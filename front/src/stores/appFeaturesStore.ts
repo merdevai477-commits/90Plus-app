@@ -5,6 +5,7 @@ import { fetchAppFeatures } from '../../services/appFeaturesService';
 interface AppFeaturesState {
   worldCupEnabled: boolean;
   worldCupLocked: boolean;
+  worldCupCampaignMode: boolean;
   leagueId: number;
   season: number;
   unlockAtMs: number;
@@ -18,6 +19,7 @@ let hydratePromise: Promise<void> | null = null;
 export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
   worldCupEnabled: false,
   worldCupLocked: true,
+  worldCupCampaignMode: false,
   leagueId: 1,
   season: 2026,
   unlockAtMs: WC_2026_KICKOFF_MS,
@@ -35,6 +37,7 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
         set((s) => ({
           worldCupEnabled: wc.enabled,
           worldCupLocked: wc.locked,
+          worldCupCampaignMode: wc.campaignMode,
           leagueId: wc.leagueId,
           season: wc.season,
           unlockAtMs: Date.parse(wc.unlockAt) || WC_2026_KICKOFF_MS,
@@ -42,7 +45,16 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
           revision: s.revision + 1,
         }));
       } catch {
-        // Keep defaults — local countdown still works offline
+        const campaignFallback = Date.now() >= Date.parse('2026-06-10T00:00:00.000Z');
+        if (campaignFallback) {
+          set((s) => ({
+            worldCupEnabled: true,
+            worldCupLocked: false,
+            worldCupCampaignMode: true,
+            hydrated: true,
+            revision: s.revision + 1,
+          }));
+        }
       } finally {
         hydratePromise = null;
       }

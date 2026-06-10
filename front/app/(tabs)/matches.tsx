@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -34,6 +34,7 @@ import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModa
 import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { getWorldCupTimeLeft } from '../../constants/worldCup';
+import { LiveTimer } from '../../components/common/LiveTimer';
 
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
@@ -85,6 +86,9 @@ function matchToFixture(m: Match): Fixture {
     leagueName: m.league?.name,
     leagueLogo: m.league?.logo,
     matchDate: m.fixtureDate,
+    statusShort: m.statusShort,
+    startTimestamp: m.startTimestamp,
+    corners: m.corners,
   };
 }
 
@@ -162,6 +166,9 @@ type Fixture = {
   leagueName?: string;
   leagueLogo?: string;
   matchDate?: string;
+  statusShort?: string;
+  startTimestamp?: number;
+  corners?: { home: number; away: number };
 };
 
 type LeagueGroup = {
@@ -294,6 +301,19 @@ const MatchRow = memo(function MatchRow({
   const { translate: t, language } = useTranslation();
   const homeName = getTeamDisplayName(fixture.home, language);
   const awayName = getTeamDisplayName(fixture.away, language);
+  const livePulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!fixture.live) return;
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(livePulse, { toValue: 0.45, duration: 650, useNativeDriver: true }),
+        Animated.timing(livePulse, { toValue: 1, duration: 650, useNativeDriver: true }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [fixture.live, livePulse]);
 
   // Bell works for upcoming (kickoff reminder) and live (goal/event alerts via FavoriteMatch).
   // Disabled only for finished matches.
@@ -330,7 +350,13 @@ const MatchRow = memo(function MatchRow({
           <View style={styles.scoreCol}>
             {fixture.status === 'UPCOMING' ? (
               <View style={styles.upcomingBadgeWrap}><Text style={styles.upcomingBadge}>{t('matches.status.upcoming')}</Text></View>
-            ) : fixture.live ? <Text style={styles.liveBadge}>{t('matches.status.live')}</Text> : <Text style={styles.ftBadge}>{t('matches.status.finished')}</Text>}
+            ) : fixture.live ? (
+              <Animated.Text style={[styles.liveBadge, { opacity: livePulse }]}>
+                {t('matches.status.live')}
+              </Animated.Text>
+            ) : (
+              <Text style={styles.ftBadge}>{t('matches.status.finished')}</Text>
+            )}
 
             {fixture.status === 'UPCOMING' ? (
               <Text
@@ -346,7 +372,28 @@ const MatchRow = memo(function MatchRow({
                 {fixture.homeScore}<Text style={styles.scoreDash}>-</Text>{fixture.awayScore}
               </Text>
             )}
-            <Text style={styles.minuteTxt}>{fixture.minute ?? ''}</Text>
+            {fixture.live ? (
+              <View style={styles.liveMetaCol}>
+                {fixture.statusShort === 'HT' || fixture.statusShort === 'BT' ? (
+                  <Text style={styles.minuteTxtLive}>{fixture.minute ?? fixture.statusShort}</Text>
+                ) : fixture.startTimestamp && fixture.statusShort ? (
+                  <LiveTimer
+                    startTime={fixture.startTimestamp}
+                    status={fixture.statusShort}
+                    style={styles.minuteTxtLive}
+                  />
+                ) : (
+                  <Text style={styles.minuteTxtLive}>{fixture.minute ?? t('matches.status.live')}</Text>
+                )}
+                {fixture.corners ? (
+                  <Text style={styles.cornersTxt} numberOfLines={1}>
+                    {t('matchDetails.corners')} {fixture.corners.home}-{fixture.corners.away}
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={styles.minuteTxt}>{fixture.minute ?? ''}</Text>
+            )}
           </View>
           <View style={styles.teamCol}>
             <View style={styles.logoStub}>
@@ -726,6 +773,7 @@ export default function MatchesHubScreenV2() {
   const [showWorldCupLocked, setShowWorldCupLocked] = useState(false);
   const worldCupEnabled = useAppFeaturesStore((s) => s.worldCupEnabled);
   const worldCupLocked = useAppFeaturesStore((s) => s.worldCupLocked);
+  const worldCupCampaignMode = useAppFeaturesStore((s) => s.worldCupCampaignMode);
   const worldCupLeagueId = useAppFeaturesStore((s) => s.leagueId);
   const unlockAtMs = useAppFeaturesStore((s) => s.unlockAtMs);
   const featuresRevision = useAppFeaturesStore((s) => s.revision);
@@ -793,13 +841,13 @@ export default function MatchesHubScreenV2() {
   // Real matches data from backend
   const { groupedMatches, countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(selectedDate);
 
-  const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
+  const wcTabActive = worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled);
   const {
     matches: worldCupMatches,
     loading: worldCupLoading,
     error: worldCupError,
     refetch: refetchWorldCup,
-  } = useWorldCupMatches(selectedDate, wcTabActive, worldCupLeagueId);
+  } = useWorldCupMatches(selectedDate, wcTabActive, worldCupLeagueId, worldCupCampaignMode);
 
   // Modal state for "View All" league sheet (shared by both LeagueCard and CountryAccordion).
   const [viewAllLeagueId, setViewAllLeagueId] = useState<string | null>(null);
@@ -1049,7 +1097,39 @@ export default function MatchesHubScreenV2() {
     }];
   }, [worldCupMatches, worldCupLeagueId]);
 
-  const wcTabLocked = worldCupLocked && !worldCupEnabled;
+  const filterWorldCupFixtures = useCallback(
+    (fixtures: Fixture[]): Fixture[] => {
+      if (filter === 'Live') {
+        return fixtures.filter((f) => f.live);
+      }
+      if (filter === 'Upcoming') {
+        return fixtures.filter((f) => f.status === 'UPCOMING');
+      }
+      if (filter === 'Predictions') {
+        return fixtures.filter(
+          (f) => f.status === 'UPCOMING' || (f.status === 'FT' && predictedMatches[f.id]),
+        );
+      }
+      if (filter === 'Finished') {
+        return fixtures.filter((f) => f.status === 'FT');
+      }
+      if (filter === 'All' || filter === 'WorldCup') {
+        return fixtures.filter((f) => f.status !== 'FT');
+      }
+      return fixtures;
+    },
+    [filter, predictedMatches],
+  );
+
+  const campaignLeagueGroups = useMemo<LeagueGroup[]>(() => {
+    if (!worldCupCampaignMode || worldCupLeagueGroups.length === 0) return [];
+    const base = worldCupLeagueGroups[0];
+    const fixtures = filterWorldCupFixtures(base.fixtures);
+    if (fixtures.length === 0) return [];
+    return [{ ...base, fixtures }];
+  }, [filterWorldCupFixtures, worldCupCampaignMode, worldCupLeagueGroups]);
+
+  const wcTabLocked = !worldCupCampaignMode && worldCupLocked && !worldCupEnabled;
 
   // Handle prediction submission
   //
@@ -1074,10 +1154,15 @@ export default function MatchesHubScreenV2() {
 
     // Find fixture details BEFORE optimistic update (used for both API + toast)
     let fixtureDetails: Fixture | undefined;
+    const fromWc = worldCupMatches.find(m => m.id === fixtureId);
+    if (fromWc) {
+      fixtureDetails = matchToFixture(fromWc);
+    }
     const fromList = matches.find(m => m.id === fixtureId);
-    if (fromList) {
+    if (!fixtureDetails && fromList) {
       fixtureDetails = matchToFixture(fromList);
-    } else {
+    }
+    if (!fixtureDetails) {
       for (const g of groups) {
         const found = g.fixtures.find(f => f.id === fixtureId);
         if (found) { fixtureDetails = found; break; }
@@ -1512,17 +1597,25 @@ export default function MatchesHubScreenV2() {
           <Calendar size={18} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
       </View>
-      {isDataStale && matches.length > 0 ? (
+      {isDataStale && !worldCupCampaignMode && matches.length > 0 ? (
         <TouchableOpacity style={styles.staleBanner} onPress={() => void refetch()} activeOpacity={0.85}>
           <Text style={styles.staleBannerTxt}>{t('matches.screen.staleData') || 'Scores may be outdated — tap to refresh'}</Text>
         </TouchableOpacity>
       ) : null}
     </View>
-  ), [filter, t, handleFilterPress, isDataStale, matches.length, refetch, wcTabLocked]);
+  ), [filter, t, handleFilterPress, isDataStale, matches.length, refetch, wcTabLocked, worldCupCampaignMode]);
 
-  const listLoading = filter === 'WorldCup' && worldCupEnabled ? worldCupLoading : loading;
-  const listError = filter === 'WorldCup' && worldCupEnabled ? worldCupError : error;
-  const listRefetch = filter === 'WorldCup' && worldCupEnabled ? refetchWorldCup : refetch;
+  const listLoading = (worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled))
+    ? worldCupLoading
+    : loading;
+  const listError = (worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled))
+    ? worldCupError
+    : error;
+  const listRefetch = (worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled))
+    ? refetchWorldCup
+    : refetch;
+  const wcListGroups = worldCupCampaignMode ? campaignLeagueGroups : worldCupLeagueGroups;
+  const useWcList = worldCupCampaignMode || filter === 'WorldCup';
 
   const listEmptyNode = useMemo(() => {
     if (listLoading) {
@@ -1575,7 +1668,7 @@ export default function MatchesHubScreenV2() {
             adjustsFontSizeToFit
             minimumFontScale={0.85}
           >
-            {t('matches.screen.title')}
+            {worldCupCampaignMode ? t('matches.screen.worldCupTitle') : t('matches.screen.title')}
           </Text>
         </View>
         <View style={{ flex: 1 }} />
@@ -1597,28 +1690,9 @@ export default function MatchesHubScreenV2() {
             - International: LeagueCard per international competition (no
               country layer — taps a competition → expands → shows matches)
             - Default (All/Live/Upcoming/Finished): Country → League accordions */}
-      {filter === 'Predictions' ? (
+      {useWcList ? (
         <FlashList
-          data={filteredCountryGroups}
-          keyExtractor={cg => cg.country}
-          renderItem={({ item }) => (
-            <CountryAccordion
-              countryGroup={item}
-              renderMatchCard={renderCountryMatchCard}
-              onViewAllLeague={handleViewAllLeague}
-              defaultExpanded={TOP5_COUNTRIES.has(item.country)}
-            />
-          )}
-          drawDistance={250}
-          ItemSeparatorComponent={ITEM_SEPARATOR_8}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={listHeaderNode}
-          ListEmptyComponent={listEmptyNode}
-        />
-      ) : filter === 'WorldCup' ? (
-        <FlashList
-          data={worldCupLeagueGroups}
+          data={wcListGroups}
           keyExtractor={g => g.id}
           renderItem={({ item }) => (
             <LeagueCard
@@ -1636,6 +1710,25 @@ export default function MatchesHubScreenV2() {
           )}
           ItemSeparatorComponent={ITEM_SEPARATOR_10}
           drawDistance={250}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={listHeaderNode}
+          ListEmptyComponent={listEmptyNode}
+        />
+      ) : filter === 'Predictions' ? (
+        <FlashList
+          data={filteredCountryGroups}
+          keyExtractor={cg => cg.country}
+          renderItem={({ item }) => (
+            <CountryAccordion
+              countryGroup={item}
+              renderMatchCard={renderCountryMatchCard}
+              onViewAllLeague={handleViewAllLeague}
+              defaultExpanded={TOP5_COUNTRIES.has(item.country)}
+            />
+          )}
+          drawDistance={250}
+          ItemSeparatorComponent={ITEM_SEPARATOR_8}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={listHeaderNode}
@@ -1971,6 +2064,9 @@ const styles = StyleSheet.create({
   },
   scoreDash: { color: 'rgba(255,255,255,0.45)' },
   minuteTxt: { marginTop: 3, color: PURPLE_PRIMARY, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  liveMetaCol: { marginTop: 3, alignItems: 'center', gap: 2 },
+  minuteTxtLive: { color: '#f87171', fontSize: 15, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  cornersTxt: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '700', fontVariant: ['tabular-nums'] },
   viewAllBtn: { height: 46, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   viewAllTxt: { color: PURPLE_PRIMARY, fontSize: 15, fontWeight: '800' },
   rowWrapCol: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },

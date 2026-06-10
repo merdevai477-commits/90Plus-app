@@ -38,6 +38,7 @@ export interface Match {
   statusShort?: string; // Raw status from API (e.g., "1H", "2H", "HT")
   minute?: string;
   startTimestamp?: number; // Timestamp of period start
+  corners?: { home: number; away: number };
   time?: string; // Match kickoff time (e.g., "20:00")
   league: LeagueInfo;
   fixtureDate?: string; // ISO date string for filtering

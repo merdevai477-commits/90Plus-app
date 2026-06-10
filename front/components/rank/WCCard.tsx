@@ -1,10 +1,8 @@
 /**
  * WCCard
  *
- * World Cup 2026 promo banner with a live countdown. The countdown interval
- * is anchored to the centralized `WC_2026_KICKOFF_UTC` constant and only
- * runs while the Rank tab is focused. When more than a day remains, we tick
- * every minute to avoid wasted re-renders; under a day we tick every second.
+ * World Cup 2026 promo banner. During campaign mode the countdown is hidden
+ * and the CTA opens the World Cup matches tab immediately.
  */
 
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -42,25 +40,22 @@ interface WCCardProps {
 const WCCard: React.FC<WCCardProps> = ({ onPressLocked }) => {
   const router = useRouter();
   const worldCupEnabled = useAppFeaturesStore((s) => s.worldCupEnabled);
+  const worldCupCampaignMode = useAppFeaturesStore((s) => s.worldCupCampaignMode);
   const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
   const unlockAtMs = useAppFeaturesStore((s) => s.unlockAtMs);
   const [time, setTime] = useState<WorldCupTimeLeft>(() => getWorldCupTimeLeft(Date.now(), unlockAtMs));
   const isFocused = useIsFocused();
   const { t } = useTranslation();
 
-  // Single source of truth for the unlock GATE is the server flag, so this card
-  // and the Matches tab never disagree. The local countdown only drives the
-  // visual timer; when it crosses zero we re-hydrate to flip the server flag.
-  const isUnlocked = worldCupEnabled;
+  const isUnlocked = worldCupEnabled || worldCupCampaignMode;
+  const showCountdown = !worldCupCampaignMode && !isUnlocked;
 
   useEffect(() => {
-    if (!isFocused) return;
+    if (!isFocused || worldCupCampaignMode) return;
     setTime(getWorldCupTimeLeft(Date.now(), unlockAtMs));
     const id = setInterval(() => {
       const next = getWorldCupTimeLeft(Date.now(), unlockAtMs);
       setTime(next);
-      // The moment the local countdown reaches zero, ask the server to confirm
-      // the unlock so the gate flips without waiting for the next manual sync.
       if (!worldCupEnabled && Date.now() >= unlockAtMs) {
         void hydrateFeatures(true);
       }
@@ -77,7 +72,7 @@ const WCCard: React.FC<WCCardProps> = ({ onPressLocked }) => {
       clearInterval(id);
       sub.remove();
     };
-  }, [isFocused, unlockAtMs, worldCupEnabled, hydrateFeatures]);
+  }, [isFocused, unlockAtMs, worldCupCampaignMode, worldCupEnabled, hydrateFeatures]);
 
   const countdownItems: ReadonlyArray<{ val: number; lbl: string }> = [
     { val: time.days, lbl: t.rank.worldCup.days },
@@ -115,7 +110,7 @@ const WCCard: React.FC<WCCardProps> = ({ onPressLocked }) => {
       />
 
       <View style={s.wcInner}>
-        <View style={s.wcLeft}>
+        <View style={[s.wcLeft, !showCountdown && s.wcLeftFull]}>
           <Text style={s.wcTitle}>{t.rank.worldCup.headline}</Text>
           <Text style={s.wcSub}>{t.rank.worldCup.body}</Text>
           <Pressable
@@ -140,15 +135,17 @@ const WCCard: React.FC<WCCardProps> = ({ onPressLocked }) => {
           </Pressable>
         </View>
 
-        {isLiquidGlassSupported ? (
-          <LiquidGlassView effect="clear" interactive style={s.wcRight}>
-            {countdownContent}
-          </LiquidGlassView>
-        ) : (
-          <BlurView intensity={12} tint="dark" style={s.wcRight}>
-            {countdownContent}
-          </BlurView>
-        )}
+        {showCountdown ? (
+          isLiquidGlassSupported ? (
+            <LiquidGlassView effect="clear" interactive style={s.wcRight}>
+              {countdownContent}
+            </LiquidGlassView>
+          ) : (
+            <BlurView intensity={12} tint="dark" style={s.wcRight}>
+              {countdownContent}
+            </BlurView>
+          )
+        ) : null}
       </View>
     </LinearGradient>
   );
@@ -161,6 +158,7 @@ const s = StyleSheet.create<{
   wcPlayerImg: ImageStyle;
   wcInner: ViewStyle;
   wcLeft: ViewStyle;
+  wcLeftFull: ViewStyle;
   wcTitle: TextStyle;
   wcSub: TextStyle;
   wcBtnDisabled: ViewStyle;
@@ -194,6 +192,7 @@ const s = StyleSheet.create<{
   },
   wcInner: { flexDirection: 'row', padding: 24, minHeight: 250, zIndex: 2 },
   wcLeft: { flex: 1, justifyContent: 'center', paddingEnd: 10, gap: 8 },
+  wcLeftFull: { paddingEnd: 24 },
   wcTitle: { color: '#fff', fontSize: 24, fontWeight: '900', lineHeight: 30 },
   wcSub: {
     color: 'rgba(255,255,255,0.55)',

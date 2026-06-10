@@ -3,6 +3,7 @@ import { getApiUrl } from '../utils/getApiUrl';
 export interface WorldCupFeatureConfig {
   enabled: boolean;
   locked: boolean;
+  campaignMode: boolean;
   leagueId: number;
   season: number;
   unlockAt: string;

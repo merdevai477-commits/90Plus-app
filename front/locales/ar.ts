@@ -458,6 +458,7 @@ export const ar = {
     },
     screen: {
       title: 'النتائج\u00A0المباشرة',
+      worldCupTitle: 'كأس العالم',
       loading: 'جاري تحميل المباريات...',
       loadFailed: 'فشل تحميل المباريات',
       retry: 'إعادة المحاولة',

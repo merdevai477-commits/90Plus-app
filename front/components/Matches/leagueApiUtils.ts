@@ -255,13 +255,19 @@ export const fetchLeagueMatchesByDate = async (
 };
 
 /** World Cup fixtures for a date — backend filters by league/season env. */
-export const fetchWorldCupMatchesByDate = async (date: Date): Promise<Match[]> => {
+export const fetchWorldCupMatchesByDate = async (
+  date: Date,
+  options?: { skipDiskCache?: boolean },
+): Promise<Match[]> => {
   const dateString = formatLocalDateKey(date);
   const cacheKey = `wc_matches_${dateString}`;
+  const isToday = dateString === getLocalTodayKey();
 
-  const cached = await cacheService.get<Match[]>(cacheKey);
-  if (cached && cached.length >= 0) {
-    return cached;
+  if (!options?.skipDiskCache) {
+    const cached = await cacheService.get<Match[]>(cacheKey);
+    if (cached && cached.length >= 0) {
+      return cached;
+    }
   }
 
   try {
@@ -280,7 +286,8 @@ export const fetchWorldCupMatchesByDate = async (date: Date): Promise<Match[]> =
       const fixtures: Fixture[] = Array.isArray(raw?.response) ? raw.response : [];
       const matches = mapFixturesToMatches(fixtures);
       if (matches.length > 0) {
-        await cacheService.set(cacheKey, matches, 2 * 60 * 1000);
+        const ttl = isToday ? 5_000 : 2 * 60 * 1000;
+        await cacheService.set(cacheKey, matches, ttl);
       }
       return matches;
     }

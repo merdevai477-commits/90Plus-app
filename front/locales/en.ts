@@ -483,6 +483,7 @@ export const en = {
     },
     screen: {
       title: 'Live Score',
+      worldCupTitle: 'WORLD CUP',
       loading: 'Loading matches...',
       loadFailed: 'Failed to load matches',
       retry: 'Retry',
