@@ -29,6 +29,7 @@ import {
   type PlayerInfoQueryType,
 } from '../services/player-info-cache.service';
 import { pLimit } from './concurrency.util';
+import { syncTeamRoster } from '../services/quiz-team-roster-sync.service';
 
 const CONCURRENCY = 3;
 const WEEKLY_TTL_MS = 7 * 24 * 60 * 60_000;
@@ -272,70 +273,6 @@ async function resolvePlayerTeam(
     if (!withTeam?.team?.id) return null;
     return { apiTeamId: withTeam.team.id, teamName: withTeam.team.name ?? `Team ${withTeam.team.id}` };
   } catch {
-    return null;
-  }
-}
-
-/**
- * Upsert a TeamInfo + its TeamPlayer squad, then back-link any PlayerInfo rows
- * whose apiPlayerId appears in the squad. Returns the TeamInfo id (or null).
- *
- * Players in PlayerInfo who are NOT in the current squad keep their row but are
- * NOT linked here; Schedule C (transfers) is the authoritative source for
- * teamId changes when a player leaves.
- */
-async function syncTeamRoster(apiTeamId: number, teamName: string): Promise<number | null> {
-  try {
-    const expiresAt = new Date(Date.now() + MONTHLY_TTL_MS);
-    const teamInfo = await prisma.teamInfo.upsert({
-      where: { apiTeamId },
-      create: {
-        apiTeamId,
-        teamName,
-        season: currentSeason(),
-        lastFetched: new Date(),
-        expiresAt,
-      },
-      update: {
-        teamName,
-        season: currentSeason(),
-        lastFetched: new Date(),
-        expiresAt,
-      },
-    });
-
-    const squadRows = await footballService.getTeamSquad(apiTeamId);
-    const squad = squadRows?.[0]?.players ?? [];
-    if (!Array.isArray(squad) || squad.length === 0) return teamInfo.id;
-
-    // Replace the roster snapshot atomically.
-    await prisma.$transaction([
-      prisma.teamPlayer.deleteMany({ where: { teamInfoId: teamInfo.id } }),
-      prisma.teamPlayer.createMany({
-        data: squad
-          .filter((p: any) => p?.id && p?.name)
-          .map((p: any) => ({
-            teamInfoId: teamInfo.id,
-            apiPlayerId: p.id,
-            playerName: p.name,
-            position: p.position ?? 'Unknown',
-            jerseyNumber: typeof p.number === 'number' ? p.number : null,
-          })),
-      }),
-    ]);
-
-    // Back-link PlayerInfo rows that belong to this squad.
-    const squadIds = squad.map((p: any) => p?.id).filter((id: any): id is number => Number.isInteger(id));
-    if (squadIds.length > 0) {
-      await prisma.playerInfo.updateMany({
-        where: { apiPlayerId: { in: squadIds } },
-        data: { teamId: teamInfo.id },
-      });
-    }
-
-    return teamInfo.id;
-  } catch (err) {
-    logger.warn(`[Worker][monthly] ⚠️ roster sync failed for team ${apiTeamId} — ${shortErr(err)}`);
     return null;
   }
 }

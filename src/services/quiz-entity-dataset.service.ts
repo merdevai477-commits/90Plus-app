@@ -154,6 +154,39 @@ export async function buildQuizEntityDataset(): Promise<QuizDatasetBuildResult> 
     });
   }
 
+  if (players.length < QUIZ_DATASET_MIN_PLAYERS) {
+    const fallbackRows = await prisma.playerInfo.findMany({
+      where: { apiPlayerId: { not: null }, teamId: { not: null } },
+      include: { teamInfo: true },
+      distinct: ['apiPlayerId'],
+      orderBy: [{ accessCount: 'desc' }, { hits: 'desc' }],
+      take: 300,
+    });
+
+    for (const row of fallbackRows) {
+      if (row.apiPlayerId == null || !row.teamInfo || seenPlayerIds.has(row.apiPlayerId)) continue;
+      seenPlayerIds.add(row.apiPlayerId);
+
+      const cached = cachedByTeamId.get(row.teamInfo.apiTeamId);
+      const enrichment = playerInfoByApiId.get(row.apiPlayerId) ?? {};
+
+      players.push({
+        id: `player:${row.apiPlayerId}`,
+        name: row.displayName ?? row.playerName,
+        apiPlayerId: row.apiPlayerId,
+        position: 'Unknown',
+        teamId: row.teamInfo.apiTeamId,
+        teamName: row.teamInfo.teamName,
+        country: cached?.country ?? undefined,
+        ...enrichment,
+      });
+    }
+
+    if (players.length < QUIZ_DATASET_MIN_PLAYERS && teamPlayers.length === 0) {
+      logger.info('[QuizDataset] TeamPlayer empty — filled from PlayerInfo+TeamInfo where linked');
+    }
+  }
+
   const dataset: QuizEntityDataset = { players, clubs, stadiums };
 
   if (!isDatasetSufficient(dataset)) {
