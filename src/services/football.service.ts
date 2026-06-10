@@ -8,6 +8,10 @@ import { logger } from '../utils/logger';
 import { getRedisClient } from '../lib/redis';
 import { convertFixturePlayersToLineups, hasLineupData, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
 import { footballMetrics } from '../utils/football-metrics';
+import {
+  footballSeasonFallbackChain,
+  resolveFootballSeason,
+} from '../utils/football-season.util';
 
 interface ApiResponse<T> {
   get: string;
@@ -516,7 +520,7 @@ class FootballService {
     leagueId: number,
     season?: number,
   ): Promise<{ flat: any[]; groups: Array<{ group: string; standings: any[] }> }> {
-    const currentSeason = season || 2024;
+    const currentSeason = season ?? resolveFootballSeason();
     const params = {
       league: leagueId,
       season: currentSeason,
@@ -668,29 +672,22 @@ class FootballService {
    * ✅ Always uses current season if not specified for real-time data
    */
   async getPlayerById(playerId: number, season?: number): Promise<any[]> {
-    // ✅ Get current season if not provided
-    const currentSeason = season || (() => {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      return month >= 6 ? year : year - 1; // July+ = current year, before July = previous year
-    })();
-    
-    return this.fetchFromApi<any[]>('/players', {
-      id: playerId,
-      season: currentSeason
-    });
+    return this.getPlayerStatistics(playerId, season);
   }
 
   /**
    * Get player statistics
    */
   async getPlayerStatistics(playerId: number, season?: number): Promise<any[]> {
-    const currentSeason = season || 2024;
-    return this.fetchFromApi<any[]>('/players', {
-      id: playerId,
-      season: currentSeason,
-    });
+    const seasons = footballSeasonFallbackChain(season);
+    for (const s of seasons) {
+      const rows = await this.fetchFromApi<any[]>('/players', {
+        id: playerId,
+        season: s,
+      });
+      if (rows?.length) return rows;
+    }
+    return [];
   }
 
   /** API-Football requires `league` or `team` (plus `season`) when using `search` on /players. */
@@ -698,19 +695,34 @@ class FootballService {
     39, 140, 135, 78, 61, 2, 3, 88, 94, 203, 253, 307, // top leagues + Saudi
   ];
 
-  private currentSeason(): number {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    return now.getUTCMonth() >= 6 ? year : year - 1;
-  }
-
   /**
    * Search players by name (API requires league or team + season with search).
+   * Tries the current season (2026 from June) then falls back to prior years.
    */
   async searchPlayers(name: string, league?: number, team?: number): Promise<any[]> {
     if (!this.isValidSearch(name)) return [];
-    const season = this.currentSeason();
 
+    for (const season of footballSeasonFallbackChain()) {
+      const results = await this.searchPlayersForSeason(name, season, league, team);
+      if (results.length) {
+        if (season !== resolveFootballSeason()) {
+          logger.info(
+            `[Football] searchPlayers "${name}" hit season ${season} (fallback)`,
+          );
+        }
+        return results;
+      }
+    }
+
+    return [];
+  }
+
+  private async searchPlayersForSeason(
+    name: string,
+    season: number,
+    league?: number,
+    team?: number,
+  ): Promise<any[]> {
     if (team) {
       try {
         const byTeam = await this.fetchFromApi<any[]>('/players', {
@@ -721,7 +733,7 @@ class FootballService {
         if (byTeam?.length) return byTeam;
       } catch (err) {
         logger.warn(
-          `[Football] searchPlayers by team ${team} failed for "${name}" — trying league scan`,
+          `[Football] searchPlayers by team ${team} season ${season} failed for "${name}" — trying league scan`,
           err instanceof Error ? err.message : err,
         );
       }
@@ -757,7 +769,7 @@ class FootballService {
       } catch (err) {
         if (err instanceof FootballApiError) {
           logger.debug(
-            `[Football] Player search in league ${leagueId} for "${name}": ${err.message}`,
+            `[Football] Player search in league ${leagueId} season ${season} for "${name}": ${err.message}`,
           );
           continue;
         }
@@ -858,7 +870,7 @@ class FootballService {
    * Get team statistics for a season
    */
   async getTeamStatistics(teamId: number, leagueId: number, season?: number): Promise<any> {
-    const currentSeason = season || 2024;
+    const currentSeason = season ?? resolveFootballSeason();
     const params: any = { team: teamId, league: leagueId, season: currentSeason };
     return this.fetchFromApi<any>('/teams/statistics', params);
   }
@@ -871,7 +883,7 @@ class FootballService {
    * Get top scorers for a league
    */
   async getTopScorers(leagueId: number, season?: number): Promise<any[]> {
-    const currentSeason = season || 2024;
+    const currentSeason = season ?? resolveFootballSeason();
     return this.fetchFromApi<any[]>('/players/topscorers', {
       league: leagueId,
       season: currentSeason,
@@ -882,7 +894,7 @@ class FootballService {
    * Get top assists/playmakers for a league
    */
   async getTopAssists(leagueId: number, season?: number): Promise<any[]> {
-    const currentSeason = season || 2024;
+    const currentSeason = season ?? resolveFootballSeason();
     return this.fetchFromApi<any[]>('/players/topassists', {
       league: leagueId,
       season: currentSeason,
@@ -894,7 +906,7 @@ class FootballService {
    * Note: API-Football doesn't have a direct endpoint, so we'll use players statistics
    */
   async getTopYellowCards(leagueId: number, season?: number): Promise<any[]> {
-    const currentSeason = season || 2024;
+    const currentSeason = season ?? resolveFootballSeason();
     // Use top scorers endpoint which includes cards statistics
     const players = await this.fetchFromApi<any[]>('/players/topscorers', {
       league: leagueId,
@@ -918,7 +930,7 @@ class FootballService {
    * Get top red cards (players with most red cards)
    */
   async getTopRedCards(leagueId: number, season?: number): Promise<any[]> {
-    const currentSeason = season || 2024;
+    const currentSeason = season ?? resolveFootballSeason();
     // Use top scorers endpoint which includes cards statistics
     const players = await this.fetchFromApi<any[]>('/players/topscorers', {
       league: leagueId,
@@ -1010,7 +1022,7 @@ class FootballService {
    * Get league rounds
    */
   async getLeagueRounds(leagueId: number, season?: number, current?: boolean): Promise<string[]> {
-    const currentSeason = season || 2024;
+    const currentSeason = season ?? resolveFootballSeason();
     const params: Record<string, any> = {
       league: leagueId,
       season: currentSeason,

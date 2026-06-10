@@ -19,6 +19,7 @@ import { prisma } from '../lib/prisma';
 import { resolveTeamId } from './team-name-resolver.service';
 import { redisCacheService } from './redis-cache.service';
 import { footballMetrics } from '../utils/football-metrics';
+import { resolveFootballSeason } from '../utils/football-season.util';
 
 export type TeamDossierSource = 'api' | 'cache' | 'unavailable';
 
@@ -30,12 +31,6 @@ export interface TeamDossierResult {
 
 const TEAM_DOSSIER_TTL_MS = 3 * 60 * 60_000; // ~3h
 const TEAM_DOSSIER_NS = 'football:team:';
-
-function currentFootballSeason(): number {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  return now.getUTCMonth() >= 6 ? year : year - 1;
-}
 
 function resultLetter(
   isHome: boolean,
@@ -73,7 +68,7 @@ export async function fetchTeamDossierContext(
   footballMetrics.recordCacheMiss();
   logger.info(`[DossierCache] team MISS ${redisKey}`);
 
-  const season = currentFootballSeason();
+  const season = resolveFootballSeason();
   let usedApi = false;
   let usedCache = false;
 

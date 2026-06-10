@@ -16,6 +16,7 @@ import { getCachedOrFetch } from './player-stats-cache.service';
 import { fetchTeamDossierContext } from './team-dossier.service';
 import { resolveTeamFromDictionary } from './team-name-resolver.service';
 import { footballMetrics } from '../utils/football-metrics';
+import { resolveFootballSeason } from '../utils/football-season.util';
 import { redisCacheService } from './redis-cache.service';
 
 // Dossier-level Redis TTLs (separate namespaces from the football:* proxy keys
@@ -87,13 +88,6 @@ function isLiveMatchesQuery(message: string): boolean {
   return /live\s*match|matches?\s+(?:now|today|live)|who(?:'s|\s+is)\s+playing|playing\s+now|currently\s+playing|live\s+score|مباريات\s*(?:اليوم|دلوقتي|الان|الآن|مباشرة|الحية)|مين\s*بيلعب|مين\s*يلعب|يلعب\s*(?:دلوقتي|الان|الآن)|النتيجة\s*(?:دلوقتي|الان|الآن|المباشرة)/i.test(
     message,
   );
-}
-
-/** API-Football season for the current European campaign (Aug→May). */
-function currentFootballSeason(): number {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  return now.getUTCMonth() >= 6 ? year : year - 1;
 }
 
 // Lightweight in-memory cache so repeated chat data lookups don't re-hit
@@ -322,7 +316,7 @@ function formatPlayerBlock(
   const allStats: any[] = Array.isArray(row.statistics) ? row.statistics : [];
   const comps = allStats.map(extractCompetitionStat).filter((c) => c.competition !== '—' || c.appearances > 0 || c.minutes > 0);
 
-  const seasonLabel = `${PLAYER_SEASON}/${PLAYER_SEASON + 1}`;
+  const seasonLabel = `${playerSeason()}/${playerSeason() + 1}`;
 
   // Primary club = entry with most minutes (fallback first entry).
   const primary =
@@ -409,7 +403,9 @@ interface PlayerStatsRow {
   aliases?: string[];
 }
 
-const PLAYER_SEASON = currentFootballSeason();
+function playerSeason(): number {
+  return resolveFootballSeason();
+}
 
 /**
  * Resolve a raw player name (AR/EN) and fetch its stats block. Uses the
@@ -433,7 +429,7 @@ export async function fetchPlayerStatsRow(
     //    fallback is exactly what produced Vinicius→Giroud. An empty stat feed
     //    for a known id means "no verified data this season", not "wrong id".
     if (apiPlayerId && resolved && resolved.resolvedBy !== 'raw') {
-      const detailed = await footballService.getPlayerStatistics(apiPlayerId, PLAYER_SEASON);
+      const detailed = await footballService.getPlayerStatistics(apiPlayerId, playerSeason());
       row = detailed?.[0] ?? null;
       footballMetrics.recordResolver(true);
       if (!row) {
@@ -444,7 +440,7 @@ export async function fetchPlayerStatsRow(
       }
     } else if (apiPlayerId) {
       // Raw-source id (rare) — try it, but allow a search fallback below.
-      const detailed = await footballService.getPlayerStatistics(apiPlayerId, PLAYER_SEASON);
+      const detailed = await footballService.getPlayerStatistics(apiPlayerId, playerSeason());
       row = detailed?.[0] ?? null;
     }
 
@@ -463,7 +459,7 @@ export async function fetchPlayerStatsRow(
       }
       apiPlayerId = match.player?.id ?? apiPlayerId;
       if (apiPlayerId) {
-        const detailed = await footballService.getPlayerStatistics(apiPlayerId, PLAYER_SEASON);
+        const detailed = await footballService.getPlayerStatistics(apiPlayerId, playerSeason());
         row = detailed?.[0] ?? match;
       } else {
         row = match;
@@ -541,7 +537,7 @@ async function fetchPlayerContextCached(
         playerName: rawName,
         statType,
         competition: league?.label ?? null,
-        season: String(PLAYER_SEASON),
+        season: String(playerSeason()),
         questionAsked: message,
         isLive,
         fetcher: () => fetchPlayerStatsRow(rawName, { competitionLabel: league?.label }),
@@ -585,7 +581,7 @@ async function fetchTopScorersContext(message: string): Promise<string | null> {
   const league = detectLeague(message);
   if (!league) return null;
 
-  const season = currentFootballSeason();
+  const season = resolveFootballSeason();
   return cachedLookup(`topscorers:${league.id}:${season}`, 30 * 60_000, async () => {
     try {
       const scorers = await footballService.getTopScorers(league.id, season);
@@ -744,7 +740,7 @@ export async function fetchPlayerUclCareerDossier(rawName: string): Promise<stri
     const currentSeasonRow = await footballService.getPlayerStatisticsInLeague(
       player.apiPlayerId,
       UCL_LEAGUE_ID,
-      PLAYER_SEASON,
+      playerSeason(),
     );
 
     const seasonBlocks: string[] = [];
@@ -770,8 +766,8 @@ export async function fetchPlayerUclCareerDossier(rawName: string): Promise<stri
 
     let currentBlock = '';
     if (currentSeasonRow) {
-      currentBlock = `\nCURRENT UCL SEASON (${PLAYER_SEASON}/${PLAYER_SEASON + 1}):\n${formatUclSeasonStatBlock(
-        `${PLAYER_SEASON}/${PLAYER_SEASON + 1}`,
+      currentBlock = `\nCURRENT UCL SEASON (${playerSeason()}/${playerSeason() + 1}):\n${formatUclSeasonStatBlock(
+        `${playerSeason()}/${playerSeason() + 1}`,
         'in progress',
         currentSeasonRow,
       )}`;
