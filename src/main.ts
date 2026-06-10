@@ -604,6 +604,24 @@ app.get(`${API_PREFIX}/users`, async (_req: Request, res: Response) => {
     }
 });
 
+// Unmatched public paths → landing page (deep links open in app; browsers get home)
+const LANDING_PAGE_URL = 'https://90plus.pro';
+const CATCH_ALL_EXCLUDED_PREFIXES = [
+    '/api',
+    '/.well-known',
+    '/apple-app-site-association',
+    '/health',
+];
+app.get('*', (req: Request, res: Response, next: NextFunction) => {
+    const isExcluded = CATCH_ALL_EXCLUDED_PREFIXES.some((prefix) =>
+        req.path.startsWith(prefix),
+    );
+    if (isExcluded) {
+        return next();
+    }
+    res.redirect(301, LANDING_PAGE_URL);
+});
+
 // ============================================
 // ERROR HANDLING
 // ============================================

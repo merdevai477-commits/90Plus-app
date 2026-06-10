@@ -37,6 +37,7 @@
     "test:refresh-features": "ts-node scripts/test-refresh-features.ts",
     "test:world-class-chat": "ts-node scripts/test-world-class-chat.ts",
     "test:universal-links": "ts-node scripts/test-universal-links.ts",
+    "test:android-links": "ts-node scripts/test-android-links.ts",
     "export:questions": "ts-node scripts/export-questions.ts",
     "export:answers": "ts-node scripts/export-answers.ts",
     "verify:user": "ts-node src/scripts/verify-user.ts",
