@@ -550,18 +550,50 @@ model DailyQuiz {
 
 /// AI-generated daily question packs (20 per language, renewed every 24h)
 model DailyQuizPack {
-  id        String   @id @default(uuid())
-  packDate  DateTime @db.Date
-  language  String   @db.VarChar(5)
-  questions Json
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(uuid())
+  packDate         DateTime @db.Date
+  language         String   @db.VarChar(5)
+  questions        Json
+  expiresAt        DateTime
+  isFallback       Boolean  @default(false)
+  generatorModel   String?  @db.VarChar(64)
+  generatorVersion String?  @db.VarChar(32)
+  promptVersion    String?  @db.VarChar(32)
+  datasetVersion   String?  @db.VarChar(32)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([packDate, language])
   @@index([packDate])
   @@index([expiresAt])
+  @@index([isFallback])
   @@map("daily_quiz_packs")
+}
+
+/// Aggregated engagement metrics per daily quiz question (cross-user).
+model QuizQuestionMetric {
+  id                String   @id @default(uuid())
+  questionId        String
+  packDate          DateTime @db.Date
+  language          String   @db.VarChar(5)
+  questionType      String?  @db.VarChar(20)
+  difficulty        String?  @db.VarChar(10)
+  shownCount        Int      @default(0)
+  correctCount      Int      @default(0)
+  wrongCount        Int      @default(0)
+  skipCount         Int      @default(0)
+  hintCount         Int      @default(0)
+  totalAnswerTimeMs BigInt   @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([questionId, packDate, language])
+  @@index([packDate, language])
+  @@index([questionType])
+  @@index([difficulty])
+  @@index([correctCount])
+  @@index([skipCount])
+  @@map("quiz_question_metrics")
 }
 
 /// Per-user progress for a daily pack (answers, skips, hints, XP)

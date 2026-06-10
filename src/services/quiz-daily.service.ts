@@ -9,6 +9,21 @@ import { awardXp, levelTitle } from './xp.service';
 import { getRedisClient, isRedisConnected } from '../lib/redis';
 import { redisCacheService } from './redis-cache.service';
 import { generateDailyQuizPack, todayPackDate, packExpiresAt, packDateYmd } from './quiz-generator.service';
+import { buildQuizEntityDataset } from './quiz-entity-dataset.service';
+import type { QuizPackGenerationMeta } from '../constants/quiz-generation.constants';
+import {
+  isCompletePack,
+  loadMostRecentValidPack,
+  logFallbackUsage,
+  remapPackQuestionsForDate,
+} from './quiz-fallback.service';
+import {
+  trackQuizAnswerMetric,
+  trackQuizHintMetric,
+  trackQuizSkipMetric,
+  trackQuizTimeoutMetric,
+  trackQuestionShownForSession,
+} from './quiz-metrics-tracker.service';
 import type {
   PublicQuizQuestion,
   QuestionProgress,
@@ -162,6 +177,7 @@ async function savePack(
   language: QuizLanguage,
   questions: StoredQuizQuestion[],
   expiresAt: Date,
+  meta?: QuizPackGenerationMeta,
 ) {
   const row = await prisma.dailyQuizPack.upsert({
     where: { packDate_language: { packDate, language } },
@@ -170,10 +186,20 @@ async function savePack(
       language,
       questions: questions as unknown as Prisma.InputJsonValue,
       expiresAt,
+      isFallback: meta?.isFallback ?? false,
+      generatorModel: meta?.generatorModel ?? null,
+      generatorVersion: meta?.generatorVersion ?? null,
+      promptVersion: meta?.promptVersion ?? null,
+      datasetVersion: meta?.datasetVersion ?? null,
     },
     update: {
       questions: questions as unknown as Prisma.InputJsonValue,
       expiresAt,
+      isFallback: meta?.isFallback ?? false,
+      generatorModel: meta?.generatorModel ?? null,
+      generatorVersion: meta?.generatorVersion ?? null,
+      promptVersion: meta?.promptVersion ?? null,
+      datasetVersion: meta?.datasetVersion ?? null,
     },
   });
   const cacheKey = `quiz:daily:${packDateYmd(packDate)}:${language}`;
@@ -183,10 +209,6 @@ async function savePack(
 
 function dailyPackLockKey(dateStr: string, language: QuizLanguage): string {
   return `quiz:daily:lock:${dateStr}:${language}`;
-}
-
-function isCompletePack(questions: unknown): questions is StoredQuizQuestion[] {
-  return Array.isArray(questions) && questions.length === QUIZ_PACK_SIZE;
 }
 
 const PACK_READY_POLL_MS = 1_500;
@@ -352,15 +374,60 @@ export async function getOrCreateDailyPack(
       }
     }
 
+    return generatePackWithFallback(packDate, language, timezone);
+  });
+}
+
+async function generatePackWithFallback(
+  packDate: Date,
+  language: QuizLanguage,
+  timezone?: string,
+): Promise<StoredQuizQuestion[]> {
+  const dateStr = packDateYmd(packDate, timezone);
+  const expiresAt = packExpiresAt(packDate, timezone);
+
+  try {
+    const datasetCheck = await buildQuizEntityDataset();
+    if (!datasetCheck.ok) {
+      throw new Error('QUIZ_DATASET_INSUFFICIENT');
+    }
+
     const avoidFromHistory = await loadRecentPackQuestions(packDate, language);
     const generated = await generateDailyQuizPack(language, packDate, avoidFromHistory, timezone);
-    await savePack(packDate, language, generated.questions, generated.expiresAt);
+    await savePack(packDate, language, generated.questions, generated.expiresAt, generated.generationMeta);
     return generated.questions;
-  });
+  } catch (err) {
+    logger.error(`[QuizDaily] Pack generation failed (${dateStr}/${language}), trying fallback`, err);
+
+    const fallback = await loadMostRecentValidPack(language, packDate);
+    if (!fallback) {
+      logger.error(`[QuizDaily] No fallback pack available for ${language}`);
+      throw err;
+    }
+
+    const remapped = remapPackQuestionsForDate(fallback.questions, dateStr, language);
+    logFallbackUsage(language, dateStr, fallback.packDate);
+    await savePack(packDate, language, remapped, expiresAt, {
+      ...fallback.meta,
+      isFallback: true,
+    });
+    return remapped;
+  }
 }
 
 export async function warmupDailyQuizzes(): Promise<void> {
   const packDate = todayPackDate();
+  const datasetCheck = await buildQuizEntityDataset();
+  if (datasetCheck.ok) {
+    logger.info('[QuizDaily] Entity dataset ready for warmup', {
+      players: datasetCheck.dataset.players.length,
+      clubs: datasetCheck.dataset.clubs.length,
+      stadiums: datasetCheck.dataset.stadiums.length,
+    });
+  } else {
+    logger.warn('[QuizDaily] Dataset below minimum — warmup will use fallback if needed', datasetCheck.counts);
+  }
+
   for (const language of ['ar', 'en'] as QuizLanguage[]) {
     try {
       await getOrCreateDailyPack(language, packDate);
@@ -506,6 +573,16 @@ export async function getDailyQuizForUser(
       where: { id: session.id },
       data: { completedAt: new Date() },
     });
+  }
+
+  if (pendingIndex >= 0 && pendingIndex < pack.length) {
+    void trackQuestionShownForSession(
+      session.id,
+      pack[pendingIndex]!,
+      packDate,
+      language,
+      progress,
+    ).catch((err) => logger.warn('[QuizMetrics] shown tracking failed', err));
   }
 
   return {
@@ -818,6 +895,16 @@ export async function submitQuizAnswer(
       question.imageType === 'team' ||
       question.imageType === 'player');
 
+  void trackQuizAnswerMetric(
+    question,
+    packDate,
+    language,
+    txResult.isCorrect,
+    timeTaken,
+    txResult.sessionId,
+    { byQuestionId: txResult.progress },
+  ).catch((err) => logger.warn('[QuizMetrics] answer tracking failed', err));
+
   return {
     isCorrect: txResult.isCorrect,
     correctKey: question.correctKey,
@@ -849,7 +936,9 @@ export async function skipQuizQuestion(
   const pack = await loadReadyDailyPack(language, packDate, timezone);
   if (!pack?.length || !findQuestion(pack, questionId)) throw new Error('QUESTION_NOT_FOUND');
 
-  return prisma.$transaction(async (tx) => {
+  const question = findQuestion(pack, questionId)!;
+
+  const skipResult = await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({
       where: { clerkUserId },
       select: { id: true, coins: true },
@@ -872,6 +961,7 @@ export async function skipQuizQuestion(
         alreadyDone: true, 
         coins: user.coins, 
         skipped: true,
+        sessionId: activeSession.id,
         currentIndex: computeCurrentIndex(progress, pack),
         progress: progress.byQuestionId
       };
@@ -921,10 +1011,23 @@ export async function skipQuizQuestion(
       skipped: true,
       stats,
       completed: allDone,
+      sessionId: activeSession.id,
       currentIndex: computeCurrentIndex(progress, pack),
       progress: progress.byQuestionId,
     };
   });
+
+  if (!skipResult.alreadyDone) {
+    void trackQuizSkipMetric(
+      question,
+      packDate,
+      language,
+      skipResult.sessionId,
+      { byQuestionId: skipResult.progress },
+    ).catch((err) => logger.warn('[QuizMetrics] skip tracking failed', err));
+  }
+
+  return skipResult;
 }
 
 export async function useQuizHint(
@@ -940,7 +1043,7 @@ export async function useQuizHint(
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
 
-  return prisma.$transaction(async (tx) => {
+  const hintResult = await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({
       where: { clerkUserId },
       select: { id: true, coins: true },
@@ -963,6 +1066,7 @@ export async function useQuizHint(
         hint: question.hint ?? '', 
         coins: user.coins, 
         alreadyUsed: true,
+        sessionId: activeSession.id,
         currentIndex: computeCurrentIndex(progress, pack),
         progress: progress.byQuestionId
       };
@@ -1005,10 +1109,23 @@ export async function useQuizHint(
       hint: question.hint ?? '',
       coins: newCoins,
       hintUsed: true,
+      sessionId: activeSession.id,
       currentIndex: computeCurrentIndex(progress, pack),
       progress: progress.byQuestionId,
     };
   });
+
+  if (!hintResult.alreadyUsed) {
+    void trackQuizHintMetric(
+      question,
+      packDate,
+      language,
+      hintResult.sessionId,
+      { byQuestionId: hintResult.progress },
+    ).catch((err) => logger.warn('[QuizMetrics] hint tracking failed', err));
+  }
+
+  return hintResult;
 }
 
 export async function timeoutQuizQuestion(
@@ -1024,7 +1141,7 @@ export async function timeoutQuizQuestion(
   const question = findQuestion(pack, questionId);
   if (!question) throw new Error('QUESTION_NOT_FOUND');
 
-  return prisma.$transaction(async (tx) => {
+  const timeoutResult = await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({
       where: { clerkUserId },
       select: { id: true, coins: true },
@@ -1051,7 +1168,7 @@ export async function timeoutQuizQuestion(
 
     if (isTerminalStatus(existing?.status)) {
       const stats = countStats(progress, pack);
-      const result: QuizTimeoutResult = {
+      const result: QuizTimeoutResult & { sessionId?: string } = {
         penaltyApplied: existing?.penaltyApplied ?? false,
         alreadyDone: true,
         coins: user.coins,
@@ -1059,6 +1176,7 @@ export async function timeoutQuizQuestion(
         completed: isQuizComplete(progress, pack),
         currentIndex: computeCurrentIndex(progress, pack),
         progress: progress.byQuestionId,
+        sessionId: activeSession.id,
       };
       if (existing?.status === 'answered' || existing?.status === 'timed_out') {
         result.correctKey = existing?.correctKey ?? question.correctKey;
@@ -1096,7 +1214,7 @@ export async function timeoutQuizQuestion(
       },
     });
 
-    const result: QuizTimeoutResult = {
+    const result: QuizTimeoutResult & { sessionId: string; alreadyDone?: boolean } = {
       correctKey: question.correctKey,
       imageUrl:
         question.type === 'guess_player' && question.imageUrl
@@ -1108,8 +1226,24 @@ export async function timeoutQuizQuestion(
       completed: allDone,
       currentIndex: computeCurrentIndex(progress, pack),
       progress: progress.byQuestionId,
+      sessionId: activeSession.id,
+      alreadyDone: false,
     };
 
     return result;
   });
+
+  if (!timeoutResult.alreadyDone) {
+    void trackQuizTimeoutMetric(
+      question,
+      packDate,
+      language,
+      QUIZ_TIME_LIMIT_SEC,
+      timeoutResult.sessionId,
+      { byQuestionId: timeoutResult.progress },
+    ).catch((err) => logger.warn('[QuizMetrics] timeout tracking failed', err));
+  }
+
+  const { sessionId: _sessionId, alreadyDone: _alreadyDone, ...publicResult } = timeoutResult;
+  return publicResult;
 }

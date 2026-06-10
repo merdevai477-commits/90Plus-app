@@ -13,6 +13,10 @@ import {
   scoreEntityNameMatch,
   isCrossScriptNamePair,
 } from './quiz-name-match.util';
+import {
+  getCachedQuizImageUrl,
+  setCachedQuizImageUrl,
+} from './quiz-image-cache.service';
 
 /** Known API-Football team IDs for names that search often misses. */
 const KNOWN_TEAM_IDS: Readonly<Record<string, number>> = {
@@ -351,6 +355,53 @@ export async function enrichQuizImages(
 
     const binding = q.imageBinding;
 
+    if (q.imageUrl?.trim()) {
+      out.push(q);
+      continue;
+    }
+
+    if (binding.apiId) {
+      const cachedUrl = await getCachedQuizImageUrl(binding.kind, binding.apiId);
+      if (cachedUrl) {
+        q.imageUrl = cachedUrl;
+        q.imageBinding = { ...binding, imageUrl: cachedUrl };
+        out.push(q);
+        continue;
+      }
+    }
+
+    if (binding.apiId && binding.kind === 'player') {
+      try {
+        const rows = await footballService.getPlayerById(binding.apiId);
+        const photo = rows?.[0]?.player?.photo;
+        if (photo?.trim()) {
+          q.imageUrl = photo;
+          q.imageBinding = { ...binding, imageUrl: photo };
+          void setCachedQuizImageUrl('player', binding.apiId, photo);
+          out.push(q);
+          continue;
+        }
+      } catch (e) {
+        logger.warn(`[QuizImage] Direct player lookup failed for apiId ${binding.apiId}`, e);
+      }
+    }
+
+    if (binding.apiId && binding.kind === 'team') {
+      try {
+        const rows = await footballService.getTeamById(binding.apiId);
+        const logo = rows?.[0]?.team?.logo;
+        if (logo?.trim()) {
+          q.imageUrl = logo;
+          q.imageBinding = { ...binding, imageUrl: logo };
+          void setCachedQuizImageUrl('team', binding.apiId, logo);
+          out.push(q);
+          continue;
+        }
+      } catch (e) {
+        logger.warn(`[QuizImage] Direct team lookup failed for apiId ${binding.apiId}`, e);
+      }
+    }
+
     if (
       q.type === 'guess_player' &&
       binding.kind === 'player' &&
@@ -581,6 +632,9 @@ export async function enrichQuizImages(
       q.imageUrl = bestMatchUrl;
       q.imageBinding.imageUrl = bestMatchUrl;
       q.imageBinding.apiId = bestMatchId;
+      if (bestMatchId) {
+        void setCachedQuizImageUrl(binding.kind, bestMatchId, bestMatchUrl);
+      }
       logger.info(`[QuizImage] Resolved ${q.id} (${q.type}): ${binding.kind} "${binding.entityName}" -> ${bestMatchUrl} (score: ${maxScore.toFixed(2)})`);
       out.push(q);
     } else {

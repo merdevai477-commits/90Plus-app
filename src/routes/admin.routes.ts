@@ -10,6 +10,8 @@ import { NotificationService, NotificationType } from '../services/notification.
 import { UploadAnalyticsService } from '../services/upload-analytics.service';
 import { ErrorCode, sendError } from '../constants/errors';
 import { notifyUser } from '../services/notify.service';
+import type { QuizLanguage } from '../types/quiz.types';
+import type { QuizAnalyticsFilters } from '../services/quiz-analytics.service';
 
 const router = Router();
 
@@ -1058,6 +1060,71 @@ router.get('/uploads/stats', requireAdmin, async (req: Request, res: Response): 
     } catch (error: any) {
         logger.error('Upload stats error:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+});
+
+/**
+ * GET /api/admin/quiz/analytics
+ * Aggregated quiz question metrics (hardest, easiest, skips, hints, types, timing).
+ */
+router.get('/quiz/analytics', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const {
+            getHardestQuestions,
+            getEasiestQuestions,
+            getMostSkippedQuestions,
+            getMostHintedQuestions,
+            getTypePerformance,
+            getAvgAnswerTimeByDifficulty,
+        } = await import('../services/quiz-analytics.service');
+
+        const langRaw = typeof req.query.language === 'string' ? req.query.language : undefined;
+        const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 20;
+        const packDateFrom = req.query.packDateFrom
+            ? new Date(String(req.query.packDateFrom))
+            : undefined;
+        const packDateTo = req.query.packDateTo
+            ? new Date(String(req.query.packDateTo))
+            : undefined;
+
+        const filters: QuizAnalyticsFilters = {
+            language: langRaw === 'ar' || langRaw === 'en' ? (langRaw as QuizLanguage) : undefined,
+            packDateFrom,
+            packDateTo,
+            limit,
+            minShown: 5,
+        };
+
+        const [
+            hardest,
+            easiest,
+            mostSkipped,
+            mostHinted,
+            typePerformance,
+            timingByDifficulty,
+        ] = await Promise.all([
+            getHardestQuestions(filters),
+            getEasiestQuestions(filters),
+            getMostSkippedQuestions(filters),
+            getMostHintedQuestions(filters),
+            getTypePerformance(filters),
+            getAvgAnswerTimeByDifficulty(filters),
+        ]);
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                hardest,
+                easiest,
+                mostSkipped,
+                mostHinted,
+                typePerformance,
+                timingByDifficulty,
+            },
+        });
+    } catch (error: unknown) {
+        logger.error('Quiz analytics error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load quiz analytics');
     }
 });
 

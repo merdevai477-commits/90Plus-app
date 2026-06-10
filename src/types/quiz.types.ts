@@ -18,12 +18,15 @@ export interface StoredQuizQuestion {
   options: QuizOptionDto[];
   correctKey: QuizOptionKey;
   difficulty: QuizDifficulty;
+  /** AI confidence at generation time (0–100); not exposed to clients. */
+  confidence?: number;
   imageUrl?: string | null;
   imageLayout?: QuizImageLayout;
   imageType?: QuizImageType;
   hint?: string | null;
   imageBinding?: {
     kind: 'player' | 'team' | 'venue' | 'league';
+    entityId?: string;
     entityName: string;
     teamName?: string;
     apiId?: number;
@@ -44,6 +47,8 @@ export interface QuestionProgress {
   answeredAt?: Date | string;
   skippedAt?: Date | string;
   timedOutAt?: Date | string;
+  /** Session flag: global shown metric recorded for this question. */
+  metricsShown?: boolean;
 }
 
 export interface SessionProgress {

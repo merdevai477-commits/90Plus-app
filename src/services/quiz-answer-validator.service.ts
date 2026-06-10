@@ -1,17 +1,44 @@
 import { logger } from '../utils/logger';
-import type { StoredQuizQuestion, QuizLanguage } from '../types/quiz.types';
+import type { StoredQuizQuestion, QuizLanguage, QuizQuestionType } from '../types/quiz.types';
+import type { QuizEntitySlice, QuizPackValidationContext } from '../types/quiz-entity.types';
+import { QUIZ_MIN_CONFIDENCE } from '../constants/quiz.constants';
 import {
   scoreEntityNameMatch,
   isCrossScriptNamePair,
   containsArabicScript,
   containsLatinLetters,
 } from './quiz-name-match.util';
+import {
+  getDatasetPlayer,
+  getEntityNameById,
+  resolveEntityIdInSlice,
+} from './quiz-entity-dataset.service';
 
 // Same-script: raised from 0.72 → 0.80 to cut homonym false alignments.
 // Cross-script (Arabic options + English entityName): lower bar — transliteration
 // is approximate but still blocks totally unrelated options.
 const MIN_OPTION_MATCH = 0.8;
 const MIN_CROSS_SCRIPT_MATCH = 0.55;
+
+const TIME_SENSITIVE_PATTERNS = [
+  /\bcurrent\s+(league\s+)?standings?\b/i,
+  /\bcurrent\s+top\s+scorer/i,
+  /\bcurrent\s+ranking/i,
+  /\bcurrent\s+form\b/i,
+  /\bcurrent\s+points?\b/i,
+  /\bthis\s+season(?:'s)?\s+top\s+scorer/i,
+  /\bleading\s+the\s+(table|standings)\b/i,
+  /\bمتصدر\s+الدوري\b/,
+  /\bترتيب\s+الدوري\s+الحالي\b/,
+  /\bهداف\s+الدوري\s+الحالي\b/,
+];
+
+const WEAK_SINGLE_CLUE_PATTERNS = [
+  /^(who is|guess the player|من هو|خمن اللاعب)\s*$/i,
+  /plays?\s+for\s+[\w\s]+\s*[-—]?\s*(who|من)/i,
+  /number\s+\d+\s*[-—]?\s*(who|guess|من)/i,
+  /يلعب\s+(في|لـ?)\s+[\w\s\u0600-\u06FF]+\s*[-—]?\s*من/i,
+];
 
 function inferQuizLanguage(q: StoredQuizQuestion): QuizLanguage | null {
   const match = q.id.match(/daily-\d{4}-\d{2}-\d{2}-(ar|en)-/);
@@ -53,6 +80,263 @@ function bestMatchingOptionKey(
   return best;
 }
 
+function optionEntityCategory(type: QuizQuestionType, bindingKind?: string): 'player' | 'club' | 'stadium' {
+  if (type === 'guess_player' || bindingKind === 'player') return 'player';
+  if (type === 'stadium' || bindingKind === 'venue') return 'stadium';
+  return 'club';
+}
+
+function resolveOptionEntityId(slice: QuizEntitySlice, text: string, type: QuizQuestionType, bindingKind?: string): string | null {
+  if (type === 'normal') {
+    return (
+      resolveEntityIdInSlice(slice, text, 'player') ??
+      resolveEntityIdInSlice(slice, text, 'club') ??
+      resolveEntityIdInSlice(slice, text, 'stadium')
+    );
+  }
+  return resolveEntityIdInSlice(slice, text, optionEntityCategory(type, bindingKind));
+}
+
+export function isTimeSensitiveQuestionText(question: string, hasExplicitStats: boolean): boolean {
+  if (hasExplicitStats) return false;
+  return TIME_SENSITIVE_PATTERNS.some((re) => re.test(question));
+}
+
+export function countGuessPlayerClues(q: StoredQuizQuestion, slice: QuizEntitySlice): number {
+  const binding = q.imageBinding;
+  if (!binding?.entityId?.startsWith('player:')) return 0;
+  const player = getDatasetPlayer(slice, binding.entityId);
+  if (!player) return 0;
+
+  const text = q.question.toLowerCase();
+  let clues = 0;
+
+  if (player.nationality && text.includes(player.nationality.toLowerCase())) clues += 1;
+  if (player.country && text.includes(player.country.toLowerCase())) clues += 1;
+  if (player.position && text.toLowerCase().includes(player.position.toLowerCase())) clues += 1;
+  if (player.age != null && new RegExp(`\\b${player.age}\\b`).test(text)) clues += 1;
+  if (player.birthdate && text.includes(player.birthdate)) clues += 1;
+  if (player.jerseyNumber != null && new RegExp(`\\b${player.jerseyNumber}\\b`).test(text)) clues += 1;
+  if (player.achievements?.some((a) => text.includes(a.toLowerCase()))) clues += 1;
+  if (player.statistics) {
+    for (const val of Object.values(player.statistics)) {
+      if (String(val).length > 0 && text.includes(String(val).toLowerCase())) clues += 1;
+    }
+  }
+
+  return clues;
+}
+
+export function hasWeakGuessPlayerClue(q: StoredQuizQuestion, playerName: string): boolean {
+  const qText = q.question.trim();
+  if (WEAK_SINGLE_CLUE_PATTERNS.some((re) => re.test(qText))) return true;
+  const normalizedName = playerName.toLowerCase();
+  if (qText.toLowerCase().includes(normalizedName)) return true;
+  return false;
+}
+
+export function validateQuestionAgainstDataset(
+  q: StoredQuizQuestion,
+  slice: QuizEntitySlice,
+  packContext: QuizPackValidationContext,
+  confidence?: number,
+): StoredQuizQuestion | null {
+  if (confidence != null && (typeof confidence !== 'number' || confidence < QUIZ_MIN_CONFIDENCE)) {
+    logger.info(`[QuizValidate] Rejected ${q.id}: confidence ${confidence} < ${QUIZ_MIN_CONFIDENCE}`);
+    return null;
+  }
+
+  const bindingKind = q.imageBinding?.kind;
+
+  const optionIds: string[] = [];
+  for (const opt of q.options) {
+    const id = resolveOptionEntityId(slice, opt.text, q.type, bindingKind);
+    if (!id) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: distractor "${opt.text}" not in dataset`);
+      return null;
+    }
+    optionIds.push(id);
+  }
+
+  const uniqueOptions = new Set(optionIds);
+  if (uniqueOptions.size !== optionIds.length) {
+    logger.info(`[QuizValidate] Rejected ${q.id}: duplicate distractors`);
+    return null;
+  }
+
+  const correctOpt = q.options.find((o) => o.key === q.correctKey);
+  const correctId =
+    q.imageBinding?.entityId && getEntityNameById(slice, q.imageBinding.entityId)
+      ? q.imageBinding.entityId
+      : resolveOptionEntityId(slice, correctOpt?.text ?? '', q.type, bindingKind);
+
+  if (!correctId) {
+    logger.info(`[QuizValidate] Rejected ${q.id}: correct answer not in dataset`);
+    return null;
+  }
+
+  if (!optionIds.includes(correctId)) {
+    logger.info(`[QuizValidate] Rejected ${q.id}: correctKey does not map to dataset entity`);
+    return null;
+  }
+
+  if (packContext.correctAnswerEntityIds.has(correctId)) {
+    logger.info(`[QuizValidate] Rejected ${q.id}: entity ${correctId} already used as correct answer`);
+    return null;
+  }
+
+  const correctOptionCount = optionIds.filter((id) => id === correctId).length;
+  if (correctOptionCount !== 1) {
+    logger.info(`[QuizValidate] Rejected ${q.id}: correct answer entity not unique in options`);
+    return null;
+  }
+
+  for (const distractorId of optionIds) {
+    if (distractorId === correctId) continue;
+    if (packContext.correctAnswerEntityIds.has(distractorId)) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: distractor ${distractorId} is correct answer elsewhere`);
+      return null;
+    }
+    if (packContext.distractorEntityIds.has(distractorId)) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: distractor ${distractorId} reused in pack`);
+      return null;
+    }
+  }
+
+  if (q.imageBinding) {
+    const binding = q.imageBinding;
+    if (binding.entityId && !getEntityNameById(slice, binding.entityId)) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: imageBinding.entityId not in dataset`);
+      return null;
+    }
+    if (binding.entityId && binding.entityId !== correctId) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: imageBinding.entityId mismatch`);
+      return null;
+    }
+
+    if (
+      (q.type === 'guess_player' && binding.kind !== 'player') ||
+      (q.type === 'logo' && binding.kind !== 'team') ||
+      (q.type === 'stadium' && binding.kind !== 'venue')
+    ) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: imageBinding kind mismatch for type ${q.type}`);
+      return null;
+    }
+
+    if (binding.kind === 'player' && binding.entityId) {
+      const player = getDatasetPlayer(slice, binding.entityId);
+      if (player && binding.teamName && binding.teamName !== player.teamName) {
+        logger.info(`[QuizValidate] Rejected ${q.id}: teamName does not match dataset`);
+        return null;
+      }
+    }
+
+    if (binding.entityName && binding.entityId) {
+      const expectedName = getEntityNameById(slice, binding.entityId);
+      if (expectedName && scoreEntityNameMatch(binding.entityName, expectedName) < 0.75) {
+        logger.info(`[QuizValidate] Rejected ${q.id}: entityName does not match dataset id`);
+        return null;
+      }
+    }
+
+  }
+
+  if (q.type === 'guess_player') {
+    const player = bindingKind === 'player' && q.imageBinding?.entityId
+      ? getDatasetPlayer(slice, q.imageBinding.entityId)
+      : null;
+    if (player && hasWeakGuessPlayerClue(q, player.name)) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: weak guess_player clue`);
+      return null;
+    }
+    const clueCount = countGuessPlayerClues(q, slice);
+    if (clueCount < 2) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: insufficient dataset-backed clues (${clueCount})`);
+      return null;
+    }
+  }
+
+  const hasStats = Boolean(
+    q.imageBinding?.entityId &&
+    getDatasetPlayer(slice, q.imageBinding.entityId)?.statistics,
+  );
+  if (isTimeSensitiveQuestionText(q.question, hasStats)) {
+    logger.info(`[QuizValidate] Rejected ${q.id}: time-sensitive question`);
+    return null;
+  }
+
+  if (q.type === 'guess_player' || correctId.startsWith('player:')) {
+    const correctPlayer = getDatasetPlayer(slice, correctId);
+    const distractorPlayers = optionIds
+      .filter((id) => id !== correctId)
+      .map((id) => getDatasetPlayer(slice, id))
+      .filter((p): p is NonNullable<typeof p> => p != null);
+
+    if (correctPlayer && distractorPlayers.length === 3) {
+      const samePosition = distractorPlayers.filter(
+        (d) => d.position === correctPlayer.position,
+      ).length;
+      if (samePosition < 2) {
+        logger.info(`[QuizValidate] Rejected ${q.id}: distractors lack position plausibility`);
+        return null;
+      }
+    }
+  }
+
+  packContext.correctAnswerEntityIds.add(correctId);
+  for (const id of optionIds) {
+    if (id !== correctId) packContext.distractorEntityIds.add(id);
+  }
+
+  const enriched = { ...q };
+
+  if (enriched.imageBinding?.entityId) {
+    const entityId = enriched.imageBinding.entityId;
+
+    if (enriched.type === 'logo' || (enriched.type === 'image' && enriched.imageBinding.kind === 'team')) {
+      const club = slice.clubs.find((c) => c.id === entityId);
+      if (club?.logoUrl) {
+        enriched.imageUrl = club.logoUrl;
+        enriched.imageBinding = {
+          ...enriched.imageBinding,
+          imageUrl: club.logoUrl,
+          apiId: club.apiTeamId,
+        };
+      }
+    }
+
+    if (enriched.type === 'stadium' || enriched.imageBinding.kind === 'venue') {
+      const stadium = slice.stadiums.find((s) => s.id === entityId);
+      if (stadium?.imageUrl) {
+        enriched.imageUrl = stadium.imageUrl;
+        enriched.imageBinding = {
+          ...enriched.imageBinding,
+          imageUrl: stadium.imageUrl,
+          apiId: stadium.apiTeamId,
+        };
+      }
+    }
+
+    if (enriched.type === 'guess_player' || enriched.imageBinding.kind === 'player') {
+      const player = getDatasetPlayer(slice, entityId);
+      if (player) {
+        enriched.imageBinding = {
+          ...enriched.imageBinding,
+          apiId: player.apiPlayerId,
+          teamName: player.teamName,
+          entityName: player.name,
+        };
+      }
+    }
+  }
+
+  return enriched;
+}
+
+export function createPackValidationContext(): QuizPackValidationContext {
+  return { correctAnswerEntityIds: new Set(), distractorEntityIds: new Set() };
+}
+
 /**
  * Align correctKey with imageBinding.entityName when the AI mismarked the answer.
  * Returns null when no option plausibly matches the bound entity.
@@ -73,9 +357,6 @@ export function alignCorrectKeyWithBinding(
 
   if (!needsAlignment) return q;
 
-  // Arabic daily packs keep imageBinding.entityName in English (for API lookup).
-  // Option text may be Arabic OR Latin — EN↔option fuzzy match is unreliable.
-  // correctKey was already validated at parse time; trust it for ar packs.
   if (
     isArabicLanguagePack(q, language) &&
     isLatinEntityName(entityName) &&
@@ -143,7 +424,6 @@ export function verifyQuestionConsistency(
   const matchScore = scoreEntityNameMatch(binding.entityName, correctText);
   const threshold = matchThreshold(binding.entityName, correctText);
 
-  // Cross-script ar packs: entityName is English, answer text is Arabic.
   if (isCrossScriptNamePair(binding.entityName, correctText) && hasValidCorrectKey(aligned)) {
     return aligned;
   }
