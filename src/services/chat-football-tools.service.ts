@@ -432,7 +432,7 @@ export async function fetchPlayerStatsRow(
     //    fall back to a name search when this id resolves nothing, because that
     //    fallback is exactly what produced Vinicius→Giroud. An empty stat feed
     //    for a known id means "no verified data this season", not "wrong id".
-    if (apiPlayerId && resolved?.resolvedBy !== 'raw') {
+    if (apiPlayerId && resolved && resolved.resolvedBy !== 'raw') {
       const detailed = await footballService.getPlayerStatistics(apiPlayerId, PLAYER_SEASON);
       row = detailed?.[0] ?? null;
       footballMetrics.recordResolver(true);
