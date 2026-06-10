@@ -196,7 +196,7 @@ function checkPureLogic() {
   });
   if (
     wcSystem.includes('Generate only FIFA World Cup related questions') &&
-    wcSystem.includes('5× "normal"')
+    wcSystem.includes('8× "normal"')
   ) {
     pass('WORLD_CUP theme prompt injection');
   } else {

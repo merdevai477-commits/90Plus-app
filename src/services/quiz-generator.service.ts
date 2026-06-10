@@ -30,6 +30,7 @@ import {
 } from '../constants/quiz.constants';
 import {
   buildQuizEntityDataset,
+  enrichSliceForTheme,
   selectDailyEntitySlice,
 } from './quiz-entity-dataset.service';
 import { buildQuizSystemPrompt, buildQuizUserPrompt } from './quiz-prompt.builder';
@@ -72,6 +73,7 @@ const QUIZ_COMPLETION_OPTS = {
 
 const AI_PARSE_MAX_RETRIES = 2;
 const MAX_GENERATION_ATTEMPTS = 3;
+const MAX_THEMED_GENERATION_ATTEMPTS = 10;
 
 export type AiQuizResponse =
   | { questions: unknown[]; status?: 'OK' }
@@ -173,6 +175,9 @@ function tryParseJson(text: string): unknown | null {
 export function parseAiQuizResponse(content: string): AiQuizResponse {
   const stripped = stripMarkdownFences(content.trim());
   const parsed = tryParseJson(stripped);
+  if (Array.isArray(parsed)) {
+    return { questions: parsed, status: 'OK' };
+  }
   if (!parsed || typeof parsed !== 'object') {
     return { questions: [] };
   }
@@ -471,10 +476,15 @@ async function buildPackFromDataset(
     );
   }
 
-  for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt += 1) {
-    const slice = selectDailyEntitySlice(datasetResult.dataset, packDate, language, attempt);
+  const maxAttempts = campaign ? MAX_THEMED_GENERATION_ATTEMPTS : MAX_GENERATION_ATTEMPTS;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const slice = enrichSliceForTheme(
+      selectDailyEntitySlice(datasetResult.dataset, packDate, language, attempt),
+      theme,
+    );
     logger.info(
-      `[QuizGen] Attempt ${attempt + 1}/${MAX_GENERATION_ATTEMPTS} slice: ${slice.players.length} players, ${slice.clubs.length} clubs, ${slice.stadiums.length} stadiums`,
+      `[QuizGen] Attempt ${attempt + 1}/${maxAttempts} slice: ${slice.players.length} players, ${slice.clubs.length} clubs, ${slice.stadiums.length} stadiums, nations=${slice.nations?.length ?? 0}`,
     );
 
     const { questions: raw, insufficient } = await attemptOpenRouterCall(
@@ -516,7 +526,7 @@ async function buildPackFromDataset(
   }
 
   throw new Error(
-    `Failed to generate valid ${QUIZ_PACK_SIZE}-question pack after ${MAX_GENERATION_ATTEMPTS} attempts`,
+    `Failed to generate valid ${QUIZ_PACK_SIZE}-question pack after ${maxAttempts} attempts`,
   );
 }
 

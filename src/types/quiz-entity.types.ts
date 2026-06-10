@@ -37,6 +37,13 @@ export interface QuizDatasetStadium {
   imageUrl?: string;
 }
 
+/** National teams / countries — injected in campaign themes (e.g. WORLD_CUP). */
+export interface QuizDatasetNation {
+  id: string;
+  name: string;
+  aliases?: string[];
+}
+
 export interface QuizEntityDataset {
   players: QuizDatasetPlayer[];
   clubs: QuizDatasetClub[];
@@ -47,6 +54,7 @@ export interface QuizEntitySlice {
   players: QuizDatasetPlayer[];
   clubs: QuizDatasetClub[];
   stadiums: QuizDatasetStadium[];
+  nations?: QuizDatasetNation[];
 }
 
 export type QuizDatasetBuildResult =

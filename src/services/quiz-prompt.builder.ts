@@ -129,15 +129,16 @@ export function buildQuizUserPrompt(params: QuizPromptParams): string {
 
   const themeLine = campaign?.userPromptLine ? `\n${campaign.userPromptLine}` : '';
 
-  const datasetJson = JSON.stringify(
-    {
-      players: params.slice.players,
-      clubs: params.slice.clubs,
-      stadiums: params.slice.stadiums,
-    },
-    null,
-    0,
-  );
+  const datasetPayload: Record<string, unknown> = {
+    players: params.slice.players,
+    clubs: params.slice.clubs,
+    stadiums: params.slice.stadiums,
+  };
+  if (params.slice.nations?.length) {
+    datasetPayload.nations = params.slice.nations;
+  }
+
+  const datasetJson = JSON.stringify(datasetPayload, null, 0);
 
   return `Generate the daily football quiz for ${params.packDate} in ${langLabel}.
 Topic focus: ${params.topicFocus}.${themeLine}

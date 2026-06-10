@@ -37,6 +37,7 @@ import type {
   StoredQuizQuestion,
 } from '../types/quiz.types';
 import { QUIZ_PACK_SIZE } from '../constants/quiz.constants';
+import { getQuizThemeCampaign, resolveQuizTheme } from '../constants/quiz-theme.config';
 import { ensureBackendUser } from '../utils/ensureBackendUser';
 
 export { QUIZ_PACK_SIZE } from '../constants/quiz.constants';
@@ -397,6 +398,14 @@ async function generatePackWithFallback(
     await savePack(packDate, language, generated.questions, generated.expiresAt, generated.generationMeta);
     return generated.questions;
   } catch (err) {
+    if (getQuizThemeCampaign(resolveQuizTheme())) {
+      logger.error(
+        `[QuizDaily] Themed pack generation failed (${dateStr}/${language}) — fallback disabled`,
+        err,
+      );
+      throw err;
+    }
+
     logger.error(`[QuizDaily] Pack generation failed (${dateStr}/${language}), trying fallback`, err);
 
     const fallback = await loadMostRecentValidPack(language, packDate);
@@ -415,7 +424,46 @@ async function generatePackWithFallback(
   }
 }
 
+/** Remove cached + DB pack so the next getOrCreate triggers fresh AI generation. */
+export async function invalidateDailyQuizPack(
+  packDate: Date,
+  language: QuizLanguage,
+  timezone?: string,
+): Promise<void> {
+  const dateStr = packDateYmd(packDate, timezone);
+  await redisCacheService.del(`quiz:daily:${dateStr}:${language}`);
+  await prisma.dailyQuizPack.deleteMany({ where: { packDate, language } });
+  logger.info(`[QuizDaily] Invalidated pack ${dateStr}/${language}`);
+}
+
+/** Force-regenerate daily packs (use after QUIZ_THEME change or bad pack). */
+export async function regenerateDailyQuizPacks(options?: {
+  packDate?: Date;
+  languages?: QuizLanguage[];
+  timezone?: string;
+}): Promise<void> {
+  const packDate = options?.packDate ?? todayPackDate(options?.timezone);
+  const languages = options?.languages ?? (['ar', 'en'] as QuizLanguage[]);
+  const dateStr = packDateYmd(packDate, options?.timezone);
+  const theme = resolveQuizTheme();
+
+  logger.info('[QuizDaily] Regenerating packs', { theme, packDate: dateStr, languages });
+
+  for (const language of languages) {
+    try {
+      await invalidateDailyQuizPack(packDate, language, options?.timezone);
+      const questions = await generatePackWithFallback(packDate, language, options?.timezone);
+      logger.info(`[QuizDaily] Regenerated ${dateStr}/${language}: ${questions.length} question(s)`);
+    } catch (err) {
+      logger.error(`[QuizDaily] Regeneration failed for ${dateStr}/${language}`, err);
+    }
+  }
+}
+
 export async function warmupDailyQuizzes(): Promise<void> {
+  const theme = resolveQuizTheme();
+  logger.info('[QuizDaily] Warmup starting', { theme });
+
   const packDate = todayPackDate();
   const datasetCheck = await buildQuizEntityDataset();
   if (datasetCheck.ok) {

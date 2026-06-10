@@ -12,6 +12,7 @@ import {
   getDatasetPlayer,
   getEntityNameById,
   resolveEntityIdInSlice,
+  resolveNationIdInSlice,
 } from './quiz-entity-dataset.service';
 
 // Same-script: raised from 0.72 → 0.80 to cut homonym false alignments.
@@ -32,6 +33,11 @@ const TIME_SENSITIVE_PATTERNS = [
   /\bترتيب\s+الدوري\s+الحالي\b/,
   /\bهداف\s+الدوري\s+الحالي\b/,
 ];
+
+const INVALID_OPTION_TEXT =
+  /^(midfielder|defender|goalkeeper|attacker|forward|winger|unknown|midfield|defence|attack)$/i;
+
+const WORLD_CUP_CLUE_PATTERN = /world cup|كأس العالم|fifa|mundial|بطولة العالم/i;
 
 const WEAK_SINGLE_CLUE_PATTERNS = [
   /^(who is|guess the player|من هو|خمن اللاعب)\s*$/i,
@@ -87,6 +93,9 @@ function optionEntityCategory(type: QuizQuestionType, bindingKind?: string): 'pl
 }
 
 function resolveOptionEntityId(slice: QuizEntitySlice, text: string, type: QuizQuestionType, bindingKind?: string): string | null {
+  const nationId = resolveNationIdInSlice(slice, text);
+  if (nationId) return nationId;
+
   if (type === 'normal') {
     return (
       resolveEntityIdInSlice(slice, text, 'player') ??
@@ -124,6 +133,8 @@ export function countGuessPlayerClues(q: StoredQuizQuestion, slice: QuizEntitySl
     }
   }
 
+  if (WORLD_CUP_CLUE_PATTERN.test(q.question)) clues += 1;
+
   return clues;
 }
 
@@ -150,6 +161,10 @@ export function validateQuestionAgainstDataset(
 
   const optionIds: string[] = [];
   for (const opt of q.options) {
+    if (INVALID_OPTION_TEXT.test(opt.text.trim())) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: invalid option text "${opt.text}"`);
+      return null;
+    }
     const id = resolveOptionEntityId(slice, opt.text, q.type, bindingKind);
     if (!id) {
       logger.info(`[QuizValidate] Rejected ${q.id}: distractor "${opt.text}" not in dataset`);
@@ -193,11 +208,17 @@ export function validateQuestionAgainstDataset(
 
   for (const distractorId of optionIds) {
     if (distractorId === correctId) continue;
-    if (packContext.correctAnswerEntityIds.has(distractorId)) {
+    if (
+      packContext.correctAnswerEntityIds.has(distractorId) &&
+      !distractorId.startsWith('nation:')
+    ) {
       logger.info(`[QuizValidate] Rejected ${q.id}: distractor ${distractorId} is correct answer elsewhere`);
       return null;
     }
-    if (packContext.distractorEntityIds.has(distractorId)) {
+    if (
+      packContext.distractorEntityIds.has(distractorId) &&
+      !distractorId.startsWith('nation:')
+    ) {
       logger.info(`[QuizValidate] Rejected ${q.id}: distractor ${distractorId} reused in pack`);
       return null;
     }
@@ -250,7 +271,8 @@ export function validateQuestionAgainstDataset(
       return null;
     }
     const clueCount = countGuessPlayerClues(q, slice);
-    if (clueCount < 2) {
+    const minClues = slice.nations?.length ? 1 : 2;
+    if (clueCount < minClues) {
       logger.info(`[QuizValidate] Rejected ${q.id}: insufficient dataset-backed clues (${clueCount})`);
       return null;
     }
@@ -265,14 +287,17 @@ export function validateQuestionAgainstDataset(
     return null;
   }
 
-  if (q.type === 'guess_player' || correctId.startsWith('player:')) {
+  if (
+    (q.type === 'guess_player' || correctId.startsWith('player:')) &&
+    !correctId.startsWith('nation:')
+  ) {
     const correctPlayer = getDatasetPlayer(slice, correctId);
     const distractorPlayers = optionIds
-      .filter((id) => id !== correctId)
+      .filter((id) => id !== correctId && id.startsWith('player:'))
       .map((id) => getDatasetPlayer(slice, id))
       .filter((p): p is NonNullable<typeof p> => p != null);
 
-    if (correctPlayer && distractorPlayers.length === 3) {
+    if (correctPlayer && distractorPlayers.length === 3 && !slice.nations?.length) {
       const samePosition = distractorPlayers.filter(
         (d) => d.position === correctPlayer.position,
       ).length;
@@ -285,7 +310,9 @@ export function validateQuestionAgainstDataset(
 
   packContext.correctAnswerEntityIds.add(correctId);
   for (const id of optionIds) {
-    if (id !== correctId) packContext.distractorEntityIds.add(id);
+    if (id !== correctId && !id.startsWith('nation:')) {
+      packContext.distractorEntityIds.add(id);
+    }
   }
 
   const enriched = { ...q };

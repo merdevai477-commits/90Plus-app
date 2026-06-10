@@ -21,6 +21,10 @@ import {
   QUIZ_SLICE_PLAYER_COUNT,
   QUIZ_SLICE_STADIUM_COUNT,
 } from '../constants/quiz.constants';
+import { buildWorldCupNations } from '../constants/world-cup-nations';
+import { QuizTheme } from '../types/quiz-theme.types';
+import { getQuizThemeCampaign } from '../constants/quiz-theme.config';
+import type { QuizDatasetNation } from '../types/quiz-entity.types';
 import { scoreEntityNameMatch } from './quiz-name-match.util';
 
 function hashSeed(input: string): number {
@@ -210,6 +214,56 @@ export async function buildQuizEntityDataset(): Promise<QuizDatasetBuildResult> 
   return { ok: true, dataset };
 }
 
+/** Attach campaign-specific entities (e.g. national teams for WORLD_CUP). */
+export function enrichSliceForTheme(slice: QuizEntitySlice, theme: QuizTheme): QuizEntitySlice {
+  if (!getQuizThemeCampaign(theme)) return slice;
+
+  if (theme === QuizTheme.WORLD_CUP) {
+    const byId = new Map<string, QuizDatasetNation>();
+    for (const nation of buildWorldCupNations()) {
+      byId.set(nation.id, nation);
+    }
+    for (const player of slice.players) {
+      for (const label of [player.nationality, player.country]) {
+        if (!label?.trim()) continue;
+        const id = `nation:${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+        if (!byId.has(id)) {
+          byId.set(id, { id, name: label.trim() });
+        }
+      }
+    }
+    return { ...slice, nations: [...byId.values()] };
+  }
+
+  return slice;
+}
+
+export function resolveNationIdInSlice(slice: QuizEntitySlice, textOrId: string): string | null {
+  const nations = slice.nations;
+  if (!nations?.length) return null;
+
+  const trimmed = textOrId.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith('nation:')) {
+    return nations.find((n) => n.id === trimmed)?.id ?? null;
+  }
+
+  let bestId: string | null = null;
+  let bestScore = 0;
+  for (const nation of nations) {
+    const labels = [nation.name, ...(nation.aliases ?? [])];
+    for (const label of labels) {
+      const score = scoreEntityNameMatch(trimmed, label);
+      if (score > bestScore && score >= 0.78) {
+        bestScore = score;
+        bestId = nation.id;
+      }
+    }
+  }
+  return bestId;
+}
+
 /** Resolve option text or entityId to a dataset entity id. */
 export function resolveEntityIdInSlice(
   slice: QuizEntitySlice,
@@ -254,6 +308,9 @@ export function getEntityNameById(slice: QuizEntitySlice, entityId: string): str
   }
   if (entityId.startsWith('team:')) {
     return slice.clubs.find((c) => c.id === entityId)?.name ?? null;
+  }
+  if (entityId.startsWith('nation:')) {
+    return slice.nations?.find((n) => n.id === entityId)?.name ?? null;
   }
   return null;
 }

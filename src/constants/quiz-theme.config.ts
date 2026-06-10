@@ -28,9 +28,9 @@ const DEFAULT_TYPE_TARGETS: Record<QuizQuestionType, number> = {
 };
 
 const WORLD_CUP_TYPE_TARGETS: Record<QuizQuestionType, number> = {
-  normal: 5,
-  image: 5,
-  guess_player: 5,
+  normal: 8,
+  image: 4,
+  guess_player: 3,
   logo: 0,
   stadium: 0,
 };
@@ -54,7 +54,12 @@ AVOID unless directly tied to World Cup history:
 - Champions League and Europa League
 - transfer market or current form
 
-When dataset entities are club players, frame questions around their national-team or World Cup career — never club-only trivia.`,
+When dataset entities are club players, frame questions around their national-team or World Cup career — never club-only trivia.
+
+The dataset includes a "nations" array — use nation names from it for national-team MCQ options (winners, hosts, finalists).
+For normal questions about countries, all four options MUST be exact nation names from the nations list (English or Arabic alias).
+NEVER use numbers, years, shirt numbers, positions, or phrases as option text — only entity names from the dataset.
+For guess_player: include nationality + position + age when available, and reference World Cup context in the question.`,
   userPromptLine: 'Generate only FIFA World Cup related questions.',
   allowedTypes: ['normal', 'image', 'guess_player'],
   typeTargets: WORLD_CUP_TYPE_TARGETS,

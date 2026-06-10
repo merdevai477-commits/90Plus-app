@@ -36,9 +36,9 @@ describe('quiz theme', () => {
     const campaign = getQuizThemeCampaign(QuizTheme.WORLD_CUP);
     expect(campaign?.allowedTypes).toEqual(['normal', 'image', 'guess_player']);
     expect(campaign?.typeTargets).toEqual({
-      normal: 5,
-      image: 5,
-      guess_player: 5,
+      normal: 8,
+      image: 4,
+      guess_player: 3,
       logo: 0,
       stadium: 0,
     });
@@ -52,7 +52,7 @@ describe('quiz theme', () => {
     });
     expect(system).toContain('CAMPAIGN THEME: FIFA WORLD CUP');
     expect(system).toContain('Generate only FIFA World Cup related questions');
-    expect(system).toContain('TYPE MIX: 5× "normal", 5× "image", 5× "guess_player"');
+    expect(system).toContain('TYPE MIX: 8× "normal", 4× "image", 3× "guess_player"');
     expect(system).not.toContain('3× "logo"');
   });
 
