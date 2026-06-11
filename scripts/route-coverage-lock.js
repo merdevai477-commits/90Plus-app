@@ -37,6 +37,8 @@ const PUBLIC_ROUTES = [
   '/api/reels/trending-hashtags',
   '/api/terms/latest',
   '/support',
+  '/news',
+  '/api/news',
   '/privacy',
   '/terms',
   '/api/football',

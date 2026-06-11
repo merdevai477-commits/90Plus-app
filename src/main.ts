@@ -236,6 +236,7 @@ import xpRoutes from './routes/xp.routes';
 import quizRoutes from './routes/quiz.routes';
 import authRoutes from './routes/auth.routes';
 import i18nRoutes from './routes/i18n.routes';
+import newsRoutes from './routes/news.routes';
 import path from 'path';
 import {
     CLERK_SIGN_IN_URL,
@@ -268,6 +269,7 @@ import {
 // Apply lenient rate limiting to high-frequency endpoints (must be before generalLimiter)
 app.use(`${API_PREFIX}/football/fixtures/live`, lenientLimiter);
 app.use(`${API_PREFIX}/football/cached/matches`, lenientLimiter);
+app.use(`${API_PREFIX}/news`, lenientLimiter);
 app.use(`${API_PREFIX}/notifications`, lenientLimiter);
 app.use(`${API_PREFIX}/reels/rankings`, lenientLimiter);
 // Chat routes: streaming + long polling — use lenient limiter
@@ -368,6 +370,7 @@ app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 app.use(`${API_PREFIX}/matches`, matchesRoutes);
 app.use(`${API_PREFIX}/daily-spin`, dailySpinRoutes);
 app.use(`${API_PREFIX}/football`, footballRoutes);
+app.use(`${API_PREFIX}/news`, newsRoutes);
 app.use(`${API_PREFIX}/i18n`, i18nRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
@@ -838,6 +841,11 @@ async function startServer() {
                         );
                     });
                     logger.info('✅ Daily quiz pack cron scheduled (00:00 UTC)');
+
+                    const { startWorldCupNewsRefreshCron } = await import(
+                        './services/world-cup-news-cron.service'
+                    );
+                    startWorldCupNewsRefreshCron();
 
                     if (isFreePlan) {
                         logger.warn('⚠️ FOOTBALL_API_PLAN is free/undefined — heavy watchers (league preloader, preload, etc.) disabled to preserve quota. Match + prediction watchers still run with circuit-breaker protection.');

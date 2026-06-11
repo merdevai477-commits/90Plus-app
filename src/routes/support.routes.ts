@@ -12,8 +12,21 @@ import {
 
 const PRIVACY_PAGE_PATH = path.join(__dirname, '../../public/privacy.html');
 const SUPPORT_PAGE_PATH = path.join(__dirname, '../../public/support.html');
+const NEWS_PAGE_PATH = path.join(__dirname, '../../public/news.html');
 
 const router = Router();
+
+/**
+ * GET /news
+ * أخبار كأس العالم 2026 — عربي + إنجليزي (public/news.html)
+ */
+router.get('/news', (_req: Request, res: Response): void => {
+    res.sendFile(NEWS_PAGE_PATH, (err) => {
+        if (err) {
+            res.status(500).send('تعذّر تحميل صفحة الأخبار');
+        }
+    });
+});
 
 /**
  * GET /support
