@@ -300,6 +300,8 @@ export class StorageService {
                             userMessage = 'حجم الفيديو كبير جداً. الحد الأقصى 50MB.';
                         } else if (xhr.status === 429) {
                             userMessage = errorData.message || 'يرجى الانتظار قبل رفع فيديو جديد.';
+                        } else if (xhr.status === 499 || xhr.status === 0) {
+                            userMessage = 'انقطع الاتصال أثناء الرفع. ابقَ في التطبيق وحاول مرة أخرى.';
                         } else if (xhr.status >= 500) {
                             userMessage = errorData.message || 'خطأ في الخادم. حاول مرة أخرى.';
                         }

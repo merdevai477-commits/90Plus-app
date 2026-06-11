@@ -11,6 +11,21 @@ import { API_CONFIG } from '../constants/theme';
 
 const USER_ID_KEY = API_CONFIG.userIdKey;          // 'ai-chat-user-id'
 const LAST_CONV_KEY = 'ai-chat-last-conversation-id';
+const SESSION_CACHE_KEY = '@chat_session_cache_v1';
+const SESSION_CACHE_TTL_MS = 30 * 60 * 1000;
+
+export interface CachedChatMessage {
+    id: string;
+    role: 'user' | 'ai';
+    text: string;
+    time: string;
+}
+
+export interface ChatSessionCache {
+    conversationId: string;
+    messages: CachedChatMessage[];
+    cachedAt: number;
+}
 
 /** Generate a simple UUID-v4 without external deps. */
 function generateUUID(): string {
@@ -57,6 +72,38 @@ export const Storage = {
     async clearLastConversationId(): Promise<void> {
         try {
             await AsyncStorage.removeItem(LAST_CONV_KEY);
+        } catch {
+            // non-fatal
+        }
+    },
+
+    async saveSessionCache(entry: ChatSessionCache): Promise<void> {
+        try {
+            await AsyncStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(entry));
+        } catch {
+            // non-fatal
+        }
+    },
+
+    async loadSessionCache(): Promise<ChatSessionCache | null> {
+        try {
+            const raw = await AsyncStorage.getItem(SESSION_CACHE_KEY);
+            if (!raw) return null;
+            const entry = JSON.parse(raw) as ChatSessionCache;
+            if (!entry?.conversationId || !Array.isArray(entry.messages)) return null;
+            if (Date.now() - entry.cachedAt > SESSION_CACHE_TTL_MS) {
+                await AsyncStorage.removeItem(SESSION_CACHE_KEY);
+                return null;
+            }
+            return entry;
+        } catch {
+            return null;
+        }
+    },
+
+    async clearSessionCache(): Promise<void> {
+        try {
+            await AsyncStorage.removeItem(SESSION_CACHE_KEY);
         } catch {
             // non-fatal
         }

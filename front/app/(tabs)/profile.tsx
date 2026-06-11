@@ -20,7 +20,7 @@ import ProfileTopBar from '../../components/profile/ProfileTopBar';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { getProfileCardOverlapMargin } from '../../constants/profileLayout';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
-import { useAuth, useUser } from '@clerk/clerk-expo';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { Flame } from 'lucide-react-native';
 import { useXp } from '../../contexts/XpContext';
 import { useLevelUpCelebrationOnFocus } from '../../hooks/useLevelUpCelebrationOnFocus';
@@ -1319,6 +1319,7 @@ function ProfileScreen() {
     setIsVideoUploading(true);
     setVideoUploadProgress(0);
     setVideoUploadMessage(t.profile.preparingUpload);
+    void activateKeepAwakeAsync('reel-upload');
 
     try {
       const token = await getToken();
@@ -1423,6 +1424,7 @@ function ProfileScreen() {
       reelUploadInFlightRef.current = false;
       resetReelUploadUi();
       void reelUploadNotification.clear();
+      deactivateKeepAwake('reel-upload');
     }
   };
 

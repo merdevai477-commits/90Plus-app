@@ -18,6 +18,7 @@ import { API_CONFIG } from '../constants/theme';
 import { Storage } from '../services/chatStorageService';
 import { logger } from '../services/logger';
 import { fetchWithClerkAuth, getClerkBearerToken } from '../utils/clerkAuthToken';
+import { setChatSessionActive } from '../utils/chatSessionState';
 import { useLanguageStore } from '../src/i18n/store';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -307,6 +308,36 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   // decide whether to animate a bubble's text or render it as history.
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
 
+  const messagesRef = useRef(messages);
+  const currentConversationIdRef = useRef<string | null>(null);
+  const isLoadingRef = useRef(false);
+  const streamingMessageIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    currentConversationIdRef.current = currentConversationId;
+  }, [currentConversationId]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  useEffect(() => {
+    streamingMessageIdRef.current = streamingMessageId;
+  }, [streamingMessageId]);
+
+  const isProtectedSession = useCallback((): boolean => {
+    return (
+      isLoadingRef.current ||
+      streamingMessageIdRef.current != null ||
+      activeAssistantMessageIdRef.current != null ||
+      messagesRef.current.length > 1
+    );
+  }, []);
+
   // ─── Init ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -315,6 +346,18 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       const id = await Storage.getUserId();
       if (!mounted) return;
       userIdRef.current = id;
+
+      const cached = await Storage.loadSessionCache();
+      if (cached && mounted) {
+        setCurrentConversationId(cached.conversationId);
+        setMessages(
+          cached.messages.map((m) => ({
+            ...m,
+            isStreaming: false,
+          })),
+        );
+      }
+
       // Run both independent calls in parallel — saves ~300–500 ms on every
       // mount vs. awaiting them sequentially.
       await Promise.all([fetchLimit(), bootstrapConversation()]);
@@ -330,6 +373,27 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Persist active session locally so a remount does not flash the welcome screen.
+  useEffect(() => {
+    const convId = currentConversationId;
+    if (!convId || messages.length <= 1) {
+      setChatSessionActive(false);
+      Storage.clearSessionCache().catch(() => {});
+      return;
+    }
+
+    setChatSessionActive(true);
+    const timer = setTimeout(() => {
+      Storage.saveSessionCache({
+        conversationId: convId,
+        messages: messages.map(({ id, role, text, time }) => ({ id, role, text, time })),
+        cachedAt: Date.now(),
+      }).catch(() => {});
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [messages, currentConversationId]);
 
   // ─── XHR abort ───────────────────────────────────────────────────────────
 
@@ -421,7 +485,15 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     }
   }, []);
 
-  const loadConversationMessages = useCallback(async (conversationId: string) => {
+  const loadConversationMessages = useCallback(async (
+    conversationId: string,
+    opts?: { force?: boolean },
+  ) => {
+    if (!opts?.force && isProtectedSession()) {
+      logger.info('[AIChat] loadConversationMessages skipped — protected local session');
+      return;
+    }
+
     try {
       const res = await fetch(
         `${BACKEND_URL}/api/conversations/${conversationId}/messages`,
@@ -443,11 +515,17 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
           time: formatTime(m.createdAt),
         })),
       ];
+
+      if (!opts?.force && isProtectedSession()) {
+        logger.info('[AIChat] loadConversationMessages skipped after fetch — session became active');
+        return;
+      }
+
       setMessages(loaded);
     } catch (err) {
       logger.warn('[AIChat] loadConversationMessages error:', err);
     }
-  }, [getAuthHeaders, getInitialMessages]);
+  }, [getAuthHeaders, getInitialMessages, isProtectedSession]);
 
   const bootstrapConversation = useCallback(async () => {
     try {
@@ -458,10 +536,30 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         // server) so the user returns to the screen they left.
         const lastId = await Storage.getLastConversationId();
         const lastConv = lastId ? existing.find(c => c.id === lastId) : null;
-        const target = lastConv ?? existing[0];
-        setCurrentConversationId(target.id);
-        await loadConversationMessages(target.id);
-        await Storage.saveLastConversationId(target.id);
+        const localConvId = currentConversationIdRef.current;
+        const target =
+          (localConvId ? existing.find(c => c.id === localConvId) : null)
+          ?? lastConv
+          ?? existing[0];
+
+        if (!currentConversationIdRef.current) {
+          setCurrentConversationId(target.id);
+        }
+
+        if (!isProtectedSession()) {
+          await loadConversationMessages(target.id, { force: true });
+        }
+
+        await Storage.saveLastConversationId(currentConversationIdRef.current ?? target.id);
+        return;
+      }
+
+      // User may have already created a conversation via sendMessage while
+      // bootstrap was still in flight — never wipe that in-progress chat.
+      if (isProtectedSession()) {
+        if (currentConversationIdRef.current) {
+          await Storage.saveLastConversationId(currentConversationIdRef.current);
+        }
         return;
       }
 
@@ -473,10 +571,18 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       }
       setCurrentConversationId(created.id);
       setConversations([created]);
-      setMessages(getInitialMessages());
+      if (!isProtectedSession()) {
+        setMessages(getInitialMessages());
+      }
       await Storage.saveLastConversationId(created.id);
     } catch (err) {
       logger.warn('[AIChat] bootstrapConversation failed:', err);
+      if (isProtectedSession()) {
+        if (currentConversationIdRef.current) {
+          await Storage.saveLastConversationId(currentConversationIdRef.current);
+        }
+        return;
+      }
       const created = await createConversation();
       if (created) {
         setCurrentConversationId(created.id);
@@ -489,7 +595,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchConversations, createConversation, loadConversationMessages]);
+  }, [fetchConversations, createConversation, loadConversationMessages, isProtectedSession]);
 
   // ─── Streaming pipeline helpers ───────────────────────────────────────────
 
@@ -1066,8 +1172,10 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     setStreamingMessageId(null);
     setError(null);
     retryCountRef.current = 0;
+    setChatSessionActive(false);
+    Storage.clearSessionCache().catch(() => {});
     fetchLimit().catch(() => {});
-  }, [abortXHR, fetchLimit, stopTypingPipeline]);
+  }, [abortXHR, fetchLimit, stopTypingPipeline, getInitialMessages]);
 
   // ─── Conversation Management ──────────────────────────────────────────────
 
@@ -1086,7 +1194,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     setStreamingMessageId(null);
     retryCountRef.current = 0;
     setCurrentConversationId(conversationId);
-    await loadConversationMessages(conversationId);
+    await loadConversationMessages(conversationId, { force: true });
     await Storage.saveLastConversationId(conversationId);
   }, [loadConversationMessages, abortXHR, stopTypingPipeline]);
 
@@ -1099,8 +1207,10 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     await fetchConversations();
     setCurrentConversationId(created.id);
     setMessages(getInitialMessages());
+    setChatSessionActive(false);
+    Storage.clearSessionCache().catch(() => {});
     await Storage.saveLastConversationId(created.id);
-  }, [createConversation, fetchConversations, getLabels]);
+  }, [createConversation, fetchConversations, getLabels, getInitialMessages]);
 
   const togglePinConversation = useCallback(async (
     conversationId: string,

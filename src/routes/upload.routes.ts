@@ -687,6 +687,150 @@ router.post(
   },
 );
 
+/** Heavy Mux PUT + metadata — runs after HTTP response so mobile clients don't 499. */
+async function processReelMuxUploadInBackground(params: {
+  userId: string;
+  reelId: string;
+  uploadId: string;
+  uploadUrl: string;
+  videoBuffer: Buffer;
+  videoMimeType: string;
+  fileSizeBytes: number;
+  fileSizeMB: number;
+  hashtags: string[];
+  mentions: string[];
+  timezone: string;
+  startTime: number;
+}): Promise<void> {
+  const {
+    userId,
+    reelId,
+    uploadId,
+    uploadUrl,
+    videoBuffer,
+    videoMimeType,
+    fileSizeBytes,
+    fileSizeMB,
+    hashtags,
+    mentions,
+    timezone,
+    startTime,
+  } = params;
+
+  const cleanupFailedUpload = async (errorCode: string) => {
+    await prisma.reel.delete({ where: { id: reelId } }).catch(() => undefined);
+    await prisma.user
+      .update({ where: { id: userId }, data: { reelUploadLockedUntil: null } })
+      .catch(() => undefined);
+    await UploadAnalyticsService.record({
+      userId,
+      type: 'REEL',
+      status: 'FAILED',
+      fileSizeMB,
+      durationMs: Date.now() - startTime,
+      errorCode,
+    }).catch(() => undefined);
+  };
+
+  try {
+    logger.info(`[upload/reel] Background Mux PUT started (uploadId: ${uploadId})`);
+
+    const uploadAbortController = new AbortController();
+    const uploadTimeout = setTimeout(() => uploadAbortController.abort(), 120_000);
+    let muxUploadResponse: Awaited<ReturnType<typeof fetch>>;
+    try {
+      muxUploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': videoMimeType },
+        body: videoBuffer,
+        signal: uploadAbortController.signal,
+      });
+    } finally {
+      clearTimeout(uploadTimeout);
+    }
+
+    if (!muxUploadResponse.ok) {
+      const errText = await muxUploadResponse.text().catch(() => '');
+      logger.error(
+        `[upload/reel] Background Mux upload rejected (${muxUploadResponse.status}): ${errText}`,
+      );
+      await cleanupFailedUpload(`MUX_REJECTED_${muxUploadResponse.status}`);
+      return;
+    }
+
+    logger.info(`[upload/reel] Background Mux upload complete for reel ${reelId}`);
+
+    await prisma.reel.update({
+      where: { id: reelId },
+      data: { muxUploadId: uploadId, videoUrl: '' },
+    });
+
+    for (const tag of hashtags) {
+      const cleanTag = tag.toLowerCase().replace(/^#/, '');
+      if (!cleanTag) continue;
+      const hashtag = await prisma.hashtag.upsert({
+        where: { name: cleanTag },
+        create: { name: cleanTag, reelCount: 1 },
+        update: { reelCount: { increment: 1 } },
+      });
+      await prisma.reelHashtag.create({ data: { reelId, hashtagId: hashtag.id } });
+    }
+
+    for (const username of mentions) {
+      const mentionedUser = await prisma.user.findUnique({
+        where: { username: username.replace(/^@/, '') },
+        select: { id: true },
+      });
+      if (!mentionedUser) continue;
+      await prisma.reelMention.create({ data: { reelId, mentionedUserId: mentionedUser.id } });
+      const lang = await getUserLanguage(mentionedUser.id);
+      await prisma.notification.create({
+        data: {
+          userId: mentionedUser.id,
+          title: renderPushTemplate('mentionInVideoTitle', lang),
+          message: renderPushTemplate('mentionInVideoBody', lang),
+          type: 'GENERAL',
+          data: { reelId },
+        },
+      });
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastReelUpload: new Date(), reelUploadLockedUntil: null },
+    });
+
+    await incrementQuota(userId, fileSizeBytes);
+
+    try {
+      const { awardXp: awardXpFn } = await import('../services/xp.service');
+      await awardXpFn({
+        userId,
+        action: 'REEL_UPLOAD',
+        dailyCap: 3,
+        timezone,
+      });
+    } catch (xpErr: any) {
+      logger.warn('[upload/reel] Background XP award failed (non-fatal):', xpErr?.message);
+    }
+
+    await UploadAnalyticsService.record({
+      userId,
+      type: 'REEL',
+      status: 'SUCCESS',
+      fileSizeMB,
+      durationMs: Date.now() - startTime,
+    });
+
+    logger.info(`[upload/reel] Reel ${reelId} committed after background Mux upload`);
+  } catch (err: any) {
+    logger.error('[upload/reel] Background Mux processing failed:', err?.message);
+    await cleanupFailedUpload(
+      err?.name === 'AbortError' ? 'MUX_UPLOAD_TIMEOUT' : 'MUX_UPLOAD_NETWORK_ERROR',
+    );
+  }
+}
+
 // ─── POST /api/upload/reel ────────────────────────────────────────────────────
 
 router.post(
@@ -700,6 +844,7 @@ router.post(
     const startTime = Date.now();
     let reelSlotHeld = false;
     let reelUploadCommitted = false;
+    let deferLockRelease = false;
     let heldUserId: string | null = null;
 
     try {
@@ -797,135 +942,40 @@ router.post(
         return;
       }
 
-      // ── 4. PUT video buffer directly to Mux upload URL ────────────────────────
-      logger.info(`[upload/reel] Uploading to Mux (uploadId: ${uploadId})`);
+      // ── Respond immediately after receiving the file — Mux PUT runs in background.
+      // iOS closes idle connections (499) while waiting for server→Mux upload (30–120s+).
+      deferLockRelease = true;
 
-      let muxUploadResponse: Awaited<ReturnType<typeof fetch>>;
-      try {
-        // Timeout: 120s max for uploading to Mux (prevents stalled connections from holding memory)
-        const uploadAbortController = new AbortController();
-        const uploadTimeout = setTimeout(() => uploadAbortController.abort(), 120_000);
-        muxUploadResponse = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': videoFile.mimetype },
-          body: videoFile.buffer,
-          signal: uploadAbortController.signal,
-        });
-        clearTimeout(uploadTimeout);
-      } catch (fetchErr: any) {
-        // Fix 2 + Fix 6: Network error during Mux PUT — clean up everything
-        logger.error('[upload/reel] Mux PUT network error — cleaning up:', fetchErr?.message);
-        await prisma.reel.delete({ where: { id: placeholderReel.id } }).catch(() => undefined);
-        sendError(req, res, 502, ErrorCode.EXTERNAL_SERVICE, 'MUX_UPLOAD_FAILED', 'Failed to upload the video to the processing server. Please try again.');
-        await UploadAnalyticsService.record({
-          userId: user.id, type: 'REEL', status: 'FAILED',
-          fileSizeMB: videoFile.buffer.length / 1e6, durationMs: Date.now() - startTime,
-          errorCode: 'MUX_UPLOAD_NETWORK_ERROR',
-        }).catch(() => undefined);
-        return;
-      }
-
-      if (!muxUploadResponse.ok) {
-        const errText = await muxUploadResponse.text().catch(() => '');
-        // Fix 2 + Fix 6: Mux rejected the upload — clean up everything
-        logger.error(`[upload/reel] Mux upload rejected (${muxUploadResponse.status}) — cleaning up: ${errText}`);
-        await prisma.reel.delete({ where: { id: placeholderReel.id } }).catch(() => undefined);
-        sendError(req, res, 502, ErrorCode.EXTERNAL_SERVICE, 'MUX_UPLOAD_REJECTED', 'The processing server rejected the video. Make sure the file is valid and try again.');
-        await UploadAnalyticsService.record({
-          userId: user.id, type: 'REEL', status: 'FAILED',
-          fileSizeMB: videoFile.buffer.length / 1e6, durationMs: Date.now() - startTime,
-          errorCode: `MUX_REJECTED_${muxUploadResponse.status}`,
-        }).catch(() => undefined);
-        return;
-      }
-
-      logger.info(`[upload/reel] Mux upload complete for reel ${placeholderReel.id}`);
-
-      // ── 5. Update reel with Mux upload ID + provisional thumbnail URL ─────────
-      // videoUrl will be set to the HLS URL by the webhook when asset is ready.
-      // For now, set it to the Mux thumbnail URL so the feed doesn't show blank.
-      const provisionalVideoUrl = ''; // webhook will fill this in
-
-      await prisma.reel.update({
-        where: { id: placeholderReel.id },
-        data: {
-          muxUploadId: uploadId,
-          videoUrl: provisionalVideoUrl,
-        },
-      });
-
-      // ── 6. Process hashtags ───────────────────────────────────────────────────
-      for (const tag of hashtags) {
-        const cleanTag = tag.toLowerCase().replace(/^#/, '');
-        if (cleanTag) {
-          const hashtag = await prisma.hashtag.upsert({
-            where: { name: cleanTag },
-            create: { name: cleanTag, reelCount: 1 },
-            update: { reelCount: { increment: 1 } },
-          });
-          await prisma.reelHashtag.create({ data: { reelId: placeholderReel.id, hashtagId: hashtag.id } });
-        }
-      }
-
-      // ── 7. Process mentions ───────────────────────────────────────────────────
-      for (const username of mentions) {
-        const mentionedUser = await prisma.user.findUnique({
-          where: { username: username.replace(/^@/, '') },
-          select: { id: true },
-        });
-        if (mentionedUser) {
-          await prisma.reelMention.create({ data: { reelId: placeholderReel.id, mentionedUserId: mentionedUser.id } });
-          const lang = await getUserLanguage(mentionedUser.id);
-          await prisma.notification.create({
-            data: {
-              userId: mentionedUser.id,
-              title: renderPushTemplate('mentionInVideoTitle', lang),
-              message: renderPushTemplate('mentionInVideoBody', lang),
-              type: 'GENERAL',
-              data: { reelId: placeholderReel.id },
-            },
-          });
-        }
-      }
-
-      // ── 8. Update cooldown + release lock ─────────────────────────────────────
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { lastReelUpload: new Date(), reelUploadLockedUntil: null },
-      });
-      reelUploadCommitted = true;
-
-      // Fix 7: Increment quota AFTER successful upload
-      await incrementQuota(user.id, videoFile.buffer.length);
-
-      // ✅ XP Award for reel upload
-      let xpEvents: Array<{ action: string; amount: number; leveledUp: boolean; newLevel: number }> = [];
-      try {
-        const { awardXp: awardXpFn } = await import('../services/xp.service');
-        const tz = (req.headers['x-user-timezone'] as string) || 'UTC';
-        const r = await awardXpFn({ userId: user.id, action: 'REEL_UPLOAD', dailyCap: 3, timezone: tz });
-        if (r.awarded > 0) xpEvents.push({ action: 'REEL_UPLOAD', amount: r.awarded, leveledUp: r.leveledUp, newLevel: r.newLevel });
-      } catch (xpErr: any) {
-        logger.warn('[upload/reel] XP award failed (non-fatal):', xpErr?.message);
-      }
-
-      await UploadAnalyticsService.record({
-        userId: user.id, type: 'REEL', status: 'SUCCESS',
-        fileSizeMB, durationMs: Date.now() - startTime,
-      });
-
-      logger.info(`[upload/reel] Reel ${placeholderReel.id} created, Mux processing started`);
+      const timezone = (req.headers['x-user-timezone'] as string) || 'UTC';
+      const videoMimeType = videoFile.mimetype || 'video/mp4';
 
       res.json({
         status: 'SUCCESS',
-        message: 'Reel uploaded successfully and is being processed.',
+        message: 'Reel received and is being processed.',
         data: {
           reelId: placeholderReel.id,
           muxUploadId: uploadId,
           thumbnailUrl: null,
           status: 'PROCESSING',
         },
-        xpEvents,
+        xpEvents: [],
+      });
+
+      setImmediate(() => {
+        void processReelMuxUploadInBackground({
+          userId: user.id,
+          reelId: placeholderReel.id,
+          uploadId,
+          uploadUrl,
+          videoBuffer: videoFile.buffer,
+          videoMimeType,
+          fileSizeBytes: videoFile.buffer.length,
+          fileSizeMB,
+          hashtags,
+          mentions,
+          timezone,
+          startTime,
+        });
       });
     } catch (error: any) {
       logger.error('[upload/reel] Exception:', error?.message);
@@ -939,7 +989,7 @@ router.post(
         fileSizeMB: 0, durationMs: Date.now() - startTime, errorCode: 'UPLOAD_ERROR',
       }).catch(() => undefined);
     } finally {
-      if (reelSlotHeld && !reelUploadCommitted && heldUserId) {
+      if (reelSlotHeld && !reelUploadCommitted && heldUserId && !deferLockRelease) {
         prisma.user
           .update({ where: { id: heldUserId }, data: { reelUploadLockedUntil: null } })
           .catch((e: any) => logger.warn('[upload/reel] Failed to clear lock:', e?.message));
