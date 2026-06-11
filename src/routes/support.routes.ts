@@ -3,30 +3,17 @@
  * صفحات الدعم والمساعدة
  */
 
-import path from 'path';
 import { Router, Request, Response } from 'express';
 import {
     buildProfileLandingPage,
     buildReelLandingPage,
 } from '../utils/share-landing-pages';
+import { resolvePublicFile } from '../utils/public-path.util';
 
-const PRIVACY_PAGE_PATH = path.join(__dirname, '../../public/privacy.html');
-const SUPPORT_PAGE_PATH = path.join(__dirname, '../../public/support.html');
-const NEWS_PAGE_PATH = path.join(__dirname, '../../public/news.html');
+const PRIVACY_PAGE_PATH = resolvePublicFile(__dirname, 'privacy.html');
+const SUPPORT_PAGE_PATH = resolvePublicFile(__dirname, 'support.html');
 
 const router = Router();
-
-/**
- * GET /news
- * أخبار كأس العالم 2026 — عربي + إنجليزي (public/news.html)
- */
-router.get('/news', (_req: Request, res: Response): void => {
-    res.sendFile(NEWS_PAGE_PATH, (err) => {
-        if (err) {
-            res.status(500).send('تعذّر تحميل صفحة الأخبار');
-        }
-    });
-});
 
 /**
  * GET /support

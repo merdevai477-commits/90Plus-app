@@ -238,6 +238,7 @@ import authRoutes from './routes/auth.routes';
 import i18nRoutes from './routes/i18n.routes';
 import newsRoutes from './routes/news.routes';
 import path from 'path';
+import { resolvePublicDir, resolvePublicFile } from './utils/public-path.util';
 import {
     CLERK_SIGN_IN_URL,
     CLERK_SIGN_UP_URL,
@@ -404,16 +405,26 @@ app.get('/.well-known/apple-app-site-association', sendAppleAppSiteAssociation);
 app.get('/apple-app-site-association', sendAppleAppSiteAssociation);
 
 // Serve static files for privacy and terms (Apple compliance)
-// Determine public path based on environment
-// In production (Railway): /app/public (Railway copies Backend/public to /app/public)
-// In development: Backend/public
-const publicPath = isProduction 
-    ? path.join(__dirname, '../../public')  // /app/public in Railway
-    : path.join(__dirname, '../../public'); // Backend/public in development
+const publicPath = resolvePublicDir(__dirname);
 
 logger.info(`📁 Public path: ${publicPath}`);
 logger.info(`📁 Current directory: ${__dirname}`);
 logger.info(`📁 Production mode: ${isProduction}`);
+
+app.get('/news', (_req: Request, res: Response) => {
+    const filePath = resolvePublicFile(__dirname, 'news.html');
+    logger.info(`📰 Serving news page from: ${filePath}`);
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            logger.error('Failed to send news.html:', err);
+            res.status(500).send('تعذّر تحميل صفحة الأخبار');
+        }
+    });
+});
+
+app.get('/news.html', (_req, res) => {
+    res.redirect(301, '/news');
+});
 
 app.get('/', (_req: Request, res: Response) => {
     res.sendFile(path.join(publicPath, 'index.html'), (err) => {
