@@ -2,7 +2,7 @@
  * WCCard
  *
  * World Cup 2026 promo banner. During campaign mode the countdown is hidden
- * and the CTA opens the World Cup matches tab immediately.
+ * and the CTA opens the 90plus.pro/news WebView.
  */
 
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -116,22 +116,34 @@ const WCCard: React.FC<WCCardProps> = ({ onPressLocked }) => {
           <Pressable
             onPress={() => {
               if (isUnlocked) {
-                router.push({ pathname: '/(tabs)/matches', params: { filter: 'WorldCup' } });
+                router.push('/world-cup-news');
                 return;
               }
               onPressLocked?.();
             }}
             accessibilityRole="button"
-            accessibilityLabel={isUnlocked ? t.rank.worldCup.viewMatches : t.rank.worldCup.comingSoon}
+            accessibilityLabel={isUnlocked ? t.rank.worldCup.openNews : t.rank.worldCup.comingSoon}
             style={({ pressed }) => [
-              isUnlocked ? s.wcBtnActive : s.wcBtnDisabled,
-              pressed && { opacity: 0.85 },
+              isUnlocked ? s.wcBtnGlow : s.wcBtnDisabled,
+              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
             ]}
           >
-            <Text style={[s.wcBtnTxt, isUnlocked && s.wcBtnTxtActive]}>
-              {isUnlocked ? t.rank.worldCup.viewMatches : t.rank.worldCup.comingSoon}
-            </Text>
-            <ChevronRight size={14} color={isUnlocked ? '#fff' : 'rgba(255,255,255,0.55)'} />
+            {isUnlocked ? (
+              <LinearGradient
+                colors={['#D8B4FE', '#A855F7', '#7E22CE']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.wcBtnGradient}
+              >
+                <Text style={s.wcBtnTxtActive}>{t.rank.worldCup.openNews}</Text>
+                <ChevronRight size={15} color="#fff" strokeWidth={2.5} />
+              </LinearGradient>
+            ) : (
+              <>
+                <Text style={s.wcBtnTxt}>{t.rank.worldCup.comingSoon}</Text>
+                <ChevronRight size={14} color="rgba(255,255,255,0.55)" />
+              </>
+            )}
           </Pressable>
         </View>
 
@@ -162,7 +174,8 @@ const s = StyleSheet.create<{
   wcTitle: TextStyle;
   wcSub: TextStyle;
   wcBtnDisabled: ViewStyle;
-  wcBtnActive: ViewStyle;
+  wcBtnGlow: ViewStyle;
+  wcBtnGradient: ViewStyle;
   wcBtnTxt: TextStyle;
   wcBtnTxtActive: TextStyle;
   wcRight: ViewStyle;
@@ -210,30 +223,33 @@ const s = StyleSheet.create<{
     paddingHorizontal: 18,
     alignSelf: 'flex-start',
     gap: 4,
-    marginTop: 12,
+    marginTop: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
-  wcBtnActive: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(168,85,247,0.35)',
-    borderRadius: 14,
-    paddingVertical: 11,
-    paddingHorizontal: 18,
+  wcBtnGlow: {
     alignSelf: 'flex-start',
-    gap: 4,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.85)',
+    marginTop: 14,
+    borderRadius: 16,
     shadowColor: '#A855F7',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    elevation: 14,
+  },
+  wcBtnGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
   },
   wcBtnTxt: { color: 'rgba(255,255,255,0.55)', fontWeight: '800', fontSize: 13 },
-  wcBtnTxtActive: { color: '#fff' },
+  wcBtnTxtActive: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 0.3 },
   wcRight: {
     position: 'absolute',
     bottom: 0,

@@ -6,14 +6,14 @@
  * token stored on the backend with pushNotificationsConsent = true.
  */
 
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { MatchesService } from '../src/services/authService';
 import { logger } from './logger';
 import { getApiUrl } from '../config/api.config';
-import { pushTrace } from '../utils/pushTrace';
+import { pushStep, pushTrace } from '../utils/pushTrace';
 import { getClerkBearerToken } from '../utils/clerkAuthToken';
 
 type NotificationsModule = typeof import('expo-notifications');
@@ -133,6 +133,7 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
     pushTrace(`[PUSH TRACE] isDevice=${String(Device.isDevice)}`);
 
     if (!Device.isDevice) {
+        pushStep('EARLY EXIT', 'Device.isDevice=false');
         pushTrace('[PUSH TRACE] EXIT → reason: Device.isDevice=false');
         logger.debug('Push notifications require a physical device');
         return null;
@@ -141,10 +142,13 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
     const Notifications = loadNotifications();
     if (!Notifications) {
         if (Platform.OS === 'web') {
+            pushStep('EARLY EXIT', 'Platform.OS=web');
             pushTrace('[PUSH TRACE] EXIT → reason: Platform.OS=web');
         } else if (isExpoGo) {
+            pushStep('EARLY EXIT', 'appOwnership=expo (Expo Go)');
             pushTrace('[PUSH TRACE] EXIT → reason: Expo Go (appOwnership=expo, no remote push)');
         } else {
+            pushStep('EARLY EXIT', 'expo-notifications module unavailable');
             pushTrace('[PUSH TRACE] EXIT → reason: expo-notifications module unavailable');
         }
         return null;
@@ -152,12 +156,14 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
 
     try {
         const permission = await Notifications.getPermissionsAsync();
+        pushStep('2', `Permission status: ${permission.status}`);
         pushTrace(`[PUSH TRACE] permissions=${permission.status}`);
 
         const projectId =
             Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
 
         if (permission.status !== 'granted') {
+            pushStep('EARLY EXIT', `permission=${permission.status}`);
             console.log('[PUSH REPORT]', {
                 platform: Platform.OS,
                 isDevice: Device.isDevice,
@@ -173,14 +179,25 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
         await ensureAndroidNotificationChannels();
 
         pushTrace(`[PUSH TRACE] projectId=${projectId ?? 'undefined'}`);
+        if (!projectId) {
+            pushStep('EARLY EXIT', 'projectId missing');
+        }
+        pushStep('3', 'Getting Expo token');
         pushTrace('[PUSH TRACE] before getExpoPushTokenAsync');
 
         let pushTokenData: { data: string } | null = null;
         try {
             pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+            pushStep(
+                '4',
+                pushTokenData.data
+                    ? `Expo token received: ${pushTokenData.data.substring(0, 28)}...`
+                    : 'Expo token received: null',
+            );
             pushTrace(`[PUSH TRACE] token=${pushTokenData.data}`);
         } catch (tokenErr: unknown) {
             const msg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+            pushStep('EARLY EXIT', `getExpoPushTokenAsync failed: ${msg}`);
             pushTrace(`[PUSH TRACE] token=error:${msg}`);
             pushTrace('[PUSH TRACE] EXIT → reason: getExpoPushTokenAsync failed');
             logger.error('Error getting push token:', tokenErr);
@@ -250,20 +267,48 @@ export async function updatePushNotificationsConsent(
     }
 }
 
+async function isPushTokenSyncedOnBackend(
+    authToken: string,
+    pushToken: string,
+): Promise<boolean> {
+    try {
+        const apiUrl = getApiUrl();
+        const res = await fetch(
+            `${apiUrl}/matches/push-token/status?token=${encodeURIComponent(pushToken)}`,
+            { headers: { Authorization: `Bearer ${authToken}` } },
+        );
+        if (!res.ok) return false;
+        const json = (await res.json()) as {
+            data?: { matchesDevice?: boolean; pushNotificationsConsent?: boolean };
+        };
+        return !!(
+            json.data?.matchesDevice === true && json.data?.pushNotificationsConsent === true
+        );
+    } catch {
+        return false;
+    }
+}
+
+/** Open OS app settings when notification permission was denied. */
+export async function openNotificationSettings(): Promise<void> {
+    try {
+        await Linking.openSettings();
+    } catch (err) {
+        logger.warn('Failed to open notification settings:', err);
+    }
+}
+
 async function registerTokenWithBackend(
     authToken: string,
     pushToken: string,
     attempt = 0,
 ): Promise<boolean> {
-    if (lastSyncedPushToken === pushToken && attempt === 0) {
-        pushTrace('[PUSH TRACE] skip registerPushToken — already synced this token');
-        return true;
-    }
-
+    pushStep('5', `Sending token to backend (attempt ${attempt + 1})`);
     pushTrace('[PUSH TRACE] before registerPushToken API call');
     try {
         const result = await MatchesService.registerPushToken(authToken, pushToken);
         if (result.success) {
+            pushStep('6', 'Backend accepted token');
             pushTrace('[PUSH TRACE] registerPushToken response=success');
             logger.debug('✅ Push token synced with backend');
             lastSyncedPushToken = pushToken;
@@ -357,18 +402,33 @@ export async function syncExpoPushToken(
     }
 
     inFlightPushSync = (async () => {
+        pushStep('1', 'syncExpoPushToken() started');
         pushTrace('[PUSH TRACE] syncExpoPushToken() start');
         const pushToken = await getExpoPushTokenIfPermitted();
         if (!pushToken) {
+            pushStep('EARLY EXIT', 'no Expo token from getExpoPushTokenIfPermitted');
             pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushToken — no token from getExpoPushTokenIfPermitted');
             return false;
         }
 
         const authToken = await resolveAuthToken(getAuthToken);
         if (!authToken) {
+            pushStep('EARLY EXIT', 'Clerk auth token unavailable');
             pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushToken — no auth token, persisted pending');
             await persistPendingPushToken(pushToken);
             return false;
+        }
+
+        const alreadyOnServer = await isPushTokenSyncedOnBackend(authToken, pushToken);
+        if (alreadyOnServer) {
+            lastSyncedPushToken = pushToken;
+            pushStep('6', 'Backend already has this token (skipped POST)');
+            pushTrace('[PUSH TRACE] skip registerPushToken — verified on backend');
+            return true;
+        }
+
+        if (lastSyncedPushToken !== pushToken) {
+            lastSyncedPushToken = null;
         }
 
         await updatePushNotificationsConsent(authToken, true);
@@ -387,6 +447,10 @@ export async function syncExpoPushTokenIfGranted(
     getAuthToken: () => Promise<string | null>,
 ): Promise<void> {
     if (!isPushRegistrationAvailable()) {
+        pushStep(
+            'EARLY EXIT',
+            `isPushRegistrationAvailable=false (isDevice=${Device.isDevice}, ownership=${ownershipLabel()})`,
+        );
         pushTrace('[PUSH TRACE] EXIT → reason: syncExpoPushTokenIfGranted — isPushRegistrationAvailable=false');
         return;
     }

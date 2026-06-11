@@ -17,7 +17,8 @@ import { useAuth } from '@clerk/clerk-expo';
 import { API_CONFIG } from '../constants/theme';
 import { Storage } from '../services/chatStorageService';
 import { logger } from '../services/logger';
-import { getClerkBearerToken } from '../utils/clerkAuthToken';
+import { fetchWithClerkAuth, getClerkBearerToken } from '../utils/clerkAuthToken';
+import { useLanguageStore } from '../src/i18n/store';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -341,11 +342,18 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
   // ─── Common headers ───────────────────────────────────────────────────────
 
-  const getAuthHeaders = useCallback(async (): Promise<Record<string, string>> => {
-    const token = await getClerkBearerToken(getTokenRef.current);
+  const getAuthHeaders = useCallback(async (opts?: { forceRefresh?: boolean }): Promise<Record<string, string>> => {
+    const token = await getClerkBearerToken(getTokenRef.current, {
+      retries: opts?.forceRefresh ? 6 : 8,
+      forceRefresh: opts?.forceRefresh,
+    });
+    const appLang = useLanguageStore.getState().language;
     const headers: Record<string, string> = {
       'x-user-timezone': getTimezone(),
     };
+    if (appLang === 'ar' || appLang === 'en') {
+      headers['x-user-language'] = appLang;
+    }
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     } else {
@@ -392,13 +400,13 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
   const createConversation = useCallback(async (): Promise<Conversation | null> => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/conversations`, {
+      const res = await fetchWithClerkAuth(getTokenRef.current, `${BACKEND_URL}/api/conversations`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
-      if (res.status === 401) {
-        logger.warn('[AIChat] createConversation 401 — session not ready');
+      if (!res) {
+        logger.warn('[AIChat] createConversation — no auth token');
         return null;
       }
       if (!res.ok) {
@@ -411,7 +419,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       logger.warn('[AIChat] createConversation error:', err);
       return null;
     }
-  }, [getAuthHeaders]);
+  }, []);
 
   const loadConversationMessages = useCallback(async (conversationId: string) => {
     try {
@@ -656,23 +664,28 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     abortRef.current = false;
     lastIndexRef.current = 0;
 
+    const appLang = useLanguageStore.getState().language;
     const body = JSON.stringify({
       message: trimmed,
       history,
       conversationId,
       ...(systemPromptSuffix ? { systemPromptSuffix } : {}),
       ...(resumeFromToken > 0 ? { resumeFromToken } : {}),
+      ...(appLang === 'ar' || appLang === 'en' ? { preferredLanguage: appLang } : {}),
     });
 
-    const xhr = new XMLHttpRequest();
-    xhrRef.current = xhr;
+    let authRetried = false;
 
-    xhr.open('POST', `${BACKEND_URL}/api/chat/stream`, true);
-    xhr.setRequestHeader('Content-Type', 'application/json');
-    const headers = await getAuthHeaders();
-    Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    const openStream = async (forceRefresh = false) => {
+      const xhr = new XMLHttpRequest();
+      xhrRef.current = xhr;
 
-    xhr.onreadystatechange = () => {
+      xhr.open('POST', `${BACKEND_URL}/api/chat/stream`, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      const headers = await getAuthHeaders({ forceRefresh });
+      Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+
+      xhr.onreadystatechange = () => {
       if (abortRef.current) return;
       if (xhr.readyState === XMLHttpRequest.LOADING || xhr.readyState === XMLHttpRequest.DONE) {
         if (xhr.status === 429) return;
@@ -744,10 +757,16 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
           }
         }
       }
-    };
+      };
 
-    xhr.onload = () => {
+      xhr.onload = () => {
       if (abortRef.current) return;
+      if (xhr.status === 401 && !authRetried) {
+        authRetried = true;
+        lastIndexRef.current = 0;
+        void openStream(true);
+        return;
+      }
       if (xhr.status === 429) {
         try {
           const errData = JSON.parse(xhr.responseText) as { error: string; resetAt?: string };
@@ -794,9 +813,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         fetchConversations().catch(() => {});
         fetchLimit().catch(() => {});
       });
-    };
+      };
 
-    const handleDisconnect = () => {
+      const handleDisconnect = () => {
       if (abortRef.current) return;
 
       // partialTextRef is the source of truth for resume — it tracks the
@@ -844,12 +863,15 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         setError(getLabels().streamRetryFailed);
         retryCountRef.current = 0;
       }
+      };
+
+      xhr.onerror = handleDisconnect;
+      xhr.ontimeout = handleDisconnect;
+      xhr.timeout = 60_000;
+      xhr.send(body);
     };
 
-    xhr.onerror = handleDisconnect;
-    xhr.ontimeout = handleDisconnect;
-    xhr.timeout = 60_000;
-    xhr.send(body);
+    await openStream();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getAuthHeaders, fetchConversations, fetchLimit, enqueueStreamChunk, completeStreaming, stopTypingPipeline]);
 
@@ -907,7 +929,12 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
     let convId = currentConversationId;
     if (!convId) {
-      const created = await createConversation();
+      let created: Conversation | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        created = await createConversation();
+        if (created) break;
+        await new Promise((r) => setTimeout(r, 350 * (attempt + 1)));
+      }
       if (!created) {
         setError(getLabels().noActiveConversation);
         setIsLoading(false);

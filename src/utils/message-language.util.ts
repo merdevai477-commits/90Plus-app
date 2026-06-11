@@ -45,6 +45,38 @@ export function detectMessageLanguage(message: string): MessageLanguage {
   return 'en';
 }
 
+function isValidPreferredLanguage(value: unknown): value is MessageLanguage {
+  return value === 'ar' || value === 'en';
+}
+
+/**
+ * Pick reply language: clear script in the message wins; otherwise use the app UI language.
+ */
+export function resolveChatLanguage(
+  message: string,
+  preferred?: MessageLanguage | string | null,
+): MessageLanguage {
+  const pref = isValidPreferredLanguage(preferred) ? preferred : null;
+  const trimmed = message?.trim() ?? '';
+  if (!trimmed) return pref ?? 'en';
+
+  const letters = countScriptLetters(trimmed);
+  const total = letters.arabic + letters.latin;
+
+  if (letters.arabic >= 3 && letters.arabic > letters.latin * 1.5) return 'ar';
+  if (letters.latin >= 12 && letters.latin > letters.arabic * 1.5) return 'en';
+
+  // Latin-only short queries (player names, "hi") → follow app UI language.
+  if (letters.arabic === 0 && letters.latin > 0 && pref) return pref;
+
+  if (total < 4 && pref) return pref;
+
+  const detected = detectMessageLanguage(trimmed);
+  if (letters.arabic === letters.latin && pref) return pref;
+
+  return detected;
+}
+
 /** Strict language rule injected at the top of the Captain AI system prompt. */
 export function buildLanguageLockPrompt(language: MessageLanguage): string {
   if (language === 'ar') {

@@ -406,6 +406,9 @@ router.get('/push-token/status', requireAuth, async (req: Request, res: Response
 
         const token = user.expoPushToken?.trim() || null;
         const hasToken = !!(token && token.length > 0);
+        const deviceToken =
+            typeof req.query.token === 'string' ? req.query.token.trim() : '';
+        const matchesDevice = deviceToken.length > 0 && token === deviceToken;
 
         res.json({
             status: 'SUCCESS',
@@ -415,6 +418,7 @@ router.get('/push-token/status', requireAuth, async (req: Request, res: Response
                 tokenPrefix: hasToken ? `${token!.substring(0, 35)}...` : null,
                 consent: user.pushNotificationsConsent,
                 pushNotificationsConsent: user.pushNotificationsConsent,
+                matchesDevice: deviceToken.length > 0 ? matchesDevice : undefined,
             },
         });
     } catch (error: any) {

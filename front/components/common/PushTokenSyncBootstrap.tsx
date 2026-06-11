@@ -19,6 +19,7 @@ import {
 } from '../../services/pushTokenRegistration.service';
 import { logPushRegistrationReport } from '../../services/pushRegistrationReport.service';
 import { logger } from '../../services/logger';
+import { pushStep } from '../../utils/pushTrace';
 
 async function ensureAndroidNotificationPermission(
     getToken: () => Promise<string | null>,
@@ -45,8 +46,31 @@ async function ensureAndroidNotificationPermission(
 
     if (newStatus === 'granted') {
         await capturePushTokenAfterPermission(getToken);
+    } else if (newStatus === 'denied') {
+        logger.info(
+            '[Push] Android notification permission denied — enable in system Settings → Apps → 90Plus → Notifications',
+        );
     } else {
         logger.info('[Push] Android notification permission not granted:', newStatus);
+    }
+}
+
+async function ensureIosNotificationPermission(
+    getToken: () => Promise<string | null>,
+): Promise<void> {
+    if (Platform.OS !== 'ios' || !isPushRegistrationAvailable()) return;
+
+    const Notifications = loadNotifications();
+    if (!Notifications) return;
+
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status === 'granted') return;
+
+    const alreadyAsked = await AsyncStorage.getItem(NOTIFICATION_PERMISSION_REQUESTED_KEY);
+    if (alreadyAsked && status === 'denied') {
+        logger.info(
+            '[Push] iOS notification permission denied — enable in Settings → 90Plus → Notifications',
+        );
     }
 }
 
@@ -58,9 +82,17 @@ export function PushTokenSyncBootstrap() {
     const lastPermissionStatus = useRef<string | null>(null);
 
     useEffect(() => {
-        if (!isLoaded || !isSignedIn) return;
+        if (!isLoaded) {
+            pushStep('EARLY EXIT', 'PushTokenSyncBootstrap — Clerk isLoaded=false');
+            return;
+        }
+        if (!isSignedIn) {
+            pushStep('EARLY EXIT', 'PushTokenSyncBootstrap — user not signed in');
+            return;
+        }
 
         const sync = async () => {
+            pushStep('1', 'App started — PushTokenSyncBootstrap sync()');
             await logPushRegistrationReport('signed-in-sync-start');
 
             const Notifications = loadNotifications();
@@ -82,7 +114,11 @@ export function PushTokenSyncBootstrap() {
 
             if (!permissionPromptStarted.current) {
                 permissionPromptStarted.current = true;
-                await ensureAndroidNotificationPermission(() => getTokenRef.current());
+                if (Platform.OS === 'android') {
+                    await ensureAndroidNotificationPermission(() => getTokenRef.current());
+                } else {
+                    await ensureIosNotificationPermission(() => getTokenRef.current());
+                }
             } else if (nowGranted) {
                 // User may have enabled notifications in system settings after denying once.
                 await syncExpoPushTokenIfGranted(() => getTokenRef.current());

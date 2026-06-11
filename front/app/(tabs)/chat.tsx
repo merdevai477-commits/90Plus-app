@@ -186,6 +186,8 @@ export default function ChatScreen() {
 
     dismissError,
 
+    isLoading,
+
     isOnline,
 
     profile,

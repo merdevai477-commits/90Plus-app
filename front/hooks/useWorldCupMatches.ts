@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Match } from '../components/Matches/matchCardUtils';
 import {
   fetchLiveMatches,
   fetchWorldCupMatchesByDate,
+  formatLiveMinuteDisplay,
   formatLocalDateKey,
   getLocalTodayKey,
 } from '../components/Matches/leagueApiUtils';
 import { ApiFootballService } from '../services/apiFootball';
+import { MatchUpdatePayload, websocketClient } from '../services/websocketClient';
 import { logger } from '../utils/logger';
 
 interface UseWorldCupMatchesResult {
@@ -18,12 +20,45 @@ interface UseWorldCupMatchesResult {
 }
 
 const memoryCache = new Map<string, { data: Match[]; ts: number }>();
-const TTL_IDLE_MS = 15_000;
-const TTL_LIVE_MS = 3_000;
+const TTL_IDLE_MS = 8_000;
+const TTL_LIVE_MS = 2_000;
 const POLL_LIVE_MS = 3_000;
-const POLL_TODAY_MS = 8_000;
+const POLL_TODAY_MS = 5_000;
 const POLL_CAMPAIGN_LIVE_MS = 3_000;
-const POLL_CAMPAIGN_TODAY_MS = 5_000;
+const POLL_CAMPAIGN_TODAY_MS = 4_000;
+const CORNERS_REFRESH_MS = 9_000;
+
+const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
+
+function patchMatchFromWsUpdate(match: Match, update: MatchUpdatePayload): Match {
+  let status: Match['status'] = match.status;
+  if (FINISHED_STATUSES.has(update.status)) status = 'finished';
+  else if (LIVE_STATUSES.has(update.status)) status = 'live';
+
+  const minute =
+    update.minute != null
+      ? formatLiveMinuteDisplay(update.status, update.minute)
+      : match.minute;
+
+  if (
+    match.score.home === update.homeScore &&
+    match.score.away === update.awayScore &&
+    match.status === status &&
+    match.statusShort === update.status &&
+    match.minute === minute
+  ) {
+    return match;
+  }
+
+  return {
+    ...match,
+    score: { home: update.homeScore, away: update.awayScore },
+    status,
+    statusShort: update.status,
+    minute,
+  };
+}
 
 function mergeLive(wc: Match[], live: Match[], leagueId: number): Match[] {
   const liveWc = live.filter((m) => m.league?.id === leagueId);
@@ -88,6 +123,7 @@ export function useWorldCupMatches(
   const [hasLive, setHasLive] = useState(false);
   const fetchingRef = useRef(false);
   const hasDataRef = useRef(false);
+  const lastCornersFetchRef = useRef(0);
 
   const dateString = formatLocalDateKey(selectedDate);
   const isToday = dateString === getLocalTodayKey();
@@ -123,10 +159,27 @@ export function useWorldCupMatches(
         const live = await fetchLiveMatches();
         list = mergeLive(list, live, leagueId);
       }
-      if (list.some((m) => m.status === 'live')) {
-        list = await enrichLiveCorners(list);
-      }
       const liveNow = list.some((m) => m.status === 'live');
+      if (liveNow) {
+        const now = Date.now();
+        if (now - lastCornersFetchRef.current >= CORNERS_REFRESH_MS) {
+          lastCornersFetchRef.current = now;
+          list = await enrichLiveCorners(list);
+        } else {
+          const prev = memoryCache.get(dateString)?.data;
+          if (prev?.length) {
+            const cornersById = new Map(
+              prev.filter((m) => m.corners).map((m) => [m.id, m.corners!]),
+            );
+            if (cornersById.size > 0) {
+              list = list.map((m) => {
+                const corners = cornersById.get(m.id);
+                return corners ? { ...m, corners } : m;
+              });
+            }
+          }
+        }
+      }
       memoryCache.set(dateString, { data: list, ts: Date.now() });
       setMatches(list);
       setHasLive(liveNow);
@@ -158,6 +211,44 @@ export function useWorldCupMatches(
     const id = setInterval(() => void load(), period);
     return () => clearInterval(id);
   }, [campaignMode, enabled, hasLive, isToday, load]);
+
+  const liveMatchIdsKey = useMemo(
+    () => matches.filter((m) => m.status === 'live').map((m) => m.id).join(','),
+    [matches],
+  );
+
+  useEffect(() => {
+    if (!enabled || !isToday || !liveMatchIdsKey) return;
+
+    const liveIds = liveMatchIdsKey
+      .split(',')
+      .map((id) => parseInt(id, 10))
+      .filter((id) => !Number.isNaN(id));
+
+    liveIds.forEach((id) => websocketClient.subscribeToRoom(`match:${id}`));
+
+    const unsub = websocketClient.subscribeToAllMatchUpdates((update) => {
+      setMatches((prev) => {
+        const idx = prev.findIndex((m) => m.id === String(update.matchId));
+        if (idx === -1) return prev;
+        const patched = patchMatchFromWsUpdate(prev[idx], update);
+        if (patched === prev[idx]) return prev;
+        const next = [...prev];
+        next[idx] = patched;
+        const cached = memoryCache.get(dateString);
+        if (cached) {
+          memoryCache.set(dateString, { data: next, ts: Date.now() });
+        }
+        return next;
+      });
+      setHasLive(true);
+    });
+
+    return () => {
+      unsub();
+      liveIds.forEach((id) => websocketClient.unsubscribeFromRoom(`match:${id}`));
+    };
+  }, [dateString, enabled, isToday, liveMatchIdsKey]);
 
   return { matches, loading, error, refetch: load, hasLive };
 }

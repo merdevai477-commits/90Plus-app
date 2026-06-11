@@ -254,7 +254,12 @@ class FootballDataCacheService {
     ): Promise<any[]> {
         const cacheKey = `wc_${leagueId}_${season}_${dateString}`;
         const todayKey = new Date().toISOString().split('T')[0];
-        const ttl = dateString < todayKey ? this.TTL.MATCHES_BY_DATE_PAST : this.TTL.MATCHES_BY_DATE_TODAY;
+        const ttl =
+            dateString < todayKey
+                ? this.TTL.MATCHES_BY_DATE_PAST
+                : dateString === todayKey
+                  ? 12 * 1000
+                  : this.TTL.MATCHES_BY_DATE_FUTURE;
 
         try {
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);

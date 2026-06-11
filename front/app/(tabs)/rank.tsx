@@ -28,6 +28,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -562,22 +563,24 @@ export default function RankScreen() {
           )}
 
           {!isLoading && !isError && realPlayers.length > 0 && (
-            <Pressable
-              style={({ pressed }) => [s.viewAllLeaderboardBtn, pressed && { opacity: 0.85 }]}
+            <TouchableOpacity
+              activeOpacity={0.88}
+              style={s.viewAllLeaderboardBtn}
               onPress={() => setIsModalVisible(true)}
               accessibilityRole="button"
               accessibilityLabel={t.rank.viewAll}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <LinearGradient
-                colors={['rgba(168,85,247,0.2)', 'rgba(124,58,237,0.1)']}
+                colors={['rgba(192,132,252,0.35)', 'rgba(168,85,247,0.22)', 'rgba(124,58,237,0.14)']}
                 style={s.viewAllLeaderboardGrad}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
                 <Text style={[s.viewAllLeaderboardTxt, { fontFamily: fontExtraBold }]}>{t.rank.viewAll}</Text>
-                <ChevronRight size={16} color={ACCENT} />
+                <ChevronRight size={16} color={ACCENT} strokeWidth={2.5} />
               </LinearGradient>
-            </Pressable>
+            </TouchableOpacity>
           )}
         </View>
       </ScrollView>
@@ -794,7 +797,13 @@ const s = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.3)',
+    borderColor: 'rgba(168,85,247,0.45)',
+    zIndex: 2,
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 8,
   },
   viewAllLeaderboardGrad: {
     flexDirection: 'row',

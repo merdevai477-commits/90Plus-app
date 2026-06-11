@@ -1,6 +1,7 @@
 import {
   buildLanguageLockPrompt,
   detectMessageLanguage,
+  resolveChatLanguage,
 } from '../message-language.util';
 
 describe('detectMessageLanguage', () => {
@@ -19,6 +20,18 @@ describe('detectMessageLanguage', () => {
 
   test('empty defaults to English', () => {
     expect(detectMessageLanguage('')).toBe('en');
+  });
+});
+
+describe('resolveChatLanguage', () => {
+  test('uses app language for short ambiguous text', () => {
+    expect(resolveChatLanguage('Salah', 'ar')).toBe('ar');
+    expect(resolveChatLanguage('hi', 'ar')).toBe('ar');
+  });
+
+  test('clear script overrides app preference', () => {
+    expect(resolveChatLanguage('كم عمر صلاح؟', 'en')).toBe('ar');
+    expect(resolveChatLanguage('How old is Salah?', 'ar')).toBe('en');
   });
 });
 

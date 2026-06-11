@@ -1122,10 +1122,16 @@ export const ar = {
 
     // World Cup card / modal
     worldCup: {
-      headline: 'اصنع\nالمجد',
-      body: 'تنافس مع الآخرين واصعد إلى\nقمة لوحة المتصدرين!',
+      headline: 'تابع اخبار كاس العالم\nلحظه بلحظه',
+      body: 'مع 90plus news',
       comingSoon: 'قريبًا',
+      openNews: 'افتح الأخبار',
       viewMatches: 'شاهد المباريات',
+      newsScreenEyebrow: 'كأس العالم 2026',
+      newsScreenTitle: '90PLUS News',
+      newsBack: 'رجوع',
+      newsLangToggle: 'تبديل لغة الأخبار',
+      newsLangLabel: 'EN',
       countdownLabel: 'كأس العالم يبدأ خلال',
       anticipate: 'استعد',
       brand: '90 بلاس كأس العالم',

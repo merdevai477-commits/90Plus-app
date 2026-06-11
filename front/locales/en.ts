@@ -1147,10 +1147,16 @@ export const en = {
 
     // World Cup card / modal
     worldCup: {
-      headline: 'Create\nGlory',
-      body: 'Compete with others and reach\nthe top of the leaderboard!',
+      headline: 'Follow World Cup news\nmoment by moment',
+      body: 'with 90plus news',
       comingSoon: 'Coming Soon',
+      openNews: 'Open News',
       viewMatches: 'View Matches',
+      newsScreenEyebrow: 'World Cup 2026',
+      newsScreenTitle: '90PLUS News',
+      newsBack: 'Back',
+      newsLangToggle: 'Toggle news language',
+      newsLangLabel: 'ع',
       countdownLabel: 'World Cup starts in',
       anticipate: 'ANTICIPATE',
       brand: '90 PLUS WORLD CUP',

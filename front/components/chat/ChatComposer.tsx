@@ -139,7 +139,7 @@ export function ChatComposer({
           style={styles.inputWrapper}
           tint="rgba(16,10,28,0.92)"
           effect="regular"
-          interactive
+          interactive={false}
         >
           <LinearGradient
             colors={['rgba(124,58,237,0.08)', 'rgba(76,29,149,0.04)']}
@@ -182,7 +182,7 @@ export function ChatComposer({
             />
             <SendButton
               active={Boolean(value.trim())}
-              loading={isLoading}
+              loading={isLoading && !isGenerating}
               isStop={isGenerating}
               onPress={isGenerating ? onStop! : onSend}
               a11yLabel={isGenerating ? t.chat.a11yStop : t.chat.a11ySend}

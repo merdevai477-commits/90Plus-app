@@ -8,6 +8,11 @@ import {
     type SupportedLanguage,
     type PushTemplateKey,
 } from './push-templates.service';
+import {
+    type ExpoPushErrorCode,
+    logExpoPushReceipt,
+    logExpoPushTicket,
+} from '../utils/expo-push-log.util';
 
 // Create a new Expo SDK client
 const expo = new Expo();
@@ -17,15 +22,53 @@ const RECEIPT_TTL_SECONDS = 60 * 35; // 35 min (Expo receipts available for ~30 
 /**
  * Handle invalid/expired push tokens by clearing them from DB
  */
-async function handleInvalidToken(token: string): Promise<void> {
+async function handleInvalidToken(token: string, reason: ExpoPushErrorCode): Promise<void> {
     try {
         await prisma.user.updateMany({
             where: { expoPushToken: token },
             data: { expoPushToken: null },
         });
-        logger.info(`Cleared invalid push token from DB: ${token.substring(0, 20)}...`);
+        logger.info(`Cleared invalid push token from DB (${reason}): ${token.substring(0, 20)}...`);
     } catch (err) {
         logger.warn('Failed to clear invalid push token from DB:', err);
+    }
+}
+
+async function handleExpoPushError(
+    errorCode: ExpoPushErrorCode,
+    pushToken: string | undefined,
+    meta: { receiptId?: string; phase: 'ticket' | 'receipt' },
+): Promise<'retry' | 'fatal' | 'done'> {
+    switch (errorCode) {
+        case 'DeviceNotRegistered':
+        case 'InvalidRegistration':
+            if (pushToken) await handleInvalidToken(pushToken, errorCode);
+            return 'done';
+        case 'MessageRateExceeded':
+            logger.warn(`[EXPO PUSH] ${errorCode} — will retry`, meta);
+            return 'retry';
+        case 'InvalidCredentials':
+        case 'MismatchSenderId':
+        case 'InvalidProviderToken':
+            logger.error(`[EXPO PUSH] CRITICAL ${errorCode} — check FCM V1 / APNs in Expo Dashboard`, meta);
+            try {
+                const Sentry = await import('@sentry/node');
+                Sentry.captureException(new Error(`Expo push ${errorCode}`), {
+                    level: 'fatal',
+                    tags: { service: 'push-notifications', errorCode, phase: meta.phase },
+                    extra: meta,
+                });
+            } catch {
+                /* non-fatal */
+            }
+            return 'fatal';
+        case 'MessageTooBig':
+            logger.error('[EXPO PUSH] MessageTooBig — reduce payload size', meta);
+            return 'done';
+        case 'Unknown':
+        default:
+            logger.warn('[EXPO PUSH] Unclassified Expo error', { errorCode, ...meta });
+            return 'done';
     }
 }
 
@@ -38,7 +81,6 @@ async function storeReceiptIds(receiptIds: string[], tokenMap?: Map<string, stri
     try {
         const pipeline = redis.pipeline();
         for (const id of receiptIds) {
-            // Store receipt ID with optional token mapping for cleanup on DeviceNotRegistered
             const value = tokenMap?.get(id) || '1';
             pipeline.setex(`expo:receipt:${id}`, RECEIPT_TTL_SECONDS, value);
         }
@@ -51,76 +93,64 @@ async function storeReceiptIds(receiptIds: string[], tokenMap?: Map<string, stri
 /**
  * Check Expo push receipts for a batch of receipt IDs.
  * Called by Bull job 30 seconds after sending.
- * Handles DeviceNotRegistered, MessageRateExceeded, InvalidCredentials.
  */
 export async function checkPushReceipts(receiptIds: string[]): Promise<void> {
     if (receiptIds.length === 0) return;
 
     try {
-        // Expo allows max 300 receipt IDs per request
         const chunks = expo.chunkPushNotificationReceiptIds(receiptIds);
 
         for (const chunk of chunks) {
             try {
                 const receipts = await expo.getPushNotificationReceiptsAsync(chunk);
 
-                logger.info('EXPO RECEIPTS', JSON.stringify(receipts, null, 2));
-
                 for (const [receiptId, receipt] of Object.entries(receipts)) {
+                    const redis = getRedisClient();
+                    const storedToken =
+                        redis ? await redis.get(`expo:receipt:${receiptId}`) : undefined;
+                    const pushTokenPrefix =
+                        storedToken && storedToken !== '1'
+                            ? `${storedToken.substring(0, 28)}...`
+                            : undefined;
+
+                    const errorCode = logExpoPushReceipt(receiptId, receipt, {
+                        receiptId,
+                        pushTokenPrefix,
+                        source: 'checkPushReceipts',
+                    });
+
                     if (receipt.status === 'ok') {
-                        logger.info(`Receipt ok [${receiptId}]`);
                         continue;
                     }
 
-                    if (receipt.status === 'error') {
-                        const errCode = (receipt as any).details?.error;
-                        logger.warn(
-                            `Receipt error [${receiptId}]: ${receipt.message} (${errCode ?? 'unknown'})`,
-                        );
-
-                        if (errCode === 'DeviceNotRegistered') {
-                            // Retrieve the push token stored with this receipt ID
-                            const redis = getRedisClient();
-                            if (redis) {
-                                const storedToken = await redis.get(`expo:receipt:${receiptId}`);
-                                if (storedToken && storedToken !== '1') {
-                                    await handleInvalidToken(storedToken);
-                                } else {
-                                    logger.warn(`DeviceNotRegistered receipt: ${receiptId} - no token stored for cleanup`);
-                                }
-                            }
-                        } else if (errCode === 'MessageRateExceeded') {
-                            logger.warn(`MessageRateExceeded for receipt ${receiptId} - will retry`);
+                    if (receipt.status === 'error' && errorCode) {
+                        const tokenForCleanup =
+                            storedToken && storedToken !== '1' ? storedToken : undefined;
+                        const action = await handleExpoPushError(errorCode, tokenForCleanup, {
+                            receiptId,
+                            phase: 'receipt',
+                        });
+                        if (action === 'retry') {
                             throw new Error('MessageRateExceeded');
-                        } else if (errCode === 'InvalidCredentials') {
-                            logger.error('CRITICAL: Invalid Expo push credentials. Check FCM/APNs setup in Expo Dashboard.', {
-                                receiptId,
-                                error: receipt.message,
-                            });
-                            // Fix 9: Capture to Sentry so the team is alerted immediately
-                            try {
-                                const Sentry = await import('@sentry/node');
-                                Sentry.captureException(
-                                    new Error(`Expo push InvalidCredentials: ${receipt.message}`),
-                                    {
-                                        level: 'fatal',
-                                        tags: { service: 'push-notifications', errorCode: 'InvalidCredentials' },
-                                        extra: { receiptId, message: receipt.message },
-                                    },
-                                );
-                            } catch (sentryErr) {
-                                logger.warn('Failed to send InvalidCredentials alert to Sentry:', sentryErr);
-                            }
+                        }
+                        if (
+                            errorCode === 'DeviceNotRegistered' &&
+                            !tokenForCleanup
+                        ) {
+                            logger.warn(
+                                `[EXPO PUSH RECEIPT] DeviceNotRegistered receipt ${receiptId} — no token in Redis for cleanup`,
+                            );
                         }
                     }
                 }
-            } catch (chunkErr: any) {
-                if (chunkErr.message === 'MessageRateExceeded') throw chunkErr;
+            } catch (chunkErr: unknown) {
+                if (chunkErr instanceof Error && chunkErr.message === 'MessageRateExceeded') {
+                    throw chunkErr;
+                }
                 logger.error('Error checking receipt chunk:', chunkErr);
             }
         }
 
-        // Clean up processed receipt IDs from Redis
         const redis = getRedisClient();
         if (redis) {
             const pipeline = redis.pipeline();
@@ -129,26 +159,13 @@ export async function checkPushReceipts(receiptIds: string[]): Promise<void> {
             }
             await pipeline.exec();
         }
-    } catch (err: any) {
+    } catch (err: unknown) {
         logger.error('checkPushReceipts error:', err);
-        throw err; // Re-throw so Bull retries
+        throw err;
     }
 }
 
-/**
- * FCM V1 startup verification check.
- * Logs a warning if FCM credentials are not configured in Expo Dashboard.
- *
- * To add FCM V1:
- * 1. Go to https://console.firebase.google.com → Project Settings → Service Accounts
- * 2. Generate new private key → download JSON
- * 3. Go to https://expo.dev → Project → Credentials → Android
- * 4. Add FCM V1 service account key → upload the JSON
- * 5. Rebuild your Android app with: eas build --platform android
- */
 export function verifyFCMConfiguration(): void {
-    // Expo SDK handles FCM internally via the service account key set in Expo Dashboard.
-    // We can't check it at runtime directly, but we log a reminder on startup.
     const hasRedis = !!process.env.REDIS_URL;
     if (!hasRedis) {
         logger.warn('⚠️  REDIS_URL not set - receipt checking disabled. Push delivery errors may go undetected.');
@@ -166,10 +183,9 @@ export interface PushNotificationPayload {
     badge?: number;
     threadId?: string;
     silent?: boolean;
-    channelId?: string; // Android notification channel
+    channelId?: string;
 }
 
-/** Android 8+ requires a channelId — default when callers omit it. */
 function resolvePushChannelId(
     data?: Record<string, unknown>,
     explicit?: string,
@@ -192,12 +208,8 @@ function resolvePushChannelId(
     return 'default';
 }
 
-/**
- * Schedule a Bull job to check receipts after 30 seconds
- */
 async function scheduleReceiptCheck(receiptIds: string[]): Promise<void> {
     try {
-        // Dynamic import to avoid circular dependency
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const receiptModule = require('../queues/receipt.queue');
         const q = receiptModule.getReceiptQueue();
@@ -210,7 +222,7 @@ async function scheduleReceiptCheck(receiptIds: string[]): Promise<void> {
                     backoff: { type: 'exponential', delay: 60000 },
                     removeOnComplete: true,
                     removeOnFail: 100,
-                }
+                },
             );
         }
     } catch (err) {
@@ -218,13 +230,46 @@ async function scheduleReceiptCheck(receiptIds: string[]): Promise<void> {
     }
 }
 
+function processTicketChunk(
+    ticketChunk: Awaited<ReturnType<typeof expo.sendPushNotificationsAsync>>,
+    tokenForIndex: (index: number) => string | undefined,
+    source: 'sendNotification' | 'sendBulkNotifications',
+): { receiptIds: string[]; receiptTokenMap: Map<string, string>; hadError: boolean } {
+    const receiptIds: string[] = [];
+    const receiptTokenMap = new Map<string, string>();
+    let hadError = false;
+
+    for (let i = 0; i < ticketChunk.length; i++) {
+        const ticket = ticketChunk[i];
+        const pushToken = tokenForIndex(i);
+        const errorCode = logExpoPushTicket(ticket, {
+            pushTokenPrefix: pushToken ? `${pushToken.substring(0, 28)}...` : undefined,
+            source,
+        });
+
+        if (ticket.status === 'error') {
+            hadError = true;
+            if (errorCode) {
+                void handleExpoPushError(errorCode, pushToken, { phase: 'ticket' });
+            }
+            continue;
+        }
+
+        if ((ticket as ExpoPushSuccessTicket).id) {
+            const rid = (ticket as ExpoPushSuccessTicket).id;
+            receiptIds.push(rid);
+            if (pushToken) {
+                receiptTokenMap.set(rid, pushToken);
+            }
+        }
+    }
+
+    return { receiptIds, receiptTokenMap, hadError };
+}
+
 export class PushNotificationService {
-    /**
-     * Send a single push notification
-     */
     static async sendNotification(payload: PushNotificationPayload): Promise<boolean> {
         try {
-            // Check if the push token is valid
             if (!Expo.isExpoPushToken(payload.to)) {
                 logger.error(`Invalid Expo push token: ${payload.to}`);
                 return false;
@@ -233,22 +278,16 @@ export class PushNotificationService {
             let message: ExpoPushMessage;
 
             if (payload.silent) {
-                // Silent / data-only notification
-                // iOS: contentAvailable:true wakes the app in background, no alert shown
-                // Android: omit title & body entirely → FCM treats it as data-only message
                 message = {
                     to: payload.to,
-                    // No title, no body, no sound → pure data message on both platforms
                     data: {
                         ...(payload.data || {}),
-                        silent: 'true', // string 'true' for Android FCM data payload compatibility
+                        silent: 'true',
                     },
-                    // iOS-specific: wake app in background
                     _contentAvailable: true,
-                    // Suppress all UI
                     sound: null,
                     badge: 0,
-                    priority: 'normal', // Android: normal priority = no heads-up notification
+                    priority: 'normal',
                 };
             } else {
                 const channelId = resolvePushChannelId(payload.data, payload.channelId);
@@ -259,7 +298,7 @@ export class PushNotificationService {
                     body: payload.body,
                     data: payload.data || {},
                     badge: payload.badge,
-                    priority: 'high', // Ensures immediate delivery for match events
+                    priority: 'high',
                     channelId,
                     ...(payload.threadId ? { threadId: payload.threadId } : {}),
                 };
@@ -278,40 +317,22 @@ export class PushNotificationService {
             }
 
             const chunks = expo.chunkPushNotifications([message]);
-            const receiptIds: string[] = [];
-            const receiptTokenMap = new Map<string, string>(); // receiptId → pushToken
+            const allReceiptIds: string[] = [];
+            const allReceiptTokenMap = new Map<string, string>();
+            let ticketFailed = false;
 
             for (const chunk of chunks) {
                 try {
                     const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-                    logger.info('Push notification sent:', ticketChunk);
-
-                    for (const ticket of ticketChunk) {
-                        if ((ticket as any).status === 'error') {
-                            const errCode = (ticket as any).details?.error;
-                            logger.error('Push notification error:', (ticket as any).message, errCode);
-                        if (errCode === 'DeviceNotRegistered' || errCode === 'InvalidRegistration') {
-                            await handleInvalidToken(payload.to);
-                        }
-                        if (errCode === 'InvalidCredentials') {
-                                try {
-                                    const Sentry = await import('@sentry/node');
-                                    Sentry.captureException(
-                                        new Error(`Expo push InvalidCredentials (ticket): ${(ticket as any).message}`),
-                                        {
-                                            level: 'fatal',
-                                            tags: { service: 'push-notifications', errorCode: 'InvalidCredentials' },
-                                        },
-                                    );
-                                } catch { /* non-fatal */ }
-                            }
-                            return false;
-                        }
-                        if ((ticket as ExpoPushSuccessTicket).id) {
-                            const rid = (ticket as ExpoPushSuccessTicket).id;
-                            receiptIds.push(rid);
-                            receiptTokenMap.set(rid, payload.to);
-                        }
+                    const { receiptIds, receiptTokenMap, hadError } = processTicketChunk(
+                        ticketChunk,
+                        () => payload.to,
+                        'sendNotification',
+                    );
+                    if (hadError) ticketFailed = true;
+                    allReceiptIds.push(...receiptIds);
+                    for (const [k, v] of receiptTokenMap) {
+                        allReceiptTokenMap.set(k, v);
                     }
                 } catch (error) {
                     logger.error('Error sending push notification chunk:', error);
@@ -319,9 +340,13 @@ export class PushNotificationService {
                 }
             }
 
-            if (receiptIds.length > 0) {
-                await storeReceiptIds(receiptIds, receiptTokenMap);
-                await scheduleReceiptCheck(receiptIds);
+            if (ticketFailed) {
+                return false;
+            }
+
+            if (allReceiptIds.length > 0) {
+                await storeReceiptIds(allReceiptIds, allReceiptTokenMap);
+                await scheduleReceiptCheck(allReceiptIds);
             }
 
             return true;
@@ -331,14 +356,10 @@ export class PushNotificationService {
         }
     }
 
-    /**
-     * Send push notifications to multiple users
-     */
     static async sendBulkNotifications(payloads: PushNotificationPayload[]): Promise<{ success: number; failed: number }> {
         const messages: ExpoPushMessage[] = [];
         let failed = 0;
 
-        // Filter valid tokens and create messages
         for (const payload of payloads) {
             if (!Expo.isExpoPushToken(payload.to)) {
                 logger.warn(`Skipping invalid token: ${payload.to}`);
@@ -362,7 +383,6 @@ export class PushNotificationService {
             return { success: 0, failed };
         }
 
-        // Chunk and send
         const chunks = expo.chunkPushNotifications(messages);
         let success = 0;
         const allReceiptIds: string[] = [];
@@ -371,26 +391,20 @@ export class PushNotificationService {
         for (const chunk of chunks) {
             try {
                 const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-                
-                for (let i = 0; i < ticketChunk.length; i++) {
-                    const ticket = ticketChunk[i];
-                    const originalToken = (chunk[i] as ExpoPushMessage).to as string;
+                const { receiptIds, receiptTokenMap } = processTicketChunk(
+                    ticketChunk,
+                    (i) => (chunk[i] as ExpoPushMessage).to as string,
+                    'sendBulkNotifications',
+                );
 
-                    if ((ticket as any).status === 'ok') {
-                        success++;
-                        if ((ticket as ExpoPushSuccessTicket).id) {
-                            const rid = (ticket as ExpoPushSuccessTicket).id;
-                            allReceiptIds.push(rid);
-                            allReceiptTokenMap.set(rid, originalToken);
-                        }
-                    } else {
-                        failed++;
-                        const errCode = (ticket as any).details?.error;
-                        logger.error('Push error:', (ticket as any).message, errCode);
-                        if (errCode === 'DeviceNotRegistered' || errCode === 'InvalidRegistration') {
-                            if (originalToken) await handleInvalidToken(originalToken);
-                        }
-                    }
+                for (const ticket of ticketChunk) {
+                    if (ticket.status === 'ok') success++;
+                    else failed++;
+                }
+
+                allReceiptIds.push(...receiptIds);
+                for (const [k, v] of receiptTokenMap) {
+                    allReceiptTokenMap.set(k, v);
                 }
             } catch (error) {
                 logger.error('Chunk send error:', error);
@@ -406,10 +420,6 @@ export class PushNotificationService {
         return { success, failed };
     }
 
-    /**
-     * Send a silent background notification (content-available: 1)
-     * Used to trigger cache invalidation on the client without showing UI
-     */
     static async sendSilentNotification(params: {
         pushToken: string;
         type: 'MATCH_UPDATE' | 'SCORE_UPDATE' | 'NOTIFICATION_COUNT';
@@ -428,17 +438,18 @@ export class PushNotificationService {
         });
     }
 
-    /**
-     * Send match goal notification.
-     *
-     * Accepts an optional `userId` (or pre-resolved `language`) so the
-     * title and body are rendered in the user's preferred locale. When
-     * neither is provided we fall back to English to stay safe.
-     *
-     * Note: team names come from the data provider as-is. The frontend
-     * applies its own Arabic mapping when displaying push payload data;
-     * we forward the original strings here so deep links keep working.
-     */
+    private static async resolveLanguage(opts?: { userId?: string; language?: SupportedLanguage }): Promise<SupportedLanguage> {
+        if (opts?.language === 'ar' || opts?.language === 'en') return opts.language;
+        if (opts?.userId) {
+            try {
+                return await getUserLanguage(opts.userId);
+            } catch {
+                return 'en';
+            }
+        }
+        return 'en';
+    }
+
     static async sendGoalNotification(
         pushToken: string,
         homeTeam: string,
@@ -452,10 +463,6 @@ export class PushNotificationService {
         const language = await this.resolveLanguage(opts);
 
         const title = renderPushTemplate('goalTitle', language);
-        // Goal body is composed of two parts the templates already
-        // model: the scorer line, plus the latest score line. We put
-        // the scorer ahead and append the running scoreboard for both
-        // languages so user copy stays close to what they expect.
         const scorerLine = renderPushTemplate('goalBody', language, {
             player: scorer,
             team: scorer,
@@ -478,25 +485,6 @@ export class PushNotificationService {
         });
     }
 
-    /** Resolve a language from optional userId / language hints. */
-    private static async resolveLanguage(opts?: { userId?: string; language?: SupportedLanguage }): Promise<SupportedLanguage> {
-        if (opts?.language === 'ar' || opts?.language === 'en') return opts.language;
-        if (opts?.userId) {
-            try {
-                return await getUserLanguage(opts.userId);
-            } catch {
-                return 'en';
-            }
-        }
-        return 'en';
-    }
-
-    /**
-     * Generic localized push helper — pick a title key and a body key
-     * from `pushTemplates` and let the service interpolate variables
-     * in the user's language. Use this for any new push types so we
-     * don't keep multiplying domain-specific helpers.
-     */
     static async sendLocalizedNotification(params: {
         pushToken: string;
         userId?: string;
@@ -523,9 +511,6 @@ export class PushNotificationService {
         });
     }
 
-    /**
-     * Send match start notification
-     */
     static async sendMatchStartNotification(
         pushToken: string,
         homeTeam: string,
@@ -551,9 +536,6 @@ export class PushNotificationService {
         });
     }
 
-    /**
-     * Send match end notification
-     */
     static async sendMatchEndNotification(
         pushToken: string,
         homeTeam: string,
@@ -584,9 +566,6 @@ export class PushNotificationService {
         });
     }
 
-    /**
-     * Send halftime notification
-     */
     static async sendHalftimeNotification(
         pushToken: string,
         homeTeam: string,

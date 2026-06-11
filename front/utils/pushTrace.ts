@@ -10,3 +10,10 @@ export function pushTrace(message: string): void {
         console.log(message);
     }
 }
+
+/** Temporary runtime diagnostics — always logged (filter: adb logcat | grep "PUSH STEP") */
+export function pushStep(step: string | number, detail?: string): void {
+    const label = typeof step === 'number' ? String(step) : step;
+    const suffix = detail ? ` ${detail}` : '';
+    console.log(`[PUSH STEP ${label}]${suffix}`);
+}

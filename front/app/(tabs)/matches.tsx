@@ -32,9 +32,9 @@ import { fetchLeagueMatchesByDate } from '../../components/Matches/leagueApiUtil
 import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
 import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModal';
 import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
-import { useWorldCupLogo } from '../../hooks/useWorldCupLogo';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
-import { getWorldCupTimeLeft } from '../../constants/worldCup';
+import { getWorldCupTimeLeft, WC_2026_OFFICIAL_LOGO } from '../../constants/worldCup';
+import type { ImageSource } from 'expo-image';
 import { LiveTimer } from '../../components/common/LiveTimer';
 
 type UserPredictionEntry = {
@@ -302,7 +302,7 @@ const MatchRow = memo(function MatchRow({
   isSubscribing: boolean;
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
   onOpenDetails: (fixture: Fixture) => void;
-  worldCupCard?: { logoUrl: string | null; leagueName: string };
+  worldCupCard?: { logoSource: ImageSource; leagueName: string };
 }) {
   const predictionEntry = predictedMatches[fixture.id];
   const existingPrediction = predictionEntry?.type ?? null;
@@ -347,6 +347,9 @@ const MatchRow = memo(function MatchRow({
                   style={styles.teamLogo}
                   contentFit="contain"
                   cachePolicy="memory-disk"
+                  transition={0}
+                  priority="high"
+                  recyclingKey={fixture.homeLogo}
                 />
               ) : (
                 <View style={styles.logoInitials}>
@@ -412,6 +415,9 @@ const MatchRow = memo(function MatchRow({
                   style={styles.teamLogo}
                   contentFit="contain"
                   cachePolicy="memory-disk"
+                  transition={0}
+                  priority="high"
+                  recyclingKey={fixture.awayLogo}
                 />
               ) : (
                 <View style={styles.logoInitials}>
@@ -509,28 +515,47 @@ const MatchRow = memo(function MatchRow({
     return (
       <View style={styles.wcMatchCard}>
         <LinearGradient
-          colors={['rgba(168,85,247,0.12)', 'rgba(168,85,247,0)']}
+          colors={['rgba(168,85,247,0.16)', 'rgba(88,28,135,0.06)', 'transparent']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.wcCardShine}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <LinearGradient
+          colors={['rgba(216,180,254,0.35)', 'rgba(168,85,247,0.12)', 'transparent']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.wcCardTopAccent}
+          pointerEvents="none"
         />
         <View style={styles.wcCardHeader}>
-          <View style={styles.wcLogoFrame}>
-            {worldCupCard.logoUrl ? (
+          <LinearGradient
+            colors={['rgba(216,180,254,0.55)', 'rgba(124,58,237,0.35)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.wcLogoRing}
+          >
+            <View style={styles.wcLogoInner}>
               <Image
-                source={{ uri: worldCupCard.logoUrl }}
-                style={styles.wcLogoImg}
+                source={worldCupCard.logoSource}
+                style={styles.wcHeaderLogo}
                 contentFit="contain"
                 cachePolicy="memory-disk"
+                transition={0}
+                priority="high"
               />
-            ) : (
-              <View style={styles.wcLogoPlaceholder} />
-            )}
+            </View>
+          </LinearGradient>
+          <View style={styles.wcHeaderCopy}>
+            <Text style={styles.wcCardLeague} numberOfLines={1}>
+              {worldCupCard.leagueName}
+            </Text>
+            <Text style={styles.wcCardSub} numberOfLines={1}>
+              {t('rank.worldCup.newsScreenEyebrow')}
+            </Text>
           </View>
-          <Text style={styles.wcCardLeague} numberOfLines={1}>
-            {worldCupCard.leagueName}
-          </Text>
         </View>
+        <View style={styles.wcCardDivider} />
         <View style={styles.wcCardBody}>{rowContent}</View>
       </View>
     );
@@ -902,7 +927,6 @@ export default function MatchesHubScreenV2() {
     error: worldCupError,
     refetch: refetchWorldCup,
   } = useWorldCupMatches(selectedDate, wcTabActive, worldCupLeagueId, worldCupCampaignMode);
-  const wcLogoUrl = useWorldCupLogo(worldCupMatches);
   const wcLeagueLabel = useMemo(() => {
     const sample = worldCupMatches[0]?.league?.name;
     return sample ? getLeagueDisplayName(sample, currentLanguage) : t('matches.tabs.worldCup');
@@ -1504,7 +1528,10 @@ export default function MatchesHubScreenV2() {
         isSubscribing={subscribingFixtureId === item.id}
         onToggleSubscription={handleToggleSubscription}
         onOpenDetails={handleOpenMatchDetails}
-        worldCupCard={{ logoUrl: wcLogoUrl, leagueName: wcLeagueLabel }}
+        worldCupCard={{
+          logoSource: WC_2026_OFFICIAL_LOGO,
+          leagueName: wcLeagueLabel,
+        }}
       />
     ),
     [
@@ -1516,7 +1543,6 @@ export default function MatchesHubScreenV2() {
       subscribingFixtureId,
       handleToggleSubscription,
       handleOpenMatchDetails,
-      wcLogoUrl,
       wcLeagueLabel,
     ],
   );
@@ -2153,63 +2179,81 @@ const styles = StyleSheet.create({
   viewAllBtn: { height: 46, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   viewAllTxt: { color: PURPLE_PRIMARY, fontSize: 15, fontWeight: '800' },
   rowWrapCol: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
-  rowWrapInCard: { borderBottomWidth: 0, minHeight: 108 },
-  wcMatchCard: {
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: 'rgba(168,85,247,0.32)',
-    backgroundColor: 'rgba(12,10,22,0.96)',
-    overflow: 'hidden',
-    shadowColor: '#A855F7',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    elevation: 6,
+  rowWrapInCard: {
+    borderBottomWidth: 0,
+    minHeight: 112,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
   },
-  wcCardShine: {
+  wcMatchCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.26)',
+    backgroundColor: '#0A0812',
+    overflow: 'hidden',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  wcCardTopAccent: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 2,
+    height: 1,
   },
   wcCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(168,85,247,0.18)',
-    backgroundColor: 'rgba(168,85,247,0.07)',
+    justifyContent: 'flex-start',
+    gap: 12,
+    paddingTop: 14,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
   },
-  wcLogoFrame: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.22)',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+  wcLogoRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    padding: 1.5,
+  },
+  wcLogoInner: {
+    flex: 1,
+    borderRadius: 12.5,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  wcLogoImg: { width: 28, height: 28 },
-  wcLogoPlaceholder: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    backgroundColor: 'rgba(168,85,247,0.25)',
+  wcHeaderLogo: {
+    width: 42,
+    height: 42,
+  },
+  wcHeaderCopy: {
+    flex: 1,
+    gap: 2,
   },
   wcCardLeague: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '800',
-    letterSpacing: 0.2,
-    maxWidth: '70%',
+    letterSpacing: 0.35,
   },
-  wcCardBody: { paddingBottom: 2 },
+  wcCardSub: {
+    color: 'rgba(216,180,254,0.82)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  wcCardDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 16,
+    backgroundColor: 'rgba(168,85,247,0.2)',
+  },
+  wcCardBody: { paddingBottom: 4 },
   upcomingBadgeWrap: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
   upcomingBadge: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700' },
   timeTxt: {

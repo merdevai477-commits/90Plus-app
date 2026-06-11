@@ -129,7 +129,7 @@ router.get('/cached/world-cup/:date', (req, res, next) => {
     return SHARED_CACHE_24H(req, res, next);
   }
   if (dateParam === today) {
-    return SHARED_CACHE_30S(req, res, next);
+    return SHARED_CACHE_8S(req, res, next);
   }
   return SHARED_CACHE_5MIN(req, res, next);
 }, FootballController.getCachedWorldCupMatches);

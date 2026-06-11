@@ -29,7 +29,7 @@ import { logger } from '../utils/logger';
 import { sanitizeTimezone } from '../utils/chat-timezone';
 import {
     buildLanguageLockPrompt,
-    detectMessageLanguage,
+    resolveChatLanguage,
 } from '../utils/message-language.util';
 import {
     buildWorldCupCampaignLockPrompt,
@@ -438,13 +438,21 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         conversationId,
         systemPromptSuffix,
         resumeFromToken,
+        preferredLanguage,
     } = (req.body ?? {}) as {
         message?: string;
         history?: HistoryItem[];
         conversationId?: string;
         systemPromptSuffix?: string;
         resumeFromToken?: number;
+        preferredLanguage?: string;
     };
+
+    const headerLang = req.headers['x-user-language'];
+    const appLanguage =
+        typeof headerLang === 'string' && headerLang.trim()
+            ? headerLang.trim()
+            : preferredLanguage;
 
     if (!message || !message.trim()) {
         res.status(400).json({ error: 'Message is required' });
@@ -519,7 +527,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             });
         };
 
-        const messageLanguage = detectMessageLanguage(trimmedMessage);
+        const messageLanguage = resolveChatLanguage(trimmedMessage, appLanguage);
 
         // ─── Fast-path short-circuits (skipped on resume) ────────────────────
         if (!isResume) {

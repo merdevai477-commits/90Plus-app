@@ -1,9 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Match } from '../components/Matches/matchCardUtils';
 import { cacheService, CACHE_KEYS } from '../services/cacheService';
 
 /** Keep logo for the full tournament (~120 days). */
 const WC_LOGO_TTL_MS = 120 * 24 * 60 * 60 * 1000;
+
+function pickLeagueLogo(matches: Match[]): string | null {
+  for (const m of matches) {
+    const logo = m.league?.logo?.trim();
+    if (logo) return logo;
+  }
+  return null;
+}
 
 export async function getCachedWorldCupLogoUrl(): Promise<string | null> {
   const cached = await cacheService.get<string>(CACHE_KEYS.WORLD_CUP_LOGO);
@@ -17,41 +25,27 @@ export async function persistWorldCupLogoUrl(url: string | null | undefined): Pr
 }
 
 /**
- * Resolves the FIFA World Cup league logo from persistent cache or the latest
- * WC fixtures payload (API-Football league.logo).
+ * FIFA World Cup league logo from API-Football (`league.logo` on fixtures).
+ * Uses the live payload immediately; falls back to a long-lived local cache
+ * while fixtures are still loading.
  */
 export function useWorldCupLogo(wcMatches: Match[]): string | null {
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const fromMatches = useMemo(() => pickLeagueLogo(wcMatches), [wcMatches]);
+  const [cachedUrl, setCachedUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    if (fromMatches) {
+      void persistWorldCupLogoUrl(fromMatches);
+      return;
+    }
     let cancelled = false;
-
-    (async () => {
-      const cached = await getCachedWorldCupLogoUrl();
-      if (cancelled) return;
-      if (cached) {
-        setLogoUrl(cached);
-        return;
-      }
-
-      const fromApi = wcMatches.find((m) => m.league?.logo)?.league?.logo;
-      if (fromApi) {
-        await persistWorldCupLogoUrl(fromApi);
-        if (!cancelled) setLogoUrl(fromApi);
-      }
-    })();
-
+    void getCachedWorldCupLogoUrl().then((url) => {
+      if (!cancelled && url) setCachedUrl(url);
+    });
     return () => {
       cancelled = true;
     };
-  }, [wcMatches]);
+  }, [fromMatches]);
 
-  useEffect(() => {
-    const fromApi = wcMatches.find((m) => m.league?.logo)?.league?.logo;
-    if (!fromApi) return;
-    void persistWorldCupLogoUrl(fromApi);
-    setLogoUrl((prev) => prev ?? fromApi);
-  }, [wcMatches]);
-
-  return logoUrl;
+  return fromMatches ?? cachedUrl;
 }

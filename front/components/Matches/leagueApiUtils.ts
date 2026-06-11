@@ -141,6 +141,7 @@ export const mapFixturesToMatches = (fixtures: Fixture[]): Match[] => {
 // components at once (Home + matches tab) fires duplicate requests that all
 // count against the quota.
 const inFlightMatchesByDate = new Map<string, Promise<Match[]>>();
+const inFlightWorldCupByDate = new Map<string, Promise<Match[]>>();
 let inFlightLiveMatches: Promise<Match[]> | null = null;
 
 /**
@@ -260,6 +261,22 @@ export const fetchWorldCupMatchesByDate = async (
   options?: { skipDiskCache?: boolean },
 ): Promise<Match[]> => {
   const dateString = formatLocalDateKey(date);
+  const inflightKey = `${dateString}:${options?.skipDiskCache ? 'fresh' : 'cache'}`;
+  const existing = inFlightWorldCupByDate.get(inflightKey);
+  if (existing) return existing;
+
+  const promise = fetchWorldCupMatchesByDateImpl(date, dateString, options).finally(() => {
+    inFlightWorldCupByDate.delete(inflightKey);
+  });
+  inFlightWorldCupByDate.set(inflightKey, promise);
+  return promise;
+};
+
+const fetchWorldCupMatchesByDateImpl = async (
+  date: Date,
+  dateString: string,
+  options?: { skipDiskCache?: boolean },
+): Promise<Match[]> => {
   const cacheKey = `wc_matches_${dateString}`;
   const isToday = dateString === getLocalTodayKey();
 
@@ -286,7 +303,7 @@ export const fetchWorldCupMatchesByDate = async (
       const fixtures: Fixture[] = Array.isArray(raw?.response) ? raw.response : [];
       const matches = mapFixturesToMatches(fixtures);
       if (matches.length > 0) {
-        const ttl = isToday ? 5_000 : 2 * 60 * 1000;
+        const ttl = isToday ? 3_000 : 2 * 60 * 1000;
         await cacheService.set(cacheKey, matches, ttl);
       }
       return matches;

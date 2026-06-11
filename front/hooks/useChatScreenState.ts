@@ -29,6 +29,7 @@ type UseChatScreenStateParams = {
   deleteMessage: (id: string) => void;
   retryLastMessage: () => void;
   dismissError: () => void;
+  isLoading: boolean;
   isOnline: boolean;
   profile: { displayName?: string | null } | null;
   isFifaCardComplete: boolean;
@@ -51,6 +52,7 @@ export function useChatScreenState({
   deleteMessage,
   retryLastMessage,
   dismissError,
+  isLoading,
   isOnline,
   profile,
   isFifaCardComplete,
@@ -160,6 +162,11 @@ export function useChatScreenState({
     (textOverride?: string) => {
       const textToSend = textOverride ?? inputValue;
       if (!textToSend.trim()) return;
+      if (isLoading) return;
+      if (!isOnline) {
+        setConnToast({ message: tChat.offline, type: 'error' });
+        return;
+      }
 
       if (editingMessage) {
         editMessage(editingMessage.id, textToSend.trim());
@@ -182,7 +189,7 @@ export function useChatScreenState({
       });
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150);
     },
-    [editingMessage, inputValue, editMessage, sendMessage, setInputValue],
+    [editingMessage, inputValue, editMessage, sendMessage, setInputValue, isLoading, isOnline, tChat.offline],
   );
 
   const handleStartEdit = useCallback(

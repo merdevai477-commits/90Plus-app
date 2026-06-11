@@ -562,7 +562,7 @@ const MatchDetailsScreen = () => {
     statsPollingRef.current = setInterval(() => {
       loadedTabsRef.current.delete('stats');
       loadStatsIfNeeded(true).catch(() => {});
-    }, 15_000);
+    }, 5_000);
 
     return () => {
       if (statsPollingRef.current) {
