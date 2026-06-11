@@ -1,16 +1,50 @@
 (function () {
-  const API_URL = '/api/news/world-cup';
-  let cachedPayload = null;
+  var API_URL = '/api/news/world-cup';
+  var LANG_KEY = '90plus-news-lang';
 
-  function formatDate(iso, locale) {
-    try {
-      return new Intl.DateTimeFormat(locale, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(new Date(iso));
-    } catch {
-      return iso;
-    }
+  var I18N = {
+    ar: {
+      brandSub: 'أخبار كأس العالم',
+      latestNews: 'أحدث الأخبار',
+      moreStories: 'المزيد من الأخبار',
+      footer: '© 2026 90Plus أخبار كأس العالم — جميع الحقوق محفوظة',
+      loading: 'جاري تحميل الأخبار…',
+      empty: 'لا توجد أخبار كأس العالم حالياً.',
+      error: 'تعذّر تحميل الأخبار. حاول مرة أخرى.',
+      updated: 'آخر تحديث',
+      articles: 'خبر',
+      stale: 'نسخة مخزّنة',
+      fresh: 'محدّث',
+      wcTag: 'كأس العالم 2026',
+      langBtn: 'EN',
+      langAria: 'التبديل للإنجليزية',
+    },
+    en: {
+      brandSub: 'WORLD CUP NEWS',
+      latestNews: 'Latest News',
+      moreStories: 'More Stories',
+      footer: '© 2026 90Plus World Cup News — All rights reserved',
+      loading: 'Loading news…',
+      empty: 'No World Cup news available right now.',
+      error: 'Could not load news. Please try again.',
+      updated: 'Updated',
+      articles: 'articles',
+      stale: 'cached snapshot',
+      fresh: 'updated',
+      wcTag: 'World Cup 2026',
+      langBtn: 'ع',
+      langAria: 'Switch to Arabic',
+    },
+  };
+
+  var state = {
+    lang: 'ar',
+    payload: null,
+    articles: [],
+  };
+
+  function t(key) {
+    return I18N[state.lang][key] || key;
   }
 
   function escapeHtml(value) {
@@ -21,139 +55,259 @@
       .replace(/"/g, '&quot;');
   }
 
-  function renderArticles(container, articles, locale) {
-    if (!container) return;
+  function readStoredLang() {
+    try {
+      var stored = localStorage.getItem(LANG_KEY);
+      return stored === 'en' ? 'en' : 'ar';
+    } catch (_e) {
+      return 'ar';
+    }
+  }
+
+  function storeLang(lang) {
+    try {
+      localStorage.setItem(LANG_KEY, lang);
+    } catch (_e) {
+      /* ignore */
+    }
+  }
+
+  function applyLanguage(lang) {
+    state.lang = lang;
+    storeLang(lang);
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    document.body.classList.remove('lang-ar', 'lang-en');
+    document.body.classList.add(lang === 'ar' ? 'lang-ar' : 'lang-en');
+
+    document.querySelectorAll('[data-i18n]').forEach(function (el) {
+      var key = el.getAttribute('data-i18n');
+      if (key && I18N[lang][key]) el.textContent = I18N[lang][key];
+    });
+
+    var toggle = document.getElementById('lang-toggle');
+    var label = document.getElementById('lang-toggle-label');
+    if (label) label.textContent = I18N[lang].langBtn;
+    if (toggle) toggle.setAttribute('aria-label', I18N[lang].langAria);
+  }
+
+  function formatRelativeTime(iso) {
+    var date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+
+    var diffMs = Date.now() - date.getTime();
+    var minutes = Math.floor(diffMs / 60000);
+    var hours = Math.floor(minutes / 60);
+    var days = Math.floor(hours / 24);
+
+    if (state.lang === 'ar') {
+      if (minutes < 1) return 'الآن';
+      if (minutes < 60) return 'منذ ' + minutes + ' د';
+      if (hours < 24) return 'منذ ' + hours + ' س';
+      if (days === 1) return 'منذ يوم';
+      return 'منذ ' + days + ' أيام';
+    }
+
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return minutes + 'm ago';
+    if (hours < 24) return hours + 'h ago';
+    if (days === 1) return '1 day ago';
+    return days + ' days ago';
+  }
+
+  function formatUpdatedAt(iso) {
+    if (!iso) return '—';
+    try {
+      return new Intl.DateTimeFormat(state.lang === 'ar' ? 'ar-EG' : 'en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date(iso));
+    } catch (_e) {
+      return iso;
+    }
+  }
+
+  function articlesForLang(payload, lang) {
+    var bucket = payload && payload.data ? payload.data[lang] : null;
+    return bucket && bucket.articles ? bucket.articles : [];
+  }
+
+  function mediaHtml(imageUrl, alt) {
+    if (imageUrl) {
+      return (
+        '<img src="' +
+        escapeHtml(imageUrl) +
+        '" alt="' +
+        escapeHtml(alt) +
+        '" loading="lazy" referrerpolicy="no-referrer" />'
+      );
+    }
+    return '<div class="card-fallback" aria-hidden="true">⚽</div>';
+  }
+
+  function clockIcon() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
+  }
+
+  function renderLarge(article) {
+    var summary = article.description || '';
+    return (
+      '<a class="card-large" href="' +
+      escapeHtml(article.url) +
+      '" target="_blank" rel="noopener noreferrer">' +
+      mediaHtml(article.imageUrl, article.title) +
+      '<div class="overlay"></div>' +
+      '<div class="content">' +
+      '<span class="badge">' +
+      escapeHtml(t('wcTag')) +
+      '</span>' +
+      '<h2>' +
+      escapeHtml(article.title) +
+      '</h2>' +
+      (summary ? '<p>' + escapeHtml(summary) + '</p>' : '') +
+      '<div class="meta-row"><span>' +
+      clockIcon() +
+      escapeHtml(formatRelativeTime(article.publishedAt)) +
+      '</span><span>' +
+      escapeHtml(article.source) +
+      '</span></div>' +
+      '</div></a>'
+    );
+  }
+
+  function renderSmall(article) {
+    return (
+      '<a class="card-small" href="' +
+      escapeHtml(article.url) +
+      '" target="_blank" rel="noopener noreferrer">' +
+      '<div class="thumb">' +
+      mediaHtml(article.imageUrl, article.title) +
+      '</div>' +
+      '<div><span class="source">' +
+      escapeHtml(article.source) +
+      '</span><h4>' +
+      escapeHtml(article.title) +
+      '</h4><span class="meta-row">' +
+      clockIcon() +
+      escapeHtml(formatRelativeTime(article.publishedAt)) +
+      '</span></div></a>'
+    );
+  }
+
+  function renderMedium(article) {
+    var summary = article.description || '';
+    return (
+      '<a class="card-medium" href="' +
+      escapeHtml(article.url) +
+      '" target="_blank" rel="noopener noreferrer">' +
+      '<div class="media">' +
+      mediaHtml(article.imageUrl, article.title) +
+      '</div>' +
+      '<div class="body">' +
+      '<span class="badge">' +
+      escapeHtml(article.source) +
+      '</span>' +
+      '<h3>' +
+      escapeHtml(article.title) +
+      '</h3>' +
+      (summary ? '<p>' + escapeHtml(summary) + '</p>' : '') +
+      '<div class="meta-row"><span>' +
+      clockIcon() +
+      escapeHtml(formatRelativeTime(article.publishedAt)) +
+      '</span></div>' +
+      '</div></a>'
+    );
+  }
+
+  function setMeta(payload) {
+    var meta = document.getElementById('news-meta');
+    if (!meta) return;
+
+    var count = state.articles.length;
+    var status = payload && payload.stale ? t('stale') : t('fresh');
+    var updated = payload && payload.fetchedAt ? formatUpdatedAt(payload.fetchedAt) : '—';
+
+    meta.innerHTML =
+      '<strong>' +
+      count +
+      '</strong> ' +
+      t('articles') +
+      ' • ' +
+      status +
+      ' • ' +
+      t('updated') +
+      ' ' +
+      escapeHtml(updated);
+  }
+
+  function showStatus(message, isError) {
+    var statusEl = document.getElementById('news-status');
+    var contentEl = document.getElementById('news-content');
+    if (!statusEl || !contentEl) return;
+
+    statusEl.textContent = message;
+    statusEl.classList.remove('hidden');
+    statusEl.classList.toggle('error', Boolean(isError));
+    contentEl.classList.add('hidden');
+  }
+
+  function renderNews() {
+    var articles = state.articles;
+    var statusEl = document.getElementById('news-status');
+    var contentEl = document.getElementById('news-content');
+    var featuredSlot = document.getElementById('featured-slot');
+    var sidebarList = document.getElementById('sidebar-list');
+    var newsGrid = document.getElementById('news-grid');
+
+    if (!statusEl || !contentEl || !featuredSlot || !sidebarList || !newsGrid) return;
+
     if (!articles.length) {
-      container.innerHTML =
-        locale === 'ar-EG'
-          ? '<div class="news-status">لا توجد أخبار كأس العالم حالياً.</div>'
-          : '<div class="news-status">No World Cup news available right now.</div>';
+      showStatus(t('empty'), false);
       return;
     }
 
-    container.innerHTML = articles
-      .map(function (article) {
-        const thumb = article.imageUrl
-          ? '<img class="news-thumb" src="' +
-            escapeHtml(article.imageUrl) +
-            '" alt="" loading="lazy" />'
-          : '<div class="news-thumb placeholder" aria-hidden="true">⚽</div>';
+    statusEl.classList.add('hidden');
+    contentEl.classList.remove('hidden');
 
-        return (
-          '<a class="card news-card reveal" href="' +
-          escapeHtml(article.url) +
-          '" target="_blank" rel="noopener noreferrer">' +
-          thumb +
-          '<div><div class="news-meta"><span class="source">' +
-          escapeHtml(article.source) +
-          '</span><span>' +
-          escapeHtml(formatDate(article.publishedAt, locale)) +
-          '</span></div><h2>' +
-          escapeHtml(article.title) +
-          '</h2>' +
-          (article.description
-            ? '<p>' + escapeHtml(article.description) + '</p>'
-            : '') +
-          '</div></a>'
-        );
-      })
-      .join('');
+    featuredSlot.innerHTML = renderLarge(articles[0]);
+    sidebarList.innerHTML = articles.slice(1, 5).map(renderSmall).join('');
+    newsGrid.innerHTML = articles.slice(5).map(renderMedium).join('');
+
+    setMeta(state.payload);
   }
 
-  function setMeta(metaEl, payload, locale) {
-    const bucket = locale === 'ar-EG' ? payload.data.ar : payload.data.en;
-    const count = bucket?.articles?.length ?? 0;
-    const updated = payload.fetchedAt
-      ? formatDate(payload.fetchedAt, locale)
-      : locale === 'ar-EG'
-        ? '—'
-        : '—';
-    const staleLabel = payload.stale
-      ? locale === 'ar-EG'
-        ? 'نسخة مخزّنة'
-        : 'cached snapshot'
-      : locale === 'ar-EG'
-        ? 'محدّث'
-        : 'updated';
-    metaEl.textContent =
-      locale === 'ar-EG'
-        ? count + ' خبر • ' + staleLabel + ' • ' + updated
-        : count + ' articles • ' + staleLabel + ' • ' + updated;
-  }
-
-  function renderFromPayload(payload) {
-    renderArticles(
-      document.getElementById('news-list-ar'),
-      payload.data.ar?.articles ?? [],
-      'ar-EG',
-    );
-    renderArticles(
-      document.getElementById('news-list-en'),
-      payload.data.en?.articles ?? [],
-      'en-US',
-    );
-    setMeta(document.getElementById('news-meta-ar'), payload, 'ar-EG');
-    setMeta(document.getElementById('news-meta-en'), payload, 'en-US');
-  }
-
-  function setLoading() {
-    const loadingAr = '<div class="news-status">جاري تحميل الأخبار…</div>';
-    const loadingEn = '<div class="news-status">Loading news…</div>';
-    var listAr = document.getElementById('news-list-ar');
-    var listEn = document.getElementById('news-list-en');
-    if (listAr) listAr.innerHTML = loadingAr;
-    if (listEn) listEn.innerHTML = loadingEn;
-  }
-
-  async function loadNews(forceNetwork) {
-    if (cachedPayload && !forceNetwork) {
-      renderFromPayload(cachedPayload);
-      return;
-    }
-
-    setLoading();
+  async function loadNews() {
+    showStatus(t('loading'), false);
 
     try {
-      var url = API_URL + '?lang=all&pageSize=15';
-      if (forceNetwork) {
-        url += '&_=' + Date.now();
-      }
-
-      const response = await fetch(url, {
+      var response = await fetch(API_URL + '?lang=all&pageSize=15', {
         headers: { Accept: 'application/json' },
-        cache: forceNetwork ? 'no-store' : 'default',
       });
-      const payload = await response.json();
+      var payload = await response.json();
 
       if (!response.ok || payload.status !== 'SUCCESS') {
-        throw new Error(payload.message || 'Request failed');
+        throw new Error((payload && payload.message) || 'Request failed');
       }
 
-      cachedPayload = payload;
-      renderFromPayload(payload);
+      state.payload = payload;
+      state.articles = articlesForLang(payload, state.lang);
+      renderNews();
     } catch (error) {
-      var errorAr = document.getElementById('news-list-ar');
-      var errorEn = document.getElementById('news-list-en');
-      var messageAr = 'تعذّر تحميل الأخبار. حاول مرة أخرى.';
-      var messageEn = 'Could not load news. Please try again.';
-      if (errorAr) {
-        errorAr.innerHTML =
-          '<div class="news-status error">' + escapeHtml(messageAr) + '</div>';
-      }
-      if (errorEn) {
-        errorEn.innerHTML =
-          '<div class="news-status error">' + escapeHtml(messageEn) + '</div>';
-      }
       console.error('[news]', error);
+      showStatus(t('error'), true);
     }
   }
 
-  document.getElementById('refresh-btn-ar')?.addEventListener('click', function () {
-    loadNews(true);
-  });
-  document.getElementById('refresh-btn-en')?.addEventListener('click', function () {
-    loadNews(true);
+  document.getElementById('lang-toggle')?.addEventListener('click', function () {
+    var next = state.lang === 'ar' ? 'en' : 'ar';
+    applyLanguage(next);
+
+    if (state.payload) {
+      state.articles = articlesForLang(state.payload, next);
+      renderNews();
+    }
   });
 
-  loadNews(false);
+  applyLanguage(readStoredLang());
+  loadNews();
 })();
