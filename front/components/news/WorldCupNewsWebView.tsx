@@ -1,10 +1,11 @@
 import React, { forwardRef, useCallback } from 'react';
-import { Platform, StyleSheet, type ViewStyle } from 'react-native';
+import { Linking, Platform, StyleSheet, type ViewStyle } from 'react-native';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 
 import {
   isAllowedWorldCupNewsUrl,
   NEWS_WEBVIEW_INJECTED_JS,
+  parseNewsWebViewMessage,
   WORLD_CUP_NEWS_URL,
 } from '../../utils/worldCupNewsWebView';
 
@@ -35,9 +36,28 @@ export const WorldCupNewsWebView = forwardRef<WebView, WorldCupNewsWebViewProps>
       [onCanGoBackChange, onLoadingChange],
     );
 
-    const shouldStartLoad = useCallback((request: { url: string }) => {
-      return isAllowedWorldCupNewsUrl(request.url);
+    const openExternalUrl = useCallback((url: string) => {
+      void Linking.openURL(url).catch(() => {});
     }, []);
+
+    const shouldStartLoad = useCallback(
+      (request: { url: string }) => {
+        if (isAllowedWorldCupNewsUrl(request.url)) return true;
+        openExternalUrl(request.url);
+        return false;
+      },
+      [openExternalUrl],
+    );
+
+    const handleMessage = useCallback(
+      (event: { nativeEvent: { data: string } }) => {
+        const msg = parseNewsWebViewMessage(event.nativeEvent.data);
+        if (msg?.type === 'OPEN_EXTERNAL') {
+          openExternalUrl(msg.url);
+        }
+      },
+      [openExternalUrl],
+    );
 
     return (
       <WebView
@@ -46,6 +66,7 @@ export const WorldCupNewsWebView = forwardRef<WebView, WorldCupNewsWebViewProps>
         style={[styles.webview, style]}
         onNavigationStateChange={handleNavChange}
         onShouldStartLoadWithRequest={shouldStartLoad}
+        onMessage={handleMessage}
         onLoadStart={() => onLoadingChange?.(true)}
         onLoadEnd={() => onLoadingChange?.(false)}
         onError={() => {

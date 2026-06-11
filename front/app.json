@@ -2,8 +2,8 @@
   "expo": {
     "name": "90Plus",
     "slug": "90plus",
-    "version": "1.0.2",
-    "runtimeVersion": "1.0.2",
+    "version": "1.0.3",
+    "runtimeVersion": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/90Plus.png",
     "scheme": "ninetyplus",
@@ -74,7 +74,7 @@
         "monochromeImage": "./assets/images/90Plus.png"
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
-      "versionCode": 104,
+      "versionCode": 105,
       "softwareKeyboardLayoutMode": "pan",
       "intentFilters": [
         {
