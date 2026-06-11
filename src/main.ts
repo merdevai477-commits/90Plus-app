@@ -62,7 +62,18 @@ app.use(
 // Helmet security headers with production optimizations
 app.use(
     helmet({
-        contentSecurityPolicy: isProduction ? undefined : false,
+        contentSecurityPolicy: isProduction
+            ? {
+                  directives: {
+                      defaultSrc: ["'self'"],
+                      imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
+                      scriptSrc: ["'self'"],
+                      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+                      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+                      connectSrc: ["'self'"],
+                  },
+              }
+            : false,
         crossOriginEmbedderPolicy: false,
         crossOriginResourcePolicy: { policy: 'cross-origin' },
     })

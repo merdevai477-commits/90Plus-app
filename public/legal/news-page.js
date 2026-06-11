@@ -1,6 +1,9 @@
 (function () {
   var API_URL = '/api/news/world-cup';
   var LANG_KEY = '90plus-news-lang';
+  var PAYLOAD_CACHE_KEY = '90plus-news-payload';
+  var PAYLOAD_CACHE_TTL_MS = 10 * 60 * 1000;
+  var PLACEHOLDER_IMG = '/90Plus.png';
 
   var I18N = {
     ar: {
@@ -132,14 +135,18 @@
     return bucket && bucket.articles ? bucket.articles : [];
   }
 
-  function mediaHtml(imageUrl, alt) {
+  function mediaHtml(imageUrl, priority) {
     if (imageUrl) {
       return (
         '<img src="' +
         escapeHtml(imageUrl) +
-        '" alt="' +
-        escapeHtml(alt) +
-        '" loading="lazy" referrerpolicy="no-referrer" />'
+        '" alt="" loading="' +
+        (priority ? 'eager' : 'lazy') +
+        '" decoding="async"' +
+        (priority ? ' fetchpriority="high"' : '') +
+        ' onerror="this.onerror=null;this.src=\'' +
+        PLACEHOLDER_IMG +
+        '\';this.classList.add(\'img-fallback\');" />'
       );
     }
     return '<div class="card-fallback" aria-hidden="true">⚽</div>';
@@ -155,8 +162,7 @@
       '<a class="card-large" href="' +
       escapeHtml(article.url) +
       '" target="_blank" rel="noopener noreferrer">' +
-      mediaHtml(article.imageUrl, article.title) +
-      '<div class="overlay"></div>' +
+      mediaHtml(article.imageUrl, true) +
       '<div class="content">' +
       '<span class="badge">' +
       escapeHtml(t('wcTag')) +
@@ -181,7 +187,7 @@
       escapeHtml(article.url) +
       '" target="_blank" rel="noopener noreferrer">' +
       '<div class="thumb">' +
-      mediaHtml(article.imageUrl, article.title) +
+      mediaHtml(article.imageUrl, false) +
       '</div>' +
       '<div><span class="source">' +
       escapeHtml(article.source) +
@@ -201,7 +207,7 @@
       escapeHtml(article.url) +
       '" target="_blank" rel="noopener noreferrer">' +
       '<div class="media">' +
-      mediaHtml(article.imageUrl, article.title) +
+      mediaHtml(article.imageUrl, false) +
       '</div>' +
       '<div class="body">' +
       '<span class="badge">' +
@@ -276,8 +282,43 @@
     setMeta(state.payload);
   }
 
+  function readPayloadCache() {
+    try {
+      var raw = sessionStorage.getItem(PAYLOAD_CACHE_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || !parsed.savedAt || !parsed.payload) return null;
+      if (Date.now() - parsed.savedAt > PAYLOAD_CACHE_TTL_MS) return null;
+      return parsed.payload;
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  function writePayloadCache(payload) {
+    try {
+      sessionStorage.setItem(
+        PAYLOAD_CACHE_KEY,
+        JSON.stringify({ savedAt: Date.now(), payload: payload }),
+      );
+    } catch (_e) {
+      /* ignore quota errors */
+    }
+  }
+
+  function applyPayload(payload) {
+    state.payload = payload;
+    state.articles = articlesForLang(payload, state.lang);
+    renderNews();
+  }
+
   async function loadNews() {
-    showStatus(t('loading'), false);
+    var cachedPayload = readPayloadCache();
+    if (cachedPayload) {
+      applyPayload(cachedPayload);
+    } else {
+      showStatus(t('loading'), false);
+    }
 
     try {
       var response = await fetch(API_URL + '?lang=all&pageSize=15', {
@@ -289,12 +330,13 @@
         throw new Error((payload && payload.message) || 'Request failed');
       }
 
-      state.payload = payload;
-      state.articles = articlesForLang(payload, state.lang);
-      renderNews();
+      writePayloadCache(payload);
+      applyPayload(payload);
     } catch (error) {
-      console.error('[news]', error);
-      showStatus(t('error'), true);
+      if (!cachedPayload) {
+        console.error('[news]', error);
+        showStatus(t('error'), true);
+      }
     }
   }
 

@@ -11,6 +11,7 @@ import type {
   WorldCupNewsPage,
   WorldCupNewsResponse,
 } from '../types/news.types';
+import { registerNewsImageSource } from './news-image-proxy.service';
 
 const NEWS_API_BASE = 'https://newsapi.org/v2';
 const BUNDLE_CACHE_KEY = 'news:wc:bundle:v1';
@@ -97,16 +98,29 @@ function normalizeArticle(
   const url = (article.url ?? '').trim();
   if (!title || !url) return null;
 
+  const id = articleId(url);
+  const originalImage = article.urlToImage?.trim() || null;
+
   return {
-    id: articleId(url),
+    id,
     title,
     description: article.description?.trim() || null,
     url,
-    imageUrl: article.urlToImage?.trim() || null,
+    imageUrl: originalImage,
     source: article.source?.name?.trim() || 'Unknown',
     publishedAt: article.publishedAt ?? new Date(0).toISOString(),
     language,
   };
+}
+
+async function attachProxiedImages(articles: WorldCupNewsArticle[]): Promise<void> {
+  await Promise.all(
+    articles.map(async (article) => {
+      if (!article.imageUrl) return;
+      const proxied = await registerNewsImageSource(article.id, article.imageUrl);
+      if (proxied) article.imageUrl = proxied;
+    }),
+  );
 }
 
 async function readQuota(): Promise<QuotaSnapshot> {
@@ -269,6 +283,12 @@ export async function refreshWorldCupNewsBundle(options?: {
         fetchLanguageFeed('en', feedSize),
       ]);
 
+      await attachProxiedImages([...ar, ...en]);
+
+      const { fetchProxiedNewsImage } = await import('./news-image-proxy.service');
+      const warmIds = [...new Set([...ar, ...en].map((a) => a.id))].slice(0, 6);
+      void Promise.allSettled(warmIds.map((id) => fetchProxiedNewsImage(id)));
+
       const fetchedAt = new Date().toISOString();
       const bundle: WorldCupNewsBundle = {
         fetchedAt,
@@ -397,6 +417,8 @@ export class WorldCupNewsService {
         quota,
       };
     }
+
+    await attachProxiedImages([...loaded.bundle.ar, ...loaded.bundle.en]);
 
     return {
       data: buildResponseSlice(loaded.bundle, language, page, pageSize),

@@ -491,6 +491,12 @@ body.lang-ar .card-small h4 {
   font-size: 2rem;
 }
 
+img.img-fallback {
+  object-fit: contain;
+  padding: 18%;
+  background: linear-gradient(135deg, var(--secondary), var(--card));
+}
+
 .site-footer {
   margin-top: 3rem;
   padding: 2rem 1rem;

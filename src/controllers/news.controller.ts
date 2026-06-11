@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { ErrorCode, sendError } from '../constants/errors';
+import { fetchProxiedNewsImage } from '../services/news-image-proxy.service';
 import { WorldCupNewsService } from '../services/world-cup-news.service';
 import { logger } from '../utils/logger';
 
@@ -55,6 +56,30 @@ export class NewsController {
         ErrorCode.EXTERNAL_SERVICE,
         error?.message || 'Failed to fetch World Cup news',
       );
+    }
+  }
+
+  /** GET /api/news/image/:id — cached proxy for external news thumbnails */
+  static async getNewsImage(req: Request, res: Response): Promise<void> {
+    try {
+      const id = typeof req.params.id === 'string' ? req.params.id : req.params.id?.[0];
+      if (!id) {
+        sendError(req, res, ErrorCode.NOT_FOUND, 'Image not found');
+        return;
+      }
+
+      const image = await fetchProxiedNewsImage(id);
+      if (!image) {
+        sendError(req, res, ErrorCode.NOT_FOUND, 'Image not found');
+        return;
+      }
+
+      res.setHeader('Content-Type', image.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      res.send(image.buffer);
+    } catch (error: any) {
+      logger.error('News image proxy error:', error);
+      sendError(req, res, ErrorCode.EXTERNAL_SERVICE, 'Failed to load image');
     }
   }
 }
