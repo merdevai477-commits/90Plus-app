@@ -2031,6 +2031,30 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/fixture/:id/details
+   * Bundle: fixture + lineups + statistics + events + venue (one round trip).
+   */
+  static async getCachedFixtureDetails(req: Request, res: Response): Promise<void> {
+    try {
+      const fixtureId = parseInt(ensureString(req.params.id));
+
+      if (isNaN(fixtureId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
+        return;
+      }
+
+      const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId);
+
+      res.json({
+        status: 'SUCCESS',
+        response: bundle,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/cached/search - Unified search with caching
    * Returns teams, players, leagues, and matches
    * Results are cached in PostgreSQL for instant retrieval by all users

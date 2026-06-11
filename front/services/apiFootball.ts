@@ -1377,6 +1377,71 @@ export const ApiFootballService = {
   },
 
   /**
+   * Full match details in one request — fixture, lineups, stats, events, venue.
+   */
+  async getFixtureDetailsBundle(
+    fixtureId: number,
+    options?: { skipCache?: boolean },
+  ): Promise<{
+    fixture: Fixture | null;
+    lineups: Lineup[];
+    statistics: TeamStatistics[];
+    events: FixtureEvent[];
+    venue: Venue | null;
+  }> {
+    try {
+      if (options?.skipCache) {
+        const [fixture, lineups, statistics, events] = await Promise.all([
+          this.getFixtureById(fixtureId, { skipCache: true }),
+          this.getFixtureLineups(fixtureId, { skipCache: true }),
+          this.getFixtureStatistics(fixtureId, { skipCache: true }),
+          this.getFixtureEvents(fixtureId),
+        ]);
+        let venue: Venue | null = (fixture?.fixture?.venue as Venue) ?? null;
+        if (venue?.id) {
+          venue = (await this.getVenueInfo(venue.id)) ?? venue;
+        }
+        return {
+          fixture,
+          lineups: lineups ?? [],
+          statistics: statistics ?? [],
+          events: events ?? [],
+          venue,
+        };
+      }
+
+      const raw = await fetchFromProxy<any>(`/cached/fixture/${fixtureId}/details`);
+      const bundle = raw?.response ?? raw;
+      return {
+        fixture: bundle?.fixture ?? null,
+        lineups: bundle?.lineups ?? [],
+        statistics: bundle?.statistics ?? [],
+        events: bundle?.events ?? [],
+        venue: bundle?.venue ?? null,
+      };
+    } catch (error) {
+      logger.warn('Fixture details bundle failed, falling back to parallel fetch:', error);
+      const [fixture, lineups, statistics, events] = await Promise.all([
+        this.getFixtureById(fixtureId, options),
+        this.getFixtureLineups(fixtureId, options),
+        this.getFixtureStatistics(fixtureId, options),
+        this.getFixtureEvents(fixtureId),
+      ]);
+      let venue: Venue | null = (fixture?.fixture?.venue as Venue) ?? null;
+      if (venue?.id) {
+        venue = (await this.getVenueInfo(venue.id)) ?? venue;
+      }
+      return {
+        fixture,
+        lineups: lineups ?? [],
+        statistics: statistics ?? [],
+        events: events ?? [],
+        venue,
+      };
+    }
+  },
+
+  /**
    * Get head to head matches between two teams
    * Uses backend permanent cache
    */

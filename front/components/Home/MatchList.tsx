@@ -449,6 +449,7 @@ function EmptySection({
 interface MatchListProps {
     isLoading?: boolean;
     matches?: MatchListItem[];
+    worldCupMode?: boolean;
     onMatchPress?: (matchId: string) => void;
     onViewAllPress?: () => void;
     onFavoritePress?: (matchId: string) => void;
@@ -458,6 +459,7 @@ interface MatchListProps {
 export function MatchList({
     isLoading = false,
     matches: matchesProp,
+    worldCupMode = false,
     onMatchPress,
     onViewAllPress,
     onFavoritePress,
@@ -470,8 +472,12 @@ export function MatchList({
 
     const openMatchesHub = useCallback((): void => {
         if (onViewAllPress) onViewAllPress();
-        else router.push('/matches');
-    }, [onViewAllPress, router]);
+        else if (worldCupMode) {
+            router.push({ pathname: '/(tabs)/matches', params: { filter: 'WorldCup' } });
+        } else {
+            router.push('/matches');
+        }
+    }, [onViewAllPress, router, worldCupMode]);
 
     const showSkeleton = isLoading && data.length === 0;
     const showData = data.length > 0;
@@ -480,8 +486,8 @@ export function MatchList({
     return (
         <View style={styles.section}>
             <SectionHeader
-                subtitle={t.home.sectionMatchesSub}
-                title={t.home.importantMatches}
+                subtitle={worldCupMode ? t.home.sectionWorldCupSub : t.home.sectionMatchesSub}
+                title={worldCupMode ? t.home.worldCupMatches : t.home.importantMatches}
                 action={t.home.viewAll}
                 onAction={openMatchesHub}
             />

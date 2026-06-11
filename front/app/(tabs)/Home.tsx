@@ -48,6 +48,7 @@ import { AuthService } from '../../src/services/authService';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
 import { useScreenFont } from '../../utils/fontSetup';
 import { useTranslation } from '../../src/i18n';
+import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { QuizApiService } from '../../services/quizApi.service';
 import { dailyQuizQueryKey, todayQuizDateKey } from '../../utils/quizDateKey';
 import {
@@ -94,6 +95,12 @@ export default function HomeScreen() {
     const queryClient = useQueryClient();
     const quizPreloadDone = useRef(false);
     const { likedIds, toggleLike } = useHomeLikes(user?.id);
+    const worldCupCampaignMode = useAppFeaturesStore((s) => s.worldCupCampaignMode);
+    const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
+
+    useEffect(() => {
+        void hydrateFeatures(true);
+    }, [hydrateFeatures]);
 
     // Open lucky wheel from push notification deep link
     const params = useLocalSearchParams<{ openLuckyWheel?: string }>();
@@ -575,8 +582,13 @@ export default function HomeScreen() {
     );
 
     const handleViewAllMatches = useCallback(
-        () => router.navigate('/(tabs)/matches'),
-        [router],
+        () =>
+            router.navigate(
+                worldCupCampaignMode
+                    ? { pathname: '/(tabs)/matches', params: { filter: 'WorldCup' } }
+                    : '/(tabs)/matches',
+            ),
+        [router, worldCupCampaignMode],
     );
 
     const handleViewAllReels = useCallback(
@@ -816,6 +828,7 @@ export default function HomeScreen() {
                     ) : (
                         <MatchList
                             matches={sortedDesignMatches}
+                            worldCupMode={worldCupCampaignMode}
                             onMatchPress={handleMatchPress}
                             onViewAllPress={handleViewAllMatches}
                             onFavoritePress={handleFavoritePress}

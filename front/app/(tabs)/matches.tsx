@@ -19,7 +19,7 @@ import { cacheService } from '../../services/cacheService';
 import { predictionsMapKey, predictionsTicketsKey } from '../../services/predictionsCacheKeys';
 import { offlineQueue } from '../../src/services/offlineQueue';
 import NetInfo from '@react-native-community/netinfo';
-import { useTranslation } from '../../src/i18n';
+import { useTranslation, useLanguageStore } from '../../src/i18n';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
 import { MatchFavoritesStorage } from '../../src/storage/matchFavorites.storage';
 import { useScreenFont } from '../../utils/fontSetup';
@@ -32,6 +32,7 @@ import { fetchLeagueMatchesByDate } from '../../components/Matches/leagueApiUtil
 import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
 import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModal';
 import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
+import { useWorldCupLogo } from '../../hooks/useWorldCupLogo';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { getWorldCupTimeLeft } from '../../constants/worldCup';
 import { LiveTimer } from '../../components/common/LiveTimer';
@@ -101,6 +102,9 @@ const ITEM_SEPARATOR_8 = () => <View style={{ height: 8 }} />;
 const ITEM_SEPARATOR_10 = () => <View style={{ height: 10 }} />;
 
 const FILTERS = ['All', 'Live', 'Upcoming', 'WorldCup', 'Finished', 'Predictions'] as const;
+const CAMPAIGN_FILTERS = ['WorldCup', 'Live', 'Upcoming', 'Finished', 'Predictions'] as const;
+type MatchFilter = (typeof FILTERS)[number];
+type CampaignFilter = (typeof CAMPAIGN_FILTERS)[number];
 
 /** Local midnight — calendar/filter sync uses device timezone. */
 function startOfLocalDay(d: Date = new Date()): Date {
@@ -109,13 +113,16 @@ function startOfLocalDay(d: Date = new Date()): Date {
   return x;
 }
 
-/** Pick the tab that matches a calendar day (past → Finished, future → Upcoming, today → All). */
-function filterForCalendarDay(day: Date): (typeof FILTERS)[number] {
+/** Pick the tab that matches a calendar day (past → Finished, future → Upcoming, today → WorldCup/All). */
+function filterForCalendarDay(
+  day: Date,
+  campaignMode = false,
+): MatchFilter {
   const t = startOfLocalDay(day).getTime();
   const today = startOfLocalDay().getTime();
   if (t < today) return 'Finished';
   if (t > today) return 'Upcoming';
-  return 'All';
+  return campaignMode ? 'WorldCup' : 'All';
 }
 
 // Translation keys for the filter tab labels. Kept in lock-step with FILTERS
@@ -284,6 +291,7 @@ const MatchRow = memo(function MatchRow({
   isSubscribing,
   onToggleSubscription,
   onOpenDetails,
+  worldCupCard,
 }: {
   fixture: Fixture;
   showPreds: boolean;
@@ -294,6 +302,7 @@ const MatchRow = memo(function MatchRow({
   isSubscribing: boolean;
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
   onOpenDetails: (fixture: Fixture) => void;
+  worldCupCard?: { logoUrl: string | null; leagueName: string };
 }) {
   const predictionEntry = predictedMatches[fixture.id];
   const existingPrediction = predictionEntry?.type ?? null;
@@ -319,9 +328,9 @@ const MatchRow = memo(function MatchRow({
   // Disabled only for finished matches.
   const canSubscribe = fixture.status !== 'FT';
 
-  return (
-    <View style={styles.rowWrapCol}>
-      <View style={styles.rowWrap}>
+  const rowContent = (
+    <>
+      <View style={[styles.rowWrap, worldCupCard && styles.rowWrapInCard]}>
         {/* Tapping anywhere on the team/score area opens match-details.
             The bell button is intentionally OUTSIDE this Touchable so it
             doesn't navigate when the user only wanted to subscribe. */}
@@ -433,7 +442,7 @@ const MatchRow = memo(function MatchRow({
       </View>
 
       {showPreds && fixture.status === 'UPCOMING' && (
-        <View style={styles.predWrap}>
+        <View style={[styles.predWrap, worldCupCard && styles.predWrapInCard]}>
           <View style={styles.predTitleRow}>
             <Text style={styles.predTitle}>
               {existingPrediction ? t('matches.prediction.yourPrediction') : t('matches.prediction.title')}
@@ -469,7 +478,7 @@ const MatchRow = memo(function MatchRow({
       )}
 
       {showPreds && fixture.status === 'FT' && predictionEntry && (
-        <View style={styles.predWrap}>
+        <View style={[styles.predWrap, worldCupCard && styles.predWrapInCard]}>
           <Text style={styles.predTitle}>
             {t('matches.prediction.yourPrediction')}:{' '}
             {existingPrediction === 'home'
@@ -493,8 +502,41 @@ const MatchRow = memo(function MatchRow({
           )}
         </View>
       )}
-    </View>
+    </>
   );
+
+  if (worldCupCard) {
+    return (
+      <View style={styles.wcMatchCard}>
+        <LinearGradient
+          colors={['rgba(168,85,247,0.12)', 'rgba(168,85,247,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.wcCardShine}
+        />
+        <View style={styles.wcCardHeader}>
+          <View style={styles.wcLogoFrame}>
+            {worldCupCard.logoUrl ? (
+              <Image
+                source={{ uri: worldCupCard.logoUrl }}
+                style={styles.wcLogoImg}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <View style={styles.wcLogoPlaceholder} />
+            )}
+          </View>
+          <Text style={styles.wcCardLeague} numberOfLines={1}>
+            {worldCupCard.leagueName}
+          </Text>
+        </View>
+        <View style={styles.wcCardBody}>{rowContent}</View>
+      </View>
+    );
+  }
+
+  return <View style={styles.rowWrapCol}>{rowContent}</View>;
 });
 
 // ─── League All Matches Modal ─────────────────────────────────────────────────
@@ -764,8 +806,9 @@ export default function MatchesHubScreenV2() {
   useScreenFont();
   useMatchEventsMonitor();
   const params = useLocalSearchParams();
-  const initialFilter = (params.filter as typeof FILTERS[number]) || 'All';
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>(initialFilter);
+  const worldCupCampaignModeEarly = useAppFeaturesStore((s) => s.worldCupCampaignMode);
+  const initialFilter = (params.filter as MatchFilter) || (worldCupCampaignModeEarly ? 'WorldCup' : 'All');
+  const [filter, setFilter] = useState<MatchFilter>(initialFilter);
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarViewDate, setCalendarViewDate] = useState<Date>(() => startOfLocalDay());
   const [showTicketsInfo, setShowTicketsInfo] = useState(false);
@@ -789,6 +832,7 @@ export default function MatchesHubScreenV2() {
   const router = useRouter();
   const { getToken, userId } = useAuth();
   const { t: tObj, translate: t } = useTranslation();
+  const currentLanguage = useLanguageStore((s) => s.language);
 
   // Clerk's getToken returns a NEW function reference on every render — store
   // it in a ref so effects don't re-fire on every parent re-render.
@@ -841,6 +885,16 @@ export default function MatchesHubScreenV2() {
   // Real matches data from backend
   const { groupedMatches, countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(selectedDate);
 
+  useEffect(() => {
+    if (worldCupCampaignMode && filter === 'All') {
+      setFilter('WorldCup');
+    }
+  }, [worldCupCampaignMode, filter]);
+
+  const displayedFilters = useMemo(
+    () => (worldCupCampaignMode ? [...CAMPAIGN_FILTERS] : [...FILTERS]),
+    [worldCupCampaignMode],
+  );
   const wcTabActive = worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled);
   const {
     matches: worldCupMatches,
@@ -848,6 +902,11 @@ export default function MatchesHubScreenV2() {
     error: worldCupError,
     refetch: refetchWorldCup,
   } = useWorldCupMatches(selectedDate, wcTabActive, worldCupLeagueId, worldCupCampaignMode);
+  const wcLogoUrl = useWorldCupLogo(worldCupMatches);
+  const wcLeagueLabel = useMemo(() => {
+    const sample = worldCupMatches[0]?.league?.name;
+    return sample ? getLeagueDisplayName(sample, currentLanguage) : t('matches.tabs.worldCup');
+  }, [worldCupMatches, currentLanguage, t]);
 
   // Modal state for "View All" league sheet (shared by both LeagueCard and CountryAccordion).
   const [viewAllLeagueId, setViewAllLeagueId] = useState<string | null>(null);
@@ -987,8 +1046,8 @@ export default function MatchesHubScreenV2() {
     next.setHours(0, 0, 0, 0);
     setSelectedDate(next);
     setShowCalendar(false);
-    setFilter(filterForCalendarDay(next));
-  }, [calendarViewDate]);
+    setFilter(filterForCalendarDay(next, worldCupCampaignMode));
+  }, [calendarViewDate, worldCupCampaignMode]);
 
   const openCalendar = useCallback(() => {
     setCalendarViewDate(new Date(selectedDate));
@@ -1009,8 +1068,8 @@ export default function MatchesHubScreenV2() {
     setCalendarViewDate(today);
     setSelectedDate(today);
     setShowCalendar(false);
-    setFilter(filterForCalendarDay(today));
-  }, []);
+    setFilter(filterForCalendarDay(today, worldCupCampaignMode));
+  }, [worldCupCampaignMode]);
 
   // Convert groupedMatches from hook to LeagueGroup format for the UI
   const groups = useMemo((): LeagueGroup[] => {
@@ -1113,7 +1172,7 @@ export default function MatchesHubScreenV2() {
       if (filter === 'Finished') {
         return fixtures.filter((f) => f.status === 'FT');
       }
-      if (filter === 'All' || filter === 'WorldCup') {
+      if (filter === 'WorldCup') {
         return fixtures.filter((f) => f.status !== 'FT');
       }
       return fixtures;
@@ -1128,6 +1187,13 @@ export default function MatchesHubScreenV2() {
     if (fixtures.length === 0) return [];
     return [{ ...base, fixtures }];
   }, [filterWorldCupFixtures, worldCupCampaignMode, worldCupLeagueGroups]);
+
+  const wcFlatFixtures = useMemo(() => {
+    if (worldCupCampaignMode) {
+      return campaignLeagueGroups[0]?.fixtures ?? [];
+    }
+    return worldCupLeagueGroups[0]?.fixtures ?? [];
+  }, [campaignLeagueGroups, worldCupCampaignMode, worldCupLeagueGroups]);
 
   const wcTabLocked = !worldCupCampaignMode && worldCupLocked && !worldCupEnabled;
 
@@ -1426,6 +1492,35 @@ export default function MatchesHubScreenV2() {
     [router],
   );
 
+  const renderWcMatchRow = useCallback(
+    ({ item }: { item: Fixture }) => (
+      <MatchRow
+        fixture={item}
+        showPreds={filter === 'Predictions'}
+        onPredict={handlePredict}
+        submittingId={submittingId}
+        predictedMatches={predictedMatches}
+        isSubscribed={subscribedFixtures.has(item.id)}
+        isSubscribing={subscribingFixtureId === item.id}
+        onToggleSubscription={handleToggleSubscription}
+        onOpenDetails={handleOpenMatchDetails}
+        worldCupCard={{ logoUrl: wcLogoUrl, leagueName: wcLeagueLabel }}
+      />
+    ),
+    [
+      filter,
+      handlePredict,
+      submittingId,
+      predictedMatches,
+      subscribedFixtures,
+      subscribingFixtureId,
+      handleToggleSubscription,
+      handleOpenMatchDetails,
+      wcLogoUrl,
+      wcLeagueLabel,
+    ],
+  );
+
   // Stable per-match renderer used by CountryAccordion. Matches the
   // existing MatchRow look exactly — same predictions + bell behavior
   // wired through. Memoized so identity stays stable across re-renders
@@ -1568,7 +1663,7 @@ export default function MatchesHubScreenV2() {
     <View style={styles.listHeader}>
       <View style={styles.tabsRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll} style={{ flex: 1, marginRight: 10 }}>
-          {FILTERS.map((f) => {
+          {displayedFilters.map((f) => {
             const active = filter === f;
             const showLock = f === 'WorldCup' && wcTabLocked;
             return (
@@ -1581,7 +1676,9 @@ export default function MatchesHubScreenV2() {
                 {active && (
                   <LinearGradient colors={['rgba(168,85,247,0.7)', 'rgba(147,51,234,0.4)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: 11 }]} />
                 )}
-                <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>{t(FILTER_LABEL_KEYS[f])}</Text>
+                <Text style={[styles.tabTxt, active && styles.tabTxtActive]}>
+                  {t(FILTER_LABEL_KEYS[f as MatchFilter])}
+                </Text>
                 {showLock ? <Lock size={11} color={active ? '#fff' : 'rgba(255,255,255,0.45)'} style={{ marginStart: 4 }} /> : null}
                 {f === 'Live' && !active && <View style={styles.liveDot} />}
               </TouchableOpacity>
@@ -1614,7 +1711,6 @@ export default function MatchesHubScreenV2() {
   const listRefetch = (worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled))
     ? refetchWorldCup
     : refetch;
-  const wcListGroups = worldCupCampaignMode ? campaignLeagueGroups : worldCupLeagueGroups;
   const useWcList = worldCupCampaignMode || filter === 'WorldCup';
 
   const listEmptyNode = useMemo(() => {
@@ -1692,22 +1788,9 @@ export default function MatchesHubScreenV2() {
             - Default (All/Live/Upcoming/Finished): Country → League accordions */}
       {useWcList ? (
         <FlashList
-          data={wcListGroups}
-          keyExtractor={g => g.id}
-          renderItem={({ item }) => (
-            <LeagueCard
-              group={item}
-              filter={filter}
-              selectedDate={selectedDate}
-              onPredict={handlePredict}
-              submittingId={submittingId}
-              predictedMatches={predictedMatches}
-              subscribedFixtures={subscribedFixtures}
-              subscribingFixtureId={subscribingFixtureId}
-              onToggleSubscription={handleToggleSubscription}
-              onOpenDetails={handleOpenMatchDetails}
-            />
-          )}
+          data={wcFlatFixtures}
+          keyExtractor={f => f.id}
+          renderItem={renderWcMatchRow}
           ItemSeparatorComponent={ITEM_SEPARATOR_10}
           drawDistance={250}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
@@ -2070,6 +2153,63 @@ const styles = StyleSheet.create({
   viewAllBtn: { height: 46, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   viewAllTxt: { color: PURPLE_PRIMARY, fontSize: 15, fontWeight: '800' },
   rowWrapCol: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  rowWrapInCard: { borderBottomWidth: 0, minHeight: 108 },
+  wcMatchCard: {
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(168,85,247,0.32)',
+    backgroundColor: 'rgba(12,10,22,0.96)',
+    overflow: 'hidden',
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  wcCardShine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+  },
+  wcCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(168,85,247,0.18)',
+    backgroundColor: 'rgba(168,85,247,0.07)',
+  },
+  wcLogoFrame: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  wcLogoImg: { width: 28, height: 28 },
+  wcLogoPlaceholder: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: 'rgba(168,85,247,0.25)',
+  },
+  wcCardLeague: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    maxWidth: '70%',
+  },
+  wcCardBody: { paddingBottom: 2 },
   upcomingBadgeWrap: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
   upcomingBadge: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700' },
   timeTxt: {
@@ -2085,6 +2225,7 @@ const styles = StyleSheet.create({
     writingDirection: 'ltr',
   },
   predWrap: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 6 },
+  predWrapInCard: { paddingHorizontal: 14, paddingBottom: 14 },
   predTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
   predTitleSpinner: { marginLeft: 4 },
   predTitle: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },

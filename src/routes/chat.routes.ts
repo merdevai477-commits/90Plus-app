@@ -32,6 +32,10 @@ import {
     detectMessageLanguage,
 } from '../utils/message-language.util';
 import {
+    buildWorldCupCampaignLockPrompt,
+    getWorldCupCampaignConfig,
+} from '../utils/world-cup-campaign.util';
+import {
     listConversations,
     createConversation,
     findConversation,
@@ -662,10 +666,14 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             }
         }
 
+        const wcCampaign = getWorldCupCampaignConfig();
         let systemPrompt = [
             buildLanguageLockPrompt(messageLanguage),
+            wcCampaign.active ? buildWorldCupCampaignLockPrompt(messageLanguage) : '',
             sanitizedSuffix ? `${baseSystemPrompt}\n\n${sanitizedSuffix}` : baseSystemPrompt,
-        ].join('\n\n');
+        ]
+            .filter(Boolean)
+            .join('\n\n');
 
         if (footballCtx?.block) {
             systemPrompt += `\n\n${footballCtx.block}`;

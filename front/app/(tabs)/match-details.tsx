@@ -264,17 +264,13 @@ const MatchDetailsScreen = () => {
 
     const pollLiveData = async () => {
       try {
-        const [eventsData, fixtureData] = await Promise.allSettled([
-          ApiFootballService.getFixtureEvents(fixtureId),
-          ApiFootballService.getFixtureById(fixtureId, { skipCache: true }),
-        ]);
-
-        if (eventsData.status === 'fulfilled') setEvents(eventsData.value);
-        if (fixtureData.status === 'fulfilled' && fixtureData.value) {
-          setFixture(fixtureData.value);
+        const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, { skipCache: true });
+        if (bundle.events?.length) setEvents(bundle.events);
+        if (bundle.fixture) {
+          setFixture(bundle.fixture);
 
           const finishedStatuses = ['FT', 'AET', 'PEN'];
-          if (finishedStatuses.includes(fixtureData.value.fixture.status.short)) {
+          if (finishedStatuses.includes(bundle.fixture.fixture.status.short)) {
             if (livePollingRef.current) {
               clearInterval(livePollingRef.current);
               livePollingRef.current = null;
@@ -283,13 +279,28 @@ const MatchDetailsScreen = () => {
             loadedTabsRef.current.delete('lineups');
           }
         }
+        if (hasLineupData(bundle.lineups)) {
+          setLineups(bundle.lineups);
+          loadedTabsRef.current.add('lineups');
+        }
+        if (hasApiStatistics(bundle.statistics)) {
+          setStatistics(bundle.statistics);
+          setStatsFromEvents(false);
+          loadedTabsRef.current.add('stats');
+        } else if (bundle.fixture && bundle.events?.length) {
+          const fromEvents = buildFallbackStatisticsFromEvents(bundle.fixture, bundle.events);
+          if (hasApiStatistics(fromEvents)) {
+            setStatistics(fromEvents);
+            setStatsFromEvents(true);
+            loadedTabsRef.current.add('stats');
+          }
+        }
       } catch {
         // Silent fail — background poll
       }
     };
 
-    // Fast events poll (5s) + slower full fixture poll (15s) via single interval at 5s
-    livePollingRef.current = setInterval(pollLiveData, 5_000);
+    livePollingRef.current = setInterval(pollLiveData, 3_000);
 
     return () => {
       if (livePollingRef.current) {
@@ -311,29 +322,22 @@ const MatchDetailsScreen = () => {
       if (!hasRouteShell) setLoading(true);
       setError(null);
 
-      // ── FAST PATH: Only load events + fixture details on open ──────────────
-      // Lineups, stats, form, standings load lazily when their tab is tapped.
-      const [eventsData, fixtureData] = await Promise.allSettled([
-        ApiFootballService.getFixtureEvents(fixtureId),
-        ApiFootballService.getFixtureById(fixtureId),
-      ]);
+      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId);
 
-      if (eventsData.status === 'fulfilled' && eventsData.value) {
-        setEvents(eventsData.value);
+      if (bundle.events?.length) {
+        setEvents(bundle.events);
       }
-      if (fixtureData.status === 'fulfilled' && fixtureData.value) {
-        const details = fixtureData.value;
+
+      if (bundle.fixture) {
+        const details = bundle.fixture;
         setFixture(details);
 
-        // Archive finished matches in background (non-blocking)
         const finishedStatuses = ['FT', 'AET', 'PEN'];
         if (finishedStatuses.includes(details.fixture.status.short)) {
           Promise.allSettled([
-            ApiFootballService.getFixtureLineups(fixtureId),
-            ApiFootballService.getFixtureStatistics(fixtureId),
-            eventsData.status === 'fulfilled'
-              ? Promise.resolve(eventsData.value)
-              : ApiFootballService.getFixtureEvents(fixtureId),
+            Promise.resolve(bundle.lineups),
+            Promise.resolve(bundle.statistics),
+            Promise.resolve(bundle.events),
           ]).then(([lineupsRes, statsRes, eventsRes]) => {
             try {
               matchArchiveService.archiveMatchFromData(
@@ -345,11 +349,10 @@ const MatchDetailsScreen = () => {
             } catch { /* non-fatal */ }
           }).catch(() => {});
         }
-      } else if (fixtureData.status === 'rejected') {
+      } else {
         const archived = await matchArchiveService.getArchivedMatch(String(fixtureId));
         if (archived) {
           setError(null);
-          // Params still provide header display; archived data enriches offline view
           if (archived.events?.length) {
             setEvents(archived.events.map((e) => ({
               time: { elapsed: e.minute, extra: e.extraMinute },
@@ -362,8 +365,37 @@ const MatchDetailsScreen = () => {
             })) as any);
           }
         } else {
-          setError(fixtureData.reason?.message || t.matchDetails.loadDetailsFailed);
+          setError(t.matchDetails.loadDetailsFailed);
         }
+      }
+
+      if (hasLineupData(bundle.lineups)) {
+        setLineups(bundle.lineups);
+        loadedTabsRef.current.add('lineups');
+      } else if (bundle.fixture && bundle.events?.length) {
+        const fromEvents = buildFallbackLineupsFromEvents(bundle.fixture, bundle.events);
+        if (hasLineupData(fromEvents)) {
+          setLineups(fromEvents);
+          loadedTabsRef.current.add('lineups');
+        }
+      }
+
+      if (hasApiStatistics(bundle.statistics)) {
+        setStatistics(bundle.statistics);
+        setStatsFromEvents(false);
+        loadedTabsRef.current.add('stats');
+      } else if (bundle.fixture && bundle.events?.length) {
+        const fromEvents = buildFallbackStatisticsFromEvents(bundle.fixture, bundle.events);
+        if (hasApiStatistics(fromEvents)) {
+          setStatistics(fromEvents);
+          setStatsFromEvents(true);
+          loadedTabsRef.current.add('stats');
+        }
+      }
+
+      if (bundle.venue) {
+        setVenue(bundle.venue);
+        loadedTabsRef.current.add('stadium');
       }
 
       setLoading(false);
@@ -434,7 +466,7 @@ const MatchDetailsScreen = () => {
         loadedTabsRef.current.delete('lineups');
         await loadLineupsIfNeeded(true);
       } catch { /* silent */ }
-    }, 30_000);
+    }, 15_000);
 
     return () => {
       if (lineupsPollingRef.current) {
@@ -530,7 +562,7 @@ const MatchDetailsScreen = () => {
     statsPollingRef.current = setInterval(() => {
       loadedTabsRef.current.delete('stats');
       loadStatsIfNeeded(true).catch(() => {});
-    }, 45_000);
+    }, 15_000);
 
     return () => {
       if (statsPollingRef.current) {

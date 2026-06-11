@@ -91,6 +91,8 @@ export const CACHE_KEYS = {
   SEARCH: 'search',
   STANDINGS: 'standings',
   H2H: 'h2h',
+  /** FIFA World Cup league logo URL — long-lived for campaign UI */
+  WORLD_CUP_LOGO: 'world_cup_league_logo',
 } as const;
 
 /**

@@ -962,6 +962,8 @@ export const en = {
     getStarted: 'GET STARTED',
     signIn: 'SIGN IN',
     importantMatches: 'Important Matches',
+    worldCupMatches: 'World Cup Matches',
+    sectionWorldCupSub: 'Live & fixtures',
     trendingReels: 'Trending Highlights',
     playerOfWeek: 'Player of the Week',
     teamOfMonth: 'Team of the Month',

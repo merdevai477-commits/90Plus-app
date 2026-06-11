@@ -5,6 +5,12 @@ import { matchesBatchService } from '../../services/matchesBatchService';
 import { logger } from '../../services/logger';
 import rankingsService from '../../services/rankingsService';
 import { cacheService } from '../../services/cacheService';
+import { useAppFeaturesStore } from '../stores/appFeaturesStore';
+import {
+    fetchLiveMatches,
+    fetchWorldCupMatchesByDate,
+} from '../../components/Matches/leagueApiUtils';
+import type { Match as LeagueMatch } from '../../components/Matches/matchCardUtils';
 
 // Cache keys for home data
 const HOME_CACHE_KEYS = {
@@ -130,6 +136,61 @@ const sortMatches = (matches: Match[], favoriteIds: string[]): Match[] => {
     });
 };
 
+const mapLeagueMatchToHomeMatch = (m: LeagueMatch, isFavorited: boolean): Match => ({
+    id: m.id,
+    homeTeam: m.homeTeam?.name ?? 'Home',
+    awayTeam: m.awayTeam?.name ?? 'Away',
+    homeScore: m.score?.home,
+    awayScore: m.score?.away,
+    time: m.time ?? '--:--',
+    league: m.league?.name ?? 'World Cup',
+    leagueId: m.league?.id ?? 1,
+    isLive: m.status === 'live',
+    isImportant: true,
+    isFavorited,
+    homeLogo: m.homeTeam?.logo,
+    awayLogo: m.awayTeam?.logo,
+    minute: m.minute,
+    fixtureId: parseInt(m.id, 10) || 0,
+    startTimestamp: m.startTimestamp,
+    statusShort: m.statusShort,
+    date: m.fixtureDate,
+});
+
+async function fetchWorldCupHomeMatches(
+    favoriteIds: string[],
+    leagueId: number,
+): Promise<Match[]> {
+    const today = new Date();
+    let list = await fetchWorldCupMatchesByDate(today, { skipDiskCache: true });
+    try {
+        const live = await fetchLiveMatches();
+        const liveWc = live.filter((m) => m.league?.id === leagueId);
+        const map = new Map(list.map((m) => [m.id, m]));
+        for (const lm of liveWc) map.set(lm.id, lm);
+        list = [...map.values()];
+    } catch (err) {
+        logger.warn('WC home: live merge failed:', err);
+    }
+
+    const mapped = list.map((m) =>
+        mapLeagueMatchToHomeMatch(m, favoriteIds.includes(m.id)),
+    );
+    return sortMatches(mapped, favoriteIds).slice(0, 15);
+}
+
+async function ensureCampaignFeaturesHydrated(): Promise<{
+    campaign: boolean;
+    leagueId: number;
+}> {
+    const state = useAppFeaturesStore.getState();
+    if (!state.hydrated) {
+        await state.hydrate(true);
+    }
+    const next = useAppFeaturesStore.getState();
+    return { campaign: next.worldCupCampaignMode, leagueId: next.leagueId };
+}
+
 /**
  * Background refresh for matches data
  * Fetches fresh data without blocking the UI
@@ -140,6 +201,14 @@ const refreshMatchesInBackground = async (
 ) => {
     try {
         logger.debug('🔄 Background refresh starting...');
+
+        const { campaign, leagueId } = await ensureCampaignFeaturesHydrated();
+        if (campaign) {
+            const finalMatches = await fetchWorldCupHomeMatches(favoriteIds, leagueId);
+            set({ matches: finalMatches });
+            logger.debug(`🔄 WC background refresh: ${finalMatches.length} matches`);
+            return;
+        }
 
         // Fetch live matches (always fresh)
         let liveFixtures: Fixture[] = [];
@@ -389,8 +458,19 @@ export const useHomeStore = create<HomeState>((set: (state: Partial<HomeState> |
         try {
             logger.debug('🏠 Fetching home screen data...');
 
-            // Load favorited match IDs from storage
             const favoriteIds = await MatchFavoritesStorage.getFavorites();
+            const { campaign, leagueId } = await ensureCampaignFeaturesHydrated();
+
+            if (campaign) {
+                const finalMatches = await fetchWorldCupHomeMatches(favoriteIds, leagueId);
+                set({
+                    matches: finalMatches,
+                    favoritedMatches: favoriteIds,
+                    loadingMatches: false,
+                });
+                refreshMatchesInBackground(favoriteIds, set);
+                return;
+            }
 
             // 1. Try to get cached matches first (cache-first pattern)
             // Requirements 5.3, 5.4: Serve from cache if data exists

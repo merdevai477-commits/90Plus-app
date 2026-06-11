@@ -1029,6 +1029,62 @@ class FootballDataCacheService {
     }
 
     /**
+     * Single round-trip bundle for match details screen — fixture, lineups,
+     * statistics, events, and venue in parallel (deduped per sub-resource).
+     */
+    async getFixtureDetailsBundle(fixtureId: number): Promise<{
+        fixture: any | null;
+        lineups: any[];
+        statistics: any[];
+        events: any[];
+        venue: any | null;
+    }> {
+        const bundleKey = `details:${fixtureId}`;
+        const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(bundleKey);
+        if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
+            return redisCached.data;
+        }
+
+        const [fixture, lineups, statistics, events] = await Promise.all([
+            footballService.getFixtureById(fixtureId),
+            this.getMatchLineups(fixtureId),
+            this.getMatchStatistics(fixtureId),
+            this.getMatchEvents(fixtureId),
+        ]);
+
+        let venue: any | null = fixture?.fixture?.venue ?? null;
+        const venueId = venue?.id;
+        if (venueId && (!venue?.name || !venue?.city)) {
+            try {
+                venue = (await footballService.getVenueInfo(venueId)) ?? venue;
+            } catch {
+                // non-fatal
+            }
+        }
+
+        const payload = {
+            fixture: fixture ?? null,
+            lineups: lineups ?? [],
+            statistics: statistics ?? [],
+            events: events ?? [],
+            venue,
+        };
+
+        const status = fixture?.fixture?.status?.short ?? '';
+        const isLive = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(status);
+        const isFinished = ['FT', 'AET', 'PEN'].includes(status);
+        const ttl = isLive ? 3_000 : isFinished ? this.TTL.FINISHED : this.TTL.UPCOMING_MATCH;
+        const cacheEntry: MemoryCacheEntry<any> = {
+            data: payload,
+            timestamp: Date.now(),
+            ttl,
+        };
+        await redisCacheService.set(bundleKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
+
+        return payload;
+    }
+
+    /**
      * Update fixture fullData with additional data
      */
     private async updateFixtureFullData(fixtureId: number, additionalData: any): Promise<void> {

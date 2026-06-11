@@ -122,6 +122,7 @@ function LeaderboardRow({
   isCurrentUser,
   onPress,
   t,
+  language,
 }: {
   entry: LeaderboardEntry;
   isCurrentUser: boolean;

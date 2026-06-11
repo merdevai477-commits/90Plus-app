@@ -194,6 +194,8 @@ export const ar = {
     getStarted: 'ابدأ الآن',
     signIn: 'تسجيل الدخول',
     importantMatches: 'المباريات المهمة',
+    worldCupMatches: 'مباريات كأس العالم',
+    sectionWorldCupSub: 'مباشر والمواعيد',
     trendingReels: 'الفيديوهات الرائجة',
     playerOfWeek: 'لاعب الأسبوع',
     teamOfMonth: 'تشكيلة الشهر',
