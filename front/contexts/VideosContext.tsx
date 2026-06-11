@@ -82,6 +82,7 @@ export function VideosProvider({ children }: { children: ReactNode }) {
 
     // Debounce ref for AsyncStorage writes on like toggle
     const saveLikedDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const saveVideosDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const setReelUploadUi = useCallback((patch: Partial<ReelUploadUiState>) => {
         setReelUploadUiState((prev) => ({ ...prev, ...patch }));
@@ -180,14 +181,21 @@ export function VideosProvider({ children }: { children: ReactNode }) {
     };
 
     // Save videos to AsyncStorage
-    const saveVideos = async (videos: UploadedVideo[]) => {
+    const saveVideos = useCallback(async (videos: UploadedVideo[]) => {
         if (!userId) return;
         try {
             await AsyncStorage.setItem(storageKeys.UPLOADED_VIDEOS, JSON.stringify(videos));
         } catch (error) {
             console.error('Error saving videos:', error);
         }
-    };
+    }, [userId, storageKeys.UPLOADED_VIDEOS]);
+
+    const saveVideosDebounced = useCallback((videos: UploadedVideo[]) => {
+        if (saveVideosDebounceRef.current) clearTimeout(saveVideosDebounceRef.current);
+        saveVideosDebounceRef.current = setTimeout(() => {
+            void saveVideos(videos);
+        }, 2000);
+    }, [saveVideos]);
 
     // Save user data to AsyncStorage
     const saveUserData = async (data: UserVideoData | null) => {
@@ -226,29 +234,41 @@ export function VideosProvider({ children }: { children: ReactNode }) {
         }, 2000); // Write at most once every 2 seconds
     }, [userId, storageKeys.LIKED_REELS]);
 
-    const addVideo = (video: UploadedVideo) => {
+    const addVideo = useCallback((video: UploadedVideo) => {
         setUploadedVideos(prev => {
-            // If video already exists, update it in place (for progress updates)
             const existingIndex = prev.findIndex(v => v.id === video.id);
             if (existingIndex !== -1) {
+                const existing = prev[existingIndex];
+                if (
+                    video.isUploading &&
+                    existing.uploadProgress !== undefined &&
+                    video.uploadProgress !== undefined &&
+                    Math.round(existing.uploadProgress) === Math.round(video.uploadProgress)
+                ) {
+                    return prev;
+                }
                 const newVideos = [...prev];
                 newVideos[existingIndex] = video;
-                saveVideos(newVideos);
+                if (video.isUploading) {
+                    saveVideosDebounced(newVideos);
+                } else {
+                    void saveVideos(newVideos);
+                }
                 return newVideos;
             }
             const newVideos = [video, ...prev];
-            saveVideos(newVideos);
+            void saveVideos(newVideos);
             return newVideos;
         });
-    };
+    }, [saveVideos, saveVideosDebounced]);
 
-    const removeVideo = (videoId: string) => {
+    const removeVideo = useCallback((videoId: string) => {
         setUploadedVideos(prev => {
             const newVideos = prev.filter(v => v.id !== videoId);
-            saveVideos(newVideos);
+            void saveVideos(newVideos);
             return newVideos;
         });
-    };
+    }, [saveVideos]);
 
     const clearVideos = async () => {
         setUploadedVideos([]);
@@ -314,26 +334,45 @@ export function VideosProvider({ children }: { children: ReactNode }) {
         });
     };
 
+    const contextValue = useMemo(
+        () => ({
+            uploadedVideos,
+            addVideo,
+            removeVideo,
+            clearVideos,
+            userVideoData,
+            setUserVideoData,
+            reelComments,
+            addComment,
+            toggleCommentLike,
+            likedReelIds,
+            toggleReelLike,
+            isLoaded,
+            reelUploadUi,
+            setReelUploadUi,
+            resetReelUploadUi,
+        }),
+        [
+            uploadedVideos,
+            addVideo,
+            removeVideo,
+            clearVideos,
+            userVideoData,
+            setUserVideoData,
+            reelComments,
+            addComment,
+            toggleCommentLike,
+            likedReelIds,
+            toggleReelLike,
+            isLoaded,
+            reelUploadUi,
+            setReelUploadUi,
+            resetReelUploadUi,
+        ],
+    );
+
     return (
-        <VideosContext.Provider
-            value={{
-                uploadedVideos,
-                addVideo,
-                removeVideo,
-                clearVideos,
-                userVideoData,
-                setUserVideoData,
-                reelComments,
-                addComment,
-                toggleCommentLike,
-                likedReelIds,
-                toggleReelLike,
-                isLoaded,
-                reelUploadUi,
-                setReelUploadUi,
-                resetReelUploadUi,
-            }}
-        >
+        <VideosContext.Provider value={contextValue}>
             {children}
         </VideosContext.Provider>
     );

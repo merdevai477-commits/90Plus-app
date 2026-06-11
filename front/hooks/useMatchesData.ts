@@ -48,6 +48,11 @@ export interface UseMatchesDataResult {
   leaguesCount: number;
 }
 
+export interface UseMatchesDataOptions {
+  /** Pause background polling + WS when another hook owns live updates (e.g. WC tab). */
+  pauseBackgroundRefresh?: boolean;
+}
+
 // Cache key generator
 const getMatchesCacheKey = (dateString: string): string => {
   return `matches_${dateString}`;
@@ -244,7 +249,11 @@ const groupMatchesByLeague = (matches: Match[]): GroupedMatches[] => {
 /**
  * Custom hook for matches data with single API request and caching
  */
-export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
+export const useMatchesData = (
+  selectedDate: Date,
+  options: UseMatchesDataOptions = {},
+): UseMatchesDataResult => {
+  const { pauseBackgroundRefresh = false } = options;
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -296,6 +305,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
 
   // Prefetch today + yesterday in background for instant tab switches
   useEffect(() => {
+    if (pauseBackgroundRefresh) return;
     const todayKey = getLocalTodayKey();
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -312,7 +322,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
         }
       }).catch(() => {});
     });
-  }, []);
+  }, [pauseBackgroundRefresh]);
 
   // Group matches by league
   const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
@@ -566,7 +576,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   );
 
   useEffect(() => {
-    if (!isToday || !liveMatchIdsKey) return;
+    if (pauseBackgroundRefresh || !isToday || !liveMatchIdsKey) return;
 
     const liveIds = liveMatchIdsKey
       .split(',')
@@ -595,7 +605,7 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
       unsub();
       liveIds.forEach((id) => websocketClient.unsubscribeFromRoom(`match:${id}`));
     };
-  }, [isToday, dateString, liveMatchIdsKey]);
+  }, [pauseBackgroundRefresh, isToday, dateString, liveMatchIdsKey]);
 
   // ─── Silent auto-refresh ────────────────────────────────────────────────
   // Schedule a background tick based on how "live" the current day is:
@@ -605,13 +615,13 @@ export const useMatchesData = (selectedDate: Date): UseMatchesDataResult => {
   //
   // The call goes through `fetchDataInBackground` which is throttled at 4s
   useEffect(() => {
-    if (isPastDate) return;
+    if (pauseBackgroundRefresh || isPastDate) return;
     const intervalMs = isToday ? 10_000 : 5 * 60_000;
     const id = setInterval(() => {
       fetchDataInBackground(dateString, isToday, isPastDate).catch(() => {});
     }, intervalMs);
     return () => clearInterval(id);
-  }, [dateString, isToday, isPastDate, fetchDataInBackground]);
+  }, [pauseBackgroundRefresh, dateString, isToday, isPastDate, fetchDataInBackground]);
 
   const refetch = useCallback(async () => {
     await fetchData(true);

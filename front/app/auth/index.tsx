@@ -164,10 +164,17 @@ export default function RegisterScreen() {
 
       if (result.status === 'complete' && result.createdSessionId) {
         await completeAuth(result.createdSessionId);
-      } else {
-        // Email verification needed — show glass modal
+      } else if (
+        result.status === 'missing_requirements' ||
+        (signUp.unverifiedFields?.includes('email_address') ?? false)
+      ) {
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
         setShowVerification(true);
+      } else {
+        Alert.alert(
+          'Error',
+          'We could not finish registration. Check your details or try signing in.',
+        );
       }
     } catch (err: any) {
       const msg = err?.errors?.[0]?.longMessage || err?.message || 'Registration failed';
@@ -641,15 +648,30 @@ const RegisterEmailVerificationModal = memo(function RegisterEmailVerificationMo
         return;
       }
 
+      // `result` is the fresh SignUp resource — hook `signUp` may lag one render behind.
+      const reportedMissing = result.missingFields ?? signUp.missingFields ?? [];
+      const freshMissing =
+        reportedMissing.length > 0
+          ? reportedMissing
+          : result.status === 'missing_requirements' && email
+            ? ['username']
+            : [];
+
       if (
         result.status === 'missing_requirements' ||
-        signUp.status === 'missing_requirements'
+        freshMissing.length > 0
       ) {
-        const completion = await completeOAuthMissingRequirements(signUp, {
+        const completion = await completeOAuthMissingRequirements(result, {
           legalAccepted,
+          missingFields: freshMissing,
+          email,
         });
         if (completion.kind === 'session') {
           await onVerified(completion.sessionId);
+          return;
+        }
+        if (completion.kind === 'email_verification') {
+          Alert.alert('Notice', 'Check your email for a new verification code.');
           return;
         }
       } else if (sessionId) {
@@ -657,7 +679,12 @@ const RegisterEmailVerificationModal = memo(function RegisterEmailVerificationMo
         return;
       }
 
-      Alert.alert('Error', 'Verification incomplete. Please try again.');
+      Alert.alert(
+        'Error',
+        freshMissing.length > 0
+          ? `Could not finish sign-up (missing: ${freshMissing.join(', ')}). Try again or contact support.`
+          : 'Verification incomplete. Please try again.',
+      );
     } catch (err: unknown) {
       const e = err as { errors?: Array<{ longMessage?: string }>; message?: string };
       const msg = e?.errors?.[0]?.longMessage || e?.message || 'Invalid code';

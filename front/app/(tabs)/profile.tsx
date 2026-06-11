@@ -761,9 +761,26 @@ function ProfileScreen() {
     stats: predictionStats,
     allPredictions,
     hydrateFromCache: hydratePredictionsCache,
-    fetchPredictionStats,
-    fetchUserPredictions,
+    preloadProfilePredictions,
   } = usePredictionsStore();
+
+  const PREDICTIONS_REFRESH_MS = 30_000;
+  const lastPredictionsFetchRef = useRef(0);
+
+  const refreshProfilePredictions = useCallback(async (force = false) => {
+    if (!clerkUser?.id) return;
+    const now = Date.now();
+    if (!force && now - lastPredictionsFetchRef.current < PREDICTIONS_REFRESH_MS) return;
+    lastPredictionsFetchRef.current = now;
+    try {
+      const { getClerkBearerToken } = await import('../../utils/clerkAuthToken');
+      const token = await getClerkBearerToken(getToken);
+      if (!token) return;
+      await preloadProfilePredictions(token, clerkUser.id);
+    } catch (error) {
+      logger.error('Error refreshing profile predictions:', error);
+    }
+  }, [clerkUser?.id, getToken, preloadProfilePredictions]);
 
   useEffect(() => {
     if (!clerkUser?.id) return;
@@ -772,25 +789,8 @@ function ProfileScreen() {
 
   useEffect(() => {
     if (!clerkUser?.id) return;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { getClerkBearerToken } = await import('../../utils/clerkAuthToken');
-        const token = await getClerkBearerToken(getToken);
-        if (cancelled || !token) return;
-        void Promise.all([
-          fetchPredictionStats(token, clerkUser.id),
-          fetchUserPredictions(token, clerkUser.id),
-        ]);
-      } catch (error) {
-        logger.error('Error prefetching profile predictions:', error);
-      }
-    })();
-
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh when user session is ready
-  }, [clerkUser?.id]);
+    void refreshProfilePredictions(true);
+  }, [clerkUser?.id, refreshProfilePredictions]);
 
   const lastMergedServerSigRef = useRef<string>('');
   const lastClerkIdForMergeRef = useRef<string | undefined>(undefined);
@@ -899,25 +899,12 @@ function ProfileScreen() {
     refreshCacheRef.current(false);
   }, [isOffline, isLoading, isRefreshing]);
 
-  // Refresh on focus - use cache hook's refresh + fresh prediction stats
+  // Refresh on focus - use cache hook's refresh + fresh prediction stats (throttled)
   useFocusEffect(
     useCallback(() => {
       maybeRefreshProfile('focus');
-      (async () => {
-        try {
-          const { getClerkBearerToken } = await import('../../utils/clerkAuthToken');
-          const token = await getClerkBearerToken(getToken);
-          if (token && clerkUser?.id) {
-            void Promise.all([
-              fetchPredictionStats(token, clerkUser.id),
-              fetchUserPredictions(token, clerkUser.id),
-            ]);
-          }
-        } catch (error) {
-          logger.error('Error refreshing prediction stats on focus:', error);
-        }
-      })();
-    }, [maybeRefreshProfile, getToken, fetchPredictionStats, fetchUserPredictions, clerkUser?.id])
+      void refreshProfilePredictions(false);
+    }, [maybeRefreshProfile, refreshProfilePredictions])
   );
 
   // Auto-refresh when app returns from background
@@ -925,6 +912,7 @@ function ProfileScreen() {
   // ✅ FIX: Prevent refresh when image/video picker is open
   const isPickerActiveRef = useRef(false);
   const reelUploadInFlightRef = useRef(false);
+  const lastGridProgressRef = useRef(-1);
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (
@@ -1373,6 +1361,9 @@ function ProfileScreen() {
         mentions.map((m: string) => m.replace('@', '')),
         (progress: number) => {
           syncReelProgress(progress);
+          const rounded = Math.round(progress);
+          if (rounded === lastGridProgressRef.current && rounded < 100) return;
+          lastGridProgressRef.current = rounded;
           addVideo({
             ...tempVideo,
             uploadProgress: progress,
@@ -1441,13 +1432,7 @@ function ProfileScreen() {
       toastManager.showInfo(t.profile.updating, t.profile.refreshingProfileData);
       
       await refreshCache(true);
-      const token = await getToken();
-      if (token && clerkUser?.id) {
-        void Promise.all([
-          fetchPredictionStats(token, clerkUser.id),
-          fetchUserPredictions(token, clerkUser.id),
-        ]);
-      }
+      await refreshProfilePredictions(true);
       
       toastManager.showSuccess(t.profile.updated, t.profile.profileDataRefreshed);
     } catch (error) {
@@ -1460,6 +1445,71 @@ function ProfileScreen() {
   const handleEditProfile = useCallback(() => {
     setIsEditProfileModalVisible(true);
   }, []);
+
+  const handleUploadPress = useCallback(() => {
+    if (reelUploadUi.active) {
+      toastManager.showWarning(t.profile.uploading, reelUploadUi.phaseLabel || t.profile.uploadAlreadyInProgress);
+      return;
+    }
+    setIsUploadModalVisible(true);
+  }, [reelUploadUi.active, reelUploadUi.phaseLabel, t.profile.uploading, t.profile.uploadAlreadyInProgress]);
+
+  const handleSharePress = useCallback(async () => {
+    try {
+      const profileUrl = buildProfileShareUrl(userData?.username || '');
+      await Share.share({
+        message: `${t.profile.checkMyProfile} @${userData?.username}\n${profileUrl}`,
+        url: profileUrl,
+      });
+      toastManager.showSuccess(t.profile.shared, t.profile.profileSharedSuccess);
+    } catch (error) {
+      logger.warn('Share error:', error);
+      toastManager.showError(t.profile.shareFailedTitle, t.profile.profileShareFailed);
+    }
+  }, [userData?.username, t.profile.checkMyProfile, t.profile.shared, t.profile.profileSharedSuccess, t.profile.shareFailedTitle, t.profile.profileShareFailed]);
+
+  const handleQRPress = useCallback(() => setIsQRModalVisible(true), []);
+
+  const handleFollowersPress = useCallback(() => {
+    setFollowersModalTab('followers');
+    setIsFollowersModalVisible(true);
+  }, []);
+
+  const handleFollowingPress = useCallback(() => {
+    setFollowersModalTab('following');
+    setIsFollowersModalVisible(true);
+  }, []);
+
+  const handleVideoPress = useCallback((video: { id: string; videoUrl?: string; uri?: string; views?: string | number; likes?: number; saved?: boolean; shares?: number }, _index: number) => {
+    const src = video.videoUrl || video.uri || '';
+    if (src && typeof src === 'string' && src.length > 0) {
+      setSelectedVideoUrl(src);
+      setSelectedReelId(video.id);
+      const viewsRaw = video.views;
+      setSelectedReelSocial({
+        liked: likedReelIdsSet.has(video.id),
+        likes: Number(video.likes) || 0,
+        saved: !!video.saved,
+        shares: Number(video.shares) || 0,
+        views:
+          typeof viewsRaw === 'number'
+            ? viewsRaw
+            : parseInt(String(viewsRaw ?? '0').replace(/,/g, ''), 10) || 0,
+      });
+      setIsVideoPlayerVisible(true);
+    } else {
+      toastManager.showWarning(t.profile.videoNotReadyTitle, t.profile.videoNotReadyMessage);
+    }
+  }, [likedReelIdsSet, t.profile.videoNotReadyTitle, t.profile.videoNotReadyMessage]);
+
+  const handleVideoLongPress = useCallback(() => {
+    setIsDeleteMode((prev) => !prev);
+  }, []);
+
+  const handleDeleteVideo = useCallback((videoId: string) => {
+    removeVideo(videoId);
+    toastManager.showDeleteSuccess('video');
+  }, [removeVideo]);
 
   // CRITICAL: Compute social links BEFORE early returns to avoid hooks count mismatch
   const socialLinks = useMemo(() => {
@@ -1748,27 +1798,9 @@ function ProfileScreen() {
         )}
 
         <ActionButtons
-          onEditPress={() => {
-            if (reelUploadUi.active) {
-              toastManager.showWarning(t.profile.uploading, reelUploadUi.phaseLabel || t.profile.uploadAlreadyInProgress);
-              return;
-            }
-            setIsUploadModalVisible(true);
-          }}
-          onSharePress={async () => {
-            try {
-              const profileUrl = buildProfileShareUrl(userData?.username || '');
-              await Share.share({
-                message: `${t.profile.checkMyProfile} @${userData?.username}\n${profileUrl}`,
-                url: profileUrl,
-              });
-              toastManager.showSuccess(t.profile.shared, t.profile.profileSharedSuccess);
-            } catch (error) {
-              logger.warn('Share error:', error);
-              toastManager.showError(t.profile.shareFailedTitle, t.profile.profileShareFailed);
-            }
-          }}
-          onQRPress={() => setIsQRModalVisible(true)}
+          onEditPress={handleUploadPress}
+          onSharePress={handleSharePress}
+          onQRPress={handleQRPress}
           uploadCooldown={cooldowns?.reelUpload}
           reelUploadActive={reelUploadUi.active}
           reelUploadProgress={reelUploadUi.progress}
@@ -1778,14 +1810,8 @@ function ProfileScreen() {
           followers={followStats.followersCount.toString()}
           following={followStats.followingCount.toString()}
           videos={(followStats.reelsCount || myVideos.length).toString()}
-          onFollowersPress={() => {
-            setFollowersModalTab('followers');
-            setIsFollowersModalVisible(true);
-          }}
-          onFollowingPress={() => {
-            setFollowersModalTab('following');
-            setIsFollowersModalVisible(true);
-          }}
+          onFollowersPress={handleFollowersPress}
+          onFollowingPress={handleFollowingPress}
         />
 
         <ContentTabs
@@ -1799,35 +1825,9 @@ function ProfileScreen() {
         {activeTab === 'videos' && (
           <VideoGrid
             videos={myVideos}
-            onVideoPress={(video, _index) => {
-              const src =
-                (video as { videoUrl?: string }).videoUrl ||
-                (video as { uri?: string }).uri ||
-                '';
-              if (src && typeof src === 'string' && src.length > 0) {
-                setSelectedVideoUrl(src);
-                setSelectedReelId(video.id);
-                const viewsRaw = (video as { views?: string | number }).views;
-                setSelectedReelSocial({
-                  liked: likedReelIdsSet.has(video.id),
-                  likes: Number((video as { likes?: number }).likes) || 0,
-                  saved: !!(video as { saved?: boolean }).saved,
-                  shares: Number((video as { shares?: number }).shares) || 0,
-                  views:
-                    typeof viewsRaw === 'number'
-                      ? viewsRaw
-                      : parseInt(String(viewsRaw ?? '0').replace(/,/g, ''), 10) || 0,
-                });
-                setIsVideoPlayerVisible(true);
-              } else {
-                toastManager.showWarning(t.profile.videoNotReadyTitle, t.profile.videoNotReadyMessage);
-              }
-            }}
-            onVideoLongPress={() => setIsDeleteMode(prev => !prev)}
-            onDeleteVideo={(videoId) => {
-              removeVideo(videoId);
-              toastManager.showDeleteSuccess('video');
-            }}
+            onVideoPress={handleVideoPress}
+            onVideoLongPress={handleVideoLongPress}
+            onDeleteVideo={handleDeleteVideo}
             isDeleteMode={isDeleteMode}
           />
         )}
@@ -1841,13 +1841,13 @@ function ProfileScreen() {
           />
         )}
 
-        <View style={activeTab === 'analytics' ? undefined : styles.hiddenTab}>
+        {activeTab === 'analytics' && (
           <ProfileAnalyticsTab
             analytics={analytics}
             predictionStats={predictionStats}
             predictions={allPredictions}
           />
-        </View>
+        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>

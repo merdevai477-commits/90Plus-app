@@ -327,6 +327,7 @@ const ReelsFeed: React.FC = () => {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [noReelsMessage, setNoReelsMessage] = useState(false);
   const hasLoadedRef = useRef(false);
+  const backendReelsLengthRef = useRef(0);
   // Abort controller to cancel in-flight retries when component re-focuses
   const retryAbortRef = useRef<AbortController | null>(null);
   const viewedReelsRef = useRef<Set<string>>(new Set());
@@ -625,6 +626,17 @@ const ReelsFeed: React.FC = () => {
     }
   }, [getToken, selectedHashtag, transformBackendReel, likedReelIdsSet]);
 
+  useEffect(() => {
+    backendReelsLengthRef.current = backendReels.length;
+  }, [backendReels.length]);
+
+  useEffect(() => {
+    return () => {
+      retryAbortRef.current?.abort();
+      retryAbortRef.current = null;
+    };
+  }, []);
+
   // Initial load
   useEffect(() => {
     if (!hasLoadedRef.current) {
@@ -701,7 +713,7 @@ const ReelsFeed: React.FC = () => {
       }
 
       // Only reload if we've already loaded once (to avoid double loading on initial mount)
-      if (hasLoadedRef.current && backendReels.length > 0) {
+      if (hasLoadedRef.current && backendReelsLengthRef.current > 0) {
         // ✅ Don't clear existing reels - just refresh in background
         lastFocusRefreshRef.current = now;
         isRefreshingRef.current = true;
@@ -766,7 +778,7 @@ const ReelsFeed: React.FC = () => {
     }));
   }, [backendReels, likedReelIdsSet]);
 
-  // Sync merged reels into state (needed so optimistic updates like mute/save/share still work)
+  // Sync merged reels into state — preserve optimistic local patches (views, comments, likes)
   useEffect(() => {
     if (!mergedBackendReels || mergedBackendReels.length === 0) {
       if (backendReels.length === 0 && !isInitialLoading) {
@@ -774,7 +786,21 @@ const ReelsFeed: React.FC = () => {
       }
       return;
     }
-    setReels(mergedBackendReels);
+    setReels((prev) => {
+      const prevById = new Map(prev.map((r) => [r.id, r]));
+      return mergedBackendReels.map((reel) => {
+        const local = prevById.get(reel.id);
+        if (!local) return reel;
+        return {
+          ...reel,
+          views: Math.max(local.views ?? 0, reel.views ?? 0),
+          comments: Math.max(local.comments ?? 0, reel.comments ?? 0),
+          likes: Math.max(local.likes ?? 0, reel.likes ?? 0),
+          shares: local.shares ?? reel.shares,
+          saved: local.saved ?? reel.saved,
+        };
+      });
+    });
   }, [mergedBackendReels, backendReels.length, isInitialLoading]);
 
   // Handle deep link navigation to specific reel and comment
@@ -1000,19 +1026,18 @@ const ReelsFeed: React.FC = () => {
 
       // Optimistic UI bump — only when the server actually counted.
       if (result.counted) {
-        setReels((prev) =>
-          prev.map((r) =>
-            r.id === reelId
-              ? {
-                  ...r,
-                  views:
-                    typeof result.views === 'number'
-                      ? result.views
-                      : (r.views ?? 0) + 1,
-                }
-              : r,
-          ),
-        );
+        const bumpViews = (r: ReelData) =>
+          r.id === reelId
+            ? {
+                ...r,
+                views:
+                  typeof result.views === 'number'
+                    ? result.views
+                    : (r.views ?? 0) + 1,
+              }
+            : r;
+        setReels((prev) => prev.map(bumpViews));
+        setBackendReels((prev) => prev.map(bumpViews));
       }
     } catch (error) {
       logger.warn('[ReelView] Unexpected error; will retry on next playback', {
@@ -1188,33 +1213,25 @@ const ReelsFeed: React.FC = () => {
   const handleSave = useCallback(async (reelId: string) => {
     haptic.trigger('light');
 
-    // Get current state for rollback
-    const currentReel = reels.find(r => r.id === reelId);
-    const wasSaved = currentReel?.saved ?? false;
+    let wasSaved = false;
+    let nextSaved = false;
+    setReels((prev) => {
+      wasSaved = prev.find((r) => r.id === reelId)?.saved ?? false;
+      nextSaved = !wasSaved;
+      return prev.map((reel) =>
+        reel.id === reelId ? { ...reel, saved: nextSaved } : reel,
+      );
+    });
+    setBackendReels((prev) =>
+      prev.map((reel) => (reel.id === reelId ? { ...reel, saved: nextSaved } : reel)),
+    );
 
-    // Optimistic UI update — use functional setState so the rollback path
-    // never restores stale values when the user taps multiple times in quick
-    // succession.
-    const updateSaveState = (saved: boolean) => {
-      setReels(prev => prev.map(reel =>
-        reel.id === reelId ? { ...reel, saved } : reel
-      ));
-      setBackendReels(prev => prev.map(reel =>
-        reel.id === reelId ? { ...reel, saved } : reel
-      ));
-    };
-
-    updateSaveState(!wasSaved);
-
-    // ✅ Use the non-blocking toast instead of Alert.alert which steals focus
-    // and pauses video playback.
     if (wasSaved) {
       toastManager.showInfo(t.reels.unsaved, '');
     } else {
       toastManager.showSuccess(t.reels.saved, '');
     }
 
-    // Sync with backend
     try {
       const token = await getToken();
       if (token) {
@@ -1225,11 +1242,15 @@ const ReelsFeed: React.FC = () => {
         }
       }
     } catch (error) {
-      // Rollback on failure
       logger.error('Error syncing save, rolling back:', error);
-      updateSaveState(wasSaved);
+      setReels((prev) =>
+        prev.map((reel) => (reel.id === reelId ? { ...reel, saved: wasSaved } : reel)),
+      );
+      setBackendReels((prev) =>
+        prev.map((reel) => (reel.id === reelId ? { ...reel, saved: wasSaved } : reel)),
+      );
     }
-  }, [haptic, reels, getToken, t.reels.unsaved, t.reels.saved]);
+  }, [haptic, getToken, t.reels.unsaved, t.reels.saved]);
 
   // Handle Add Comment
   const handleAddComment = useCallback((reelId: string, comment: Comment) => {

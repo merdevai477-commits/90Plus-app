@@ -184,7 +184,8 @@ export default function LoginScreen() {
       }
 
       if (signInNeedsVerification(result.status)) {
-        const factor = resolveSecondFactor(result);
+        // Prefer hook `signIn` — Clerk populates supportedSecondFactors on the live resource.
+        const factor = resolveSecondFactor(signIn);
         await openVerificationStep(factor);
         return;
       }
@@ -360,7 +361,11 @@ export default function LoginScreen() {
             <View style={styles.modalCard}>
               <TouchableOpacity
                 style={styles.modalClose}
-                onPress={() => setShowVerification(false)}
+                onPress={() => {
+                  setShowVerification(false);
+                  setOtp('');
+                  setSecondFactorKind(null);
+                }}
                 activeOpacity={0.7}
               >
                 <X size={20} color={TEXT_MUTED} strokeWidth={2} />

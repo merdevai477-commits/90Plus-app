@@ -12,6 +12,7 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
+  InteractionManager,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { X, Award, Trophy, Star, Crown, Medal } from 'lucide-react-native';
@@ -256,23 +257,30 @@ export const BadgesDisplay: React.FC<BadgesDisplayProps> = memo(({ userId, token
   const [modalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
-    const fetchBadges = async () => {
-      if (!userId) return;
-      
-      setLoading(true);
-      try {
-        const data = await getUserBadges(token, userId);
-        setBadgesData(data);
-      } catch (error) {
-        // Silently handle errors - component will just not show badges
-        console.warn('Failed to load badges:', error);
-        setBadgesData(null);
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (!userId) return;
 
-    fetchBadges();
+    let cancelled = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      const fetchBadges = async () => {
+        setLoading(true);
+        try {
+          const data = await getUserBadges(token, userId);
+          if (!cancelled) setBadgesData(data);
+        } catch (error) {
+          console.warn('Failed to load badges:', error);
+          if (!cancelled) setBadgesData(null);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      };
+
+      void fetchBadges();
+    });
+
+    return () => {
+      cancelled = true;
+      task.cancel();
+    };
   }, [userId, token]);
 
   if (loading) {

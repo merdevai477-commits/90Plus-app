@@ -68,8 +68,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   useFocusEffect(
     useCallback(() => {
       refetchProfile();
-      void xpCtx.refresh();
-    }, [refetchProfile, xpCtx.refresh]),
+    }, [refetchProfile]),
   );
 
   // Source of truth for level/XP: live XpContext (SSE/poll), then profile,

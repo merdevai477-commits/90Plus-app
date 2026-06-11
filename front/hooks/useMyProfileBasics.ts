@@ -8,7 +8,7 @@
 
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { AuthService } from '../src/services/authService';
 
@@ -90,12 +90,14 @@ export function useMyProfileBasics(): {
     };
   }, [isSignedIn, clerkUser?.imageUrl, clerkUser?.fullName, clerkUser?.username, clerkUser?.firstName, query.data]);
 
+  const refetch = useCallback(() => {
+    void query.refetch();
+  }, [query.refetch]);
+
   return {
     data: merged,
     isLoading: query.isLoading,
-    refetch: () => {
-      query.refetch();
-    },
+    refetch,
   };
 }
 

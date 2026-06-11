@@ -592,7 +592,7 @@ function LeagueAllMatchesModal({
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
   onOpenDetails: (fixture: Fixture) => void;
 }) {
-  const { language, t } = useTranslation();
+  const { language, translate: t } = useTranslation();
   const [extraFixtures, setExtraFixtures] = useState<Fixture[]>([]);
   const [leagueLoading, setLeagueLoading] = useState(false);
 
@@ -907,8 +907,13 @@ export default function MatchesHubScreenV2() {
   const [subscribedFixtures, setSubscribedFixtures] = useState<Set<string>>(() => new Set());
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
 
-  // Real matches data from backend
-  const { groupedMatches, countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(selectedDate);
+  const wcTabActive = worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled);
+
+  // Real matches data from backend — pause polling/WS when WC hook owns live updates
+  const { groupedMatches, countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(
+    selectedDate,
+    { pauseBackgroundRefresh: wcTabActive },
+  );
 
   useEffect(() => {
     if (worldCupCampaignMode && filter === 'All') {
@@ -920,7 +925,6 @@ export default function MatchesHubScreenV2() {
     () => (worldCupCampaignMode ? [...CAMPAIGN_FILTERS] : [...FILTERS]),
     [worldCupCampaignMode],
   );
-  const wcTabActive = worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled);
   const {
     matches: worldCupMatches,
     loading: worldCupLoading,
@@ -931,6 +935,14 @@ export default function MatchesHubScreenV2() {
     const sample = worldCupMatches[0]?.league?.name;
     return sample ? getLeagueDisplayName(sample, currentLanguage) : t('matches.tabs.worldCup');
   }, [worldCupMatches, currentLanguage, t]);
+
+  const worldCupCardProps = useMemo(
+    () => ({
+      logoSource: WC_2026_OFFICIAL_LOGO,
+      leagueName: wcLeagueLabel,
+    }),
+    [wcLeagueLabel],
+  );
 
   // Modal state for "View All" league sheet (shared by both LeagueCard and CountryAccordion).
   const [viewAllLeagueId, setViewAllLeagueId] = useState<string | null>(null);
@@ -1528,10 +1540,7 @@ export default function MatchesHubScreenV2() {
         isSubscribing={subscribingFixtureId === item.id}
         onToggleSubscription={handleToggleSubscription}
         onOpenDetails={handleOpenMatchDetails}
-        worldCupCard={{
-          logoSource: WC_2026_OFFICIAL_LOGO,
-          leagueName: wcLeagueLabel,
-        }}
+        worldCupCard={worldCupCardProps}
       />
     ),
     [
@@ -1543,7 +1552,7 @@ export default function MatchesHubScreenV2() {
       subscribingFixtureId,
       handleToggleSubscription,
       handleOpenMatchDetails,
-      wcLeagueLabel,
+      worldCupCardProps,
     ],
   );
 
@@ -1586,6 +1595,18 @@ export default function MatchesHubScreenV2() {
   const handleViewAllLeague = useCallback((leagueId: number) => {
     setViewAllLeagueId(String(leagueId));
   }, []);
+
+  const renderCountryAccordion = useCallback(
+    ({ item }: { item: CountryGroup }) => (
+      <CountryAccordion
+        countryGroup={item}
+        renderMatchCard={renderCountryMatchCard}
+        onViewAllLeague={handleViewAllLeague}
+        defaultExpanded={TOP5_COUNTRIES.has(item.country)}
+      />
+    ),
+    [renderCountryMatchCard, handleViewAllLeague],
+  );
 
   // The currently-open "View All" league (resolved from `groups` so the
   // modal renders in the LeagueGroup shape it already expects).
@@ -1828,14 +1849,7 @@ export default function MatchesHubScreenV2() {
         <FlashList
           data={filteredCountryGroups}
           keyExtractor={cg => cg.country}
-          renderItem={({ item }) => (
-            <CountryAccordion
-              countryGroup={item}
-              renderMatchCard={renderCountryMatchCard}
-              onViewAllLeague={handleViewAllLeague}
-              defaultExpanded={TOP5_COUNTRIES.has(item.country)}
-            />
-          )}
+          renderItem={renderCountryAccordion}
           drawDistance={250}
           ItemSeparatorComponent={ITEM_SEPARATOR_8}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
@@ -1847,14 +1861,7 @@ export default function MatchesHubScreenV2() {
         <FlashList
           data={filteredCountryGroups}
           keyExtractor={cg => cg.country}
-          renderItem={({ item }) => (
-            <CountryAccordion
-              countryGroup={item}
-              renderMatchCard={renderCountryMatchCard}
-              onViewAllLeague={handleViewAllLeague}
-              defaultExpanded={TOP5_COUNTRIES.has(item.country)}
-            />
-          )}
+          renderItem={renderCountryAccordion}
           // Smaller draw distance keeps fewer cells in memory while
           // scrolling fast, which matters because each country can mount
           // a chunk of leagues + match rows when expanded.

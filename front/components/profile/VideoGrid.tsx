@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useCallback } from 'react';
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { FlashList } from '@shopify/flash-list';
@@ -7,8 +7,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { shouldShowDuration } from '../../utils/videoDuration';
 import { isValidThumbnail, VIDEO_THUMBNAIL_PLACEHOLDER } from '../../constants/VideoPlaceholder';
-import Animated, { useAnimatedStyle, withRepeat, withTiming } from 'react-native-reanimated';
-
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
 const SPACING = 2;
@@ -35,7 +33,7 @@ interface VideoGridProps {
 }
 
 const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPress, onDeleteVideo, isDeleteMode }: VideoGridProps) {
-    const renderItem = ({ item, index }: { item: VideoItem; index: number }) => (
+    const renderItem = useCallback(({ item, index }: { item: VideoItem; index: number }) => (
         <TouchableOpacity
             activeOpacity={0.8}
             style={styles.itemContainer}
@@ -129,13 +127,15 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
                 </View>
             )}
         </TouchableOpacity>
-    );
+    ), [isDeleteMode, onVideoPress, onVideoLongPress, onDeleteVideo]);
+
+    const keyExtractor = useCallback((item: VideoItem) => item.id, []);
 
     return (
         <FlashList
             data={videos}
             renderItem={renderItem}
-            keyExtractor={(item) => item.id}
+            keyExtractor={keyExtractor}
             numColumns={COLUMN_COUNT}
             scrollEnabled={false}
             contentContainerStyle={styles.grid}

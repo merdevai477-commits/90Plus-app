@@ -18,11 +18,12 @@ import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { ChevronRight, Trophy } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ImageSourcePropType,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -180,10 +181,12 @@ export default function RankScreen() {
   const [period, setPeriod] = useState<TopPlayersPeriod>('weekly');
   const [refreshing, setRefreshing] = useState(false);
   const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
+  const isFocused = useIsFocused();
 
   const { players, isLoading, isError, refetch } = useTopPlayers({
     limit: 11,
     period,
+    enabled: isFocused,
   });
 
   const realPlayers = useMemo(
@@ -205,7 +208,7 @@ export default function RankScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadShareStatus();
-      void hydrateFeatures(true);
+      void hydrateFeatures();
     }, [loadShareStatus, hydrateFeatures]),
   );
 
@@ -238,6 +241,24 @@ export default function RankScreen() {
       setRefreshing(false);
     }
   }, [refetch]);
+
+  const handleCloseModal = useCallback(() => setIsModalVisible(false), []);
+
+  const handleLeaderboardEntryPress = useCallback(
+    (entry: LeaderboardEntry) => {
+      setIsModalVisible(false);
+      navigateToProfile(entry.username);
+    },
+    [navigateToProfile],
+  );
+
+  const scrollContentStyle = useMemo(
+    () => ({
+      paddingTop: insets.top + 60,
+      paddingBottom: Math.max(insets.bottom, 16) + 88,
+    }),
+    [insets.top, insets.bottom],
+  );
 
   const competitions = useMemo(
     () => [
@@ -328,15 +349,12 @@ export default function RankScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => void onRefresh()}
+            onRefresh={onRefresh}
             tintColor={ACCENT}
             colors={[ACCENT]}
           />
         }
-        contentContainerStyle={{
-          paddingTop: insets.top + 60,
-          paddingBottom: Math.max(insets.bottom, 16) + 88,
-        }}
+        contentContainerStyle={scrollContentStyle}
       >
         {/* ── Hero block ── */}
         <View style={s.heroBlock}>
@@ -494,9 +512,15 @@ export default function RankScreen() {
               {/* Lower rows */}
               <View style={s.board}>
                 {lowerSlots.map((row, i) => {
-                  const RowWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+                  const RowWrapper = isLiquidGlassSupported
+                    ? LiquidGlassView
+                    : Platform.OS === 'android'
+                    ? View
+                    : BlurView;
                   const rowProps = isLiquidGlassSupported
                     ? { effect: 'clear' as const, interactive: true }
+                    : Platform.OS === 'android'
+                    ? {}
                     : { intensity: 15, tint: 'dark' as const };
                   const rowInner = (
                     <>
@@ -536,7 +560,10 @@ export default function RankScreen() {
                         <RowWrapper
                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           {...(rowProps as any)}
-                          style={s.boardRowGlass}
+                          style={[
+                            s.boardRowGlass,
+                            Platform.OS === 'android' && !isLiquidGlassSupported && s.boardRowGlassAndroid,
+                          ]}
                         >
                           {rowInner}
                         </RowWrapper>
@@ -551,6 +578,7 @@ export default function RankScreen() {
                       {...(rowProps as any)}
                       style={[
                         s.boardRowGlass,
+                        Platform.OS === 'android' && !isLiquidGlassSupported && s.boardRowGlassAndroid,
                         i < lowerSlots.length - 1 && { marginBottom: 8 },
                       ]}
                     >
@@ -585,17 +613,16 @@ export default function RankScreen() {
         </View>
       </ScrollView>
 
-      <LeaderboardModal
-        visible={isModalVisible}
-        onClose={() => setIsModalVisible(false)}
-        entries={top11Entries}
-        topInset={insets.top}
-        currentUserId={globalState.userProfile?.id ?? null}
-        onEntryPress={(entry) => {
-          setIsModalVisible(false);
-          navigateToProfile(entry.username);
-        }}
-      />
+      {isModalVisible ? (
+        <LeaderboardModal
+          visible={isModalVisible}
+          onClose={handleCloseModal}
+          entries={top11Entries}
+          topInset={insets.top}
+          currentUserId={globalState.userProfile?.id ?? null}
+          onEntryPress={handleLeaderboardEntryPress}
+        />
+      ) : null}
       <SoonModal visible={isSoonVisible} onClose={() => setIsSoonVisible(false)} />
     </View>
   );
@@ -723,6 +750,10 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(241, 241, 241, 0)',
     gap: 12,
+  },
+  boardRowGlassAndroid: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   rankBadgeSmall: {
     width: 28,
