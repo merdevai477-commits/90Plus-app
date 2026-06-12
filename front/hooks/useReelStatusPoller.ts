@@ -45,47 +45,19 @@ export function useReelStatusPoller(
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
+  const reelIdRef = useRef(reelId);
+  reelIdRef.current = reelId;
+
+  // Clerk returns a new getToken reference every render — keep a stable ref.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   const stopPolling = useCallback(() => {
     if (pollIntervalRef.current) { clearInterval(pollIntervalRef.current); pollIntervalRef.current = null; }
     if (elapsedIntervalRef.current) { clearInterval(elapsedIntervalRef.current); elapsedIntervalRef.current = null; }
   }, []);
-
-  const poll = useCallback(async () => {
-    if (!reelId || !isMountedRef.current) return;
-    try {
-      const token = await getToken();
-      if (!token || !isMountedRef.current) return;
-      const res = await fetch(`${getApiUrl()}/upload/reels/${reelId}/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok || !isMountedRef.current) return;
-      const json = await res.json();
-      const data = json?.data;
-      if (!data || !isMountedRef.current) return;
-
-      const status: string = data.status ?? 'PROCESSING';
-      const hasMuxPlayback = !!data.muxPlaybackId;
-
-      let newStage: ReelProcessingStage = 'uploading';
-      if (status === 'READY') newStage = 'ready';
-      else if (status === 'FAILED') newStage = 'failed';
-      else if (hasMuxPlayback || data.muxUploadId) newStage = 'processing';
-      else newStage = 'uploading';
-
-      if (!isMountedRef.current) return; // Final check before setState
-      setStage(newStage);
-      setVideoUrl(data.videoUrl ?? null);
-      setThumbnailUrl(data.thumbnailUrl ?? null);
-      setMuxPlaybackId(data.muxPlaybackId ?? null);
-
-      if (newStage === 'ready' || newStage === 'failed') {
-        stopPolling();
-      }
-    } catch (err) {
-      logger.warn('[useReelStatusPoller] Poll error:', err);
-    }
-  }, [reelId, getToken, stopPolling]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -100,15 +72,50 @@ export function useReelStatusPoller(
       return;
     }
 
+    const pollOnce = async () => {
+      const activeReelId = reelIdRef.current;
+      if (!activeReelId || !isMountedRef.current) return;
+      try {
+        const token = await getTokenRef.current();
+        if (!token || !isMountedRef.current) return;
+        const res = await fetch(`${getApiUrl()}/upload/reels/${activeReelId}/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || !isMountedRef.current) return;
+        const json = await res.json();
+        const data = json?.data;
+        if (!data || !isMountedRef.current) return;
+
+        const status: string = data.status ?? 'PROCESSING';
+        const hasMuxPlayback = !!data.muxPlaybackId;
+
+        let newStage: ReelProcessingStage = 'uploading';
+        if (status === 'READY') newStage = 'ready';
+        else if (status === 'FAILED') newStage = 'failed';
+        else if (hasMuxPlayback || data.muxUploadId) newStage = 'processing';
+        else newStage = 'uploading';
+
+        if (!isMountedRef.current) return;
+        setStage(newStage);
+        setVideoUrl(data.videoUrl ?? null);
+        setThumbnailUrl(data.thumbnailUrl ?? null);
+        setMuxPlaybackId(data.muxPlaybackId ?? null);
+
+        if (newStage === 'ready' || newStage === 'failed') {
+          stopPolling();
+        }
+      } catch (err) {
+        logger.warn('[useReelStatusPoller] Poll error:', err);
+      }
+    };
+
     startTimeRef.current = Date.now();
     setStage('uploading');
     setElapsedSeconds(0);
 
-    // Poll every 3 seconds
-    poll();
-    pollIntervalRef.current = setInterval(poll, 3000);
+    pollOnce();
+    pollIntervalRef.current = setInterval(pollOnce, 3000);
 
-    // Update elapsed time every second
     elapsedIntervalRef.current = setInterval(() => {
       if (isMountedRef.current) {
         setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000));
@@ -116,7 +123,7 @@ export function useReelStatusPoller(
     }, 1000);
 
     return stopPolling;
-  }, [reelId, enabled, poll, stopPolling]);
+  }, [reelId, enabled, stopPolling]);
 
   const stageLabel = stage === 'processing' && elapsedSeconds > 0
     ? `${STAGE_LABELS.processing} (${elapsedSeconds} ثانية)`

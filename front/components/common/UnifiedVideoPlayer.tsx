@@ -395,10 +395,17 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
       logger.warn(
         `[UnifiedVideoPlayer] Video load failed for reel ${reel.id}: ${msg} — url prefix: ${activeVideoUrl.substring(0, 80)}`,
       );
-      captureException(new Error(`Video load failed: ${msg}`), {
-        tags: { area: 'reels', component: 'UnifiedVideoPlayer' },
-        extra: { reelId: reel.id, urlPrefix: activeVideoUrl.substring(0, 80) },
-      });
+      const isLocalUri =
+        /^file:\/\//i.test(activeVideoUrl) ||
+        /^ph:\/\//i.test(activeVideoUrl) ||
+        /^assets-library:\/\//i.test(activeVideoUrl) ||
+        activeVideoUrl.startsWith('content://');
+      if (!isLocalUri) {
+        captureException(new Error(`Video load failed: ${msg}`), {
+          tags: { area: 'reels', component: 'UnifiedVideoPlayer' },
+          extra: { reelId: reel.id, urlPrefix: activeVideoUrl.substring(0, 80) },
+        });
+      }
     }
 
     // Refresh playback URL from API (R2 signed URL or Mux HLS) when load fails.

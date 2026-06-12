@@ -321,6 +321,8 @@ function ProfileScreen() {
   const [activeTab, setActiveTab] = useState('videos');
   const [isOffline, setIsOffline] = useState(false);
   const { isSignedIn, getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const { user: clerkUser } = useUser();
   const { streak: loginStreak, refresh: refreshXp } = useXp();
   
@@ -761,15 +763,13 @@ function ProfileScreen() {
   const cooldowns = cachedCooldowns;
 
   // Predictions store — hydrate from cache on mount for instant analytics
-  const {
-    stats: predictionStats,
-    allPredictions,
-    hydrateFromCache: hydratePredictionsCache,
-    preloadProfilePredictions,
-  } = usePredictionsStore();
+  const predictionStats = usePredictionsStore((s) => s.stats);
+  const allPredictions = usePredictionsStore((s) => s.allPredictions);
+  const hydratePredictionsCache = usePredictionsStore((s) => s.hydrateFromCache);
 
   const PREDICTIONS_REFRESH_MS = 30_000;
   const lastPredictionsFetchRef = useRef(0);
+  const predictionsBootstrappedForRef = useRef<string | null>(null);
 
   const refreshProfilePredictions = useCallback(async (force = false) => {
     if (!clerkUser?.id) return;
@@ -778,13 +778,13 @@ function ProfileScreen() {
     lastPredictionsFetchRef.current = now;
     try {
       const { getClerkBearerToken } = await import('../../utils/clerkAuthToken');
-      const token = await getClerkBearerToken(getToken);
+      const token = await getClerkBearerToken(getTokenRef.current);
       if (!token) return;
-      await preloadProfilePredictions(token, clerkUser.id);
+      await usePredictionsStore.getState().preloadProfilePredictions(token, clerkUser.id);
     } catch (error) {
       logger.error('Error refreshing profile predictions:', error);
     }
-  }, [clerkUser?.id, getToken, preloadProfilePredictions]);
+  }, [clerkUser?.id]);
 
   useEffect(() => {
     if (!clerkUser?.id) return;
@@ -793,6 +793,8 @@ function ProfileScreen() {
 
   useEffect(() => {
     if (!clerkUser?.id) return;
+    if (predictionsBootstrappedForRef.current === clerkUser.id) return;
+    predictionsBootstrappedForRef.current = clerkUser.id;
     void refreshProfilePredictions(true);
   }, [clerkUser?.id, refreshProfilePredictions]);
 
@@ -917,6 +919,7 @@ function ProfileScreen() {
   const isPickerActiveRef = useRef(false);
   const reelUploadInFlightRef = useRef(false);
   const lastGridProgressRef = useRef(-1);
+  const lastUploadUiProgressRef = useRef(-1);
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (
@@ -1294,6 +1297,8 @@ function ProfileScreen() {
       return;
     }
     reelUploadInFlightRef.current = true;
+    lastUploadUiProgressRef.current = -1;
+    lastGridProgressRef.current = -1;
 
     try {
     setUserVideoData({
@@ -1351,10 +1356,18 @@ function ProfileScreen() {
         if (safeProgress >= 20 && safeProgress < 90) label = t.profile.uploadingVideo;
         else if (safeProgress >= 90 && safeProgress < 100) label = t.profile.processingVideo;
         else if (safeProgress >= 100) label = t.profile.uploadSuccessPhase;
-        setVideoUploadProgress(safeProgress);
-        setVideoUploadMessage(label);
-        setReelUploadUi({ active: true, progress: safeProgress, phaseLabel: label });
-        void reelUploadNotification.updateProgress(safeProgress, label);
+
+        const shouldUpdateUi =
+          safeProgress === 0 ||
+          safeProgress >= 100 ||
+          safeProgress - lastUploadUiProgressRef.current >= 5;
+        if (shouldUpdateUi) {
+          lastUploadUiProgressRef.current = safeProgress;
+          setVideoUploadProgress(safeProgress);
+          setVideoUploadMessage(label);
+          setReelUploadUi({ active: true, progress: safeProgress, phaseLabel: label });
+          void reelUploadNotification.updateProgress(safeProgress, label);
+        }
       };
 
       setReelUploadUi({ active: true, progress: 0, phaseLabel: t.profile.preparingUpload });

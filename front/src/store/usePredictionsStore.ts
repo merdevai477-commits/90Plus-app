@@ -15,6 +15,8 @@ import {
 /** Coalesce parallel remaining-count fetches (multiple screens mount at once). */
 let fetchUserDataInFlight: Promise<void> | null = null;
 let fetchUserPredictionsInFlight: Promise<void> | null = null;
+let fetchPredictionStatsInFlight: Promise<void> | null = null;
+let preloadProfilePredictionsInFlight: Promise<void> | null = null;
 
 async function persistProfilePredictionsCache(
     userId: string,
@@ -155,11 +157,23 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
     },
 
     preloadProfilePredictions: async (token: string, userId: string) => {
-        const { fetchUserPredictions, fetchPredictionStats } = get();
-        await Promise.all([
-            fetchUserPredictions(token, userId),
-            fetchPredictionStats(token, userId),
-        ]);
+        if (preloadProfilePredictionsInFlight) {
+            return preloadProfilePredictionsInFlight;
+        }
+
+        preloadProfilePredictionsInFlight = (async () => {
+            try {
+                const { fetchUserPredictions, fetchPredictionStats } = get();
+                await Promise.all([
+                    fetchUserPredictions(token, userId),
+                    fetchPredictionStats(token, userId),
+                ]);
+            } finally {
+                preloadProfilePredictionsInFlight = null;
+            }
+        })();
+
+        return preloadProfilePredictionsInFlight;
     },
 
     fetchUserData: async (token: string | null) => {
@@ -252,33 +266,43 @@ export const usePredictionsStore = create<PredictionsState>((set, get) => ({
     fetchPredictionStats: async (token: string | null, userId?: string) => {
         if (!token) return;
 
-        try {
-            const response = await fetchWithTimeout(`${getApiUrl()}/predictions/stats`, {
-                timeout: 30000,
-                retries: 1,
-                retryDelay: 1500,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-            });
+        if (fetchPredictionStatsInFlight) {
+            return fetchPredictionStatsInFlight;
+        }
 
-            if (response.ok) {
-                const data = await response.json();
-                if (data.success) {
-                    const stats = data.data;
-                    set({ stats });
-                    if (userId) {
-                        await persistProfilePredictionsCache(userId, {
-                            allPredictions: get().allPredictions,
-                            stats,
-                        });
+        fetchPredictionStatsInFlight = (async () => {
+            try {
+                const response = await fetchWithTimeout(`${getApiUrl()}/predictions/stats`, {
+                    timeout: 30000,
+                    retries: 1,
+                    retryDelay: 1500,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        const stats = data.data;
+                        set({ stats });
+                        if (userId) {
+                            await persistProfilePredictionsCache(userId, {
+                                allPredictions: get().allPredictions,
+                                stats,
+                            });
+                        }
                     }
                 }
+            } catch (error) {
+                console.error('Error fetching prediction stats:', error);
+            } finally {
+                fetchPredictionStatsInFlight = null;
             }
-        } catch (error) {
-            console.error('Error fetching prediction stats:', error);
-        }
+        })();
+
+        return fetchPredictionStatsInFlight;
     },
 
     submitPrediction: async (token, matchId, prediction, matchInfo) => {

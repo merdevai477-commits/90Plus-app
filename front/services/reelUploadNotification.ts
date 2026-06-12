@@ -41,6 +41,30 @@ function getPushTemplates() {
     return { ...en, ...tab } as typeof en;
 }
 
+/** Never surface raw React/internal errors in user-visible push notifications. */
+function sanitizeUploadFailureMessage(message: string): string {
+    const lang = useLanguageStore.getState().language;
+    const profileTab = (translations[lang] ?? translations.en).profile;
+    const fallback =
+        profileTab.videoUploadFailedMessage || translations.en.profile.videoUploadFailedMessage;
+    const trimmed = message?.trim() ?? '';
+    if (!trimmed) return fallback;
+
+    const internalPatterns = [
+        /maximum update depth exceeded/i,
+        /infinite (render )?loop/i,
+        /componentdidupdate/i,
+        /componentwillupdate/i,
+        /setstate inside/i,
+        /nested updates/i,
+    ];
+    if (internalPatterns.some((pattern) => pattern.test(trimmed))) {
+        return fallback;
+    }
+    if (trimmed.length > 200) return fallback;
+    return trimmed;
+}
+
 /** True when the app is running inside Expo Go (not a development/production build). */
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -270,10 +294,11 @@ export const reelUploadNotification = {
 
         try {
             const tpl = getPushTemplates();
+            const safeBody = sanitizeUploadFailureMessage(message);
             await Notifications.scheduleNotificationAsync({
                 content: {
                     title: tpl.reelUploadFailedTitle,
-                    body: message,
+                    body: safeBody,
                     sound: true,
                     data: { type: 'reel_upload_error' },
                     ...(Platform.OS === 'android' ? {
