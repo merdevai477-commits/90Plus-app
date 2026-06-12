@@ -38,7 +38,54 @@ export function teamMatchesStanding(
   standingTeamName: string,
   matchTeamName: string,
 ): boolean {
-  const a = standingTeamName.toLowerCase();
-  const b = matchTeamName.toLowerCase();
+  const a = standingTeamName.toLowerCase().trim();
+  const b = matchTeamName.toLowerCase().trim();
+  if (!a || !b) return false;
   return a.includes(b) || b.includes(a);
+}
+
+export interface MatchTeamRef {
+  id?: number;
+  name?: string;
+}
+
+export function standingRowMatchesTeam(
+  row: Standing,
+  team: MatchTeamRef,
+): boolean {
+  if (team.id != null && row.team?.id === team.id) return true;
+  if (team.name && row.team?.name) {
+    return teamMatchesStanding(row.team.name, team.name);
+  }
+  return false;
+}
+
+function groupContainsTeam(group: StandingsGroup, team: MatchTeamRef): boolean {
+  return group.standings.some((row) => standingRowMatchesTeam(row, team));
+}
+
+/**
+ * For group-stage tournaments (World Cup, etc.), keep only the group that
+ * contains both teams. Falls back to groups that contain either team, then
+ * the full table for single-group leagues.
+ */
+export function resolveStandingsGroupsForMatch(
+  groups: StandingsGroup[],
+  home: MatchTeamRef,
+  away: MatchTeamRef,
+): StandingsGroup[] {
+  if (!groups.length) return [];
+
+  const shared = groups.filter(
+    (g) => groupContainsTeam(g, home) && groupContainsTeam(g, away),
+  );
+  if (shared.length) return shared;
+
+  const partial = groups.filter(
+    (g) => groupContainsTeam(g, home) || groupContainsTeam(g, away),
+  );
+  if (partial.length) return partial;
+
+  if (groups.length === 1) return groups;
+  return groups;
 }

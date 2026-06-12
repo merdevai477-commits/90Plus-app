@@ -33,12 +33,24 @@ let _isLiquidGlassSupported = false;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const pkg = require('@callstack/liquid-glass') as {
-    LiquidGlassView: ComponentType<LiquidGlassViewProps>;
+    LiquidGlassView?: ComponentType<LiquidGlassViewProps> | { default: ComponentType<LiquidGlassViewProps> };
     LiquidGlassContainerView?: ComponentType<ViewProps & { spacing?: number }>;
-    isLiquidGlassSupported: boolean;
+    isLiquidGlassSupported?: boolean;
   };
-  _LiquidGlassView = pkg.LiquidGlassView ?? View;
-  _LiquidGlassContainerView = pkg.LiquidGlassContainerView ?? View;
+  const rawView = pkg.LiquidGlassView;
+  _LiquidGlassView =
+    typeof rawView === 'function'
+      ? rawView
+      : rawView && typeof rawView === 'object' && 'default' in rawView
+        ? (rawView.default ?? View)
+        : View;
+  const rawContainer = pkg.LiquidGlassContainerView;
+  _LiquidGlassContainerView =
+    typeof rawContainer === 'function'
+      ? rawContainer
+      : rawContainer && typeof rawContainer === 'object' && 'default' in rawContainer
+        ? (rawContainer.default ?? View)
+        : View;
   _isLiquidGlassSupported = pkg.isLiquidGlassSupported ?? false;
 } catch {
   // Native module not available — silently fall back to View / BlurView

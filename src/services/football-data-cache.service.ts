@@ -985,6 +985,9 @@ class FootballDataCacheService {
         });
 
         const isFinished = dbMatch && ['FT', 'AET', 'PEN'].includes(dbMatch.status);
+        const isLiveStatus =
+            dbMatch &&
+            ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(dbMatch.status);
         const fullData = dbMatch?.fullData as any;
 
         // ✅ If finished and we have events in fullData, use them (no API call, shared for all users)
@@ -1006,10 +1009,9 @@ class FootballDataCacheService {
             try {
                 const events = await footballService.getFixtureEvents(fixtureId);
 
-                // Empty results get a short TTL — same reasoning as lineups.
                 const isEmpty = !Array.isArray(events) || events.length === 0;
                 const ttl = isEmpty
-                    ? this.TTL.EMPTY
+                    ? (isLiveStatus ? 12_000 : this.TTL.EMPTY)
                     : (isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH);
                 const cacheEntry: MemoryCacheEntry<any> = {
                     data: events,

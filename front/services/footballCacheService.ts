@@ -337,6 +337,11 @@ class FootballCacheService {
     return cacheService.getStandings(leagueId, season);
   }
 
+  async invalidateStandings(leagueId: number, season: number): Promise<void> {
+    const key = `standings_${leagueId}_${season}`;
+    await cacheService.invalidate(key);
+  }
+
   /**
    * Cache head-to-head data
    */

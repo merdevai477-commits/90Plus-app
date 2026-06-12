@@ -33,9 +33,9 @@ export const TAB_ICON_SIZE = 20;
 export const TAB_LABEL_FONT_SIZE = 11;
 
 export const TAB_SPRING = {
-  damping: 20,
-  stiffness: 280,
-  mass: 0.75,
+  damping: 22,
+  stiffness: 420,
+  mass: 0.55,
 } as const;
 
 export const TAB_BLOB_SPAWN_SPRING = {

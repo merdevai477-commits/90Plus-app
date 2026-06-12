@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -90,6 +90,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   statusShort,
   elapsed,
   stoppage,
+  startTimestamp,
 }) => {
   const short = statusShort || '';
   const isHalftime = short === 'HT';
@@ -99,10 +100,39 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   const isUpcoming = !isLive && !isFinished && !isHalftime;
   const isStoppage = isLive && !!stoppage && stoppage > 0;
 
+  const [periodMinute, setPeriodMinute] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!isLive || !startTimestamp) {
+      setPeriodMinute(null);
+      return;
+    }
+    const compute = () => {
+      const now = Math.floor(Date.now() / 1000);
+      const start =
+        startTimestamp > 1_000_000_000_000
+          ? Math.floor(startTimestamp / 1000)
+          : startTimestamp;
+      let diffMin = Math.max(0, Math.floor((now - start) / 60));
+      if (short === '2H') diffMin += 45;
+      if (short === 'ET') diffMin += 90;
+      setPeriodMinute(diffMin);
+    };
+    compute();
+    const id = setInterval(compute, 5_000);
+    return () => clearInterval(id);
+  }, [isLive, startTimestamp, short]);
+
+  const effectiveElapsed = useMemo(() => {
+    if (elapsed == null) return periodMinute;
+    if (periodMinute == null) return elapsed;
+    return Math.max(elapsed, periodMinute);
+  }, [elapsed, periodMinute]);
+
   const minuteLabel = (() => {
     if (isHalftime) return 'HT';
     if (!isLive) return '';
-    const formatted = formatLiveMinuteDisplay(short, elapsed);
+    const formatted = formatLiveMinuteDisplay(short, effectiveElapsed);
     if (formatted) return formatted;
     if (short === '1H') return "1'";
     if (short === '2H') return "46'";

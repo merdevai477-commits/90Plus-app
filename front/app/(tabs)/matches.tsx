@@ -9,7 +9,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { FlashList } from '@shopify/flash-list';
-import BottomNav from './BottomNav';
 import { TEXT_PRIMARY, PURPLE_PRIMARY } from '../../constants/tokens';
 import { APP_BG } from '../../constants/ui';
 import { useMatchesData } from '../../hooks/useMatchesData';
@@ -385,6 +384,8 @@ const MatchRow = memo(function MatchRow({
               <View style={styles.liveMetaCol}>
                 {fixture.statusShort === 'HT' || fixture.statusShort === 'BT' ? (
                   <Text style={styles.minuteTxtLive}>{fixture.minute ?? fixture.statusShort}</Text>
+                ) : fixture.minute && !fixture.minute.includes(':') ? (
+                  <Text style={styles.minuteTxtLive}>{fixture.minute}</Text>
                 ) : fixture.startTimestamp && fixture.statusShort ? (
                   <LiveTimer
                     startTime={fixture.startTimestamp}
@@ -910,7 +911,11 @@ export default function MatchesHubScreenV2() {
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
 
   const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
-  const wcFetchEnabled = worldCupEnabled;
+  const wcFetchEnabled =
+    worldCupEnabled &&
+    (filter === 'WorldCup' || filter === 'All' || filter === 'Live');
+  const wcEnrichCorners =
+    wcFetchEnabled && (filter === 'WorldCup' || filter === 'Live');
 
   // Real matches data from backend — pause polling/WS when WC hook owns live updates
   const { groupedMatches, countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(
@@ -923,7 +928,13 @@ export default function MatchesHubScreenV2() {
     loading: worldCupLoading,
     error: worldCupError,
     refetch: refetchWorldCup,
-  } = useWorldCupMatches(selectedDate, wcFetchEnabled, worldCupLeagueId, false);
+  } = useWorldCupMatches(
+    selectedDate,
+    wcFetchEnabled,
+    worldCupLeagueId,
+    false,
+    wcEnrichCorners,
+  );
 
   // Modal state for "View All" league sheet (shared by both LeagueCard and CountryAccordion).
   const [viewAllLeagueId, setViewAllLeagueId] = useState<string | null>(null);
@@ -1995,8 +2006,6 @@ export default function MatchesHubScreenV2() {
           </View>
         </View>
       </Modal>
-
-      <BottomNav />
     </View>
   );
 }

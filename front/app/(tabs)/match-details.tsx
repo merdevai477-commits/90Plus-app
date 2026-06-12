@@ -45,7 +45,10 @@ import {
 import { hasLineupData, buildFallbackLineupsFromEvents } from '../../utils/matchLineupsFallback';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
 import type { StandingsGroup } from '../../utils/standingsHelpers';
-import { teamMatchesStanding } from '../../utils/standingsHelpers';
+import {
+  resolveStandingsGroupsForMatch,
+  standingRowMatchesTeam,
+} from '../../utils/standingsHelpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -131,12 +134,50 @@ const MatchDetailsScreen = () => {
 
   // Determine if the match is live based on fixture status or params
   const isLive = useCallback(() => {
+    const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
     if (fixture) {
-      const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
       return liveStatuses.includes(fixture.fixture.status.short);
     }
     return params.status === 'live';
   }, [fixture, params.status]);
+
+  const refreshLiveSnapshot = useCallback(async () => {
+    if (!fixtureId) return;
+    try {
+      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, {
+        skipCache: true,
+      });
+      if (bundle.fixture) setFixture(bundle.fixture);
+      setEvents(bundle.events ?? []);
+      if (hasLineupData(bundle.lineups)) {
+        setLineups(bundle.lineups);
+        loadedTabsRef.current.add('lineups');
+      }
+      if (hasApiStatistics(bundle.statistics)) {
+        setStatistics(bundle.statistics);
+        setStatsFromEvents(false);
+        loadedTabsRef.current.add('stats');
+      } else if (bundle.fixture && bundle.events?.length) {
+        const fromEvents = buildFallbackStatisticsFromEvents(bundle.fixture, bundle.events);
+        if (hasApiStatistics(fromEvents)) {
+          setStatistics(fromEvents);
+          setStatsFromEvents(true);
+          loadedTabsRef.current.add('stats');
+        }
+      }
+      const finishedStatuses = ['FT', 'AET', 'PEN'];
+      if (
+        bundle.fixture &&
+        finishedStatuses.includes(bundle.fixture.fixture.status.short)
+      ) {
+        loadedTabsRef.current.delete('stats');
+        loadedTabsRef.current.delete('lineups');
+        loadedTabsRef.current.delete('standings');
+      }
+    } catch {
+      // silent — next poll retries
+    }
+  }, [fixtureId]);
 
   // Live polling interval refs
   const livePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -253,54 +294,24 @@ const MatchDetailsScreen = () => {
     ]).start();
   }, [fixtureId]);
 
-  // Live match polling: fallback when WebSocket is disconnected (every 15s)
+  // Live match polling — fresh scores, clock, and events every 5s
   useEffect(() => {
     if (livePollingRef.current) {
       clearInterval(livePollingRef.current);
       livePollingRef.current = null;
     }
 
-    if (!isLive() || !fixtureId) return;
+    if (!fixtureId) return;
+    const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+    const shouldPoll =
+      params.status === 'live' ||
+      (fixture ? liveStatuses.includes(fixture.fixture.status.short) : false);
+    if (!shouldPoll) return;
 
-    const pollLiveData = async () => {
-      try {
-        const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, { skipCache: true });
-        if (bundle.events?.length) setEvents(bundle.events);
-        if (bundle.fixture) {
-          setFixture(bundle.fixture);
-
-          const finishedStatuses = ['FT', 'AET', 'PEN'];
-          if (finishedStatuses.includes(bundle.fixture.fixture.status.short)) {
-            if (livePollingRef.current) {
-              clearInterval(livePollingRef.current);
-              livePollingRef.current = null;
-            }
-            loadedTabsRef.current.delete('stats');
-            loadedTabsRef.current.delete('lineups');
-          }
-        }
-        if (hasLineupData(bundle.lineups)) {
-          setLineups(bundle.lineups);
-          loadedTabsRef.current.add('lineups');
-        }
-        if (hasApiStatistics(bundle.statistics)) {
-          setStatistics(bundle.statistics);
-          setStatsFromEvents(false);
-          loadedTabsRef.current.add('stats');
-        } else if (bundle.fixture && bundle.events?.length) {
-          const fromEvents = buildFallbackStatisticsFromEvents(bundle.fixture, bundle.events);
-          if (hasApiStatistics(fromEvents)) {
-            setStatistics(fromEvents);
-            setStatsFromEvents(true);
-            loadedTabsRef.current.add('stats');
-          }
-        }
-      } catch {
-        // Silent fail — background poll
-      }
-    };
-
-    livePollingRef.current = setInterval(pollLiveData, 3_000);
+    void refreshLiveSnapshot();
+    livePollingRef.current = setInterval(() => {
+      void refreshLiveSnapshot();
+    }, 5_000);
 
     return () => {
       if (livePollingRef.current) {
@@ -308,7 +319,12 @@ const MatchDetailsScreen = () => {
         livePollingRef.current = null;
       }
     };
-  }, [fixtureId, fixture?.fixture?.status?.short, params.status, isLive]);
+  }, [
+    fixtureId,
+    fixture?.fixture?.status?.short,
+    params.status,
+    refreshLiveSnapshot,
+  ]);
 
   const loadMatchDetails = async () => {
     if (!fixtureId) {
@@ -322,11 +338,13 @@ const MatchDetailsScreen = () => {
       if (!hasRouteShell) setLoading(true);
       setError(null);
 
-      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId);
+      const preferFresh = params.status === 'live';
+      const bundle = await ApiFootballService.getFixtureDetailsBundle(
+        fixtureId,
+        preferFresh ? { skipCache: true } : undefined,
+      );
 
-      if (bundle.events?.length) {
-        setEvents(bundle.events);
-      }
+      setEvents(bundle.events ?? []);
 
       if (bundle.fixture) {
         const details = bundle.fixture;
@@ -599,15 +617,29 @@ const MatchDetailsScreen = () => {
     setStandingsError(null);
     setStandingsUnavailable(false);
     try {
+      const preferFresh = force || isLive() || isFinishedMatch();
       const result = await ApiFootballService.getLeagueStandingsGrouped(
         fixture.league.id,
         fixture.league.season,
+        { skipCache: preferFresh },
       );
-      setStandingsGroups(result.groups);
+      const homeTeam = {
+        id: fixture.teams.home.id,
+        name: params.homeTeam || fixture.teams.home.name,
+      };
+      const awayTeam = {
+        id: fixture.teams.away.id,
+        name: params.awayTeam || fixture.teams.away.name,
+      };
+      const matchGroups = resolveStandingsGroupsForMatch(
+        result.groups,
+        homeTeam,
+        awayTeam,
+      );
+      setStandingsGroups(matchGroups);
       setStandingsSeasonUsed(result.available ? result.season : null);
-      if (!result.available) {
+      if (!result.available || matchGroups.length === 0) {
         setStandingsUnavailable(true);
-        loadedTabsRef.current.delete('standings');
       }
     } catch (err: any) {
       setStandingsError(err?.message || t.matchDetails.loadStandingsFailed);
@@ -615,7 +647,14 @@ const MatchDetailsScreen = () => {
     } finally {
       setStandingsLoading(false);
     }
-  }, [fixture, t.matchDetails.loadStandingsFailed]);
+  }, [
+    fixture,
+    params.homeTeam,
+    params.awayTeam,
+    isLive,
+    isFinishedMatch,
+    t.matchDetails.loadStandingsFailed,
+  ]);
 
   const loadVenueIfNeeded = useCallback(async () => {
     if (loadedTabsRef.current.has('stadium') || !fixture) return;
@@ -662,11 +701,37 @@ const MatchDetailsScreen = () => {
     if (!short) return;
     if (short === 'HT' || short === 'FT' || short === 'AET' || short === 'PEN') {
       loadedTabsRef.current.delete('stats');
+      if (short === 'FT' || short === 'AET' || short === 'PEN') {
+        loadedTabsRef.current.delete('standings');
+      }
       if (activeTab === 'stats') {
         loadStatsIfNeeded();
       }
+      if (
+        (short === 'FT' || short === 'AET' || short === 'PEN') &&
+        activeTab === 'standings'
+      ) {
+        void loadStandingsIfNeeded(true);
+      }
     }
-  }, [fixture?.fixture?.status?.short, activeTab, loadStatsIfNeeded]);
+  }, [fixture?.fixture?.status?.short, activeTab, loadStatsIfNeeded, loadStandingsIfNeeded]);
+
+  // Standings need fixture league ids — load when fixture arrives while tab is open
+  useEffect(() => {
+    if (activeTab !== 'standings' || !fixture) return;
+    if (loadedTabsRef.current.has('standings')) return;
+    void loadStandingsIfNeeded();
+  }, [activeTab, fixture?.fixture?.id, loadStandingsIfNeeded]);
+
+  // Refresh group table during live matches (updates after goals)
+  useEffect(() => {
+    if (!isLive() || !fixtureId || activeTab !== 'standings') return;
+    const interval = setInterval(() => {
+      loadedTabsRef.current.delete('standings');
+      void loadStandingsIfNeeded(true);
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [fixtureId, isLive, activeTab, loadStandingsIfNeeded]);
 
   // Preload lineups for live matches so the tab is ready when opened
   useEffect(() => {
@@ -1293,9 +1358,17 @@ const MatchDetailsScreen = () => {
           <Text style={[styles.standingsHeaderText, { width: 30 }]}>Pts</Text>
         </View>
         {rows.map((team: any, index: number) => {
-          const isHome = teamMatchesStanding(team.team.name, params.homeTeam);
-          const isAway = teamMatchesStanding(team.team.name, params.awayTeam);
-          const isHighlighted = isHome || isAway;
+          const homeRef = {
+            id: fixture?.teams?.home?.id,
+            name: params.homeTeam || fixture?.teams?.home?.name,
+          };
+          const awayRef = {
+            id: fixture?.teams?.away?.id,
+            name: params.awayTeam || fixture?.teams?.away?.name,
+          };
+          const isHighlighted =
+            standingRowMatchesTeam(team, homeRef) ||
+            standingRowMatchesTeam(team, awayRef);
 
           return (
             <View
@@ -1333,11 +1406,11 @@ const MatchDetailsScreen = () => {
         )}
         {standingsGroups.map((groupBlock, groupIndex) => (
           <View key={`${groupBlock.group}-${groupIndex}`} style={styles.standingsContainer}>
-            {standingsGroups.length > 1 && (
+            {groupBlock.group !== 'Table' && (
               <Text style={styles.standingsGroupTitle}>
                 {(t.matchDetails.standingsGroupLabel || 'Group {name}').replace(
                   '{name}',
-                  groupBlock.group,
+                  groupBlock.group.replace(/^Group\s+/i, ''),
                 )}
               </Text>
             )}

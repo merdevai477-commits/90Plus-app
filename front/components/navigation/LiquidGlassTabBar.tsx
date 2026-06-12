@@ -2,7 +2,7 @@
  * Premium floating Liquid Glass tab bar — pill bubble with icon + label.
  */
 
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
@@ -106,7 +106,9 @@ function TabIcon({
 }
 
 interface TabSlotProps {
-  isHighlighted: boolean;
+  index: number;
+  activeIndex: number;
+  highlightIndex: number;
   accent: string;
   icon: LiquidTabIconKind;
   profileAvatarUrl?: string | null;
@@ -118,12 +120,18 @@ interface TabSlotProps {
 }
 
 const TabSlot = memo(function TabSlot({
-  isHighlighted,
+  index,
+  activeIndex,
+  highlightIndex,
   accent,
   icon,
   profileAvatarUrl,
   gesture,
 }: TabSlotProps) {
+  const isHighlighted = highlightIndex === index;
+  const isTransitioning = highlightIndex !== activeIndex;
+  const hideIcon =
+    isHighlighted || (isTransitioning && activeIndex === index);
   const color = isHighlighted ? accent || ICON_ACTIVE_FALLBACK : ICON_INACTIVE;
 
   return (
@@ -133,7 +141,7 @@ const TabSlot = memo(function TabSlot({
         accessibilityRole="button"
         accessibilityState={{ selected: isHighlighted }}
       >
-        <View style={[s.iconContainer, isHighlighted && s.iconHidden]}>
+        <View style={[s.iconContainer, hideIcon && s.iconHidden]}>
           <TabIcon
             icon={icon}
             color={color}
@@ -161,8 +169,10 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
   );
 
   const [highlightIndex, setHighlightIndex] = useState(activeIndex);
+  const pendingIndexRef = useRef<number | null>(null);
 
   const handleHighlightChange = useCallback((index: number) => {
+    pendingIndexRef.current = index;
     setHighlightIndex(index);
   }, []);
 
@@ -175,7 +185,13 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
   });
 
   useEffect(() => {
-    setHighlightIndex(activeIndex);
+    if (
+      pendingIndexRef.current === null ||
+      pendingIndexRef.current === activeIndex
+    ) {
+      pendingIndexRef.current = null;
+      setHighlightIndex(activeIndex);
+    }
   }, [activeIndex]);
 
   const activeTab = LIQUID_TAB_ITEMS[highlightIndex];
@@ -236,7 +252,9 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
           {LIQUID_TAB_ITEMS.map((tab, index) => (
             <TabSlot
               key={tab.id}
-              isHighlighted={highlightIndex === index}
+              index={index}
+              activeIndex={activeIndex}
+              highlightIndex={highlightIndex}
               accent={tab.accent}
               icon={tab.icon}
               profileAvatarUrl={tab.icon === 'profile' ? profileAvatarUrl : undefined}

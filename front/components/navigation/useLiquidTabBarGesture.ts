@@ -125,12 +125,17 @@ export function useLiquidTabBarGesture({
   const isDragging = useSharedValue(false);
   const dragIndex = useSharedValue(activeIndex);
   const dragOriginCenterX = useSharedValue(0);
+  const pendingTabIndex = useSharedValue(-1);
 
   const bubbleTop =
     (layout.navHeight - TAB_BUBBLE_HEIGHT) / 2 + TAB_BUBBLE_VERTICAL_OFFSET;
   const bubbleRadius = TAB_BUBBLE_HEIGHT / 2;
 
   useEffect(() => {
+    if (pendingTabIndex.value >= 0 && pendingTabIndex.value !== activeIndex) {
+      return;
+    }
+    pendingTabIndex.value = -1;
     springToTab(
       activeIndex,
       navWidth,
@@ -148,6 +153,7 @@ export function useLiquidTabBarGesture({
     blobCenterX,
     blobWidth,
     dragIndex,
+    pendingTabIndex,
   ]);
 
   const triggerSelectionHaptic = useCallback(() => {
@@ -248,6 +254,9 @@ export function useLiquidTabBarGesture({
         .onEnd(() => {
           'worklet';
           const targetIndex = dragIndex.value;
+          isDragging.value = false;
+          pendingTabIndex.value = targetIndex;
+          runOnJS(finishDrag)(targetIndex);
           springToTab(
             targetIndex,
             navWidth,
@@ -258,8 +267,6 @@ export function useLiquidTabBarGesture({
           );
           blobLift.value = withSpring(0, TAB_SPRING);
           blobScale.value = withSpring(1, TAB_SPRING);
-          isDragging.value = false;
-          runOnJS(finishDrag)(targetIndex);
         })
         .onFinalize((_, success) => {
           'worklet';
@@ -291,6 +298,8 @@ export function useLiquidTabBarGesture({
           if (index === activeIndex) {
             return;
           }
+          pendingTabIndex.value = index;
+          runOnJS(finishDrag)(index);
           runOnJS(notifyHighlight)(index);
           runOnJS(triggerSelectionHaptic)();
           springToTab(
@@ -301,7 +310,6 @@ export function useLiquidTabBarGesture({
             blobCenterX,
             blobWidth,
           );
-          runOnJS(finishDrag)(index);
         });
 
       return Gesture.Exclusive(tap, panAfterLongPress);
@@ -323,6 +331,7 @@ export function useLiquidTabBarGesture({
       prefetchTab,
       triggerImpactHaptic,
       triggerSelectionHaptic,
+      pendingTabIndex,
     ],
   );
 

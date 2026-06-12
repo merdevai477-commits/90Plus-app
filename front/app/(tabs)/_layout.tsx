@@ -3,11 +3,14 @@ import { Home, User, Video, Brain, BarChart2 } from "lucide-react-native";
 import React, { useEffect } from "react";
 import { Animated, BackHandler, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import BottomNav from './BottomNav';
+import BottomNav from '@/components/navigation/BottomNav';
 
 const TAB_STACK_OPTIONS = {
   headerShown: false,
   contentStyle: { backgroundColor: '#000' },
+  // Keep inactive tabs mounted but frozen — faster tab switches, less JS work on blur.
+  lazy: true,
+  freezeOnBlur: true,
 } as const;
 
 export default function TabLayout() {
@@ -187,12 +190,6 @@ export default function TabLayout() {
         />
         <Tabs.Screen
           name="aboutUs"
-          options={{
-            href: null,
-          }}
-        />
-        <Tabs.Screen
-          name="BottomNav"
           options={{
             href: null,
           }}

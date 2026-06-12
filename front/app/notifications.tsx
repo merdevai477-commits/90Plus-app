@@ -38,7 +38,7 @@ import {
     Award,
     Video,
 } from 'lucide-react-native';
-import BottomNav from './(tabs)/BottomNav';
+import BottomNav from '@/components/navigation/BottomNav';
 import {
     TEXT_PRIMARY,
     TEXT_MUTED,

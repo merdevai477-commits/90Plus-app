@@ -1,13 +1,11 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { memo, useCallback, useEffect, useMemo } from 'react';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  LIQUID_TAB_ITEMS,
-  LiquidGlassTabBar,
-} from '../../components/navigation/LiquidGlassTabBar';
-import { useProfileTabAvatar } from '../../components/navigation/useProfileTabAvatar';
-import { prefetchRoute, prefetchRoutes } from '../../utils/routePrefetcher';
+import { prefetchRoute, prefetchRoutes } from '@/utils/routePrefetcher';
+
+import { LIQUID_TAB_ITEMS, LiquidGlassTabBar } from './LiquidGlassTabBar';
+import { useProfileTabAvatar } from './useProfileTabAvatar';
 
 function resolveActiveIndex(pathname: string | null): number {
   const p = (pathname ?? '').toLowerCase();
@@ -41,11 +39,11 @@ function resolveActiveIndex(pathname: string | null): number {
   return found >= 0 ? found : 0;
 }
 
-const BottomNav = () => {
+const BottomNav = memo(function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const profileAvatarUrl = useProfileTabAvatar();
+  const profileAvatarUrl = useProfileTabAvatar(pathname);
 
   const isChat = pathname?.includes('chat');
   const isQuiz = pathname?.includes('quiz');
@@ -78,7 +76,7 @@ const BottomNav = () => {
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      router.replace(tab.route as any);
+      router.navigate(tab.route as any);
     },
     [activeIndex, pathname, router],
   );
@@ -86,15 +84,15 @@ const BottomNav = () => {
   const handleTabPressIn = useCallback(
     (index: number) => {
       if (index === activeIndex) return;
-    const tab = LIQUID_TAB_ITEMS[index];
-    if (!tab) return;
+      const tab = LIQUID_TAB_ITEMS[index];
+      if (!tab) return;
 
-    prefetchRoute(String(tab.route)).catch(() => {});
-    const adjacent = [LIQUID_TAB_ITEMS[index - 1], LIQUID_TAB_ITEMS[index + 1]]
-      .filter(Boolean)
-      .map((t) => String(t!.route));
-    if (adjacent.length > 0) prefetchRoutes(adjacent).catch(() => {});
-  },
+      prefetchRoute(String(tab.route)).catch(() => {});
+      const adjacent = [LIQUID_TAB_ITEMS[index - 1], LIQUID_TAB_ITEMS[index + 1]]
+        .filter(Boolean)
+        .map((t) => String(t!.route));
+      if (adjacent.length > 0) prefetchRoutes(adjacent).catch(() => {});
+    },
     [activeIndex],
   );
 
@@ -109,6 +107,6 @@ const BottomNav = () => {
       onTabPressIn={handleTabPressIn}
     />
   );
-};
+});
 
 export default BottomNav;

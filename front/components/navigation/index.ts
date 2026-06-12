@@ -1,3 +1,4 @@
+export { default as BottomNav } from './BottomNav';
 export { LiquidGlassTabBar, LIQUID_TAB_ITEMS } from './LiquidGlassTabBar';
 export { LiquidGlassBlob } from './LiquidGlassBlob';
 export { useLiquidTabBarGesture } from './useLiquidTabBarGesture';

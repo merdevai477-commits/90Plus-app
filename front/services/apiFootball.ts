@@ -1324,6 +1324,7 @@ export const ApiFootballService = {
   async getFixtureById(fixtureId: number, options?: { skipCache?: boolean }): Promise<Fixture | null> {
     // ✅ 1. Check offline storage first (permanent, no token needed)
     const { offlineDataService } = await import('./offlineDataService');
+    if (!options?.skipCache) {
     const offlineMatch = await offlineDataService.getFinishedMatch(fixtureId);
     if (offlineMatch) {
       console.log(`📦 Match ${fixtureId} from offline storage`);
@@ -1335,6 +1336,7 @@ export const ApiFootballService = {
         goals: offlineMatch.goals,
         score: offlineMatch.score,
       } as Fixture;
+    }
     }
 
     // ✅ 2. Try cache first (skip during live polling for fresh scores)
@@ -1366,12 +1368,16 @@ export const ApiFootballService = {
    * Get match events (goals, cards, substitutions)
    * Uses backend permanent cache for finished matches
    */
-  async getFixtureEvents(fixtureId: number): Promise<FixtureEvent[]> {
+  async getFixtureEvents(
+    fixtureId: number,
+    options?: { skipCache?: boolean },
+  ): Promise<FixtureEvent[]> {
     try {
-      // Use cached endpoint (permanent for finished matches)
+      if (options?.skipCache) {
+        return await fetchFromProxy<FixtureEvent[]>(`/fixtures/${fixtureId}/events`);
+      }
       return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`);
     } catch (error) {
-      // Fallback to regular endpoint
       return fetchFromProxy<FixtureEvent[]>(`/fixtures/${fixtureId}/events`);
     }
   },
@@ -1395,7 +1401,7 @@ export const ApiFootballService = {
           this.getFixtureById(fixtureId, { skipCache: true }),
           this.getFixtureLineups(fixtureId, { skipCache: true }),
           this.getFixtureStatistics(fixtureId, { skipCache: true }),
-          this.getFixtureEvents(fixtureId),
+          this.getFixtureEvents(fixtureId, { skipCache: true }),
         ]);
         let venue: Venue | null = (fixture?.fixture?.venue as Venue) ?? null;
         if (venue?.id) {
@@ -1490,6 +1496,7 @@ export const ApiFootballService = {
   async getLeagueStandingsGrouped(
     leagueId: number,
     season?: number,
+    options?: { skipCache?: boolean },
   ): Promise<{ groups: import('../utils/standingsHelpers').StandingsGroup[]; season: number; available: boolean }> {
     const {
       standingsSeasonCandidates,
@@ -1498,13 +1505,8 @@ export const ApiFootballService = {
     } = await import('../utils/standingsHelpers');
 
     for (const trySeason of standingsSeasonCandidates(season)) {
-      const cached = await footballCacheService.getStandings(leagueId, trySeason);
-      if (cached?.length) {
-        return {
-          groups: [{ group: 'Table', standings: cached }],
-          season: trySeason,
-          available: true,
-        };
+      if (options?.skipCache) {
+        await footballCacheService.invalidateStandings(leagueId, trySeason).catch(() => {});
       }
 
       try {
@@ -1520,6 +1522,17 @@ export const ApiFootballService = {
         }
       } catch (error) {
         console.error(`Error fetching standings for league ${leagueId} season ${trySeason}:`, error);
+      }
+
+      if (!options?.skipCache) {
+        const cached = await footballCacheService.getStandings(leagueId, trySeason);
+        if (cached?.length) {
+          return {
+            groups: [{ group: 'Table', standings: cached }],
+            season: trySeason,
+            available: true,
+          };
+        }
       }
     }
 

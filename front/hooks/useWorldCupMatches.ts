@@ -26,7 +26,7 @@ const POLL_LIVE_MS = 3_000;
 const POLL_TODAY_MS = 5_000;
 const POLL_CAMPAIGN_LIVE_MS = 3_000;
 const POLL_CAMPAIGN_TODAY_MS = 4_000;
-const CORNERS_REFRESH_MS = 9_000;
+const CORNERS_REFRESH_MS = 20_000;
 
 const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
 const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
@@ -116,6 +116,7 @@ export function useWorldCupMatches(
   enabled: boolean,
   leagueId: number,
   campaignMode = false,
+  enrichCorners = true,
 ): UseWorldCupMatchesResult {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(false);
@@ -160,7 +161,7 @@ export function useWorldCupMatches(
         list = mergeLive(list, live, leagueId);
       }
       const liveNow = list.some((m) => m.status === 'live');
-      if (liveNow) {
+      if (liveNow && enrichCorners) {
         const now = Date.now();
         if (now - lastCornersFetchRef.current >= CORNERS_REFRESH_MS) {
           lastCornersFetchRef.current = now;
@@ -193,7 +194,7 @@ export function useWorldCupMatches(
       setLoading(false);
       fetchingRef.current = false;
     }
-  }, [dateString, enabled, isToday, leagueId, selectedDate]);
+  }, [dateString, enabled, enrichCorners, isToday, leagueId, selectedDate]);
 
   useEffect(() => {
     void load();
