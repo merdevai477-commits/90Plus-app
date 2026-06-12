@@ -200,6 +200,32 @@
     );
   }
 
+  function bindNativeExternalLinks() {
+    if (window.__90plusNewsPageClickBound) return;
+    window.__90plusNewsPageClickBound = true;
+    document.addEventListener(
+      'click',
+      function (e) {
+        var link = e.target && e.target.closest ? e.target.closest('a') : null;
+        if (!link || !link.href) return;
+        try {
+          var host = new URL(link.href).hostname.toLowerCase();
+          if (host === '90plus.pro' || host === 'www.90plus.pro') return;
+        } catch (_err) {
+          return;
+        }
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({ type: 'OPEN_EXTERNAL', url: link.href }),
+          );
+        }
+      },
+      true,
+    );
+  }
+
   function renderMedium(article) {
     var summary = article.description || '';
     return (
@@ -351,5 +377,6 @@
   });
 
   applyLanguage(readStoredLang());
+  bindNativeExternalLinks();
   loadNews();
 })();

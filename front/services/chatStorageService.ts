@@ -12,6 +12,7 @@ import { API_CONFIG } from '../constants/theme';
 const USER_ID_KEY = API_CONFIG.userIdKey;          // 'ai-chat-user-id'
 const LAST_CONV_KEY = 'ai-chat-last-conversation-id';
 const SESSION_CACHE_KEY = '@chat_session_cache_v1';
+const INPUT_DRAFT_KEY = '@chat_input_draft_v1';
 const SESSION_CACHE_TTL_MS = 30 * 60 * 1000;
 
 export interface CachedChatMessage {
@@ -104,6 +105,35 @@ export const Storage = {
     async clearSessionCache(): Promise<void> {
         try {
             await AsyncStorage.removeItem(SESSION_CACHE_KEY);
+        } catch {
+            // non-fatal
+        }
+    },
+
+    async saveInputDraft(text: string): Promise<void> {
+        try {
+            const trimmed = text.trim();
+            if (!trimmed) {
+                await AsyncStorage.removeItem(INPUT_DRAFT_KEY);
+                return;
+            }
+            await AsyncStorage.setItem(INPUT_DRAFT_KEY, text);
+        } catch {
+            // non-fatal
+        }
+    },
+
+    async loadInputDraft(): Promise<string> {
+        try {
+            return (await AsyncStorage.getItem(INPUT_DRAFT_KEY)) ?? '';
+        } catch {
+            return '';
+        }
+    },
+
+    async clearInputDraft(): Promise<void> {
+        try {
+            await AsyncStorage.removeItem(INPUT_DRAFT_KEY);
         } catch {
             // non-fatal
         }

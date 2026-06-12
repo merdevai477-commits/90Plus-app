@@ -1,6 +1,7 @@
 import {
   isAllowedWorldCupNewsUrl,
   isNinetyPlusNewsUrl,
+  normalizeExternalNewsUrl,
   parseNewsWebViewMessage,
 } from '../worldCupNewsWebView';
 
@@ -11,6 +12,16 @@ describe('worldCupNewsWebView', () => {
     expect(isNinetyPlusNewsUrl('https://www.aljazeera.net/sport')).toBe(false);
     expect(isAllowedWorldCupNewsUrl('about:blank')).toBe(true);
     expect(isAllowedWorldCupNewsUrl('https://www.aljazeera.net/sport')).toBe(false);
+  });
+
+  it('normalizes external news URLs to https', () => {
+    expect(normalizeExternalNewsUrl('http://www.aljazeera.net/sport')).toBe(
+      'https://www.aljazeera.net/sport',
+    );
+    expect(normalizeExternalNewsUrl('www.aljazeera.net/sport')).toBe(
+      'https://www.aljazeera.net/sport',
+    );
+    expect(normalizeExternalNewsUrl('about:blank')).toBeNull();
   });
 
   it('parses external open messages from injected JS', () => {

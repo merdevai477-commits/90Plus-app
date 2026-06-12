@@ -216,7 +216,10 @@ export class ProfileErrorBoundary extends Component<Props, State> {
       try {
         const { captureException } = require('../../services/sentry.service');
         captureException(new Error(`Infinite render loop: ${renderCount} renders`), {
-          tags: { errorBoundary: 'ProfileScreen', type: 'infinite_loop' },
+          tags: {
+            errorBoundary: this.props.screenLabel ?? 'ProfileScreen',
+            type: 'infinite_loop',
+          },
           level: 'fatal',
         });
       } catch { /* Sentry not available */ }

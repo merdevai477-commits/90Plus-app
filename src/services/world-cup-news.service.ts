@@ -95,8 +95,21 @@ function normalizeArticle(
   language: NewsLanguage,
 ): WorldCupNewsArticle | null {
   const title = (article.title ?? '').trim();
-  const url = (article.url ?? '').trim();
+  let url = (article.url ?? '').trim();
   if (!title || !url) return null;
+
+  try {
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+      url = `https://${url}`;
+    }
+    const parsed = new URL(url);
+    if (parsed.protocol === 'http:') {
+      parsed.protocol = 'https:';
+      url = parsed.toString();
+    }
+  } catch {
+    return null;
+  }
 
   const id = articleId(url);
   const originalImage = article.urlToImage?.trim() || null;

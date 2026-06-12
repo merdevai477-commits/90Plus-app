@@ -24,7 +24,10 @@ export interface CooldownTimerResult {
   minutesRemaining: number;
 }
 
-export function useCooldownTimer(cooldown: CooldownInfo | null | undefined): CooldownTimerResult {
+export function useCooldownTimer(
+  cooldown: CooldownInfo | null | undefined,
+  enabled = true,
+): CooldownTimerResult {
   const getRemaining = () => {
     if (!cooldown || cooldown.canChange) {
       return { days: 0, hours: 0, minutes: 0, expired: true };
@@ -52,6 +55,11 @@ export function useCooldownTimer(cooldown: CooldownInfo | null | undefined): Coo
 
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
+    if (!enabled) {
+      setState({ days: 0, hours: 0, minutes: 0, expired: true });
+      return;
+    }
+
     setState(getRemaining());
 
     if (!cooldown || cooldown.canChange) return;
@@ -67,7 +75,13 @@ export function useCooldownTimer(cooldown: CooldownInfo | null | undefined): Coo
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [cooldown?.canChange, cooldown?.nextAllowedDate, cooldown?.daysRemaining, cooldown?.hoursRemaining]);
+  }, [
+    enabled,
+    cooldown?.canChange,
+    cooldown?.nextAllowedDate,
+    cooldown?.daysRemaining,
+    cooldown?.hoursRemaining,
+  ]);
 
   const buildText = () => {
     if (state.expired) return '';

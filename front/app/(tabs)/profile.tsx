@@ -529,6 +529,9 @@ function ProfileScreen() {
   // UX Fix 3: Cooldown block modal state
   const [cooldownBlockVisible, setCooldownBlockVisible] = useState(false);
   const [cooldownBlockType, setCooldownBlockType] = useState<'avatar' | 'cover' | 'reel'>('avatar');
+  const handleCooldownBlockClose = useCallback(() => {
+    setCooldownBlockVisible(false);
+  }, []);
 
   // UX Fix 4: Reel status polling
   const [pollingReelId, setPollingReelId] = useState<string | null>(null);
@@ -1899,7 +1902,7 @@ function ProfileScreen() {
           : cooldowns?.reelUpload ?? null
         }
         type={cooldownBlockType}
-        onClose={() => setCooldownBlockVisible(false)}
+        onClose={handleCooldownBlockClose}
       />
 
       {/* Modals */}

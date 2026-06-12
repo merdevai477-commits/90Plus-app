@@ -5,8 +5,8 @@
  * Displays remaining time with a live countdown.
  */
 
-import React from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCooldownTimer, CooldownInfo } from '../../hooks/useCooldownTimer';
@@ -25,12 +25,36 @@ const TYPE_LABELS: Record<Props['type'], string> = {
 };
 
 export const CooldownBlockModal: React.FC<Props> = ({ visible, cooldown, type, onClose }) => {
-  const { remainingText } = useCooldownTimer(cooldown);
+  const closingRef = useRef(false);
+  const { remainingText } = useCooldownTimer(visible ? cooldown : null, visible);
+
+  useEffect(() => {
+    if (visible) {
+      closingRef.current = false;
+    }
+  }, [visible]);
+
+  const handleClose = useCallback(() => {
+    if (!visible || closingRef.current) return;
+    closingRef.current = true;
+    onClose();
+  }, [visible, onClose]);
+
+  if (!visible) {
+    return null;
+  }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
+    <Modal
+      visible
+      transparent
+      animationType="fade"
+      onRequestClose={handleClose}
+      statusBarTranslucent
+      presentationStyle="overFullScreen"
+    >
+      <Pressable style={styles.overlay} onPress={handleClose}>
+        <Pressable style={styles.container} onPress={(e) => e.stopPropagation()}>
           <LinearGradient
             colors={['rgba(255,165,0,0.15)', 'rgba(255,69,0,0.1)']}
             style={StyleSheet.absoluteFill}
@@ -51,11 +75,11 @@ export const CooldownBlockModal: React.FC<Props> = ({ visible, cooldown, type, o
             <Text style={styles.subtitle}>يرجى الانتظار قبل المحاولة مجدداً</Text>
           )}
 
-          <TouchableOpacity style={styles.btn} onPress={onClose} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.btn} onPress={handleClose} activeOpacity={0.8}>
             <Text style={styles.btnText}>حسناً</Text>
           </TouchableOpacity>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 };

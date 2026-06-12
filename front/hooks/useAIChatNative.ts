@@ -309,6 +309,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
 
   const messagesRef = useRef(messages);
+  const inputValueRef = useRef('');
   const currentConversationIdRef = useRef<string | null>(null);
   const isLoadingRef = useRef(false);
   const streamingMessageIdRef = useRef<string | null>(null);
@@ -329,12 +330,17 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     streamingMessageIdRef.current = streamingMessageId;
   }, [streamingMessageId]);
 
+  useEffect(() => {
+    inputValueRef.current = inputValue;
+  }, [inputValue]);
+
   const isProtectedSession = useCallback((): boolean => {
     return (
       isLoadingRef.current ||
       streamingMessageIdRef.current != null ||
       activeAssistantMessageIdRef.current != null ||
-      messagesRef.current.length > 1
+      messagesRef.current.length > 1 ||
+      inputValueRef.current.trim().length > 0
     );
   }, []);
 
@@ -347,15 +353,22 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       if (!mounted) return;
       userIdRef.current = id;
 
-      const cached = await Storage.loadSessionCache();
+      const [cached, draft] = await Promise.all([
+        Storage.loadSessionCache(),
+        Storage.loadInputDraft(),
+      ]);
       if (cached && mounted) {
+        const restored = cached.messages.map((m) => ({
+          ...m,
+          isStreaming: false,
+        }));
+        messagesRef.current = restored;
         setCurrentConversationId(cached.conversationId);
-        setMessages(
-          cached.messages.map((m) => ({
-            ...m,
-            isStreaming: false,
-          })),
-        );
+        setMessages(restored);
+      }
+      if (draft.trim() && mounted) {
+        inputValueRef.current = draft;
+        setInputValue(draft);
       }
 
       // Run both independent calls in parallel — saves ~300–500 ms on every
@@ -384,16 +397,27 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     }
 
     setChatSessionActive(true);
+    const payload = {
+      conversationId: convId,
+      messages: messages.map(({ id, role, text, time }) => ({ id, role, text, time })),
+      cachedAt: Date.now(),
+    };
+    // Persist quickly so tab remounts / iOS keyboard cycles do not flash welcome.
+    const delay = isLoading ? 400 : 80;
     const timer = setTimeout(() => {
-      Storage.saveSessionCache({
-        conversationId: convId,
-        messages: messages.map(({ id, role, text, time }) => ({ id, role, text, time })),
-        cachedAt: Date.now(),
-      }).catch(() => {});
-    }, 400);
+      Storage.saveSessionCache(payload).catch(() => {});
+    }, delay);
 
     return () => clearTimeout(timer);
-  }, [messages, currentConversationId]);
+  }, [messages, currentConversationId, isLoading]);
+
+  // Keep composer draft across remounts while the user is still typing.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Storage.saveInputDraft(inputValue).catch(() => {});
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [inputValue]);
 
   // ─── XHR abort ───────────────────────────────────────────────────────────
 
@@ -487,9 +511,10 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
   const loadConversationMessages = useCallback(async (
     conversationId: string,
-    opts?: { force?: boolean },
+    opts?: { replaceLocal?: boolean },
   ) => {
-    if (!opts?.force && isProtectedSession()) {
+    const replaceLocal = opts?.replaceLocal === true;
+    if (!replaceLocal && isProtectedSession()) {
       logger.info('[AIChat] loadConversationMessages skipped — protected local session');
       return;
     }
@@ -516,7 +541,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         })),
       ];
 
-      if (!opts?.force && isProtectedSession()) {
+      if (!replaceLocal && isProtectedSession()) {
         logger.info('[AIChat] loadConversationMessages skipped after fetch — session became active');
         return;
       }
@@ -547,7 +572,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         }
 
         if (!isProtectedSession()) {
-          await loadConversationMessages(target.id, { force: true });
+          await loadConversationMessages(target.id);
         }
 
         await Storage.saveLastConversationId(currentConversationIdRef.current ?? target.id);
@@ -587,7 +612,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       if (created) {
         setCurrentConversationId(created.id);
         setConversations([created]);
-        setMessages(getInitialMessages());
+        if (!isProtectedSession()) {
+          setMessages(getInitialMessages());
+        }
         await Storage.saveLastConversationId(created.id);
         setError(null);
       } else {
@@ -1024,11 +1051,21 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       isStreaming: true,
     };
     if (historyBase) {
-      setMessages([...historyBase, userMsg, assistantPlaceholder]);
+      const next = [...historyBase, userMsg, assistantPlaceholder];
+      messagesRef.current = next;
+      setMessages(next);
     } else {
-      setMessages(prev => [...prev, userMsg, assistantPlaceholder]);
+      setMessages(prev => {
+        const next = [...prev, userMsg, assistantPlaceholder];
+        messagesRef.current = next;
+        return next;
+      });
     }
+    inputValueRef.current = '';
     setInputValue('');
+    Storage.clearInputDraft().catch(() => {});
+    isLoadingRef.current = true;
+    streamingMessageIdRef.current = aiMessageId;
     setIsLoading(true);
     setIsThinking(true);
     setMessagesRemaining(prev => (prev === null ? prev : Math.max(0, prev - 1)));
@@ -1166,6 +1203,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     stopTypingPipeline();
     setMessages(getInitialMessages());
     setInputValue('');
+    Storage.clearInputDraft().catch(() => {});
     setIsLoading(false);
     setIsThinking(false);
     setIsRetrying(false);
@@ -1194,7 +1232,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     setStreamingMessageId(null);
     retryCountRef.current = 0;
     setCurrentConversationId(conversationId);
-    await loadConversationMessages(conversationId, { force: true });
+    await loadConversationMessages(conversationId, { replaceLocal: true });
     await Storage.saveLastConversationId(conversationId);
   }, [loadConversationMessages, abortXHR, stopTypingPipeline]);
 
@@ -1259,7 +1297,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         const next = after.find(c => c?.id?.trim());
         if (next?.id) {
           setCurrentConversationId(next.id);
-          await loadConversationMessages(next.id);
+          await loadConversationMessages(next.id, { replaceLocal: true });
         } else {
           const created = await createConversation();
           if (created) {

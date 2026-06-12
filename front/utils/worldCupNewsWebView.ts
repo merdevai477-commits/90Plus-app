@@ -2,6 +2,33 @@ export const WORLD_CUP_NEWS_URL = 'https://90plus.pro/news';
 
 const NINETY_PLUS_HOSTS = new Set(['90plus.pro', 'www.90plus.pro']);
 
+/** WebView may only load pages on our domain — everything else opens in the system browser. */
+export const WORLD_CUP_NEWS_ORIGIN_WHITELIST = [
+  'https://90plus.pro',
+  'https://www.90plus.pro',
+] as const;
+
+/** Upgrade http → https and ensure a valid https URL before opening externally. */
+export function normalizeExternalNewsUrl(raw: string): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed || trimmed === 'about:blank') return null;
+
+  try {
+    let href = trimmed;
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(href)) {
+      href = `https://${href}`;
+    }
+    const parsed = new URL(href);
+    if (parsed.protocol === 'http:') {
+      parsed.protocol = 'https:';
+    }
+    if (parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function isNinetyPlusNewsUrl(url: string): boolean {
   if (!url || url === 'about:blank') return false;
 
@@ -43,6 +70,30 @@ export function parseNewsWebViewMessage(raw: string): NewsWebViewMessage | null 
 }
 
 /** Hide site chrome; open external article URLs in the system browser (not WebView). */
+export const NEWS_WEBVIEW_INJECTED_JS_BEFORE_LOAD = `
+(function () {
+  if (window.__90plusNewsClickBound) return;
+  window.__90plusNewsClickBound = true;
+  document.addEventListener('click', function (e) {
+    var link = e.target && e.target.closest ? e.target.closest('a') : null;
+    if (!link || !link.href) return;
+    try {
+      var u = new URL(link.href);
+      var h = u.hostname.toLowerCase();
+      if (h === '90plus.pro' || h === 'www.90plus.pro') return;
+    } catch (err) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'OPEN_EXTERNAL', url: link.href }));
+    }
+  }, true);
+})();
+true;
+`;
+
 export const NEWS_WEBVIEW_INJECTED_JS = `
 (function () {
   function hideHeader() {

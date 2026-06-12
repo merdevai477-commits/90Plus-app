@@ -173,7 +173,7 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
 
   const handleHighlightChange = useCallback((index: number) => {
     pendingIndexRef.current = index;
-    setHighlightIndex(index);
+    setHighlightIndex((prev) => (prev === index ? prev : index));
   }, []);
 
   const { blobAnimatedStyle, createTabGesture } = useLiquidTabBarGesture({
@@ -190,7 +190,7 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
       pendingIndexRef.current === activeIndex
     ) {
       pendingIndexRef.current = null;
-      setHighlightIndex(activeIndex);
+      setHighlightIndex((prev) => (prev === activeIndex ? prev : activeIndex));
     }
   }, [activeIndex]);
 

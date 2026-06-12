@@ -266,8 +266,6 @@ function LeaderboardRow({
 
   t,
 
-  language,
-
   isLast,
 
 }: {
@@ -280,11 +278,11 @@ function LeaderboardRow({
 
   t: ReturnType<typeof useTranslation>['t'];
 
-  language: ReturnType<typeof useLanguageStore.getState>['language'];
-
   isLast: boolean;
 
 }) {
+
+  const language = useLanguageStore((s) => s.language);
 
   const top3 = TOP3_THEME[entry.rank];
 
@@ -492,8 +490,6 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
 
   const { t } = useTranslation();
 
-  const language = useLanguageStore((s) => s.language);
-
   const insets = useSafeAreaInsets();
 
   const { height: windowHeight } = useWindowDimensions();
@@ -633,8 +629,6 @@ const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                   isLast={index === entries.length - 1}
 
                   t={t}
-
-                  language={language}
 
                   onPress={() => {
 

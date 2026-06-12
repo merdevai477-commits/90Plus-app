@@ -1,11 +1,15 @@
-import React, { forwardRef, useCallback } from 'react';
-import { Linking, Platform, StyleSheet, type ViewStyle } from 'react-native';
+import React, { forwardRef, useCallback, useRef } from 'react';
+import { Platform, StyleSheet, type ViewStyle } from 'react-native';
+import { openBrowserAsync, WebBrowserPresentationStyle } from 'expo-web-browser';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 
 import {
   isAllowedWorldCupNewsUrl,
   NEWS_WEBVIEW_INJECTED_JS,
+  NEWS_WEBVIEW_INJECTED_JS_BEFORE_LOAD,
+  normalizeExternalNewsUrl,
   parseNewsWebViewMessage,
+  WORLD_CUP_NEWS_ORIGIN_WHITELIST,
   WORLD_CUP_NEWS_URL,
 } from '../../utils/worldCupNewsWebView';
 
@@ -28,20 +32,58 @@ export const WorldCupNewsWebView = forwardRef<WebView, WorldCupNewsWebViewProps>
     { style, onCanGoBackChange, onLoadingChange, onError },
     ref,
   ) {
+    const webViewRef = useRef<WebView>(null);
+
+    const setWebViewRef = useCallback(
+      (instance: WebView | null) => {
+        webViewRef.current = instance;
+        if (typeof ref === 'function') {
+          ref(instance);
+        } else if (ref) {
+          ref.current = instance;
+        }
+      },
+      [ref],
+    );
+
+    const openExternalUrl = useCallback((rawUrl: string) => {
+      const url = normalizeExternalNewsUrl(rawUrl);
+      if (!url) return;
+      void openBrowserAsync(url, {
+        presentationStyle: WebBrowserPresentationStyle.AUTOMATIC,
+        enableBarCollapsing: true,
+        showInRecents: false,
+      }).catch(() => {});
+    }, []);
+
     const handleNavChange = useCallback(
       (nav: WebViewNavigation) => {
+        if (!isAllowedWorldCupNewsUrl(nav.url)) {
+          webViewRef.current?.stopLoading();
+          openExternalUrl(nav.url);
+          if (nav.canGoBack) {
+            webViewRef.current?.goBack();
+          } else {
+            webViewRef.current?.injectJavaScript(
+              `window.location.replace('${WORLD_CUP_NEWS_URL}'); true;`,
+            );
+          }
+          onCanGoBackChange?.(false);
+          onLoadingChange?.(false);
+          return;
+        }
         onCanGoBackChange?.(nav.canGoBack);
         onLoadingChange?.(nav.loading);
       },
-      [onCanGoBackChange, onLoadingChange],
+      [openExternalUrl, onCanGoBackChange, onLoadingChange],
     );
 
-    const openExternalUrl = useCallback((url: string) => {
-      void Linking.openURL(url).catch(() => {});
-    }, []);
-
     const shouldStartLoad = useCallback(
-      (request: { url: string }) => {
+      (request: { url: string; isTopFrame?: boolean }) => {
+        if (Platform.OS === 'ios' && request.isTopFrame === false) {
+          openExternalUrl(request.url);
+          return false;
+        }
         if (isAllowedWorldCupNewsUrl(request.url)) return true;
         openExternalUrl(request.url);
         return false;
@@ -61,9 +103,10 @@ export const WorldCupNewsWebView = forwardRef<WebView, WorldCupNewsWebViewProps>
 
     return (
       <WebView
-        ref={ref}
+        ref={setWebViewRef}
         source={{ uri: WORLD_CUP_NEWS_URL }}
         style={[styles.webview, style]}
+        originWhitelist={[...WORLD_CUP_NEWS_ORIGIN_WHITELIST]}
         onNavigationStateChange={handleNavChange}
         onShouldStartLoadWithRequest={shouldStartLoad}
         onMessage={handleMessage}
@@ -76,6 +119,7 @@ export const WorldCupNewsWebView = forwardRef<WebView, WorldCupNewsWebViewProps>
         onHttpError={() => {
           onLoadingChange?.(false);
         }}
+        injectedJavaScriptBeforeContentLoaded={NEWS_WEBVIEW_INJECTED_JS_BEFORE_LOAD}
         injectedJavaScript={NEWS_WEBVIEW_INJECTED_JS}
         setSupportMultipleWindows={false}
         javaScriptEnabled
