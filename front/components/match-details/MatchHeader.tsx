@@ -119,20 +119,17 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
       setPeriodMinute(diffMin);
     };
     compute();
-    const id = setInterval(compute, 1_000);
+    const id = setInterval(compute, 5_000);
     return () => clearInterval(id);
   }, [isHalftime, isLive, startTimestamp, short]);
 
-  // Prefer API elapsed; between 5s polls use wall-clock so the minute never lags behind.
+  // API elapsed is authoritative (referee clock, stoppage). Wall-clock from period
+  // start runs ahead during VAR/injury pauses — only use it when API has no minute yet.
   const effectiveElapsed = useMemo(() => {
     if (isHalftime || short === 'BT') return elapsed ?? null;
-    if (!isLive) return elapsed ?? null;
-    if (elapsed != null && periodMinute != null) {
-      return Math.max(elapsed, periodMinute);
-    }
     if (elapsed != null) return elapsed;
     return periodMinute;
-  }, [elapsed, isHalftime, isLive, periodMinute, short]);
+  }, [elapsed, isHalftime, periodMinute, short]);
 
   const minuteLabel = (() => {
     if (isHalftime) return 'HT';
