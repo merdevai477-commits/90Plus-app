@@ -204,7 +204,10 @@ const MatchDetailsScreen = () => {
         },
       };
     });
-  }, []);
+    if (update.status === 'HT' || update.status === 'FT') {
+      void refreshLiveSnapshot();
+    }
+  }, [refreshLiveSnapshot]);
 
   useMatchUpdateEvents(fixtureId > 0 ? fixtureId : null, handleWsMatchUpdate);
 
@@ -311,7 +314,7 @@ const MatchDetailsScreen = () => {
     void refreshLiveSnapshot();
     livePollingRef.current = setInterval(() => {
       void refreshLiveSnapshot();
-    }, 5_000);
+    }, 3_000);
 
     return () => {
       if (livePollingRef.current) {
@@ -325,6 +328,22 @@ const MatchDetailsScreen = () => {
     params.status,
     refreshLiveSnapshot,
   ]);
+
+  // Extra events refresh while the Events tab is open during live play / HT
+  useEffect(() => {
+    const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+    const inPlay =
+      params.status === 'live' ||
+      (fixture ? liveStatuses.includes(fixture.fixture.status.short) : false);
+    if (!fixtureId || activeTab !== 'events' || !inPlay) return;
+
+    const id = setInterval(() => {
+      ApiFootballService.getFixtureEvents(fixtureId, { skipCache: true })
+        .then((data) => setEvents(data ?? []))
+        .catch(() => {});
+    }, 4_000);
+    return () => clearInterval(id);
+  }, [activeTab, fixture?.fixture?.status?.short, fixtureId, params.status]);
 
   const loadMatchDetails = async () => {
     if (!fixtureId) {
@@ -862,10 +881,24 @@ const MatchDetailsScreen = () => {
       return <EventsSkeleton shimmerX={shimmerX} />;
     }
     if (events.length === 0) {
+      const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+      const inPlay =
+        liveStatuses.includes(fixture?.fixture?.status?.short ?? '') ||
+        params.status === 'live';
       return (
         <View style={styles.emptyState}>
           <Ionicons name="football-outline" size={64} color="#333" />
           <Text style={styles.emptyStateText}>{t.matchDetails.noEvents}</Text>
+          {inPlay ? (
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => void refreshLiveSnapshot()}
+            >
+              <Text style={styles.retryButtonText}>
+                {t.matchDetails.standingsRetry || t.common.retry}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       );
     }

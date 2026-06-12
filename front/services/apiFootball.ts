@@ -758,7 +758,13 @@ interface ProxyResponse<T> {
 const fetchFromProxy = async <T,>(
   endpoint: string,
   params: Record<string, any> = {},
-  options: { method?: 'GET' | 'POST' | 'DELETE'; body?: any; headers?: Record<string, string>; retries?: number } = {}
+  options: {
+    method?: 'GET' | 'POST' | 'DELETE';
+    body?: any;
+    headers?: Record<string, string>;
+    retries?: number;
+    fresh?: boolean;
+  } = {},
 ): Promise<T> => {
   const baseUrl = getApiUrl();
   const { method = 'GET', body, headers = {}, retries = 2 } = options;
@@ -769,6 +775,9 @@ const fetchFromProxy = async <T,>(
   const url = new URL(`${baseUrl}${pathPrefix}${endpoint}`);
 
   if (method === 'GET') {
+    if (options.fresh) {
+      url.searchParams.set('fresh', '1');
+    }
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
         url.searchParams.append(key, String(value));
@@ -1231,12 +1240,21 @@ export const ApiFootballService = {
       '../utils/matchLineupsFallback'
     );
 
-    const resolveFromDirect = async (): Promise<Lineup[]> => {
-      let lineups = await fetchFromProxy<Lineup[]>(`/fixtures/${fixtureId}/lineups`);
+    const resolveFromDirect = async (fresh = false): Promise<Lineup[]> => {
+      const fetchOpts = fresh ? { fresh: true } : {};
+      let lineups = await fetchFromProxy<Lineup[]>(
+        `/fixtures/${fixtureId}/lineups`,
+        {},
+        fetchOpts,
+      );
       if (hasLineupData(lineups)) return lineups;
 
       try {
-        const players = await fetchFromProxy<unknown[]>(`/fixtures/${fixtureId}/players`);
+        const players = await fetchFromProxy<unknown[]>(
+          `/fixtures/${fixtureId}/players`,
+          {},
+          fetchOpts,
+        );
         const fromPlayers = convertFixturePlayersToLineups(players);
         if (hasLineupData(fromPlayers)) return fromPlayers;
       } catch {
@@ -1247,7 +1265,7 @@ export const ApiFootballService = {
     };
 
     if (options?.skipCache) {
-      return resolveFromDirect();
+      return resolveFromDirect(true);
     }
 
     const { offlineDataService } = await import('./offlineDataService');
@@ -1277,7 +1295,11 @@ export const ApiFootballService = {
   ): Promise<TeamStatistics[]> {
     try {
       if (options?.skipCache) {
-        return await fetchFromProxy<TeamStatistics[]>(`/fixtures/${fixtureId}/statistics`);
+        return await fetchFromProxy<TeamStatistics[]>(
+          `/fixtures/${fixtureId}/statistics`,
+          {},
+          { fresh: true },
+        );
       }
       return await fetchFromProxy<TeamStatistics[]>(`/cached/fixture/${fixtureId}/statistics`);
     } catch (error) {
@@ -1349,14 +1371,17 @@ export const ApiFootballService = {
     }
     
     try {
-      const fixtures = await fetchFromProxy<Fixture[]>(`/fixtures/${fixtureId}`);
+      const fixtures = await fetchFromProxy<Fixture[]>(
+        `/fixtures/${fixtureId}`,
+        {},
+        options?.skipCache ? { fresh: true } : {},
+      );
       const fixture = fixtures && fixtures.length > 0 ? fixtures[0] : null;
-      
-      // Cache the fixture
-      if (fixture) {
+
+      if (fixture && !options?.skipCache) {
         footballCacheService.cacheMatch(fixture as any).catch(console.error);
       }
-      
+
       return fixture;
     } catch (error) {
       console.error('Error fetching fixture by ID:', error);
@@ -1374,7 +1399,11 @@ export const ApiFootballService = {
   ): Promise<FixtureEvent[]> {
     try {
       if (options?.skipCache) {
-        return await fetchFromProxy<FixtureEvent[]>(`/fixtures/${fixtureId}/events`);
+        return await fetchFromProxy<FixtureEvent[]>(
+          `/fixtures/${fixtureId}/events`,
+          {},
+          { fresh: true },
+        );
       }
       return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`);
     } catch (error) {

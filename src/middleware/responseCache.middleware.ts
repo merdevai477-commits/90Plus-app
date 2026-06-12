@@ -246,6 +246,11 @@ export function responseCacheMiddleware(options: {
             return next();
         }
 
+        // Bypass cache for explicit live-refresh requests
+        if (req.query.fresh === '1' || req.query.refresh === 'true') {
+            return next();
+        }
+
         // Skip if skip function returns true
         if (skip && skip(req)) {
             return next();

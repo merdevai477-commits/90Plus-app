@@ -103,7 +103,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   const [periodMinute, setPeriodMinute] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!isLive || !startTimestamp) {
+    if (isHalftime || short === 'BT' || !isLive || !startTimestamp) {
       setPeriodMinute(null);
       return;
     }
@@ -121,13 +121,14 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
     compute();
     const id = setInterval(compute, 5_000);
     return () => clearInterval(id);
-  }, [isLive, startTimestamp, short]);
+  }, [isHalftime, isLive, startTimestamp, short]);
 
+  // Prefer API elapsed — wall-clock drifts during stoppage time and half-time.
   const effectiveElapsed = useMemo(() => {
-    if (elapsed == null) return periodMinute;
-    if (periodMinute == null) return elapsed;
-    return Math.max(elapsed, periodMinute);
-  }, [elapsed, periodMinute]);
+    if (isHalftime || short === 'BT') return elapsed ?? null;
+    if (elapsed != null) return elapsed;
+    return periodMinute;
+  }, [elapsed, isHalftime, periodMinute, short]);
 
   const minuteLabel = (() => {
     if (isHalftime) return 'HT';

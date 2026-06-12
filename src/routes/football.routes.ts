@@ -200,7 +200,7 @@ router.get('/fixtures/:id', SHARED_CACHE_8S, FootballController.getFixtureById);
 // GET /api/football/fixtures/:id/lineups
 // Get lineups for a fixture
 // ============================================
-router.get('/fixtures/:id/lineups', SHARED_CACHE_1H, FootballController.getFixtureLineups);
+router.get('/fixtures/:id/lineups', SHARED_CACHE_8S, FootballController.getFixtureLineups);
 
 // ============================================
 // GET /api/football/fixtures/:id/players
@@ -212,13 +212,13 @@ router.get('/fixtures/:id/players', SHARED_CACHE_1H, FootballController.getFixtu
 // GET /api/football/fixtures/:id/statistics
 // Get statistics for a fixture
 // ============================================
-router.get('/fixtures/:id/statistics', SHARED_CACHE_1H, FootballController.getFixtureStatistics);
+router.get('/fixtures/:id/statistics', SHARED_CACHE_8S, FootballController.getFixtureStatistics);
 
 // ============================================
 // GET /api/football/fixtures/:id/events
 // Get events for a fixture (goals, cards, substitutions)
 // ============================================
-router.get('/fixtures/:id/events', SHARED_CACHE_1H, FootballController.getFixtureEvents);
+router.get('/fixtures/:id/events', SHARED_CACHE_3S, FootballController.getFixtureEvents);
 
 // ============================================
 // GET /api/football/standings
