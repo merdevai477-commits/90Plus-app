@@ -50,6 +50,10 @@ export async function resolveVideoUploadSource(
 
   try {
     await FileSystem.copyAsync({ from: trimmed, to: destPath });
+    const info = await FileSystem.getInfoAsync(destPath);
+    if (!info.exists || !('size' in info) || !info.size) {
+      throw new Error('Staged video file is empty');
+    }
     const uri = destPath.startsWith('file://') ? destPath : `file://${destPath}`;
     logger.info('[videoUpload] Copied video to cache for upload', {
       platform: Platform.OS,

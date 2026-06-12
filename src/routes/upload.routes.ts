@@ -24,6 +24,7 @@ import { invalidateUserCache } from './clerk-user.routes';
 import { UploadAnalyticsService } from '../services/upload-analytics.service';
 import * as muxService from '../services/mux.service';
 import { healReelFromMux } from '../services/reel-mux-heal.service';
+import { ensureBackendUserId } from '../utils/ensureBackendUser';
 import multer from 'multer';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
@@ -245,7 +246,12 @@ const uploadReel = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (_req, file, cb) => {
     const mt = (file.mimetype || '').toLowerCase();
-    cb(null, mt.startsWith('video/') || mt.startsWith('image/'));
+    cb(
+      null,
+      mt.startsWith('video/') ||
+        mt.startsWith('image/') ||
+        mt === 'application/octet-stream',
+    );
   },
 });
 
@@ -272,6 +278,9 @@ type BeginReelResult =
 
 async function beginReelUploadForClerkUser(clerkUserId: string): Promise<BeginReelResult> {
   try {
+    // iOS often opens profile/reels before /clerk/me finishes — avoid 404 USER_NOT_FOUND.
+    await ensureBackendUserId(clerkUserId);
+
     return await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT 1 FROM "users" WHERE "clerkUserId" = ${clerkUserId} FOR UPDATE`;
       const user = await tx.user.findUnique({

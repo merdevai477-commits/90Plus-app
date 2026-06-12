@@ -1,7 +1,11 @@
 import { getApiUrl } from '../../config/api.config';
 import { logger } from './logger';
 
-const API_URL = getApiUrl();
+function uploadApiUrl(path: string): string {
+  const base = getApiUrl().replace(/\/$/, '');
+  const suffix = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${suffix}`;
+}
 
 export interface UploadResult {
     success: boolean;
@@ -33,7 +37,7 @@ export class StorageService {
             } as any);
 
             // Don't set Content-Type header - let fetch API set it automatically with boundary
-            const response = await fetch(`${API_URL}/upload/avatar`, {
+            const response = await fetch(uploadApiUrl('/upload/avatar'), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -112,7 +116,7 @@ export class StorageService {
             } as any);
 
             // Don't set Content-Type header - let fetch API set it automatically with boundary
-            const response = await fetch(`${API_URL}/upload/cover`, {
+            const response = await fetch(uploadApiUrl('/upload/cover'), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -183,14 +187,18 @@ export class StorageService {
         caption?: string,
         hashtags?: string[],
         mentions?: string[],
-        onProgress?: (progress: number) => void
+        onProgress?: (progress: number) => void,
+        options?: { mimeType?: string | null; fileName?: string | null },
     ): Promise<UploadResult & { reelId?: string }> {
         try {
             // ✅ Show "Preparing..." at the start
             if (onProgress) onProgress(5);
 
             const { resolveVideoUploadSource } = await import('../utils/videoUpload');
-            const resolved = await resolveVideoUploadSource(videoUri);
+            const resolved = await resolveVideoUploadSource(videoUri, {
+                mimeType: options?.mimeType,
+                fileName: options?.fileName,
+            });
 
             const formData = new FormData();
             
@@ -302,6 +310,10 @@ export class StorageService {
                             userMessage = errorData.message || 'يرجى الانتظار قبل رفع فيديو جديد.';
                         } else if (xhr.status === 499 || xhr.status === 0) {
                             userMessage = 'انقطع الاتصال أثناء الرفع. ابقَ في التطبيق وحاول مرة أخرى.';
+                        } else if (xhr.status === 404) {
+                            userMessage =
+                                errorData.message ||
+                                'تعذر بدء الرفع. أعد فتح التطبيق ثم حاول مرة أخرى.';
                         } else if (xhr.status >= 500) {
                             userMessage = errorData.message || 'خطأ في الخادم. حاول مرة أخرى.';
                         }
@@ -339,10 +351,11 @@ export class StorageService {
                     resolve({ success: false, error: 'انتهت مهلة الرفع. الفيديو كبير جداً أو الاتصال بطيء. حاول مرة أخرى.' });
                 };
 
-                xhr.open('POST', `${API_URL}/upload/reel`);
+                const uploadUrl = uploadApiUrl('/upload/reel');
+                xhr.open('POST', uploadUrl);
                 xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
-                logger.info('[ReelUpload] Starting POST to /api/upload/reel...');
+                logger.info('[ReelUpload] Starting POST to', uploadUrl);
                 xhr.send(formData);
             });
 

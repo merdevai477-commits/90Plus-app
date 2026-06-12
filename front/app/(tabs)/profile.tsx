@@ -1331,6 +1331,13 @@ function ProfileScreen() {
         return;
       }
 
+      // Ensure backend user row exists (iOS can upload before /clerk/me completes).
+      try {
+        await AuthService.syncUserWithBackend(token, { getToken });
+      } catch (syncErr) {
+        logger.warn('[ReelUpload] Pre-upload sync failed (continuing):', syncErr);
+      }
+
       const caption = newVideo.caption || '';
       const hashtags = caption.match(/#[\w\u0600-\u06FF]+/g) || [];
       const mentions = caption.match(/@[\w]+/g) || [];
@@ -1371,7 +1378,11 @@ function ProfileScreen() {
             uploadProgress: progress,
             isUploading: true,
           });
-        }
+        },
+        {
+          mimeType: (newVideo as { mimeType?: string }).mimeType,
+          fileName: (newVideo as { fileName?: string }).fileName,
+        },
       );
 
       if (uploadResult.success) {

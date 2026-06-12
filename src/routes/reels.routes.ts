@@ -424,10 +424,15 @@ router.get('/hashtag/:tag', requireAuth, async (req: Request, res: Response): Pr
 });
 
 /**
- * POST /api/reels — REMOVED
- * This legacy route accepted arbitrary videoUrl strings and was a security risk.
- * All reel creation now goes through POST /api/upload/reel (Mux pipeline).
+ * POST /api/reels — legacy JSON upload removed (was 404). Direct clients to Mux pipeline.
  */
+router.post('/', requireAuth, (_req: Request, res: Response): void => {
+  res.status(400).json({
+    status: 'ERROR',
+    code: 'USE_UPLOAD_REEL',
+    message: 'Upload reels via POST /api/upload/reel (multipart field: video).',
+  });
+});
 
 // ============================================
 // PATCH /api/reels/:id  — Edit reel caption & hashtags

@@ -69,8 +69,22 @@ const MAGIC_RULES: MagicRule[] = [
   },
 ];
 
+function isVideoBuffer(buf: Buffer): boolean {
+  if (buf.length < 8) return false;
+  // MP4 / MOV / M4V — ftyp box
+  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return true;
+  // WebM
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return true;
+  return false;
+}
+
 function mimeMatches(declared: string, buf: Buffer): boolean {
   const norm = declared.toLowerCase().split(';')[0].trim();
+
+  // iOS picker sometimes sends application/octet-stream for .mov/.mp4
+  if (norm === 'application/octet-stream') {
+    return isHeicBuffer(buf) || isVideoBuffer(buf);
+  }
 
   // Special case: iOS sometimes sends HEIC with mime 'application/octet-stream'
   // or 'image/jpeg' — check actual bytes first

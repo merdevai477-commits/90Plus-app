@@ -1238,7 +1238,7 @@ export class ReelsService {
     }
 
     /**
-     * Upload a new reel
+     * @deprecated Use StorageService.uploadReel (POST /api/upload/reel multipart).
      */
     static async uploadReel(
         token: string,
@@ -1251,24 +1251,21 @@ export class ReelsService {
         }
     ): Promise<{ success: boolean; reel?: any; error?: string; hoursRemaining?: number }> {
         try {
-            const response = await fetch(`${API_URL}/reels`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(reel),
-            });
-
-            const data = await response.json();
-            if (data.status === 'SUCCESS') {
-                return { success: true, reel: data.data.reel };
+            const { StorageService } = await import('./storageService');
+            if (reel.videoUrl.startsWith('http://') || reel.videoUrl.startsWith('https://')) {
+                return {
+                    success: false,
+                    error: 'Remote video URLs are not supported. Use StorageService.uploadReel with a local file URI.',
+                };
             }
-            return { 
-                success: false, 
-                error: data.message,
-                hoursRemaining: data.hoursRemaining 
-            };
+            return StorageService.uploadReel(
+                token,
+                reel.videoUrl,
+                reel.thumbnail,
+                reel.caption,
+                reel.hashtags,
+                reel.mentions,
+            );
         } catch (error: any) {
             console.error('Error uploading reel:', error);
             return { success: false, error: error.message };
