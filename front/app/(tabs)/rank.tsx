@@ -4,7 +4,7 @@
  * Aggregates the Rank features:
  * - profile strip (real user data via ProfileCard)
  * - competitions carousel
- * - World Cup countdown banner
+ * - World Cup news banner (opens 90plus.pro/news)
  * - Top Players podium + lower leaderboard from `/api/reels/rankings/top-players`
  * - full Top-11 leaderboard modal
  *
@@ -42,7 +42,6 @@ import PodiumCard from '../../components/rank/PodiumCard';
 import ProfileCard from '../../components/rank/ProfileCard';
 import RankHeader from '../../components/rank/RankHeader';
 import { BoardRowSkeleton, PodiumSkeleton } from '../../components/rank/RankSkeletons';
-import SoonModal from '../../components/rank/SoonModal';
 import WCCard from '../../components/rank/WCCard';
 import { APP_BG } from '../../constants/ui';
 import { prefetchDailyQuiz } from '../../hooks/useDailyQuiz';
@@ -177,7 +176,6 @@ export default function RankScreen() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [isSoonVisible, setIsSoonVisible] = useState(false);
   const [period, setPeriod] = useState<TopPlayersPeriod>('weekly');
   const [refreshing, setRefreshing] = useState(false);
   const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
@@ -410,7 +408,7 @@ export default function RankScreen() {
         </ScrollView>
 
         {/* ── World Cup banner ── */}
-        <WCCard onPressLocked={() => setIsSoonVisible(true)} />
+        <WCCard />
 
         {/* ── Top players ── */}
         <View style={s.bottomContentGroup}>
@@ -623,7 +621,6 @@ export default function RankScreen() {
           onEntryPress={handleLeaderboardEntryPress}
         />
       ) : null}
-      <SoonModal visible={isSoonVisible} onClose={() => setIsSoonVisible(false)} />
     </View>
   );
 }

@@ -1573,7 +1573,11 @@ export const ApiFootballService = {
    * ✅ Stores permanently for future use
    * ✅ Always fetches with current season for real-time data
    */
-  async getPlayerById(playerId: number, season?: number): Promise<any[]> {
+  async getPlayerById(
+    playerId: number,
+    season?: number,
+    options?: { fresh?: boolean },
+  ): Promise<any[]> {
     // ✅ Get current season if not provided
     const currentSeason = season || (() => {
       const now = new Date();
@@ -1586,7 +1590,10 @@ export const ApiFootballService = {
     // Cache is only used for player basic info, not team info
     try {
       // ✅ Use cached endpoint with current season (backend handles caching)
-      const players = await fetchFromProxy<any[]>(`/cached/player/${playerId}`, { season: currentSeason });
+      const players = await fetchFromProxy<any[]>(`/cached/player/${playerId}`, {
+        season: currentSeason,
+        ...(options?.fresh ? { fresh: '1' } : {}),
+      });
       
       if (players?.length) {
         const playerData = players[0];

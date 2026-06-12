@@ -46,3 +46,6 @@ export const padCountdown = (n: number): string => String(n).padStart(2, '0');
 
 /** Official FIFA World Cup 2026 emblem (trophy + FIFA wordmark). */
 export const WC_2026_OFFICIAL_LOGO = require('../assets/images/fwc-2026-official-logo.png');
+
+/** API-Football league id for FIFA World Cup. */
+export const WC_LEAGUE_ID = 1;

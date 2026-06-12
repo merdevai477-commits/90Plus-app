@@ -39,7 +39,8 @@ import {
 const PLAYER_CACHE_PREFIX = 'player_cache_';
 const TRANSFER_CACHE_PREFIX = 'player_transfers_';
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-const BACKGROUND_REFRESH_MS = 30 * 60 * 1000; // skip network if cache is fresher than 30m
+const CACHE_TTL_FROM_MATCH_MS = 5 * 60 * 1000; // after a live match, refresh stats within 5m
+const BACKGROUND_REFRESH_MS = 15 * 60 * 1000; // skip network if cache is fresher than 15m
 
 const EMPTY_STAT_ROW: PlayerData['statistics'][0] = {
     team: { id: 0, name: '', logo: '' },
@@ -99,6 +100,7 @@ interface PlayerParams {
     teamColor?: string;
     teamId?: string;
     season?: string;
+    fresh?: string;
 }
 
 interface PlayerData {
@@ -504,6 +506,7 @@ export default function PlayerProfileScreen() {
     const contextTeamId = params.teamId ? parseInt(params.teamId, 10) : undefined;
     const contextSeason = params.season ? parseInt(params.season, 10) : undefined;
     const seasonYear = contextSeason ?? getFootballSeasonYear();
+    const forceFreshStats = params.fresh === '1' || params.fresh === 'true';
     const routeShell = useMemo(
         () => buildShellFromParams(params, playerId, contextTeamId),
         [params, playerId, contextTeamId],
@@ -544,7 +547,7 @@ export default function PlayerProfileScreen() {
                 useNativeDriver: true,
             }),
         ]).start();
-    }, [playerId, contextSeason, contextTeamId, seasonYear]);
+    }, [playerId, contextSeason, contextTeamId, seasonYear, forceFreshStats]);
 
     const loadPlayerData = async (forceRefresh = false) => {
         if (!playerId) {
@@ -559,14 +562,17 @@ export default function PlayerProfileScreen() {
             }
             setError(null);
 
-            if (!forceRefresh) {
+            const skipLocalCache = forceRefresh || forceFreshStats;
+            const localCacheMaxAge = forceFreshStats ? CACHE_TTL_FROM_MATCH_MS : BACKGROUND_REFRESH_MS;
+
+            if (!skipLocalCache) {
                 const cached = await getCachedPlayer(playerId, seasonYear);
                 if (cached) {
                     setPlayer(cached);
                     setLoading(false);
                     await addToRecentlyViewed(cached.player);
                     const cacheAge = Date.now() - (await getCachedTimestamp(playerId, seasonYear) || 0);
-                    if (cacheAge < BACKGROUND_REFRESH_MS) {
+                    if (cacheAge < localCacheMaxAge) {
                         return;
                     }
                     loadPlayerData(true).catch((err) => {
@@ -578,7 +584,9 @@ export default function PlayerProfileScreen() {
 
             const seasonToFetch = seasonYear;
             logger.debug(`📡 Fetching player from API (season ${seasonToFetch}):`, playerId);
-            const data = await ApiFootballService.getPlayerById(playerId, seasonToFetch);
+            const data = await ApiFootballService.getPlayerById(playerId, seasonToFetch, {
+                fresh: skipLocalCache,
+            });
 
             if (data && data.length > 0) {
                 let playerData = data[0];

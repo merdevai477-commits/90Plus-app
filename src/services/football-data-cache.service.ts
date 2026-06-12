@@ -474,10 +474,16 @@ class FootballDataCacheService {
     /**
      * Get player by ID with full statistics
      */
-    async getPlayer(playerId: number, season: number = 2024): Promise<any> {
-        return playerCacheService.getPlayer(playerId, async () => {
-            return footballService.getPlayerById(playerId, season);
-        });
+    async getPlayer(
+        playerId: number,
+        season: number = 2024,
+        options?: { forceRefresh?: boolean },
+    ): Promise<any> {
+        return playerCacheService.getPlayer(
+            playerId,
+            async () => footballService.getPlayerById(playerId, season),
+            options,
+        );
     }
 
     /**

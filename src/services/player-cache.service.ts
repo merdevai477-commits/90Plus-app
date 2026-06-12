@@ -10,9 +10,14 @@ import { logger } from '../utils/logger';
 import prisma from '../lib/prisma'; // ✅ Use centralized singleton
 
 // Cache TTL for in-memory cache
-// ✅ OPTIMIZATION 1: Increased cache duration for teams (24 hours) - teams rarely change
-const MEMORY_CACHE_TTL = 60 * 60 * 1000; // 1 hour for players
+// Players refresh often during tournaments (goals/assists after each match).
+const MEMORY_CACHE_TTL = 15 * 60 * 1000; // 15 minutes for players
+const PLAYER_DB_MAX_AGE_MS = 15 * 60 * 1000; // DB fallback must be fresh or we re-hit API
 const TEAM_MEMORY_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours for teams (optimization)
+
+export interface GetPlayerCacheOptions {
+    forceRefresh?: boolean;
+}
 
 interface CacheEntry<T> {
     data: T;
@@ -123,41 +128,47 @@ class PlayerCacheService {
      */
     async getPlayer(
         playerId: number,
-        fetchFromApi: () => Promise<PlayerFromAPI[]>
+        fetchFromApi: () => Promise<PlayerFromAPI[]>,
+        options?: GetPlayerCacheOptions,
     ): Promise<PlayerFromAPI | null> {
-        // 1. Check Redis cache first, then memory cache
         const redisKey = `player:${playerId}`;
-        const redisCached = await redisCacheService.get<CacheEntry<any>>(redisKey);
-        if (redisCached && Date.now() - redisCached.timestamp < MEMORY_CACHE_TTL) {
-            logger.debug(`📦 Player ${playerId} from Redis cache (shared for all users)`);
-            // Update memory cache
-            this.playerCache.set(playerId, redisCached);
-            return redisCached.data;
-        }
+        const forceRefresh = options?.forceRefresh === true;
 
-        // Check memory cache
-        const memoryCached = this.playerCache.get(playerId);
-        if (memoryCached && Date.now() - memoryCached.timestamp < MEMORY_CACHE_TTL) {
-            logger.debug(`📦 Player ${playerId} from memory cache (shared for all users)`);
-            return memoryCached.data;
-        }
+        if (!forceRefresh) {
+            // 1. Check Redis cache first, then memory cache
+            const redisCached = await redisCacheService.get<CacheEntry<any>>(redisKey);
+            if (redisCached && Date.now() - redisCached.timestamp < MEMORY_CACHE_TTL) {
+                logger.debug(`📦 Player ${playerId} from Redis cache (shared for all users)`);
+                this.playerCache.set(playerId, redisCached);
+                return redisCached.data;
+            }
 
-        // 2. Check database (shared for all users)
-        const dbPlayer = await prisma.cachedPlayer.findUnique({
-            where: { playerId },
-        });
+            const memoryCached = this.playerCache.get(playerId);
+            if (memoryCached && Date.now() - memoryCached.timestamp < MEMORY_CACHE_TTL) {
+                logger.debug(`📦 Player ${playerId} from memory cache (shared for all users)`);
+                return memoryCached.data;
+            }
 
-        if (dbPlayer) {
-            const playerData = dbPlayer.fullData as unknown as PlayerFromAPI;
-            const cacheEntry: CacheEntry<any> = { data: playerData, timestamp: Date.now() };
-            
-            // Update Redis cache
-            await redisCacheService.set(redisKey, cacheEntry, MEMORY_CACHE_TTL);
-            
-            // Update memory cache
-            this.playerCache.set(playerId, cacheEntry);
-            logger.debug(`📦 Player ${playerId} from database (shared for all users)`);
-            return playerData;
+            // 2. DB fallback only when recently updated — stale rows used to freeze goals at 0
+            const dbPlayer = await prisma.cachedPlayer.findUnique({
+                where: { playerId },
+            });
+
+            if (dbPlayer?.fullData) {
+                const dbAge = Date.now() - dbPlayer.updatedAt.getTime();
+                if (dbAge < PLAYER_DB_MAX_AGE_MS) {
+                    const playerData = dbPlayer.fullData as unknown as PlayerFromAPI;
+                    const cacheEntry: CacheEntry<any> = { data: playerData, timestamp: Date.now() };
+                    await redisCacheService.set(redisKey, cacheEntry, MEMORY_CACHE_TTL);
+                    this.playerCache.set(playerId, cacheEntry);
+                    logger.debug(`📦 Player ${playerId} from database (${Math.round(dbAge / 1000)}s old)`);
+                    return playerData;
+                }
+                logger.debug(`📦 Player ${playerId} DB cache stale (${Math.round(dbAge / 60000)}m) — refreshing from API`);
+            }
+        } else {
+            this.playerCache.delete(playerId);
+            await redisCacheService.del(redisKey).catch(() => undefined);
         }
 
         // ✅ 3. Request deduplication: Check if there's already a pending request for this player

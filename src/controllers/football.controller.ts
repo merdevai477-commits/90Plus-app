@@ -1701,14 +1701,25 @@ export class FootballController {
   static async getCachedPlayer(req: Request, res: Response): Promise<void> {
     try {
       const playerId = parseInt(ensureString(req.params.id));
-      const season = req.query.season ? parseInt(req.query.season as string) : 2024;
+      const season = req.query.season
+        ? parseInt(req.query.season as string)
+        : (() => {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            return month >= 6 ? year : year - 1;
+          })();
+      const forceRefresh =
+        req.query.fresh === '1' ||
+        req.query.fresh === 'true' ||
+        req.query.nocache === '1';
 
       if (isNaN(playerId)) {
         res.status(400).json({ status: 'ERROR', message: 'Invalid player ID' });
         return;
       }
 
-      const player = await footballDataCacheService.getPlayer(playerId, season);
+      const player = await footballDataCacheService.getPlayer(playerId, season, { forceRefresh });
 
       if (!player) {
         res.status(404).json({ status: 'ERROR', message: 'Player not found' });

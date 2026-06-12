@@ -138,7 +138,7 @@ router.get('/cached/world-cup/:date', (req, res, next) => {
 router.get('/transfers', SHARED_CACHE_1H, FootballController.getTransfers);
 
 // GET /api/football/cached/player/:id - Get player (permanent cache)
-router.get('/cached/player/:id', SHARED_CACHE_1H, FootballController.getCachedPlayer);
+router.get('/cached/player/:id', SHARED_CACHE_5MIN, FootballController.getCachedPlayer);
 
 // GET /api/football/cached/teams/all - Get all cached teams
 router.get('/cached/teams/all', SHARED_CACHE_24H, FootballController.getAllCachedTeams);

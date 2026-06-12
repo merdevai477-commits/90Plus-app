@@ -703,6 +703,7 @@ const MatchDetailsScreen = () => {
           teamLogo: lineupTeam.logo,
           teamId: String(lineupTeam.id),
           season: fixture?.league?.season != null ? String(fixture.league.season) : '',
+          fresh: '1',
         },
       } as any);
     },

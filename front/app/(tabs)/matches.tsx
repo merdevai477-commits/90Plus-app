@@ -19,7 +19,7 @@ import { cacheService } from '../../services/cacheService';
 import { predictionsMapKey, predictionsTicketsKey } from '../../services/predictionsCacheKeys';
 import { offlineQueue } from '../../src/services/offlineQueue';
 import NetInfo from '@react-native-community/netinfo';
-import { useTranslation, useLanguageStore } from '../../src/i18n';
+import { useTranslation } from '../../src/i18n';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
 import { MatchFavoritesStorage } from '../../src/storage/matchFavorites.storage';
 import { useScreenFont } from '../../utils/fontSetup';
@@ -102,9 +102,7 @@ const ITEM_SEPARATOR_8 = () => <View style={{ height: 8 }} />;
 const ITEM_SEPARATOR_10 = () => <View style={{ height: 10 }} />;
 
 const FILTERS = ['All', 'Live', 'Upcoming', 'WorldCup', 'Finished', 'Predictions'] as const;
-const CAMPAIGN_FILTERS = ['WorldCup', 'Live', 'Upcoming', 'Finished', 'Predictions'] as const;
 type MatchFilter = (typeof FILTERS)[number];
-type CampaignFilter = (typeof CAMPAIGN_FILTERS)[number];
 
 /** Local midnight — calendar/filter sync uses device timezone. */
 function startOfLocalDay(d: Date = new Date()): Date {
@@ -113,16 +111,13 @@ function startOfLocalDay(d: Date = new Date()): Date {
   return x;
 }
 
-/** Pick the tab that matches a calendar day (past → Finished, future → Upcoming, today → WorldCup/All). */
-function filterForCalendarDay(
-  day: Date,
-  campaignMode = false,
-): MatchFilter {
+/** Pick the tab that matches a calendar day (past → Finished, future → Upcoming, today → All). */
+function filterForCalendarDay(day: Date): MatchFilter {
   const t = startOfLocalDay(day).getTime();
   const today = startOfLocalDay().getTime();
   if (t < today) return 'Finished';
   if (t > today) return 'Upcoming';
-  return campaignMode ? 'WorldCup' : 'All';
+  return 'All';
 }
 
 // Translation keys for the filter tab labels. Kept in lock-step with FILTERS
@@ -182,6 +177,8 @@ type LeagueGroup = {
   id: string;
   league: string;
   leagueLogo: string;
+  /** Local asset — used for FIFA WC emblem when API logo is missing/wrong. */
+  logoSource?: ImageSource;
   fixtures: Fixture[];
 };
 
@@ -752,7 +749,15 @@ const LeagueCard = memo(function LeagueCard({
         >
           <View style={styles.leagueLeft}>
             <View style={styles.leagueLogoWrap}>
-              {group.leagueLogo ? (
+              {group.logoSource ? (
+                <Image
+                  source={group.logoSource}
+                  style={styles.leagueLogo}
+                  contentFit="contain"
+                  cachePolicy="memory-disk"
+                  transition={0}
+                />
+              ) : group.leagueLogo ? (
                 <Image
                   source={{ uri: group.leagueLogo }}
                   style={styles.leagueLogo}
@@ -831,8 +836,7 @@ export default function MatchesHubScreenV2() {
   useScreenFont();
   useMatchEventsMonitor();
   const params = useLocalSearchParams();
-  const worldCupCampaignModeEarly = useAppFeaturesStore((s) => s.worldCupCampaignMode);
-  const initialFilter = (params.filter as MatchFilter) || (worldCupCampaignModeEarly ? 'WorldCup' : 'All');
+  const initialFilter = (params.filter as MatchFilter) || 'All';
   const [filter, setFilter] = useState<MatchFilter>(initialFilter);
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarViewDate, setCalendarViewDate] = useState<Date>(() => startOfLocalDay());
@@ -841,7 +845,6 @@ export default function MatchesHubScreenV2() {
   const [showWorldCupLocked, setShowWorldCupLocked] = useState(false);
   const worldCupEnabled = useAppFeaturesStore((s) => s.worldCupEnabled);
   const worldCupLocked = useAppFeaturesStore((s) => s.worldCupLocked);
-  const worldCupCampaignMode = useAppFeaturesStore((s) => s.worldCupCampaignMode);
   const worldCupLeagueId = useAppFeaturesStore((s) => s.leagueId);
   const unlockAtMs = useAppFeaturesStore((s) => s.unlockAtMs);
   const featuresRevision = useAppFeaturesStore((s) => s.revision);
@@ -857,7 +860,6 @@ export default function MatchesHubScreenV2() {
   const router = useRouter();
   const { getToken, userId } = useAuth();
   const { t: tObj, translate: t } = useTranslation();
-  const currentLanguage = useLanguageStore((s) => s.language);
 
   // Clerk's getToken returns a NEW function reference on every render — store
   // it in a ref so effects don't re-fire on every parent re-render.
@@ -907,7 +909,8 @@ export default function MatchesHubScreenV2() {
   const [subscribedFixtures, setSubscribedFixtures] = useState<Set<string>>(() => new Set());
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
 
-  const wcTabActive = worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled);
+  const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
+  const wcFetchEnabled = worldCupEnabled;
 
   // Real matches data from backend — pause polling/WS when WC hook owns live updates
   const { groupedMatches, countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(
@@ -915,34 +918,12 @@ export default function MatchesHubScreenV2() {
     { pauseBackgroundRefresh: wcTabActive },
   );
 
-  useEffect(() => {
-    if (worldCupCampaignMode && filter === 'All') {
-      setFilter('WorldCup');
-    }
-  }, [worldCupCampaignMode, filter]);
-
-  const displayedFilters = useMemo(
-    () => (worldCupCampaignMode ? [...CAMPAIGN_FILTERS] : [...FILTERS]),
-    [worldCupCampaignMode],
-  );
   const {
     matches: worldCupMatches,
     loading: worldCupLoading,
     error: worldCupError,
     refetch: refetchWorldCup,
-  } = useWorldCupMatches(selectedDate, wcTabActive, worldCupLeagueId, worldCupCampaignMode);
-  const wcLeagueLabel = useMemo(() => {
-    const sample = worldCupMatches[0]?.league?.name;
-    return sample ? getLeagueDisplayName(sample, currentLanguage) : t('matches.tabs.worldCup');
-  }, [worldCupMatches, currentLanguage, t]);
-
-  const worldCupCardProps = useMemo(
-    () => ({
-      logoSource: WC_2026_OFFICIAL_LOGO,
-      leagueName: wcLeagueLabel,
-    }),
-    [wcLeagueLabel],
-  );
+  } = useWorldCupMatches(selectedDate, wcFetchEnabled, worldCupLeagueId, false);
 
   // Modal state for "View All" league sheet (shared by both LeagueCard and CountryAccordion).
   const [viewAllLeagueId, setViewAllLeagueId] = useState<string | null>(null);
@@ -1082,8 +1063,8 @@ export default function MatchesHubScreenV2() {
     next.setHours(0, 0, 0, 0);
     setSelectedDate(next);
     setShowCalendar(false);
-    setFilter(filterForCalendarDay(next, worldCupCampaignMode));
-  }, [calendarViewDate, worldCupCampaignMode]);
+    setFilter(filterForCalendarDay(next));
+  }, [calendarViewDate]);
 
   const openCalendar = useCallback(() => {
     setCalendarViewDate(new Date(selectedDate));
@@ -1104,8 +1085,8 @@ export default function MatchesHubScreenV2() {
     setCalendarViewDate(today);
     setSelectedDate(today);
     setShowCalendar(false);
-    setFilter(filterForCalendarDay(today, worldCupCampaignMode));
-  }, [worldCupCampaignMode]);
+    setFilter(filterForCalendarDay(today));
+  }, []);
 
   // Convert groupedMatches from hook to LeagueGroup format for the UI
   const groups = useMemo((): LeagueGroup[] => {
@@ -1162,6 +1143,22 @@ export default function MatchesHubScreenV2() {
     [filter, predictedMatches],
   );
 
+  const fixturePassesFilter = useCallback(
+    (f: Fixture): boolean => {
+      if (filter === 'Live') return f.live;
+      if (filter === 'Upcoming') return f.status === 'UPCOMING';
+      if (filter === 'Predictions') {
+        if (f.status === 'UPCOMING') return true;
+        if (f.status === 'FT') return Boolean(predictedMatches[f.id]);
+        return false;
+      }
+      if (filter === 'Finished') return f.status === 'FT';
+      if (filter === 'All') return f.status !== 'FT';
+      return true;
+    },
+    [filter, predictedMatches],
+  );
+
   // Country → League hierarchy after filtering. Drops empty leagues and
   // empty countries so the accordion list only renders sections with data.
   // International competitions (World/Europe/Africa/...) are pulled out and
@@ -1172,11 +1169,11 @@ export default function MatchesHubScreenV2() {
       .map(cg => {
         const leagues = cg.leagues
           .map(l => ({ ...l, matches: l.matches.filter(matchPassesFilter) }))
-          .filter(l => l.matches.length > 0);
+          .filter(l => l.matches.length > 0 && l.leagueId !== worldCupLeagueId);
         return { ...cg, leagues };
       })
       .filter(cg => cg.leagues.length > 0);
-  }, [countryGroups, matchPassesFilter]);
+  }, [countryGroups, matchPassesFilter, worldCupLeagueId]);
 
   // International competitions stay in country accordions on other tabs.
   // World Cup has its own dedicated tab fed by the backend WC endpoint.
@@ -1187,51 +1184,24 @@ export default function MatchesHubScreenV2() {
     return [{
       id: String(sample.league?.id ?? worldCupLeagueId),
       league: sample.league?.name ?? 'World Cup',
-      leagueLogo: sample.league?.logo ?? '',
+      leagueLogo: '',
+      logoSource: WC_2026_OFFICIAL_LOGO,
       fixtures: worldCupMatches.map(matchToFixture),
     }];
   }, [worldCupMatches, worldCupLeagueId]);
 
-  const filterWorldCupFixtures = useCallback(
-    (fixtures: Fixture[]): Fixture[] => {
-      if (filter === 'Live') {
-        return fixtures.filter((f) => f.live);
-      }
-      if (filter === 'Upcoming') {
-        return fixtures.filter((f) => f.status === 'UPCOMING');
-      }
-      if (filter === 'Predictions') {
-        return fixtures.filter(
-          (f) => f.status === 'UPCOMING' || (f.status === 'FT' && predictedMatches[f.id]),
-        );
-      }
-      if (filter === 'Finished') {
-        return fixtures.filter((f) => f.status === 'FT');
-      }
-      if (filter === 'WorldCup') {
-        return fixtures.filter((f) => f.status !== 'FT');
-      }
-      return fixtures;
-    },
-    [filter, predictedMatches],
-  );
-
-  const campaignLeagueGroups = useMemo<LeagueGroup[]>(() => {
-    if (!worldCupCampaignMode || worldCupLeagueGroups.length === 0) return [];
-    const base = worldCupLeagueGroups[0];
-    const fixtures = filterWorldCupFixtures(base.fixtures);
-    if (fixtures.length === 0) return [];
-    return [{ ...base, fixtures }];
-  }, [filterWorldCupFixtures, worldCupCampaignMode, worldCupLeagueGroups]);
-
-  const wcFlatFixtures = useMemo(() => {
-    if (worldCupCampaignMode) {
-      return campaignLeagueGroups[0]?.fixtures ?? [];
+  /** Pinned at top on All/Live/Upcoming/Finished/Predictions — filtered by active tab. */
+  const pinnedWorldCupGroup = useMemo((): LeagueGroup | null => {
+    if (filter === 'WorldCup' || !worldCupEnabled || worldCupLeagueGroups.length === 0) {
+      return null;
     }
-    return worldCupLeagueGroups[0]?.fixtures ?? [];
-  }, [campaignLeagueGroups, worldCupCampaignMode, worldCupLeagueGroups]);
+    const base = worldCupLeagueGroups[0];
+    const fixtures = base.fixtures.filter(fixturePassesFilter);
+    if (fixtures.length === 0) return null;
+    return { ...base, fixtures };
+  }, [filter, worldCupEnabled, worldCupLeagueGroups, fixturePassesFilter]);
 
-  const wcTabLocked = !worldCupCampaignMode && worldCupLocked && !worldCupEnabled;
+  const wcTabLocked = worldCupLocked && !worldCupEnabled;
 
   // Handle prediction submission
   //
@@ -1528,38 +1498,6 @@ export default function MatchesHubScreenV2() {
     [router],
   );
 
-  const renderWcMatchRow = useCallback(
-    ({ item }: { item: Fixture }) => (
-      <MatchRow
-        fixture={item}
-        showPreds={filter === 'Predictions'}
-        onPredict={handlePredict}
-        submittingId={submittingId}
-        predictedMatches={predictedMatches}
-        isSubscribed={subscribedFixtures.has(item.id)}
-        isSubscribing={subscribingFixtureId === item.id}
-        onToggleSubscription={handleToggleSubscription}
-        onOpenDetails={handleOpenMatchDetails}
-        worldCupCard={worldCupCardProps}
-      />
-    ),
-    [
-      filter,
-      handlePredict,
-      submittingId,
-      predictedMatches,
-      subscribedFixtures,
-      subscribingFixtureId,
-      handleToggleSubscription,
-      handleOpenMatchDetails,
-      worldCupCardProps,
-    ],
-  );
-
-  // Stable per-match renderer used by CountryAccordion. Matches the
-  // existing MatchRow look exactly — same predictions + bell behavior
-  // wired through. Memoized so identity stays stable across re-renders
-  // unless one of its dependencies actually changes.
   const renderCountryMatchCard = useCallback(
     (match: Match): React.ReactNode => {
       const fixture = matchToFixture(match);
@@ -1606,6 +1544,34 @@ export default function MatchesHubScreenV2() {
       />
     ),
     [renderCountryMatchCard, handleViewAllLeague],
+  );
+
+  const renderLeagueCard = useCallback(
+    ({ item }: { item: LeagueGroup }) => (
+      <LeagueCard
+        group={item}
+        filter={filter}
+        selectedDate={selectedDate}
+        onPredict={handlePredict}
+        submittingId={submittingId}
+        predictedMatches={predictedMatches}
+        subscribedFixtures={subscribedFixtures}
+        subscribingFixtureId={subscribingFixtureId}
+        onToggleSubscription={handleToggleSubscription}
+        onOpenDetails={handleOpenMatchDetails}
+      />
+    ),
+    [
+      filter,
+      selectedDate,
+      handlePredict,
+      submittingId,
+      predictedMatches,
+      subscribedFixtures,
+      subscribingFixtureId,
+      handleToggleSubscription,
+      handleOpenMatchDetails,
+    ],
   );
 
   // The currently-open "View All" league (resolved from `groups` so the
@@ -1710,7 +1676,7 @@ export default function MatchesHubScreenV2() {
     <View style={styles.listHeader}>
       <View style={styles.tabsRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll} style={{ flex: 1, marginRight: 10 }}>
-          {displayedFilters.map((f) => {
+          {FILTERS.map((f) => {
             const active = filter === f;
             const showLock = f === 'WorldCup' && wcTabLocked;
             return (
@@ -1741,24 +1707,54 @@ export default function MatchesHubScreenV2() {
           <Calendar size={18} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
       </View>
-      {isDataStale && !worldCupCampaignMode && matches.length > 0 ? (
+      {isDataStale && matches.length > 0 ? (
         <TouchableOpacity style={styles.staleBanner} onPress={() => void refetch()} activeOpacity={0.85}>
           <Text style={styles.staleBannerTxt}>{t('matches.screen.staleData') || 'Scores may be outdated — tap to refresh'}</Text>
         </TouchableOpacity>
       ) : null}
     </View>
-  ), [filter, t, handleFilterPress, isDataStale, matches.length, refetch, wcTabLocked, worldCupCampaignMode]);
+  ), [filter, t, handleFilterPress, isDataStale, matches.length, refetch, wcTabLocked]);
 
-  const listLoading = (worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled))
-    ? worldCupLoading
-    : loading;
-  const listError = (worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled))
-    ? worldCupError
-    : error;
-  const listRefetch = (worldCupCampaignMode || (filter === 'WorldCup' && worldCupEnabled))
-    ? refetchWorldCup
-    : refetch;
-  const useWcList = worldCupCampaignMode || filter === 'WorldCup';
+  const listHeaderWithPinnedWc = useMemo(
+    () => (
+      <View>
+        {listHeaderNode}
+        {pinnedWorldCupGroup ? (
+          <View style={styles.pinnedWcWrap}>
+            <LeagueCard
+              group={pinnedWorldCupGroup}
+              filter={filter}
+              selectedDate={selectedDate}
+              onPredict={handlePredict}
+              submittingId={submittingId}
+              predictedMatches={predictedMatches}
+              subscribedFixtures={subscribedFixtures}
+              subscribingFixtureId={subscribingFixtureId}
+              onToggleSubscription={handleToggleSubscription}
+              onOpenDetails={handleOpenMatchDetails}
+            />
+          </View>
+        ) : null}
+      </View>
+    ),
+    [
+      listHeaderNode,
+      pinnedWorldCupGroup,
+      filter,
+      selectedDate,
+      handlePredict,
+      submittingId,
+      predictedMatches,
+      subscribedFixtures,
+      subscribingFixtureId,
+      handleToggleSubscription,
+      handleOpenMatchDetails,
+    ],
+  );
+
+  const listLoading = filter === 'WorldCup' && worldCupEnabled ? worldCupLoading : loading;
+  const listError = filter === 'WorldCup' && worldCupEnabled ? worldCupError : error;
+  const listRefetch = filter === 'WorldCup' && worldCupEnabled ? refetchWorldCup : refetch;
 
   const listEmptyNode = useMemo(() => {
     if (listLoading) {
@@ -1811,7 +1807,7 @@ export default function MatchesHubScreenV2() {
             adjustsFontSizeToFit
             minimumFontScale={0.85}
           >
-            {worldCupCampaignMode ? t('matches.screen.worldCupTitle') : t('matches.screen.title')}
+            {t('matches.screen.title')}
           </Text>
         </View>
         <View style={{ flex: 1 }} />
@@ -1833,19 +1829,7 @@ export default function MatchesHubScreenV2() {
             - International: LeagueCard per international competition (no
               country layer — taps a competition → expands → shows matches)
             - Default (All/Live/Upcoming/Finished): Country → League accordions */}
-      {useWcList ? (
-        <FlashList
-          data={wcFlatFixtures}
-          keyExtractor={f => f.id}
-          renderItem={renderWcMatchRow}
-          ItemSeparatorComponent={ITEM_SEPARATOR_10}
-          drawDistance={250}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={listHeaderNode}
-          ListEmptyComponent={listEmptyNode}
-        />
-      ) : filter === 'Predictions' ? (
+      {filter === 'Predictions' ? (
         <FlashList
           data={filteredCountryGroups}
           keyExtractor={cg => cg.country}
@@ -1854,7 +1838,19 @@ export default function MatchesHubScreenV2() {
           ItemSeparatorComponent={ITEM_SEPARATOR_8}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={listHeaderNode}
+          ListHeaderComponent={listHeaderWithPinnedWc}
+          ListEmptyComponent={listEmptyNode}
+        />
+      ) : filter === 'WorldCup' ? (
+        <FlashList
+          data={worldCupLeagueGroups}
+          keyExtractor={g => g.id}
+          renderItem={renderLeagueCard}
+          ItemSeparatorComponent={ITEM_SEPARATOR_10}
+          drawDistance={250}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={listHeaderWithPinnedWc}
           ListEmptyComponent={listEmptyNode}
         />
       ) : (
@@ -1862,14 +1858,11 @@ export default function MatchesHubScreenV2() {
           data={filteredCountryGroups}
           keyExtractor={cg => cg.country}
           renderItem={renderCountryAccordion}
-          // Smaller draw distance keeps fewer cells in memory while
-          // scrolling fast, which matters because each country can mount
-          // a chunk of leagues + match rows when expanded.
           drawDistance={250}
           ItemSeparatorComponent={ITEM_SEPARATOR_8}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={listHeaderNode}
+          ListHeaderComponent={listHeaderWithPinnedWc}
           ListEmptyComponent={listEmptyNode}
         />
       )}
@@ -2026,6 +2019,7 @@ const styles = StyleSheet.create({
   logoPlusSmall: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   headerTitleTxt: { flexShrink: 0, color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
   listHeader: { marginBottom: 4 },
+  pinnedWcWrap: { marginBottom: 10 },
   staleBanner: {
     marginBottom: 12,
     paddingVertical: 10,

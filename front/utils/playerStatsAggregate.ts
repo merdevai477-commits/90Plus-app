@@ -1,3 +1,5 @@
+import { WC_LEAGUE_ID } from '../constants/worldCup';
+
 /**
  * API-Football returns one statistics row per league/competition.
  * Aggregate or pick the right row for player profile display.
@@ -70,6 +72,13 @@ export function resolvePlayerSeasonStats(
 
   const season = options?.season ?? getFootballSeasonYear();
   let rows = statistics.filter((s) => s.league?.season === season);
+
+  const wcRowsResolve = statistics.filter((s) => s.league?.id === WC_LEAGUE_ID);
+  for (const wc of wcRowsResolve) {
+    if (!rows.some((r) => r.league?.id === WC_LEAGUE_ID)) {
+      rows.push(wc);
+    }
+  }
 
   if (options?.teamId != null) {
     rows = rows.filter((s) => s.team?.id === options.teamId);
@@ -169,6 +178,13 @@ export function getPlayerLeagueStats(
 
   const season = options?.season ?? getFootballSeasonYear();
   let rows = statistics.filter((s) => s.league?.season === season);
+
+  const wcRowsList = statistics.filter((s) => s.league?.id === WC_LEAGUE_ID);
+  for (const wc of wcRowsList) {
+    if (!rows.some((r) => r.league?.id === WC_LEAGUE_ID)) {
+      rows.push(wc);
+    }
+  }
 
   if (options?.teamId != null) {
     rows = rows.filter((s) => s.team?.id === options.teamId);
