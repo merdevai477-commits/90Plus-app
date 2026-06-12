@@ -33,6 +33,14 @@ interface Props {
   fallback?: ReactNode;
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
   maxRenderCount?: number;
+  /** Sentry / log label (e.g. ProfileScreen, PublicUserProfile). */
+  screenLabel?: string;
+  /** User-facing message when a render error is caught. */
+  errorMessage?: string;
+  /** User-facing message when an infinite render loop is detected. */
+  infiniteLoopMessage?: string;
+  /** Secondary navigation after an error — back to previous screen or home tab. */
+  secondaryAction?: 'home' | 'back';
 }
 
 interface State {
@@ -187,7 +195,7 @@ export class ProfileErrorBoundary extends Component<Props, State> {
       try {
         const { captureException } = require('../../services/sentry.service');
         captureException(error, {
-          tags: { errorBoundary: 'ProfileScreen' },
+          tags: { errorBoundary: this.props.screenLabel ?? 'ProfileScreen' },
           extra: { componentStack: errorInfo.componentStack },
           level: 'error',
         });
@@ -237,7 +245,16 @@ export class ProfileErrorBoundary extends Component<Props, State> {
     });
   };
 
-  private handleGoHome = (): void => {
+  private handleSecondaryNavigate = (): void => {
+    if (this.props.secondaryAction === 'back') {
+      logger.info('[ProfileErrorBoundary] User navigating back');
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/Home');
+      }
+      return;
+    }
     logger.info('[ProfileErrorBoundary] User navigating to home');
     router.replace('/(tabs)/Home');
   };
@@ -255,6 +272,11 @@ export class ProfileErrorBoundary extends Component<Props, State> {
 
   private renderFallbackUI(): ReactNode {
     const { error, isInfiniteLoop, errorTimestamp } = this.state;
+    const {
+      errorMessage = 'عذراً، حدث خطأ غير متوقع في صفحة البروفايل.',
+      infiniteLoopMessage = 'تم اكتشاف حلقة لا نهائية في البروفايل. تم إيقاف التطبيق للحماية.',
+      secondaryAction = 'home',
+    } = this.props;
 
     return (
       <View style={styles.container}>
@@ -284,9 +306,7 @@ export class ProfileErrorBoundary extends Component<Props, State> {
 
           {/* Error Message */}
           <Text style={styles.message}>
-            {isInfiniteLoop
-              ? 'تم اكتشاف حلقة لا نهائية في البروفايل. تم إيقاف التطبيق للحماية.'
-              : 'عذراً، حدث خطأ غير متوقع في صفحة البروفايل.'}
+            {isInfiniteLoop ? infiniteLoopMessage : errorMessage}
           </Text>
 
           {/* Error Details (Collapsible) */}
@@ -332,14 +352,20 @@ export class ProfileErrorBoundary extends Component<Props, State> {
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Go Home Button */}
+            {/* Go back / home */}
             <TouchableOpacity
               style={styles.secondaryButton}
-              onPress={this.handleGoHome}
+              onPress={this.handleSecondaryNavigate}
               activeOpacity={0.8}
             >
-              <Ionicons name="home-outline" size={20} color={ProfileTheme.colors.textPrimary} />
-              <Text style={styles.secondaryButtonText}>العودة للرئيسية</Text>
+              <Ionicons
+                name={secondaryAction === 'back' ? 'arrow-back' : 'home-outline'}
+                size={20}
+                color={ProfileTheme.colors.textPrimary}
+              />
+              <Text style={styles.secondaryButtonText}>
+                {secondaryAction === 'back' ? 'رجوع' : 'العودة للرئيسية'}
+              </Text>
             </TouchableOpacity>
 
             {/* Reload App Button */}

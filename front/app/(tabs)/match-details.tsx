@@ -10,8 +10,10 @@ import {
   Dimensions,
   ActivityIndicator,
   StatusBar,
+  AppState,
+  type AppStateStatus,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ApiFootballService, { Lineup, TeamStatistics, TeamFixture, Fixture, FixtureEvent, Venue } from '../../services/apiFootball';
@@ -51,6 +53,10 @@ import {
 } from '../../utils/standingsHelpers';
 
 const { width, height } = Dimensions.get('window');
+
+const LIVE_MATCH_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] as const;
+const FINISHED_MATCH_STATUSES = ['FT', 'AET', 'PEN'] as const;
+const LIVE_POLL_INTERVAL_MS = 5_000;
 
 interface MatchDetailsParams {
   fixtureId: string;
@@ -134,11 +140,22 @@ const MatchDetailsScreen = () => {
 
   // Determine if the match is live based on fixture status or params
   const isLive = useCallback(() => {
-    const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
     if (fixture) {
-      return liveStatuses.includes(fixture.fixture.status.short);
+      return LIVE_MATCH_STATUSES.includes(
+        fixture.fixture.status.short as (typeof LIVE_MATCH_STATUSES)[number],
+      );
     }
     return params.status === 'live';
+  }, [fixture, params.status]);
+
+  const shouldPollLive = useCallback(() => {
+    if (params.status === 'live') return true;
+    if (!fixture) return false;
+    const short = fixture.fixture.status.short;
+    if (FINISHED_MATCH_STATUSES.includes(short as (typeof FINISHED_MATCH_STATUSES)[number])) {
+      return false;
+    }
+    return LIVE_MATCH_STATUSES.includes(short as (typeof LIVE_MATCH_STATUSES)[number]);
   }, [fixture, params.status]);
 
   const refreshLiveSnapshot = useCallback(async () => {
@@ -297,24 +314,19 @@ const MatchDetailsScreen = () => {
     ]).start();
   }, [fixtureId]);
 
-  // Live match polling — fresh scores, clock, and events every 5s
+  // Live match polling — fresh scores, clock, and events every 5s (background)
   useEffect(() => {
     if (livePollingRef.current) {
       clearInterval(livePollingRef.current);
       livePollingRef.current = null;
     }
 
-    if (!fixtureId) return;
-    const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
-    const shouldPoll =
-      params.status === 'live' ||
-      (fixture ? liveStatuses.includes(fixture.fixture.status.short) : false);
-    if (!shouldPoll) return;
+    if (!fixtureId || !shouldPollLive()) return;
 
     void refreshLiveSnapshot();
     livePollingRef.current = setInterval(() => {
       void refreshLiveSnapshot();
-    }, 3_000);
+    }, LIVE_POLL_INTERVAL_MS);
 
     return () => {
       if (livePollingRef.current) {
@@ -322,12 +334,25 @@ const MatchDetailsScreen = () => {
         livePollingRef.current = null;
       }
     };
-  }, [
-    fixtureId,
-    fixture?.fixture?.status?.short,
-    params.status,
-    refreshLiveSnapshot,
-  ]);
+  }, [fixtureId, shouldPollLive, refreshLiveSnapshot]);
+
+  // Instant refresh when user opens this screen (tab switch / navigation)
+  useFocusEffect(
+    useCallback(() => {
+      if (!fixtureId || !shouldPollLive()) return;
+      void refreshLiveSnapshot();
+    }, [fixtureId, shouldPollLive, refreshLiveSnapshot]),
+  );
+
+  // Refresh when app returns from background during a live match
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active' && fixtureId && shouldPollLive()) {
+        void refreshLiveSnapshot();
+      }
+    });
+    return () => sub.remove();
+  }, [fixtureId, shouldPollLive, refreshLiveSnapshot]);
 
   // Extra events refresh while the Events tab is open during live play / HT
   useEffect(() => {

@@ -194,7 +194,7 @@ router.get('/cache/stats', FootballController.getCacheStats);
 // GET /api/football/fixtures/:id
 // Get a single fixture by ID
 // ============================================
-router.get('/fixtures/:id', SHARED_CACHE_8S, FootballController.getFixtureById);
+router.get('/fixtures/:id', SHARED_CACHE_3S, FootballController.getFixtureById);
 
 // ============================================
 // GET /api/football/fixtures/:id/lineups

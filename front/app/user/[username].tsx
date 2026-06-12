@@ -56,6 +56,8 @@ import { useUserReport } from '../../hooks/useReportSystem';
 import ContentTabs from '../../components/profile/ContentTabs';
 import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
 import { usePublicUserPredictions } from '../../hooks/usePublicUserPredictions';
+import { ProfileErrorBoundary } from '../../components/common/ProfileErrorBoundary';
+import { logger } from '../../utils/logger';
 
 // Cache keys for the public-profile screen
 const USER_PROFILE_CACHE = 'user_profile';
@@ -190,9 +192,16 @@ const tb = StyleSheet.create({
   },
 });
 
+function normalizeRouteUsername(value: string | string[] | undefined): string {
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) return (value[0] ?? '').trim();
+  return '';
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
-export default function UserProfileScreen() {
-  const { username } = useLocalSearchParams<{ username: string }>();
+function UserProfileScreen() {
+  const params = useLocalSearchParams<{ username: string | string[] }>();
+  const username = normalizeRouteUsername(params.username);
   const { getToken, isSignedIn } = useAuth();
   const toast = useToast();
   const { t } = useTranslation();
@@ -252,10 +261,14 @@ export default function UserProfileScreen() {
 
   // ── Data loading (cache-first for instant render) ──────────────────────────
   const loadUserProfile = useCallback(async (skipCache = false) => {
-    if (!username) { setError(t.publicProfile.notFound); setIsLoading(false); return; }
+    if (!username) {
+      setError(t.publicProfile.notFound);
+      setIsLoading(false);
+      return;
+    }
 
     const isOwn =
-      globalState.userProfile?.username?.toLowerCase() === username?.toLowerCase();
+      globalState.userProfile?.username?.toLowerCase() === username.toLowerCase();
     if (isOwn) { router.replace('/(tabs)/profile'); return; }
 
     // Cache-first: paint cached profile instantly while we revalidate.
@@ -569,23 +582,34 @@ export default function UserProfileScreen() {
   const userXp = user.xp ?? 0;
   const relativeXp = Math.max(0, userXp - xpForLevel(userLevel));
 
-  // Social links
+  // Social links — guard malformed API rows
   const socialLinks = Array.isArray(user.socialLinks)
     ? user.socialLinks
-        .map((l) => ({ platform: l.platform || 'website', url: l.url || '', username: l.username }))
+        .filter((l): l is NonNullable<typeof l> => !!l && typeof l === 'object')
+        .map((l) => ({
+          platform: typeof l.platform === 'string' ? l.platform : 'website',
+          url: typeof l.url === 'string' ? l.url : '',
+          username: typeof l.username === 'string' ? l.username : undefined,
+        }))
         .filter((l) => l.url.trim() !== '')
     : [];
 
   const showFullProfile = !blockedMe && !isBlocked;
 
-  const formattedVideos = userVideos.map(v => ({
-    id: v.id,
-    uri: v.uri,
-    thumbnail: v.thumbnail,
-    views: v.views,
-    likes: v.likes,
-    duration: (v as any).duration ?? 0,
-  }));
+  const formattedVideos = userVideos
+    .filter((v) => v && v.id && v.uri)
+    .map((v) => ({
+      id: v.id,
+      thumbnail: v.thumbnail,
+      views: String(v.views ?? '0'),
+      duration: String((v as { duration?: number | string }).duration ?? '0'),
+    }));
+
+  const openFollowersModal = (tab: 'followers' | 'following') => {
+    if (!user?.id) return;
+    setFollowersModalTab(tab);
+    setIsFollowersModalVisible(true);
+  };
 
   return (
     <View style={s.container}>
@@ -752,14 +776,8 @@ export default function UserProfileScreen() {
           followers={(user.followersCount || 0).toString()}
           following={(user.followingCount || 0).toString()}
           videos={(user.reelsCount || 0).toString()}
-          onFollowersPress={showFullProfile ? () => {
-            setFollowersModalTab('followers');
-            setIsFollowersModalVisible(true);
-          } : undefined}
-          onFollowingPress={showFullProfile ? () => {
-            setFollowersModalTab('following');
-            setIsFollowersModalVisible(true);
-          } : undefined}
+          onFollowersPress={showFullProfile && user.id ? () => openFollowersModal('followers') : undefined}
+          onFollowingPress={showFullProfile && user.id ? () => openFollowersModal('following') : undefined}
         />
 
         {/* Follow + Share + Report + Block */}
@@ -922,14 +940,35 @@ export default function UserProfileScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <FollowersListModal
-        visible={isFollowersModalVisible}
-        onClose={() => setIsFollowersModalVisible(false)}
-        userId={user.id}
-        initialTab={followersModalTab}
-        username={user.username}
-      />
+      {user.id ? (
+        <FollowersListModal
+          visible={isFollowersModalVisible}
+          onClose={() => setIsFollowersModalVisible(false)}
+          userId={user.id}
+          initialTab={followersModalTab}
+          username={user.username}
+        />
+      ) : null}
     </View>
+  );
+}
+
+export default function UserProfileScreenWithBoundary() {
+  return (
+    <ProfileErrorBoundary
+      screenLabel="PublicUserProfile"
+      errorMessage="عذراً، حدث خطأ غير متوقع في صفحة المستخدم."
+      infiniteLoopMessage="تم اكتشاف مشكلة في عرض صفحة المستخدم. تم إيقاف الشاشة للحماية."
+      secondaryAction="back"
+      onError={(error, errorInfo) => {
+        logger.error('[PublicUserProfile] render error:', {
+          message: error.message,
+          componentStack: errorInfo.componentStack,
+        });
+      }}
+    >
+      <UserProfileScreen />
+    </ProfileErrorBoundary>
   );
 }
 

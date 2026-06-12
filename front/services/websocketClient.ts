@@ -239,7 +239,7 @@ class WebSocketClient {
       transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
       autoConnect: true,
       reconnection: false, // We handle reconnection manually for exponential backoff
-      timeout: 20000,
+      timeout: 30000,
       forceNew: true, // Force new connection
       upgrade: true, // Allow transport upgrades
       rememberUpgrade: false, // Don't remember upgrade preference
@@ -313,10 +313,11 @@ class WebSocketClient {
       const looksLikeNetwork =
         errMsg.includes('network request failed') ||
         errMsg.includes('xhr poll error') ||
+        errMsg.includes('timeout') ||
         ctxResp.includes('unable to resolve host') ||
         ctxResp.includes('no address associated');
       if (looksLikeNetwork) {
-        logger.debug('[WebSocket] Transient network error — retrying silently');
+        logger.debug('[WebSocket] Transient network/timeout — retrying silently');
         if (!this.isManualDisconnect) {
           this.attemptReconnect();
         }

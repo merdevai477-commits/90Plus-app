@@ -373,7 +373,15 @@ class PreloadManagerClass {
         logger.debug('[PreloadManager] ✅ Profile preloaded with key:', userSpecificKey);
       }
     } catch (error: any) {
-      logger.error('[PreloadManager] Failed to preload profile:', error);
+      const isTransient =
+        error?.name === 'SyncNetworkError' ||
+        error?.name === 'SyncTimeoutError' ||
+        String(error?.message || '').toLowerCase().includes('timeout');
+      if (isTransient) {
+        logger.debug('[PreloadManager] Profile preload skipped (slow network) — will load on tab open');
+        return;
+      }
+      logger.warn('[PreloadManager] Failed to preload profile:', error);
       throw error;
     }
   }

@@ -68,7 +68,11 @@ export default function FollowersListModal({
     const PAGE_SIZE = 30;
 
     useEffect(() => {
-        if (visible) {
+        if (visible && !userId) {
+            onClose();
+            return;
+        }
+        if (visible && userId) {
             setActiveTab(initialTab);
             setFollowers([]);
             setFollowing([]);
@@ -78,9 +82,10 @@ export default function FollowersListModal({
             setHasMoreFollowing(true);
             loadData(initialTab);
         }
-    }, [visible, initialTab]);
+    }, [visible, initialTab, userId]);
 
     const loadFollowers = async () => {
+        if (!userId) return;
         const token = await getToken();
         if (!token) return;
         const followersData = await FollowService.getFollowers(token, userId, PAGE_SIZE, 0);
@@ -90,6 +95,7 @@ export default function FollowersListModal({
     };
 
     const loadFollowing = async () => {
+        if (!userId) return;
         const token = await getToken();
         if (!token) return;
         const followingData = await FollowService.getFollowing(token, userId, PAGE_SIZE, 0);
@@ -200,11 +206,12 @@ export default function FollowersListModal({
     };
 
     const handleUserPress = (user: FollowUser) => {
+        if (!user?.username) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onClose();
         router.push({
             pathname: '/user/[username]',
-            params: { username: user.username }
+            params: { username: user.username },
         });
     };
 
