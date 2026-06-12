@@ -239,6 +239,7 @@ export default function UserProfileScreen() {
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const hasRecordedViewRef = useRef(false);
+  const followActionInFlightRef = useRef(false);
 
   const { follow, unfollow } = useFollowStore();
 
@@ -415,7 +416,8 @@ export default function UserProfileScreen() {
   };
 
   const performFollow = async () => {
-    if (!user) return;
+    if (!user || followActionInFlightRef.current) return;
+    followActionInFlightRef.current = true;
     const prev = { isFollowing: user.isFollowing, followersCount: user.followersCount };
     follow(user.id);
     setUser(p => p ? { ...p, isFollowing: true, followersCount: (p.followersCount || 0) + 1 } : null);
@@ -432,11 +434,14 @@ export default function UserProfileScreen() {
       unfollow(user.id);
       setUser(p => p ? { ...p, ...prev } : null);
       toast.showError('', t.publicProfile.followFailed);
+    } finally {
+      followActionInFlightRef.current = false;
     }
   };
 
   const performUnfollow = async () => {
-    if (!user) return;
+    if (!user || followActionInFlightRef.current) return;
+    followActionInFlightRef.current = true;
     const prev = { isFollowing: user.isFollowing, followersCount: user.followersCount };
     unfollow(user.id);
     setUser(p => p ? { ...p, isFollowing: false, followersCount: Math.max((p.followersCount || 0) - 1, 0) } : null);
@@ -453,11 +458,13 @@ export default function UserProfileScreen() {
       follow(user.id);
       setUser(p => p ? { ...p, ...prev } : null);
       toast.showError('', t.publicProfile.followFailed);
+    } finally {
+      followActionInFlightRef.current = false;
     }
   };
 
   const handleFollow = () => {
-    if (!user) return;
+    if (!user || followActionInFlightRef.current) return;
     if (!isSignedIn) {
       router.push('/auth');
       return;

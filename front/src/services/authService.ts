@@ -873,6 +873,10 @@ export class CardProfileService {
     }
 }
 
+function isAlreadyFollowingError(message?: string): boolean {
+    return typeof message === 'string' && message.toLowerCase().includes('already following');
+}
+
 export class FollowService {
     /**
      * Follow a user
@@ -888,7 +892,7 @@ export class FollowService {
             });
 
             const data = await response.json();
-            if (data.status === 'SUCCESS') {
+            if (data.status === 'SUCCESS' || isAlreadyFollowingError(data.message)) {
                 return { success: true, data: data.data };
             }
             return { success: false, error: data.message };
@@ -960,7 +964,7 @@ export class FollowService {
             });
 
             const data = await response.json();
-            if (data.status === 'SUCCESS') {
+            if (data.status === 'SUCCESS' || isAlreadyFollowingError(data.message)) {
                 return { success: true };
             }
             return { success: false, error: data.message };
