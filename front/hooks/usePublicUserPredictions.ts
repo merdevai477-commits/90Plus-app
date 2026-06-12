@@ -46,6 +46,13 @@ export function usePublicUserPredictions(
   const [stats, setStats] = useState(EMPTY.stats);
   const [predictions, setPredictions] = useState<UserPredictionItem[]>([]);
   const hydratedRef = useRef(false);
+  const fetchInFlightRef = useRef(false);
+  const lastBootstrapKeyRef = useRef<string | null>(null);
+
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   const applyPayload = useCallback((payload: PublicUserPredictionsPayload) => {
     setStats(payload.stats);
@@ -67,26 +74,39 @@ export function usePublicUserPredictions(
     if (!username || !enabled) return;
     const key = username.toLowerCase();
 
-    if (!skipCache && !hydratedRef.current) {
-      await hydrateFromCache(key);
-      hydratedRef.current = true;
-    }
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
 
     try {
-      const token = await getToken();
+      if (!skipCache && !hydratedRef.current) {
+        await hydrateFromCache(key);
+        hydratedRef.current = true;
+      }
+
+      const token = await getTokenRef.current();
       const payload = await PredictionsService.getPublicUserPredictions(key, token);
       applyPayload(payload);
       await AsyncStorage.setItem(publicUserPredictionsKey(key), JSON.stringify(payload));
     } catch {
       // keep cached data on network errors
+    } finally {
+      fetchInFlightRef.current = false;
     }
-  }, [username, enabled, getToken, hydrateFromCache, applyPayload]);
+  }, [username, enabled, hydrateFromCache, applyPayload]);
+
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
 
   useEffect(() => {
     if (!username || !enabled) return;
+
+    const bootstrapKey = `${username.toLowerCase()}|${enabled}`;
+    if (lastBootstrapKeyRef.current === bootstrapKey) return;
+    lastBootstrapKeyRef.current = bootstrapKey;
+
     hydratedRef.current = false;
-    void refresh(false);
-  }, [username, enabled, refresh]);
+    void refreshRef.current(false);
+  }, [username, enabled]);
 
   return { stats, predictions, refresh };
 }

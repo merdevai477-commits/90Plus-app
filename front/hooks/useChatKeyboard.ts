@@ -30,6 +30,8 @@ export function useChatKeyboard({ listRef, hasMessages, messageCount }: UseChatK
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const syncTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const keyboardVisibleRef = useRef(false);
+  const lastScrolledCountRef = useRef(0);
   const useExpoKeyboardPath = !isKeyboardControllerActive;
   const useKeyboardAvoiding = false;
   const useNativeKeyboardScroll = isKeyboardControllerActive;
@@ -52,6 +54,9 @@ export function useChatKeyboard({ listRef, hasMessages, messageCount }: UseChatK
     [hasMessages, listRef],
   );
 
+  const scrollToEndRef = useRef(scrollToEnd);
+  scrollToEndRef.current = scrollToEnd;
+
   const setHeightIfValid = useCallback((h: number) => {
     if (h <= 0) return;
     setKeyboardHeight((prev) => (Math.abs(prev - h) < 2 ? prev : h));
@@ -59,21 +64,29 @@ export function useChatKeyboard({ listRef, hasMessages, messageCount }: UseChatK
 
   const applyKeyboardOpen = useCallback(
     (e?: KeyboardEvent) => {
-      setKeyboardVisible(true);
+      keyboardVisibleRef.current = true;
+      setKeyboardVisible((prev) => (prev ? prev : true));
       const fromEvent = heightFromEvent(e);
       if (fromEvent > 0) {
         setHeightIfValid(fromEvent);
-        scrollToEnd(false);
+        scrollToEndRef.current(false);
       }
     },
-    [scrollToEnd, setHeightIfValid],
+    [setHeightIfValid],
   );
 
   const applyKeyboardClose = useCallback(() => {
+    if (!keyboardVisibleRef.current) return;
     clearSyncTimers();
+    keyboardVisibleRef.current = false;
     setKeyboardVisible(false);
-    setKeyboardHeight(0);
+    setKeyboardHeight((prev) => (prev === 0 ? prev : 0));
   }, [clearSyncTimers]);
+
+  const applyKeyboardOpenRef = useRef(applyKeyboardOpen);
+  const applyKeyboardCloseRef = useRef(applyKeyboardClose);
+  applyKeyboardOpenRef.current = applyKeyboardOpen;
+  applyKeyboardCloseRef.current = applyKeyboardClose;
 
   /** iOS only: poll metrics until keyboard animation finishes. */
   const scheduleHeightSync = useCallback(() => {
@@ -92,30 +105,36 @@ export function useChatKeyboard({ listRef, hasMessages, messageCount }: UseChatK
   useEffect(() => {
     const subs: { remove: () => void }[] = [];
 
+    const onShow = (e: KeyboardEvent) => applyKeyboardOpenRef.current(e);
+    const onHide = () => applyKeyboardCloseRef.current();
+
     if (Platform.OS === 'ios') {
-      subs.push(Keyboard.addListener('keyboardWillShow', applyKeyboardOpen));
-      subs.push(Keyboard.addListener('keyboardWillHide', applyKeyboardClose));
+      subs.push(Keyboard.addListener('keyboardWillShow', onShow));
+      subs.push(Keyboard.addListener('keyboardWillHide', onHide));
     } else {
-      subs.push(Keyboard.addListener('keyboardDidShow', applyKeyboardOpen));
-      subs.push(Keyboard.addListener('keyboardDidHide', applyKeyboardClose));
+      subs.push(Keyboard.addListener('keyboardDidShow', onShow));
+      subs.push(Keyboard.addListener('keyboardDidHide', onHide));
     }
 
     return () => {
       subs.forEach((s) => s.remove());
       clearSyncTimers();
     };
-  }, [applyKeyboardOpen, applyKeyboardClose, clearSyncTimers]);
+  }, [clearSyncTimers]);
 
   useEffect(() => {
     if (!hasMessages) return;
-    scrollToEnd(false);
-  }, [hasMessages, messageCount, scrollToEnd]);
+    if (messageCount === lastScrolledCountRef.current) return;
+    lastScrolledCountRef.current = messageCount;
+    scrollToEndRef.current(false);
+  }, [hasMessages, messageCount]);
 
   const onInputFocus = useCallback(() => {
+    keyboardVisibleRef.current = true;
     setKeyboardVisible(true);
     scheduleHeightSync();
-    scrollToEnd(true);
-  }, [scheduleHeightSync, scrollToEnd]);
+    scrollToEndRef.current(true);
+  }, [scheduleHeightSync]);
 
   const syncKeyboardHeight = useCallback(() => {
     if (!USE_MANUAL_COMPOSER_LIFT) return;

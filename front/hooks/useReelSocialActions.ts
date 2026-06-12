@@ -25,6 +25,8 @@ export function useReelSocialActions({
   enabled = true,
 }: UseReelSocialActionsOptions) {
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const [isLiked, setIsLiked] = useState(initial.liked);
   const [likes, setLikes] = useState(initial.likes);
   const [isSaved, setIsSaved] = useState(initial.saved);
@@ -53,7 +55,7 @@ export function useReelSocialActions({
           const target = pendingLikeRef.current;
           if (target === null) return;
           try {
-            const token = await getToken();
+            const token = await getTokenRef.current();
             if (!token) return;
             const result = target
               ? await ReelsService.likeReel(token, reelId)
@@ -71,27 +73,27 @@ export function useReelSocialActions({
       }
       return next;
     });
-  }, [enabled, reelId, getToken]);
+  }, [enabled, reelId]);
 
   const handleSave = useCallback(async () => {
     const nextSaved = !isSaved;
     setIsSaved(nextSaved);
     if (!enabled || !reelId) return;
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
       if (nextSaved) await ReelsService.saveReel(token, reelId);
       else await ReelsService.unsaveReel(token, reelId);
     } catch {
       setIsSaved(!nextSaved);
     }
-  }, [enabled, reelId, getToken, isSaved]);
+  }, [enabled, reelId, isSaved]);
 
   const recordShare = useCallback(
     async (platform: string) => {
       if (!enabled || !reelId) return;
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token) return;
         const res = await ReelsService.recordShare(token, reelId, platform);
         if (res.sharesCount !== undefined) setShares(res.sharesCount);
@@ -99,7 +101,7 @@ export function useReelSocialActions({
         /* non-blocking */
       }
     },
-    [enabled, reelId, getToken],
+    [enabled, reelId],
   );
 
   return {

@@ -76,7 +76,9 @@ function debounce<T extends (...args: any[]) => any>(
 
 export function useProfileCompletion(): UseProfileCompletionReturn {
   const { getToken, isSignedIn, isLoaded } = useAuth();
-  
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   // ============================================================================
   // STATE
   // ============================================================================
@@ -86,6 +88,9 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
+  const lastFetchTimeRef = useRef<number | null>(null);
+  const retryCountRef = useRef(0);
+  retryCountRef.current = retryCount;
   
   // ============================================================================
   // REFS (Prevent Re-renders & Memory Leaks)
@@ -153,7 +158,7 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
     
     // Check cooldown
     const now = Date.now();
-    if (!force && lastFetchTime && now - lastFetchTime < CONFIG.FETCH_COOLDOWN) {
+    if (!force && lastFetchTimeRef.current && now - lastFetchTimeRef.current < CONFIG.FETCH_COOLDOWN) {
       logger.debug('[useProfileCompletion] Fetch cooldown active, skipping');
       return;
     }
@@ -173,9 +178,10 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
       isFetchingRef.current = true;
       setIsLoading(true);
       setError(null);
+      lastFetchTimeRef.current = now;
       setLastFetchTime(now);
       
-      const token = await getClerkBearerToken(getToken);
+      const token = await getClerkBearerToken(getTokenRef.current);
       if (!token) return;
       
       // Check if aborted
@@ -225,16 +231,25 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
       logger.error('[useProfileCompletion] ❌ Error fetching completion status:', err);
       
       // Advanced Retry logic to prevent DDOSing backend
-      if (retryCount < CONFIG.MAX_RETRIES && isMountedRef.current) {
+      if (retryCountRef.current < CONFIG.MAX_RETRIES && isMountedRef.current) {
         willRetry = true;
-        setRetryCount(prev => prev + 1);
-        logger.info('[useProfileCompletion] Retrying... Attempt', retryCount + 1, 'of', CONFIG.MAX_RETRIES);
+        setRetryCount((prev) => {
+          const next = prev + 1;
+          retryCountRef.current = next;
+          return next;
+        });
+        logger.info(
+          '[useProfileCompletion] Retrying... Attempt',
+          retryCountRef.current,
+          'of',
+          CONFIG.MAX_RETRIES,
+        );
 
-        const backoffDelay = CONFIG.RETRY_DELAY * Math.pow(2, retryCount);
+        const backoffDelay = CONFIG.RETRY_DELAY * Math.pow(2, retryCountRef.current - 1);
 
         setTimeout(() => {
           if (isMountedRef.current) {
-            fetchCompletionStatus(true);
+            fetchCompletionStatusRef.current(true);
           }
         }, backoffDelay);
       } else {
@@ -252,15 +267,20 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
         abortControllerRef.current = null;
       }
     }
-  }, [isSignedIn, isLoaded, getToken, retryCount, lastFetchTime, checkLoopSafeguard]);
+  }, [isSignedIn, isLoaded, checkLoopSafeguard]);
+
+  const fetchCompletionStatusRef = useRef(fetchCompletionStatus);
+  fetchCompletionStatusRef.current = fetchCompletionStatus;
   
   // ============================================================================
   // DEBOUNCED FETCH (Prevent Rapid Calls)
   // ============================================================================
   
   const debouncedFetch = useMemo(
-    () => debounce(fetchCompletionStatus, CONFIG.DEBOUNCE_DELAY),
-    [fetchCompletionStatus]
+    () => debounce((force = false) => {
+      void fetchCompletionStatusRef.current(force);
+    }, CONFIG.DEBOUNCE_DELAY),
+    [],
   );
   
   // ============================================================================
@@ -278,7 +298,7 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
     }
     
     try {
-      const token = await getClerkBearerToken(getToken);
+      const token = await getClerkBearerToken(getTokenRef.current);
       if (!token) return false;
       
       logger.debug('[useProfileCompletion] Marking step as completed:', stepId);
@@ -299,7 +319,7 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
       logger.error('[useProfileCompletion] ❌ Error marking step completed:', err);
       return false;
     }
-  }, [isSignedIn, getToken]);
+  }, [isSignedIn]);
   
   // ============================================================================
   // REFRESH (Force Fetch)
@@ -307,8 +327,8 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
   
   const refresh = useCallback(async () => {
     logger.debug('[useProfileCompletion] Manual refresh triggered');
-    await fetchCompletionStatus(true);
-  }, [fetchCompletionStatus]);
+    await fetchCompletionStatusRef.current(true);
+  }, []);
   
   // ============================================================================
   // EFFECT: Initial Fetch (RUNS ONCE)
@@ -318,7 +338,7 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
     // Only fetch if signed in
     if (isSignedIn) {
       logger.debug('[useProfileCompletion] Initial fetch on mount');
-      fetchCompletionStatus(false);
+      void fetchCompletionStatusRef.current(false);
     }
     
     // Cleanup on unmount
@@ -376,7 +396,7 @@ export function useProfileCompletion(): UseProfileCompletionReturn {
         appStateSubscriptionRef.current = null;
       }
     };
-  }, [isSignedIn, debouncedFetch]);
+  }, [isSignedIn, debouncedFetch]); // debouncedFetch is stable (empty useMemo deps)
   
   // ============================================================================
   // RETURN

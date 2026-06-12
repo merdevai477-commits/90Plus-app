@@ -203,6 +203,8 @@ function UserProfileScreen() {
   const params = useLocalSearchParams<{ username: string | string[] }>();
   const username = normalizeRouteUsername(params.username);
   const { getToken, isSignedIn } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const toast = useToast();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -288,7 +290,7 @@ function UserProfileScreen() {
     }
 
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       setAuthToken(token);
       const userData = await AuthService.getUserByUsername(token, username);
       if (userData) {
@@ -310,7 +312,7 @@ function UserProfileScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [username, getToken, t]);
+  }, [username, t]);
 
   const loadUserVideos = useCallback(async (skipCache = false, appendOffset?: number) => {
     if (!username) return;
@@ -339,7 +341,7 @@ function UserProfileScreen() {
     }
 
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       const reels = await AuthService.getUserReels(
         token,
         username,
@@ -357,16 +359,16 @@ function UserProfileScreen() {
       setIsLoadingVideos(false);
       setLoadingMoreVideos(false);
     }
-  }, [username, getToken]);
+  }, [username]);
 
   const recordProfileView = useCallback(async () => {
     if (!username || hasRecordedViewRef.current) return;
     hasRecordedViewRef.current = true;
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (token) ProfileService.recordProfileView(token, username);
     } catch { /* silent */ }
-  }, [username, getToken]);
+  }, [username]);
 
   useEffect(() => {
     if (!username) return;
@@ -381,7 +383,7 @@ function UserProfileScreen() {
     setHasMoreVideos(true);
 
     const bootstrap = async () => {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       setAuthToken(token);
       await loadUserProfile();
       recordProfileView();

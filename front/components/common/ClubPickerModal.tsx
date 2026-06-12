@@ -11,7 +11,7 @@
  * `clubLogo` (logo URL) and `favoriteTeam` (team name) to the backend.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
@@ -93,9 +93,15 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
     const [clubsByCountry, setClubsByCountry] = useState<Record<string, TopClub[]>>({});
     const [loadingCountry, setLoadingCountry] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const clubsByCountryRef = useRef(clubsByCountry);
+    const fetchInFlightRef = useRef<string | null>(null);
+    clubsByCountryRef.current = clubsByCountry;
 
     const fetchCountryClubs = useCallback(async (countryKey: string) => {
-        if (clubsByCountry[countryKey]) return; // already loaded
+        if (clubsByCountryRef.current[countryKey]) return;
+        if (fetchInFlightRef.current === countryKey) return;
+
+        fetchInFlightRef.current = countryKey;
         setLoadingCountry(countryKey);
         setError(null);
         try {
@@ -124,10 +130,17 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
         } catch (err: any) {
             logger.error('[ClubPickerModal] Failed to load clubs for', countryKey, err?.message);
             setError('فشل تحميل الأندية. تحقق من اتصالك وحاول مرة أخرى.');
+            // Mark as loaded (empty) so a failed fetch does not retrigger the effect loop.
+            setClubsByCountry((prev) => (
+                prev[countryKey] ? prev : { ...prev, [countryKey]: [] }
+            ));
         } finally {
+            if (fetchInFlightRef.current === countryKey) {
+                fetchInFlightRef.current = null;
+            }
             setLoadingCountry(null);
         }
-    }, [clubsByCountry]);
+    }, []);
 
     // Load initial country when modal opens
     useEffect(() => {
