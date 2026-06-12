@@ -57,7 +57,9 @@ const { width, height } = Dimensions.get('window');
 
 const LIVE_MATCH_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] as const;
 const FINISHED_MATCH_STATUSES = ['FT', 'AET', 'PEN'] as const;
-const LIVE_POLL_INTERVAL_MS = 5_000;
+const LIVE_POLL_INTERVAL_MS = 3_000;
+/** Full lineups/stats bundle every N fast ticks (~15s at 3s interval). */
+const LIVE_FULL_BUNDLE_EVERY_N = 5;
 
 interface MatchDetailsParams {
   fixtureId: string;
@@ -168,12 +170,13 @@ const MatchDetailsScreen = () => {
     return false;
   }, [fixture, params.status, events]);
 
-  const refreshLiveSnapshot = useCallback(async () => {
-    if (!fixtureId) return;
-    try {
-      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, {
-        skipCache: true,
-      });
+  const applyLiveBundle = useCallback(
+    (bundle: {
+      fixture: Fixture | null;
+      lineups: Lineup[];
+      statistics: TeamStatistics[];
+      events: FixtureEvent[];
+    }) => {
       const nextEvents = bundle.events ?? [];
       setEvents(nextEvents);
       if (bundle.fixture) {
@@ -187,8 +190,8 @@ const MatchDetailsScreen = () => {
         setStatistics(bundle.statistics);
         setStatsFromEvents(false);
         loadedTabsRef.current.add('stats');
-      } else if (bundle.fixture && bundle.events?.length) {
-        const fromEvents = buildFallbackStatisticsFromEvents(bundle.fixture, bundle.events);
+      } else if (bundle.fixture && nextEvents.length) {
+        const fromEvents = buildFallbackStatisticsFromEvents(bundle.fixture, nextEvents);
         if (hasApiStatistics(fromEvents)) {
           setStatistics(fromEvents);
           setStatsFromEvents(true);
@@ -204,13 +207,51 @@ const MatchDetailsScreen = () => {
         loadedTabsRef.current.delete('lineups');
         loadedTabsRef.current.delete('standings');
       }
+    },
+    [],
+  );
+
+  /** Fast: score + minute + events only (matches list cadence). */
+  const refreshLiveFast = useCallback(async () => {
+    if (!fixtureId) return;
+    try {
+      const [fixtureData, eventData] = await Promise.all([
+        ApiFootballService.getFixtureById(fixtureId, { skipCache: true }),
+        ApiFootballService.getFixtureEvents(fixtureId, { skipCache: true }),
+      ]);
+      const nextEvents = eventData ?? [];
+      setEvents(nextEvents);
+      if (fixtureData) {
+        setFixture(reconcileFixtureWithEvents(fixtureData, nextEvents));
+      }
     } catch {
       // silent — next poll retries
     }
   }, [fixtureId]);
 
+  const refreshLiveFull = useCallback(async () => {
+    if (!fixtureId) return;
+    try {
+      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, {
+        skipCache: true,
+      });
+      applyLiveBundle(bundle);
+    } catch {
+      // silent — next poll retries
+    }
+  }, [applyLiveBundle, fixtureId]);
+
+  const refreshLiveSnapshot = useCallback(
+    async (scope: 'fast' | 'full' = 'fast') => {
+      if (scope === 'full') await refreshLiveFull();
+      else await refreshLiveFast();
+    },
+    [refreshLiveFast, refreshLiveFull],
+  );
+
   // Live polling interval refs
   const livePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const livePollTickRef = useRef(0);
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lineupsTabRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -235,7 +276,7 @@ const MatchDetailsScreen = () => {
       };
     });
     if (update.status === 'HT' || update.status === 'FT') {
-      void refreshLiveSnapshot();
+      void refreshLiveSnapshot('full');
     }
   }, [refreshLiveSnapshot]);
 
@@ -327,18 +368,22 @@ const MatchDetailsScreen = () => {
     ]).start();
   }, [fixtureId]);
 
-  // Live match polling — fresh scores, clock, and events every 5s (background)
+  // Live polling — fast score/minute/events every 3s; full bundle ~every 15s
   useEffect(() => {
     if (livePollingRef.current) {
       clearInterval(livePollingRef.current);
       livePollingRef.current = null;
     }
+    livePollTickRef.current = 0;
 
     if (!fixtureId || !shouldPollLive()) return;
 
-    void refreshLiveSnapshot();
+    void refreshLiveSnapshot('fast');
     livePollingRef.current = setInterval(() => {
-      void refreshLiveSnapshot();
+      livePollTickRef.current += 1;
+      const scope =
+        livePollTickRef.current % LIVE_FULL_BUNDLE_EVERY_N === 0 ? 'full' : 'fast';
+      void refreshLiveSnapshot(scope);
     }, LIVE_POLL_INTERVAL_MS);
 
     return () => {
@@ -346,6 +391,7 @@ const MatchDetailsScreen = () => {
         clearInterval(livePollingRef.current);
         livePollingRef.current = null;
       }
+      livePollTickRef.current = 0;
     };
   }, [fixtureId, shouldPollLive, refreshLiveSnapshot]);
 
@@ -353,7 +399,7 @@ const MatchDetailsScreen = () => {
   useFocusEffect(
     useCallback(() => {
       if (!fixtureId || !shouldPollLive()) return;
-      void refreshLiveSnapshot();
+      void refreshLiveSnapshot('fast');
     }, [fixtureId, shouldPollLive, refreshLiveSnapshot]),
   );
 
@@ -361,7 +407,7 @@ const MatchDetailsScreen = () => {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next === 'active' && fixtureId && shouldPollLive()) {
-        void refreshLiveSnapshot();
+        void refreshLiveSnapshot('fast');
       }
     });
     return () => sub.remove();
