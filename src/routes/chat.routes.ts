@@ -32,10 +32,6 @@ import {
     resolveChatLanguage,
 } from '../utils/message-language.util';
 import {
-    buildWorldCupCampaignLockPrompt,
-    getWorldCupCampaignConfig,
-} from '../utils/world-cup-campaign.util';
-import {
     listConversations,
     createConversation,
     findConversation,
@@ -327,7 +323,8 @@ const CORE_BEHAVIOR_PROMPT = `
 
 function buildSystemPrompt(category: Category, mode: LengthMode): string {
     const categoryFocus: Record<Category, string> = {
-        football: 'ركز على معلومات كرة القدم والتكتيك والتاريخ الرياضي.',
+        football:
+            'ركز على معلومات كرة القدم والتكتيك والتاريخ الرياضي. أجب عن كل المسابقات (الدوريات المحلية، دوري الأبطال، كأس العالم، المنتخبات) حسب سؤال المستخدم — لا تقصر الإجابة على كأس العالم فقط.',
         training: 'ركز على التمارين وخطط التدريب وتطوير المهارات.',
         nutrition: 'ركز على التغذية الرياضية والوجبات قبل/بعد المباراة.',
         recovery: 'ركز على الاستشفاء والتعامل مع الإصابات الخفيفة.',
@@ -674,10 +671,8 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             }
         }
 
-        const wcCampaign = getWorldCupCampaignConfig();
         let systemPrompt = [
             buildLanguageLockPrompt(messageLanguage),
-            wcCampaign.active ? buildWorldCupCampaignLockPrompt(messageLanguage) : '',
             sanitizedSuffix ? `${baseSystemPrompt}\n\n${sanitizedSuffix}` : baseSystemPrompt,
         ]
             .filter(Boolean)

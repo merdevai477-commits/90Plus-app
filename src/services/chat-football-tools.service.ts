@@ -30,9 +30,7 @@ import {
 } from '../utils/player-season-stats.util';
 import { redisCacheService } from './redis-cache.service';
 import {
-  filterFixturesByLeague,
   formatFixturesForChatContext,
-  getWorldCupCampaignConfig,
   localDateKey,
 } from '../utils/world-cup-campaign.util';
 
@@ -107,7 +105,7 @@ function isLiveMatchesQuery(message: string): boolean {
   );
 }
 
-/** Today's fixtures / daily football news & stats — scoped to WC during campaign. */
+/** Today's fixtures / daily football news & stats across all competitions. */
 function isTodayFootballScopeQuery(message: string): boolean {
   return (
     isLiveMatchesQuery(message) ||
@@ -115,14 +113,6 @@ function isTodayFootballScopeQuery(message: string): boolean {
       message,
     )
   );
-}
-
-function resolveWorldCupLeague(wc: { leagueId: number; season: number }): {
-  id: number;
-  label: string;
-  season: number;
-} {
-  return { id: wc.leagueId, label: 'FIFA World Cup 2026', season: wc.season };
 }
 
 type ChatLeagueRef = { id: number; label: string; season?: number };
@@ -896,27 +886,18 @@ async function fetchPlayerUclCareerContextCached(
   );
 }
 
-async function fetchLiveMatchesContext(wc?: { leagueId: number }): Promise<string | null> {
+async function fetchLiveMatchesContext(): Promise<string | null> {
   if (!footballService.isConfigured()) return null;
 
-  const cacheKey = wc ? `live:wc:${wc.leagueId}` : 'live:all';
   // Short TTL — live scores move fast.
-  return cachedLookup(cacheKey, 25_000, async () => {
+  return cachedLookup('live:all', 25_000, async () => {
     try {
-      let fixtures = await footballService.getLiveFixtures();
-      if (wc) {
-        fixtures = filterFixturesByLeague(fixtures, wc.leagueId);
-      }
+      const fixtures = await footballService.getLiveFixtures();
       if (!Array.isArray(fixtures) || fixtures.length === 0) {
-        return wc
-          ? 'No FIFA World Cup 2026 matches are live right now.'
-          : 'No football matches are being played live right now.';
+        return 'No football matches are being played live right now.';
       }
 
-      const heading = wc
-        ? 'Live FIFA World Cup 2026 matches right now'
-        : 'Live matches right now';
-      return formatFixturesForChatContext(fixtures, heading);
+      return formatFixturesForChatContext(fixtures, 'Live matches right now');
     } catch (err) {
       logger.warn('[ChatFootball] live matches lookup failed:', err);
       return null;
@@ -924,32 +905,22 @@ async function fetchLiveMatchesContext(wc?: { leagueId: number }): Promise<strin
   });
 }
 
-async function fetchTodayWorldCupFixturesContext(wc: {
-  id: number;
-  season: number;
-}): Promise<string | null> {
+async function fetchTodayAllFixturesContext(): Promise<string | null> {
   if (!footballService.isConfigured()) return null;
 
   const dateString = localDateKey();
-  return cachedLookup(`wc:today:${wc.id}:${wc.season}:${dateString}`, 60_000, async () => {
+  return cachedLookup(`fixtures:today:all:${dateString}`, 60_000, async () => {
     try {
       const { footballDataCacheService } = await import('./football-data-cache.service');
-      const fixtures = await footballDataCacheService.getWorldCupMatchesByDate(
-        dateString,
-        wc.id,
-        wc.season,
-      );
+      const fixtures = await footballDataCacheService.getMatchesByDate(dateString);
       if (!fixtures.length) {
-        return `No FIFA World Cup 2026 fixtures scheduled for ${dateString}.`;
+        return `No football fixtures scheduled for ${dateString}.`;
       }
       return (
-        formatFixturesForChatContext(
-          fixtures,
-          `FIFA World Cup 2026 fixtures on ${dateString}`,
-        ) ?? null
+        formatFixturesForChatContext(fixtures, `Football fixtures on ${dateString}`) ?? null
       );
     } catch (err) {
-      logger.warn('[ChatFootball] today WC fixtures lookup failed:', err);
+      logger.warn('[ChatFootball] today fixtures lookup failed:', err);
       return null;
     }
   });
@@ -978,9 +949,6 @@ export async function buildFootballChatContext(
   const language = opts?.language ?? 'en';
   if (!footballService.isConfigured()) return null;
 
-  const wcCampaign = getWorldCupCampaignConfig();
-  const wcLeague = wcCampaign.active ? resolveWorldCupLeague(wcCampaign) : null;
-
   const wantsLive = isLiveMatchesQuery(message);
   const wantsTodayScope = isTodayFootballScopeQuery(message);
   const wantsTopScorers = isTopScorerQuery(message);
@@ -995,30 +963,23 @@ export async function buildFootballChatContext(
   const tasks: Array<Promise<ContextPiece | null>> = [];
 
   if (wantsLive) {
-    tasks.push(
-      fetchLiveMatchesContext(wcLeague ? { leagueId: wcLeague.id } : undefined).then((b) =>
-        tagPiece(b, 'api'),
-      ),
-    );
+    tasks.push(fetchLiveMatchesContext().then((b) => tagPiece(b, 'api')));
   }
-  if (wcCampaign.active && wantsTodayScope && wcLeague) {
-    tasks.push(fetchTodayWorldCupFixturesContext(wcLeague).then((b) => tagPiece(b, 'api')));
+  if (wantsTodayScope) {
+    tasks.push(fetchTodayAllFixturesContext().then((b) => tagPiece(b, 'api')));
   }
   if (wantsTopScorers) {
-    tasks.push(
-      fetchTopScorersContext(message, wcLeague ?? undefined).then((b) => tagPiece(b, 'api')),
-    );
+    tasks.push(fetchTopScorersContext(message).then((b) => tagPiece(b, 'api')));
   }
   if (wantsStandings) {
     tasks.push(
       cachedLookup(`standings:${message.slice(0, 64)}`, 10 * 60_000, () =>
-        fetchStandingsContext(message, wcLeague ?? undefined),
+        fetchStandingsContext(message),
       ).then((b) => tagPiece(b, 'api')),
     );
   }
 
-  // During WC campaign, block UCL career lookups — out of scope.
-  const allowUclCareer = wantsUclCareer && !wcCampaign.active;
+  const allowUclCareer = wantsUclCareer;
 
   // ── Team dossier takes precedence over player search for the SAME candidate,
   //    so clubs (ريال مدريد / PSG) stop being mis-resolved as players. We
@@ -1062,18 +1023,6 @@ export async function buildFootballChatContext(
   }
 
   if (tasks.length === 0) {
-    if (wcCampaign.active && wantsTodayScope) {
-      const guard =
-        language === 'ar'
-          ? 'لا توجد بيانات مباريات كأس العالم 2026 متاحة الآن. لا تذكر أي مباريات أو نتائج من مسابقات أخرى.'
-          : 'No FIFA World Cup 2026 match data is available right now. Do not mention matches or results from any other competition.';
-      return {
-        block: tagPiece(guard, 'unavailable')!.block,
-        usedApi: false,
-        cacheable: false,
-        sources: ['unavailable'],
-      };
-    }
     return null;
   }
 
@@ -1107,9 +1056,7 @@ export async function buildFootballChatContext(
 
   const header = allowUclCareer
     ? 'LIVE FOOTBALL API DATA — PLAYER UCL CAREER DOSSIER (authoritative; model: write a professional per-season breakdown using ONLY this data):'
-    : wcCampaign.active
-      ? 'LIVE FIFA WORLD CUP 2026 DATA (authoritative — World Cup only; never invent stats. Items tagged "source: unavailable" have NO data):'
-      : 'LIVE FOOTBALL DATA (authoritative — use ONLY these numbers; never invent stats. Items tagged "source: unavailable" have NO data):';
+    : 'LIVE FOOTBALL DATA (authoritative — use ONLY these numbers; never invent stats. Items tagged "source: unavailable" have NO data):';
 
   return {
     block: `${header}\n\n${pieces.map((p) => p.block).join('\n\n---\n\n')}\n\n${sourceSummary}`,

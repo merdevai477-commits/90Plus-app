@@ -51,6 +51,7 @@ import {
   resolveStandingsGroupsForMatch,
   standingRowMatchesTeam,
 } from '../../utils/standingsHelpers';
+import { reconcileFixtureWithEvents } from '../../utils/matchDetailsLiveSync';
 
 const { width, height } = Dimensions.get('window');
 
@@ -150,13 +151,22 @@ const MatchDetailsScreen = () => {
 
   const shouldPollLive = useCallback(() => {
     if (params.status === 'live') return true;
-    if (!fixture) return false;
-    const short = fixture.fixture.status.short;
-    if (FINISHED_MATCH_STATUSES.includes(short as (typeof FINISHED_MATCH_STATUSES)[number])) {
-      return false;
+    if (fixture) {
+      const short = fixture.fixture.status.short;
+      if (FINISHED_MATCH_STATUSES.includes(short as (typeof FINISHED_MATCH_STATUSES)[number])) {
+        return false;
+      }
+      if (LIVE_MATCH_STATUSES.includes(short as (typeof LIVE_MATCH_STATUSES)[number])) {
+        return true;
+      }
     }
-    return LIVE_MATCH_STATUSES.includes(short as (typeof LIVE_MATCH_STATUSES)[number]);
-  }, [fixture, params.status]);
+    // Header fixture can lag while events are fresh — keep polling until FT.
+    if (events.length > 0) {
+      const maxMinute = Math.max(...events.map((e) => e.time?.elapsed ?? 0));
+      if (maxMinute > 0 && maxMinute < 130) return true;
+    }
+    return false;
+  }, [fixture, params.status, events]);
 
   const refreshLiveSnapshot = useCallback(async () => {
     if (!fixtureId) return;
@@ -164,8 +174,11 @@ const MatchDetailsScreen = () => {
       const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, {
         skipCache: true,
       });
-      if (bundle.fixture) setFixture(bundle.fixture);
-      setEvents(bundle.events ?? []);
+      const nextEvents = bundle.events ?? [];
+      setEvents(nextEvents);
+      if (bundle.fixture) {
+        setFixture(reconcileFixtureWithEvents(bundle.fixture, nextEvents));
+      }
       if (hasLineupData(bundle.lineups)) {
         setLineups(bundle.lineups);
         loadedTabsRef.current.add('lineups');
@@ -354,22 +367,6 @@ const MatchDetailsScreen = () => {
     return () => sub.remove();
   }, [fixtureId, shouldPollLive, refreshLiveSnapshot]);
 
-  // Extra events refresh while the Events tab is open during live play / HT
-  useEffect(() => {
-    const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
-    const inPlay =
-      params.status === 'live' ||
-      (fixture ? liveStatuses.includes(fixture.fixture.status.short) : false);
-    if (!fixtureId || activeTab !== 'events' || !inPlay) return;
-
-    const id = setInterval(() => {
-      ApiFootballService.getFixtureEvents(fixtureId, { skipCache: true })
-        .then((data) => setEvents(data ?? []))
-        .catch(() => {});
-    }, 4_000);
-    return () => clearInterval(id);
-  }, [activeTab, fixture?.fixture?.status?.short, fixtureId, params.status]);
-
   const loadMatchDetails = async () => {
     if (!fixtureId) {
       setError(t.matchDetails.invalidMatchId);
@@ -388,10 +385,11 @@ const MatchDetailsScreen = () => {
         preferFresh ? { skipCache: true } : undefined,
       );
 
-      setEvents(bundle.events ?? []);
+      const nextEvents = bundle.events ?? [];
+      setEvents(nextEvents);
 
       if (bundle.fixture) {
-        const details = bundle.fixture;
+        const details = reconcileFixtureWithEvents(bundle.fixture, nextEvents);
         setFixture(details);
 
         const finishedStatuses = ['FT', 'AET', 'PEN'];
