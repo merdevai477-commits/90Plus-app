@@ -50,6 +50,7 @@ export interface MatchListItem {
     stoppageTime?: number;
     league: string;
     leagueId?: number;
+    leagueCountry?: string;
     kickoff?: string;
     /** True when the user has subscribed (bell) to this match. */
     isPinned?: boolean;
@@ -128,7 +129,12 @@ function MatchCard({
     const awayTeam = normalizeTeam(rawAway);
     const homeLabel = getTeamDisplayName(homeTeam.shortName || homeTeam.name, language);
     const awayLabel = getTeamDisplayName(awayTeam.shortName || awayTeam.name, language);
-    const leagueLabel = getLeagueDisplayName(match.league, language, match.leagueId);
+    const leagueLabel = getLeagueDisplayName(
+      match.league,
+      language,
+      match.leagueId,
+      match.leagueCountry,
+    );
     const homeLogo = homeTeam.logo;
     const awayLogo = awayTeam.logo;
     const homeInitial = (homeLabel || homeTeam.shortName || '?').charAt(0).toUpperCase();

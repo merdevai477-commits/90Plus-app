@@ -36,4 +36,14 @@ export const LEAGUES: League[] = [
     { id: 203, name: 'Turkish Süper Lig', nameAr: 'الدوري التركي', logo: 'https://media.api-sports.io/football/leagues/203.png', country: 'Turkey', countryFlag: '🇹🇷' },
     { id: 71, name: 'Brasileirão', nameAr: 'الدوري البرازيلي', logo: 'https://media.api-sports.io/football/leagues/71.png', country: 'Brazil', countryFlag: '🇧🇷' },
     { id: 128, name: 'Liga Argentina', nameAr: 'الدوري الأرجنتيني', logo: 'https://media.api-sports.io/football/leagues/128.png', country: 'Argentina', countryFlag: '🇦🇷' },
+
+    // Oceania / Asia / Americas
+    { id: 188, name: 'A-League', nameAr: 'الدوري الأسترالي', logo: 'https://media.api-sports.io/football/leagues/188.png', country: 'Australia', countryFlag: '🇦🇺' },
+    { id: 98, name: 'J1 League', nameAr: 'الدوري الياباني', logo: 'https://media.api-sports.io/football/leagues/98.png', country: 'Japan', countryFlag: '🇯🇵' },
+    { id: 253, name: 'Major League Soccer', nameAr: 'الدوري الأمريكي', logo: 'https://media.api-sports.io/football/leagues/253.png', country: 'USA', countryFlag: '🇺🇸' },
+    { id: 262, name: 'Liga MX', nameAr: 'الدوري المكسيكي', logo: 'https://media.api-sports.io/football/leagues/262.png', country: 'Mexico', countryFlag: '🇲🇽' },
+
+    // UK secondary
+    { id: 40, name: 'Championship', nameAr: 'الدرجة الأولى الإنجليزية', logo: 'https://media.api-sports.io/football/leagues/40.png', country: 'England', countryFlag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
+    { id: 179, name: 'Premiership', nameAr: 'الدوري الاسكتلندي', logo: 'https://media.api-sports.io/football/leagues/179.png', country: 'Scotland', countryFlag: '🏴󠁧󠁢󠁳󠁣󠁴󠁿' },
 ];

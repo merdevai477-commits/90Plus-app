@@ -91,7 +91,12 @@ const LeagueSection = memo(function LeagueSection({
   }, []);
 
   const { translate: t, language } = useTranslation();
-  const localizedLeagueName = getLeagueDisplayName(league.leagueName, language, league.leagueId);
+  const localizedLeagueName = getLeagueDisplayName(
+    league.leagueName,
+    language,
+    league.leagueId,
+    league.matches[0]?.league?.country,
+  );
   const matchCount = league.matches.length;
   const hasMore = matchCount > MATCHES_PREVIEW_COUNT;
 

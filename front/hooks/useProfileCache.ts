@@ -203,6 +203,8 @@ export interface UseProfileCacheResult {
  */
 export function useProfileCache(options: UseProfileCacheOptions): UseProfileCacheResult {
   const { getToken, clerkUserImageUrl, clerkUserId, clerkFallback, onCacheHit, onFreshDataLoaded } = options;
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   
   // Generate user-specific cache key
   const cacheKey = useMemo(() => {
@@ -417,7 +419,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         logger.warn('[useProfileCache] ⚠️ API health check error (background check):', err);
       });
       
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) {
         console.error('[useProfileCache] ❌ No token available');
         setError('Authentication required');
@@ -605,7 +607,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     } finally {
       isLoadingRef.current = false;
     }
-  }, [getToken, clerkUserImageUrl, clerkFallback, transformUserProfile, transformReels, saveToCache]); // Removed onFreshDataLoaded - uses ref
+  }, [clerkUserImageUrl, clerkFallback, transformUserProfile, transformReels, saveToCache]); // Removed onFreshDataLoaded - uses ref
 
   /**
    * Main refresh function - implements cache-first pattern
@@ -715,7 +717,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
    */
   const loadVideos = useCallback(async (username: string, bustCache: boolean = false): Promise<void> => {
     try {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
 
       const reels = await AuthService.getUserReels(token, username, 20, 0, bustCache);
@@ -733,7 +735,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     } catch (err) {
       console.error('[useProfileCache] Error loading videos:', err);
     }
-  }, [getToken, transformReels, saveToCache]);
+  }, [transformReels, saveToCache]);
 
   /**
    * Update user data locally (for optimistic updates)

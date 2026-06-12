@@ -35,6 +35,25 @@ export const formatLocalDateKey = (date: Date): string => {
 
 export const getLocalTodayKey = (): string => formatLocalDateKey(new Date());
 
+const LIVE_STATUS_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+
+/** Estimate elapsed minute from period start when API minute is missing. */
+export const estimateElapsedFromPeriodStart = (
+  statusShort: string,
+  startTimestamp: number | undefined,
+): number | undefined => {
+  if (!startTimestamp) return undefined;
+  const now = Math.floor(Date.now() / 1000);
+  const start =
+    startTimestamp > 1_000_000_000_000
+      ? Math.floor(startTimestamp / 1000)
+      : startTimestamp;
+  let diffMin = Math.max(0, Math.floor((now - start) / 60));
+  if (statusShort === '2H') diffMin += 45;
+  if (statusShort === 'ET') diffMin += 90;
+  return diffMin;
+};
+
 /**
  * Live minute label shared by list cards and match-details header.
  */
@@ -59,6 +78,33 @@ export const formatLiveMinuteDisplay = (
     return `${elapsed}'`;
   }
 
+  return undefined;
+};
+
+/**
+ * Single source for live minute labels — matches list and match-details must match.
+ * Prefers API elapsed; only estimates from period start when elapsed is absent.
+ */
+export const resolveLiveMinuteLabel = (
+  statusShort: string | undefined | null,
+  elapsed: number | null | undefined,
+  options?: { startTimestamp?: number },
+): string | undefined => {
+  const short = (statusShort ?? '').trim();
+  if (!short || !LIVE_STATUS_SHORTS.has(short)) return undefined;
+
+  const fromApi = formatLiveMinuteDisplay(short, elapsed);
+  if (fromApi) return fromApi;
+
+  if (elapsed == null && options?.startTimestamp) {
+    const estimated = estimateElapsedFromPeriodStart(short, options.startTimestamp);
+    if (estimated != null) {
+      return formatLiveMinuteDisplay(short, estimated);
+    }
+  }
+
+  if (short === '1H') return "1'";
+  if (short === '2H') return "46'";
   return undefined;
 };
 
@@ -117,7 +163,8 @@ export const mapFixtureToMatch = (fixture: Fixture): Match => {
       away: fixture.goals.away ?? 0,
     },
     status: mapFixtureStatus(fixture.fixture.status.short),
-    statusShort: fixture.fixture.status.short, // Needed for LiveTimer logic
+    statusShort: fixture.fixture.status.short,
+    elapsed: fixture.fixture.status.elapsed ?? null,
     minute: formatMatchMinute(fixture),
     startTimestamp: fixture.fixture.status.short === '2H'
       ? fixture.fixture.periods.second || undefined

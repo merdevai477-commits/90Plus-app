@@ -1209,10 +1209,24 @@ const MatchDetailsScreen = () => {
           <Text style={styles.sectionTitle}>{t.matchDetails.statistics || 'Match Statistics'}</Text>
           {statistics[0]?.statistics.map((stat: any, index: number) => {
             const homeValue = stat.value;
-            const awayValue = statistics[1]?.statistics[index]?.value || 0;
+            const awayStat = statistics[1]?.statistics.find(
+              (s: { type: string }) => s.type === stat.type,
+            );
+            const awayValue = awayStat?.value ?? 0;
 
-            const homeNum = typeof homeValue === 'string' ? parseInt(homeValue) || 0 : homeValue || 0;
-            const awayNum = typeof awayValue === 'string' ? parseInt(awayValue) || 0 : awayValue || 0;
+            const parseStatNum = (v: unknown): number => {
+              if (typeof v === 'number' && Number.isFinite(v)) return v;
+              if (typeof v === 'string') {
+                const pct = v.match(/^(\d+(?:\.\d+)?)\s*%$/);
+                if (pct) return parseFloat(pct[1]) || 0;
+                const n = parseFloat(v.replace(/[^\d.]/g, ''));
+                return Number.isFinite(n) ? n : 0;
+              }
+              return 0;
+            };
+
+            const homeNum = parseStatNum(homeValue);
+            const awayNum = parseStatNum(awayValue);
             const total = homeNum + awayNum || 1;
             const homePercentage = (homeNum / total) * 100;
             const awayPercentage = (awayNum / total) * 100;
@@ -1277,7 +1291,14 @@ const MatchDetailsScreen = () => {
                     <TeamBadge name={opponent.name} logo={opponent.logo} size={40} color="transparent" />
                     <View style={styles.fixtureInfo}>
                       <Text style={styles.fixtureOpponent}>{getTeamDisplayName(opponent.name, language)}</Text>
-                      <Text style={styles.fixtureLeague}>{getLeagueDisplayName(fixture.league.name, language)}</Text>
+                      <Text style={styles.fixtureLeague}>
+                        {getLeagueDisplayName(
+                          fixture.league.name,
+                          language,
+                          fixture.league.id,
+                          fixture.league.country,
+                        )}
+                      </Text>
                     </View>
                     <View style={[styles.fixtureResult, result === 'win' && styles.fixtureWin,
                     result === 'lose' && styles.fixtureLose,
@@ -1316,7 +1337,14 @@ const MatchDetailsScreen = () => {
                     <Image source={{ uri: opponent.logo }} style={styles.fixtureTeamLogo} />
                     <View style={styles.fixtureInfo}>
                       <Text style={styles.fixtureOpponent}>{getTeamDisplayName(opponent.name, language)}</Text>
-                      <Text style={styles.fixtureLeague}>{getLeagueDisplayName(fixture.league.name, language)}</Text>
+                      <Text style={styles.fixtureLeague}>
+                        {getLeagueDisplayName(
+                          fixture.league.name,
+                          language,
+                          fixture.league.id,
+                          fixture.league.country,
+                        )}
+                      </Text>
                     </View>
                     <View style={[styles.fixtureResult, result === 'win' && styles.fixtureWin,
                     result === 'lose' && styles.fixtureLose,
@@ -1603,9 +1631,15 @@ const MatchDetailsScreen = () => {
             : ['FT', 'AET', 'PEN'].includes(fixture.fixture.status.short) ? 'finished'
             : 'upcoming'
           ) : params.status}
-          league={fixture?.league?.name || params.league}
+          league={getLeagueDisplayName(
+            fixture?.league?.name || params.league,
+            language,
+            fixture?.league?.id,
+            fixture?.league?.country,
+          )}
           date={params.date}
           time={params.time}
+          fixtureDate={fixture?.fixture?.date}
           statusShort={fixture?.fixture.status.short}
           elapsed={fixture?.fixture.status.elapsed ?? undefined}
           stoppage={(fixture?.fixture.status as any)?.extra ?? null}

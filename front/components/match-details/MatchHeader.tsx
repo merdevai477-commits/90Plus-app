@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,7 +8,10 @@ import Animated, {
   withTiming,
   useAnimatedStyle,
 } from 'react-native-reanimated';
-import { formatLiveMinuteDisplay } from '../../components/Matches/leagueApiUtils';
+import {
+  formatMatchTime,
+  resolveLiveMinuteLabel,
+} from '../../components/Matches/leagueApiUtils';
 import {
   PURPLE_PRIMARY,
   PURPLE_SOFT,
@@ -29,6 +32,8 @@ interface MatchHeaderProps {
   league: string;
   date: string;
   time: string;
+  /** ISO kickoff — preferred over `time` when available */
+  fixtureDate?: string;
   /** Period start timestamp (seconds) — fallback when API minute is missing. */
   startTimestamp?: number;
   /** API-Football short status (1H, 2H, HT, FT, NS, ...). */
@@ -42,7 +47,6 @@ interface MatchHeaderProps {
 const LIVE_STATUSES = ['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
 const FINISHED_STATUSES = ['FT', 'AET', 'PEN'];
 
-// ─── Pulsing live dot — identical to Home card ────────────────────────────
 function PulsingDot({ color = LIVE_RED }: { color?: string }): React.ReactElement {
   const pulse = useSharedValue(1);
   useEffect(() => {
@@ -56,7 +60,6 @@ function PulsingDot({ color = LIVE_RED }: { color?: string }): React.ReactElemen
   );
 }
 
-// ─── Team logo (with initials fallback) ──────────────────────────────────
 function TeamLogo({ name, uri }: { name: string; uri?: string }): React.ReactElement {
   if (uri) {
     return (
@@ -87,6 +90,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   status,
   league,
   time,
+  fixtureDate,
   statusShort,
   elapsed,
   stoppage,
@@ -99,83 +103,18 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   const isFinished = FINISHED_STATUSES.includes(short) || status === 'finished';
   const isUpcoming = !isLive && !isFinished && !isHalftime;
   const isStoppage = isLive && !!stoppage && stoppage > 0;
-  const inAddedTime =
-    (short === '1H' && elapsed != null && elapsed > 45) ||
-    (short === '2H' && elapsed != null && elapsed > 90);
 
-  /** Anchor local ticking to each fresh API minute (resets on every poll). */
-  const [apiAnchor, setApiAnchor] = useState<{ minute: number; atMs: number } | null>(null);
-  const [clockTick, setClockTick] = useState(0);
+  const kickoffTime = useMemo(() => {
+    if (fixtureDate) return formatMatchTime(fixtureDate);
+    return time || '--:--';
+  }, [fixtureDate, time]);
 
-  useEffect(() => {
-    if (elapsed == null || !isLive || isHalftime || short === 'BT') {
-      setApiAnchor(null);
-      return;
-    }
-    setApiAnchor({ minute: elapsed, atMs: Date.now() });
-  }, [elapsed, isLive, isHalftime, short]);
-
-  useEffect(() => {
-    if (!isLive || isHalftime || !apiAnchor || inAddedTime || isStoppage) return;
-    const id = setInterval(() => setClockTick((n) => n + 1), 1_000);
-    return () => clearInterval(id);
-  }, [apiAnchor, inAddedTime, isHalftime, isLive, isStoppage]);
-
-  const [periodMinute, setPeriodMinute] = useState<number | null>(null);
-  useEffect(() => {
-    if (isHalftime || short === 'BT' || !isLive || !startTimestamp || elapsed != null) {
-      setPeriodMinute(null);
-      return;
-    }
-    const compute = () => {
-      const now = Math.floor(Date.now() / 1000);
-      const start =
-        startTimestamp > 1_000_000_000_000
-          ? Math.floor(startTimestamp / 1000)
-          : startTimestamp;
-      let diffMin = Math.max(0, Math.floor((now - start) / 60));
-      if (short === '2H') diffMin += 45;
-      if (short === 'ET') diffMin += 90;
-      setPeriodMinute(diffMin);
-    };
-    compute();
-    const id = setInterval(compute, 1_000);
-    return () => clearInterval(id);
-  }, [elapsed, isHalftime, isLive, startTimestamp, short]);
-
-  const minuteLabel = useMemo(() => {
-    if (isHalftime) return 'HT';
-    if (!isLive) return '';
-
-    if (inAddedTime || isStoppage) {
-      const formatted = formatLiveMinuteDisplay(short, elapsed);
-      if (formatted) return formatted;
-    }
-
-    if (apiAnchor && elapsed != null) {
-      const sinceAnchorSec = Math.floor((Date.now() - apiAnchor.atMs) / 1000);
-      const extraMinutes = Math.min(1, Math.floor(sinceAnchorSec / 60));
-      const displayMinute = apiAnchor.minute + extraMinutes;
-      const displaySeconds = sinceAnchorSec % 60;
-      return `${displayMinute}:${String(displaySeconds).padStart(2, '0')}`;
-    }
-
-    const formatted = formatLiveMinuteDisplay(short, elapsed ?? periodMinute);
-    if (formatted) return formatted;
-    if (short === '1H') return "1'";
-    if (short === '2H') return "46'";
-    return short || 'LIVE';
-  }, [
-    apiAnchor,
-    clockTick,
-    elapsed,
-    inAddedTime,
-    isHalftime,
-    isLive,
-    isStoppage,
-    periodMinute,
-    short,
-  ]);
+  const minuteLabel = useMemo(
+    () =>
+      resolveLiveMinuteLabel(short, elapsed, { startTimestamp }) ??
+      (isLive ? short || 'LIVE' : ''),
+    [elapsed, isLive, short, startTimestamp],
+  );
 
   const sepText = isLive
     ? isStoppage
@@ -196,7 +135,6 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           isStoppage && styles.cardStoppage,
         ]}
       >
-        {/* Left accent bar — matches Home card */}
         {isLive ? (
           <LinearGradient
             colors={
@@ -221,7 +159,6 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           />
         )}
 
-        {/* Top row: league + status pill */}
         <View style={styles.cardTop}>
           <View style={styles.cardTopLeft}>
             <Text style={styles.leagueText} numberOfLines={1}>
@@ -248,11 +185,10 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
               <Text style={styles.ftText}>FT</Text>
             </View>
           ) : (
-            <Text style={styles.kickoffText}>{time}</Text>
+            <Text style={styles.kickoffText}>{kickoffTime}</Text>
           )}
         </View>
 
-        {/* Teams + score */}
         <View style={styles.teamsRow}>
           <View style={styles.teamCol}>
             <TeamLogo name={homeTeam} uri={homeLogo} />
@@ -265,7 +201,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
             {isUpcoming ? (
               <View style={styles.vsContainer}>
                 <Text style={styles.vsText}>VS</Text>
-                <Text style={styles.kickoffLarge}>{time}</Text>
+                <Text style={styles.kickoffLarge}>{kickoffTime}</Text>
               </View>
             ) : (
               <View style={styles.scoreRow}>
@@ -315,7 +251,6 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   );
 };
 
-// ─── Styles — mirrors front/components/home/MatchList.tsx MatchCard ─────────
 const styles = StyleSheet.create({
   wrapper: {
     paddingHorizontal: 16,
@@ -348,8 +283,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(239,68,68,0.25)',
   },
   accentBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
-
-  // Top row
   cardTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -403,8 +336,6 @@ const styles = StyleSheet.create({
   },
   htText: { color: '#F5C518', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   kickoffText: { color: PURPLE_SOFT, fontSize: 11, fontWeight: '600' },
-
-  // Teams row
   teamsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -432,8 +363,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 110,
   },
-
-  // Score area
   scoreArea: { alignItems: 'center', justifyContent: 'center', minWidth: 130 },
   vsContainer: { alignItems: 'center', gap: 4 },
   vsText: {

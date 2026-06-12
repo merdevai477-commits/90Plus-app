@@ -9,6 +9,7 @@ import { useAppFeaturesStore } from '../stores/appFeaturesStore';
 import {
     fetchLiveMatches,
     fetchWorldCupMatchesByDate,
+    formatMatchTime,
 } from '../../components/Matches/leagueApiUtils';
 import type { Match as LeagueMatch } from '../../components/Matches/matchCardUtils';
 
@@ -314,13 +315,7 @@ const mapFixtureToMatch = (fixture: Fixture, isFavorited: boolean = false): Matc
         }
     }
 
-    //  Format time
-    const date = new Date(fixture.fixture.date);
-    const timeString = date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
+    const timeString = formatMatchTime(fixture.fixture.date);
 
     return {
         id: String(fixture.fixture.id),

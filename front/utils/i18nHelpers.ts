@@ -91,14 +91,87 @@ export function getCountryDisplayName(
   return getTeamDisplayName(originalName, language);
 }
 
+/** Disambiguate generic league names that exist in multiple countries. */
+const LEAGUE_NAME_COUNTRY_ID: Record<string, Record<string, number>> = {
+  'premier league': { england: 39 },
+  'championship': { england: 40 },
+  'league one': { england: 41 },
+  'league two': { england: 42 },
+  'fa cup': { england: 45 },
+  'efl cup': { england: 48 },
+  'carabao cup': { england: 48 },
+  'ligue 1': { france: 61 },
+  'ligue 2': { france: 62 },
+  'bundesliga': { germany: 78 },
+  '2. bundesliga': { germany: 79 },
+  'serie a': { italy: 135 },
+  'serie b': { italy: 136 },
+  'la liga': { spain: 140 },
+  'segunda división': { spain: 141 },
+  'segunda division': { spain: 141 },
+  'primeira liga': { portugal: 94 },
+  'eredivisie': { netherlands: 88 },
+  'premiership': { scotland: 179 },
+  'a-league': { australia: 188 },
+};
+
+const KNOWN_LEAGUE_ARABIC_KEYS = new Set(
+  LEAGUES.map((l) => l.name.toLowerCase()).concat([
+    'premier league',
+    'championship',
+    'uefa champions league',
+    'champions league',
+    'uefa europa league',
+    'europa league',
+    'a-league',
+    'a league',
+    'scottish premiership',
+    'major league soccer',
+    'mls',
+    'j1 league',
+    'super lig',
+    'süper lig',
+  ]),
+);
+
+function lookupCuratedLeagueArabic(
+  name: string,
+  leagueId?: number | null,
+  country?: string | null,
+): string | null {
+  if (leagueId != null) {
+    const byId = LEAGUES.find((l) => l.id === leagueId);
+    if (byId?.nameAr) return byId.nameAr;
+  }
+
+  const lowerName = name.toLowerCase();
+  const countryKey = (country ?? '').trim().toLowerCase();
+  const disambigId = LEAGUE_NAME_COUNTRY_ID[lowerName]?.[countryKey];
+  if (disambigId != null) {
+    const byCountry = LEAGUES.find((l) => l.id === disambigId);
+    if (byCountry?.nameAr) return byCountry.nameAr;
+  }
+
+  const byName = LEAGUES.find((l) => l.name.toLowerCase() === lowerName);
+  if (byName?.nameAr) return byName.nameAr;
+
+  if (KNOWN_LEAGUE_ARABIC_KEYS.has(lowerName)) {
+    const fromMap = teamArabicNames[name] ?? teamArabicNames[lowerName];
+    if (fromMap) return fromMap;
+  }
+
+  return null;
+}
+
 /**
  * Localized league/competition name. Checks the curated leagues list by id
- * first, then the shared Arabic name map.
+ * and country first — never maps unknown leagues to the English Premier League.
  */
 export function getLeagueDisplayName(
   originalName: string | null | undefined,
   language: Language,
   leagueId?: number | null,
+  country?: string | null,
 ): string {
   const fallback = translations[language]?.common?.unknown
     ?? translations.en.common.unknown
@@ -108,15 +181,10 @@ export function getLeagueDisplayName(
   if (!name && !leagueId) return fallback;
 
   if (language === 'ar') {
-    if (leagueId != null) {
-      const byId = LEAGUES.find((l) => l.id === leagueId);
-      if (byId?.nameAr) return byId.nameAr;
-    }
+    const curated = lookupCuratedLeagueArabic(name, leagueId, country);
+    if (curated) return curated;
+
     if (name) {
-      const byName = LEAGUES.find((l) => l.name.toLowerCase() === name.toLowerCase());
-      if (byName?.nameAr) return byName.nameAr;
-      const ar = lookupArabicLabel(name);
-      if (ar) return ar;
       const cached = getCachedFootballTranslation(name);
       if (cached) return cached;
       queueFootballTranslation(name, language);

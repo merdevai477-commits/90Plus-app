@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions, Animated, FlatList, InteractionManager } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -34,7 +34,7 @@ import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { getWorldCupTimeLeft, WC_2026_OFFICIAL_LOGO } from '../../constants/worldCup';
 import type { ImageSource } from 'expo-image';
-import { LiveTimer } from '../../components/common/LiveTimer';
+import { resolveLiveMinuteLabel } from '../../components/Matches/leagueApiUtils';
 
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
@@ -81,9 +81,12 @@ function matchToFixture(m: Match): Fixture {
     awayScore: m.score?.away ?? 0,
     status: mapStatus(m.status),
     minute: m.minute,
+    elapsed: m.elapsed ?? null,
     live: m.status === 'live',
     time: m.time,
     leagueName: m.league?.name,
+    leagueId: m.league?.id,
+    leagueCountry: m.league?.country,
     leagueLogo: m.league?.logo,
     matchDate: m.fixtureDate,
     statusShort: m.statusShort,
@@ -165,9 +168,12 @@ type Fixture = {
   live?: boolean;
   time?: string;
   leagueName?: string;
+  leagueId?: number;
+  leagueCountry?: string;
   leagueLogo?: string;
   matchDate?: string;
   statusShort?: string;
+  elapsed?: number | null;
   startTimestamp?: number;
   corners?: { home: number; away: number };
 };
@@ -175,6 +181,7 @@ type Fixture = {
 type LeagueGroup = {
   id: string;
   league: string;
+  leagueCountry?: string;
   leagueLogo: string;
   /** Local asset — used for FIFA WC emblem when API logo is missing/wrong. */
   logoSource?: ImageSource;
@@ -382,19 +389,14 @@ const MatchRow = memo(function MatchRow({
             )}
             {fixture.live ? (
               <View style={styles.liveMetaCol}>
-                {fixture.statusShort === 'HT' || fixture.statusShort === 'BT' ? (
-                  <Text style={styles.minuteTxtLive}>{fixture.minute ?? fixture.statusShort}</Text>
-                ) : fixture.minute && !fixture.minute.includes(':') ? (
-                  <Text style={styles.minuteTxtLive}>{fixture.minute}</Text>
-                ) : fixture.startTimestamp && fixture.statusShort ? (
-                  <LiveTimer
-                    startTime={fixture.startTimestamp}
-                    status={fixture.statusShort}
-                    style={styles.minuteTxtLive}
-                  />
-                ) : (
-                  <Text style={styles.minuteTxtLive}>{fixture.minute ?? t('matches.status.live')}</Text>
-                )}
+                <Text style={styles.minuteTxtLive}>
+                  {fixture.minute ??
+                    resolveLiveMinuteLabel(fixture.statusShort, fixture.elapsed, {
+                      startTimestamp: fixture.startTimestamp,
+                    }) ??
+                    fixture.statusShort ??
+                    t('matches.status.live')}
+                </Text>
                 {fixture.corners ? (
                   <Text style={styles.cornersTxt} numberOfLines={1}>
                     {t('matchDetails.corners')} {fixture.corners.home}-{fixture.corners.away}
@@ -625,22 +627,73 @@ function LeagueAllMatchesModal({
     return () => { cancelled = true; };
   }, [visible, group?.id, group?.fixtures.length, selectedDate]);
 
-  if (!group) return null;
-  const localizedLeagueName = getLeagueDisplayName(group.league, language, parseInt(group.id, 10) || undefined);
-  const fixtures = group.fixtures.length > 0 ? group.fixtures : extraFixtures;
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      {/* Full-screen iOS-style blur backdrop */}
-      <BlurView
-        intensity={Platform.OS === 'ios' ? 60 : 100}
-        tint={Platform.OS === 'ios' ? 'systemUltraThinMaterialDark' : 'dark'}
-        style={StyleSheet.absoluteFill}
+  const openDetailsSafely = useCallback(
+    (fixture: Fixture) => {
+      if (!fixture?.id) return;
+      onClose();
+      InteractionManager.runAfterInteractions(() => {
+        onOpenDetails(fixture);
+      });
+    },
+    [onClose, onOpenDetails],
+  );
+
+  const renderModalRow = useCallback(
+    ({ item }: { item: Fixture }) => (
+      <MatchRow
+        fixture={item}
+        showPreds={filter === 'Predictions'}
+        onPredict={onPredict}
+        submittingId={submittingId}
+        predictedMatches={predictedMatches}
+        isSubscribed={subscribedFixtures.has(item.id)}
+        isSubscribing={subscribingFixtureId === item.id}
+        onToggleSubscription={onToggleSubscription}
+        onOpenDetails={openDetailsSafely}
       />
-      {/* Tap outside to close */}
-      <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+    ),
+    [
+      filter,
+      onPredict,
+      submittingId,
+      predictedMatches,
+      subscribedFixtures,
+      subscribingFixtureId,
+      onToggleSubscription,
+      openDetailsSafely,
+    ],
+  );
+
+  if (!group) return null;
+  const localizedLeagueName = getLeagueDisplayName(
+    group.league,
+    language,
+    parseInt(group.id, 10) || undefined,
+    group.leagueCountry,
+  );
+  const fixtures = group.fixtures.length > 0 ? group.fixtures : extraFixtures;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      onDismiss={onClose}
+      statusBarTranslucent
+    >
+      <View style={styles.allMatchesModalRoot}>
+      {/* Tap backdrop to close — sheet sits above this layer */}
+      <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1}>
+        <BlurView
+          intensity={Platform.OS === 'ios' ? 60 : 100}
+          tint={Platform.OS === 'ios' ? 'systemUltraThinMaterialDark' : 'dark'}
+          style={StyleSheet.absoluteFill}
+        />
+      </TouchableOpacity>
 
       {/* Bottom sheet */}
-      <View style={styles.allMatchesSheetWrap}>
+      <View style={styles.allMatchesSheetWrap} pointerEvents="box-none">
         <View style={styles.allMatchesSheet}>
           {/* Sheet glass surface */}
           {isLiquidGlassSupported ? (
@@ -679,28 +732,19 @@ function LeagueAllMatchesModal({
                 <Text style={styles.leagueModalEmptyText}>{t('matches.screen.leagueDataUnavailable')}</Text>
               </View>
             ) : (
-            <FlashList
+            <FlatList
               data={fixtures}
-              keyExtractor={f => f.id}
-              renderItem={({ item }) => (
-                <MatchRow
-                  fixture={item}
-                  showPreds={filter === 'Predictions'}
-                  onPredict={onPredict}
-                  submittingId={submittingId}
-                  predictedMatches={predictedMatches}
-                  isSubscribed={subscribedFixtures.has(item.id)}
-                  isSubscribing={subscribingFixtureId === item.id}
-                  onToggleSubscription={onToggleSubscription}
-                  onOpenDetails={onOpenDetails}
-                />
-              )}
+              keyExtractor={(f) => f.id}
+              renderItem={renderModalRow}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 40 }}
+              keyboardShouldPersistTaps="handled"
+              removeClippedSubviews={false}
             />
             )}
           </View>
         </View>
+      </View>
       </View>
     </Modal>
   );
@@ -735,7 +779,12 @@ const LeagueCard = memo(function LeagueCard({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const { translate: t, language } = useTranslation();
-  const localizedLeagueName = getLeagueDisplayName(group.league, language);
+  const localizedLeagueName = getLeagueDisplayName(
+    group.league,
+    language,
+    parseInt(group.id, 10) || undefined,
+    group.leagueCountry,
+  );
   const hasMore = group.fixtures.length > PREVIEW_COUNT;
   const previewFixtures = hasMore ? group.fixtures.slice(0, PREVIEW_COUNT) : group.fixtures;
 
@@ -1104,6 +1153,7 @@ export default function MatchesHubScreenV2() {
     const allGroups: LeagueGroup[] = groupedMatches.map(g => ({
       id: String(g.leagueId),
       league: g.leagueName,
+      leagueCountry: g.matches[0]?.league?.country,
       leagueLogo: g.leagueLogo || '',
       fixtures: g.matches.map(matchToFixture),
     }));
@@ -1483,6 +1533,8 @@ export default function MatchesHubScreenV2() {
   //     responses come back.
   const handleOpenMatchDetails = useCallback(
     (fixture: Fixture) => {
+      if (!fixture?.id) return;
+      setViewAllLeagueId(null);
       router.push({
         pathname: '/(tabs)/match-details',
         params: {
@@ -1589,8 +1641,23 @@ export default function MatchesHubScreenV2() {
   // modal renders in the LeagueGroup shape it already expects).
   const viewAllLeagueGroup = useMemo<LeagueGroup | null>(() => {
     if (!viewAllLeagueId) return null;
-    return groups.find(g => g.id === viewAllLeagueId) ?? null;
-  }, [viewAllLeagueId, groups]);
+    const fromGroups = groups.find(g => g.id === viewAllLeagueId);
+    if (fromGroups) return fromGroups;
+    for (const cg of filteredCountryGroups) {
+      for (const league of cg.leagues) {
+        if (String(league.leagueId) === viewAllLeagueId) {
+          return {
+            id: String(league.leagueId),
+            league: league.leagueName,
+            leagueCountry: league.matches[0]?.league?.country,
+            leagueLogo: league.leagueLogo || '',
+            fixtures: league.matches.map(matchToFixture),
+          };
+        }
+      }
+    }
+    return null;
+  }, [viewAllLeagueId, groups, filteredCountryGroups]);
 
   // ─── Calendar grid (driven by selectedDate — always in sync) ──────────────
   // `calendarGrid` is the array of cells to render. Each cell is either a
@@ -2065,6 +2132,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(12,10,20,0.85)', overflow: 'hidden',
   },
   // All-matches bottom sheet
+  allMatchesModalRoot: {
+    flex: 1,
+  },
   allMatchesSheetWrap: {
     flex: 1,
     justifyContent: 'flex-end',

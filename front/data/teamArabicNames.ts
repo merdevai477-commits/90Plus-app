@@ -302,6 +302,13 @@ export const teamArabicNames: Record<string, string> = {
 
   // ── Major leagues / competitions ──────────────────────────────────────
   'Premier League': 'الدوري الإنجليزي الممتاز',
+  'A-League': 'الدوري الأسترالي',
+  'A League': 'الدوري الأسترالي',
+  'Scottish Premiership': 'الدوري الاسكتلندي',
+  'Premiership': 'الدوري الاسكتلندي',
+  'Major League Soccer': 'الدوري الأمريكي',
+  'J1 League': 'الدوري الياباني',
+  'Championship': 'الدرجة الأولى الإنجليزية',
   'La Liga': 'الدوري الإسباني',
   'Serie A': 'الدوري الإيطالي',
   'Bundesliga': 'الدوري الألماني',

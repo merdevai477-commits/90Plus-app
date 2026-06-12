@@ -55,7 +55,12 @@ const getStatusText = (status: MatchArchive['status']): string => {
 
 const MatchHistoryCard: React.FC<MatchHistoryCardProps> = ({ match, onPress }) => {
   const { language } = useTranslation();
-  const localizedLeagueName = getLeagueDisplayName(match.league.name, language);
+  const localizedLeagueName = getLeagueDisplayName(
+    match.league.name,
+    language,
+    match.league.id,
+    match.league.country,
+  );
   const localizedHomeName = getTeamDisplayName(match.homeTeam.name, language);
   const localizedAwayName = getTeamDisplayName(match.awayTeam.name, language);
 

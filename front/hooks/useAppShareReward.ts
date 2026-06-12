@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Share } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 
@@ -16,19 +16,22 @@ import { getClerkBearerToken } from '../utils/clerkAuthToken';
 
 export function useAppShareReward() {
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   const { handleXpEvents, refresh } = useXp();
   const { t } = useTranslation();
   const [shareStatus, setShareStatus] = useState<AppShareStatus | null>(null);
 
   const loadShareStatus = useCallback(async () => {
-    const token = await getClerkBearerToken(getToken);
+    const token = await getClerkBearerToken(getTokenRef.current);
     if (!token) {
       setShareStatus(null);
       return;
     }
     const status = await fetchAppShareStatus(token);
     setShareStatus(status);
-  }, [getToken]);
+  }, []);
 
   const shareAppAndClaim = useCallback(
     async (lang: 'ar' | 'en') => {
@@ -39,7 +42,7 @@ export function useAppShareReward() {
           return;
         }
 
-        const token = await getClerkBearerToken(getToken);
+        const token = await getClerkBearerToken(getTokenRef.current);
         if (!token) return;
 
         const claim = await claimAppShareReward(token);
@@ -73,7 +76,7 @@ export function useAppShareReward() {
         // User cancelled share sheet
       }
     },
-    [getToken, handleXpEvents, loadShareStatus, refresh, t],
+    [handleXpEvents, loadShareStatus, refresh, t],
   );
 
   const shareRewardHint = useCallback((): string | undefined => {

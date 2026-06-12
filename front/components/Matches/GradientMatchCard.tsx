@@ -17,7 +17,7 @@ import { Zap } from 'lucide-react-native';
 import { useHaptic } from '../../hooks/useHaptic';
 import { useTranslation } from '../../src/i18n';
 import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
-import { LiveTimer } from '../common/LiveTimer';
+import { resolveLiveMinuteLabel } from './leagueApiUtils';
 import TeamBadge from '../common/TeamBadge';
 import LeagueIcon from '../common/LeagueIcon';
 import {
@@ -80,7 +80,12 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
 
   const localizedHomeName = getTeamDisplayName(match.homeTeam?.name, language);
   const localizedAwayName = getTeamDisplayName(match.awayTeam?.name, language);
-  const localizedLeagueName = getLeagueDisplayName(match.league?.name, language);
+  const localizedLeagueName = getLeagueDisplayName(
+    match.league?.name,
+    language,
+    match.league?.id,
+    match.league?.country,
+  );
   const homeFallback = t.matches.prediction.homeLabelFallback ?? 'Home';
   const awayFallback = t.matches.prediction.awayLabelFallback ?? 'Away';
   const winLabel = t.predictions.homeWin ?? 'Win';
@@ -262,15 +267,14 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
 
                   {/* Live Timer or Static Minute */}
                   {isLive && (
-                    match.startTimestamp ? (
-                      <LiveTimer
-                        startTime={match.startTimestamp}
-                        status={match.statusShort || '1H'}
-                        style={styles.matchMinute}
-                      />
-                    ) : (
-                      match.minute && <Text style={styles.matchMinute}>{match.minute}</Text>
-                    )
+                    <Text style={styles.matchMinute}>
+                      {match.minute ??
+                        resolveLiveMinuteLabel(match.statusShort, match.elapsed, {
+                          startTimestamp: match.startTimestamp,
+                        }) ??
+                        match.statusShort ??
+                        'LIVE'}
+                    </Text>
                   )}
 
                   {/* Prediction Button or User Prediction */}

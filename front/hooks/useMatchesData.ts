@@ -116,9 +116,10 @@ const patchMatchFromWsUpdate = (match: Match, update: MatchUpdatePayload): Match
   if (FINISHED_STATUSES.has(update.status)) status = 'finished';
   else if (LIVE_STATUSES.has(update.status)) status = 'live';
 
+  const elapsed = update.minute ?? match.elapsed ?? null;
   const minute =
-    update.minute != null
-      ? formatLiveMinuteDisplay(update.status, update.minute)
+    elapsed != null
+      ? formatLiveMinuteDisplay(update.status, elapsed)
       : match.minute;
 
   if (
@@ -126,7 +127,8 @@ const patchMatchFromWsUpdate = (match: Match, update: MatchUpdatePayload): Match
     match.score.away === update.awayScore &&
     match.status === status &&
     match.statusShort === update.status &&
-    match.minute === minute
+    match.minute === minute &&
+    match.elapsed === elapsed
   ) {
     return match;
   }
@@ -136,6 +138,7 @@ const patchMatchFromWsUpdate = (match: Match, update: MatchUpdatePayload): Match
     score: { home: update.homeScore, away: update.awayScore },
     status,
     statusShort: update.status,
+    elapsed,
     minute,
   };
 };
