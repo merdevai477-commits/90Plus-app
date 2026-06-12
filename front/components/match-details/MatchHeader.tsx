@@ -29,7 +29,7 @@ interface MatchHeaderProps {
   league: string;
   date: string;
   time: string;
-  /** Period start timestamp (seconds). Currently unused — minute comes from `elapsed`. */
+  /** Period start timestamp (seconds) — fallback when API minute is missing. */
   startTimestamp?: number;
   /** API-Football short status (1H, 2H, HT, FT, NS, ...). */
   statusShort?: string;
@@ -99,11 +99,31 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   const isFinished = FINISHED_STATUSES.includes(short) || status === 'finished';
   const isUpcoming = !isLive && !isFinished && !isHalftime;
   const isStoppage = isLive && !!stoppage && stoppage > 0;
+  const inAddedTime =
+    (short === '1H' && elapsed != null && elapsed > 45) ||
+    (short === '2H' && elapsed != null && elapsed > 90);
 
-  const [periodMinute, setPeriodMinute] = useState<number | null>(null);
+  /** Anchor local ticking to each fresh API minute (resets on every poll). */
+  const [apiAnchor, setApiAnchor] = useState<{ minute: number; atMs: number } | null>(null);
+  const [clockTick, setClockTick] = useState(0);
 
   useEffect(() => {
-    if (isHalftime || short === 'BT' || !isLive || !startTimestamp) {
+    if (elapsed == null || !isLive || isHalftime || short === 'BT') {
+      setApiAnchor(null);
+      return;
+    }
+    setApiAnchor({ minute: elapsed, atMs: Date.now() });
+  }, [elapsed, isLive, isHalftime, short]);
+
+  useEffect(() => {
+    if (!isLive || isHalftime || !apiAnchor || inAddedTime || isStoppage) return;
+    const id = setInterval(() => setClockTick((n) => n + 1), 1_000);
+    return () => clearInterval(id);
+  }, [apiAnchor, inAddedTime, isHalftime, isLive, isStoppage]);
+
+  const [periodMinute, setPeriodMinute] = useState<number | null>(null);
+  useEffect(() => {
+    if (isHalftime || short === 'BT' || !isLive || !startTimestamp || elapsed != null) {
       setPeriodMinute(null);
       return;
     }
@@ -119,27 +139,43 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
       setPeriodMinute(diffMin);
     };
     compute();
-    const id = setInterval(compute, 5_000);
+    const id = setInterval(compute, 1_000);
     return () => clearInterval(id);
-  }, [isHalftime, isLive, startTimestamp, short]);
+  }, [elapsed, isHalftime, isLive, startTimestamp, short]);
 
-  // API elapsed is authoritative (referee clock, stoppage). Wall-clock from period
-  // start runs ahead during VAR/injury pauses — only use it when API has no minute yet.
-  const effectiveElapsed = useMemo(() => {
-    if (isHalftime || short === 'BT') return elapsed ?? null;
-    if (elapsed != null) return elapsed;
-    return periodMinute;
-  }, [elapsed, isHalftime, periodMinute, short]);
-
-  const minuteLabel = (() => {
+  const minuteLabel = useMemo(() => {
     if (isHalftime) return 'HT';
     if (!isLive) return '';
-    const formatted = formatLiveMinuteDisplay(short, effectiveElapsed);
+
+    if (inAddedTime || isStoppage) {
+      const formatted = formatLiveMinuteDisplay(short, elapsed);
+      if (formatted) return formatted;
+    }
+
+    if (apiAnchor && elapsed != null) {
+      const sinceAnchorSec = Math.floor((Date.now() - apiAnchor.atMs) / 1000);
+      const extraMinutes = Math.min(1, Math.floor(sinceAnchorSec / 60));
+      const displayMinute = apiAnchor.minute + extraMinutes;
+      const displaySeconds = sinceAnchorSec % 60;
+      return `${displayMinute}:${String(displaySeconds).padStart(2, '0')}`;
+    }
+
+    const formatted = formatLiveMinuteDisplay(short, elapsed ?? periodMinute);
     if (formatted) return formatted;
     if (short === '1H') return "1'";
     if (short === '2H') return "46'";
     return short || 'LIVE';
-  })();
+  }, [
+    apiAnchor,
+    clockTick,
+    elapsed,
+    inAddedTime,
+    isHalftime,
+    isLive,
+    isStoppage,
+    periodMinute,
+    short,
+  ]);
 
   const sepText = isLive
     ? isStoppage
@@ -341,7 +377,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(59,130,246,0.3)',
     backgroundColor: 'rgba(59,130,246,0.06)',
   },
-  minuteText: { color: PURPLE_SOFT, fontSize: 11, fontWeight: '700' },
+  minuteText: {
+    color: PURPLE_SOFT,
+    fontSize: 11,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
   stoppageInline: { color: LIVE_RED, fontSize: 11, fontWeight: '900' },
   ftBadge: {
     backgroundColor: 'rgba(255,255,255,0.07)',
@@ -414,6 +455,11 @@ const styles = StyleSheet.create({
     textShadowRadius: 8,
   },
   scoreSep: { alignItems: 'center', gap: 4 },
-  sepMinute: { fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
+  sepMinute: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    fontVariant: ['tabular-nums'],
+  },
   liveBar: { width: 32, height: 2, borderRadius: 1 },
 });
