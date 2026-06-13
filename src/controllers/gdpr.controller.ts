@@ -18,6 +18,49 @@ import { logger } from '../utils/logger';
 const prisma = getPrisma();
 
 // ============================================================================
+// HELPER: Resolve Clerk auth ID → internal User.id (FK target for GDPR tables)
+// ============================================================================
+
+async function resolveDbUserId(req: Request, res: Response): Promise<string | null> {
+  const clerkUserId = req.auth?.userId;
+
+  if (!clerkUserId) {
+    res.status(401).json({
+      status: 'ERROR',
+      code: 'E002',
+      message: 'Authentication required',
+    });
+    return null;
+  }
+
+  let user = await prisma.user.findUnique({
+    where: { clerkUserId },
+    select: { id: true },
+  });
+
+  if (!user) {
+    try {
+      const { ClerkUserService } = await import('../services/clerk-user.service');
+      const created = await ClerkUserService.findOrCreateUser(clerkUserId);
+      user = created ? { id: created.id } : null;
+    } catch (err: any) {
+      logger.error('[GDPR] Failed to sync user from Clerk:', err?.message);
+    }
+  }
+
+  if (!user) {
+    res.status(404).json({
+      status: 'ERROR',
+      code: 'E004',
+      message: 'User not found',
+    });
+    return null;
+  }
+
+  return user.id;
+}
+
+// ============================================================================
 // TYPES
 // ============================================================================
 
@@ -81,15 +124,8 @@ async function logGDPRAction(
 
 export const requestDataExport = async (req: Request, res: Response) => {
   try {
-    const userId = req.auth?.userId;
-
-    if (!userId) {
-      return res.status(401).json({
-        status: 'ERROR',
-        code: 'E002',
-        message: 'Authentication required',
-      });
-    }
+    const userId = await resolveDbUserId(req, res);
+    if (!userId) return;
 
     // Check for existing pending/processing requests
     const existingRequest = await prisma.dataExportRequest.findFirst({
@@ -392,15 +428,8 @@ async function processDataExport(requestId: string) {
 export const getExportStatus = async (req: Request, res: Response) => {
   try {
     const requestId = req.params.requestId as string;
-    const userId = req.auth?.userId;
-
-    if (!userId) {
-      return res.status(401).json({
-        status: 'ERROR',
-        code: 'E002',
-        message: 'Authentication required',
-      });
-    }
+    const userId = await resolveDbUserId(req, res);
+    if (!userId) return;
 
     const exportRequest = await prisma.dataExportRequest.findFirst({
       where: {
@@ -448,16 +477,9 @@ export const getExportStatus = async (req: Request, res: Response) => {
 
 export const requestAccountDeletion = async (req: Request, res: Response) => {
   try {
-    const userId = req.auth?.userId;
+    const userId = await resolveDbUserId(req, res);
+    if (!userId) return;
     const { reason } = req.body;
-
-    if (!userId) {
-      return res.status(401).json({
-        status: 'ERROR',
-        code: 'E002',
-        message: 'Authentication required',
-      });
-    }
 
     // Check for existing pending/scheduled requests
     const existingRequest = await prisma.accountDeletionRequest.findFirst({
@@ -542,16 +564,9 @@ export const requestAccountDeletion = async (req: Request, res: Response) => {
 
 export const cancelAccountDeletion = async (req: Request, res: Response) => {
   try {
-    const userId = req.auth?.userId;
+    const userId = await resolveDbUserId(req, res);
+    if (!userId) return;
     const { cancellationReason } = req.body;
-
-    if (!userId) {
-      return res.status(401).json({
-        status: 'ERROR',
-        code: 'E002',
-        message: 'Authentication required',
-      });
-    }
 
     // Find pending/scheduled deletion request
     const deletionRequest = await prisma.accountDeletionRequest.findFirst({
@@ -622,15 +637,8 @@ export const cancelAccountDeletion = async (req: Request, res: Response) => {
 
 export const getDeletionStatus = async (req: Request, res: Response) => {
   try {
-    const userId = req.auth?.userId;
-
-    if (!userId) {
-      return res.status(401).json({
-        status: 'ERROR',
-        code: 'E002',
-        message: 'Authentication required',
-      });
-    }
+    const userId = await resolveDbUserId(req, res);
+    if (!userId) return;
 
     const deletionRequest = await prisma.accountDeletionRequest.findFirst({
       where: { userId },
@@ -675,16 +683,9 @@ export const getDeletionStatus = async (req: Request, res: Response) => {
 
 export const updateConsent = async (req: Request, res: Response) => {
   try {
-    const userId = req.auth?.userId;
+    const userId = await resolveDbUserId(req, res);
+    if (!userId) return;
     const { consentType, granted } = req.body;
-
-    if (!userId) {
-      return res.status(401).json({
-        status: 'ERROR',
-        code: 'E002',
-        message: 'Authentication required',
-      });
-    }
 
     // Validate consent type
     if (!Object.values(ConsentType).includes(consentType)) {
@@ -761,15 +762,8 @@ export const updateConsent = async (req: Request, res: Response) => {
 
 export const getConsent = async (req: Request, res: Response) => {
   try {
-    const userId = req.auth?.userId;
-
-    if (!userId) {
-      return res.status(401).json({
-        status: 'ERROR',
-        code: 'E002',
-        message: 'Authentication required',
-      });
-    }
+    const userId = await resolveDbUserId(req, res);
+    if (!userId) return;
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
