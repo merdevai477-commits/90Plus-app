@@ -46,13 +46,52 @@ export interface MuxAsset {
   duration?: number;
 }
 
-// ─── Methods ──────────────────────────────────────────────────────────────────
+export type MuxVideoQuality = 'basic' | 'plus';
 
-/**
- * Create a Mux direct upload URL.
- * The caller PUTs the raw video buffer to `uploadUrl`.
- */
-export async function createUploadUrl(
+export interface MuxAssetSummary {
+  id: string;
+  status: string;
+  createdAt?: number;
+  passthrough?: string;
+}
+
+export type MuxErrorCode = 'MUX_ASSET_LIMIT' | 'MUX_UNAVAILABLE';
+
+export class MuxServiceError extends Error {
+  readonly code: MuxErrorCode;
+
+  constructor(code: MuxErrorCode, message: string) {
+    super(message);
+    this.name = 'MuxServiceError';
+    this.code = code;
+  }
+}
+
+function getMuxVideoQuality(): MuxVideoQuality {
+  const raw = (process.env.MUX_VIDEO_QUALITY || 'basic').toLowerCase();
+  return raw === 'plus' ? 'plus' : 'basic';
+}
+
+/** Mux free tier blocks new uploads when 10 assets exist. */
+export function isMuxAssetLimitError(err: unknown): boolean {
+  const msg = String((err as { message?: string })?.message ?? err ?? '').toLowerCase();
+  return (
+    msg.includes('10 assets') ||
+    msg.includes('exceeding this limit') ||
+    msg.includes('asset limit')
+  );
+}
+
+function toMuxServiceError(err: unknown): MuxServiceError {
+  if (err instanceof MuxServiceError) return err;
+  const message = String((err as { message?: string })?.message ?? err ?? 'Mux request failed');
+  if (isMuxAssetLimitError(err)) {
+    return new MuxServiceError('MUX_ASSET_LIMIT', message);
+  }
+  return new MuxServiceError('MUX_UNAVAILABLE', message);
+}
+
+async function createUploadUrlOnce(
   userId: string,
   reelId: string,
 ): Promise<MuxUploadResult> {
@@ -60,17 +99,81 @@ export async function createUploadUrl(
     cors_origin: '*',
     new_asset_settings: {
       playback_policy: ['public'],
-      video_quality: 'plus', // Upgraded from 'basic' — better quality for sports content with fast motion
+      video_quality: getMuxVideoQuality(),
       passthrough: JSON.stringify({ userId, reelId }),
     },
   });
 
-  logger.info(`[Mux] Created upload ${upload.id} for reel ${reelId}`);
+  logger.info(`[Mux] Created upload ${upload.id} for reel ${reelId} (quality=${getMuxVideoQuality()})`);
 
   return {
     uploadId: upload.id,
     uploadUrl: upload.url,
   };
+}
+
+/**
+ * List Mux assets (newest first). Used for quota cleanup on the free plan.
+ */
+export async function listMuxAssets(limit = 100): Promise<MuxAssetSummary[]> {
+  const page = await mux().video.assets.list({ limit: Math.min(limit, 100) });
+  const rows = ((page as { data?: unknown[] }).data ?? []) as Array<{
+    id: string;
+    status?: string;
+    created_at?: number | string;
+    passthrough?: string;
+  }>;
+
+  return rows.map((row) => ({
+    id: row.id,
+    status: row.status ?? 'unknown',
+    createdAt: typeof row.created_at === 'number'
+      ? row.created_at
+      : row.created_at
+        ? Math.floor(new Date(row.created_at).getTime() / 1000)
+        : undefined,
+    passthrough: row.passthrough,
+  }));
+}
+
+// ─── Methods ──────────────────────────────────────────────────────────────────
+
+/**
+ * Create a Mux direct upload URL.
+ * The caller PUTs the raw video buffer to `uploadUrl`.
+ * On free-tier asset cap, prunes stale/test assets once and retries.
+ */
+export async function createUploadUrl(
+  userId: string,
+  reelId: string,
+): Promise<MuxUploadResult> {
+  try {
+    return await createUploadUrlOnce(userId, reelId);
+  } catch (firstErr) {
+    if (!isMuxAssetLimitError(firstErr)) {
+      throw toMuxServiceError(firstErr);
+    }
+
+    logger.warn('[Mux] Asset limit hit — attempting cleanup before retry', {
+      reelId,
+      userId,
+    });
+
+    const { freeMuxAssetSlots } = await import('./mux-cleanup.service');
+    const freed = await freeMuxAssetSlots(1);
+    if (freed < 1) {
+      throw new MuxServiceError(
+        'MUX_ASSET_LIMIT',
+        'Mux free plan asset limit reached and no stale assets could be removed',
+      );
+    }
+
+    try {
+      return await createUploadUrlOnce(userId, reelId);
+    } catch (retryErr) {
+      throw toMuxServiceError(retryErr);
+    }
+  }
 }
 
 /**
@@ -144,12 +247,11 @@ export function verifyWebhook(rawBody: string | Buffer, signature: string): any 
     throw new Error('MUX_WEBHOOK_SECRET is not set');
   }
 
-  // Use the mux instance's webhooks helper (has verifySignature on prototype)
-  const client = new Mux({ tokenId: 'placeholder', tokenSecret: 'placeholder', webhookSecret: secret });
-  // verifySignature exists at runtime but TypeScript types may lag — use bracket access
-  (client.webhooks as any).verifySignature(rawBody, { 'mux-signature': signature }, secret);
+  // Mux SDK requires the exact raw JSON string — express.raw() gives us a Buffer.
+  const bodyStr = typeof rawBody === 'string' ? rawBody : rawBody.toString('utf8');
 
-  // Parse after verification
-  const body = typeof rawBody === 'string' ? rawBody : rawBody.toString('utf8');
-  return JSON.parse(body);
+  const client = new Mux({ tokenId: 'placeholder', tokenSecret: 'placeholder', webhookSecret: secret });
+  (client.webhooks as any).verifySignature(bodyStr, { 'mux-signature': signature }, secret);
+
+  return JSON.parse(bodyStr);
 }

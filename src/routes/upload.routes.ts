@@ -23,6 +23,8 @@ import { r2MediaStorage } from '../services/r2-media-storage.service';
 import { invalidateUserCache } from './clerk-user.routes';
 import { UploadAnalyticsService } from '../services/upload-analytics.service';
 import * as muxService from '../services/mux.service';
+import { MuxServiceError } from '../services/mux.service';
+import { captureException } from '../config/sentry.config';
 import { healReelFromMux } from '../services/reel-mux-heal.service';
 import { ensureBackendUserId } from '../utils/ensureBackendUser';
 import multer from 'multer';
@@ -936,17 +938,42 @@ router.post(
         const muxResult = await muxService.createUploadUrl(user.id, placeholderReel.id);
         uploadId = muxResult.uploadId;
         uploadUrl = muxResult.uploadUrl;
-      } catch (muxCreateErr: any) {
-        // Fix 2: Mux URL creation failed — clean up placeholder reel + thumbnail
-        logger.error('[upload/reel] Mux createUploadUrl failed — cleaning up:', muxCreateErr?.message);
+      } catch (muxCreateErr: unknown) {
+        const muxErr =
+          muxCreateErr instanceof MuxServiceError
+            ? muxCreateErr
+            : new MuxServiceError(
+                muxService.isMuxAssetLimitError(muxCreateErr) ? 'MUX_ASSET_LIMIT' : 'MUX_UNAVAILABLE',
+                (muxCreateErr as { message?: string })?.message ?? 'Mux createUploadUrl failed',
+              );
+
+        logger.error('[upload/reel] Mux createUploadUrl failed — cleaning up:', muxErr.message);
+        captureException(muxErr, {
+          route: 'POST /api/upload/reel',
+          userId: user.id,
+          muxCode: muxErr.code,
+          fileSizeMB: videoFile.buffer.length / 1e6,
+        });
+
         await prisma.reel.delete({ where: { id: placeholderReel.id } }).catch((e: any) =>
           logger.warn('[upload/reel] Failed to delete placeholder reel:', e?.message),
         );
-        sendError(req, res, 502, ErrorCode.EXTERNAL_SERVICE, 'MUX_UNAVAILABLE', 'Video processing service is unavailable. Please try again.');
+
+        const isAssetLimit = muxErr.code === 'MUX_ASSET_LIMIT';
+        sendError(
+          req,
+          res,
+          isAssetLimit ? 503 : 502,
+          ErrorCode.EXTERNAL_SERVICE,
+          muxErr.code,
+          isAssetLimit
+            ? 'Video storage is temporarily full. Please try again in a moment.'
+            : 'Video processing service is unavailable. Please try again.',
+        );
         await UploadAnalyticsService.record({
           userId: user.id, type: 'REEL', status: 'FAILED',
           fileSizeMB: videoFile.buffer.length / 1e6, durationMs: Date.now() - startTime,
-          errorCode: 'MUX_UNAVAILABLE',
+          errorCode: muxErr.code,
         }).catch(() => undefined);
         return;
       }

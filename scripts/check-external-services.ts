@@ -54,14 +54,24 @@ async function checkMux(): Promise<void> {
   console.log(`[Mux] ✅ assets.list ok (page size 1, returned ${count})`);
 
   // 2. Write scope — create a direct upload, then cancel it immediately.
-  const upload = await mux.video.uploads.create({
-    cors_origin: '*',
-    new_asset_settings: {
-      playback_policy: ['public'],
-      video_quality: 'basic',
-      passthrough: JSON.stringify({ probe: 'connectivity-check' }),
-    },
-  });
+  const quality = (process.env.MUX_VIDEO_QUALITY || 'basic').toLowerCase() === 'plus' ? 'plus' : 'basic';
+  let upload;
+  try {
+    upload = await mux.video.uploads.create({
+      cors_origin: '*',
+      new_asset_settings: {
+        playback_policy: ['public'],
+        video_quality: quality,
+        passthrough: JSON.stringify({ probe: 'connectivity-check' }),
+      },
+    });
+  } catch (err: any) {
+    const msg = String(err?.message ?? err);
+    if (msg.includes('10 assets')) {
+      console.log('[Mux] ⚠ At 10-asset free-tier cap — run: npx tsx scripts/prune-mux-assets.ts');
+    }
+    throw err;
+  }
   console.log(`[Mux] ✅ uploads.create ok — id=${upload.id}`);
   console.log(`[Mux]    upload URL starts with: ${upload.url.slice(0, 60)}…`);
 

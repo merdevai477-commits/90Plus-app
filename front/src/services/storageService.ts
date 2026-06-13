@@ -314,6 +314,9 @@ export class StorageService {
                             userMessage =
                                 errorData.message ||
                                 'تعذر بدء الرفع. أعد فتح التطبيق ثم حاول مرة أخرى.';
+                        } else if (errorData.code === 'MUX_ASSET_LIMIT' || xhr.status === 503) {
+                            userMessage =
+                                'خدمة الفيديو ممتلئة مؤقتاً. انتظر دقيقة وحاول مرة أخرى.';
                         } else if (xhr.status >= 500) {
                             userMessage = errorData.message || 'خطأ في الخادم. حاول مرة أخرى.';
                         }
