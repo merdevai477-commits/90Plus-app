@@ -14,6 +14,11 @@ import {
 import { useTranslation } from '../src/i18n';
 import { getClerkBearerToken } from '../utils/clerkAuthToken';
 
+/** Avoid hammering /xp/app-share/status when Rank refocuses or re-renders. */
+const APP_SHARE_STATUS_MIN_INTERVAL_MS = 60_000;
+let lastAppShareStatusFetchAt = 0;
+let appShareStatusInFlight: Promise<AppShareStatus | null> | null = null;
+
 export function useAppShareReward() {
   const { getToken } = useAuth();
   const getTokenRef = useRef(getToken);
@@ -23,14 +28,35 @@ export function useAppShareReward() {
   const { t } = useTranslation();
   const [shareStatus, setShareStatus] = useState<AppShareStatus | null>(null);
 
-  const loadShareStatus = useCallback(async () => {
-    const token = await getClerkBearerToken(getTokenRef.current);
-    if (!token) {
-      setShareStatus(null);
+  const loadShareStatus = useCallback(async (options?: { force?: boolean }) => {
+    const now = Date.now();
+    if (!options?.force && now - lastAppShareStatusFetchAt < APP_SHARE_STATUS_MIN_INTERVAL_MS) {
       return;
     }
-    const status = await fetchAppShareStatus(token);
-    setShareStatus(status);
+    if (!options?.force && appShareStatusInFlight) {
+      const status = await appShareStatusInFlight;
+      if (status) setShareStatus(status);
+      return;
+    }
+
+    const run = (async () => {
+      const token = await getClerkBearerToken(getTokenRef.current);
+      if (!token) {
+        setShareStatus(null);
+        return null;
+      }
+      const status = await fetchAppShareStatus(token);
+      lastAppShareStatusFetchAt = Date.now();
+      setShareStatus(status);
+      return status;
+    })();
+
+    appShareStatusInFlight = run;
+    try {
+      await run;
+    } finally {
+      appShareStatusInFlight = null;
+    }
   }, []);
 
   const shareAppAndClaim = useCallback(
@@ -46,7 +72,7 @@ export function useAppShareReward() {
         if (!token) return;
 
         const claim = await claimAppShareReward(token);
-        await loadShareStatus();
+        await loadShareStatus({ force: true });
 
         if (!claim) {
           toastManager.showError(t.common.error, t.rank.shareRewardFailed);

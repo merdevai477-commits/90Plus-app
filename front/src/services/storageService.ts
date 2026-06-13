@@ -302,6 +302,19 @@ export class StorageService {
                             resolve({ success: false, error: errorData.message || 'يرجى الانتظار قبل رفع فيديو جديد.' });
                             return;
                         }
+                        if (
+                            xhr.status === 429 &&
+                            (errorData.code === 'REEL_UPLOAD_IN_PROGRESS' ||
+                                errorData.details?.code === 'REEL_UPLOAD_IN_PROGRESS')
+                        ) {
+                            resolve({
+                                success: false,
+                                error:
+                                    errorData.message ||
+                                    'يتم رفع فيديو حالياً. انتظر دقيقة ثم حاول مرة أخرى.',
+                            });
+                            return;
+                        }
                         // Arabic messages for common HTTP errors
                         let userMessage = errorData.message;
                         if (xhr.status === 413) {

@@ -160,7 +160,7 @@ export async function createUploadUrl(
     });
 
     const { freeMuxAssetSlots } = await import('./mux-cleanup.service');
-    const freed = await freeMuxAssetSlots(1);
+    const freed = await freeMuxAssetSlots(3);
     if (freed < 1) {
       throw new MuxServiceError(
         'MUX_ASSET_LIMIT',

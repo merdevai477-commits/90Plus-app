@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@clerk/clerk-expo';
 
@@ -11,15 +11,21 @@ import { presentPendingLevelUpCelebration } from '../utils/presentPendingLevelUp
 export function useLevelUpCelebrationOnFocus(): void {
   const { isSignedIn, userId } = useAuth();
   const { level, loading } = useXp();
+  const levelRef = useRef(level);
+  const loadingRef = useRef(loading);
+  levelRef.current = level;
+  loadingRef.current = loading;
 
   useFocusEffect(
     useCallback(() => {
-      if (!isSignedIn || !userId || loading || level < FIRST_CELEBRATION_LEVEL) return;
+      if (!isSignedIn || !userId || loadingRef.current || levelRef.current < FIRST_CELEBRATION_LEVEL) {
+        return;
+      }
 
       let cancelled = false;
 
       const run = async () => {
-        await syncNextPendingCelebration(userId, level);
+        await syncNextPendingCelebration(userId, levelRef.current);
         if (!cancelled) await presentPendingLevelUpCelebration(userId);
       };
 
@@ -28,6 +34,6 @@ export function useLevelUpCelebrationOnFocus(): void {
       return () => {
         cancelled = true;
       };
-    }, [isSignedIn, userId, level, loading]),
+    }, [isSignedIn, userId]),
   );
 }

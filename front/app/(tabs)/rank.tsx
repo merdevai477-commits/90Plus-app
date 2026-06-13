@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { ChevronRight, Trophy } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ImageSourcePropType,
   Platform,
@@ -202,12 +202,21 @@ export default function RankScreen() {
   );
 
   const { loadShareStatus, shareAppAndClaim, shareRewardHint } = useAppShareReward();
+  const loadShareStatusRef = useRef(loadShareStatus);
+  loadShareStatusRef.current = loadShareStatus;
+  const hydrateFeaturesRef = useRef(hydrateFeatures);
+  hydrateFeaturesRef.current = hydrateFeatures;
+  const lastRankFocusFetchAtRef = useRef(0);
 
   useFocusEffect(
     useCallback(() => {
-      void loadShareStatus();
-      void hydrateFeatures();
-    }, [loadShareStatus, hydrateFeatures]),
+      const now = Date.now();
+      if (now - lastRankFocusFetchAtRef.current >= 60_000) {
+        lastRankFocusFetchAtRef.current = now;
+        void loadShareStatusRef.current();
+      }
+      void hydrateFeaturesRef.current();
+    }, []),
   );
 
   const handleShareApp = useCallback(async () => {

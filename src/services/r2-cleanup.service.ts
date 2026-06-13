@@ -112,7 +112,8 @@ export async function runOrphanCleanup(): Promise<void> {
  * Call this from the same cron that runs runOrphanCleanup().
  */
 export async function runStuckReelCleanup(): Promise<void> {
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  const staleAfterMs = 45 * 60 * 1000;
+  const staleBefore = new Date(Date.now() - staleAfterMs);
 
   logger.info('[R2Cleanup] Checking for stuck PROCESSING reels...');
 
@@ -129,7 +130,7 @@ export async function runStuckReelCleanup(): Promise<void> {
     stuckReels = await prisma.reel.findMany({
       where: {
         status: 'PROCESSING',
-        createdAt: { lt: twoHoursAgo },
+        createdAt: { lt: staleBefore },
       },
       select: {
         id: true,
@@ -161,6 +162,16 @@ export async function runStuckReelCleanup(): Promise<void> {
         where: { id: reel.id },
         data: { status: 'FAILED' },
       });
+
+      // Release upload lock so the user can retry without waiting 25 minutes
+      await prisma.user
+        .update({
+          where: { id: reel.userId },
+          data: { reelUploadLockedUntil: null },
+        })
+        .catch((err: any) =>
+          logger.warn(`[R2Cleanup] Failed to clear upload lock for user ${reel.userId}:`, err?.message),
+        );
 
       // Delete Mux asset if it was created
       if (reel.muxAssetId) {

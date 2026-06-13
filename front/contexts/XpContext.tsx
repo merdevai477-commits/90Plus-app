@@ -34,6 +34,7 @@ interface XpContextType {
   progressPct: number;
   streak: { current: number; longest: number };
   loading: boolean;
+  /** Force-refresh XP from the server (bypasses poll throttle). */
   refresh: () => Promise<void>;
   /** Apply server-authoritative XP/level immediately (quiz, predictions, etc.). */
   applyXpSnapshot: (snapshot: { xp: number; level: number; title?: string }) => void;
@@ -44,6 +45,11 @@ interface XpContextType {
 }
 
 const XpContext = createContext<XpContextType | undefined>(undefined);
+
+/** Background poll while foregrounded — level-ups still arrive via handleXpEvents. */
+const XP_POLL_INTERVAL_MS = 60_000;
+/** Skip duplicate /xp/me within this window unless refresh() forces it. */
+const XP_MIN_FETCH_GAP_MS = 8_000;
 
 // Level-up queue for the modal
 interface LevelUpEvent {
@@ -150,6 +156,8 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
   // Suppress the next auto-emit when `handleXpEvents` already emitted a
   // level-up — otherwise the user would see the modal twice.
   const suppressNextAutoLevelUpRef = useRef(false);
+  const lastXpFetchAtRef = useRef(0);
+  const xpFetchInFlightRef = useRef<Promise<void> | null>(null);
 
   const applyXpPayload = useCallback(async (data: {
     level: number;
@@ -212,19 +220,32 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
         ? data.progressPct
         : Math.min(100, Math.round((apiXpInLevel / apiXpForNext) * 100)),
     );
-    setStreak(data.streak || { current: 0, longest: 0 });
+    const nextStreak = data.streak || { current: 0, longest: 0 };
+    setStreak((prev) =>
+      prev.current === nextStreak.current && prev.longest === nextStreak.longest ? prev : nextStreak,
+    );
   }, [userId]);
 
-  const fetchXpData = useCallback(async () => {
+  const fetchXpData = useCallback(async (options?: { force?: boolean }) => {
     if (!isLoaded || !isSignedIn) {
       setLoading(false);
       return;
     }
+
+    const now = Date.now();
+    if (!options?.force && now - lastXpFetchAtRef.current < XP_MIN_FETCH_GAP_MS) {
+      return;
+    }
+    if (xpFetchInFlightRef.current) {
+      return xpFetchInFlightRef.current;
+    }
+
+    const run = (async () => {
     try {
       const token = await getClerkBearerToken(getTokenRef.current);
       if (!token) return;
 
-      await AuthService.syncUserWithBackend(token).catch(() => null);
+      lastXpFetchAtRef.current = Date.now();
 
       let res = await fetchWithClerkAuth(getTokenRef.current, `${getApiUrl()}/xp/me`);
       if (!res) return;
@@ -246,13 +267,21 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       // silent
     } finally {
       setLoading(false);
+      xpFetchInFlightRef.current = null;
     }
+    })();
+
+    xpFetchInFlightRef.current = run;
+    return run;
   }, [isLoaded, isSignedIn, applyXpPayload]);
+
+  const fetchXpDataRef = useRef(fetchXpData);
+  fetchXpDataRef.current = fetchXpData;
 
   // Fetch on mount and user change
   useEffect(() => {
     if (isLoaded && isSignedIn && user?.id) {
-      fetchXpData();
+      void fetchXpDataRef.current({ force: true });
     } else if (isLoaded && !isSignedIn) {
       setXp(0);
       setLevel(1);
@@ -269,58 +298,26 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       lastSeenLevelRef.current = null;
       suppressNextAutoLevelUpRef.current = false;
     }
-  }, [isLoaded, isSignedIn, user?.id, fetchXpData]);
+  }, [isLoaded, isSignedIn, user?.id]);
 
-  // SSE stream with polling fallback
+  // Poll while signed in (SSE + auth headers is not viable on RN today).
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
 
-    let eventSource: EventSource | null = null;
-    let pollInterval: ReturnType<typeof setInterval> | null = null;
-    let cancelled = false;
+    const pollInterval = setInterval(() => {
+      void fetchXpDataRef.current();
+    }, XP_POLL_INTERVAL_MS);
 
-    const setupSSE = async () => {
-      try {
-        const token = await getClerkBearerToken(getTokenRef.current);
-        if (!token || cancelled) return;
-
-        const url = `${getApiUrl()}/xp/stream`;
-
-        // Try native EventSource (available in web, polyfilled in RN)
-        if (typeof EventSource !== 'undefined') {
-          // EventSource doesn't support auth headers natively.
-          // Fall back to polling for now (RN doesn't have a good SSE + auth story).
-          // In web, we could use a query param token, but for security we poll.
-          throw new Error('SSE_AUTH_NOT_SUPPORTED');
-        }
-
-        throw new Error('NO_EVENTSOURCE');
-      } catch {
-        // Fallback: poll every 20s while the app is foregrounded so a
-        // server-awarded level-up shows the modal within ~20s instead of
-        // ~60s. Foreground/background is handled by the AppState listener
-        // below, which calls fetchXpData() immediately on resume.
-        if (!cancelled) {
-          pollInterval = setInterval(fetchXpData, 20000);
-        }
-      }
-    };
-
-    setupSSE();
-
-    // Also refresh on foreground
     const handleAppState = (state: AppStateStatus) => {
-      if (state === 'active') fetchXpData();
+      if (state === 'active') void fetchXpDataRef.current();
     };
     const sub = AppState.addEventListener('change', handleAppState);
 
     return () => {
-      cancelled = true;
-      if (eventSource) eventSource.close();
-      if (pollInterval) clearInterval(pollInterval);
+      clearInterval(pollInterval);
       sub.remove();
     };
-  }, [isLoaded, isSignedIn, fetchXpData]);
+  }, [isLoaded, isSignedIn]);
 
   const applyXpSnapshot = useCallback(
     (snapshot: { xp: number; level: number; title?: string }) => {
@@ -345,6 +342,9 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
     [],
   );
 
+  const xpForNextLevelRef = useRef(xpForNextLevel);
+  xpForNextLevelRef.current = xpForNextLevel;
+
   const handleXpEvents = useCallback(
     async (events: XpEvent[], snapshot?: { xp: number; level: number; title?: string }) => {
       if (snapshot) {
@@ -354,7 +354,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
         if (totalGain > 0 && !events.some((e) => e.leveledUp)) {
           setXp((prev) => prev + totalGain);
           setXpInLevel((inLevel) => {
-            const span = xpForNextLevel || 290;
+            const span = xpForNextLevelRef.current || 290;
             const nextIn = inLevel + totalGain;
             setProgressPct(Math.min(100, Math.round((nextIn / span) * 100)));
             return nextIn;
@@ -364,7 +364,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (!events?.length) {
-        void fetchXpData();
+        void fetchXpDataRef.current({ force: true });
         return;
       }
 
@@ -384,9 +384,9 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      void fetchXpData();
+      void fetchXpDataRef.current({ force: true });
     },
-    [applyXpSnapshot, fetchXpData, userId, xpForNextLevel],
+    [applyXpSnapshot, userId],
   );
 
   useEffect(() => {
@@ -408,7 +408,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
         progressPct,
         streak,
         loading,
-        refresh: fetchXpData,
+        refresh: () => fetchXpData({ force: true }),
         applyXpSnapshot,
         handleXpEvents,
       }}

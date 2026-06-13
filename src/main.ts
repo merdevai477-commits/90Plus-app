@@ -765,6 +765,17 @@ async function startServer() {
                     .catch((err) =>
                         logger.warn('[ReelHeal] Startup heal failed (non-fatal):', err?.message ?? err),
                     );
+
+                import('./services/mux-cleanup.service')
+                    .then(({ ensureMuxUploadHeadroom }) => ensureMuxUploadHeadroom(2))
+                    .then((freed) => {
+                        if (freed > 0) {
+                            logger.info(`[MuxCleanup] Startup freed ${freed} orphan/stale Mux asset slot(s)`);
+                        }
+                    })
+                    .catch((err) =>
+                        logger.warn('[MuxCleanup] Startup headroom check failed (non-fatal):', err?.message ?? err),
+                    );
             } catch (postConnectErr) {
                 logger.error('❌ Failed to initialize database-dependent services after connect:', postConnectErr);
                 process.exit(1);
@@ -995,6 +1006,21 @@ async function startServer() {
                         }
                     });
                     logger.info('✅ Stuck Reel Cleanup Cron Job scheduled (every hour)');
+
+                    // Mux free-tier cap: prune orphan/stale assets before uploads block
+                    cron.schedule('15 * * * *', async () => {
+                        logger.info('⏰ Cron: Running Mux asset headroom check...');
+                        try {
+                            const { ensureMuxUploadHeadroom } = await import('./services/mux-cleanup.service');
+                            const freed = await ensureMuxUploadHeadroom(2);
+                            if (freed > 0) {
+                                logger.info(`✅ Mux headroom: freed ${freed} asset slot(s)`);
+                            }
+                        } catch (error) {
+                            logger.error('❌ Mux headroom cron failed:', error);
+                        }
+                    });
+                    logger.info('✅ Mux asset headroom cron scheduled (hourly at :15)');
 
                     // ✅ Daily ranking badges (views, shares, comments, predictions)
                     cron.schedule('0 4 * * *', async () => {
