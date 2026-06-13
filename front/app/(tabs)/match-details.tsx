@@ -76,15 +76,7 @@ const MatchDetailsScreen = () => {
   const { t, language } = useTranslation();
   const params = useLocalSearchParams() as unknown as MatchDetailsParams;
   const shimmerX = useShimmer();
-
-  // Safety check for translations
-  if (!t || !t.matchDetails) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
-        <ActivityIndicator size="large" color="#A855F7" />
-      </View>
-    );
-  }
+  const translationsReady = Boolean(t?.matchDetails);
 
   const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'stadium'>('events');
 
@@ -196,6 +188,8 @@ const MatchDetailsScreen = () => {
   ]);
 
   useEffect(() => {
+    if (!translationsReady) return;
+
     setHomeLastFixtures([]);
     setAwayLastFixtures([]);
     setStandingsGroups([]);
@@ -233,9 +227,11 @@ const MatchDetailsScreen = () => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [fixtureId]);
+  }, [fixtureId, translationsReady]);
 
   const loadMatchDetails = async () => {
+    if (!t?.matchDetails) return;
+
     if (!fixtureId) {
       setError(t.matchDetails.invalidMatchId);
       setLoading(false);
@@ -311,7 +307,7 @@ const MatchDetailsScreen = () => {
     } finally {
       setLineupsLoading(false);
     }
-  }, [fixtureId, t.matchDetails.loadLineupsFailed]);
+  }, [fixtureId, t?.matchDetails?.loadLineupsFailed]);
 
   const retryLineups = useCallback(() => {
     setLineupFetchAttempts(0);
@@ -396,7 +392,7 @@ const MatchDetailsScreen = () => {
     } finally {
       setStatsLoading(false);
     }
-  }, [fixtureId, isLive, t.matchDetails.loadStatsFailed]);
+  }, [fixtureId, isLive, t?.matchDetails?.loadStatsFailed]);
 
   // Retry stats every 45s while live (lower-tier leagues often publish late)
   useEffect(() => {
@@ -480,7 +476,7 @@ const MatchDetailsScreen = () => {
     fixture,
     isLive,
     isFinishedMatch,
-    t.matchDetails.loadStandingsFailed,
+    t?.matchDetails?.loadStandingsFailed,
   ]);
 
   const loadVenueIfNeeded = useCallback(async () => {
@@ -1299,6 +1295,14 @@ const MatchDetailsScreen = () => {
         <TouchableOpacity style={styles.retryButton} onPress={loadMatchDetails}>
           <Text style={styles.retryButtonText}>{t.common.retry}</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!translationsReady) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0a0a0a' }}>
+        <ActivityIndicator size="large" color="#A855F7" />
       </View>
     );
   }

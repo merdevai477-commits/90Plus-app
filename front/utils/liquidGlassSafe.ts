@@ -24,33 +24,39 @@ export interface LiquidGlassViewProps extends ViewProps {
   animated?: boolean;
 }
 
+type LiquidGlassContainerProps = ViewProps & { spacing?: number };
+
+/** Package exports may be the component directly or wrapped in `{ default }`. */
+type MaybeDefaultExport<T extends ComponentType<unknown>> = T | { default: T };
+
+function resolveComponent<T extends ComponentType<unknown>>(
+  raw: MaybeDefaultExport<T> | undefined,
+  fallback: T,
+): T {
+  if (typeof raw === 'function') {
+    return raw;
+  }
+  if (raw && typeof raw === 'object' && 'default' in raw) {
+    return raw.default ?? fallback;
+  }
+  return fallback;
+}
+
 // ─── Safe import ──────────────────────────────────────────────────────────────
 
 let _LiquidGlassView: ComponentType<LiquidGlassViewProps> = View;
-let _LiquidGlassContainerView: ComponentType<ViewProps & { spacing?: number }> = View;
+let _LiquidGlassContainerView: ComponentType<LiquidGlassContainerProps> = View;
 let _isLiquidGlassSupported = false;
 
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const pkg = require('@callstack/liquid-glass') as {
-    LiquidGlassView?: ComponentType<LiquidGlassViewProps> | { default: ComponentType<LiquidGlassViewProps> };
-    LiquidGlassContainerView?: ComponentType<ViewProps & { spacing?: number }>;
+    LiquidGlassView?: MaybeDefaultExport<ComponentType<LiquidGlassViewProps>>;
+    LiquidGlassContainerView?: MaybeDefaultExport<ComponentType<LiquidGlassContainerProps>>;
     isLiquidGlassSupported?: boolean;
   };
-  const rawView = pkg.LiquidGlassView;
-  _LiquidGlassView =
-    typeof rawView === 'function'
-      ? rawView
-      : rawView && typeof rawView === 'object' && 'default' in rawView
-        ? (rawView.default ?? View)
-        : View;
-  const rawContainer = pkg.LiquidGlassContainerView;
-  _LiquidGlassContainerView =
-    typeof rawContainer === 'function'
-      ? rawContainer
-      : rawContainer && typeof rawContainer === 'object' && 'default' in rawContainer
-        ? (rawContainer.default ?? View)
-        : View;
+  _LiquidGlassView = resolveComponent(pkg.LiquidGlassView, View);
+  _LiquidGlassContainerView = resolveComponent(pkg.LiquidGlassContainerView, View);
   _isLiquidGlassSupported = pkg.isLiquidGlassSupported ?? false;
 } catch {
   // Native module not available — silently fall back to View / BlurView
@@ -58,6 +64,6 @@ try {
 }
 
 export const LiquidGlassView: ComponentType<LiquidGlassViewProps> = _LiquidGlassView;
-export const LiquidGlassContainerView: ComponentType<ViewProps & { spacing?: number }> =
+export const LiquidGlassContainerView: ComponentType<LiquidGlassContainerProps> =
   _LiquidGlassContainerView;
 export const isLiquidGlassSupported: boolean = _isLiquidGlassSupported;

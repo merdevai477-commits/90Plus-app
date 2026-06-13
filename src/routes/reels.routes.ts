@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth, optionalAuth } from '../middleware/clerk.middleware';
+import { requireAdmin } from '../middleware/admin.middleware';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { WebSocketService } from '../services/websocket.service';
@@ -3002,7 +3003,7 @@ router.get('/rankings/players/:userId/votes', requireAuth, async (req: Request, 
  * POST /api/reels/rankings/award-badges
  * Award badges to top ranked users (called by cron job or admin)
  */
-router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/rankings/award-badges', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { category, period = '3_days' } = req.body;
 
@@ -3068,7 +3069,7 @@ router.post('/rankings/award-badges', requireAuth, async (req: Request, res: Res
  * POST /api/reels/rankings/award-team-of-month
  * Award team of month badges and check for diamond streak
  */
-router.post('/rankings/award-team-of-month', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/rankings/award-team-of-month', requireAuth, requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const currentDate = new Date();
         const monthYear = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;

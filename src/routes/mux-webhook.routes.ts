@@ -27,6 +27,13 @@ import {
 
 const router = Router();
 
+if (process.env.NODE_ENV === 'production' && !process.env.MUX_WEBHOOK_SECRET?.trim()) {
+  logger.error(
+    '[MuxWebhook] FATAL: MUX_WEBHOOK_SECRET is required when NODE_ENV=production. Refusing to start.',
+  );
+  throw new Error('MUX_WEBHOOK_SECRET must be set when NODE_ENV=production');
+}
+
 /**
  * POST /api/webhooks/mux
  *
@@ -42,24 +49,27 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   // ── Signature verification ────────────────────────────────────────────────
   const secret = process.env.MUX_WEBHOOK_SECRET;
 
-  if (!secret) {
-    // No secret configured — log warning but process event (dev/staging fallback)
-    logger.warn('[MuxWebhook] MUX_WEBHOOK_SECRET not set — skipping verification (INSECURE)');
-  } else if (!signature) {
+  if (!secret?.trim()) {
+    logger.error('[MuxWebhook] Rejected — MUX_WEBHOOK_SECRET not configured');
+    res.status(503).json({ error: 'Webhook verification not configured' });
+    return;
+  }
+
+  if (!signature) {
     logger.error('[MuxWebhook] Signature verification FAILED — missing mux-signature header');
     res.status(401).json({ error: 'Missing signature' });
     return;
-  } else {
-    try {
-      muxService.verifyWebhook(rawBody, signature);
-      logger.info('[MuxWebhook] Signature verified ✅');
-    } catch (err: any) {
-      logger.error('[MuxWebhook] Signature verification FAILED');
-      logger.error('[MuxWebhook] Signature verification failed:', err.message);
-      logger.error('[MuxWebhook] Secret length:', secret.length, '| Signature:', signature?.substring(0, 30));
-      res.status(401).json({ error: 'Invalid webhook signature' });
-      return;
-    }
+  }
+
+  try {
+    muxService.verifyWebhook(rawBody, signature);
+    logger.info('[MuxWebhook] Signature verified ✅');
+  } catch (err: any) {
+    logger.error('[MuxWebhook] Signature verification FAILED');
+    logger.error('[MuxWebhook] Signature verification failed:', err.message);
+    logger.error('[MuxWebhook] Secret length:', secret.length, '| Signature:', signature?.substring(0, 30));
+    res.status(401).json({ error: 'Invalid webhook signature' });
+    return;
   }
 
   // ── Parse body ────────────────────────────────────────────────────────────

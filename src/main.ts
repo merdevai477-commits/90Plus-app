@@ -548,85 +548,9 @@ app.get(`${API_PREFIX}`, (_req: Request, res: Response) => {
         description: 'Backend API for 90Plus App using Express, Prisma, and PostgreSQL',
         endpoints: {
             health: `${API_PREFIX}/health`,
-            users: `${API_PREFIX}/users`,
+            users: `${API_PREFIX}/users (authenticated routes)`,
         },
     });
-});
-
-app.get(`${API_PREFIX}/users`, async (_req: Request, res: Response) => {
-    try {
-        const users = await prisma.user.findMany({
-            select: {
-                id: true,
-                email: true,
-                username: true,
-                displayName: true,
-                isVerified: true,
-                isDeveloper: true,
-                coins: true,
-                level: true,
-                createdAt: true,
-            },
-            orderBy: {
-                createdAt: 'desc',
-            },
-        });
-
-        res.json({
-            status: 'SUCCESS',
-            count: users.length,
-            users: users,
-            message: users.length > 0
-                ? `Found ${users.length} user(s) in database`
-                : 'No users found. Run "npm run prisma:seed" to create sample accounts.',
-        });
-    } catch (error: any) {
-        const errorMessage = error?.message || 'Cannot connect to database';
-        const isConnectionError = errorMessage.includes('Can\'t reach database server') ||
-            errorMessage.includes('ECONNREFUSED') ||
-            errorMessage.includes('timeout');
-
-        res.status(500).json({
-            status: 'ERROR',
-            message: 'Database connection failed',
-            error: errorMessage,
-            databaseStatus: 'Not Connected',
-            accountsAvailable: false,
-            help: {
-                message: isConnectionError
-                    ? 'PostgreSQL is not running or not installed. Choose one option:'
-                    : 'To fix this:',
-                options: [
-                    {
-                        title: 'Option 1: Install PostgreSQL Locally',
-                        steps: [
-                            '1. Install PostgreSQL locally (Windows): https://www.postgresql.org/download/windows/',
-                            '2. After installation, run: npm run prisma:migrate',
-                            '3. Then run: npm run prisma:seed',
-                        ],
-                    },
-                    {
-                        title: 'Option 2: Use a managed PostgreSQL (Cloud Database)',
-                        steps: [
-                            '1. Create a database on your provider (e.g. Neon, Railway, Render, etc.)',
-                            '2. Copy the connection string',
-                            '3. Update DATABASE_URL in .env file',
-                            '4. Run: npm run prisma:migrate',
-                            '5. Then run: npm run prisma:seed',
-                        ],
-                        note: 'See your provider docs for connection strings and IP allowlists',
-                    },
-                ],
-                quickCheck: [
-                    'Check if PostgreSQL service is running:',
-                    '  Get-Service -Name "*postgresql*"',
-                    '',
-                    'If installed, start it:',
-                    '  Start-Service postgresql-x64-14',
-                ],
-            },
-        });
-    }
 });
 
 // Unmatched public paths → landing page (deep links open in app; browsers get home)
