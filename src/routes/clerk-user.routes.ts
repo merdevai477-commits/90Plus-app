@@ -14,6 +14,7 @@ import { ErrorCode, sendError } from '../constants/errors';
 import { getUserLanguage, renderPushTemplate } from '../services/push-templates.service';
 import { getBlockRelation } from '../services/block.service';
 import { followCountsFromPrisma } from '../utils/follow-count.utils';
+import { AuditService } from '../services/audit.service';
 
 const router = Router();
 
@@ -26,6 +27,17 @@ function ensureString(param: string | string[] | undefined): string {
 // Simple in-memory cache for user profiles (5 minutes TTL - increased for better performance)
 const userCache = new Map<string, { data: any; timestamp: number }>();
 const USER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function recordSuccessfulSessionLogin(req: Request, source: string): void {
+    const userId = req.auth?.userId;
+    if (!userId) return;
+    void AuditService.auditSuccessfulLogin({
+        userId,
+        sessionId: req.auth?.sessionId,
+        req,
+        metadata: { source },
+    }).catch((err) => logger.error('Login audit error:', err));
+}
 
 // Helper to invalidate user cache
 export const invalidateUserCache = (clerkUserId: string) => {
@@ -63,6 +75,7 @@ router.get(
         const cached = userCache.get(clerkUserId);
         if (cached && Date.now() - cached.timestamp < USER_CACHE_TTL) {
             logger.info(`[/clerk/me] ⚡ Returning cached data for: ${clerkUserId}`);
+            recordSuccessfulSessionLogin(req, 'clerk/me');
             res.json({ status: 'SUCCESS', data: { user: cached.data } });
             return;
         }
@@ -126,6 +139,7 @@ router.get(
         userCache.set(clerkUserId, { data: userData, timestamp: Date.now() });
 
         logger.info(`[/clerk/me] ✅ Returning user data for: ${user.username}`);
+        recordSuccessfulSessionLogin(req, 'clerk/me');
         res.json({ status: 'SUCCESS', data: { user: userData } });
     } catch (error: any) {
         logger.error('[/clerk/me] ❌ Unexpected error:', error);
@@ -518,6 +532,8 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
         }
 
         const user = await ClerkUserService.syncUserFromClerk(clerkUserId);
+
+        recordSuccessfulSessionLogin(req, 'clerk/sync');
 
         res.json({
             status: 'SUCCESS',

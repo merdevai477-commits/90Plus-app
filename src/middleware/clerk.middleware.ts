@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { clerkClient, getAuth } from '@clerk/express';
 import { logger } from '../utils/logger';
-import { AuditService, AuditAction } from '../services/audit.service';
 import { TokenRevocationService } from '../services/token-revocation.service';
 import { AbuseDetectionService } from '../services/abuse-detection.service';
 
@@ -303,18 +302,6 @@ export const requireAuth = async (
             path: req.path,
             duration: `${duration}ms`,
         });
-
-        // Log successful authentication (non-blocking)
-        AuditService.logAuth({
-            action: AuditAction.LOGIN,
-            userId,
-            req,
-            metadata: {
-                path: req.path,
-                method: req.method,
-                duration: `${duration}ms`,
-            },
-        }).catch(err => logger.error('Audit log error:', err));
 
         next();
     } catch (error: any) {

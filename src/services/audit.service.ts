@@ -34,6 +34,12 @@ export enum AuditAction {
     SUSPICIOUS_ACTIVITY = 'SUSPICIOUS_ACTIVITY',
 }
 
+/**
+ * Debug-only audit label for optional request tracing.
+ * Never persisted — use {@link AuditService.logApiAccessDebug} only.
+ */
+export const DEBUG_AUDIT_API_ACCESS = 'API_ACCESS' as const;
+
 export enum AuditTargetType {
     USER = 'USER',
     REEL = 'REEL',
@@ -55,10 +61,15 @@ export interface CreateAuditLogParams {
 }
 
 export class AuditService {
+    /** One LOGIN audit row per Clerk session (avoids duplicate rows on /clerk/me retries). */
+    private static loginAuditBySession = new Map<string, number>();
+    private static readonly LOGIN_AUDIT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+    private static readonly MAX_LOGIN_AUDIT_CACHE = 10_000;
+
     /**
      * Create an audit log entry
      */
-    static async log(params: CreateAuditLogParams) {
+    static async log(params: CreateAuditLogParams, options?: { logLevel?: 'info' | 'debug' }) {
         try {
             const auditLog = await prisma.auditLog.create({
                 data: {
@@ -74,7 +85,8 @@ export class AuditService {
                 },
             });
 
-            logger.info('Audit log created', {
+            const logFn = options?.logLevel === 'info' ? logger.info.bind(logger) : logger.debug.bind(logger);
+            logFn('Audit log created', {
                 action: params.action,
                 actorId: params.actorId,
                 resource: params.resource,
@@ -99,7 +111,7 @@ export class AuditService {
     }
 
     /**
-     * Log authentication event
+     * Log authentication event (security — logged at info level when persisted).
      */
     static async logAuth(params: {
         action: AuditAction.LOGIN | AuditAction.LOGOUT | AuditAction.LOGIN_FAILED;
@@ -115,6 +127,65 @@ export class AuditService {
             resource: 'AUTH',
             metadata: params.metadata,
             ...requestInfo,
+        }, { logLevel: 'info' });
+    }
+
+    /**
+     * Record a real user session/login event (once per Clerk session).
+     * Call from auth bootstrap routes only — never from generic requireAuth.
+     */
+    static async auditSuccessfulLogin(params: {
+        userId: string;
+        sessionId?: string;
+        req?: Request;
+        metadata?: Record<string, unknown>;
+    }): Promise<void> {
+        const sessionKey = params.sessionId?.trim() || params.userId;
+        const now = Date.now();
+        const lastAuditedAt = this.loginAuditBySession.get(sessionKey);
+
+        if (lastAuditedAt != null && now - lastAuditedAt < this.LOGIN_AUDIT_SESSION_TTL_MS) {
+            return;
+        }
+
+        if (this.loginAuditBySession.size >= this.MAX_LOGIN_AUDIT_CACHE) {
+            for (const [key, ts] of this.loginAuditBySession.entries()) {
+                if (now - ts > this.LOGIN_AUDIT_SESSION_TTL_MS) {
+                    this.loginAuditBySession.delete(key);
+                }
+            }
+            while (this.loginAuditBySession.size >= this.MAX_LOGIN_AUDIT_CACHE) {
+                const oldest = this.loginAuditBySession.keys().next().value;
+                if (oldest === undefined) break;
+                this.loginAuditBySession.delete(oldest);
+            }
+        }
+
+        this.loginAuditBySession.set(sessionKey, now);
+
+        await this.logAuth({
+            action: AuditAction.LOGIN,
+            userId: params.userId,
+            req: params.req,
+            metadata: params.metadata as Record<string, any> | undefined,
+        });
+    }
+
+    /**
+     * Optional debug trace for authenticated API traffic — never writes to AuditLog.
+     */
+    static logApiAccessDebug(params: {
+        userId?: string;
+        path?: string;
+        method?: string;
+        metadata?: Record<string, unknown>;
+    }): void {
+        logger.debug('API access', {
+            action: DEBUG_AUDIT_API_ACCESS,
+            userId: params.userId,
+            path: params.path,
+            method: params.method,
+            ...params.metadata,
         });
     }
 
@@ -139,7 +210,7 @@ export class AuditService {
             reason: params.reason,
             metadata: params.metadata,
             ...requestInfo,
-        });
+        }, { logLevel: 'info' });
     }
 
     /**
@@ -161,7 +232,7 @@ export class AuditService {
             reason: params.reason,
             metadata: params.metadata,
             ...requestInfo,
-        });
+        }, { logLevel: 'info' });
     }
 
     /**
@@ -236,7 +307,7 @@ export class AuditService {
             targetType,
             resource: 'MODERATION',
             metadata: { reportId },
-        });
+        }, { logLevel: 'info' });
     }
 
     /**
@@ -250,7 +321,7 @@ export class AuditService {
             targetType: AuditTargetType.USER,
             resource: 'MODERATION',
             metadata: { strikeId, reportId },
-        });
+        }, { logLevel: 'info' });
     }
 
     /**
@@ -272,7 +343,7 @@ export class AuditService {
             metadata: {
                 deletedAt: new Date().toISOString(),
             },
-        });
+        }, { logLevel: 'info' });
     }
 
     /**
@@ -286,7 +357,7 @@ export class AuditService {
             targetType: AuditTargetType.USER,
             resource: 'MODERATION',
             reason,
-        });
+        }, { logLevel: 'info' });
     }
 
     /**
@@ -299,7 +370,7 @@ export class AuditService {
             targetId: userId,
             targetType: AuditTargetType.USER,
             resource: 'MODERATION',
-        });
+        }, { logLevel: 'info' });
     }
 
     /**
@@ -313,7 +384,7 @@ export class AuditService {
             targetType: AuditTargetType.USER,
             resource: 'MODERATION',
             reason,
-        });
+        }, { logLevel: 'info' });
     }
 }
 
