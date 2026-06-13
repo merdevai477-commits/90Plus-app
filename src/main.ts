@@ -856,6 +856,9 @@ async function startServer() {
                         const { getMatchStartReminderQueue } = await import('./queues/match-start-reminder.queue');
                         getMatchStartReminderQueue();
 
+                        const { getMatchEventPushQueue } = await import('./queues/match-event-push.queue');
+                        getMatchEventPushQueue();
+
                         const { verifyFCMConfiguration } = await import('./services/push-notification.service');
                         verifyFCMConfiguration();
                     } catch (queueErr) {
@@ -983,6 +986,20 @@ async function startServer() {
                     });
                     logger.info('✅ GDPR Export Cleanup Cron Job scheduled (daily at 3 AM)');
 
+                    // Match event retention — daily at 4:30 AM UTC
+                    cron.schedule('30 4 * * *', async () => {
+                        logger.info('⏰ Cron: Running match event retention cleanup...');
+                        try {
+                            const { cleanupMatchEventData } = await import(
+                                './services/match-events/match-event-cleanup.service'
+                            );
+                            await cleanupMatchEventData();
+                        } catch (error) {
+                            logger.error('❌ Match event cleanup cron failed:', error);
+                        }
+                    });
+                    logger.info('✅ Match event retention cron scheduled (daily at 04:30 UTC)');
+
                     // ✅ Fix 2: R2 Orphan Cleanup – daily at 03:00 Cairo (UTC+2 = 01:00 UTC)
                     cron.schedule('0 1 * * *', async () => {
                         logger.info('⏰ Cron: Running R2 orphan cleanup...');
@@ -1077,6 +1094,12 @@ process.on('SIGINT', async () => {
     MatchWatcherService.stop();
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
     LeagueMatchWatcherService.stop(); // ✅ Stop league match watcher
+    try {
+        const { closeMatchEventPushQueue } = await import('./queues/match-event-push.queue');
+        await closeMatchEventPushQueue();
+    } catch {
+        /* non-fatal */
+    }
     const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
     liveFixtureSyncService.stop();
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
@@ -1091,6 +1114,13 @@ process.on('SIGTERM', async () => {
     WebSocketService.shutdown();
     MatchWatcherService.stop();
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
+    LeagueMatchWatcherService.stop();
+    try {
+        const { closeMatchEventPushQueue } = await import('./queues/match-event-push.queue');
+        await closeMatchEventPushQueue();
+    } catch {
+        /* non-fatal */
+    }
     const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
     liveFixtureSyncService.stop();
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload

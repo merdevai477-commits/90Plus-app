@@ -1250,17 +1250,63 @@ model FavoriteMatch {
   lastStatus    String? // Last known status (NS, 1H, HT, 2H, FT, etc.)
   notifiedStart Boolean  @default(false) // Already notified about match start
   notifiedEnd   Boolean  @default(false) // Already notified about match end
+  /// Anchor for subscription-aware delivery — updated on every subscribe/re-subscribe
+  subscribedAt  DateTime @default(now())
+  /// Cursor into the canonical match event stream (last delivered eventKey)
+  lastDeliveredEventKey String?
+  /// Score/status snapshot at subscribe time (guards retroactive goal alerts)
+  baselineHomeScore     Int?
+  baselineAwayScore     Int?
+  baselineStatus        String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries MatchEventDelivery[]
 
   @@unique([userId, apiMatchId])
   @@index([userId])
   @@index([apiMatchId])
   @@index([matchDate])
   @@index([notifiedEnd, matchDate])
+  @@index([apiMatchId, subscribedAt])
   @@map("favorite_matches")
+}
+
+/// Canonical match events — one row per distinct event per fixture (shared by all subscribers)
+model MatchEvent {
+  id          String   @id @default(uuid())
+  fixtureId   Int
+  eventKey    String
+  eventType   String
+  minute      Int?
+  extraMinute Int?
+  teamId      Int?
+  playerId    Int?
+  payload     Json
+  detectedAt  DateTime @default(now())
+
+  deliveries MatchEventDelivery[]
+
+  @@unique([fixtureId, eventKey])
+  @@index([fixtureId, detectedAt])
+  @@map("match_events")
+}
+
+/// Per-subscription delivery ledger — prevents duplicate pushes at scale
+model MatchEventDelivery {
+  id             String   @id @default(uuid())
+  subscriptionId String
+  eventKey       String
+  deliveredAt    DateTime @default(now())
+  fixtureId      Int
+
+  subscription FavoriteMatch @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  event        MatchEvent    @relation(fields: [fixtureId, eventKey], references: [fixtureId, eventKey], onDelete: Cascade)
+
+  @@unique([subscriptionId, eventKey])
+  @@index([subscriptionId])
+  @@map("match_event_deliveries")
 }
 
 // ============================================

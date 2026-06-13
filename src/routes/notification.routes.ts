@@ -325,33 +325,17 @@ router.post('/match-subscribe', requireAuth, async (req: Request, res: Response)
             return;
         }
 
-        const subscription = await prisma.favoriteMatch.upsert({
-            where: { userId_apiMatchId: { userId: user.id, apiMatchId: parsedFixtureId } },
-            update: {
-                matchDate,
-                homeTeam: String(homeTeam),
-                awayTeam: String(awayTeam),
-                homeTeamLogo: homeTeamLogo ? String(homeTeamLogo) : null,
-                awayTeamLogo: awayTeamLogo ? String(awayTeamLogo) : null,
-                leagueName: leagueName ? String(leagueName) : null,
-                // Re-arming after a previous notification means the user must have
-                // re-subscribed for a re-scheduled fixture (e.g. postponed).
-                notifiedStart: false,
-                // Re-baseline on re-subscribe so mid-match bell does not replay old events.
-                lastHomeScore: null,
-                lastAwayScore: null,
-                lastStatus: null,
-            },
-            create: {
-                userId: user.id,
-                apiMatchId: parsedFixtureId,
-                matchDate,
-                homeTeam: String(homeTeam),
-                awayTeam: String(awayTeam),
-                homeTeamLogo: homeTeamLogo ? String(homeTeamLogo) : null,
-                awayTeamLogo: awayTeamLogo ? String(awayTeamLogo) : null,
-                leagueName: leagueName ? String(leagueName) : null,
-            },
+        const { subscribeWithBaseline } = await import('../services/match-events/match-subscription.service');
+
+        const subscription = await subscribeWithBaseline({
+            userId: user.id,
+            fixtureId: parsedFixtureId,
+            matchDate,
+            homeTeam: String(homeTeam),
+            awayTeam: String(awayTeam),
+            homeTeamLogo: homeTeamLogo ? String(homeTeamLogo) : null,
+            awayTeamLogo: awayTeamLogo ? String(awayTeamLogo) : null,
+            leagueName: leagueName ? String(leagueName) : null,
         });
 
         // Schedule the delayed push. Safe if Redis is down (returns silently).
@@ -373,7 +357,7 @@ router.post('/match-subscribe', requireAuth, async (req: Request, res: Response)
             data: {
                 fixtureId: parsedFixtureId,
                 subscribed: true,
-                subscriptionId: subscription.id,
+                subscriptionId: subscription.subscriptionId,
             },
         });
     } catch (error: any) {
@@ -410,9 +394,25 @@ router.delete('/match-subscribe/:fixtureId', requireAuth, async (req: Request, r
         }
 
         // Idempotent delete — missing record is not an error.
+        const deleted = await prisma.favoriteMatch.findMany({
+            where: { userId: user.id, apiMatchId: parsedFixtureId },
+            select: { id: true },
+        });
+
         await prisma.favoriteMatch.deleteMany({
             where: { userId: user.id, apiMatchId: parsedFixtureId },
         });
+
+        try {
+            const { removeSubscriberFromIndex } = await import(
+                '../services/match-events/match-subscriber-index.adapter'
+            );
+            for (const row of deleted) {
+                await removeSubscriberFromIndex(parsedFixtureId, row.id);
+            }
+        } catch (err) {
+            logger.warn('[match-subscribe] failed to update subscriber index:', err);
+        }
 
         try {
             const { cancelMatchStartReminder } = await import('../queues/match-start-reminder.queue');
