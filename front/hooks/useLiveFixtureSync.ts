@@ -7,6 +7,7 @@ import {
   LIVE_FIXTURE_FULL_BUNDLE_EVERY_N,
   LIVE_FIXTURE_SWEEP_MS,
 } from '../src/store/liveFixtureStore.types';
+import { logger } from '../utils/logger';
 
 const MAX_CONCURRENT_FAST = 6;
 
@@ -26,7 +27,10 @@ export function useLiveFixtureSync(): void {
     });
 
     const pollTick = async () => {
-      if (pollRunningRef.current) return;
+      if (pollRunningRef.current) {
+        logger.debug('[LiveFixtureSync] Poll tick skipped — previous cycle still running');
+        return;
+      }
       pollRunningRef.current = true;
       try {
         tickRef.current += 1;

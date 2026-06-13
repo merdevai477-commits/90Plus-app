@@ -76,7 +76,8 @@ export function usePushNotifications(): PushNotificationState {
                 case 'SCORE_UPDATE': {
                     const matchId = Number(data.matchId || data.fixtureId);
                     if (matchId) {
-                        void useLiveFixtureStore.getState().fetchAndIngestFast(matchId);
+                        // One-shot refresh only — never registerInterest (no poll leak).
+                        void useLiveFixtureStore.getState().ensureSnapshot(matchId);
                     } else {
                         void useLiveFixtureStore.getState().refreshInterestedLive();
                     }

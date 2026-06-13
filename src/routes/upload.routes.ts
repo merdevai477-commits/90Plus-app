@@ -771,9 +771,10 @@ async function processReelMuxUploadInBackground(params: {
 
     logger.info(`[upload/reel] Background Mux upload complete for reel ${reelId}`);
 
-    await prisma.reel.update({
-      where: { id: reelId },
-      data: { muxUploadId: uploadId, videoUrl: '' },
+    // muxUploadId is persisted before background PUT; ensure row is still present.
+    await prisma.reel.updateMany({
+      where: { id: reelId, muxUploadId: null },
+      data: { muxUploadId: uploadId },
     });
 
     for (const tag of hashtags) {
@@ -977,6 +978,13 @@ router.post(
         }).catch(() => undefined);
         return;
       }
+
+      // Persist muxUploadId before background PUT so webhook/heal can link even if
+      // the API crashes after createUploadUrl or during the Mux transfer.
+      await prisma.reel.update({
+        where: { id: placeholderReel.id },
+        data: { muxUploadId: uploadId },
+      });
 
       // ── Respond immediately after receiving the file — Mux PUT runs in background.
       // iOS closes idle connections (499) while waiting for server→Mux upload (30–120s+).

@@ -25,11 +25,118 @@ interface LiveFixtureStoreState {
   setFocusedFixture: (fixtureId: number | null) => void;
   ingestSnapshot: (snapshot: LiveFixtureSnapshot) => void;
   patchFromWebSocket: (update: MatchUpdatePayload, messageTimestamp: number) => void;
+  /** One-shot HTTP warm-up for WS/push paths — never increments interestCounts. */
+  ensureSnapshot: (fixtureId: number) => Promise<void>;
   fetchAndIngestFast: (fixtureId: number) => Promise<void>;
   fetchAndIngestFull: (fixtureId: number) => Promise<void>;
   refreshInterestedLive: () => Promise<void>;
   getPollTargetIds: () => number[];
   sweepEvictions: () => void;
+}
+
+/** Coalesced one-shot HTTP fetches — not ref-counted interest. */
+const oneShotFetchInFlight = new Map<number, Promise<void>>();
+
+/** Serializes WS-before-snapshot ensure + apply loops per fixture. */
+const wsEnsureInFlight = new Map<number, Promise<void>>();
+
+/** Latest WS payload to apply after ensureSnapshot fetch completes. */
+const pendingWsWhileEnsuring = new Map<
+  number,
+  { update: MatchUpdatePayload; messageTimestamp: number }
+>();
+
+type StoreGetter = () => LiveFixtureStoreState;
+
+/** Apply a WS patch to an existing snapshot (shared by direct WS and post-ensure paths). */
+function applyWebSocketPatch(
+  get: StoreGetter,
+  fixtureId: number,
+  update: MatchUpdatePayload,
+  messageTimestamp: number,
+  existing: LiveFixtureSnapshot,
+): void {
+  const patchedFixture = applyWebSocketToFixture(existing, update);
+  const next = buildSnapshotFromRaw({
+    fixtureId,
+    fixture: patchedFixture,
+    events: existing.events,
+    lineups: existing.lineups,
+    statistics: existing.statistics,
+    venue: existing.venue,
+    source: 'websocket',
+    existing,
+  });
+  if (!next) return;
+
+  next.lastWsAppliedAt = messageTimestamp;
+  get().ingestSnapshot(next);
+
+  if (update.status === 'HT' || update.status === 'FT') {
+    void get().fetchAndIngestFull(fixtureId);
+  }
+}
+
+/**
+ * Coalesced one-shot HTTP fetch — shared by ensureSnapshot, WS warm-up, and push refresh.
+ * Never touches interestCounts.
+ */
+async function runOneShotFetch(get: StoreGetter, fixtureId: number): Promise<void> {
+  if (get().snapshots[fixtureId]) return;
+
+  let inFlight = oneShotFetchInFlight.get(fixtureId);
+  if (!inFlight) {
+    inFlight = get()
+      .fetchAndIngestFast(fixtureId)
+      .finally(() => {
+        oneShotFetchInFlight.delete(fixtureId);
+      });
+    oneShotFetchInFlight.set(fixtureId, inFlight);
+  }
+  await inFlight;
+}
+
+async function ensureSnapshotForWebSocket(
+  get: StoreGetter,
+  fixtureId: number,
+  update: MatchUpdatePayload,
+  messageTimestamp: number,
+): Promise<void> {
+  pendingWsWhileEnsuring.set(fixtureId, { update, messageTimestamp });
+
+  const existing = get().snapshots[fixtureId];
+  if (existing) {
+    const pending = pendingWsWhileEnsuring.get(fixtureId)!;
+    pendingWsWhileEnsuring.delete(fixtureId);
+    applyWebSocketPatch(get, fixtureId, pending.update, pending.messageTimestamp, existing);
+    return;
+  }
+
+  let chain = wsEnsureInFlight.get(fixtureId);
+  if (!chain) {
+    chain = (async () => {
+      while (pendingWsWhileEnsuring.has(fixtureId)) {
+        await runOneShotFetch(get, fixtureId);
+
+        const pending = pendingWsWhileEnsuring.get(fixtureId);
+        if (!pending) break;
+
+        const snap = get().snapshots[fixtureId];
+        if (!snap) {
+          pendingWsWhileEnsuring.delete(fixtureId);
+          break;
+        }
+
+        pendingWsWhileEnsuring.delete(fixtureId);
+        applyWebSocketPatch(get, fixtureId, pending.update, pending.messageTimestamp, snap);
+      }
+    })().finally(() => {
+      wsEnsureInFlight.delete(fixtureId);
+    });
+    wsEnsureInFlight.set(fixtureId, chain);
+  }
+
+  await chain;
 }
 
 function cancelEviction(
@@ -130,29 +237,17 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
     const fixtureId = update.matchId;
     const existing = get().snapshots[fixtureId];
     if (!existing) {
-      void get().fetchAndIngestFast(fixtureId);
+      // One-shot fetch + apply WS — never registerInterest (no ref-count leak).
+      void ensureSnapshotForWebSocket(get, fixtureId, update, messageTimestamp);
       return;
     }
 
-    const patchedFixture = applyWebSocketToFixture(existing, update);
-    const next = buildSnapshotFromRaw({
-      fixtureId,
-      fixture: patchedFixture,
-      events: existing.events,
-      lineups: existing.lineups,
-      statistics: existing.statistics,
-      venue: existing.venue,
-      source: 'websocket',
-      existing,
-    });
-    if (!next) return;
+    applyWebSocketPatch(get, fixtureId, update, messageTimestamp, existing);
+  },
 
-    next.lastWsAppliedAt = messageTimestamp;
-    get().ingestSnapshot(next);
-
-    if (update.status === 'HT' || update.status === 'FT') {
-      void get().fetchAndIngestFull(fixtureId);
-    }
+  async ensureSnapshot(fixtureId: number) {
+    if (!fixtureId || fixtureId <= 0) return;
+    await runOneShotFetch(get, fixtureId);
   },
 
   async fetchAndIngestFast(fixtureId: number) {

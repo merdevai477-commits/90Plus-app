@@ -1024,6 +1024,27 @@ async function startServer() {
                     });
                     logger.info('✅ Stuck Reel Cleanup Cron Job scheduled (every hour)');
 
+                    // Mux orphan reconciliation — reconnect PROCESSING reels missing muxUploadId
+                    cron.schedule('*/10 * * * *', async () => {
+                        logger.info('⏰ Cron: Running Mux reel reconciliation...');
+                        try {
+                            const { runMuxReconciliation } = await import(
+                                './services/reel-mux-reconcile.service'
+                            );
+                            const summary = await runMuxReconciliation();
+                            if (
+                                summary.identifiersAttached > 0 ||
+                                summary.healedReady > 0 ||
+                                summary.repairFailed > 0
+                            ) {
+                                logger.info('[MuxReconcile] Cron summary:', summary);
+                            }
+                        } catch (error) {
+                            logger.error('❌ Mux reel reconciliation cron failed:', error);
+                        }
+                    });
+                    logger.info('✅ Mux Reel Reconciliation Cron scheduled (every 10 minutes)');
+
                     // Mux free-tier cap: prune orphan/stale assets before uploads block
                     cron.schedule('15 * * * *', async () => {
                         logger.info('⏰ Cron: Running Mux asset headroom check...');

@@ -130,6 +130,14 @@ describe('shouldSkipHttpIngest', () => {
     const incoming = baseSnapshot(makeFixture(55, '2H', 2, 0));
     expect(shouldSkipHttpIngest(current, incoming, 100)).toBe(false);
   });
+
+  it('skips stale HTTP 1-1 after WS applied 2-1 (goal regression guard)', () => {
+    const current = baseSnapshot(makeFixture(60, '2H', 2, 1));
+    current.lastWsAppliedAt = 1000;
+    current.lastSource = 'websocket';
+    const incoming = baseSnapshot(makeFixture(58, '2H', 1, 1));
+    expect(shouldSkipHttpIngest(current, incoming, 500)).toBe(true);
+  });
 });
 
 describe('isValidStatusTransition', () => {

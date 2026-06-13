@@ -53,6 +53,15 @@ export interface MuxAssetSummary {
   status: string;
   createdAt?: number;
   passthrough?: string;
+  uploadId?: string;
+}
+
+export interface MuxUploadSummary {
+  id: string;
+  status?: string;
+  assetId?: string;
+  passthrough?: string;
+  createdAt?: number;
 }
 
 export type MuxErrorCode = 'MUX_ASSET_LIMIT' | 'MUX_UNAVAILABLE';
@@ -122,6 +131,7 @@ export async function listMuxAssets(limit = 100): Promise<MuxAssetSummary[]> {
     status?: string;
     created_at?: number | string;
     passthrough?: string;
+    upload_id?: string;
   }>;
 
   return rows.map((row) => ({
@@ -133,6 +143,33 @@ export async function listMuxAssets(limit = 100): Promise<MuxAssetSummary[]> {
         ? Math.floor(new Date(row.created_at).getTime() / 1000)
         : undefined,
     passthrough: row.passthrough,
+    uploadId: row.upload_id,
+  }));
+}
+
+/**
+ * List recent Mux direct uploads (newest first) for passthrough reconciliation.
+ */
+export async function listMuxUploads(limit = 100): Promise<MuxUploadSummary[]> {
+  const page = await mux().video.uploads.list({ limit: Math.min(limit, 100) });
+  const rows = ((page as { data?: unknown[] }).data ?? []) as Array<{
+    id: string;
+    status?: string;
+    asset_id?: string;
+    created_at?: number | string;
+    new_asset_settings?: { passthrough?: string };
+  }>;
+
+  return rows.map((row) => ({
+    id: row.id,
+    status: row.status,
+    assetId: row.asset_id,
+    passthrough: row.new_asset_settings?.passthrough,
+    createdAt: typeof row.created_at === 'number'
+      ? row.created_at
+      : row.created_at
+        ? Math.floor(new Date(row.created_at).getTime() / 1000)
+        : undefined,
   }));
 }
 

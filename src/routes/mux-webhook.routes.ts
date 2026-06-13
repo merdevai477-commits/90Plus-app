@@ -7,8 +7,9 @@
  * so we receive the raw body for signature verification.
  *
  * Handles:
- *  - video.asset.ready   → mark reel READY, set videoUrl + muxPlaybackId
- *  - video.asset.errored → mark reel FAILED, notify user
+ *  - video.asset.ready        → mark reel READY, set videoUrl + muxPlaybackId
+ *  - video.asset.errored      → mark reel FAILED, notify user
+ *  - video.upload.asset_created → attach mux ids via passthrough when DB link missing
  */
 
 import { Router, Request, Response } from 'express';
@@ -18,6 +19,10 @@ import { enqueueNotification } from '../queues/notification.queue';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { getUserLanguage, renderPushTemplate } from '../services/push-templates.service';
+import {
+  passthroughFromMuxEvent,
+  resolveReelForMuxEvent,
+} from '../services/reel-mux-reconcile.service';
 
 
 const router = Router();
@@ -71,7 +76,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   logger.info('[MuxWebhook] Received event:', {
     type: event.type,
     assetId: event.data?.id,
-    uploadId: event.data?.upload_id,
+    uploadId: event.data?.upload_id ?? event.data?.id,
     status: event.data?.status,
     timestamp: new Date().toISOString(),
   });
@@ -90,7 +95,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         break;
 
       case 'video.upload.asset_created':
-        logger.info(`[MuxWebhook] Upload ${event.data?.id} linked to asset ${event.data?.asset_id}`);
+        await handleUploadAssetCreated(event);
         break;
 
       default:
@@ -106,22 +111,41 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
+async function handleUploadAssetCreated(event: any): Promise<void> {
+  const uploadId: string | undefined = event.data?.id;
+  const assetId: string | undefined = event.data?.asset_id;
+  const passthrough = passthroughFromMuxEvent(event.data);
+
+  logger.info(
+    `[MuxWebhook] Upload ${uploadId} linked to asset ${assetId} (passthrough=${!!passthrough})`,
+  );
+
+  if (!uploadId && !assetId) return;
+
+  await resolveReelForMuxEvent({
+    uploadId,
+    assetId,
+    passthrough,
+    source: 'webhook_upload_asset_created',
+  });
+}
+
 async function handleAssetReady(event: any): Promise<void> {
   const assetId: string = event.data?.id;
   const uploadId: string | undefined = event.data?.upload_id;
   const playbackIds: Array<{ id: string; policy: string }> = event.data?.playback_ids ?? [];
+  const passthrough = passthroughFromMuxEvent(event.data);
 
   if (!assetId) {
     logger.warn('[MuxWebhook] video.asset.ready missing asset id');
     return;
   }
 
-  // Find the reel — prefer upload_id lookup, fall back to asset_id
-  const reel = await prisma.reel.findFirst({
-    where: uploadId
-      ? { muxUploadId: uploadId }
-      : { muxAssetId: assetId },
-    select: { id: true, userId: true, thumbnail: true },
+  const reel = await resolveReelForMuxEvent({
+    uploadId,
+    assetId,
+    passthrough,
+    source: 'webhook_asset_ready',
   });
 
   if (!reel) {
@@ -141,12 +165,23 @@ async function handleAssetReady(event: any): Promise<void> {
   // Use Mux auto-thumbnail only if no custom thumbnail was uploaded
   const thumbnailUrl = reel.thumbnail || muxService.getThumbnailUrl(playbackId);
 
+  // Idempotent READY transition — skip if already READY with same playback id.
+  const current = await prisma.reel.findUnique({
+    where: { id: reel.id },
+    select: { status: true, muxPlaybackId: true },
+  });
+  if (current?.status === 'READY' && current.muxPlaybackId === playbackId) {
+    logger.info(`[MuxWebhook] Reel ${reel.id} already READY — skipping duplicate webhook`);
+    return;
+  }
+
   // `publishedAt` is set to the READY transition timestamp so the feed surfaces
   // freshly-processed reels at the top (the reel may have been `createdAt`
   // days ago if processing was delayed or the reel was healed from FAILED).
   await prisma.reel.update({
     where: { id: reel.id },
     data: {
+      muxUploadId: uploadId ?? reel.muxUploadId ?? undefined,
       muxAssetId: assetId,
       muxPlaybackId: playbackId,
       videoUrl,
