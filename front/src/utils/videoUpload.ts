@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { logger } from '../../utils/logger';
+import { isStagedReelUploadUri } from './reelVideoLimits';
 
 export type ResolvedVideoUpload = {
   uri: string;
@@ -32,7 +33,7 @@ function inferMimeAndName(
  */
 export async function resolveVideoUploadSource(
   sourceUri: string,
-  options?: { mimeType?: string | null; fileName?: string | null },
+  options?: { mimeType?: string | null; fileName?: string | null; skipIfStaged?: boolean },
 ): Promise<ResolvedVideoUpload> {
   const trimmed = sourceUri?.trim();
   if (!trimmed) {
@@ -40,6 +41,12 @@ export async function resolveVideoUploadSource(
   }
 
   const { name, type } = inferMimeAndName(trimmed, options?.mimeType, options?.fileName);
+
+  if (options?.skipIfStaged !== false && isStagedReelUploadUri(trimmed)) {
+    const uri = trimmed.startsWith('file://') ? trimmed : `file://${trimmed}`;
+    return { uri, name, type };
+  }
+
   const ext = name.includes('.') ? name.split('.').pop()! : type.includes('quicktime') ? 'mov' : 'mp4';
   const cacheDir = FileSystem.cacheDirectory;
   if (!cacheDir) {

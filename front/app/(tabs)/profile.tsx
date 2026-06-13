@@ -40,6 +40,11 @@ import * as Haptics from 'expo-haptics';
 import { useProfileCache, type ProfileUserData } from '../../hooks/useProfileCache';
 import { useProfileCompletion } from '../../hooks/useProfileCompletion';
 import { useTranslation } from '../../src/i18n';
+import {
+  formatReelTooLargeMessage,
+  getVideoFileSizeBytes,
+  isReelVideoOverSizeLimit,
+} from '../../src/utils/reelVideoLimits';
 import { getProfileCompletionStepLabel } from '../../utils/i18nHelpers';
 import {
   isCooldownApiError,
@@ -537,6 +542,7 @@ function ProfileScreen() {
 
   // UX Fix 4: Reel status polling
   const [pollingReelId, setPollingReelId] = useState<string | null>(null);
+  const handledPollReelRef = useRef<string | null>(null);
   const reelStatus = useReelStatusPoller(pollingReelId, getToken, !!pollingReelId);
 
   // Cross-screen event store — notifies the reels feed when a reel becomes READY
@@ -548,8 +554,13 @@ function ProfileScreen() {
   // Without this, freshly uploaded reels stayed hidden until tab focus + 10s
   // throttle window passed.
   useEffect(() => {
-    if (!pollingReelId) return;
+    if (!pollingReelId) {
+      handledPollReelRef.current = null;
+      return;
+    }
     if (reelStatus.stage === 'ready') {
+      if (handledPollReelRef.current === pollingReelId) return;
+      handledPollReelRef.current = pollingReelId;
       (async () => {
         try {
           await cacheService.invalidate(CACHE_KEYS.REELS_FEED).catch(() => {});
@@ -562,10 +573,11 @@ function ProfileScreen() {
         }
       })();
     } else if (reelStatus.stage === 'failed') {
+      if (handledPollReelRef.current === pollingReelId) return;
+      handledPollReelRef.current = pollingReelId;
       markReelFailed(pollingReelId);
       setPollingReelId(null);
     }
-    // loadVideos is stable from useProfileCache; userData?.username only flips on auth change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reelStatus.stage, pollingReelId]);
 
@@ -1292,10 +1304,29 @@ function ProfileScreen() {
       }
     }
 
+    try {
+      const sizeBytes = await getVideoFileSizeBytes(
+        newVideo.uri,
+        (newVideo as { fileSize?: number }).fileSize,
+      );
+      if (sizeBytes != null && isReelVideoOverSizeLimit(sizeBytes)) {
+        toastManager.showWarning(
+          t.profile.videoTooLargeTitle,
+          formatReelTooLargeMessage(t.profile.videoTooLargeMessage, sizeBytes),
+        );
+        return;
+      }
+    } catch (sizeErr) {
+      logger.warn('[ReelUpload] Client size check failed (continuing):', sizeErr);
+    }
+
     if (reelUploadInFlightRef.current) {
       toastManager.showWarning(t.profile.waitABit, t.profile.uploadAlreadyInProgress);
       return;
     }
+
+    toastManager.showSuccess(t.profile.videoSelectedTitle, t.profile.videoSelectedMessage);
+
     reelUploadInFlightRef.current = true;
     lastUploadUiProgressRef.current = -1;
     lastGridProgressRef.current = -1;
@@ -2001,17 +2032,38 @@ function ProfileScreen() {
         onSelect={async (pos) => {
           setIsPositionModalVisible(false);
 
-          await localProfileStorage.saveProfileData({ position: pos });
-          updateCachedUserData({ position: pos });
+          const prevPosition = userData?.position ?? null;
+          const rollback = async () => {
+            updateCachedUserData({ position: prevPosition ?? undefined });
+            await localProfileStorage
+              .saveProfileData({ position: prevPosition ?? undefined })
+              .catch(() => {});
+            if (globalState.userProfile) {
+              globalState.setUserProfile({
+                ...globalState.userProfile,
+                position: prevPosition ?? undefined,
+              });
+            }
+          };
 
-          toastManager.showInfo(t.profile.updating, t.profile.updatingPosition.replace('{position}', pos));
+          try {
+            await localProfileStorage.saveProfileData({ position: pos });
+            updateCachedUserData({ position: pos });
 
-          const result = await updateFIFACard({ position: pos });
-          
-          if (result.success) {
-            toastManager.showSuccess(t.profile.updated, t.profile.positionUpdatedSuccess.replace('{position}', pos));
-            // Mark position step as completed
-            await markStepCompleted('position');
+            toastManager.showInfo(t.profile.updating, t.profile.updatingPosition.replace('{position}', pos));
+
+            const result = await updateFIFACard({ position: pos });
+
+            if (result?.success) {
+              toastManager.showSuccess(t.profile.updated, t.profile.positionUpdatedSuccess.replace('{position}', pos));
+              await markStepCompleted('position');
+            } else {
+              await rollback();
+              toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
+            }
+          } catch {
+            await rollback();
+            toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
           }
         }}
         selectedPosition={displayPosition}
@@ -2027,43 +2079,74 @@ function ProfileScreen() {
               : selectedClub.name || selectedClub.nameAr;
           logger.debug('[ClubPicker] Selected club:', clubDisplayName);
 
-          await localProfileStorage.saveProfileData({
-            clubLogo: selectedClub.logo,
-            favoriteTeam: clubDisplayName,
-          });
+          const prevClubLogo = userData?.clubLogo ?? null;
+          const prevFavoriteTeam = userData?.favoriteTeam ?? null;
 
-          updateCachedUserData({
-            clubLogo: selectedClub.logo,
-            favoriteTeam: clubDisplayName,
-          });
-
-          if (globalState.userProfile) {
-            globalState.setUserProfile({
-              ...globalState.userProfile,
-              clubLogo: selectedClub.logo,
-              favoriteTeam: clubDisplayName,
+          const rollback = async () => {
+            updateCachedUserData({
+              clubLogo: prevClubLogo ?? undefined,
+              favoriteTeam: prevFavoriteTeam ?? undefined,
             });
-          }
+            await localProfileStorage
+              .saveProfileData({
+                clubLogo: prevClubLogo ?? undefined,
+                favoriteTeam: prevFavoriteTeam ?? undefined,
+              })
+              .catch(() => {});
+            if (globalState.userProfile) {
+              globalState.setUserProfile({
+                ...globalState.userProfile,
+                clubLogo: prevClubLogo ?? undefined,
+                favoriteTeam: prevFavoriteTeam ?? undefined,
+              });
+            }
+          };
 
           setIsClubModalVisible(false);
 
-          toastManager.showInfo(
-            t.profile.updating,
-            t.profile.updatingClub.replace('{club}', clubDisplayName),
-          );
+          try {
+            await localProfileStorage.saveProfileData({
+              clubLogo: selectedClub.logo,
+              favoriteTeam: clubDisplayName,
+            });
 
-          const result = await updateFavorites({
-            favoriteClub: clubDisplayName,
-            favoriteTeam: clubDisplayName,
-            clubLogo: selectedClub.logo,
-          });
+            updateCachedUserData({
+              clubLogo: selectedClub.logo,
+              favoriteTeam: clubDisplayName,
+            });
 
-          if (result.success) {
-            toastManager.showSuccess(
-              t.profile.updated,
-              t.profile.clubUpdatedSuccess.replace('{club}', clubDisplayName),
+            if (globalState.userProfile) {
+              globalState.setUserProfile({
+                ...globalState.userProfile,
+                clubLogo: selectedClub.logo,
+                favoriteTeam: clubDisplayName,
+              });
+            }
+
+            toastManager.showInfo(
+              t.profile.updating,
+              t.profile.updatingClub.replace('{club}', clubDisplayName),
             );
-            await markStepCompleted('club');
+
+            const result = await updateFavorites({
+              favoriteClub: clubDisplayName,
+              favoriteTeam: clubDisplayName,
+              clubLogo: selectedClub.logo,
+            });
+
+            if (result?.success) {
+              toastManager.showSuccess(
+                t.profile.updated,
+                t.profile.clubUpdatedSuccess.replace('{club}', clubDisplayName),
+              );
+              await markStepCompleted('club');
+            } else {
+              await rollback();
+              toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
+            }
+          } catch {
+            await rollback();
+            toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
           }
         }}
       />
@@ -2081,32 +2164,60 @@ function ProfileScreen() {
           const weightNum = parseInt(newStats.weight);
           const preferredFoot = newStats.foot || undefined;
 
-          await localProfileStorage.saveProfileData({
-            age: Number.isFinite(ageNum) ? ageNum : undefined,
-            height: Number.isFinite(heightNum) ? heightNum : undefined,
-            weight: Number.isFinite(weightNum) ? weightNum : undefined,
-            preferredFoot,
-          });
+          const prevAge = userData?.age;
+          const prevHeight = userData?.height;
+          const prevWeight = userData?.weight;
+          const prevFoot = userData?.preferredFoot;
 
-          updateCachedUserData({
-            age: Number.isFinite(ageNum) ? ageNum : undefined,
-            height: Number.isFinite(heightNum) ? heightNum : undefined,
-            weight: Number.isFinite(weightNum) ? weightNum : undefined,
-            preferredFoot,
-          });
-          
-          // Send to backend with optimistic updates
-          const result = await updateFIFACard({
-            age: Number.isFinite(ageNum) ? ageNum : undefined,
-            height: Number.isFinite(heightNum) ? heightNum : undefined,
-            weight: Number.isFinite(weightNum) ? weightNum : undefined,
-            preferredFoot
-          });
-          
-          if (result.success) {
-            toastManager.showSuccess(t.profile.updated, t.profile.playerStatsUpdatedSuccess);
-            // Mark cardData step as completed (age, height, weight, foot)
-            await markStepCompleted('cardData');
+          const rollback = async () => {
+            updateCachedUserData({
+              age: prevAge,
+              height: prevHeight,
+              weight: prevWeight,
+              preferredFoot: prevFoot,
+            });
+            await localProfileStorage
+              .saveProfileData({
+                age: prevAge,
+                height: prevHeight,
+                weight: prevWeight,
+                preferredFoot: prevFoot,
+              })
+              .catch(() => {});
+          };
+
+          try {
+            await localProfileStorage.saveProfileData({
+              age: Number.isFinite(ageNum) ? ageNum : undefined,
+              height: Number.isFinite(heightNum) ? heightNum : undefined,
+              weight: Number.isFinite(weightNum) ? weightNum : undefined,
+              preferredFoot,
+            });
+
+            updateCachedUserData({
+              age: Number.isFinite(ageNum) ? ageNum : undefined,
+              height: Number.isFinite(heightNum) ? heightNum : undefined,
+              weight: Number.isFinite(weightNum) ? weightNum : undefined,
+              preferredFoot,
+            });
+
+            const result = await updateFIFACard({
+              age: Number.isFinite(ageNum) ? ageNum : undefined,
+              height: Number.isFinite(heightNum) ? heightNum : undefined,
+              weight: Number.isFinite(weightNum) ? weightNum : undefined,
+              preferredFoot,
+            });
+
+            if (result?.success) {
+              toastManager.showSuccess(t.profile.updated, t.profile.playerStatsUpdatedSuccess);
+              await markStepCompleted('cardData');
+            } else {
+              await rollback();
+              toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
+            }
+          } catch {
+            await rollback();
+            toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
           }
         }}
         initialStats={displayStats}
@@ -2168,39 +2279,47 @@ function ProfileScreen() {
             
             try {
             if (updates.username) {
-              // Update UI immediately before sending to backend
-              updateCachedUserData({ username: updates.username });
-              
-              // Also update global state for immediate UI refresh
-              if (globalState.userProfile) {
-                globalState.setUserProfile({
-                  ...globalState.userProfile,
-                  username: updates.username
-                });
-              }
-              
               const result = await updateUsername(updates.username);
               if (result.success) {
+                updateCachedUserData({ username: updates.username });
+                if (globalState.userProfile) {
+                  globalState.setUserProfile({
+                    ...globalState.userProfile,
+                    username: updates.username,
+                  });
+                }
                 toastManager.showSuccess(t.profile.updated, t.profile.usernameUpdatedTo.replace('{username}', `@${updates.username}`));
+              } else {
+                updateCachedUserData({ username: currentUsername });
+                if (globalState.userProfile) {
+                  globalState.setUserProfile({
+                    ...globalState.userProfile,
+                    username: currentUsername,
+                  });
+                }
               }
-              delete updates.username; // Remove from batch update
+              delete updates.username;
             }
-            
+
             if (updates.displayName) {
-              // Update UI immediately before sending to backend
-              updateCachedUserData({ displayName: updates.displayName });
-              
-              // Also update global state for immediate UI refresh
-              if (globalState.userProfile) {
-                globalState.setUserProfile({
-                  ...globalState.userProfile,
-                  displayName: updates.displayName
-                });
-              }
-              
               const result = await updateDisplayName(updates.displayName);
               if (result.success) {
+                updateCachedUserData({ displayName: updates.displayName });
+                if (globalState.userProfile) {
+                  globalState.setUserProfile({
+                    ...globalState.userProfile,
+                    displayName: updates.displayName,
+                  });
+                }
                 toastManager.showSuccess(t.profile.updated, t.profile.nameUpdatedTo.replace('{name}', updates.displayName));
+              } else {
+                updateCachedUserData({ displayName: currentName });
+                if (globalState.userProfile) {
+                  globalState.setUserProfile({
+                    ...globalState.userProfile,
+                    displayName: currentName,
+                  });
+                }
               }
               delete updates.displayName;
             }
@@ -2269,9 +2388,6 @@ function ProfileScreen() {
         uploadLocked={reelUploadUi.active}
         onUpload={(newVideo) => {
           setIsUploadModalVisible(false);
-          
-          toastManager.showSuccess(t.profile.videoSelectedTitle, t.profile.videoSelectedMessage);
-          
           handleUploadVideo(newVideo);
         }}
         canUploadVideo={true}

@@ -30,6 +30,10 @@ const STAGE_LABELS: Record<ReelProcessingStage, string> = {
   idle: '',
 };
 
+function patchIfChanged<T>(prev: T, next: T): T {
+  return Object.is(prev, next) ? prev : next;
+}
+
 export function useReelStatusPoller(
   reelId: string | null,
   getToken: () => Promise<string | null>,
@@ -48,7 +52,6 @@ export function useReelStatusPoller(
   const reelIdRef = useRef(reelId);
   reelIdRef.current = reelId;
 
-  // Clerk returns a new getToken reference every render — keep a stable ref.
   const getTokenRef = useRef(getToken);
   useEffect(() => {
     getTokenRef.current = getToken;
@@ -69,6 +72,9 @@ export function useReelStatusPoller(
     if (!reelId || !enabled) {
       setStage('idle');
       setElapsedSeconds(0);
+      setVideoUrl(null);
+      setThumbnailUrl(null);
+      setMuxPlaybackId(null);
       return;
     }
 
@@ -96,10 +102,10 @@ export function useReelStatusPoller(
         else newStage = 'uploading';
 
         if (!isMountedRef.current) return;
-        setStage(newStage);
-        setVideoUrl(data.videoUrl ?? null);
-        setThumbnailUrl(data.thumbnailUrl ?? null);
-        setMuxPlaybackId(data.muxPlaybackId ?? null);
+        setStage(prev => patchIfChanged(prev, newStage));
+        setVideoUrl(prev => patchIfChanged(prev, data.videoUrl ?? null));
+        setThumbnailUrl(prev => patchIfChanged(prev, data.thumbnailUrl ?? null));
+        setMuxPlaybackId(prev => patchIfChanged(prev, data.muxPlaybackId ?? null));
 
         if (newStage === 'ready' || newStage === 'failed') {
           stopPolling();
@@ -117,9 +123,9 @@ export function useReelStatusPoller(
     pollIntervalRef.current = setInterval(pollOnce, 3000);
 
     elapsedIntervalRef.current = setInterval(() => {
-      if (isMountedRef.current) {
-        setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000));
-      }
+      if (!isMountedRef.current) return;
+      const next = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      setElapsedSeconds(prev => patchIfChanged(prev, next));
     }, 1000);
 
     return stopPolling;

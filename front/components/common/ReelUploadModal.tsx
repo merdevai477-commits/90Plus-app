@@ -11,6 +11,14 @@ import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { extractDurationFromUrl } from '../../utils/videoDuration';
 import { resolveVideoUploadSource } from '../../src/utils/videoUpload';
+import {
+  checkReelVideoSizeLimit,
+  formatReelTooLargeMessage,
+  getVideoFileSizeBytes,
+  isReelVideoOverSizeLimit,
+  isStagedReelUploadUri,
+  MAX_REEL_VIDEO_MB,
+} from '../../src/utils/reelVideoLimits';
 import { toastManager } from '../../services/toastManager';
 import { usePhotoPermission } from '../../hooks/usePhotoPermission';
 import { logger } from '../../utils/logger';
@@ -44,6 +52,7 @@ export default function ReelUploadModal({
     const [videoAsset, setVideoAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
     const [caption, setCaption] = useState('');
     const [isUploading, setIsUploading] = useState(false);
+    const [isPickingVideo, setIsPickingVideo] = useState(false);
     const [uploadStage, setUploadStage] = useState<'idle' | 'preparing' | 'uploading' | 'done'>('idle');
     const uploadProgress = useSharedValue(0);
     const { permissionState, requestLibraryPermission } = usePhotoPermission();
@@ -124,17 +133,17 @@ export default function ReelUploadModal({
     // Thumbnail upload removed; Mux auto-generates thumbnails from the video.
 
     const pickVideo = async () => {
-        if (uploadLocked) {
-            toastManager.showWarning(
-                t.reels.uploadLockedToast,
-                t.reels.uploadLockedToastDetail
-            );
+        if (uploadLocked || isPickingVideo) {
+            if (uploadLocked) {
+                toastManager.showWarning(
+                    t.reels.uploadLockedToast,
+                    t.reels.uploadLockedToastDetail
+                );
+            }
             return;
         }
-        // Request media library permission (iOS + Android). If denied/blocked, hook will guide user to Settings.
         const hasPermission = await requestLibraryPermission();
         if (!hasPermission) return;
-        // Informative hint for iOS "Limited" access (user can still pick, but may not see all items).
         if (permissionState.library === 'limited') {
             toastManager.showInfo(
                 t.reels.uploadLimitedAccess,
@@ -142,46 +151,82 @@ export default function ReelUploadModal({
             );
         }
 
+        setIsPickingVideo(true);
         onPickerOpen?.();
-        let result: ImagePicker.ImagePickerResult;
         try {
-            result = await ImagePicker.launchImageLibraryAsync({
+            const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Videos,
                 allowsEditing: true,
                 quality: 1,
                 videoMaxDuration: 60,
             });
-        } finally {
-            onPickerClose?.();
-        }
 
-        if (!result.canceled) {
+            if (result.canceled) return;
+
             const asset = result.assets[0];
-
-            // Extract duration using expo-av for accurate validation
-            // This is required because ImagePicker.duration may not be reliable
-            const duration = await extractDurationFromUrl(asset.uri);
-
-            // File size validation — reject before wasting upload bandwidth
-            const MAX_FILE_SIZE_MB = 50;
-            if (asset.fileSize && asset.fileSize > MAX_FILE_SIZE_MB * 1024 * 1024) {
+            const sizeCheck = await checkReelVideoSizeLimit(asset.uri, asset.fileSize);
+            if (!sizeCheck.ok) {
                 toastManager.showWarning(
                     t.reels.uploadFileTooLarge,
-                    (t.reels.uploadFileTooLargeDetail as string).replace('{max}', String(MAX_FILE_SIZE_MB))
+                    formatReelTooLargeMessage(
+                        t.reels.uploadFileTooLargeDetail as string,
+                        sizeCheck.sizeBytes,
+                    ),
                 );
                 return;
             }
 
-            // Validation Logic - Requirements 2.6, 2.7, 2.8
-            // Skip validation if duration is null (Expo Go / expo-av not available)
+            let stagedUri = asset.uri;
+            let stagedMime = asset.mimeType;
+            let stagedName = asset.fileName;
+            try {
+                const resolved = await resolveVideoUploadSource(asset.uri, {
+                    mimeType: asset.mimeType,
+                    fileName: asset.fileName,
+                });
+                stagedUri = resolved.uri;
+                stagedMime = resolved.type;
+                stagedName = resolved.name;
+            } catch (copyErr) {
+                logger.warn('[ReelUploadModal] Could not stage video after size check', copyErr);
+            }
+
+            const stagedSizeBytes = await getVideoFileSizeBytes(
+                stagedUri,
+                sizeCheck.sizeBytes ?? asset.fileSize,
+            );
+            if (stagedSizeBytes != null && isReelVideoOverSizeLimit(stagedSizeBytes)) {
+                toastManager.showWarning(
+                    t.reels.uploadFileTooLarge,
+                    formatReelTooLargeMessage(
+                        t.reels.uploadFileTooLargeDetail as string,
+                        stagedSizeBytes,
+                    ),
+                );
+                return;
+            }
+
+            const stagedAsset = {
+                ...asset,
+                uri: stagedUri,
+                mimeType: stagedMime,
+                fileName: stagedName,
+                fileSize: stagedSizeBytes ?? sizeCheck.sizeBytes ?? asset.fileSize,
+            };
+
+            let duration: number | null = null;
+            try {
+                duration = await extractDurationFromUrl(stagedUri);
+            } catch (durationErr) {
+                logger.warn('[ReelUploadModal] Duration extraction failed', durationErr);
+            }
+
             if (duration === null) {
-                // In Expo Go, we can't extract duration - allow upload anyway
-                // Show warning but don't block
                 toastManager.showWarning(
                     t.reels.uploadDurationWarning,
                     t.reels.uploadDurationWarningDetail
                 );
-                setVideoAsset(asset);
+                setVideoAsset(stagedAsset);
                 return;
             }
 
@@ -201,21 +246,13 @@ export default function ReelUploadModal({
                 return;
             }
 
-            // Resolution check (Soft check, just warn or accept)
-            if (asset.width > 1920 || asset.height > 1920) {
-                // Might handle resizing logic here or backend, but for now we accept standard HD
-            }
-
-            try {
-                const resolved = await resolveVideoUploadSource(asset.uri, {
-                    mimeType: asset.mimeType,
-                    fileName: asset.fileName,
-                });
-                setVideoAsset({ ...asset, uri: resolved.uri, mimeType: resolved.type, fileName: resolved.name });
-            } catch (copyErr) {
-                logger.warn('[ReelUploadModal] Could not stage video in cache, using picker URI', copyErr);
-                setVideoAsset(asset);
-            }
+            setVideoAsset(stagedAsset);
+        } catch (err) {
+            logger.error('[ReelUploadModal] pickVideo failed:', err);
+            toastManager.showError(t.reels.uploadFailed, t.reels.uploadFailedDetail);
+        } finally {
+            setIsPickingVideo(false);
+            onPickerClose?.();
         }
     };
 
@@ -250,14 +287,16 @@ export default function ReelUploadModal({
             setUploadStage('uploading');
 
             let uploadUri = videoAsset.uri;
-            try {
-                const resolved = await resolveVideoUploadSource(videoAsset.uri, {
-                    mimeType: videoAsset.mimeType,
-                    fileName: videoAsset.fileName,
-                });
-                uploadUri = resolved.uri;
-            } catch (stageErr) {
-                logger.warn('[ReelUploadModal] Publish staging failed, using asset URI', stageErr);
+            if (!isStagedReelUploadUri(videoAsset.uri)) {
+                try {
+                    const resolved = await resolveVideoUploadSource(videoAsset.uri, {
+                        mimeType: videoAsset.mimeType,
+                        fileName: videoAsset.fileName,
+                    });
+                    uploadUri = resolved.uri;
+                } catch (stageErr) {
+                    logger.warn('[ReelUploadModal] Publish staging failed, using asset URI', stageErr);
+                }
             }
 
             const newVideo = {
@@ -265,6 +304,7 @@ export default function ReelUploadModal({
                 uri: uploadUri,
                 mimeType: videoAsset.mimeType,
                 fileName: videoAsset.fileName,
+                fileSize: (videoAsset as { fileSize?: number }).fileSize,
                 caption: caption,
                 likes: 0,
                 views: 0,
@@ -334,12 +374,17 @@ export default function ReelUploadModal({
 
                     {/* Video Preview / Picker */}
                     <TouchableOpacity
-                        style={[styles.uploadArea, uploadLocked && styles.uploadAreaDisabled]}
+                        style={[styles.uploadArea, (uploadLocked || isPickingVideo) && styles.uploadAreaDisabled]}
                         onPress={pickVideo}
-                        activeOpacity={uploadLocked ? 1 : 0.8}
-                        disabled={uploadLocked}
+                        activeOpacity={uploadLocked || isPickingVideo ? 1 : 0.8}
+                        disabled={uploadLocked || isPickingVideo}
                     >
-                        {videoAsset ? (
+                        {isPickingVideo ? (
+                            <View style={styles.placeholderContainer}>
+                                <ActivityIndicator color={ProfileTheme.colors.neonGreen} size="large" />
+                                <Text style={styles.uploadText}>{t.reels.uploadPreparing}</Text>
+                            </View>
+                        ) : videoAsset ? (
                             <View style={styles.previewContainer}>
                                 <Image
                                     source={{ uri: videoAsset.uri }} // Use video thumb if possible, or simple placeholder logic
@@ -354,7 +399,12 @@ export default function ReelUploadModal({
                             <View style={styles.placeholderContainer}>
                                 <Ionicons name="cloud-upload-outline" size={48} color={ProfileTheme.colors.neonGreen} />
                                 <Text style={styles.uploadText}>{t.reels.uploadPickVideo}</Text>
-                                <Text style={styles.uploadSubText}>{t.reels.uploadDurationHint}</Text>
+                                <Text style={styles.uploadSubText}>
+                                    {(t.reels.uploadDurationHint as string).replace(
+                                        '{max}',
+                                        String(MAX_REEL_VIDEO_MB),
+                                    )}
+                                </Text>
                             </View>
                         )}
                     </TouchableOpacity>

@@ -35,6 +35,11 @@ import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { getWorldCupTimeLeft, WC_2026_OFFICIAL_LOGO } from '../../constants/worldCup';
 import type { ImageSource } from 'expo-image';
 import { resolveLiveMinuteLabel } from '../../components/Matches/leagueApiUtils';
+import {
+  getSharedLivePulse,
+  subscribeSharedLivePulse,
+  unsubscribeSharedLivePulse,
+} from '../../components/Matches/sharedLivePulse';
 
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
@@ -313,19 +318,13 @@ const MatchRow = memo(function MatchRow({
   const { translate: t, language } = useTranslation();
   const homeName = getTeamDisplayName(fixture.home, language);
   const awayName = getTeamDisplayName(fixture.away, language);
-  const livePulse = useRef(new Animated.Value(1)).current;
+  const sharedLivePulse = getSharedLivePulse();
 
   useEffect(() => {
     if (!fixture.live) return;
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(livePulse, { toValue: 0.45, duration: 650, useNativeDriver: true }),
-        Animated.timing(livePulse, { toValue: 1, duration: 650, useNativeDriver: true }),
-      ]),
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [fixture.live, livePulse]);
+    subscribeSharedLivePulse();
+    return unsubscribeSharedLivePulse;
+  }, [fixture.live]);
 
   // Bell works for upcoming (kickoff reminder) and live (goal/event alerts via FavoriteMatch).
   // Disabled only for finished matches.
@@ -366,7 +365,7 @@ const MatchRow = memo(function MatchRow({
             {fixture.status === 'UPCOMING' ? (
               <View style={styles.upcomingBadgeWrap}><Text style={styles.upcomingBadge}>{t('matches.status.upcoming')}</Text></View>
             ) : fixture.live ? (
-              <Animated.Text style={[styles.liveBadge, { opacity: livePulse }]}>
+              <Animated.Text style={[styles.liveBadge, { opacity: sharedLivePulse }]}>
                 {t('matches.status.live')}
               </Animated.Text>
             ) : (
