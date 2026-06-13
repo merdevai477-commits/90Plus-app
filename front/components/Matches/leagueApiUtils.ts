@@ -13,7 +13,7 @@ import { getApiUrl } from '../../config/api.config';
  * Maps API fixture status to component match status
  */
 export const mapFixtureStatus = (statusShort: string): 'live' | 'upcoming' | 'finished' => {
-  const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE'];
+  const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
   const finishedStatuses = ['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO'];
 
   if (liveStatuses.includes(statusShort)) {

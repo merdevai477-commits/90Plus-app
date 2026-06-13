@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Match } from '../components/Matches/matchCardUtils';
 import {
   fetchMatchesByDate,
+  fetchLiveMatches,
   getLocalTodayKey,
   formatLocalDateKey,
 } from '../components/Matches/leagueApiUtils';
@@ -107,6 +108,44 @@ const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
 // when the user switches dates rapidly. Backend `/fixtures` for today is
 // shared-cached for 8s, so this won't multiply API quota usage.
 const BACKGROUND_REFRESH_THROTTLE = 4 * 1000; // 4 seconds
+
+/**
+ * Merge today's date-indexed calendar with the global live feed.
+ * Calendar cache can lag behind kickoff; live endpoint is authoritative for status/score.
+ */
+function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Match[]): Match[] {
+  const map = new Map<string, Match>();
+  for (const row of calendar) {
+    map.set(row.id, row);
+  }
+  for (const liveRow of liveFeed) {
+    if (liveRow.status !== 'live') continue;
+    const existing = map.get(liveRow.id);
+    map.set(
+      liveRow.id,
+      existing
+        ? {
+            ...existing,
+            ...liveRow,
+            status: 'live',
+            score: liveRow.score,
+            minute: liveRow.minute ?? existing.minute,
+            elapsed: liveRow.elapsed ?? existing.elapsed,
+            statusShort: liveRow.statusShort ?? existing.statusShort,
+          }
+        : liveRow,
+    );
+  }
+  return Array.from(map.values());
+}
+
+async function fetchTodayMatchesWithLiveFeed(date: Date): Promise<Match[]> {
+  const [byDate, liveFeed] = await Promise.all([
+    fetchMatchesByDate(date),
+    fetchLiveMatches(),
+  ]);
+  return mergeTodayCalendarWithLiveFeed(byDate, liveFeed);
+}
 
 /** Overlay Zustand live snapshots onto calendar rows for live/finished fixtures. */
 function overlaySnapshotsOnCalendar(
@@ -272,11 +311,11 @@ export const useMatchesData = (
   );
   const liveFixtureIds = useMemo(
     () =>
-      calendarMatches
+      matches
         .filter((m) => m.status === 'live')
         .map((m) => parseInt(m.id, 10))
         .filter((id) => !Number.isNaN(id) && id > 0),
-    [calendarMatches],
+    [matches],
   );
   useRegisterLiveFixtures(
     pauseBackgroundRefresh || !isToday ? [] : liveFixtureIds,
@@ -316,7 +355,11 @@ export const useMatchesData = (
     [todayKey, yesterdayKey].forEach((key) => {
       if (memoryCache.has(key)) return;
       const date = key === todayKey ? new Date() : yesterday;
-      fetchMatchesByDate(date).then((data) => {
+      const load =
+        key === todayKey
+          ? fetchTodayMatchesWithLiveFeed(date)
+          : fetchMatchesByDate(date);
+      load.then((data) => {
         if (data.length > 0) {
           evictOldestIfNeeded(memoryCache);
           memoryCache.set(key, { data, timestamp: Date.now() });
@@ -406,8 +449,7 @@ export const useMatchesData = (
         let fetchedMatches: Match[];
 
         if (isToday) {
-          // Calendar structure only — live scores come from liveFixtureStore.
-          fetchedMatches = await fetchMatchesByDate(selectedDate);
+          fetchedMatches = await fetchTodayMatchesWithLiveFeed(selectedDate);
         } else if (!isPastDate) {
           // For future dates, just fetch scheduled matches
           fetchedMatches = await fetchMatchesByDate(selectedDate);
@@ -514,11 +556,9 @@ export const useMatchesData = (
       const date = new Date(dateStr);
       let fetchedMatches: Match[];
 
-      if (isTodayFlag) {
-        fetchedMatches = await fetchMatchesByDate(date);
-      } else {
-        fetchedMatches = await fetchMatchesByDate(date);
-      }
+      fetchedMatches = isTodayFlag
+        ? await fetchTodayMatchesWithLiveFeed(date)
+        : await fetchMatchesByDate(date);
 
       setCalendarMatches(fetchedMatches);
       setIsDataStale(false); // background refresh succeeded
