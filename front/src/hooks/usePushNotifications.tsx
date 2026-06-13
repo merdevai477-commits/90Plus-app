@@ -20,6 +20,7 @@ import {
     NOTIFICATION_PERMISSION_REQUESTED_KEY,
 } from '../../services/pushTokenRegistration.service';
 import { markTrayNotificationPresented } from '../../services/trayNotification.service';
+import { useLiveFixtureStore } from '../store/liveFixtureStore';
 
 const PERMISSION_REQUESTED_KEY = NOTIFICATION_PERMISSION_REQUESTED_KEY;
 
@@ -72,14 +73,15 @@ export function usePushNotifications(): PushNotificationState {
         try {
             switch (data.type) {
                 case 'MATCH_UPDATE':
-                    queryClientRef.current.invalidateQueries({ queryKey: ['matches', 'live'] });
-                    break;
-                case 'SCORE_UPDATE':
-                    if (data.matchId) {
-                        queryClientRef.current.invalidateQueries({ queryKey: ['matches', data.matchId] });
+                case 'SCORE_UPDATE': {
+                    const matchId = Number(data.matchId || data.fixtureId);
+                    if (matchId) {
+                        void useLiveFixtureStore.getState().fetchAndIngestFast(matchId);
+                    } else {
+                        void useLiveFixtureStore.getState().refreshInterestedLive();
                     }
-                    queryClientRef.current.invalidateQueries({ queryKey: ['matches', 'live'] });
                     break;
+                }
                 case 'NOTIFICATION_COUNT':
                 case 'LIKE':
                 case 'COMMENT':
@@ -112,17 +114,6 @@ export function usePushNotifications(): PushNotificationState {
                         pathname: '/(tabs)/match-details',
                         params: {
                             fixtureId: fId,
-                            homeTeam: data.homeTeam || '',
-                            awayTeam: data.awayTeam || '',
-                            homeLogo: data.homeTeamLogo || '',
-                            awayLogo: data.awayTeamLogo || '',
-                            homeScore: data.homeScore != null ? String(data.homeScore) : '',
-                            awayScore: data.awayScore != null ? String(data.awayScore) : '',
-                            league: data.leagueName || '',
-                            leagueLogo: '',
-                            date: data.matchDate || new Date().toISOString().split('T')[0],
-                            time: '',
-                            status: type === 'MATCH_END' ? 'finished' : 'live',
                         },
                     });
                 } else {
@@ -170,17 +161,6 @@ export function usePushNotifications(): PushNotificationState {
                         pathname: '/(tabs)/match-details',
                         params: {
                             fixtureId: String(fId),
-                            homeTeam: data.homeTeam || '',
-                            awayTeam: data.awayTeam || '',
-                            homeLogo: data.homeTeamLogo || '',
-                            awayLogo: data.awayTeamLogo || '',
-                            homeScore: data.homeScore != null ? String(data.homeScore) : '',
-                            awayScore: data.awayScore != null ? String(data.awayScore) : '',
-                            league: data.leagueName || '',
-                            leagueLogo: '',
-                            date: data.matchDate || new Date().toISOString().split('T')[0],
-                            time: '',
-                            status: 'finished',
                         },
                     });
                 } else {

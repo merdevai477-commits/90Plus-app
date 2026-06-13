@@ -361,15 +361,6 @@ export default function TeamProfileScreen() {
                         pathname: '/(tabs)/match-details',
                         params: {
                             fixtureId: match.fixture.id.toString(),
-                            homeTeam: match.teams?.home?.name || '',
-                            awayTeam: match.teams?.away?.name || '',
-                            homeLogo: match.teams?.home?.logo || '',
-                            awayLogo: match.teams?.away?.logo || '',
-                            homeScore: match.goals?.home?.toString() || '',
-                            awayScore: match.goals?.away?.toString() || '',
-                            league: match.league?.name || '',
-                            date: match.fixture?.date || '',
-                            status: match.fixture?.status?.short || '',
                         },
                     });
                 }

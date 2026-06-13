@@ -4,6 +4,12 @@ import React, { useEffect } from "react";
 import { Animated, BackHandler, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNav from '@/components/navigation/BottomNav';
+import { useLiveFixtureSync } from '../../hooks/useLiveFixtureSync';
+
+function LiveFixtureSyncBootstrap() {
+  useLiveFixtureSync();
+  return null;
+}
 
 const TAB_STACK_OPTIONS = {
   headerShown: false,
@@ -59,6 +65,7 @@ export default function TabLayout() {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <LiveFixtureSyncBootstrap />
       <Tabs
         screenOptions={{
           ...TAB_STACK_OPTIONS,

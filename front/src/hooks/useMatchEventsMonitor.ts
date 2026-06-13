@@ -1,44 +1,51 @@
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
 import { MatchEventMonitor } from '../services/matchEventMonitor';
 import { MatchFavoritesStorage } from '../storage/matchFavorites.storage';
 import { isRateLimitError } from '../../services/apiFootball';
 import { logger } from '../services/logger';
+import { useLiveFixtureStore } from '../store/liveFixtureStore';
 
 const POLLING_INTERVAL = 45000; // 45 seconds
 
 /**
- * Keeps live match data fresh for favorited fixtures while the app is foregrounded.
- * Push notifications for goals/cards/etc. are delivered by the backend match-watcher;
- * this hook no longer injects duplicate in-app "match notifications" into home.store.
+ * Keeps favorited live fixtures registered in the SSOT store and refreshes snapshots.
  */
 export const useMatchEventsMonitor = () => {
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const appState = useRef(AppState.currentState);
-    const queryClient = useQueryClient();
+    const registeredFavoritesRef = useRef<number[]>([]);
+
+    const syncFavoriteInterest = (liveFixtureIds: number[]) => {
+        const store = useLiveFixtureStore.getState();
+        const prev = registeredFavoritesRef.current;
+        for (const id of prev) {
+            if (!liveFixtureIds.includes(id)) {
+                store.unregisterInterest(id);
+            }
+        }
+        for (const id of liveFixtureIds) {
+            store.registerInterest(id);
+        }
+        registeredFavoritesRef.current = liveFixtureIds;
+    };
 
     const monitorFavoritedMatches = async () => {
         try {
             const favoritedIds = await MatchFavoritesStorage.getFavorites();
 
             if (favoritedIds.length === 0) {
+                syncFavoriteInterest([]);
                 return;
             }
 
             const liveFixtureIds = await MatchEventMonitor.getLiveFavoritedFixtures(favoritedIds);
 
-            if (liveFixtureIds.length === 0) {
-                return;
-            }
-
-            // Process events so MatchEventMonitor internal dedup state stays current
             await MatchEventMonitor.monitorMatches(liveFixtureIds);
+            syncFavoriteInterest(liveFixtureIds);
 
-            // Refresh match UIs; server push handles user-visible alerts
-            queryClient.invalidateQueries({ queryKey: ['matches', 'live'] });
-            for (const fixtureId of liveFixtureIds) {
-                queryClient.invalidateQueries({ queryKey: ['matches', fixtureId] });
+            if (liveFixtureIds.length > 0) {
+                await useLiveFixtureStore.getState().refreshInterestedLive();
             }
         } catch (error) {
             if (isRateLimitError(error)) {
@@ -52,7 +59,7 @@ export const useMatchEventsMonitor = () => {
     const startMonitoring = () => {
         if (intervalRef.current) return;
 
-        logger.debug('Starting match event monitor (cache refresh only)');
+        logger.debug('Starting match event monitor (live fixture SSOT refresh)');
 
         const safeMonitor = async () => {
             try {
@@ -88,8 +95,9 @@ export const useMatchEventsMonitor = () => {
         return () => {
             stopMonitoring();
             subscription.remove();
+            syncFavoriteInterest([]);
         };
-    }, [queryClient]);
+    }, []);
 
     return {
         startMonitoring,

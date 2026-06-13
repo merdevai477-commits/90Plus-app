@@ -7,7 +7,6 @@ import rankingsService from '../../services/rankingsService';
 import { cacheService } from '../../services/cacheService';
 import { useAppFeaturesStore } from '../stores/appFeaturesStore';
 import {
-    fetchLiveMatches,
     fetchWorldCupMatchesByDate,
     formatMatchTime,
 } from '../../components/Matches/leagueApiUtils';
@@ -164,16 +163,6 @@ async function fetchWorldCupHomeMatches(
 ): Promise<Match[]> {
     const today = new Date();
     let list = await fetchWorldCupMatchesByDate(today, { skipDiskCache: true });
-    try {
-        const live = await fetchLiveMatches();
-        const liveWc = live.filter((m) => m.league?.id === leagueId);
-        const map = new Map(list.map((m) => [m.id, m]));
-        for (const lm of liveWc) map.set(lm.id, lm);
-        list = [...map.values()];
-    } catch (err) {
-        logger.warn('WC home: live merge failed:', err);
-    }
-
     const mapped = list.map((m) =>
         mapLeagueMatchToHomeMatch(m, favoriteIds.includes(m.id)),
     );

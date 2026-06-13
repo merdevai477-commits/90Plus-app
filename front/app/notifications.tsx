@@ -743,17 +743,6 @@ export default function NotificationsScreen() {
                                 pathname: '/(tabs)/match-details',
                                 params: {
                                     fixtureId: String(data.matchId || data.fixtureId),
-                                    homeTeam: data.homeTeam || '',
-                                    awayTeam: data.awayTeam || '',
-                                    homeLogo: data.homeTeamLogo || '',
-                                    awayLogo: data.awayTeamLogo || '',
-                                    homeScore: data.homeScore != null ? String(data.homeScore) : '',
-                                    awayScore: data.awayScore != null ? String(data.awayScore) : '',
-                                    league: data.leagueName || '',
-                                    leagueLogo: '',
-                                    date: data.matchDate || new Date().toISOString().split('T')[0],
-                                    time: '',
-                                    status: isFinished ? 'finished' : 'live',
                                 },
                             });
                         } else {
@@ -767,17 +756,6 @@ export default function NotificationsScreen() {
                                 pathname: '/(tabs)/match-details',
                                 params: {
                                     fixtureId: String(data.matchId || data.fixtureId),
-                                    homeTeam: data.homeTeam || '',
-                                    awayTeam: data.awayTeam || '',
-                                    homeLogo: data.homeTeamLogo || '',
-                                    awayLogo: data.awayTeamLogo || '',
-                                    homeScore: data.homeScore != null ? String(data.homeScore) : '',
-                                    awayScore: data.awayScore != null ? String(data.awayScore) : '',
-                                    league: data.leagueName || '',
-                                    leagueLogo: '',
-                                    date: data.matchDate || new Date().toISOString().split('T')[0],
-                                    time: '',
-                                    status: 'finished',
                                 },
                             });
                         } else {

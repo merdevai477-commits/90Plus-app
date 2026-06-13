@@ -31,6 +31,9 @@ import {
     ScreenSection,
 } from '../../components/home';
 import type { MatchListItem } from '../../components/home/MatchList';
+import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
+import { useRegisterLiveFixtures } from '../../hooks/useLiveFixture';
+import { snapshotToMatchRow } from '../../src/utils/snapshotToMatchRow';
 import AdvancedSearchBar, { SearchResult } from '../../components/common/AdvancedSearchBar';
 import LuckyWheelModal from '../../components/common/LuckyWheelModal';
 import { HomeSectionError } from '../../components/home/HomeSectionError';
@@ -555,17 +558,6 @@ export default function HomeScreen() {
                 pathname: '/(tabs)/match-details',
                 params: {
                     fixtureId: String(match.fixtureId),
-                    homeTeam: match.homeTeam,
-                    awayTeam: match.awayTeam,
-                    homeLogo: match.homeLogo || '',
-                    awayLogo: match.awayLogo || '',
-                    homeScore: match.homeScore?.toString() || '',
-                    awayScore: match.awayScore?.toString() || '',
-                    league: match.league,
-                    leagueLogo: '',
-                    date: match.date || new Date().toISOString().split('T')[0],
-                    time: match.time,
-                    status: match.isLive ? 'live' : 'upcoming',
                 },
             });
         },
@@ -648,6 +640,15 @@ export default function HomeScreen() {
     );
 
     const displayMatches = useMemo(() => matches.slice(0, 3), [matches]);
+    const snapshots = useLiveFixtureStore((s) => s.snapshots);
+    const liveHomeFixtureIds = useMemo(
+        () =>
+            displayMatches
+                .filter((m) => m.isLive && m.fixtureId)
+                .map((m) => m.fixtureId),
+        [displayMatches],
+    );
+    useRegisterLiveFixtures(liveHomeFixtureIds);
 
     // ─── Adapters: store shape → design component shape ──────────────────────
     const POSITION_COLOR: Record<string, string> = {
@@ -658,33 +659,39 @@ export default function HomeScreen() {
 
     const designMatches = useMemo<MatchListItem[]>(
         () =>
-            displayMatches.map((m) => ({
+            displayMatches.map((m) => {
+                const snap = snapshots[m.fixtureId];
+                const liveRow = snap ? snapshotToMatchRow(snap) : null;
+                const homeScore = liveRow?.score.home ?? m.homeScore ?? 0;
+                const awayScore = liveRow?.score.away ?? m.awayScore ?? 0;
+                const isLive = liveRow?.status === 'live' || m.isLive;
+                return {
                 id: m.id,
                 homeTeam: {
                     name: m.homeTeam ?? '',
                     shortName: m.homeTeam ?? '?',
-                    score: m.homeScore ?? 0,
+                    score: homeScore,
                     logo: m.homeLogo,
                 },
                 awayTeam: {
                     name: m.awayTeam ?? '',
                     shortName: m.awayTeam ?? '?',
-                    score: m.awayScore ?? 0,
+                    score: awayScore,
                     logo: m.awayLogo,
                 },
-                status: (m.isLive
+                status: (isLive
                     ? 'LIVE'
-                    : m.homeScore !== undefined && m.awayScore !== undefined
+                    : homeScore !== undefined && awayScore !== undefined && !isLive
                       ? 'FT'
                       : 'UPCOMING') as MatchListItem['status'],
-                minute: m.minute,
+                minute: liveRow?.minute ?? m.minute,
                 league: m.league,
                 kickoff: m.time,
-                // Pinned = user subscribed to this fixture via bell
                 isPinned: subscribedIds.has(m.fixtureId),
                 isFavorited: m.isFavorited,
-            })),
-        [displayMatches, subscribedIds],
+            };
+            }),
+        [displayMatches, snapshots, subscribedIds],
     );
 
     // Sort: pinned first, then live, then rest

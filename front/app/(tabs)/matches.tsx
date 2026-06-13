@@ -1538,22 +1538,6 @@ export default function MatchesHubScreenV2() {
         pathname: '/(tabs)/match-details',
         params: {
           fixtureId: fixture.id,
-          homeTeam: fixture.home,
-          awayTeam: fixture.away,
-          homeLogo: fixture.homeLogo || '',
-          awayLogo: fixture.awayLogo || '',
-          homeScore: fixture.status === 'UPCOMING' ? '' : String(fixture.homeScore),
-          awayScore: fixture.status === 'UPCOMING' ? '' : String(fixture.awayScore),
-          league: fixture.leagueName || '',
-          leagueLogo: fixture.leagueLogo || '',
-          date: fixture.matchDate
-            ? new Date(fixture.matchDate).toISOString().split('T')[0]
-            : new Date().toISOString().split('T')[0],
-          time: fixture.time || '',
-          status:
-            fixture.status === 'LIVE' ? 'live'
-            : fixture.status === 'FT' ? 'finished'
-            : 'upcoming',
         },
       });
     },

@@ -10,13 +10,11 @@ import {
   Dimensions,
   ActivityIndicator,
   StatusBar,
-  AppState,
-  type AppStateStatus,
 } from 'react-native';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import ApiFootballService, { Lineup, TeamStatistics, TeamFixture, Fixture, FixtureEvent, Venue } from '../../services/apiFootball';
+import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
 import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 import { prefetchFootballTranslations } from '../../src/stores/footballTranslationStore';
@@ -38,42 +36,27 @@ import {
   StandingsSkeleton,
   useShimmer,
 } from '../../components/match-details/MatchDetailsSkeleton';
-import { useMatchUpdateEvents } from '../../hooks/useWebSocket';
-import { MatchUpdatePayload } from '../../services/websocketClient';
+import { useLiveFixture } from '../../hooks/useLiveFixture';
+import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
 import {
-  buildFallbackStatisticsFromEvents,
   hasApiStatistics,
 } from '../../utils/matchStatsFallback';
-import { hasLineupData, buildFallbackLineupsFromEvents } from '../../utils/matchLineupsFallback';
+import { hasLineupData } from '../../utils/matchLineupsFallback';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
 import type { StandingsGroup } from '../../utils/standingsHelpers';
 import {
   resolveStandingsGroupsForMatch,
   standingRowMatchesTeam,
 } from '../../utils/standingsHelpers';
-import { reconcileFixtureWithEvents } from '../../utils/matchDetailsLiveSync';
+import { getPeriodStartTimestamp } from '../../src/store/liveFixtureSelectors';
 
 const { width, height } = Dimensions.get('window');
 
 const LIVE_MATCH_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] as const;
 const FINISHED_MATCH_STATUSES = ['FT', 'AET', 'PEN'] as const;
-const LIVE_POLL_INTERVAL_MS = 3_000;
-/** Full lineups/stats bundle every N fast ticks (~15s at 3s interval). */
-const LIVE_FULL_BUNDLE_EVERY_N = 5;
 
 interface MatchDetailsParams {
   fixtureId: string;
-  homeTeam: string;
-  awayTeam: string;
-  homeLogo: string;
-  awayLogo: string;
-  homeScore?: string;
-  awayScore?: string;
-  league: string;
-  leagueLogo?: string;
-  date: string;
-  time: string;
-  status: string;
 }
 
 /** Win/loss/draw from the displayed team's score — not fixture home/away winner flags. */
@@ -104,23 +87,39 @@ const MatchDetailsScreen = () => {
   }
 
   const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'stadium'>('events');
-  const [venue, setVenue] = useState<Venue | null>(null);
-  const [venueLoading, setVenueLoading] = useState(false);
 
-  const [lineups, setLineups] = useState<Lineup[]>([]);
-  const [statistics, setStatistics] = useState<TeamStatistics[]>([]);
   const [homeLastFixtures, setHomeLastFixtures] = useState<TeamFixture[]>([]);
   const [awayLastFixtures, setAwayLastFixtures] = useState<TeamFixture[]>([]);
-  const [events, setEvents] = useState<FixtureEvent[]>([]);
   const [standingsGroups, setStandingsGroups] = useState<StandingsGroup[]>([]);
   const [standingsSeasonUsed, setStandingsSeasonUsed] = useState<number | null>(null);
   const [standingsUnavailable, setStandingsUnavailable] = useState(false);
-  const [fixture, setFixture] = useState<Fixture | null>(null);
 
-  const fixtureId = parseInt(params.fixtureId || '0');
-  const hasRouteShell = Boolean(params.fixtureId && params.homeTeam && params.awayTeam);
+  const fixtureId = parseInt(params.fixtureId || '0', 10);
+  const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
+  const fixture = snapshot?.fixture ?? null;
+  const events = snapshot?.events ?? [];
+  const statistics = snapshot?.statistics ?? [];
+  const statsFromEvents = snapshot?.statsFromEvents ?? false;
+  const lineups = snapshot?.lineups ?? [];
+  const venue = snapshot?.venue ?? null;
 
-  const [loading, setLoading] = useState(!hasRouteShell);
+  const homeTeamName = fixture?.teams?.home?.name ?? '';
+  const awayTeamName = fixture?.teams?.away?.name ?? '';
+  const homeTeamLogo = fixture?.teams?.home?.logo ?? '';
+  const awayTeamLogo = fixture?.teams?.away?.logo ?? '';
+  const leagueName = fixture?.league?.name ?? '';
+  const kickoffDate = fixture?.fixture?.date
+    ? new Date(fixture.fixture.date).toISOString().split('T')[0]
+    : '';
+  const kickoffTime = fixture?.fixture?.date
+    ? new Date(fixture.fixture.date).toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    : '';
+
+  const [loading, setLoading] = useState(true);
   const [detailsFetching, setDetailsFetching] = useState(false);
   const [lineupsLoading, setLineupsLoading] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -132,155 +131,38 @@ const MatchDetailsScreen = () => {
   const [statsError, setStatsError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [standingsError, setStandingsError] = useState<string | null>(null);
-  const [statsFromEvents, setStatsFromEvents] = useState(false);
 
-  // Track which tabs have already loaded their data (lazy loading)
+  const [lineupFetchAttempts, setLineupFetchAttempts] = useState(0);
+  const [venueLoading, setVenueLoading] = useState(false);
+  const MAX_LINEUP_AUTO_RETRIES = 4;
+
   const loadedTabsRef = useRef<Set<string>>(new Set());
   const lineupsPreloadedForRef = useRef<number | null>(null);
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-
-  // Determine if the match is live based on fixture status or params
-  const isLive = useCallback(() => {
-    if (fixture) {
-      return LIVE_MATCH_STATUSES.includes(
-        fixture.fixture.status.short as (typeof LIVE_MATCH_STATUSES)[number],
-      );
-    }
-    return params.status === 'live';
-  }, [fixture, params.status]);
-
-  const shouldPollLive = useCallback(() => {
-    if (params.status === 'live') return true;
-    if (fixture) {
-      const short = fixture.fixture.status.short;
-      if (FINISHED_MATCH_STATUSES.includes(short as (typeof FINISHED_MATCH_STATUSES)[number])) {
-        return false;
-      }
-      if (LIVE_MATCH_STATUSES.includes(short as (typeof LIVE_MATCH_STATUSES)[number])) {
-        return true;
-      }
-    }
-    // Header fixture can lag while events are fresh — keep polling until FT.
-    if (events.length > 0) {
-      const maxMinute = Math.max(...events.map((e) => e.time?.elapsed ?? 0));
-      if (maxMinute > 0 && maxMinute < 130) return true;
-    }
-    return false;
-  }, [fixture, params.status, events]);
-
-  const applyLiveBundle = useCallback(
-    (bundle: {
-      fixture: Fixture | null;
-      lineups: Lineup[];
-      statistics: TeamStatistics[];
-      events: FixtureEvent[];
-    }) => {
-      const nextEvents = bundle.events ?? [];
-      setEvents(nextEvents);
-      if (bundle.fixture) {
-        setFixture(reconcileFixtureWithEvents(bundle.fixture, nextEvents));
-      }
-      if (hasLineupData(bundle.lineups)) {
-        setLineups(bundle.lineups);
-        loadedTabsRef.current.add('lineups');
-      }
-      if (hasApiStatistics(bundle.statistics)) {
-        setStatistics(bundle.statistics);
-        setStatsFromEvents(false);
-        loadedTabsRef.current.add('stats');
-      } else if (bundle.fixture && nextEvents.length) {
-        const fromEvents = buildFallbackStatisticsFromEvents(bundle.fixture, nextEvents);
-        if (hasApiStatistics(fromEvents)) {
-          setStatistics(fromEvents);
-          setStatsFromEvents(true);
-          loadedTabsRef.current.add('stats');
-        }
-      }
-      const finishedStatuses = ['FT', 'AET', 'PEN'];
-      if (
-        bundle.fixture &&
-        finishedStatuses.includes(bundle.fixture.fixture.status.short)
-      ) {
-        loadedTabsRef.current.delete('stats');
-        loadedTabsRef.current.delete('lineups');
-        loadedTabsRef.current.delete('standings');
-      }
-    },
-    [],
-  );
-
-  /** Fast: score + minute + events only (matches list cadence). */
-  const refreshLiveFast = useCallback(async () => {
-    if (!fixtureId) return;
-    try {
-      const [fixtureData, eventData] = await Promise.all([
-        ApiFootballService.getFixtureById(fixtureId, { skipCache: true }),
-        ApiFootballService.getFixtureEvents(fixtureId, { skipCache: true }),
-      ]);
-      const nextEvents = eventData ?? [];
-      setEvents(nextEvents);
-      if (fixtureData) {
-        setFixture(reconcileFixtureWithEvents(fixtureData, nextEvents));
-      }
-    } catch {
-      // silent — next poll retries
-    }
-  }, [fixtureId]);
-
-  const refreshLiveFull = useCallback(async () => {
-    if (!fixtureId) return;
-    try {
-      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, {
-        skipCache: true,
-      });
-      applyLiveBundle(bundle);
-    } catch {
-      // silent — next poll retries
-    }
-  }, [applyLiveBundle, fixtureId]);
-
-  const refreshLiveSnapshot = useCallback(
-    async (scope: 'fast' | 'full' = 'fast') => {
-      if (scope === 'full') await refreshLiveFull();
-      else await refreshLiveFast();
-    },
-    [refreshLiveFast, refreshLiveFull],
-  );
-
-  // Live polling interval refs
-  const livePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const livePollTickRef = useRef(0);
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lineupsTabRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [lineupFetchAttempts, setLineupFetchAttempts] = useState(0);
-  const MAX_LINEUP_AUTO_RETRIES = 4;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
 
-  const handleWsMatchUpdate = useCallback((update: MatchUpdatePayload) => {
-    setFixture((prev) => {
-      if (!prev) return prev;
-      const elapsed = update.minute ?? prev.fixture.status.elapsed;
-      return {
-        ...prev,
-        goals: { home: update.homeScore, away: update.awayScore },
-        fixture: {
-          ...prev.fixture,
-          status: {
-            ...prev.fixture.status,
-            short: update.status,
-            elapsed: elapsed ?? null,
-          },
-        },
-      };
-    });
-    if (update.status === 'HT' || update.status === 'FT') {
-      void refreshLiveSnapshot('full');
+  const isLive = useCallback(() => {
+    if (!fixture) return snapshot?.phase === 'live';
+    return LIVE_MATCH_STATUSES.includes(
+      fixture.fixture.status.short as (typeof LIVE_MATCH_STATUSES)[number],
+    );
+  }, [fixture, snapshot?.phase]);
+
+  const isFinishedMatch = useCallback(() => {
+    const short = fixture?.fixture?.status?.short;
+    return short
+      ? ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(short)
+      : snapshot?.phase === 'finished';
+  }, [fixture, snapshot?.phase]);
+
+  useEffect(() => {
+    if (snapshot && loading) {
+      setLoading(false);
     }
-  }, [refreshLiveSnapshot]);
-
-  useMatchUpdateEvents(fixtureId > 0 ? fixtureId : null, handleWsMatchUpdate);
+  }, [snapshot, loading]);
 
   useEffect(() => {
     if (language !== 'ar') return;
@@ -291,9 +173,6 @@ const MatchDetailsScreen = () => {
     const eventNames = events.map((e) => e.team?.name);
     prefetchFootballTranslations(
       collectUniqueStrings(
-        params.homeTeam,
-        params.awayTeam,
-        params.league,
         fixture?.teams?.home?.name,
         fixture?.teams?.away?.name,
         fixture?.league?.name,
@@ -308,9 +187,6 @@ const MatchDetailsScreen = () => {
     );
   }, [
     language,
-    params.homeTeam,
-    params.awayTeam,
-    params.league,
     fixture,
     events,
     lineups,
@@ -320,37 +196,28 @@ const MatchDetailsScreen = () => {
   ]);
 
   useEffect(() => {
-    // Reset state immediately when fixtureId changes to prevent stale data
-    setEvents([]);
-    setLineups([]);
-    setStatistics([]);
-    setFixture(null);
     setHomeLastFixtures([]);
     setAwayLastFixtures([]);
     setStandingsGroups([]);
     setStandingsSeasonUsed(null);
     setStandingsUnavailable(false);
-    setVenue(null);
-    setStatsFromEvents(false);
     setLineupFetchAttempts(0);
     setLineupsError(null);
     setStatsError(null);
     setStandingsError(null);
     setFormError(null);
     setDetailsFetching(false);
-    if (!hasRouteShell) setLoading(true);
-    else setLoading(false);
+    setLoading(true);
     setError(null);
     setLineupsLoading(false);
     setStatsLoading(false);
     setFormLoading(false);
     setStandingsLoading(false);
-    loadedTabsRef.current = new Set(); // reset lazy-load tracking
+    loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
 
-    loadMatchDetails();
+    void loadMatchDetails();
 
-    // Reset animations
     fadeAnim.setValue(0);
     slideAnim.setValue(50);
     Animated.parallel([
@@ -368,51 +235,6 @@ const MatchDetailsScreen = () => {
     ]).start();
   }, [fixtureId]);
 
-  // Live polling — fast score/minute/events every 3s; full bundle ~every 15s
-  useEffect(() => {
-    if (livePollingRef.current) {
-      clearInterval(livePollingRef.current);
-      livePollingRef.current = null;
-    }
-    livePollTickRef.current = 0;
-
-    if (!fixtureId || !shouldPollLive()) return;
-
-    void refreshLiveSnapshot('fast');
-    livePollingRef.current = setInterval(() => {
-      livePollTickRef.current += 1;
-      const scope =
-        livePollTickRef.current % LIVE_FULL_BUNDLE_EVERY_N === 0 ? 'full' : 'fast';
-      void refreshLiveSnapshot(scope);
-    }, LIVE_POLL_INTERVAL_MS);
-
-    return () => {
-      if (livePollingRef.current) {
-        clearInterval(livePollingRef.current);
-        livePollingRef.current = null;
-      }
-      livePollTickRef.current = 0;
-    };
-  }, [fixtureId, shouldPollLive, refreshLiveSnapshot]);
-
-  // Instant refresh when user opens this screen (tab switch / navigation)
-  useFocusEffect(
-    useCallback(() => {
-      if (!fixtureId || !shouldPollLive()) return;
-      void refreshLiveSnapshot('fast');
-    }, [fixtureId, shouldPollLive, refreshLiveSnapshot]),
-  );
-
-  // Refresh when app returns from background during a live match
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active' && fixtureId && shouldPollLive()) {
-        void refreshLiveSnapshot('fast');
-      }
-    });
-    return () => sub.remove();
-  }, [fixtureId, shouldPollLive, refreshLiveSnapshot]);
-
   const loadMatchDetails = async () => {
     if (!fixtureId) {
       setError(t.matchDetails.invalidMatchId);
@@ -422,28 +244,20 @@ const MatchDetailsScreen = () => {
 
     try {
       setDetailsFetching(true);
-      if (!hasRouteShell) setLoading(true);
+      setLoading(true);
       setError(null);
 
-      const preferFresh = params.status === 'live';
-      const bundle = await ApiFootballService.getFixtureDetailsBundle(
-        fixtureId,
-        preferFresh ? { skipCache: true } : undefined,
-      );
+      await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
+      const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
 
-      const nextEvents = bundle.events ?? [];
-      setEvents(nextEvents);
-
-      if (bundle.fixture) {
-        const details = reconcileFixtureWithEvents(bundle.fixture, nextEvents);
-        setFixture(details);
-
+      if (snap?.fixture) {
+        const details = snap.fixture;
         const finishedStatuses = ['FT', 'AET', 'PEN'];
         if (finishedStatuses.includes(details.fixture.status.short)) {
           Promise.allSettled([
-            Promise.resolve(bundle.lineups),
-            Promise.resolve(bundle.statistics),
-            Promise.resolve(bundle.events),
+            Promise.resolve(snap.lineups ?? []),
+            Promise.resolve(snap.statistics ?? []),
+            Promise.resolve(snap.events ?? []),
           ]).then(([lineupsRes, statsRes, eventsRes]) => {
             try {
               matchArchiveService.archiveMatchFromData(
@@ -455,53 +269,14 @@ const MatchDetailsScreen = () => {
             } catch { /* non-fatal */ }
           }).catch(() => {});
         }
+        if (hasLineupData(snap.lineups)) loadedTabsRef.current.add('lineups');
+        if (hasApiStatistics(snap.statistics)) loadedTabsRef.current.add('stats');
+        if (snap.venue) loadedTabsRef.current.add('stadium');
       } else {
         const archived = await matchArchiveService.getArchivedMatch(String(fixtureId));
-        if (archived) {
-          setError(null);
-          if (archived.events?.length) {
-            setEvents(archived.events.map((e) => ({
-              time: { elapsed: e.minute, extra: e.extraMinute },
-              team: { id: e.team === 'home' ? archived.homeTeam.id : archived.awayTeam.id, name: e.team === 'home' ? archived.homeTeam.name : archived.awayTeam.name },
-              player: { id: 0, name: e.player },
-              assist: e.assist ? { id: 0, name: e.assist } : null,
-              type: e.type,
-              detail: e.detail,
-              comments: e.comments,
-            })) as any);
-          }
-        } else {
+        if (!archived) {
           setError(t.matchDetails.loadDetailsFailed);
         }
-      }
-
-      if (hasLineupData(bundle.lineups)) {
-        setLineups(bundle.lineups);
-        loadedTabsRef.current.add('lineups');
-      } else if (bundle.fixture && bundle.events?.length) {
-        const fromEvents = buildFallbackLineupsFromEvents(bundle.fixture, bundle.events);
-        if (hasLineupData(fromEvents)) {
-          setLineups(fromEvents);
-          loadedTabsRef.current.add('lineups');
-        }
-      }
-
-      if (hasApiStatistics(bundle.statistics)) {
-        setStatistics(bundle.statistics);
-        setStatsFromEvents(false);
-        loadedTabsRef.current.add('stats');
-      } else if (bundle.fixture && bundle.events?.length) {
-        const fromEvents = buildFallbackStatisticsFromEvents(bundle.fixture, bundle.events);
-        if (hasApiStatistics(fromEvents)) {
-          setStatistics(fromEvents);
-          setStatsFromEvents(true);
-          loadedTabsRef.current.add('stats');
-        }
-      }
-
-      if (bundle.venue) {
-        setVenue(bundle.venue);
-        loadedTabsRef.current.add('stadium');
       }
 
       setLoading(false);
@@ -520,24 +295,9 @@ const MatchDetailsScreen = () => {
     setLineupsLoading(true);
     setLineupsError(null);
     try {
-      const preferFresh = isLive();
-      let data = await ApiFootballService.getFixtureLineups(fixtureId, {
-        skipCache: preferFresh,
-      });
-      if (!hasLineupData(data)) {
-        data = await ApiFootballService.getFixtureLineups(fixtureId, { skipCache: true });
-      }
-      if (!hasLineupData(data) && fixture?.teams) {
-        const ev =
-          events.length > 0
-            ? events
-            : await ApiFootballService.getFixtureEvents(fixtureId).catch(() => []);
-        const fromEvents = buildFallbackLineupsFromEvents(fixture, ev);
-        if (hasLineupData(fromEvents)) {
-          data = fromEvents;
-        }
-      }
-      setLineups(data ?? []);
+      await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
+      const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
+      const data = snap?.lineups ?? [];
       if (hasLineupData(data)) {
         setLineupFetchAttempts(0);
       } else {
@@ -551,7 +311,7 @@ const MatchDetailsScreen = () => {
     } finally {
       setLineupsLoading(false);
     }
-  }, [fixtureId, fixture, events, isLive, t.matchDetails.loadLineupsFailed]);
+  }, [fixtureId, t.matchDetails.loadLineupsFailed]);
 
   const retryLineups = useCallback(() => {
     setLineupFetchAttempts(0);
@@ -581,14 +341,6 @@ const MatchDetailsScreen = () => {
       }
     };
   }, [fixtureId, isLive, activeTab, loadLineupsIfNeeded]);
-
-  const isFinishedMatch = useCallback(() => {
-    if (params.status === 'finished') return true;
-    const short = fixture?.fixture?.status?.short;
-    return short
-      ? ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(short)
-      : false;
-  }, [fixture, params.status]);
 
   // Auto-retry lineups while the tab is open (capped — then show empty state + manual retry).
   useEffect(() => {
@@ -632,21 +384,10 @@ const MatchDetailsScreen = () => {
     setStatsLoading(true);
     setStatsError(null);
     try {
-      let data = await ApiFootballService.getFixtureStatistics(fixtureId);
-      if (!hasApiStatistics(data) && isLive()) {
-        data = await ApiFootballService.getFixtureStatistics(fixtureId, { skipCache: true });
-      }
-      let fromEvents = false;
-      if (!hasApiStatistics(data) && fixture) {
-        const ev = events.length ? events : await ApiFootballService.getFixtureEvents(fixtureId).catch(() => []);
-        if (ev.length) {
-          data = buildFallbackStatisticsFromEvents(fixture, ev);
-          fromEvents = true;
-        }
-      }
-      setStatistics(data ?? []);
-      setStatsFromEvents(fromEvents);
-      if (isLive() && !hasApiStatistics(data) && !fromEvents) {
+      await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
+      const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
+      const data = snap?.statistics ?? [];
+      if (isLive() && !hasApiStatistics(data) && !snap?.statsFromEvents) {
         loadedTabsRef.current.delete('stats');
       }
     } catch (err: any) {
@@ -655,7 +396,7 @@ const MatchDetailsScreen = () => {
     } finally {
       setStatsLoading(false);
     }
-  }, [fixtureId, fixture, events, isLive, t.matchDetails.loadStatsFailed]);
+  }, [fixtureId, isLive, t.matchDetails.loadStatsFailed]);
 
   // Retry stats every 45s while live (lower-tier leagues often publish late)
   useEffect(() => {
@@ -713,11 +454,11 @@ const MatchDetailsScreen = () => {
       );
       const homeTeam = {
         id: fixture.teams.home.id,
-        name: params.homeTeam || fixture.teams.home.name,
+        name: fixture.teams.home.name,
       };
       const awayTeam = {
         id: fixture.teams.away.id,
-        name: params.awayTeam || fixture.teams.away.name,
+        name: fixture.teams.away.name,
       };
       const matchGroups = resolveStandingsGroupsForMatch(
         result.groups,
@@ -737,8 +478,6 @@ const MatchDetailsScreen = () => {
     }
   }, [
     fixture,
-    params.homeTeam,
-    params.awayTeam,
     isLive,
     isFinishedMatch,
     t.matchDetails.loadStandingsFailed,
@@ -749,38 +488,12 @@ const MatchDetailsScreen = () => {
     loadedTabsRef.current.add('stadium');
     setVenueLoading(true);
     try {
-      const venueId = fixture.fixture.venue?.id;
-      if (venueId) {
-        const data = await ApiFootballService.getVenueInfo(venueId);
-        if (data) {
-          setVenue(data);
-          return;
-        }
-      }
-      if (fixture.fixture.venue?.name) {
-        setVenue({
-          id: venueId ?? 0,
-          name: fixture.fixture.venue.name,
-          address: null,
-          city: fixture.fixture.venue.city ?? null,
-          capacity: null,
-          surface: null,
-          image: null,
-        } as Venue);
-      }
+      await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
     } catch {
-      if (fixture.fixture.venue?.name) {
-        setVenue({
-          id: fixture.fixture.venue?.id ?? 0,
-          name: fixture.fixture.venue.name,
-          address: null,
-          city: fixture.fixture.venue.city ?? null,
-          capacity: null,
-          surface: null,
-          image: null,
-        } as Venue);
-      }
-    } finally { setVenueLoading(false); }
+      // venue may remain from fixture stub in snapshot
+    } finally {
+      setVenueLoading(false);
+    }
   }, [fixtureId, fixture]);
 
   // Reload stats when match reaches HT or full time
@@ -953,7 +666,7 @@ const MatchDetailsScreen = () => {
       const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
       const inPlay =
         liveStatuses.includes(fixture?.fixture?.status?.short ?? '') ||
-        params.status === 'live';
+        isLive();
       return (
         <View style={styles.emptyState}>
           <Ionicons name="football-outline" size={64} color="#333" />
@@ -961,7 +674,7 @@ const MatchDetailsScreen = () => {
           {inPlay ? (
             <TouchableOpacity
               style={styles.retryButton}
-              onPress={() => void refreshLiveSnapshot()}
+              onPress={() => void useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId)}
             >
               <Text style={styles.retryButtonText}>
                 {t.matchDetails.standingsRetry || t.common.retry}
@@ -983,8 +696,8 @@ const MatchDetailsScreen = () => {
             const homeTeamId = fixture?.teams?.home?.id;
             const isHomeTeam = homeTeamId != null
               ? event.team.id === homeTeamId
-              : event.team.name.toLowerCase().includes(params.homeTeam.toLowerCase()) ||
-                params.homeTeam.toLowerCase().includes(event.team.name.toLowerCase());
+              : event.team.name.toLowerCase().includes(homeTeamName.toLowerCase()) ||
+                homeTeamName.toLowerCase().includes(event.team.name.toLowerCase());
 
             return (
               <View key={index} style={[styles.eventCard, isHomeTeam ? styles.eventHome : styles.eventAway]}>
@@ -1111,7 +824,7 @@ const MatchDetailsScreen = () => {
                   formation={formation}
                   players={fieldPlayers}
                   teamName={lineup.team.name}
-                  teamColor={index === 0 ? params.homeTeam === lineup.team.name ? '#A855F7' : '#3b82f6' : params.awayTeam === lineup.team.name ? '#3b82f6' : '#A855F7'}
+                  teamColor={index === 0 ? homeTeamName === lineup.team.name ? '#A855F7' : '#3b82f6' : awayTeamName === lineup.team.name ? '#3b82f6' : '#A855F7'}
                   onPlayerPress={(player) => {
                     if (player.id) {
                       openPlayerProfile(
@@ -1254,12 +967,12 @@ const MatchDetailsScreen = () => {
   const renderForm = () => {
     // البحث عن team IDs من lineups
     const homeLineup = lineups.find(l =>
-      l.team.name.toLowerCase().includes(params.homeTeam.toLowerCase()) ||
-      params.homeTeam.toLowerCase().includes(l.team.name.toLowerCase())
+      l.team.name.toLowerCase().includes(homeTeamName.toLowerCase()) ||
+      homeTeamName.toLowerCase().includes(l.team.name.toLowerCase())
     );
     const awayLineup = lineups.find(l =>
-      l.team.name.toLowerCase().includes(params.awayTeam.toLowerCase()) ||
-      params.awayTeam.toLowerCase().includes(l.team.name.toLowerCase())
+      l.team.name.toLowerCase().includes(awayTeamName.toLowerCase()) ||
+      awayTeamName.toLowerCase().includes(l.team.name.toLowerCase())
     );
 
     const homeTeamId = homeLineup?.team.id || (lineups.length > 0 ? lineups[0]?.team.id : null);
@@ -1273,8 +986,8 @@ const MatchDetailsScreen = () => {
         {/* Home Team Last 5 Matches */}
         <View style={styles.formContainer}>
           <View style={styles.formHeader}>
-            <TeamBadge name={params.homeTeam} logo={params.homeLogo} size={50} color="transparent" />
-            <Text style={styles.formTeamName}>{getTeamDisplayName(params.homeTeam, language)}</Text>
+            <TeamBadge name={homeTeamName} logo={homeTeamLogo} size={50} color="transparent" />
+            <Text style={styles.formTeamName}>{getTeamDisplayName(homeTeamName, language)}</Text>
             <Text style={styles.formTitle}>{t.matchDetails.last5Matches}</Text>
           </View>
           {homeLastFixtures.length > 0 ? (
@@ -1296,7 +1009,7 @@ const MatchDetailsScreen = () => {
                           fixture.league.name,
                           language,
                           fixture.league.id,
-                          fixture.league.country,
+                          undefined,
                         )}
                       </Text>
                     </View>
@@ -1319,8 +1032,8 @@ const MatchDetailsScreen = () => {
         {/* Away Team Last 5 Matches */}
         <View style={styles.formContainer}>
           <View style={styles.formHeader}>
-            <TeamBadge name={params.awayTeam} logo={params.awayLogo} size={50} color="transparent" />
-            <Text style={styles.formTeamName}>{getTeamDisplayName(params.awayTeam, language)}</Text>
+            <TeamBadge name={awayTeamName} logo={awayTeamLogo} size={50} color="transparent" />
+            <Text style={styles.formTeamName}>{getTeamDisplayName(awayTeamName, language)}</Text>
             <Text style={styles.formTitle}>{t.matchDetails.last5Matches}</Text>
           </View>
           {awayLastFixtures.length > 0 ? (
@@ -1342,7 +1055,7 @@ const MatchDetailsScreen = () => {
                           fixture.league.name,
                           language,
                           fixture.league.id,
-                          fixture.league.country,
+                          undefined,
                         )}
                       </Text>
                     </View>
@@ -1490,11 +1203,11 @@ const MatchDetailsScreen = () => {
         {rows.map((team: any, index: number) => {
           const homeRef = {
             id: fixture?.teams?.home?.id,
-            name: params.homeTeam || fixture?.teams?.home?.name,
+            name: fixture?.teams?.home?.name,
           };
           const awayRef = {
             id: fixture?.teams?.away?.id,
-            name: params.awayTeam || fixture?.teams?.away?.name,
+            name: fixture?.teams?.away?.name,
           };
           const isHighlighted =
             standingRowMatchesTeam(team, homeRef) ||
@@ -1551,7 +1264,7 @@ const MatchDetailsScreen = () => {
     );
   };
 
-  if (loading && !hasRouteShell) {
+  if (loading && !snapshot) {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" />
@@ -1620,33 +1333,30 @@ const MatchDetailsScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Modern Header (Score Card) */}
         <MatchHeader
-          homeTeam={getTeamDisplayName(fixture?.teams?.home?.name || params.homeTeam, language)}
-          awayTeam={getTeamDisplayName(fixture?.teams?.away?.name || params.awayTeam, language)}
-          homeLogo={fixture?.teams?.home?.logo || params.homeLogo}
-          awayLogo={fixture?.teams?.away?.logo || params.awayLogo}
-          homeScore={fixture?.goals?.home != null ? String(fixture.goals.home) : params.homeScore}
-          awayScore={fixture?.goals?.away != null ? String(fixture.goals.away) : params.awayScore}
+          homeTeam={getTeamDisplayName(homeTeamName, language)}
+          awayTeam={getTeamDisplayName(awayTeamName, language)}
+          homeLogo={homeTeamLogo}
+          awayLogo={awayTeamLogo}
+          homeScore={fixture?.goals?.home != null ? String(fixture.goals.home) : undefined}
+          awayScore={fixture?.goals?.away != null ? String(fixture.goals.away) : undefined}
           status={fixture ? (
             ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(fixture.fixture.status.short) ? 'live'
             : ['FT', 'AET', 'PEN'].includes(fixture.fixture.status.short) ? 'finished'
             : 'upcoming'
-          ) : params.status}
+          ) : 'upcoming'}
           league={getLeagueDisplayName(
-            fixture?.league?.name || params.league,
+            leagueName,
             language,
             fixture?.league?.id,
             fixture?.league?.country,
           )}
-          date={params.date}
-          time={params.time}
+          date={kickoffDate}
+          time={kickoffTime}
           fixtureDate={fixture?.fixture?.date}
           statusShort={fixture?.fixture.status.short}
           elapsed={fixture?.fixture.status.elapsed ?? undefined}
           stoppage={(fixture?.fixture.status as any)?.extra ?? null}
-          startTimestamp={fixture?.fixture.status.short === '2H'
-            ? (fixture?.fixture.periods.second || undefined)
-            : (fixture?.fixture.periods.first || undefined)
-          }
+          startTimestamp={fixture ? getPeriodStartTimestamp(fixture) : undefined}
         />
 
         {/* Modern Tabs */}

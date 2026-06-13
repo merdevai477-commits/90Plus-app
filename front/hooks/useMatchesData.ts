@@ -8,19 +8,20 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Match } from '../components/Matches/matchCardUtils';
 import {
   fetchMatchesByDate,
-  fetchLiveMatches,
   getLocalTodayKey,
-  formatLiveMinuteDisplay,
   formatLocalDateKey,
 } from '../components/Matches/leagueApiUtils';
 import { cacheService } from '../services/cacheService';
 import { logger } from '../utils/logger';
-import { websocketClient, MatchUpdatePayload } from '../services/websocketClient';
 import { useLanguageStore } from '../src/i18n/store';
 import { prefetchFootballTranslations } from '../src/stores/footballTranslationStore';
 import { collectNamesFromMatches } from '../utils/footballNamePrefetch';
 import { getCountryFlagUri } from '../utils/countryFlagUri';
 import { prefetchMatchAssets } from '../utils/prefetchMatchAssets';
+import { useLiveFixtureStore } from '../src/store/liveFixtureStore';
+import { LIVE_FIXTURE_CALENDAR_POLL_MS } from '../src/store/liveFixtureStore.types';
+import { useRegisterLiveFixtures } from './useLiveFixture';
+import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
 
 export interface GroupedMatches {
   leagueId: number;
@@ -49,7 +50,7 @@ export interface UseMatchesDataResult {
 }
 
 export interface UseMatchesDataOptions {
-  /** Pause background polling + WS when another hook owns live updates (e.g. WC tab). */
+  /** Pause calendar refresh when another hook owns the matches tab (e.g. WC filter). */
   pauseBackgroundRefresh?: boolean;
 }
 
@@ -107,41 +108,22 @@ const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
 // shared-cached for 8s, so this won't multiply API quota usage.
 const BACKGROUND_REFRESH_THROTTLE = 4 * 1000; // 4 seconds
 
-const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
-const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
-
-/** Apply a WebSocket score/minute patch to a list match row. */
-const patchMatchFromWsUpdate = (match: Match, update: MatchUpdatePayload): Match => {
-  let status: Match['status'] = match.status;
-  if (FINISHED_STATUSES.has(update.status)) status = 'finished';
-  else if (LIVE_STATUSES.has(update.status)) status = 'live';
-
-  const elapsed = update.minute ?? match.elapsed ?? null;
-  const minute =
-    elapsed != null
-      ? formatLiveMinuteDisplay(update.status, elapsed)
-      : match.minute;
-
-  if (
-    match.score.home === update.homeScore &&
-    match.score.away === update.awayScore &&
-    match.status === status &&
-    match.statusShort === update.status &&
-    match.minute === minute &&
-    match.elapsed === elapsed
-  ) {
-    return match;
-  }
-
-  return {
-    ...match,
-    score: { home: update.homeScore, away: update.awayScore },
-    status,
-    statusShort: update.status,
-    elapsed,
-    minute,
-  };
-};
+/** Overlay Zustand live snapshots onto calendar rows for live/finished fixtures. */
+function overlaySnapshotsOnCalendar(
+  calendarRows: Match[],
+  snapshots: Record<number, import('../src/store/liveFixtureStore.types').LiveFixtureSnapshot>,
+): Match[] {
+  return calendarRows.map((row) => {
+    const id = parseInt(row.id, 10);
+    if (Number.isNaN(id)) return row;
+    const snap = snapshots[id];
+    if (!snap) return row;
+    if (row.status === 'live' || snap.phase === 'live' || snap.phase === 'finished') {
+      return snapshotToMatchRow(snap);
+    }
+    return row;
+  });
+}
 
 /**
  * Country sort priority:
@@ -257,7 +239,8 @@ export const useMatchesData = (
   options: UseMatchesDataOptions = {},
 ): UseMatchesDataResult => {
   const { pauseBackgroundRefresh = false } = options;
-  const [matches, setMatches] = useState<Match[]>([]);
+  const [calendarMatches, setCalendarMatches] = useState<Match[]>([]);
+  const snapshots = useLiveFixtureStore((s) => s.snapshots);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   // Fix ERR-3: track when background refresh fails so UI can show a stale indicator
@@ -282,13 +265,29 @@ export const useMatchesData = (
   }, []);
   const isToday = dateString === today;
   const isPastDate = dateString < today;
+
+  const matches = useMemo(
+    () => overlaySnapshotsOnCalendar(calendarMatches, snapshots),
+    [calendarMatches, snapshots],
+  );
+  const liveFixtureIds = useMemo(
+    () =>
+      calendarMatches
+        .filter((m) => m.status === 'live')
+        .map((m) => parseInt(m.id, 10))
+        .filter((id) => !Number.isNaN(id) && id > 0),
+    [calendarMatches],
+  );
+  useRegisterLiveFixtures(
+    pauseBackgroundRefresh || !isToday ? [] : liveFixtureIds,
+  );
   
   // Stale-while-revalidate: show disk cache immediately when date changes
   useEffect(() => {
     let cancelled = false;
     const memoryCached = memoryCache.get(dateString);
     if (memoryCached) {
-      setMatches(memoryCached.data);
+      setCalendarMatches(memoryCached.data);
       setLoading(false);
     } else {
       setLoading(true);
@@ -299,7 +298,7 @@ export const useMatchesData = (
       if (cancelled || !cached?.length) return;
       evictOldestIfNeeded(memoryCache);
       memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
-      setMatches(cached);
+      setCalendarMatches(cached);
       setLoading(false);
     }).catch(() => {});
 
@@ -357,7 +356,7 @@ export const useMatchesData = (
           const memoryCached = memoryCache.get(dateString);
           if (memoryCached && isCacheValid(memoryCached, dateString)) {
             logger.debug(`📦 Memory cache hit for ${dateString}`);
-            setMatches(memoryCached.data);
+            setCalendarMatches(memoryCached.data);
             setLoading(false);
             prefetchMatchAssets(memoryCached.data);
             
@@ -384,7 +383,7 @@ export const useMatchesData = (
             // Update memory cache first
             evictOldestIfNeeded(memoryCache);
             memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
-            setMatches(cached);
+            setCalendarMatches(cached);
             setLoading(false);
             prefetchMatchAssets(cached);
             
@@ -407,24 +406,8 @@ export const useMatchesData = (
         let fetchedMatches: Match[];
 
         if (isToday) {
-          // For today, fetch both live matches and scheduled matches
-          const [liveMatches, scheduledMatches] = await Promise.all([
-            fetchLiveMatches(),
-            fetchMatchesByDate(selectedDate),
-          ]);
-
-          // Fix 9: Deduplicate using Map keyed by match ID.
-          // Scheduled matches inserted first, then live matches overwrite them
-          // so the live version (more up-to-date status) always wins.
-          const mergeMap = new Map<string, Match>();
-          scheduledMatches.forEach(m => mergeMap.set(m.id, m));
-          liveMatches.forEach(m => mergeMap.set(m.id, m)); // live overwrites scheduled
-          fetchedMatches = Array.from(mergeMap.values());
-          
-          // Pre-fetching upcoming days was burning 3 API calls per launch
-          // against a 100/day quota. Disabled — users can swipe to the next
-          // day and we'll fetch on-demand (and cache) then.
-          // preloadUpcomingDays(3);
+          // Calendar structure only — live scores come from liveFixtureStore.
+          fetchedMatches = await fetchMatchesByDate(selectedDate);
         } else if (!isPastDate) {
           // For future dates, just fetch scheduled matches
           fetchedMatches = await fetchMatchesByDate(selectedDate);
@@ -433,7 +416,7 @@ export const useMatchesData = (
           fetchedMatches = await fetchMatchesByDate(selectedDate);
         }
 
-        setMatches(fetchedMatches);
+        setCalendarMatches(fetchedMatches);
         setIsDataStale(false); // fresh data loaded successfully
         prefetchMatchAssets(fetchedMatches);
 
@@ -456,7 +439,7 @@ export const useMatchesData = (
         });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to load matches';
-        setMatches((prev) => {
+        setCalendarMatches((prev) => {
           if (prev.length > 0) {
             setIsDataStale(true);
             setError(null);
@@ -532,20 +515,12 @@ export const useMatchesData = (
       let fetchedMatches: Match[];
 
       if (isTodayFlag) {
-        const [liveMatches, scheduledMatches] = await Promise.all([
-          fetchLiveMatches(),
-          fetchMatchesByDate(date),
-        ]);
-        // Fix 9: Map-based dedup — live version overwrites scheduled
-        const mergeMap = new Map<string, Match>();
-        scheduledMatches.forEach(m => mergeMap.set(m.id, m));
-        liveMatches.forEach(m => mergeMap.set(m.id, m));
-        fetchedMatches = Array.from(mergeMap.values());
+        fetchedMatches = await fetchMatchesByDate(date);
       } else {
         fetchedMatches = await fetchMatchesByDate(date);
       }
 
-      setMatches(fetchedMatches);
+      setCalendarMatches(fetchedMatches);
       setIsDataStale(false); // background refresh succeeded
 
       // Today: short TTL so the disk cache doesn't override fresh polls.
@@ -570,56 +545,12 @@ export const useMatchesData = (
 
   useEffect(() => {
     fetchDataRef.current();
-  }, [dateString, isToday, isPastDate]); // Re-fetch when date changes or when isToday/isPastDate change (e.g. at midnight)
+  }, [dateString, isToday, isPastDate]);
 
-  // WebSocket: patch live scores instantly; polling remains fallback
-  const liveMatchIdsKey = useMemo(
-    () => matches.filter((m) => m.status === 'live').map((m) => m.id).join(','),
-    [matches],
-  );
-
-  useEffect(() => {
-    if (pauseBackgroundRefresh || !isToday || !liveMatchIdsKey) return;
-
-    const liveIds = liveMatchIdsKey
-      .split(',')
-      .map((id) => parseInt(id, 10))
-      .filter((id) => !Number.isNaN(id));
-
-    liveIds.forEach((id) => websocketClient.subscribeToRoom(`match:${id}`));
-
-    const unsub = websocketClient.subscribeToAllMatchUpdates((update) => {
-      setMatches((prev) => {
-        const idx = prev.findIndex((m) => m.id === String(update.matchId));
-        if (idx === -1) return prev;
-        const patched = patchMatchFromWsUpdate(prev[idx], update);
-        if (patched === prev[idx]) return prev;
-        const next = [...prev];
-        next[idx] = patched;
-        const cached = memoryCache.get(dateString);
-        if (cached) {
-          memoryCache.set(dateString, { data: next, timestamp: Date.now() });
-        }
-        return next;
-      });
-    });
-
-    return () => {
-      unsub();
-      liveIds.forEach((id) => websocketClient.unsubscribeFromRoom(`match:${id}`));
-    };
-  }, [pauseBackgroundRefresh, isToday, dateString, liveMatchIdsKey]);
-
-  // ─── Silent auto-refresh ────────────────────────────────────────────────
-  // Schedule a background tick based on how "live" the current day is:
-  //   - today  → every 10 s (WS handles instant updates; this is fallback)
-  //   - future → every 5 minutes (fixtures rarely change last-minute)
-  //   - past   → no refresh at all (permanent cache)
-  //
-  // The call goes through `fetchDataInBackground` which is throttled at 4s
+  // Calendar refresh only — live scores via useLiveFixtureSync + Zustand store.
   useEffect(() => {
     if (pauseBackgroundRefresh || isPastDate) return;
-    const intervalMs = isToday ? 10_000 : 5 * 60_000;
+    const intervalMs = isToday ? LIVE_FIXTURE_CALENDAR_POLL_MS : 5 * 60_000;
     const id = setInterval(() => {
       fetchDataInBackground(dateString, isToday, isPastDate).catch(() => {});
     }, intervalMs);
