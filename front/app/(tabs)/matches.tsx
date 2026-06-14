@@ -138,21 +138,6 @@ const FILTER_LABEL_KEYS: Record<(typeof FILTERS)[number], string> = {
   Predictions: 'matches.tabs.predictions',
 };
 
-// Country values the API returns for international competitions. Anything in
-// this set gets pulled OUT of the country accordions on All/Live/Upcoming/
-// Finished and shown only inside the dedicated "International" tab.
-const INTL_COUNTRIES: ReadonlySet<string> = new Set([
-  'World',
-  'Europe',
-  'Africa',
-  'South-America',
-  'South America',
-  'North-America',
-  'North America',
-  'Asia',
-  'Oceania',
-]);
-
 // Map API match status to display status
 function mapStatus(status: string): 'LIVE' | 'FT' | 'UPCOMING' {
   if (status === 'live') return 'LIVE';
@@ -1221,11 +1206,8 @@ export default function MatchesHubScreenV2() {
 
   // Country → League hierarchy after filtering. Drops empty leagues and
   // empty countries so the accordion list only renders sections with data.
-  // International competitions (World/Europe/Africa/...) are pulled out and
-  // shown in their own tab — keeps the country list clean and country-only.
   const filteredCountryGroups = useMemo<CountryGroup[]>(() => {
     return countryGroups
-      .filter(cg => !INTL_COUNTRIES.has(cg.country))
       .map(cg => {
         const leagues = cg.leagues
           .map(l => ({ ...l, matches: l.matches.filter(matchPassesFilter) }))
@@ -1234,9 +1216,6 @@ export default function MatchesHubScreenV2() {
       })
       .filter(cg => cg.leagues.length > 0);
   }, [countryGroups, matchPassesFilter, worldCupLeagueId]);
-
-  // International competitions stay in country accordions on other tabs.
-  // World Cup has its own dedicated tab fed by the backend WC endpoint.
 
   const worldCupLeagueGroups = useMemo<LeagueGroup[]>(() => {
     if (worldCupMatches.length === 0) return [];
@@ -1885,11 +1864,7 @@ export default function MatchesHubScreenV2() {
         gotItLabel={t('matchesInfo.gotIt')}
       />
       {/* FlashList — virtualized, JS-thread friendly, no nested scroll.
-          Three rendering modes:
-            - Predictions: legacy LeagueGroup flow (every league + prediction buttons)
-            - International: LeagueCard per international competition (no
-              country layer — taps a competition → expands → shows matches)
-            - Default (All/Live/Upcoming/Finished): Country → League accordions */}
+          Predictions / WorldCup / default (All/Live/Upcoming/Finished) modes. */}
       {filter === 'Predictions' ? (
         <FlashList
           data={filteredCountryGroups}

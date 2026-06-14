@@ -409,8 +409,21 @@ export const useMatchesData = (
               return;
             }
             
-            // For today/future, refresh in background
-            fetchDataInBackground(dateString, isToday, isPastDate);
+            // For today, always merge live feed immediately (calendar cache can lag).
+            if (isToday) {
+              void fetchTodayMatchesWithLiveFeed(selectedDate)
+                .then((merged) => {
+                  setCalendarMatches(merged);
+                  setIsDataStale(false);
+                  prefetchMatchAssets(merged);
+                  evictOldestIfNeeded(memoryCache);
+                  memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
+                  return cacheService.set(cacheKey, merged, 3 * 1000);
+                })
+                .catch(() => setIsDataStale(true));
+            } else {
+              fetchDataInBackground(dateString, isToday, isPastDate);
+            }
             isFetchingRef.current = false;
             return;
           }
@@ -436,8 +449,21 @@ export const useMatchesData = (
               return;
             }
             
-            // For today/future, refresh in background (non-blocking)
-            fetchDataInBackground(dateString, isToday, isPastDate);
+            // For today, always merge live feed immediately (calendar cache can lag).
+            if (isToday) {
+              void fetchTodayMatchesWithLiveFeed(selectedDate)
+                .then((merged) => {
+                  setCalendarMatches(merged);
+                  setIsDataStale(false);
+                  prefetchMatchAssets(merged);
+                  evictOldestIfNeeded(memoryCache);
+                  memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
+                  return cacheService.set(cacheKey, merged, 3 * 1000);
+                })
+                .catch(() => setIsDataStale(true));
+            } else {
+              fetchDataInBackground(dateString, isToday, isPastDate);
+            }
             isFetchingRef.current = false;
             return;
           }

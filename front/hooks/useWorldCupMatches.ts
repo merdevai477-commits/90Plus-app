@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Match } from '../components/Matches/matchCardUtils';
 import {
   fetchWorldCupMatchesByDate,
+  fetchLiveMatches,
   formatLocalDateKey,
   getLocalTodayKey,
 } from '../components/Matches/leagueApiUtils';
@@ -81,6 +82,48 @@ async function enrichLiveCorners(matches: Match[]): Promise<Match[]> {
   });
 }
 
+function mergeWorldCupCalendarWithLiveFeed(
+  calendar: Match[],
+  liveFeed: Match[],
+  leagueId: number,
+): Match[] {
+  const map = new Map<string, Match>();
+  for (const row of calendar) {
+    map.set(row.id, row);
+  }
+  for (const liveRow of liveFeed) {
+    if (liveRow.status !== 'live') continue;
+    if (liveRow.league?.id !== leagueId) continue;
+    const existing = map.get(liveRow.id);
+    map.set(
+      liveRow.id,
+      existing
+        ? {
+            ...existing,
+            ...liveRow,
+            status: 'live',
+            score: liveRow.score,
+            minute: liveRow.minute ?? existing.minute,
+            elapsed: liveRow.elapsed ?? existing.elapsed,
+            statusShort: liveRow.statusShort ?? existing.statusShort,
+          }
+        : liveRow,
+    );
+  }
+  return Array.from(map.values());
+}
+
+async function fetchTodayWorldCupWithLiveFeed(
+  date: Date,
+  leagueId: number,
+): Promise<Match[]> {
+  const [byDate, liveFeed] = await Promise.all([
+    fetchWorldCupMatchesByDate(date, { skipDiskCache: true }),
+    fetchLiveMatches(),
+  ]);
+  return mergeWorldCupCalendarWithLiveFeed(byDate, liveFeed, leagueId);
+}
+
 export function useWorldCupMatches(
   selectedDate: Date,
   enabled: boolean,
@@ -105,11 +148,11 @@ export function useWorldCupMatches(
 
   const liveFixtureIds = useMemo(
     () =>
-      calendarMatches
+      matches
         .filter((m) => m.status === 'live')
         .map((m) => parseInt(m.id, 10))
         .filter((id) => !Number.isNaN(id) && id > 0),
-    [calendarMatches],
+    [matches],
   );
   useRegisterLiveFixtures(enabled && isToday ? liveFixtureIds : []);
 
@@ -127,7 +170,8 @@ export function useWorldCupMatches(
 
     const mem = memoryCache.get(dateString);
     const ttl = TTL_IDLE_MS;
-    if (mem && Date.now() - mem.ts < ttl && !mem.data.some((m) => m.status === 'live')) {
+    // Today always refetches with live feed — calendar cache can miss kickoffs.
+    if (!isToday && mem && Date.now() - mem.ts < ttl) {
       setCalendarMatches(mem.data);
       setLoading(false);
       fetchingRef.current = false;
@@ -137,9 +181,11 @@ export function useWorldCupMatches(
     if (!hasDataRef.current) setLoading(true);
     setError(null);
     try {
-      let list = await fetchWorldCupMatchesByDate(selectedDate, {
-        skipDiskCache: isToday,
-      });
+      let list = isToday
+        ? await fetchTodayWorldCupWithLiveFeed(selectedDate, leagueId)
+        : await fetchWorldCupMatchesByDate(selectedDate, {
+            skipDiskCache: false,
+          });
       const liveNow = list.some((m) => m.status === 'live');
       if (liveNow && enrichCorners) {
         const now = Date.now();
