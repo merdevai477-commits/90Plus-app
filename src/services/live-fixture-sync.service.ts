@@ -11,9 +11,11 @@ import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES } f
 import { WebSocketService } from './websocket.service';
 import { PredictionResolverService } from './prediction-resolver.service';
 import { logger } from '../utils/logger';
-import { getRedisClient } from '../lib/redis';
 import { tryAcquireSyncLeader } from './football-sync-leader.service';
-import { FOOTBALL_LIVE_MATCHES_KEY } from '../utils/football-cache-keys.util';
+import {
+    writeLiveFixturesSnapshot,
+    writeTerminalFixtureSnapshot,
+} from './live-fixture-cache.service';
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
@@ -40,8 +42,8 @@ class LiveFixtureSyncService {
         if (this.running) return;
 
         const intervalMs = Math.max(
-            15_000,
-            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '15000', 10) || 15_000,
+            10_000,
+            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '10000', 10) || 10_000,
         );
 
         this.running = true;
@@ -67,18 +69,43 @@ class LiveFixtureSyncService {
         logger.info('🔴 Live fixture sync stopped');
     }
 
+    private broadcastMatchUpdate(
+        fixtureId: number,
+        homeScore: number,
+        awayScore: number,
+        status: string,
+        elapsed: number | null,
+    ): void {
+        WebSocketService.sendMatchUpdate(fixtureId, {
+            matchId: fixtureId,
+            homeScore,
+            awayScore,
+            status,
+            minute: elapsed ?? undefined,
+        });
+    }
+
     private async onMatchFinished(
         fixtureId: number,
         homeScore: number,
         awayScore: number,
+        status: string,
+        elapsed: number | null,
+        fixture?: FixtureFromAPI,
     ): Promise<void> {
         if (this.finishingInFlight.has(fixtureId)) return;
         this.finishingInFlight.add(fixtureId);
 
         try {
+            if (fixture) {
+                await writeTerminalFixtureSnapshot(fixture);
+            }
+
+            this.broadcastMatchUpdate(fixtureId, homeScore, awayScore, status, elapsed);
+
             await matchCacheService.handleMatchFinished(fixtureId);
             await PredictionResolverService.resolveMatchPredictions(fixtureId, homeScore, awayScore);
-            logger.info(`✅ Match ${fixtureId} archived and predictions resolved (${homeScore}-${awayScore})`);
+            logger.info(`✅ Match ${fixtureId} archived and predictions resolved (${homeScore}-${awayScore}, ${status})`);
         } catch (err) {
             logger.warn(`Failed to finalize match ${fixtureId}:`, err);
         } finally {
@@ -102,7 +129,8 @@ class LiveFixtureSyncService {
 
             const homeScore = fixture.goals?.home ?? 0;
             const awayScore = fixture.goals?.away ?? 0;
-            await this.onMatchFinished(fixtureId, homeScore, awayScore);
+            const elapsed = fixture.fixture?.status?.elapsed ?? null;
+            await this.onMatchFinished(fixtureId, homeScore, awayScore, status, elapsed, fixture as FixtureFromAPI);
         } catch (err) {
             logger.debug(`Could not verify finished status for match ${fixtureId}:`, err);
         }
@@ -129,7 +157,8 @@ class LiveFixtureSyncService {
             if (FINISHED_STATUSES_SET.has(status)) {
                 const homeScore = fixture.goals.home ?? 0;
                 const awayScore = fixture.goals.away ?? 0;
-                await this.onMatchFinished(id, homeScore, awayScore);
+                const elapsed = fixture.fixture.status.elapsed ?? null;
+                await this.onMatchFinished(id, homeScore, awayScore, status, elapsed, fixture);
             }
         }
 
@@ -140,16 +169,13 @@ class LiveFixtureSyncService {
         }
         this.previouslyLiveIds = currentLiveIds;
 
+        await writeLiveFixturesSnapshot(liveFixtures);
+
         if (liveFixtures.length === 0) {
             return;
         }
 
         await matchCacheService.upsertFixtures(liveFixtures);
-
-        const redis = getRedisClient();
-        if (redis) {
-            await redis.setex(FOOTBALL_LIVE_MATCHES_KEY, 20, JSON.stringify(liveFixtures));
-        }
 
         for (const fixture of liveFixtures) {
             const id = fixture.fixture.id;
@@ -172,13 +198,7 @@ class LiveFixtureSyncService {
 
             this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed });
 
-            WebSocketService.sendMatchUpdate(id, {
-                matchId: id,
-                homeScore,
-                awayScore,
-                status,
-                minute: elapsed ?? undefined,
-            });
+            this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed);
         }
     }
 }

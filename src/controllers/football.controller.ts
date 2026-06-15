@@ -6,6 +6,10 @@ import { getTopClubsByCountry, getSupportedCountries } from '../services/top-clu
 import { logger } from '../utils/logger';
 import { getFootballMetrics } from '../utils/football-metrics';
 import prisma from '../lib/prisma';
+import {
+  resolveFixtureForClient,
+  resolveLiveFixturesForClient,
+} from '../services/live-fixture-cache.service';
 
 /**
  * Football API Proxy Controller
@@ -280,15 +284,8 @@ export class FootballController {
 
   /**
    * GET /api/football/fixtures/live - Get live fixtures
-   * Cache TTL: 30 seconds — short enough that the displayed minute stays
-   * within ±30s of the real upstream, long enough to avoid hammering the
-   * upstream API on every poll. The previous 5-minute cache caused the
-   * displayed minute to lag the real match by up to 3 minutes, which users
-   * compared to TV broadcasts and reported as a bug.
+   * Prefers Redis snapshot from LiveFixtureSync (≤10s) before upstream API.
    */
-  private static liveFixturesCache: { data: any[]; timestamp: number } | null = null;
-  private static readonly LIVE_CACHE_TTL = 15 * 1000;
-
   static async getLiveFixtures(req: Request, res: Response): Promise<void> {
     try {
       if (!footballService.isConfigured()) {
@@ -299,29 +296,24 @@ export class FootballController {
         return;
       }
 
-      // Check cache first
-      const now = Date.now();
-      if (
-        FootballController.liveFixturesCache &&
-        now - FootballController.liveFixturesCache.timestamp < FootballController.LIVE_CACHE_TTL
-      ) {
-        logger.debug('📦 Returning live fixtures from cache');
+      const redisLive = await resolveLiveFixturesForClient();
+      if (redisLive.source === 'redis') {
+        logger.debug(`📦 Returning ${redisLive.fixtures.length} live fixtures from Redis sync`);
         res.json({
           status: 'SUCCESS',
-          results: FootballController.liveFixturesCache.data.length,
-          response: FootballController.liveFixturesCache.data,
+          results: redisLive.fixtures.length,
+          response: redisLive.fixtures,
           cached: true,
+          source: 'redis-sync',
         });
         return;
       }
 
-      // Fetch from API
-      logger.debug('📡 Fetching live fixtures from API');
+      logger.debug('📡 Fetching live fixtures from API (Redis sync empty)');
       let fixtures: any[] = [];
       try {
         fixtures = await footballService.getLiveFixtures();
       } catch (fetchError: any) {
-        // One retry on timeout/network error
         if (fetchError?.name === 'FootballApiError' || fetchError?.message?.includes('timed out') || fetchError?.message?.includes('timeout')) {
           logger.warn('getLiveFixtures: first attempt failed, retrying once...', fetchError?.message);
           fixtures = await footballService.getLiveFixtures();
@@ -329,12 +321,6 @@ export class FootballController {
           throw fetchError;
         }
       }
-
-      // Update cache + persist full payload for calendar/history
-      FootballController.liveFixturesCache = {
-        data: fixtures,
-        timestamp: now,
-      };
 
       if (fixtures.length > 0) {
         const { matchCacheService } = await import('../services/match-cache.service');
@@ -382,6 +368,18 @@ export class FootballController {
         res.status(400).json({
           status: 'ERROR',
           message: 'Invalid fixture ID',
+        });
+        return;
+      }
+
+      const resolved = await resolveFixtureForClient(fixtureId);
+      if (resolved.fixture) {
+        res.json({
+          status: 'SUCCESS',
+          results: 1,
+          response: [resolved.fixture],
+          cached: resolved.source !== null,
+          source: resolved.source ?? undefined,
         });
         return;
       }

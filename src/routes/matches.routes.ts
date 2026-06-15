@@ -6,6 +6,7 @@ import { enqueueNotification } from '../queues/notification.queue';
 import { ErrorCode, sendError } from '../constants/errors';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 
+const SHARED_CACHE_5S = responseCacheMiddleware({ ttl: 5 * 1000, sharedCache: true });
 const SHARED_CACHE_15S = responseCacheMiddleware({ ttl: 15 * 1000, sharedCache: true });
 const SHARED_CACHE_60S = responseCacheMiddleware({ ttl: 60 * 1000, sharedCache: true });
 
@@ -435,7 +436,7 @@ router.get('/push-token/status', requireAuth, async (req: Request, res: Response
 // GET /api/matches/live
 // Get live matches from Football API
 // ============================================
-router.get('/live', SHARED_CACHE_15S, async (req: Request, res: Response): Promise<void> => {
+router.get('/live', SHARED_CACHE_5S, async (req: Request, res: Response): Promise<void> => {
     try {
         // Import FootballController instead of FootballService
         const { FootballController } = await import('../controllers/football.controller');

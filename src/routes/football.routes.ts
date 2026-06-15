@@ -3,6 +3,7 @@ import { FootballController } from '../controllers/football.controller';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 
 // Shared public cache TTLs for football data (no userId in key — same response for all users)
+const SHARED_CACHE_5S   = responseCacheMiddleware({ ttl: 5   * 1000, sharedCache: true });
 const SHARED_CACHE_15S  = responseCacheMiddleware({ ttl: 15  * 1000, sharedCache: true });
 const SHARED_CACHE_30S  = responseCacheMiddleware({ ttl: 30  * 1000, sharedCache: true });
 const SHARED_CACHE_60S  = responseCacheMiddleware({ ttl: 60  * 1000, sharedCache: true });
@@ -80,7 +81,7 @@ router.get('/search', SHARED_CACHE_5MIN, FootballController.search);
 // GET /api/football/fixtures/live
 // Get live fixtures — shared 8s cache (same for all users)
 // ============================================
-router.get('/fixtures/live', SHARED_CACHE_15S, FootballController.getLiveFixtures);
+router.get('/fixtures/live', SHARED_CACHE_5S, FootballController.getLiveFixtures);
 
 // ============================================
 // GET /api/football/fixtures/optimized
@@ -194,7 +195,7 @@ router.get('/cache/stats', FootballController.getCacheStats);
 // GET /api/football/fixtures/:id
 // Get a single fixture by ID
 // ============================================
-router.get('/fixtures/:id', SHARED_CACHE_15S, FootballController.getFixtureById);
+router.get('/fixtures/:id', SHARED_CACHE_5S, FootballController.getFixtureById);
 
 // ============================================
 // GET /api/football/fixtures/:id/lineups
@@ -218,7 +219,7 @@ router.get('/fixtures/:id/statistics', SHARED_CACHE_8S, FootballController.getFi
 // GET /api/football/fixtures/:id/events
 // Get events for a fixture (goals, cards, substitutions)
 // ============================================
-router.get('/fixtures/:id/events', SHARED_CACHE_15S, FootballController.getFixtureEvents);
+router.get('/fixtures/:id/events', SHARED_CACHE_5S, FootballController.getFixtureEvents);
 
 // ============================================
 // GET /api/football/standings

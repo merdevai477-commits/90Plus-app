@@ -2,7 +2,6 @@ import prisma from '../../lib/prisma';
 import { footballService } from '../football.service';
 import { footballDataCacheService } from '../football-data-cache.service';
 import { logger } from '../../utils/logger';
-import { getRedisClient } from '../../lib/redis';
 import { acquireIngestorLock } from './match-ingestor-lock.adapter';
 import { appendMatchEventsToStream } from './match-event-stream.adapter';
 import {
@@ -16,21 +15,12 @@ import {
     LIVE_STATUSES,
 } from './match-event-normalizer';
 import type { MatchEventIngestResult, NormalizedMatchEvent, FixtureSnapshot } from './match-event.types';
-import { FOOTBALL_LIVE_MATCHES_KEY } from '../../utils/football-cache-keys.util';
+import { readLiveFixtureById } from '../live-fixture-cache.service';
 
 const lineupAnnouncedFixtures = new Set<number>();
 
 async function readLiveFixtureFromRedis(fixtureId: number): Promise<any | null> {
-    const redis = getRedisClient();
-    if (!redis) return null;
-    try {
-        const raw = await redis.get(FOOTBALL_LIVE_MATCHES_KEY);
-        if (!raw) return null;
-        const fixtures = JSON.parse(raw) as any[];
-        return fixtures.find((f) => f?.fixture?.id === fixtureId) ?? null;
-    } catch {
-        return null;
-    }
+    return readLiveFixtureById(fixtureId);
 }
 
 async function persistEvent(event: NormalizedMatchEvent): Promise<boolean> {
