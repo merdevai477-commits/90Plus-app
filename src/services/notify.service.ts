@@ -224,6 +224,11 @@ async function claimIdempotency(key: string): Promise<boolean> {
     }
 }
 
+/** Exported for match-event push fast path (direct delivery, no second Bull queue). */
+export async function claimNotifyIdempotency(key: string): Promise<boolean> {
+    return claimIdempotency(key);
+}
+
 function pickRendered(
     language: SupportedLanguage,
     key: PushTemplateKey | undefined,

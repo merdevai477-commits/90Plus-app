@@ -68,9 +68,10 @@ export async function enqueueMatchEventPush(payload: MatchEventPushJob): Promise
     await q.add(payload, {
         jobId: payload.idempotencyKey,
         attempts: 3,
-        backoff: 2000,
+        backoff: 500,
         removeOnComplete: true,
         removeOnFail: 500,
+        priority: 1,
     });
 }
 

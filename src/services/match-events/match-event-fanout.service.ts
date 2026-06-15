@@ -81,9 +81,7 @@ export async function fanOutMatchEvent(event: NormalizedMatchEvent): Promise<num
 }
 
 export async function fanOutMatchEvents(events: NormalizedMatchEvent[]): Promise<number> {
-    let total = 0;
-    for (const event of events) {
-        total += await fanOutMatchEvent(event);
-    }
-    return total;
+    if (events.length === 0) return 0;
+    const counts = await Promise.all(events.map((event) => fanOutMatchEvent(event)));
+    return counts.reduce((sum, n) => sum + n, 0);
 }

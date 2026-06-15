@@ -4,6 +4,8 @@
  *
  * Cache-first: reuses Redis live/events data written by liveFixtureSync before
  * calling API-Football. Runs only on the distributed sync leader instance.
+ *
+ * Score/status changes from LiveFixtureSync trigger immediate per-fixture ingest.
  */
 
 import prisma from '../lib/prisma';
@@ -15,15 +17,23 @@ import { tryAcquireSyncLeader } from './football-sync-leader.service';
 
 function pollIntervalMs(): number {
     const fromEnv = parseInt(
-        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '15000',
+        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '5000',
         10,
     );
-    return Math.max(15_000, Number.isFinite(fromEnv) ? fromEnv : 15_000);
+    return Math.max(5_000, Number.isFinite(fromEnv) ? fromEnv : 5_000);
 }
+
+const FIXTURE_INGEST_CONCURRENCY = Math.max(
+    1,
+    Math.min(16, parseInt(process.env.MATCH_EVENT_INGEST_CONCURRENCY || '8', 10) || 8),
+);
 
 export class LiveMatchIngestorService {
     private static isRunning = false;
     private static intervalId: NodeJS.Timeout | null = null;
+    /** Coalesce rapid sync triggers for the same fixture. */
+    private static pendingSyncIngest = new Map<number, NodeJS.Timeout>();
+    private static inFlightFixtures = new Set<number>();
 
     static start(): void {
         if (this.intervalId) {
@@ -36,13 +46,13 @@ export class LiveMatchIngestorService {
 
         setTimeout(() => {
             this.tick().catch((err) => logger.error('Live match ingestor first tick failed:', err));
-        }, 30_000);
+        }, 5_000);
 
         this.intervalId = setInterval(() => {
             this.tick().catch((err) => logger.error('Live match ingestor tick failed:', err));
         }, intervalMs);
 
-        logger.info(`✅ Live match ingestor started (first tick in 30s)`);
+        logger.info(`✅ Live match ingestor started (first tick in 5s)`);
     }
 
     static stop(): void {
@@ -50,7 +60,30 @@ export class LiveMatchIngestorService {
             clearInterval(this.intervalId);
             this.intervalId = null;
         }
+        for (const timer of this.pendingSyncIngest.values()) {
+            clearTimeout(timer);
+        }
+        this.pendingSyncIngest.clear();
         logger.info('✅ Live match ingestor stopped');
+    }
+
+    /**
+     * Called by LiveFixtureSync when score or status changes — near-real-time goal/status pushes.
+     */
+    static triggerFixtureIngest(fixtureId: number): void {
+        if (!fixtureId || fixtureId <= 0) return;
+
+        const existing = this.pendingSyncIngest.get(fixtureId);
+        if (existing) clearTimeout(existing);
+
+        const timer = setTimeout(() => {
+            this.pendingSyncIngest.delete(fixtureId);
+            void this.ingestFixtureById(fixtureId).catch((err) =>
+                logger.warn(`[LiveMatchIngestor] sync-trigger ingest ${fixtureId} failed:`, err?.message),
+            );
+        }, 150);
+
+        this.pendingSyncIngest.set(fixtureId, timer);
     }
 
     static async tick(): Promise<void> {
@@ -71,6 +104,51 @@ export class LiveMatchIngestorService {
         } finally {
             this.isRunning = false;
         }
+    }
+
+    private static async ingestFixtureById(fixtureId: number): Promise<void> {
+        if (this.inFlightFixtures.has(fixtureId)) return;
+        this.inFlightFixtures.add(fixtureId);
+        try {
+            const favorite = await prisma.favoriteMatch.findFirst({
+                where: {
+                    apiMatchId: fixtureId,
+                    notifiedEnd: false,
+                },
+                select: { homeTeam: true, awayTeam: true },
+            });
+            if (!favorite) return;
+
+            await this.processFixture(fixtureId, {
+                homeTeam: favorite.homeTeam,
+                awayTeam: favorite.awayTeam,
+            });
+        } finally {
+            this.inFlightFixtures.delete(fixtureId);
+        }
+    }
+
+    private static async processFixture(
+        fixtureId: number,
+        meta: { homeTeam: string; awayTeam: string },
+    ): Promise<void> {
+        const result = await MatchEventIngestor.ingestFixture(fixtureId, meta);
+        if (!result) return;
+
+        if (result.freshEvents.length > 0) {
+            const enqueued = await fanOutMatchEvents(result.freshEvents);
+            logger.info(
+                `[LiveMatchIngestor] fixture ${fixtureId}: ${result.freshEvents.length} new event(s), ${enqueued} push(es) enqueued`,
+            );
+        }
+
+        WebSocketService.sendMatchUpdate(fixtureId, {
+            matchId: fixtureId,
+            homeScore: result.snapshot.homeScore,
+            awayScore: result.snapshot.awayScore,
+            status: result.snapshot.status,
+            minute: result.snapshot.elapsed ?? undefined,
+        });
     }
 
     private static async checkFavoritedFixtures(): Promise<void> {
@@ -104,27 +182,16 @@ export class LiveMatchIngestorService {
 
         logger.info(`📊 Ingesting ${byFixture.size} favorited fixture(s) (cache-first)...`);
 
-        for (const [fixtureId, meta] of byFixture) {
-            try {
-                const result = await MatchEventIngestor.ingestFixture(fixtureId, meta);
-                if (!result) continue;
-
-                if (result.freshEvents.length > 0) {
-                    const enqueued = await fanOutMatchEvents(result.freshEvents);
-                    logger.info(
-                        `[LiveMatchIngestor] fixture ${fixtureId}: ${result.freshEvents.length} new event(s), ${enqueued} push(es) enqueued`,
-                    );
-                }
-
-                WebSocketService.sendMatchUpdate(fixtureId, {
-                    matchId: fixtureId,
-                    homeScore: result.snapshot.homeScore,
-                    awayScore: result.snapshot.awayScore,
-                    status: result.snapshot.status,
-                });
-            } catch (err: any) {
-                logger.error(`[LiveMatchIngestor] fixture ${fixtureId} error:`, err?.message);
-            }
+        const entries = [...byFixture.entries()];
+        for (let i = 0; i < entries.length; i += FIXTURE_INGEST_CONCURRENCY) {
+            const batch = entries.slice(i, i + FIXTURE_INGEST_CONCURRENCY);
+            await Promise.all(
+                batch.map(([fixtureId, meta]) =>
+                    this.processFixture(fixtureId, meta).catch((err: any) => {
+                        logger.error(`[LiveMatchIngestor] fixture ${fixtureId} error:`, err?.message);
+                    }),
+                ),
+            );
         }
     }
 }

@@ -79,7 +79,8 @@ class FootballDataCacheService {
     // TTL values
     private readonly TTL = {
         STANDINGS: 60 * 60 * 1000,      // 1 hour
-        LIVE_MATCH: 15 * 1000,          // 15 seconds minimum for live data
+        LIVE_MATCH: 5 * 1000,           // 5 seconds for live match sub-resources
+        LIVE_EVENT_INGEST: 5 * 1000,    // ingestor force-refresh window
         UPCOMING_MATCH: 5 * 60 * 1000,  // 5 minutes
         FINISHED: Infinity,              // Permanent
         TEAM_STATISTICS: 60 * 60 * 1000, // 1 hour
@@ -960,9 +961,15 @@ class FootballDataCacheService {
      * ✅ Request deduplication: If 1000 users request the same events, only 1 API call is made
      * ✅ Finished matches: permanently stored in DB, shared for all users, no API call
      */
-    async getMatchEvents(fixtureId: number): Promise<any[]> {
-        // 1. Check Redis cache first, then memory cache
+    async getMatchEvents(
+        fixtureId: number,
+        options?: { forceRefresh?: boolean },
+    ): Promise<any[]> {
+        const forceRefresh = options?.forceRefresh === true;
         const redisKey = `events:${fixtureId}`;
+
+        if (!forceRefresh) {
+        // 1. Check Redis cache first, then memory cache
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Events ${fixtureId} from Redis cache (shared for all users)`);
@@ -976,6 +983,7 @@ class FootballDataCacheService {
         if (cached && Date.now() - cached.timestamp < cached.ttl) {
             logger.debug(`📦 Events ${fixtureId} from memory cache (shared for all users)`);
             return cached.data;
+        }
         }
 
         // 2. Check if match is finished (permanent cache in DB, shared for all users)
@@ -991,7 +999,7 @@ class FootballDataCacheService {
         const fullData = dbMatch?.fullData as any;
 
         // ✅ If finished and we have events in fullData, use them (no API call, shared for all users)
-        if (isFinished && fullData?.events) {
+        if (!forceRefresh && isFinished && fullData?.events) {
             logger.debug(`📦 Events ${fixtureId} from DB fullData (shared for all users, no API call)`);
             return fullData.events;
         }
@@ -1011,7 +1019,7 @@ class FootballDataCacheService {
 
                 const isEmpty = !Array.isArray(events) || events.length === 0;
                 const ttl = isEmpty
-                    ? (isLiveStatus ? 15_000 : this.TTL.EMPTY)
+                    ? (isLiveStatus ? this.TTL.LIVE_EVENT_INGEST : this.TTL.EMPTY)
                     : (isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH);
                 const cacheEntry: MemoryCacheEntry<any> = {
                     data: events,

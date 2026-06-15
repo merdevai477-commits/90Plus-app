@@ -48,7 +48,12 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
     createClient: bullCreateClient(redisUrl),
   });
 
-  queue.process(async (job) => {
+  const notifConcurrency = Math.max(
+    1,
+    Math.min(50, parseInt(process.env.NOTIFICATION_QUEUE_CONCURRENCY || '20', 10) || 20),
+  );
+
+  queue.process(notifConcurrency, async (job) => {
     const { kind } = job.data;
 
     if (kind === 'SOCIAL') {

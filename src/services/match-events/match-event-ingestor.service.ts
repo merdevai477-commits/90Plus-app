@@ -80,7 +80,9 @@ export class MatchEventIngestor {
             ];
 
             if (snapshot.isLive) {
-                const apiEvents = await footballDataCacheService.getMatchEvents(fixtureId);
+                const apiEvents = await footballDataCacheService.getMatchEvents(fixtureId, {
+                    forceRefresh: true,
+                });
                 if (Array.isArray(apiEvents)) {
                     normalized.push(...normalizeApiEvents(fixtureId, apiEvents, meta));
                 }

@@ -1,13 +1,13 @@
 /**
- * Enqueue-first push processor: delivery ledger is written only after a successful
- * (or idempotency-deduplicated) push, closing the crash window where delivery was
- * recorded but the job never ran.
+ * Match-event push processor — delivers inbox row + WebSocket + Expo push inline
+ * (no second Bull notifications queue) so live events reach devices immediately.
  */
 
 import prisma from '../../lib/prisma';
 import { logger } from '../../utils/logger';
-import { notifyUser } from '../notify.service';
+import { claimNotifyIdempotency } from '../notify.service';
 import { renderPushTemplate, getUserLanguage } from '../push-templates.service';
+import { NotificationService } from '../notification.service';
 import type { MatchEventPushJob } from '../../queues/match-event-push.queue';
 import {
     shouldDeliverToSubscription,
@@ -45,6 +45,14 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
         return;
     }
 
+    if (idempotencyKey) {
+        const fresh = await claimNotifyIdempotency(idempotencyKey);
+        if (!fresh) {
+            logger.debug('[MatchEventPush] idempotency duplicate', { userId, eventKey: event.eventKey });
+            return;
+        }
+    }
+
     const lang = await getUserLanguage(userId);
     let title: string | undefined;
     let message: string | undefined;
@@ -63,21 +71,17 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
         throw new Error(`missing push copy for event ${event.eventKey}`);
     }
 
-    const result = await notifyUser({
+    await NotificationService.createNotification({
         userId,
-        type: job.notificationType,
         title,
         message,
-        data: job.data as any,
-        bypassPreferences: true,
-        idempotencyKey,
+        type: job.notificationType,
+        data: {
+            type: String(job.notificationType),
+            priority: 'high',
+            ...job.data,
+        },
     });
-
-    const pushSucceeded = result.delivered || result.reason === 'duplicate';
-
-    if (!pushSucceeded) {
-        throw new Error(`push not delivered: ${result.reason ?? 'unknown'}`);
-    }
 
     await recordMatchEventDelivery(subscriptionId, event.eventKey, fixtureId);
     await updateSubscriptionFlags(sub, event);

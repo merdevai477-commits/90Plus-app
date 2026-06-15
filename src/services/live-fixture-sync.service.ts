@@ -16,6 +16,7 @@ import {
     writeLiveFixturesSnapshot,
     writeTerminalFixtureSnapshot,
 } from './live-fixture-cache.service';
+import LiveMatchIngestorService from './live-match-ingestor.service';
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
@@ -103,6 +104,8 @@ class LiveFixtureSyncService {
 
             this.broadcastMatchUpdate(fixtureId, homeScore, awayScore, status, elapsed);
 
+            LiveMatchIngestorService.triggerFixtureIngest(fixtureId);
+
             await matchCacheService.handleMatchFinished(fixtureId);
             await PredictionResolverService.resolveMatchPredictions(fixtureId, homeScore, awayScore);
             logger.info(`✅ Match ${fixtureId} archived and predictions resolved (${homeScore}-${awayScore}, ${status})`);
@@ -187,11 +190,13 @@ class LiveFixtureSyncService {
             const elapsed = fixture.fixture.status.elapsed ?? null;
 
             const prev = this.lastSnapshots.get(id);
+            const scoreChanged =
+                !prev || prev.homeScore !== homeScore || prev.awayScore !== awayScore;
+            const statusChanged = !prev || prev.status !== status;
             const changed =
                 !prev ||
-                prev.homeScore !== homeScore ||
-                prev.awayScore !== awayScore ||
-                prev.status !== status ||
+                scoreChanged ||
+                statusChanged ||
                 prev.elapsed !== elapsed;
 
             if (!changed) continue;
@@ -199,6 +204,10 @@ class LiveFixtureSyncService {
             this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed });
 
             this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed);
+
+            if (scoreChanged || statusChanged) {
+                LiveMatchIngestorService.triggerFixtureIngest(id);
+            }
         }
     }
 }
