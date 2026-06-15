@@ -4,6 +4,7 @@ import { matchCacheService, FixtureFromAPI } from '../services/match-cache.servi
 import { footballDataCacheService } from '../services/football-data-cache.service';
 import { getTopClubsByCountry, getSupportedCountries } from '../services/top-clubs.service';
 import { logger } from '../utils/logger';
+import { getFootballMetrics } from '../utils/football-metrics';
 import prisma from '../lib/prisma';
 
 /**
@@ -269,6 +270,7 @@ export class FootballController {
         data: {
           matchCache: stats,
           rateLimit: rateLimitStatus,
+          footballMetrics: getFootballMetrics(),
         },
       });
     } catch (error) {
@@ -285,7 +287,7 @@ export class FootballController {
    * compared to TV broadcasts and reported as a bug.
    */
   private static liveFixturesCache: { data: any[]; timestamp: number } | null = null;
-  private static readonly LIVE_CACHE_TTL = 8 * 1000; // 8 seconds — aligned with live sync + matches tab
+  private static readonly LIVE_CACHE_TTL = 15 * 1000;
 
   static async getLiveFixtures(req: Request, res: Response): Promise<void> {
     try {
@@ -616,15 +618,53 @@ export class FootballController {
         return;
       }
 
-      const events = await footballService.getFixtureEvents(fixtureId);
+      try {
+        const events = await footballDataCacheService.getMatchEvents(fixtureId);
 
-      res.json({
-        status: 'SUCCESS',
-        results: events.length,
-        response: events,
-      });
+        res.json({
+          status: 'SUCCESS',
+          results: events?.length ?? 0,
+          response: events ?? [],
+        });
+        return;
+      } catch (fetchError: any) {
+        logger.warn(
+          `getFixtureEvents: upstream error for ${fixtureId} (${fetchError?.message ?? fetchError}), returning degraded empty list`,
+        );
+
+        const dbMatch = await prisma.cachedFixture.findUnique({
+          where: { fixtureId },
+          select: { fullData: true },
+        });
+        const fromDb = (dbMatch?.fullData as { events?: unknown[] } | null)?.events;
+        if (Array.isArray(fromDb) && fromDb.length > 0) {
+          res.status(200).json({
+            status: 'SUCCESS',
+            results: fromDb.length,
+            response: fromDb,
+            degraded: true,
+            message: 'Events served from database cache',
+          });
+          return;
+        }
+
+        res.status(200).json({
+          status: 'SUCCESS',
+          results: 0,
+          response: [],
+          degraded: true,
+          message: 'Match events temporarily unavailable',
+        });
+      }
     } catch (error) {
-      FootballController.handleError(res, error);
+      logger.error('getFixtureEvents unexpected error:', error);
+      res.status(200).json({
+        status: 'SUCCESS',
+        results: 0,
+        response: [],
+        degraded: true,
+        message: 'Match events temporarily unavailable',
+      });
     }
   }
 

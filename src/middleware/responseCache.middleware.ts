@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { redisCacheService } from '../services/redis-cache.service';
 import { logger } from '../utils/logger';
+import { shouldHonorFreshCacheBypass } from '../utils/cache-bypass.util';
 
 interface CacheEntry {
     data: any;
@@ -246,8 +247,8 @@ export function responseCacheMiddleware(options: {
             return next();
         }
 
-        // Bypass cache for explicit live-refresh requests
-        if (req.query.fresh === '1' || req.query.refresh === 'true') {
+        // Bypass cache for explicit live-refresh requests (development only in production)
+        if (shouldHonorFreshCacheBypass(req)) {
             return next();
         }
 

@@ -1,6 +1,9 @@
 /**
  * Live Match Ingestor — polls favorited fixtures and drives the event pipeline:
  *   ingest → persist MatchEvent → subscription-aware fan-out → Bull push queue
+ *
+ * Cache-first: reuses Redis live/events data written by liveFixtureSync before
+ * calling API-Football. Runs only on the distributed sync leader instance.
  */
 
 import prisma from '../lib/prisma';
@@ -8,13 +11,14 @@ import { WebSocketService } from './websocket.service';
 import { logger } from '../utils/logger';
 import { MatchEventIngestor } from './match-events/match-event-ingestor.service';
 import { fanOutMatchEvents } from './match-events/match-event-fanout.service';
+import { tryAcquireSyncLeader } from './football-sync-leader.service';
 
 function pollIntervalMs(): number {
     const fromEnv = parseInt(
         process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '15000',
         10,
     );
-    return Math.max(5_000, Number.isFinite(fromEnv) ? fromEnv : 15_000);
+    return Math.max(15_000, Number.isFinite(fromEnv) ? fromEnv : 15_000);
 }
 
 export class LiveMatchIngestorService {
@@ -28,7 +32,7 @@ export class LiveMatchIngestorService {
         }
 
         const intervalMs = pollIntervalMs();
-        logger.info(`🔄 Starting live match ingestor (poll every ${intervalMs / 1000}s)...`);
+        logger.info(`🔄 Starting live match ingestor (poll every ${intervalMs / 1000}s, cache-first)...`);
 
         setTimeout(() => {
             this.tick().catch((err) => logger.error('Live match ingestor first tick failed:', err));
@@ -50,6 +54,12 @@ export class LiveMatchIngestorService {
     }
 
     static async tick(): Promise<void> {
+        const isLeader = await tryAcquireSyncLeader('match-ingestor');
+        if (!isLeader) {
+            logger.debug('[LiveMatchIngestor] Skipping tick — another instance is sync leader');
+            return;
+        }
+
         if (this.isRunning) {
             logger.debug('⏳ Live match ingestor tick skipped — previous still running');
             return;
@@ -92,7 +102,7 @@ export class LiveMatchIngestorService {
             }
         }
 
-        logger.info(`📊 Ingesting ${byFixture.size} favorited fixture(s)...`);
+        logger.info(`📊 Ingesting ${byFixture.size} favorited fixture(s) (cache-first)...`);
 
         for (const [fixtureId, meta] of byFixture) {
             try {

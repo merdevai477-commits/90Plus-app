@@ -1,6 +1,8 @@
 import prisma from '../../lib/prisma';
 import { footballService } from '../football.service';
+import { footballDataCacheService } from '../football-data-cache.service';
 import { logger } from '../../utils/logger';
+import { getRedisClient } from '../../lib/redis';
 import { acquireIngestorLock } from './match-ingestor-lock.adapter';
 import { appendMatchEventsToStream } from './match-event-stream.adapter';
 import {
@@ -14,8 +16,22 @@ import {
     LIVE_STATUSES,
 } from './match-event-normalizer';
 import type { MatchEventIngestResult, NormalizedMatchEvent, FixtureSnapshot } from './match-event.types';
+import { FOOTBALL_LIVE_MATCHES_KEY } from '../../utils/football-cache-keys.util';
 
 const lineupAnnouncedFixtures = new Set<number>();
+
+async function readLiveFixtureFromRedis(fixtureId: number): Promise<any | null> {
+    const redis = getRedisClient();
+    if (!redis) return null;
+    try {
+        const raw = await redis.get(FOOTBALL_LIVE_MATCHES_KEY);
+        if (!raw) return null;
+        const fixtures = JSON.parse(raw) as any[];
+        return fixtures.find((f) => f?.fixture?.id === fixtureId) ?? null;
+    } catch {
+        return null;
+    }
+}
 
 async function persistEvent(event: NormalizedMatchEvent): Promise<boolean> {
     try {
@@ -41,7 +57,7 @@ async function persistEvent(event: NormalizedMatchEvent): Promise<boolean> {
 
 export class MatchEventIngestor {
     /**
-     * Ingest one fixture: fetch API data, normalize events, persist new ones.
+     * Ingest one fixture: prefer Redis/cache, normalize events, persist new ones.
      * Returns only events that were newly inserted in this tick.
      */
     static async ingestFixture(
@@ -52,10 +68,20 @@ export class MatchEventIngestor {
         if (!lock) return null;
 
         try {
-            const rawFixture = await footballService.fetchFromApi<any[]>('/fixtures', { id: fixtureId });
-            if (!rawFixture?.length) return null;
+            const cachedLive = await readLiveFixtureFromRedis(fixtureId);
+            let snapshot: FixtureSnapshot | null = null;
 
-            const snapshot = parseFixtureSnapshot(fixtureId, rawFixture[0]);
+            if (cachedLive) {
+                snapshot = parseFixtureSnapshot(fixtureId, cachedLive);
+            } else {
+                const fixtureRow = await footballService.getFixtureById(fixtureId, { source: 'job' });
+                if (fixtureRow) {
+                    snapshot = parseFixtureSnapshot(fixtureId, fixtureRow);
+                }
+            }
+
+            if (!snapshot) return null;
+
             const prev = getCachedFixtureState(fixtureId);
 
             const normalized: NormalizedMatchEvent[] = [
@@ -64,9 +90,7 @@ export class MatchEventIngestor {
             ];
 
             if (snapshot.isLive) {
-                const apiEvents = await footballService.fetchFromApi<any[]>('/fixtures/events', {
-                    fixture: fixtureId,
-                });
+                const apiEvents = await footballDataCacheService.getMatchEvents(fixtureId);
                 if (Array.isArray(apiEvents)) {
                     normalized.push(...normalizeApiEvents(fixtureId, apiEvents, meta));
                 }
@@ -113,11 +137,9 @@ export class MatchEventIngestor {
         if (lineupAnnouncedFixtures.has(fixtureId)) return null;
 
         try {
-            const data = await footballService.fetchFromApi<any[]>('/fixtures/lineups', {
-                fixture: fixtureId,
-            });
-            if (!Array.isArray(data) || data.length === 0) return null;
-            const hasStartXI = data.some(
+            const lineups = await footballDataCacheService.getMatchLineups(fixtureId);
+            if (!Array.isArray(lineups) || lineups.length === 0) return null;
+            const hasStartXI = lineups.some(
                 (team) => Array.isArray(team?.startXI) && team.startXI.length > 0,
             );
             if (!hasStartXI) return null;

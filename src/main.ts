@@ -838,13 +838,9 @@ async function startServer() {
                     footballBackgroundService.start();
                     logger.info('✅ Football Background Service started (API optimization)');
                     
-                    // ✅ Setup Cron Job for Prediction Watcher (every 2 minutes)
-                    cron.schedule('*/2 * * * *', () => {
-                        logger.info('⏰ Cron: Running prediction check...');
-                        PredictionWatcherService.checkPredictions();
-                    });
-                    logger.info('✅ Prediction Watcher Cron Job scheduled (every 2 minutes)');
-
+                    // ✅ Prediction watcher runs via setInterval in PredictionWatcherService.start()
+                    // (duplicate cron removed — was doubling API-Football fixture checks)
+                    
                     // Backfill finished fixtures missing events/lineups in fullData
                     cron.schedule('0 5 * * *', async () => {
                         logger.info('⏰ Cron: Backfilling missing finished match details...');

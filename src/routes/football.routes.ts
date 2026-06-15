@@ -3,10 +3,10 @@ import { FootballController } from '../controllers/football.controller';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 
 // Shared public cache TTLs for football data (no userId in key — same response for all users)
-const SHARED_CACHE_3S   = responseCacheMiddleware({ ttl: 3   * 1000, sharedCache: true });
-const SHARED_CACHE_8S   = responseCacheMiddleware({ ttl: 8   * 1000, sharedCache: true });
+const SHARED_CACHE_15S  = responseCacheMiddleware({ ttl: 15  * 1000, sharedCache: true });
 const SHARED_CACHE_30S  = responseCacheMiddleware({ ttl: 30  * 1000, sharedCache: true });
 const SHARED_CACHE_60S  = responseCacheMiddleware({ ttl: 60  * 1000, sharedCache: true });
+const SHARED_CACHE_8S   = responseCacheMiddleware({ ttl: 8   * 1000, sharedCache: true });
 const SHARED_CACHE_5MIN = responseCacheMiddleware({ ttl: 5   * 60 * 1000, sharedCache: true });
 const SHARED_CACHE_1H   = responseCacheMiddleware({ ttl: 60  * 60 * 1000, sharedCache: true });
 const SHARED_CACHE_24H  = responseCacheMiddleware({ ttl: 24  * 60 * 60 * 1000, sharedCache: true });
@@ -61,8 +61,8 @@ router.get('/fixtures', (req, res, next) => {
       // Past date — permanent-ish cache (24h)
       return SHARED_CACHE_24H(req, res, next);
     } else if (dateParam === today) {
-      // Today — refresh every 3s to keep live scores in sync with the UI
-      return SHARED_CACHE_3S(req, res, next);
+      // Today — refresh every 60s; live scores also flow via WebSocket + live sync job
+      return SHARED_CACHE_60S(req, res, next);
     } else {
       // Future date — 5min cache
       return SHARED_CACHE_5MIN(req, res, next);
@@ -80,7 +80,7 @@ router.get('/search', SHARED_CACHE_5MIN, FootballController.search);
 // GET /api/football/fixtures/live
 // Get live fixtures — shared 8s cache (same for all users)
 // ============================================
-router.get('/fixtures/live', SHARED_CACHE_3S, FootballController.getLiveFixtures);
+router.get('/fixtures/live', SHARED_CACHE_15S, FootballController.getLiveFixtures);
 
 // ============================================
 // GET /api/football/fixtures/optimized
@@ -103,7 +103,7 @@ router.get('/cached/matches/:date', (req, res, next) => {
     return SHARED_CACHE_24H(req, res, next);
   }
   if (dateParam === today) {
-    return SHARED_CACHE_30S(req, res, next);
+    return SHARED_CACHE_60S(req, res, next);
   }
   return SHARED_CACHE_5MIN(req, res, next);
 }, FootballController.getCachedMatchesByDate);
@@ -116,7 +116,7 @@ router.get('/cached/league/:leagueId/matches/:date', (req, res, next) => {
     return SHARED_CACHE_24H(req, res, next);
   }
   if (dateParam === today) {
-    return SHARED_CACHE_30S(req, res, next);
+    return SHARED_CACHE_60S(req, res, next);
   }
   return SHARED_CACHE_5MIN(req, res, next);
 }, FootballController.getCachedLeagueMatchesByDate);
@@ -161,16 +161,16 @@ router.get('/cached/h2h', SHARED_CACHE_24H, FootballController.getCachedH2H);
 // 5min route cache lets the inner cache logic (which tracks empty vs full
 // results) actually surface fresh data — a 24h shared HTTP cache would lock
 // an empty array for a day.
-router.get('/cached/fixture/:id/lineups', SHARED_CACHE_8S, FootballController.getCachedLineups);
+router.get('/cached/fixture/:id/lineups', SHARED_CACHE_15S, FootballController.getCachedLineups);
 
 // GET /api/football/cached/fixture/:id/statistics - Get statistics (permanent for finished, short for empty/live)
-router.get('/cached/fixture/:id/statistics', SHARED_CACHE_8S, FootballController.getCachedStatistics);
+router.get('/cached/fixture/:id/statistics', SHARED_CACHE_15S, FootballController.getCachedStatistics);
 
 // GET /api/football/cached/fixture/:id/events - Get events (permanent for finished, short for empty/live)
-router.get('/cached/fixture/:id/events', SHARED_CACHE_8S, FootballController.getCachedEvents);
+router.get('/cached/fixture/:id/events', SHARED_CACHE_15S, FootballController.getCachedEvents);
 
 // GET /api/football/cached/fixture/:id/details - Full match details bundle (3s TTL for live)
-router.get('/cached/fixture/:id/details', SHARED_CACHE_3S, FootballController.getCachedFixtureDetails);
+router.get('/cached/fixture/:id/details', SHARED_CACHE_15S, FootballController.getCachedFixtureDetails);
 
 // GET /api/football/cached/search - Unified search with caching
 router.get('/cached/search', SHARED_CACHE_5MIN, FootballController.getCachedSearch);
@@ -194,7 +194,7 @@ router.get('/cache/stats', FootballController.getCacheStats);
 // GET /api/football/fixtures/:id
 // Get a single fixture by ID
 // ============================================
-router.get('/fixtures/:id', SHARED_CACHE_3S, FootballController.getFixtureById);
+router.get('/fixtures/:id', SHARED_CACHE_15S, FootballController.getFixtureById);
 
 // ============================================
 // GET /api/football/fixtures/:id/lineups
@@ -218,7 +218,7 @@ router.get('/fixtures/:id/statistics', SHARED_CACHE_8S, FootballController.getFi
 // GET /api/football/fixtures/:id/events
 // Get events for a fixture (goals, cards, substitutions)
 // ============================================
-router.get('/fixtures/:id/events', SHARED_CACHE_3S, FootballController.getFixtureEvents);
+router.get('/fixtures/:id/events', SHARED_CACHE_15S, FootballController.getFixtureEvents);
 
 // ============================================
 // GET /api/football/standings

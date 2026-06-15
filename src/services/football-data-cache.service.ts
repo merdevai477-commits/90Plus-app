@@ -79,7 +79,7 @@ class FootballDataCacheService {
     // TTL values
     private readonly TTL = {
         STANDINGS: 60 * 60 * 1000,      // 1 hour
-        LIVE_MATCH: 30 * 1000,          // 30 seconds
+        LIVE_MATCH: 15 * 1000,          // 15 seconds minimum for live data
         UPCOMING_MATCH: 5 * 60 * 1000,  // 5 minutes
         FINISHED: Infinity,              // Permanent
         TEAM_STATISTICS: 60 * 60 * 1000, // 1 hour
@@ -96,10 +96,10 @@ class FootballDataCacheService {
         // don't poison long-lived caches. The next request after this window
         // will re-hit the API.
         EMPTY: 2 * 60 * 1000, // 2 minutes
-        MATCHES_BY_DATE_TODAY: 45 * 1000,
+        MATCHES_BY_DATE_TODAY: 60 * 1000,
         MATCHES_BY_DATE_FUTURE: 5 * 60 * 1000,
         MATCHES_BY_DATE_PAST: 24 * 60 * 60 * 1000,
-        TODAY_API_REFRESH: 60 * 1000,          // re-fetch full day list at most once/min
+        TODAY_API_REFRESH: 60 * 1000,
     };
 
     // ============================================
@@ -812,7 +812,7 @@ class FootballDataCacheService {
 
                 if (!hasLineupData(lineups)) {
                     try {
-                        const events = await footballService.getFixtureEvents(fixtureId);
+                        const events = await footballService.getFixtureEvents(fixtureId, { source: 'job' });
                         const teams =
                             fullData?.teams ??
                             (dbMatch
@@ -919,7 +919,7 @@ class FootballDataCacheService {
             let events = fullData.events;
             if (!Array.isArray(events) || events.length === 0) {
                 try {
-                    events = await footballService.getFixtureEvents(fixtureId);
+                    events = await footballService.getFixtureEvents(fixtureId, { source: 'job' });
                 } catch {
                     events = [];
                 }
@@ -1007,11 +1007,11 @@ class FootballDataCacheService {
         logger.debug(`📡 Fetching events for fixture ${fixtureId} (request will be shared with concurrent users)`);
         const apiRequestPromise = (async () => {
             try {
-                const events = await footballService.getFixtureEvents(fixtureId);
+                const events = await footballService.getFixtureEvents(fixtureId, { source: 'job' });
 
                 const isEmpty = !Array.isArray(events) || events.length === 0;
                 const ttl = isEmpty
-                    ? (isLiveStatus ? 12_000 : this.TTL.EMPTY)
+                    ? (isLiveStatus ? 15_000 : this.TTL.EMPTY)
                     : (isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH);
                 const cacheEntry: MemoryCacheEntry<any> = {
                     data: events,

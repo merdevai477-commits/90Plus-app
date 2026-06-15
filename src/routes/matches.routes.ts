@@ -4,6 +4,10 @@ import { requireAuth } from '../middleware/clerk.middleware';
 import { logger } from '../utils/logger';
 import { enqueueNotification } from '../queues/notification.queue';
 import { ErrorCode, sendError } from '../constants/errors';
+import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
+
+const SHARED_CACHE_15S = responseCacheMiddleware({ ttl: 15 * 1000, sharedCache: true });
+const SHARED_CACHE_60S = responseCacheMiddleware({ ttl: 60 * 1000, sharedCache: true });
 
 const router = Router();
 
@@ -431,7 +435,7 @@ router.get('/push-token/status', requireAuth, async (req: Request, res: Response
 // GET /api/matches/live
 // Get live matches from Football API
 // ============================================
-router.get('/live', async (req: Request, res: Response): Promise<void> => {
+router.get('/live', SHARED_CACHE_15S, async (req: Request, res: Response): Promise<void> => {
     try {
         // Import FootballController instead of FootballService
         const { FootballController } = await import('../controllers/football.controller');
@@ -448,7 +452,7 @@ router.get('/live', async (req: Request, res: Response): Promise<void> => {
 // GET /api/matches/today
 // Get today's matches
 // ============================================
-router.get('/today', async (req: Request, res: Response): Promise<void> => {
+router.get('/today', SHARED_CACHE_60S, async (req: Request, res: Response): Promise<void> => {
     try {
         // Use football fixtures endpoint with today's date
         const { FootballController } = await import('../controllers/football.controller');

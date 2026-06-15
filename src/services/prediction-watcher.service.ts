@@ -129,7 +129,7 @@ export class PredictionWatcherService {
     private static async checkAndResolveMatch(matchId: number): Promise<boolean> {
         try {
             // Fetch match data from API-Football
-            const data = await footballService.fetchFromApi<any[]>('/fixtures', { id: matchId });
+            const data = await footballService.fetchFromApi<any[]>('/fixtures', { id: matchId }, { source: 'job' });
 
             if (!data || data.length === 0) {
                 logger.warn(`⚠️ No data found for match ${matchId}`);
@@ -163,7 +163,7 @@ export class PredictionWatcherService {
      */
     static async manualResolve(matchId: number): Promise<{ success: boolean; message: string }> {
         try {
-            const data = await footballService.fetchFromApi<any[]>('/fixtures', { id: matchId });
+            const data = await footballService.fetchFromApi<any[]>('/fixtures', { id: matchId }, { source: 'job' });
 
             if (!data || data.length === 0) {
                 return { success: false, message: 'Match not found' };

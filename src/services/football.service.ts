@@ -7,7 +7,7 @@
 import { logger } from '../utils/logger';
 import { getRedisClient } from '../lib/redis';
 import { convertFixturePlayersToLineups, hasLineupData, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
-import { footballMetrics } from '../utils/football-metrics';
+import { footballMetrics, type FootballApiCallSource } from '../utils/football-metrics';
 import {
   footballSeasonFallbackChain,
   resolveFootballSeason,
@@ -33,15 +33,13 @@ interface CacheEntry {
 // Cache TTL values in milliseconds
 // ✅ OPTIMIZED for Free Plan (100 requests/day): Aggressive caching
 const CACHE_TTL = {
-  // Live matches: 8 seconds. Matches the UI poll cadence so the elapsed
-  // minute and live score stay within ~8s of API-Football. Upstream calls
-  // are still throttled by the route-level shared cache and the rate
-  // limiter below.
-  LIVE: 8 * 1000,
-  SHORT: 30 * 60 * 1000,              // 30 minutes for upcoming matches
-  MEDIUM: 2 * 60 * 60 * 1000,         // 2 hours for standings, stats
-  LONG: 7 * 24 * 60 * 60 * 1000,      // 7 days for teams, leagues, players
-  PERMANENT: 30 * 24 * 60 * 60 * 1000, // 30 days for finished matches, logos
+  // Live matches / events / stats: 15s minimum — shared across all users via Redis.
+  LIVE: 15 * 1000,
+  SHORT: 30 * 60 * 1000,
+  MEDIUM: 2 * 60 * 60 * 1000,
+  LONG: 7 * 24 * 60 * 60 * 1000,
+  PERMANENT: 30 * 24 * 60 * 60 * 1000,
+  STALE_SHADOW: 5 * 60 * 1000, // last-good payload when upstream fails
 };
 
 class FootballApiError extends Error {
@@ -74,7 +72,10 @@ class FootballService {
   // ✅ OPTIMIZED: Use Redis for persistent caching across server restarts
   // Fallback to in-memory cache if Redis is unavailable
   private memoryCache = new Map<string, CacheEntry>();
-  private useRedis = true; // Flag to disable Redis if connection fails
+  private useRedis = true;
+  /** Coalesce concurrent upstream calls for the same cache key. */
+  private pendingApiRequests = new Map<string, Promise<any>>();
+  private defaultCallSource: FootballApiCallSource = 'internal';
 
   // Rate limiting: 300 requests per minute for Pro plan
   private requestCount = 0;
@@ -218,6 +219,28 @@ class FootballService {
    * Set data in cache (Redis + memory)
    * ✅ OPTIMIZED: Dual-layer caching
    */
+  private async getStaleCachedData(key: string): Promise<any | null> {
+    try {
+      if (this.useRedis) {
+        const redis = getRedisClient();
+        if (redis) {
+          const stale = await redis.get(`football:stale:${key}`);
+          if (stale) {
+            return JSON.parse(stale);
+          }
+        }
+      }
+    } catch (error) {
+      logger.warn('Stale cache read failed:', error);
+    }
+
+    const memoryCached = this.memoryCache.get(key);
+    if (memoryCached) {
+      return memoryCached.data;
+    }
+    return null;
+  }
+
   private async setCachedData(key: string, data: any, ttl: number): Promise<void> {
     try {
       // Save to Redis with TTL
@@ -226,7 +249,12 @@ class FootballService {
         if (redis) {
           await redis.setex(
             `football:${key}`,
-            Math.floor(ttl / 1000), // Convert to seconds
+            Math.floor(ttl / 1000),
+            JSON.stringify(data)
+          );
+          await redis.setex(
+            `football:stale:${key}`,
+            Math.floor(CACHE_TTL.STALE_SHADOW / 1000),
             JSON.stringify(data)
           );
           logger.debug('💾 Saved to Redis cache:', key);
@@ -315,14 +343,17 @@ class FootballService {
    * Fetch data from API-Football with Redis caching and rate limiting
    * ✅ OPTIMIZED: Redis-backed caching for better performance
    */
-  async fetchFromApi<T>(endpoint: string, params: Record<string, any> = {}): Promise<T> {
+  async fetchFromApi<T>(
+    endpoint: string,
+    params: Record<string, any> = {},
+    options: { source?: FootballApiCallSource } = {},
+  ): Promise<T> {
     if (!this.isConfigured()) {
       throw new FootballApiError('Football API not configured');
     }
 
     const url = new URL(`${this.baseUrl}${endpoint}`);
 
-    // Add params to URL
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
         url.searchParams.append(key, String(value));
@@ -330,27 +361,49 @@ class FootballService {
     });
 
     const cacheKey = url.pathname + url.search;
+    const callSource = options.source ?? this.defaultCallSource;
+    footballMetrics.recordEndpointAccess(cacheKey, callSource);
+
+    const pending = this.pendingApiRequests.get(cacheKey);
+    if (pending) {
+      footballMetrics.recordDedupWait(cacheKey);
+      return pending as Promise<T>;
+    }
+
+    const promise = this.fetchFromApiOnce<T>(cacheKey, url, endpoint, params, callSource).finally(() => {
+      this.pendingApiRequests.delete(cacheKey);
+    });
+    this.pendingApiRequests.set(cacheKey, promise);
+    return promise;
+  }
+
+  private async fetchFromApiOnce<T>(
+    cacheKey: string,
+    url: URL,
+    endpoint: string,
+    params: Record<string, any>,
+    callSource: FootballApiCallSource,
+  ): Promise<T> {
     const ttl = this.getCacheTTL(endpoint, params);
 
-    // ✅ Check Redis cache first
     const cached = await this.getCachedData(cacheKey);
     if (cached) {
-      footballMetrics.recordCacheHit();
+      footballMetrics.recordCacheHit(cacheKey, callSource);
       return cached;
     }
-    footballMetrics.recordCacheMiss();
+    footballMetrics.recordCacheMiss(cacheKey, callSource);
 
-    // ✅ If we already hit the daily quota, skip the API entirely and return
-    // an empty array so upstream code uses the DB fallback instead of burning
-    // retries and producing cascading 429 errors in the logs.
     if (isQuotaExhausted()) {
       logger.debug(`⏭️  Skipping API call (quota exhausted until ${new Date(quotaExhaustedUntil).toISOString()}): ${cacheKey}`);
-      // Short TTL so we don't poison the cache with empty results once the quota resets
+      const stale = await this.getStaleCachedData(cacheKey);
+      if (stale !== null) {
+        footballMetrics.recordStaleFallback(cacheKey);
+        return stale as T;
+      }
       await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
       return [] as T;
     }
 
-    // Rate limit check
     await this.checkRateLimit();
 
     logger.debug('🔍 Football API Request:', cacheKey);
@@ -374,14 +427,17 @@ class FootballService {
       this.lastRequestTime = Date.now();
 
       if (!response.ok) {
-        // 429 → trip the circuit breaker so we stop burning retries for the day
         if (response.status === 429) {
           const retryAfter = response.headers.get('retry-after');
           const retryAfterSec = retryAfter ? parseInt(retryAfter, 10) : undefined;
           markQuotaExhausted(isNaN(retryAfterSec as number) ? undefined : retryAfterSec);
           logger.warn(`⚠️ API-Football 429 Too Many Requests — pausing outbound calls until ${new Date(quotaExhaustedUntil).toISOString()}`);
-          footballMetrics.recordApiFailure(Date.now() - apiStartTime);
-          // Cache empty so upstream returns a usable value instead of throwing
+          footballMetrics.recordApiFailure(Date.now() - apiStartTime, cacheKey, callSource);
+          const stale = await this.getStaleCachedData(cacheKey);
+          if (stale !== null) {
+            footballMetrics.recordStaleFallback(cacheKey);
+            return stale as T;
+          }
           await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
           return [] as T;
         }
@@ -395,12 +451,10 @@ class FootballService {
       const data = await response.json() as ApiResponse<T>;
 
       if (data.errors && Object.keys(data.errors).length > 0) {
-        // Check if it's a Free Plan date restriction error
         const errorMessage = (data.errors as any).plan || (data.errors as any).message || '';
         if (typeof errorMessage === 'string' && errorMessage.includes('Free plans do not have access')) {
           logger.debug('📅 Free Plan date restriction:', errorMessage);
-          footballMetrics.recordApiSuccess(Date.now() - apiStartTime);
-          // Return empty array for date restrictions instead of throwing error
+          footballMetrics.recordApiSuccess(Date.now() - apiStartTime, cacheKey, callSource);
           await this.setCachedData(cacheKey, [], ttl);
           return [] as T;
         }
@@ -411,20 +465,24 @@ class FootballService {
           throw new FootballApiError('Rate limit exceeded. Please wait a moment.');
         }
 
-        // Log the full error for debugging
         logger.error('❌ Football API full error object:', JSON.stringify(data.errors));
         throw new FootballApiError(`API returned errors: ${JSON.stringify(data.errors)}`);
       }
 
       logger.debug(`✅ Football API Response: ${data.results} results`);
-      footballMetrics.recordApiSuccess(Date.now() - apiStartTime);
+      footballMetrics.recordApiSuccess(Date.now() - apiStartTime, cacheKey, callSource);
 
-      // ✅ Save to Redis cache
       await this.setCachedData(cacheKey, data.response, ttl);
 
       return data.response;
     } catch (error: any) {
-      footballMetrics.recordApiFailure(Date.now() - apiStartTime);
+      footballMetrics.recordApiFailure(Date.now() - apiStartTime, cacheKey, callSource);
+      const stale = await this.getStaleCachedData(cacheKey);
+      if (stale !== null) {
+        footballMetrics.recordStaleFallback(cacheKey);
+        logger.warn(`📦 Serving stale football cache for ${cacheKey} after upstream failure`);
+        return stale as T;
+      }
       if (error.name === 'AbortError') {
         throw new FootballApiError('Request timed out');
       }
@@ -461,22 +519,22 @@ class FootballService {
     status?: string;
     id?: number;
     ids?: string;
-  } = {}): Promise<any[]> {
-    return this.fetchFromApi<any[]>('/fixtures', params);
+  } = {}, options: { source?: FootballApiCallSource } = {}): Promise<any[]> {
+    return this.fetchFromApi<any[]>('/fixtures', params, options);
   }
 
   /**
    * Get live fixtures
    */
-  async getLiveFixtures(): Promise<any[]> {
-    return this.getFixtures({ live: 'all' });
+  async getLiveFixtures(options: { source?: FootballApiCallSource } = {}): Promise<any[]> {
+    return this.getFixtures({ live: 'all' }, options);
   }
 
   /**
    * Get a single fixture by ID
    */
-  async getFixtureById(fixtureId: number): Promise<any | null> {
-    const fixtures = await this.getFixtures({ id: fixtureId });
+  async getFixtureById(fixtureId: number, options: { source?: FootballApiCallSource } = {}): Promise<any | null> {
+    const fixtures = await this.getFixtures({ id: fixtureId }, options);
     return fixtures && fixtures.length > 0 ? fixtures[0] : null;
   }
 
@@ -622,8 +680,11 @@ class FootballService {
   /**
    * Get match events (goals, cards, substitutions)
    */
-  async getFixtureEvents(fixtureId: number): Promise<any[]> {
-    return this.fetchFromApi<any[]>('/fixtures/events', { fixture: fixtureId });
+  async getFixtureEvents(
+    fixtureId: number,
+    options: { source?: FootballApiCallSource } = {},
+  ): Promise<any[]> {
+    return this.fetchFromApi<any[]>('/fixtures/events', { fixture: fixtureId }, options);
   }
 
   /**

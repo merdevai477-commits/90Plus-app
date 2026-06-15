@@ -2,6 +2,8 @@
  * Live Fixture Sync Service
  * Polls API-Football live fixtures on a short interval, upserts full data to DB,
  * and broadcasts WebSocket score/status updates for sub-second UI refresh on clients.
+ *
+ * Only the distributed sync leader instance performs upstream API calls.
  */
 
 import { footballService } from './football.service';
@@ -10,6 +12,8 @@ import { WebSocketService } from './websocket.service';
 import { PredictionResolverService } from './prediction-resolver.service';
 import { logger } from '../utils/logger';
 import { getRedisClient } from '../lib/redis';
+import { tryAcquireSyncLeader } from './football-sync-leader.service';
+import { FOOTBALL_LIVE_MATCHES_KEY } from '../utils/football-cache-keys.util';
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
@@ -36,12 +40,12 @@ class LiveFixtureSyncService {
         if (this.running) return;
 
         const intervalMs = Math.max(
-            8_000,
-            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '8000', 10) || 8_000,
+            15_000,
+            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '15000', 10) || 15_000,
         );
 
         this.running = true;
-        logger.info(`🔴 Live fixture sync started (every ${intervalMs / 1000}s)`);
+        logger.info(`🔴 Live fixture sync started (every ${intervalMs / 1000}s, leader-elected)`);
 
         const tick = () => {
             this.syncOnce().catch((err) => logger.warn('Live fixture sync tick failed:', err));
@@ -87,7 +91,7 @@ class LiveFixtureSyncService {
         if (this.finishingInFlight.has(fixtureId)) return;
 
         try {
-            const fixtures = await footballService.getFixtures({ id: fixtureId });
+            const fixtures = await footballService.getFixtures({ id: fixtureId }, { source: 'job' });
             const fixture = fixtures?.[0];
             if (!fixture) return;
 
@@ -107,7 +111,13 @@ class LiveFixtureSyncService {
     private async syncOnce(): Promise<void> {
         if (!footballService.isConfigured()) return;
 
-        const liveFixtures: FixtureFromAPI[] = await footballService.getLiveFixtures();
+        const isLeader = await tryAcquireSyncLeader('live-fixture-sync');
+        if (!isLeader) {
+            logger.debug('[LiveFixtureSync] Skipping tick — another instance is sync leader');
+            return;
+        }
+
+        const liveFixtures: FixtureFromAPI[] = await footballService.getLiveFixtures({ source: 'job' });
 
         const currentLiveIds = new Set<number>();
         for (const fixture of liveFixtures) {
@@ -138,7 +148,7 @@ class LiveFixtureSyncService {
 
         const redis = getRedisClient();
         if (redis) {
-            await redis.setex('football:live_matches', 12, JSON.stringify(liveFixtures));
+            await redis.setex(FOOTBALL_LIVE_MATCHES_KEY, 20, JSON.stringify(liveFixtures));
         }
 
         for (const fixture of liveFixtures) {
