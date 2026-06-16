@@ -258,6 +258,33 @@ class FootballDataCacheService {
     }
 
     /**
+     * Past calendar days must not expose stale in-play statuses (e.g. 2H left in DB
+     * after quota outage). Otherwise the app treats them as live and breaks WC lists.
+     */
+    private normalizePastCalendarFixtures(fixtures: any[], dateString: string): any[] {
+        const todayKey = new Date().toISOString().split('T')[0];
+        if (dateString >= todayKey) return fixtures;
+
+        const liveShorts = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+        return fixtures.map((f) => {
+            const short = f?.fixture?.status?.short;
+            if (!short || !liveShorts.has(short)) return f;
+            return {
+                ...f,
+                fixture: {
+                    ...f.fixture,
+                    status: {
+                        ...f.fixture.status,
+                        short: 'FT',
+                        long: 'Match Finished',
+                        elapsed: f.fixture.status?.elapsed ?? 90,
+                    },
+                },
+            };
+        });
+    }
+
+    /**
      * World Cup fixtures for a calendar day (league + season scoped).
      * Falls back to the all-fixtures-by-date path when the league-scoped API
      * returns empty (quota negative-cache or upstream miss).
@@ -279,7 +306,7 @@ class FootballDataCacheService {
         try {
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
             if (cached && cached.length > 0) {
-                return cached;
+                return this.normalizePastCalendarFixtures(cached, dateString);
             }
 
             // DB / by-date cache first — avoids a league-scoped API call per calendar day.
@@ -301,6 +328,7 @@ class FootballDataCacheService {
             }
 
             if (list.length > 0) {
+                list = this.normalizePastCalendarFixtures(list, dateString);
                 await matchCacheService.setInMemoryCache(cacheKey, list, ttl);
             }
             return list;
@@ -308,7 +336,10 @@ class FootballDataCacheService {
             logger.error(`[WC ${dateString}] getWorldCupMatchesByDate failed:`, error);
             try {
                 const byDate = await this.getMatchesByDate(dateString);
-                return this.filterWorldCupFixtures(byDate, leagueId, season);
+                return this.normalizePastCalendarFixtures(
+                    this.filterWorldCupFixtures(byDate, leagueId, season),
+                    dateString,
+                );
             } catch {
                 return [];
             }

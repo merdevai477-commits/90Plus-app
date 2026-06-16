@@ -176,7 +176,7 @@ export function useWorldCupMatches(
         const liveFeed = await fetchLiveMatches();
         list = mergeWorldCupCalendarWithLiveFeed(list, liveFeed, leagueId);
       }
-      const liveNow = list.some((m) => m.status === 'live');
+      const liveNow = isToday && list.some((m) => m.status === 'live');
       if (liveNow && enrichCorners) {
         const now = Date.now();
         if (now - lastCornersFetchRef.current >= CORNERS_REFRESH_MS) {
