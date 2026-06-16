@@ -53,6 +53,7 @@ export class MatchEventIngestor {
     static async ingestFixture(
         fixtureId: number,
         meta: { homeTeam: string; awayTeam: string },
+        options?: { forceRefreshEvents?: boolean },
     ): Promise<MatchEventIngestResult | null> {
         const lock = await acquireIngestorLock(fixtureId);
         if (!lock) return null;
@@ -81,7 +82,7 @@ export class MatchEventIngestor {
 
             if (snapshot.isLive) {
                 const apiEvents = await footballDataCacheService.getMatchEvents(fixtureId, {
-                    forceRefresh: true,
+                    forceRefresh: options?.forceRefreshEvents === true,
                 });
                 if (Array.isArray(apiEvents)) {
                     normalized.push(...normalizeApiEvents(fixtureId, apiEvents, meta));

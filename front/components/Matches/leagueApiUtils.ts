@@ -329,7 +329,7 @@ const fetchWorldCupMatchesByDateImpl = async (
 
   if (!options?.skipDiskCache) {
     const cached = await cacheService.get<Match[]>(cacheKey);
-    if (cached && cached.length >= 0) {
+    if (cached && cached.length > 0) {
       return cached;
     }
   }

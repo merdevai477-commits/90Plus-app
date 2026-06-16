@@ -79,8 +79,8 @@ class FootballDataCacheService {
     // TTL values
     private readonly TTL = {
         STANDINGS: 60 * 60 * 1000,      // 1 hour
-        LIVE_MATCH: 5 * 1000,           // 5 seconds for live match sub-resources
-        LIVE_EVENT_INGEST: 5 * 1000,    // ingestor force-refresh window
+        LIVE_MATCH: 30 * 1000,          // 30s — shared across all users via Redis
+        LIVE_EVENT_INGEST: 20 * 1000,   // sync-triggered ingest refresh window
         UPCOMING_MATCH: 5 * 60 * 1000,  // 5 minutes
         FINISHED: Infinity,              // Permanent
         TEAM_STATISTICS: 60 * 60 * 1000, // 1 hour
@@ -97,10 +97,10 @@ class FootballDataCacheService {
         // don't poison long-lived caches. The next request after this window
         // will re-hit the API.
         EMPTY: 2 * 60 * 1000, // 2 minutes
-        MATCHES_BY_DATE_TODAY: 60 * 1000,
+        MATCHES_BY_DATE_TODAY: 2 * 60 * 1000,
         MATCHES_BY_DATE_FUTURE: 5 * 60 * 1000,
         MATCHES_BY_DATE_PAST: 24 * 60 * 60 * 1000,
-        TODAY_API_REFRESH: 60 * 1000,
+        TODAY_API_REFRESH: 2 * 60 * 1000,
     };
 
     // ============================================
@@ -245,8 +245,22 @@ class FootballDataCacheService {
         }
     }
 
+    private filterWorldCupFixtures(
+        fixtures: any[],
+        leagueId: number,
+        season: number,
+    ): any[] {
+        return fixtures.filter(
+            (f) =>
+                f?.league?.id === leagueId &&
+                (f?.league?.season === season || f?.league?.season == null),
+        );
+    }
+
     /**
      * World Cup fixtures for a calendar day (league + season scoped).
+     * Falls back to the all-fixtures-by-date path when the league-scoped API
+     * returns empty (quota negative-cache or upstream miss).
      */
     async getWorldCupMatchesByDate(
         dateString: string,
@@ -264,25 +278,40 @@ class FootballDataCacheService {
 
         try {
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
-            if (cached) {
+            if (cached && cached.length > 0) {
                 return cached;
             }
 
-            const { footballService } = await import('./football.service');
-            const fixtures = await footballService.getFixtures({
-                date: dateString,
-                league: leagueId,
-                season,
-            });
+            // DB / by-date cache first — avoids a league-scoped API call per calendar day.
+            const byDate = await this.getMatchesByDate(dateString);
+            let list = this.filterWorldCupFixtures(byDate, leagueId, season);
 
-            const list = Array.isArray(fixtures) ? fixtures : [];
+            if (list.length === 0) {
+                const { footballService } = await import('./football.service');
+                const fixtures = await footballService.getFixtures(
+                    { date: dateString, league: leagueId, season },
+                    { source: 'internal' },
+                );
+                list = Array.isArray(fixtures) ? fixtures : [];
+                if (list.length > 0) {
+                    logger.info(
+                        `[WC ${dateString}] by-date empty — ${list.length} fixtures from league-scoped API`,
+                    );
+                }
+            }
+
             if (list.length > 0) {
                 await matchCacheService.setInMemoryCache(cacheKey, list, ttl);
             }
             return list;
         } catch (error) {
             logger.error(`[WC ${dateString}] getWorldCupMatchesByDate failed:`, error);
-            return [];
+            try {
+                const byDate = await this.getMatchesByDate(dateString);
+                return this.filterWorldCupFixtures(byDate, leagueId, season);
+            } catch {
+                return [];
+            }
         }
     }
 

@@ -17,15 +17,15 @@ import { tryAcquireSyncLeader } from './football-sync-leader.service';
 
 function pollIntervalMs(): number {
     const fromEnv = parseInt(
-        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '5000',
+        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '20000',
         10,
     );
-    return Math.max(5_000, Number.isFinite(fromEnv) ? fromEnv : 5_000);
+    return Math.max(15_000, Number.isFinite(fromEnv) ? fromEnv : 20_000);
 }
 
 const FIXTURE_INGEST_CONCURRENCY = Math.max(
     1,
-    Math.min(16, parseInt(process.env.MATCH_EVENT_INGEST_CONCURRENCY || '8', 10) || 8),
+    Math.min(8, parseInt(process.env.MATCH_EVENT_INGEST_CONCURRENCY || '4', 10) || 4),
 );
 
 export class LiveMatchIngestorService {
@@ -78,7 +78,7 @@ export class LiveMatchIngestorService {
 
         const timer = setTimeout(() => {
             this.pendingSyncIngest.delete(fixtureId);
-            void this.ingestFixtureById(fixtureId).catch((err) =>
+            void this.ingestFixtureById(fixtureId, { forceRefreshEvents: true }).catch((err) =>
                 logger.warn(`[LiveMatchIngestor] sync-trigger ingest ${fixtureId} failed:`, err?.message),
             );
         }, 150);
@@ -106,7 +106,10 @@ export class LiveMatchIngestorService {
         }
     }
 
-    private static async ingestFixtureById(fixtureId: number): Promise<void> {
+    private static async ingestFixtureById(
+        fixtureId: number,
+        options?: { forceRefreshEvents?: boolean },
+    ): Promise<void> {
         if (this.inFlightFixtures.has(fixtureId)) return;
         this.inFlightFixtures.add(fixtureId);
         try {
@@ -119,10 +122,14 @@ export class LiveMatchIngestorService {
             });
             if (!favorite) return;
 
-            await this.processFixture(fixtureId, {
-                homeTeam: favorite.homeTeam,
-                awayTeam: favorite.awayTeam,
-            });
+            await this.processFixture(
+                fixtureId,
+                {
+                    homeTeam: favorite.homeTeam,
+                    awayTeam: favorite.awayTeam,
+                },
+                options,
+            );
         } finally {
             this.inFlightFixtures.delete(fixtureId);
         }
@@ -131,8 +138,9 @@ export class LiveMatchIngestorService {
     private static async processFixture(
         fixtureId: number,
         meta: { homeTeam: string; awayTeam: string },
+        options?: { forceRefreshEvents?: boolean },
     ): Promise<void> {
-        const result = await MatchEventIngestor.ingestFixture(fixtureId, meta);
+        const result = await MatchEventIngestor.ingestFixture(fixtureId, meta, options);
         if (!result) return;
 
         if (result.freshEvents.length > 0) {

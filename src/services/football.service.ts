@@ -33,8 +33,8 @@ interface CacheEntry {
 // Cache TTL values in milliseconds
 // ✅ OPTIMIZED for Free Plan (100 requests/day): Aggressive caching
 const CACHE_TTL = {
-  // Live matches / events / stats: 15s minimum — shared across all users via Redis.
-  LIVE: 15 * 1000,
+  // Live matches / events / stats — shared across all users via Redis.
+  LIVE: 30 * 1000,
   SHORT: 30 * 60 * 1000,
   MEDIUM: 2 * 60 * 60 * 1000,
   LONG: 7 * 24 * 60 * 60 * 1000,

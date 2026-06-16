@@ -27,7 +27,7 @@ export interface LiveFixtureSnapshot {
   lastFetchError: string | null;
 }
 
-export const LIVE_FIXTURE_FAST_POLL_MS = 8_000;
+export const LIVE_FIXTURE_FAST_POLL_MS = 15_000;
 export const LIVE_FIXTURE_FULL_BUNDLE_EVERY_N = 2;
 export const LIVE_FIXTURE_MAX_SNAPSHOTS = 64;
 export const LIVE_FIXTURE_FINISHED_RETENTION_MS = 10 * 60 * 1000;
