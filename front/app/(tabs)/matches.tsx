@@ -762,6 +762,7 @@ const LeagueCard = memo(function LeagueCard({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const showExpanded = filter === 'WorldCup' || isExpanded;
   const { translate: t, language } = useTranslation();
   const localizedLeagueName = getLeagueDisplayName(
     group.league,
@@ -810,13 +811,13 @@ const LeagueCard = memo(function LeagueCard({
             <ChevronDown
               size={16}
               color="rgba(255,255,255,0.45)"
-              style={{ transform: [{ rotate: isExpanded ? '0deg' : '-90deg' }] }}
+              style={{ transform: [{ rotate: showExpanded ? '0deg' : '-90deg' }] }}
             />
           </View>
         </TouchableOpacity>
 
         {/* Expanded content */}
-        {isExpanded && (
+        {showExpanded && (
           <View>
             {previewFixtures.map((fixture, i) => (
               <MatchRow
@@ -1107,8 +1108,11 @@ export default function MatchesHubScreenV2() {
     next.setHours(0, 0, 0, 0);
     setSelectedDate(next);
     setShowCalendar(false);
-    setFilter(filterForCalendarDay(next));
-  }, [calendarViewDate]);
+    // Keep World Cup / Live tab when browsing dates — only auto-switch filter elsewhere.
+    if (filter !== 'WorldCup' && filter !== 'Live') {
+      setFilter(filterForCalendarDay(next));
+    }
+  }, [calendarViewDate, filter]);
 
   const openCalendar = useCallback(() => {
     setCalendarViewDate(new Date(selectedDate));

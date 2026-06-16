@@ -113,17 +113,6 @@ function mergeWorldCupCalendarWithLiveFeed(
   return Array.from(map.values());
 }
 
-async function fetchTodayWorldCupWithLiveFeed(
-  date: Date,
-  leagueId: number,
-): Promise<Match[]> {
-  const [byDate, liveFeed] = await Promise.all([
-    fetchWorldCupMatchesByDate(date, { skipDiskCache: true }),
-    fetchLiveMatches(),
-  ]);
-  return mergeWorldCupCalendarWithLiveFeed(byDate, liveFeed, leagueId);
-}
-
 export function useWorldCupMatches(
   selectedDate: Date,
   enabled: boolean,
@@ -170,8 +159,7 @@ export function useWorldCupMatches(
 
     const mem = memoryCache.get(dateString);
     const ttl = TTL_IDLE_MS;
-    // Today always refetches with live feed — calendar cache can miss kickoffs.
-    if (!isToday && mem && Date.now() - mem.ts < ttl) {
+    if (!isToday && mem && mem.data.length > 0 && Date.now() - mem.ts < ttl) {
       setCalendarMatches(mem.data);
       setLoading(false);
       fetchingRef.current = false;
@@ -181,11 +169,13 @@ export function useWorldCupMatches(
     if (!hasDataRef.current) setLoading(true);
     setError(null);
     try {
-      let list = isToday
-        ? await fetchTodayWorldCupWithLiveFeed(selectedDate, leagueId)
-        : await fetchWorldCupMatchesByDate(selectedDate, {
-            skipDiskCache: false,
-          });
+      let list = await fetchWorldCupMatchesByDate(selectedDate, {
+        skipDiskCache: true,
+      });
+      if (isToday) {
+        const liveFeed = await fetchLiveMatches();
+        list = mergeWorldCupCalendarWithLiveFeed(list, liveFeed, leagueId);
+      }
       const liveNow = list.some((m) => m.status === 'live');
       if (liveNow && enrichCorners) {
         const now = Date.now();

@@ -332,6 +332,10 @@ const fetchWorldCupMatchesByDateImpl = async (
     if (cached && cached.length > 0) {
       return cached;
     }
+    // Purge poisoned empty entries from the old `length >= 0` disk-cache bug.
+    if (cached && cached.length === 0) {
+      await cacheService.invalidate(cacheKey);
+    }
   }
 
   try {
