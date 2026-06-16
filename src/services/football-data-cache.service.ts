@@ -257,10 +257,18 @@ class FootballDataCacheService {
         );
     }
 
-    /**
-     * Past calendar days must not expose stale in-play statuses (e.g. 2H left in DB
-     * after quota outage). Otherwise the app treats them as live and breaks WC lists.
-     */
+    /** Live status left in DB after quota outage on a calendar day that already passed. */
+    private isStaleLiveOnPastDay(status: string, matchDate?: Date | string | null): boolean {
+        const liveShorts = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+        if (!liveShorts.has(status)) return false;
+        if (!matchDate) return false;
+        const d = typeof matchDate === 'string' ? new Date(matchDate) : matchDate;
+        if (Number.isNaN(d.getTime())) return false;
+        const fixtureDay = d.toISOString().split('T')[0];
+        const todayKey = new Date().toISOString().split('T')[0];
+        return fixtureDay < todayKey;
+    }
+
     private normalizePastCalendarFixtures(fixtures: any[], dateString: string): any[] {
         const todayKey = new Date().toISOString().split('T')[0];
         if (dateString >= todayKey) return fixtures;
@@ -957,23 +965,41 @@ class FootballDataCacheService {
             return cached.data;
         }
 
-        // Check if match is finished
+        // Check if match is finished (or stale live on a past calendar day)
         const dbMatch = await prisma.cachedFixture.findUnique({
             where: { fixtureId },
-            select: { status: true, fullData: true },
+            select: { status: true, fullData: true, matchDate: true },
         });
 
-        const isFinished = dbMatch && ['FT', 'AET', 'PEN'].includes(dbMatch.status);
         const fullData = dbMatch?.fullData as any;
+        const isFinished =
+            !!dbMatch &&
+            (['FT', 'AET', 'PEN'].includes(dbMatch.status) ||
+                this.isStaleLiveOnPastDay(dbMatch.status, dbMatch.matchDate));
 
         if (isFinished && fullData?.statistics) {
             logger.debug(`📦 Statistics ${fixtureId} from DB fullData`);
             return fullData.statistics;
         }
 
+        // Stale live on a past day — skip upstream API (quota + pointless refresh).
+        if (dbMatch && this.isStaleLiveOnPastDay(dbMatch.status, dbMatch.matchDate)) {
+            logger.debug(`📦 Statistics ${fixtureId} skipped — stale live on past day`);
+            return Array.isArray(fullData?.statistics) ? fullData.statistics : [];
+        }
+
         // Fetch from API (+ events-derived fallback for lower-tier leagues)
         logger.debug(`📡 Fetching statistics for fixture ${fixtureId}`);
-        let statistics = await footballService.getFixtureStatistics(fixtureId);
+        let statistics: any[] = [];
+        try {
+            statistics = await footballService.getFixtureStatistics(fixtureId);
+        } catch (err) {
+            logger.warn(`[Stats] Fixture ${fixtureId} upstream failed:`, err);
+            if (Array.isArray(fullData?.statistics) && fullData.statistics.length > 0) {
+                return fullData.statistics;
+            }
+            return [];
+        }
 
         let isEmpty = !Array.isArray(statistics) || statistics.length === 0;
         if (isEmpty && fullData?.teams && fullData?.goals) {
@@ -997,7 +1023,10 @@ class FootballDataCacheService {
                 }
             }
         }
-        const isLive = dbMatch && !['FT', 'AET', 'PEN'].includes(dbMatch.status);
+        const isLive =
+            !!dbMatch &&
+            !isFinished &&
+            !this.isStaleLiveOnPastDay(dbMatch.status, dbMatch.matchDate);
         const ttl = isEmpty
             ? (isLive ? 30 * 1000 : this.TTL.EMPTY)
             : (isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH);

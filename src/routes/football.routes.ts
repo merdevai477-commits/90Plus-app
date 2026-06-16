@@ -126,7 +126,14 @@ router.get('/cached/league/:leagueId/matches/:date', (req, res, next) => {
 router.get('/cached/world-cup/:date', (req, res, next) => {
   const dateParam = req.params.date as string;
   const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date();
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const yesterdayKey = yesterday.toISOString().split('T')[0];
   if (dateParam < today) {
+    // Yesterday may still receive status corrections — avoid locking stale 2H for 24h.
+    if (dateParam === yesterdayKey) {
+      return SHARED_CACHE_5MIN(req, res, next);
+    }
     return SHARED_CACHE_24H(req, res, next);
   }
   if (dateParam === today) {

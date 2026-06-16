@@ -2043,15 +2043,53 @@ export class FootballController {
         return;
       }
 
-      const statistics = await footballDataCacheService.getMatchStatistics(fixtureId);
+      try {
+        const statistics = await footballDataCacheService.getMatchStatistics(fixtureId);
 
-      res.json({
-        status: 'SUCCESS',
-        results: statistics?.length || 0,
-        response: statistics || [],
-      });
+        res.json({
+          status: 'SUCCESS',
+          results: statistics?.length || 0,
+          response: statistics || [],
+        });
+        return;
+      } catch (fetchError: any) {
+        logger.warn(
+          `getCachedStatistics: upstream error for ${fixtureId} (${fetchError?.message ?? fetchError}), returning degraded empty list`,
+        );
+
+        const dbMatch = await prisma.cachedFixture.findUnique({
+          where: { fixtureId },
+          select: { fullData: true },
+        });
+        const fromDb = (dbMatch?.fullData as { statistics?: unknown[] } | null)?.statistics;
+        if (Array.isArray(fromDb) && fromDb.length > 0) {
+          res.status(200).json({
+            status: 'SUCCESS',
+            results: fromDb.length,
+            response: fromDb,
+            degraded: true,
+            message: 'Statistics served from database cache',
+          });
+          return;
+        }
+
+        res.status(200).json({
+          status: 'SUCCESS',
+          results: 0,
+          response: [],
+          degraded: true,
+          message: 'Match statistics temporarily unavailable',
+        });
+      }
     } catch (error) {
-      FootballController.handleError(res, error);
+      logger.error('getCachedStatistics unexpected error:', error);
+      res.status(200).json({
+        status: 'SUCCESS',
+        results: 0,
+        response: [],
+        degraded: true,
+        message: 'Match statistics temporarily unavailable',
+      });
     }
   }
 
