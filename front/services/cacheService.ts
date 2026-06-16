@@ -284,6 +284,34 @@ class CacheService {
   }
 
   /**
+   * Remove all cache entries whose logical key starts with prefix (e.g. wc_matches_).
+   */
+  async invalidateByPrefix(prefix: string): Promise<number> {
+    let removed = 0;
+    for (const key of [...memoryStore.keys()]) {
+      if (key.startsWith(prefix)) {
+        memoryStore.delete(key);
+        removed += 1;
+      }
+    }
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const toRemove = allKeys.filter((fullKey) => {
+        if (!fullKey.startsWith(CACHE_PREFIX)) return false;
+        const logical = fullKey.slice(CACHE_PREFIX.length);
+        return logical.startsWith(prefix);
+      });
+      if (toRemove.length > 0) {
+        await AsyncStorage.multiRemove(toRemove);
+        removed += toRemove.length;
+      }
+    } catch (error) {
+      console.error(`[CacheService] Error invalidating prefix "${prefix}":`, error);
+    }
+    return removed;
+  }
+
+  /**
    * Clean up all expired cache entries.
    * Should be called on app start.
    */

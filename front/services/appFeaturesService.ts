@@ -14,6 +14,7 @@ export interface AppFeaturesResponse {
   status: string;
   features: {
     worldCupTab: WorldCupFeatureConfig;
+    footballCacheEpoch?: string;
   };
 }
 

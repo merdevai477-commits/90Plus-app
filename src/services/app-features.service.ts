@@ -19,6 +19,8 @@ export interface WorldCupFeatureConfig {
 
 export interface AppFeatures {
   worldCupTab: WorldCupFeatureConfig;
+  /** Bump via FOOTBALL_CACHE_EPOCH env to purge client WC/match disk cache app-wide. */
+  footballCacheEpoch: string;
 }
 
 function parseBool(value: string | undefined, fallback = false): boolean {
@@ -67,7 +69,10 @@ export function getWorldCupTabState(nowMs: number = Date.now()): WorldCupFeature
 }
 
 export function getAppFeatures(): AppFeatures {
+  const footballCacheEpoch =
+    process.env.FOOTBALL_CACHE_EPOCH?.trim() || '2';
   return {
     worldCupTab: getWorldCupTabState(),
+    footballCacheEpoch,
   };
 }

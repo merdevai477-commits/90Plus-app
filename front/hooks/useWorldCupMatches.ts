@@ -12,6 +12,7 @@ import { useLiveFixtureStore } from '../src/store/liveFixtureStore';
 import { LIVE_FIXTURE_CALENDAR_POLL_MS } from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
+import { registerWorldCupMemoryCacheClear } from '../services/footballCacheEpochSync';
 
 interface UseWorldCupMatchesResult {
   matches: Match[];
@@ -24,6 +25,8 @@ interface UseWorldCupMatchesResult {
 const memoryCache = new Map<string, { data: Match[]; ts: number }>();
 const TTL_IDLE_MS = 8_000;
 const CORNERS_REFRESH_MS = 20_000;
+
+registerWorldCupMemoryCacheClear(() => memoryCache.clear());
 
 function overlaySnapshots(
   calendarRows: Match[],

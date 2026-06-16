@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { WC_2026_KICKOFF_MS } from '../../constants/worldCup';
 import { fetchAppFeatures } from '../../services/appFeaturesService';
+import { applyFootballCacheEpoch } from '../../services/footballCacheEpochSync';
 
 interface AppFeaturesState {
   worldCupEnabled: boolean;
@@ -27,12 +28,26 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
   hydrated: false,
 
   hydrate: async (force = false) => {
-    if (!force && get().hydrated) return;
+    if (!force && get().hydrated) {
+      void (async () => {
+        try {
+          const data = await fetchAppFeatures();
+          const busted = await applyFootballCacheEpoch(data.features.footballCacheEpoch);
+          if (busted) {
+            set((s) => ({ revision: s.revision + 1 }));
+          }
+        } catch {
+          // non-fatal background refresh
+        }
+      })();
+      return;
+    }
     if (hydratePromise) return hydratePromise;
 
     hydratePromise = (async () => {
       try {
         const data = await fetchAppFeatures();
+        await applyFootballCacheEpoch(data.features.footballCacheEpoch);
         const wc = data.features.worldCupTab;
         set((s) => ({
           worldCupEnabled: wc.enabled,
