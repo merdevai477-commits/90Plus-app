@@ -1,6 +1,6 @@
 /** Pull feature flags on cold start so footballCacheEpoch can purge stale WC disk cache. */
 import { useEffect, useRef } from 'react';
-import { useAppFeaturesStore } from '../src/stores/appFeaturesStore';
+import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 
 export function FootballCacheEpochBootstrap() {
   const ran = useRef(false);
