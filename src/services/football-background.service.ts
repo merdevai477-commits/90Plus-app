@@ -51,10 +51,10 @@ class FootballBackgroundService {
     // Update immediately on start
     this.updateAll().catch(err => logger.error('Initial update failed:', err));
 
-    // Then update every 30 minutes (reduced from 5 minutes)
+    // Then update every 2 hours (standings only — calendar/live handled by dedicated sync jobs)
     this.updateInterval = setInterval(() => {
       this.updateAll().catch(err => logger.error('Background update failed:', err));
-    }, 30 * 60 * 1000); // 30 minutes
+    }, 2 * 60 * 60 * 1000); // 2 hours
   }
 
   /**
@@ -73,17 +73,11 @@ class FootballBackgroundService {
    * Update all background data
    */
   private async updateAll(): Promise<void> {
-    logger.debug('🔄 Background update starting...');
+    logger.debug('🔄 Background standings update starting...');
 
     try {
-      // Run updates in parallel
-      await Promise.allSettled([
-        this.updateLiveMatches(),
-        this.updateStandings(),
-        this.updateTodayMatches(),
-      ]);
-
-      logger.debug('✅ Background update complete');
+      await this.updateStandings();
+      logger.debug('✅ Background standings update complete');
     } catch (error) {
       logger.error('❌ Background update error:', error);
     }

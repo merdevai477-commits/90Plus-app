@@ -26,7 +26,7 @@ import { logger } from '../utils/logger';
 import { hasLineupData, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
 import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
-import { footballService } from './football.service';
+import { footballService, isFootballQuotaExhausted } from './football.service';
 import { matchCacheService } from './match-cache.service';
 import { playerCacheService } from './player-cache.service';
 import { leagueCacheService } from './league-cache.service';
@@ -97,10 +97,10 @@ class FootballDataCacheService {
         // don't poison long-lived caches. The next request after this window
         // will re-hit the API.
         EMPTY: 2 * 60 * 1000, // 2 minutes
-        MATCHES_BY_DATE_TODAY: 2 * 60 * 1000,
-        MATCHES_BY_DATE_FUTURE: 5 * 60 * 1000,
+        MATCHES_BY_DATE_TODAY: 3 * 60 * 1000,
+        MATCHES_BY_DATE_FUTURE: 15 * 60 * 1000,
         MATCHES_BY_DATE_PAST: 24 * 60 * 60 * 1000,
-        TODAY_API_REFRESH: 2 * 60 * 1000,
+        TODAY_API_REFRESH: 3 * 60 * 1000,
     };
 
     // ============================================
@@ -121,6 +121,38 @@ class FootballDataCacheService {
         const matches = await this.getMatchesByDate(target);
         logger.info(`🔥 Warmed matches-by-date cache for ${target}: ${matches.length} fixtures`);
         return matches.length;
+    }
+
+    /**
+     * Authoritative calendar refresh for background jobs only.
+     * Exactly one upstream `fixtures?date=` call → memory + DB (+ live merge for today).
+     */
+    async syncCalendarDateFromApi(dateString: string): Promise<number> {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return 0;
+        if (isFootballQuotaExhausted()) return 0;
+
+        const todayKey = new Date().toISOString().split('T')[0];
+        const isPastDate = dateString < todayKey;
+        const isToday = dateString === todayKey;
+        const cacheKey = `by_date_${dateString}`;
+        const responseTtl = isPastDate
+            ? this.TTL.MATCHES_BY_DATE_PAST
+            : isToday
+              ? this.TTL.MATCHES_BY_DATE_TODAY
+              : this.TTL.MATCHES_BY_DATE_FUTURE;
+
+        try {
+            const matches = await this.fetchMatchesByDateFromApi(
+                dateString,
+                cacheKey,
+                responseTtl,
+                isToday,
+            );
+            return matches.length;
+        } catch (err) {
+            logger.warn(`[CalendarSync] syncCalendarDateFromApi ${dateString} failed:`, err);
+            return 0;
+        }
     }
 
     private storeLocalMatchesByDate(
@@ -365,18 +397,27 @@ class FootballDataCacheService {
 
         try {
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
-            if (cached) {
+            if (cached && cached.length > 0) {
                 return cached;
             }
 
-            const { footballService } = await import('./football.service');
-            const fixtures = await footballService.getFixtures({
-                date: dateString,
-                league: leagueId,
-                season,
-            });
+            const byDate = await this.getMatchesByDate(dateString);
+            let list = byDate.filter(
+                (f) =>
+                    f?.league?.id === leagueId &&
+                    (f?.league?.season === season || f?.league?.season == null),
+            );
 
-            const list = Array.isArray(fixtures) ? fixtures : [];
+            if (list.length === 0) {
+                const { footballService } = await import('./football.service');
+                const fixtures = await footballService.getFixtures({
+                    date: dateString,
+                    league: leagueId,
+                    season,
+                });
+
+                list = Array.isArray(fixtures) ? fixtures : [];
+            }
             await matchCacheService.setInMemoryCache(cacheKey, list, ttl);
             return list;
         } catch (error) {

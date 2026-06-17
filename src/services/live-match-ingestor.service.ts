@@ -14,13 +14,14 @@ import { logger } from '../utils/logger';
 import { MatchEventIngestor } from './match-events/match-event-ingestor.service';
 import { fanOutMatchEvents } from './match-events/match-event-fanout.service';
 import { tryAcquireSyncLeader } from './football-sync-leader.service';
+import { isFootballQuotaExhausted } from './football.service';
 
 function pollIntervalMs(): number {
     const fromEnv = parseInt(
-        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '20000',
+        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '90000',
         10,
     );
-    return Math.max(15_000, Number.isFinite(fromEnv) ? fromEnv : 20_000);
+    return Math.max(60_000, Number.isFinite(fromEnv) ? fromEnv : 90_000);
 }
 
 const FIXTURE_INGEST_CONCURRENCY = Math.max(
@@ -87,6 +88,11 @@ export class LiveMatchIngestorService {
     }
 
     static async tick(): Promise<void> {
+        if (isFootballQuotaExhausted()) {
+            logger.debug('[LiveMatchIngestor] Skipping tick — API-Football daily quota exhausted');
+            return;
+        }
+
         const isLeader = await tryAcquireSyncLeader('match-ingestor');
         if (!isLeader) {
             logger.debug('[LiveMatchIngestor] Skipping tick — another instance is sync leader');

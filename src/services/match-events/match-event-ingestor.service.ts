@@ -1,5 +1,5 @@
 import prisma from '../../lib/prisma';
-import { footballService } from '../football.service';
+import { footballService, isFootballQuotaExhausted } from '../football.service';
 import { footballDataCacheService } from '../football-data-cache.service';
 import { logger } from '../../utils/logger';
 import { acquireIngestorLock } from './match-ingestor-lock.adapter';
@@ -15,12 +15,24 @@ import {
     LIVE_STATUSES,
 } from './match-event-normalizer';
 import type { MatchEventIngestResult, NormalizedMatchEvent, FixtureSnapshot } from './match-event.types';
-import { readLiveFixtureById } from '../live-fixture-cache.service';
+import { readLiveFixtureById, readTerminalFixtureById } from '../live-fixture-cache.service';
+import { matchCacheService } from '../match-cache.service';
 
 const lineupAnnouncedFixtures = new Set<number>();
 
-async function readLiveFixtureFromRedis(fixtureId: number): Promise<any | null> {
-    return readLiveFixtureById(fixtureId);
+async function readFixtureSnapshotFromCache(fixtureId: number): Promise<any | null> {
+    const live = await readLiveFixtureById(fixtureId);
+    if (live) return live;
+
+    const terminal = await readTerminalFixtureById(fixtureId);
+    if (terminal) return terminal;
+
+    const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
+    if (dbRow) {
+        return matchCacheService.convertDbMatchToApiFormat(dbRow);
+    }
+
+    return null;
 }
 
 async function persistEvent(event: NormalizedMatchEvent): Promise<boolean> {
@@ -59,12 +71,12 @@ export class MatchEventIngestor {
         if (!lock) return null;
 
         try {
-            const cachedLive = await readLiveFixtureFromRedis(fixtureId);
+            const cachedLive = await readFixtureSnapshotFromCache(fixtureId);
             let snapshot: FixtureSnapshot | null = null;
 
             if (cachedLive) {
                 snapshot = parseFixtureSnapshot(fixtureId, cachedLive);
-            } else {
+            } else if (!isFootballQuotaExhausted()) {
                 const fixtureRow = await footballService.getFixtureById(fixtureId, { source: 'job' });
                 if (fixtureRow) {
                     snapshot = parseFixtureSnapshot(fixtureId, fixtureRow);
@@ -116,7 +128,9 @@ export class MatchEventIngestor {
 
             return { fixtureId, snapshot, freshEvents };
         } catch (err: any) {
-            logger.error(`[MatchEventIngestor] ingest ${fixtureId} failed:`, err?.message);
+            if (!isFootballQuotaExhausted()) {
+                logger.error(`[MatchEventIngestor] ingest ${fixtureId} failed:`, err?.message);
+            }
             return null;
         } finally {
             await lock.release();

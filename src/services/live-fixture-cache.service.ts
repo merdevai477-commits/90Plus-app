@@ -14,8 +14,11 @@ import prisma from '../lib/prisma';
 export const FOOTBALL_LIVE_FIXTURE_KEY_PREFIX = 'football:live_fixture:';
 export const FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX = 'football:fixture_terminal:';
 
-const LIVE_LIST_TTL_SEC = 25;
-const LIVE_FIXTURE_TTL_SEC = 25;
+const LIVE_LIST_TTL_SEC = Math.max(
+    70,
+    Math.ceil((parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '45000', 10) || 45_000) / 1000) + 20,
+);
+const LIVE_FIXTURE_TTL_SEC = LIVE_LIST_TTL_SEC;
 const TERMINAL_FIXTURE_TTL_SEC = 600;
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);

@@ -12,6 +12,7 @@ import { WebSocketService } from './websocket.service';
 import { PredictionResolverService } from './prediction-resolver.service';
 import { logger } from '../utils/logger';
 import { tryAcquireSyncLeader } from './football-sync-leader.service';
+import { isFootballQuotaExhausted } from './football.service';
 import {
     writeLiveFixturesSnapshot,
     writeTerminalFixtureSnapshot,
@@ -34,6 +35,7 @@ class LiveFixtureSyncService {
     private lastSnapshots = new Map<number, LiveSnapshot>();
     private previouslyLiveIds = new Set<number>();
     private finishingInFlight = new Set<number>();
+    private droppedFromLiveIds = new Set<number>();
 
     start(): void {
         if (!process.env.FOOTBALL_API_KEY) {
@@ -43,8 +45,8 @@ class LiveFixtureSyncService {
         if (this.running) return;
 
         const intervalMs = Math.max(
-            15_000,
-            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '15000', 10) || 15_000,
+            45_000,
+            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '45000', 10) || 45_000,
         );
 
         this.running = true;
@@ -117,30 +119,57 @@ class LiveFixtureSyncService {
         }
     }
 
-    private async handlePotentiallyFinished(fixtureId: number): Promise<void> {
-        if (this.finishingInFlight.has(fixtureId)) return;
+    private async verifyFinishedBatch(fixtureIds: number[]): Promise<void> {
+        const unique = [...new Set(fixtureIds)].filter((id) => id > 0 && !this.finishingInFlight.has(id));
+        if (unique.length === 0) return;
 
-        try {
-            const fixtures = await footballService.getFixtures({ id: fixtureId }, { source: 'job' });
-            const fixture = fixtures?.[0];
-            if (!fixture) return;
+        for (let i = 0; i < unique.length; i += 20) {
+            const chunk = unique.slice(i, i + 20);
+            try {
+                const fixtures = await footballService.getFixtures(
+                    { ids: chunk.join('-') },
+                    { source: 'job' },
+                );
+                if (!Array.isArray(fixtures)) continue;
 
-            const status = fixture.fixture?.status?.short;
-            if (!FINISHED_STATUSES_SET.has(status)) return;
+                for (const fixture of fixtures) {
+                    const fixtureId = fixture?.fixture?.id;
+                    if (fixtureId == null) continue;
 
-            await matchCacheService.upsertFixtures([fixture as FixtureFromAPI]);
+                    const status = fixture.fixture?.status?.short;
+                    if (!FINISHED_STATUSES_SET.has(status)) continue;
 
-            const homeScore = fixture.goals?.home ?? 0;
-            const awayScore = fixture.goals?.away ?? 0;
-            const elapsed = fixture.fixture?.status?.elapsed ?? null;
-            await this.onMatchFinished(fixtureId, homeScore, awayScore, status, elapsed, fixture as FixtureFromAPI);
-        } catch (err) {
-            logger.debug(`Could not verify finished status for match ${fixtureId}:`, err);
+                    await matchCacheService.upsertFixtures([fixture as FixtureFromAPI]);
+
+                    const homeScore = fixture.goals?.home ?? 0;
+                    const awayScore = fixture.goals?.away ?? 0;
+                    const elapsed = fixture.fixture?.status?.elapsed ?? null;
+                    await this.onMatchFinished(
+                        fixtureId,
+                        homeScore,
+                        awayScore,
+                        status,
+                        elapsed,
+                        fixture as FixtureFromAPI,
+                    );
+                }
+            } catch (err) {
+                logger.debug(`Could not verify finished batch (${chunk.length} ids):`, err);
+            }
         }
+    }
+
+    private async handlePotentiallyFinished(fixtureId: number): Promise<void> {
+        this.droppedFromLiveIds.add(fixtureId);
     }
 
     private async syncOnce(): Promise<void> {
         if (!footballService.isConfigured()) return;
+
+        if (isFootballQuotaExhausted()) {
+            logger.debug('[LiveFixtureSync] Skipping tick — API-Football daily quota exhausted');
+            return;
+        }
 
         const isLeader = await tryAcquireSyncLeader('live-fixture-sync');
         if (!isLeader) {
@@ -171,6 +200,12 @@ class LiveFixtureSyncService {
             }
         }
         this.previouslyLiveIds = currentLiveIds;
+
+        if (this.droppedFromLiveIds.size > 0) {
+            const batch = [...this.droppedFromLiveIds];
+            this.droppedFromLiveIds.clear();
+            await this.verifyFinishedBatch(batch);
+        }
 
         await writeLiveFixturesSnapshot(liveFixtures);
 

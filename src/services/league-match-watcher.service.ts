@@ -1,7 +1,7 @@
 import prisma from '../lib/prisma';
 import { NotificationService, NotificationType } from './notification.service';
 import { logger } from '../utils/logger';
-import { footballService } from './football.service';
+import { footballService, isFootballQuotaExhausted } from './football.service';
 import { getUserLanguage, renderPushTemplate } from './push-templates.service';
 
 interface ApiFootballFixture {
@@ -85,6 +85,11 @@ export class LeagueMatchWatcherService {
     static async checkLeagueMatches() {
         if (this.isRunning) {
             logger.debug('⏳ League match check already in progress, skipping...');
+            return;
+        }
+
+        if (isFootballQuotaExhausted()) {
+            logger.debug('[LeagueMatchWatcher] Skipping — API-Football daily quota exhausted');
             return;
         }
 

@@ -764,6 +764,11 @@ async function startServer() {
                     const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
                     liveFixtureSyncService.start();
 
+                    const { footballCalendarSyncService } = await import(
+                        './services/football-calendar-sync.service'
+                    );
+                    footballCalendarSyncService.start();
+
                     // ── Always-on queues & verification ──────────────────
                     // These have nothing to do with API-Football quota; they
                     // process push receipts and notification fan-out, which
@@ -1043,6 +1048,8 @@ process.on('SIGINT', async () => {
     }
     const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
     liveFixtureSyncService.stop();
+    const { footballCalendarSyncService } = await import('./services/football-calendar-sync.service');
+    footballCalendarSyncService.stop();
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
 
     stopKeepAlive();
@@ -1064,6 +1071,8 @@ process.on('SIGTERM', async () => {
     }
     const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
     liveFixtureSyncService.stop();
+    const { footballCalendarSyncService } = await import('./services/football-calendar-sync.service');
+    footballCalendarSyncService.stop();
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
 
     stopKeepAlive();

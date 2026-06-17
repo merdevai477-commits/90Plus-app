@@ -59,9 +59,38 @@ function isQuotaExhausted(): boolean {
   return Date.now() < quotaExhaustedUntil;
 }
 
+/** Pause outbound calls until next UTC midnight when the daily plan limit is hit. */
+function markDailyQuotaExhausted(): void {
+  const now = new Date();
+  const nextUtcMidnight = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+  );
+  quotaExhaustedUntil = nextUtcMidnight;
+}
+
 function markQuotaExhausted(retryAfterSec?: number): void {
   const coolMs = retryAfterSec ? retryAfterSec * 1000 : QUOTA_COOLDOWN_MS;
   quotaExhaustedUntil = Date.now() + coolMs;
+}
+
+function isDailyQuotaError(errors: Record<string, unknown>): boolean {
+  const parts = Object.values(errors)
+    .filter((v) => typeof v === 'string')
+    .join(' ')
+    .toLowerCase();
+  return (
+    parts.includes('request limit') ||
+    parts.includes('reached the request limit') ||
+    parts.includes('daily limit') ||
+    parts.includes('quota')
+  );
+}
+
+/** For background jobs — skip work when API-Football quota is exhausted. */
+export function isFootballQuotaExhausted(): boolean {
+  return isQuotaExhausted();
 }
 
 class FootballService {
@@ -451,7 +480,8 @@ class FootballService {
       const data = await response.json() as ApiResponse<T>;
 
       if (data.errors && Object.keys(data.errors).length > 0) {
-        const errorMessage = (data.errors as any).plan || (data.errors as any).message || '';
+        const errors = data.errors as Record<string, unknown>;
+        const errorMessage = (errors.plan || errors.message || '') as string;
         if (typeof errorMessage === 'string' && errorMessage.includes('Free plans do not have access')) {
           logger.debug('📅 Free Plan date restriction:', errorMessage);
           footballMetrics.recordApiSuccess(Date.now() - apiStartTime, cacheKey, callSource);
@@ -459,9 +489,24 @@ class FootballService {
           return [] as T;
         }
 
+        if (isDailyQuotaError(errors)) {
+          markDailyQuotaExhausted();
+          logger.warn(
+            `⚠️ API-Football daily quota exhausted — pausing outbound calls until ${new Date(quotaExhaustedUntil).toISOString()}`,
+          );
+          footballMetrics.recordApiFailure(Date.now() - apiStartTime, cacheKey, callSource);
+          const stale = await this.getStaleCachedData(cacheKey);
+          if (stale !== null) {
+            footballMetrics.recordStaleFallback(cacheKey);
+            return stale as T;
+          }
+          await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+          return [] as T;
+        }
+
         logger.error('❌ Football API Errors:', data.errors);
 
-        if ((data.errors as any).rateLimit) {
+        if (errors.rateLimit) {
           throw new FootballApiError('Rate limit exceeded. Please wait a moment.');
         }
 
