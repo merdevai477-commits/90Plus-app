@@ -43,6 +43,11 @@ interface MemoryCacheEntry<T> {
     ttl: number;
 }
 
+import {
+    applyScores365ExperimentToWorldCupList,
+    getScores365ExperimentBundle,
+    isScores365ExperimentFixture,
+} from './scores365-experiment.service';
 import { redisCacheService } from './redis-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 
@@ -402,7 +407,8 @@ class FootballDataCacheService {
         try {
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
             if (cached && cached.length > 0) {
-                return this.normalizePastCalendarFixtures(cached, dateString);
+                const normalized = this.normalizePastCalendarFixtures(cached, dateString);
+                return applyScores365ExperimentToWorldCupList(normalized, dateString);
             }
 
             // DB / by-date cache first — avoids a league-scoped API call per calendar day.
@@ -427,13 +433,16 @@ class FootballDataCacheService {
                 list = this.normalizePastCalendarFixtures(list, dateString);
                 await matchCacheService.setInMemoryCache(cacheKey, list, ttl);
             }
-            return list;
+            return applyScores365ExperimentToWorldCupList(list, dateString);
         } catch (error) {
             logger.error(`[WC ${dateString}] getWorldCupMatchesByDate failed:`, error);
             try {
                 const byDate = await this.getMatchesByDate(dateString);
-                return this.normalizePastCalendarFixtures(
-                    this.filterWorldCupFixtures(byDate, leagueId, season),
+                return applyScores365ExperimentToWorldCupList(
+                    this.normalizePastCalendarFixtures(
+                        this.filterWorldCupFixtures(byDate, leagueId, season),
+                        dateString,
+                    ),
                     dateString,
                 );
             } catch {
@@ -1256,6 +1265,23 @@ class FootballDataCacheService {
         events: any[];
         venue: any | null;
     }> {
+        if (isScores365ExperimentFixture(fixtureId)) {
+            const experiment = await getScores365ExperimentBundle();
+            if (experiment) {
+                let statistics = experiment.statistics;
+                if (!statistics?.length) {
+                    statistics = await this.getMatchStatistics(fixtureId);
+                }
+                return {
+                    fixture: experiment.fixture,
+                    lineups: experiment.lineups,
+                    statistics: statistics ?? [],
+                    events: experiment.events,
+                    venue: experiment.venue,
+                };
+            }
+        }
+
         const bundleKey = `details:${fixtureId}`;
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(bundleKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {

@@ -2,6 +2,8 @@
  * Remote feature flags — toggled via environment / countdown without app release.
  */
 
+import { getScores365ExperimentFeatureState } from './scores365-experiment.service';
+
 export interface WorldCupFeatureConfig {
   /** Tab unlocked — matches available */
   enabled: boolean;
@@ -21,6 +23,12 @@ export interface AppFeatures {
   worldCupTab: WorldCupFeatureConfig;
   /** Bump via FOOTBALL_CACHE_EPOCH env to purge client WC/match disk cache app-wide. */
   footballCacheEpoch: string;
+  scores365Experiment: {
+    enabled: boolean;
+    fixtureId: number;
+    gameId: number;
+    label: string;
+  };
 }
 
 function parseBool(value: string | undefined, fallback = false): boolean {
@@ -74,5 +82,6 @@ export function getAppFeatures(): AppFeatures {
   return {
     worldCupTab: getWorldCupTabState(),
     footballCacheEpoch,
+    scores365Experiment: getScores365ExperimentFeatureState(),
   };
 }

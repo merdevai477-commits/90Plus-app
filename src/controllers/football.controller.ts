@@ -1695,7 +1695,13 @@ export class FootballController {
         status: 'SUCCESS',
         results: matches.length,
         response: matches,
-        _meta: { date: dateString, leagueId: wc.leagueId, season: wc.season, cached: true },
+        _meta: {
+          date: dateString,
+          leagueId: wc.leagueId,
+          season: wc.season,
+          cached: true,
+          scores365Experiment: matches.some((m: any) => m?._experiment === 'scores365'),
+        },
       });
     } catch (error) {
       logger.warn(`getCachedWorldCupMatches(${dateString}): error`, error);

@@ -24,7 +24,12 @@ const TERMINAL_FIXTURE_TTL_SEC = 600;
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
 
-export type LiveFixtureReadSource = 'redis-live' | 'redis-terminal' | 'db' | null;
+import {
+  getScores365ExperimentFixture,
+  isScores365ExperimentFixture,
+} from './scores365-experiment.service';
+
+export type LiveFixtureReadSource = 'redis-live' | 'redis-terminal' | 'db' | 'scores365-experiment' | null;
 
 function liveFixtureKey(fixtureId: number): string {
   return `${FOOTBALL_LIVE_FIXTURE_KEY_PREFIX}${fixtureId}`;
@@ -130,6 +135,13 @@ export async function readTerminalFixtureById(fixtureId: number): Promise<Fixtur
 export async function resolveFixtureForClient(
   fixtureId: number,
 ): Promise<{ fixture: FixtureFromAPI | null; source: LiveFixtureReadSource }> {
+  if (isScores365ExperimentFixture(fixtureId)) {
+    const experimentFixture = await getScores365ExperimentFixture();
+    if (experimentFixture) {
+      return { fixture: experimentFixture, source: 'scores365-experiment' };
+    }
+  }
+
   const live = await readLiveFixtureById(fixtureId);
   if (live) {
     return { fixture: live, source: 'redis-live' };
@@ -165,14 +177,29 @@ export async function resolveFixtureForClient(
  */
 export async function resolveLiveFixturesForClient(): Promise<{
   fixtures: FixtureFromAPI[];
-  source: 'redis' | null;
+  source: 'redis' | 'scores365-experiment' | null;
 }> {
   const fromRedis = await readLiveFixturesList();
+  let fixtures: FixtureFromAPI[] = [];
+  let source: 'redis' | 'scores365-experiment' | null = null;
+
   if (fromRedis != null) {
-    const liveOnly = fromRedis.filter((f) =>
+    fixtures = fromRedis.filter((f) =>
       LIVE_STATUSES_SET.has(f?.fixture?.status?.short ?? ''),
     );
-    return { fixtures: liveOnly, source: 'redis' };
+    source = 'redis';
   }
-  return { fixtures: [], source: null };
+
+  const experimentFixture = await getScores365ExperimentFixture();
+  if (experimentFixture) {
+    const short = experimentFixture.fixture?.status?.short ?? '';
+    if (LIVE_STATUSES_SET.has(short)) {
+      const id = experimentFixture.fixture.id;
+      fixtures = fixtures.filter((f) => f.fixture.id !== id);
+      fixtures.unshift(experimentFixture);
+      source = source ?? 'scores365-experiment';
+    }
+  }
+
+  return { fixtures, source };
 }
