@@ -13,7 +13,6 @@ import { LIVE_FIXTURE_CALENDAR_POLL_MS } from '../src/store/liveFixtureStore.typ
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
 import { registerWorldCupMemoryCacheClear } from '../services/footballCacheEpochSync';
-import { getAppLanguageCode } from '../utils/appLanguage';
 import { useLanguageStore } from '../src/i18n/store';
 
 interface UseWorldCupMatchesResult {
