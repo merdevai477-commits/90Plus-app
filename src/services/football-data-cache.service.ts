@@ -46,6 +46,7 @@ interface MemoryCacheEntry<T> {
 import {
     applyScores365ExperimentToWorldCupList,
     getScores365ExperimentBundle,
+    getScores365ExperimentEvents,
     isScores365ExperimentFixture,
 } from './scores365-experiment.service';
 import { redisCacheService } from './redis-cache.service';
@@ -1171,6 +1172,21 @@ class FootballDataCacheService {
         options?: { forceRefresh?: boolean },
     ): Promise<any[]> {
         const forceRefresh = options?.forceRefresh === true;
+
+        // 365Scores experiment — single shared upstream fetch; never API-Football quota.
+        if (isScores365ExperimentFixture(fixtureId)) {
+            const events = await getScores365ExperimentEvents(forceRefresh);
+            const ttl = Math.max(3_000, parseInt(process.env.SCORES365_CACHE_MS || '5000', 10) || 5_000);
+            const cacheEntry: MemoryCacheEntry<any> = {
+                data: events,
+                timestamp: Date.now(),
+                ttl,
+            };
+            this.eventsCache.set(fixtureId, cacheEntry);
+            await redisCacheService.set(`events:${fixtureId}`, cacheEntry, ttl);
+            return events;
+        }
+
         const redisKey = `events:${fixtureId}`;
 
         if (!forceRefresh) {

@@ -85,6 +85,10 @@ export interface Scores365ExperimentConfig {
 }
 
 let cachedGame: { fetchedAt: number; game: Scores365Game | null } | null = null;
+/** Last successful payload — used when 365Scores fetch fails (no empty flash). */
+let lastGoodGame: Scores365Game | null = null;
+/** Coalesce concurrent upstream calls (all users share one in-flight request). */
+let inFlightFetch: Promise<Scores365Game | null> | null = null;
 
 export function isScores365ExperimentEnabled(): boolean {
   const raw = process.env.SCORES365_EXPERIMENT_ENABLED?.trim();
@@ -113,6 +117,40 @@ function scores365Url(gameId: number): string {
   return `${SCORES365_BASE}?appTypeId=5&langId=${langId}&timezoneName=${tz}&userCountryId=${countryId}&gameId=${gameId}`;
 }
 
+async function fetchScores365GameOnce(gameId: number): Promise<Scores365Game | null> {
+  try {
+    const res = await fetch(scores365Url(gameId), {
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        'Accept-Language': 'ar,en;q=0.9',
+        'User-Agent':
+          process.env.SCORES365_USER_AGENT?.trim() ||
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        Referer: 'https://www.365scores.com/',
+        Origin: 'https://www.365scores.com',
+      },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) {
+      logger.warn(`[Scores365Experiment] HTTP ${res.status} for game ${gameId}`);
+      return lastGoodGame;
+    }
+    const payload = (await res.json()) as Scores365GamePayload;
+    const game = payload?.game ?? null;
+    if (game) {
+      lastGoodGame = game;
+      cachedGame = { fetchedAt: Date.now(), game };
+      logger.debug(
+        `[Scores365Experiment] game ${gameId}: ${game.homeCompetitor?.name} ${game.homeCompetitor?.score ?? 0}-${game.awayCompetitor?.score ?? 0} ${game.awayCompetitor?.name} (${game.gameTimeDisplay ?? game.statusText}) events=${game.events?.length ?? 0}`,
+      );
+    }
+    return game ?? lastGoodGame;
+  } catch (err: any) {
+    logger.warn(`[Scores365Experiment] fetch failed for game ${gameId}:`, err?.message);
+    return lastGoodGame;
+  }
+}
+
 export async function fetchScores365Game(force = false): Promise<Scores365Game | null> {
   if (!isScores365ExperimentEnabled()) return null;
 
@@ -120,34 +158,17 @@ export async function fetchScores365Game(force = false): Promise<Scores365Game |
   const ttlMs = Math.max(3_000, parseInt(process.env.SCORES365_CACHE_MS || '5000', 10) || 5_000);
 
   if (!force && cachedGame && Date.now() - cachedGame.fetchedAt < ttlMs) {
-    return cachedGame.game;
+    return cachedGame.game ?? lastGoodGame;
   }
 
-  try {
-    const res = await fetch(scores365Url(gameId), {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': '90Plus-Scores365-Experiment/1.0',
-      },
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!res.ok) {
-      logger.warn(`[Scores365Experiment] HTTP ${res.status} for game ${gameId}`);
-      return cachedGame?.game ?? null;
-    }
-    const payload = (await res.json()) as Scores365GamePayload;
-    const game = payload?.game ?? null;
-    cachedGame = { fetchedAt: Date.now(), game };
-    if (game) {
-      logger.debug(
-        `[Scores365Experiment] game ${gameId}: ${game.homeCompetitor?.name} ${game.homeCompetitor?.score ?? 0}-${game.awayCompetitor?.score ?? 0} ${game.awayCompetitor?.name} (${game.gameTimeDisplay ?? game.statusText})`,
-      );
-    }
-    return game;
-  } catch (err: any) {
-    logger.warn(`[Scores365Experiment] fetch failed for game ${gameId}:`, err?.message);
-    return cachedGame?.game ?? null;
+  if (inFlightFetch) {
+    return inFlightFetch;
   }
+
+  inFlightFetch = fetchScores365GameOnce(gameId).finally(() => {
+    inFlightFetch = null;
+  });
+  return inFlightFetch;
 }
 
 function map365Status(game: Scores365Game): { short: string; long: string; elapsed: number | null } {
@@ -369,6 +390,16 @@ export async function mapScores365ToApiFootballFixture(
       round: game.groupName ? `${game.roundName ?? ''} - ${game.groupName}`.trim() : base.league.round,
     },
   };
+}
+
+export async function getScores365ExperimentEvents(force = false): Promise<any[]> {
+  const game = await fetchScores365Game(force);
+  if (!game) return [];
+
+  const base = await loadBaseFixture();
+  if (!base) return [];
+
+  return mapScores365Events(game, base);
 }
 
 export async function getScores365ExperimentFixture(): Promise<FixtureFromAPI | null> {
