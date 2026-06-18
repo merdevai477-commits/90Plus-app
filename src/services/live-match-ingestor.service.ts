@@ -15,6 +15,11 @@ import { MatchEventIngestor } from './match-events/match-event-ingestor.service'
 import { fanOutMatchEvents } from './match-events/match-event-fanout.service';
 import { tryAcquireSyncLeader } from './football-sync-leader.service';
 import { isFootballQuotaExhausted } from './football.service';
+import {
+    isWorldCupFixtureIdAllowed,
+    isWorldCupOnlyMode,
+    logSkippingNonWorldCup,
+} from '../config/world-cup-only-mode.config';
 
 function pollIntervalMs(): number {
     const fromEnv = parseInt(
@@ -146,6 +151,14 @@ export class LiveMatchIngestorService {
         meta: { homeTeam: string; awayTeam: string },
         options?: { forceRefreshEvents?: boolean },
     ): Promise<void> {
+        if (isWorldCupOnlyMode()) {
+            const allowed = await isWorldCupFixtureIdAllowed(fixtureId);
+            if (!allowed) {
+                logSkippingNonWorldCup(`live ingestor fixture ${fixtureId}`);
+                return;
+            }
+        }
+
         const result = await MatchEventIngestor.ingestFixture(fixtureId, meta, options);
         if (!result) return;
 

@@ -7,6 +7,10 @@
 import { footballService } from './football.service';
 import { logger } from '../utils/logger';
 import { getRedisClient } from '../lib/redis';
+import {
+  isWorldCupOnlyMode,
+  logSkippingNonWorldCup,
+} from '../config/world-cup-only-mode.config';
 
 // Major leagues that need frequent updates
 const MAJOR_LEAGUES = {
@@ -32,6 +36,11 @@ class FootballBackgroundService {
    * Enable only if you have Pro Plan (300 requests/minute)
    */
   start(): void {
+    if (isWorldCupOnlyMode()) {
+      logSkippingNonWorldCup('background standings service');
+      return;
+    }
+
     const isFreePlan = process.env.FOOTBALL_API_PLAN === 'free' || !process.env.FOOTBALL_API_PLAN;
     
     if (isFreePlan) {

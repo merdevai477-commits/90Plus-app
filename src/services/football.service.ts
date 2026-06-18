@@ -12,6 +12,14 @@ import {
   footballSeasonFallbackChain,
   resolveFootballSeason,
 } from '../utils/football-season.util';
+import {
+  assertWorldCupFixtureApiAllowed,
+  filterWorldCupFixtures,
+  getWorldCupLeagueId,
+  getWorldCupSeason,
+  isAllowedApiFootballParams,
+  isWorldCupOnlyMode,
+} from '../config/world-cup-only-mode.config';
 
 interface ApiResponse<T> {
   get: string;
@@ -433,6 +441,28 @@ class FootballService {
       return [] as T;
     }
 
+    if (isWorldCupOnlyMode()) {
+      if (!isAllowedApiFootballParams(endpoint, params)) {
+        const stale = await this.getStaleCachedData(cacheKey);
+        if (stale !== null) {
+          footballMetrics.recordStaleFallback(cacheKey);
+          return stale as T;
+        }
+        await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+        return [] as T;
+      }
+      const fixtureAllowed = await assertWorldCupFixtureApiAllowed(endpoint, params);
+      if (!fixtureAllowed) {
+        const stale = await this.getStaleCachedData(cacheKey);
+        if (stale !== null) {
+          footballMetrics.recordStaleFallback(cacheKey);
+          return stale as T;
+        }
+        await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+        return [] as T;
+      }
+    }
+
     await this.checkRateLimit();
 
     logger.debug('🔍 Football API Request:', cacheKey);
@@ -572,6 +602,17 @@ class FootballService {
    * Get live fixtures
    */
   async getLiveFixtures(options: { source?: FootballApiCallSource } = {}): Promise<any[]> {
+    if (isWorldCupOnlyMode()) {
+      const fixtures = await this.getFixtures(
+        {
+          live: 'all',
+          league: getWorldCupLeagueId(),
+          season: getWorldCupSeason(),
+        },
+        options,
+      );
+      return filterWorldCupFixtures(fixtures);
+    }
     return this.getFixtures({ live: 'all' }, options);
   }
 

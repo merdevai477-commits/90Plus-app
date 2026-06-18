@@ -30,6 +30,11 @@ import { footballService, isFootballQuotaExhausted } from './football.service';
 import { matchCacheService } from './match-cache.service';
 import { playerCacheService } from './player-cache.service';
 import { leagueCacheService } from './league-cache.service';
+import {
+    isWorldCupOnlyMode,
+    logSkippingNonWorldCup,
+} from '../config/world-cup-only-mode.config';
+import { getWorldCupTabState } from './app-features.service';
 
 // Memory cache for frequently accessed data
 interface MemoryCacheEntry<T> {
@@ -131,6 +136,10 @@ class FootballDataCacheService {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return 0;
         if (isFootballQuotaExhausted()) return 0;
 
+        if (isWorldCupOnlyMode()) {
+            return this.syncWorldCupCalendarDateFromApi(dateString);
+        }
+
         const todayKey = new Date().toISOString().split('T')[0];
         const isPastDate = dateString < todayKey;
         const isToday = dateString === todayKey;
@@ -151,6 +160,44 @@ class FootballDataCacheService {
             return matches.length;
         } catch (err) {
             logger.warn(`[CalendarSync] syncCalendarDateFromApi ${dateString} failed:`, err);
+            return 0;
+        }
+    }
+
+    /** WORLD_CUP_ONLY_MODE: one league-scoped fixtures?date= call per tick. */
+    private async syncWorldCupCalendarDateFromApi(dateString: string): Promise<number> {
+        const wc = getWorldCupTabState();
+        const cacheKey = `wc_${wc.leagueId}_${wc.season}_${dateString}`;
+        const todayKey = new Date().toISOString().split('T')[0];
+        const isToday = dateString === todayKey;
+        const responseTtl =
+            dateString < todayKey
+                ? this.TTL.MATCHES_BY_DATE_PAST
+                : isToday
+                  ? this.TTL.MATCHES_BY_DATE_TODAY
+                  : this.TTL.MATCHES_BY_DATE_FUTURE;
+
+        try {
+            const fixtures = await footballService.getFixtures(
+                { date: dateString, league: wc.leagueId, season: wc.season },
+                { source: 'job' },
+            );
+            const list = Array.isArray(fixtures) ? fixtures : [];
+
+            if (list.length > 0) {
+                matchCacheService.upsertFixtures(list).catch((archiveError) => {
+                    logger.warn(`[WC ${dateString}] Background DB upsert failed:`, archiveError);
+                });
+                void matchCacheService.setInMemoryCache(cacheKey, list, responseTtl);
+                this.storeLocalMatchesByDate(dateString, list, responseTtl);
+                if (isToday) {
+                    await this.markTodayApiFetched(dateString);
+                }
+                logger.info(`[Football Sync] World Cup calendar ${dateString}: ${list.length} fixtures synced`);
+            }
+            return list.length;
+        } catch (err) {
+            logger.warn(`[CalendarSync] syncWorldCupCalendarDateFromApi ${dateString} failed:`, err);
             return 0;
         }
     }
@@ -253,7 +300,7 @@ class FootballDataCacheService {
             if (fromDb.length > 0) {
                 if (isToday) {
                     const merged = await this.mergeLiveFromRedis(fromDb);
-                    if (!(await this.isTodayApiFresh(dateString))) {
+                    if (!isWorldCupOnlyMode() && !(await this.isTodayApiFresh(dateString))) {
                         void this.refreshMatchesByDateFromApi(dateString, cacheKey, responseTtl);
                     }
                     logger.debug(`📦 [${dateString}] ${merged.length} matches from DB + live merge (fast path)`);
@@ -265,8 +312,17 @@ class FootballDataCacheService {
 
             // Today with empty DB: refresh in background; never block the client on a cold API call.
             if (isToday) {
-                void this.fetchMatchesByDateFromApi(dateString, cacheKey, responseTtl, true);
-                logger.warn(`📦 [${dateString}] No DB/cache rows — returning empty; API refresh started in background`);
+                if (!isWorldCupOnlyMode()) {
+                    void this.fetchMatchesByDateFromApi(dateString, cacheKey, responseTtl, true);
+                    logger.warn(`📦 [${dateString}] No DB/cache rows — returning empty; API refresh started in background`);
+                } else {
+                    logSkippingNonWorldCup(`matches-by-date background refresh ${dateString}`);
+                }
+                return [];
+            }
+
+            if (isWorldCupOnlyMode()) {
+                logSkippingNonWorldCup(`matches-by-date API fetch ${dateString}`);
                 return [];
             }
 
@@ -472,6 +528,11 @@ class FootballDataCacheService {
         responseTtl: number,
         mergeLive: boolean,
     ): Promise<any[]> {
+        if (isWorldCupOnlyMode()) {
+            logSkippingNonWorldCup(`matches-by-date API fetch ${dateString}`);
+            return [];
+        }
+
         const pending = this.pendingMatchesByDate.get(dateString);
         if (pending) {
             logger.debug(`⏳ [${dateString}] waiting for in-flight API fetch`);
@@ -509,6 +570,11 @@ class FootballDataCacheService {
         cacheKey: string,
         responseTtl: number,
     ): void {
+        if (isWorldCupOnlyMode()) {
+            logSkippingNonWorldCup(`matches-by-date background refresh ${dateString}`);
+            return;
+        }
+
         if (this.backgroundRefreshDates.has(dateString)) return;
         this.backgroundRefreshDates.add(dateString);
 

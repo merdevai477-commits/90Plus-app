@@ -3,6 +3,10 @@ import { NotificationService, NotificationType } from './notification.service';
 import { logger } from '../utils/logger';
 import { footballService, isFootballQuotaExhausted } from './football.service';
 import { getUserLanguage, renderPushTemplate } from './push-templates.service';
+import {
+    isWorldCupOnlyMode,
+    logSkippingNonWorldCup,
+} from '../config/world-cup-only-mode.config';
 
 interface ApiFootballFixture {
     fixture: {
@@ -83,6 +87,11 @@ export class LeagueMatchWatcherService {
      * Check for upcoming matches in users' favorite leagues
      */
     static async checkLeagueMatches() {
+        if (isWorldCupOnlyMode()) {
+            logSkippingNonWorldCup('LeagueMatchWatcher');
+            return;
+        }
+
         if (this.isRunning) {
             logger.debug('⏳ League match check already in progress, skipping...');
             return;

@@ -744,6 +744,11 @@ async function startServer() {
 
                 // Start match watcher for push notifications
                 if (process.env.FOOTBALL_API_KEY) {
+                    const { logWorldCupOnlyModeStartup } = await import(
+                        './config/world-cup-only-mode.config'
+                    );
+                    logWorldCupOnlyModeStartup();
+
                     const plan = (process.env.FOOTBALL_API_PLAN || '').toLowerCase();
                     const isFreePlan = !plan || plan === 'free';
 

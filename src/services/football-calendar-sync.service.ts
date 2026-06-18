@@ -11,6 +11,10 @@ import { logger } from '../utils/logger';
 import { footballDataCacheService } from './football-data-cache.service';
 import { isFootballQuotaExhausted } from './football.service';
 import { tryAcquireSyncLeader } from './football-sync-leader.service';
+import {
+    isWorldCupOnlyMode,
+    logWorldCupOnlyModeStartup,
+} from '../config/world-cup-only-mode.config';
 
 function calendarSyncIntervalMs(): number {
     const fromEnv = parseInt(process.env.FOOTBALL_CALENDAR_SYNC_MS || '180000', 10);
@@ -44,8 +48,9 @@ class FootballCalendarSyncService {
         const prefetchMs = prefetchIntervalMs();
 
         this.running = true;
+        logWorldCupOnlyModeStartup();
         logger.info(
-            `[CalendarSync] Started — today every ${todayMs / 1000}s, prefetch every ${prefetchMs / 1000}s (leader-elected)`,
+            `[CalendarSync] Started — today every ${todayMs / 1000}s, prefetch every ${prefetchMs / 1000}s (leader-elected)${isWorldCupOnlyMode() ? ' [World Cup only]' : ''}`,
         );
 
         const runToday = () => {

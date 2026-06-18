@@ -18,6 +18,11 @@ import {
     writeTerminalFixtureSnapshot,
 } from './live-fixture-cache.service';
 import LiveMatchIngestorService from './live-match-ingestor.service';
+import {
+    filterWorldCupFixtures,
+    isWorldCupOnlyMode,
+    logWorldCupOnlyModeStartup,
+} from '../config/world-cup-only-mode.config';
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
@@ -50,7 +55,8 @@ class LiveFixtureSyncService {
         );
 
         this.running = true;
-        logger.info(`🔴 Live fixture sync started (every ${intervalMs / 1000}s, leader-elected)`);
+        logWorldCupOnlyModeStartup();
+        logger.info(`🔴 Live fixture sync started (every ${intervalMs / 1000}s, leader-elected)${isWorldCupOnlyMode() ? ' [World Cup only]' : ''}`);
 
         const tick = () => {
             this.syncOnce().catch((err) => logger.warn('Live fixture sync tick failed:', err));
@@ -177,7 +183,10 @@ class LiveFixtureSyncService {
             return;
         }
 
-        const liveFixtures: FixtureFromAPI[] = await footballService.getLiveFixtures({ source: 'job' });
+        const liveFixturesRaw: FixtureFromAPI[] = await footballService.getLiveFixtures({ source: 'job' });
+        const liveFixtures: FixtureFromAPI[] = isWorldCupOnlyMode()
+            ? (filterWorldCupFixtures(liveFixturesRaw) as FixtureFromAPI[])
+            : liveFixturesRaw;
 
         const currentLiveIds = new Set<number>();
         for (const fixture of liveFixtures) {
