@@ -537,7 +537,7 @@ export function mapScores365Lineups(game: Scores365Game, base: FixtureFromAPI): 
     if (!side?.lineups?.members?.length) return null;
     const starters = side.lineups.members.filter((m) => m.status === 1);
     return {
-      team: { id: team.id, name: team.name, logo: team.logo, colors: null },
+      team: { id: team.id, name: side?.name ?? team.name, logo: team.logo, colors: null },
       coach: { id: null, name: null, photo: null },
       formation: side.lineups.formation ?? null,
       startXI: starters.map((m) => {

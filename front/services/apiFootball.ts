@@ -20,12 +20,7 @@ import { cacheService, CACHE_TTL } from './cacheService';
 import { logger } from './logger';
 import { circuitBreakerService } from './circuitBreaker.service';
 import { requestQueueService } from './requestQueue.service';
-import { useAppSettings } from '../src/store/useAppSettings';
-
-function getProxyLanguageParams(): Record<string, string> {
-  const current = useAppSettings.getState().language?.current ?? 'ar';
-  return { language: current.startsWith('en') ? 'en' : 'ar' };
-}
+import { acceptLanguageHeader, getAppLanguageCode } from '../utils/appLanguage';
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds timeout
 
@@ -789,6 +784,10 @@ const fetchFromProxy = async <T,>(
         url.searchParams.append(key, String(value));
       }
     });
+    // Propagate app language to backend (365Scores langId: ar=27, en=1).
+    if (!url.searchParams.has('language')) {
+      url.searchParams.set('language', getAppLanguageCode());
+    }
   }
 
   if (__DEV__) {
@@ -831,6 +830,7 @@ const fetchFromProxy = async <T,>(
             headers: {
               'Accept': 'application/json',
               'Content-Type': 'application/json',
+              'Accept-Language': acceptLanguageHeader(),
               ...headers,
             },
             body: body ? JSON.stringify(body) : undefined,
@@ -1411,10 +1411,7 @@ export const ApiFootballService = {
           { fresh: true },
         );
       }
-      return await fetchFromProxy<FixtureEvent[]>(
-        `/cached/fixture/${fixtureId}/events`,
-        getProxyLanguageParams(),
-      );
+      return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`);
     } catch (error) {
       return fetchFromProxy<FixtureEvent[]>(`/fixtures/${fixtureId}/events`);
     }
@@ -1454,10 +1451,7 @@ export const ApiFootballService = {
         };
       }
 
-      const raw = await fetchFromProxy<any>(
-        `/cached/fixture/${fixtureId}/details`,
-        getProxyLanguageParams(),
-      );
+      const raw = await fetchFromProxy<any>(`/cached/fixture/${fixtureId}/details`);
       const bundle = raw?.response ?? raw;
       return {
         fixture: bundle?.fixture ?? null,

@@ -177,7 +177,9 @@ export async function resolveFixtureForClient(
 /**
  * Live list for clients — prefer sync Redis payload; filter to currently-live statuses.
  */
-export async function resolveLiveFixturesForClient(): Promise<{
+export async function resolveLiveFixturesForClient(
+  language?: string | null,
+): Promise<{
   fixtures: FixtureFromAPI[];
   source: 'redis' | 'scores365-experiment' | null;
 }> {
@@ -194,6 +196,7 @@ export async function resolveLiveFixturesForClient(): Promise<{
 
   const experimentFixture = await getScores365ExperimentFixture(
     getScores365ExperimentConfig().fixtureId,
+    language,
   );
   if (experimentFixture) {
     const short = experimentFixture.fixture?.status?.short ?? '';

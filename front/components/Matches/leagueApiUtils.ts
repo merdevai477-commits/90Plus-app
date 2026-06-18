@@ -8,11 +8,10 @@ import { Match, LeagueInfo, TeamInfo } from './matchCardUtils';
 import { cacheService } from '../../services/cacheService';
 import { logger } from '../../utils/logger';
 import { getApiUrl } from '../../config/api.config';
-import { useAppSettings } from '../../src/store/useAppSettings';
+import { getAppLanguageCode, acceptLanguageHeader } from '../../utils/appLanguage';
 
 function getAppLanguageParam(): string {
-  const current = useAppSettings.getState().language?.current ?? 'ar';
-  return current.startsWith('en') ? 'en' : 'ar';
+  return getAppLanguageCode();
 }
 
 /**
@@ -351,7 +350,10 @@ const fetchWorldCupMatchesByDateImpl = async (
       `${apiUrl}/football/cached/world-cup/${dateString}?language=${lang}`,
       {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept-Language': acceptLanguageHeader(lang as 'ar' | 'en'),
+      },
     },
     );
 

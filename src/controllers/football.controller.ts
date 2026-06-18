@@ -297,15 +297,20 @@ export class FootballController {
         return;
       }
 
-      const redisLive = await resolveLiveFixturesForClient();
-      if (redisLive.source === 'redis') {
-        logger.debug(`📦 Returning ${redisLive.fixtures.length} live fixtures from Redis sync`);
+      const language = resolveAppLanguage(req);
+      const redisLive = await resolveLiveFixturesForClient(language);
+      if (
+        (redisLive.source === 'redis' || redisLive.source === 'scores365-experiment') &&
+        redisLive.fixtures.length > 0
+      ) {
+        logger.debug(`📦 Returning ${redisLive.fixtures.length} live fixtures from ${redisLive.source}`);
         res.json({
           status: 'SUCCESS',
           results: redisLive.fixtures.length,
           response: redisLive.fixtures,
           cached: true,
-          source: 'redis-sync',
+          source: redisLive.source === 'scores365-experiment' ? 'scores365-experiment' : 'redis-sync',
+          language,
         });
         return;
       }
@@ -618,7 +623,8 @@ export class FootballController {
       }
 
       try {
-        const events = await footballDataCacheService.getMatchEvents(fixtureId);
+        const language = resolveAppLanguage(req);
+        const events = await footballDataCacheService.getMatchEvents(fixtureId, { language });
 
         res.json({
           status: 'SUCCESS',
