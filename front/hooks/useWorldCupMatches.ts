@@ -13,6 +13,8 @@ import { LIVE_FIXTURE_CALENDAR_POLL_MS } from '../src/store/liveFixtureStore.typ
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
 import { registerWorldCupMemoryCacheClear } from '../services/footballCacheEpochSync';
+import { getAppLanguageCode } from '../utils/appLanguage';
+import { useLanguageStore } from '../src/i18n/store';
 
 interface UseWorldCupMatchesResult {
   matches: Match[];
@@ -137,6 +139,7 @@ export function useWorldCupMatches(
 
   const dateString = formatLocalDateKey(selectedDate);
   const isToday = dateString === getLocalTodayKey();
+  const appLang = useLanguageStore((s) => s.language);
 
   const liveFixtureIds = useMemo(
     () =>
@@ -160,7 +163,9 @@ export function useWorldCupMatches(
     if (fetchingRef.current) return;
     fetchingRef.current = true;
 
-    const mem = memoryCache.get(dateString);
+    const lang = appLang.startsWith('en') ? 'en' : 'ar';
+    const memKey = `${dateString}:${lang}`;
+    const mem = memoryCache.get(memKey);
     const ttl = TTL_IDLE_MS;
     if (!isToday && mem && mem.data.length > 0 && Date.now() - mem.ts < ttl) {
       setCalendarMatches(mem.data);
@@ -186,7 +191,7 @@ export function useWorldCupMatches(
           lastCornersFetchRef.current = now;
           list = await enrichLiveCorners(list);
         } else {
-          const prev = memoryCache.get(dateString)?.data;
+          const prev = memoryCache.get(memKey)?.data;
           if (prev?.length) {
             const cornersById = new Map(
               prev.filter((m) => m.corners).map((m) => [m.id, m.corners!]),
@@ -200,7 +205,7 @@ export function useWorldCupMatches(
           }
         }
       }
-      memoryCache.set(dateString, { data: list, ts: Date.now() });
+      memoryCache.set(memKey, { data: list, ts: Date.now() });
       setCalendarMatches(list);
       hasDataRef.current = list.length > 0;
     } catch (e) {
@@ -211,7 +216,7 @@ export function useWorldCupMatches(
       setLoading(false);
       fetchingRef.current = false;
     }
-  }, [dateString, enabled, enrichCorners, isToday, leagueId, selectedDate]);
+  }, [appLang, dateString, enabled, enrichCorners, isToday, leagueId, selectedDate]);
 
   useEffect(() => {
     void load();

@@ -313,7 +313,7 @@ export const fetchWorldCupMatchesByDate = async (
   options?: { skipDiskCache?: boolean },
 ): Promise<Match[]> => {
   const dateString = formatLocalDateKey(date);
-  const inflightKey = `${dateString}:${options?.skipDiskCache ? 'fresh' : 'cache'}`;
+  const inflightKey = `${dateString}:${getAppLanguageParam()}:${options?.skipDiskCache ? 'fresh' : 'cache'}`;
   const existing = inFlightWorldCupByDate.get(inflightKey);
   if (existing) return existing;
 
@@ -329,7 +329,7 @@ const fetchWorldCupMatchesByDateImpl = async (
   dateString: string,
   options?: { skipDiskCache?: boolean },
 ): Promise<Match[]> => {
-  const cacheKey = `wc_matches_${dateString}`;
+  const cacheKey = `wc_matches_${dateString}_${getAppLanguageParam()}`;
   const isToday = dateString === getLocalTodayKey();
 
   if (!options?.skipDiskCache) {

@@ -96,8 +96,8 @@ export interface Scores365ExperimentConfig {
 }
 
 let cachedGameByKey = new Map<string, { fetchedAt: number; game: Scores365Game | null }>();
-/** Last successful payload per gameId — used when 365Scores fetch fails (no empty flash). */
-let lastGoodGameById = new Map<number, Scores365Game>();
+/** Last successful payload per game+lang — avoids cross-language stale fallback. */
+let lastGoodGameByKey = new Map<string, Scores365Game>();
 /** Coalesce concurrent upstream calls per game+lang. */
 let inFlightGameFetch = new Map<string, Promise<Scores365Game | null>>();
 
@@ -175,10 +175,12 @@ function scores365FixturesUrl(langId: number): string {
   return `${SCORES365_FIXTURES_BASE}?${scores365CommonParams(langId)}&competitions=${competitionId}&showOdds=true`;
 }
 
-function scores365FetchHeaders(): Record<string, string> {
+function scores365FetchHeaders(langId: number): Record<string, string> {
+  const enId = parseInt(process.env.SCORES365_LANG_ID_EN || '1', 10);
+  const preferEn = langId === enId;
   return {
     Accept: 'application/json, text/plain, */*',
-    'Accept-Language': 'ar,en;q=0.9',
+    'Accept-Language': preferEn ? 'en,ar;q=0.9' : 'ar,en;q=0.9',
     'User-Agent':
       process.env.SCORES365_USER_AGENT?.trim() ||
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -187,33 +189,49 @@ function scores365FetchHeaders(): Record<string, string> {
   };
 }
 
+/** Force langId on pagination paths returned by 365Scores (may carry a stale langId). */
+function rewriteScores365PagingPath(path: string, langId: number): string {
+  try {
+    const url = new URL(path.startsWith('http') ? path : `${SCORES365_WEB_ORIGIN}${path}`);
+    url.searchParams.set('langId', String(langId));
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return path;
+  }
+}
+
+function lastGoodGameKey(gameId: number, langId: number): string {
+  return `${gameId}:${langId}`;
+}
+
 function gameCacheKey(gameId: number, langId: number): string {
   return `${gameId}:${langId}`;
 }
 
 async function fetchScores365GameOnce(gameId: number, langId: number): Promise<Scores365Game | null> {
-  const lastGood = lastGoodGameById.get(gameId) ?? null;
+  const staleKey = lastGoodGameKey(gameId, langId);
+  const lastGood = lastGoodGameByKey.get(staleKey) ?? null;
   try {
     const res = await fetch(scores365GameUrl(gameId, langId), {
-      headers: scores365FetchHeaders(),
+      headers: scores365FetchHeaders(langId),
       signal: AbortSignal.timeout(12_000),
     });
     if (!res.ok) {
-      logger.warn(`[Scores365Experiment] HTTP ${res.status} for game ${gameId}`);
+      logger.warn(`[Scores365Experiment] HTTP ${res.status} for game ${gameId} lang=${langId}`);
       return lastGood;
     }
     const payload = (await res.json()) as Scores365GamePayload;
     const game = payload?.game ?? null;
     if (game) {
-      lastGoodGameById.set(gameId, game);
+      lastGoodGameByKey.set(staleKey, game);
       cachedGameByKey.set(gameCacheKey(gameId, langId), { fetchedAt: Date.now(), game });
       logger.debug(
-        `[Scores365Experiment] game ${gameId}: ${game.homeCompetitor?.name} ${normalize365Score(game.homeCompetitor?.score)}-${normalize365Score(game.awayCompetitor?.score)} ${game.awayCompetitor?.name} (${game.gameTimeDisplay ?? game.statusText}) events=${game.events?.length ?? 0}`,
+        `[Scores365Experiment] game ${gameId} lang=${langId}: ${game.homeCompetitor?.name} ${normalize365Score(game.homeCompetitor?.score)}-${normalize365Score(game.awayCompetitor?.score)} ${game.awayCompetitor?.name} (${game.gameTimeDisplay ?? game.statusText}) events=${game.events?.length ?? 0}`,
       );
     }
     return game ?? lastGood;
   } catch (err: any) {
-    logger.warn(`[Scores365Experiment] fetch failed for game ${gameId}:`, err?.message);
+    logger.warn(`[Scores365Experiment] fetch failed for game ${gameId} lang=${langId}:`, err?.message);
     return lastGood;
   }
 }
@@ -230,7 +248,7 @@ export async function fetchScores365GameById(
   const cached = cachedGameByKey.get(key);
 
   if (!options?.force && cached && Date.now() - cached.fetchedAt < ttlMs) {
-    return cached.game ?? lastGoodGameById.get(gameId) ?? null;
+    return cached.game ?? lastGoodGameByKey.get(lastGoodGameKey(gameId, langId)) ?? null;
   }
 
   const inFlight = inFlightGameFetch.get(key);
@@ -252,12 +270,13 @@ export async function fetchScores365Game(
   return fetchScores365GameById(gameId, { force, language });
 }
 
-async function fetchScores365FixturesPage(pathOrUrl: string): Promise<Scores365FixturesPayload> {
-  const url = pathOrUrl.startsWith('http')
-    ? pathOrUrl
-    : `${SCORES365_WEB_ORIGIN}${pathOrUrl}`;
+async function fetchScores365FixturesPage(pathOrUrl: string, langId: number): Promise<Scores365FixturesPayload> {
+  const normalized = rewriteScores365PagingPath(pathOrUrl, langId);
+  const url = normalized.startsWith('http')
+    ? normalized
+    : `${SCORES365_WEB_ORIGIN}${normalized}`;
   const res = await fetch(url, {
-    headers: scores365FetchHeaders(),
+    headers: scores365FetchHeaders(langId),
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
@@ -278,12 +297,12 @@ async function paginateScores365Fixtures(langId: number): Promise<Scores365Game[
     }
   };
 
-  const first = await fetchScores365FixturesPage(scores365FixturesUrl(langId));
+  const first = await fetchScores365FixturesPage(scores365FixturesUrl(langId), langId);
   add(first.games);
 
   let prev = first.paging?.previousPage;
   for (let step = 0; prev && step < 40; step++) {
-    const page = await fetchScores365FixturesPage(prev);
+    const page = await fetchScores365FixturesPage(prev, langId);
     const before = all.length;
     add(page.games);
     if (all.length === before && !(page.games?.length)) break;
@@ -292,7 +311,7 @@ async function paginateScores365Fixtures(langId: number): Promise<Scores365Game[
 
   let next = first.paging?.nextPage;
   for (let step = 0; next && step < 40; step++) {
-    const page = await fetchScores365FixturesPage(next);
+    const page = await fetchScores365FixturesPage(next, langId);
     const before = all.length;
     add(page.games);
     if (all.length === before && !(page.games?.length)) break;

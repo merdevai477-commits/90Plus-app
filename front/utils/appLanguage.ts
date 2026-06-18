@@ -1,10 +1,10 @@
-import { useAppSettings } from '../src/store/useAppSettings';
+import { useLanguageStore } from '../src/i18n/store';
 
 export type AppLanguageCode = 'ar' | 'en';
 
-/** Current app UI language — drives backend + 365Scores langId. */
+/** Current app UI language — same store as useTranslation / settings screen. */
 export function getAppLanguageCode(): AppLanguageCode {
-  const current = useAppSettings.getState().language?.current ?? 'ar';
+  const current = useLanguageStore.getState().language ?? 'ar';
   return current.startsWith('en') ? 'en' : 'ar';
 }
 
