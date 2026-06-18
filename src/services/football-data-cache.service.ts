@@ -407,7 +407,7 @@ class FootballDataCacheService {
             dateString < todayKey
                 ? this.TTL.MATCHES_BY_DATE_PAST
                 : dateString === todayKey
-                  ? 12 * 1000
+                  ? 4 * 1000
                   : this.TTL.MATCHES_BY_DATE_FUTURE;
 
         try {
@@ -1196,7 +1196,7 @@ class FootballDataCacheService {
         // 365Scores experiment — single shared upstream fetch; never API-Football quota.
         if (isScores365ExperimentFixture(fixtureId)) {
             const events = await getScores365ExperimentEvents(fixtureId, forceRefresh, language);
-            const ttl = Math.max(3_000, parseInt(process.env.SCORES365_CACHE_MS || '5000', 10) || 5_000);
+            const ttl = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '3000', 10) || 3_000);
             const cacheEntry: MemoryCacheEntry<any> = {
                 data: events,
                 timestamp: Date.now(),

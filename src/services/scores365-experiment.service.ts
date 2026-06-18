@@ -260,7 +260,7 @@ export async function fetchScores365GameById(
   if (!isScores365ExperimentEnabled()) return null;
 
   const langId = resolveScores365LangId(options?.language);
-  const ttlMs = Math.max(3_000, parseInt(process.env.SCORES365_CACHE_MS || '5000', 10) || 5_000);
+  const ttlMs = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '3000', 10) || 3_000);
   const key = gameCacheKey(gameId, langId);
   const cached = cachedGameByKey.get(key);
 
@@ -339,15 +339,14 @@ async function paginateScores365Fixtures(langId: number): Promise<Scores365Game[
 }
 
 export async function fetchScores365WorldCupFixtures(
-  options?: { force?: boolean; language?: string | null },
+  options?: { force?: boolean; language?: string | null; liveRefresh?: boolean },
 ): Promise<Scores365Game[]> {
   if (!isScores365ExperimentEnabled()) return [];
 
   const langId = resolveScores365LangId(options?.language);
-  const ttlMs = Math.max(
-    30_000,
-    parseInt(process.env.SCORES365_FIXTURES_CACHE_MS || '60000', 10) || 60_000,
-  );
+  const ttlMs = options?.liveRefresh
+    ? Math.max(4_000, parseInt(process.env.SCORES365_FIXTURES_LIVE_CACHE_MS || '8000', 10) || 8_000)
+    : Math.max(30_000, parseInt(process.env.SCORES365_FIXTURES_CACHE_MS || '60000', 10) || 60_000);
   const cached = cachedFixturesByLang.get(langId);
   if (!options?.force && cached && Date.now() - cached.fetchedAt < ttlMs) {
     return cached.games;
@@ -386,7 +385,7 @@ export function classifyScores365MatchStatus(
   const homeRaw = game.homeCompetitor?.score;
   const awayRaw = game.awayCompetitor?.score;
   const text = (game.statusText ?? '').toLowerCase();
-  const shortCode = (game.shortStatusText ?? '').trim();
+  const shortCode = (game.shortStatusText ?? '').trim().toLowerCase();
   const minute = Math.floor(game.gameTime ?? 0) || null;
 
   if (homeRaw === -1 || awayRaw === -1) {
@@ -397,21 +396,43 @@ export function classifyScores365MatchStatus(
     text.includes('انته') ||
     text.includes('finish') ||
     text.includes('ended') ||
-    shortCode === 'FT'
+    shortCode === 'ft'
   ) {
     return { short: 'FT', long: 'Match Finished', elapsed: 90 };
   }
 
-  if (text.includes('استراح') || text.includes('half') || shortCode === 'HT') {
+  // 2nd / 1st half BEFORE generic "half" — "2nd Half".includes("half") must not map to HT.
+  if (
+    text.includes('second') ||
+    text.includes('2nd') ||
+    text.includes('الثاني') ||
+    shortCode === '2' ||
+    shortCode === '2h' ||
+    (minute != null && minute > 45)
+  ) {
+    return {
+      short: '2H',
+      long: 'Second Half',
+      elapsed: minute != null ? Math.max(minute, 46) : 46,
+    };
+  }
+
+  if (
+    text.includes('استراح') ||
+    text.includes('halftime') ||
+    text.includes('half time') ||
+    text.includes('half-time') ||
+    shortCode === 'ht'
+  ) {
     return { short: 'HT', long: 'Halftime', elapsed: 45 };
   }
-  if (text.includes('الثاني') || text.includes('second') || shortCode === '2') {
-    return { short: '2H', long: 'Second Half', elapsed: minute != null ? Math.max(minute, 46) : 46 };
-  }
+
   if (
-    text.includes('الأول') ||
     text.includes('first') ||
+    text.includes('1st') ||
+    text.includes('الأول') ||
     shortCode === '1' ||
+    shortCode === '1h' ||
     (minute != null && minute > 0)
   ) {
     return { short: '1H', long: 'First Half', elapsed: minute };
@@ -769,8 +790,6 @@ export async function getScores365MatchesForDate(
   if (!isScores365ExperimentEnabled()) return [];
 
   const dbRows = await loadWorldCupDbFixtures(leagueId, season);
-  const games = await fetchScores365WorldCupFixtures({ language });
-  if (!games.length) return [];
 
   const todayKey = new Intl.DateTimeFormat('en-CA', {
     timeZone: process.env.SCORES365_TIMEZONE || 'Africa/Cairo',
@@ -779,19 +798,31 @@ export async function getScores365MatchesForDate(
     day: '2-digit',
   }).format(new Date());
 
+  const isToday = dateString === todayKey;
+  const lang = resolveScores365AppLanguage(language);
+  const games = await fetchScores365WorldCupFixtures({ language, liveRefresh: isToday });
+  if (!games.length) return [];
+
   const mapped: any[] = [];
   for (const game of games) {
     const matchDate = calendarDateFromStart(game.startTime);
     const live = is365Live(game);
-    if (dateString !== matchDate && !(live && dateString === todayKey)) {
+    if (dateString !== matchDate && !(live && isToday)) {
       continue;
     }
 
     const dbRow = resolveDbFixtureFor365Game(game, dbRows);
     if (!dbRow) continue;
 
+    // Live matches on today: refresh from /web/game/ (fixtures list lags by ~30–60s).
+    let gameForMap = game;
+    if (live && isToday) {
+      const fresh = await fetchScores365GameById(game.id, { language: lang });
+      if (fresh) gameForMap = fresh;
+    }
+
     const base = matchCacheService.convertDbMatchToApiFormat(dbRow);
-    const fixture = await mapScores365ToApiFootballFixture(game, base, dbRow.fixtureId);
+    const fixture = await mapScores365ToApiFootballFixture(gameForMap, base, dbRow.fixtureId);
     if (fixture) mapped.push(fixture);
   }
 
@@ -799,7 +830,7 @@ export async function getScores365MatchesForDate(
 
   if (mapped.length > 0) {
     logger.info(
-      `[Scores365Experiment] ${mapped.length} fixtures on ${dateString} (lang=${resolveScores365LangId(language)})`,
+      `[Scores365Experiment] ${mapped.length} fixtures on ${dateString} (lang=${resolveScores365LangId(language)} liveRefresh=${isToday})`,
     );
   }
 
