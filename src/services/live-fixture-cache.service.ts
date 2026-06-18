@@ -28,6 +28,7 @@ import {
   getScores365ExperimentConfig,
   getScores365ExperimentFixture,
   isScores365ExperimentFixture,
+  resolveScores365AppLanguage,
 } from './scores365-experiment.service';
 
 export type LiveFixtureReadSource = 'redis-live' | 'redis-terminal' | 'db' | 'scores365-experiment' | null;
@@ -138,7 +139,10 @@ export async function resolveFixtureForClient(
   language?: string | null,
 ): Promise<{ fixture: FixtureFromAPI | null; source: LiveFixtureReadSource }> {
   if (isScores365ExperimentFixture(fixtureId)) {
-    const experimentFixture = await getScores365ExperimentFixture(fixtureId, language);
+    const experimentFixture = await getScores365ExperimentFixture(
+      fixtureId,
+      resolveScores365AppLanguage(language),
+    );
     if (experimentFixture) {
       return { fixture: experimentFixture, source: 'scores365-experiment' };
     }
@@ -196,7 +200,7 @@ export async function resolveLiveFixturesForClient(
 
   const experimentFixture = await getScores365ExperimentFixture(
     getScores365ExperimentConfig().fixtureId,
-    language,
+    resolveScores365AppLanguage(language),
   );
   if (experimentFixture) {
     const short = experimentFixture.fixture?.status?.short ?? '';

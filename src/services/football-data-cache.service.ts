@@ -50,6 +50,7 @@ import {
     getScores365MatchesForDate,
     isScores365ExperimentEnabled,
     isScores365ExperimentFixture,
+    resolveScores365AppLanguage,
 } from './scores365-experiment.service';
 import { redisCacheService } from './redis-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
@@ -399,7 +400,8 @@ class FootballDataCacheService {
         season: number,
         language?: string | null,
     ): Promise<any[]> {
-        const cacheKey = `wc_${leagueId}_${season}_${dateString}_${language ?? 'ar'}`;
+        const scores365Lang = resolveScores365AppLanguage(language);
+        const cacheKey = `wc_${leagueId}_${season}_${dateString}_${scores365Lang}`;
         const todayKey = new Date().toISOString().split('T')[0];
         const ttl =
             dateString < todayKey
@@ -414,7 +416,7 @@ class FootballDataCacheService {
                     dateString,
                     leagueId,
                     season,
-                    language,
+                    scores365Lang,
                 );
                 if (from365.length > 0) {
                     await matchCacheService.setInMemoryCache(cacheKey, from365, ttl);
@@ -425,7 +427,7 @@ class FootballDataCacheService {
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
             if (cached && cached.length > 0) {
                 const normalized = this.normalizePastCalendarFixtures(cached, dateString);
-                return applyScores365ExperimentToWorldCupList(normalized, dateString, language);
+                return applyScores365ExperimentToWorldCupList(normalized, dateString, scores365Lang);
             }
 
             // DB / by-date cache first — avoids a league-scoped API call per calendar day.
@@ -450,7 +452,7 @@ class FootballDataCacheService {
                 list = this.normalizePastCalendarFixtures(list, dateString);
                 await matchCacheService.setInMemoryCache(cacheKey, list, ttl);
             }
-            return applyScores365ExperimentToWorldCupList(list, dateString, language);
+            return applyScores365ExperimentToWorldCupList(list, dateString, scores365Lang);
         } catch (error) {
             logger.error(`[WC ${dateString}] getWorldCupMatchesByDate failed:`, error);
             try {
@@ -461,7 +463,7 @@ class FootballDataCacheService {
                         dateString,
                     ),
                     dateString,
-                    language,
+                    scores365Lang,
                 );
             } catch {
                 return [];
@@ -1189,7 +1191,7 @@ class FootballDataCacheService {
         options?: { forceRefresh?: boolean; language?: string | null },
     ): Promise<any[]> {
         const forceRefresh = options?.forceRefresh === true;
-        const language = options?.language ?? null;
+        const language = resolveScores365AppLanguage(options?.language ?? null);
 
         // 365Scores experiment — single shared upstream fetch; never API-Football quota.
         if (isScores365ExperimentFixture(fixtureId)) {
@@ -1303,7 +1305,10 @@ class FootballDataCacheService {
         venue: any | null;
     }> {
         if (isScores365ExperimentFixture(fixtureId)) {
-            const experiment = await getScores365ExperimentBundle(fixtureId, options?.language);
+            const experiment = await getScores365ExperimentBundle(
+                fixtureId,
+                resolveScores365AppLanguage(options?.language ?? null),
+            );
             if (experiment) {
                 let statistics = experiment.statistics;
                 if (!statistics?.length) {

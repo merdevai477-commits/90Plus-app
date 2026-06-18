@@ -1712,6 +1712,7 @@ export class FootballController {
           language,
           cached: true,
           scores365Experiment: matches.some((m: any) => m?._experiment === 'scores365'),
+          scores365ForceEnglish: (await import('../services/scores365-experiment.service')).isScores365ForceEnglish(),
         },
       });
     } catch (error) {

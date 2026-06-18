@@ -133,7 +133,24 @@ export function getScores365ExperimentConfig(): Scores365ExperimentConfig {
   return cfg;
 }
 
+export function isScores365ForceEnglish(): boolean {
+  const raw = process.env.SCORES365_FORCE_ENGLISH?.trim();
+  if (raw === 'false' || raw === '0') return false;
+  // Default ON until app OTA ships i18n→365Scores locale sync.
+  return true;
+}
+
+/** Language passed into 365Scores upstream (forced EN when isScores365ForceEnglish). */
+export function resolveScores365AppLanguage(appLanguage?: string | null): 'ar' | 'en' {
+  if (isScores365ForceEnglish()) return 'en';
+  const lang = (appLanguage || process.env.SCORES365_DEFAULT_LANG || 'ar').trim().toLowerCase();
+  return lang.startsWith('en') ? 'en' : 'ar';
+}
+
 export function resolveScores365LangId(appLanguage?: string | null): number {
+  if (isScores365ForceEnglish()) {
+    return parseInt(process.env.SCORES365_LANG_ID_EN || '1', 10);
+  }
   const lang = (appLanguage || process.env.SCORES365_DEFAULT_LANG || 'ar').trim().toLowerCase();
   if (lang.startsWith('en')) {
     return parseInt(process.env.SCORES365_LANG_ID_EN || '1', 10);
