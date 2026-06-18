@@ -20,6 +20,12 @@ import { cacheService, CACHE_TTL } from './cacheService';
 import { logger } from './logger';
 import { circuitBreakerService } from './circuitBreaker.service';
 import { requestQueueService } from './requestQueue.service';
+import { useAppSettings } from '../src/store/useAppSettings';
+
+function getProxyLanguageParams(): Record<string, string> {
+  const current = useAppSettings.getState().language?.current ?? 'ar';
+  return { language: current.startsWith('en') ? 'en' : 'ar' };
+}
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds timeout
 
@@ -1405,7 +1411,10 @@ export const ApiFootballService = {
           { fresh: true },
         );
       }
-      return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`);
+      return await fetchFromProxy<FixtureEvent[]>(
+        `/cached/fixture/${fixtureId}/events`,
+        getProxyLanguageParams(),
+      );
     } catch (error) {
       return fetchFromProxy<FixtureEvent[]>(`/fixtures/${fixtureId}/events`);
     }
@@ -1445,7 +1454,10 @@ export const ApiFootballService = {
         };
       }
 
-      const raw = await fetchFromProxy<any>(`/cached/fixture/${fixtureId}/details`);
+      const raw = await fetchFromProxy<any>(
+        `/cached/fixture/${fixtureId}/details`,
+        getProxyLanguageParams(),
+      );
       const bundle = raw?.response ?? raw;
       return {
         fixture: bundle?.fixture ?? null,

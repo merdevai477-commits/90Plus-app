@@ -8,11 +8,22 @@ import { logger } from '../utils/logger';
 import { matchCacheService } from './match-cache.service';
 import type { FixtureFromAPI } from './match-cache.service';
 
-const SCORES365_BASE = 'https://webws.365scores.com/web/game/';
+const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
+const SCORES365_FIXTURES_BASE = 'https://webws.365scores.com/web/games/fixtures/';
+const SCORES365_WEB_ORIGIN = 'https://webws.365scores.com';
 
 interface Scores365GamePayload {
   ttl?: number;
   game?: Scores365Game;
+}
+
+interface Scores365FixturesPayload {
+  ttl?: number;
+  games?: Scores365Game[];
+  paging?: {
+    previousPage?: string;
+    nextPage?: string;
+  };
 }
 
 interface Scores365Game {
@@ -84,11 +95,24 @@ export interface Scores365ExperimentConfig {
   season: number;
 }
 
-let cachedGame: { fetchedAt: number; game: Scores365Game | null } | null = null;
-/** Last successful payload — used when 365Scores fetch fails (no empty flash). */
-let lastGoodGame: Scores365Game | null = null;
-/** Coalesce concurrent upstream calls (all users share one in-flight request). */
-let inFlightFetch: Promise<Scores365Game | null> | null = null;
+let cachedGameByKey = new Map<string, { fetchedAt: number; game: Scores365Game | null }>();
+/** Last successful payload per gameId — used when 365Scores fetch fails (no empty flash). */
+let lastGoodGameById = new Map<number, Scores365Game>();
+/** Coalesce concurrent upstream calls per game+lang. */
+let inFlightGameFetch = new Map<string, Promise<Scores365Game | null>>();
+
+let cachedFixturesByLang = new Map<number, { fetchedAt: number; games: Scores365Game[] }>();
+let inFlightFixturesFetch = new Map<number, Promise<Scores365Game[]>>();
+
+/** fixtureId → 365Scores gameId (built from fixtures list sync). */
+const fixtureToGameId = new Map<number, number>();
+
+let cachedWorldCupDbRows: {
+  leagueId: number;
+  season: number;
+  fetchedAt: number;
+  rows: Awaited<ReturnType<typeof prisma.cachedFixture.findMany>>;
+} | null = null;
 
 export function isScores365ExperimentEnabled(): boolean {
   const raw = process.env.SCORES365_EXPERIMENT_ENABLED?.trim();
@@ -96,123 +120,349 @@ export function isScores365ExperimentEnabled(): boolean {
 }
 
 export function getScores365ExperimentConfig(): Scores365ExperimentConfig {
-  return {
+  const cfg = {
     enabled: isScores365ExperimentEnabled(),
     gameId: parseInt(process.env.SCORES365_EXPERIMENT_GAME_ID || '4627937', 10),
     fixtureId: parseInt(process.env.SCORES365_EXPERIMENT_FIXTURE_ID || '1489387', 10),
     leagueId: parseInt(process.env.WORLD_CUP_LEAGUE_ID || '1', 10),
     season: parseInt(process.env.WORLD_CUP_SEASON || '2026', 10),
   };
+  if (cfg.enabled) {
+    registerScores365FixtureMapping(cfg.fixtureId, cfg.gameId);
+  }
+  return cfg;
+}
+
+export function resolveScores365LangId(appLanguage?: string | null): number {
+  const lang = (appLanguage || process.env.SCORES365_DEFAULT_LANG || 'ar').trim().toLowerCase();
+  if (lang.startsWith('en')) {
+    return parseInt(process.env.SCORES365_LANG_ID_EN || '1', 10);
+  }
+  return parseInt(process.env.SCORES365_LANG_ID_AR || process.env.SCORES365_LANG_ID || '27', 10);
+}
+
+export function getScores365CompetitionId(): number {
+  return parseInt(process.env.SCORES365_COMPETITION_ID || '5930', 10);
+}
+
+export function registerScores365FixtureMapping(fixtureId: number, gameId: number): void {
+  fixtureToGameId.set(fixtureId, gameId);
+}
+
+export function getScores365GameIdForFixture(fixtureId: number): number | null {
+  const cfg = getScores365ExperimentConfig();
+  if (fixtureId === cfg.fixtureId) return cfg.gameId;
+  return fixtureToGameId.get(fixtureId) ?? null;
 }
 
 export function isScores365ExperimentFixture(fixtureId: number): boolean {
   if (!isScores365ExperimentEnabled()) return false;
-  return fixtureId === getScores365ExperimentConfig().fixtureId;
+  return getScores365GameIdForFixture(fixtureId) != null;
 }
 
-function scores365Url(gameId: number): string {
+function scores365CommonParams(langId: number): string {
   const tz = encodeURIComponent(process.env.SCORES365_TIMEZONE || 'Africa/Cairo');
-  const langId = process.env.SCORES365_LANG_ID || '27';
   const countryId = process.env.SCORES365_USER_COUNTRY_ID || '131';
-  return `${SCORES365_BASE}?appTypeId=5&langId=${langId}&timezoneName=${tz}&userCountryId=${countryId}&gameId=${gameId}`;
+  return `appTypeId=5&langId=${langId}&timezoneName=${tz}&userCountryId=${countryId}`;
 }
 
-async function fetchScores365GameOnce(gameId: number): Promise<Scores365Game | null> {
+function scores365GameUrl(gameId: number, langId: number): string {
+  return `${SCORES365_GAME_BASE}?${scores365CommonParams(langId)}&gameId=${gameId}`;
+}
+
+function scores365FixturesUrl(langId: number): string {
+  const competitionId = getScores365CompetitionId();
+  return `${SCORES365_FIXTURES_BASE}?${scores365CommonParams(langId)}&competitions=${competitionId}&showOdds=true`;
+}
+
+function scores365FetchHeaders(): Record<string, string> {
+  return {
+    Accept: 'application/json, text/plain, */*',
+    'Accept-Language': 'ar,en;q=0.9',
+    'User-Agent':
+      process.env.SCORES365_USER_AGENT?.trim() ||
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    Referer: 'https://www.365scores.com/',
+    Origin: 'https://www.365scores.com',
+  };
+}
+
+function gameCacheKey(gameId: number, langId: number): string {
+  return `${gameId}:${langId}`;
+}
+
+async function fetchScores365GameOnce(gameId: number, langId: number): Promise<Scores365Game | null> {
+  const lastGood = lastGoodGameById.get(gameId) ?? null;
   try {
-    const res = await fetch(scores365Url(gameId), {
-      headers: {
-        Accept: 'application/json, text/plain, */*',
-        'Accept-Language': 'ar,en;q=0.9',
-        'User-Agent':
-          process.env.SCORES365_USER_AGENT?.trim() ||
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        Referer: 'https://www.365scores.com/',
-        Origin: 'https://www.365scores.com',
-      },
+    const res = await fetch(scores365GameUrl(gameId, langId), {
+      headers: scores365FetchHeaders(),
       signal: AbortSignal.timeout(12_000),
     });
     if (!res.ok) {
       logger.warn(`[Scores365Experiment] HTTP ${res.status} for game ${gameId}`);
-      return lastGoodGame;
+      return lastGood;
     }
     const payload = (await res.json()) as Scores365GamePayload;
     const game = payload?.game ?? null;
     if (game) {
-      lastGoodGame = game;
-      cachedGame = { fetchedAt: Date.now(), game };
+      lastGoodGameById.set(gameId, game);
+      cachedGameByKey.set(gameCacheKey(gameId, langId), { fetchedAt: Date.now(), game });
       logger.debug(
-        `[Scores365Experiment] game ${gameId}: ${game.homeCompetitor?.name} ${game.homeCompetitor?.score ?? 0}-${game.awayCompetitor?.score ?? 0} ${game.awayCompetitor?.name} (${game.gameTimeDisplay ?? game.statusText}) events=${game.events?.length ?? 0}`,
+        `[Scores365Experiment] game ${gameId}: ${game.homeCompetitor?.name} ${normalize365Score(game.homeCompetitor?.score)}-${normalize365Score(game.awayCompetitor?.score)} ${game.awayCompetitor?.name} (${game.gameTimeDisplay ?? game.statusText}) events=${game.events?.length ?? 0}`,
       );
     }
-    return game ?? lastGoodGame;
+    return game ?? lastGood;
   } catch (err: any) {
     logger.warn(`[Scores365Experiment] fetch failed for game ${gameId}:`, err?.message);
-    return lastGoodGame;
+    return lastGood;
   }
 }
 
-export async function fetchScores365Game(force = false): Promise<Scores365Game | null> {
+export async function fetchScores365GameById(
+  gameId: number,
+  options?: { force?: boolean; language?: string | null },
+): Promise<Scores365Game | null> {
   if (!isScores365ExperimentEnabled()) return null;
 
-  const { gameId } = getScores365ExperimentConfig();
+  const langId = resolveScores365LangId(options?.language);
   const ttlMs = Math.max(3_000, parseInt(process.env.SCORES365_CACHE_MS || '5000', 10) || 5_000);
+  const key = gameCacheKey(gameId, langId);
+  const cached = cachedGameByKey.get(key);
 
-  if (!force && cachedGame && Date.now() - cachedGame.fetchedAt < ttlMs) {
-    return cachedGame.game ?? lastGoodGame;
+  if (!options?.force && cached && Date.now() - cached.fetchedAt < ttlMs) {
+    return cached.game ?? lastGoodGameById.get(gameId) ?? null;
   }
 
-  if (inFlightFetch) {
-    return inFlightFetch;
-  }
+  const inFlight = inFlightGameFetch.get(key);
+  if (inFlight) return inFlight;
 
-  inFlightFetch = fetchScores365GameOnce(gameId).finally(() => {
-    inFlightFetch = null;
+  const promise = fetchScores365GameOnce(gameId, langId).finally(() => {
+    inFlightGameFetch.delete(key);
   });
-  return inFlightFetch;
+  inFlightGameFetch.set(key, promise);
+  return promise;
 }
 
-function map365Status(game: Scores365Game): { short: string; long: string; elapsed: number | null } {
-  const minute = Math.floor(game.gameTime ?? 0) || null;
+/** Back-compat: default experiment gameId. */
+export async function fetchScores365Game(
+  force = false,
+  language?: string | null,
+): Promise<Scores365Game | null> {
+  const gameId = getScores365ExperimentConfig().gameId;
+  return fetchScores365GameById(gameId, { force, language });
+}
+
+async function fetchScores365FixturesPage(pathOrUrl: string): Promise<Scores365FixturesPayload> {
+  const url = pathOrUrl.startsWith('http')
+    ? pathOrUrl
+    : `${SCORES365_WEB_ORIGIN}${pathOrUrl}`;
+  const res = await fetch(url, {
+    headers: scores365FetchHeaders(),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    throw new Error(`365Scores fixtures HTTP ${res.status}`);
+  }
+  return (await res.json()) as Scores365FixturesPayload;
+}
+
+async function paginateScores365Fixtures(langId: number): Promise<Scores365Game[]> {
+  const seen = new Set<number>();
+  const all: Scores365Game[] = [];
+  const add = (games?: Scores365Game[]) => {
+    for (const g of games ?? []) {
+      if (!seen.has(g.id)) {
+        seen.add(g.id);
+        all.push(g);
+      }
+    }
+  };
+
+  const first = await fetchScores365FixturesPage(scores365FixturesUrl(langId));
+  add(first.games);
+
+  let prev = first.paging?.previousPage;
+  for (let step = 0; prev && step < 40; step++) {
+    const page = await fetchScores365FixturesPage(prev);
+    const before = all.length;
+    add(page.games);
+    if (all.length === before && !(page.games?.length)) break;
+    prev = page.paging?.previousPage;
+  }
+
+  let next = first.paging?.nextPage;
+  for (let step = 0; next && step < 40; step++) {
+    const page = await fetchScores365FixturesPage(next);
+    const before = all.length;
+    add(page.games);
+    if (all.length === before && !(page.games?.length)) break;
+    next = page.paging?.nextPage;
+  }
+
+  return all;
+}
+
+export async function fetchScores365WorldCupFixtures(
+  options?: { force?: boolean; language?: string | null },
+): Promise<Scores365Game[]> {
+  if (!isScores365ExperimentEnabled()) return [];
+
+  const langId = resolveScores365LangId(options?.language);
+  const ttlMs = Math.max(
+    30_000,
+    parseInt(process.env.SCORES365_FIXTURES_CACHE_MS || '60000', 10) || 60_000,
+  );
+  const cached = cachedFixturesByLang.get(langId);
+  if (!options?.force && cached && Date.now() - cached.fetchedAt < ttlMs) {
+    return cached.games;
+  }
+
+  const inFlight = inFlightFixturesFetch.get(langId);
+  if (inFlight) return inFlight;
+
+  const promise = (async () => {
+    try {
+      const games = await paginateScores365Fixtures(langId);
+      cachedFixturesByLang.set(langId, { fetchedAt: Date.now(), games });
+      logger.info(`[Scores365Experiment] fixtures list lang=${langId}: ${games.length} games`);
+      return games;
+    } catch (err: any) {
+      logger.warn('[Scores365Experiment] fixtures pagination failed:', err?.message);
+      return cached?.games ?? [];
+    } finally {
+      inFlightFixturesFetch.delete(langId);
+    }
+  })();
+
+  inFlightFixturesFetch.set(langId, promise);
+  return promise;
+}
+
+function normalize365Score(score?: number): number | null {
+  if (score == null || score < 0) return null;
+  return score;
+}
+
+/** Status rules validated against 365Scores WC feed (score -1 / statusText). */
+export function classifyScores365MatchStatus(
+  game: Scores365Game,
+): { short: string; long: string; elapsed: number | null } {
+  const homeRaw = game.homeCompetitor?.score;
+  const awayRaw = game.awayCompetitor?.score;
   const text = (game.statusText ?? '').toLowerCase();
   const shortCode = (game.shortStatusText ?? '').trim();
+  const minute = Math.floor(game.gameTime ?? 0) || null;
 
-  if (game.statusGroup !== 3) {
-    if (text.includes('انته') || shortCode === 'FT') {
-      return { short: 'FT', long: 'Match Finished', elapsed: 90 };
-    }
+  if (homeRaw === -1 || awayRaw === -1) {
     return { short: 'NS', long: 'Not Started', elapsed: null };
   }
 
-  if (text.includes('استراح') || shortCode === 'HT') {
+  if (
+    text.includes('انته') ||
+    text.includes('finish') ||
+    text.includes('ended') ||
+    shortCode === 'FT'
+  ) {
+    return { short: 'FT', long: 'Match Finished', elapsed: 90 };
+  }
+
+  if (text.includes('استراح') || text.includes('half') || shortCode === 'HT') {
     return { short: 'HT', long: 'Halftime', elapsed: 45 };
   }
-  if (text.includes('الثاني') || shortCode === '2') {
+  if (text.includes('الثاني') || text.includes('second') || shortCode === '2') {
     return { short: '2H', long: 'Second Half', elapsed: minute != null ? Math.max(minute, 46) : 46 };
   }
-  return { short: '1H', long: 'First Half', elapsed: minute };
+  if (
+    text.includes('الأول') ||
+    text.includes('first') ||
+    shortCode === '1' ||
+    (minute != null && minute > 0)
+  ) {
+    return { short: '1H', long: 'First Half', elapsed: minute };
+  }
+
+  return { short: 'NS', long: 'Not Started', elapsed: null };
+}
+
+function map365Status(game: Scores365Game): { short: string; long: string; elapsed: number | null } {
+  return classifyScores365MatchStatus(game);
 }
 
 function is365Live(game: Scores365Game): boolean {
-  return game.statusGroup === 3;
+  const status = classifyScores365MatchStatus(game);
+  return ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE'].includes(status.short);
 }
 
-function calendarDateFromStart(startTime?: string): string | null {
+function calendarDateFromStart(
+  startTime?: string,
+  timezone = process.env.SCORES365_TIMEZONE || 'Africa/Cairo',
+): string | null {
   if (!startTime) return null;
   const d = new Date(startTime);
   if (Number.isNaN(d.getTime())) return null;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
 }
 
-async function loadBaseFixture(): Promise<FixtureFromAPI | null> {
-  const { fixtureId } = getScores365ExperimentConfig();
+async function loadBaseFixture(fixtureId: number): Promise<FixtureFromAPI | null> {
   const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
   if (dbRow) {
     return matchCacheService.convertDbMatchToApiFormat(dbRow);
   }
   return null;
+}
+
+async function loadWorldCupDbFixtures(leagueId: number, season: number) {
+  const ttlMs = 5 * 60_000;
+  if (
+    cachedWorldCupDbRows &&
+    cachedWorldCupDbRows.leagueId === leagueId &&
+    cachedWorldCupDbRows.season === season &&
+    Date.now() - cachedWorldCupDbRows.fetchedAt < ttlMs
+  ) {
+    return cachedWorldCupDbRows.rows;
+  }
+
+  const rows = await prisma.cachedFixture.findMany({
+    where: { leagueId, leagueSeason: season },
+    orderBy: { matchDate: 'asc' },
+  });
+  cachedWorldCupDbRows = { leagueId, season, fetchedAt: Date.now(), rows };
+  return rows;
+}
+
+function kickoffMs(iso?: string): number | null {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function resolveDbFixtureFor365Game(
+  game: Scores365Game,
+  dbRows: Awaited<ReturnType<typeof loadWorldCupDbFixtures>>,
+) {
+  const gameMs = kickoffMs(game.startTime);
+  if (gameMs == null) return null;
+
+  let best: (typeof dbRows)[number] | null = null;
+  let bestDelta = Number.POSITIVE_INFINITY;
+
+  for (const row of dbRows) {
+    const rowMs = row.matchTimestamp
+      ? row.matchTimestamp * 1000
+      : row.matchDate.getTime();
+    const delta = Math.abs(rowMs - gameMs);
+    if (delta <= 3 * 60 * 60 * 1000 && delta < bestDelta) {
+      best = row;
+      bestDelta = delta;
+    }
+  }
+
+  return best;
 }
 
 function memberNameLookup(game: Scores365Game): Map<number, Scores365Member> {
@@ -262,7 +512,11 @@ export function mapScores365Events(game: Scores365Game, base: FixtureFromAPI): a
 
     return {
       time: { elapsed, extra: null },
-      team: { id: team.id, name: team.name, logo: team.logo },
+      team: {
+        id: team.id,
+        name: (isHome ? game.homeCompetitor?.name : game.awayCompetitor?.name) ?? team.name,
+        logo: team.logo,
+      },
       player: {
         id: ev.playerId ?? 0,
         name: player?.shortName || player?.name || '—',
@@ -330,20 +584,25 @@ export function mapScores365Lineups(game: Scores365Game, base: FixtureFromAPI): 
 export async function mapScores365ToApiFootballFixture(
   game: Scores365Game,
   baseInput?: FixtureFromAPI | null,
+  fixtureIdOverride?: number,
 ): Promise<FixtureFromAPI | null> {
-  const base = baseInput ?? (await loadBaseFixture());
+  const fixtureId =
+    fixtureIdOverride ?? baseInput?.fixture?.id ?? getScores365ExperimentConfig().fixtureId;
+  const base = baseInput ?? (await loadBaseFixture(fixtureId));
   if (!base) return null;
 
+  registerScores365FixtureMapping(fixtureId, game.id);
+
   const status = map365Status(game);
-  const homeScore = game.homeCompetitor?.score ?? base.goals.home ?? 0;
-  const awayScore = game.awayCompetitor?.score ?? base.goals.away ?? 0;
+  const homeScore = normalize365Score(game.homeCompetitor?.score) ?? base.goals.home ?? null;
+  const awayScore = normalize365Score(game.awayCompetitor?.score) ?? base.goals.away ?? null;
   const kickoff = game.startTime ?? base.fixture.date;
 
   return {
     ...base,
     fixture: {
       ...base.fixture,
-      id: getScores365ExperimentConfig().fixtureId,
+      id: fixtureId,
       date: kickoff,
       timestamp: Math.floor(new Date(kickoff).getTime() / 1000),
       status: {
@@ -364,8 +623,9 @@ export async function mapScores365ToApiFootballFixture(
     teams: {
       home: {
         ...base.teams.home,
+        name: game.homeCompetitor?.name ?? base.teams.home.name,
         winner:
-          status.short === 'FT'
+          status.short === 'FT' && homeScore != null && awayScore != null
             ? homeScore > awayScore
               ? true
               : homeScore < awayScore
@@ -375,8 +635,9 @@ export async function mapScores365ToApiFootballFixture(
       },
       away: {
         ...base.teams.away,
+        name: game.awayCompetitor?.name ?? base.teams.away.name,
         winner:
-          status.short === 'FT'
+          status.short === 'FT' && homeScore != null && awayScore != null
             ? awayScore > homeScore
               ? true
               : awayScore < homeScore
@@ -387,28 +648,49 @@ export async function mapScores365ToApiFootballFixture(
     },
     league: {
       ...base.league,
+      name: game.competitionDisplayName ?? base.league.name,
       round: game.groupName ? `${game.roundName ?? ''} - ${game.groupName}`.trim() : base.league.round,
     },
-  };
+    _scores365GameId: game.id,
+    _experiment: 'scores365',
+  } as FixtureFromAPI;
 }
 
-export async function getScores365ExperimentEvents(force = false): Promise<any[]> {
-  const game = await fetchScores365Game(force);
+export async function getScores365ExperimentEvents(
+  fixtureId: number,
+  force = false,
+  language?: string | null,
+): Promise<any[]> {
+  const gameId = getScores365GameIdForFixture(fixtureId);
+  if (!gameId) return [];
+
+  const game = await fetchScores365GameById(gameId, { force, language });
   if (!game) return [];
 
-  const base = await loadBaseFixture();
+  const base = await loadBaseFixture(fixtureId);
   if (!base) return [];
 
   return mapScores365Events(game, base);
 }
 
-export async function getScores365ExperimentFixture(): Promise<FixtureFromAPI | null> {
-  const game = await fetchScores365Game();
+export async function getScores365ExperimentFixture(
+  fixtureId: number,
+  language?: string | null,
+): Promise<FixtureFromAPI | null> {
+  const gameId = getScores365GameIdForFixture(fixtureId);
+  if (!gameId) return null;
+
+  const game = await fetchScores365GameById(gameId, { language });
   if (!game) return null;
-  return mapScores365ToApiFootballFixture(game);
+
+  const base = await loadBaseFixture(fixtureId);
+  return mapScores365ToApiFootballFixture(game, base, fixtureId);
 }
 
-export async function getScores365ExperimentBundle(): Promise<{
+export async function getScores365ExperimentBundle(
+  fixtureId: number,
+  language?: string | null,
+): Promise<{
   fixture: FixtureFromAPI | null;
   lineups: any[];
   statistics: any[];
@@ -416,13 +698,16 @@ export async function getScores365ExperimentBundle(): Promise<{
   venue: any | null;
   source: 'scores365-experiment';
 } | null> {
-  const game = await fetchScores365Game();
+  const gameId = getScores365GameIdForFixture(fixtureId);
+  if (!gameId) return null;
+
+  const game = await fetchScores365GameById(gameId, { language });
   if (!game) return null;
 
-  const base = await loadBaseFixture();
+  const base = await loadBaseFixture(fixtureId);
   if (!base) return null;
 
-  const fixture = await mapScores365ToApiFootballFixture(game, base);
+  const fixture = await mapScores365ToApiFootballFixture(game, base, fixtureId);
   if (!fixture) return null;
 
   return {
@@ -435,36 +720,109 @@ export async function getScores365ExperimentBundle(): Promise<{
   };
 }
 
-/** Inject / overlay the experiment fixture into a World Cup day list. */
+/**
+ * World Cup calendar day from 365Scores fixtures feed (paginated, all 72 matches).
+ * Team/status names follow `language` (ar → langId 27, en → langId 1).
+ */
+export async function getScores365MatchesForDate(
+  dateString: string,
+  leagueId: number,
+  season: number,
+  language?: string | null,
+): Promise<any[]> {
+  if (!isScores365ExperimentEnabled()) return [];
+
+  const dbRows = await loadWorldCupDbFixtures(leagueId, season);
+  const games = await fetchScores365WorldCupFixtures({ language });
+  if (!games.length) return [];
+
+  const todayKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: process.env.SCORES365_TIMEZONE || 'Africa/Cairo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
+  const mapped: any[] = [];
+  for (const game of games) {
+    const matchDate = calendarDateFromStart(game.startTime);
+    const live = is365Live(game);
+    if (dateString !== matchDate && !(live && dateString === todayKey)) {
+      continue;
+    }
+
+    const dbRow = resolveDbFixtureFor365Game(game, dbRows);
+    if (!dbRow) continue;
+
+    const base = matchCacheService.convertDbMatchToApiFormat(dbRow);
+    const fixture = await mapScores365ToApiFootballFixture(game, base, dbRow.fixtureId);
+    if (fixture) mapped.push(fixture);
+  }
+
+  mapped.sort((a, b) => (a.fixture?.timestamp ?? 0) - (b.fixture?.timestamp ?? 0));
+
+  if (mapped.length > 0) {
+    logger.info(
+      `[Scores365Experiment] ${mapped.length} fixtures on ${dateString} (lang=${resolveScores365LangId(language)})`,
+    );
+  }
+
+  return mapped;
+}
+
+/** Overlay 365Scores live data on a World Cup day list. */
 export async function applyScores365ExperimentToWorldCupList(
   matches: any[],
   dateString: string,
+  language?: string | null,
 ): Promise<any[]> {
   if (!isScores365ExperimentEnabled()) return matches;
 
-  const game = await fetchScores365Game();
+  const fromList = await getScores365MatchesForDate(
+    dateString,
+    getScores365ExperimentConfig().leagueId,
+    getScores365ExperimentConfig().season,
+    language,
+  );
+  if (fromList.length > 0) {
+    const ids = new Set(fromList.map((m) => m?.fixture?.id));
+    const rest = matches.filter((m) => !ids.has(m?.fixture?.id));
+    return [...fromList, ...rest];
+  }
+
+  const gameId = getScores365ExperimentConfig().gameId;
+  const game = await fetchScores365GameById(gameId, { language });
   if (!game) return matches;
 
-  const fixture = await mapScores365ToApiFootballFixture(game);
+  const dbRow = resolveDbFixtureFor365Game(
+    game,
+    await loadWorldCupDbFixtures(
+      getScores365ExperimentConfig().leagueId,
+      getScores365ExperimentConfig().season,
+    ),
+  );
+  const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
+  const fixture = await mapScores365ToApiFootballFixture(
+    game,
+    base,
+    dbRow?.fixtureId ?? getScores365ExperimentConfig().fixtureId,
+  );
   if (!fixture) return matches;
 
   const matchDate = calendarDateFromStart(game.startTime);
-  const todayKey = new Date().toISOString().split('T')[0];
+  const todayKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: process.env.SCORES365_TIMEZONE || 'Africa/Cairo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
   const live = is365Live(game);
-  const shouldShow =
-    dateString === matchDate || (live && dateString === todayKey);
-
+  const shouldShow = dateString === matchDate || (live && dateString === todayKey);
   if (!shouldShow) return matches;
 
-  const id = getScores365ExperimentConfig().fixtureId;
+  const id = fixture.fixture.id;
   const without = matches.filter((m) => m?.fixture?.id !== id);
-  const pinned = [{ ...fixture, _experiment: 'scores365' }, ...without];
-
-  logger.info(
-    `[Scores365Experiment] pinned fixture ${id} on ${dateString} (${fixture.teams.home.name} vs ${fixture.teams.away.name}, ${fixture.fixture.status.short} ${fixture.fixture.status.elapsed ?? ''}')`,
-  );
-
-  return pinned;
+  return [{ ...fixture, _experiment: 'scores365' }, ...without];
 }
 
 export function getScores365ExperimentFeatureState(): {

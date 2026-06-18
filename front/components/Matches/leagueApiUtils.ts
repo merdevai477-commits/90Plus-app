@@ -8,6 +8,12 @@ import { Match, LeagueInfo, TeamInfo } from './matchCardUtils';
 import { cacheService } from '../../services/cacheService';
 import { logger } from '../../utils/logger';
 import { getApiUrl } from '../../config/api.config';
+import { useAppSettings } from '../../src/store/useAppSettings';
+
+function getAppLanguageParam(): string {
+  const current = useAppSettings.getState().language?.current ?? 'ar';
+  return current.startsWith('en') ? 'en' : 'ar';
+}
 
 /**
  * Maps API fixture status to component match status
@@ -340,10 +346,14 @@ const fetchWorldCupMatchesByDateImpl = async (
 
   try {
     const apiUrl = getApiUrl();
-    const response = await fetch(`${apiUrl}/football/cached/world-cup/${dateString}`, {
+    const lang = getAppLanguageParam();
+    const response = await fetch(
+      `${apiUrl}/football/cached/world-cup/${dateString}?language=${lang}`,
+      {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
-    });
+    },
+    );
 
     if (response.status === 403) {
       return [];

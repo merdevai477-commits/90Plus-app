@@ -25,6 +25,7 @@ const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
 
 import {
+  getScores365ExperimentConfig,
   getScores365ExperimentFixture,
   isScores365ExperimentFixture,
 } from './scores365-experiment.service';
@@ -134,9 +135,10 @@ export async function readTerminalFixtureById(fixtureId: number): Promise<Fixtur
  */
 export async function resolveFixtureForClient(
   fixtureId: number,
+  language?: string | null,
 ): Promise<{ fixture: FixtureFromAPI | null; source: LiveFixtureReadSource }> {
   if (isScores365ExperimentFixture(fixtureId)) {
-    const experimentFixture = await getScores365ExperimentFixture();
+    const experimentFixture = await getScores365ExperimentFixture(fixtureId, language);
     if (experimentFixture) {
       return { fixture: experimentFixture, source: 'scores365-experiment' };
     }
@@ -190,7 +192,9 @@ export async function resolveLiveFixturesForClient(): Promise<{
     source = 'redis';
   }
 
-  const experimentFixture = await getScores365ExperimentFixture();
+  const experimentFixture = await getScores365ExperimentFixture(
+    getScores365ExperimentConfig().fixtureId,
+  );
   if (experimentFixture) {
     const short = experimentFixture.fixture?.status?.short ?? '';
     if (LIVE_STATUSES_SET.has(short)) {

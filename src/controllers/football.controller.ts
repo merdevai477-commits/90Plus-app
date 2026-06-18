@@ -5,6 +5,7 @@ import { footballDataCacheService } from '../services/football-data-cache.servic
 import { getTopClubsByCountry, getSupportedCountries } from '../services/top-clubs.service';
 import { logger } from '../utils/logger';
 import { getFootballMetrics } from '../utils/football-metrics';
+import { resolveAppLanguage } from '../utils/app-language.util';
 import prisma from '../lib/prisma';
 import {
   resolveFixtureForClient,
@@ -372,7 +373,7 @@ export class FootballController {
         return;
       }
 
-      const resolved = await resolveFixtureForClient(fixtureId);
+      const resolved = await resolveFixtureForClient(fixtureId, resolveAppLanguage(req));
       if (resolved.fixture) {
         res.json({
           status: 'SUCCESS',
@@ -1685,10 +1686,13 @@ export class FootballController {
         return;
       }
 
+      const language = resolveAppLanguage(req);
+
       const matches = await footballDataCacheService.getWorldCupMatchesByDate(
         dateString,
         wc.leagueId,
         wc.season,
+        language,
       );
 
       res.json({
@@ -1699,6 +1703,7 @@ export class FootballController {
           date: dateString,
           leagueId: wc.leagueId,
           season: wc.season,
+          language,
           cached: true,
           scores365Experiment: matches.some((m: any) => m?._experiment === 'scores365'),
         },
@@ -2111,7 +2116,8 @@ export class FootballController {
         return;
       }
 
-      const events = await footballDataCacheService.getMatchEvents(fixtureId);
+      const language = resolveAppLanguage(req);
+      const events = await footballDataCacheService.getMatchEvents(fixtureId, { language });
 
       res.json({
         status: 'SUCCESS',
@@ -2136,7 +2142,8 @@ export class FootballController {
         return;
       }
 
-      const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId);
+      const language = resolveAppLanguage(req);
+      const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId, { language });
 
       res.json({
         status: 'SUCCESS',
