@@ -11,6 +11,15 @@ export function reconcileFixtureWithEvents(
 ): Fixture {
   if (!events.length) return fixture;
 
+  // 365Scores is source of truth for WC experiment — never override its score from events.
+  if ((fixture as Fixture & { _experiment?: string })._experiment === 'scores365') {
+    return fixture;
+  }
+  const allFrom365 = events.every(
+    (e) => (e as FixtureEvent & { _source?: string })._source === 'scores365-experiment',
+  );
+  if (allFrom365) return fixture;
+
   const homeId = fixture.teams?.home?.id;
   const awayId = fixture.teams?.away?.id;
   if (!homeId || !awayId) return fixture;

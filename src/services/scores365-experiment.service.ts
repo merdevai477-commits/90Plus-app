@@ -498,6 +498,61 @@ function kickoffMs(iso?: string): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
+/** Normalize team labels for fuzzy cross-provider matching (365Scores ↔ API-Football DB). */
+function normalizeTeamNameForMatch(name?: string | null): string {
+  if (!name) return '';
+  return name
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function teamNamesMatch(a?: string | null, b?: string | null): boolean {
+  const na = normalizeTeamNameForMatch(a);
+  const nb = normalizeTeamNameForMatch(b);
+  if (!na || !nb) return false;
+  return na === nb || na.includes(nb) || nb.includes(na);
+}
+
+type Scores365TeamAlignment = { swapped: boolean };
+
+function scoreDbRowTeamsFor365Game(
+  game: Scores365Game,
+  row: Awaited<ReturnType<typeof loadWorldCupDbFixtures>>[number],
+): { direct: number; swapped: number } {
+  const h365 = game.homeCompetitor?.name;
+  const a365 = game.awayCompetitor?.name;
+  let direct = 0;
+  let swapped = 0;
+  if (teamNamesMatch(h365, row.homeTeamName)) direct++;
+  if (teamNamesMatch(a365, row.awayTeamName)) direct++;
+  if (teamNamesMatch(h365, row.awayTeamName)) swapped++;
+  if (teamNamesMatch(a365, row.homeTeamName)) swapped++;
+  return { direct, swapped };
+}
+
+function detect365TeamAlignment(
+  game: Scores365Game,
+  base: FixtureFromAPI,
+): Scores365TeamAlignment | null {
+  const h365 = game.homeCompetitor?.name;
+  const a365 = game.awayCompetitor?.name;
+  const dbHome = base.teams.home?.name;
+  const dbAway = base.teams.away?.name;
+
+  const direct =
+    (teamNamesMatch(h365, dbHome) ? 1 : 0) + (teamNamesMatch(a365, dbAway) ? 1 : 0);
+  const swapped =
+    (teamNamesMatch(h365, dbAway) ? 1 : 0) + (teamNamesMatch(a365, dbHome) ? 1 : 0);
+
+  if (direct >= 2) return { swapped: false };
+  if (swapped >= 2) return { swapped: true };
+  if (direct === 1 && swapped === 0) return { swapped: false };
+  if (swapped === 1 && direct === 0) return { swapped: true };
+  return null;
+}
+
 function resolveDbFixtureFor365Game(
   game: Scores365Game,
   dbRows: Awaited<ReturnType<typeof loadWorldCupDbFixtures>>,
@@ -505,21 +560,113 @@ function resolveDbFixtureFor365Game(
   const gameMs = kickoffMs(game.startTime);
   if (gameMs == null) return null;
 
-  let best: (typeof dbRows)[number] | null = null;
-  let bestDelta = Number.POSITIVE_INFINITY;
+  const maxDeltaMs = 3 * 60 * 60 * 1000;
+  type Candidate = {
+    row: (typeof dbRows)[number];
+    delta: number;
+    teamHits: number;
+    swapped: boolean;
+  };
+  const candidates: Candidate[] = [];
 
   for (const row of dbRows) {
     const rowMs = row.matchTimestamp
       ? row.matchTimestamp * 1000
       : row.matchDate.getTime();
     const delta = Math.abs(rowMs - gameMs);
-    if (delta <= 3 * 60 * 60 * 1000 && delta < bestDelta) {
-      best = row;
-      bestDelta = delta;
-    }
+    if (delta > maxDeltaMs) continue;
+
+    const { direct, swapped } = scoreDbRowTeamsFor365Game(game, row);
+    const teamHits = Math.max(direct, swapped);
+    if (teamHits < 2) continue;
+
+    candidates.push({
+      row,
+      delta,
+      teamHits,
+      swapped: swapped > direct,
+    });
   }
 
-  return best;
+  if (!candidates.length) {
+    logger.warn(
+      `[Scores365Experiment] no DB fixture for 365 game ${game.id} (${game.homeCompetitor?.name} vs ${game.awayCompetitor?.name}) — team/kickoff mismatch`,
+    );
+    return null;
+  }
+
+  candidates.sort((a, b) => a.delta - b.delta || b.teamHits - a.teamHits);
+  const best = candidates[0];
+  const tied = candidates.filter(
+    (c) => c.delta === best.delta && c.teamHits === best.teamHits,
+  );
+  if (tied.length > 1) {
+    logger.warn(
+      `[Scores365Experiment] ambiguous DB mapping for 365 game ${game.id}: ${tied.map((c) => c.row.fixtureId).join(', ')}`,
+    );
+    return null;
+  }
+
+  return best.row;
+}
+
+function map365CompetitorToBaseTeam(
+  competitorId: number,
+  game: Scores365Game,
+  base: FixtureFromAPI,
+  alignment: Scores365TeamAlignment,
+): FixtureFromAPI['teams']['home'] {
+  const is365Home = competitorId === game.homeCompetitor?.id;
+  const is365Away = competitorId === game.awayCompetitor?.id;
+  const mapsToDbHome = alignment.swapped ? is365Away : is365Home;
+  return mapsToDbHome ? base.teams.home : base.teams.away;
+}
+
+function resolve365Scores(
+  game: Scores365Game,
+  alignment: Scores365TeamAlignment,
+): { home: number | null; away: number | null } {
+  const home365 = normalize365Score(game.homeCompetitor?.score);
+  const away365 = normalize365Score(game.awayCompetitor?.score);
+  return alignment.swapped
+    ? { home: away365, away: home365 }
+    : { home: home365, away: away365 };
+}
+
+function tallyGoalsFromMappedEvents(
+  events: Array<{ type?: string; detail?: string; team?: { id?: number } }>,
+  homeId: number,
+  awayId: number,
+): { home: number; away: number } {
+  let home = 0;
+  let away = 0;
+  for (const e of events) {
+    if (e.type !== 'Goal') continue;
+    const detail = (e.detail || '').toLowerCase();
+    if (detail.includes('missed')) continue;
+    const isOwn = detail.includes('own');
+    const teamId = e.team?.id;
+    if (teamId === homeId) {
+      if (isOwn) away++;
+      else home++;
+    } else if (teamId === awayId) {
+      if (isOwn) home++;
+      else away++;
+    }
+  }
+  return { home, away };
+}
+
+function eventsMatch365ScoreLine(
+  events: Array<{ type?: string; detail?: string; team?: { id?: number } }>,
+  homeId: number,
+  awayId: number,
+  expectedHome: number | null,
+  expectedAway: number | null,
+): boolean {
+  if (expectedHome == null || expectedAway == null) return true;
+  const tallied = tallyGoalsFromMappedEvents(events, homeId, awayId);
+  return tallied.home === expectedHome && tallied.away === expectedAway;
 }
 
 function memberNameLookup(game: Scores365Game): Map<number, Scores365Member> {
@@ -540,13 +687,23 @@ function posFrom365(shortName?: string): string | null {
   return null;
 }
 
-export function mapScores365Events(game: Scores365Game, base: FixtureFromAPI): any[] {
-  const home365 = game.homeCompetitor?.id;
+export function mapScores365Events(
+  game: Scores365Game,
+  base: FixtureFromAPI,
+  alignment?: Scores365TeamAlignment | null,
+): any[] {
+  const resolvedAlignment = alignment ?? detect365TeamAlignment(game, base);
+  if (!resolvedAlignment) {
+    logger.warn(
+      `[Scores365Experiment] skip events for game ${game.id}: teams do not match fixture ${base.fixture.id}`,
+    );
+    return [];
+  }
+
   const members = memberNameLookup(game);
 
   return (game.events ?? []).map((ev) => {
-    const isHome = ev.competitorId === home365;
-    const team = isHome ? base.teams.home : base.teams.away;
+    const team = map365CompetitorToBaseTeam(ev.competitorId, game, base, resolvedAlignment);
     const player = ev.playerId ? members.get(ev.playerId) : undefined;
     const elapsed = Math.floor(ev.gameTime ?? 0);
     const typeId = ev.eventType?.id;
@@ -571,7 +728,7 @@ export function mapScores365Events(game: Scores365Game, base: FixtureFromAPI): a
       time: { elapsed, extra: null },
       team: {
         id: team.id,
-        name: (isHome ? game.homeCompetitor?.name : game.awayCompetitor?.name) ?? team.name,
+        name: team.name,
         logo: team.logo,
       },
       player: {
@@ -587,14 +744,25 @@ export function mapScores365Events(game: Scores365Game, base: FixtureFromAPI): a
   });
 }
 
-export function mapScores365Lineups(game: Scores365Game, base: FixtureFromAPI): any[] {
+export function mapScores365Lineups(
+  game: Scores365Game,
+  base: FixtureFromAPI,
+  alignment?: Scores365TeamAlignment | null,
+): any[] {
+  const resolvedAlignment = alignment ?? detect365TeamAlignment(game, base);
+  if (!resolvedAlignment) return [];
+
   const members = memberNameLookup(game);
 
-  const mapSide = (side: Scores365Competitor | undefined, team: FixtureFromAPI['teams']['home']) => {
+  const mapSide = (
+    side: Scores365Competitor | undefined,
+    team: FixtureFromAPI['teams']['home'],
+    displayName?: string,
+  ) => {
     if (!side?.lineups?.members?.length) return null;
     const starters = side.lineups.members.filter((m) => m.status === 1);
     return {
-      team: { id: team.id, name: side?.name ?? team.name, logo: team.logo, colors: null },
+      team: { id: team.id, name: displayName ?? team.name, logo: team.logo, colors: null },
       coach: { id: null, name: null, photo: null },
       formation: side.lineups.formation ?? null,
       startXI: starters.map((m) => {
@@ -633,8 +801,14 @@ export function mapScores365Lineups(game: Scores365Game, base: FixtureFromAPI): 
     };
   };
 
-  const home = mapSide(game.homeCompetitor, base.teams.home);
-  const away = mapSide(game.awayCompetitor, base.teams.away);
+  const home365 = game.homeCompetitor;
+  const away365 = game.awayCompetitor;
+  const home = resolvedAlignment.swapped
+    ? mapSide(away365, base.teams.home, away365?.name)
+    : mapSide(home365, base.teams.home, home365?.name);
+  const away = resolvedAlignment.swapped
+    ? mapSide(home365, base.teams.away, home365?.name)
+    : mapSide(away365, base.teams.away, away365?.name);
   return [home, away].filter(Boolean);
 }
 
@@ -648,12 +822,25 @@ export async function mapScores365ToApiFootballFixture(
   const base = baseInput ?? (await loadBaseFixture(fixtureId));
   if (!base) return null;
 
+  const alignment = detect365TeamAlignment(game, base);
+  if (!alignment) {
+    logger.warn(
+      `[Scores365Experiment] refuse fixture map game ${game.id} → ${fixtureId}: team names mismatch (${game.homeCompetitor?.name}/${game.awayCompetitor?.name} vs ${base.teams.home?.name}/${base.teams.away?.name})`,
+    );
+    return null;
+  }
+
   registerScores365FixtureMapping(fixtureId, game.id);
 
   const status = map365Status(game);
-  const homeScore = normalize365Score(game.homeCompetitor?.score) ?? base.goals.home ?? null;
-  const awayScore = normalize365Score(game.awayCompetitor?.score) ?? base.goals.away ?? null;
+  const scores = resolve365Scores(game, alignment);
+  const homeScore = scores.home;
+  const awayScore = scores.away;
   const kickoff = game.startTime ?? base.fixture.date;
+  const home365 = game.homeCompetitor;
+  const away365 = game.awayCompetitor;
+  const homeDisplay = alignment.swapped ? away365?.name : home365?.name;
+  const awayDisplay = alignment.swapped ? home365?.name : away365?.name;
 
   return {
     ...base,
@@ -680,7 +867,7 @@ export async function mapScores365ToApiFootballFixture(
     teams: {
       home: {
         ...base.teams.home,
-        name: game.homeCompetitor?.name ?? base.teams.home.name,
+        name: homeDisplay ?? base.teams.home.name,
         winner:
           status.short === 'FT' && homeScore != null && awayScore != null
             ? homeScore > awayScore
@@ -692,7 +879,7 @@ export async function mapScores365ToApiFootballFixture(
       },
       away: {
         ...base.teams.away,
-        name: game.awayCompetitor?.name ?? base.teams.away.name,
+        name: awayDisplay ?? base.teams.away.name,
         winner:
           status.short === 'FT' && homeScore != null && awayScore != null
             ? awayScore > homeScore
@@ -727,7 +914,25 @@ export async function getScores365ExperimentEvents(
   const base = await loadBaseFixture(fixtureId);
   if (!base) return [];
 
-  return mapScores365Events(game, base);
+  const alignment = detect365TeamAlignment(game, base);
+  if (!alignment) return [];
+
+  const events = mapScores365Events(game, base, alignment);
+  const scores = resolve365Scores(game, alignment);
+  const homeId = base.teams.home?.id;
+  const awayId = base.teams.away?.id;
+  if (
+    homeId &&
+    awayId &&
+    !eventsMatch365ScoreLine(events, homeId, awayId, scores.home, scores.away)
+  ) {
+    logger.warn(
+      `[Scores365Experiment] drop events for fixture ${fixtureId}: tally ${JSON.stringify(tallyGoalsFromMappedEvents(events, homeId, awayId))} ≠ 365 score ${scores.home}-${scores.away}`,
+    );
+    return [];
+  }
+
+  return events;
 }
 
 export async function getScores365ExperimentFixture(
@@ -767,10 +972,27 @@ export async function getScores365ExperimentBundle(
   const fixture = await mapScores365ToApiFootballFixture(game, base, fixtureId);
   if (!fixture) return null;
 
+  const alignment = detect365TeamAlignment(game, base);
+  if (!alignment) return null;
+
+  let events = mapScores365Events(game, base, alignment);
+  const homeId = base.teams.home?.id;
+  const awayId = base.teams.away?.id;
+  if (
+    homeId &&
+    awayId &&
+    !eventsMatch365ScoreLine(events, homeId, awayId, fixture.goals.home, fixture.goals.away)
+  ) {
+    logger.warn(
+      `[Scores365Experiment] bundle ${fixtureId}: events/score mismatch — serving score only`,
+    );
+    events = [];
+  }
+
   return {
     fixture,
-    lineups: mapScores365Lineups(game, base),
-    events: mapScores365Events(game, base),
+    lineups: mapScores365Lineups(game, base, alignment),
+    events,
     statistics: (base as any).statistics ?? [],
     venue: fixture.fixture.venue ?? null,
     source: 'scores365-experiment',
