@@ -166,6 +166,25 @@ router.get('/cached/standings/:leagueId', SHARED_CACHE_1H, FootballController.ge
 // GET /api/football/cached/h2h - Get H2H (permanent cache)
 router.get('/cached/h2h', SHARED_CACHE_24H, FootballController.getCachedH2H);
 
+// 365Scores World Cup enrichment (secondary source — athleteId from lineups)
+router.get('/cached/365/standings', SHARED_CACHE_5MIN, FootballController.getCached365Standings);
+router.get('/cached/365/fixture/:id/form', SHARED_CACHE_1H, FootballController.getCached365FixtureForm);
+router.get(
+  '/cached/365/fixture/:id/player/:athleteId/report',
+  SHARED_CACHE_5MIN,
+  FootballController.getCached365PlayerMatchReport,
+);
+router.get(
+  '/cached/365/player/:athleteId/shot-chart',
+  SHARED_CACHE_24H,
+  FootballController.getCached365PlayerShotChart,
+);
+router.get(
+  '/cached/365/player/:athleteId/info',
+  SHARED_CACHE_24H,
+  FootballController.getCached365PlayerInfo,
+);
+
 // GET /api/football/cached/fixture/:id/lineups - Get lineups (permanent for finished, short for empty/live)
 // 5min route cache lets the inner cache logic (which tracks empty vs full
 // results) actually surface fresh data — a 24h shared HTTP cache would lock

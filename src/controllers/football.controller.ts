@@ -11,6 +11,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
+import { getScores365GameIdForFixture } from '../services/scores365-experiment.service';
 
 /**
  * Football API Proxy Controller
@@ -2038,11 +2039,18 @@ export class FootballController {
       }
 
       const lineups = await footballDataCacheService.getMatchLineups(fixtureId);
+      const gameId = getScores365GameIdForFixture(fixtureId);
 
       res.json({
         status: 'SUCCESS',
         results: lineups?.length || 0,
         response: lineups || [],
+        _meta: gameId
+          ? {
+              scores365GameId: gameId,
+              lineupPlayerIdField: 'athleteId',
+            }
+          : undefined,
       });
     } catch (error) {
       FootballController.handleError(res, error);
@@ -2151,10 +2159,186 @@ export class FootballController {
 
       const language = resolveAppLanguage(req);
       const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId, { language });
+      const gameId = getScores365GameIdForFixture(fixtureId);
 
       res.json({
         status: 'SUCCESS',
         response: bundle,
+        _meta: gameId
+          ? {
+              scores365GameId: gameId,
+              lineupPlayerIdField: 'athleteId',
+            }
+          : undefined,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/standings — World Cup group standings (365Scores).
+   */
+  static async getCached365Standings(req: Request, res: Response): Promise<void> {
+    try {
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365Standings(undefined, language);
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores standings unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        results: result.data.length,
+        response: result.data,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/fixture/:id/form — recent form per team (365Scores).
+   */
+  static async getCached365FixtureForm(req: Request, res: Response): Promise<void> {
+    try {
+      const fixtureId = parseInt(ensureString(req.params.id));
+      if (isNaN(fixtureId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
+        return;
+      }
+      const gameId = getScores365GameIdForFixture(fixtureId);
+      if (!gameId) {
+        res.status(404).json({ status: 'ERROR', message: '365Scores game not mapped for this fixture' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365HeadToHeadForm(gameId, language);
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores form unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { scores365GameId: gameId, fixtureId },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/fixture/:id/player/:athleteId/report
+   * Match report + shot map for one player (365Scores). athleteId comes from lineup.
+   */
+  static async getCached365PlayerMatchReport(req: Request, res: Response): Promise<void> {
+    try {
+      const fixtureId = parseInt(ensureString(req.params.id));
+      const athleteId = parseInt(ensureString(req.params.athleteId));
+      if (isNaN(fixtureId) || isNaN(athleteId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid fixture or athlete ID' });
+        return;
+      }
+      const gameId = getScores365GameIdForFixture(fixtureId);
+      if (!gameId) {
+        res.status(404).json({ status: 'ERROR', message: '365Scores game not mapped for this fixture' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365PlayerMatchReport(
+        athleteId,
+        gameId,
+        language,
+      );
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores player match report unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { scores365GameId: gameId, fixtureId, athleteId },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/player/:athleteId/shot-chart — career shot map (365Scores).
+   */
+  static async getCached365PlayerShotChart(req: Request, res: Response): Promise<void> {
+    try {
+      const athleteId = parseInt(ensureString(req.params.athleteId));
+      if (isNaN(athleteId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid athlete ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365PlayerCareerShotChart(
+        athleteId,
+        language,
+      );
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores career shot chart unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { athleteId },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/player/:athleteId/info — basic profile + next game (365Scores).
+   */
+  static async getCached365PlayerInfo(req: Request, res: Response): Promise<void> {
+    try {
+      const athleteId = parseInt(ensureString(req.params.athleteId));
+      if (isNaN(athleteId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid athlete ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365PlayerBasicInfo(athleteId, language);
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores player info unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { athleteId },
       });
     } catch (error) {
       FootballController.handleError(res, error);

@@ -47,11 +47,24 @@ import {
     applyScores365ExperimentToWorldCupList,
     getScores365ExperimentBundle,
     getScores365ExperimentEvents,
+    getScores365GameIdForFixture,
     getScores365MatchesForDate,
     isScores365ExperimentEnabled,
     isScores365ExperimentFixture,
     resolveScores365AppLanguage,
 } from './scores365-experiment.service';
+import {
+    threeSixFiveScoresService,
+    type ThreeSixFiveHeadToHeadForm,
+    type ThreeSixFiveLineupPlayer,
+    type ThreeSixFiveLiveGameDetails,
+    type ThreeSixFivePlayerBasicInfo,
+    type ThreeSixFivePlayerCareerShotChart,
+    type ThreeSixFivePlayerMatchReport,
+    type ThreeSixFiveResult,
+    type ThreeSixFiveStandingRow,
+    type ThreeSixFiveFixtureItem,
+} from './threeSixFiveScores.service';
 import { redisCacheService } from './redis-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 
@@ -1002,6 +1015,20 @@ class FootballDataCacheService {
             return fullData.lineups;
         }
 
+        if (isScores365ExperimentFixture(fixtureId)) {
+            const from365 = await this.resolve365LineupsForFixture(fixtureId);
+            if (hasLineupData(from365)) {
+                const cacheEntry: MemoryCacheEntry<any> = {
+                    data: from365,
+                    timestamp: Date.now(),
+                    ttl: isLive ? this.TTL.LIVE_MATCH : this.TTL.UPCOMING_MATCH,
+                };
+                await redisCacheService.set(redisKey, cacheEntry, cacheEntry.ttl);
+                this.lineupsCache.set(fixtureId, cacheEntry);
+                return from365;
+            }
+        }
+
         // ✅ 3. Request deduplication: Check if there's already a pending request
         const pendingRequest = this.pendingLineupRequests.get(fixtureId);
         if (pendingRequest) {
@@ -1314,9 +1341,17 @@ class FootballDataCacheService {
                 if (!statistics?.length) {
                     statistics = await this.getMatchStatistics(fixtureId);
                 }
+                let lineups = experiment.lineups;
+                const named365 = await this.resolve365LineupsForFixture(
+                    fixtureId,
+                    resolveScores365AppLanguage(options?.language ?? null),
+                );
+                if (hasLineupData(named365)) {
+                    lineups = named365;
+                }
                 return {
                     fixture: experiment.fixture,
-                    lineups: experiment.lineups,
+                    lineups,
                     statistics: statistics ?? [],
                     events: experiment.events,
                     venue: experiment.venue,
@@ -2005,6 +2040,154 @@ class FootballDataCacheService {
         await redisCacheService.set(redisKey, entry, this.TTL.ROUNDS);
 
         return data;
+    }
+
+    // ============================================
+    // 365SCORES — World Cup secondary source (wrappers)
+    // Controllers must call these, not threeSixFiveScoresService directly.
+    // ============================================
+
+    private is365WorldCupSecondaryEnabled(): boolean {
+        return isScores365ExperimentEnabled() && isWorldCupOnlyMode();
+    }
+
+    async getCached365Fixtures(
+        competitionId?: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveFixtureItem[]>> {
+        if (!this.is365WorldCupSecondaryEnabled()) {
+            return { data: null, source: null };
+        }
+        return threeSixFiveScoresService.getFixtures(competitionId, language);
+    }
+
+    async getCached365LiveGameDetails(
+        gameId: number,
+        options?: { matchupId?: string; language?: string | null; force?: boolean },
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveLiveGameDetails>> {
+        if (!this.is365WorldCupSecondaryEnabled()) {
+            return { data: null, source: null };
+        }
+        threeSixFiveScoresService.touchLiveGameSubscription(gameId);
+        return threeSixFiveScoresService.getLiveGameDetails(
+            gameId,
+            options?.matchupId,
+            { language: options?.language, force: options?.force },
+        );
+    }
+
+    async getCached365LineupsWithNames(
+        fixtureIdOrGameId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveLineupPlayer[]>> {
+        if (!this.is365WorldCupSecondaryEnabled()) {
+            return { data: null, source: null };
+        }
+        const gameId =
+            getScores365GameIdForFixture(fixtureIdOrGameId) ?? fixtureIdOrGameId;
+        return threeSixFiveScoresService.getLineupsWithNames(gameId, language);
+    }
+
+    async getCached365Standings(
+        competitionId?: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveStandingRow[]>> {
+        if (!this.is365WorldCupSecondaryEnabled()) {
+            return { data: null, source: null };
+        }
+        return threeSixFiveScoresService.getStandings(competitionId, language);
+    }
+
+    async getCached365HeadToHeadForm(
+        gameId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveHeadToHeadForm>> {
+        if (!this.is365WorldCupSecondaryEnabled()) {
+            return { data: null, source: null };
+        }
+        return threeSixFiveScoresService.getHeadToHeadForm(gameId, language);
+    }
+
+    async getCached365PlayerMatchReport(
+        athleteId: number,
+        gameId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerMatchReport>> {
+        if (!this.is365WorldCupSecondaryEnabled()) {
+            return { data: null, source: null };
+        }
+        return threeSixFiveScoresService.getPlayerMatchReport(athleteId, gameId, language);
+    }
+
+    async getCached365PlayerCareerShotChart(
+        athleteId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareerShotChart>> {
+        if (!this.is365WorldCupSecondaryEnabled()) {
+            return { data: null, source: null };
+        }
+        return threeSixFiveScoresService.getPlayerCareerShotChart(athleteId, language);
+    }
+
+    async getCached365PlayerBasicInfo(
+        athleteId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerBasicInfo>> {
+        if (!this.is365WorldCupSecondaryEnabled()) {
+            return { data: null, source: null };
+        }
+        return threeSixFiveScoresService.getPlayerBasicInfo(athleteId, language);
+    }
+
+    /** 365Scores named lineups → API-Football shape with athleteId for player taps. */
+    async resolve365LineupsForFixture(
+        fixtureId: number,
+        language?: string | null,
+    ): Promise<any[]> {
+        if (!isScores365ExperimentFixture(fixtureId)) return [];
+        const named = await this.getCached365LineupsWithNames(fixtureId, language);
+        if (!named.data?.length) return [];
+        return this.map365LineupsToApiFormat(fixtureId, named.data);
+    }
+
+    /** Map 365 named lineups → API-Football lineup array (enrichment only). */
+    private async map365LineupsToApiFormat(
+        fixtureId: number,
+        players: ThreeSixFiveLineupPlayer[],
+    ): Promise<any[]> {
+        const gameId = getScores365GameIdForFixture(fixtureId);
+        const dbMatch = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
+        if (!dbMatch) return [];
+
+        const base = matchCacheService.convertDbMatchToApiFormat(dbMatch);
+        const homeTeam = base.teams.home;
+        const awayTeam = base.teams.away;
+        const mkSide = (side: 'home' | 'away', team: typeof homeTeam) => {
+            const sidePlayers = players.filter((p) => p.side === side);
+            if (!sidePlayers.length) return null;
+            return {
+                team: { id: team.id, name: team.name, logo: team.logo, colors: null },
+                coach: { id: null, name: null, photo: null },
+                formation: null,
+                startXI: sidePlayers.map((p) => ({
+                    player: {
+                        id: p.athleteId,
+                        athleteId: p.athleteId,
+                        scores365MemberId: p.memberId,
+                        name: p.name,
+                        number: p.jerseyNumber ?? 0,
+                        pos: p.position?.charAt(0) ?? null,
+                        grid: null,
+                        photo: p.imageUrl,
+                    },
+                })),
+                substitutes: [],
+                _source: '365scores',
+                _scores365GameId: gameId,
+            };
+        };
+
+        return [mkSide('home', homeTeam), mkSide('away', awayTeam)].filter(Boolean);
     }
 }
 
