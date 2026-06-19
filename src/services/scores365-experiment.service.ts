@@ -1036,6 +1036,7 @@ export async function getScores365ExperimentFixture(
 export async function getScores365ExperimentBundle(
   fixtureId: number,
   language?: string | null,
+  options?: { force?: boolean },
 ): Promise<{
   fixture: FixtureFromAPI | null;
   lineups: any[];
@@ -1047,7 +1048,10 @@ export async function getScores365ExperimentBundle(
   const gameId = (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
   if (!gameId) return null;
 
-  const game = await fetchScores365GameById(gameId, { language });
+  const game = await fetchScores365GameById(gameId, {
+    language,
+    force: options?.force === true,
+  });
   if (!game) return null;
 
   const base = await loadBaseFixture(fixtureId);

@@ -2038,7 +2038,15 @@ export class FootballController {
         return;
       }
 
-      const lineups = await footballDataCacheService.getMatchLineups(fixtureId);
+      const language = resolveAppLanguage(req);
+      const forceRefresh =
+        req.query.fresh === '1' ||
+        req.query.fresh === 'true' ||
+        req.query.forceRefresh === '1';
+      const lineups = await footballDataCacheService.getMatchLineups(fixtureId, {
+        forceRefresh,
+        language,
+      });
       const gameId =
         (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
 

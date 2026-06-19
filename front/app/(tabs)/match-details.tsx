@@ -266,7 +266,7 @@ const MatchDetailsScreen = () => {
             } catch { /* non-fatal */ }
           }).catch(() => {});
         }
-        if (hasLineupData(snap.lineups)) loadedTabsRef.current.add('lineups');
+        if (isAuthoritativeLineupData(snap.lineups)) loadedTabsRef.current.add('lineups');
         if (hasApiStatistics(snap.statistics)) loadedTabsRef.current.add('stats');
         if (snap.venue) loadedTabsRef.current.add('stadium');
       } else {
@@ -287,30 +287,40 @@ const MatchDetailsScreen = () => {
 
   // ── Lazy loaders — called when a tab is first activated ───────────────────
   const loadLineupsIfNeeded = useCallback(async (force = false) => {
-    if (!force && loadedTabsRef.current.has('lineups')) return;
+    const snapLineups = useLiveFixtureStore.getState().snapshots[fixtureId]?.lineups;
+    if (!force && loadedTabsRef.current.has('lineups') && isAuthoritativeLineupData(snapLineups)) {
+      return;
+    }
     if (!force) loadedTabsRef.current.add('lineups');
     setLineupsLoading(true);
     setLineupsError(null);
     try {
-      await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
-      let data = useLiveFixtureStore.getState().snapshots[fixtureId]?.lineups ?? [];
-      if (!isAuthoritativeLineupData(data)) {
-        const fresh = await ApiFootballService.getFixtureLineups(fixtureId, { skipCache: true });
-        if (isAuthoritativeLineupData(fresh)) {
-          data = fresh;
-          const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
-          if (snap) {
-            useLiveFixtureStore.getState().ingestSnapshot({
-              ...snap,
-              lineups: fresh,
-              revision: snap.revision + 1,
-              updatedAt: Date.now(),
-            });
-          }
+      const fresh = await ApiFootballService.getFixtureLineups(fixtureId, { skipCache: true });
+      if (isAuthoritativeLineupData(fresh)) {
+        const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
+        if (snap) {
+          useLiveFixtureStore.getState().ingestSnapshot({
+            ...snap,
+            lineups: fresh,
+            revision: snap.revision + 1,
+            updatedAt: Date.now(),
+          });
         }
+      } else {
+        await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
       }
-      if (hasLineupData(data)) {
+
+      let data = useLiveFixtureStore.getState().snapshots[fixtureId]?.lineups ?? [];
+      if (!isAuthoritativeLineupData(data) && isAuthoritativeLineupData(fresh)) {
+        data = fresh;
+      }
+
+      if (isAuthoritativeLineupData(data)) {
         setLineupFetchAttempts(0);
+        loadedTabsRef.current.add('lineups');
+      } else if (hasLineupData(data)) {
+        setLineupFetchAttempts((n) => n + 1);
+        loadedTabsRef.current.delete('lineups');
       } else {
         setLineupFetchAttempts((n) => n + 1);
         loadedTabsRef.current.delete('lineups');
@@ -360,9 +370,8 @@ const MatchDetailsScreen = () => {
       lineupsTabRetryRef.current = null;
     }
     if (activeTab !== 'lineups' || !fixtureId || lineupsError) return;
-    if (hasLineupData(lineups)) return;
-    if (!isLive() && isFinishedMatch()) return;
-    if (!isLive() && lineupFetchAttempts >= MAX_LINEUP_AUTO_RETRIES) return;
+    if (isAuthoritativeLineupData(lineups)) return;
+    if (lineupFetchAttempts >= MAX_LINEUP_AUTO_RETRIES) return;
 
     const tick = () => {
       if (!lineupsLoading && lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES) {
@@ -794,9 +803,7 @@ const MatchDetailsScreen = () => {
       // live matches always poll; non-finished matches retry until the cap.
       // Finished matches with no data must fall through to the empty state
       // immediately so the user never gets stuck on an infinite spinner.
-      const stillRetrying =
-        isLive() ||
-        (!isFinishedMatch() && lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES);
+      const stillRetrying = lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES;
       if (stillRetrying) {
         return (
           <View style={styles.emptyState}>

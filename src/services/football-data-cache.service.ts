@@ -23,7 +23,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { hasLineupData, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
+import { hasLineupData, isAuthoritativeLineupData, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
 import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
 import { footballService, isFootballQuotaExhausted } from './football.service';
@@ -966,33 +966,49 @@ class FootballDataCacheService {
      * ✅ Request deduplication: If 1000 users request the same lineups, only 1 API call is made
      * ✅ Finished matches: permanently stored in DB, shared for all users, no API call
      */
-    async getMatchLineups(fixtureId: number): Promise<any[]> {
+    async getMatchLineups(
+        fixtureId: number,
+        options?: { forceRefresh?: boolean; language?: string | null },
+    ): Promise<any[]> {
         const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
-
-        // 1. Check Redis cache first, then memory cache (never serve empty — re-fetch)
+        const forceRefresh = options?.forceRefresh === true;
+        const language = resolveScores365AppLanguage(options?.language ?? null);
         const redisKey = `lineups:${fixtureId}`;
-        const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
-        if (
-            redisCached &&
-            Date.now() - redisCached.timestamp < redisCached.ttl &&
-            hasLineupData(redisCached.data)
-        ) {
-            logger.debug(`📦 Lineups ${fixtureId} from Redis cache (shared for all users)`);
-            this.lineupsCache.set(fixtureId, redisCached);
-            return redisCached.data;
+
+        const cacheUsable = (data: unknown): boolean => {
+            if (!hasLineupData(data)) return false;
+            if (isScores365ExperimentFixture(fixtureId)) {
+                return isAuthoritativeLineupData(data);
+            }
+            return true;
+        };
+
+        if (!forceRefresh) {
+            const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
+            if (
+                redisCached &&
+                Date.now() - redisCached.timestamp < redisCached.ttl &&
+                cacheUsable(redisCached.data)
+            ) {
+                logger.debug(`📦 Lineups ${fixtureId} from Redis cache (shared for all users)`);
+                this.lineupsCache.set(fixtureId, redisCached);
+                return redisCached.data;
+            }
+
+            const cached = this.lineupsCache.get(fixtureId);
+            if (
+                cached &&
+                Date.now() - cached.timestamp < cached.ttl &&
+                cacheUsable(cached.data)
+            ) {
+                logger.debug(`📦 Lineups ${fixtureId} from memory cache (shared for all users)`);
+                return cached.data;
+            }
+        } else {
+            await redisCacheService.del(redisKey);
+            this.lineupsCache.delete(fixtureId);
         }
 
-        const cached = this.lineupsCache.get(fixtureId);
-        if (
-            cached &&
-            Date.now() - cached.timestamp < cached.ttl &&
-            hasLineupData(cached.data)
-        ) {
-            logger.debug(`📦 Lineups ${fixtureId} from memory cache (shared for all users)`);
-            return cached.data;
-        }
-
-        // 2. Check if match is finished (permanent cache in DB, shared for all users)
         const dbMatch = await prisma.cachedFixture.findUnique({
             where: { fixtureId },
             select: {
@@ -1020,6 +1036,7 @@ class FootballDataCacheService {
             );
 
         if (
+            !forceRefresh &&
             isFinished &&
             hasLineupData(fullData?.lineups) &&
             (!isScores365ExperimentFixture(fixtureId) || dbLineupsHaveGrid(fullData.lineups))
@@ -1031,7 +1048,9 @@ class FootballDataCacheService {
         if (isScores365ExperimentFixture(fixtureId)) {
             const from365 = await this.get365LineupsMerged(
                 fixtureId,
-                resolveScores365AppLanguage(null),
+                language,
+                undefined,
+                forceRefresh,
             );
             if (hasLineupData(from365)) {
                 const cacheEntry: MemoryCacheEntry<any> = {
@@ -1048,22 +1067,21 @@ class FootballDataCacheService {
                 }
                 return from365;
             }
+            return from365 ?? [];
         }
 
-        // ✅ 3. Request deduplication: Check if there's already a pending request
         const pendingRequest = this.pendingLineupRequests.get(fixtureId);
         if (pendingRequest) {
             logger.debug(`⏳ Waiting for pending lineup request ${fixtureId} (${this.pendingLineupRequests.size} concurrent requests)`);
             return await pendingRequest;
         }
 
-        // ✅ 4. Create new API request and share it with all concurrent requests
         logger.debug(`📡 Fetching lineups for fixture ${fixtureId} (request will be shared with concurrent users)`);
         const apiRequestPromise = (async () => {
             try {
                 let lineups = await footballService.getFixtureLineupsResolved(fixtureId);
 
-                if (!hasLineupData(lineups)) {
+                if (!hasLineupData(lineups) && !isScores365ExperimentFixture(fixtureId)) {
                     try {
                         const events = await footballService.getFixtureEvents(fixtureId, { source: 'job' });
                         const teams =
@@ -1106,9 +1124,6 @@ class FootballDataCacheService {
                 await redisCacheService.set(redisKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
                 this.lineupsCache.set(fixtureId, cacheEntry);
 
-                // ✅ If finished AND non-empty, update fullData in DB
-                // (permanent, shared for all users). Don't persist empty
-                // arrays — the API may backfill later.
                 if (isFinished && !isEmpty && lineups?.length) {
                     await this.updateFixtureFullData(fixtureId, { lineups });
                     logger.debug(`💾 Lineups ${fixtureId} stored in DB (shared for all users)`);
@@ -1116,15 +1131,12 @@ class FootballDataCacheService {
 
                 return lineups;
             } finally {
-                // Remove from pending requests after completion
                 this.pendingLineupRequests.delete(fixtureId);
             }
         })();
 
-        // Store the promise so other concurrent requests can wait for it
         this.pendingLineupRequests.set(fixtureId, apiRequestPromise);
 
-        // Wait for the API request to complete
         return await apiRequestPromise;
     }
 
@@ -1389,6 +1401,7 @@ class FootballDataCacheService {
             const experiment = await getScores365ExperimentBundle(
                 fixtureId,
                 resolveScores365AppLanguage(options?.language ?? null),
+                { force: options?.forceRefresh === true },
             );
             if (experiment) {
                 let statistics = experiment.statistics;
@@ -1409,6 +1422,7 @@ class FootballDataCacheService {
                     fixtureId,
                     resolveScores365AppLanguage(options?.language ?? null),
                     experiment.lineups,
+                    options?.forceRefresh === true,
                 );
                 const payload = {
                     fixture: experiment.fixture,
@@ -2264,15 +2278,17 @@ class FootballDataCacheService {
         fixtureId: number,
         language?: string | null,
         baseLineups?: any[],
+        forceRefresh = false,
     ): Promise<any[]> {
         await ensureScores365GameMapping(fixtureId);
         if (!isScores365ExperimentFixture(fixtureId)) return [];
 
         let structured = baseLineups;
-        if (!hasLineupData(structured)) {
+        if (!hasLineupData(structured) || forceRefresh) {
             const bundle = await getScores365ExperimentBundle(
                 fixtureId,
                 resolveScores365AppLanguage(language),
+                { force: forceRefresh },
             );
             structured = bundle?.lineups;
         }

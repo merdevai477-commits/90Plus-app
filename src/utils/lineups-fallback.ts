@@ -11,6 +11,21 @@ export function hasLineupData(lineups: unknown): boolean {
   });
 }
 
+/** Full 365/API lineups — not partial squads inferred from goal/card events. */
+export function isAuthoritativeLineupData(lineups: unknown): boolean {
+  if (!Array.isArray(lineups) || lineups.length === 0) return false;
+  return lineups.some((row) => {
+    const l = row as {
+      _source?: string;
+      formation?: string | null;
+      startXI?: unknown[];
+    };
+    if (l._source === 'scores365-experiment' || l._source === '365scores') return true;
+    if (l.formation) return true;
+    return (l.startXI?.length ?? 0) >= 9;
+  });
+}
+
 export function convertFixturePlayersToLineups(playersPayload: unknown[]): unknown[] {
   if (!Array.isArray(playersPayload) || playersPayload.length === 0) return [];
 
