@@ -7,6 +7,16 @@ export function resolveQuizGeneratorModel(): string {
   return process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
 }
 
+/** OpenRouter bills against max_tokens; keep below credit headroom (default 12k). */
+export function resolveQuizMaxTokens(): number {
+  const raw = process.env.OPENROUTER_QUIZ_MAX_TOKENS;
+  if (raw) {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n >= 2000) return n;
+  }
+  return 12_000;
+}
+
 export interface QuizPackGenerationMeta {
   generatorModel: string;
   generatorVersion: string;

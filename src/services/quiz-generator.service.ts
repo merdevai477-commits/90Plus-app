@@ -43,6 +43,7 @@ import {
 import type { QuizTheme } from '../types/quiz-theme.types';
 import {
   buildPackGenerationMeta,
+  resolveQuizMaxTokens,
   type QuizPackGenerationMeta,
 } from '../constants/quiz-generation.constants';
 
@@ -67,12 +68,9 @@ const DAILY_TOPIC_POOL = [
   'Club badges and identity trivia',
 ];
 
-const QUIZ_COMPLETION_OPTS = {
-  max_tokens: 16_000,
-  response_format: { type: 'json_object' as const },
-};
-
 const AI_PARSE_MAX_RETRIES = 2;
+const QUIZ_402_MAX_RETRIES = 3;
+const QUIZ_MIN_MAX_TOKENS = 4_000;
 const MAX_GENERATION_ATTEMPTS = 3;
 const MAX_THEMED_GENERATION_ATTEMPTS = 10;
 
@@ -420,6 +418,30 @@ async function enrichAndFilterValid(
     });
 }
 
+function openRouterErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object') {
+    const nested = (err as { error?: { message?: string } }).error?.message;
+    if (nested) return nested;
+    if ('message' in err && typeof (err as { message: unknown }).message === 'string') {
+      return (err as { message: string }).message;
+    }
+  }
+  return String(err);
+}
+
+function parseAffordableMaxTokens(err: unknown): number | null {
+  const match = openRouterErrorMessage(err).match(/can only afford (\d+)/i);
+  if (!match) return null;
+  const n = Number.parseInt(match[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function isOpenRouterCreditError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const status = (err as { status?: number; code?: number }).status ?? (err as { code?: number }).code;
+  return status === 402;
+}
+
 async function callQuizAiJson(
   system: string,
   user: string,
@@ -430,36 +452,63 @@ async function callQuizAiJson(
 
   const model = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
   let lastContent = '{}';
+  let maxTokens = resolveQuizMaxTokens();
 
-  for (let attempt = 1; attempt <= AI_PARSE_MAX_RETRIES; attempt += 1) {
-    const completion = await client.chat.completions.create({
-      model,
-      temperature: attempt === 1 ? temperature : Math.min(temperature, 0.7),
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      ...QUIZ_COMPLETION_OPTS,
-    });
+  for (let creditAttempt = 0; creditAttempt < QUIZ_402_MAX_RETRIES; creditAttempt += 1) {
+    try {
+      for (let attempt = 1; attempt <= AI_PARSE_MAX_RETRIES; attempt += 1) {
+        const completion = await client.chat.completions.create({
+          model,
+          temperature: attempt === 1 ? temperature : Math.min(temperature, 0.7),
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          max_tokens: maxTokens,
+          response_format: { type: 'json_object' },
+        });
 
-    const content = completion.choices[0]?.message?.content ?? '{}';
-    lastContent = content;
-    const parsed = parseAiQuizResponse(content);
+        const content = completion.choices[0]?.message?.content ?? '{}';
+        lastContent = content;
+        const parsed = parseAiQuizResponse(content);
 
-    if (parsed.status === 'INSUFFICIENT_DATA') {
-      return parsed;
+        if (parsed.status === 'INSUFFICIENT_DATA') {
+          return parsed;
+        }
+
+        if (parsed.questions.length > 0) {
+          return parsed;
+        }
+
+        logger.warn('[QuizGen] AI returned unparsable or empty JSON', {
+          attempt,
+          finishReason: completion.choices[0]?.finish_reason,
+          length: content.length,
+          preview: content.slice(0, 120).replace(/\s+/g, ' '),
+        });
+      }
+
+      return parseAiQuizResponse(lastContent);
+    } catch (err) {
+      if (!isOpenRouterCreditError(err) || creditAttempt >= QUIZ_402_MAX_RETRIES - 1) {
+        throw err;
+      }
+
+      const affordable = parseAffordableMaxTokens(err);
+      const nextMax = affordable
+        ? Math.max(QUIZ_MIN_MAX_TOKENS, Math.floor(affordable * 0.95))
+        : Math.max(QUIZ_MIN_MAX_TOKENS, Math.floor(maxTokens * 0.75));
+
+      if (nextMax >= maxTokens) {
+        throw err;
+      }
+
+      maxTokens = nextMax;
+      logger.warn('[QuizGen] OpenRouter 402 — retrying with lower max_tokens', {
+        maxTokens,
+        message: openRouterErrorMessage(err).slice(0, 160),
+      });
     }
-
-    if (parsed.questions.length > 0) {
-      return parsed;
-    }
-
-    logger.warn('[QuizGen] AI returned unparsable or empty JSON', {
-      attempt,
-      finishReason: completion.choices[0]?.finish_reason,
-      length: content.length,
-      preview: content.slice(0, 120).replace(/\s+/g, ' '),
-    });
   }
 
   return parseAiQuizResponse(lastContent);
