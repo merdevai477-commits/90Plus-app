@@ -41,7 +41,8 @@ import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
 import {
   hasApiStatistics,
 } from '../../utils/matchStatsFallback';
-import { hasLineupData } from '../../utils/matchLineupsFallback';
+import { hasLineupData, isAuthoritativeLineupData } from '../../utils/matchLineupsFallback';
+import { sortPlayersByGrid } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
 import type { StandingsGroup } from '../../utils/standingsHelpers';
 import {
@@ -292,8 +293,22 @@ const MatchDetailsScreen = () => {
     setLineupsError(null);
     try {
       await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
-      const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
-      const data = snap?.lineups ?? [];
+      let data = useLiveFixtureStore.getState().snapshots[fixtureId]?.lineups ?? [];
+      if (!isAuthoritativeLineupData(data)) {
+        const fresh = await ApiFootballService.getFixtureLineups(fixtureId, { skipCache: true });
+        if (isAuthoritativeLineupData(fresh)) {
+          data = fresh;
+          const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
+          if (snap) {
+            useLiveFixtureStore.getState().ingestSnapshot({
+              ...snap,
+              lineups: fresh,
+              revision: snap.revision + 1,
+              updatedAt: Date.now(),
+            });
+          }
+        }
+      }
       if (hasLineupData(data)) {
         setLineupFetchAttempts(0);
       } else {
@@ -816,19 +831,22 @@ const MatchDetailsScreen = () => {
       >
         <View style={styles.lineupsContainer}>
           {lineups.map((lineup, index) => {
-            const formation = lineup.formation || '4-4-2'; // Default fallback
+            const formation = lineup.formation || '4-4-2';
             const startingXI = lineup.startXI || [];
             const substitutes = lineup.substitutes || [];
 
-            // Map API players to FootballField players
-            const fieldPlayers = startingXI.map((item: any) => ({
-              id: item.player.id,
-              name: item.player.name,
-              number: item.player.number,
-              pos: item.player.pos,
-              grid: item.player.grid,
-              photo: item.player.photo || `https://media.api-sports.io/football/players/${item.player.id}.png`
-            }));
+            const fieldPlayers = sortPlayersByGrid(
+              startingXI.map((item: any) => ({
+                id: item.player.id,
+                name: item.player.name,
+                number: item.player.number,
+                pos: item.player.pos,
+                grid: item.player.grid,
+                fieldLine: item.player.fieldLine,
+                fieldSide: item.player.fieldSide,
+                photo: item.player.photo ?? undefined,
+              })),
+            );
 
             return (
               <View key={index} style={styles.teamLineupContainer}>

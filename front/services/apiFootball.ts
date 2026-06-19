@@ -1271,6 +1271,16 @@ export const ApiFootballService = {
     };
 
     if (options?.skipCache) {
+      try {
+        const lineups = await fetchFromProxy<Lineup[]>(
+          `/cached/fixture/${fixtureId}/lineups`,
+          {},
+          { fresh: true },
+        );
+        if (hasLineupData(lineups)) return lineups;
+      } catch {
+        // fall through to direct proxy
+      }
       return resolveFromDirect(true);
     }
 

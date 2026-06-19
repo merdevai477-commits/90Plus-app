@@ -8,7 +8,7 @@ import {
   shouldSkipHttpIngest,
 } from './liveFixtureSync';
 import { hasApiStatistics } from '../../utils/matchStatsFallback';
-import { hasLineupData } from '../../utils/matchLineupsFallback';
+import { hasLineupData, pickBetterLineups } from '../../utils/matchLineupsFallback';
 import type { LiveFixtureSnapshot } from './liveFixtureStore.types';
 import {
   LIVE_FIXTURE_FINISHED_RETENTION_MS,
@@ -278,7 +278,7 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
           fixtureId,
           fixture: current.fixture,
           events: snapshot.events.length > 0 ? snapshot.events : current.events,
-          lineups: hasLineupData(snapshot.lineups) ? snapshot.lineups : current.lineups,
+          lineups: pickBetterLineups(current.lineups, snapshot.lineups),
           statistics: hasApiStatistics(snapshot.statistics)
             ? snapshot.statistics
             : current.statistics,

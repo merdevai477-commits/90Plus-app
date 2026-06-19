@@ -68,7 +68,7 @@ interface Scores365LineupMember {
   statusText?: string;
   competitorId?: number;
   formation?: { shortName?: string };
-  yardFormation?: { line?: number; fieldPosition?: number };
+  yardFormation?: { line?: number; fieldPosition?: number; fieldLine?: number; fieldSide?: number };
 }
 
 interface Scores365Member {
@@ -808,10 +808,23 @@ export function mapScores365Lineups(
     displayName?: string,
   ) => {
     if (!side?.lineups?.members?.length) return null;
-    const starters = side.lineups.members.filter((m) => m.status === 1);
+    const coachMember = side.lineups.members.find((m) => m.status === 4);
+    const coachMeta = coachMember ? members.get(coachMember.id) : undefined;
+    const starters = side.lineups.members
+      .filter((m) => m.status === 1)
+      .sort((a, b) => {
+        const al = a.yardFormation?.line ?? 99;
+        const bl = b.yardFormation?.line ?? 99;
+        if (al !== bl) return al - bl;
+        return (a.yardFormation?.fieldPosition ?? 0) - (b.yardFormation?.fieldPosition ?? 0);
+      });
     return {
       team: { id: team.id, name: displayName ?? team.name, logo: team.logo, colors: null },
-      coach: { id: null, name: null, photo: null },
+      coach: {
+        id: coachMember?.id ?? null,
+        name: coachMeta?.name ?? coachMeta?.shortName ?? null,
+        photo: null,
+      },
       formation: side.lineups.formation ?? null,
       startXI: starters.map((m) => {
         const meta = members.get(m.id);
@@ -826,6 +839,8 @@ export function mapScores365Lineups(
             number: meta?.jerseyNumber ?? 0,
             pos: posFrom365(m.formation?.shortName),
             grid,
+            fieldLine: m.yardFormation?.fieldLine ?? null,
+            fieldSide: m.yardFormation?.fieldSide ?? null,
             photo: null,
           },
         };

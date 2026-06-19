@@ -11,7 +11,11 @@ import {
   buildFallbackStatisticsFromEvents,
   hasApiStatistics,
 } from '../../utils/matchStatsFallback';
-import { hasLineupData, buildFallbackLineupsFromEvents } from '../../utils/matchLineupsFallback';
+import {
+  hasLineupData,
+  isAuthoritativeLineupData,
+  buildFallbackLineupsFromEvents,
+} from '../../utils/matchLineupsFallback';
 import type {
   LiveFixturePhase,
   LiveFixtureSnapshot,
@@ -54,7 +58,12 @@ function resolveLineups(
   events: FixtureEvent[],
   lineups: Lineup[] | null | undefined,
 ): Lineup[] | null {
+  if (isAuthoritativeLineupData(lineups)) return lineups ?? [];
   if (hasLineupData(lineups)) return lineups ?? [];
+  const is365 =
+    (fixture as { _experiment?: string })._experiment === 'scores365' ||
+    (fixture as { _scores365GameId?: number })._scores365GameId != null;
+  if (is365) return null;
   if (events.length > 0) {
     const fromEvents = buildFallbackLineupsFromEvents(fixture, events);
     if (hasLineupData(fromEvents)) return fromEvents;

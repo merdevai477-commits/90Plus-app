@@ -23,6 +23,41 @@ export function hasLineupData(lineups: Lineup[] | null | undefined): boolean {
   );
 }
 
+/** Full 365/API lineups — not the partial squads inferred from goal/card events. */
+export function isAuthoritativeLineupData(lineups: Lineup[] | null | undefined): boolean {
+  if (!lineups?.length) return false;
+  return lineups.some((row) => {
+    const source = (row as { _source?: string })._source;
+    if (source === 'scores365-experiment' || source === '365scores') return true;
+    if (row.formation) return true;
+    return (row.startXI?.length ?? 0) >= 9;
+  });
+}
+
+function countStartingPlayers(lineups: Lineup[] | null | undefined): number {
+  if (!lineups?.length) return 0;
+  return lineups.reduce((sum, row) => sum + (row.startXI?.length ?? 0), 0);
+}
+
+export function pickBetterLineups(
+  current: Lineup[] | null | undefined,
+  incoming: Lineup[] | null | undefined,
+): Lineup[] | null {
+  const curAuth = isAuthoritativeLineupData(current);
+  const incAuth = isAuthoritativeLineupData(incoming);
+  if (incAuth && !curAuth) return incoming ?? null;
+  if (curAuth && !incAuth) return current ?? null;
+  if (incAuth && curAuth) {
+    return countStartingPlayers(incoming) >= countStartingPlayers(current)
+      ? incoming ?? null
+      : current ?? null;
+  }
+  if (hasLineupData(incoming) && !hasLineupData(current)) return incoming ?? null;
+  if (hasLineupData(current) && !hasLineupData(incoming)) return current ?? null;
+  if (countStartingPlayers(incoming) > countStartingPlayers(current)) return incoming ?? null;
+  return current ?? incoming ?? null;
+}
+
 export function convertFixturePlayersToLineups(playersPayload: unknown[]): Lineup[] {
   if (!Array.isArray(playersPayload) || playersPayload.length === 0) return [];
 

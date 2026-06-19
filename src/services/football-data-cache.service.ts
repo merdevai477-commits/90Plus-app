@@ -2244,6 +2244,9 @@ class FootballDataCacheService {
                     photo: hit.imageUrl ?? p.photo,
                     number: hit.jerseyNumber ?? p.number,
                     pos: hit.position?.charAt(0) ?? p.pos,
+                    fieldLine: p.fieldLine ?? null,
+                    fieldSide: p.fieldSide ?? null,
+                    grid: p.grid ?? null,
                 },
             };
         };
