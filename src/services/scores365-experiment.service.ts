@@ -751,7 +751,6 @@ export function mapScores365Events(
   const members = memberNameLookup(game);
 
   return (game.events ?? []).map((ev) => {
-    const team = map365CompetitorToBaseTeam(ev.competitorId, game, base, resolvedAlignment);
     const player = ev.playerId ? members.get(ev.playerId) : undefined;
     const elapsed = Math.floor(ev.gameTime ?? 0);
     const typeId = ev.eventType?.id;
@@ -760,7 +759,8 @@ export function mapScores365Events(
     let detail = ev.eventType?.name ?? 'Event';
     if (typeId === 1) {
       type = 'Goal';
-      detail = ev.eventType?.subTypeName ?? 'Normal Goal';
+      const sub = ev.eventType?.subTypeName ?? 'Normal Goal';
+      detail = /field\s*goal/i.test(sub) ? 'Normal Goal' : sub;
     } else if (typeId === 2) {
       type = 'Card';
       detail = 'Yellow Card';
@@ -771,6 +771,21 @@ export function mapScores365Events(
       type = 'subst';
       detail = 'Substitution 1';
     }
+
+    const isOwnGoal = (detail || '').toLowerCase().includes('own');
+    // 365 uses competitorId = benefiting team on own goals; API-Football uses scorer's team.
+    let teamCompetitorId = ev.competitorId;
+    if (isOwnGoal) {
+      if (player?.competitorId != null) {
+        teamCompetitorId = player.competitorId;
+      } else if (ev.competitorId === game.homeCompetitor?.id) {
+        teamCompetitorId = game.awayCompetitor?.id ?? ev.competitorId;
+      } else if (ev.competitorId === game.awayCompetitor?.id) {
+        teamCompetitorId = game.homeCompetitor?.id ?? ev.competitorId;
+      }
+    }
+
+    const team = map365CompetitorToBaseTeam(teamCompetitorId, game, base, resolvedAlignment);
 
     return {
       time: { elapsed, extra: null },

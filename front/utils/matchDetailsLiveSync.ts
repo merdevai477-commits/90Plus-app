@@ -12,7 +12,8 @@ export function reconcileFixtureWithEvents(
   if (!events.length) return fixture;
 
   // 365Scores is source of truth for WC experiment — never override its score from events.
-  if ((fixture as Fixture & { _experiment?: string })._experiment === 'scores365') {
+  const fx = fixture as Fixture & { _experiment?: string; _scores365GameId?: number };
+  if (fx._experiment === 'scores365' || fx._scores365GameId != null) {
     return fixture;
   }
   const allFrom365 = events.every(
