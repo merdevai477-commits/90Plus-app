@@ -7,6 +7,8 @@ import {
   fetchFullSnapshot,
   shouldSkipHttpIngest,
 } from './liveFixtureSync';
+import { hasApiStatistics } from '../../utils/matchStatsFallback';
+import { hasLineupData } from '../../utils/matchLineupsFallback';
 import type { LiveFixtureSnapshot } from './liveFixtureStore.types';
 import {
   LIVE_FIXTURE_FINISHED_RETENTION_MS,
@@ -271,6 +273,21 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
 
     const current = get().snapshots[fixtureId];
     if (shouldSkipHttpIngest(current, snapshot, startedAt)) {
+      if (current) {
+        const merged = buildSnapshotFromRaw({
+          fixtureId,
+          fixture: current.fixture,
+          events: snapshot.events.length > 0 ? snapshot.events : current.events,
+          lineups: hasLineupData(snapshot.lineups) ? snapshot.lineups : current.lineups,
+          statistics: hasApiStatistics(snapshot.statistics)
+            ? snapshot.statistics
+            : current.statistics,
+          venue: snapshot.venue ?? current.venue,
+          source: 'http-full',
+          existing: current,
+        });
+        if (merged) get().ingestSnapshot(merged);
+      }
       return;
     }
     get().ingestSnapshot(snapshot);

@@ -701,7 +701,20 @@ function eventsMatch365ScoreLine(
 ): boolean {
   if (expectedHome == null || expectedAway == null) return true;
   const tallied = tallyGoalsFromMappedEvents(events, homeId, awayId);
+  const expectedTotal = expectedHome + expectedAway;
+  const talliedTotal = tallied.home + tallied.away;
+  if (talliedTotal === expectedTotal) return true;
+  // Per-team exact match (strict)
   return tallied.home === expectedHome && tallied.away === expectedAway;
+}
+
+function shouldServe365EventsDespiteMismatch(
+  game: Scores365Game,
+  events: Array<{ type?: string }>,
+): boolean {
+  if (!events.length) return false;
+  if (!is365FinishedGame(game)) return true;
+  return true;
 }
 
 function memberNameLookup(game: Scores365Game): Map<number, Scores365Member> {
@@ -961,9 +974,9 @@ export async function getScores365ExperimentEvents(
     awayId &&
     !eventsMatch365ScoreLine(events, homeId, awayId, scores.home, scores.away)
   ) {
-    if (is365FinishedGame(game) && events.length > 0) {
+    if (shouldServe365EventsDespiteMismatch(game, events)) {
       logger.warn(
-        `[Scores365Experiment] fixture ${fixtureId}: events/score tally mismatch on FT — serving events anyway`,
+        `[Scores365Experiment] fixture ${fixtureId}: events/score tally mismatch — serving ${events.length} events anyway`,
       );
       return events;
     }
@@ -1024,15 +1037,15 @@ export async function getScores365ExperimentBundle(
     awayId &&
     !eventsMatch365ScoreLine(events, homeId, awayId, fixture.goals.home, fixture.goals.away)
   ) {
-    if (is365FinishedGame(game) && events.length > 0) {
-      logger.warn(
-        `[Scores365Experiment] bundle ${fixtureId}: events/score mismatch on FT — keeping events`,
-      );
-    } else {
+    if (!shouldServe365EventsDespiteMismatch(game, events)) {
       logger.warn(
         `[Scores365Experiment] bundle ${fixtureId}: events/score mismatch — serving score only`,
       );
       events = [];
+    } else {
+      logger.warn(
+        `[Scores365Experiment] bundle ${fixtureId}: events/score mismatch — keeping ${events.length} events`,
+      );
     }
   }
 

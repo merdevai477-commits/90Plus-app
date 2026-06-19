@@ -1132,6 +1132,32 @@ class FootballDataCacheService {
      * Get match statistics
      */
     async getMatchStatistics(fixtureId: number): Promise<any[]> {
+        await ensureScores365GameMapping(fixtureId);
+        if (isScores365ExperimentFixture(fixtureId)) {
+            const dbMatch = await prisma.cachedFixture.findUnique({
+                where: { fixtureId },
+                select: { fullData: true, status: true },
+            });
+            const fullData = dbMatch?.fullData as any;
+            const events = await this.getMatchEvents(fixtureId, { forceRefresh: true });
+            if (events.length > 0 && fullData?.teams && fullData?.goals) {
+                const derived = buildFallbackStatisticsFromEvents(
+                    { teams: fullData.teams, goals: fullData.goals },
+                    events,
+                );
+                if (hasApiStatistics(derived)) {
+                    const cacheEntry: MemoryCacheEntry<any> = {
+                        data: derived,
+                        timestamp: Date.now(),
+                        ttl: this.TTL.LIVE_MATCH,
+                    };
+                    await redisCacheService.set(`statistics:${fixtureId}`, cacheEntry, this.TTL.LIVE_MATCH);
+                    this.statisticsCache.set(fixtureId, cacheEntry);
+                    return derived;
+                }
+            }
+        }
+
         // Check Redis cache first, then memory cache
         const redisKey = `statistics:${fixtureId}`;
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
@@ -1350,7 +1376,7 @@ class FootballDataCacheService {
      */
     async getFixtureDetailsBundle(
         fixtureId: number,
-        options?: { language?: string | null },
+        options?: { language?: string | null; forceRefresh?: boolean },
     ): Promise<{
         fixture: any | null;
         lineups: any[];
@@ -1370,7 +1396,7 @@ class FootballDataCacheService {
                     statistics = await this.getMatchStatistics(fixtureId);
                 }
                 let events = experiment.events;
-                if (!events.length) {
+                if (!events.length || options?.forceRefresh) {
                     events = await this.getMatchEvents(fixtureId, {
                         forceRefresh: true,
                         language: resolveScores365AppLanguage(options?.language ?? null),

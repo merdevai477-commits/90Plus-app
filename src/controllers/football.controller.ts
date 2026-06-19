@@ -2133,7 +2133,14 @@ export class FootballController {
       }
 
       const language = resolveAppLanguage(req);
-      const events = await footballDataCacheService.getMatchEvents(fixtureId, { language });
+      const forceRefresh =
+        req.query.fresh === '1' ||
+        req.query.fresh === 'true' ||
+        req.query.forceRefresh === '1';
+      const events = await footballDataCacheService.getMatchEvents(fixtureId, {
+        language,
+        forceRefresh,
+      });
 
       res.json({
         status: 'SUCCESS',
@@ -2159,7 +2166,14 @@ export class FootballController {
       }
 
       const language = resolveAppLanguage(req);
-      const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId, { language });
+      const forceRefresh =
+        req.query.fresh === '1' ||
+        req.query.fresh === 'true' ||
+        req.query.forceRefresh === '1';
+      const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId, {
+        language,
+        forceRefresh,
+      });
       const gameId =
         (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
 

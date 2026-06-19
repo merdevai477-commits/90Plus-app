@@ -1302,14 +1302,22 @@ export const ApiFootballService = {
     try {
       if (options?.skipCache) {
         return await fetchFromProxy<TeamStatistics[]>(
-          `/fixtures/${fixtureId}/statistics`,
+          `/cached/fixture/${fixtureId}/statistics`,
           {},
           { fresh: true },
         );
       }
       return await fetchFromProxy<TeamStatistics[]>(`/cached/fixture/${fixtureId}/statistics`);
     } catch (error) {
-      return fetchFromProxy<TeamStatistics[]>(`/fixtures/${fixtureId}/statistics`);
+      try {
+        return await fetchFromProxy<TeamStatistics[]>(
+          `/cached/fixture/${fixtureId}/statistics`,
+          {},
+          { fresh: true },
+        );
+      } catch {
+        return [];
+      }
     }
   },
 
@@ -1406,14 +1414,18 @@ export const ApiFootballService = {
     try {
       if (options?.skipCache) {
         return await fetchFromProxy<FixtureEvent[]>(
-          `/fixtures/${fixtureId}/events`,
+          `/cached/fixture/${fixtureId}/events`,
           {},
           { fresh: true },
         );
       }
       return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`);
     } catch (error) {
-      return fetchFromProxy<FixtureEvent[]>(`/fixtures/${fixtureId}/events`);
+      try {
+        return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`, {}, { fresh: true });
+      } catch {
+        return [];
+      }
     }
   },
 
@@ -1432,22 +1444,18 @@ export const ApiFootballService = {
   }> {
     try {
       if (options?.skipCache) {
-        const [fixture, lineups, statistics, events] = await Promise.all([
-          this.getFixtureById(fixtureId, { skipCache: true }),
-          this.getFixtureLineups(fixtureId, { skipCache: true }),
-          this.getFixtureStatistics(fixtureId, { skipCache: true }),
-          this.getFixtureEvents(fixtureId, { skipCache: true }),
-        ]);
-        let venue: Venue | null = (fixture?.fixture?.venue as Venue) ?? null;
-        if (venue?.id) {
-          venue = (await this.getVenueInfo(venue.id)) ?? venue;
-        }
+        const raw = await fetchFromProxy<any>(
+          `/cached/fixture/${fixtureId}/details`,
+          {},
+          { fresh: true },
+        );
+        const bundle = raw?.response ?? raw;
         return {
-          fixture,
-          lineups: lineups ?? [],
-          statistics: statistics ?? [],
-          events: events ?? [],
-          venue,
+          fixture: bundle?.fixture ?? null,
+          lineups: bundle?.lineups ?? [],
+          statistics: bundle?.statistics ?? [],
+          events: bundle?.events ?? [],
+          venue: bundle?.venue ?? null,
         };
       }
 

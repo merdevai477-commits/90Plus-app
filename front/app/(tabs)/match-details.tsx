@@ -420,7 +420,9 @@ const MatchDetailsScreen = () => {
     loadedTabsRef.current.add('form');
     setFormLoading(true);
     try {
-      const is365 = (fixture as { _experiment?: string })._experiment === 'scores365';
+      const is365 =
+        (fixture as { _experiment?: string })._experiment === 'scores365' ||
+        (fixture as { _scores365GameId?: number })._scores365GameId != null;
       if (is365 && fixtureId) {
         const form365 = await ApiFootballService.get365MatchForm(fixtureId);
         if (form365) {
@@ -451,7 +453,9 @@ const MatchDetailsScreen = () => {
     setStandingsError(null);
     setStandingsUnavailable(false);
     try {
-      const is365 = (fixture as { _experiment?: string })._experiment === 'scores365';
+      const is365 =
+        (fixture as { _experiment?: string })._experiment === 'scores365' ||
+        (fixture as { _scores365GameId?: number })._scores365GameId != null;
       if (is365) {
         const result365 = await ApiFootballService.get365StandingsGrouped();
         if (result365.available) {
