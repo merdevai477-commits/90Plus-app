@@ -748,6 +748,10 @@ async function startServer() {
                         './config/world-cup-only-mode.config'
                     );
                     logWorldCupOnlyModeStartup();
+                    const { log365StoreHotfixStartup } = await import(
+                        './services/scores365-experiment.service'
+                    );
+                    log365StoreHotfixStartup();
 
                     const plan = (process.env.FOOTBALL_API_PLAN || '').toLowerCase();
                     const isFreePlan = !plan || plan === 'free';

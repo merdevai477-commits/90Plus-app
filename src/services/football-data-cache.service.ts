@@ -47,6 +47,7 @@ import {
     applyScores365ExperimentToWorldCupList,
     ensureScores365GameMapping,
     getScores365ExperimentBundle,
+    is365StoreDetailsHotfix,
     getScores365ExperimentEvents,
     getScores365GameIdForFixture,
     getScores365MatchesForDate,
@@ -971,7 +972,9 @@ class FootballDataCacheService {
         options?: { forceRefresh?: boolean; language?: string | null },
     ): Promise<any[]> {
         const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
-        const forceRefresh = options?.forceRefresh === true;
+        const forceRefresh =
+            options?.forceRefresh === true ||
+            (isScores365ExperimentFixture(fixtureId) && is365StoreDetailsHotfix());
         const language = resolveScores365AppLanguage(options?.language ?? null);
         const redisKey = `lineups:${fixtureId}`;
 
@@ -1276,7 +1279,9 @@ class FootballDataCacheService {
         fixtureId: number,
         options?: { forceRefresh?: boolean; language?: string | null },
     ): Promise<any[]> {
-        const forceRefresh = options?.forceRefresh === true;
+        const forceRefresh =
+            options?.forceRefresh === true ||
+            (isScores365ExperimentFixture(fixtureId) && is365StoreDetailsHotfix());
         const language = resolveScores365AppLanguage(options?.language ?? null);
 
         // 365Scores experiment — single shared upstream fetch; never API-Football quota.
@@ -1397,11 +1402,14 @@ class FootballDataCacheService {
         venue: any | null;
     }> {
         await ensureScores365GameMapping(fixtureId);
+        const forceRefresh =
+            options?.forceRefresh === true ||
+            (isScores365ExperimentFixture(fixtureId) && is365StoreDetailsHotfix());
         if (isScores365ExperimentFixture(fixtureId)) {
             const experiment = await getScores365ExperimentBundle(
                 fixtureId,
                 resolveScores365AppLanguage(options?.language ?? null),
-                { force: options?.forceRefresh === true },
+                { force: forceRefresh },
             );
             if (experiment) {
                 let statistics = experiment.statistics;
@@ -1409,7 +1417,7 @@ class FootballDataCacheService {
                     statistics = await this.getMatchStatistics(fixtureId);
                 }
                 let events = experiment.events;
-                if (!events.length || options?.forceRefresh) {
+                if (!events.length || forceRefresh) {
                     events = await this.getMatchEvents(fixtureId, {
                         forceRefresh: true,
                         language: resolveScores365AppLanguage(options?.language ?? null),
@@ -1422,7 +1430,7 @@ class FootballDataCacheService {
                     fixtureId,
                     resolveScores365AppLanguage(options?.language ?? null),
                     experiment.lineups,
-                    options?.forceRefresh === true,
+                    forceRefresh,
                 );
                 const payload = {
                     fixture: experiment.fixture,

@@ -11,7 +11,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture, ensureScores365GameMapping } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentFixture } from '../services/scores365-experiment.service';
 
 /**
  * Football API Proxy Controller
@@ -22,6 +22,16 @@ import { getScores365GameIdForFixture, ensureScores365GameMapping } from '../ser
 function ensureString(param: string | string[] | undefined): string {
   if (Array.isArray(param)) return param[0] || '';
   return param || '';
+}
+
+/** fresh=1 query param, or WC store hotfix (legacy app compatibility). */
+function wantsFreshMatchDetails(req: Request): boolean {
+  return (
+    is365StoreDetailsHotfix() ||
+    req.query.fresh === '1' ||
+    req.query.fresh === 'true' ||
+    req.query.forceRefresh === '1'
+  );
 }
 
 // Helper function to format transfer date
@@ -529,6 +539,20 @@ export class FootballController {
         return;
       }
 
+      await ensureScores365GameMapping(fixtureId);
+      if (isScores365ExperimentFixture(fixtureId)) {
+        const lineups = await footballDataCacheService.getMatchLineups(fixtureId, {
+          forceRefresh: wantsFreshMatchDetails(req),
+          language: resolveAppLanguage(req),
+        });
+        res.json({
+          status: 'SUCCESS',
+          results: lineups?.length ?? 0,
+          response: lineups ?? [],
+        });
+        return;
+      }
+
       const lineups = await footballService.getFixtureLineupsResolved(fixtureId);
 
       res.json({
@@ -588,6 +612,17 @@ export class FootballController {
         return;
       }
 
+      await ensureScores365GameMapping(fixtureId);
+      if (isScores365ExperimentFixture(fixtureId)) {
+        const statistics = await footballDataCacheService.getMatchStatistics(fixtureId);
+        res.json({
+          status: 'SUCCESS',
+          results: statistics?.length ?? 0,
+          response: statistics ?? [],
+        });
+        return;
+      }
+
       const statistics = await footballService.getFixtureStatistics(fixtureId);
 
       res.json({
@@ -625,7 +660,10 @@ export class FootballController {
 
       try {
         const language = resolveAppLanguage(req);
-        const events = await footballDataCacheService.getMatchEvents(fixtureId, { language });
+        const events = await footballDataCacheService.getMatchEvents(fixtureId, {
+          language,
+          forceRefresh: wantsFreshMatchDetails(req),
+        });
 
         res.json({
           status: 'SUCCESS',
@@ -2039,10 +2077,7 @@ export class FootballController {
       }
 
       const language = resolveAppLanguage(req);
-      const forceRefresh =
-        req.query.fresh === '1' ||
-        req.query.fresh === 'true' ||
-        req.query.forceRefresh === '1';
+      const forceRefresh = wantsFreshMatchDetails(req);
       const lineups = await footballDataCacheService.getMatchLineups(fixtureId, {
         forceRefresh,
         language,
@@ -2141,10 +2176,7 @@ export class FootballController {
       }
 
       const language = resolveAppLanguage(req);
-      const forceRefresh =
-        req.query.fresh === '1' ||
-        req.query.fresh === 'true' ||
-        req.query.forceRefresh === '1';
+      const forceRefresh = wantsFreshMatchDetails(req);
       const events = await footballDataCacheService.getMatchEvents(fixtureId, {
         language,
         forceRefresh,
@@ -2174,10 +2206,7 @@ export class FootballController {
       }
 
       const language = resolveAppLanguage(req);
-      const forceRefresh =
-        req.query.fresh === '1' ||
-        req.query.fresh === 'true' ||
-        req.query.forceRefresh === '1';
+      const forceRefresh = wantsFreshMatchDetails(req);
       const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId, {
         language,
         forceRefresh,
