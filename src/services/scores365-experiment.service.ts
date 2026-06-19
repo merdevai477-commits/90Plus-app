@@ -7,6 +7,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { matchCacheService } from './match-cache.service';
 import type { FixtureFromAPI } from './match-cache.service';
+import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
 const SCORES365_FIXTURES_BASE = 'https://webws.365scores.com/web/games/fixtures/';
@@ -175,6 +176,40 @@ export function getScores365GameIdForFixture(fixtureId: number): number | null {
 export function isScores365ExperimentFixture(fixtureId: number): boolean {
   if (!isScores365ExperimentEnabled()) return false;
   return getScores365GameIdForFixture(fixtureId) != null;
+}
+
+/** Lazy map API-Football fixtureId → 365 gameId (team names + kickoff). */
+export async function ensureScores365GameMapping(fixtureId: number): Promise<number | null> {
+  const existing = getScores365GameIdForFixture(fixtureId);
+  if (existing) return existing;
+  if (!isScores365ExperimentEnabled()) return null;
+
+  const leagueId = getScores365ExperimentConfig().leagueId;
+  const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
+  if (!dbRow || dbRow.leagueId !== leagueId) return null;
+
+  const games = await fetchScores365WorldCupFixtures({ language: 'en' });
+  for (const game of games) {
+    const matched = resolveDbFixtureFor365Game(game, [dbRow]);
+    if (matched?.fixtureId === fixtureId) {
+      registerScores365FixtureMapping(fixtureId, game.id);
+      return game.id;
+    }
+  }
+  return null;
+}
+
+function is365FinishedGame(game: Scores365Game): boolean {
+  const homeRaw = game.homeCompetitor?.score;
+  const awayRaw = game.awayCompetitor?.score;
+  if (homeRaw === -1 || awayRaw === -1) return false;
+  const text = (game.statusText ?? '').toLowerCase();
+  return (
+    text.includes('انته') ||
+    text.includes('ended') ||
+    text.includes('finish') ||
+    (game.shortStatusText ?? '').toLowerCase() === 'ft'
+  );
 }
 
 function scores365CommonParams(langId: number): string {
@@ -905,7 +940,7 @@ export async function getScores365ExperimentEvents(
   force = false,
   language?: string | null,
 ): Promise<any[]> {
-  const gameId = getScores365GameIdForFixture(fixtureId);
+  const gameId = (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
   if (!gameId) return [];
 
   const game = await fetchScores365GameById(gameId, { force, language });
@@ -926,6 +961,12 @@ export async function getScores365ExperimentEvents(
     awayId &&
     !eventsMatch365ScoreLine(events, homeId, awayId, scores.home, scores.away)
   ) {
+    if (is365FinishedGame(game) && events.length > 0) {
+      logger.warn(
+        `[Scores365Experiment] fixture ${fixtureId}: events/score tally mismatch on FT — serving events anyway`,
+      );
+      return events;
+    }
     logger.warn(
       `[Scores365Experiment] drop events for fixture ${fixtureId}: tally ${JSON.stringify(tallyGoalsFromMappedEvents(events, homeId, awayId))} ≠ 365 score ${scores.home}-${scores.away}`,
     );
@@ -960,7 +1001,7 @@ export async function getScores365ExperimentBundle(
   venue: any | null;
   source: 'scores365-experiment';
 } | null> {
-  const gameId = getScores365GameIdForFixture(fixtureId);
+  const gameId = (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
   if (!gameId) return null;
 
   const game = await fetchScores365GameById(gameId, { language });
@@ -983,17 +1024,28 @@ export async function getScores365ExperimentBundle(
     awayId &&
     !eventsMatch365ScoreLine(events, homeId, awayId, fixture.goals.home, fixture.goals.away)
   ) {
-    logger.warn(
-      `[Scores365Experiment] bundle ${fixtureId}: events/score mismatch — serving score only`,
-    );
-    events = [];
+    if (is365FinishedGame(game) && events.length > 0) {
+      logger.warn(
+        `[Scores365Experiment] bundle ${fixtureId}: events/score mismatch on FT — keeping events`,
+      );
+    } else {
+      logger.warn(
+        `[Scores365Experiment] bundle ${fixtureId}: events/score mismatch — serving score only`,
+      );
+      events = [];
+    }
+  }
+
+  let statistics = (base as any).statistics ?? [];
+  if (!hasApiStatistics(statistics) && events.length > 0) {
+    statistics = buildFallbackStatisticsFromEvents(fixture, events);
   }
 
   return {
     fixture,
     lineups: mapScores365Lineups(game, base, alignment),
     events,
-    statistics: (base as any).statistics ?? [],
+    statistics,
     venue: fixture.fixture.venue ?? null,
     source: 'scores365-experiment',
   };

@@ -11,7 +11,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping } from '../services/scores365-experiment.service';
 
 /**
  * Football API Proxy Controller
@@ -2039,7 +2039,8 @@ export class FootballController {
       }
 
       const lineups = await footballDataCacheService.getMatchLineups(fixtureId);
-      const gameId = getScores365GameIdForFixture(fixtureId);
+      const gameId =
+        (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
 
       res.json({
         status: 'SUCCESS',
@@ -2159,7 +2160,8 @@ export class FootballController {
 
       const language = resolveAppLanguage(req);
       const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId, { language });
-      const gameId = getScores365GameIdForFixture(fixtureId);
+      const gameId =
+        (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
 
       res.json({
         status: 'SUCCESS',
@@ -2212,7 +2214,8 @@ export class FootballController {
         res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
         return;
       }
-      const gameId = getScores365GameIdForFixture(fixtureId);
+      const gameId =
+        (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
       if (!gameId) {
         res.status(404).json({ status: 'ERROR', message: '365Scores game not mapped for this fixture' });
         return;
@@ -2250,7 +2253,8 @@ export class FootballController {
         res.status(400).json({ status: 'ERROR', message: 'Invalid fixture or athlete ID' });
         return;
       }
-      const gameId = getScores365GameIdForFixture(fixtureId);
+      const gameId =
+        (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
       if (!gameId) {
         res.status(404).json({ status: 'ERROR', message: '365Scores game not mapped for this fixture' });
         return;

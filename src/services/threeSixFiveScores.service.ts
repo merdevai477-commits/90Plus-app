@@ -295,6 +295,44 @@ class ThreeSixFiveScoresService {
     }
   }
 
+  // ─── 1b. All scores (date range, all leagues) ────────────────────────────
+
+  async getAllScores(
+    startDate: string,
+    endDate: string,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFiveFixtureItem[]>> {
+    if (!this.isEnabled()) return { data: null, source: null };
+
+    try {
+      const langId = resolveScores365LangId(language);
+      const cacheKey = `365:allscores:${startDate}:${endDate}:${langId}`;
+      const cached = await redisCacheService.get<ThreeSixFiveFixtureItem[]>(cacheKey);
+      if (cached) return { data: cached, source: '365scores' };
+
+      const path =
+        `/web/games/allscores/?${this.commonParams(langId)}` +
+        `&sports=1&startDate=${encodeURIComponent(startDate)}` +
+        `&endDate=${encodeURIComponent(endDate)}&showOdds=true&onlyMajorGames=true&withTop=true`;
+
+      const payload = await this.fetchJson<{ games?: Scores365Game[] }>(
+        path,
+        `allscores:${startDate}:${endDate}`,
+        120_000,
+      );
+      if (!payload?.games?.length) return { data: null, source: null };
+
+      const items = payload.games.map((g) => this.toFixtureItem(g));
+      await redisCacheService.set(cacheKey, items, 120_000);
+      await this.persistFinishedFixtures(items);
+
+      return { data: items, source: '365scores' };
+    } catch (err: unknown) {
+      logger.error('[365Scores] getAllScores failed:', (err as Error)?.message);
+      return { data: null, source: null };
+    }
+  }
+
   // ─── 2. Live game details ────────────────────────────────────────────────
 
   async getLiveGameDetails(

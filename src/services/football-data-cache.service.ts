@@ -45,6 +45,7 @@ interface MemoryCacheEntry<T> {
 
 import {
     applyScores365ExperimentToWorldCupList,
+    ensureScores365GameMapping,
     getScores365ExperimentBundle,
     getScores365ExperimentEvents,
     getScores365GameIdForFixture,
@@ -1010,21 +1011,41 @@ class FootballDataCacheService {
         const isLive = dbMatch && LIVE_STATUSES.includes(dbMatch.status);
         const fullData = dbMatch?.fullData as any;
 
-        if (isFinished && hasLineupData(fullData?.lineups)) {
+        await ensureScores365GameMapping(fixtureId);
+
+        const dbLineupsHaveGrid = (lineups: unknown) =>
+            Array.isArray(lineups) &&
+            lineups.some((row: { startXI?: Array<{ player?: { grid?: string | null } }> }) =>
+                row.startXI?.some((p) => p.player?.grid != null),
+            );
+
+        if (
+            isFinished &&
+            hasLineupData(fullData?.lineups) &&
+            (!isScores365ExperimentFixture(fixtureId) || dbLineupsHaveGrid(fullData.lineups))
+        ) {
             logger.debug(`📦 Lineups ${fixtureId} from DB fullData (shared for all users, no API call)`);
             return fullData.lineups;
         }
 
         if (isScores365ExperimentFixture(fixtureId)) {
-            const from365 = await this.resolve365LineupsForFixture(fixtureId);
+            const from365 = await this.get365LineupsMerged(
+                fixtureId,
+                resolveScores365AppLanguage(null),
+            );
             if (hasLineupData(from365)) {
                 const cacheEntry: MemoryCacheEntry<any> = {
                     data: from365,
                     timestamp: Date.now(),
-                    ttl: isLive ? this.TTL.LIVE_MATCH : this.TTL.UPCOMING_MATCH,
+                    ttl: isFinished ? this.TTL.FINISHED : isLive ? this.TTL.LIVE_MATCH : this.TTL.UPCOMING_MATCH,
                 };
-                await redisCacheService.set(redisKey, cacheEntry, cacheEntry.ttl);
+                const redisTtl =
+                    cacheEntry.ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : cacheEntry.ttl;
+                await redisCacheService.set(redisKey, cacheEntry, redisTtl);
                 this.lineupsCache.set(fixtureId, cacheEntry);
+                if (isFinished) {
+                    await this.updateFixtureFullData(fixtureId, { lineups: from365 });
+                }
                 return from365;
             }
         }
@@ -1221,16 +1242,22 @@ class FootballDataCacheService {
         const language = resolveScores365AppLanguage(options?.language ?? null);
 
         // 365Scores experiment — single shared upstream fetch; never API-Football quota.
+        await ensureScores365GameMapping(fixtureId);
         if (isScores365ExperimentFixture(fixtureId)) {
-            const events = await getScores365ExperimentEvents(fixtureId, forceRefresh, language);
+            let events = await getScores365ExperimentEvents(fixtureId, forceRefresh, language);
+            if (!events.length) {
+                events = await getScores365ExperimentEvents(fixtureId, true, language);
+            }
             const ttl = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '3000', 10) || 3_000);
-            const cacheEntry: MemoryCacheEntry<any> = {
-                data: events,
-                timestamp: Date.now(),
-                ttl,
-            };
-            this.eventsCache.set(fixtureId, cacheEntry);
-            await redisCacheService.set(`events:${fixtureId}`, cacheEntry, ttl);
+            if (events.length > 0) {
+                const cacheEntry: MemoryCacheEntry<any> = {
+                    data: events,
+                    timestamp: Date.now(),
+                    ttl,
+                };
+                this.eventsCache.set(fixtureId, cacheEntry);
+                await redisCacheService.set(`events:${fixtureId}`, cacheEntry, ttl);
+            }
             return events;
         }
 
@@ -1331,6 +1358,7 @@ class FootballDataCacheService {
         events: any[];
         venue: any | null;
     }> {
+        await ensureScores365GameMapping(fixtureId);
         if (isScores365ExperimentFixture(fixtureId)) {
             const experiment = await getScores365ExperimentBundle(
                 fixtureId,
@@ -1338,24 +1366,40 @@ class FootballDataCacheService {
             );
             if (experiment) {
                 let statistics = experiment.statistics;
-                if (!statistics?.length) {
+                if (!hasApiStatistics(statistics)) {
                     statistics = await this.getMatchStatistics(fixtureId);
                 }
-                let lineups = experiment.lineups;
-                const named365 = await this.resolve365LineupsForFixture(
+                let events = experiment.events;
+                if (!events.length) {
+                    events = await this.getMatchEvents(fixtureId, {
+                        forceRefresh: true,
+                        language: resolveScores365AppLanguage(options?.language ?? null),
+                    });
+                }
+                if (!hasApiStatistics(statistics) && events.length > 0 && experiment.fixture) {
+                    statistics = buildFallbackStatisticsFromEvents(experiment.fixture, events);
+                }
+                const lineups = await this.get365LineupsMerged(
                     fixtureId,
                     resolveScores365AppLanguage(options?.language ?? null),
+                    experiment.lineups,
                 );
-                if (hasLineupData(named365)) {
-                    lineups = named365;
-                }
-                return {
+                const payload = {
                     fixture: experiment.fixture,
-                    lineups,
+                    lineups: hasLineupData(lineups) ? lineups : experiment.lineups,
                     statistics: statistics ?? [],
-                    events: experiment.events,
+                    events,
                     venue: experiment.venue,
                 };
+                const statusShort = experiment.fixture?.fixture?.status?.short ?? '';
+                if (['FT', 'AET', 'PEN'].includes(statusShort)) {
+                    await this.updateFixtureFullData(fixtureId, {
+                        lineups: payload.lineups,
+                        events: payload.events,
+                        statistics: payload.statistics,
+                    });
+                }
+                return payload;
             }
         }
 
@@ -2048,7 +2092,7 @@ class FootballDataCacheService {
     // ============================================
 
     private is365WorldCupSecondaryEnabled(): boolean {
-        return isScores365ExperimentEnabled() && isWorldCupOnlyMode();
+        return isScores365ExperimentEnabled();
     }
 
     async getCached365Fixtures(
@@ -2080,7 +2124,7 @@ class FootballDataCacheService {
         fixtureIdOrGameId: number,
         language?: string | null,
     ): Promise<ThreeSixFiveResult<ThreeSixFiveLineupPlayer[]>> {
-        if (!this.is365WorldCupSecondaryEnabled()) {
+        if (!isScores365ExperimentEnabled()) {
             return { data: null, source: null };
         }
         const gameId =
@@ -2139,55 +2183,84 @@ class FootballDataCacheService {
         return threeSixFiveScoresService.getPlayerBasicInfo(athleteId, language);
     }
 
+    /** Merge 365 named players (athleteId, photo) into structured lineups (grid, formation). */
+    private merge365NamesIntoLineups(
+        lineups: any[],
+        named: ThreeSixFiveLineupPlayer[],
+    ): any[] {
+        if (!named.length || !lineups.length) return lineups;
+        const norm = (s?: string) =>
+            (s ?? '')
+                .normalize('NFD')
+                .replace(/\p{M}/gu, '')
+                .toLowerCase()
+                .trim();
+        const byMemberId = new Map(named.map((n) => [n.memberId, n]));
+        const byAthleteId = new Map(named.map((n) => [n.athleteId, n]));
+        const byName = new Map(named.map((n) => [norm(n.name), n]));
+
+        const enrich = (entry: { player?: Record<string, unknown> }) => {
+            const p = entry.player;
+            if (!p) return entry;
+            const hit =
+                byMemberId.get(p.id as number) ??
+                byAthleteId.get(p.id as number) ??
+                byName.get(norm(p.name as string));
+            if (!hit) return entry;
+            return {
+                ...entry,
+                player: {
+                    ...p,
+                    id: hit.athleteId,
+                    athleteId: hit.athleteId,
+                    scores365MemberId: hit.memberId,
+                    name: hit.name || p.name,
+                    photo: hit.imageUrl ?? p.photo,
+                    number: hit.jerseyNumber ?? p.number,
+                    pos: hit.position?.charAt(0) ?? p.pos,
+                },
+            };
+        };
+
+        return lineups.map((side) => ({
+            ...side,
+            startXI: side.startXI?.map(enrich) ?? [],
+            substitutes: side.substitutes?.map(enrich) ?? [],
+            _source: side._source ?? '365scores',
+        }));
+    }
+
+    /** Structured 365 lineups + named enrichment — keeps formation/grid for finished matches. */
+    async get365LineupsMerged(
+        fixtureId: number,
+        language?: string | null,
+        baseLineups?: any[],
+    ): Promise<any[]> {
+        await ensureScores365GameMapping(fixtureId);
+        if (!isScores365ExperimentFixture(fixtureId)) return [];
+
+        let structured = baseLineups;
+        if (!hasLineupData(structured)) {
+            const bundle = await getScores365ExperimentBundle(
+                fixtureId,
+                resolveScores365AppLanguage(language),
+            );
+            structured = bundle?.lineups;
+        }
+        if (!hasLineupData(structured)) return [];
+
+        const named = await this.getCached365LineupsWithNames(fixtureId, language);
+        if (!named.data?.length) return structured ?? [];
+
+        return this.merge365NamesIntoLineups(structured ?? [], named.data);
+    }
+
     /** 365Scores named lineups → API-Football shape with athleteId for player taps. */
     async resolve365LineupsForFixture(
         fixtureId: number,
         language?: string | null,
     ): Promise<any[]> {
-        if (!isScores365ExperimentFixture(fixtureId)) return [];
-        const named = await this.getCached365LineupsWithNames(fixtureId, language);
-        if (!named.data?.length) return [];
-        return this.map365LineupsToApiFormat(fixtureId, named.data);
-    }
-
-    /** Map 365 named lineups → API-Football lineup array (enrichment only). */
-    private async map365LineupsToApiFormat(
-        fixtureId: number,
-        players: ThreeSixFiveLineupPlayer[],
-    ): Promise<any[]> {
-        const gameId = getScores365GameIdForFixture(fixtureId);
-        const dbMatch = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
-        if (!dbMatch) return [];
-
-        const base = matchCacheService.convertDbMatchToApiFormat(dbMatch);
-        const homeTeam = base.teams.home;
-        const awayTeam = base.teams.away;
-        const mkSide = (side: 'home' | 'away', team: typeof homeTeam) => {
-            const sidePlayers = players.filter((p) => p.side === side);
-            if (!sidePlayers.length) return null;
-            return {
-                team: { id: team.id, name: team.name, logo: team.logo, colors: null },
-                coach: { id: null, name: null, photo: null },
-                formation: null,
-                startXI: sidePlayers.map((p) => ({
-                    player: {
-                        id: p.athleteId,
-                        athleteId: p.athleteId,
-                        scores365MemberId: p.memberId,
-                        name: p.name,
-                        number: p.jerseyNumber ?? 0,
-                        pos: p.position?.charAt(0) ?? null,
-                        grid: null,
-                        photo: p.imageUrl,
-                    },
-                })),
-                substitutes: [],
-                _source: '365scores',
-                _scores365GameId: gameId,
-            };
-        };
-
-        return [mkSide('home', homeTeam), mkSide('away', awayTeam)].filter(Boolean);
+        return this.get365LineupsMerged(fixtureId, language);
     }
 }
 

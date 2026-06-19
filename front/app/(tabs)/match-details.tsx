@@ -420,6 +420,15 @@ const MatchDetailsScreen = () => {
     loadedTabsRef.current.add('form');
     setFormLoading(true);
     try {
+      const is365 = (fixture as { _experiment?: string })._experiment === 'scores365';
+      if (is365 && fixtureId) {
+        const form365 = await ApiFootballService.get365MatchForm(fixtureId);
+        if (form365) {
+          setHomeLastFixtures(form365.home);
+          setAwayLastFixtures(form365.away);
+          return;
+        }
+      }
       const homeId = fixture.teams.home.id;
       const awayId = fixture.teams.away.id;
       const leagueId = fixture.league.id;
@@ -442,6 +451,23 @@ const MatchDetailsScreen = () => {
     setStandingsError(null);
     setStandingsUnavailable(false);
     try {
+      const is365 = (fixture as { _experiment?: string })._experiment === 'scores365';
+      if (is365) {
+        const result365 = await ApiFootballService.get365StandingsGrouped();
+        if (result365.available) {
+          const homeTeam = { id: fixture.teams.home.id, name: fixture.teams.home.name };
+          const awayTeam = { id: fixture.teams.away.id, name: fixture.teams.away.name };
+          const matchGroups = resolveStandingsGroupsForMatch(
+            result365.groups,
+            homeTeam,
+            awayTeam,
+          );
+          setStandingsGroups(matchGroups);
+          setStandingsSeasonUsed(fixture.league.season);
+          if (matchGroups.length === 0) setStandingsUnavailable(true);
+          return;
+        }
+      }
       const preferFresh = force || isLive() || isFinishedMatch();
       const result = await ApiFootballService.getLeagueStandingsGrouped(
         fixture.league.id,

@@ -1517,6 +1517,70 @@ export const ApiFootballService = {
   },
 
   /**
+   * 365Scores — recent form (last ~15 matches per team) for a WC fixture.
+   */
+  async get365MatchForm(
+    fixtureId: number,
+  ): Promise<{ home: TeamFixture[]; away: TeamFixture[] } | null> {
+    try {
+      const baseUrl = getApiUrl();
+      const url = `${baseUrl}/football/cached/365/fixture/${fixtureId}/form`;
+      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
+      if (!response.ok) return null;
+      const json = (await response.json()) as {
+        response?: {
+          home?: { recentGames?: unknown[] };
+          away?: { recentGames?: unknown[] };
+        };
+      };
+      const { map365RecentGamesToTeamFixtures } = await import('../utils/scores365Adapters');
+      return {
+        home: map365RecentGamesToTeamFixtures(json.response?.home?.recentGames as any[] ?? [], 5),
+        away: map365RecentGamesToTeamFixtures(json.response?.away?.recentGames as any[] ?? [], 5),
+      };
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * 365Scores — World Cup group standings (all groups).
+   */
+  async get365StandingsGrouped(): Promise<{
+    groups: import('../utils/standingsHelpers').StandingsGroup[];
+    available: boolean;
+  }> {
+    try {
+      const baseUrl = getApiUrl();
+      const url = `${baseUrl}/football/cached/365/standings`;
+      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
+      if (!response.ok) return { groups: [], available: false };
+      const json = (await response.json()) as {
+        response?: Array<{
+          groupNum: number;
+          groupName: string | null;
+          position: number;
+          teamId: number;
+          teamName: string;
+          gamePlayed: number;
+          gamesWon: number;
+          gamesEven: number;
+          gamesLost: number;
+          goalsFor: number;
+          goalsAgainst: number;
+          ratio: number;
+          points: number;
+        }>;
+      };
+      const { map365StandingsToGroups } = await import('../utils/scores365Adapters');
+      const groups = map365StandingsToGroups(json.response ?? []);
+      return { groups, available: groups.length > 0 };
+    } catch {
+      return { groups: [], available: false };
+    }
+  },
+
+  /**
    * Get standings for a specific league and season (flat list).
    * Uses backend cache (1 hour TTL)
    */
