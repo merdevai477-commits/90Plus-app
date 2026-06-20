@@ -68,8 +68,46 @@ class FootballCalendarSyncService {
         setTimeout(runToday, 8_000);
         setTimeout(runPrefetch, 20_000);
 
+        if (isWorldCupOnlyMode()) {
+            setTimeout(() => {
+                void this.runWorldCupBackfill().catch((err) =>
+                    logger.warn('[CalendarSync] World Cup backfill failed:', err),
+                );
+            }, 5_000);
+        }
+
         this.todayInterval = setInterval(runToday, todayMs);
         this.prefetchInterval = setInterval(runPrefetch, prefetchMs);
+    }
+
+    /**
+     * One-time tournament-wide fixture seed (leader-elected). Populates every WC
+     * matchday in cachedFixture, then re-runs the 365Scores bulk mapping tick so
+     * fixture↔game mapping has rows to match against immediately.
+     */
+    private async runWorldCupBackfill(): Promise<void> {
+        if (isFootballQuotaExhausted()) {
+            logger.debug('[CalendarSync] World Cup backfill skipped — quota exhausted');
+            return;
+        }
+
+        const isLeader = await tryAcquireSyncLeader('calendar-sync');
+        if (!isLeader) {
+            logger.debug('[CalendarSync] World Cup backfill skipped — not sync leader');
+            return;
+        }
+
+        const count = await footballDataCacheService.backfillWorldCupFixtures();
+        logger.info(`[CalendarSync] World Cup backfill: ${count} fixtures seeded`);
+
+        if (count > 0) {
+            try {
+                const { runBulkFixtureSyncTick } = await import('../workers/worldCupSync.service');
+                await runBulkFixtureSyncTick();
+            } catch (err) {
+                logger.warn('[CalendarSync] post-backfill 365 bulk sync failed:', err);
+            }
+        }
     }
 
     stop(): void {

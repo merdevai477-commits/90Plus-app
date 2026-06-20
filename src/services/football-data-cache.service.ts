@@ -226,6 +226,73 @@ class FootballDataCacheService {
         }
     }
 
+    /**
+     * WORLD_CUP_ONLY_MODE: one-shot backfill of the entire tournament.
+     * A single league+season `fixtures` call (no date) returns all WC fixtures,
+     * which are upserted into DB + grouped into per-date memory/local caches.
+     * This is the authoritative seed so 365Scores mapping has rows to match against.
+     */
+    async backfillWorldCupFixtures(): Promise<number> {
+        if (isFootballQuotaExhausted()) {
+            logger.debug('[Football Sync] World Cup backfill skipped — quota exhausted');
+            return 0;
+        }
+
+        const wc = getWorldCupTabState();
+        try {
+            const fixtures = await footballService.getFixtures(
+                { league: wc.leagueId, season: wc.season },
+                { source: 'job' },
+            );
+            const list = Array.isArray(fixtures) ? fixtures : [];
+            if (list.length === 0) {
+                logger.warn(
+                    `[Football Sync] World Cup backfill: league-scoped fixtures returned 0 (league=${wc.leagueId}, season=${wc.season})`,
+                );
+                return 0;
+            }
+
+            await matchCacheService.upsertFixtures(list).catch((archiveError) => {
+                logger.warn('[Football Sync] World Cup backfill DB upsert failed:', archiveError);
+            });
+
+            const byDate = new Map<string, any[]>();
+            for (const fixture of list) {
+                const iso = fixture?.fixture?.date;
+                if (typeof iso !== 'string') continue;
+                const dateString = iso.split('T')[0];
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) continue;
+                const bucket = byDate.get(dateString);
+                if (bucket) {
+                    bucket.push(fixture);
+                } else {
+                    byDate.set(dateString, [fixture]);
+                }
+            }
+
+            const todayKey = new Date().toISOString().split('T')[0];
+            for (const [dateString, dayFixtures] of byDate) {
+                const responseTtl =
+                    dateString < todayKey
+                        ? this.TTL.MATCHES_BY_DATE_PAST
+                        : dateString === todayKey
+                          ? this.TTL.MATCHES_BY_DATE_TODAY
+                          : this.TTL.MATCHES_BY_DATE_FUTURE;
+                const cacheKey = `wc_${wc.leagueId}_${wc.season}_${dateString}`;
+                void matchCacheService.setInMemoryCache(cacheKey, dayFixtures, responseTtl);
+                this.storeLocalMatchesByDate(dateString, dayFixtures, responseTtl);
+            }
+
+            logger.info(
+                `[Football Sync] World Cup backfill: ${list.length} fixtures synced across ${byDate.size} matchdays`,
+            );
+            return list.length;
+        } catch (err) {
+            logger.warn('[CalendarSync] backfillWorldCupFixtures failed:', err);
+            return 0;
+        }
+    }
+
     private storeLocalMatchesByDate(
         dateString: string,
         data: any[],
@@ -339,14 +406,23 @@ class FootballDataCacheService {
                 if (!isWorldCupOnlyMode()) {
                     void this.fetchMatchesByDateFromApi(dateString, cacheKey, responseTtl, true);
                     logger.warn(`📦 [${dateString}] No DB/cache rows — returning empty; API refresh started in background`);
-                } else {
-                    logSkippingNonWorldCup(`matches-by-date background refresh ${dateString}`);
+                    return [];
+                }
+                // WC mode: self-heal via the league-scoped sync instead of skipping.
+                const synced = await this.syncWorldCupCalendarDateFromApi(dateString);
+                if (synced > 0) {
+                    const seeded = this.matchesByDateLocal.get(dateString)?.data ?? [];
+                    return this.mergeLiveFromRedis(seeded);
                 }
                 return [];
             }
 
             if (isWorldCupOnlyMode()) {
-                logSkippingNonWorldCup(`matches-by-date API fetch ${dateString}`);
+                // WC mode: self-heal via the league-scoped sync instead of skipping.
+                const synced = await this.syncWorldCupCalendarDateFromApi(dateString);
+                if (synced > 0) {
+                    return this.matchesByDateLocal.get(dateString)?.data ?? [];
+                }
                 return [];
             }
 
