@@ -254,9 +254,15 @@ export async function syncScores365FixtureMappingsFromFixturesList(
     mapped += 1;
   }
 
-  logger.info(
-    `[Scores365] fixture↔game sync: ${mapped}/${games.length} games mapped (${dbRows.length} DB fixtures)`,
-  );
+  const coverageRatio = dbRows.length > 0 ? mapped / dbRows.length : 1;
+  const logMsg = `[Scores365] fixture↔game sync: ${mapped}/${games.length} games mapped (${dbRows.length} DB fixtures)`;
+
+  if (coverageRatio < 0.8) {
+    logger.warn(`⚠️ ${logMsg} — coverage is suspiciously low (${(coverageRatio * 100).toFixed(1)}%). Upstream feed may have changed or missing DB matches.`);
+  } else {
+    logger.info(`✅ ${logMsg}`);
+  }
+
   return mapped;
 }
 

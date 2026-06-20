@@ -161,6 +161,18 @@ async function runStatsSyncTick(): Promise<void> {
   }
 }
 
+// ─── Mapping sync tick ────────────────────────────────────────────────────────
+
+async function runMappingSyncTick(): Promise<void> {
+  if (!isEnabled()) return;
+  try {
+    const { syncScores365FixtureMappingsFromFixturesList } = await import('../services/scores365-experiment.service');
+    await syncScores365FixtureMappingsFromFixturesList({ force: true });
+  } catch (err: unknown) {
+    logger.error(`[${WORKER}][mapping] tick fatal:`, (err as Error)?.message);
+  }
+}
+
 // ─── Fixture ID resolution ────────────────────────────────────────────────────
 
 /**
@@ -210,6 +222,11 @@ export function startWorldCupSyncWorker(): void {
   const lMs = lineupSyncMs();
   const sMs = statsSyncMs();
 
+  // Mapping sync: cron-based (every 5 minutes)
+  cron.schedule('*/5 * * * *', () => {
+    void runMappingSyncTick();
+  });
+
   // Lineup sync: interval-based (tight for live matches)
   lineupTimer = setInterval(() => {
     void runLineupSyncTick();
@@ -220,11 +237,13 @@ export function startWorldCupSyncWorker(): void {
     void runStatsSyncTick();
   }, sMs);
 
-  // Kick off immediately on startup
-  void runLineupSyncTick();
+  // Kick off immediately on startup: mapping FIRST, then lineups.
+  runMappingSyncTick().finally(() => {
+    void runLineupSyncTick();
+  });
 
   logger.info(
-    `[${WORKER}] started — lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s`,
+    `[${WORKER}] started — mapping every 5m, lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s`,
   );
 }
 
