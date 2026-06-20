@@ -42,6 +42,8 @@ interface Scores365Game {
   competitionDisplayName?: string;
   roundName?: string;
   groupName?: string;
+  lineupsStatus?: number;
+  lineupsStatusText?: string;
   homeCompetitor?: Scores365Competitor;
   awayCompetitor?: Scores365Competitor;
   events?: Scores365Event[];
@@ -776,12 +778,43 @@ function shouldServe365EventsDespiteMismatch(
   return true;
 }
 
+function normaliseNameKey(s?: string): string {
+  return (s ?? '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
+interface MemberLookup {
+  byId: Map<number, Scores365Member>;
+  byNormName: Map<string, Scores365Member>;
+}
+
 function memberNameLookup(game: Scores365Game): Map<number, Scores365Member> {
   const map = new Map<number, Scores365Member>();
   for (const m of game.members ?? []) {
     map.set(m.id, m);
   }
   return map;
+}
+
+/** Extended lookup used in mapScores365Lineups — id + normalised name/shortName. */
+function buildMemberLookup(game: Scores365Game): MemberLookup {
+  const byId = new Map<number, Scores365Member>();
+  const byNormName = new Map<string, Scores365Member>();
+  for (const m of game.members ?? []) {
+    byId.set(m.id, m);
+    const nName = normaliseNameKey(m.name);
+    const nShort = normaliseNameKey(m.shortName);
+    if (nName) byNormName.set(nName, m);
+    if (nShort && nShort !== nName) byNormName.set(nShort, m);
+  }
+  return { byId, byNormName };
+}
+
+function lookupMember(lookup: MemberLookup, id: number, rawName?: string): Scores365Member | undefined {
+  return lookup.byId.get(id) ?? (rawName ? lookup.byNormName.get(normaliseNameKey(rawName)) : undefined);
 }
 
 function posFrom365(shortName?: string): string | null {
@@ -874,6 +907,9 @@ export function mapScores365Events(
   });
 }
 
+/** Status values recognised as confirmed starters in the 365Scores lineups array. */
+const STARTER_STATUSES = new Set([1, 0]); // 1 = confirmed starter; 0 = used for GK in some feeds
+
 export function mapScores365Lineups(
   game: Scores365Game,
   base: FixtureFromAPI,
@@ -882,24 +918,62 @@ export function mapScores365Lineups(
   const resolvedAlignment = alignment ?? detect365TeamAlignment(game, base);
   if (!resolvedAlignment) return [];
 
-  const members = memberNameLookup(game);
+  const lookup = buildMemberLookup(game);
+  const lineupsConfirmed =
+    game.lineupsStatus === 1 ||
+    (game.lineupsStatusText ?? '').toLowerCase().includes('confirm') ||
+    (game.lineupsStatusText ?? '').toLowerCase().includes('مؤك');
 
   const mapSide = (
     side: Scores365Competitor | undefined,
     team: FixtureFromAPI['teams']['home'],
     displayName?: string,
+    sideLabel = 'unknown',
   ) => {
-    if (!side?.lineups?.members?.length) return null;
-    const coachMember = side.lineups.members.find((m) => m.status === 4);
-    const coachMeta = coachMember ? members.get(coachMember.id) : undefined;
-    const starters = side.lineups.members
-      .filter((m) => m.status === 1)
+    if (!side?.lineups?.members?.length) {
+      logger.debug(
+        `[Scores365Lineups] game ${game.id} ${sideLabel}: no lineup members in payload`,
+      );
+      return null;
+    }
+
+    const allMembers = side.lineups.members;
+
+    // Log every non-starter for full auditability.
+    const dropped = allMembers.filter((m) => !STARTER_STATUSES.has(m.status) && m.status !== 2 && m.status !== 4);
+    for (const d of dropped) {
+      const meta = lookup.byId.get(d.id);
+      logger.warn(
+        `[Scores365Lineups] game ${game.id} ${sideLabel}: member id=${d.id} name="${meta?.name ?? '?'}" dropped — unexpected status=${d.status}`,
+      );
+    }
+
+    const coachMember = allMembers.find((m) => m.status === 4);
+    const coachMeta = coachMember ? lookup.byId.get(coachMember.id) : undefined;
+
+    const starters = allMembers
+      .filter((m) => STARTER_STATUSES.has(m.status))
       .sort((a, b) => {
         const al = a.yardFormation?.line ?? 99;
         const bl = b.yardFormation?.line ?? 99;
         if (al !== bl) return al - bl;
         return (a.yardFormation?.fieldPosition ?? 0) - (b.yardFormation?.fieldPosition ?? 0);
       });
+
+    // Completeness warning — fire BEFORE returning so it always appears in logs.
+    if (lineupsConfirmed && starters.length < 11) {
+      logger.warn(
+        `[Scores365Lineups] game ${game.id} ${sideLabel}: confirmed lineup but only ${starters.length}/11 starters resolved — potential partial data`,
+        {
+          gameId: game.id,
+          side: sideLabel,
+          starterCount: starters.length,
+          totalMembers: allMembers.length,
+          memberStatuses: allMembers.map((m) => ({ id: m.id, status: m.status })),
+        },
+      );
+    }
+
     return {
       team: { id: team.id, name: displayName ?? team.name, logo: team.logo, colors: null },
       coach: {
@@ -909,51 +983,62 @@ export function mapScores365Lineups(
       },
       formation: side.lineups.formation ?? null,
       startXI: starters.map((m) => {
-        const meta = members.get(m.id);
+        const meta = lookupMember(lookup, m.id);
         const grid =
           m.yardFormation?.line != null && m.yardFormation?.fieldPosition != null
             ? `${m.yardFormation.line}:${m.yardFormation.fieldPosition}`
             : null;
+        // Use raw name from lineup member if metadata lookup missed — never '—' here.
+        const resolvedName = meta?.name ?? meta?.shortName ?? null;
+        if (!resolvedName) {
+          logger.warn(
+            `[Scores365Lineups] game ${game.id} ${sideLabel}: member id=${m.id} has no name in game.members — rendering without name`,
+          );
+        }
         return {
           player: {
             id: m.id,
-            name: meta?.name ?? meta?.shortName ?? '—',
+            name: resolvedName ?? `#${m.id}`,
             number: meta?.jerseyNumber ?? 0,
             pos: posFrom365(m.formation?.shortName),
             grid,
             fieldLine: m.yardFormation?.fieldLine ?? null,
             fieldSide: m.yardFormation?.fieldSide ?? null,
             photo: null,
+            _stats365: (meta as any)?.stats ?? null,
           },
         };
       }),
-      substitutes: side.lineups.members
+      substitutes: allMembers
         .filter((m) => m.status === 2)
         .map((m) => {
-          const meta = members.get(m.id);
+          const meta = lookupMember(lookup, m.id);
           return {
             player: {
               id: m.id,
-              name: meta?.name ?? meta?.shortName ?? '—',
+              name: meta?.name ?? meta?.shortName ?? `#${m.id}`,
               number: meta?.jerseyNumber ?? 0,
               pos: posFrom365(m.formation?.shortName),
               grid: null,
               photo: null,
+              _stats365: (meta as any)?.stats ?? null,
             },
           };
         }),
       _source: 'scores365-experiment',
+      _starterCount: starters.length,
+      _lineupsConfirmed: lineupsConfirmed,
     };
   };
 
   const home365 = game.homeCompetitor;
   const away365 = game.awayCompetitor;
   const home = resolvedAlignment.swapped
-    ? mapSide(away365, base.teams.home, away365?.name)
-    : mapSide(home365, base.teams.home, home365?.name);
+    ? mapSide(away365, base.teams.home, away365?.name, 'away-as-home')
+    : mapSide(home365, base.teams.home, home365?.name, 'home');
   const away = resolvedAlignment.swapped
-    ? mapSide(home365, base.teams.away, home365?.name)
-    : mapSide(away365, base.teams.away, away365?.name);
+    ? mapSide(home365, base.teams.away, home365?.name, 'home-as-away')
+    : mapSide(away365, base.teams.away, away365?.name, 'away');
   return [home, away].filter(Boolean);
 }
 

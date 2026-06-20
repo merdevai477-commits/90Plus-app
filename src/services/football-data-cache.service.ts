@@ -1154,7 +1154,8 @@ class FootballDataCacheService {
                 select: { fullData: true, status: true },
             });
             const fullData = dbMatch?.fullData as any;
-            const events = await this.getMatchEvents(fixtureId, { forceRefresh: true });
+            // Use cached events — avoid forceRefresh to break the blocking chain.
+            const events = await this.getMatchEvents(fixtureId, { forceRefresh: false });
             if (events.length > 0 && fullData?.teams && fullData?.goals) {
                 const derived = buildFallbackStatisticsFromEvents(
                     { teams: fullData.teams, goals: fullData.goals },
@@ -1171,6 +1172,9 @@ class FootballDataCacheService {
                     return derived;
                 }
             }
+            // Events empty or no team data — return explicit unavailable marker.
+            logger.info(`[Stats365] fixture=${fixtureId}: events empty or teams missing — statistics unavailable yet`);
+            return [];
         }
 
         // Check Redis cache first, then memory cache
@@ -2235,6 +2239,7 @@ class FootballDataCacheService {
     private merge365NamesIntoLineups(
         lineups: any[],
         named: ThreeSixFiveLineupPlayer[],
+        fixtureId?: number,
     ): any[] {
         if (!named.length || !lineups.length) return lineups;
         const norm = (s?: string) =>
@@ -2246,6 +2251,12 @@ class FootballDataCacheService {
         const byMemberId = new Map(named.map((n) => [n.memberId, n]));
         const byAthleteId = new Map(named.map((n) => [n.athleteId, n]));
         const byName = new Map(named.map((n) => [norm(n.name), n]));
+        // Extra: index by shortName for better join coverage
+        const byShortName = new Map(
+            named
+                .filter((n) => n.shortName && norm(n.shortName) !== norm(n.name))
+                .map((n) => [norm(n.shortName), n]),
+        );
 
         const enrich = (entry: { player?: Record<string, unknown> }) => {
             const p = entry.player;
@@ -2253,8 +2264,16 @@ class FootballDataCacheService {
             const hit =
                 byMemberId.get(p.id as number) ??
                 byAthleteId.get(p.id as number) ??
-                byName.get(norm(p.name as string));
-            if (!hit) return entry;
+                byName.get(norm(p.name as string)) ??
+                byShortName.get(norm(p.name as string));
+            if (!hit) {
+                // Log the join miss — never silently drop the player.
+                logger.warn(
+                    `[Lineups365Join] fixture=${fixtureId ?? '?'} memberId=${p.id} name="${p.name}" — no match in named lineup (athleteId/name join miss); rendering with partial data`,
+                );
+                // Return the player as-is — preserve whatever name/data we already have.
+                return entry;
+            }
             return {
                 ...entry,
                 player: {
@@ -2263,7 +2282,7 @@ class FootballDataCacheService {
                     athleteId: hit.athleteId,
                     scores365MemberId: hit.memberId,
                     name: hit.name || p.name,
-                    photo: hit.imageUrl ?? p.photo,
+                    photo: hit.imageUrl ?? p.photo ?? null,
                     number: hit.jerseyNumber ?? p.number,
                     pos: hit.position?.charAt(0) ?? p.pos,
                     fieldLine: p.fieldLine ?? null,
@@ -2281,7 +2300,7 @@ class FootballDataCacheService {
         }));
     }
 
-    /** Structured 365 lineups + named enrichment — keeps formation/grid for finished matches. */
+    /** Structured 365 lineups + named enrichment — keeps formation/grid; completeness gate before caching. */
     async get365LineupsMerged(
         fixtureId: number,
         language?: string | null,
@@ -2303,9 +2322,58 @@ class FootballDataCacheService {
         if (!hasLineupData(structured)) return [];
 
         const named = await this.getCached365LineupsWithNames(fixtureId, language);
-        if (!named.data?.length) return structured ?? [];
+        const merged = named.data?.length
+            ? this.merge365NamesIntoLineups(structured ?? [], named.data, fixtureId)
+            : (structured ?? []);
 
-        return this.merge365NamesIntoLineups(structured ?? [], named.data);
+        // — Completeness gate —
+        const isConfirmed = (merged as any[]).some((side: any) => side?._lineupsConfirmed);
+        const startersHome = (merged[0]?.startXI ?? []).length;
+        const startersAway = (merged[1]?.startXI ?? []).length;
+
+        if (isConfirmed && (startersHome < 11 || startersAway < 11)) {
+            logger.warn(
+                `[365LineupsMerged] fixture=${fixtureId}: confirmed lineup incomplete — home=${startersHome} away=${startersAway} — retrying once`,
+            );
+            // Retry once with a short delay (avoids caching a stale partial snapshot).
+            await new Promise((r) => setTimeout(r, 3_000));
+            const retryBundle = await getScores365ExperimentBundle(
+                fixtureId,
+                resolveScores365AppLanguage(language),
+                { force: true },
+            );
+            const retryStructured = retryBundle?.lineups;
+            if (hasLineupData(retryStructured)) {
+                const retryNamed = await this.getCached365LineupsWithNames(fixtureId, language);
+                const retryMerged = retryNamed.data?.length
+                    ? this.merge365NamesIntoLineups(retryStructured!, retryNamed.data, fixtureId)
+                    : retryStructured!;
+                const retryHome = (retryMerged[0]?.startXI ?? []).length;
+                const retryAway = (retryMerged[1]?.startXI ?? []).length;
+                logger.info(
+                    `[365LineupsMerged] fixture=${fixtureId}: retry result — home=${retryHome} away=${retryAway}`,
+                );
+                if (retryHome < 11 || retryAway < 11) {
+                    logger.warn(
+                        `[365LineupsMerged] fixture=${fixtureId}: still incomplete after retry (home=${retryHome}, away=${retryAway}) — marking _incomplete, skipping permanent cache`,
+                        { fixtureId, retryHome, retryAway, ts: new Date().toISOString() },
+                    );
+                    // Mark incomplete in Redis briefly so frontend can show retry state.
+                    await redisCacheService.set(`lineups:${fixtureId}:incomplete`, true, 60_000);
+                    return retryMerged.map((s: any) => ({ ...s, _incomplete: true }));
+                }
+                logger.info(`[365LineupsMerged] fixture=${fixtureId}: ✅ retry complete — home=${retryHome} away=${retryAway}`);
+                return retryMerged;
+            }
+            // Retry did not produce usable data — return original merged (partial) with flag.
+            await redisCacheService.set(`lineups:${fixtureId}:incomplete`, true, 60_000);
+            return merged.map((s: any) => ({ ...s, _incomplete: true }));
+        }
+
+        logger.info(
+            `[365LineupsMerged] fixture=${fixtureId}: ✅ home=${startersHome} away=${startersAway} (confirmed=${isConfirmed})`,
+        );
+        return merged;
     }
 
     /** 365Scores named lineups → API-Football shape with athleteId for player taps. */

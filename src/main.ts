@@ -1016,6 +1016,22 @@ async function startServer() {
                     startDataRefreshWorker();
                     logger.info('✅ Data refresh worker scheduled (weekly/monthly/100-day)');
 
+                    // ✅ World Cup sync worker — lineup completeness + live stats (365Scores)
+                    try {
+                        const { startWorldCupSyncWorker } = await import('./workers/worldCupSync.service');
+                        startWorldCupSyncWorker();
+                    } catch (wcErr) {
+                        logger.warn('⚠️ WC sync worker failed to start (non-fatal):', (wcErr as Error)?.message);
+                    }
+
+                    // ✅ Other leagues sync worker — live fixture refresh for non-WC competitions
+                    try {
+                        const { startOtherLeaguesSyncWorker } = await import('./workers/otherLeaguesSync.service');
+                        startOtherLeaguesSyncWorker();
+                    } catch (olErr) {
+                        logger.warn('⚠️ Other leagues sync worker failed to start (non-fatal):', (olErr as Error)?.message);
+                    }
+
                     // ✅ Idempotently sync player name mappings (upsert) so new
                     // seed entries land on deploy even when the table isn't empty.
                     void import('./services/player-name-resolver.service')

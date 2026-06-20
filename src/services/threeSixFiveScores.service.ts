@@ -415,15 +415,22 @@ class ThreeSixFiveScoresService {
       const awayIds = new Set(
         (gameResult.awayCompetitor?.lineups?.members ?? []).map((m) => m.id),
       );
+      const lineupsConfirmed = gameResult.lineupsStatus === 1;
 
       const payload = await this.fetchJson<LineupsPayload>(
         `/web/athletes/games/lineups?${this.commonParams(langId)}&gameId=${gameId}`,
         `lineups:${gameId}`,
         120_000,
       );
-      if (!payload?.members?.length) return { data: null, source: null };
 
-      const players: ThreeSixFiveLineupPlayer[] = payload.members.map((m) => {
+      const memberCount = payload?.members?.length ?? 0;
+      logger.info(
+        `[365Scores] getLineupsWithNames(${gameId}): received ${memberCount} member records from athletes/lineups (homeIds=${homeIds.size}, awayIds=${awayIds.size})`,
+      );
+
+      if (!memberCount) return { data: null, source: null };
+
+      const players: ThreeSixFiveLineupPlayer[] = (payload!.members!).map((m) => {
         const side: 'home' | 'away' = homeIds.has(m.id)
           ? 'home'
           : awayIds.has(m.id)
@@ -450,6 +457,37 @@ class ThreeSixFiveScoresService {
           stats: m.stats,
         };
       });
+
+      // Per-side completeness audit.
+      const homePlayers = players.filter((p) => p.side === 'home');
+      const awayPlayers = players.filter((p) => p.side === 'away');
+      logger.info(
+        `[365Scores] getLineupsWithNames(${gameId}): resolved home=${homePlayers.length}/${homeIds.size} away=${awayPlayers.length}/${awayIds.size} (confirmed=${lineupsConfirmed})`,
+      );
+
+      // Log join misses (member IDs present in game payload but absent in athletes response).
+      for (const id of homeIds) {
+        if (!players.some((p) => p.memberId === id)) {
+          logger.warn(
+            `[365Scores] getLineupsWithNames(${gameId}): home member id=${id} missing from athletes/lineups response — join miss`,
+          );
+        }
+      }
+      for (const id of awayIds) {
+        if (!players.some((p) => p.memberId === id)) {
+          logger.warn(
+            `[365Scores] getLineupsWithNames(${gameId}): away member id=${id} missing from athletes/lineups response — join miss`,
+          );
+        }
+      }
+
+      // Completeness gate: do NOT cache a confirmed lineup that is still incomplete.
+      if (lineupsConfirmed && (homePlayers.length < 11 || awayPlayers.length < 11)) {
+        logger.warn(
+          `[365Scores] getLineupsWithNames(${gameId}): confirmed lineup is incomplete (home=${homePlayers.length}, away=${awayPlayers.length}) — skipping cache`,
+        );
+        return { data: players, source: '365scores' }; // return but do NOT cache
+      }
 
       await redisCacheService.set(cacheKey, players, phase === 'finished' ? 86_400_000 : 300_000);
       return { data: players, source: '365scores' };
@@ -907,7 +945,17 @@ class ThreeSixFiveScoresService {
       }
 
       this.lastUpstreamFetch.set(rateKey, Date.now());
-      return JSON.parse(text) as T;
+      const parsed = JSON.parse(text) as T;
+      // Log response size for diagnostics (helps catch truncated payloads).
+      const itemCount = Array.isArray(parsed)
+        ? parsed.length
+        : typeof parsed === 'object' && parsed !== null
+          ? Object.keys(parsed as object).length
+          : -1;
+      logger.debug(
+        `[365Scores] fetch ${rateKey}: ${text.length} bytes, ${itemCount < 0 ? 'non-array' : itemCount + ' top-level keys/items'}`,
+      );
+      return parsed;
     } catch (err: unknown) {
       logger.warn(`[365Scores] fetch ${rateKey} failed:`, (err as Error)?.message);
       return null;
