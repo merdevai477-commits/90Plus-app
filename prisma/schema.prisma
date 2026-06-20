@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,199 +7,136 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// USER & AUTHENTICATION
-// ============================================
-
 model User {
-  id                String  @id @default(uuid())
-  clerkUserId       String? @unique // Clerk User ID for authentication
-  email             String  @unique
-  username          String  @unique
-  password          String? // Nullable for OAuth users (deprecated with Clerk)
-  displayName       String?
-  avatar            String?
-  avatarStoragePath String? // Path in Supabase Storage
-  bio               String?
-  coins             Int     @default(0)
-  level             Int     @default(1)
-  xp                Int     @default(0)
-  isVerified        Boolean @default(false)
-  isDeveloper       Boolean @default(false)
-  favoriteTeam      String?
-  favoriteBrand     String? // البراند المفضل
-  country           String? // بلد المستخدم
-  favoriteLeagues   Int[]   @default([]) // الدوريات المفضلة (IDs)
-  settings          Json?   @default("{}") // Stores preferences like biometricEnabled, language
-
-  // FIFA Card Profile Fields
-  position      String? // Player position (RW, LW, ST, etc.) - no default
-  countryFlag   String? // Country flag emoji - no default
-  location      String? // Country name - no default
-  age           Int? // Player age - no default
-  height        Int? // Height in cm - no default
-  weight        Int? // Weight in kg - no default
-  preferredFoot String? // R = Right, L = Left, B = Both - no default
-  clubLogo      String? // شعار النادي المفضل (URL or path)
-  brandLogo     String? // شعار البراند المفضل (URL or path)
-
-  // Social Links
-  socialLinks Json? @default("[]") // Array of {platform, url, username}
-
-  // Username change tracking (15 days cooldown)
-  lastUsernameChange DateTime?
-
-  // Profile image change tracking (7 days cooldown)
-  lastAvatarChange DateTime?
-  lastCoverChange  DateTime?
-  coverImage       String?
-  coverStoragePath String?
-  
-  // Profile completion tracking
-  profileCompletionSteps Json? @default("{}") // Tracks completed steps: {avatar: true, country: true, club: true, etc.}
-  profileCompletionPercentage Int? @default(0) // 0-100%
-  firstVideoUploaded Boolean @default(false) // Track if user uploaded first video
-
-  // Storage quota (Fix 7)
-  storageUsedBytes  BigInt @default(0)
-  storageQuotaBytes BigInt @default(5368709120) // 5 GB default
-
-  // Profile analytics
-  profileViews    Int       @default(0)
-  lastReelUpload  DateTime?
+  id                            String                   @id @default(uuid())
+  clerkUserId                   String?                  @unique
+  email                         String                   @unique
+  username                      String                   @unique
+  password                      String?
+  displayName                   String?
+  avatar                        String?
+  avatarStoragePath             String?
+  bio                           String?
+  coins                         Int                      @default(0)
+  level                         Int                      @default(1)
+  xp                            Int                      @default(0)
+  isVerified                    Boolean                  @default(false)
+  isDeveloper                   Boolean                  @default(false)
+  favoriteTeam                  String?
+  favoriteBrand                 String?
+  country                       String?
+  favoriteLeagues               Int[]                    @default([])
+  settings                      Json?                    @default("{}")
+  position                      String?
+  countryFlag                   String?
+  location                      String?
+  age                           Int?
+  height                        Int?
+  weight                        Int?
+  preferredFoot                 String?
+  clubLogo                      String?
+  brandLogo                     String?
+  socialLinks                   Json?                    @default("[]")
+  lastUsernameChange            DateTime?
+  lastAvatarChange              DateTime?
+  lastCoverChange               DateTime?
+  coverImage                    String?
+  coverStoragePath              String?
+  profileCompletionSteps        Json?                    @default("{}")
+  profileCompletionPercentage   Int?                     @default(0)
+  firstVideoUploaded            Boolean                  @default(false)
+  storageUsedBytes              BigInt                   @default(0)
+  storageQuotaBytes             BigInt                   @default(5368709120)
+  profileViews                  Int                      @default(0)
+  lastReelUpload                DateTime?
   /// منع رفعات متزامنة: يُضبط عند بدء الرفع ويُمسح عند النجاح/الفشل (انتهاء تلقائي بعد المدة)
-  reelUploadLockedUntil DateTime?
-  reelDeleteCount Int       @default(0) // عدد مرات مسح الفيديو (حد أقصى 3)
-
-  // Daily Spin Wheel
-  lastDailySpin DateTime? // آخر مرة لف عجلة الحظ
-  dailySpins    DailySpinHistory[]
-
-  // Login Streak Tracking
-  lastLoginDate        DateTime? // آخر تاريخ تسجيل دخول
-  consecutiveLoginDays Int       @default(0) // عدد أيام الدخول المتتالية
-  streakFreezes        Int       @default(0) // عدد تجميدات السلسلة المتاحة
-  lastActiveAt         DateTime? // آخر نشاط XP (لحساب فترة الراحة)
-
-  // Push Notifications
-  expoPushToken String? // Expo Push Token for notifications
-
-  // Email verification
-  emailVerified                 Boolean   @default(false)
-  emailVerificationToken        String?   @unique
+  reelUploadLockedUntil         DateTime?
+  reelDeleteCount               Int                      @default(0)
+  lastDailySpin                 DateTime?
+  lastLoginDate                 DateTime?
+  consecutiveLoginDays          Int                      @default(0)
+  expoPushToken                 String?
+  emailVerified                 Boolean                  @default(false)
+  emailVerificationToken        String?                  @unique
   emailVerificationTokenExpires DateTime?
-
-  // Moderation fields
-  isSuspended    Boolean   @default(false)
-  suspendedUntil DateTime?
-  isBanned       Boolean   @default(false)
-  bannedAt       DateTime?
-  banReason      String?
-  warningsCount  Int       @default(0)
-
-  // Role-based access control
-  role UserRole @default(USER)
-
-  // Account Deletion fields (Apple Compliance)
-  isDeleted            Boolean   @default(false)
-  deletedAt            DateTime?
-  scheduledDeletionAt  DateTime?
-  deletionRequestedAt  DateTime?
-
-  // GDPR Consent fields
-  analyticsConsent            Boolean   @default(true)
-  pushNotificationsConsent    Boolean   @default(false)
-  emailCommunicationsConsent  Boolean   @default(true)
-  dataSharingConsent          Boolean   @default(false)
-  privacyPolicyVersion        String?
-  privacyPolicyAcceptedAt     DateTime?
-
-  // COPPA age verification
-  dateOfBirth                  DateTime?
-  ageVerifiedAt                DateTime?
-  ageTier                      AgeTier?
-  parentalConsent              Boolean   @default(false)
-  parentEmail                  String?
-  parentalConsentRequestedAt   DateTime?
-  parentalConsentConfirmedAt   DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  parentalConsentRequests ParentalConsentRequest[]
-  sessions         Session[]
-  refreshTokens    RefreshToken[]
-  quizAttempts        QuizAttempt[]
-  quizAnswers         UserQuizAnswer[]
-  quizState           UserQuizState?
-  dailyQuizSessions   UserDailyQuizSession[]
-  notifications    Notification[]
-  reels            Reel[]
-  comments         Comment[]
-  likes            Like[]
-  commentLikes     CommentLike[]
-  savedReels       SavedReel[]
-  reelShares       ReelShare[]
-  reelViews        ReelView[]
-  coinTransactions CoinTransaction[]
-  achievements     UserAchievement[]
-
-  // Follow system
-  followers Follow[] @relation("UserFollowers")
-  following Follow[] @relation("UserFollowing")
-
-  // Block system
-  blockedUsers   Block[] @relation("UserBlocking")
-  blockedByUsers Block[] @relation("UserBlocked")
-
-  // Reports
-  reportsCreated  Report[] @relation("ReportCreator")
-  reportsReceived Report[] @relation("ReportedUser")
-  reportsReviewed Report[] @relation("ReportReviewer")
-
-  // Strikes
-  strikes Strike[]
-
-  // Comment Mentions
-  commentMentions CommentMention[] @relation("CommentMentions")
-
-  // Favorite Matches
-  favoriteMatches FavoriteMatch[]
-
-  // Predictions
-  predictions Prediction[]
-
-  // Terms Acceptance (Apple Compliance)
-  termsAcceptances TermsAcceptance[]
-
-  // GDPR Compliance
-  dataExportRequests      DataExportRequest[]      @relation("UserDataExports")
-  accountDeletionRequests AccountDeletionRequest[] @relation("UserAccountDeletions")
-  consentLogs             ConsentLog[]             @relation("UserConsentLogs")
-  gdprAuditLogs           GDPRAuditLog[]           @relation("UserGDPRAuditLogs")
-
-  // Notification Preferences
-  notificationPreferences NotificationPreferences?
-
-  // Content Moderation
-  bannedWordsCreated  BannedWord[]      @relation("BannedWordCreator")
-  moderationLogs      ModerationLog[]   @relation("ModerationLogUser")
-  moderationReviews   ModerationLog[]   @relation("ModerationLogReviewer")
-  warnings            UserWarning[]     @relation("UserWarnings")
-  warningsIssued      UserWarning[]     @relation("WarningIssuer")
-  bans                UserBan[]         @relation("UserBans")
-  bansIssued          UserBan[]         @relation("BanIssuer")
-
-  // XP System
-  xpTransactions  XpTransaction[] @relation("UserXpTransactions")
-  xpDailyCaps     XpDailyCap[]    @relation("UserXpDailyCaps")
-  loginStreak     LoginStreak?    @relation("UserLoginStreak")
+  isSuspended                   Boolean                  @default(false)
+  suspendedUntil                DateTime?
+  isBanned                      Boolean                  @default(false)
+  bannedAt                      DateTime?
+  banReason                     String?
+  warningsCount                 Int                      @default(0)
+  role                          UserRole                 @default(USER)
+  isDeleted                     Boolean                  @default(false)
+  deletedAt                     DateTime?
+  scheduledDeletionAt           DateTime?
+  deletionRequestedAt           DateTime?
+  analyticsConsent              Boolean                  @default(true)
+  pushNotificationsConsent      Boolean                  @default(false)
+  emailCommunicationsConsent    Boolean                  @default(true)
+  dataSharingConsent            Boolean                  @default(false)
+  privacyPolicyVersion          String?
+  privacyPolicyAcceptedAt       DateTime?
+  createdAt                     DateTime                 @default(now())
+  updatedAt                     DateTime                 @updatedAt
+  lastActiveAt                  DateTime?
+  streakFreezes                 Int                      @default(0)
+  dateOfBirth                   DateTime?
+  ageVerifiedAt                 DateTime?
+  ageTier                       AgeTier?
+  parentalConsent               Boolean                  @default(false)
+  parentEmail                   String?
+  parentalConsentRequestedAt    DateTime?
+  parentalConsentConfirmedAt    DateTime?
+  accountDeletionRequests       AccountDeletionRequest[] @relation("UserAccountDeletions")
+  bannedWordsCreated            BannedWord[]             @relation("BannedWordCreator")
+  blockedByUsers                Block[]                  @relation("UserBlocked")
+  blockedUsers                  Block[]                  @relation("UserBlocking")
+  coinTransactions              CoinTransaction[]
+  commentLikes                  CommentLike[]
+  commentMentions               CommentMention[]         @relation("CommentMentions")
+  comments                      Comment[]
+  consentLogs                   ConsentLog[]             @relation("UserConsentLogs")
+  dailySpins                    DailySpinHistory[]
+  dataExportRequests            DataExportRequest[]      @relation("UserDataExports")
+  favoriteMatches               FavoriteMatch[]
+  followers                     Follow[]                 @relation("UserFollowers")
+  following                     Follow[]                 @relation("UserFollowing")
+  gdprAuditLogs                 GDPRAuditLog[]           @relation("UserGDPRAuditLogs")
+  likes                         Like[]
+  loginStreak                   LoginStreak?             @relation("UserLoginStreak")
+  moderationReviews             ModerationLog[]          @relation("ModerationLogReviewer")
+  moderationLogs                ModerationLog[]          @relation("ModerationLogUser")
+  notificationPreferences       NotificationPreferences?
+  notifications                 Notification[]
+  parentalConsentRequests       ParentalConsentRequest[]
+  predictions                   Prediction[]
+  quizAttempts                  QuizAttempt[]
+  reelShares                    ReelShare[]
+  reelViews                     ReelView[]
+  reels                         Reel[]
+  refreshTokens                 RefreshToken[]
+  reportsReceived               Report[]                 @relation("ReportedUser")
+  reportsCreated                Report[]                 @relation("ReportCreator")
+  reportsReviewed               Report[]                 @relation("ReportReviewer")
+  savedReels                    SavedReel[]
+  sessions                      Session[]
+  strikes                       Strike[]
+  termsAcceptances              TermsAcceptance[]
+  achievements                  UserAchievement[]
+  bansIssued                    UserBan[]                @relation("BanIssuer")
+  bans                          UserBan?                 @relation("UserBans")
+  dailyQuizSessions             UserDailyQuizSession[]
+  quizAnswers                   UserQuizAnswer[]
+  quizState                     UserQuizState?
+  warningsIssued                UserWarning[]            @relation("WarningIssuer")
+  warnings                      UserWarning[]            @relation("UserWarnings")
+  xpDailyCaps                   XpDailyCap[]             @relation("UserXpDailyCaps")
+  xpTransactions                XpTransaction[]          @relation("UserXpTransactions")
 
   @@index([email])
   @@index([username])
   @@index([level])
-  @@index([xp])
+  @@index([xp(sort: Desc)])
   @@index([coins])
   @@index([createdAt])
   @@index([isDeleted])
@@ -210,8 +144,7 @@ model User {
   @@index([ageVerifiedAt])
   @@index([ageTier])
   @@index([parentalConsent])
-  // Case-insensitive search indexes: idx_users_username_lower, idx_users_displayname_lower
-  // Created via migration for LOWER(username) and LOWER(displayName) expressions
+  @@index([xp(sort: Desc), level(sort: Desc)])
   @@map("users")
 }
 
@@ -225,11 +158,10 @@ model ParentalConsentRequest {
   confirmedAt DateTime?
   expiresAt   DateTime
   ipAddress   String?
-  userAgent   String?       @db.Text
+  userAgent   String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([token])
@@ -239,32 +171,18 @@ model ParentalConsentRequest {
   @@map("parental_consent_requests")
 }
 
-enum AgeTier {
-  BLOCKED
-  TEEN
-  ADULT
-}
-
-enum ConsentStatus {
-  PENDING
-  CONFIRMED
-  EXPIRED
-  REJECTED
-}
-
 model RefreshToken {
   id         String    @id @default(uuid())
   userId     String
-  token      String    @unique @db.Text
+  token      String    @unique
   deviceInfo String?
   ipAddress  String?
-  userAgent  String?   @db.Text
+  userAgent  String?
   isRevoked  Boolean   @default(false)
   expiresAt  DateTime
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([token])
@@ -282,10 +200,6 @@ model Session {
   @@map("sessions")
 }
 
-// ============================================
-// FOOTBALL DATA
-// ============================================
-
 model League {
   id        String   @id @default(uuid())
   name      String
@@ -294,9 +208,8 @@ model League {
   season    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  teams   Team[]
-  matches Match[]
+  matches   Match[]
+  teams     Team[]
 
   @@index([country])
   @@index([season])
@@ -304,21 +217,19 @@ model League {
 }
 
 model Team {
-  id       String  @id @default(uuid())
-  name     String
-  logo     String?
-  country  String
-  stadium  String?
-  founded  Int?
-  leagueId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  league      League?  @relation(fields: [leagueId], references: [id])
-  players     Player[]
-  homeMatches Match[]  @relation("HomeTeam")
+  id          String   @id @default(uuid())
+  name        String
+  logo        String?
+  country     String
+  stadium     String?
+  founded     Int?
+  leagueId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   awayMatches Match[]  @relation("AwayTeam")
+  homeMatches Match[]  @relation("HomeTeam")
+  players     Player[]
+  league      League?  @relation(fields: [leagueId], references: [id])
 
   @@index([leagueId])
   @@index([country])
@@ -327,7 +238,7 @@ model Team {
 }
 
 model Player {
-  id          String  @id @default(uuid())
+  id          String       @id @default(uuid())
   name        String
   photo       String?
   position    String
@@ -335,12 +246,10 @@ model Player {
   nationality String
   age         Int?
   teamId      String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  team  Team?        @relation(fields: [teamId], references: [id])
-  stats PlayerStats?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  stats       PlayerStats?
+  team        Team?        @relation(fields: [teamId], references: [id])
 
   @@index([teamId])
   @@index([position])
@@ -359,8 +268,7 @@ model PlayerStats {
   defending Int
   physical  Int
   overall   Int
-
-  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  player    Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@index([overall])
   @@map("player_stats")
@@ -376,13 +284,11 @@ model Match {
   leagueId   String
   matchDate  DateTime
   venue      String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  homeTeam Team   @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  awayTeam Team   @relation("AwayTeam", fields: [awayTeamId], references: [id])
-  league   League @relation(fields: [leagueId], references: [id])
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  awayTeam   Team        @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  homeTeam   Team        @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  league     League      @relation(fields: [leagueId], references: [id])
 
   @@index([status])
   @@index([matchDate])
@@ -392,97 +298,61 @@ model Match {
   @@map("matches")
 }
 
-enum UserRole {
-  USER
-  MODERATOR
-  ADMIN
-}
-
-enum MatchStatus {
-  SCHEDULED
-  LIVE
-  FINISHED
-  POSTPONED
-  CANCELLED
-}
-
-// ============================================
-// QUIZ SYSTEM
-// ============================================
-
 model QuizCategory {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  icon        String?
-  description String?
-  isLocked    Boolean  @default(false)
-  unlockLevel Int      @default(1)
-  createdAt   DateTime @default(now())
-
-  questions    QuizQuestion[]
-  attempts     QuizAttempt[]
+  id           String         @id @default(uuid())
+  name         String         @unique
+  icon         String?
+  description  String?
+  isLocked     Boolean        @default(false)
+  unlockLevel  Int            @default(1)
+  createdAt    DateTime       @default(now())
   dailyQuizzes DailyQuiz[]
+  attempts     QuizAttempt[]
+  questions    QuizQuestion[]
 
   @@index([isLocked])
   @@map("quiz_categories")
 }
 
 model QuizQuestion {
-  id            String     @id @default(uuid())
+  id            String           @id @default(uuid())
   categoryId    String
-  question      String     @db.Text
+  question      String
   options       String[]
   correctAnswer String
   difficulty    Difficulty
-  points        Int        @default(10)
+  points        Int              @default(10)
   imageUrl      String?
-  imageType     String? // player, club, stadium, trophy, manager, flag
+  imageType     String?
   hint          String?
-  timeLimit     Int        @default(15) // بالثواني
-  displayMode   DisplayMode @default(NEVER) // كيفية عرض الصورة
-  createdAt     DateTime   @default(now())
-
-  category QuizCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  answers  UserQuizAnswer[]
+  timeLimit     Int              @default(15)
+  displayMode   DisplayMode      @default(NEVER)
+  createdAt     DateTime         @default(now())
+  category      QuizCategory     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  answers       UserQuizAnswer[]
 
   @@index([categoryId])
   @@index([difficulty])
   @@map("quiz_questions")
 }
 
-enum Difficulty {
-  EASY
-  MEDIUM
-  HARD
-}
-
-enum DisplayMode {
-  NEVER           // لا تظهر الصورة قبل الإجابة
-  AFTER_ANSWER    // تظهر بعد الإجابة (صحيحة أو خاطئة)
-  BEFORE_QUESTION // تظهر قبل السؤال
-  IN_QUESTION     // تظهر مع السؤال
-  AFTER_WRONG     // تظهر فقط بعد الإجابة الخاطئة
-  BLUR_REVEAL     // تظهر مشوشة ثم تتضح
-}
-
 model QuizAttempt {
-  id             String   @id @default(uuid())
+  id             String           @id @default(uuid())
   userId         String
   categoryId     String
   score          Int
   totalQuestions Int
   correctAnswers Int
   coinsEarned    Int
-  xpEarned       Int      @default(0)
-  streak         Int      @default(0)
-  bestStreak     Int      @default(0)
-  timeTaken      Int // إجمالي الوقت بالثواني
-  completedAt    DateTime @default(now())
-  canRetryAt     DateTime // موعد السماح بإعادة المحاولة (24 ساعة بعد completion)
-
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category QuizCategory     @relation(fields: [categoryId], references: [id])
-  answers  UserQuizAnswer[]
+  xpEarned       Int              @default(0)
+  streak         Int              @default(0)
+  bestStreak     Int              @default(0)
+  timeTaken      Int
+  completedAt    DateTime         @default(now())
+  canRetryAt     DateTime
+  category       QuizCategory     @relation(fields: [categoryId], references: [id])
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers        UserQuizAnswer[]
 
   @@index([userId])
   @@index([categoryId])
@@ -493,18 +363,17 @@ model QuizAttempt {
 }
 
 model UserQuizAnswer {
-  id         String   @id @default(uuid())
+  id         String       @id @default(uuid())
   userId     String
   questionId String
   attemptId  String
-  userAnswer String // الإجابة المختارة (index كـ string)
+  userAnswer String
   isCorrect  Boolean
-  timeTaken  Int // الوقت المستغرق بالثواني
-  createdAt  DateTime @default(now())
-
-  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  attempt  QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  timeTaken  Int
+  createdAt  DateTime     @default(now())
+  attempt    QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question   QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([questionId])
@@ -515,15 +384,14 @@ model UserQuizAnswer {
 model UserQuizState {
   id                    String    @id @default(uuid())
   userId                String    @unique
-  currentOpenCategoryId String? // النوع المفتوح حالياً
-  lastCategoryOpenedAt  DateTime? // متى فتح آخر نوع
-  nextCategoryUnlockAt  DateTime? // متى يفتح النوع التالي
-  completedCategoryIds  String[]  @default([]) // الأنواع المكتملة
-  lastAttemptAt         DateTime? // آخر محاولة
+  currentOpenCategoryId String?
+  lastCategoryOpenedAt  DateTime?
+  nextCategoryUnlockAt  DateTime?
+  completedCategoryIds  String[]  @default([])
+  lastAttemptAt         DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([currentOpenCategoryId])
@@ -532,15 +400,14 @@ model UserQuizState {
 }
 
 model DailyQuiz {
-  id          String   @id @default(uuid())
+  id          String       @id @default(uuid())
   categoryId  String
-  questionIds String[] // قائمة معرفات الأسئلة للاختبار اليومي
-  date        DateTime @unique @db.Date // تاريخ اليوم (YYYY-MM-DD)
-  expiresAt   DateTime // وقت انتهاء الاختبار (24 ساعة من بداية اليوم)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  category QuizCategory @relation(fields: [categoryId], references: [id])
+  questionIds String[]
+  date        DateTime     @unique @db.Date
+  expiresAt   DateTime
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  category    QuizCategory @relation(fields: [categoryId], references: [id])
 
   @@index([date])
   @@index([categoryId])
@@ -555,13 +422,13 @@ model DailyQuizPack {
   language         String   @db.VarChar(5)
   questions        Json
   expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   isFallback       Boolean  @default(false)
   generatorModel   String?  @db.VarChar(64)
   generatorVersion String?  @db.VarChar(32)
   promptVersion    String?  @db.VarChar(32)
   datasetVersion   String?  @db.VarChar(32)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
 
   @@unique([packDate, language])
   @@index([packDate])
@@ -610,18 +477,13 @@ model UserDailyQuizSession {
   completedAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, packDate, language])
   @@index([userId])
   @@index([packDate])
   @@map("user_daily_quiz_sessions")
 }
-
-// ============================================
-// COINS & GAMIFICATION
-// ============================================
 
 model CoinTransaction {
   id          String              @id @default(uuid())
@@ -630,13 +492,1228 @@ model CoinTransaction {
   type        CoinTransactionType
   description String?
   createdAt   DateTime            @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([createdAt])
   @@index([type])
   @@map("coin_transactions")
+}
+
+model Achievement {
+  id               String              @id @default(uuid())
+  name             String              @unique
+  description      String
+  icon             String?
+  category         AchievementCategory
+  requirement      Json
+  coinReward       Int                 @default(0)
+  xpReward         Int                 @default(0)
+  rarity           AchievementRarity
+  createdAt        DateTime            @default(now())
+  userAchievements UserAchievement[]
+
+  @@index([category])
+  @@index([rarity])
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String      @id @default(uuid())
+  userId        String
+  achievementId String
+  progress      Int         @default(0)
+  isCompleted   Boolean     @default(false)
+  completedAt   DateTime?
+  createdAt     DateTime    @default(now())
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@index([achievementId])
+  @@index([isCompleted])
+  @@map("user_achievements")
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@index([createdAt])
+  @@index([followingId, createdAt])
+  @@map("follows")
+}
+
+model Block {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+  blocked   User     @relation("UserBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  blocker   User     @relation("UserBlocking", fields: [blockerId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+  @@map("blocks")
+}
+
+model Reel {
+  id                   String        @id @default(uuid())
+  userId               String
+  videoUrl             String
+  videoStoragePath     String?
+  processedVideoUrl    String?
+  processedVideoKey    String?
+  thumbnail            String?
+  thumbnailStoragePath String?
+  caption              String?
+  views                Int           @default(0)
+  sharesCount          Int           @default(0)
+  fileSizeBytes        BigInt        @default(0)
+  status               ReelStatus    @default(PROCESSING)
+  muxUploadId          String?
+  muxAssetId           String?
+  muxPlaybackId        String?
+  isDeleted            Boolean       @default(false)
+  deletedAt            DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  publishedAt          DateTime?
+  comments             Comment[]
+  likes                Like[]
+  hashtags             ReelHashtag[]
+  mentions             ReelMention[]
+  shares               ReelShare[]
+  reelViews            ReelView[]
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports              Report[]
+  savedBy              SavedReel[]
+  strikes              Strike[]
+
+  @@index([publishedAt])
+  @@index([userId])
+  @@index([views])
+  @@index([createdAt])
+  @@index([sharesCount])
+  @@index([createdAt, views])
+  @@index([createdAt, sharesCount])
+  @@index([isDeleted])
+  @@map("reels")
+}
+
+model Hashtag {
+  id        String        @id @default(uuid())
+  name      String        @unique
+  reelCount Int           @default(0)
+  createdAt DateTime      @default(now())
+  reels     ReelHashtag[]
+
+  @@index([name])
+  @@index([reelCount])
+  @@map("hashtags")
+}
+
+model ReelHashtag {
+  id        String   @id @default(uuid())
+  reelId    String
+  hashtagId String
+  createdAt DateTime @default(now())
+  hashtag   Hashtag  @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, hashtagId])
+  @@index([reelId])
+  @@index([hashtagId])
+  @@map("reel_hashtags")
+}
+
+model ReelMention {
+  id              String   @id @default(uuid())
+  reelId          String
+  mentionedUserId String
+  createdAt       DateTime @default(now())
+  reel            Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, mentionedUserId])
+  @@index([reelId])
+  @@index([mentionedUserId])
+  @@map("reel_mentions")
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  reelId    String
+  createdAt DateTime @default(now())
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, reelId])
+  @@index([userId])
+  @@index([reelId])
+  @@index([createdAt])
+  @@map("likes")
+}
+
+model ReelView {
+  id       String   @id @default(uuid())
+  reelId   String
+  userId   String
+  viewedAt DateTime @default(now())
+  reel     Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, userId])
+  @@index([reelId])
+  @@index([userId])
+  @@index([viewedAt])
+  @@map("reel_views")
+}
+
+model Comment {
+  id        String           @id @default(uuid())
+  userId    String
+  reelId    String
+  parentId  String?
+  content   String
+  isDeleted Boolean          @default(false)
+  deletedAt DateTime?
+  createdAt DateTime         @default(now())
+  likes     CommentLike[]
+  mentions  CommentMention[]
+  parent    Comment?         @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[]        @relation("CommentReplies")
+  reel      Reel             @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports   Report[]
+  strikes   Strike[]
+
+  @@index([userId])
+  @@index([reelId])
+  @@index([parentId])
+  @@index([createdAt])
+  @@index([isDeleted])
+  @@map("comments")
+}
+
+model CommentMention {
+  id              String   @id @default(uuid())
+  commentId       String
+  mentionedUserId String
+  createdAt       DateTime @default(now())
+  comment         Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  mentionedUser   User     @relation("CommentMentions", fields: [mentionedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, mentionedUserId])
+  @@index([commentId])
+  @@index([mentionedUserId])
+  @@map("comment_mentions")
+}
+
+model CommentLike {
+  id        String   @id @default(uuid())
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@index([userId])
+  @@index([commentId])
+  @@map("comment_likes")
+}
+
+model SavedReel {
+  id        String   @id @default(uuid())
+  userId    String
+  reelId    String
+  createdAt DateTime @default(now())
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, reelId])
+  @@index([userId])
+  @@index([reelId])
+  @@index([createdAt])
+  @@map("saved_reels")
+}
+
+model ReelShare {
+  id        String   @id @default(uuid())
+  userId    String
+  reelId    String
+  platform  String?
+  createdAt DateTime @default(now())
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([reelId])
+  @@index([createdAt])
+  @@map("reel_shares")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  data      Json?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([type])
+  @@map("notifications")
+}
+
+model Report {
+  id                String         @id @default(uuid())
+  reporterId        String
+  reportedUserId    String?
+  reportedReelId    String?
+  reportedCommentId String?
+  type              ReportType
+  reason            String
+  status            ReportStatus   @default(PENDING)
+  priority          ReportPriority @default(MEDIUM)
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  action            ReportAction   @default(NO_ACTION)
+  isDuplicate       Boolean        @default(false)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  reportedComment   Comment?       @relation(fields: [reportedCommentId], references: [id])
+  reportedReel      Reel?          @relation(fields: [reportedReelId], references: [id])
+  reportedUser      User?          @relation("ReportedUser", fields: [reportedUserId], references: [id])
+  reporter          User           @relation("ReportCreator", fields: [reporterId], references: [id])
+  reviewer          User?          @relation("ReportReviewer", fields: [reviewedBy], references: [id])
+  strikes           Strike[]
+
+  @@index([reporterId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([type])
+  @@index([priority])
+  @@index([reportedReelId])
+  @@index([reportedCommentId])
+  @@map("reports")
+}
+
+model Strike {
+  id                String     @id @default(uuid())
+  userId            String
+  reportId          String
+  reportedReelId    String?
+  reportedCommentId String?
+  strikeType        StrikeType
+  reason            String
+  createdAt         DateTime   @default(now())
+  report            Report     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reportedComment   Comment?   @relation(fields: [reportedCommentId], references: [id], onDelete: Cascade)
+  reportedReel      Reel?      @relation(fields: [reportedReelId], references: [id], onDelete: Cascade)
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([reportId])
+  @@index([reportedReelId])
+  @@index([reportedCommentId])
+  @@index([createdAt])
+  @@map("strikes")
+}
+
+model AuditLog {
+  id           String           @id @default(uuid())
+  action       AuditAction
+  actorId      String?
+  targetId     String?
+  targetType   AuditTargetType?
+  resource     String
+  reason       String?
+  metadata     Json?
+  ip           String?
+  userAgent    String?
+  hash         String?
+  previousHash String?
+  severity     String?          @default("MEDIUM")
+  createdAt    DateTime         @default(now())
+
+  @@index([actorId])
+  @@index([targetId])
+  @@index([targetType])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@index([severity])
+  @@index([hash])
+  @@map("audit_logs")
+}
+
+model RevokedToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  reason    String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("revoked_tokens")
+}
+
+model FavoriteMatch {
+  id                    String               @id @default(uuid())
+  userId                String
+  apiMatchId            Int
+  homeTeam              String
+  awayTeam              String
+  homeTeamLogo          String?
+  awayTeamLogo          String?
+  matchDate             DateTime
+  leagueName            String?
+  lastHomeScore         Int?
+  lastAwayScore         Int?
+  lastStatus            String?
+  notifiedStart         Boolean              @default(false)
+  notifiedEnd           Boolean              @default(false)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  /// Anchor for subscription-aware delivery — updated on every subscribe/re-subscribe
+  subscribedAt          DateTime             @default(now())
+  /// Cursor into the canonical match event stream (last delivered eventKey)
+  lastDeliveredEventKey String?
+  /// Score/status snapshot at subscribe time (guards retroactive goal alerts)
+  baselineHomeScore     Int?
+  baselineAwayScore     Int?
+  baselineStatus        String?
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries            MatchEventDelivery[]
+
+  @@unique([userId, apiMatchId])
+  @@index([userId])
+  @@index([apiMatchId])
+  @@index([matchDate])
+  @@index([notifiedEnd, matchDate])
+  @@index([apiMatchId, subscribedAt])
+  @@map("favorite_matches")
+}
+
+/// Canonical match events — one row per distinct event per fixture (shared by all subscribers)
+model MatchEvent {
+  id          String               @id @default(uuid())
+  fixtureId   Int
+  eventKey    String
+  eventType   String
+  minute      Int?
+  extraMinute Int?
+  teamId      Int?
+  playerId    Int?
+  payload     Json
+  detectedAt  DateTime             @default(now())
+  deliveries  MatchEventDelivery[]
+
+  @@unique([fixtureId, eventKey])
+  @@index([fixtureId, detectedAt])
+  @@map("match_events")
+}
+
+/// Per-subscription delivery ledger — prevents duplicate pushes at scale
+model MatchEventDelivery {
+  id             String        @id @default(uuid())
+  subscriptionId String
+  eventKey       String
+  deliveredAt    DateTime      @default(now())
+  fixtureId      Int
+  event          MatchEvent    @relation(fields: [fixtureId, eventKey], references: [fixtureId, eventKey], onDelete: Cascade)
+  subscription   FavoriteMatch @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, eventKey])
+  @@index([subscriptionId])
+  @@map("match_event_deliveries")
+}
+
+model DailySpinHistory {
+  id       String   @id @default(uuid())
+  userId   String
+  coinsWon Int
+  spinDate DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([spinDate])
+  @@map("daily_spin_history")
+}
+
+model CachedFixture {
+  id                String   @id @default(uuid())
+  fixtureId         Int      @unique
+  leagueId          Int
+  leagueName        String
+  leagueLogo        String?
+  leagueCountry     String?
+  leagueSeason      Int?
+  leagueRound       String?
+  homeTeamId        Int
+  homeTeamName      String
+  homeTeamLogo      String?
+  awayTeamId        Int
+  awayTeamName      String
+  awayTeamLogo      String?
+  homeScore         Int?
+  awayScore         Int?
+  homeHalftimeScore Int?
+  awayHalftimeScore Int?
+  matchDate         DateTime
+  matchTimestamp    Int
+  status            String
+  statusLong        String?
+  venue             String?
+  referee           String?
+  fullData          Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  elapsed           Int?
+
+  @@index([matchDate])
+  @@index([matchDate, status])
+  @@index([matchTimestamp])
+  @@index([leagueId])
+  @@index([status])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@map("cached_fixtures")
+}
+
+model CachedPlayer {
+  id              String   @id @default(uuid())
+  playerId        Int      @unique
+  name            String
+  firstname       String?
+  lastname        String?
+  photo           String?
+  nationality     String?
+  nationalityFlag String?
+  age             Int?
+  birthDate       String?
+  birthPlace      String?
+  birthCountry    String?
+  height          String?
+  weight          String?
+  teamId          Int?
+  teamName        String?
+  teamLogo        String?
+  position        String?
+  seasonStats     Json?
+  fullData        Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([nationality])
+  @@index([position])
+  @@map("cached_players")
+}
+
+model CachedTeam {
+  id            String   @id @default(uuid())
+  teamId        Int      @unique
+  name          String
+  code          String?
+  logo          String?
+  country       String?
+  founded       Int?
+  venueName     String?
+  venueAddress  String?
+  venueCity     String?
+  venueCapacity Int?
+  venueImage    String?
+  fullData      Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([country])
+  @@index([name])
+  @@index([updatedAt])
+  @@map("cached_teams")
+}
+
+model CachedH2H {
+  id           String   @id @default(uuid())
+  team1Id      Int
+  team2Id      Int
+  totalMatches Int      @default(0)
+  team1Wins    Int      @default(0)
+  team2Wins    Int      @default(0)
+  draws        Int      @default(0)
+  lastMatches  Json
+  fullData     Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([team1Id, team2Id])
+  @@index([team1Id])
+  @@index([team2Id])
+  @@map("cached_h2h")
+}
+
+model CachedLeague {
+  id        String   @id @default(uuid())
+  leagueId  Int      @unique
+  name      String
+  country   String
+  logo      String?
+  type      String?  @default("league")
+  fullData  Json
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([country])
+  @@map("cached_leagues")
+}
+
+model Prediction {
+  id                 String    @id @default(uuid())
+  userId             String
+  apiMatchId         Int
+  predictionType     String
+  coinsSpent         Int       @default(5)
+  coinsWon           Int?
+  isCorrect          Boolean?
+  createdAt          DateTime  @default(now())
+  resolvedAt         DateTime?
+  homeTeam           String?
+  awayTeam           String?
+  homeTeamLogo       String?
+  awayTeamLogo       String?
+  matchDate          DateTime?
+  leagueName         String?
+  predictedHomeScore Int?
+  predictedAwayScore Int?
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, apiMatchId])
+  @@index([userId])
+  @@index([apiMatchId])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([isCorrect])
+  @@index([userId, isCorrect])
+  @@map("predictions")
+}
+
+model PlayerVote {
+  id        String   @id @default(uuid())
+  voterId   String
+  playerId  String
+  voteType  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([voterId, playerId])
+  @@index([voterId])
+  @@index([playerId])
+  @@index([voteType])
+  @@map("player_votes")
+}
+
+model RankingBadge {
+  id        String   @id @default(uuid())
+  userId    String
+  badgeType String
+  category  String
+  period    String
+  rank      Int
+  earnedAt  DateTime @default(now())
+  monthYear String?
+
+  @@index([userId])
+  @@index([badgeType])
+  @@index([category])
+  @@index([earnedAt])
+  @@map("ranking_badges")
+}
+
+model TeamOfMonthStreak {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  consecutiveMonths Int       @default(0)
+  lastMonthYear     String?
+  diamondAwarded    Boolean   @default(false)
+  diamondAwardedAt  DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([consecutiveMonths])
+  @@map("team_of_month_streaks")
+}
+
+model CachedSearch {
+  id             String   @id @default(uuid())
+  query          String   @unique
+  queryType      String   @default("general")
+  teams          Json?
+  players        Json?
+  leagues        Json?
+  matches        Json?
+  resultCount    Int      @default(0)
+  searchCount    Int      @default(1)
+  lastSearchedAt DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([query])
+  @@index([queryType])
+  @@index([searchCount])
+  @@index([lastSearchedAt])
+  @@map("cached_searches")
+}
+
+model PopularSearch {
+  id             String   @id @default(uuid())
+  query          String   @unique
+  searchCount    Int      @default(1)
+  lastSearchedAt DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([searchCount])
+  @@index([lastSearchedAt])
+  @@map("popular_searches")
+}
+
+model CachedTransfer {
+  id            String   @id @default(cuid())
+  playerId      Int
+  playerName    String
+  playerPhoto   String?
+  teamInId      Int?
+  teamInName    String?
+  teamInLogo    String?
+  teamOutId     Int?
+  teamOutName   String?
+  teamOutLogo   String?
+  transferType  String?
+  transferDate  String
+  transferValue Float?
+  leagueId      Int?
+  leagueName    String?
+  leagueLogo    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([playerId])
+  @@index([teamInId])
+  @@index([teamOutId])
+  @@index([leagueId])
+  @@index([transferDate])
+  @@index([transferType])
+  @@map("cached_transfers")
+}
+
+model TermsAcceptance {
+  id         String   @id @default(uuid())
+  userId     String
+  version    String
+  acceptedAt DateTime @default(now())
+  ipAddress  String?
+  userAgent  String?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, version])
+  @@index([userId])
+  @@index([version])
+  @@index([acceptedAt])
+  @@map("terms_acceptances")
+}
+
+model DataExportRequest {
+  id           String       @id @default(uuid())
+  userId       String
+  status       ExportStatus @default(PENDING)
+  fileUrl      String?
+  fileSize     Int?
+  expiresAt    DateTime?
+  requestedAt  DateTime     @default(now())
+  completedAt  DateTime?
+  failedReason String?
+  ipAddress    String?
+  userAgent    String?
+  user         User         @relation("UserDataExports", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([requestedAt])
+  @@index([expiresAt])
+  @@map("data_export_requests")
+}
+
+model AccountDeletionRequest {
+  id                 String         @id @default(uuid())
+  userId             String
+  status             DeletionStatus @default(PENDING)
+  reason             String?
+  requestedAt        DateTime       @default(now())
+  scheduledAt        DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+  ipAddress          String?
+  userAgent          String?
+  user               User           @relation("UserAccountDeletions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([requestedAt])
+  @@map("account_deletion_requests")
+}
+
+model ConsentLog {
+  id          String      @id @default(uuid())
+  userId      String
+  consentType ConsentType
+  granted     Boolean
+  timestamp   DateTime    @default(now())
+  ipAddress   String?
+  userAgent   String?
+  version     String?
+  user        User        @relation("UserConsentLogs", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([consentType])
+  @@index([timestamp])
+  @@map("consent_logs")
+}
+
+model GDPRAuditLog {
+  id        String     @id @default(uuid())
+  userId    String
+  action    GDPRAction
+  details   String?
+  ipAddress String?
+  userAgent String?
+  timestamp DateTime   @default(now())
+  user      User       @relation("UserGDPRAuditLogs", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
+  @@map("gdpr_audit_logs")
+}
+
+model BannedWord {
+  id        String       @id @default(uuid())
+  word      String       @unique
+  language  String
+  severity  WordSeverity @default(MEDIUM)
+  category  String?
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  createdBy String?
+  creator   User?        @relation("BannedWordCreator", fields: [createdBy], references: [id])
+
+  @@index([word])
+  @@index([language])
+  @@index([isActive])
+  @@map("banned_words")
+}
+
+model ModerationLog {
+  id            String           @id @default(uuid())
+  userId        String?
+  contentType   String
+  contentId     String?
+  action        ModerationAction
+  reason        String
+  detectedWords String[]         @default([])
+  severity      String
+  isAutomatic   Boolean          @default(true)
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  metadata      Json?
+  createdAt     DateTime         @default(now())
+  reviewer      User?            @relation("ModerationLogReviewer", fields: [reviewedBy], references: [id])
+  user          User?            @relation("ModerationLogUser", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([contentType])
+  @@index([action])
+  @@index([createdAt])
+  @@index([severity])
+  @@map("moderation_logs")
+}
+
+model UserWarning {
+  id        String          @id @default(uuid())
+  userId    String
+  reason    String
+  severity  WarningSeverity @default(MEDIUM)
+  issuedBy  String?
+  expiresAt DateTime?
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  issuer    User?           @relation("WarningIssuer", fields: [issuedBy], references: [id])
+  user      User            @relation("UserWarnings", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("user_warnings")
+}
+
+model UserBan {
+  id        String    @id @default(uuid())
+  userId    String    @unique
+  reason    String
+  bannedBy  String?
+  bannedAt  DateTime  @default(now())
+  expiresAt DateTime?
+  isActive  Boolean   @default(true)
+  banner    User?     @relation("BanIssuer", fields: [bannedBy], references: [id])
+  user      User      @relation("UserBans", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([bannedAt])
+  @@map("user_bans")
+}
+
+model NotificationPreferences {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  matchGoals        Boolean  @default(true)
+  matchStart        Boolean  @default(true)
+  matchEnd          Boolean  @default(true)
+  matchHalftime     Boolean  @default(true)
+  leagueMatches     Boolean  @default(true)
+  socialFollow      Boolean  @default(true)
+  socialLike        Boolean  @default(true)
+  socialComment     Boolean  @default(true)
+  socialReply       Boolean  @default(true)
+  socialMention     Boolean  @default(true)
+  predictionResults Boolean  @default(true)
+  luckyWheel        Boolean  @default(true)
+  gifts             Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  matchCards        Boolean  @default(true)
+  matchSubs         Boolean  @default(true)
+  matchVar          Boolean  @default(true)
+  matchLineups      Boolean  @default(true)
+  socialShare       Boolean  @default(true)
+  dailyQuiz         Boolean  @default(true)
+  cooldown          Boolean  @default(true)
+  levelUp           Boolean  @default(true)
+  reportUpdates     Boolean  @default(true)
+  avatarUpload      Boolean  @default(true)
+  videoProcessed    Boolean  @default(true)
+  leaderboard       Boolean  @default(true)
+  aiCoach           Boolean  @default(false)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model NotificationEvent {
+  id             String                @id @default(uuid())
+  notificationId String
+  userId         String
+  event          NotificationEventType
+  createdAt      DateTime              @default(now())
+
+  @@index([notificationId])
+  @@index([userId])
+  @@index([event])
+  @@index([createdAt])
+  @@map("notification_events")
+}
+
+model R2OrphanTracker {
+  id            String    @id @default(uuid())
+  storagePath   String    @unique
+  bucket        String
+  fileSizeBytes BigInt    @default(0)
+  uploadedAt    DateTime  @default(now())
+  resolved      Boolean   @default(false)
+  resolvedAt    DateTime?
+
+  @@index([resolved])
+  @@index([uploadedAt])
+  @@map("r2_orphan_tracker")
+}
+
+model UploadEvent {
+  id         String            @id @default(uuid())
+  userId     String
+  type       UploadEventType
+  status     UploadEventStatus
+  fileSizeMB Float
+  durationMs Int
+  errorCode  String?
+  createdAt  DateTime          @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("upload_events")
+}
+
+model ChatConversation {
+  id        String        @id @default(uuid())
+  userId    String
+  title     String        @default("محادثة جديدة")
+  pinned    Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             String           @id @default(uuid())
+  conversationId String
+  role           String
+  text           String
+  usedModel      String?
+  createdAt      DateTime         @default(now())
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+model ChatLimit {
+  userId    String   @id
+  count     Int      @default(0)
+  date      String
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@map("chat_limits")
+}
+
+model ChatAnswerCache {
+  id           String   @id @default(uuid())
+  questionHash String   @unique
+  language     String
+  question     String
+  answer       String
+  usedModel    String?
+  hits         Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([language])
+  @@map("chat_answer_cache")
+}
+
+model PlayerStatsCache {
+  id            String   @id @default(uuid())
+  playerName    String
+  playerAliases String[]
+  apiPlayerId   Int?
+  competition   String?
+  season        String
+  statType      String
+  statValue     Json
+  aiResponse    String
+  questionAsked String
+  fetchedAt     DateTime @default(now())
+  expiresAt     DateTime
+
+  @@index([playerName])
+  @@index([expiresAt])
+  @@map("player_stats_cache")
+}
+
+model PlayerNameMapping {
+  id             String   @id @default(uuid())
+  arabicName     String
+  englishName    String
+  aliases        String[]
+  apiPlayerId    Int      @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  /// Diacritic-stripped, lowercased key used for accent-insensitive matching.
+  normalizedName String   @default("")
+
+  @@index([arabicName])
+  @@index([englishName])
+  @@index([normalizedName])
+  @@map("player_name_mapping")
+}
+
+model PlayerInfo {
+  id              String    @id @default(uuid())
+  playerName      String
+  displayName     String?
+  apiPlayerId     Int?
+  queryType       String
+  language        String
+  questionSample  String
+  answer          String
+  apiFingerprint  String
+  apiContext      String
+  usedModel       String?
+  answeredOn      DateTime  @default(now())
+  refreshedAt     DateTime  @default(now())
+  expiresAt       DateTime
+  hits            Int       @default(0)
+  teamId          Int?
+  lastRefreshType String?
+  refreshPriority Int       @default(1)
+  accessCount     Int       @default(0)
+  teamInfo        TeamInfo? @relation(fields: [teamId], references: [id])
+
+  @@unique([playerName, queryType, language])
+  @@index([playerName])
+  @@index([answeredOn])
+  @@index([expiresAt])
+  @@index([teamId])
+  @@index([lastRefreshType])
+  @@index([apiPlayerId])
+  @@map("player_info")
+}
+
+model TeamInfo {
+  id          Int          @id @default(autoincrement())
+  apiTeamId   Int          @unique
+  teamName    String
+  season      Int
+  lastFetched DateTime
+  expiresAt   DateTime
+  playerInfos PlayerInfo[]
+  players     TeamPlayer[]
+
+  @@index([expiresAt])
+  @@map("team_info")
+}
+
+model TeamPlayer {
+  id           Int      @id @default(autoincrement())
+  teamInfoId   Int
+  apiPlayerId  Int
+  playerName   String
+  position     String
+  jerseyNumber Int?
+  teamInfo     TeamInfo @relation(fields: [teamInfoId], references: [id], onDelete: Cascade)
+
+  @@index([teamInfoId])
+  @@index([apiPlayerId])
+  @@map("team_player")
+}
+
+model RefreshControl {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("refresh_control")
+}
+
+model XpTransaction {
+  id             String       @id @default(uuid())
+  userId         String
+  action         XpActionType
+  amount         Int
+  idempotencyKey String?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  user           User         @relation("UserXpTransactions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@index([action])
+  @@map("xp_transactions")
+}
+
+model XpDailyCap {
+  id     String       @id @default(uuid())
+  userId String
+  action XpActionType
+  date   String
+  count  Int          @default(0)
+  user   User         @relation("UserXpDailyCaps", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, action, date])
+  @@index([userId, date])
+  @@map("xp_daily_caps")
+}
+
+model LoginStreak {
+  id            String  @id @default(uuid())
+  userId        String  @unique
+  current       Int     @default(0)
+  longest       Int     @default(0)
+  lastLoginDate String?
+  user          User    @relation("UserLoginStreak", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("login_streaks")
+}
+
+enum AgeTier {
+  BLOCKED
+  TEEN
+  ADULT
+}
+
+enum ConsentStatus {
+  PENDING
+  CONFIRMED
+  EXPIRED
+  REJECTED
+}
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum DisplayMode {
+  NEVER
+  AFTER_ANSWER
+  BEFORE_QUESTION
+  IN_QUESTION
+  AFTER_WRONG
+  BLUR_REVEAL
 }
 
 enum CoinTransactionType {
@@ -647,25 +1724,6 @@ enum CoinTransactionType {
   ADMIN_GRANT
   REEL_REWARD
   PREDICTION
-}
-
-model Achievement {
-  id          String              @id @default(uuid())
-  name        String              @unique
-  description String
-  icon        String?
-  category    AchievementCategory
-  requirement Json // Flexible JSON for different requirements
-  coinReward  Int                 @default(0)
-  xpReward    Int                 @default(0)
-  rarity      AchievementRarity
-  createdAt   DateTime            @default(now())
-
-  userAchievements UserAchievement[]
-
-  @@index([category])
-  @@index([rarity])
-  @@map("achievements")
 }
 
 enum AchievementCategory {
@@ -684,419 +1742,50 @@ enum AchievementRarity {
   LEGENDARY
 }
 
-model UserAchievement {
-  id            String    @id @default(uuid())
-  userId        String
-  achievementId String
-  progress      Int       @default(0)
-  isCompleted   Boolean   @default(false)
-  completedAt   DateTime?
-  createdAt     DateTime  @default(now())
-
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, achievementId])
-  @@index([userId])
-  @@index([achievementId])
-  @@index([isCompleted])
-  @@map("user_achievements")
-}
-
-// ============================================
-// SOCIAL FEATURES
-// ============================================
-
-model Follow {
-  id          String   @id @default(uuid())
-  followerId  String
-  followingId String
-  createdAt   DateTime @default(now())
-
-  follower  User @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
-  following User @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
-
-  @@unique([followerId, followingId])
-  @@index([followerId])
-  @@index([followingId])
-  @@index([createdAt]) // For recent followers analytics
-  @@index([followingId, createdAt]) // Compound index for analytics
-  @@map("follows")
-}
-
-model Block {
-  id        String   @id @default(uuid())
-  blockerId String
-  blockedId String
-  createdAt DateTime @default(now())
-
-  blocker User @relation("UserBlocking", fields: [blockerId], references: [id], onDelete: Cascade)
-  blocked User @relation("UserBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
-
-  @@unique([blockerId, blockedId])
-  @@index([blockerId])
-  @@index([blockedId])
-  @@map("blocks")
-}
-
 enum ReelStatus {
   PROCESSING
   READY
   FAILED
 }
 
-model Reel {
-  id                   String     @id @default(uuid())
-  userId               String
-  videoUrl             String
-  videoStoragePath     String?
-  processedVideoUrl    String?    // URL after transcoding (H.264/720p)
-  processedVideoKey    String?    // R2 key of processed video
-  thumbnail            String?
-  thumbnailStoragePath String?
-  caption              String?    @db.Text
-  views                Int        @default(0)
-  sharesCount          Int        @default(0)
-  fileSizeBytes        BigInt     @default(0) // Fix 7: track size for quota decrement
-  status               ReelStatus @default(PROCESSING)
-  // Mux Video fields (new reels use Mux; legacy reels keep videoStoragePath)
-  muxUploadId          String?    // Mux direct upload ID
-  muxAssetId           String?    // Mux asset ID (set by webhook)
-  muxPlaybackId        String?    // Mux playback ID (set by webhook)
-  isDeleted            Boolean    @default(false)
-  deletedAt            DateTime?
-  // Set when the reel transitions to READY (via webhook or self-heal).
-  // Feed orders by publishedAt DESC NULLS LAST, then createdAt DESC.
-  // Legacy reels without publishedAt fall back to createdAt ordering.
-  publishedAt          DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  likes     Like[]
-  comments  Comment[]
-  reports   Report[]
-  hashtags  ReelHashtag[]
-  mentions  ReelMention[]
-  savedBy   SavedReel[]
-  shares    ReelShare[]
-  reelViews ReelView[]
-  strikes   Strike[]
-
-  @@index([publishedAt])
-  @@index([userId])
-  @@index([views])
-  @@index([createdAt])
-  @@index([sharesCount]) // ✅ OPTIMIZATION 3: Index for top shares ranking
-  @@index([createdAt, views]) // ✅ OPTIMIZATION 3: Compound index for rankings queries
-  @@index([createdAt, sharesCount]) // ✅ OPTIMIZATION 3: Compound index for shares ranking
-  @@index([isDeleted])
-  @@map("reels")
-}
-
-model Hashtag {
-  id        String   @id @default(uuid())
-  name      String   @unique // without # symbol
-  reelCount Int      @default(0)
-  createdAt DateTime @default(now())
-
-  reels ReelHashtag[]
-
-  @@index([name])
-  @@index([reelCount])
-  @@map("hashtags")
-}
-
-model ReelHashtag {
-  id        String   @id @default(uuid())
-  reelId    String
-  hashtagId String
-  createdAt DateTime @default(now())
-
-  reel    Reel    @relation(fields: [reelId], references: [id], onDelete: Cascade)
-  hashtag Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
-
-  @@unique([reelId, hashtagId])
-  @@index([reelId])
-  @@index([hashtagId])
-  @@map("reel_hashtags")
-}
-
-model ReelMention {
-  id              String   @id @default(uuid())
-  reelId          String
-  mentionedUserId String
-  createdAt       DateTime @default(now())
-
-  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  @@unique([reelId, mentionedUserId])
-  @@index([reelId])
-  @@index([mentionedUserId])
-  @@map("reel_mentions")
-}
-
-model Like {
-  id        String   @id @default(uuid())
-  userId    String
-  reelId    String
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, reelId])
-  @@index([userId])
-  @@index([reelId])
-  @@index([createdAt]) // For analytics queries
-  @@map("likes")
-}
-
-model ReelView {
-  id       String   @id @default(uuid())
-  reelId   String
-  userId   String
-  viewedAt DateTime @default(now())
-
-  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([reelId, userId])
-  @@index([reelId])
-  @@index([userId])
-  @@index([viewedAt])
-  @@map("reel_views")
-}
-
-model Comment {
-  id        String    @id @default(uuid())
-  userId    String
-  reelId    String
-  parentId  String? // For replies
-  content   String    @db.Text
-  isDeleted Boolean   @default(false)
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reel     Reel             @relation(fields: [reelId], references: [id], onDelete: Cascade)
-  parent   Comment?         @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies  Comment[]        @relation("CommentReplies")
-  reports  Report[]
-  likes    CommentLike[]
-  strikes  Strike[]
-  mentions CommentMention[]
-
-  @@index([userId])
-  @@index([reelId])
-  @@index([parentId])
-  @@index([createdAt])
-  @@index([isDeleted])
-  @@map("comments")
-}
-
-// ============================================
-// COMMENT MENTIONS (الإشارات في التعليقات)
-// ============================================
-
-model CommentMention {
-  id              String   @id @default(uuid())
-  commentId       String
-  mentionedUserId String
-  createdAt       DateTime @default(now())
-
-  comment       Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  mentionedUser User    @relation("CommentMentions", fields: [mentionedUserId], references: [id], onDelete: Cascade)
-
-  @@unique([commentId, mentionedUserId])
-  @@index([commentId])
-  @@index([mentionedUserId])
-  @@map("comment_mentions")
-}
-
-// ============================================
-// COMMENT LIKES (لايك على التعليقات والردود)
-// ============================================
-
-model CommentLike {
-  id        String   @id @default(uuid())
-  userId    String
-  commentId String
-  createdAt DateTime @default(now())
-
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, commentId])
-  @@index([userId])
-  @@index([commentId])
-  @@map("comment_likes")
-}
-
-// ============================================
-// SAVED REELS (الفيديوهات المحفوظة)
-// ============================================
-
-model SavedReel {
-  id        String   @id @default(uuid())
-  userId    String
-  reelId    String
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, reelId])
-  @@index([userId])
-  @@index([reelId])
-  @@index([createdAt])
-  @@map("saved_reels")
-}
-
-// ============================================
-// REEL SHARES (تتبع المشاركات)
-// ============================================
-
-model ReelShare {
-  id        String   @id @default(uuid())
-  userId    String
-  reelId    String
-  platform  String? // whatsapp, facebook, twitter, copy_link, etc.
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([reelId])
-  @@index([createdAt])
-  @@map("reel_shares")
-}
-
-// ============================================
-// NOTIFICATIONS & MODERATION
-// ============================================
-
-model Notification {
-  id        String           @id @default(uuid())
-  userId    String
-  title     String
-  message   String           @db.Text
-  type      NotificationType
-  isRead    Boolean          @default(false)
-  data      Json?
-  createdAt DateTime         @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([isRead])
-  @@index([createdAt])
-  @@index([type])
-  @@map("notifications")
-}
-
 enum NotificationType {
   MATCH_UPDATE
-  MATCH_GOAL
-  MATCH_START
-  MATCH_END
-  MATCH_HALFTIME
   MATCH_FAVORITE
-  MATCH_YELLOW_CARD
-  MATCH_RED_CARD
-  PREDICTION_RESULT
   QUIZ_REWARD
   LEVEL_UP
   ACHIEVEMENT
   FOLLOW
-  FOLLOW_ACTIVITY
   LIKE
   COMMENT
-  COMMENT_LIKE
   REPLY
   MENTION
+  GENERAL
+  MODERATION_ALERT
+  MATCH_GOAL
+  MATCH_START
+  MATCH_END
+  MATCH_HALFTIME
+  MATCH_YELLOW_CARD
+  MATCH_RED_CARD
+  PREDICTION_RESULT
+  FOLLOW_ACTIVITY
+  COMMENT_LIKE
   GIFT
   SHARE
   VIDEO_PROCESSED
   REPORT_RESOLVED
-  REPORT_SUBMITTED
   MILESTONE
   COIN_MILESTONE
   LUCKY_WHEEL
-  LUCKY_WHEEL_RENEWED
   LEADERBOARD_TOP10
-  LEADERBOARD_TOP3
   RE_ENGAGEMENT
-  GENERAL
-  MODERATION_ALERT
+  REPORT_SUBMITTED
+  LUCKY_WHEEL_RENEWED
+  LEADERBOARD_TOP3
   AVATAR_UPLOAD
   AI_CHECKIN
   COOLDOWN_EXPIRED
   DAILY_QUIZ_RENEWED
-}
-
-model Report {
-  id                String         @id @default(uuid())
-  reporterId        String
-  reportedUserId    String?
-  reportedReelId    String?
-  reportedCommentId String?
-  type              ReportType
-  reason            String         @db.Text
-  status            ReportStatus   @default(PENDING)
-  priority          ReportPriority @default(MEDIUM)
-  reviewedBy        String?
-  reviewedAt        DateTime?
-  action            ReportAction   @default(NO_ACTION)
-  isDuplicate       Boolean        @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  reporter        User     @relation("ReportCreator", fields: [reporterId], references: [id])
-  reportedUser    User?    @relation("ReportedUser", fields: [reportedUserId], references: [id])
-  reportedReel    Reel?    @relation(fields: [reportedReelId], references: [id])
-  reportedComment Comment? @relation(fields: [reportedCommentId], references: [id])
-  reviewer        User?    @relation("ReportReviewer", fields: [reviewedBy], references: [id])
-  strikes         Strike[]
-
-  @@index([reporterId])
-  @@index([status])
-  @@index([createdAt])
-  @@index([type])
-  @@index([priority])
-  @@index([reportedReelId])
-  @@index([reportedCommentId])
-  @@map("reports")
-}
-
-// ============================================
-// STRIKES SYSTEM
-// ============================================
-
-model Strike {
-  id                String     @id @default(uuid())
-  userId            String
-  reportId          String
-  reportedReelId    String?
-  reportedCommentId String?
-  strikeType        StrikeType
-  reason            String     @db.Text
-  createdAt         DateTime   @default(now())
-
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  reportedReel    Reel?    @relation(fields: [reportedReelId], references: [id], onDelete: Cascade)
-  reportedComment Comment? @relation(fields: [reportedCommentId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([reportId])
-  @@index([reportedReelId])
-  @@index([reportedCommentId])
-  @@index([createdAt])
-  @@map("strikes")
 }
 
 enum StrikeType {
@@ -1140,56 +1829,17 @@ enum ReportAction {
   USER_BANNED
 }
 
-// ============================================
-// AUDIT LOG (Moderation Actions)
-// ============================================
-
-model AuditLog {
-  id           String          @id @default(uuid())
-  action       AuditAction
-  actorId      String? // User who performed the action (null for system actions)
-  targetId     String? // Target user/content ID
-  targetType   AuditTargetType?
-  resource     String // Resource being accessed (e.g., 'AUTH', 'USER', 'REEL')
-  reason       String?         @db.Text
-  metadata     Json? // Additional context (IP, user agent, etc.)
-  ip           String? // IP address of the actor
-  userAgent    String? // User agent string
-  
-  // 🛡️ ENTERPRISE IMMUNITY: Tamper-proof audit trail
-  hash         String? // SHA-256 hash of this log entry
-  previousHash String? // Hash of previous log entry (chain verification)
-  severity     String? @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
-  
-  createdAt    DateTime        @default(now())
-
-  @@index([actorId])
-  @@index([targetId])
-  @@index([targetType])
-  @@index([action])
-  @@index([resource])
-  @@index([createdAt])
-  @@index([severity])
-  @@index([hash])
-  @@map("audit_logs")
-}
-
 enum AuditAction {
-  // Authentication
   LOGIN
   LOGOUT
   LOGIN_FAILED
   TOKEN_REFRESH
   PASSWORD_RESET
-  
-  // Account Management
   ACCOUNT_CREATED
   ACCOUNT_UPDATED
   ACCOUNT_DELETION_INITIATED
   ACCOUNT_DELETION_CANCELLED
   ACCOUNT_DELETED
-  
-  // Moderation
   REPORT_CREATED
   STRIKE_CREATED
   CONTENT_DELETED
@@ -1199,8 +1849,6 @@ enum AuditAction {
   USER_UNBANNED
   ADMIN_REVIEW
   WARNING_ISSUED
-  
-  // Security
   RATE_LIMIT_EXCEEDED
   UNAUTHORIZED_ACCESS
   SUSPICIOUS_ACTIVITY
@@ -1212,590 +1860,6 @@ enum AuditTargetType {
   COMMENT
   REPORT
   ACCOUNT
-}
-
-// ============================================
-// REVOKED TOKENS (Token Blacklist)
-// ============================================
-
-model RevokedToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  userId    String
-  reason    String?  @db.Text
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([expiresAt])
-  @@map("revoked_tokens")
-}
-
-// ============================================
-// FAVORITE MATCHES (for Push Notifications)
-// ============================================
-
-model FavoriteMatch {
-  id            String   @id @default(uuid())
-  userId        String
-  apiMatchId    Int // Match ID from API-Football
-  homeTeam      String // Home team name (cached)
-  awayTeam      String // Away team name (cached)
-  homeTeamLogo  String? // Home team logo URL
-  awayTeamLogo  String? // Away team logo URL
-  matchDate     DateTime // Match date/time
-  leagueName    String? // League name
-  lastHomeScore Int? // Last known home score (for detecting goals)
-  lastAwayScore Int? // Last known away score
-  lastStatus    String? // Last known status (NS, 1H, HT, 2H, FT, etc.)
-  notifiedStart Boolean  @default(false) // Already notified about match start
-  notifiedEnd   Boolean  @default(false) // Already notified about match end
-  /// Anchor for subscription-aware delivery — updated on every subscribe/re-subscribe
-  subscribedAt  DateTime @default(now())
-  /// Cursor into the canonical match event stream (last delivered eventKey)
-  lastDeliveredEventKey String?
-  /// Score/status snapshot at subscribe time (guards retroactive goal alerts)
-  baselineHomeScore     Int?
-  baselineAwayScore     Int?
-  baselineStatus        String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  user       User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deliveries MatchEventDelivery[]
-
-  @@unique([userId, apiMatchId])
-  @@index([userId])
-  @@index([apiMatchId])
-  @@index([matchDate])
-  @@index([notifiedEnd, matchDate])
-  @@index([apiMatchId, subscribedAt])
-  @@map("favorite_matches")
-}
-
-/// Canonical match events — one row per distinct event per fixture (shared by all subscribers)
-model MatchEvent {
-  id          String   @id @default(uuid())
-  fixtureId   Int
-  eventKey    String
-  eventType   String
-  minute      Int?
-  extraMinute Int?
-  teamId      Int?
-  playerId    Int?
-  payload     Json
-  detectedAt  DateTime @default(now())
-
-  deliveries MatchEventDelivery[]
-
-  @@unique([fixtureId, eventKey])
-  @@index([fixtureId, detectedAt])
-  @@map("match_events")
-}
-
-/// Per-subscription delivery ledger — prevents duplicate pushes at scale
-model MatchEventDelivery {
-  id             String   @id @default(uuid())
-  subscriptionId String
-  eventKey       String
-  deliveredAt    DateTime @default(now())
-  fixtureId      Int
-
-  subscription FavoriteMatch @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  event        MatchEvent    @relation(fields: [fixtureId, eventKey], references: [fixtureId, eventKey], onDelete: Cascade)
-
-  @@unique([subscriptionId, eventKey])
-  @@index([subscriptionId])
-  @@map("match_event_deliveries")
-}
-
-// ============================================
-// DAILY SPIN WHEEL (عجلة الحظ اليومية)
-// ============================================
-
-model DailySpinHistory {
-  id       String   @id @default(uuid())
-  userId   String
-  coinsWon Int // الكوينات المربوحة
-  spinDate DateTime @default(now()) // تاريخ اللف
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([spinDate])
-  @@map("daily_spin_history")
-}
-
-// ============================================
-// CACHED FIXTURES (API Optimization)
-// Stores finished matches permanently to reduce API calls
-// ============================================
-
-model CachedFixture {
-  id        String @id @default(uuid())
-  fixtureId Int    @unique // API-Football fixture ID
-
-  // League Info
-  leagueId      Int
-  leagueName    String
-  leagueLogo    String?
-  leagueCountry String?
-  leagueSeason  Int?
-  leagueRound   String?
-
-  // Home Team
-  homeTeamId   Int
-  homeTeamName String
-  homeTeamLogo String?
-
-  // Away Team
-  awayTeamId   Int
-  awayTeamName String
-  awayTeamLogo String?
-
-  // Match Result
-  homeScore         Int?
-  awayScore         Int?
-  homeHalftimeScore Int?
-  awayHalftimeScore Int?
-
-  // Match Info
-  matchDate      DateTime
-  matchTimestamp Int // Unix timestamp for easy sorting
-  status         String // FT, AET, PEN, PST, CANC, etc.
-  statusLong     String? // Full status name
-  elapsed        Int? // Live minute from API (1H/2H/ET)
-  venue          String?
-  referee        String?
-
-  // Full JSON data for detailed views
-  fullData Json
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([matchDate])
-  @@index([matchDate, status])
-  @@index([matchTimestamp])
-  @@index([leagueId])
-  @@index([status])
-  @@index([homeTeamId])
-  @@index([awayTeamId])
-  @@map("cached_fixtures")
-}
-
-// ============================================
-// CACHED PLAYERS (API Optimization)
-// Stores player data to reduce API calls
-// ============================================
-
-model CachedPlayer {
-  id       String @id @default(uuid())
-  playerId Int    @unique // API-Football player ID
-
-  // Basic Info
-  name      String
-  firstname String?
-  lastname  String?
-  photo     String?
-
-  // Personal Info
-  nationality     String?
-  nationalityFlag String?
-  age             Int?
-  birthDate       String?
-  birthPlace      String?
-  birthCountry    String?
-  height          String?
-  weight          String?
-
-  // Current Team
-  teamId   Int?
-  teamName String?
-  teamLogo String?
-
-  // Position
-  position String?
-
-  // Season Stats (JSON for flexibility)
-  seasonStats Json? // Goals, assists, matches, cards, etc.
-
-  // Full API response
-  fullData Json
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([teamId])
-  @@index([nationality])
-  @@index([position])
-  @@map("cached_players")
-}
-
-// ============================================
-// CACHED TEAMS (API Optimization)
-// Stores team data to reduce API calls
-// ============================================
-
-model CachedTeam {
-  id     String @id @default(uuid())
-  teamId Int    @unique // API-Football team ID
-
-  // Basic Info
-  name    String
-  code    String?
-  logo    String?
-  country String?
-  founded Int?
-
-  // Venue
-  venueName     String?
-  venueAddress  String?
-  venueCity     String?
-  venueCapacity Int?
-  venueImage    String?
-
-  // Full API response
-  fullData Json
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([country])
-  @@index([name]) // ✅ OPTIMIZATION 3: Index for team search
-  @@index([updatedAt]) // ✅ OPTIMIZATION 3: Index for cache freshness checks
-  @@map("cached_teams")
-}
-
-// ============================================
-// CACHED HEAD TO HEAD (API Optimization)
-// Stores H2H data between teams
-// ============================================
-
-model CachedH2H {
-  id      String @id @default(uuid())
-  team1Id Int
-  team2Id Int
-
-  // Summary
-  totalMatches Int @default(0)
-  team1Wins    Int @default(0)
-  team2Wins    Int @default(0)
-  draws        Int @default(0)
-
-  // Last matches (JSON array)
-  lastMatches Json
-
-  // Full API response
-  fullData Json
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([team1Id, team2Id])
-  @@index([team1Id])
-  @@index([team2Id])
-  @@map("cached_h2h")
-}
-
-model CachedLeague {
-  id        String   @id @default(uuid())
-  leagueId  Int      @unique
-  name      String
-  country   String
-  logo      String?
-  type      String?  @default("league")
-  fullData  Json
-  updatedAt DateTime @updatedAt
-
-  @@index([name])
-  @@index([country])
-  @@map("cached_leagues")
-}
-
-// ============================================
-// PREDICTIONS SYSTEM (التوقعات)
-// ============================================
-
-model Prediction {
-  id             String    @id @default(uuid())
-  userId         String
-  apiMatchId     Int // Match ID from API-Football
-  predictionType String // 'home' | 'draw' | 'away'
-  coinsSpent     Int       @default(5)
-  coinsWon       Int?
-  isCorrect      Boolean?
-  createdAt      DateTime  @default(now())
-  resolvedAt     DateTime?
-
-  // Cached match info for display
-  homeTeam     String?
-  awayTeam     String?
-  homeTeamLogo String?
-  awayTeamLogo String?
-  matchDate    DateTime?
-  leagueName   String?
-
-  // Exact score prediction (used by /submit endpoint)
-  predictedHomeScore Int?
-  predictedAwayScore Int?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, apiMatchId])
-  @@index([userId])
-  @@index([apiMatchId])
-  @@index([createdAt])
-  @@index([userId, createdAt])
-  @@index([isCorrect]) // ✅ OPTIMIZATION 3: Index for top predictions ranking
-  @@index([userId, isCorrect]) // ✅ OPTIMIZATION 3: Compound index for user predictions stats
-  @@map("predictions")
-}
-
-// ============================================
-// PLAYER VOTING SYSTEM (تصويت اللاعبين)
-// ============================================
-
-model PlayerVote {
-  id        String   @id @default(uuid())
-  voterId   String // المصوت (voter)
-  playerId  String // اللاعب المصوت عليه
-  voteType  String // 'up' or 'down'
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([voterId, playerId])
-  @@index([voterId])
-  @@index([playerId])
-  @@index([voteType])
-  @@map("player_votes")
-}
-
-// ============================================
-// RANKING BADGES & ACHIEVEMENTS (ميداليات وإنجازات التصنيف)
-// ============================================
-
-model RankingBadge {
-  id        String   @id @default(uuid())
-  userId    String
-  badgeType String // 'gold', 'silver', 'bronze', 'diamond', 'rank_4' to 'rank_100'
-  category  String // 'views', 'shares', 'comments', 'predictions', 'team_of_month'
-  period    String // 'daily', 'weekly', 'monthly'
-  rank      Int // الترتيب الفعلي
-  earnedAt  DateTime @default(now())
-
-  // For team of month streak tracking
-  monthYear String? // Format: "2024-01" for tracking consecutive months
-
-  @@index([userId])
-  @@index([badgeType])
-  @@index([category])
-  @@index([earnedAt])
-  @@map("ranking_badges")
-}
-
-// Track consecutive team of month appearances for Diamond badge
-model TeamOfMonthStreak {
-  id                String    @id @default(uuid())
-  userId            String    @unique
-  consecutiveMonths Int       @default(0)
-  lastMonthYear     String? // Last month they appeared in team of month
-  diamondAwarded    Boolean   @default(false)
-  diamondAwardedAt  DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  @@index([userId])
-  @@index([consecutiveMonths])
-  @@map("team_of_month_streaks")
-}
-
-// ============================================
-// CACHED SEARCH RESULTS (نتائج البحث المحفوظة)
-// Stores search results for instant retrieval
-// ============================================
-
-model CachedSearch {
-  id        String @id @default(uuid())
-  query     String @unique // Search query (lowercase, trimmed)
-  queryType String @default("general") // 'team', 'player', 'league', 'general'
-
-  // Results stored as JSON
-  teams   Json? // Array of team results
-  players Json? // Array of player results
-  leagues Json? // Array of league results
-  matches Json? // Array of match results (live, upcoming, finished)
-
-  // Metadata
-  resultCount    Int      @default(0)
-  searchCount    Int      @default(1) // How many times this was searched
-  lastSearchedAt DateTime @default(now())
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([query])
-  @@index([queryType])
-  @@index([searchCount])
-  @@index([lastSearchedAt])
-  @@map("cached_searches")
-}
-
-// ============================================
-// POPULAR SEARCHES (البحث الشائع)
-// Tracks trending searches for suggestions
-// ============================================
-
-model PopularSearch {
-  id             String   @id @default(uuid())
-  query          String   @unique
-  searchCount    Int      @default(1)
-  lastSearchedAt DateTime @default(now())
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([searchCount])
-  @@index([lastSearchedAt])
-  @@map("popular_searches")
-}
-
-// ============================================
-// CACHED TRANSFERS (API Optimization)
-// Stores transfer data to reduce API calls
-// ============================================
-
-model CachedTransfer {
-  id            String   @id @default(cuid())
-  playerId      Int
-  playerName    String
-  playerPhoto   String?
-  teamInId      Int?
-  teamInName    String?
-  teamInLogo    String?
-  teamOutId     Int?
-  teamOutName   String?
-  teamOutLogo   String?
-  transferType  String?
-  transferDate  String
-  transferValue Float?
-  leagueId      Int?
-  leagueName    String?
-  leagueLogo    String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([playerId])
-  @@index([teamInId])
-  @@index([teamOutId])
-  @@index([leagueId])
-  @@index([transferDate])
-  @@index([transferType])
-  @@map("cached_transfers")
-}
-
-// ============================================
-// TERMS OF SERVICE ACCEPTANCE (Apple Compliance)
-// ============================================
-
-model TermsAcceptance {
-  id          String   @id @default(uuid())
-  userId      String
-  version     String   // e.g., "1.0"
-  acceptedAt  DateTime @default(now())
-  ipAddress   String?
-  userAgent   String?  @db.Text
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, version])
-  @@index([userId])
-  @@index([version])
-  @@index([acceptedAt])
-  @@map("terms_acceptances")
-}
-
-// ============================================
-// GDPR COMPLIANCE (Data Export & Account Deletion)
-// ============================================
-
-model DataExportRequest {
-  id           String   @id @default(uuid())
-  userId       String
-  status       ExportStatus @default(PENDING)
-  fileUrl      String?
-  fileSize     Int?
-  expiresAt    DateTime?
-  requestedAt  DateTime @default(now())
-  completedAt  DateTime?
-  failedReason String?  @db.Text
-  ipAddress    String?
-  userAgent    String?  @db.Text
-
-  user User @relation("UserDataExports", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([status])
-  @@index([requestedAt])
-  @@index([expiresAt])
-  @@map("data_export_requests")
-}
-
-model AccountDeletionRequest {
-  id                  String   @id @default(uuid())
-  userId              String
-  status              DeletionStatus @default(PENDING)
-  reason              String?  @db.Text
-  requestedAt         DateTime @default(now())
-  scheduledAt         DateTime?
-  completedAt         DateTime?
-  cancelledAt         DateTime?
-  cancellationReason  String?  @db.Text
-  ipAddress           String?
-  userAgent           String?  @db.Text
-
-  user User @relation("UserAccountDeletions", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([status])
-  @@index([scheduledAt])
-  @@index([requestedAt])
-  @@map("account_deletion_requests")
-}
-
-model ConsentLog {
-  id          String   @id @default(uuid())
-  userId      String
-  consentType ConsentType
-  granted     Boolean
-  timestamp   DateTime @default(now())
-  ipAddress   String?
-  userAgent   String?  @db.Text
-  version     String?  // Privacy policy version
-
-  user User @relation("UserConsentLogs", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([consentType])
-  @@index([timestamp])
-  @@map("consent_logs")
-}
-
-model GDPRAuditLog {
-  id        String   @id @default(uuid())
-  userId    String
-  action    GDPRAction
-  details   String?  @db.Text
-  ipAddress String?
-  userAgent String?  @db.Text
-  timestamp DateTime @default(now())
-
-  user User @relation("UserGDPRAuditLogs", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([action])
-  @@index([timestamp])
-  @@map("gdpr_audit_logs")
 }
 
 enum ExportStatus {
@@ -1826,92 +1890,6 @@ enum GDPRAction {
   DATA_ACCESS
 }
 
-// ============================================
-// CONTENT MODERATION SYSTEM
-// ============================================
-
-model BannedWord {
-  id        String   @id @default(uuid())
-  word      String   @unique
-  language  String   // 'ar' or 'en'
-  severity  WordSeverity @default(MEDIUM)
-  category  String?  // 'profanity', 'spam', 'offensive', etc.
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  createdBy String?  // Admin user ID who added this word
-
-  creator User? @relation("BannedWordCreator", fields: [createdBy], references: [id])
-
-  @@index([word])
-  @@index([language])
-  @@index([isActive])
-  @@map("banned_words")
-}
-
-model ModerationLog {
-  id          String   @id @default(uuid())
-  userId      String?  // User who triggered moderation
-  contentType String   // 'comment', 'reel', 'bio', 'username'
-  contentId   String?  // ID of the content
-  action      ModerationAction
-  reason      String   @db.Text
-  detectedWords String[] @default([])
-  severity    String   // 'low', 'medium', 'high'
-  isAutomatic Boolean  @default(true)
-  reviewedBy  String?  // Admin who reviewed (if manual)
-  reviewedAt  DateTime?
-  metadata    Json?    // Additional context
-  createdAt   DateTime @default(now())
-
-  user     User? @relation("ModerationLogUser", fields: [userId], references: [id])
-  reviewer User? @relation("ModerationLogReviewer", fields: [reviewedBy], references: [id])
-
-  @@index([userId])
-  @@index([contentType])
-  @@index([action])
-  @@index([createdAt])
-  @@index([severity])
-  @@map("moderation_logs")
-}
-
-model UserWarning {
-  id        String   @id @default(uuid())
-  userId    String
-  reason    String   @db.Text
-  severity  WarningSeverity @default(MEDIUM)
-  issuedBy  String?  // Admin user ID
-  expiresAt DateTime?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-
-  user   User  @relation("UserWarnings", fields: [userId], references: [id], onDelete: Cascade)
-  issuer User? @relation("WarningIssuer", fields: [issuedBy], references: [id])
-
-  @@index([userId])
-  @@index([isActive])
-  @@index([createdAt])
-  @@map("user_warnings")
-}
-
-model UserBan {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  reason    String   @db.Text
-  bannedBy  String?  // Admin user ID
-  bannedAt  DateTime @default(now())
-  expiresAt DateTime? // Null = permanent ban
-  isActive  Boolean  @default(true)
-
-  user   User  @relation("UserBans", fields: [userId], references: [id], onDelete: Cascade)
-  banner User? @relation("BanIssuer", fields: [bannedBy], references: [id])
-
-  @@index([userId])
-  @@index([isActive])
-  @@index([bannedAt])
-  @@map("user_bans")
-}
-
 enum WordSeverity {
   LOW
   MEDIUM
@@ -1937,101 +1915,11 @@ enum WarningSeverity {
   CRITICAL
 }
 
-// ============================================
-// NOTIFICATION PREFERENCES
-// ============================================
-
-model NotificationPreferences {
-  id     String @id @default(uuid())
-  userId String @unique
-
-  // Match notifications
-  matchGoals     Boolean @default(true)
-  matchStart     Boolean @default(true)
-  matchEnd       Boolean @default(true)
-  matchHalftime  Boolean @default(true)
-  matchCards     Boolean @default(true)
-  matchSubs      Boolean @default(true)
-  matchVar       Boolean @default(true)
-  matchLineups   Boolean @default(true)
-  leagueMatches  Boolean @default(true)
-
-  // Social notifications
-  socialFollow   Boolean @default(true)
-  socialLike     Boolean @default(true)
-  socialComment  Boolean @default(true)
-  socialReply    Boolean @default(true)
-  socialMention  Boolean @default(true)
-  socialShare    Boolean @default(true)
-
-  // General notifications
-  predictionResults Boolean @default(true)
-  luckyWheel        Boolean @default(true)
-  gifts             Boolean @default(true)
-  dailyQuiz         Boolean @default(true)
-  cooldown          Boolean @default(true)
-  levelUp           Boolean @default(true)
-  reportUpdates     Boolean @default(true)
-  avatarUpload      Boolean @default(true)
-  videoProcessed    Boolean @default(true)
-  leaderboard       Boolean @default(true)
-
-  // Opt-in (default off): personalised AI coach check-in twice a day.
-  aiCoach           Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("notification_preferences")
-}
-
-// ============================================
-// NOTIFICATION ANALYTICS
-// ============================================
-
-model NotificationEvent {
-  id             String                @id @default(uuid())
-  notificationId String
-  userId         String
-  event          NotificationEventType
-  createdAt      DateTime              @default(now())
-
-  @@index([notificationId])
-  @@index([userId])
-  @@index([event])
-  @@index([createdAt])
-  @@map("notification_events")
-}
-
 enum NotificationEventType {
   SENT
   OPENED
   DISMISSED
 }
-
-// ============================================
-// R2 ORPHAN TRACKER (Fix 2)
-// ============================================
-
-model R2OrphanTracker {
-  id           String   @id @default(uuid())
-  storagePath  String   @unique
-  bucket       String
-  fileSizeBytes BigInt  @default(0)
-  uploadedAt   DateTime @default(now())
-  resolved     Boolean  @default(false)
-  resolvedAt   DateTime?
-
-  @@index([resolved])
-  @@index([uploadedAt])
-  @@map("r2_orphan_tracker")
-}
-
-// ============================================
-// UPLOAD ANALYTICS (Fix 12)
-// ============================================
 
 enum UploadEventType {
   AVATAR
@@ -2043,257 +1931,6 @@ enum UploadEventStatus {
   SUCCESS
   FAILED
   TIMEOUT
-}
-
-model UploadEvent {
-  id          String            @id @default(uuid())
-  userId      String
-  type        UploadEventType
-  status      UploadEventStatus
-  fileSizeMB  Float
-  durationMs  Int
-  errorCode   String?
-  createdAt   DateTime          @default(now())
-
-  @@index([userId])
-  @@index([type])
-  @@index([status])
-  @@index([createdAt])
-  @@map("upload_events")
-}
-
-// ============================================
-// AI CHAT (90Plus Captain AI)
-// ============================================
-//
-// Models for the AI chat assistant. Replaces the legacy file-based
-// chat-store.json with proper DB-backed storage. userId here is the
-// device-local UUID issued by the frontend (x-user-id header) — NOT the
-// users.id FK — so chat history survives even for unauthenticated users.
-
-model ChatConversation {
-  id        String   @id @default(uuid())
-  userId    String   // device UUID, matches x-user-id header
-  title     String   @default("محادثة جديدة")
-  pinned    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  messages ChatMessage[]
-
-  @@index([userId])
-  @@index([userId, updatedAt])
-  @@map("chat_conversations")
-}
-
-model ChatMessage {
-  id             String   @id @default(uuid())
-  conversationId String
-  role           String   // "user" | "assistant"
-  text           String   @db.Text
-  usedModel      String?
-  createdAt      DateTime @default(now())
-
-  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
-  @@index([conversationId])
-  @@index([conversationId, createdAt])
-  @@map("chat_messages")
-}
-
-model ChatLimit {
-  userId    String   @id // device UUID
-  count     Int      @default(0)
-  date      String   // YYYY-MM-DD in the user's local timezone
-  updatedAt DateTime @updatedAt
-
-  @@index([date])
-  @@map("chat_limits")
-}
-
-// Cache of factual, data-backed answers (player stats, standings, top scorers).
-// Keyed by a hash of the normalized question + language so identical questions
-// from any user are served from the DB instead of re-calling the LLM.
-model ChatAnswerCache {
-  id           String   @id @default(uuid())
-  questionHash String   @unique // sha256(language + '|' + normalizedQuestion)
-  language     String // "ar" | "en"
-  question     String   @db.Text
-  answer       String   @db.Text
-  usedModel    String?
-  hits         Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@index([language])
-  @@map("chat_answer_cache")
-}
-
-// Persistent, structured cache of a single player's stats for a given
-// season/competition/statType. Survives restarts (unlike the in-memory ctx
-// cache) so repeated questions about the same player are instant and cheap.
-model PlayerStatsCache {
-  id            String   @id @default(uuid())
-  playerName    String
-  playerAliases String[]
-  apiPlayerId   Int?
-  competition   String?
-  season        String
-  statType      String
-  statValue     Json
-  aiResponse    String   @db.Text
-  questionAsked String   @db.Text
-  fetchedAt     DateTime @default(now())
-  expiresAt     DateTime
-
-  @@index([playerName])
-  @@index([expiresAt])
-  @@map("player_stats_cache")
-}
-
-// Arabic <-> English player name mapping with aliases. Lets the chat resolve
-// Arabic player queries (e.g. "محمد صلاح") to the English name API-Football
-// expects. Self-learns: once a name resolves via API, its apiPlayerId is
-// upserted here for instant future lookups.
-model PlayerNameMapping {
-  id             String   @id @default(uuid())
-  arabicName     String
-  englishName    String
-  /// Diacritic-stripped, lowercased key used for accent-insensitive matching.
-  normalizedName String
-  aliases        String[]
-  apiPlayerId    Int      @unique
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@index([arabicName])
-  @@index([englishName])
-  @@index([normalizedName])
-  @@map("player_name_mapping")
-}
-
-// Full Captain AI answers keyed by player + query type + language.
-// Serves repeat questions instantly from Postgres; refreshes when API data changes.
-model PlayerInfo {
-  id             String   @id @default(uuid())
-  playerName     String
-  displayName    String?
-  apiPlayerId    Int?
-  queryType      String
-  language       String
-  questionSample String   @db.Text
-  answer         String   @db.Text
-  apiFingerprint String
-  apiContext     String   @db.Text
-  usedModel      String?
-  answeredOn     DateTime @default(now())
-  refreshedAt    DateTime @default(now())
-  expiresAt      DateTime
-  hits           Int      @default(0)
-
-  // Proactive background refresh metadata (additive)
-  teamId          Int? // FK → TeamInfo.id (nullable: not all players are linked yet)
-  teamInfo        TeamInfo? @relation(fields: [teamId], references: [id])
-  lastRefreshType String? // audit tag of the last cron that touched this row: "weekly" | "monthly" | "100day"
-  refreshPriority Int       @default(1) // 1 = star (refresh first), 2 = normal
-  accessCount     Int       @default(0) // user-query counter, mirrors `hits` for the refresh scheduler
-
-  @@unique([playerName, queryType, language])
-  @@index([playerName])
-  @@index([answeredOn])
-  @@index([expiresAt])
-  @@index([teamId])
-  @@index([lastRefreshType])
-  @@index([apiPlayerId])
-  @@map("player_info")
-}
-
-// ============================================
-// PROACTIVE DATA REFRESH (TeamInfo / TeamPlayer / RefreshControl)
-// ============================================
-
-model TeamInfo {
-  id          Int          @id @default(autoincrement())
-  apiTeamId   Int          @unique
-  teamName    String
-  season      Int
-  lastFetched DateTime
-  expiresAt   DateTime // monthly
-  players     TeamPlayer[]
-  playerInfos PlayerInfo[]
-
-  @@index([expiresAt])
-  @@map("team_info")
-}
-
-model TeamPlayer {
-  id           Int      @id @default(autoincrement())
-  teamInfoId   Int
-  teamInfo     TeamInfo @relation(fields: [teamInfoId], references: [id], onDelete: Cascade)
-  apiPlayerId  Int
-  playerName   String
-  position     String
-  jerseyNumber Int?
-
-  @@index([teamInfoId])
-  @@index([apiPlayerId])
-  @@map("team_player")
-}
-
-model RefreshControl {
-  id        Int      @id @default(autoincrement())
-  key       String   @unique // e.g. "transfers_last_run"
-  value     String
-  updatedAt DateTime @updatedAt
-
-  @@map("refresh_control")
-}
-
-// ============================================
-// XP & LEVEL SYSTEM
-// ============================================
-
-model XpTransaction {
-  id              String       @id @default(uuid())
-  userId          String
-  action          XpActionType
-  amount          Int          // can be negative for reversals
-  idempotencyKey  String?      // null for repeatable actions; set for one-time/per-resource awards
-  metadata        Json?        // e.g. { reelId, matchId, questionId }
-  createdAt       DateTime     @default(now())
-
-  user User @relation("UserXpTransactions", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, idempotencyKey])
-  @@index([userId, createdAt])
-  @@index([action])
-  @@map("xp_transactions")
-}
-
-model XpDailyCap {
-  id     String       @id @default(uuid())
-  userId String
-  action XpActionType
-  date   String       // YYYY-MM-DD in user's timezone
-  count  Int          @default(0)
-
-  user User @relation("UserXpDailyCaps", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, action, date])
-  @@index([userId, date])
-  @@map("xp_daily_caps")
-}
-
-model LoginStreak {
-  id            String  @id @default(uuid())
-  userId        String  @unique
-  current       Int     @default(0)
-  longest       Int     @default(0)
-  lastLoginDate String? // YYYY-MM-DD in user's timezone
-
-  user User @relation("UserLoginStreak", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("login_streaks")
 }
 
 enum XpActionType {
@@ -2317,18 +1954,18 @@ enum XpActionType {
   REEL_COMMENT
   REEL_SHARE
   REEL_VIEWS_100
+  PREDICTION_EXACT
+  PREDICTION_WINNER
+  QUIZ_ANSWER_CORRECT
+  QUIZ_COMPLETED_HIGH
+  DAILY_LOGIN
+  ADMIN_ADJUSTMENT
+  STREAK_FREEZE_USED
   REEL_VIEWS_500
   REEL_VIEWS_1000
   REEL_RECEIVED_LIKE
   REEL_RECEIVED_COMMENT
   REEL_RECEIVED_SHARE
   RECEIVED_FOLLOW
-  PREDICTION_EXACT
-  PREDICTION_WINNER
-  QUIZ_ANSWER_CORRECT
-  QUIZ_COMPLETED_HIGH
-  DAILY_LOGIN
   APP_SHARE
-  ADMIN_ADJUSTMENT
-  STREAK_FREEZE_USED
 }

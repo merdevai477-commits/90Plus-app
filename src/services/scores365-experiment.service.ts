@@ -205,26 +205,43 @@ export function isScores365ExperimentFixture(fixtureId: number): boolean {
   return getScores365GameIdForFixture(fixtureId) != null;
 }
 
-/** Lazy map API-Football fixtureId → 365 gameId (team names + kickoff). */
+const ON_DEMAND_REFRESH_MIN_INTERVAL_MS = 30_000;
+let lastOnDemandRefresh = 0;
+
+/** Lazy map API-Football fixtureId → 365 gameId (passive check + rate-limited live fallback). */
 export async function ensureScores365GameMapping(fixtureId: number): Promise<number | null> {
   const existing = getScores365GameIdForFixture(fixtureId);
   if (existing) return existing;
   if (!isScores365ExperimentEnabled()) return null;
 
-  const cfg = getScores365ExperimentConfig();
-  const dbRows = await loadWorldCupDbFixtures(cfg.leagueId, cfg.season);
-  const dbRow = dbRows.find((r) => r.fixtureId === fixtureId);
-  if (!dbRow) return null;
+  logger.debug(`[Scores365] fixtureId=${fixtureId} not yet in map — checking if on-demand refresh is warranted`);
 
-  const games = await fetchScores365WorldCupFixtures({ language: 'en' });
-  for (const game of games) {
-    const matched = resolveDbFixtureFor365Game(game, dbRows);
-    if (matched?.fixtureId === fixtureId) {
-      registerScores365FixtureMapping(fixtureId, game.id);
-      return game.id;
-    }
+  const dbRow = await prisma.cachedFixture.findUnique({
+    where: { fixtureId },
+    select: { status: true },
+  });
+  const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+  const isPlausiblyLive = !!dbRow && LIVE_STATUSES.has(dbRow.status);
+
+  if (!isPlausiblyLive) {
+    logger.debug(`[Scores365] fixtureId=${fixtureId} not live — waiting for next scheduled bulk sync`);
+    return null;
   }
-  return null;
+
+  if (Date.now() - lastOnDemandRefresh < ON_DEMAND_REFRESH_MIN_INTERVAL_MS) {
+    logger.debug(`[Scores365] fixtureId=${fixtureId} is live but on-demand refresh was rate-limited — waiting`);
+    return null;
+  }
+
+  logger.warn(
+    `[Scores365] fixtureId=${fixtureId} is LIVE but missing from map — triggering immediate on-demand bulk refresh`,
+  );
+  lastOnDemandRefresh = Date.now();
+
+  const { runBulkFixtureSyncTick } = await import('../workers/worldCupSync.service');
+  await runBulkFixtureSyncTick();
+
+  return getScores365GameIdForFixture(fixtureId);
 }
 
 /**
@@ -575,7 +592,7 @@ async function loadBaseFixture(fixtureId: number): Promise<FixtureFromAPI | null
   return null;
 }
 
-async function loadWorldCupDbFixtures(leagueId: number, season: number) {
+export async function loadWorldCupDbFixtures(leagueId: number, season: number) {
   const ttlMs = 5 * 60_000;
   if (
     cachedWorldCupDbRows &&
@@ -655,7 +672,7 @@ function detect365TeamAlignment(
   return null;
 }
 
-function resolveDbFixtureFor365Game(
+export function resolveDbFixtureFor365Game(
   game: Scores365Game,
   dbRows: Awaited<ReturnType<typeof loadWorldCupDbFixtures>>,
 ) {

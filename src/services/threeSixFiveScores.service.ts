@@ -453,7 +453,7 @@ class ThreeSixFiveScoresService {
           imageUrl:
             imageVersion != null
               ? `https://imagecache.365scores.com/image/upload/v1/Athletes/${imageVersion}/${athleteId}`
-              : null,
+              : `https://imagecache.365scores.com/image/upload/f_png,w_48,h_48,c_limit,q_auto,dpr_1,d_Athletes:default.png/Athletes/${athleteId}`,
           stats: m.stats,
         };
       });

@@ -15,18 +15,20 @@ import cron from 'node-cron';
 import { logger } from '../utils/logger';
 import {
   isScores365ExperimentEnabled,
-  fetchScores365WorldCupFixtures,
   ensureScores365GameMapping,
   getScores365ExperimentConfig,
+  getScores365CompetitionId,
+  registerScores365FixtureMapping,
+  resolveDbFixtureFor365Game,
+  loadWorldCupDbFixtures,
 } from '../services/scores365-experiment.service';
 import { footballDataCacheService } from '../services/football-data-cache.service';
 import { hasLineupData } from '../utils/lineups-fallback';
+import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const WORKER = 'WC-Sync';
-const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
-const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
 
 function isEnabled(): boolean {
   const raw = process.env.WC_SYNC_ENABLED?.trim();
@@ -44,9 +46,72 @@ function statsSyncMs(): number {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-const isRunning = { lineups: false, stats: false };
+const isRunning = { lineups: false, stats: false, bulk: false };
 let lineupTimer: ReturnType<typeof setInterval> | null = null;
 let statsTimer: ReturnType<typeof setInterval> | null = null;
+const liveGameIds = new Set<number>();
+const recentGameIds = new Set<number>();
+
+// ─── Bulk Fixture Sync ────────────────────────────────────────────────────────
+
+export async function runBulkFixtureSyncTick(): Promise<void> {
+  if (!isEnabled()) return;
+  if (isRunning.bulk) {
+    logger.debug(`[${WORKER}][bulk] previous tick still running — skipping`);
+    return;
+  }
+  isRunning.bulk = true;
+
+  try {
+    const cfg = getScores365ExperimentConfig();
+    const result = await threeSixFiveScoresService.getFixtures(getScores365CompetitionId(), 'en');
+    const items = result.data;
+    
+    if (!items || !items.length) {
+      logger.debug(`[${WORKER}][bulk] no WC fixtures returned from getFixtures`);
+      return;
+    }
+
+    const dbRows = await loadWorldCupDbFixtures(cfg.leagueId, cfg.season);
+
+    let mappedCount = 0;
+    const newLive = new Set<number>();
+    const newRecent = new Set<number>();
+
+    for (const item of items) {
+      const row = resolveDbFixtureFor365Game(item.raw as any, dbRows);
+      if (row) {
+        registerScores365FixtureMapping(row.fixtureId, item.gameId);
+        mappedCount++;
+      }
+
+      if (item.phase === 'live') {
+        newLive.add(item.gameId);
+      } else if (item.phase === 'finished') {
+        const statusText = (item.raw.shortStatusText ?? item.raw.statusText ?? '').toUpperCase();
+        if (statusText === 'FT') {
+            newRecent.add(item.gameId);
+        }
+      }
+    }
+
+    liveGameIds.clear();
+    for (const id of newLive) liveGameIds.add(id);
+
+    recentGameIds.clear();
+    for (const id of newRecent) recentGameIds.add(id);
+
+    const upcomingCount = items.length - newLive.size - newRecent.size; // approximate
+
+    logger.info(
+      `[WC-BulkSync] ${mappedCount}/${items.length} fixtures mapped, ${newLive.size} live, ${upcomingCount} upcoming`
+    );
+  } catch (err: unknown) {
+    logger.error(`[${WORKER}][bulk] tick fatal:`, (err as Error)?.message);
+  } finally {
+    isRunning.bulk = false;
+  }
+}
 
 // ─── Lineup sync tick ─────────────────────────────────────────────────────────
 
@@ -60,25 +125,15 @@ async function runLineupSyncTick(): Promise<void> {
 
   try {
     const cfg = getScores365ExperimentConfig();
-    const games = await fetchScores365WorldCupFixtures({ language: 'en', liveRefresh: true });
+    const liveOrRecent = [...liveGameIds, ...recentGameIds];
 
-    if (!games.length) {
-      logger.debug(`[${WORKER}][lineups] no WC fixtures returned`);
-      return;
-    }
+    if (!liveOrRecent.length) return;
 
-    const liveOrRecent = games.filter((g) => {
-      const statusText = (g.shortStatusText ?? g.statusText ?? '').toUpperCase();
-      // include live + recently-finished (FT) so we capture lineups for just-ended matches
-      return LIVE_STATUSES.has(statusText) || statusText === 'FT';
-    });
+    logger.info(`[${WORKER}][lineups] tick: ${liveOrRecent.length} live/recent games`);
 
-    logger.info(`[${WORKER}][lineups] tick: ${games.length} total WC fixtures, ${liveOrRecent.length} live/recent`);
-
-    for (const game of liveOrRecent) {
+    for (const gameId of liveOrRecent) {
       try {
-        // Resolve fixtureId ↔ gameId mapping
-        const fixtureId = await resolveFixtureIdForGame(game.id, cfg);
+        const fixtureId = await resolveFixtureIdForGame(gameId, cfg);
         if (!fixtureId) continue;
 
         await ensureScores365GameMapping(fixtureId);
@@ -97,17 +152,17 @@ async function runLineupSyncTick(): Promise<void> {
 
         if (incomplete || (confirmed && (startersHome < 11 || startersAway < 11))) {
           logger.warn(
-            `[${WORKER}][lineups] ⚠️ fixture=${fixtureId} game=${game.id}: incomplete confirmed lineup after retry (home=${startersHome}, away=${startersAway})`,
-            { worker: 'worldcup-sync', fixtureId, gameId: game.id, startersHome, startersAway, ts: new Date().toISOString() },
+            `[${WORKER}][lineups] ⚠️ fixture=${fixtureId} game=${gameId}: incomplete confirmed lineup after retry (home=${startersHome}, away=${startersAway})`,
+            { worker: 'worldcup-sync', fixtureId, gameId, startersHome, startersAway, ts: new Date().toISOString() },
           );
         } else if (hasLineupData(lineups)) {
           logger.info(
-            `[${WORKER}][lineups] ✅ fixture=${fixtureId} game=${game.id}: home=${startersHome} away=${startersAway} confirmed=${confirmed}`,
-            { worker: 'worldcup-sync', fixtureId, gameId: game.id, startersHome, startersAway },
+            `[${WORKER}][lineups] ✅ fixture=${fixtureId} game=${gameId}: home=${startersHome} away=${startersAway} confirmed=${confirmed}`,
+            { worker: 'worldcup-sync', fixtureId, gameId, startersHome, startersAway },
           );
         }
       } catch (err: unknown) {
-        logger.warn(`[${WORKER}][lineups] error on game ${game.id}:`, (err as Error)?.message);
+        logger.warn(`[${WORKER}][lineups] error on game ${gameId}:`, (err as Error)?.message);
       }
     }
   } catch (err: unknown) {
@@ -129,47 +184,32 @@ async function runStatsSyncTick(): Promise<void> {
 
   try {
     const cfg = getScores365ExperimentConfig();
-    const games = await fetchScores365WorldCupFixtures({ language: 'en', liveRefresh: true });
-    const liveGames = games.filter((g) =>
-      LIVE_STATUSES.has((g.shortStatusText ?? g.statusText ?? '').toUpperCase()),
-    );
+    const liveGamesList = [...liveGameIds];
 
-    if (!liveGames.length) return;
+    if (!liveGamesList.length) return;
 
-    logger.info(`[${WORKER}][stats] tick: ${liveGames.length} live WC fixtures`);
+    logger.info(`[${WORKER}][stats] tick: ${liveGamesList.length} live WC fixtures`);
 
-    for (const game of liveGames) {
+    for (const gameId of liveGamesList) {
       try {
-        const fixtureId = await resolveFixtureIdForGame(game.id, cfg);
+        const fixtureId = await resolveFixtureIdForGame(gameId, cfg);
         if (!fixtureId) continue;
 
         const stats = await footballDataCacheService.getMatchStatistics(fixtureId);
         const hasStats = Array.isArray(stats) && stats.length > 0;
 
         logger.debug(
-          `[${WORKER}][stats] fixture=${fixtureId} game=${game.id}: ${hasStats ? stats.length + ' stat entries' : 'no stats yet'}`,
-          { worker: 'worldcup-sync', fixtureId, gameId: game.id, hasStats },
+          `[${WORKER}][stats] fixture=${fixtureId} game=${gameId}: ${hasStats ? stats.length + ' stat entries' : 'no stats yet'}`,
+          { worker: 'worldcup-sync', fixtureId, gameId, hasStats },
         );
       } catch (err: unknown) {
-        logger.warn(`[${WORKER}][stats] error on game ${game.id}:`, (err as Error)?.message);
+        logger.warn(`[${WORKER}][stats] error on game ${gameId}:`, (err as Error)?.message);
       }
     }
   } catch (err: unknown) {
     logger.error(`[${WORKER}][stats] tick fatal (recovered):`, (err as Error)?.message);
   } finally {
     isRunning.stats = false;
-  }
-}
-
-// ─── Mapping sync tick ────────────────────────────────────────────────────────
-
-async function runMappingSyncTick(): Promise<void> {
-  if (!isEnabled()) return;
-  try {
-    const { syncScores365FixtureMappingsFromFixturesList } = await import('../services/scores365-experiment.service');
-    await syncScores365FixtureMappingsFromFixturesList({ force: true });
-  } catch (err: unknown) {
-    logger.error(`[${WORKER}][mapping] tick fatal:`, (err as Error)?.message);
   }
 }
 
@@ -185,7 +225,7 @@ async function resolveFixtureIdForGame(
 ): Promise<number | null> {
   if (gameId === cfg.gameId) return cfg.fixtureId;
 
-  // Search the reverse mapping populated by ensureScores365GameMapping / syncScores365FixtureMappingsFromFixturesList
+  // Search the reverse mapping populated by ensureScores365GameMapping / runBulkFixtureSyncTick
   const { getScores365GameIdForFixture } = await import('../services/scores365-experiment.service');
   // The map stores fixtureId → gameId; we need the reverse.
   // We iterate our WC DB fixtures via a lightweight import to find a match.
@@ -224,7 +264,7 @@ export function startWorldCupSyncWorker(): void {
 
   // Mapping sync: cron-based (every 5 minutes)
   cron.schedule('*/5 * * * *', () => {
-    void runMappingSyncTick();
+    void runBulkFixtureSyncTick();
   });
 
   // Lineup sync: interval-based (tight for live matches)
@@ -238,12 +278,12 @@ export function startWorldCupSyncWorker(): void {
   }, sMs);
 
   // Kick off immediately on startup: mapping FIRST, then lineups.
-  runMappingSyncTick().finally(() => {
+  runBulkFixtureSyncTick().finally(() => {
     void runLineupSyncTick();
   });
 
   logger.info(
-    `[${WORKER}] started — mapping every 5m, lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s`,
+    `[${WORKER}] started — bulk sync every 5m, lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s`,
   );
 }
 
