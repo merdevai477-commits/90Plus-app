@@ -12,6 +12,7 @@ import {
   getScores365CompetitionId,
   isScores365ExperimentEnabled,
   mapScores365ToApiFootballFixture,
+  registerScores365FixtureMapping,
   resolveScores365LangId,
 } from './scores365-experiment.service';
 
@@ -973,30 +974,36 @@ class ThreeSixFiveScoresService {
     const toUpsert: FixtureFromAPI[] = [];
 
     for (const item of items) {
-      if (item.phase !== 'finished') continue;
-
+      // Finished fixtures are immutable — upsert once, then skip on later ticks.
+      // Upcoming/live fixtures change (score, status, lineups) — refresh every tick.
+      const isFinished = item.phase === 'finished';
       const upsertedKey = `${FINISHED_UPSERTED_KEY_PREFIX}${item.gameId}`;
-      const already = await redisCacheService.get<boolean>(upsertedKey);
-      if (already) continue;
+      if (isFinished) {
+        const already = await redisCacheService.get<boolean>(upsertedKey);
+        if (already) continue;
+      }
 
       const dbRow = this.resolveDbRow(item.raw, dbRows);
-      if (!dbRow) continue;
-
-      const base = matchCacheService.convertDbMatchToApiFormat(dbRow);
+      const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
+      // Use the 365 gameId as a synthetic fixtureId when API-Football has no row.
+      const fixtureId = dbRow?.fixtureId ?? item.gameId;
       const mapped = await mapScores365ToApiFootballFixture(
         item.raw as Parameters<typeof mapScores365ToApiFootballFixture>[0],
         base,
-        dbRow.fixtureId,
+        fixtureId,
       );
       if (mapped) {
         toUpsert.push(mapped);
-        await redisCacheService.set(upsertedKey, true, 30 * 24 * 60 * 60 * 1000);
+        registerScores365FixtureMapping(fixtureId, item.gameId);
+        if (isFinished) {
+          await redisCacheService.set(upsertedKey, true, 30 * 24 * 60 * 60 * 1000);
+        }
       }
     }
 
     if (toUpsert.length > 0) {
       const count = await matchCacheService.upsertFixtures(toUpsert);
-      logger.info(`[365Scores] upserted ${count} finished WC fixtures to DB`);
+      logger.info(`[365Scores] upserted ${count} WC fixtures to DB (all phases)`);
     }
   }
 

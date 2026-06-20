@@ -69,6 +69,7 @@ import {
 } from './threeSixFiveScores.service';
 import { redisCacheService } from './redis-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
+import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 
 class FootballDataCacheService {
     /** Hot in-process cache for matches-by-date (avoids Redis round-trip per request). */
@@ -1230,6 +1231,33 @@ class FootballDataCacheService {
                 select: { fullData: true, status: true },
             });
             const fullData = dbMatch?.fullData as any;
+
+            // Primary: aggregate real team stats from 365 player-level stats.
+            if (fullData?.teams) {
+                const named = await this.getCached365LineupsWithNames(fixtureId);
+                if (named.data?.length) {
+                    const aggregated = buildTeamStatisticsFrom365Players(
+                        named.data,
+                        fullData.teams,
+                    );
+                    if (hasApiStatistics(aggregated)) {
+                        const cacheEntry: MemoryCacheEntry<any> = {
+                            data: aggregated,
+                            timestamp: Date.now(),
+                            ttl: this.TTL.LIVE_MATCH,
+                        };
+                        await redisCacheService.set(
+                            `statistics:${fixtureId}`,
+                            cacheEntry,
+                            this.TTL.LIVE_MATCH,
+                        );
+                        this.statisticsCache.set(fixtureId, cacheEntry);
+                        return aggregated;
+                    }
+                }
+            }
+
+            // Fallback: events-derived stats (shots/possession not derivable here).
             // Use cached events — avoid forceRefresh to break the blocking chain.
             const events = await this.getMatchEvents(fixtureId, { forceRefresh: false });
             if (events.length > 0 && fullData?.teams && fullData?.goals) {

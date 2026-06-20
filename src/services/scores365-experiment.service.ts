@@ -592,6 +592,82 @@ async function loadBaseFixture(fixtureId: number): Promise<FixtureFromAPI | null
   return null;
 }
 
+/** 365Scores competitor (national team) crest URL. */
+function build365CompetitorLogo(competitorId?: number): string {
+  if (!competitorId) return '';
+  return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2/v3/Competitors/${competitorId}`;
+}
+
+/**
+ * Build a FixtureFromAPI base directly from a 365Scores game when no API-Football
+ * cachedFixture row exists. Teams come straight from game.homeCompetitor/awayCompetitor
+ * (so detect365TeamAlignment resolves to non-swapped), and league is forced to the WC
+ * league/season so loadWorldCupDbFixtures + persist queries pick the rows up.
+ */
+function synthesizeBaseFrom365Game(game: Scores365Game, fixtureId: number): FixtureFromAPI {
+  const cfg = getScores365ExperimentConfig();
+  const status = map365Status(game);
+  const kickoff = game.startTime ?? new Date().toISOString();
+  const home = game.homeCompetitor;
+  const away = game.awayCompetitor;
+  const homeScore = normalize365Score(home?.score);
+  const awayScore = normalize365Score(away?.score);
+  const round = game.groupName
+    ? `${game.roundName ?? ''} - ${game.groupName}`.trim()
+    : game.roundName ?? '';
+
+  return {
+    fixture: {
+      id: fixtureId,
+      referee: null,
+      timezone: 'UTC',
+      date: kickoff,
+      timestamp: Math.floor(new Date(kickoff).getTime() / 1000),
+      periods: { first: null, second: null },
+      venue: {
+        id: game.venue?.id ?? null,
+        name: game.venue?.name ?? null,
+        city: null,
+      },
+      status: {
+        long: status.long,
+        short: status.short,
+        elapsed: status.elapsed,
+      },
+    },
+    league: {
+      id: cfg.leagueId,
+      name: game.competitionDisplayName ?? 'FIFA World Cup',
+      country: 'World',
+      logo: '',
+      flag: null,
+      season: cfg.season,
+      round,
+    },
+    teams: {
+      home: {
+        id: home?.id ?? 0,
+        name: home?.name ?? 'Home',
+        logo: build365CompetitorLogo(home?.id),
+        winner: null,
+      },
+      away: {
+        id: away?.id ?? 0,
+        name: away?.name ?? 'Away',
+        logo: build365CompetitorLogo(away?.id),
+        winner: null,
+      },
+    },
+    goals: { home: homeScore, away: awayScore },
+    score: {
+      halftime: { home: null, away: null },
+      fulltime: { home: homeScore, away: awayScore },
+      extratime: { home: null, away: null },
+      penalty: { home: null, away: null },
+    },
+  };
+}
+
 export async function loadWorldCupDbFixtures(leagueId: number, season: number) {
   const ttlMs = 5 * 60_000;
   if (
@@ -1072,8 +1148,8 @@ export async function mapScores365ToApiFootballFixture(
 ): Promise<FixtureFromAPI | null> {
   const fixtureId =
     fixtureIdOverride ?? baseInput?.fixture?.id ?? getScores365ExperimentConfig().fixtureId;
-  const base = baseInput ?? (await loadBaseFixture(fixtureId));
-  if (!base) return null;
+  const base =
+    baseInput ?? (await loadBaseFixture(fixtureId)) ?? synthesizeBaseFrom365Game(game, fixtureId);
 
   const alignment = detect365TeamAlignment(game, base);
   if (!alignment) {
@@ -1164,8 +1240,7 @@ export async function getScores365ExperimentEvents(
   const game = await fetchScores365GameById(gameId, { force, language });
   if (!game) return [];
 
-  const base = await loadBaseFixture(fixtureId);
-  if (!base) return [];
+  const base = (await loadBaseFixture(fixtureId)) ?? synthesizeBaseFrom365Game(game, fixtureId);
 
   const alignment = detect365TeamAlignment(game, base);
   if (!alignment) return [];
@@ -1229,8 +1304,7 @@ export async function getScores365ExperimentBundle(
   });
   if (!game) return null;
 
-  const base = await loadBaseFixture(fixtureId);
-  if (!base) return null;
+  const base = (await loadBaseFixture(fixtureId)) ?? synthesizeBaseFrom365Game(game, fixtureId);
 
   const fixture = await mapScores365ToApiFootballFixture(game, base, fixtureId);
   if (!fixture) return null;
@@ -1308,7 +1382,6 @@ export async function getScores365MatchesForDate(
     }
 
     const dbRow = resolveDbFixtureFor365Game(game, dbRows);
-    if (!dbRow) continue;
 
     // Live matches on today: refresh from /web/game/ (fixtures list lags by ~30–60s).
     let gameForMap = game;
@@ -1317,8 +1390,13 @@ export async function getScores365MatchesForDate(
       if (fresh) gameForMap = fresh;
     }
 
-    const base = matchCacheService.convertDbMatchToApiFormat(dbRow);
-    const fixture = await mapScores365ToApiFootballFixture(gameForMap, base, dbRow.fixtureId);
+    // Build directly from 365 data when API-Football has no row (synthetic fixtureId = gameId).
+    const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
+    const fixture = await mapScores365ToApiFootballFixture(
+      gameForMap,
+      base,
+      dbRow?.fixtureId ?? game.id,
+    );
     if (fixture) mapped.push(fixture);
   }
 
