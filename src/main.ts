@@ -752,6 +752,12 @@ async function startServer() {
                         './services/scores365-experiment.service'
                     );
                     log365StoreHotfixStartup();
+                    const { syncScores365FixtureMappingsFromFixturesList } = await import(
+                        './services/scores365-experiment.service'
+                    );
+                    void syncScores365FixtureMappingsFromFixturesList().catch((err) =>
+                        logger.warn('[Scores365] fixture↔game startup sync failed', err),
+                    );
 
                     const plan = (process.env.FOOTBALL_API_PLAN || '').toLowerCase();
                     const isFreePlan = !plan || plan === 'free';

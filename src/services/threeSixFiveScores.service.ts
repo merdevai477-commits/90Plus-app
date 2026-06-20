@@ -402,7 +402,12 @@ class ThreeSixFiveScoresService {
       if (!gameResult) return { data: null, source: null };
 
       const phase = this.classifyPhase(gameResult);
-      if (phase === 'upcoming') return { data: null, source: null };
+      const hasStructuredLineups =
+        (gameResult.homeCompetitor?.lineups?.members?.length ?? 0) > 0 ||
+        (gameResult.awayCompetitor?.lineups?.members?.length ?? 0) > 0;
+      if (phase === 'upcoming' && !hasStructuredLineups) {
+        return { data: null, source: null };
+      }
 
       const homeIds = new Set(
         (gameResult.homeCompetitor?.lineups?.members ?? []).map((m) => m.id),

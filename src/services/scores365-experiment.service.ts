@@ -84,6 +84,9 @@ interface Scores365Event {
   competitorId: number;
   gameTime?: number;
   gameTimeDisplay?: string;
+  addedTime?: number;
+  order?: number;
+  num?: number;
   playerId?: number;
   isMajor?: boolean;
   eventType?: { id: number; name?: string; subTypeName?: string };
@@ -206,19 +209,53 @@ export async function ensureScores365GameMapping(fixtureId: number): Promise<num
   if (existing) return existing;
   if (!isScores365ExperimentEnabled()) return null;
 
-  const leagueId = getScores365ExperimentConfig().leagueId;
-  const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
-  if (!dbRow || dbRow.leagueId !== leagueId) return null;
+  const cfg = getScores365ExperimentConfig();
+  const dbRows = await loadWorldCupDbFixtures(cfg.leagueId, cfg.season);
+  const dbRow = dbRows.find((r) => r.fixtureId === fixtureId);
+  if (!dbRow) return null;
 
   const games = await fetchScores365WorldCupFixtures({ language: 'en' });
   for (const game of games) {
-    const matched = resolveDbFixtureFor365Game(game, [dbRow]);
+    const matched = resolveDbFixtureFor365Game(game, dbRows);
     if (matched?.fixtureId === fixtureId) {
       registerScores365FixtureMapping(fixtureId, game.id);
       return game.id;
     }
   }
   return null;
+}
+
+/**
+ * Map every WC fixture in DB to its 365 gameId via competitions=5930 fixtures feed.
+ * Events + structured lineups come from GET /web/game/?gameId=…;
+ * named lineups/photos from GET /web/athletes/games/lineups?gameId=…
+ */
+export async function syncScores365FixtureMappingsFromFixturesList(
+  options?: { force?: boolean },
+): Promise<number> {
+  if (!isScores365ExperimentEnabled()) return 0;
+
+  const cfg = getScores365ExperimentConfig();
+  const dbRows = await loadWorldCupDbFixtures(cfg.leagueId, cfg.season);
+  if (!dbRows.length) return 0;
+
+  const games = await fetchScores365WorldCupFixtures({
+    language: 'en',
+    force: options?.force === true,
+  });
+
+  let mapped = 0;
+  for (const game of games) {
+    const row = resolveDbFixtureFor365Game(game, dbRows);
+    if (!row) continue;
+    registerScores365FixtureMapping(row.fixtureId, game.id);
+    mapped += 1;
+  }
+
+  logger.info(
+    `[Scores365] fixture↔game sync: ${mapped}/${games.length} games mapped (${dbRows.length} DB fixtures)`,
+  );
+  return mapped;
 }
 
 function is365FinishedGame(game: Scores365Game): boolean {
@@ -772,9 +809,17 @@ export function mapScores365Events(
 
   const members = memberNameLookup(game);
 
-  return (game.events ?? []).map((ev) => {
+  const sortedEvents = [...(game.events ?? [])].sort((a, b) => {
+    const orderA = a.order ?? a.num ?? a.gameTime ?? 0;
+    const orderB = b.order ?? b.num ?? b.gameTime ?? 0;
+    if (orderA !== orderB) return orderA - orderB;
+    return (a.gameTime ?? 0) - (b.gameTime ?? 0);
+  });
+
+  return sortedEvents.map((ev) => {
     const player = ev.playerId ? members.get(ev.playerId) : undefined;
     const elapsed = Math.floor(ev.gameTime ?? 0);
+    const extra = ev.addedTime != null && ev.addedTime > 0 ? ev.addedTime : null;
     const typeId = ev.eventType?.id;
 
     let type = 'Var';
@@ -810,7 +855,7 @@ export function mapScores365Events(
     const team = map365CompetitorToBaseTeam(teamCompetitorId, game, base, resolvedAlignment);
 
     return {
-      time: { elapsed, extra: null },
+      time: { elapsed, extra },
       team: {
         id: team.id,
         name: team.name,
