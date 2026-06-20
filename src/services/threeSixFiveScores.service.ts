@@ -18,6 +18,18 @@ import {
 
 const BASE_URL = 'https://webws.365scores.com';
 
+/**
+ * 365Scores athlete headshot URL.
+ * Format mirrors the working Competitors logo pattern: `<transforms>/v<version>/Athletes/<id>`.
+ * The version must be the `v{imageVersion}` path segment — NOT a folder between Athletes and the id.
+ */
+function buildAthleteImageUrl(athleteId: number, imageVersion: number | null): string {
+  if (imageVersion != null) {
+    return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png/v${imageVersion}/Athletes/${athleteId}`;
+  }
+  return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png/Athletes/${athleteId}`;
+}
+
 const HEADERS: Record<string, string> = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
@@ -84,6 +96,7 @@ export interface ThreeSixFiveStandingRow {
   position: number;
   teamId: number;
   teamName: string;
+  teamLogo: string;
   gamePlayed: number;
   gamesWon: number;
   gamesEven: number;
@@ -212,7 +225,7 @@ interface StandingsPayload {
       against: number;
       ratio: number;
       points: number;
-      competitor?: { id: number; name: string };
+      competitor?: { id: number; name: string; imageVersion?: number };
     }>;
   }>;
 }
@@ -451,10 +464,7 @@ class ThreeSixFiveScoresService {
           position: m.position?.shortName ?? m.position?.name ?? null,
           formation: m.formation?.shortName ?? m.formation?.name ?? null,
           imageVersion,
-          imageUrl:
-            imageVersion != null
-              ? `https://imagecache.365scores.com/image/upload/v1/Athletes/${imageVersion}/${athleteId}`
-              : `https://imagecache.365scores.com/image/upload/f_png,w_48,h_48,c_limit,q_auto,dpr_1,d_Athletes:default.png/Athletes/${athleteId}`,
+          imageUrl: buildAthleteImageUrl(athleteId, imageVersion),
           stats: m.stats,
         };
       });
@@ -529,6 +539,9 @@ class ThreeSixFiveScoresService {
             position: row.position,
             teamId: row.competitor?.id ?? 0,
             teamName: row.competitor?.name ?? '—',
+            teamLogo: row.competitor?.id
+              ? `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2/v${row.competitor.imageVersion ?? 1}/Competitors/${row.competitor.id}`
+              : '',
             gamePlayed: row.gamePlayed,
             gamesWon: row.gamesWon,
             gamesEven: row.gamesEven,
@@ -645,10 +658,7 @@ class ThreeSixFiveScoresService {
         jerseyNumber: member.jerseyNumber ?? null,
         position: member.position?.shortName ?? member.position?.name ?? null,
         formation: member.formation?.shortName ?? member.formation?.name ?? null,
-        imageUrl:
-          imageVersion != null
-            ? `https://imagecache.365scores.com/image/upload/v1/Athletes/${imageVersion}/${aid}`
-            : null,
+        imageUrl: imageVersion != null ? buildAthleteImageUrl(aid, imageVersion) : null,
         stats: member.stats ?? [],
         chartEvents,
       };
@@ -736,10 +746,7 @@ class ThreeSixFiveScoresService {
         club: (raw.clubName as string) ?? (raw.competitorName as string),
         nationality: raw.countryName as string | undefined,
         position: (raw.positionName as string) ?? (raw.position as string),
-        imageUrl:
-          imageVersion != null
-            ? `https://imagecache.365scores.com/image/upload/v1/Athletes/${imageVersion}/${athleteId}`
-            : null,
+        imageUrl: imageVersion != null ? buildAthleteImageUrl(athleteId, imageVersion) : null,
         nextGame: raw.nextGame,
         raw,
       };

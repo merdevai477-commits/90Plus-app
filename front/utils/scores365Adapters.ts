@@ -80,6 +80,7 @@ export function map365StandingsToGroups(
     position: number;
     teamId: number;
     teamName: string;
+    teamLogo?: string;
     gamePlayed: number;
     gamesWon: number;
     gamesEven: number;
@@ -96,7 +97,7 @@ export function map365StandingsToGroups(
     const groupLabel = row.groupName ?? `Group ${row.groupNum}`;
     const standing: Standing = {
       rank: row.position,
-      team: { id: row.teamId, name: row.teamName, logo: '' },
+      team: { id: row.teamId, name: row.teamName, logo: row.teamLogo ?? '' },
       points: row.points,
       goalsDiff: row.goalsFor - row.goalsAgainst,
       group: groupLabel,

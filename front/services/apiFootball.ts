@@ -1580,6 +1580,7 @@ export const ApiFootballService = {
           position: number;
           teamId: number;
           teamName: string;
+          teamLogo?: string;
           gamePlayed: number;
           gamesWon: number;
           gamesEven: number;
