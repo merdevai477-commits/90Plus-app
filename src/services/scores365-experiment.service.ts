@@ -784,8 +784,9 @@ export function resolveDbFixtureFor365Game(
   }
 
   if (!candidates.length) {
-    logger.warn(
-      `[Scores365Experiment] no DB fixture for 365 game ${game.id} (${game.homeCompetitor?.name} vs ${game.awayCompetitor?.name}) — team/kickoff mismatch`,
+    // Expected now: callers fall back to a synthetic base built from 365 data.
+    logger.debug(
+      `[Scores365Experiment] no API-Football row for 365 game ${game.id} (${game.homeCompetitor?.name} vs ${game.awayCompetitor?.name}) — using synthetic fixture`,
     );
     return null;
   }
