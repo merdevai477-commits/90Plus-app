@@ -11,7 +11,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentFixture } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture } from '../services/scores365-experiment.service';
 
 /**
  * Football API Proxy Controller
@@ -300,14 +300,6 @@ export class FootballController {
    */
   static async getLiveFixtures(req: Request, res: Response): Promise<void> {
     try {
-      if (!footballService.isConfigured()) {
-        res.status(503).json({
-          status: 'ERROR',
-          message: 'Football API not configured',
-        });
-        return;
-      }
-
       const language = resolveAppLanguage(req);
       const redisLive = await resolveLiveFixturesForClient(language);
       if (
@@ -322,6 +314,25 @@ export class FootballController {
           cached: true,
           source: redisLive.source === 'scores365-experiment' ? 'scores365-experiment' : 'redis-sync',
           language,
+        });
+        return;
+      }
+
+      if (!footballService.isConfigured()) {
+        if (isScores365ExperimentEnabled()) {
+          res.json({
+            status: 'SUCCESS',
+            results: 0,
+            response: [],
+            cached: true,
+            source: 'scores365-experiment',
+            language,
+          });
+          return;
+        }
+        res.status(503).json({
+          status: 'ERROR',
+          message: 'Football API not configured',
         });
         return;
       }

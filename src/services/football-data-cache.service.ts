@@ -70,6 +70,10 @@ import {
 import { redisCacheService } from './redis-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
+import {
+    calendarDayBounds,
+    calendarTodayKey,
+} from '../utils/calendar-day-bounds.util';
 
 class FootballDataCacheService {
     /** Hot in-process cache for matches-by-date (avoids Redis round-trip per request). */
@@ -357,10 +361,9 @@ class FootballDataCacheService {
                 throw new Error(`Invalid date: ${dateString}`);
             }
 
-            const startOfDay = new Date(`${dateString}T00:00:00.000Z`);
-            const endOfDay = new Date(`${dateString}T23:59:59.999Z`);
+            const { start: startOfDay, end: endOfDay } = calendarDayBounds(dateString);
 
-            const todayKey = new Date().toISOString().split('T')[0];
+            const todayKey = calendarTodayKey();
             const isPastDate = dateString < todayKey;
             const isToday = dateString === todayKey;
             const cacheKey = `by_date_${dateString}`;
@@ -372,26 +375,38 @@ class FootballDataCacheService {
 
             const localData = this.tryLocalMatchesByDate(dateString, isToday, cacheKey, responseTtl);
             if (localData) {
-                return isToday ? this.mergeLiveFromRedis(localData) : localData;
+                return isToday ? this.mergeCalendarWithLiveSources(localData) : localData;
             }
 
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
             if (cached && cached.length > 0) {
                 this.storeLocalMatchesByDate(dateString, cached, responseTtl);
                 logger.debug(`📦 [${dateString}] ${cached.length} matches from shared cache`);
-                return isToday ? this.mergeLiveFromRedis(cached) : cached;
+                return isToday ? this.mergeCalendarWithLiveSources(cached) : cached;
             }
 
-            const fromDb = await this.loadMatchesFromDbForDate(
+            let fromDb = await this.loadMatchesFromDbForDate(
                 startOfDay,
                 endOfDay,
                 cacheKey,
                 dateString,
                 responseTtl,
             );
+
+            if (fromDb.length === 0 && isScores365ExperimentEnabled()) {
+                await this.ensure365CalendarDate(dateString);
+                fromDb = await this.loadMatchesFromDbForDate(
+                    startOfDay,
+                    endOfDay,
+                    cacheKey,
+                    dateString,
+                    responseTtl,
+                );
+            }
+
             if (fromDb.length > 0) {
                 if (isToday) {
-                    const merged = await this.mergeLiveFromRedis(fromDb);
+                    const merged = await this.mergeCalendarWithLiveSources(fromDb);
                     if (!isWorldCupOnlyMode() && !(await this.isTodayApiFresh(dateString))) {
                         void this.refreshMatchesByDateFromApi(dateString, cacheKey, responseTtl);
                     }
@@ -402,28 +417,32 @@ class FootballDataCacheService {
                 return fromDb;
             }
 
-            // Today with empty DB: refresh in background; never block the client on a cold API call.
+            // Today with empty DB: try 365 first, then optional API refresh in background.
             if (isToday) {
-                if (!isWorldCupOnlyMode()) {
-                    void this.fetchMatchesByDateFromApi(dateString, cacheKey, responseTtl, true);
-                    logger.warn(`📦 [${dateString}] No DB/cache rows — returning empty; API refresh started in background`);
+                if (isWorldCupOnlyMode()) {
+                    const synced = await this.syncWorldCupCalendarDateFromApi(dateString);
+                    if (synced > 0) {
+                        const seeded = this.matchesByDateLocal.get(dateString)?.data ?? [];
+                        return this.mergeCalendarWithLiveSources(seeded);
+                    }
                     return [];
                 }
-                // WC mode: self-heal via the league-scoped sync instead of skipping.
-                const synced = await this.syncWorldCupCalendarDateFromApi(dateString);
-                if (synced > 0) {
-                    const seeded = this.matchesByDateLocal.get(dateString)?.data ?? [];
-                    return this.mergeLiveFromRedis(seeded);
+                if (!isScores365ExperimentEnabled()) {
+                    void this.fetchMatchesByDateFromApi(dateString, cacheKey, responseTtl, true);
+                    logger.warn(`📦 [${dateString}] No DB/cache rows — returning empty; API refresh started in background`);
                 }
                 return [];
             }
 
             if (isWorldCupOnlyMode()) {
-                // WC mode: self-heal via the league-scoped sync instead of skipping.
                 const synced = await this.syncWorldCupCalendarDateFromApi(dateString);
                 if (synced > 0) {
                     return this.matchesByDateLocal.get(dateString)?.data ?? [];
                 }
+                return [];
+            }
+
+            if (isScores365ExperimentEnabled()) {
                 return [];
             }
 
@@ -658,7 +677,7 @@ class FootballDataCacheService {
         if (pending) {
             logger.debug(`⏳ [${dateString}] waiting for in-flight API fetch`);
             const shared = await pending;
-            return mergeLive ? this.mergeLiveFromRedis(shared) : shared;
+            return mergeLive ? this.mergeCalendarWithLiveSources(shared) : shared;
         }
 
         const fetchPromise = (async () => {
@@ -683,7 +702,7 @@ class FootballDataCacheService {
 
         this.pendingMatchesByDate.set(dateString, fetchPromise);
         const apiMatches = await fetchPromise;
-        return mergeLive ? this.mergeLiveFromRedis(apiMatches) : apiMatches;
+        return mergeLive ? this.mergeCalendarWithLiveSources(apiMatches) : apiMatches;
     }
 
     private refreshMatchesByDateFromApi(
@@ -746,6 +765,54 @@ class FootballDataCacheService {
         } catch (err) {
             logger.warn('Redis live merge failed, using API payload:', err);
             return apiMatches;
+        }
+    }
+
+    /** Redis live overlay + 365Scores synthetic live rows for today's calendar. */
+    private async mergeCalendarWithLiveSources(apiMatches: any[]): Promise<any[]> {
+        let merged = await this.mergeLiveFromRedis(apiMatches);
+        if (!isScores365ExperimentEnabled()) return merged;
+
+        try {
+            const { resolveLiveFixturesForClient } = await import('./live-fixture-cache.service');
+            const live365 = await resolveLiveFixturesForClient();
+            if (!live365.fixtures.length) return merged;
+
+            const byId = new Map<number, any>();
+            for (const m of merged) {
+                const id = m?.fixture?.id;
+                if (id != null) byId.set(id, m);
+            }
+            for (const f of live365.fixtures) {
+                const id = f?.fixture?.id;
+                if (id != null) byId.set(id, f);
+            }
+            return Array.from(byId.values()).sort(
+                (a, b) => (a?.fixture?.timestamp ?? 0) - (b?.fixture?.timestamp ?? 0),
+            );
+        } catch (err) {
+            logger.warn('365 live calendar merge failed:', err);
+            return merged;
+        }
+    }
+
+    /** On-demand 365 allscores fetch for a single calendar day (upcoming/live leagues). */
+    private async ensure365CalendarDate(dateString: string): Promise<number> {
+        if (!isScores365ExperimentEnabled()) return 0;
+        try {
+            const res = await threeSixFiveScoresService.getAllScores(
+                dateString,
+                dateString,
+                'en',
+            );
+            const count = res.data?.length ?? 0;
+            if (count > 0) {
+                logger.info(`[365Calendar] synced ${count} fixtures for ${dateString}`);
+            }
+            return count;
+        } catch (err: unknown) {
+            logger.warn(`[365Calendar] ensure failed for ${dateString}:`, (err as Error)?.message);
+            return 0;
         }
     }
 
