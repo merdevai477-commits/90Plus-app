@@ -205,6 +205,26 @@ interface FixturesPayload {
   paging?: { previousPage?: string; nextPage?: string };
 }
 
+interface Scores365CompetitionMeta {
+  id: number;
+  countryId?: number;
+  name?: string;
+}
+
+interface Scores365CountryMeta {
+  id: number;
+  name?: string;
+}
+
+interface AllScoresPayload {
+  games?: Scores365Game[];
+  competitions?: Scores365CompetitionMeta[];
+  countries?: Scores365CountryMeta[];
+}
+
+/** competitionId → resolved league name + country (for synthetic non-WC fixtures). */
+type CompetitionMetaMap = Map<number, { name?: string; country?: string }>;
+
 interface GamePayload {
   game?: Scores365Game;
 }
@@ -332,16 +352,17 @@ class ThreeSixFiveScoresService {
         `&sports=1&startDate=${encodeURIComponent(startDate)}` +
         `&endDate=${encodeURIComponent(endDate)}&showOdds=true&onlyMajorGames=true&withTop=true`;
 
-      const payload = await this.fetchJson<{ games?: Scores365Game[] }>(
+      const payload = await this.fetchJson<AllScoresPayload>(
         path,
         `allscores:${startDate}:${endDate}`,
         120_000,
       );
       if (!payload?.games?.length) return { data: null, source: null };
 
+      const competitionMeta = this.buildCompetitionMeta(payload);
       const items = payload.games.map((g) => this.toFixtureItem(g));
       await redisCacheService.set(cacheKey, items, 120_000);
-      await this.persistAllScoresFixtures(items);
+      await this.persistAllScoresFixtures(items, competitionMeta);
 
       return { data: items, source: '365scores' };
     } catch (err: unknown) {
@@ -1024,7 +1045,27 @@ class ThreeSixFiveScoresService {
    * API-Football row when present; unmatched games become synthetic fixtures with
    * a namespaced leagueId derived from the 365 competitionId.
    */
-  private async persistAllScoresFixtures(items: ThreeSixFiveFixtureItem[]): Promise<void> {
+  /** Build competitionId → { name, country } from the allscores payload lookups. */
+  private buildCompetitionMeta(payload: AllScoresPayload): CompetitionMetaMap {
+    const countriesById = new Map<number, string>();
+    for (const c of payload.countries ?? []) {
+      if (c.id != null && c.name) countriesById.set(c.id, c.name);
+    }
+    const meta: CompetitionMetaMap = new Map();
+    for (const comp of payload.competitions ?? []) {
+      if (comp.id == null) continue;
+      meta.set(comp.id, {
+        name: comp.name,
+        country: comp.countryId != null ? countriesById.get(comp.countryId) : undefined,
+      });
+    }
+    return meta;
+  }
+
+  private async persistAllScoresFixtures(
+    items: ThreeSixFiveFixtureItem[],
+    competitionMeta?: CompetitionMetaMap,
+  ): Promise<void> {
     if (!items.length) return;
 
     // Date window covering all kickoffs ±3h, so resolveDbRow can match existing
@@ -1080,13 +1121,15 @@ class ThreeSixFiveScoresService {
           continue;
         }
         const kickoff = item.raw.startTime ? new Date(item.raw.startTime) : new Date();
+        const meta = competitionMeta?.get(competitionId);
         base = synthesizeBaseFrom365Game(
           item.raw as Parameters<typeof synthesizeBaseFrom365Game>[0],
           item.gameId,
           {
             leagueId: scores365CompetitionToLeagueId(competitionId),
             season: kickoff.getUTCFullYear(),
-            leagueName: item.raw.competitionDisplayName,
+            leagueName: meta?.name ?? item.raw.competitionDisplayName,
+            country: meta?.country,
           },
         );
         fixtureId = item.gameId;
