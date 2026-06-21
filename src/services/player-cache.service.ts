@@ -293,6 +293,60 @@ class PlayerCacheService {
         }
     }
 
+    /** Persist 365 lineup athletes for DB-backed search (no live 365 player listing). */
+    async upsertScores365LineupPlayers(
+        players: Array<{
+            athleteId: number;
+            name: string;
+            photo?: string | null;
+            position?: string | null;
+            teamId?: number;
+            teamName?: string;
+            teamLogo?: string | null;
+            fixtureId: number;
+        }>,
+    ): Promise<void> {
+        for (const p of players) {
+            if (!p.athleteId || !p.name?.trim()) continue;
+            const fullData = {
+                source: '365scores',
+                lastFixtureId: p.fixtureId,
+                athleteId: p.athleteId,
+                name: p.name,
+                photo: p.photo ?? null,
+                teamId: p.teamId ?? null,
+                teamName: p.teamName ?? null,
+            };
+            try {
+                await prisma.cachedPlayer.upsert({
+                    where: { playerId: p.athleteId },
+                    update: {
+                        name: p.name,
+                        photo: p.photo ?? undefined,
+                        teamId: p.teamId,
+                        teamName: p.teamName,
+                        teamLogo: p.teamLogo ?? undefined,
+                        position: p.position ?? undefined,
+                        fullData,
+                        updatedAt: new Date(),
+                    },
+                    create: {
+                        playerId: p.athleteId,
+                        name: p.name,
+                        photo: p.photo ?? null,
+                        teamId: p.teamId,
+                        teamName: p.teamName,
+                        teamLogo: p.teamLogo ?? null,
+                        position: p.position ?? null,
+                        fullData,
+                    },
+                });
+            } catch (error) {
+                logger.debug(`Failed to cache 365 lineup player ${p.athleteId}:`, (error as Error)?.message);
+            }
+        }
+    }
+
     /**
      * Get team from cache or API
      */

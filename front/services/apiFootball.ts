@@ -1561,6 +1561,62 @@ export const ApiFootballService = {
     }
   },
 
+  async get365PlayerMatchReport(
+    fixtureId: number,
+    athleteId: number,
+  ): Promise<{
+    athleteId: number;
+    gameId: number;
+    name: string;
+    shortName: string;
+    jerseyNumber: number | null;
+    position: string | null;
+    formation: string | null;
+    imageUrl: string | null;
+    stats: unknown[];
+    chartEvents: unknown[];
+  } | null> {
+    try {
+      const baseUrl = getApiUrl();
+      const url = `${baseUrl}/football/cached/365/fixture/${fixtureId}/player/${athleteId}/report`;
+      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
+      if (!response.ok) return null;
+      const json = (await response.json()) as {
+        response?: {
+          athleteId: number;
+          gameId: number;
+          name: string;
+          shortName: string;
+          jerseyNumber: number | null;
+          position: string | null;
+          formation: string | null;
+          imageUrl: string | null;
+          stats: unknown[];
+          chartEvents: unknown[];
+        };
+      };
+      return json.response ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * 365Scores — basic profile enrichment (athleteId must come from lineup/DB).
+   */
+  async get365PlayerInfo(athleteId: number): Promise<Record<string, unknown> | null> {
+    try {
+      const baseUrl = getApiUrl();
+      const url = `${baseUrl}/football/cached/365/player/${athleteId}/info`;
+      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
+      if (!response.ok) return null;
+      const json = (await response.json()) as { response?: Record<string, unknown> };
+      return json.response ?? null;
+    } catch {
+      return null;
+    }
+  },
+
   /**
    * 365Scores — World Cup group standings (all groups).
    */

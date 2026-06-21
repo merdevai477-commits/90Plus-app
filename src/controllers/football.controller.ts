@@ -2343,6 +2343,7 @@ export class FootballController {
 
   /**
    * GET /api/football/cached/365/player/:athleteId/shot-chart — career shot map (365Scores).
+   * Enrichment only: athleteId must already be known from a lineup or CachedPlayer — not cold discovery.
    */
   static async getCached365PlayerShotChart(req: Request, res: Response): Promise<void> {
     try {
@@ -2377,6 +2378,7 @@ export class FootballController {
 
   /**
    * GET /api/football/cached/365/player/:athleteId/info — basic profile + next game (365Scores).
+   * Enrichment only: athleteId must already be known from a lineup or CachedPlayer — not cold discovery.
    */
   static async getCached365PlayerInfo(req: Request, res: Response): Promise<void> {
     try {

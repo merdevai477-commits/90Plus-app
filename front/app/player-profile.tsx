@@ -101,6 +101,33 @@ interface PlayerParams {
     teamId?: string;
     season?: string;
     fresh?: string;
+    fixtureId?: string;
+    dataSource?: '365' | 'api' | string;
+}
+
+interface MatchReport365 {
+    athleteId: number;
+    gameId: number;
+    name: string;
+    shortName: string;
+    jerseyNumber: number | null;
+    position: string | null;
+    formation: string | null;
+    imageUrl: string | null;
+    stats: unknown[];
+    chartEvents: unknown[];
+}
+
+function format365StatEntry(raw: unknown): { label: string; value: string } | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const o = raw as Record<string, unknown>;
+    const label =
+        (typeof o.name === 'string' && o.name) ||
+        (typeof o.typeName === 'string' && o.typeName) ||
+        (o.type != null ? `#${String(o.type)}` : null);
+    const value = o.value != null ? String(o.value) : null;
+    if (!label && !value) return null;
+    return { label: label ?? 'Stat', value: value ?? '—' };
 }
 
 interface PlayerData {
@@ -253,14 +280,19 @@ function PlayerHeroPhoto({
     name,
     position,
     colors,
+    photoSource,
 }: {
     playerId: number;
     photo?: string | null;
     name: string;
     position: string | null;
     colors: readonly [string, string, ...string[]];
+    photoSource?: '365' | 'api';
 }) {
-    const candidates = useMemo(() => playerPhotoCandidates(playerId, photo), [playerId, photo]);
+    const candidates = useMemo(
+        () => playerPhotoCandidates(playerId, photo, photoSource ? { source: photoSource } : undefined),
+        [playerId, photo, photoSource],
+    );
     const [uriIndex, setUriIndex] = useState(0);
 
     useEffect(() => {
@@ -505,6 +537,8 @@ export default function PlayerProfileScreen() {
     const playerId = parseInt(params.id || '0');
     const contextTeamId = params.teamId ? parseInt(params.teamId, 10) : undefined;
     const contextSeason = params.season ? parseInt(params.season, 10) : undefined;
+    const contextFixtureId = params.fixtureId ? parseInt(params.fixtureId, 10) : undefined;
+    const is365Source = params.dataSource === '365';
     const seasonYear = contextSeason ?? getFootballSeasonYear();
     const forceFreshStats = params.fresh === '1' || params.fresh === 'true';
     const routeShell = useMemo(
@@ -518,6 +552,7 @@ export default function PlayerProfileScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loadingTransfers, setLoadingTransfers] = useState(false);
+    const [matchReport365, setMatchReport365] = useState<MatchReport365 | null>(null);
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
@@ -531,7 +566,11 @@ export default function PlayerProfileScreen() {
 
     useEffect(() => {
         loadPlayerData();
-        loadPlayerTransfers();
+        if (!is365Source) {
+            loadPlayerTransfers();
+        } else {
+            setTransfers([]);
+        }
 
         // Entrance animations
         Animated.parallel([
@@ -547,9 +586,56 @@ export default function PlayerProfileScreen() {
                 useNativeDriver: true,
             }),
         ]).start();
-    }, [playerId, contextSeason, contextTeamId, seasonYear, forceFreshStats]);
+    }, [playerId, contextSeason, contextTeamId, seasonYear, forceFreshStats, is365Source, contextFixtureId]);
+
+    const load365PlayerData = async () => {
+        if (!playerId || !contextFixtureId) {
+            setError(t.playerProfile.playerNotFound);
+            setLoading(false);
+            return;
+        }
+
+        try {
+            setLoading(true);
+            setError(null);
+            const report = await ApiFootballService.get365PlayerMatchReport(contextFixtureId, playerId);
+            if (!report) {
+                if (!player) {
+                    setError(t.playerProfile.playerNotFound);
+                }
+                setMatchReport365(null);
+                return;
+            }
+
+            setMatchReport365(report);
+            const shell = buildShellFromParams(params, playerId, contextTeamId);
+            if (shell) {
+                shell.player.photo = report.imageUrl ?? params.photo ?? shell.player.photo;
+                if (report.position) {
+                    shell.statistics = shell.statistics.map((s) => ({
+                        ...s,
+                        games: { ...s.games, position: report.position },
+                    }));
+                }
+                setPlayer(shell);
+            }
+        } catch (err: unknown) {
+            logger.error('Failed to load 365 player report:', err);
+            if (!player) {
+                setError((err as Error)?.message || t.playerProfile.loadFailed);
+            }
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
 
     const loadPlayerData = async (forceRefresh = false) => {
+        if (is365Source) {
+            await load365PlayerData();
+            return;
+        }
+
         if (!playerId) {
             setError(t.playerProfile.invalidPlayerId ?? 'Invalid player ID');
             setLoading(false);
@@ -650,7 +736,11 @@ export default function PlayerProfileScreen() {
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await Promise.all([loadPlayerData(true), loadPlayerTransfers()]);
+        await loadPlayerData(true);
+        if (!is365Source) {
+            await loadPlayerTransfers(true);
+        }
+        setRefreshing(false);
     };
 
     const addToRecentlyViewed = async (player: any) => {
@@ -742,7 +832,7 @@ export default function PlayerProfileScreen() {
         [displayPlayer, seasonYear, contextTeamId],
     );
     const seasonTotals = useMemo(() => sumSeasonTotals(leagueStats), [leagueStats]);
-    const primaryPosition = leagueStats[0]?.games?.position ?? null;
+    const primaryPosition = matchReport365?.position ?? leagueStats[0]?.games?.position ?? null;
     const primaryTeam = leagueStats[0]?.team ?? (params.teamName ? { id: contextTeamId ?? 0, name: params.teamName, logo: params.teamLogo || '' } : null);
     const teamColors = useMemo(
         () => getTeamColors(primaryTeam?.name || params.teamName || ''),
@@ -822,6 +912,7 @@ export default function PlayerProfileScreen() {
                                 name={heroPlayer.name}
                                 position={primaryPosition}
                                 colors={teamColors}
+                                photoSource={is365Source ? '365' : 'api'}
                             />
 
                             <View style={styles.heroInfo}>
@@ -863,7 +954,7 @@ export default function PlayerProfileScreen() {
                                     </View>
                                 )}
                                 <Text style={styles.seasonBadge}>
-                                    {pp.seasonStats} {seasonYear}/{seasonYear + 1}
+                                    {is365Source ? 'Match stats' : `${pp.seasonStats} ${seasonYear}/${seasonYear + 1}`}
                                 </Text>
                             </View>
                         </View>
@@ -871,6 +962,32 @@ export default function PlayerProfileScreen() {
                 </LinearGradient>
 
                 <Animated.View style={[styles.body, { opacity: fadeAnim }]}>
+                    {is365Source && matchReport365 && (
+                        <View style={styles.infoSection}>
+                            <Text style={styles.sectionTitle}>Match stats</Text>
+                            <View style={styles.infoCardContainer}>
+                                {matchReport365.jerseyNumber != null && (
+                                    <Text style={styles.infoValue}>
+                                        #{matchReport365.jerseyNumber}
+                                        {matchReport365.formation ? ` · ${matchReport365.formation}` : ''}
+                                    </Text>
+                                )}
+                                {(matchReport365.stats ?? [])
+                                    .map(format365StatEntry)
+                                    .filter((row): row is { label: string; value: string } => row != null)
+                                    .map((row) => (
+                                        <View key={`${row.label}-${row.value}`} style={styles.matchStatRow}>
+                                            <Text style={styles.infoLabel}>{row.label}</Text>
+                                            <Text style={styles.infoValue}>{row.value}</Text>
+                                        </View>
+                                    ))}
+                                {(matchReport365.stats ?? []).length === 0 && (
+                                    <Text style={styles.emptyText}>{pp.noCompetitionStats}</Text>
+                                )}
+                            </View>
+                        </View>
+                    )}
+
                     {/* Season total summary */}
                     {leagueStats.length > 0 && (
                         <View style={styles.totalCard}>
@@ -889,6 +1006,7 @@ export default function PlayerProfileScreen() {
                     )}
 
                     {/* Per-league stats */}
+                    {!is365Source && (
                     <View style={styles.infoSection}>
                         <Text style={styles.sectionTitle}>{pp.competitions}</Text>
                         {leagueStats.length === 0 ? (
@@ -908,6 +1026,7 @@ export default function PlayerProfileScreen() {
                             ))
                         )}
                     </View>
+                    )}
 
                     {/* Personal info */}
                     <View style={styles.infoSection}>
@@ -1226,6 +1345,14 @@ const styles = StyleSheet.create({
         padding: 16,
         borderWidth: 1,
         borderColor: ProfileTheme.colors.border,
+    },
+    matchStatRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 8,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: ProfileTheme.colors.border,
     },
     infoGrid: {
         flexDirection: 'row',

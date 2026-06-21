@@ -238,21 +238,35 @@ export function teamLogoUrl(teamId: number, logo?: string | null): string {
   return '';
 }
 
-/** Ordered photo candidates — API url first, then canonical png/jpg. */
-export function playerPhotoCandidates(playerId: number, photo?: string | null): string[] {
+import { buildScores365AthletePhotoUrl, isScores365ImageUrl } from './scores365AthletePhoto';
+
+/** Ordered photo candidates — API url first, then canonical png/jpg or 365 NationalTeam. */
+export function playerPhotoCandidates(
+  playerId: number,
+  photo?: string | null,
+  options?: { source?: '365' | 'api' },
+): string[] {
   const urls: string[] = [];
   if (photo && photo.trim() && !photo.includes('placeholder')) {
     urls.push(photo.trim());
   }
   if (playerId > 0) {
-    urls.push(`https://media.api-sports.io/football/players/${playerId}.png`);
-    urls.push(`https://media.api-sports.io/football/players/${playerId}.jpg`);
+    if (options?.source === '365' || isScores365ImageUrl(photo)) {
+      urls.push(buildScores365AthletePhotoUrl(playerId, 80));
+    } else {
+      urls.push(`https://media.api-sports.io/football/players/${playerId}.png`);
+      urls.push(`https://media.api-sports.io/football/players/${playerId}.jpg`);
+    }
   }
   return [...new Set(urls)];
 }
 
-export function playerPhotoUrl(playerId: number, photo?: string | null): string {
-  return playerPhotoCandidates(playerId, photo)[0] ?? '';
+export function playerPhotoUrl(
+  playerId: number,
+  photo?: string | null,
+  options?: { source?: '365' | 'api' },
+): string {
+  return playerPhotoCandidates(playerId, photo, options)[0] ?? '';
 }
 
 export function normalizeStatRow(stat: PlayerStatRow): PlayerStatRow {

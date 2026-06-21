@@ -19,20 +19,9 @@ import {
   SCORES365_LEAGUE_ID_OFFSET,
   synthesizeBaseFrom365Game,
 } from './scores365-experiment.service';
+import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
 
 const BASE_URL = 'https://webws.365scores.com';
-
-/**
- * 365Scores athlete headshot URL.
- * Format mirrors the working Competitors logo pattern: `<transforms>/v<version>/Athletes/<id>`.
- * The version must be the `v{imageVersion}` path segment — NOT a folder between Athletes and the id.
- */
-function buildAthleteImageUrl(athleteId: number, imageVersion: number | null): string {
-  if (imageVersion != null) {
-    return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png/v${imageVersion}/Athletes/${athleteId}`;
-  }
-  return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png/Athletes/${athleteId}`;
-}
 
 /**
  * 365Scores competition (league) logo URL.
@@ -508,7 +497,7 @@ class ThreeSixFiveScoresService {
           position: m.position?.shortName ?? m.position?.name ?? null,
           formation: m.formation?.shortName ?? m.formation?.name ?? null,
           imageVersion,
-          imageUrl: buildAthleteImageUrl(athleteId, imageVersion),
+          imageUrl: buildScores365AthletePhotoUrl(athleteId, 68),
           stats: m.stats,
         };
       });
@@ -654,6 +643,8 @@ class ThreeSixFiveScoresService {
   }
 
   // ─── 6. Player match report ──────────────────────────────────────────────
+  // 365Scores has no standalone player search/listing. athleteId must come from a
+  // game lineup (/web/athletes/games/lineups?gameId=) or our CachedPlayer DB.
 
   async getPlayerMatchReport(
     athleteId: number,
@@ -702,7 +693,7 @@ class ThreeSixFiveScoresService {
         jerseyNumber: member.jerseyNumber ?? null,
         position: member.position?.shortName ?? member.position?.name ?? null,
         formation: member.formation?.shortName ?? member.formation?.name ?? null,
-        imageUrl: imageVersion != null ? buildAthleteImageUrl(aid, imageVersion) : null,
+        imageUrl: buildScores365AthletePhotoUrl(aid, 68),
         stats: member.stats ?? [],
         chartEvents,
       };
@@ -782,7 +773,6 @@ class ThreeSixFiveScoresService {
       const raw = payload?.athletes?.[0];
       if (!raw) return { data: null, source: null };
 
-      const imageVersion = raw.imageVersion as number | undefined;
       const data: ThreeSixFivePlayerBasicInfo = {
         athleteId,
         name: (raw.name as string) ?? '—',
@@ -790,7 +780,7 @@ class ThreeSixFiveScoresService {
         club: (raw.clubName as string) ?? (raw.competitorName as string),
         nationality: raw.countryName as string | undefined,
         position: (raw.positionName as string) ?? (raw.position as string),
-        imageUrl: imageVersion != null ? buildAthleteImageUrl(athleteId, imageVersion) : null,
+        imageUrl: buildScores365AthletePhotoUrl(athleteId, 68),
         nextGame: raw.nextGame,
         raw,
       };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -106,6 +106,23 @@ const MatchDetailsScreen = () => {
   const homeTeamLogo = fixture?.teams?.home?.logo ?? '';
   const awayTeamLogo = fixture?.teams?.away?.logo ?? '';
   const leagueName = fixture?.league?.name ?? '';
+
+  const is365Fixture = useMemo(() => {
+    const leagueId = fixture?.league?.id ?? 0;
+    return (
+      leagueId === WC_LEAGUE_ID ||
+      leagueId >= SCORES365_LEAGUE_ID_OFFSET ||
+      Boolean((fixture as { _experiment?: string; _scores365GameId?: number } | null)?._experiment === 'scores365') ||
+      Boolean((fixture as { _scores365GameId?: number } | null)?._scores365GameId)
+    );
+  }, [fixture]);
+
+  const resolveLineupPlayerPhoto = useCallback(
+    (playerId: number, photo?: string | null) =>
+      playerPhotoUrl(playerId, photo, is365Fixture ? { source: '365' } : undefined),
+    [is365Fixture],
+  );
+
   const kickoffDate = fixture?.fixture?.date
     ? new Date(fixture.fixture.date).toISOString().split('T')[0]
     : '';
@@ -640,16 +657,18 @@ const MatchDetailsScreen = () => {
         params: {
           id: String(player.id),
           name: player.name,
-          photo: playerPhotoUrl(player.id, player.photo),
+          photo: resolveLineupPlayerPhoto(player.id, player.photo),
           teamName: lineupTeam.name,
           teamLogo: lineupTeam.logo,
           teamId: String(lineupTeam.id),
           season: fixture?.league?.season != null ? String(fixture.league.season) : '',
+          fixtureId: fixtureId > 0 ? String(fixtureId) : '',
+          dataSource: is365Fixture ? '365' : 'api',
           fresh: '1',
         },
       } as any);
     },
-    [router, fixture?.league?.season],
+    [router, fixture?.league?.season, fixtureId, is365Fixture, resolveLineupPlayerPhoto],
   );
 
   const parseFormation = (formation: string | null): number[] => {
@@ -675,7 +694,7 @@ const MatchDetailsScreen = () => {
 
   // Player Card Component with proper player photo
   const PlayerCard = ({ player, number, position }: { player: any; number: number; position: string | null }) => {
-    const playerPhoto = player.photo || `https://media.api-sports.io/football/players/${player.id}.png`;
+    const playerPhoto = resolveLineupPlayerPhoto(player.id, player.photo);
     return (
       <View style={styles.playerCard}>
         <View style={styles.playerNumber}>
@@ -877,7 +896,7 @@ const MatchDetailsScreen = () => {
                 grid: item.player.grid,
                 fieldLine: item.player.fieldLine,
                 fieldSide: item.player.fieldSide,
-                photo: item.player.photo ?? undefined,
+                photo: resolveLineupPlayerPhoto(item.player.id, item.player.photo) || undefined,
               })),
             );
 
@@ -933,7 +952,7 @@ const MatchDetailsScreen = () => {
                           }}
                         >
                           <ExpoImage
-                            source={{ uri: item.player.photo || `https://media.api-sports.io/football/players/${item.player.id}.png` }}
+                            source={{ uri: resolveLineupPlayerPhoto(item.player.id, item.player.photo) }}
                             style={{ width: 28, height: 28, borderRadius: 14 }}
                             contentFit="cover"
                             cachePolicy="memory-disk"
