@@ -14,6 +14,8 @@ import {
   mapScores365ToApiFootballFixture,
   registerScores365FixtureMapping,
   resolveScores365LangId,
+  scores365CompetitionToLeagueId,
+  synthesizeBaseFrom365Game,
 } from './scores365-experiment.service';
 
 const BASE_URL = 'https://webws.365scores.com';
@@ -155,6 +157,7 @@ interface Scores365Game {
   id: number;
   sportId?: number;
   competitionId?: number;
+  competitionDisplayName?: string;
   statusId?: number;
   statusGroup?: number;
   statusText?: string;
@@ -338,7 +341,7 @@ class ThreeSixFiveScoresService {
 
       const items = payload.games.map((g) => this.toFixtureItem(g));
       await redisCacheService.set(cacheKey, items, 120_000);
-      await this.persistFinishedFixtures(items);
+      await this.persistAllScoresFixtures(items);
 
       return { data: items, source: '365scores' };
     } catch (err: unknown) {
@@ -1011,6 +1014,105 @@ class ThreeSixFiveScoresService {
     if (toUpsert.length > 0) {
       const count = await matchCacheService.upsertFixtures(toUpsert);
       logger.info(`[365Scores] upserted ${count} WC fixtures to DB (all phases)`);
+    }
+  }
+
+  /**
+   * League-agnostic persistence for the /allscores/ feed (non-WC competitions).
+   * Unlike persistFinishedFixtures (WC-scoped), candidate DB rows are loaded by a
+   * date window across ALL leagues so resolveDbRow can reuse an existing
+   * API-Football row when present; unmatched games become synthetic fixtures with
+   * a namespaced leagueId derived from the 365 competitionId.
+   */
+  private async persistAllScoresFixtures(items: ThreeSixFiveFixtureItem[]): Promise<void> {
+    if (!items.length) return;
+
+    // Date window covering all kickoffs ±3h, so resolveDbRow can match existing
+    // API-Football rows without a leagueId/season restriction.
+    let minMs = Infinity;
+    let maxMs = -Infinity;
+    for (const item of items) {
+      const ms = item.raw.startTime ? new Date(item.raw.startTime).getTime() : NaN;
+      if (Number.isNaN(ms)) continue;
+      if (ms < minMs) minMs = ms;
+      if (ms > maxMs) maxMs = ms;
+    }
+    if (!Number.isFinite(minMs) || !Number.isFinite(maxMs)) return;
+
+    const WINDOW_MS = 3 * 60 * 60 * 1000;
+    const dbRows = await prisma.cachedFixture.findMany({
+      where: {
+        matchDate: {
+          gte: new Date(minMs - WINDOW_MS),
+          lte: new Date(maxMs + WINDOW_MS),
+        },
+      },
+      orderBy: { matchDate: 'asc' },
+    });
+
+    const toUpsert: FixtureFromAPI[] = [];
+    const competitions = new Set<number>();
+
+    for (const item of items) {
+      // Finished fixtures are immutable — upsert once, then skip on later ticks.
+      // Upcoming/live fixtures change (score, status) — refresh every tick.
+      const isFinished = item.phase === 'finished';
+      const upsertedKey = `${FINISHED_UPSERTED_KEY_PREFIX}${item.gameId}`;
+      if (isFinished) {
+        const already = await redisCacheService.get<boolean>(upsertedKey);
+        if (already) continue;
+      }
+
+      const dbRow = this.resolveDbRow(item.raw, dbRows);
+
+      let base: FixtureFromAPI | null;
+      let fixtureId: number;
+      if (dbRow) {
+        // Reuse the existing API-Football row (keeps its real leagueId).
+        base = matchCacheService.convertDbMatchToApiFormat(dbRow);
+        fixtureId = dbRow.fixtureId;
+      } else {
+        const competitionId = item.competitionId ?? item.raw.competitionId;
+        if (!competitionId) {
+          logger.debug(
+            `[OtherLeagues-365] game ${item.gameId}: no competitionId — skipping synthetic build`,
+          );
+          continue;
+        }
+        const kickoff = item.raw.startTime ? new Date(item.raw.startTime) : new Date();
+        base = synthesizeBaseFrom365Game(
+          item.raw as Parameters<typeof synthesizeBaseFrom365Game>[0],
+          item.gameId,
+          {
+            leagueId: scores365CompetitionToLeagueId(competitionId),
+            season: kickoff.getUTCFullYear(),
+            leagueName: item.raw.competitionDisplayName,
+          },
+        );
+        fixtureId = item.gameId;
+      }
+
+      const mapped = await mapScores365ToApiFootballFixture(
+        item.raw as Parameters<typeof mapScores365ToApiFootballFixture>[0],
+        base,
+        fixtureId,
+      );
+      if (mapped) {
+        toUpsert.push(mapped);
+        registerScores365FixtureMapping(fixtureId, item.gameId);
+        const compId = item.competitionId ?? item.raw.competitionId;
+        if (compId) competitions.add(compId);
+        if (isFinished) {
+          await redisCacheService.set(upsertedKey, true, 30 * 24 * 60 * 60 * 1000);
+        }
+      }
+    }
+
+    if (toUpsert.length > 0) {
+      const count = await matchCacheService.upsertFixtures(toUpsert);
+      logger.info(
+        `[OtherLeagues-365] upserted ${count} fixtures across ${competitions.size} competitions`,
+      );
     }
   }
 

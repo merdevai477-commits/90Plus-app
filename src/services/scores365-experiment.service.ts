@@ -599,12 +599,36 @@ function build365CompetitorLogo(competitorId?: number): string {
 }
 
 /**
+ * Offset applied to a 365Scores competitionId to derive a synthetic `leagueId`
+ * for non-WC leagues. Keeps 365's ID space from colliding with API-Football
+ * leagueIds (which are well below this offset) while staying internally
+ * consistent for calendar grouping and per-league endpoints.
+ */
+export const SCORES365_LEAGUE_ID_OFFSET = 7_000_000;
+
+export function scores365CompetitionToLeagueId(competitionId: number): number {
+  return SCORES365_LEAGUE_ID_OFFSET + competitionId;
+}
+
+/** Optional league overrides for non-WC synthetic fixtures (defaults to WC). */
+export interface SynthesizeBaseOverrides {
+  leagueId?: number;
+  season?: number;
+  leagueName?: string;
+  country?: string;
+}
+
+/**
  * Build a FixtureFromAPI base directly from a 365Scores game when no API-Football
  * cachedFixture row exists. Teams come straight from game.homeCompetitor/awayCompetitor
- * (so detect365TeamAlignment resolves to non-swapped), and league is forced to the WC
- * league/season so loadWorldCupDbFixtures + persist queries pick the rows up.
+ * (so detect365TeamAlignment resolves to non-swapped). League defaults to the WC
+ * league/season; pass `overrides` to synthesize non-WC leagues (allscores path).
  */
-function synthesizeBaseFrom365Game(game: Scores365Game, fixtureId: number): FixtureFromAPI {
+export function synthesizeBaseFrom365Game(
+  game: Scores365Game,
+  fixtureId: number,
+  overrides?: SynthesizeBaseOverrides,
+): FixtureFromAPI {
   const cfg = getScores365ExperimentConfig();
   const status = map365Status(game);
   const kickoff = game.startTime ?? new Date().toISOString();
@@ -636,12 +660,12 @@ function synthesizeBaseFrom365Game(game: Scores365Game, fixtureId: number): Fixt
       },
     },
     league: {
-      id: cfg.leagueId,
-      name: game.competitionDisplayName ?? 'FIFA World Cup',
-      country: 'World',
+      id: overrides?.leagueId ?? cfg.leagueId,
+      name: overrides?.leagueName ?? game.competitionDisplayName ?? 'FIFA World Cup',
+      country: overrides?.country ?? 'World',
       logo: '',
       flag: null,
-      season: cfg.season,
+      season: overrides?.season ?? cfg.season,
       round,
     },
     teams: {

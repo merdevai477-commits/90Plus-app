@@ -16,6 +16,7 @@ import cron from 'node-cron';
 import { logger } from '../utils/logger';
 import { isWorldCupOnlyMode } from '../config/world-cup-only-mode.config';
 import { footballDataCacheService } from '../services/football-data-cache.service';
+import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 import { getRedisClient } from '../lib/redis';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -33,7 +34,14 @@ function isEnabled(): boolean {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-const isRunning = { calendar: false, live: false };
+const isRunning = { calendar: false, live: false, allScores: false };
+
+/** Local YYYY-MM-DD offset by `days` from today. */
+function dateKeyOffset(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
 
 // ─── Calendar sync tick ───────────────────────────────────────────────────────
 
@@ -116,6 +124,42 @@ async function runLiveRefreshTick(): Promise<void> {
   }
 }
 
+// ─── All-scores (365Scores, all non-WC leagues) sync tick ──────────────────────
+
+/**
+ * Sync every non-WC competition from 365Scores' /allscores/ feed in a single call.
+ * Builds league-agnostic synthetic cachedFixture rows for leagues API-Football
+ * does not cover. Independent of the WC worker; disabled in WORLD_CUP_ONLY_MODE
+ * via isEnabled().
+ */
+async function runAllScoresSyncTick(): Promise<void> {
+  if (!isEnabled()) return;
+  if (isRunning.allScores) {
+    logger.debug(`[${WORKER}][allscores] previous tick still running — skipping`);
+    return;
+  }
+  isRunning.allScores = true;
+
+  try {
+    const start = dateKeyOffset(-1); // yesterday (catch late-finished results)
+    const end = dateKeyOffset(3); // today + 3 days
+    const res = await threeSixFiveScoresService.getAllScores(start, end, 'en');
+    const items = res.data ?? [];
+    const competitions = new Set<number>();
+    for (const item of items) {
+      if (item.competitionId) competitions.add(item.competitionId);
+    }
+    logger.info(
+      `[OtherLeagues-365] ${items.length} fixtures across ${competitions.size} competitions synced for ${start}..${end}`,
+      { worker: 'other-leagues-sync', start, end, fixtures: items.length, competitions: competitions.size },
+    );
+  } catch (err: unknown) {
+    logger.error(`[${WORKER}][allscores] tick fatal (recovered):`, (err as Error)?.message);
+  } finally {
+    isRunning.allScores = false;
+  }
+}
+
 // ─── Registration ─────────────────────────────────────────────────────────────
 
 /**
@@ -131,6 +175,7 @@ export function startOtherLeaguesSyncWorker(): void {
 
   const calendarCron = process.env.OTHER_LEAGUES_SYNC_CRON?.trim() || '*/5 * * * *';
   const liveCron = process.env.OTHER_LEAGUES_LIVE_CRON?.trim() || '* * * * *';
+  const allScoresCron = process.env.OTHER_LEAGUES_ALLSCORES_CRON?.trim() || '*/10 * * * *';
 
   // Calendar refresh every N minutes
   cron.schedule(calendarCron, () => {
@@ -142,7 +187,15 @@ export function startOtherLeaguesSyncWorker(): void {
     void runLiveRefreshTick();
   });
 
+  // All non-WC leagues from 365Scores /allscores/ — single large request per tick
+  cron.schedule(allScoresCron, () => {
+    void runAllScoresSyncTick();
+  });
+
+  // Kick off an immediate allscores pass on startup (don't wait for first cron).
+  void runAllScoresSyncTick();
+
   logger.info(
-    `[${WORKER}] started — calendar cron="${calendarCron}", live cron="${liveCron}"`,
+    `[${WORKER}] started — calendar cron="${calendarCron}", live cron="${liveCron}", allscores cron="${allScoresCron}"`,
   );
 }
