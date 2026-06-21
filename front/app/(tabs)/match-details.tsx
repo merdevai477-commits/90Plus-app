@@ -649,15 +649,17 @@ const MatchDetailsScreen = () => {
 
   const openPlayerProfile = useCallback(
     (
-      player: { id: number; name: string; photo?: string | null },
+      player: { id: number; name: string; photo?: string | null; athleteId?: number },
       lineupTeam: { id: number; name: string; logo: string },
     ) => {
+      const athleteId = player.athleteId ?? player.id;
       router.push({
         pathname: '/player-profile' as any,
         params: {
-          id: String(player.id),
+          id: String(athleteId),
+          athleteId: String(athleteId),
           name: player.name,
-          photo: resolveLineupPlayerPhoto(player.id, player.photo),
+          photo: resolveLineupPlayerPhoto(athleteId, player.photo),
           teamName: lineupTeam.name,
           teamLogo: lineupTeam.logo,
           teamId: String(lineupTeam.id),
@@ -889,14 +891,18 @@ const MatchDetailsScreen = () => {
 
             const fieldPlayers = sortPlayersByGrid(
               startingXI.map((item: any) => ({
-                id: item.player.id,
+                id: item.player.athleteId ?? item.player.id,
+                athleteId: item.player.athleteId ?? item.player.id,
                 name: item.player.name,
                 number: item.player.number,
                 pos: item.player.pos,
                 grid: item.player.grid,
                 fieldLine: item.player.fieldLine,
                 fieldSide: item.player.fieldSide,
-                photo: resolveLineupPlayerPhoto(item.player.id, item.player.photo) || undefined,
+                photo: resolveLineupPlayerPhoto(
+                  item.player.athleteId ?? item.player.id,
+                  item.player.photo,
+                ) || undefined,
               })),
             );
 
@@ -943,7 +949,8 @@ const MatchDetailsScreen = () => {
                           onPress={() => {
                             openPlayerProfile(
                               {
-                                id: item.player.id,
+                                id: item.player.athleteId ?? item.player.id,
+                                athleteId: item.player.athleteId ?? item.player.id,
                                 name: item.player.name,
                                 photo: item.player.photo,
                               },
@@ -952,7 +959,12 @@ const MatchDetailsScreen = () => {
                           }}
                         >
                           <ExpoImage
-                            source={{ uri: resolveLineupPlayerPhoto(item.player.id, item.player.photo) }}
+                            source={{
+                              uri: resolveLineupPlayerPhoto(
+                                item.player.athleteId ?? item.player.id,
+                                item.player.photo,
+                              ),
+                            }}
                             style={{ width: 28, height: 28, borderRadius: 14 }}
                             contentFit="cover"
                             cachePolicy="memory-disk"

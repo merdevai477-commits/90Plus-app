@@ -102,6 +102,7 @@ interface PlayerParams {
     season?: string;
     fresh?: string;
     fixtureId?: string;
+    athleteId?: string;
     dataSource?: '365' | 'api' | string;
 }
 
@@ -123,11 +124,24 @@ function format365StatEntry(raw: unknown): { label: string; value: string } | nu
     const o = raw as Record<string, unknown>;
     const label =
         (typeof o.name === 'string' && o.name) ||
+        (typeof o.shortName === 'string' && o.shortName) ||
         (typeof o.typeName === 'string' && o.typeName) ||
         (o.type != null ? `#${String(o.type)}` : null);
-    const value = o.value != null ? String(o.value) : null;
+    const rawValue = o.value ?? o.val ?? o.statValue;
+    const value = rawValue != null ? String(rawValue) : null;
     if (!label && !value) return null;
     return { label: label ?? 'Stat', value: value ?? '—' };
+}
+
+function format365ChartEvent(raw: unknown): string | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const e = raw as Record<string, unknown>;
+    const minute = e.minute ?? e.gameTime ?? e.time;
+    const type = e.typeName ?? e.eventTypeName ?? e.type ?? e.name;
+    if (minute == null && type == null) return null;
+    const minStr = minute != null ? `${minute}'` : '';
+    const typeStr = type != null ? String(type) : 'Event';
+    return minStr ? `${minStr} · ${typeStr}` : typeStr;
 }
 
 interface PlayerData {
@@ -535,6 +549,7 @@ export default function PlayerProfileScreen() {
     const { t, language } = useTranslation();
 
     const playerId = parseInt(params.id || '0');
+    const contextAthleteId = parseInt(params.athleteId || params.id || '0', 10);
     const contextTeamId = params.teamId ? parseInt(params.teamId, 10) : undefined;
     const contextSeason = params.season ? parseInt(params.season, 10) : undefined;
     const contextFixtureId = params.fixtureId ? parseInt(params.fixtureId, 10) : undefined;
@@ -589,7 +604,7 @@ export default function PlayerProfileScreen() {
     }, [playerId, contextSeason, contextTeamId, seasonYear, forceFreshStats, is365Source, contextFixtureId]);
 
     const load365PlayerData = async () => {
-        if (!playerId || !contextFixtureId) {
+        if (!contextAthleteId || !contextFixtureId) {
             setError(t.playerProfile.playerNotFound);
             setLoading(false);
             return;
@@ -598,18 +613,26 @@ export default function PlayerProfileScreen() {
         try {
             setLoading(true);
             setError(null);
-            const report = await ApiFootballService.get365PlayerMatchReport(contextFixtureId, playerId);
+            const report = await ApiFootballService.get365PlayerMatchReport(
+                contextFixtureId,
+                contextAthleteId,
+            );
             if (!report) {
+                setMatchReport365(null);
                 if (!player) {
                     setError(t.playerProfile.playerNotFound);
                 }
-                setMatchReport365(null);
                 return;
             }
 
             setMatchReport365(report);
-            const shell = buildShellFromParams(params, playerId, contextTeamId);
+            const shell = buildShellFromParams(
+                { ...params, id: String(report.athleteId), name: report.name },
+                report.athleteId,
+                contextTeamId,
+            );
             if (shell) {
+                shell.player.name = report.name || shell.player.name;
                 shell.player.photo = report.imageUrl ?? params.photo ?? shell.player.photo;
                 if (report.position) {
                     shell.statistics = shell.statistics.map((s) => ({
@@ -618,6 +641,38 @@ export default function PlayerProfileScreen() {
                     }));
                 }
                 setPlayer(shell);
+            }
+
+            // Optional enrichment — athleteId already known from lineup context.
+            const info = await ApiFootballService.get365PlayerInfo(report.athleteId);
+            if (info) {
+                setPlayer((prev) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        player: {
+                            ...prev.player,
+                            nationality:
+                                (typeof info.nationality === 'string' && info.nationality) ||
+                                prev.player.nationality,
+                        },
+                        statistics: prev.statistics.map((s) => ({
+                            ...s,
+                            team: {
+                                ...s.team,
+                                name:
+                                    (typeof info.club === 'string' && info.club) ||
+                                    s.team.name,
+                            },
+                            games: {
+                                ...s.games,
+                                position:
+                                    (typeof info.position === 'string' && info.position) ||
+                                    s.games.position,
+                            },
+                        })),
+                    };
+                });
             }
         } catch (err: unknown) {
             logger.error('Failed to load 365 player report:', err);
@@ -962,34 +1017,53 @@ export default function PlayerProfileScreen() {
                 </LinearGradient>
 
                 <Animated.View style={[styles.body, { opacity: fadeAnim }]}>
-                    {is365Source && matchReport365 && (
+                    {is365Source && (
                         <View style={styles.infoSection}>
                             <Text style={styles.sectionTitle}>Match stats</Text>
                             <View style={styles.infoCardContainer}>
-                                {matchReport365.jerseyNumber != null && (
-                                    <Text style={styles.infoValue}>
-                                        #{matchReport365.jerseyNumber}
-                                        {matchReport365.formation ? ` · ${matchReport365.formation}` : ''}
-                                    </Text>
-                                )}
-                                {(matchReport365.stats ?? [])
-                                    .map(format365StatEntry)
-                                    .filter((row): row is { label: string; value: string } => row != null)
-                                    .map((row) => (
-                                        <View key={`${row.label}-${row.value}`} style={styles.matchStatRow}>
-                                            <Text style={styles.infoLabel}>{row.label}</Text>
-                                            <Text style={styles.infoValue}>{row.value}</Text>
-                                        </View>
-                                    ))}
-                                {(matchReport365.stats ?? []).length === 0 && (
+                                {loading && !matchReport365 ? (
+                                    <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                                ) : matchReport365 ? (
+                                    <>
+                                        {matchReport365.jerseyNumber != null && (
+                                            <Text style={styles.infoValue}>
+                                                #{matchReport365.jerseyNumber}
+                                                {matchReport365.formation ? ` · ${matchReport365.formation}` : ''}
+                                            </Text>
+                                        )}
+                                        {(matchReport365.stats ?? [])
+                                            .map(format365StatEntry)
+                                            .filter((row): row is { label: string; value: string } => row != null)
+                                            .map((row) => (
+                                                <View key={`${row.label}-${row.value}`} style={styles.matchStatRow}>
+                                                    <Text style={styles.infoLabel}>{row.label}</Text>
+                                                    <Text style={styles.infoValue}>{row.value}</Text>
+                                                </View>
+                                            ))}
+                                        {(matchReport365.stats ?? []).length === 0 && (
+                                            <Text style={styles.emptyText}>{pp.noCompetitionStats}</Text>
+                                        )}
+                                        {(matchReport365.chartEvents ?? []).length > 0 && (
+                                            <View style={{ marginTop: 12 }}>
+                                                <Text style={[styles.infoLabel, { marginBottom: 8 }]}>Events</Text>
+                                                {(matchReport365.chartEvents ?? [])
+                                                    .map(format365ChartEvent)
+                                                    .filter((line): line is string => !!line)
+                                                    .map((line, idx) => (
+                                                        <Text key={idx} style={styles.infoValue}>{line}</Text>
+                                                    ))}
+                                            </View>
+                                        )}
+                                    </>
+                                ) : (
                                     <Text style={styles.emptyText}>{pp.noCompetitionStats}</Text>
                                 )}
                             </View>
                         </View>
                     )}
 
-                    {/* Season total summary */}
-                    {leagueStats.length > 0 && (
+                    {/* Season total summary — API-Football career profile only */}
+                    {!is365Source && leagueStats.length > 0 && (
                         <View style={styles.totalCard}>
                             <Text style={styles.totalTitle}>{pp.seasonTotal}</Text>
                             <View style={styles.totalRow}>
@@ -1028,7 +1102,8 @@ export default function PlayerProfileScreen() {
                     </View>
                     )}
 
-                    {/* Personal info */}
+                    {/* Personal info — API-Football only (365 has no DOB/height in match context) */}
+                    {!is365Source && (
                     <View style={styles.infoSection}>
                         <Text style={styles.sectionTitle}>{pp.personalInfo}</Text>
                         <View style={styles.infoCardContainer}>
@@ -1087,9 +1162,10 @@ export default function PlayerProfileScreen() {
                             )}
                         </View>
                     </View>
+                    )}
 
-                    {/* Transfers */}
-                    {transfers.length > 0 && (
+                    {/* Transfers — API-Football only */}
+                    {!is365Source && transfers.length > 0 && (
                         <View style={styles.infoSection}>
                             <Text style={styles.sectionTitle}>{pp.transfers}</Text>
                             {loadingTransfers ? (

@@ -672,19 +672,30 @@ class ThreeSixFiveScoresService {
         ),
       ]);
 
-      const member = playerPayload?.members?.[0];
+      // Callers may pass 365 memberId (game.members[].id) instead of athleteId — resolve from full lineup.
+      let member = playerPayload?.members?.[0];
+      if (!member && gameLineups?.members?.length) {
+        member = gameLineups.members.find(
+          (m) => m.athleteId === athleteId || m.id === athleteId,
+        );
+      }
       if (!member) return { data: null, source: null };
 
+      const aid = member.athleteId ?? member.id;
       const allEvents = gameLineups?.chartEvents?.events ?? [];
       const chartEvents = Array.isArray(allEvents)
         ? allEvents.filter((ev) => {
-            const e = ev as { athleteId?: number; playerId?: number };
-            return e.athleteId === athleteId || e.playerId === athleteId;
+            const e = ev as { athleteId?: number; playerId?: number; memberId?: number };
+            return (
+              e.athleteId === aid ||
+              e.playerId === aid ||
+              e.athleteId === member!.id ||
+              e.playerId === member!.id ||
+              e.memberId === member!.id
+            );
           })
         : [];
 
-      const aid = member.athleteId ?? athleteId;
-      const imageVersion = member.imageVersion ?? null;
       const report: ThreeSixFivePlayerMatchReport = {
         athleteId: aid,
         gameId,
