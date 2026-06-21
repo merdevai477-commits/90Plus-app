@@ -218,8 +218,18 @@ export async function ensureScores365GameMapping(fixtureId: number): Promise<num
 
   const dbRow = await prisma.cachedFixture.findUnique({
     where: { fixtureId },
-    select: { status: true },
+    select: { status: true, leagueId: true },
   });
+
+  // Non-WC synthetic 365 fixtures store the 365 gameId AS the fixtureId and use
+  // a namespaced leagueId (>= SCORES365_LEAGUE_ID_OFFSET). The fixture↔game map
+  // is only built inside the sync worker process, so the web process never has
+  // it — resolve directly here so events/lineups/stats work for every league.
+  if (dbRow && dbRow.leagueId >= SCORES365_LEAGUE_ID_OFFSET) {
+    registerScores365FixtureMapping(fixtureId, fixtureId);
+    return fixtureId;
+  }
+
   const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
   const isPlausiblyLive = !!dbRow && LIVE_STATUSES.has(dbRow.status);
 
