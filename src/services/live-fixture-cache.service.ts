@@ -27,8 +27,10 @@ const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
 import {
   getScores365ExperimentConfig,
   getScores365ExperimentFixture,
+  isScores365ExperimentEnabled,
   isScores365ExperimentFixture,
   resolveScores365AppLanguage,
+  SCORES365_LEAGUE_ID_OFFSET,
 } from './scores365-experiment.service';
 
 export type LiveFixtureReadSource = 'redis-live' | 'redis-terminal' | 'db' | 'scores365-experiment' | null;
@@ -61,6 +63,50 @@ export async function writeLiveFixturesSnapshot(fixtures: FixtureFromAPI[]): Pro
     await pipeline.exec();
   } catch (err) {
     logger.warn('[LiveFixtureCache] writeLiveFixturesSnapshot failed:', err);
+  }
+}
+
+/**
+ * Overlay 365Scores (or other) live rows onto the existing Redis live list without
+ * wiping API-Football entries. Removes ids that transitioned to a terminal status.
+ */
+export async function mergeLiveFixturesIntoRedisSnapshot(incoming: FixtureFromAPI[]): Promise<void> {
+  if (!incoming.length) return;
+  const redis = getRedisClient();
+  if (!redis) return;
+
+  try {
+    const existingRaw = await redis.get(FOOTBALL_LIVE_MATCHES_KEY);
+    let existing: FixtureFromAPI[] = [];
+    if (existingRaw) {
+      const parsed = JSON.parse(existingRaw) as FixtureFromAPI[];
+      if (Array.isArray(parsed)) existing = parsed;
+    }
+
+    const byId = new Map<number, FixtureFromAPI>();
+    for (const fixture of existing) {
+      const id = fixture?.fixture?.id;
+      if (id != null) byId.set(id, fixture);
+    }
+
+    for (const fixture of incoming) {
+      const id = fixture?.fixture?.id;
+      if (id == null) continue;
+      const status = fixture.fixture?.status?.short ?? '';
+      if (LIVE_STATUSES_SET.has(status)) {
+        byId.set(id, fixture);
+      } else if (FINISHED_STATUSES_SET.has(status)) {
+        byId.delete(id);
+        void writeTerminalFixtureSnapshot(fixture);
+      }
+    }
+
+    const merged = Array.from(byId.values()).filter((f) =>
+      LIVE_STATUSES_SET.has(f?.fixture?.status?.short ?? ''),
+    );
+    await writeLiveFixturesSnapshot(merged);
+  } catch (err) {
+    logger.warn('[LiveFixtureCache] mergeLiveFixturesIntoRedisSnapshot failed:', err);
   }
 }
 
@@ -208,6 +254,37 @@ export async function resolveLiveFixturesForClient(
       const id = experimentFixture.fixture.id;
       fixtures = fixtures.filter((f) => f.fixture.id !== id);
       fixtures.unshift(experimentFixture);
+      source = source ?? 'scores365-experiment';
+    }
+  }
+
+  if (isScores365ExperimentEnabled()) {
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - 1);
+    const syntheticRows = await prisma.cachedFixture.findMany({
+      where: {
+        leagueId: { gte: SCORES365_LEAGUE_ID_OFFSET },
+        status: { in: LIVE_STATUSES },
+        matchDate: { gte: since },
+      },
+      take: 80,
+      orderBy: { matchDate: 'asc' },
+    });
+    if (syntheticRows.length > 0) {
+      const byId = new Map<number, FixtureFromAPI>();
+      for (const f of fixtures) {
+        const id = f?.fixture?.id;
+        if (id != null) byId.set(id, f);
+      }
+      for (const row of syntheticRows) {
+        const converted = matchCacheService.convertDbMatchToApiFormat(row);
+        const short = converted.fixture?.status?.short ?? '';
+        if (!LIVE_STATUSES_SET.has(short)) continue;
+        if (!byId.has(row.fixtureId)) {
+          byId.set(row.fixtureId, converted);
+        }
+      }
+      fixtures = Array.from(byId.values());
       source = source ?? 'scores365-experiment';
     }
   }

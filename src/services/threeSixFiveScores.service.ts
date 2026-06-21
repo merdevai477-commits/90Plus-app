@@ -7,7 +7,7 @@
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { redisCacheService } from './redis-cache.service';
-import { matchCacheService, type FixtureFromAPI } from './match-cache.service';
+import { matchCacheService, type FixtureFromAPI, LIVE_STATUSES } from './match-cache.service';
 import { leagueCacheService } from './league-cache.service';
 import {
   getScores365CompetitionId,
@@ -18,6 +18,7 @@ import {
   scores365CompetitionToLeagueId,
   SCORES365_LEAGUE_ID_OFFSET,
   synthesizeBaseFrom365Game,
+  sync365SyntheticLiveSnapshots,
 } from './scores365-experiment.service';
 import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
 
@@ -1133,7 +1134,14 @@ class ThreeSixFiveScoresService {
       const upsertedKey = `${FINISHED_UPSERTED_KEY_PREFIX}${item.gameId}`;
       if (isFinished) {
         const already = await redisCacheService.get<boolean>(upsertedKey);
-        if (already) continue;
+        if (already) {
+          const candidateRow = this.resolveDbRow(item.raw, dbRows);
+          const stillLiveInDb =
+            !!candidateRow &&
+            candidateRow.leagueId >= SCORES365_LEAGUE_ID_OFFSET &&
+            LIVE_STATUSES.includes(candidateRow.status);
+          if (!stillLiveInDb) continue;
+        }
       }
 
       const dbRow = this.resolveDbRow(item.raw, dbRows);
@@ -1224,6 +1232,11 @@ class ThreeSixFiveScoresService {
           }
         }
       }
+    }
+
+    const liveGameIds = items.filter((i) => i.phase === 'live').map((i) => i.gameId);
+    if (liveGameIds.length > 0) {
+      void sync365SyntheticLiveSnapshots({ gameIds: liveGameIds, language: 'en' });
     }
   }
 

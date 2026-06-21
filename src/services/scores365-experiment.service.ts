@@ -1502,6 +1502,82 @@ export async function applyScores365ExperimentToWorldCupList(
   return [{ ...fixture, _experiment: 'scores365' }, ...without];
 }
 
+const SYNTHETIC_LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] as const;
+const SYNTHETIC_LIVE_BATCH = 40;
+
+/**
+ * Refresh non-WC 365 synthetic fixtures from GET /web/game/ — accurate minutes/scores
+ * (allscores list lags ~30–60s; mirrors WC liveRefresh in getScores365MatchesForDate).
+ * Writes live rows into Redis overlay so /fixtures/live and today's calendar stay fresh.
+ */
+export async function sync365SyntheticLiveSnapshots(
+  options?: { language?: string | null; gameIds?: number[] },
+): Promise<number> {
+  if (!isScores365ExperimentEnabled()) return 0;
+
+  const lang = resolveScores365AppLanguage(options?.language ?? null);
+  const liveSet = new Set<string>(SYNTHETIC_LIVE_STATUSES);
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - 1);
+
+  let targetIds: number[];
+  if (options?.gameIds?.length) {
+    targetIds = [...new Set(options.gameIds)].slice(0, SYNTHETIC_LIVE_BATCH);
+  } else {
+    const rows = await prisma.cachedFixture.findMany({
+      where: {
+        leagueId: { gte: SCORES365_LEAGUE_ID_OFFSET },
+        status: { in: [...SYNTHETIC_LIVE_STATUSES] },
+        matchDate: { gte: since },
+      },
+      select: { fixtureId: true },
+      orderBy: { updatedAt: 'asc' },
+      take: SYNTHETIC_LIVE_BATCH,
+    });
+    targetIds = rows.map((r) => r.fixtureId);
+  }
+
+  if (!targetIds.length) return 0;
+
+  const refreshedLive: FixtureFromAPI[] = [];
+  let updated = 0;
+
+  for (const fixtureId of targetIds) {
+    try {
+      const game = await fetchScores365GameById(fixtureId, { force: true, language: lang });
+      if (!game) continue;
+
+      const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
+      const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
+      const mapped = await mapScores365ToApiFootballFixture(game, base, fixtureId);
+      if (!mapped) continue;
+
+      await matchCacheService.upsertFixtures([mapped]);
+      updated += 1;
+
+      const short = mapped.fixture?.status?.short ?? '';
+      if (liveSet.has(short)) {
+        refreshedLive.push(mapped);
+      }
+    } catch (err: unknown) {
+      logger.warn(`[365Live] refresh fixture ${fixtureId} failed:`, (err as Error)?.message);
+    }
+  }
+
+  if (refreshedLive.length > 0) {
+    const { mergeLiveFixturesIntoRedisSnapshot } = await import('./live-fixture-cache.service');
+    await mergeLiveFixturesIntoRedisSnapshot(refreshedLive);
+  }
+
+  if (updated > 0) {
+    logger.info(
+      `[365Live] refreshed ${updated} synthetic fixtures (${refreshedLive.length} live in Redis overlay)`,
+    );
+  }
+
+  return updated;
+}
+
 export function getScores365ExperimentFeatureState(): {
   enabled: boolean;
   fixtureId: number;
