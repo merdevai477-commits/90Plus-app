@@ -96,6 +96,29 @@ function isDailyQuotaError(errors: Record<string, unknown>): boolean {
   );
 }
 
+// Circuit breaker for a suspended/inactive API-Football account. Unlike a 429
+// (transient), a suspended account stays broken until the dashboard is fixed, so
+// we pause ALL outbound calls for a long window and serve 365Scores/DB fallback
+// instead of throwing on every tick. Auto-retries after the cooldown in case the
+// account is reinstated.
+const SUSPENDED_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+function isAccountSuspendedError(errors: Record<string, unknown>): boolean {
+  const parts = Object.values(errors)
+    .filter((v) => typeof v === 'string')
+    .join(' ')
+    .toLowerCase();
+  return (
+    parts.includes('suspended') ||
+    parts.includes('account is not active') ||
+    parts.includes('not subscribed')
+  );
+}
+
+function markAccountSuspended(): void {
+  quotaExhaustedUntil = Date.now() + SUSPENDED_COOLDOWN_MS;
+}
+
 /** For background jobs — skip work when API-Football quota is exhausted. */
 export function isFootballQuotaExhausted(): boolean {
   return isQuotaExhausted();
@@ -524,6 +547,24 @@ class FootballService {
           logger.warn(
             `⚠️ API-Football daily quota exhausted — pausing outbound calls until ${new Date(quotaExhaustedUntil).toISOString()}`,
           );
+          footballMetrics.recordApiFailure(Date.now() - apiStartTime, cacheKey, callSource);
+          const stale = await this.getStaleCachedData(cacheKey);
+          if (stale !== null) {
+            footballMetrics.recordStaleFallback(cacheKey);
+            return stale as T;
+          }
+          await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+          return [] as T;
+        }
+
+        if (isAccountSuspendedError(errors)) {
+          const wasActive = !isQuotaExhausted();
+          markAccountSuspended();
+          if (wasActive) {
+            logger.warn(
+              `⚠️ API-Football account suspended — pausing all outbound calls until ${new Date(quotaExhaustedUntil).toISOString()} and serving 365Scores/DB fallback. ${JSON.stringify(data.errors)}`,
+            );
+          }
           footballMetrics.recordApiFailure(Date.now() - apiStartTime, cacheKey, callSource);
           const stale = await this.getStaleCachedData(cacheKey);
           if (stale !== null) {

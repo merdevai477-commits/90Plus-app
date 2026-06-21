@@ -17,6 +17,7 @@ import { logger } from '../utils/logger';
 import { isWorldCupOnlyMode } from '../config/world-cup-only-mode.config';
 import { footballDataCacheService } from '../services/football-data-cache.service';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
+import { isScores365ExperimentEnabled } from '../services/scores365-experiment.service';
 import { getRedisClient } from '../lib/redis';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -24,12 +25,30 @@ import { getRedisClient } from '../lib/redis';
 const WORKER = 'OtherLeagues-Sync';
 const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
 
-function isEnabled(): boolean {
+/** Master kill-switch shared by both data paths. */
+function isWorkerEnabled(): boolean {
   const raw = process.env.OTHER_LEAGUES_SYNC_ENABLED?.trim();
-  if (raw === 'false' || raw === '0') return false;
-  // In WC-only mode this worker is silent — WC worker handles the WC fixtures.
+  return raw !== 'false' && raw !== '0';
+}
+
+/**
+ * API-Football-based calendar/live ticks. Silent in WC-only mode (the WC worker
+ * + 365 cover everything) and useless while the API-Football account is down.
+ */
+function isApiFootballSyncEnabled(): boolean {
+  if (!isWorkerEnabled()) return false;
   if (isWorldCupOnlyMode()) return false;
   return true;
+}
+
+/**
+ * 365Scores all-scores tick. Independent of WORLD_CUP_ONLY_MODE so non-WC leagues
+ * are sourced from 365 exactly like the World Cup, even when API-Football is
+ * suspended/restricted. Gated only by the 365 experiment master flag.
+ */
+function isAllScoresEnabled(): boolean {
+  if (!isWorkerEnabled()) return false;
+  return isScores365ExperimentEnabled();
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -46,7 +65,7 @@ function dateKeyOffset(days: number): string {
 // ─── Calendar sync tick ───────────────────────────────────────────────────────
 
 async function runCalendarSyncTick(): Promise<void> {
-  if (!isEnabled()) return;
+  if (!isApiFootballSyncEnabled()) return;
   if (isRunning.calendar) {
     logger.debug(`[${WORKER}][calendar] previous tick still running — skipping`);
     return;
@@ -71,7 +90,7 @@ async function runCalendarSyncTick(): Promise<void> {
 // ─── Live match refresh tick ──────────────────────────────────────────────────
 
 async function runLiveRefreshTick(): Promise<void> {
-  if (!isEnabled()) return;
+  if (!isApiFootballSyncEnabled()) return;
   if (isRunning.live) {
     logger.debug(`[${WORKER}][live] previous tick still running — skipping`);
     return;
@@ -133,7 +152,7 @@ async function runLiveRefreshTick(): Promise<void> {
  * via isEnabled().
  */
 async function runAllScoresSyncTick(): Promise<void> {
-  if (!isEnabled()) return;
+  if (!isAllScoresEnabled()) return;
   if (isRunning.allScores) {
     logger.debug(`[${WORKER}][allscores] previous tick still running — skipping`);
     return;
@@ -168,8 +187,18 @@ async function runAllScoresSyncTick(): Promise<void> {
  * never affects the other.
  */
 export function startOtherLeaguesSyncWorker(): void {
-  if (!isEnabled()) {
-    logger.info(`[${WORKER}] disabled (OTHER_LEAGUES_SYNC_ENABLED=false or WORLD_CUP_ONLY_MODE=true)`);
+  if (!isWorkerEnabled()) {
+    logger.info(`[${WORKER}] disabled (OTHER_LEAGUES_SYNC_ENABLED=false)`);
+    return;
+  }
+
+  const apiFootballEnabled = isApiFootballSyncEnabled();
+  const allScoresEnabled = isAllScoresEnabled();
+
+  if (!apiFootballEnabled && !allScoresEnabled) {
+    logger.info(
+      `[${WORKER}] idle — API-Football sync off (WORLD_CUP_ONLY_MODE) and 365 allscores off (SCORES365_EXPERIMENT_ENABLED not set)`,
+    );
     return;
   }
 
@@ -177,25 +206,27 @@ export function startOtherLeaguesSyncWorker(): void {
   const liveCron = process.env.OTHER_LEAGUES_LIVE_CRON?.trim() || '* * * * *';
   const allScoresCron = process.env.OTHER_LEAGUES_ALLSCORES_CRON?.trim() || '*/10 * * * *';
 
-  // Calendar refresh every N minutes
-  cron.schedule(calendarCron, () => {
-    void runCalendarSyncTick();
-  });
+  // API-Football calendar/live ticks (skip entirely in WC-only mode).
+  if (apiFootballEnabled) {
+    cron.schedule(calendarCron, () => {
+      void runCalendarSyncTick();
+    });
+    cron.schedule(liveCron, () => {
+      void runLiveRefreshTick();
+    });
+  }
 
-  // Live fixture refresh every minute
-  cron.schedule(liveCron, () => {
-    void runLiveRefreshTick();
-  });
-
-  // All non-WC leagues from 365Scores /allscores/ — single large request per tick
-  cron.schedule(allScoresCron, () => {
+  // All non-WC leagues from 365Scores /allscores/ — single large request per tick.
+  // Runs regardless of WORLD_CUP_ONLY_MODE so other leagues mirror the WC pipeline.
+  if (allScoresEnabled) {
+    cron.schedule(allScoresCron, () => {
+      void runAllScoresSyncTick();
+    });
+    // Immediate pass on startup (don't wait for the first cron).
     void runAllScoresSyncTick();
-  });
-
-  // Kick off an immediate allscores pass on startup (don't wait for first cron).
-  void runAllScoresSyncTick();
+  }
 
   logger.info(
-    `[${WORKER}] started — calendar cron="${calendarCron}", live cron="${liveCron}", allscores cron="${allScoresCron}"`,
+    `[${WORKER}] started — apiFootball=${apiFootballEnabled ? `on (calendar="${calendarCron}", live="${liveCron}")` : 'off'}, allscores365=${allScoresEnabled ? `on (cron="${allScoresCron}")` : 'off'}`,
   );
 }
