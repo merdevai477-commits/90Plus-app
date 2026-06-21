@@ -16,6 +16,7 @@ import {
   registerScores365FixtureMapping,
   resolveScores365LangId,
   scores365CompetitionToLeagueId,
+  SCORES365_LEAGUE_ID_OFFSET,
   synthesizeBaseFrom365Game,
 } from './scores365-experiment.service';
 
@@ -1112,6 +1113,15 @@ class ThreeSixFiveScoresService {
       orderBy: { matchDate: 'asc' },
     });
 
+    // Self-heal: finished synthetic fixtures are Redis-guarded and never
+    // re-upserted, so any metadata written by older code (e.g. country
+    // "World", missing logo) would persist forever. Reconcile every tick
+    // against the freshly-built competition meta so country/logo stay correct
+    // even for rows we won't otherwise touch below.
+    if (competitionMeta) {
+      await this.reconcileSyntheticLeagueMeta(dbRows, competitionMeta);
+    }
+
     const toUpsert: FixtureFromAPI[] = [];
     const competitions = new Set<number>();
 
@@ -1213,6 +1223,65 @@ class ThreeSixFiveScoresService {
           }
         }
       }
+    }
+  }
+
+  /**
+   * Correct drifted league metadata (country / logo) on already-stored
+   * synthetic 365 fixtures. Only rows whose country or logo actually differ
+   * from the authoritative competition meta are written, so this is a no-op on
+   * a healthy DB and cheap on a drifted one.
+   */
+  private async reconcileSyntheticLeagueMeta(
+    dbRows: Awaited<ReturnType<typeof prisma.cachedFixture.findMany>>,
+    competitionMeta: CompetitionMetaMap,
+  ): Promise<void> {
+    let fixed = 0;
+    for (const row of dbRows) {
+      if (row.leagueId < SCORES365_LEAGUE_ID_OFFSET) continue;
+      const competitionId = row.leagueId - SCORES365_LEAGUE_ID_OFFSET;
+      const meta = competitionMeta.get(competitionId);
+      const country = meta?.country;
+      if (!country || country === 'World') continue; // nothing authoritative to apply
+
+      const logo = meta?.logo ?? row.leagueLogo ?? null;
+      const name = meta?.name ?? row.leagueName;
+
+      const countryDrifted = row.leagueCountry !== country;
+      const logoDrifted = !!meta?.logo && row.leagueLogo !== meta.logo;
+      const full = row.fullData as { league?: { country?: string; logo?: string } } | null;
+      const jsonDrifted =
+        !!full?.league && (full.league.country !== country || (!!meta?.logo && full.league.logo !== meta.logo));
+
+      if (!countryDrifted && !logoDrifted && !jsonDrifted) continue;
+
+      let fullData = row.fullData as unknown;
+      if (full?.league) {
+        fullData = {
+          ...(full as object),
+          league: { ...full.league, country, logo: logo ?? full.league.logo ?? '' },
+        };
+      }
+
+      try {
+        await prisma.cachedFixture.update({
+          where: { id: row.id },
+          data: {
+            leagueCountry: country,
+            leagueLogo: logo,
+            leagueName: name,
+            fullData: fullData as never,
+          },
+        });
+        fixed++;
+      } catch (err: unknown) {
+        logger.debug(
+          `[OtherLeagues-365] reconcile failed for fixture ${row.fixtureId}: ${(err as Error)?.message}`,
+        );
+      }
+    }
+    if (fixed > 0) {
+      logger.info(`[OtherLeagues-365] reconciled league metadata on ${fixed} synthetic fixtures`);
     }
   }
 
