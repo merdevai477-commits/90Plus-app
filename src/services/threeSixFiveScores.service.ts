@@ -8,6 +8,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { redisCacheService } from './redis-cache.service';
 import { matchCacheService, type FixtureFromAPI } from './match-cache.service';
+import { leagueCacheService } from './league-cache.service';
 import {
   getScores365CompetitionId,
   isScores365ExperimentEnabled,
@@ -30,6 +31,16 @@ function buildAthleteImageUrl(athleteId: number, imageVersion: number | null): s
     return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png/v${imageVersion}/Athletes/${athleteId}`;
   }
   return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png/Athletes/${athleteId}`;
+}
+
+/**
+ * 365Scores competition (league) logo URL.
+ * Verified pattern: `<transforms>/v<imageVersion>/Competitions/<competitionId>`
+ * (a bogus competitionId 404s; the `imageVersion` is the `v{n}` path segment).
+ */
+function buildLeagueLogoUrl(competitionId: number, imageVersion: number | null): string | null {
+  if (imageVersion == null) return null;
+  return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2/v${imageVersion}/Competitions/${competitionId}`;
 }
 
 const HEADERS: Record<string, string> = {
@@ -209,6 +220,8 @@ interface Scores365CompetitionMeta {
   id: number;
   countryId?: number;
   name?: string;
+  imageVersion?: number;
+  hasStandings?: boolean;
 }
 
 interface Scores365CountryMeta {
@@ -222,8 +235,14 @@ interface AllScoresPayload {
   countries?: Scores365CountryMeta[];
 }
 
-/** competitionId → resolved league name + country (for synthetic non-WC fixtures). */
-type CompetitionMetaMap = Map<number, { name?: string; country?: string }>;
+/** competitionId → resolved league metadata (for synthetic non-WC fixtures + league cache). */
+interface CompetitionMeta {
+  name?: string;
+  country?: string;
+  logo?: string;
+  hasStandings?: boolean;
+}
+type CompetitionMetaMap = Map<number, CompetitionMeta>;
 
 interface GamePayload {
   game?: Scores365Game;
@@ -1057,6 +1076,8 @@ class ThreeSixFiveScoresService {
       meta.set(comp.id, {
         name: comp.name,
         country: comp.countryId != null ? countriesById.get(comp.countryId) : undefined,
+        logo: buildLeagueLogoUrl(comp.id, comp.imageVersion ?? null) ?? undefined,
+        hasStandings: comp.hasStandings,
       });
     }
     return meta;
@@ -1130,6 +1151,7 @@ class ThreeSixFiveScoresService {
             season: kickoff.getUTCFullYear(),
             leagueName: meta?.name ?? item.raw.competitionDisplayName,
             country: meta?.country,
+            leagueLogo: meta?.logo,
           },
         );
         fixtureId = item.gameId;
@@ -1156,6 +1178,41 @@ class ThreeSixFiveScoresService {
       logger.info(
         `[OtherLeagues-365] upserted ${count} fixtures across ${competitions.size} competitions`,
       );
+
+      // Persist each distinct competition as its own league record so the app
+      // can render league logo/name/country for any 365 competition.
+      if (competitionMeta) {
+        const leagueRecords = [...competitions]
+          .map((compId) => {
+            const meta = competitionMeta.get(compId);
+            if (!meta?.name) return null;
+            return {
+              leagueId: scores365CompetitionToLeagueId(compId),
+              name: meta.name,
+              country: meta.country ?? 'World',
+              logo: meta.logo ?? null,
+              hasStandings: meta.hasStandings,
+              fullData: {
+                competitionId: compId,
+                leagueId: scores365CompetitionToLeagueId(compId),
+                name: meta.name,
+                country: meta.country ?? 'World',
+                logo: meta.logo ?? null,
+                hasStandings: meta.hasStandings ?? false,
+                source: '365scores',
+              },
+            };
+          })
+          .filter((r): r is NonNullable<typeof r> => r !== null);
+
+        if (leagueRecords.length > 0) {
+          try {
+            await leagueCacheService.upsertScores365Leagues(leagueRecords);
+          } catch (err: unknown) {
+            logger.warn('[OtherLeagues-365] league cache upsert failed:', (err as Error)?.message);
+          }
+        }
+      }
     }
   }
 

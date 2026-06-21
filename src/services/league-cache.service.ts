@@ -99,6 +99,65 @@ class LeagueCacheService {
     }
 
     /**
+     * Upsert 365Scores-sourced leagues (non-WC) using the namespaced leagueId
+     * scheme (7_000_000 + competitionId). Lets the app render league logo/name/
+     * country for any 365 competition, parallel to API-Football leagues.
+     */
+    async upsertScores365Leagues(
+        records: Array<{
+            leagueId: number;
+            name: string;
+            country: string;
+            logo: string | null;
+            hasStandings?: boolean;
+            fullData?: unknown;
+        }>,
+    ): Promise<void> {
+        if (!records.length) return;
+
+        const operations = records.map((r) =>
+            (prisma as any).cachedLeague.upsert({
+                where: { leagueId: r.leagueId },
+                update: {
+                    name: r.name,
+                    country: r.country,
+                    logo: r.logo,
+                    type: 'league',
+                    fullData: r.fullData ?? {
+                        leagueId: r.leagueId,
+                        name: r.name,
+                        country: r.country,
+                        logo: r.logo,
+                        hasStandings: r.hasStandings ?? false,
+                        source: '365scores',
+                    },
+                    updatedAt: new Date(),
+                },
+                create: {
+                    leagueId: r.leagueId,
+                    name: r.name,
+                    country: r.country,
+                    logo: r.logo,
+                    type: 'league',
+                    fullData: r.fullData ?? {
+                        leagueId: r.leagueId,
+                        name: r.name,
+                        country: r.country,
+                        logo: r.logo,
+                        hasStandings: r.hasStandings ?? false,
+                        source: '365scores',
+                    },
+                },
+            }),
+        );
+
+        const chunkSize = 10;
+        for (let i = 0; i < operations.length; i += chunkSize) {
+            await Promise.all(operations.slice(i, i + chunkSize));
+        }
+    }
+
+    /**
      * Unified search across players, teams, and leagues
      * NOTE: Player search from API is disabled (Free Plan limitation)
      * Players are searched from database only

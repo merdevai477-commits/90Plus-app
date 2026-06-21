@@ -616,6 +616,7 @@ export interface SynthesizeBaseOverrides {
   season?: number;
   leagueName?: string;
   country?: string;
+  leagueLogo?: string;
 }
 
 /**
@@ -663,7 +664,7 @@ export function synthesizeBaseFrom365Game(
       id: overrides?.leagueId ?? cfg.leagueId,
       name: overrides?.leagueName ?? game.competitionDisplayName ?? 'FIFA World Cup',
       country: overrides?.country ?? 'World',
-      logo: '',
+      logo: overrides?.leagueLogo ?? '',
       flag: null,
       season: overrides?.season ?? cfg.season,
       round,

@@ -1564,13 +1564,16 @@ export const ApiFootballService = {
   /**
    * 365Scores — World Cup group standings (all groups).
    */
-  async get365StandingsGrouped(): Promise<{
+  async get365StandingsGrouped(competitionId?: number): Promise<{
     groups: import('../utils/standingsHelpers').StandingsGroup[];
     available: boolean;
   }> {
     try {
       const baseUrl = getApiUrl();
-      const url = `${baseUrl}/football/cached/365/standings`;
+      const url =
+        competitionId != null
+          ? `${baseUrl}/football/cached/365/standings?competitions=${competitionId}`
+          : `${baseUrl}/football/cached/365/standings`;
       const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
       if (!response.ok) return { groups: [], available: false };
       const json = (await response.json()) as {

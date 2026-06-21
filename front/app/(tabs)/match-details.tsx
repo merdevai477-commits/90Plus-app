@@ -44,7 +44,11 @@ import {
 import { hasLineupData, isAuthoritativeLineupData } from '../../utils/matchLineupsFallback';
 import { sortPlayersByGrid } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
-import { WC_LEAGUE_ID } from '../../constants/worldCup';
+import {
+  WC_LEAGUE_ID,
+  SCORES365_LEAGUE_ID_OFFSET,
+  scores365CompetitionIdFromLeagueId,
+} from '../../constants/worldCup';
 import type { StandingsGroup } from '../../utils/standingsHelpers';
 import {
   resolveStandingsGroupsForMatch,
@@ -447,7 +451,9 @@ const MatchDetailsScreen = () => {
     try {
       const is365 =
         (fixture as { _experiment?: string })._experiment === 'scores365' ||
-        (fixture as { _scores365GameId?: number })._scores365GameId != null;
+        (fixture as { _scores365GameId?: number })._scores365GameId != null ||
+        fixture.league?.id === WC_LEAGUE_ID ||
+        (fixture.league?.id ?? 0) >= SCORES365_LEAGUE_ID_OFFSET;
       if (is365 && fixtureId) {
         const form365 = await ApiFootballService.get365MatchForm(fixtureId);
         if (form365) {
@@ -478,15 +484,21 @@ const MatchDetailsScreen = () => {
     setStandingsError(null);
     setStandingsUnavailable(false);
     try {
-      // World Cup standings come from 365Scores. Detect via the experiment markers
-      // OR the WC league id, so standings still resolve if a runtime fixture object
-      // dropped the markers (e.g. live poll / list snapshot).
+      // 365Scores standings cover the World Cup AND all non-WC leagues synced
+      // via the allscores pipeline (namespaced leagueId >= offset). Detect via the
+      // experiment markers, the WC league id, or the namespaced league id, so
+      // standings still resolve if a runtime fixture object dropped the markers.
+      const non365CompetitionId = scores365CompetitionIdFromLeagueId(fixture.league?.id);
       const is365 =
         (fixture as { _experiment?: string })._experiment === 'scores365' ||
         (fixture as { _scores365GameId?: number })._scores365GameId != null ||
-        fixture.league?.id === WC_LEAGUE_ID;
+        fixture.league?.id === WC_LEAGUE_ID ||
+        (fixture.league?.id ?? 0) >= SCORES365_LEAGUE_ID_OFFSET;
       if (is365) {
-        const result365 = await ApiFootballService.get365StandingsGrouped();
+        // Non-WC leagues must pass their 365 competitionId; WC omits it (defaults).
+        const result365 = await ApiFootballService.get365StandingsGrouped(
+          non365CompetitionId ?? undefined,
+        );
         if (result365.available) {
           const homeTeam = { id: fixture.teams.home.id, name: fixture.teams.home.name };
           const awayTeam = { id: fixture.teams.away.id, name: fixture.teams.away.name };
@@ -502,6 +514,12 @@ const MatchDetailsScreen = () => {
           }
           // 365 returned standings but neither team is in a group table
           // (e.g. knockout stage) — fall through to the league standings path.
+        }
+        // Synthetic 365 leagues have no API-Football leagueId — don't query it
+        // with a namespaced id; just show "standings unavailable".
+        if (non365CompetitionId != null) {
+          setStandingsUnavailable(true);
+          return;
         }
       }
       const preferFresh = force || isLive() || isFinishedMatch();

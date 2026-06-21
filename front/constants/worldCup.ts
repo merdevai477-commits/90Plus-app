@@ -49,3 +49,17 @@ export const WC_2026_OFFICIAL_LOGO = require('../assets/images/fwc-2026-official
 
 /** API-Football league id for FIFA World Cup. */
 export const WC_LEAGUE_ID = 1;
+
+/**
+ * Offset added to a 365Scores competitionId to form a synthetic leagueId for
+ * non-WC leagues (mirrors backend SCORES365_LEAGUE_ID_OFFSET). A fixture whose
+ * league.id >= this value is a 365Scores-sourced league; its 365 competitionId
+ * is `league.id - SCORES365_LEAGUE_ID_OFFSET`.
+ */
+export const SCORES365_LEAGUE_ID_OFFSET = 7_000_000;
+
+/** Derive the 365 competitionId from a (possibly namespaced) leagueId, else null. */
+export function scores365CompetitionIdFromLeagueId(leagueId: number | undefined | null): number | null {
+  if (leagueId == null) return null;
+  return leagueId >= SCORES365_LEAGUE_ID_OFFSET ? leagueId - SCORES365_LEAGUE_ID_OFFSET : null;
+}

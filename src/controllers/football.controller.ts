@@ -2235,7 +2235,13 @@ export class FootballController {
   static async getCached365Standings(req: Request, res: Response): Promise<void> {
     try {
       const language = resolveAppLanguage(req);
-      const result = await footballDataCacheService.getCached365Standings(undefined, language);
+      // Optional ?competitions= (or ?competitionId=) for non-WC leagues;
+      // omitted → defaults to the World Cup competition inside the service.
+      const rawQuery = req.query.competitions ?? req.query.competitionId;
+      const rawCompetition = typeof rawQuery === 'string' ? rawQuery.trim() : '';
+      const parsedCompetition = rawCompetition ? parseInt(rawCompetition, 10) : NaN;
+      const competitionId = Number.isFinite(parsedCompetition) ? parsedCompetition : undefined;
+      const result = await footballDataCacheService.getCached365Standings(competitionId, language);
       if (!result.data) {
         res.status(503).json({
           status: 'ERROR',
