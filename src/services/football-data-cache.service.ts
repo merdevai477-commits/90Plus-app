@@ -72,7 +72,9 @@ import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/ma
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import {
     calendarDayBounds,
+    calendarDateFromKickoff,
     calendarTodayKey,
+    offsetCalendarDateKey,
 } from '../utils/calendar-day-bounds.util';
 
 class FootballDataCacheService {
@@ -375,14 +377,16 @@ class FootballDataCacheService {
 
             const localData = this.tryLocalMatchesByDate(dateString, isToday, cacheKey, responseTtl);
             if (localData) {
-                return isToday ? this.mergeCalendarWithLiveSources(localData) : localData;
+                const scoped = this.filterFixturesToCalendarDay(localData, dateString);
+                return isToday ? this.mergeCalendarWithLiveSources(scoped) : scoped;
             }
 
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
             if (cached && cached.length > 0) {
                 this.storeLocalMatchesByDate(dateString, cached, responseTtl);
                 logger.debug(`📦 [${dateString}] ${cached.length} matches from shared cache`);
-                return isToday ? this.mergeCalendarWithLiveSources(cached) : cached;
+                const scoped = this.filterFixturesToCalendarDay(cached, dateString);
+                return isToday ? this.mergeCalendarWithLiveSources(scoped) : scoped;
             }
 
             let fromDb = await this.loadMatchesFromDbForDate(
@@ -392,6 +396,7 @@ class FootballDataCacheService {
                 dateString,
                 responseTtl,
             );
+            fromDb = this.filterFixturesToCalendarDay(fromDb, dateString);
 
             if (fromDb.length === 0 && isScores365ExperimentEnabled()) {
                 await this.ensure365CalendarDate(dateString);
@@ -402,6 +407,22 @@ class FootballDataCacheService {
                     dateString,
                     responseTtl,
                 );
+                fromDb = this.filterFixturesToCalendarDay(fromDb, dateString);
+            }
+
+            if (fromDb.length === 0 && isScores365ExperimentEnabled()) {
+                await threeSixFiveScoresService.supplementCalendarDateFromCompetitionFixtures(
+                    dateString,
+                    'en',
+                );
+                fromDb = await this.loadMatchesFromDbForDate(
+                    startOfDay,
+                    endOfDay,
+                    cacheKey,
+                    dateString,
+                    responseTtl,
+                );
+                fromDb = this.filterFixturesToCalendarDay(fromDb, dateString);
             }
 
             if (fromDb.length > 0) {
@@ -800,20 +821,27 @@ class FootballDataCacheService {
     private async ensure365CalendarDate(dateString: string): Promise<number> {
         if (!isScores365ExperimentEnabled()) return 0;
         try {
-            const res = await threeSixFiveScoresService.getAllScores(
-                dateString,
-                dateString,
-                'en',
-            );
+            const start = offsetCalendarDateKey(dateString, -2);
+            const end = offsetCalendarDateKey(dateString, 7);
+            const res = await threeSixFiveScoresService.getAllScores(start, end, 'en', {
+                force: true,
+            });
             const count = res.data?.length ?? 0;
             if (count > 0) {
-                logger.info(`[365Calendar] synced ${count} fixtures for ${dateString}`);
+                logger.info(`[365Calendar] synced ${count} allscores fixtures for window ${start}..${end}`);
             }
             return count;
         } catch (err: unknown) {
             logger.warn(`[365Calendar] ensure failed for ${dateString}:`, (err as Error)?.message);
             return 0;
         }
+    }
+
+    private filterFixturesToCalendarDay(fixtures: any[], dateString: string): any[] {
+        if (!fixtures.length) return fixtures;
+        return fixtures.filter(
+            (f) => calendarDateFromKickoff(f?.fixture?.date) === dateString,
+        );
     }
 
     private applyLiveOverlay(apiMatches: any[], liveFixtures: any[]): any[] {

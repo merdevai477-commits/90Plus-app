@@ -45,3 +45,11 @@ export function calendarDayBounds(
 export function getAppCalendarTimezone(): string {
   return DEFAULT_CALENDAR_TZ;
 }
+
+/** Shift a calendar YYYY-MM-DD by `days` (UTC-safe arithmetic on the date parts). */
+export function offsetCalendarDateKey(dateString: string, days: number): string {
+  const [y, m, d] = dateString.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}

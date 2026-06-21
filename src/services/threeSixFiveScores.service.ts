@@ -21,6 +21,7 @@ import {
   sync365SyntheticLiveSnapshots,
 } from './scores365-experiment.service';
 import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
+import { calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
 
 const BASE_URL = 'https://webws.365scores.com';
 
@@ -284,6 +285,16 @@ const LIVE_GAME_MIN_INTERVAL_MS = 3_000;
 const LIVE_POLL_INTERVAL_MS = 4_000;
 const LIVE_SUBSCRIPTION_TTL_MS = 45_000;
 const FINISHED_UPSERTED_KEY_PREFIX = '365:finished-upserted:';
+const TRACKED_COMPETITIONS_KEY = '365:tracked_competition_ids';
+const TRACKED_COMPETITIONS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const SUPPLEMENT_COMPETITION_BATCH = 6;
+const SUPPLEMENT_COMPETITION_LIMIT = 80;
+/** Always supplement fixtures feed for these 365 competitionIds (lower tiers missing from allscores). */
+const DEFAULT_TRACKED_COMPETITIONS = [116]; // Brasileirão Série B
+
+function useOnlyMajorGames(): boolean {
+  return process.env.SCORES365_ONLY_MAJOR_GAMES === 'true';
+}
 
 class ThreeSixFiveScoresService {
   private lastUpstreamFetch = new Map<string, number>();
@@ -348,19 +359,23 @@ class ThreeSixFiveScoresService {
     startDate: string,
     endDate: string,
     language?: string | null,
+    options?: { force?: boolean },
   ): Promise<ThreeSixFiveResult<ThreeSixFiveFixtureItem[]>> {
     if (!this.isEnabled()) return { data: null, source: null };
 
     try {
       const langId = resolveScores365LangId(language);
-      const cacheKey = `365:allscores:${startDate}:${endDate}:${langId}`;
-      const cached = await redisCacheService.get<ThreeSixFiveFixtureItem[]>(cacheKey);
-      if (cached) return { data: cached, source: '365scores' };
+      const majorOnly = useOnlyMajorGames();
+      const cacheKey = `365:allscores:${startDate}:${endDate}:${langId}:${majorOnly ? 'major' : 'all'}`;
+      if (!options?.force) {
+        const cached = await redisCacheService.get<ThreeSixFiveFixtureItem[]>(cacheKey);
+        if (cached) return { data: cached, source: '365scores' };
+      }
 
       const path =
         `/web/games/allscores/?${this.commonParams(langId)}` +
         `&sports=1&startDate=${encodeURIComponent(startDate)}` +
-        `&endDate=${encodeURIComponent(endDate)}&showOdds=true&onlyMajorGames=true&withTop=true`;
+        `&endDate=${encodeURIComponent(endDate)}&showOdds=true&onlyMajorGames=${majorOnly}&withTop=true`;
 
       const payload = await this.fetchJson<AllScoresPayload>(
         path,
@@ -373,12 +388,60 @@ class ThreeSixFiveScoresService {
       const items = payload.games.map((g) => this.toFixtureItem(g));
       await redisCacheService.set(cacheKey, items, 120_000);
       await this.persistAllScoresFixtures(items, competitionMeta);
+      await this.storeTrackedCompetitionIds(competitionMeta);
 
       return { data: items, source: '365scores' };
     } catch (err: unknown) {
       logger.error('[365Scores] getAllScores failed:', (err as Error)?.message);
       return { data: null, source: null };
     }
+  }
+
+  /**
+   * Fill upcoming gaps for a calendar day via per-competition /fixtures/ feed.
+   * allscores often omits scheduled lower-tier games (e.g. Brasileirão Série B).
+   */
+  async supplementCalendarDateFromCompetitionFixtures(
+    dateString: string,
+    language?: string | null,
+  ): Promise<number> {
+    if (!this.isEnabled()) return 0;
+
+    const competitionIds = await this.loadTrackedCompetitionIds();
+    if (!competitionIds.length) return 0;
+
+    const langId = resolveScores365LangId(language);
+    const items: ThreeSixFiveFixtureItem[] = [];
+    const competitionMeta = await this.loadCompetitionMetaForIds(competitionIds);
+
+    for (let i = 0; i < competitionIds.length; i += SUPPLEMENT_COMPETITION_BATCH) {
+      const slice = competitionIds.slice(i, i + SUPPLEMENT_COMPETITION_BATCH);
+      const batches = await Promise.all(
+        slice.map(async (competitionId) => {
+          try {
+            const games = await this.fetchAllFixtures(competitionId, langId);
+            return games
+              .filter((g) => calendarDateFromKickoff(g.startTime) === dateString)
+              .map((g) => this.toFixtureItem(g));
+          } catch (err: unknown) {
+            logger.debug(
+              `[365Scores] supplement fixtures comp=${competitionId} failed:`,
+              (err as Error)?.message,
+            );
+            return [] as ThreeSixFiveFixtureItem[];
+          }
+        }),
+      );
+      for (const batch of batches) items.push(...batch);
+    }
+
+    if (!items.length) return 0;
+
+    await this.persistAllScoresFixtures(items, competitionMeta);
+    logger.info(
+      `[365Scores] supplemented ${items.length} fixtures for ${dateString} from ${competitionIds.length} competitions`,
+    );
+    return items.length;
   }
 
   // ─── 2. Live game details ────────────────────────────────────────────────
@@ -1060,13 +1123,6 @@ class ThreeSixFiveScoresService {
     }
   }
 
-  /**
-   * League-agnostic persistence for the /allscores/ feed (non-WC competitions).
-   * Unlike persistFinishedFixtures (WC-scoped), candidate DB rows are loaded by a
-   * date window across ALL leagues so resolveDbRow can reuse an existing
-   * API-Football row when present; unmatched games become synthetic fixtures with
-   * a namespaced leagueId derived from the 365 competitionId.
-   */
   /** Build competitionId → { name, country } from the allscores payload lookups. */
   private buildCompetitionMeta(payload: AllScoresPayload): CompetitionMetaMap {
     const countriesById = new Map<number, string>();
@@ -1086,6 +1142,56 @@ class ThreeSixFiveScoresService {
     return meta;
   }
 
+  private async storeTrackedCompetitionIds(meta: CompetitionMetaMap): Promise<void> {
+    if (!meta.size) return;
+    const existing = (await redisCacheService.get<number[]>(TRACKED_COMPETITIONS_KEY)) ?? [];
+    const merged = [...new Set([...existing, ...meta.keys()])].slice(0, 500);
+    await redisCacheService.set(TRACKED_COMPETITIONS_KEY, merged, TRACKED_COMPETITIONS_TTL_MS);
+  }
+
+  private async loadTrackedCompetitionIds(): Promise<number[]> {
+    const fromRedis = (await redisCacheService.get<number[]>(TRACKED_COMPETITIONS_KEY)) ?? [];
+    const fromLeagues = await prisma.cachedLeague.findMany({
+      where: { leagueId: { gte: SCORES365_LEAGUE_ID_OFFSET } },
+      select: { leagueId: true },
+      take: 300,
+    });
+    const fromLeagueIds = fromLeagues
+      .map((r) => r.leagueId - SCORES365_LEAGUE_ID_OFFSET)
+      .filter((id) => id > 0);
+
+    const merged = [...new Set([...fromRedis, ...fromLeagueIds, ...DEFAULT_TRACKED_COMPETITIONS])];
+    return merged.slice(0, SUPPLEMENT_COMPETITION_LIMIT);
+  }
+
+  private async loadCompetitionMetaForIds(competitionIds: number[]): Promise<CompetitionMetaMap> {
+    const meta: CompetitionMetaMap = new Map();
+    const leagueIds = competitionIds.map((id) => scores365CompetitionToLeagueId(id));
+    const rows = await prisma.cachedLeague.findMany({
+      where: { leagueId: { in: leagueIds } },
+      select: { leagueId: true, name: true, country: true, logo: true, fullData: true },
+    });
+    for (const row of rows) {
+      const competitionId = row.leagueId - SCORES365_LEAGUE_ID_OFFSET;
+      if (competitionId <= 0) continue;
+      const full = row.fullData as { hasStandings?: boolean } | null;
+      meta.set(competitionId, {
+        name: row.name,
+        country: row.country ?? undefined,
+        logo: row.logo ?? undefined,
+        hasStandings: full?.hasStandings,
+      });
+    }
+    return meta;
+  }
+
+  /**
+   * League-agnostic persistence for the /allscores/ feed (non-WC competitions).
+   * Unlike persistFinishedFixtures (WC-scoped), candidate DB rows are loaded by a
+   * date window across ALL leagues so resolveDbRow can reuse an existing
+   * API-Football row when present; unmatched games become synthetic fixtures with
+   * a namespaced leagueId derived from the 365 competitionId.
+   */
   private async persistAllScoresFixtures(
     items: ThreeSixFiveFixtureItem[],
     competitionMeta?: CompetitionMetaMap,

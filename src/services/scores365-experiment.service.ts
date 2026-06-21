@@ -522,6 +522,15 @@ export function classifyScores365MatchStatus(
   }
 
   if (
+    text.includes('schedul') ||
+    text.includes('postpon') ||
+    shortCode === 'ns' ||
+    shortCode === 'sched'
+  ) {
+    return { short: 'NS', long: 'Not Started', elapsed: null };
+  }
+
+  if (
     text.includes('انته') ||
     text.includes('finish') ||
     text.includes('ended') ||

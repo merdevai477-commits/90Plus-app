@@ -161,7 +161,7 @@ async function runAllScoresSyncTick(): Promise<void> {
 
   try {
     const start = dateKeyOffset(-1); // yesterday (catch late-finished results)
-    const end = dateKeyOffset(7); // today + 7 days (upcoming calendar)
+    const end = dateKeyOffset(14); // today + 14 days (upcoming calendar)
     const res = await threeSixFiveScoresService.getAllScores(start, end, 'en');
     const items = res.data ?? [];
     const competitions = new Set<number>();
