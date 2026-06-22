@@ -46,7 +46,7 @@ function statsSyncMs(): number {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-const isRunning = { lineups: false, stats: false, bulk: false };
+const isRunning = { lineups: false, stats: false, bulk: false, standings: false };
 let lineupTimer: ReturnType<typeof setInterval> | null = null;
 let statsTimer: ReturnType<typeof setInterval> | null = null;
 const liveGameIds = new Set<number>();
@@ -110,6 +110,31 @@ export async function runBulkFixtureSyncTick(): Promise<void> {
     logger.error(`[${WORKER}][bulk] tick fatal:`, (err as Error)?.message);
   } finally {
     isRunning.bulk = false;
+  }
+}
+
+// ─── Group standings sync ─────────────────────────────────────────────────────
+
+async function runStandingsSyncTick(): Promise<void> {
+  if (!isEnabled()) return;
+  if (isRunning.standings) {
+    logger.debug(`[${WORKER}][standings] previous tick still running — skipping`);
+    return;
+  }
+  isRunning.standings = true;
+
+  try {
+    const count = await footballDataCacheService.syncWorldCupStandingsFrom365('en');
+    if (count > 0) {
+      logger.debug(`[${WORKER}][standings] synced ${count} WC group rows`, {
+        worker: 'worldcup-sync',
+        count,
+      });
+    }
+  } catch (err: unknown) {
+    logger.error(`[${WORKER}][standings] tick fatal:`, (err as Error)?.message);
+  } finally {
+    isRunning.standings = false;
   }
 }
 
@@ -267,6 +292,10 @@ export function startWorldCupSyncWorker(): void {
     void runBulkFixtureSyncTick();
   });
 
+  cron.schedule('*/10 * * * *', () => {
+    void runStandingsSyncTick();
+  });
+
   // Lineup sync: interval-based (tight for live matches)
   lineupTimer = setInterval(() => {
     void runLineupSyncTick();
@@ -279,11 +308,12 @@ export function startWorldCupSyncWorker(): void {
 
   // Kick off immediately on startup: mapping FIRST, then lineups.
   runBulkFixtureSyncTick().finally(() => {
+    void runStandingsSyncTick();
     void runLineupSyncTick();
   });
 
   logger.info(
-    `[${WORKER}] started — bulk sync every 5m, lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s`,
+    `[${WORKER}] started — bulk sync every 5m, standings every 10m, lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s`,
   );
 }
 

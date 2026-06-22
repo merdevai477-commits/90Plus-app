@@ -2253,7 +2253,20 @@ export class FootballController {
       const parsedCompetition = rawCompetition ? parseInt(rawCompetition, 10) : NaN;
       const competitionId = Number.isFinite(parsedCompetition) ? parsedCompetition : undefined;
       const result = await footballDataCacheService.getCached365Standings(competitionId, language);
-      if (!result.data) {
+      if (!result.data?.length) {
+        const count = await footballDataCacheService.syncWorldCupStandingsFrom365(language);
+        if (count > 0) {
+          const retry = await footballDataCacheService.getCached365Standings(competitionId, language);
+          if (retry.data?.length) {
+            res.json({
+              status: 'SUCCESS',
+              source: retry.source,
+              results: retry.data.length,
+              response: retry.data,
+            });
+            return;
+          }
+        }
         res.status(503).json({
           status: 'ERROR',
           message: '365Scores standings unavailable',

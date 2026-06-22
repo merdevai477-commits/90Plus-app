@@ -52,6 +52,7 @@ import {
 import type { StandingsGroup } from '../../utils/standingsHelpers';
 import {
   resolveStandingsGroupsForMatch,
+  sortStandingsGroups,
   standingRowMatchesTeam,
 } from '../../utils/standingsHelpers';
 import { getPeriodStartTimestamp } from '../../src/store/liveFixtureSelectors';
@@ -519,11 +520,10 @@ const MatchDetailsScreen = () => {
         if (result365.available) {
           const homeTeam = { id: fixture.teams.home.id, name: fixture.teams.home.name };
           const awayTeam = { id: fixture.teams.away.id, name: fixture.teams.away.name };
-          const matchGroups = resolveStandingsGroupsForMatch(
-            result365.groups,
-            homeTeam,
-            awayTeam,
-          );
+          const isWcLeague = fixture.league?.id === WC_LEAGUE_ID;
+          const matchGroups = isWcLeague
+            ? sortStandingsGroups(result365.groups)
+            : resolveStandingsGroupsForMatch(result365.groups, homeTeam, awayTeam);
           if (matchGroups.length > 0) {
             setStandingsGroups(matchGroups);
             setStandingsSeasonUsed(fixture.league.season);

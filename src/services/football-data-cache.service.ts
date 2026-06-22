@@ -76,6 +76,9 @@ import {
     calendarTodayKey,
     offsetCalendarDateKey,
 } from '../utils/calendar-day-bounds.util';
+import { map365StandingRowsToApiGroups } from '../utils/scores365-standings-mapper';
+import { getWorldCupLeagueId, getWorldCupSeason } from '../config/world-cup-only-mode.config';
+import { getScores365CompetitionId } from './scores365-experiment.service';
 
 class FootballDataCacheService {
     /** Hot in-process cache for matches-by-date (avoids Redis round-trip per request). */
@@ -1041,6 +1044,21 @@ class FootballDataCacheService {
             return { flat: [], groups: [] };
         }
 
+        if (
+            leagueId === getWorldCupLeagueId() &&
+            isScores365ExperimentEnabled()
+        ) {
+            const from365 = await this.getStandingsParsedFrom365(getScores365CompetitionId());
+            if (from365.groups.length > 0) {
+                this.standingsCache.set(cacheKey, {
+                    data: from365,
+                    timestamp: Date.now(),
+                    ttl: this.TTL.STANDINGS,
+                });
+                return from365;
+            }
+        }
+
         logger.debug(`📡 Fetching standings for league ${leagueId}`);
         const parsed = await footballService.getStandingsParsed(leagueId, season);
 
@@ -1059,6 +1077,47 @@ class FootballDataCacheService {
         }
 
         return parsed;
+    }
+
+    /** World Cup / 365 competition group tables from /web/standings/. */
+    async getStandingsParsedFrom365(
+        competitionId: number = getScores365CompetitionId(),
+        language?: string | null,
+    ): Promise<{ flat: any[]; groups: Array<{ group: string; standings: any[] }> }> {
+        const result = await threeSixFiveScoresService.getStandings(competitionId, language);
+        if (!result.data?.length) {
+            return { flat: [], groups: [] };
+        }
+        const mapped = map365StandingRowsToApiGroups(result.data);
+        for (const standing of mapped.flat) {
+            const team = standing.team as { id?: number; name?: string; logo?: string } | undefined;
+            if (team?.id) {
+                await this.cacheTeamFromStanding(team);
+            }
+        }
+        return mapped;
+    }
+
+    async syncWorldCupStandingsFrom365(language?: string | null): Promise<number> {
+        if (!isScores365ExperimentEnabled()) return 0;
+        const parsed = await this.getStandingsParsedFrom365(
+            getScores365CompetitionId(),
+            language ?? 'en',
+        );
+        const wcLeagueId = getWorldCupLeagueId();
+        const season = getWorldCupSeason();
+        const cacheKey = `${wcLeagueId}_${season}`;
+        if (parsed.groups.length > 0) {
+            this.standingsCache.set(cacheKey, {
+                data: parsed,
+                timestamp: Date.now(),
+                ttl: this.TTL.STANDINGS,
+            });
+            logger.info(
+                `[365Standings] synced ${parsed.flat.length} rows across ${parsed.groups.length} WC groups`,
+            );
+        }
+        return parsed.flat.length;
     }
 
     private async cacheTeamFromStanding(team: any): Promise<void> {

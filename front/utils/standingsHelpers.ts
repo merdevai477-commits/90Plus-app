@@ -89,3 +89,8 @@ export function resolveStandingsGroupsForMatch(
   if (groups.length === 1) return groups;
   return groups;
 }
+
+/** Sort group-stage tables (Group A, Group B, …). */
+export function sortStandingsGroups(groups: StandingsGroup[]): StandingsGroup[] {
+  return [...groups].sort((a, b) => a.group.localeCompare(b.group));
+}
