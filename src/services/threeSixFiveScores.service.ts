@@ -121,6 +121,10 @@ export interface ThreeSixFiveTeamForm {
 export interface ThreeSixFiveHeadToHeadForm {
   home: ThreeSixFiveTeamForm | null;
   away: ThreeSixFiveTeamForm | null;
+  /** Direct meetings between the two sides (from h2hGames or cross-filtered recent games). */
+  meetings: Scores365Game[];
+  homeCompetitorId: number | null;
+  awayCompetitorId: number | null;
 }
 
 export interface ThreeSixFivePlayerMatchReport {
@@ -174,7 +178,7 @@ interface Scores365Game {
   awayCompetitor?: Scores365Competitor;
   events?: unknown[];
   members?: Scores365Member[];
-  h2hGames?: Record<string, Scores365Game[]>;
+  h2hGames?: Record<string, Scores365Game[]> | Scores365Game[];
   recentGames?: Scores365Game[];
 }
 
@@ -661,6 +665,50 @@ class ThreeSixFiveScoresService {
 
   // ─── 5. Head-to-head / recent form ───────────────────────────────────────
 
+  private flattenH2hGames(
+    h2hGames?: Record<string, Scores365Game[]> | Scores365Game[],
+  ): Scores365Game[] {
+    if (!h2hGames) return [];
+    if (Array.isArray(h2hGames)) return h2hGames;
+    return Object.values(h2hGames).flat();
+  }
+
+  private extractDirectMeetings(
+    game: Scores365Game,
+    homeId: number | undefined,
+    awayId: number | undefined,
+  ): Scores365Game[] {
+    const fromH2h = this.flattenH2hGames(game.h2hGames);
+    if (fromH2h.length) {
+      return fromH2h
+        .filter((g) => g?.id != null)
+        .sort(
+          (a, b) =>
+            new Date(b.startTime ?? 0).getTime() - new Date(a.startTime ?? 0).getTime(),
+        );
+    }
+    if (!homeId || !awayId) return [];
+
+    const all = [
+      ...(game.homeCompetitor?.recentGames ?? []),
+      ...(game.awayCompetitor?.recentGames ?? []),
+    ];
+    const seen = new Set<number>();
+    const meetings: Scores365Game[] = [];
+    for (const g of all) {
+      if (!g?.id || seen.has(g.id)) continue;
+      const h = g.homeCompetitor?.id;
+      const a = g.awayCompetitor?.id;
+      if ((h === homeId && a === awayId) || (h === awayId && a === homeId)) {
+        seen.add(g.id);
+        meetings.push(g);
+      }
+    }
+    return meetings.sort(
+      (a, b) => new Date(b.startTime ?? 0).getTime() - new Date(a.startTime ?? 0).getTime(),
+    );
+  }
+
   async getHeadToHeadForm(
     gameId: number,
     language?: string | null,
@@ -669,7 +717,7 @@ class ThreeSixFiveScoresService {
 
     try {
       const langId = resolveScores365LangId(language);
-      const cacheKey = `365:h2h:${gameId}:${langId}`;
+      const cacheKey = `365:h2h:v2:${gameId}:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFiveHeadToHeadForm>(cacheKey);
       if (cached) return { data: cached, source: '365scores' };
 
@@ -680,6 +728,10 @@ class ThreeSixFiveScoresService {
       );
       const game = payload?.game;
       if (!game) return { data: null, source: null };
+
+      const homeId = game.homeCompetitor?.id;
+      const awayId = game.awayCompetitor?.id;
+      const meetings = this.extractDirectMeetings(game, homeId, awayId);
 
       const data: ThreeSixFiveHeadToHeadForm = {
         home: game.homeCompetitor
@@ -696,6 +748,9 @@ class ThreeSixFiveScoresService {
               recentGames: game.awayCompetitor.recentGames ?? [],
             }
           : null,
+        meetings,
+        homeCompetitorId: homeId ?? null,
+        awayCompetitorId: awayId ?? null,
       };
 
       await redisCacheService.set(cacheKey, data, 600_000);

@@ -6,6 +6,12 @@ export function isScores365Fixture(fixture: { _experiment?: string } | null | un
   return fixture?._experiment === 'scores365';
 }
 
+/** Build 365 competitor crest URL when imageVersion is present. */
+function build365CompetitorLogo(competitorId?: number, imageVersion?: number): string {
+  if (!competitorId || imageVersion == null) return '';
+  return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2/v${imageVersion}/Competitors/${competitorId}`;
+}
+
 /** Map 365 h2h recentGames → TeamFixture[] for the form tab. */
 export function map365RecentGamesToTeamFixtures(
   games: Array<{
@@ -51,13 +57,13 @@ export function map365RecentGamesToTeamFixtures(
         home: {
           id: g.homeCompetitor?.id ?? 0,
           name: g.homeCompetitor?.name ?? '—',
-          logo: '',
+          logo: build365CompetitorLogo(g.homeCompetitor?.id, g.homeCompetitor?.imageVersion),
           winner: homeScore > awayScore ? true : homeScore < awayScore ? false : null,
         },
         away: {
           id: g.awayCompetitor?.id ?? 0,
           name: g.awayCompetitor?.name ?? '—',
-          logo: '',
+          logo: build365CompetitorLogo(g.awayCompetitor?.id, g.awayCompetitor?.imageVersion),
           winner: awayScore > homeScore ? true : awayScore < homeScore ? false : null,
         },
       },

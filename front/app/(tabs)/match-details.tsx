@@ -89,6 +89,11 @@ const MatchDetailsScreen = () => {
 
   const [homeLastFixtures, setHomeLastFixtures] = useState<TeamFixture[]>([]);
   const [awayLastFixtures, setAwayLastFixtures] = useState<TeamFixture[]>([]);
+  const [h2hFixtures, setH2hFixtures] = useState<TeamFixture[]>([]);
+  const [form365TeamIds, setForm365TeamIds] = useState<{
+    home?: number;
+    away?: number;
+  }>({});
   const [standingsGroups, setStandingsGroups] = useState<StandingsGroup[]>([]);
   const [standingsSeasonUsed, setStandingsSeasonUsed] = useState<number | null>(null);
   const [standingsUnavailable, setStandingsUnavailable] = useState(false);
@@ -216,6 +221,8 @@ const MatchDetailsScreen = () => {
 
     setHomeLastFixtures([]);
     setAwayLastFixtures([]);
+    setH2hFixtures([]);
+    setForm365TeamIds({});
     setStandingsGroups([]);
     setStandingsSeasonUsed(null);
     setStandingsUnavailable(false);
@@ -477,6 +484,11 @@ const MatchDetailsScreen = () => {
         if (form365) {
           setHomeLastFixtures(form365.home);
           setAwayLastFixtures(form365.away);
+          setH2hFixtures(form365.h2h);
+          setForm365TeamIds({
+            home: form365.homeCompetitorId ?? undefined,
+            away: form365.awayCompetitorId ?? undefined,
+          });
           return;
         }
       }
@@ -1073,24 +1085,70 @@ const MatchDetailsScreen = () => {
 
 
   const renderForm = () => {
-    // البحث عن team IDs من lineups
-    const homeLineup = lineups.find(l =>
-      l.team.name.toLowerCase().includes(homeTeamName.toLowerCase()) ||
-      homeTeamName.toLowerCase().includes(l.team.name.toLowerCase())
-    );
-    const awayLineup = lineups.find(l =>
-      l.team.name.toLowerCase().includes(awayTeamName.toLowerCase()) ||
-      awayTeamName.toLowerCase().includes(l.team.name.toLowerCase())
-    );
-
-    const homeTeamId = homeLineup?.team.id || (lineups.length > 0 ? lineups[0]?.team.id : null);
-    const awayTeamId = awayLineup?.team.id || (lineups.length > 1 ? lineups[1]?.team.id : null);
+    const resolveTeamSideInRow = (
+      row: TeamFixture,
+      side: 'home' | 'away',
+    ): boolean => {
+      const refId = side === 'home'
+        ? (form365TeamIds.home ?? fixture?.teams.home.id)
+        : (form365TeamIds.away ?? fixture?.teams.away.id);
+      const refName = side === 'home' ? homeTeamName : awayTeamName;
+      if (refId != null && row.teams.home.id === refId) return true;
+      if (refId != null && row.teams.away.id === refId) return false;
+      const homeN = row.teams.home.name.toLowerCase();
+      const n = refName.toLowerCase();
+      return homeN.includes(n) || n.includes(homeN);
+    };
 
     return (
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
+        {/* Head-to-head (direct meetings) */}
+        <View style={styles.formContainer}>
+          <View style={styles.formHeader}>
+            <Text style={styles.formTitle}>{t.matchDetails.headToHead}</Text>
+          </View>
+          {h2hFixtures.length > 0 ? (
+            <View style={styles.fixturesList}>
+              {h2hFixtures.map((row, index) => (
+                <View key={`h2h-${index}`} style={styles.fixtureCard}>
+                  <TeamBadge
+                    name={row.teams.home.name}
+                    logo={row.teams.home.logo}
+                    size={36}
+                    color="transparent"
+                  />
+                  <View style={styles.fixtureInfo}>
+                    <Text style={styles.fixtureOpponent} numberOfLines={1}>
+                      {getTeamDisplayName(row.teams.home.name, language)} vs{' '}
+                      {getTeamDisplayName(row.teams.away.name, language)}
+                    </Text>
+                    <Text style={styles.fixtureLeague}>
+                      {getLeagueDisplayName(
+                        row.league.name,
+                        language,
+                        row.league.id,
+                        undefined,
+                      )}
+                    </Text>
+                  </View>
+                  <View style={styles.fixtureResult}>
+                    <Text style={styles.fixtureScore}>
+                      {row.goals.home} - {row.goals.away}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>{t.matchDetails.noHeadToHead}</Text>
+            </View>
+          )}
+        </View>
+
         {/* Home Team Last 5 Matches */}
         <View style={styles.formContainer}>
           <View style={styles.formHeader}>
@@ -1101,7 +1159,7 @@ const MatchDetailsScreen = () => {
           {homeLastFixtures.length > 0 ? (
             <View style={styles.fixturesList}>
               {homeLastFixtures.map((fixture, index) => {
-                const isHome = homeTeamId ? fixture.teams.home.id === homeTeamId : true;
+                const isHome = resolveTeamSideInRow(fixture, 'home');
                 const opponent = isHome ? fixture.teams.away : fixture.teams.home;
                 const teamScore = isHome ? fixture.goals.home : fixture.goals.away;
                 const opponentScore = isHome ? fixture.goals.away : fixture.goals.home;
@@ -1147,7 +1205,7 @@ const MatchDetailsScreen = () => {
           {awayLastFixtures.length > 0 ? (
             <View style={styles.fixturesList}>
               {awayLastFixtures.map((fixture, index) => {
-                const isHome = awayTeamId ? fixture.teams.home.id === awayTeamId : false;
+                const isHome = resolveTeamSideInRow(fixture, 'away');
                 const opponent = isHome ? fixture.teams.away : fixture.teams.home;
                 const teamScore = isHome ? fixture.goals.home : fixture.goals.away;
                 const opponentScore = isHome ? fixture.goals.away : fixture.goals.home;

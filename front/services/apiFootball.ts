@@ -1539,7 +1539,13 @@ export const ApiFootballService = {
    */
   async get365MatchForm(
     fixtureId: number,
-  ): Promise<{ home: TeamFixture[]; away: TeamFixture[] } | null> {
+  ): Promise<{
+    home: TeamFixture[];
+    away: TeamFixture[];
+    h2h: TeamFixture[];
+    homeCompetitorId: number | null;
+    awayCompetitorId: number | null;
+  } | null> {
     try {
       const baseUrl = getApiUrl();
       const url = `${baseUrl}/football/cached/365/fixture/${fixtureId}/form`;
@@ -1547,14 +1553,22 @@ export const ApiFootballService = {
       if (!response.ok) return null;
       const json = (await response.json()) as {
         response?: {
-          home?: { recentGames?: unknown[] };
-          away?: { recentGames?: unknown[] };
+          home?: { recentGames?: unknown[]; teamId?: number };
+          away?: { recentGames?: unknown[]; teamId?: number };
+          meetings?: unknown[];
+          homeCompetitorId?: number | null;
+          awayCompetitorId?: number | null;
         };
       };
       const { map365RecentGamesToTeamFixtures } = await import('../utils/scores365Adapters');
+      const payload = json.response;
+      if (!payload) return null;
       return {
-        home: map365RecentGamesToTeamFixtures(json.response?.home?.recentGames as any[] ?? [], 5),
-        away: map365RecentGamesToTeamFixtures(json.response?.away?.recentGames as any[] ?? [], 5),
+        home: map365RecentGamesToTeamFixtures(payload.home?.recentGames as any[] ?? [], 5),
+        away: map365RecentGamesToTeamFixtures(payload.away?.recentGames as any[] ?? [], 5),
+        h2h: map365RecentGamesToTeamFixtures(payload.meetings as any[] ?? [], 10),
+        homeCompetitorId: payload.homeCompetitorId ?? payload.home?.teamId ?? null,
+        awayCompetitorId: payload.awayCompetitorId ?? payload.away?.teamId ?? null,
       };
     } catch {
       return null;

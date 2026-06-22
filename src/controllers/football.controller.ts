@@ -2304,6 +2304,21 @@ export class FootballController {
       const language = resolveAppLanguage(req);
       const result = await footballDataCacheService.getCached365HeadToHeadForm(gameId, language);
       if (!result.data) {
+        await ensureScores365GameMapping(fixtureId);
+        const retryGameId =
+          (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
+        if (retryGameId) {
+          const retry = await footballDataCacheService.getCached365HeadToHeadForm(retryGameId, language);
+          if (retry.data) {
+            res.json({
+              status: 'SUCCESS',
+              source: retry.source,
+              response: retry.data,
+              _meta: { scores365GameId: retryGameId, fixtureId },
+            });
+            return;
+          }
+        }
         res.status(503).json({
           status: 'ERROR',
           message: '365Scores form unavailable',

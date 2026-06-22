@@ -578,6 +578,8 @@ export const ar = {
     beforeMatch: 'قد لا تتوفر البيانات قبل المباراة',
     matchEvents: 'أحداث المباراة',
     last5Matches: 'آخر 5 مباريات',
+    headToHead: 'المواجهات المباشرة',
+    noHeadToHead: 'لا توجد مواجهات سابقة بين الفريقين',
     noPreviousMatches: 'لا توجد مباريات سابقة',
     goalkeeper: 'حارس مرمى',
     defender: 'مدافع',

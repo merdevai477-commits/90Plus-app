@@ -366,6 +366,8 @@ export const en = {
     beforeMatch: 'Data may not be available before match starts',
     matchEvents: 'Match Events',
     last5Matches: 'Last 5 Matches',
+    headToHead: 'Head to Head',
+    noHeadToHead: 'No previous meetings between these teams',
     noPreviousMatches: 'No previous matches',
     goalkeeper: 'Goalkeeper',
     defender: 'Defender',
