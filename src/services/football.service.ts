@@ -79,7 +79,9 @@ function markDailyQuotaExhausted(): void {
 }
 
 function markQuotaExhausted(retryAfterSec?: number): void {
-  const coolMs = retryAfterSec ? retryAfterSec * 1000 : QUOTA_COOLDOWN_MS;
+  const coolMs = retryAfterSec
+    ? retryAfterSec * 1000
+    : QUOTA_COOLDOWN_RETRY_AFTER_MS;
   quotaExhaustedUntil = Date.now() + coolMs;
 }
 

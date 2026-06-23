@@ -14,7 +14,6 @@ import { logger } from '../utils/logger';
 import { MatchEventIngestor } from './match-events/match-event-ingestor.service';
 import { fanOutMatchEvent } from './match-events/match-event-fanout.service';
 import { tryAcquireSyncLeader } from './football-sync-leader.service';
-import { isFootballQuotaExhausted } from './football.service';
 import {
     isWorldCupFixtureIdAllowed,
     isWorldCupOnlyMode,
@@ -93,11 +92,6 @@ export class LiveMatchIngestorService {
     }
 
     static async tick(): Promise<void> {
-        if (isFootballQuotaExhausted()) {
-            logger.debug('[LiveMatchIngestor] Skipping tick — API-Football daily quota exhausted');
-            return;
-        }
-
         const isLeader = await tryAcquireSyncLeader('match-ingestor');
         if (!isLeader) {
             logger.debug('[LiveMatchIngestor] Skipping tick — another instance is sync leader');

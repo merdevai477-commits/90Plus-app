@@ -17,19 +17,28 @@ import type { MatchEventIngestResult, NormalizedMatchEvent, FixtureSnapshot } fr
 import { readLiveFixtureById, readTerminalFixtureById } from '../live-fixture-cache.service';
 import { matchCacheService } from '../match-cache.service';
 
-async function readFixtureSnapshotFromCache(fixtureId: number): Promise<any | null> {
+async function readFixtureSnapshotFromCache(
+    fixtureId: number,
+    options?: { preferFresh?: boolean },
+): Promise<any | null> {
+    const readDb = (): Promise<any | null> =>
+        prisma.cachedFixture
+            .findUnique({ where: { fixtureId } })
+            .then((dbRow) => (dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null));
+
+    // Sync-triggered ingest runs right after DB upsert — prefer DB over Redis TTL lag.
+    if (options?.preferFresh) {
+        const fromDb = await readDb();
+        if (fromDb) return fromDb;
+    }
+
     const live = await readLiveFixtureById(fixtureId);
     if (live) return live;
 
     const terminal = await readTerminalFixtureById(fixtureId);
     if (terminal) return terminal;
 
-    const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
-    if (dbRow) {
-        return matchCacheService.convertDbMatchToApiFormat(dbRow);
-    }
-
-    return null;
+    return readDb();
 }
 
 async function persistEvent(event: NormalizedMatchEvent): Promise<boolean> {
@@ -68,7 +77,8 @@ export class MatchEventIngestor {
         if (!lock) return null;
 
         try {
-            const cachedLive = await readFixtureSnapshotFromCache(fixtureId);
+            const preferFresh = options?.forceRefreshEvents === true;
+            const cachedLive = await readFixtureSnapshotFromCache(fixtureId, { preferFresh });
             let snapshot: FixtureSnapshot | null = null;
 
             if (cachedLive) {

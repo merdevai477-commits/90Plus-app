@@ -1450,11 +1450,14 @@ class FootballDataCacheService {
             return fullData.events;
         }
 
-        // ✅ 3. Request deduplication: Check if there's already a pending request
-        const pendingRequest = this.pendingEventsRequests.get(fixtureId);
-        if (pendingRequest) {
-            logger.debug(`⏳ Waiting for pending events request ${fixtureId} (${this.pendingEventsRequests.size} concurrent requests)`);
-            return await pendingRequest;
+        // ✅ 3. Request deduplication: share in-flight fetches (skip when forceRefresh —
+        // ingest/sync triggers need a fresh upstream read, not a stale pending promise).
+        if (!forceRefresh) {
+            const pendingRequest = this.pendingEventsRequests.get(fixtureId);
+            if (pendingRequest) {
+                logger.debug(`⏳ Waiting for pending events request ${fixtureId} (${this.pendingEventsRequests.size} concurrent requests)`);
+                return await pendingRequest;
+            }
         }
 
         // ✅ 4. Create new API request and share it with all concurrent requests
