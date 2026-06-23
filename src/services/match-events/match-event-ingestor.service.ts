@@ -8,7 +8,6 @@ import {
     normalizeApiEvents,
     diffScoreGoals,
     diffStatusEvents,
-    buildLineupEvent,
     getCachedFixtureState,
     setCachedFixtureState,
     parseFixtureSnapshot,
@@ -17,8 +16,6 @@ import {
 import type { MatchEventIngestResult, NormalizedMatchEvent, FixtureSnapshot } from './match-event.types';
 import { readLiveFixtureById, readTerminalFixtureById } from '../live-fixture-cache.service';
 import { matchCacheService } from '../match-cache.service';
-
-const lineupAnnouncedFixtures = new Set<number>();
 
 async function readFixtureSnapshotFromCache(fixtureId: number): Promise<any | null> {
     const live = await readLiveFixtureById(fixtureId);
@@ -101,11 +98,6 @@ export class MatchEventIngestor {
                 }
             }
 
-            if (!snapshot.isLive && (snapshot.status === 'NS' || snapshot.status === 'TBD')) {
-                const lineupEvent = await this.tryLineupEvent(fixtureId, meta);
-                if (lineupEvent) normalized.push(lineupEvent);
-            }
-
             const freshEvents: NormalizedMatchEvent[] = [];
             for (const event of normalized) {
                 const inserted = await persistEvent(event);
@@ -134,27 +126,6 @@ export class MatchEventIngestor {
             return null;
         } finally {
             await lock.release();
-        }
-    }
-
-    private static async tryLineupEvent(
-        fixtureId: number,
-        meta: { homeTeam: string; awayTeam: string },
-    ): Promise<NormalizedMatchEvent | null> {
-        if (lineupAnnouncedFixtures.has(fixtureId)) return null;
-
-        try {
-            const lineups = await footballDataCacheService.getMatchLineups(fixtureId);
-            if (!Array.isArray(lineups) || lineups.length === 0) return null;
-            const hasStartXI = lineups.some(
-                (team) => Array.isArray(team?.startXI) && team.startXI.length > 0,
-            );
-            if (!hasStartXI) return null;
-
-            lineupAnnouncedFixtures.add(fixtureId);
-            return buildLineupEvent(fixtureId, meta);
-        } catch {
-            return null;
         }
     }
 

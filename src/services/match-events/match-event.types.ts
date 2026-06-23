@@ -1,19 +1,27 @@
 import type { PushTemplateKey } from '../push-templates.service';
 import type { NotificationType } from '../notification.service';
 
-/** Canonical event kinds emitted by the ingestor. */
-export type MatchEventKind =
-    | 'goal_home'
-    | 'goal_away'
-    | 'kickoff'
-    | 'halftime'
-    | 'fulltime'
-    | 'card_yellow'
-    | 'card_red'
-    | 'substitution'
-    | 'var'
-    | 'penalty'
-    | 'lineup';
+/**
+ * Match events that may trigger push + inbox notifications.
+ * Yellow cards, substitutions, halftime, lineups, etc. are intentionally excluded.
+ */
+export const MATCH_PUSH_EVENT_KINDS = [
+    'goal_home',
+    'goal_away',
+    'kickoff',
+    'card_red',
+    'var',
+    'fulltime',
+] as const;
+
+export type MatchEventKind = (typeof MATCH_PUSH_EVENT_KINDS)[number];
+
+export type MatchNotificationPrefKey =
+    | 'matchGoals'
+    | 'matchStart'
+    | 'matchEnd'
+    | 'matchCards'
+    | 'matchVar';
 
 export interface NormalizedMatchEvent {
     fixtureId: number;
@@ -29,7 +37,7 @@ export interface NormalizedMatchEvent {
     notificationType: NotificationType;
     titleKey: PushTemplateKey;
     bodyKey: PushTemplateKey;
-    prefKey: 'matchGoals' | 'matchStart' | 'matchEnd' | 'matchHalftime' | 'matchCards' | 'matchSubs' | 'matchVar' | 'matchLineups' | null;
+    prefKey: MatchNotificationPrefKey;
     data: Record<string, unknown>;
 }
 

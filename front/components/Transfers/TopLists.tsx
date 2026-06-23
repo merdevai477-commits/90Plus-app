@@ -49,7 +49,7 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
       .slice(0, 10);
 
     // Top 10 Most Active Leagues
-    const leagueCounts = new Map<number, { name: string; logo?: string; count: number }>();
+    const leagueCounts = new Map<number, { name: string; logo?: string; count: number , country?: string }>();
     transfers.forEach(t => {
       if (t.league?.id) {
         const existing = leagueCounts.get(t.league.id);
@@ -57,6 +57,7 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
           name: t.league.name,
           logo: t.league.logo,
           count: (existing?.count || 0) + 1,
+          
         });
       }
     });
@@ -162,7 +163,7 @@ export const TopLists: React.FC<TopListsProps> = ({ transfers, onTransferPress }
               />
               <View style={styles.itemInfo}>
                 <Text style={styles.itemName} numberOfLines={1}>
-                  {getLeagueDisplayName(league.name, language)}
+                  {getLeagueDisplayName(league.name, language, league.id, league.country)}
                 </Text>
               </View>
               <Text style={styles.itemValue}>{league.count}</Text>

@@ -6,6 +6,7 @@
  * Only the distributed sync leader instance performs upstream API calls.
  */
 
+import prisma from '../lib/prisma';
 import { footballService } from './football.service';
 import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES } from './match-cache.service';
 import { WebSocketService } from './websocket.service';
@@ -50,8 +51,8 @@ class LiveFixtureSyncService {
         if (this.running) return;
 
         const intervalMs = Math.max(
-            45_000,
-            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '45000', 10) || 45_000,
+            10_000,
+            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '15000', 10) || 15_000,
         );
 
         this.running = true;
@@ -224,6 +225,22 @@ class LiveFixtureSyncService {
 
         await matchCacheService.upsertFixtures(liveFixtures);
 
+        const liveIds = [...currentLiveIds];
+        const favoritedLiveIds = liveIds.length > 0
+            ? new Set(
+                (
+                    await prisma.favoriteMatch.findMany({
+                        where: {
+                            apiMatchId: { in: liveIds },
+                            notifiedEnd: false,
+                        },
+                        select: { apiMatchId: true },
+                        distinct: ['apiMatchId'],
+                    })
+                ).map((row) => row.apiMatchId),
+            )
+            : new Set<number>();
+
         for (const fixture of liveFixtures) {
             const id = fixture.fixture.id;
             const status = fixture.fixture.status.short;
@@ -243,13 +260,14 @@ class LiveFixtureSyncService {
                 statusChanged ||
                 prev.elapsed !== elapsed;
 
-            if (!changed) continue;
+            if (changed) {
+                this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed });
+                this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed);
+            }
 
-            this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed });
-
-            this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed);
-
-            if (scoreChanged || statusChanged) {
+            // Re-ingest favorited live fixtures every tick so cards/VAR are
+            // detected without waiting for a score or status change.
+            if (favoritedLiveIds.has(id)) {
                 LiveMatchIngestorService.triggerFixtureIngest(id);
             }
         }

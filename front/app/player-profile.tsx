@@ -332,7 +332,12 @@ function LeagueStatCard({
     labels: Record<string, string>;
     teamColor: string;
 }) {
-    const leagueName = getLeagueDisplayName(stat.league.name, language);
+    const leagueName = getLeagueDisplayName(
+        stat.league.name,
+        language,
+        stat.league.id,
+        stat.league.country,
+    );
     const seasonLabel = stat.league.season
         ? `${stat.league.season}/${stat.league.season + 1}`
         : '';

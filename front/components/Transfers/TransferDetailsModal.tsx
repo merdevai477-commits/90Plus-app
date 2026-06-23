@@ -14,6 +14,8 @@ import { Transfer } from '../../services/apiFootball';
 import PlayerAvatar from '../common/PlayerAvatar';
 import TeamBadge from '../common/TeamBadge';
 import LeagueIcon from '../common/LeagueIcon';
+import { useTranslation } from '../../src/i18n';
+import { getLeagueDisplayName } from '../../utils/i18nHelpers';
 
 interface TransferDetailsModalProps {
   visible: boolean;
@@ -38,6 +40,7 @@ export const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({
   onFavorite,
   isFavorite = false,
 }) => {
+  const { language } = useTranslation();
   if (!transfer) return null;
 
   const transferTimeline = useMemo(() => {
@@ -117,7 +120,13 @@ export const TransferDetailsModal: React.FC<TransferDetailsModalProps> = ({
                         size={24}
                         color="#8B5CF6"
                       />
-                      <Text style={styles.leagueName}>{transfer.league.name}</Text>
+                      <Text style={styles.leagueName}>
+                        {getLeagueDisplayName(
+                          transfer.league.name,
+                          language,
+                          transfer.league.id,
+                        )}
+                      </Text>
                     </View>
                   )}
                 </View>

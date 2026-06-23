@@ -15,7 +15,13 @@
 import type { Language } from '../src/i18n/types';
 import { translations } from '../src/i18n/utils';
 import { teamArabicNames } from '../data/teamArabicNames';
-import { LEAGUES } from '../data/leagues';
+import {
+  AMBIGUOUS_LEAGUE_NAMES,
+  LEAGUE_BY_ID,
+  LEAGUE_NAME_COUNTRY_ID,
+  LEAGUES,
+  normalizeLeagueCountryKey,
+} from '../data/leagues';
 import { ALL_COUNTRY_FLAGS } from '../data/localCountryFlags';
 import { COUNTRIES } from '../data/countries';
 import {
@@ -91,46 +97,28 @@ export function getCountryDisplayName(
   return getTeamDisplayName(originalName, language);
 }
 
-/** Disambiguate generic league names that exist in multiple countries. */
-const LEAGUE_NAME_COUNTRY_ID: Record<string, Record<string, number>> = {
-  'premier league': { england: 39 },
-  'championship': { england: 40 },
-  'league one': { england: 41 },
-  'league two': { england: 42 },
-  'fa cup': { england: 45 },
-  'efl cup': { england: 48 },
-  'carabao cup': { england: 48 },
-  'ligue 1': { france: 61 },
-  'ligue 2': { france: 62 },
-  'bundesliga': { germany: 78 },
-  '2. bundesliga': { germany: 79 },
-  'serie a': { italy: 135 },
-  'serie b': { italy: 136 },
-  'la liga': { spain: 140 },
-  'segunda división': { spain: 141 },
-  'segunda division': { spain: 141 },
-  'primeira liga': { portugal: 94 },
-  'eredivisie': { netherlands: 88 },
-  'premiership': { scotland: 179 },
-  'a-league': { australia: 188 },
-};
-
 const KNOWN_LEAGUE_ARABIC_KEYS = new Set(
   LEAGUES.map((l) => l.name.toLowerCase()).concat([
-    'premier league',
     'championship',
     'uefa champions league',
     'champions league',
     'uefa europa league',
     'europa league',
+    'uefa europa conference league',
     'a-league',
     'a league',
     'scottish premiership',
     'major league soccer',
     'mls',
     'j1 league',
-    'super lig',
-    'süper lig',
+    'egyptian premier league',
+    'saudi pro league',
+    'iraqi premier league',
+    'jordanian pro league',
+    'west bank premier league',
+    'yemeni league',
+    'sudani premier league',
+    'ligat ha\'al',
   ]),
 );
 
@@ -140,16 +128,22 @@ function lookupCuratedLeagueArabic(
   country?: string | null,
 ): string | null {
   if (leagueId != null) {
-    const byId = LEAGUES.find((l) => l.id === leagueId);
+    const byId = LEAGUE_BY_ID.get(leagueId);
     if (byId?.nameAr) return byId.nameAr;
   }
 
-  const lowerName = name.toLowerCase();
-  const countryKey = (country ?? '').trim().toLowerCase();
+  const lowerName = name.trim().toLowerCase();
+  if (!lowerName) return null;
+
+  const countryKey = normalizeLeagueCountryKey(country);
   const disambigId = LEAGUE_NAME_COUNTRY_ID[lowerName]?.[countryKey];
   if (disambigId != null) {
-    const byCountry = LEAGUES.find((l) => l.id === disambigId);
+    const byCountry = LEAGUE_BY_ID.get(disambigId);
     if (byCountry?.nameAr) return byCountry.nameAr;
+  }
+
+  if (AMBIGUOUS_LEAGUE_NAMES.has(lowerName)) {
+    return null;
   }
 
   const byName = LEAGUES.find((l) => l.name.toLowerCase() === lowerName);
@@ -161,6 +155,21 @@ function lookupCuratedLeagueArabic(
   }
 
   return null;
+}
+
+function shouldSkipAutoLeagueTranslation(
+  name: string,
+  leagueId?: number | null,
+  country?: string | null,
+): boolean {
+  if (leagueId != null) return false;
+  const lowerName = name.trim().toLowerCase();
+  if (!lowerName) return true;
+  if (AMBIGUOUS_LEAGUE_NAMES.has(lowerName)) return true;
+  if (LEAGUE_NAME_COUNTRY_ID[lowerName] && !normalizeLeagueCountryKey(country)) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -184,7 +193,7 @@ export function getLeagueDisplayName(
     const curated = lookupCuratedLeagueArabic(name, leagueId, country);
     if (curated) return curated;
 
-    if (name) {
+    if (name && !shouldSkipAutoLeagueTranslation(name, leagueId, country)) {
       const cached = getCachedFootballTranslation(name);
       if (cached) return cached;
       queueFootballTranslation(name, language);

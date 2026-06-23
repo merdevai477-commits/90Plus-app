@@ -219,23 +219,15 @@ export default function NotificationPreferencesScreen() {
                 <View style={styles.section}>
                     <SectionHeader title={t.notifications.sectionMatch} icon="football-outline" />
                     <View style={styles.card}>
-                        <SwitchRow label={t.notifications.prefMatchGoals} subtitle={t.notifications.prefMatchGoalsSub} value={current.matchGoals} field="matchGoals" onToggle={handleToggle} loading={loadingField === 'matchGoals'} />
-                        <View style={styles.divider} />
                         <SwitchRow label={t.notifications.prefMatchStart} subtitle={t.notifications.prefMatchStartSub} value={current.matchStart} field="matchStart" onToggle={handleToggle} loading={loadingField === 'matchStart'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefMatchEnd} subtitle={t.notifications.prefMatchEndSub} value={current.matchEnd} field="matchEnd" onToggle={handleToggle} loading={loadingField === 'matchEnd'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefHalftime} subtitle={t.notifications.prefHalftimeSub} value={current.matchHalftime} field="matchHalftime" onToggle={handleToggle} loading={loadingField === 'matchHalftime'} />
+                        <SwitchRow label={t.notifications.prefMatchGoals} subtitle={t.notifications.prefMatchGoalsSub} value={current.matchGoals} field="matchGoals" onToggle={handleToggle} loading={loadingField === 'matchGoals'} />
                         <View style={styles.divider} />
                         <SwitchRow label={t.notifications.prefMatchCards} subtitle={t.notifications.prefMatchCardsSub} value={current.matchCards} field="matchCards" onToggle={handleToggle} loading={loadingField === 'matchCards'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefMatchSubs} subtitle={t.notifications.prefMatchSubsSub} value={current.matchSubs} field="matchSubs" onToggle={handleToggle} loading={loadingField === 'matchSubs'} />
-                        <View style={styles.divider} />
                         <SwitchRow label={t.notifications.prefMatchVar} subtitle={t.notifications.prefMatchVarSub} value={current.matchVar} field="matchVar" onToggle={handleToggle} loading={loadingField === 'matchVar'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefMatchLineups} subtitle={t.notifications.prefMatchLineupsSub} value={current.matchLineups} field="matchLineups" onToggle={handleToggle} loading={loadingField === 'matchLineups'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefLeague} subtitle={t.notifications.prefLeagueSub} value={current.leagueMatches} field="leagueMatches" onToggle={handleToggle} loading={loadingField === 'leagueMatches'} />
+                        <SwitchRow label={t.notifications.prefMatchEnd} subtitle={t.notifications.prefMatchEndSub} value={current.matchEnd} field="matchEnd" onToggle={handleToggle} loading={loadingField === 'matchEnd'} />
                     </View>
                 </View>
 

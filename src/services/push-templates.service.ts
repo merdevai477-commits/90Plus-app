@@ -34,6 +34,8 @@ export type PushTemplateKey =
     | 'goalBody'
     | 'halftimeTitle'
     | 'halftimeBody'
+    | 'matchSecondHalfTitle'
+    | 'matchSecondHalfBody'
     | 'fulltimeTitle'
     | 'fulltimeBody'
     | 'predictionWinTitle'
@@ -200,6 +202,8 @@ const en: TemplateMap = {
     goalBody: "{player} scores for {team} ({minute}')",
     halftimeTitle: 'Half time',
     halftimeBody: '{home} {homeScore} - {awayScore} {away}',
+    matchSecondHalfTitle: 'Second half',
+    matchSecondHalfBody: '{home} vs {away} — the second half has started',
     fulltimeTitle: 'Full time',
     fulltimeBody: '{home} {homeScore} - {awayScore} {away}',
     predictionWinTitle: '🎉 Correct prediction!',
@@ -366,6 +370,8 @@ const ar: TemplateMap = {
     goalBody: '{player} يسجل لـ{team} في الدقيقة {minute}',
     halftimeTitle: 'استراحة بين الشوطين',
     halftimeBody: '{home} {homeScore} - {awayScore} {away}',
+    matchSecondHalfTitle: 'الشوط الثاني',
+    matchSecondHalfBody: '{home} ضد {away} — بدأ الشوط الثاني',
     fulltimeTitle: 'انتهت المباراة',
     fulltimeBody: '{home} {homeScore} - {awayScore} {away}',
     predictionWinTitle: '🎉 توقع صحيح!',

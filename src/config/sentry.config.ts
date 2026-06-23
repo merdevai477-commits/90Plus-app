@@ -135,7 +135,7 @@ export function initializeSentry(app: Application): void {
       
       // Integrations for performance monitoring and profiling
       integrations: [
-        nodeProfilingIntegration(),
+        // nodeProfilingIntegration(),
       ],
       
       // Filter sensitive data before sending

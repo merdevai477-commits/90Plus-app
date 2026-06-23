@@ -1,8 +1,7 @@
 import prisma from '../lib/prisma';
-import { NotificationService, NotificationType } from './notification.service';
+import { NotificationType } from './notification.service';
 import { logger } from '../utils/logger';
 import { footballService, isFootballQuotaExhausted } from './football.service';
-import { getUserLanguage, renderPushTemplate } from './push-templates.service';
 import {
     isWorldCupOnlyMode,
     logSkippingNonWorldCup,
@@ -291,58 +290,9 @@ export class LeagueMatchWatcherService {
         fixture: ApiFootballFixture,
         leagueId: number
     ) {
-        try {
-            const homeTeam = fixture.teams.home.name;
-            const awayTeam = fixture.teams.away.name;
-            const leagueName = fixture.league.name;
-            const matchId = fixture.fixture.id;
-            const status = fixture.fixture.status.short;
-
-            let title: string;
-            let message: string;
-
-            const lang = await getUserLanguage(userId);
-            if (status === 'NS') {
-                // Match starting soon
-                const matchDate = new Date(fixture.fixture.date);
-                const minutesUntil = Math.round((matchDate.getTime() - Date.now()) / (60 * 1000));
-                title = renderPushTemplate('leagueMatchSoonTitle', lang);
-                message = renderPushTemplate('leagueMatchSoonBody', lang, {
-                    home: homeTeam,
-                    away: awayTeam,
-                    minutes: minutesUntil,
-                });
-            } else {
-                // Match just started
-                title = renderPushTemplate('leagueMatchStartedTitle', lang);
-                message = renderPushTemplate('leagueMatchStartedBody', lang, {
-                    home: homeTeam,
-                    away: awayTeam,
-                    league: leagueName,
-                });
-            }
-
-            await NotificationService.createNotification({
-                userId,
-                pushToken,
-                title,
-                message,
-                type: NotificationType.MATCH_START,
-                data: {
-                    type: status === 'NS' ? 'MATCH_REMINDER' : 'LEAGUE_MATCH_START',
-                    matchId,
-                    fixtureId: matchId,
-                    leagueId,
-                    homeTeam,
-                    awayTeam,
-                    leagueName,
-                },
-            });
-
-            logger.info(`📢 Sent league match notification to user ${userId} for match ${matchId}`);
-        } catch (error: any) {
-            logger.error(`❌ Error sending league match notification:`, error.message);
-        }
+        // League kickoff reminders are disabled — match pushes are limited to
+        // goals, halftime, second-half start, and fulltime on subscriptions.
+        logger.debug(`[LeagueMatchWatcher] skipped league match notification for user ${userId}`);
     }
 }
 

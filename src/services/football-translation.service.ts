@@ -11,6 +11,10 @@ import crypto from 'crypto';
 import OpenAI from 'openai';
 import { getRedisClient, isRedisConnected } from '../lib/redis';
 import { logger } from '../utils/logger';
+import {
+  getCuratedArabicLeagueName,
+  isAmbiguousLeagueName,
+} from '../data/league-translations';
 
 const CACHE_PREFIX = 'ft:en:ar:';
 const CACHE_TTL_SEC = 90 * 24 * 60 * 60; // 90 days
@@ -173,6 +177,17 @@ export async function translateFootballNames(
   const missing: string[] = [];
 
   for (const text of unique) {
+    const curated = getCuratedArabicLeagueName(text);
+    if (curated) {
+      output[text] = curated;
+      continue;
+    }
+
+    if (isAmbiguousLeagueName(text)) {
+      output[text] = text;
+      continue;
+    }
+
     const cached = await readCache(text);
     if (cached) {
       output[text] = cached;

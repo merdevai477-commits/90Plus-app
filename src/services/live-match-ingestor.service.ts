@@ -12,7 +12,7 @@ import prisma from '../lib/prisma';
 import { WebSocketService } from './websocket.service';
 import { logger } from '../utils/logger';
 import { MatchEventIngestor } from './match-events/match-event-ingestor.service';
-import { fanOutMatchEvents } from './match-events/match-event-fanout.service';
+import { fanOutMatchEvent } from './match-events/match-event-fanout.service';
 import { tryAcquireSyncLeader } from './football-sync-leader.service';
 import { isFootballQuotaExhausted } from './football.service';
 import {
@@ -23,10 +23,10 @@ import {
 
 function pollIntervalMs(): number {
     const fromEnv = parseInt(
-        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '90000',
+        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '15000',
         10,
     );
-    return Math.max(60_000, Number.isFinite(fromEnv) ? fromEnv : 90_000);
+    return Math.max(10_000, Number.isFinite(fromEnv) ? fromEnv : 15_000);
 }
 
 const FIXTURE_INGEST_CONCURRENCY = Math.max(
@@ -35,11 +35,11 @@ const FIXTURE_INGEST_CONCURRENCY = Math.max(
 );
 
 export class LiveMatchIngestorService {
-    private static isRunning = false;
     private static intervalId: NodeJS.Timeout | null = null;
     /** Coalesce rapid sync triggers for the same fixture. */
     private static pendingSyncIngest = new Map<number, NodeJS.Timeout>();
     private static inFlightFixtures = new Set<number>();
+    private static pendingRetries = new Set<number>();
 
     static start(): void {
         if (this.intervalId) {
@@ -87,7 +87,7 @@ export class LiveMatchIngestorService {
             void this.ingestFixtureById(fixtureId, { forceRefreshEvents: true }).catch((err) =>
                 logger.warn(`[LiveMatchIngestor] sync-trigger ingest ${fixtureId} failed:`, err?.message),
             );
-        }, 150);
+        }, 0);
 
         this.pendingSyncIngest.set(fixtureId, timer);
     }
@@ -104,24 +104,19 @@ export class LiveMatchIngestorService {
             return;
         }
 
-        if (this.isRunning) {
-            logger.debug('⏳ Live match ingestor tick skipped — previous still running');
-            return;
-        }
-
-        this.isRunning = true;
-        try {
-            await this.checkFavoritedFixtures();
-        } finally {
-            this.isRunning = false;
-        }
+        void this.checkFavoritedFixtures().catch((err) =>
+            logger.error('Live match ingestor tick failed:', err),
+        );
     }
 
     private static async ingestFixtureById(
         fixtureId: number,
         options?: { forceRefreshEvents?: boolean },
     ): Promise<void> {
-        if (this.inFlightFixtures.has(fixtureId)) return;
+        if (this.inFlightFixtures.has(fixtureId)) {
+            this.pendingRetries.add(fixtureId);
+            return;
+        }
         this.inFlightFixtures.add(fixtureId);
         try {
             const favorite = await prisma.favoriteMatch.findFirst({
@@ -139,10 +134,13 @@ export class LiveMatchIngestorService {
                     homeTeam: favorite.homeTeam,
                     awayTeam: favorite.awayTeam,
                 },
-                options,
+                { forceRefreshEvents: true, ...options },
             );
         } finally {
             this.inFlightFixtures.delete(fixtureId);
+            if (this.pendingRetries.delete(fixtureId)) {
+                void this.ingestFixtureById(fixtureId, options);
+            }
         }
     }
 
@@ -163,10 +161,12 @@ export class LiveMatchIngestorService {
         if (!result) return;
 
         if (result.freshEvents.length > 0) {
-            const enqueued = await fanOutMatchEvents(result.freshEvents);
-            logger.info(
-                `[LiveMatchIngestor] fixture ${fixtureId}: ${result.freshEvents.length} new event(s), ${enqueued} push(es) enqueued`,
-            );
+            for (const event of result.freshEvents) {
+                const delivered = await fanOutMatchEvent(event);
+                logger.info(
+                    `[LiveMatchIngestor] fixture ${fixtureId}: event ${event.eventType} → ${delivered} push(es)`,
+                );
+            }
         }
 
         WebSocketService.sendMatchUpdate(fixtureId, {
@@ -214,7 +214,7 @@ export class LiveMatchIngestorService {
             const batch = entries.slice(i, i + FIXTURE_INGEST_CONCURRENCY);
             await Promise.all(
                 batch.map(([fixtureId, meta]) =>
-                    this.processFixture(fixtureId, meta).catch((err: any) => {
+                    this.processFixture(fixtureId, meta, { forceRefreshEvents: true }).catch((err: any) => {
                         logger.error(`[LiveMatchIngestor] fixture ${fixtureId} error:`, err?.message);
                     }),
                 ),

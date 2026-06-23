@@ -22,6 +22,7 @@ import * as Haptics from 'expo-haptics';
 import ApiFootballService, { Transfer, TransfersByLeague, MAJOR_LEAGUES } from '../services/apiFootball';
 import { getFootballSeasonYear, playerPhotoUrl } from '../utils/playerStatsAggregate';
 import { useTranslation } from '../src/i18n';
+import { getLeagueDisplayName } from '../utils/i18nHelpers';
 import { TransferCardSkeleton } from '../components/Transfers/TransferCardSkeleton';
 import { FiltersModal, TransferFilters } from '../components/Transfers/FiltersModal';
 import { TransfersCharts } from '../components/Transfers/TransfersCharts';
@@ -40,11 +41,13 @@ type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'value-d
 const TransferCard = React.memo(({ 
   transfer, 
   index,
+  language,
   onPlayerPress,
   onTeamPress,
 }: { 
   transfer: Transfer; 
   index: number;
+  language: 'ar' | 'en';
   onPlayerPress?: (transfer: Transfer) => void;
   onTeamPress?: (teamId: number) => void;
 }) => (
@@ -87,7 +90,9 @@ const TransferCard = React.memo(({
                 placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
               />
             )}
-            <Text style={styles.leagueNameSmall}>{transfer.league.name}</Text>
+            <Text style={styles.leagueNameSmall}>
+              {getLeagueDisplayName(transfer.league.name, language, transfer.league.id)}
+            </Text>
           </View>
         )}
       </View>
@@ -153,7 +158,7 @@ TransferCard.displayName = 'TransferCard';
 
 export default function TransfersScreen() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   const [transfersByLeague, setTransfersByLeague] = useState<TransfersByLeague[]>([]);
   const [allTransfers, setAllTransfers] = useState<Transfer[]>([]);
@@ -571,6 +576,7 @@ export default function TransfersScreen() {
         <TransferCard 
           transfer={item} 
           index={index}
+          language={language}
           onPlayerPress={handlePlayerPress}
           onTeamPress={handleTeamPress}
         />
@@ -746,7 +752,7 @@ export default function TransfersScreen() {
               ]}
               numberOfLines={1}
             >
-              {league.name}
+              {getLeagueDisplayName(league.name, language, league.id)}
             </Text>
           </TouchableOpacity>
         ))}
