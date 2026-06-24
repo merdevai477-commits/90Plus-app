@@ -231,6 +231,11 @@ interface AllScoresPayload {
   countries?: Scores365CountryMeta[];
 }
 
+interface CompetitionsCatalogPayload {
+  competitions?: Scores365CompetitionMeta[];
+  countries?: Scores365CountryMeta[];
+}
+
 /** competitionId → resolved league metadata (for synthetic non-WC fixtures + league cache). */
 interface CompetitionMeta {
   name?: string;
@@ -291,10 +296,45 @@ const LIVE_SUBSCRIPTION_TTL_MS = 45_000;
 const FINISHED_UPSERTED_KEY_PREFIX = '365:finished-upserted:';
 const TRACKED_COMPETITIONS_KEY = '365:tracked_competition_ids';
 const TRACKED_COMPETITIONS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const COMPETITIONS_CATALOG_CACHE_KEY = '365:competitions_catalog';
+const FIXTURES_SYNC_CURSOR_KEY = '365:fixtures_sync_cursor';
 const SUPPLEMENT_COMPETITION_BATCH = 6;
-const SUPPLEMENT_COMPETITION_LIMIT = 80;
-/** Always supplement fixtures feed for these 365 competitionIds (lower tiers missing from allscores). */
-const DEFAULT_TRACKED_COMPETITIONS = [116]; // Brasileirão Série B
+/** Always supplement / rotate these 365 competitionIds (lower tiers often missing from allscores). */
+const DEFAULT_TRACKED_COMPETITIONS = [
+  116, // Brasileirão Série B
+  18, // Serie B (Italy)
+  1, // Championship (England)
+  2, // League One (England)
+  3, // League Two (England)
+  26, // Bundesliga 2
+  34, // 3. Liga
+  12, // LaLiga 2
+  36, // Ligue 2
+  74, // Liga Portugal 2
+  58, // Eerste Divisie
+  5502, // Saudi First Division
+  6994, // Egypt Second Division
+  5651, // Botola 2 (Morocco)
+  6168, // Serie C (Italy)
+  7741, // Segunda RFEF (Spain)
+  357, // Championnat National (France)
+  6251, // Regionalliga (Germany)
+];
+
+function supplementCompetitionLimit(): number {
+  const raw = parseInt(process.env.SCORES365_SUPPLEMENT_COMPETITION_LIMIT || '801', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 801;
+}
+
+function fixturesSyncBatchSize(): number {
+  const raw = parseInt(process.env.SCORES365_FIXTURES_SYNC_BATCH || '30', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 30;
+}
+
+function trackedCompetitionStoreLimit(): number {
+  const raw = parseInt(process.env.SCORES365_TRACKED_COMPETITIONS_LIMIT || '2000', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 2000;
+}
 
 function useOnlyMajorGames(): boolean {
   return process.env.SCORES365_ONLY_MAJOR_GAMES === 'true';
@@ -446,6 +486,160 @@ class ThreeSixFiveScoresService {
       `[365Scores] supplemented ${items.length} fixtures for ${dateString} from ${competitionIds.length} competitions`,
     );
     return items.length;
+  }
+
+  /**
+   * Fetch the full 365Scores football competitions catalog (~800+ leagues incl.
+   * 2nd/3rd divisions) and persist each as a CachedLeague row.
+   */
+  async syncCompetitionsCatalog(
+    language?: string | null,
+    options?: { force?: boolean },
+  ): Promise<{ competitions: number; leaguesUpserted: number }> {
+    if (!this.isEnabled()) return { competitions: 0, leaguesUpserted: 0 };
+
+    try {
+      const langId = resolveScores365LangId(language);
+      if (!options?.force) {
+        const cached = await redisCacheService.get<number[]>(COMPETITIONS_CATALOG_CACHE_KEY);
+        if (cached?.length) {
+          return { competitions: cached.length, leaguesUpserted: 0 };
+        }
+      }
+
+      const path = `/web/competitions/?${this.commonParams(langId)}&sports=1`;
+      const payload = await this.fetchJson<CompetitionsCatalogPayload>(
+        path,
+        'competitions-catalog',
+        86_400_000,
+      );
+      const competitions = payload?.competitions ?? [];
+      if (!competitions.length) return { competitions: 0, leaguesUpserted: 0 };
+
+      const countriesById = new Map<number, string>();
+      for (const c of payload?.countries ?? []) {
+        if (c.id != null && c.name) countriesById.set(c.id, c.name);
+      }
+
+      const competitionMeta = this.buildCompetitionMetaFromCatalog(competitions, countriesById);
+      const competitionIds = [...competitionMeta.keys()];
+
+      const leagueRecords = competitionIds
+        .map((compId) => {
+          const meta = competitionMeta.get(compId);
+          if (!meta?.name) return null;
+          return {
+            leagueId: scores365CompetitionToLeagueId(compId),
+            name: meta.name,
+            country: meta.country ?? 'World',
+            logo: meta.logo ?? null,
+            hasStandings: meta.hasStandings,
+            fullData: {
+              competitionId: compId,
+              leagueId: scores365CompetitionToLeagueId(compId),
+              name: meta.name,
+              country: meta.country ?? 'World',
+              logo: meta.logo ?? null,
+              hasStandings: meta.hasStandings ?? false,
+              source: '365scores',
+            },
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+
+      if (leagueRecords.length > 0) {
+        await leagueCacheService.upsertScores365Leagues(leagueRecords);
+      }
+
+      await this.storeTrackedCompetitionIds(competitionMeta);
+      await redisCacheService.set(
+        COMPETITIONS_CATALOG_CACHE_KEY,
+        competitionIds,
+        86_400_000,
+      );
+
+      logger.info(
+        `[365Scores] synced competitions catalog: ${competitionIds.length} leagues upserted=${leagueRecords.length}`,
+      );
+      return { competitions: competitionIds.length, leaguesUpserted: leagueRecords.length };
+    } catch (err: unknown) {
+      logger.error('[365Scores] syncCompetitionsCatalog failed:', (err as Error)?.message);
+      return { competitions: 0, leaguesUpserted: 0 };
+    }
+  }
+
+  /** Sync fixtures for one 365 competition (all pages) into cachedFixture. */
+  async syncCompetitionFixtures(
+    competitionId: number,
+    language?: string | null,
+  ): Promise<number> {
+    if (!this.isEnabled() || competitionId <= 0) return 0;
+
+    try {
+      const langId = resolveScores365LangId(language);
+      const games = await this.fetchAllFixtures(competitionId, langId);
+      if (!games?.length) return 0;
+
+      const items = games.map((g) => this.toFixtureItem(g));
+      let competitionMeta = await this.loadCompetitionMetaForIds([competitionId]);
+      if (!competitionMeta.has(competitionId) && games[0]) {
+        competitionMeta.set(competitionId, {
+          name: games[0].competitionDisplayName ?? `Competition ${competitionId}`,
+        });
+      }
+      await this.persistAllScoresFixtures(items, competitionMeta);
+      return items.length;
+    } catch (err: unknown) {
+      logger.debug(
+        `[365Scores] syncCompetitionFixtures(${competitionId}) failed:`,
+        (err as Error)?.message,
+      );
+      return 0;
+    }
+  }
+
+  /**
+   * Round-robin batch sync: walks the full catalog so 2nd/3rd-tier leagues
+   * eventually populate the DB even when /allscores/ omits them.
+   */
+  async syncCompetitionFixturesBatch(
+    language?: string | null,
+    options?: { batchSize?: number },
+  ): Promise<{ batchSize: number; fixtures: number; cursor: number; total: number }> {
+    if (!this.isEnabled()) {
+      return { batchSize: 0, fixtures: 0, cursor: 0, total: 0 };
+    }
+
+    const batchSize = options?.batchSize ?? fixturesSyncBatchSize();
+    const allIds = await this.loadAllCompetitionIds();
+    if (!allIds.length) return { batchSize: 0, fixtures: 0, cursor: 0, total: 0 };
+
+    const cursor =
+      (await redisCacheService.get<number>(FIXTURES_SYNC_CURSOR_KEY)) ?? 0;
+    const slice =
+      cursor + batchSize <= allIds.length
+        ? allIds.slice(cursor, cursor + batchSize)
+        : [...allIds.slice(cursor), ...allIds.slice(0, batchSize - (allIds.length - cursor))];
+    const nextCursor = (cursor + batchSize) % allIds.length;
+
+    let fixtures = 0;
+    for (let i = 0; i < slice.length; i += SUPPLEMENT_COMPETITION_BATCH) {
+      const chunk = slice.slice(i, i + SUPPLEMENT_COMPETITION_BATCH);
+      const counts = await Promise.all(
+        chunk.map((competitionId) => this.syncCompetitionFixtures(competitionId, language)),
+      );
+      fixtures += counts.reduce((sum, n) => sum + n, 0);
+    }
+
+    await redisCacheService.set(FIXTURES_SYNC_CURSOR_KEY, nextCursor, 7 * 24 * 60 * 60 * 1000);
+
+    if (fixtures > 0) {
+      logger.info(
+        `[365Scores] fixtures batch synced ${fixtures} fixtures for ${slice.length}/${allIds.length} competitions (cursor ${cursor}→${nextCursor})`,
+      );
+    }
+
+    return { batchSize: slice.length, fixtures, cursor: nextCursor, total: allIds.length };
   }
 
   // ─── 2. Live game details ────────────────────────────────────────────────
@@ -1184,8 +1378,15 @@ class ThreeSixFiveScoresService {
     for (const c of payload.countries ?? []) {
       if (c.id != null && c.name) countriesById.set(c.id, c.name);
     }
+    return this.buildCompetitionMetaFromCatalog(payload.competitions ?? [], countriesById);
+  }
+
+  private buildCompetitionMetaFromCatalog(
+    competitions: Scores365CompetitionMeta[],
+    countriesById: Map<number, string>,
+  ): CompetitionMetaMap {
     const meta: CompetitionMetaMap = new Map();
-    for (const comp of payload.competitions ?? []) {
+    for (const comp of competitions) {
       if (comp.id == null) continue;
       meta.set(comp.id, {
         name: comp.name,
@@ -1200,23 +1401,30 @@ class ThreeSixFiveScoresService {
   private async storeTrackedCompetitionIds(meta: CompetitionMetaMap): Promise<void> {
     if (!meta.size) return;
     const existing = (await redisCacheService.get<number[]>(TRACKED_COMPETITIONS_KEY)) ?? [];
-    const merged = [...new Set([...existing, ...meta.keys()])].slice(0, 500);
+    const merged = [...new Set([...existing, ...meta.keys()])].slice(
+      0,
+      trackedCompetitionStoreLimit(),
+    );
     await redisCacheService.set(TRACKED_COMPETITIONS_KEY, merged, TRACKED_COMPETITIONS_TTL_MS);
   }
 
-  private async loadTrackedCompetitionIds(): Promise<number[]> {
+  private async loadAllCompetitionIds(): Promise<number[]> {
+    const fromCatalog = (await redisCacheService.get<number[]>(COMPETITIONS_CATALOG_CACHE_KEY)) ?? [];
     const fromRedis = (await redisCacheService.get<number[]>(TRACKED_COMPETITIONS_KEY)) ?? [];
     const fromLeagues = await prisma.cachedLeague.findMany({
       where: { leagueId: { gte: SCORES365_LEAGUE_ID_OFFSET } },
       select: { leagueId: true },
-      take: 300,
     });
     const fromLeagueIds = fromLeagues
       .map((r) => r.leagueId - SCORES365_LEAGUE_ID_OFFSET)
       .filter((id) => id > 0);
 
-    const merged = [...new Set([...fromRedis, ...fromLeagueIds, ...DEFAULT_TRACKED_COMPETITIONS])];
-    return merged.slice(0, SUPPLEMENT_COMPETITION_LIMIT);
+    return [...new Set([...fromCatalog, ...fromRedis, ...fromLeagueIds, ...DEFAULT_TRACKED_COMPETITIONS])];
+  }
+
+  private async loadTrackedCompetitionIds(): Promise<number[]> {
+    const merged = await this.loadAllCompetitionIds();
+    return merged.slice(0, supplementCompetitionLimit());
   }
 
   private async loadCompetitionMetaForIds(competitionIds: number[]): Promise<CompetitionMetaMap> {

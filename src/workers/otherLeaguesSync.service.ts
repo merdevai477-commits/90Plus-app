@@ -53,7 +53,7 @@ function isAllScoresEnabled(): boolean {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-const isRunning = { calendar: false, live: false, allScores: false, scores365Live: false };
+const isRunning = { calendar: false, live: false, allScores: false, scores365Live: false, catalog: false, fixturesBatch: false };
 
 /** Local YYYY-MM-DD offset by `days` from today. */
 function dateKeyOffset(days: number): string {
@@ -208,6 +208,54 @@ async function run365LiveRefreshTick(): Promise<void> {
   }
 }
 
+// ─── 365 competitions catalog (all leagues incl. 2nd/3rd tier) ───────────────
+
+async function runCompetitionsCatalogSyncTick(force = false): Promise<void> {
+  if (!isAllScoresEnabled()) return;
+  if (isRunning.catalog) {
+    logger.debug(`[${WORKER}][365catalog] previous tick still running — skipping`);
+    return;
+  }
+  isRunning.catalog = true;
+
+  try {
+    const result = await threeSixFiveScoresService.syncCompetitionsCatalog('en', { force });
+    logger.info(
+      `[${WORKER}][365catalog] ${result.competitions} competitions (${result.leaguesUpserted} upserted)`,
+      { worker: 'other-leagues-sync', ...result },
+    );
+  } catch (err: unknown) {
+    logger.error(`[${WORKER}][365catalog] tick fatal (recovered):`, (err as Error)?.message);
+  } finally {
+    isRunning.catalog = false;
+  }
+}
+
+// ─── 365 per-competition fixtures batch (round-robin all leagues) ────────────
+
+async function runCompetitionFixturesBatchTick(): Promise<void> {
+  if (!isAllScoresEnabled()) return;
+  if (isRunning.fixturesBatch) {
+    logger.debug(`[${WORKER}][365fixtures] previous tick still running — skipping`);
+    return;
+  }
+  isRunning.fixturesBatch = true;
+
+  try {
+    const result = await threeSixFiveScoresService.syncCompetitionFixturesBatch('en');
+    if (result.fixtures > 0) {
+      logger.info(
+        `[${WORKER}][365fixtures] synced ${result.fixtures} fixtures (${result.batchSize}/${result.total} comps, cursor=${result.cursor})`,
+        { worker: 'other-leagues-sync', ...result },
+      );
+    }
+  } catch (err: unknown) {
+    logger.error(`[${WORKER}][365fixtures] tick fatal (recovered):`, (err as Error)?.message);
+  } finally {
+    isRunning.fixturesBatch = false;
+  }
+}
+
 // ─── Registration ─────────────────────────────────────────────────────────────
 
 /**
@@ -235,6 +283,8 @@ export function startOtherLeaguesSyncWorker(): void {
   const liveCron = process.env.OTHER_LEAGUES_LIVE_CRON?.trim() || '* * * * *';
   const allScoresCron = process.env.OTHER_LEAGUES_ALLSCORES_CRON?.trim() || '*/10 * * * *';
   const scores365LiveCron = process.env.OTHER_LEAGUES_365_LIVE_CRON?.trim() || '* * * * *';
+  const catalogCron = process.env.OTHER_LEAGUES_365_CATALOG_CRON?.trim() || '0 4 * * *';
+  const fixturesBatchCron = process.env.OTHER_LEAGUES_365_FIXTURES_CRON?.trim() || '*/5 * * * *';
 
   // API-Football calendar/live ticks (skip entirely in WC-only mode).
   if (apiFootballEnabled) {
@@ -255,12 +305,20 @@ export function startOtherLeaguesSyncWorker(): void {
     cron.schedule(scores365LiveCron, () => {
       void run365LiveRefreshTick();
     });
+    cron.schedule(catalogCron, () => {
+      void runCompetitionsCatalogSyncTick(true);
+    });
+    cron.schedule(fixturesBatchCron, () => {
+      void runCompetitionFixturesBatchTick();
+    });
     // Immediate pass on startup (don't wait for the first cron).
+    void runCompetitionsCatalogSyncTick(true);
     void runAllScoresSyncTick();
     void run365LiveRefreshTick();
+    void runCompetitionFixturesBatchTick();
   }
 
   logger.info(
-    `[${WORKER}] started — apiFootball=${apiFootballEnabled ? `on (calendar="${calendarCron}", live="${liveCron}")` : 'off'}, allscores365=${allScoresEnabled ? `on (allscores="${allScoresCron}", 365live="${scores365LiveCron}")` : 'off'}`,
+    `[${WORKER}] started — apiFootball=${apiFootballEnabled ? `on (calendar="${calendarCron}", live="${liveCron}")` : 'off'}, allscores365=${allScoresEnabled ? `on (allscores="${allScoresCron}", 365live="${scores365LiveCron}", catalog="${catalogCron}", fixtures="${fixturesBatchCron}")` : 'off'}`,
   );
 }

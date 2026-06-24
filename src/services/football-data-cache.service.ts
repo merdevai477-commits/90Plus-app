@@ -54,6 +54,7 @@ import {
     isScores365ExperimentEnabled,
     isScores365ExperimentFixture,
     resolveScores365AppLanguage,
+    SCORES365_LEAGUE_ID_OFFSET,
 } from './scores365-experiment.service';
 import {
     threeSixFiveScoresService,
@@ -630,13 +631,23 @@ class FootballDataCacheService {
 
             if (list.length === 0) {
                 const { footballService } = await import('./football.service');
-                const fixtures = await footballService.getFixtures({
-                    date: dateString,
-                    league: leagueId,
-                    season,
-                });
-
-                list = Array.isArray(fixtures) ? fixtures : [];
+                if (leagueId >= SCORES365_LEAGUE_ID_OFFSET && isScores365ExperimentEnabled()) {
+                    const competitionId = leagueId - SCORES365_LEAGUE_ID_OFFSET;
+                    await threeSixFiveScoresService.syncCompetitionFixtures(competitionId, 'en');
+                    const byDate = await this.getMatchesByDate(dateString);
+                    list = byDate.filter(
+                        (f) =>
+                            f?.league?.id === leagueId &&
+                            (f?.league?.season === season || f?.league?.season == null),
+                    );
+                } else {
+                    const fixtures = await footballService.getFixtures({
+                        date: dateString,
+                        league: leagueId,
+                        season,
+                    });
+                    list = Array.isArray(fixtures) ? fixtures : [];
+                }
             }
             await matchCacheService.setInMemoryCache(cacheKey, list, ttl);
             return list;
