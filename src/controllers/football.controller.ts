@@ -11,7 +11,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping } from '../services/scores365-experiment.service';
 
 /**
  * Football API Proxy Controller
@@ -2332,6 +2332,44 @@ export class FootballController {
         response: result.data,
         _meta: { scores365GameId: gameId, fixtureId },
       });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/game/:gameId/resolve
+   * Map a 365Scores gameId → fixtureId for match-details navigation.
+   */
+  static async resolve365GameFixture(req: Request, res: Response): Promise<void> {
+    try {
+      const gameId = parseInt(ensureString(req.params.gameId));
+      if (isNaN(gameId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid game ID' });
+        return;
+      }
+
+      const apiFixtureId = await resolveApiFixtureIdFor365GameId(gameId);
+      if (apiFixtureId != null) {
+        res.json({
+          status: 'SUCCESS',
+          response: { fixtureId: apiFixtureId, gameId },
+        });
+        return;
+      }
+
+      const language = resolveAppLanguage(req);
+      const game = await fetchScores365GameById(gameId, { language });
+      if (game?.id) {
+        registerScores365FixtureMapping(gameId, game.id);
+        res.json({
+          status: 'SUCCESS',
+          response: { fixtureId: gameId, gameId: game.id },
+        });
+        return;
+      }
+
+      res.status(404).json({ status: 'ERROR', message: '365Scores game not found' });
     } catch (error) {
       FootballController.handleError(res, error);
     }

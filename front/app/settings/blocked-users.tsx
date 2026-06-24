@@ -4,13 +4,7 @@ import { Stack } from 'expo-router';
 export default function BlockedUsersPage() {
   return (
     <>
-      <Stack.Screen 
-        options={{ 
-          headerShown: false,
-          statusBarStyle: 'light',
-          statusBarBackgroundColor: '#000',
-        }} 
-      />
+      <Stack.Screen options={{ headerShown: false }} />
       <BlockedUsersScreen />
     </>
   );

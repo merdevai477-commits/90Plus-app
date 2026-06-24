@@ -23,8 +23,45 @@ module.exports = ({ config }) => {
 
   // Dev-client autolinking exclusions: see react-native.config.js (EAS_BUILD_PROFILE-aware).
 
+  const widgetPlugins = [
+    [
+      'expo-widgets',
+      {
+        groupIdentifier: 'group.com.mhmdsh1892.ninetyplusapp',
+        frequentUpdates: true,
+        widgets: [
+          {
+            name: 'MatchesWidget',
+            displayName: '90Plus Matches',
+            description: 'Live scores and today\'s matches',
+            supportedFamilies: ['systemSmall', 'systemMedium', 'systemLarge'],
+          },
+        ],
+      },
+    ],
+    [
+      'react-native-android-widget',
+      {
+        widgets: [
+          {
+            name: 'MatchesWidget',
+            label: '90Plus — الماتشات',
+            description: 'نتائج لايف وماتشات اليوم',
+            minWidth: '250dp',
+            minHeight: '110dp',
+            targetCellWidth: 4,
+            targetCellHeight: 2,
+            previewImage: './assets/images/90Plus.png',
+            updatePeriodMillis: 1800000,
+          },
+        ],
+      },
+    ],
+  ];
+
   return {
     ...config,
+    plugins: [...(config.plugins ?? []), ...widgetPlugins],
     android: {
       ...config.android,
       intentFilters,

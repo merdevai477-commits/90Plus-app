@@ -12,6 +12,7 @@ import { Home, User, BarChart3, Sparkles, Clapperboard } from 'lucide-react-nati
 import Svg, { Circle, Line, Rect } from 'react-native-svg';
 
 import { isLiquidGlassSupported, LiquidGlassView } from '@/utils/liquidGlassSafe';
+import { useTranslation } from '../../src/i18n';
 
 import { LiquidGlassBlob } from './LiquidGlassBlob';
 import {
@@ -27,7 +28,7 @@ import {
   TAB_ICON_SIZE,
   TAB_LABEL_FONT_SIZE,
 } from './liquidGlassTabBar.constants';
-import type { LiquidGlassTabBarProps, LiquidTabIconKind } from './liquidGlassTabBar.types';
+import type { LiquidGlassTabBarProps, LiquidTabIconKind, LiquidTabId } from './liquidGlassTabBar.types';
 import { accentToGlassTint, getTabBarLayout } from './liquidGlassTabBar.utils';
 import { useLiquidTabBarGesture } from './useLiquidTabBarGesture';
 
@@ -162,10 +163,22 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
   profileAvatarUrl,
   bottomInset = 16,
   onTabPressIn,
+  tabItems: tabItemsProp,
 }: LiquidGlassTabBarProps) {
+  const { t } = useTranslation();
+  const translatedTabItems = useMemo(
+    () =>
+      LIQUID_TAB_ITEMS.map((tab) => ({
+        ...tab,
+        label: t.nav[tab.id as LiquidTabId],
+      })),
+    [t],
+  );
+  const tabItems = tabItemsProp ?? translatedTabItems;
+
   const layout = useMemo(
-    () => getTabBarLayout(LIQUID_TAB_ITEMS.length),
-    [],
+    () => getTabBarLayout(tabItems.length),
+    [tabItems.length],
   );
 
   const [highlightIndex, setHighlightIndex] = useState(activeIndex);
@@ -194,14 +207,14 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
     }
   }, [activeIndex]);
 
-  const activeTab = LIQUID_TAB_ITEMS[highlightIndex];
+  const activeTab = tabItems[highlightIndex];
   const accent = activeTab?.accent ?? '#FFFFFF';
   const bubbleTint = accentToGlassTint(accent, 0.12);
   const bubbleLabelColor = accent || ICON_ACTIVE_FALLBACK;
 
   const tabGestures = useMemo(
-    () => LIQUID_TAB_ITEMS.map((_, index) => createTabGesture(index)),
-    [createTabGesture],
+    () => tabItems.map((_, index) => createTabGesture(index)),
+    [createTabGesture, tabItems],
   );
 
   return (
@@ -249,7 +262,7 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
         </LiquidGlassBlob>
 
         <View style={s.navItemsContainer}>
-          {LIQUID_TAB_ITEMS.map((tab, index) => (
+          {tabItems.map((tab, index) => (
             <TabSlot
               key={tab.id}
               index={index}

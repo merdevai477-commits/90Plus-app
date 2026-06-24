@@ -1452,24 +1452,12 @@ export const ApiFootballService = {
     events: FixtureEvent[];
     venue: Venue | null;
   }> {
-    try {
-      if (options?.skipCache) {
-        const raw = await fetchFromProxy<any>(
-          `/cached/fixture/${fixtureId}/details`,
-          {},
-          { fresh: true },
-        );
-        const bundle = raw?.response ?? raw;
-        return {
-          fixture: bundle?.fixture ?? null,
-          lineups: bundle?.lineups ?? [],
-          statistics: bundle?.statistics ?? [],
-          events: bundle?.events ?? [],
-          venue: bundle?.venue ?? null,
-        };
-      }
-
-      const raw = await fetchFromProxy<any>(`/cached/fixture/${fixtureId}/details`);
+    const fetchBundle = async (id: number) => {
+      const raw = await fetchFromProxy<any>(
+        `/cached/fixture/${id}/details`,
+        {},
+        options?.skipCache ? { fresh: true } : {},
+      );
       const bundle = raw?.response ?? raw;
       return {
         fixture: bundle?.fixture ?? null,
@@ -1478,8 +1466,53 @@ export const ApiFootballService = {
         events: bundle?.events ?? [],
         venue: bundle?.venue ?? null,
       };
+    };
+
+    try {
+      let bundle = await fetchBundle(fixtureId);
+      if (!bundle.fixture) {
+        const resolved = await this.resolve365GameToFixtureId(fixtureId);
+        if (resolved && resolved !== fixtureId) {
+          bundle = await fetchBundle(resolved);
+        }
+      }
+      if (bundle.fixture) return bundle;
+
+      // Avoid hammering /fixtures/:id for unmapped 365 gameIds (404 + wrong collisions).
+      const likely365GameId = fixtureId >= 4_000_000;
+      if (likely365GameId) {
+        return bundle;
+      }
+
+      const [fixture, lineups, statistics, events] = await Promise.all([
+        this.getFixtureById(fixtureId, options),
+        this.getFixtureLineups(fixtureId, options),
+        this.getFixtureStatistics(fixtureId, options),
+        this.getFixtureEvents(fixtureId),
+      ]);
+      let venue: Venue | null = (fixture?.fixture?.venue as Venue) ?? null;
+      if (venue?.id) {
+        venue = (await this.getVenueInfo(venue.id)) ?? venue;
+      }
+      return {
+        fixture,
+        lineups: lineups ?? [],
+        statistics: statistics ?? [],
+        events: events ?? [],
+        venue,
+      };
     } catch (error) {
       logger.warn('Fixture details bundle failed, falling back to parallel fetch:', error);
+      const likely365GameId = fixtureId >= 4_000_000;
+      if (likely365GameId) {
+        return {
+          fixture: null,
+          lineups: [],
+          statistics: [],
+          events: [],
+          venue: null,
+        };
+      }
       const [fixture, lineups, statistics, events] = await Promise.all([
         this.getFixtureById(fixtureId, options),
         this.getFixtureLineups(fixtureId, options),
@@ -1531,6 +1564,25 @@ export const ApiFootballService = {
     } catch (error) {
       console.error('Error fetching head to head:', error);
       return [];
+    }
+  },
+
+  /**
+   * 365Scores — resolve gameId → fixtureId for match-details navigation.
+   */
+  async resolve365GameToFixtureId(gameId: number): Promise<number | null> {
+    try {
+      const baseUrl = getApiUrl();
+      const url = `${baseUrl}/football/cached/365/game/${gameId}/resolve`;
+      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
+      if (!response.ok) return null;
+      const json = (await response.json()) as {
+        response?: { fixtureId?: number };
+      };
+      const fixtureId = json.response?.fixtureId;
+      return typeof fixtureId === 'number' && fixtureId > 0 ? fixtureId : null;
+    } catch {
+      return null;
     }
   },
 

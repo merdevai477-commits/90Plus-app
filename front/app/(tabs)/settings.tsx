@@ -2,7 +2,7 @@
  * Settings Screen - 90Plus
  *
  * Fully localized: every user-facing string comes from front/locales/*.ts
- * via the i18n hook. Layout stays LTR for all languages; only copy changes.
+ * via the i18n hook. Arabic mirrors layout direction (RTL) app-wide.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -21,7 +21,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   Bell,
   Shield,
-  ChevronRight,
   Globe,
   Trash2,
   Star,
@@ -32,6 +31,7 @@ import {
   Ban,
   Mail,
 } from 'lucide-react-native';
+import { DirectionalChevron } from '../../components/common/DirectionalChevron';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useVideos } from '../../contexts/VideosContext';
 import { useRouter } from 'expo-router';
@@ -286,7 +286,7 @@ export default function SettingsScreen() {
             <Text style={styles.linkSub}>{tSettings.notificationPreferencesSub}</Text>
           </View>
         </View>
-        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
+        <DirectionalChevron color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -303,7 +303,7 @@ export default function SettingsScreen() {
             <Text style={styles.linkSub}>{tSettings.notificationInboxSub}</Text>
           </View>
         </View>
-        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
+        <DirectionalChevron color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
       {/* ── Preferences ───────────────────────────────────────────────────── */}
@@ -324,7 +324,7 @@ export default function SettingsScreen() {
             <Text style={styles.linkSub}>{getLanguageName(language)}</Text>
           </View>
         </View>
-        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
+        <DirectionalChevron color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
       {/* ── Data & Storage ────────────────────────────────────────────────── */}
@@ -358,7 +358,7 @@ export default function SettingsScreen() {
             <Text style={styles.linkSub}>{tSettings.managePermissionsSub}</Text>
           </View>
         </View>
-        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
+        <DirectionalChevron color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -375,7 +375,7 @@ export default function SettingsScreen() {
             <Text style={styles.linkSub}>{tSettings.blockedUsersSub}</Text>
           </View>
         </View>
-        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
+        <DirectionalChevron color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
       {/* ── Support & Legal ───────────────────────────────────────────────── */}
@@ -391,7 +391,7 @@ export default function SettingsScreen() {
             <Text style={styles.linkSub}>{tSettings.contactUsSub}</Text>
           </View>
         </View>
-        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
+        <DirectionalChevron color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
       <TouchableOpacity activeOpacity={0.88} style={[styles.linkRow, { marginTop: 8 }]} onPress={handlePrivacyPolicy}>
@@ -404,7 +404,7 @@ export default function SettingsScreen() {
             <Text style={styles.linkSub}>{tSettings.privacyPolicySub}</Text>
           </View>
         </View>
-        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
+        <DirectionalChevron color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
       <TouchableOpacity activeOpacity={0.88} style={[styles.linkRow, { marginTop: 8 }]} onPress={handleTerms}>
@@ -417,7 +417,7 @@ export default function SettingsScreen() {
             <Text style={styles.linkSub}>{tSettings.termsConditionsSub}</Text>
           </View>
         </View>
-        <ChevronRight color={TEXT_MUTED} size={20} strokeWidth={2} />
+        <DirectionalChevron color={TEXT_MUTED} size={20} strokeWidth={2} />
       </TouchableOpacity>
 
       {/* ── About ─────────────────────────────────────────────────────────── */}
@@ -502,12 +502,6 @@ export default function SettingsScreen() {
           </View>
         </View>
       </TouchableOpacity>
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>{tSettings.madeWith}</Text>
-        <Text style={styles.footerCopyright}>{tSettings.copyright}</Text>
-      </View>
 
       {/* Modals */}
       <LanguagePickerModal
@@ -661,20 +655,4 @@ const styles = StyleSheet.create({
   },
   infoLabel: { fontSize: 14, color: TEXT_MUTED },
   infoValue: { fontSize: 14, fontWeight: '700', color: TEXT_PRIMARY },
-
-  footer: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    gap: 6,
-  },
-  footerText: {
-    fontSize: 13,
-    color: TEXT_MUTED,
-    textAlign: 'center',
-  },
-  footerCopyright: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.2)',
-    textAlign: 'center',
-  },
 });

@@ -15,8 +15,6 @@ import { useTranslation } from '../../src/i18n';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
     PURPLE_PRIMARY,
-    PURPLE_GLOW_SM,
-    GLASS_BORDER_TOP,
     RADIUS_LG,
     RATING_GOLD,
     RATING_GREEN,
@@ -34,18 +32,25 @@ import Animated, {
 import {
     FootballPitchSvg,
     FOOTBALL_PITCH_ASPECT,
-    GRASS_BASE,
-    PITCH_SURROUND,
     pitchPercentToContainer,
 } from '../common/FootballPitchSvg';
+import { resolvePublicFirstName } from '../../hooks/useProfileCache';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
 const HORIZONTAL_PADDING = 16;
+const AVATAR_SIZE = 34;
+const NODE_OFFSET = AVATAR_SIZE / 2 + 2;
 
 function displayLabel(player: PitchPlayerItem): string {
-    const name = player.name?.trim();
-    if (name) return name.length > 12 ? `${name.slice(0, 11)}…` : name;
+    const resolved =
+        resolvePublicFirstName(player.name, player.username) ||
+        player.name?.trim() ||
+        '';
+    if (resolved && !/^user_[a-z0-9]+$/i.test(resolved)) {
+        const first = resolved.split(/\s+/)[0];
+        return first.length > 9 ? `${first.slice(0, 8)}…` : first;
+    }
     return player.short || '?';
 }
 
@@ -63,20 +68,20 @@ export type PitchPlayerItem = {
 
 /**
  * 4-3-3 on horizontal pitch — GK left, attack right.
- * Four straight lines: 1 GK | 4 DEF | 3 MID | 3 ATT (same x per line).
+ * Wider vertical spacing to avoid overlapping labels on mobile.
  */
 const FORMATION_433: Array<{ x: number; y: number; label: string }> = [
-    { x: 1, y: 50, label: 'GK' },
-    { x: 21, y: 88, label: 'RB' },
-    { x: 21, y: 64, label: 'CB' },
-    { x: 21, y: 36, label: 'CB' },
-    { x: 21, y: 12, label: 'LB' },
-    { x: 47, y: 78, label: 'RCM' },
-    { x: 47, y: 50, label: 'CM' },
-    { x: 47, y: 22, label: 'LCM' },
-    { x: 73, y: 88, label: 'RW' },
-    { x: 73, y: 50, label: 'ST' },
-    { x: 73, y: 12, label: 'LW' },
+    { x: 7, y: 50, label: 'GK' },
+    { x: 27, y: 84, label: 'RB' },
+    { x: 27, y: 61, label: 'CB' },
+    { x: 27, y: 39, label: 'CB' },
+    { x: 27, y: 16, label: 'LB' },
+    { x: 53, y: 78, label: 'RCM' },
+    { x: 53, y: 50, label: 'CM' },
+    { x: 53, y: 22, label: 'LCM' },
+    { x: 79, y: 84, label: 'RW' },
+    { x: 79, y: 50, label: 'ST' },
+    { x: 79, y: 16, label: 'LW' },
 ];
 
 /** Preferred positions per slot (first match wins). */
@@ -120,8 +125,13 @@ function playerIdentity(player: PitchPlayerItem): string {
     const id = player.id?.trim();
     if (id) return `id:${id}`;
     const user = player.username?.trim().toLowerCase();
-    if (user) return `u:${user}`;
-    return `n:${(player.name || '').trim().toLowerCase()}`;
+    if (user && !/^user_[a-z0-9]+$/i.test(user)) return `u:${user}`;
+    const publicName =
+        resolvePublicFirstName(player.name, player.username) || player.name?.trim();
+    if (publicName && !/^user_[a-z0-9]+$/i.test(publicName)) {
+        return `n:${publicName.toLowerCase()}`;
+    }
+    return `x:${user || publicName || ''}`;
 }
 
 /** One entry per user — max 11 for the formation. */
@@ -206,9 +216,18 @@ export function detectFormation(_players: PitchPlayerItem[]): string {
 
 const SKELETON_POSITIONS = FORMATION_433.map((s) => ({ x: s.x, y: s.y }));
 
+function pitchInitials(player: PitchPlayerItem): string {
+    const label = displayLabel(player);
+    if (label && label !== '?') {
+        return label.slice(0, 2).toUpperCase();
+    }
+    return '•';
+}
+
 function PlayerAvatar({ player }: { player: PitchPlayerItem }) {
     const [failed, setFailed] = React.useState(false);
     const uri = player.photoUri?.trim();
+    const initials = pitchInitials(player);
 
     if (uri && !failed) {
         return (
@@ -223,7 +242,7 @@ function PlayerAvatar({ player }: { player: PitchPlayerItem }) {
 
     return (
         <View style={styles.playerAvatarFallback}>
-            <Text style={styles.playerShort}>{player.short}</Text>
+            <Text style={styles.playerShort}>{initials}</Text>
         </View>
     );
 }
@@ -262,6 +281,9 @@ function PlayerNode({
 
     const { left, top } = pitchPercentToContainer(player.x ?? 50, player.y ?? 50, containerW, containerH);
 
+    const label = displayLabel(player);
+    const showNameLabel = label !== '?' && !/^user_/i.test(label);
+
     return (
         <View style={[styles.playerNode, { left, top }]}>
             <AnimatedView style={animatedStyle}>
@@ -269,15 +291,17 @@ function PlayerNode({
                     <View style={styles.circleWrapper}>
                         <View style={styles.playerCircle}>
                             <PlayerAvatar player={player} />
+                            {showNameLabel ? (
+                                <View style={styles.nameOverlay}>
+                                    <Text style={styles.nameText} numberOfLines={1}>
+                                        {label}
+                                    </Text>
+                                </View>
+                            ) : null}
                         </View>
                         <View style={[styles.ratingBadge, { backgroundColor: ratingColor }]}>
                             <Text style={styles.ratingText}>{player.rating}</Text>
                         </View>
-                    </View>
-                    <View style={styles.nameBadge}>
-                        <Text style={styles.nameText} numberOfLines={1}>
-                            {displayLabel(player)}
-                        </Text>
                     </View>
                 </TouchableOpacity>
             </AnimatedView>
@@ -422,18 +446,25 @@ export function TeamPitch({
 
             <View style={styles.pitchOuter}>
                 <LinearGradient
-                    colors={['rgba(74,154,92,0.12)', 'rgba(8,12,16,0)', 'transparent']}
+                    colors={['rgba(124,58,237,0.22)', 'rgba(88,28,135,0.08)', 'transparent']}
                     start={{ x: 0.5, y: 0 }}
                     end={{ x: 0.5, y: 1 }}
-                    style={[styles.pitchAmbient, { width: pitchLayoutWidth + 16 }]}
+                    style={[styles.pitchAmbient, { width: pitchLayoutWidth + 24 }]}
                     pointerEvents="none"
                 />
+                <LinearGradient
+                    colors={['rgba(167,139,250,0.35)', 'rgba(88,28,135,0.15)', 'rgba(4,6,10,0.9)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.pitchCardBorder, { width: pitchLayoutWidth + 4 }]}
+                >
                 <View
                     style={[styles.pitchFrame, { width: pitchLayoutWidth }]}
                     onLayout={onPitchLayout}
                 >
                     <View style={styles.pitchSvgFill}>
                         <FootballPitchSvg
+                            variant="stadium"
                             width={pitchSize.w > 0 ? pitchSize.w : pitchLayoutWidth}
                             height={
                                 pitchSize.h > 0
@@ -442,6 +473,12 @@ export function TeamPitch({
                             }
                         />
                     </View>
+
+                    <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.35)']}
+                        style={styles.pitchVignette}
+                        pointerEvents="none"
+                    />
 
                     {ready && !showSkeleton && (
                         <View style={styles.playersOverlay}>
@@ -488,6 +525,7 @@ export function TeamPitch({
                         </View>
                     )}
                 </View>
+                </LinearGradient>
             </View>
         </View>
     );
@@ -509,27 +547,36 @@ const styles = StyleSheet.create({
     },
     pitchAmbient: {
         position: 'absolute',
-        top: '12%',
-        height: '76%',
-        borderRadius: RADIUS_LG + 8,
-        opacity: 0.9,
+        top: '8%',
+        height: '84%',
+        borderRadius: RADIUS_LG + 12,
+        opacity: 0.85,
+    },
+    pitchCardBorder: {
+        borderRadius: RADIUS_LG + 2,
+        padding: 2,
+        shadowColor: PURPLE_PRIMARY,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.35,
+        shadowRadius: 18,
+        elevation: 12,
     },
     pitchFrame: {
         aspectRatio: FOOTBALL_PITCH_ASPECT,
         borderRadius: RADIUS_LG,
         overflow: 'hidden',
-        borderWidth: 1.5,
-        borderColor: 'rgba(74, 154, 92, 0.45)',
-        backgroundColor: PITCH_SURROUND,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.55,
-        shadowRadius: 16,
-        elevation: 10,
+        borderWidth: 1,
+        borderColor: 'rgba(167,139,250,0.25)',
+        backgroundColor: '#04060A',
+        minHeight: 228,
     },
     pitchSvgFill: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: GRASS_BASE,
+        backgroundColor: '#143D2E',
+    },
+    pitchVignette: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 10,
     },
     playersOverlay: {
         ...StyleSheet.absoluteFillObject,
@@ -538,14 +585,15 @@ const styles = StyleSheet.create({
     playerNode: {
         position: 'absolute',
         alignItems: 'center',
-        transform: [{ translateX: -20 }, { translateY: -20 }],
+        width: AVATAR_SIZE + 12,
+        transform: [{ translateX: -(AVATAR_SIZE + 12) / 2 }, { translateY: -NODE_OFFSET }],
         zIndex: 10,
     },
-    circleWrapper: { position: 'relative', alignItems: 'center' },
+    circleWrapper: { position: 'relative', alignItems: 'center', width: AVATAR_SIZE + 8 },
     playerCircle: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: AVATAR_SIZE,
+        height: AVATAR_SIZE,
+        borderRadius: AVATAR_SIZE / 2,
         borderWidth: 2,
         borderColor: 'rgba(167,139,250,0.75)',
         alignItems: 'center',
@@ -579,49 +627,50 @@ const styles = StyleSheet.create({
     },
     ratingBadge: {
         position: 'absolute',
-        bottom: -4,
-        right: -6,
-        width: 20,
-        height: 20,
-        borderRadius: 10,
+        bottom: -2,
+        right: -4,
+        width: 18,
+        height: 18,
+        borderRadius: 9,
         borderWidth: 1.5,
         borderColor: 'rgba(0,0,0,0.9)',
         alignItems: 'center',
         justifyContent: 'center',
     },
-    ratingText: { color: '#000', fontSize: 7.5, fontWeight: '900' },
-    nameBadge: {
-        backgroundColor: 'rgba(10,6,18,0.88)',
-        borderRadius: 6,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        maxWidth: 84,
-        borderWidth: 1,
-        borderColor: PURPLE_GLOW_SM,
-        marginTop: 4,
+    ratingText: { color: '#000', fontSize: 7, fontWeight: '900' },
+    nameOverlay: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(8,4,14,0.92)',
+        paddingHorizontal: 2,
+        paddingVertical: 1,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(167,139,250,0.35)',
     },
     nameText: {
         color: '#fff',
-        fontSize: 8,
+        fontSize: 6.5,
         fontWeight: '800',
         textAlign: 'center',
-        letterSpacing: 0.2,
+        letterSpacing: 0.1,
     },
     skeletonPlayerCircle: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: AVATAR_SIZE,
+        height: AVATAR_SIZE,
+        borderRadius: AVATAR_SIZE / 2,
         backgroundColor: 'rgba(255,255,255,0.08)',
         borderWidth: 2,
         borderColor: 'rgba(255,255,255,0.14)',
     },
     skeletonRatingBadge: {
         position: 'absolute',
-        bottom: -4,
-        right: -6,
-        width: 20,
-        height: 20,
-        borderRadius: 10,
+        bottom: -2,
+        right: -4,
+        width: 18,
+        height: 18,
+        borderRadius: 9,
         backgroundColor: 'rgba(255,255,255,0.12)',
         borderWidth: 1.5,
         borderColor: 'rgba(0,0,0,0.9)',
@@ -634,9 +683,9 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     emptyPlayerCircle: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: AVATAR_SIZE,
+        height: AVATAR_SIZE,
+        borderRadius: AVATAR_SIZE / 2,
         backgroundColor: 'rgba(255,255,255,0.06)',
         borderWidth: 2,
         borderColor: 'rgba(255,255,255,0.25)',
@@ -647,11 +696,11 @@ const styles = StyleSheet.create({
     emptyPlayerIcon: { color: 'rgba(255, 255, 255, 0.35)', fontSize: 14, fontWeight: '700' },
     emptyRatingBadge: {
         position: 'absolute',
-        bottom: -4,
-        right: -6,
-        width: 20,
-        height: 20,
-        borderRadius: 10,
+        bottom: -2,
+        right: -4,
+        width: 18,
+        height: 18,
+        borderRadius: 9,
         backgroundColor: 'rgba(0, 0, 0, 0.2)',
         borderWidth: 1.5,
         borderColor: 'rgba(0,0,0,0.9)',

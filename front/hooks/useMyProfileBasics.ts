@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 import { AuthService } from '../src/services/authService';
+import { resolveProfileDisplayName } from './useProfileCache';
 
 export interface MyProfileBasics {
   avatar: string | null;
@@ -49,11 +50,17 @@ export function useMyProfileBasics(): {
 
       return {
         avatar: (user.avatar?.trim() || null) ?? null,
-        displayName:
-          (user.displayName && user.displayName.trim()) ||
-          user.username ||
-          clerkUser?.firstName ||
-          '',
+        displayName: resolveProfileDisplayName(
+          user.displayName,
+          user.username,
+          {
+            clerkUserId: clerkUser?.id ?? '',
+            firstName: clerkUser?.firstName,
+            lastName: clerkUser?.lastName,
+            fullName: clerkUser?.fullName,
+            primaryEmail: clerkUser?.primaryEmailAddress?.emailAddress,
+          },
+        ),
         username: user.username,
         level: user.level ?? 1,
         xp: user.xp ?? 0,
@@ -65,16 +72,17 @@ export function useMyProfileBasics(): {
     if (!isSignedIn) return null;
     const remote = query.data;
     const clerkAvatar = clerkUser?.imageUrl ?? null;
-    const clerkDisplayName =
-      clerkUser?.fullName?.trim() ||
-      clerkUser?.username ||
-      clerkUser?.firstName ||
-      '';
 
     if (!remote) {
       return {
         avatar: clerkAvatar,
-        displayName: clerkDisplayName,
+        displayName: resolveProfileDisplayName(undefined, clerkUser?.username, {
+          clerkUserId: clerkUser?.id ?? '',
+          firstName: clerkUser?.firstName,
+          lastName: clerkUser?.lastName,
+          fullName: clerkUser?.fullName,
+          primaryEmail: clerkUser?.primaryEmailAddress?.emailAddress,
+        }),
         username: clerkUser?.username ?? '',
         level: 1,
         xp: 0,
@@ -83,12 +91,32 @@ export function useMyProfileBasics(): {
 
     return {
       avatar: remote.avatar ?? clerkAvatar,
-      displayName: remote.displayName || clerkDisplayName,
+      displayName: resolveProfileDisplayName(
+        remote.displayName,
+        remote.username,
+        {
+          clerkUserId: clerkUser?.id ?? '',
+          firstName: clerkUser?.firstName,
+          lastName: clerkUser?.lastName,
+          fullName: clerkUser?.fullName,
+          primaryEmail: clerkUser?.primaryEmailAddress?.emailAddress,
+        },
+      ),
       username: remote.username || clerkUser?.username || '',
       level: remote.level,
       xp: remote.xp,
     };
-  }, [isSignedIn, clerkUser?.imageUrl, clerkUser?.fullName, clerkUser?.username, clerkUser?.firstName, query.data]);
+  }, [
+    isSignedIn,
+    clerkUser?.id,
+    clerkUser?.imageUrl,
+    clerkUser?.fullName,
+    clerkUser?.username,
+    clerkUser?.firstName,
+    clerkUser?.lastName,
+    clerkUser?.primaryEmailAddress?.emailAddress,
+    query.data,
+  ]);
 
   const refetch = useCallback(() => {
     void query.refetch();

@@ -6,6 +6,41 @@ const { getSentryExpoConfig } = require('@sentry/react-native/metro');
 const { FileStore } = require('metro-cache');
 const { withNativeWind } = require('nativewind/metro');
 
+const WIDGET_SWIFT_UI_STUBS = {
+  '@expo/ui/swift-ui': path.resolve(__dirname, 'widgets/swift-ui-stub.ts'),
+  '@expo/ui/swift-ui/modifiers': path.resolve(
+    __dirname,
+    'widgets/swift-ui-modifiers-stub.ts',
+  ),
+};
+
+function isWidgetSourceModule(originModulePath) {
+  return originModulePath.includes(`${path.sep}widgets${path.sep}`);
+}
+
+/** Stub Swift UI in the main app bundle — real components run in the widget extension only. */
+function withWidgetSwiftUiStubs(config) {
+  const previousResolveRequest = config.resolver?.resolveRequest;
+
+  config.resolver = {
+    ...config.resolver,
+    resolveRequest(context, moduleName, platform) {
+      const origin = context.originModulePath ?? '';
+      if (isWidgetSourceModule(origin) && moduleName in WIDGET_SWIFT_UI_STUBS) {
+        return { type: 'sourceFile', filePath: WIDGET_SWIFT_UI_STUBS[moduleName] };
+      }
+
+      if (previousResolveRequest) {
+        return previousResolveRequest(context, moduleName, platform);
+      }
+
+      return context.resolveRequest(context, moduleName, platform);
+    },
+  };
+
+  return config;
+}
+
 function applyProjectMetroTweaks(config) {
   const parsedWorkers = Number.parseInt(process.env.METRO_MAX_WORKERS ?? '', 10);
   const maxWorkers =
@@ -24,14 +59,6 @@ function applyProjectMetroTweaks(config) {
     ? [new FileStore({ root: path.join(__dirname, '.metro-cache') })]
     : [];
 
-  const originalResolveRequest = config.resolver.resolveRequest;
-  config.resolver.resolveRequest = (context, moduleName, platform) => {
-    if (originalResolveRequest) {
-      return originalResolveRequest(context, moduleName, platform);
-    }
-    return context.resolveRequest(context, moduleName, platform);
-  };
-
   return config;
 }
 
@@ -41,4 +68,6 @@ const config = getSentryExpoConfig(__dirname, {
     applyProjectMetroTweaks(getDefaultConfig(projectRoot, options)),
 });
 
-module.exports = withNativeWind(config, { input: './global.css' });
+module.exports = withWidgetSwiftUiStubs(
+  withNativeWind(config, { input: './global.css' }),
+);

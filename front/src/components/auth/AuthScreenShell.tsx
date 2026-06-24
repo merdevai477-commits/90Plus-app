@@ -2,8 +2,6 @@ import React from 'react';
 import {
   View,
   ImageBackground,
-  Pressable,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -13,8 +11,6 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { X } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
 import { AuthHeroBlock } from './AuthHeroBlock';
@@ -27,12 +23,9 @@ type Props = {
   heroMode?: 'full' | 'compact' | 'none';
   children: React.ReactNode;
   panelOffset?: number;
+  heroTitle?: string;
+  heroSubtitle?: string;
 };
-
-// ─── Typed style objects ──────────────────────────────────────────────────────
-// StyleSheet.create() returns a union type (ViewStyle | TextStyle | ImageStyle)
-// which conflicts with strict component style props in RN 0.83+.
-// Defining styles as explicit typed constants avoids the overload mismatch.
 
 const rootStyle: ViewStyle = { flex: 1, backgroundColor: BG_BASE };
 
@@ -53,54 +46,55 @@ const shadowBandBase: ViewStyle = {
 
 const keyboardStyle: ViewStyle = { flex: 1, zIndex: 1 };
 
-const scrollContentBase: ViewStyle = {
-  flexGrow: 1, paddingHorizontal: 20, paddingTop: 52,
+const mainContentStyle: ViewStyle = {
+  flex: 1,
+  paddingHorizontal: 20,
 };
-
-const closeStyle: ViewStyle = {
-  position: 'absolute',
-  right: 20,
-  zIndex: 10,
-  width: 44,
-  height: 44,
-  borderRadius: 22,
-  alignItems: 'center',
-  justifyContent: 'center',
-  backgroundColor: 'rgba(0,0,0,0.4)',
-  borderWidth: 1,
-  borderColor: 'rgba(255,255,255,0.1)',
-  overflow: 'hidden',
-};
-
-const closeInnerStyle: ViewStyle = { justifyContent: 'center', alignItems: 'center' };
 
 const panelBase: ViewStyle = {
-  flex: 1,
-  marginTop: -55,
   backgroundColor: 'transparent',
-  overflow: 'hidden',
   borderRadius: 20,
   borderTopLeftRadius: 22,
   borderTopRightRadius: 22,
   paddingHorizontal: 20,
-  paddingTop: 26,
+  paddingTop: 8,
+  paddingBottom: 10,
   borderWidth: 1,
   borderColor: 'rgba(255,255,255,0.08)',
 };
 
-// absoluteFill as a plain ViewStyle object (no StyleSheet registration needed)
+const panelCompactStyle: ViewStyle = {
+  paddingTop: 18,
+  paddingBottom: 14,
+};
+
 const fillV: ViewStyle = {
   position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const panelBlurClipStyle: ViewStyle = {
+  ...fillV,
+  borderRadius: 20,
+  borderTopLeftRadius: 22,
+  borderTopRightRadius: 22,
+  overflow: 'hidden',
+};
 
-export function AuthScreenShell({ heroMode = 'full', children, panelOffset }: Props) {
-  const router = useRouter();
+export function AuthScreenShell({
+  heroMode = 'full',
+  children,
+  panelOffset,
+  heroTitle,
+  heroSubtitle,
+}: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const imgH = Math.min(height * 0.90, 550);
+  const isCompact = heroMode === 'compact';
+  const imgH = isCompact
+    ? height
+    : Math.min(height * (heroMode === 'full' ? 0.46 : 0.72), heroMode === 'full' ? 380 : 480);
   const shadowBandTop = Math.max(0, imgH - 72);
+  const contentTop = isCompact ? 0 : Math.max(insets.top, 16) + 8;
 
   return (
     <View style={rootStyle}>
@@ -121,22 +115,6 @@ export function AuthScreenShell({ heroMode = 'full', children, panelOffset }: Pr
         </ImageBackground>
       </View>
 
-      <Pressable
-        style={[closeStyle, { top: Math.max(insets.top, 20) + 10, left: 20 }]}
-        onPress={() => {
-          if (router.canGoBack()) {
-            router.back();
-          } else {
-            router.replace('/');
-          }
-        }}
-      >
-        <BlurView intensity={20} tint="dark" style={fillV} />
-        <View style={closeInnerStyle}>
-          <X color="#fff" size={20} strokeWidth={1.5} />
-        </View>
-      </Pressable>
-
       <LinearGradient
         colors={[`${BG_BASE}00`, BG_BASE]}
         locations={[0, 0.12]}
@@ -146,37 +124,51 @@ export function AuthScreenShell({ heroMode = 'full', children, panelOffset }: Pr
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={keyboardStyle}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            scrollContentBase,
-            { paddingBottom: Math.max(insets.bottom, 20) },
+        <View
+          style={[
+            mainContentStyle,
+            isCompact && { justifyContent: 'flex-end' },
+            {
+              paddingTop: contentTop,
+              paddingBottom: Math.max(insets.bottom, isCompact ? 16 : 10),
+            },
           ]}
         >
-          {heroMode !== 'none' ? (
-            <AuthHeroBlock compact={heroMode === 'compact'} />
-          ) : (
-            <View style={{ height: 8 }} />
-          )}
+          {!isCompact && heroMode !== 'none' ? (
+            <AuthHeroBlock compact={false} subtitle={heroSubtitle} />
+          ) : !isCompact && heroMode === 'none' ? (
+            <View style={{ height: 4 }} />
+          ) : null}
 
           <View
             style={[
               panelBase,
-              { paddingBottom: Math.max(insets.bottom, 16) },
-              panelOffset !== undefined ? { marginTop: panelOffset } : undefined,
+              isCompact && panelCompactStyle,
+              !isCompact && {
+                marginTop: panelOffset ?? (heroMode === 'full' ? 6 : 8),
+              },
             ]}
           >
-            <BlurView intensity={10} tint="dark" style={fillV} />
+            <View style={panelBlurClipStyle} pointerEvents="none">
+              <BlurView intensity={10} tint="dark" style={fillV} />
+            </View>
+            {isCompact ? (
+              <AuthHeroBlock
+                compact
+                embedded
+                title={heroTitle}
+                subtitle={heroSubtitle}
+              />
+            ) : null}
             {children}
           </View>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
-// Keep StyleSheet for any future additions — not used above to avoid union type issues
 const _unused = StyleSheet.create({});
 void _unused;

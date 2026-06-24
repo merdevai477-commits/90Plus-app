@@ -184,8 +184,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
-    marginBottom: 24,
-    gap: 10,
+    marginBottom: 18,
+    gap: 8,
   },
   uploadWrap: { flex: 1 },
   shareWrap: { flex: 1 },
@@ -194,18 +194,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    borderWidth: 1,
+    gap: 6,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.1)',
-    minHeight: 48,
+    minHeight: 44,
     overflow: 'hidden',
   },
   btnText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
 
@@ -222,12 +222,7 @@ const styles = StyleSheet.create({
 
   /* Share */
   shareBtn: {
-    borderColor: 'rgba(168,85,247,0.4)',
-    shadowColor: '#A855F7',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 5,
+    borderColor: 'rgba(168,85,247,0.35)',
   },
 
   /* QR */

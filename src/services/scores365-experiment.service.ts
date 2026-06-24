@@ -116,6 +116,8 @@ let inFlightFixturesFetch = new Map<number, Promise<Scores365Game[]>>();
 
 /** fixtureId → 365Scores gameId (built from fixtures list sync). */
 const fixtureToGameId = new Map<number, number>();
+/** 365Scores gameId → API-Football fixtureId (reverse of fixtureToGameId). */
+const gameIdToFixtureId = new Map<number, number>();
 
 let cachedWorldCupDbRows: {
   leagueId: number;
@@ -195,6 +197,48 @@ export function getScores365CompetitionId(): number {
 
 export function registerScores365FixtureMapping(fixtureId: number, gameId: number): void {
   fixtureToGameId.set(fixtureId, gameId);
+  gameIdToFixtureId.set(gameId, fixtureId);
+}
+
+/**
+ * Resolve a 365Scores gameId to the API-Football fixtureId used in our DB/cache.
+ * Returns null when the game is unknown or only exists as a synthetic 365-only row.
+ */
+export async function resolveApiFixtureIdFor365GameId(gameId: number): Promise<number | null> {
+  if (!isScores365ExperimentEnabled()) return null;
+
+  const cfg = getScores365ExperimentConfig();
+  if (gameId === cfg.gameId) return cfg.fixtureId;
+
+  const fromReverse = gameIdToFixtureId.get(gameId);
+  if (fromReverse != null) return fromReverse;
+
+  for (const [fixtureId, mappedGameId] of fixtureToGameId.entries()) {
+    if (mappedGameId === gameId) {
+      gameIdToFixtureId.set(gameId, fixtureId);
+      return fixtureId;
+    }
+  }
+
+  const wcRows = await loadWorldCupDbFixtures(cfg.leagueId, cfg.season);
+  for (const row of wcRows) {
+    const mapped = getScores365GameIdForFixture(row.fixtureId);
+    if (mapped === gameId) {
+      registerScores365FixtureMapping(row.fixtureId, gameId);
+      return row.fixtureId;
+    }
+  }
+
+  const dbRow = await prisma.cachedFixture.findUnique({
+    where: { fixtureId: gameId },
+    select: { leagueId: true },
+  });
+  if (dbRow && dbRow.leagueId >= SCORES365_LEAGUE_ID_OFFSET) {
+    registerScores365FixtureMapping(gameId, gameId);
+    return gameId;
+  }
+
+  return null;
 }
 
 export function getScores365GameIdForFixture(fixtureId: number): number | null {
@@ -231,6 +275,19 @@ export async function ensureScores365GameMapping(fixtureId: number): Promise<num
   if (dbRow && dbRow.leagueId >= SCORES365_LEAGUE_ID_OFFSET) {
     registerScores365FixtureMapping(fixtureId, fixtureId);
     return fixtureId;
+  }
+
+  // Form-tab / deep links may pass a 365 gameId instead of API-Football fixtureId.
+  const apiFixtureId = await resolveApiFixtureIdFor365GameId(fixtureId);
+  if (apiFixtureId != null) {
+    registerScores365FixtureMapping(apiFixtureId, fixtureId);
+    return fixtureId;
+  }
+
+  const directGame = await fetchScores365GameById(fixtureId, { language: 'en' });
+  if (directGame?.id) {
+    registerScores365FixtureMapping(fixtureId, directGame.id);
+    return directGame.id;
   }
 
   const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);

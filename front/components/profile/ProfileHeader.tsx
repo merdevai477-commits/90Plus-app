@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 
 const { width } = Dimensions.get('window');
-const COVER_HEIGHT = 420;
+const COVER_HEIGHT = 300;
 
 interface ProfileHeaderProps {
   coverImage?: { uri: string };

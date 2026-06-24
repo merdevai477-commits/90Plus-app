@@ -11,11 +11,33 @@ const VW = L + PAD_X * 2;
 const VH = W + PAD_Y * 2;
 export const FOOTBALL_PITCH_ASPECT = VW / VH;
 
+export type PitchTheme = 'classic' | 'stadium';
+
+const PITCH_THEMES: Record<
+  PitchTheme,
+  { grassLight: string; grassDark: string; grassBase: string; surround: string; tint: string }
+> = {
+  classic: {
+    grassLight: '#529A62',
+    grassDark: '#2E6B42',
+    grassBase: '#428F54',
+    surround: '#080C10',
+    tint: 'transparent',
+  },
+  stadium: {
+    grassLight: '#1E5C42',
+    grassDark: '#0E3528',
+    grassBase: '#143D2E',
+    surround: '#04060A',
+    tint: 'rgba(88,28,135,0.12)',
+  },
+};
+
 /** Reference pitch greens — solid hex only (no url() fills; Android-safe). */
-const GRASS_LIGHT = '#529A62';
-const GRASS_DARK = '#2E6B42';
-export const GRASS_BASE = '#428F54';
-export const PITCH_SURROUND = '#080C10';
+const GRASS_LIGHT = PITCH_THEMES.classic.grassLight;
+const GRASS_DARK = PITCH_THEMES.classic.grassDark;
+export const GRASS_BASE = PITCH_THEMES.classic.grassBase;
+export const PITCH_SURROUND = PITCH_THEMES.classic.surround;
 
 export const PITCH_INSET_X_RATIO = PAD_X / VW;
 export const PITCH_INSET_Y_RATIO = PAD_Y / VH;
@@ -56,6 +78,7 @@ export interface FootballPitchSvgProps {
   height?: number;
   style?: ViewStyle;
   lineOpacity?: number;
+  variant?: PitchTheme;
 }
 
 function GoalNet({
@@ -138,7 +161,14 @@ export function FootballPitchSvg({
   height,
   style,
   lineOpacity = 0.92,
+  variant = 'classic',
 }: FootballPitchSvgProps) {
+  const theme = PITCH_THEMES[variant];
+  const grassLight = theme.grassLight;
+  const grassDark = theme.grassDark;
+  const grassBase = theme.grassBase;
+  const pitchSurround = theme.surround;
+
   const layout = useMemo(() => {
     if (width && height) return { w: width, h: height };
     if (width) return { w: width, h: width / FOOTBALL_PITCH_ASPECT };
@@ -174,16 +204,16 @@ export function FootballPitchSvg({
   }, [ox, oy]);
 
   return (
-    <View style={[styles.wrap, style, { width: layout.w, height: layout.h }]}>
+    <View style={[styles.wrap, style, { width: layout.w, height: layout.h, backgroundColor: grassBase }]}>
       <Svg
         width={layout.w}
         height={layout.h}
         viewBox={`0 0 ${VW} ${VH}`}
         preserveAspectRatio="xMidYMid meet"
       >
-        <Rect x={0} y={0} width={VW} height={VH} fill={PITCH_SURROUND} rx={1.4} ry={1.4} />
+        <Rect x={0} y={0} width={VW} height={VH} fill={pitchSurround} rx={1.4} ry={1.4} />
 
-        <Rect x={ox} y={oy} width={L} height={W} fill={GRASS_BASE} rx={1.1} ry={1.1} />
+        <Rect x={ox} y={oy} width={L} height={W} fill={grassBase} rx={1.1} ry={1.1} />
 
         {Array.from({ length: STRIPE_COUNT }).map((_, i) => (
           <Rect
@@ -192,9 +222,13 @@ export function FootballPitchSvg({
             y={oy}
             width={stripeW + 0.02}
             height={W}
-            fill={i % 2 === 0 ? GRASS_LIGHT : GRASS_DARK}
+            fill={i % 2 === 0 ? grassLight : grassDark}
           />
         ))}
+
+        {theme.tint !== 'transparent' ? (
+          <Rect x={ox} y={oy} width={L} height={W} fill={theme.tint} rx={1.1} ry={1.1} />
+        ) : null}
 
         {textureLines}
         <GrassLighting ox={ox} oy={oy} cx={cx} cyMid={cyMid} />

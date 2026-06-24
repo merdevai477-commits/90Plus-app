@@ -4,11 +4,11 @@ import {
     Text,
     TouchableOpacity,
     StyleSheet,
-    Platform,
     AppState,
     type AppStateStatus,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
@@ -200,21 +200,36 @@ export const HomeHeader = React.memo(function HomeHeader({
         </>
     );
 
-    if (isLiquidGlassSupported) {
-        return (
-            <LiquidGlassView
-                effect="clear"
-                interactive
-                style={containerStyle}
-            >
-                {content}
-            </LiquidGlassView>
-        );
-    }
-    return (
-        <BlurView intensity={15} tint="dark" style={containerStyle}>
+    const shell = (
+        <>
+            <LinearGradient
+                colors={['#030008', '#05010F', 'rgba(5,1,15,0.98)']}
+                style={StyleSheet.absoluteFillObject}
+                pointerEvents="none"
+            />
+            {isLiquidGlassSupported ? (
+                <LiquidGlassView
+                    effect="regular"
+                    tint="rgba(5,1,13,0.92)"
+                    style={StyleSheet.absoluteFillObject}
+                    pointerEvents="none"
+                />
+            ) : (
+                <BlurView
+                    intensity={48}
+                    tint="dark"
+                    style={StyleSheet.absoluteFillObject}
+                    pointerEvents="none"
+                />
+            )}
             {content}
-        </BlurView>
+        </>
+    );
+
+    return (
+        <View style={containerStyle} pointerEvents="box-none">
+            {shell}
+        </View>
     );
 });
 
@@ -226,8 +241,10 @@ const styles = StyleSheet.create({
         top: 0,
         left: 0,
         right: 0,
-        zIndex: 50,
-        backgroundColor: Platform.OS === 'android' ? 'rgba(6,4,10,0.0)' : 'transparent',
+        zIndex: 100,
+        elevation: 12,
+        overflow: 'hidden',
+        backgroundColor: '#05010F',
     },
     inner: {
         minHeight: HOME_HEADER_BODY_HEIGHT,

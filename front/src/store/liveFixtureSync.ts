@@ -129,6 +129,42 @@ export async function fetchFastSnapshot(
 
   const promise = (async () => {
     try {
+      if (existing?.fixture) {
+        const eventData = await ApiFootballService.getFixtureEvents(fixtureId, {
+          skipCache: true,
+        }).catch(() => existing.events ?? []);
+        return buildSnapshotFromRaw({
+          fixtureId,
+          fixture: reconcileFixtureWithEvents(existing.fixture, eventData ?? []),
+          events: eventData ?? [],
+          source: 'http-fast',
+          existing,
+        });
+      }
+
+      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, {
+        skipCache: true,
+      });
+      if (bundle.fixture) {
+        return buildSnapshotFromRaw({
+          fixtureId,
+          fixture: bundle.fixture,
+          events: bundle.events ?? [],
+          lineups: bundle.lineups,
+          statistics: bundle.statistics,
+          venue: bundle.venue,
+          source: 'http-fast',
+          existing,
+        });
+      }
+
+      if (fixtureId >= 4_000_000) {
+        if (existing) {
+          return { ...existing, updatedAt: Date.now() };
+        }
+        return null;
+      }
+
       const [fixtureData, eventData] = await Promise.all([
         ApiFootballService.getFixtureById(fixtureId, { skipCache: true }),
         ApiFootballService.getFixtureEvents(fixtureId, { skipCache: true }),

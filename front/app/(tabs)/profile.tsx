@@ -16,7 +16,6 @@ import ContentTabs from '../../components/profile/ContentTabs';
 import VideoGrid from '../../components/profile/VideoGrid';
 import ActionButtons from '../../components/profile/ActionButtons';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
-import ProfileTopBar from '../../components/profile/ProfileTopBar';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { getProfileCardOverlapMargin } from '../../constants/profileLayout';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
@@ -37,7 +36,7 @@ import { reelUploadNotification } from '../../services/reelUploadNotification';
 import { syncExpoPushToken } from '../../services/pushTokenRegistration.service';
 import { localProfileStorage } from '../../services/localProfileStorage';
 import * as Haptics from 'expo-haptics';
-import { useProfileCache, type ProfileUserData } from '../../hooks/useProfileCache';
+import { useProfileCache, resolveProfileDisplayName, type ProfileUserData } from '../../hooks/useProfileCache';
 import { useProfileCompletion } from '../../hooks/useProfileCompletion';
 import { useTranslation } from '../../src/i18n';
 import {
@@ -157,8 +156,9 @@ const styles = StyleSheet.create({
     display: 'none',
   },
   profileCardContainer: {
+    width: '100%',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     zIndex: 10,
   },
   centerContent: {
@@ -233,14 +233,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 10,
+    marginTop: -8,
+    marginBottom: 12,
     marginHorizontal: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,107,53,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,140,66,0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,107,53,0.1)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,140,66,0.25)',
   },
   streakMasterText: {
     color: '#FFAB76',
@@ -253,21 +254,21 @@ const styles = StyleSheet.create({
 const completionStyles = StyleSheet.create({
   wrapper: {
     paddingHorizontal: 20,
-    marginTop: 14,
-    marginBottom: 4,
+    marginTop: 0,
+    marginBottom: 12,
   },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 14,
+    borderRadius: 12,
     overflow: 'hidden',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.3)',
-    backgroundColor: 'transparent',
-    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(124,58,237,0.22)',
+    backgroundColor: 'rgba(124,58,237,0.06)',
+    gap: 10,
   },
   left: {
     flexDirection: 'row',
@@ -391,6 +392,7 @@ function ProfileScreen() {
           username: clerkUser.username,
           firstName: clerkUser.firstName,
           lastName: clerkUser.lastName,
+          fullName: clerkUser.fullName,
           imageUrl: clerkUser.imageUrl,
           primaryEmail: clerkUser.primaryEmailAddress?.emailAddress,
         }
@@ -671,6 +673,23 @@ function ProfileScreen() {
   const displayLocation = useMemo(
     () => (userData?.country || userData?.location || '').trim(),
     [userData?.country, userData?.location]
+  );
+  const displayProfileName = useMemo(
+    () =>
+      resolveProfileDisplayName(
+        userData?.displayName,
+        userData?.username,
+        clerkUser
+          ? {
+              clerkUserId: clerkUser.id,
+              firstName: clerkUser.firstName,
+              lastName: clerkUser.lastName,
+              fullName: clerkUser.fullName,
+              primaryEmail: clerkUser.primaryEmailAddress?.emailAddress,
+            }
+          : null,
+      ) || userData?.username || 'User',
+    [userData?.displayName, userData?.username, clerkUser],
   );
   const displayPosition = useMemo(
     () => (userData?.position?.trim() ? userData.position! : DEFAULT_POSITION),
@@ -1724,8 +1743,7 @@ function ProfileScreen() {
         </View>
       )}
 
-      {/* Fixed top bar — 90PLUS brand + LVL badge + purple coin badge */}
-      <ProfileTopBar topInset={insets.top} level={userData?.level ?? undefined} />
+      {/* LVL + coins live inside ProfileCard */}
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -1748,13 +1766,18 @@ function ProfileScreen() {
         {/* Profile FIFA Card Frame */}
         <View style={[styles.profileCardContainer, { marginTop: cardOverlap }]}>
           <ProfileCard
+            fillWidth
+            showEconomyBadges
+            level={userData?.level ?? 1}
             playerImage={localImage ? { uri: localImage } : (userData?.avatar ? { uri: userData.avatar } : undefined)}
             cardType="gold"
-            scale={0.60}
             onImageUpload={handleImageUpload}
             uploadedImage={localImage || userData?.avatar || null}
             countryFlag={displayCountryFlag}
+            country={displayLocation}
             onCountryPress={() => setIsCountryModalVisible(true)}
+            displayName={displayProfileName}
+            username={userData?.username || undefined}
             position={displayPosition}
             onPositionPress={() => setIsPositionModalVisible(true)}
             age={displayStats.age}
@@ -1763,6 +1786,7 @@ function ProfileScreen() {
             foot={displayStats.foot}
             onStatsPress={() => setIsStatsModalVisible(true)}
             clubLogo={displayClubLogo}
+            favoriteTeam={userData?.favoriteTeam || ''}
             onClubPress={() => setIsClubModalVisible(true)}
             isAvatarUploading={isAvatarUploading}
             isCountryUpdating={isCountryUpdating}
@@ -1772,19 +1796,14 @@ function ProfileScreen() {
         </View>
 
         <UserInfo
-          name={userData?.displayName || userData?.username || 'User'}
+          variant="bio"
+          name={displayProfileName}
           username={userData?.username || 'user'}
           bio={userData?.bio}
-          location={displayLocation}
-          countryFlag={displayCountryFlag}
-          team={userData?.favoriteTeam || ''}
           isVerified={userData?.isVerified || false}
           isDeveloper={userData?.isDeveloper || false}
           onBioLongPress={() => setIsEditProfileModalVisible(true)}
-          onNameLongPress={() => setIsEditProfileModalVisible(true)}
-          clubLogo={displayClubLogo}
           onEditPress={handleEditProfile}
-          socials={userData?.socials}
           consecutiveLoginDays={Math.max(userData?.consecutiveLoginDays || 0, loginStreak.current)}
         />
 
@@ -1797,12 +1816,25 @@ function ProfileScreen() {
           </View>
         )}
 
-        {/* Profile Completion — compact liquid glass pill */}
+        <StatsRow
+          followers={followStats.followersCount.toString()}
+          following={followStats.followingCount.toString()}
+          videos={(followStats.reelsCount || myVideos.length).toString()}
+          onFollowersPress={handleFollowersPress}
+          onFollowingPress={handleFollowingPress}
+        />
+
+        <ActionButtons
+          onEditPress={handleUploadPress}
+          onSharePress={handleSharePress}
+          onQRPress={handleQRPress}
+          uploadCooldown={cooldowns?.reelUpload}
+          reelUploadActive={reelUploadUi.active}
+          reelUploadProgress={reelUploadUi.progress}
+        />
+
+        {/* Profile Completion — compact pill */}
         {completionStatus && completionStatus.percentage < 100 && (() => {
-          const GlassCompletion = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-          const glassP = isLiquidGlassSupported
-            ? { effect: 'clear' as const, interactive: true }
-            : { intensity: 22, tint: 'dark' as const };
           const pct = completionStatus.percentage;
           return (
             <View style={completionStyles.wrapper}>
@@ -1811,24 +1843,13 @@ function ProfileScreen() {
                 activeOpacity={0.82}
                 onPress={() => setIsCompletionDetailVisible(true)}
               >
-                <GlassCompletion {...(glassP as any)} style={StyleSheet.absoluteFill} />
-                {/* Purple-to-cyan tint */}
-                <LinearGradient
-                  colors={['rgba(124,58,237,0.18)', 'rgba(0,217,255,0.08)']}
-                  style={StyleSheet.absoluteFill}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                />
-
-                {/* Left: icon + label */}
                 <View style={completionStyles.left}>
                   <View style={completionStyles.iconDot}>
-                    <Ionicons name="checkmark-done" size={12} color="#A855F7" />
+                    <Ionicons name="checkmark-done" size={11} color="#A855F7" />
                   </View>
                   <Text style={completionStyles.label}>{t.profile.completeYourProfile}</Text>
                 </View>
 
-                {/* Right: progress bar + percentage */}
                 <View style={completionStyles.right}>
                   <View style={completionStyles.barBg}>
                     <View style={[completionStyles.barFill, { width: `${pct}%` as any }]} />
@@ -1857,23 +1878,6 @@ function ProfileScreen() {
             />
           </View>
         )}
-
-        <ActionButtons
-          onEditPress={handleUploadPress}
-          onSharePress={handleSharePress}
-          onQRPress={handleQRPress}
-          uploadCooldown={cooldowns?.reelUpload}
-          reelUploadActive={reelUploadUi.active}
-          reelUploadProgress={reelUploadUi.progress}
-        />
-
-        <StatsRow
-          followers={followStats.followersCount.toString()}
-          following={followStats.followingCount.toString()}
-          videos={(followStats.reelsCount || myVideos.length).toString()}
-          onFollowersPress={handleFollowersPress}
-          onFollowingPress={handleFollowingPress}
-        />
 
         <ContentTabs
           activeTab={activeTab}

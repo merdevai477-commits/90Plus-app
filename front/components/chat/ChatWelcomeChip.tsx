@@ -12,7 +12,7 @@ import { chatColors, chatRadii, chatTypography } from './chatTheme';
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export type ChatWelcomeChipProps = {
-  icon: string;
+  icon: React.ReactNode;
   title: string;
   subtitle?: string;
   onPress: () => void;
@@ -46,9 +46,7 @@ export function ChatWelcomeChip({ icon, title, subtitle, onPress }: ChatWelcomeC
       {Platform.OS === 'ios' && (
         <BlurView intensity={16} tint="dark" style={StyleSheet.absoluteFill} />
       )}
-      <View style={styles.iconWrap}>
-        <Text style={styles.icon}>{icon}</Text>
-      </View>
+      <View style={styles.iconWrap}>{icon}</View>
       <View style={styles.textWrap}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
@@ -98,7 +96,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(196,181,253,0.25)',
     marginRight: 14,
   },
-  icon: { fontSize: 20 },
   textWrap: { flex: 1, minWidth: 0 },
   title: {
     ...chatTypography.chipTitle,

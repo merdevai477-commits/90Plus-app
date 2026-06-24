@@ -3,6 +3,7 @@ import { ApiFootballService, MAJOR_LEAGUES, Fixture } from '../../services/apiFo
 import { MatchFavoritesStorage } from '../storage/matchFavorites.storage';
 import { matchesBatchService } from '../../services/matchesBatchService';
 import { logger } from '../../services/logger';
+import { isMatchFinished, isMatchLive } from '../../utils/matchStatusUtils';
 import rankingsService from '../../services/rankingsService';
 import { cacheService } from '../../services/cacheService';
 import { useAppFeaturesStore } from '../stores/appFeaturesStore';
@@ -10,6 +11,7 @@ import {
     fetchWorldCupMatchesByDate,
     formatMatchTime,
 } from '../../components/Matches/leagueApiUtils';
+import { resolvePublicFirstName } from '../../hooks/useProfileCache';
 import type { Match as LeagueMatch } from '../../components/Matches/matchCardUtils';
 
 // Cache keys for home data
@@ -305,15 +307,18 @@ const mapFixtureToMatch = (fixture: Fixture, isFavorited: boolean = false): Matc
     }
 
     const timeString = formatMatchTime(fixture.fixture.date);
+    const statusShort = fixture.fixture.status.short;
+    const finished = isMatchFinished(statusShort);
+    const live = isMatchLive(statusShort);
 
     return {
         id: String(fixture.fixture.id),
         fixtureId: fixture.fixture.id,
         homeTeam: fixture.teams.home.name,
         awayTeam: fixture.teams.away.name,
-        homeScore: fixture.goals.home ?? undefined,
-        awayScore: fixture.goals.away ?? undefined,
-        time: isLive ? 'LIVE' : timeString,
+        homeScore: finished || live ? (fixture.goals.home ?? 0) : undefined,
+        awayScore: finished || live ? (fixture.goals.away ?? 0) : undefined,
+        time: live ? 'LIVE' : timeString,
         league: fixture.league.name,
         leagueId: fixture.league.id, // ✅ Map leagueId
         isLive,
@@ -391,33 +396,31 @@ export const useHomeStore = create<HomeState>((set: (state: Partial<HomeState> |
                 avatar: reel.user?.avatar || undefined,
             }));
 
+            const mapRankedPlayer = (player: (typeof weeklyPlayersData.players)[number]) => {
+                const publicName =
+                    resolvePublicFirstName(player.displayName, player.username) ||
+                    (player.displayName && !/^user_[a-z0-9]+$/i.test(player.displayName)
+                        ? player.displayName
+                        : '');
+                return {
+                    id: player.id,
+                    username: player.username,
+                    name: publicName,
+                    position: player.position || 'ST',
+                    rating: Math.min(10, (player.score / 1000) + 7),
+                    image: player.avatar || '',
+                    team: player.countryFlag || '🇪🇬',
+                    isVerified: player.isVerified,
+                    level: player.level,
+                    stats: player.stats,
+                };
+            };
+
             // Transform weekly players (top 7)
-            const players: Player[] = weeklyPlayersData.players.map(player => ({
-                id: player.id,
-                username: player.username,
-                name: player.displayName || player.username,
-                position: player.position || 'ST',
-                rating: Math.min(10, (player.score / 1000) + 7),
-                image: player.avatar || '',
-                team: player.countryFlag || '🇪🇬',
-                isVerified: player.isVerified,
-                level: player.level,
-                stats: player.stats,
-            }));
+            const players: Player[] = weeklyPlayersData.players.map(mapRankedPlayer);
 
             // Transform monthly players (team of month - 11 players)
-            const teamOfMonth: Player[] = monthlyPlayersData.players.map(player => ({
-                id: player.id,
-                username: player.username,
-                name: player.displayName || player.username,
-                position: player.position || 'ST',
-                rating: Math.min(10, (player.score / 1000) + 7),
-                image: player.avatar || '',
-                team: player.countryFlag || '🇪🇬',
-                isVerified: player.isVerified,
-                level: player.level,
-                stats: player.stats,
-            }));
+            const teamOfMonth: Player[] = monthlyPlayersData.players.map(mapRankedPlayer);
 
             logger.debug(`✅ Rankings loaded: ${videos.length} videos, ${players.length} weekly players, ${teamOfMonth.length} monthly players`);
 

@@ -575,6 +575,9 @@ export const ar = {
     statsLeagueLimited: 'الإحصائيات الكاملة غير متوفرة لهذه البطولة.',
     statsFromEvents: 'إحصائيات جزئية مستخرجة من أحداث المباراة',
     noEvents: 'الأحداث غير متاحة',
+    eventsFilterAll: 'الكل',
+    noEventsForTeam: 'لا توجد أحداث لهذا الفريق',
+    noLineupsForTeam: 'لا توجد تشكيلة لهذا الفريق',
     beforeMatch: 'قد لا تتوفر البيانات قبل المباراة',
     matchEvents: 'أحداث المباراة',
     last5Matches: 'آخر 5 مباريات',
@@ -594,6 +597,8 @@ export const ar = {
     assist: 'أسيست',
 
     // Stats
+    goals: 'الأهداف',
+    substitutions: 'التبديلات',
     shots: 'التسديدات',
     shotsOnGoal: 'تسديدات على المرمى',
     possession: 'الاستحواذ',
@@ -618,6 +623,7 @@ export const ar = {
     standingsLeagueLimited: 'مزود البيانات لا ينشر جدول ترتيب لهذه البطولة.',
     standingsSeasonNote: 'عرض موسم {season}',
     standingsGroupLabel: 'المجموعة {name}',
+    standingsGroupsFilterTitle: 'المجموعات',
     standingsRetry: 'إعادة المحاولة',
   },
 
@@ -801,6 +807,26 @@ export const ar = {
     hours: 'ساعات',
     minutes: 'دقائق',
     great: 'رائع!',
+  },
+
+  nav: {
+    home: 'الرئيسية',
+    matches: 'المباريات',
+    rank: 'الترتيب',
+    reels: 'ريلز',
+    ai: 'الذكاء',
+    profile: 'الملف',
+  },
+
+  notificationPermission: {
+    title: 'لا تفوّت أي لحظة كبيرة',
+    description:
+      'احصل على تنبيهات فورية للأهداف والنتائج المباشرة وتحديثات أنديتك المفضلة.',
+    liveGoals: 'أهداف مباشرة وتنبيهات المباريات',
+    exclusiveNews: 'أخبار حصرية وتحديثات',
+    turnOn: 'تفعيل الإشعارات',
+    maybeLater: 'ليس الآن',
+    closeA11y: 'إغلاق',
   },
 
   coinsInfo: {
@@ -1255,6 +1281,11 @@ export const ar = {
     netProfit: 'صافي الربح/الخسارة',
     predictionCost: 'التوقع = 5 كوينز • الفوز = +10 كوينز',
     chooseClub: 'اختر ناديك',
+    chooseCountry: 'اختر بلدك',
+    profileCardGuest: 'لاعب',
+    profileCardPickClub: 'اختر ناديك',
+    profileCardMotto: 'تركيز • شغف • انتصار',
+    profileCardDream: 'الحلم حقيقي',
 
     // QR Code Modal
     qrCode: 'رمز QR',
@@ -1320,6 +1351,8 @@ export const ar = {
     noBlockedUsers: 'لا يوجد مستخدمين محظورين',
     noBlockedUsersDesc: 'عندما تقوم بحظر مستخدم، سيظهر هنا',
     blockedSince: 'محظور منذ',
+    loadBlockedUsersError: 'فشل تحميل المستخدمين المحظورين',
+    blockedUserCountLabel: 'مستخدم محظور',
     // New additions for BlockedUsersScreen
     blockedUsersTitle: 'المستخدمون المحظورون',
     blockedUsersInfo: 'يمكنك إلغاء حظر أي مستخدم من هنا. المستخدمون المحظورون لا يمكنهم رؤية محتواك أو التواصل معك.',
@@ -1478,7 +1511,7 @@ export const ar = {
     noProfileChanges: 'لم يتم إجراء أي تغييرات على الملف الشخصي',
     videoSelectedTitle: 'تم اختيار الفيديو',
     videoSelectedMessage: 'تم إضافة الفيديو وجاري الرفع...',
-    editProfileTitle: 'تعديل الملف الشخصي ✏️',
+    editProfileTitle: 'تعديل الملف الشخصي',
     nameLabel: 'الاسم',
     namePlaceholder: 'الاسم الظاهر',
     usernameLabel: 'اسم المستخدم',
@@ -2228,7 +2261,7 @@ export const ar = {
     deleteAccountFailed: 'فشل حذف الحساب',
     deleteAccountFailedDetail: 'حدث خطأ أثناء الحذف. حاول مرة أخرى.',
     languageChanging: 'جاري تغيير اللغة',
-    languageChangingDetail: 'جاري تطبيق اللغة الجديدة...',
+    languageChangingDetail: 'جاري تطبيق اتجاه الواجهة والترجمة...',
     languageChangeFailed: 'تعذّر تغيير اللغة. حاول مرة تانية.',
     rateThanks: 'شكراً لدعمك!',
     rateThanksDetail: 'يمكنك تقييم التطبيق من المتجر في أي وقت.',

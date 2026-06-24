@@ -48,7 +48,7 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
  * delegates to the new Zustand-based i18n store.
  */
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { t, language, setLanguage: setLang } = useTranslation();
+  const { t, language, setLanguage: setLang, isRTL, direction } = useTranslation();
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -62,10 +62,10 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
 
   const value: LanguageContextType = {
     language: language as Language,
-    direction: 'ltr',
+    direction,
     t,
     setLanguage,
-    isRTL: false,
+    isRTL,
   };
 
   if (!isReady) {
@@ -108,7 +108,7 @@ export const useLanguage = (): LanguageContextType => {
   // Otherwise, use the new i18n system directly
   // This allows useLanguage to work even without LanguageProvider
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const { t, language, setLanguage: setLang } = useTranslation();
+  const { t, language, setLanguage: setLang, isRTL, direction } = useTranslation();
   
   const setLanguage = async (lang: Language) => {
     await setLang(lang);
@@ -116,10 +116,10 @@ export const useLanguage = (): LanguageContextType => {
 
   return {
     language: language as Language,
-    direction: 'ltr',
+    direction,
     t,
     setLanguage,
-    isRTL: false,
+    isRTL,
   };
 };
 

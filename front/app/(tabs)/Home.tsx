@@ -29,14 +29,15 @@ import {
     PlayerList,
     TeamPitch,
     ScreenSection,
-} from '../../components/home';
-import type { MatchListItem } from '../../components/home/MatchList';
+} from '../../components/Home';
+import type { MatchListItem } from '../../components/Home/MatchList';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
 import { useRegisterLiveFixtures } from '../../hooks/useLiveFixture';
 import { snapshotToMatchRow } from '../../src/utils/snapshotToMatchRow';
+import { isMatchFinished, isMatchLive } from '../../utils/matchStatusUtils';
 import AdvancedSearchBar, { SearchResult } from '../../components/common/AdvancedSearchBar';
 import LuckyWheelModal from '../../components/common/LuckyWheelModal';
-import { HomeSectionError } from '../../components/home/HomeSectionError';
+import { HomeSectionError } from '../../components/Home/HomeSectionError';
 import { useHomeStore, type Match as HomeMatch } from '../../src/store/home.store';
 import { APP_BG } from '../../constants/ui';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
@@ -49,10 +50,19 @@ import { ProfileCompletionService } from '../../services/profileCompletion.servi
 import { cacheService, CACHE_KEYS } from '../../services/cacheService';
 import { AuthService } from '../../src/services/authService';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
+import { scheduleMatchesWidgetSync } from '../../src/widgets/syncMatchesWidget';
 import { useScreenFont } from '../../utils/fontSetup';
 import { useTranslation } from '../../src/i18n';
+import useMyProfileBasics from '../../hooks/useMyProfileBasics';
+import { resolveProfileDisplayName, resolveGreetingFirstName, resolvePublicFirstName } from '../../hooks/useProfileCache';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { QuizApiService } from '../../services/quizApi.service';
+import { dailyQuizQueryKey, todayQuizDateKey } from '../../utils/quizDateKey';
+import {
+    canMakeAuthenticatedRequests,
+    fetchWithClerkAuth,
+    getClerkBearerToken,
+} from '../../utils/clerkAuthToken';
 
 const LIVE_STATUS_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
 const FINISHED_STATUS_SHORTS = new Set(['FT', 'AET', 'PEN']);
@@ -87,12 +97,6 @@ function deriveHomeMatchListStatus(
     if (m.isLive) return 'LIVE';
     return 'UPCOMING';
 }
-import { dailyQuizQueryKey, todayQuizDateKey } from '../../utils/quizDateKey';
-import {
-    canMakeAuthenticatedRequests,
-    fetchWithClerkAuth,
-    getClerkBearerToken,
-} from '../../utils/clerkAuthToken';
 
 const API_URL = getApiUrl();
 
@@ -129,6 +133,7 @@ export default function HomeScreen() {
     // ── Persisted video likes ─────────────────────────────────────────────────
     const { user } = useUser();
     const { isSignedIn, isLoaded, getToken } = useAuth();
+    const { data: profileBasics } = useMyProfileBasics();
     const queryClient = useQueryClient();
     const quizPreloadDone = useRef(false);
     const { likedIds, toggleLike } = useHomeLikes(user?.id);
@@ -219,18 +224,24 @@ export default function HomeScreen() {
     }, [getToken, isSignedIn, isLoaded]);
 
     const fetchUserProfile = useCallback(async () => {
+        const clerkFallback = user
+            ? {
+                  clerkUserId: user.id,
+                  username: user.username,
+                  firstName: user.firstName,
+                  lastName: user.lastName,
+                  fullName: user.fullName,
+                  primaryEmail: user.primaryEmailAddress?.emailAddress,
+              }
+            : null;
+
         const applyClerkHomeFallback = () => {
-            if (!user) return;
-            const emailUsername =
-                user.primaryEmailAddress?.emailAddress
-                    ?.split('@')[0]
-                    ?.toLowerCase()
-                    .replace(/[^a-z0-9_]/g, '') || '';
-            const display =
-                [user.firstName, user.lastName].filter(Boolean).join(' ').trim() ||
-                globalState.userProfile?.displayName ||
-                globalState.userProfile?.username ||
-                emailUsername;
+            if (!user || !clerkFallback) return;
+            const display = resolveProfileDisplayName(
+                globalState.userProfile?.displayName,
+                globalState.userProfile?.username,
+                clerkFallback,
+            );
 
             setUserInfo((prev) => ({
                 ...prev,
@@ -247,9 +258,14 @@ export default function HomeScreen() {
 
             try {
                 const userData = await AuthService.syncUserWithBackend(token, { getToken });
+                const greetingName = resolveProfileDisplayName(
+                    userData.displayName,
+                    userData.username,
+                    clerkFallback,
+                );
                 setUserInfo((prev) => ({
                     ...prev,
-                    username: userData.username || prev.username,
+                    username: greetingName || prev.username,
                     avatar: userData.avatar || prev.avatar,
                     loginStreak:
                         userData.consecutiveLoginDays !== undefined
@@ -361,11 +377,48 @@ export default function HomeScreen() {
         fetchUserData: fetchPredictionsData,
     } = usePredictionsStore();
 
+    const greetingName = useMemo(() => {
+        const clerkFallback = user
+            ? {
+                  clerkUserId: user.id,
+                  username: user.username,
+                  firstName: user.firstName,
+                  lastName: user.lastName,
+                  fullName: user.fullName,
+                  primaryEmail: user.primaryEmailAddress?.emailAddress,
+              }
+            : null;
+
+        if (!user && !profileBasics) return userInfo.username;
+
+        return resolveGreetingFirstName(
+            profileBasics?.displayName || globalState.userProfile?.displayName,
+            profileBasics?.username || globalState.userProfile?.username,
+            clerkFallback,
+        );
+    }, [
+        profileBasics?.displayName,
+        profileBasics?.username,
+        user,
+        userInfo.username,
+    ]);
+
     useEffect(() => {
         if (isSignedIn && user) {
             const email = user.primaryEmailAddress?.emailAddress || '';
             const emailUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
-            const displayUsername = globalState.userProfile?.username || emailUsername;
+            const displayUsername = resolveProfileDisplayName(
+                globalState.userProfile?.displayName,
+                globalState.userProfile?.username || emailUsername,
+                {
+                    clerkUserId: user.id,
+                    username: user.username,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    fullName: user.fullName,
+                    primaryEmail: email,
+                },
+            );
             setUserInfo((prev) => ({ ...prev, username: displayUsername }));
 
             if (!globalState.userProfile || globalState.userProfile.id !== user.id) {
@@ -569,6 +622,7 @@ export default function HomeScreen() {
             logger.error('Error refreshing home screen:', error);
         } finally {
             setRefreshing(false);
+            scheduleMatchesWidgetSync(400);
         }
     }, [getToken, isLoaded, isSignedIn]);
 
@@ -703,18 +757,19 @@ export default function HomeScreen() {
                 homeTeam: {
                     name: m.homeTeam ?? '',
                     shortName: m.homeTeam ?? '?',
-                    score: homeScore,
+                    score: homeScore ?? 0,
                     logo: m.homeLogo,
                 },
                 awayTeam: {
                     name: m.awayTeam ?? '',
                     shortName: m.awayTeam ?? '?',
-                    score: awayScore,
+                    score: awayScore ?? 0,
                     logo: m.awayLogo,
                 },
                 status: deriveHomeMatchListStatus(liveRow, m),
                 minute: liveRow?.minute ?? m.minute,
                 league: m.league,
+                leagueId: m.leagueId,
                 kickoff: m.time,
                 isPinned: subscribedIds.has(m.fixtureId),
                 isFavorited: m.isFavorited,
@@ -737,6 +792,11 @@ export default function HomeScreen() {
             }),
         [designMatches],
     );
+
+    useEffect(() => {
+        if (loadingMatches && matches.length === 0) return;
+        scheduleMatchesWidgetSync(1200);
+    }, [sortedDesignMatches, loadingMatches, matches.length, snapshots]);
 
     const designVideos = useMemo(
         () =>
@@ -762,7 +822,7 @@ export default function HomeScreen() {
                 const color = POSITION_COLOR[pos] ?? '#8E54E9';
                 return {
                     id: idx + 1,
-                    name: p.name,
+                    name: resolvePublicFirstName(p.name, p.username) || p.name,
                     team: p.team,
                     // The store stores the user's country flag emoji in `team`
                     // (see home.store.ts: `team: player.countryFlag || '🇪🇬'`).
@@ -790,23 +850,34 @@ export default function HomeScreen() {
             unique.push(p);
             if (unique.length >= 11) break;
         }
-        return unique.map((p) => ({
-            id: p.id,
-            name: p.name,
-            short: (p.name || p.username || '??').slice(0, 3).toUpperCase(),
-            rating: Math.round((p.rating ?? 80) * 10) / 10,
-            position: p.position || 'CM',
-            photoUri: p.image || '',
-            username: p.username,
-        }));
+        return unique.map((p) => {
+            const publicName =
+                resolvePublicFirstName(p.name, p.username) ||
+                (p.name && !/^user_[a-z0-9]+$/i.test(p.name) ? p.name.split(/\s+/)[0] : '');
+            return {
+                id: p.id,
+                name: publicName,
+                short: publicName ? publicName.slice(0, 2).toUpperCase() : '•',
+                rating: Math.round((p.rating ?? 80) * 10) / 10,
+                position: p.position || 'CM',
+                photoUri: p.image || '',
+                username: p.username,
+            };
+        });
     }, [teamOfMonth]);
 
     const NAV_BOTTOM_PADDING = Math.max(insets.bottom, 16) + 16 + 4;
-    const headerOffset = insets.top + HOME_HEADER_BODY_HEIGHT + -1;
+    const headerOffset = insets.top + HOME_HEADER_BODY_HEIGHT + 10;
 
     return (
         <View style={styles.container}>
             <StatusBar style="light" />
+
+            <HomeHeader
+                userName={greetingName}
+                onSearchPress={handleSearchPress}
+                isOffline={!isOnline}
+            />
 
             {/* Static ambient gradient — matches the neon-purple artwork palette */}
             <LinearGradient
@@ -823,7 +894,7 @@ export default function HomeScreen() {
             <ScrollView
                 style={styles.scroll}
                 contentContainerStyle={{
-                    paddingTop: headerOffset +10,
+                    paddingTop: headerOffset,
                     // ─── MAX SCROLL BOTTOM ───────────────────────────────────
                     // Change this number to control how far down the scroll goes.
                     // 0   = ends exactly at the last element (image gets hidden behind BottomNav)
@@ -935,12 +1006,6 @@ export default function HomeScreen() {
                     />
                 </ScreenSection>
             </ScrollView>
-
-            <HomeHeader
-                userName={userInfo.username}
-                onSearchPress={handleSearchPress}
-                isOffline={!isOnline}
-            />
 
             <AdvancedSearchBar
                 visible={searchVisible}

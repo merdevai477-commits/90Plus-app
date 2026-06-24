@@ -363,6 +363,9 @@ export const en = {
     statsLeagueLimited: 'Full statistics are not provided for this competition.',
     statsFromEvents: 'Partial stats derived from match events',
     noEvents: 'No events available',
+    eventsFilterAll: 'All',
+    noEventsForTeam: 'No events for this team',
+    noLineupsForTeam: 'No lineup for this team',
     beforeMatch: 'Data may not be available before match starts',
     matchEvents: 'Match Events',
     last5Matches: 'Last 5 Matches',
@@ -382,6 +385,8 @@ export const en = {
     assist: 'Assist',
 
     // Stats
+    goals: 'Goals',
+    substitutions: 'Substitutions',
     shots: 'Shots',
     shotsOnGoal: 'Shots on Goal',
     possession: 'Possession',
@@ -406,6 +411,7 @@ export const en = {
     standingsLeagueLimited: 'The provider does not publish a league table for this competition.',
     standingsSeasonNote: 'Showing season {season}',
     standingsGroupLabel: 'Group {name}',
+    standingsGroupsFilterTitle: 'Groups',
     standingsRetry: 'Check again',
   },
 
@@ -710,6 +716,26 @@ export const en = {
     hours: 'hours',
     minutes: 'minutes',
     great: 'Awesome!',
+  },
+
+  nav: {
+    home: 'Home',
+    matches: 'Matches',
+    rank: 'Rank',
+    reels: 'Reels',
+    ai: 'AI',
+    profile: 'Profile',
+  },
+
+  notificationPermission: {
+    title: 'Never miss a big moment',
+    description:
+      'Get instant alerts for goals, live scores, and updates from your favorite clubs.',
+    liveGoals: 'Live goals & match alerts',
+    exclusiveNews: 'Exclusive news & updates',
+    turnOn: 'Turn on notifications',
+    maybeLater: 'Maybe later',
+    closeA11y: 'Close',
   },
 
   coinsInfo: {
@@ -1278,6 +1304,11 @@ export const en = {
     netProfit: 'Net Profit/Loss',
     predictionCost: 'Prediction = 5 coins • Win = +10 coins',
     chooseClub: 'Choose your club',
+    chooseCountry: 'Select your country',
+    profileCardGuest: 'Player',
+    profileCardPickClub: 'Choose club',
+    profileCardMotto: 'FOCUS • PASSION • VICTORY',
+    profileCardDream: 'THE DREAM IS REAL',
 
     // QR Code Modal
     qrCode: 'QR Code',
@@ -1343,6 +1374,8 @@ export const en = {
     noBlockedUsers: 'No blocked users',
     noBlockedUsersDesc: 'When you block a user, they will appear here',
     blockedSince: 'Blocked since',
+    loadBlockedUsersError: 'Failed to load blocked users',
+    blockedUserCountLabel: 'blocked user',
     // New additions for BlockedUsersScreen
     blockedUsersTitle: 'Blocked Users',
     blockedUsersInfo: 'You can unblock any user from here. Blocked users cannot see your content or contact you.',
@@ -1503,7 +1536,7 @@ export const en = {
     noProfileChanges: 'No changes were made to your profile.',
     videoSelectedTitle: 'Video selected',
     videoSelectedMessage: 'Video has been added and upload started.',
-    editProfileTitle: 'Edit Profile ✏️',
+    editProfileTitle: 'Edit Profile',
     nameLabel: 'Name',
     namePlaceholder: 'Display name',
     usernameLabel: 'Username',
@@ -2298,7 +2331,7 @@ export const en = {
     deleteAccountFailed: 'Could not delete account',
     deleteAccountFailedDetail: 'Something went wrong. Please try again.',
     languageChanging: 'Changing language',
-    languageChangingDetail: 'Applying your new language...',
+    languageChangingDetail: 'Applying layout direction and translations...',
     languageChangeFailed: 'Could not change language. Please try again.',
     rateThanks: 'Thanks for the support!',
     rateThanksDetail: 'You can rate the app from your store anytime.',

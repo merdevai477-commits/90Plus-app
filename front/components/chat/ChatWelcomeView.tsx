@@ -1,7 +1,18 @@
 import React, { useMemo } from 'react';
 import { View, Text, ScrollView } from 'react-native';
+import {
+  Trophy,
+  BarChart3,
+  Dumbbell,
+  Salad,
+  HeartPulse,
+} from 'lucide-react-native';
 import { chatScreenStyles as styles } from './chatScreen.styles';
 import { ChatWelcomeChip } from './ChatWelcomeChip';
+import { chatColors } from './chatTheme';
+
+const CHIP_ICON_SIZE = 20;
+const CHIP_ICON_COLOR = chatColors.accentSoft;
 
 export type ChatWelcomeViewProps = {
   greetingName: string;
@@ -19,11 +30,31 @@ export const ChatWelcomeView = React.memo(function ChatWelcomeView({
 
   const suggestions = useMemo(
     () => [
-      { icon: '⚽', title: tChat.suggestionFootballInfo, prompt: tChat.suggestionFootballInfoPrompt },
-      { icon: '📊', title: tChat.suggestionLeagueStats, prompt: tChat.suggestionLeagueStatsPrompt },
-      { icon: '🏋️', title: tChat.suggestionTrainingPlan, prompt: tChat.suggestionTrainingPlanPrompt },
-      { icon: '🥗', title: tChat.suggestionDietPlan, prompt: tChat.suggestionDietPlanPrompt },
-      { icon: '💪', title: tChat.suggestionRecoveryTips, prompt: tChat.suggestionRecoveryTipsPrompt },
+      {
+        icon: <Trophy size={CHIP_ICON_SIZE} color={CHIP_ICON_COLOR} strokeWidth={2} />,
+        title: tChat.suggestionFootballInfo,
+        prompt: tChat.suggestionFootballInfoPrompt,
+      },
+      {
+        icon: <BarChart3 size={CHIP_ICON_SIZE} color={CHIP_ICON_COLOR} strokeWidth={2} />,
+        title: tChat.suggestionLeagueStats,
+        prompt: tChat.suggestionLeagueStatsPrompt,
+      },
+      {
+        icon: <Dumbbell size={CHIP_ICON_SIZE} color={CHIP_ICON_COLOR} strokeWidth={2} />,
+        title: tChat.suggestionTrainingPlan,
+        prompt: tChat.suggestionTrainingPlanPrompt,
+      },
+      {
+        icon: <Salad size={CHIP_ICON_SIZE} color={CHIP_ICON_COLOR} strokeWidth={2} />,
+        title: tChat.suggestionDietPlan,
+        prompt: tChat.suggestionDietPlanPrompt,
+      },
+      {
+        icon: <HeartPulse size={CHIP_ICON_SIZE} color={CHIP_ICON_COLOR} strokeWidth={2} />,
+        title: tChat.suggestionRecoveryTips,
+        prompt: tChat.suggestionRecoveryTipsPrompt,
+      },
     ],
     [tChat],
   );

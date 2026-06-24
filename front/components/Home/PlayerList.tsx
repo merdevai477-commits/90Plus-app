@@ -14,13 +14,12 @@ import Animated, {
   useSharedValue, withRepeat, withTiming, useAnimatedStyle, Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import Svg, { Polygon } from 'react-native-svg';
 import { User } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { SectionHeader } from './SectionHeader';
 import { useTranslation } from '../../src/i18n';
+import { resolvePublicFirstName } from '../../hooks/useProfileCache';
 import {
   GOLD_PRIMARY,
   SCREEN_PADDING_H,
@@ -33,6 +32,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 type PlayerRow = {
   id: number;
   name: string;
+  username?: string;
   team: string;
   country: string;
   position: string;
@@ -307,6 +307,10 @@ interface EmptyPodiumSpec {
   image: import('react-native').ImageSourcePropType;
 }
 
+function displayPlayerName(rawName: string, username?: string): string {
+  return resolvePublicFirstName(rawName, username) || rawName || '?';
+}
+
 function EmptyPodiumCard({
   spec,
   player,
@@ -322,6 +326,8 @@ function EmptyPodiumCard({
 }) {
   const accent = RANK_ACCENT_COLORS[rank - 1] ?? RANK_ACCENT_COLORS[0];
   const occupied = Boolean(player);
+  const isTopThree = rank <= 3;
+  const playerLabel = player ? displayPlayerName(player.name, player.username) : '';
 
   return (
     <TouchableOpacity
@@ -339,14 +345,12 @@ function EmptyPodiumCard({
 
       {occupied && player ? (
         <>
-          {/* Top-left country flag (reserved square on the artwork) */}
           {player.country ? (
             <View style={styles.podiumFlagSlot}>
               <Text style={styles.podiumFlagText}>{player.country}</Text>
             </View>
           ) : null}
 
-          {/* Top-right hexagon — player position */}
           <View style={styles.podiumPositionHexWrap}>
             <Svg
               width="100%"
@@ -354,7 +358,6 @@ function EmptyPodiumCard({
               viewBox="0 0 100 100"
               style={StyleSheet.absoluteFill}
             >
-              {/* Regular hexagon centered in the viewBox */}
               <Polygon
                 points="50,4 92,27 92,73 50,96 8,73 8,27"
                 fill="rgba(5,1,13,0.82)"
@@ -370,8 +373,13 @@ function EmptyPodiumCard({
             </Text>
           </View>
 
-          {/* Center circle — player avatar (no colored ring around it) */}
-          <View style={styles.podiumAvatarWrap} pointerEvents="none">
+          <View
+            style={[
+              styles.podiumAvatarWrap,
+              !isTopThree && styles.podiumAvatarWrapLower,
+            ]}
+            pointerEvents="none"
+          >
             {player.photoUri ? (
               <Image
                 source={{ uri: player.photoUri }}
@@ -381,35 +389,41 @@ function EmptyPodiumCard({
             ) : (
               <View style={[styles.podiumAvatar, styles.podiumAvatarFallback]}>
                 <Text style={styles.podiumAvatarInitials}>
-                  {(player.name || '?').trim().charAt(0).toUpperCase()}
+                  {playerLabel.trim().charAt(0).toUpperCase() || '?'}
                 </Text>
               </View>
             )}
           </View>
 
-          {/* Name bar covering the built-in "Waiting for you!" copy.
-              Uses LiquidGlass on iOS 26+ and falls back to a BlurView
-              elsewhere, giving the pill a true transparent-glass look. */}
-          {(() => {
-            const NameWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-            const nameWrapperProps = isLiquidGlassSupported
-              ? ({ effect: 'clear' as const, interactive: false } as const)
-              : ({ intensity: 28, tint: 'dark' as const } as const);
-            return (
-              <NameWrapper
-                {...(nameWrapperProps as any)}
-                style={styles.podiumNameSlot}
-                pointerEvents="none"
-              >
-                <Text
-                  style={[styles.podiumName, { color: accent }]}
-                  numberOfLines={1}
-                >
-                  {player.name}
-                </Text>
-              </NameWrapper>
-            );
-          })()}
+          {/* Solid bottom band — hides baked-in "XTH PLACE" copy on artwork */}
+          <LinearGradient
+            colors={
+              isTopThree
+                ? ['transparent', 'rgba(5,1,13,0.55)', 'rgba(5,1,13,0.98)', '#05010D']
+                : ['transparent', 'rgba(5,1,13,0.7)', 'rgba(5,1,13,1)', '#05010D']
+            }
+            locations={isTopThree ? [0.15, 0.45, 0.78, 1] : [0.05, 0.35, 0.62, 1]}
+            style={[
+              styles.podiumBottomMask,
+              isTopThree ? styles.podiumBottomMaskTop : styles.podiumBottomMaskLower,
+            ]}
+            pointerEvents="none"
+          />
+
+          <View
+            style={[
+              styles.podiumFooter,
+              isTopThree ? styles.podiumFooterTop : styles.podiumFooterLower,
+            ]}
+            pointerEvents="none"
+          >
+            <Text
+              style={[styles.podiumName, !isTopThree && styles.podiumNameLower]}
+              numberOfLines={1}
+            >
+              {playerLabel}
+            </Text>
+          </View>
         </>
       ) : null}
     </TouchableOpacity>
@@ -669,9 +683,6 @@ const styles = StyleSheet.create({
   // ── Empty Section — 7 ordered image cards (image-led, same as VideoList) ──
   emptyPodiumCard: {
     width: 155,
-    // Force all cards to the same aspect ratio (3:4 = 0.75) matching the
-    // 1st/2nd/3rd artwork. Cards 4–7 have a slightly taller source image
-    // (0.667) but cover + fixed aspect clips them to the same visual size.
     aspectRatio: 0.75,
     borderRadius: 18,
     backgroundColor: 'transparent',
@@ -692,8 +703,8 @@ const styles = StyleSheet.create({
   //   Scale Y = 220/500 = 0.440
   podiumFlagSlot: {
     position: 'absolute',
-    top:8,
-    left:1,       // 20 × 0.484
+    top: 8,
+    left: 1,
     width: 49,      // 40 × 0.484 → 19, bumped for readability
     height: 20,     // 28 × 0.44  → 12, bumped for readability
     borderRadius: 1,
@@ -711,8 +722,8 @@ const styles = StyleSheet.create({
   // Hexagon badge — drawn as an SVG polygon inside a square viewport.
   podiumPositionHexWrap: {
     position: 'absolute',
-    top: 13, // 20 × 0.44
-    right:11,     // 20 × 0.484
+    top: 13,
+    right: 11,
     width: 25,      // 60 × 0.484
     height: 20,     // 60 × 0.44  → 26, bumped to 30 so hex reads cleanly
     alignItems: 'center',
@@ -726,14 +737,17 @@ const styles = StyleSheet.create({
   // Avatar — no colored ring, just a plain circular mask.
   podiumAvatarWrap: {
     position: 'absolute',
-    top: 28,        // 80 × 0.44
-    left: 1,
+    top: 28,
+    left: 0,
     right: 0,
     alignItems: 'center',
   },
+  podiumAvatarWrapLower: {
+    top: 32,
+  },
   podiumAvatar: {
-    width: 58,      // (90 × 2) × 0.484 ≈ 87; tightened to 78 so it fits
-    height: 68,     // within the ring slot cleanly on 155×220
+    width: 58,
+    height: 68,
     borderRadius: 39,
     backgroundColor: 'rgba(5,1,13,0.6)',
   },
@@ -747,32 +761,44 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.3,
   },
-  // Name bar — hides the baked-in "Waiting for you!" copy.
-  // Background is transparent because LiquidGlass / BlurView provides the tint.
-  podiumNameSlot: {
+  podiumBottomMask: {
     position: 'absolute',
-    bottom: 18,     // 100 × 0.44
-    left: 8,
-    right: 8,
-    height: 25,     // 50  × 0.44
-    paddingVertical: 2,
-    backgroundColor: 'transparent',
-    borderRadius: 40,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  podiumBottomMaskTop: {
+    height: '40%',
+  },
+  podiumBottomMaskLower: {
+    height: '54%',
+  },
+  podiumFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(54, 5, 95,00)',
-    overflow: 'hidden',
+    paddingHorizontal: 10,
+    backgroundColor: '#05010D',
+  },
+  podiumFooterTop: {
+    bottom: 0,
+    height: 30,
+  },
+  podiumFooterLower: {
+    bottom: 0,
+    height: 32,
   },
   podiumName: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
     textAlign: 'center',
-    // Subtle shadow keeps the colored text readable over the glass blur
-    // regardless of the artwork behind it.
-    textShadowColor: 'rgba(0,0,0,0.55)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    color: '#FFFFFF',
+  },
+  podiumNameLower: {
+    fontSize: 12,
+    fontWeight: '800',
   },
 });
