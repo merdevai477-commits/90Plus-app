@@ -1,0 +1,25 @@
+---
+description: Auto-commit and push to GitHub after completing code changes
+alwaysApply: true
+---
+
+# Auto push to GitHub after changes
+
+When you finish implementing a task that modified tracked project files:
+
+1. **Commit** — Create a commit with a clear message (why, not just what). Do not commit secrets (`.env`, credentials). Skip untracked docs unless the user asked for them.
+2. **Push** — Run `git push origin main` (or the current branch with `-u` if no upstream).
+3. **Report** — Tell the user the commit hash and that push succeeded.
+
+## When to skip
+
+- Question-only or read-only tasks (no file changes).
+- User explicitly says not to commit or push.
+- Commit would be empty.
+- Push fails (auth, conflicts) — fix or report; do not force-push `main`.
+
+## Git safety
+
+- Never `git push --force` to `main`/`master`.
+- Never skip hooks unless the user asks.
+- Never amend unless user rules for amend are satisfied.
