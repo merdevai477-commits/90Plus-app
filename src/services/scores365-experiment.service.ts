@@ -507,7 +507,7 @@ function normalize365Score(score?: number): number | null {
   return score;
 }
 
-/** Status rules validated against 365Scores WC feed (score -1 / statusText). */
+/** Status rules validated against 365Scores feed (statusGroup, score -1, statusText). */
 export function classifyScores365MatchStatus(
   game: Scores365Game,
 ): { short: string; long: string; elapsed: number | null } {
@@ -515,10 +515,23 @@ export function classifyScores365MatchStatus(
   const awayRaw = game.awayCompetitor?.score;
   const text = (game.statusText ?? '').toLowerCase();
   const shortCode = (game.shortStatusText ?? '').trim().toLowerCase();
-  const minute = Math.floor(game.gameTime ?? 0) || null;
+  const display = (game.gameTimeDisplay ?? '').trim().toLowerCase();
+  const minuteRaw = game.gameTime;
+  const minute =
+    minuteRaw != null && minuteRaw >= 0 ? Math.floor(minuteRaw) : null;
+  const statusGroup = game.statusGroup;
 
   if (homeRaw === -1 || awayRaw === -1) {
     return { short: 'NS', long: 'Not Started', elapsed: null };
+  }
+
+  // 365 statusGroup: 2 = scheduled, 3 = live, 4 = finished (verified on allscores).
+  if (statusGroup === 2) {
+    return { short: 'NS', long: 'Not Started', elapsed: null };
+  }
+
+  if (statusGroup === 4) {
+    return { short: 'FT', long: 'Match Finished', elapsed: 90 };
   }
 
   if (
@@ -530,29 +543,33 @@ export function classifyScores365MatchStatus(
     return { short: 'NS', long: 'Not Started', elapsed: null };
   }
 
-  if (
+  const isFinishedText =
     text.includes('انته') ||
-    text.includes('finish') ||
     text.includes('ended') ||
-    shortCode === 'ft'
-  ) {
+    text.includes('finish') ||
+    text.includes('after pen') ||
+    text.includes('full time') ||
+    text.includes('fulltime') ||
+    shortCode === 'ft' ||
+    shortCode === 'aet' ||
+    shortCode === 'pen' ||
+    shortCode.includes('ended') ||
+    display === 'ft' ||
+    display.includes('ended');
+
+  if (isFinishedText) {
     return { short: 'FT', long: 'Match Finished', elapsed: 90 };
   }
 
-  // 2nd / 1st half BEFORE generic "half" — "2nd Half".includes("half") must not map to HT.
-  if (
-    text.includes('second') ||
-    text.includes('2nd') ||
-    text.includes('الثاني') ||
-    shortCode === '2' ||
-    shortCode === '2h' ||
-    (minute != null && minute > 45)
-  ) {
-    return {
-      short: '2H',
-      long: 'Second Half',
-      elapsed: minute != null ? Math.max(minute, 46) : 46,
-    };
+  // Stale/high clocks — finished matches sometimes keep gameTime > 90 without FT text.
+  if (minute != null && minute > 120) {
+    return { short: 'FT', long: 'Match Finished', elapsed: 90 };
+  }
+  if (statusGroup !== 3 && minute != null && minute >= 90) {
+    return { short: 'FT', long: 'Match Finished', elapsed: 90 };
+  }
+  if (minute != null && minute > 105) {
+    return { short: 'FT', long: 'Match Finished', elapsed: 90 };
   }
 
   if (
@@ -565,15 +582,41 @@ export function classifyScores365MatchStatus(
     return { short: 'HT', long: 'Halftime', elapsed: 45 };
   }
 
+  // 2nd half — require live statusGroup OR explicit 2nd-half text (not minute > 45 alone).
+  if (
+    text.includes('second') ||
+    text.includes('2nd') ||
+    text.includes('الثاني') ||
+    shortCode === '2' ||
+    shortCode === '2h' ||
+    (statusGroup === 3 && minute != null && minute > 45)
+  ) {
+    const elapsed =
+      minute != null ? Math.min(Math.max(minute, 46), 105) : 46;
+    return {
+      short: '2H',
+      long: 'Second Half',
+      elapsed,
+    };
+  }
+
   if (
     text.includes('first') ||
     text.includes('1st') ||
     text.includes('الأول') ||
     shortCode === '1' ||
     shortCode === '1h' ||
-    (minute != null && minute > 0)
+    (statusGroup === 3 && minute != null && minute > 0 && minute <= 45)
   ) {
     return { short: '1H', long: 'First Half', elapsed: minute };
+  }
+
+  if (statusGroup === 3) {
+    return {
+      short: 'LIVE',
+      long: 'In Progress',
+      elapsed: minute != null ? Math.min(minute, 105) : null,
+    };
   }
 
   return { short: 'NS', long: 'Not Started', elapsed: null };
@@ -1536,8 +1579,11 @@ export async function sync365SyntheticLiveSnapshots(
     const rows = await prisma.cachedFixture.findMany({
       where: {
         leagueId: { gte: SCORES365_LEAGUE_ID_OFFSET },
-        status: { in: [...SYNTHETIC_LIVE_STATUSES] },
         matchDate: { gte: since },
+        OR: [
+          { status: { in: [...SYNTHETIC_LIVE_STATUSES] } },
+          { status: '2H', elapsed: { gt: 100 } },
+        ],
       },
       select: { fixtureId: true },
       orderBy: { updatedAt: 'asc' },

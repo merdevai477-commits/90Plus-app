@@ -17,9 +17,21 @@ function getAppLanguageParam(): string {
 /**
  * Maps API fixture status to component match status
  */
-export const mapFixtureStatus = (statusShort: string): 'live' | 'upcoming' | 'finished' => {
+export const mapFixtureStatus = (
+  statusShort: string,
+  elapsed?: number | null,
+): 'live' | 'upcoming' | 'finished' => {
   const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
   const finishedStatuses = ['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO'];
+
+  // Stale 365 rows: impossible stoppage → treat as finished.
+  if (
+    elapsed != null &&
+    elapsed > 105 &&
+    (statusShort === '2H' || statusShort === '1H')
+  ) {
+    return 'finished';
+  }
 
   if (liveStatuses.includes(statusShort)) {
     return 'live';
@@ -78,8 +90,8 @@ export const formatLiveMinuteDisplay = (
   }
 
   if ((status === '1H' || status === '2H') && elapsed != null) {
-    if (status === '1H' && elapsed > 45) return `45+${elapsed - 45}'`;
-    if (status === '2H' && elapsed > 90) return `90+${elapsed - 90}'`;
+    if (status === '1H' && elapsed > 45) return `45+${Math.min(elapsed - 45, 15)}'`;
+    if (status === '2H' && elapsed > 90) return `90+${Math.min(elapsed - 90, 15)}'`;
     return `${elapsed}'`;
   }
 
@@ -167,7 +179,7 @@ export const mapFixtureToMatch = (fixture: Fixture): Match => {
       home: fixture.goals.home ?? 0,
       away: fixture.goals.away ?? 0,
     },
-    status: mapFixtureStatus(fixture.fixture.status.short),
+    status: mapFixtureStatus(fixture.fixture.status.short, fixture.fixture.status.elapsed),
     statusShort: fixture.fixture.status.short,
     elapsed: fixture.fixture.status.elapsed ?? null,
     minute: formatMatchMinute(fixture),

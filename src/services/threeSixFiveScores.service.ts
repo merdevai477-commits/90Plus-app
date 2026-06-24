@@ -19,6 +19,7 @@ import {
   SCORES365_LEAGUE_ID_OFFSET,
   synthesizeBaseFrom365Game,
   sync365SyntheticLiveSnapshots,
+  classifyScores365MatchStatus,
 } from './scores365-experiment.service';
 import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
 import { calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
@@ -1126,19 +1127,9 @@ class ThreeSixFiveScoresService {
   }
 
   private classifyPhase(game: Scores365Game): ThreeSixFiveMatchPhase {
-    const homeRaw = game.homeCompetitor?.score;
-    const awayRaw = game.awayCompetitor?.score;
-    if (homeRaw === -1 || awayRaw === -1) return 'upcoming';
-
-    const text = (game.statusText ?? '').toLowerCase();
-    if (
-      text.includes('انته') ||
-      text.includes('ended') ||
-      text.includes('finish') ||
-      (game.shortStatusText ?? '').toLowerCase() === 'ft'
-    ) {
-      return 'finished';
-    }
+    const { short } = classifyScores365MatchStatus(game as Parameters<typeof classifyScores365MatchStatus>[0]);
+    if (short === 'NS') return 'upcoming';
+    if (short === 'FT' || short === 'AET' || short === 'PEN') return 'finished';
     return 'live';
   }
 
