@@ -23,6 +23,8 @@ import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { APP_BG } from '../../constants/ui';
 import { FootballField } from '../../components/match-details/FootballField';
+import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
+import { applySubstitutionsToPitch } from '../../utils/lineupMatchState';
 import { matchArchiveService } from '../../services/matchArchiveService';
 import TeamBadge from '../../components/common/TeamBadge';
 import LeagueIcon from '../../components/common/LeagueIcon';
@@ -729,43 +731,6 @@ const MatchDetailsScreen = () => {
     );
   };
 
-  // Helper function to get event icon
-  const getEventIcon = (type: string, detail: string) => {
-    if (type === 'Goal') return 'football';
-    if (type === 'Card') {
-      if (detail.includes('Yellow')) return 'card';
-      if (detail.includes('Red')) return 'card';
-    }
-    if (type === 'subst') return 'swap-horizontal';
-    return 'information-circle';
-  };
-
-  // Helper function to get event color
-  const getEventColor = (type: string, detail: string) => {
-    if (type === 'Goal') return '#22c55e';
-    if (type === 'Card') {
-      if (detail.includes('Yellow')) return '#f59e0b';
-      if (detail.includes('Red')) return '#ef4444';
-    }
-    if (type === 'subst') return '#3b82f6';
-    return '#888';
-  };
-
-  // Helper function to get event label
-  const getEventLabel = (type: string, detail: string) => {
-    if (type === 'Goal') {
-      if (detail.includes('Penalty')) return t.matchDetails.penaltyGoal;
-      if (detail.includes('Own')) return t.matchDetails.ownGoal;
-      return t.matchDetails.goal;
-    }
-    if (type === 'Card') {
-      if (detail.includes('Yellow')) return t.matchDetails.yellowCard;
-      if (detail.includes('Red')) return t.matchDetails.redCard;
-    }
-    if (type === 'subst') return t.matchDetails.substitution;
-    return detail;
-  };
-
   // Render Events Tab
   const renderEvents = () => {
     if (detailsFetching && events.length === 0) {
@@ -808,6 +773,9 @@ const MatchDetailsScreen = () => {
               : event.team.name.toLowerCase().includes(homeTeamName.toLowerCase()) ||
                 homeTeamName.toLowerCase().includes(event.team.name.toLowerCase());
 
+            const eventColor = getMatchEventColor(event.type, event.detail);
+            const isSubstitution = event.type === 'subst';
+
             return (
               <View key={index} style={[styles.eventCard, isHomeTeam ? styles.eventHome : styles.eventAway]}>
                 <View style={styles.eventTime}>
@@ -817,19 +785,49 @@ const MatchDetailsScreen = () => {
                   )}
                 </View>
 
-                <View style={[styles.eventIcon, { backgroundColor: `${getEventColor(event.type, event.detail)}20` }]}>
-                  <Ionicons
-                    name={getEventIcon(event.type, event.detail) as any}
-                    size={20}
-                    color={getEventColor(event.type, event.detail)}
-                  />
+                <View style={[styles.eventIcon, { backgroundColor: `${eventColor}20` }]}>
+                  <MatchEventIcon type={event.type} detail={event.detail} size={20} />
                 </View>
 
                 <View style={styles.eventDetails}>
-                  {!!event.player.name && <Text style={styles.eventPlayer}>{String(event.player.name)}</Text>}
-                  <Text style={styles.eventType}>{getEventLabel(event.type, event.detail)}</Text>
-                  {!!event.assist.name && (
-                    <Text style={styles.eventAssist}>{t.matchDetails?.assist || 'Assist'}: {String(event.assist.name)}</Text>
+                  {isSubstitution ? (
+                    <>
+                      {!!event.assist?.name && (
+                        <View style={styles.subEventRow}>
+                          <Ionicons name="arrow-down" size={12} color="#ef4444" />
+                          <Text style={styles.eventPlayer}>{String(event.assist.name)}</Text>
+                        </View>
+                      )}
+                      {!!event.player?.name && (
+                        <View style={styles.subEventRow}>
+                          <Ionicons name="arrow-up" size={12} color="#22c55e" />
+                          <Text style={styles.eventPlayer}>{String(event.player.name)}</Text>
+                        </View>
+                      )}
+                      <Text style={styles.eventType}>{t.matchDetails.substitution}</Text>
+                    </>
+                  ) : (
+                    <>
+                      {!!event.player.name && <Text style={styles.eventPlayer}>{String(event.player.name)}</Text>}
+                      <Text style={styles.eventType}>
+                        {event.type === 'Goal' && /own/i.test(event.detail)
+                          ? t.matchDetails.ownGoal
+                          : event.type === 'Goal' && /penalty/i.test(event.detail)
+                            ? t.matchDetails.penaltyGoal
+                            : event.type === 'Goal'
+                              ? t.matchDetails.goal
+                              : event.type === 'Card' && /yellow/i.test(event.detail)
+                                ? t.matchDetails.yellowCard
+                                : event.type === 'Card' && /red/i.test(event.detail)
+                                  ? t.matchDetails.redCard
+                                  : event.type === 'subst'
+                                    ? t.matchDetails.substitution
+                                    : event.detail}
+                      </Text>
+                      {!!event.assist?.name && event.type === 'Goal' && (
+                        <Text style={styles.eventAssist}>{t.matchDetails?.assist || 'Assist'}: {String(event.assist.name)}</Text>
+                      )}
+                    </>
                   )}
                 </View>
 
@@ -900,20 +898,21 @@ const MatchDetailsScreen = () => {
             const formation = lineup.formation || '4-4-2';
             const startingXI = lineup.startXI || [];
             const substitutes = lineup.substitutes || [];
+            const teamId = lineup.team?.id;
+
+            const { pitchPlayers, benchPlayers } = applySubstitutionsToPitch(
+              startingXI,
+              substitutes,
+              events,
+              teamId,
+            );
 
             const fieldPlayers = sortPlayersByGrid(
-              startingXI.map((item: any) => ({
-                id: item.player.athleteId ?? item.player.id,
-                athleteId: item.player.athleteId ?? item.player.id,
-                name: item.player.name,
-                number: item.player.number,
-                pos: item.player.pos,
-                grid: item.player.grid,
-                fieldLine: item.player.fieldLine,
-                fieldSide: item.player.fieldSide,
+              pitchPlayers.map((player) => ({
+                ...player,
                 photo: resolveLineupPlayerPhoto(
-                  item.player.athleteId ?? item.player.id,
-                  item.player.photo,
+                  player.id,
+                  player.photo,
                 ) || undefined,
               })),
             );
@@ -949,22 +948,26 @@ const MatchDetailsScreen = () => {
                   }}
                 />
 
-                {/* Substitutes */}
-                {substitutes.length > 0 && (
+                {/* Substitutes & bench */}
+                {benchPlayers.length > 0 && (
                   <View style={styles.substitutesSection}>
                     <Text style={styles.substitutesTitle}>{t.matchDetails.substitutes}</Text>
                     <View style={styles.substitutesGrid}>
-                      {substitutes.map((item: any) => (
+                      {benchPlayers.map((player) => (
                         <TouchableOpacity
-                          key={item.player.id}
-                          style={styles.substituteCard}
+                          key={`bench-${player.id}`}
+                          style={[
+                            styles.substituteCard,
+                            player.subbedOff != null && styles.substituteCardOut,
+                          ]}
                           onPress={() => {
+                            if (!player.id) return;
                             openPlayerProfile(
                               {
-                                id: item.player.athleteId ?? item.player.id,
-                                athleteId: item.player.athleteId ?? item.player.id,
-                                name: item.player.name,
-                                photo: item.player.photo,
+                                id: player.id,
+                                athleteId: player.id,
+                                name: player.name,
+                                photo: player.photo,
                               },
                               lineup.team,
                             );
@@ -972,20 +975,26 @@ const MatchDetailsScreen = () => {
                         >
                           <ExpoImage
                             source={{
-                              uri: resolveLineupPlayerPhoto(
-                                item.player.athleteId ?? item.player.id,
-                                item.player.photo,
-                              ),
+                              uri: resolveLineupPlayerPhoto(player.id, player.photo),
                             }}
                             style={{ width: 28, height: 28, borderRadius: 14 }}
                             contentFit="cover"
                             cachePolicy="memory-disk"
                           />
-                          <Text style={styles.substituteNumber}>{item.player.number || '-'}</Text>
+                          <Text style={styles.substituteNumber}>{player.number || '-'}</Text>
                           <View style={styles.substituteInfo}>
-                            <Text style={styles.substituteName} numberOfLines={1}>{item.player.name}</Text>
-                            <Text style={styles.substitutePos}>{item.player.pos}</Text>
+                            <Text style={styles.substituteName} numberOfLines={1}>{player.name}</Text>
+                            <Text style={styles.substitutePos}>
+                              {player.subbedOff != null
+                                ? `${player.pos} · ${Math.floor(player.subbedOff)}'`
+                                : player.pos}
+                            </Text>
                           </View>
+                          {player.subbedOff != null ? (
+                            <Ionicons name="arrow-down" size={14} color="#ef4444" />
+                          ) : player.rating != null && player.rating > 0 ? (
+                            <Text style={styles.subRating}>{player.rating.toFixed(1)}</Text>
+                          ) : null}
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -2135,6 +2144,21 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 11,
     fontStyle: 'italic',
+  },
+  subEventRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  substituteCardOut: {
+    opacity: 0.55,
+    borderColor: 'rgba(239,68,68,0.35)',
+  },
+  subRating: {
+    color: '#22c55e',
+    fontSize: 11,
+    fontWeight: '700',
   },
   eventTeamLogo: {
     width: 30,

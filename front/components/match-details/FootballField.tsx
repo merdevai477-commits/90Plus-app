@@ -17,6 +17,9 @@ import {
   sortPlayersByGrid,
 } from '../../utils/lineupGrid';
 
+import { Ionicons } from '@expo/vector-icons';
+import { ratingBadgeColor } from '../../utils/lineupMatchState';
+
 const { width } = Dimensions.get('window');
 const FIELD_WIDTH = width - 40;
 const FIELD_HEIGHT = FIELD_WIDTH * 1.5;
@@ -30,6 +33,11 @@ interface Player {
   grid?: string;
   fieldLine?: number | null;
   fieldSide?: number | null;
+  rating?: number | null;
+  goals?: number;
+  assists?: number;
+  subbedOff?: number | null;
+  subbedIn?: number | null;
 }
 
 interface FootballFieldProps {
@@ -64,7 +72,16 @@ const viewStyles = StyleSheet.create<{
   playerRow: ViewStyle;
   playerWrapper: ViewStyle;
   playerCircleContainer: ViewStyle;
+  playerPhotoCircle: ViewStyle;
   placeholderParams: ViewStyle;
+  playerBadgesRow: ViewStyle;
+  ratingBadge: ViewStyle;
+  ratingText: TextStyle;
+  eventBadges: ViewStyle;
+  miniBadge: ViewStyle;
+  miniBadgeText: TextStyle;
+  subIndicator: ViewStyle;
+  subbedOffDim: ViewStyle;
 }>({
   container: {
     alignItems: 'center',
@@ -227,9 +244,16 @@ const viewStyles = StyleSheet.create<{
   playerCircleContainer: {
     width: 40,
     height: 40,
+    marginBottom: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  playerPhotoCircle: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
     backgroundColor: '#fff',
-    marginBottom: 4,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -239,6 +263,60 @@ const viewStyles = StyleSheet.create<{
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  playerBadgesRow: {
+    position: 'absolute',
+    top: -10,
+    left: -6,
+    right: -6,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 2,
+    zIndex: 3,
+  },
+  ratingBadge: {
+    minWidth: 22,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  ratingText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '800',
+  },
+  eventBadges: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  miniBadge: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#22c55e',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniBadgeText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '800',
+  },
+  subIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: -4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#1f2937',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    zIndex: 4,
   },
 });
 
@@ -329,29 +407,71 @@ export const FootballField: React.FC<FootballFieldProps> = ({
   const playerRows = distributePlayersInRows();
   const gridRows = groupPlayersByGridLine(players);
 
-  const renderPlayer = (player: Player, key: string | number) => (
-    <TouchableOpacity
-      key={key}
-      style={viewStyles.playerWrapper}
-      onPress={() => onPlayerPress?.(player)}
-      activeOpacity={onPlayerPress ? 0.7 : 1}
-    >
-      <View style={viewStyles.playerCircleContainer}>
-        {player.photo ? (
-          <Image source={{ uri: player.photo }} style={imageStyles.playerImage} />
-        ) : (
-          <View style={viewStyles.placeholderParams}>
-            <Text style={textStyles.placeholderNumber}>
-              {player.number || '?'}
-            </Text>
+  const renderPlayer = (player: Player, key: string | number) => {
+    const goals = player.goals ?? 0;
+    const assists = player.assists ?? 0;
+
+    return (
+      <TouchableOpacity
+        key={key}
+        style={viewStyles.playerWrapper}
+        onPress={() => onPlayerPress?.(player)}
+        activeOpacity={onPlayerPress ? 0.7 : 1}
+      >
+        <View style={viewStyles.playerCircleContainer}>
+          {(player.rating != null && player.rating > 0) || goals > 0 || assists > 0 ? (
+            <View style={viewStyles.playerBadgesRow}>
+              {player.rating != null && player.rating > 0 ? (
+                <View
+                  style={[
+                    viewStyles.ratingBadge,
+                    { backgroundColor: ratingBadgeColor(player.rating) },
+                  ]}
+                >
+                  <Text style={viewStyles.ratingText}>{player.rating.toFixed(1)}</Text>
+                </View>
+              ) : null}
+              {(goals > 0 || assists > 0) && (
+                <View style={viewStyles.eventBadges}>
+                  {goals > 0 ? (
+                    <View style={viewStyles.miniBadge}>
+                      <Ionicons name="football" size={8} color="#fff" />
+                    </View>
+                  ) : null}
+                  {assists > 0 ? (
+                    <View style={[viewStyles.miniBadge, { backgroundColor: '#3b82f6' }]}>
+                      <Text style={viewStyles.miniBadgeText}>A</Text>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+            </View>
+          ) : null}
+
+          <View style={viewStyles.playerPhotoCircle}>
+            {player.photo ? (
+              <Image source={{ uri: player.photo }} style={imageStyles.playerImage} />
+            ) : (
+              <View style={viewStyles.placeholderParams}>
+                <Text style={textStyles.placeholderNumber}>
+                  {player.number || '?'}
+                </Text>
+              </View>
+            )}
           </View>
-        )}
-      </View>
-      <Text style={textStyles.playerNameText} numberOfLines={1}>
-        {player.name.split(' ').pop()}
-      </Text>
-    </TouchableOpacity>
-  );
+
+          {player.subbedIn != null ? (
+            <View style={viewStyles.subIndicator}>
+              <Ionicons name="arrow-up" size={9} color="#22c55e" />
+            </View>
+          ) : null}
+        </View>
+        <Text style={textStyles.playerNameText} numberOfLines={1}>
+          {player.name.split(' ').pop()}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={viewStyles.container}>

@@ -72,6 +72,8 @@ interface Scores365LineupMember {
   competitorId?: number;
   formation?: { shortName?: string };
   yardFormation?: { line?: number; fieldPosition?: number; fieldLine?: number; fieldSide?: number };
+  ranking?: number;
+  stats?: Array<{ type?: number; value?: string }>;
 }
 
 interface Scores365Member {
@@ -90,6 +92,7 @@ interface Scores365Event {
   order?: number;
   num?: number;
   playerId?: number;
+  extraPlayers?: number[];
   isMajor?: boolean;
   eventType?: { id: number; name?: string; subTypeName?: string };
 }
@@ -1014,6 +1017,71 @@ function posFrom365(shortName?: string): string | null {
   return null;
 }
 
+const STAT_GOALS = 27;
+const STAT_ASSISTS = 26;
+const STAT_MINUTES = 30;
+
+function parse365StatInt(stats: Scores365LineupMember['stats'], typeId: number): number {
+  for (const row of stats ?? []) {
+    if (row.type !== typeId) continue;
+    const m = String(row.value ?? '').match(/\d+/);
+    if (m) return Number(m[0]) || 0;
+  }
+  return 0;
+}
+
+function parse365StatText(stats: Scores365LineupMember['stats'], typeId: number): string | null {
+  for (const row of stats ?? []) {
+    if (row.type === typeId && row.value) return String(row.value);
+  }
+  return null;
+}
+
+function memberMatchStatsFromLineup(m: Scores365LineupMember): {
+  rating: number | null;
+  goals: number;
+  assists: number;
+  minutes: string | null;
+} {
+  const rating = typeof m.ranking === 'number' && m.ranking > 0 ? m.ranking : null;
+  return {
+    rating,
+    goals: parse365StatInt(m.stats, STAT_GOALS),
+    assists: parse365StatInt(m.stats, STAT_ASSISTS),
+    minutes: parse365StatText(m.stats, STAT_MINUTES),
+  };
+}
+
+function resolve365GoalDetail(subTypeName?: string): string {
+  const sub = (subTypeName ?? 'Normal Goal').trim();
+  if (/own\s*goal/i.test(sub)) return 'Own Goal';
+  if (/penalty/i.test(sub)) return 'Penalty';
+  if (/field\s*goal/i.test(sub)) return 'Normal Goal';
+  if (/header/i.test(sub)) return 'Header';
+  return sub || 'Normal Goal';
+}
+
+function resolve365EventType(ev: Scores365Event): { type: string; detail: string } {
+  const typeId = ev.eventType?.id;
+  const typeName = ev.eventType?.name ?? 'Event';
+  if (typeId === 1) {
+    return { type: 'Goal', detail: resolve365GoalDetail(ev.eventType?.subTypeName) };
+  }
+  if (typeId === 2) {
+    return { type: 'Card', detail: 'Yellow Card' };
+  }
+  if (typeId === 3) {
+    return { type: 'Card', detail: 'Red Card' };
+  }
+  if (typeId === 1000 || typeId === 4 || /subst/i.test(typeName)) {
+    return { type: 'subst', detail: 'Substitution 1' };
+  }
+  if (/var|video\s*assist/i.test(typeName)) {
+    return { type: 'Var', detail: typeName };
+  }
+  return { type: 'Var', detail: typeName };
+}
+
 export function mapScores365Events(
   game: Scores365Game,
   base: FixtureFromAPI,
@@ -1037,34 +1105,19 @@ export function mapScores365Events(
   });
 
   return sortedEvents.map((ev) => {
-    const player = ev.playerId ? members.get(ev.playerId) : undefined;
+    const primaryMember = ev.playerId ? members.get(ev.playerId) : undefined;
+    const extraMemberId = ev.extraPlayers?.[0];
+    const extraMember = extraMemberId ? members.get(extraMemberId) : undefined;
     const elapsed = Math.floor(ev.gameTime ?? 0);
     const extra = ev.addedTime != null && ev.addedTime > 0 ? ev.addedTime : null;
-    const typeId = ev.eventType?.id;
-
-    let type = 'Var';
-    let detail = ev.eventType?.name ?? 'Event';
-    if (typeId === 1) {
-      type = 'Goal';
-      const sub = ev.eventType?.subTypeName ?? 'Normal Goal';
-      detail = /field\s*goal/i.test(sub) ? 'Normal Goal' : sub;
-    } else if (typeId === 2) {
-      type = 'Card';
-      detail = 'Yellow Card';
-    } else if (typeId === 3) {
-      type = 'Card';
-      detail = 'Red Card';
-    } else if (typeId === 4) {
-      type = 'subst';
-      detail = 'Substitution 1';
-    }
+    const { type, detail } = resolve365EventType(ev);
 
     const isOwnGoal = (detail || '').toLowerCase().includes('own');
     // 365 uses competitorId = benefiting team on own goals; API-Football uses scorer's team.
     let teamCompetitorId = ev.competitorId;
     if (isOwnGoal) {
-      if (player?.competitorId != null) {
-        teamCompetitorId = player.competitorId;
+      if (primaryMember?.competitorId != null) {
+        teamCompetitorId = primaryMember.competitorId;
       } else if (ev.competitorId === game.homeCompetitor?.id) {
         teamCompetitorId = game.awayCompetitor?.id ?? ev.competitorId;
       } else if (ev.competitorId === game.awayCompetitor?.id) {
@@ -1074,6 +1127,23 @@ export function mapScores365Events(
 
     const team = map365CompetitorToBaseTeam(teamCompetitorId, game, base, resolvedAlignment);
 
+    // API-Football: substitution player = IN, assist = OUT; goal player = scorer, assist = assister.
+    const isSubstitution = type === 'subst';
+    const playerId = isSubstitution ? (extraMemberId ?? 0) : (ev.playerId ?? 0);
+    const playerName = isSubstitution
+      ? extraMember?.shortName || extraMember?.name || '—'
+      : primaryMember?.shortName || primaryMember?.name || '—';
+    const assistId = isSubstitution
+      ? (ev.playerId ?? null)
+      : type === 'Goal' && extraMember
+        ? extraMemberId ?? null
+        : null;
+    const assistName = isSubstitution
+      ? primaryMember?.shortName || primaryMember?.name || null
+      : type === 'Goal' && extraMember
+        ? extraMember.shortName || extraMember.name || null
+        : null;
+
     return {
       time: { elapsed, extra },
       team: {
@@ -1082,10 +1152,10 @@ export function mapScores365Events(
         logo: team.logo,
       },
       player: {
-        id: ev.playerId ?? 0,
-        name: player?.shortName || player?.name || '—',
+        id: playerId,
+        name: playerName,
       },
-      assist: { id: null, name: null },
+      assist: { id: assistId, name: assistName },
       type,
       detail,
       comments: null,
@@ -1171,6 +1241,7 @@ export function mapScores365Lineups(
       formation: side.lineups.formation ?? null,
       startXI: starters.map((m) => {
         const meta = lookupMember(lookup, m.id);
+        const matchStats = memberMatchStatsFromLineup(m);
         const grid =
           m.yardFormation?.line != null && m.yardFormation?.fieldPosition != null
             ? `${m.yardFormation.line}:${m.yardFormation.fieldPosition}`
@@ -1192,7 +1263,11 @@ export function mapScores365Lineups(
             fieldLine: m.yardFormation?.fieldLine ?? null,
             fieldSide: m.yardFormation?.fieldSide ?? null,
             photo: null,
-            _stats365: (meta as any)?.stats ?? null,
+            rating: matchStats.rating,
+            goals: matchStats.goals,
+            assists: matchStats.assists,
+            minutes: matchStats.minutes,
+            _stats365: m.stats ?? null,
           },
         };
       }),
@@ -1200,6 +1275,7 @@ export function mapScores365Lineups(
         .filter((m) => m.status === 2)
         .map((m) => {
           const meta = lookupMember(lookup, m.id);
+          const matchStats = memberMatchStatsFromLineup(m);
           return {
             player: {
               id: m.id,
@@ -1208,7 +1284,11 @@ export function mapScores365Lineups(
               pos: posFrom365(m.formation?.shortName),
               grid: null,
               photo: null,
-              _stats365: (meta as any)?.stats ?? null,
+              rating: matchStats.rating,
+              goals: matchStats.goals,
+              assists: matchStats.assists,
+              minutes: matchStats.minutes,
+              _stats365: m.stats ?? null,
             },
           };
         }),
