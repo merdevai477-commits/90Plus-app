@@ -392,7 +392,7 @@ export default function TeamProfileScreen() {
                     <View key={index} style={styles.trophyCard}>
                         <Image source={{ uri: trophy.league.logo }} style={styles.trophyLogo} />
                         <View style={styles.trophyInfo}>
-                            <Text style={styles.trophyName} numberOfLines={2}>{getLeagueDisplayName(trophy.league.name, language)}</Text>
+                            <Text style={styles.trophyName} numberOfLines={2}>{getLeagueDisplayName(trophy.league.name, language, trophy.league.id, trophy.league.country)}</Text>
                             <Text style={styles.trophySeason}>{trophy.season}</Text>
                             <Text style={styles.trophyPlace}>{trophy.place}</Text>
                         </View>

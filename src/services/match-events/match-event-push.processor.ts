@@ -76,6 +76,7 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
         title,
         message,
         type: job.notificationType,
+        channelId: 'match-updates',
         data: {
             type: String(job.notificationType),
             priority: 'high',

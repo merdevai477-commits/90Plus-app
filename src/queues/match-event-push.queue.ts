@@ -52,27 +52,12 @@ export function getMatchEventPushQueue(): Queue<MatchEventPushJob> | null {
 }
 
 export async function enqueueMatchEventPush(payload: MatchEventPushJob): Promise<void> {
-    const q = getMatchEventPushQueue();
-
-    if (!q) {
-        setImmediate(async () => {
-            try {
-                await processMatchEventPushJob(payload);
-            } catch (err: any) {
-                logger.warn('[MatchEventPush] in-process fallback failed:', err?.message);
-            }
-        });
-        return;
+    try {
+        await processMatchEventPushJob(payload);
+    } catch (err: any) {
+        logger.warn('[MatchEventPush] immediate delivery failed:', err?.message);
+        throw err;
     }
-
-    await q.add(payload, {
-        jobId: payload.idempotencyKey,
-        attempts: 3,
-        backoff: 500,
-        removeOnComplete: true,
-        removeOnFail: 500,
-        priority: 1,
-    });
 }
 
 export async function closeMatchEventPushQueue(): Promise<void> {

@@ -313,12 +313,12 @@ export const en = {
     saudi: 'Saudi Arabia',
 
     // Leagues
-    premierLeague: 'English League 1',
-    laLiga: 'Spanish League 1',
-    bundesliga: 'German League 1',
-    serieA: 'Italian League 1',
-    ligue1: 'French League 1',
-    championsLeague: 'European Cup',
+    premierLeague: 'Premier League',
+    laLiga: 'La Liga',
+    bundesliga: 'Bundesliga',
+    serieA: 'Serie A',
+    ligue1: 'Ligue 1',
+    championsLeague: 'UEFA Champions League',
 
     // Match Status
     live: 'Live',
@@ -803,7 +803,7 @@ export const en = {
     prefMatchEnd: 'Match End',
     prefMatchEndSub: 'Final result',
     prefHalftime: 'Half Time',
-    prefHalftimeSub: 'First half result',
+    prefHalftimeSub: 'First half result and second half kickoff',
     prefLeague: 'League Matches',
     prefLeagueSub: 'Your favourite league matches',
     sectionSocial: 'Social',
@@ -825,8 +825,8 @@ export const en = {
     prefGifts: 'Gifts & Rewards',
     prefGiftsSub: 'When you receive a gift or reward',
     // Extended preferences
-    prefMatchCards: 'Cards (yellow / red)',
-    prefMatchCardsSub: 'Bookings during the match',
+    prefMatchCards: 'Red cards',
+    prefMatchCardsSub: 'When a player is sent off',
     prefMatchSubs: 'Substitutions',
     prefMatchSubsSub: 'Players coming on and off',
     prefMatchVar: 'VAR reviews',
@@ -2442,6 +2442,8 @@ export const en = {
     goalBody: '{player} scores for {team} ({minute}\')',
     halftimeTitle: 'Half time',
     halftimeBody: '{home} {homeScore} - {awayScore} {away}',
+    matchSecondHalfTitle: 'Second half',
+    matchSecondHalfBody: '{home} vs {away} — the second half has started',
     fulltimeTitle: 'Full time',
     fulltimeBody: '{home} {homeScore} - {awayScore} {away}',
     predictionWinTitle: '🎉 Correct prediction!',

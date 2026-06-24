@@ -116,35 +116,9 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
 export async function scheduleMatchStartReminder(
     data: MatchStartReminderJob,
 ): Promise<void> {
-    const q = getMatchStartReminderQueue();
-    if (!q) return;
-
-    const delay = new Date(data.matchDate).getTime() - Date.now();
-    if (delay <= 0) {
-        logger.debug(`[match-start] match already started, skipping schedule for ${data.fixtureId}`);
-        return;
-    }
-
-    const jobId = matchStartJobId(data.userId, data.fixtureId);
-
-    // Remove any existing job with the same id (re-subscribe case).
-    try {
-        const existing = await q.getJob(jobId);
-        if (existing) await existing.remove();
-    } catch (err) {
-        logger.debug('[match-start] failed to remove existing job:', err);
-    }
-
-    await q.add(data, {
-        jobId,
-        delay,
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 30_000 },
-        removeOnComplete: true,
-        removeOnFail: 100,
-    });
-
-    logger.info(`[match-start] scheduled reminder for ${data.userId}/${data.fixtureId} in ${Math.round(delay / 1000)}s`);
+    // Match kickoff reminders are disabled — only goals, halftime,
+    // second-half start, and fulltime are pushed for subscribed matches.
+    logger.debug(`[match-start] skipped (disabled) for ${data.userId}/${data.fixtureId}`);
 }
 
 /**

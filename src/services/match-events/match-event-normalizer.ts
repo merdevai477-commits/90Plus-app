@@ -32,15 +32,6 @@ function classifyApiEvent(event: ApiFootballEvent): {
     prefKey: NormalizedMatchEvent['prefKey'];
 } | null {
     if (event.type === 'Card') {
-        if (event.detail === 'Yellow Card') {
-            return {
-                kind: 'card_yellow',
-                notificationType: NotificationType.MATCH_YELLOW_CARD,
-                titleKey: 'matchYellowCardTitle',
-                bodyKey: 'matchCardBody',
-                prefKey: 'matchCards',
-            };
-        }
         if (event.detail === 'Red Card' || event.detail === 'Second Yellow card') {
             return {
                 kind: 'card_red',
@@ -50,15 +41,7 @@ function classifyApiEvent(event: ApiFootballEvent): {
                 prefKey: 'matchCards',
             };
         }
-    }
-    if (event.type === 'subst') {
-        return {
-            kind: 'substitution',
-            notificationType: NotificationType.MATCH_UPDATE,
-            titleKey: 'matchSubstitutionTitle',
-            bodyKey: 'matchSubstitutionBody',
-            prefKey: 'matchSubs',
-        };
+        return null;
     }
     if (event.type === 'Var') {
         return {
@@ -67,15 +50,6 @@ function classifyApiEvent(event: ApiFootballEvent): {
             titleKey: 'matchVarTitle',
             bodyKey: 'matchVarBody',
             prefKey: 'matchVar',
-        };
-    }
-    if (event.type === 'Goal' && event.detail === 'Penalty') {
-        return {
-            kind: 'penalty',
-            notificationType: NotificationType.MATCH_UPDATE,
-            titleKey: 'matchPenaltyTitle',
-            bodyKey: 'matchPenaltyBody',
-            prefKey: 'matchGoals',
         };
     }
     return null;
@@ -242,37 +216,6 @@ export function diffStatusEvents(
         });
     }
 
-    if (last !== 'HT' && currentStatus === 'HT') {
-        out.push({
-            fixtureId,
-            eventKey: buildStatusEventKey(fixtureId, 'halftime', 'HT'),
-            eventType: 'halftime',
-            minute: 45,
-            extraMinute: null,
-            teamId: null,
-            playerId: null,
-            detectedAt: now,
-            payload: { status: 'HT', ...scores },
-            templateVars: {
-                home: meta.homeTeam,
-                away: meta.awayTeam,
-                homeScore: scores.homeScore,
-                awayScore: scores.awayScore,
-            },
-            notificationType: NotificationType.MATCH_UPDATE,
-            titleKey: 'halftimeTitle',
-            bodyKey: 'halftimeBody',
-            prefKey: 'matchHalftime',
-            data: {
-                type: 'MATCH_HALFTIME',
-                homeScore: scores.homeScore,
-                awayScore: scores.awayScore,
-                homeTeam: meta.homeTeam,
-                awayTeam: meta.awayTeam,
-            },
-        });
-    }
-
     if (!FINISHED_STATUSES.has(last) && FINISHED_STATUSES.has(currentStatus)) {
         out.push({
             fixtureId,
@@ -319,30 +262,6 @@ export function parseFixtureSnapshot(fixtureId: number, raw: ApiFootballFixture)
         elapsed: raw.fixture.status.elapsed ?? null,
         isLive: LIVE_STATUSES.has(status),
         latestEventKey: null,
-    };
-}
-
-export function buildLineupEvent(
-    fixtureId: number,
-    meta: { homeTeam: string; awayTeam: string },
-): NormalizedMatchEvent {
-    const now = new Date();
-    return {
-        fixtureId,
-        eventKey: buildMatchEventKey(fixtureId, { eventType: 'lineup', detail: 'announced' }),
-        eventType: 'lineup',
-        minute: null,
-        extraMinute: null,
-        teamId: null,
-        playerId: null,
-        detectedAt: now,
-        payload: { lineup: true },
-        templateVars: { home: meta.homeTeam, away: meta.awayTeam },
-        notificationType: NotificationType.MATCH_UPDATE,
-        titleKey: 'matchLineupTitle',
-        bodyKey: 'matchLineupBody',
-        prefKey: 'matchLineups',
-        data: { eventKind: 'lineup', homeTeam: meta.homeTeam, awayTeam: meta.awayTeam },
     };
 }
 

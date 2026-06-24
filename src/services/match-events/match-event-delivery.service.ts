@@ -4,7 +4,15 @@ import {
     isBaselinedGoal,
     isEventBeforeSubscribeMinute,
 } from './match-subscription.service';
-import type { NormalizedMatchEvent } from './match-event.types';
+import type { MatchEventKind, NormalizedMatchEvent } from './match-event.types';
+import { MATCH_PUSH_EVENT_KINDS } from './match-event.types';
+
+/** Only these live-match events trigger push/inbox notifications. */
+const PUSH_NOTIFIABLE_MATCH_EVENTS = new Set<MatchEventKind>(MATCH_PUSH_EVENT_KINDS);
+
+export function isPushNotifiableMatchEvent(event: NormalizedMatchEvent): boolean {
+    return PUSH_NOTIFIABLE_MATCH_EVENTS.has(event.eventType);
+}
 
 export type SubscriptionRow = {
     id: string;
@@ -78,13 +86,11 @@ export async function updateSubscriptionFlags(
         data.lastAwayScore = awayScore;
     }
 
-    if (event.eventType === 'halftime' || event.eventType === 'fulltime' || event.eventType === 'kickoff') {
+    if (event.eventType === 'fulltime' || event.eventType === 'kickoff') {
         const status =
-            event.eventType === 'halftime'
-                ? 'HT'
-                : event.eventType === 'fulltime'
-                    ? String(event.payload.status ?? 'FT')
-                    : String(event.payload.status ?? '1H');
+            event.eventType === 'fulltime'
+                ? String(event.payload.status ?? 'FT')
+                : String(event.payload.status ?? '1H');
         data.lastStatus = status;
     }
 

@@ -1,8 +1,13 @@
 import { logger } from '../../utils/logger';
 import { loadActiveSubscriptions } from './match-subscriber-index.adapter';
-import { isPrefAllowed, shouldDeliverToSubscription } from './match-event-delivery.service';
+import {
+    isPrefAllowed,
+    isPushNotifiableMatchEvent,
+    shouldDeliverToSubscription,
+} from './match-event-delivery.service';
 import type { NormalizedMatchEvent } from './match-event.types';
-import { enqueueMatchEventPush } from '../../queues/match-event-push.queue';
+import { processMatchEventPushJob } from './match-event-push.processor';
+import type { MatchEventPushJob } from '../../queues/match-event-push.queue';
 
 type SubscriptionRow = Awaited<ReturnType<typeof loadActiveSubscriptions>>[number];
 
@@ -53,31 +58,35 @@ function buildPushPayload(sub: SubscriptionRow, event: NormalizedMatchEvent) {
 }
 
 /**
- * Enqueue push jobs only — delivery ledger is written by the worker after push succeeds.
+ * Deliver push + inbox immediately (same path as social notifications — no Bull delay).
  */
 export async function fanOutMatchEvent(event: NormalizedMatchEvent): Promise<number> {
+    if (!isPushNotifiableMatchEvent(event)) return 0;
+
     const subs = await loadActiveSubscriptions(event.fixtureId);
     if (subs.length === 0) return 0;
 
-    let enqueued = 0;
+    const payloads: MatchEventPushJob[] = [];
 
     for (const sub of subs) {
         if (!shouldDeliverToSubscription(sub, event)) continue;
         if (!(await isPrefAllowed(sub.userId, event.prefKey))) continue;
+        payloads.push(buildPushPayload(sub, event));
+    }
 
-        try {
-            const payload = buildPushPayload(sub, event);
-            await enqueueMatchEventPush(payload);
-            enqueued++;
-        } catch (err: any) {
-            logger.warn(
-                `[MatchEventFanout] enqueue failed sub=${sub.id} event=${event.eventKey}:`,
-                err?.message,
-            );
+    if (payloads.length === 0) return 0;
+
+    const results = await Promise.allSettled(
+        payloads.map((payload) => processMatchEventPushJob(payload)),
+    );
+
+    for (const result of results) {
+        if (result.status === 'rejected') {
+            logger.warn('[MatchEventFanout] immediate push failed:', result.reason?.message ?? result.reason);
         }
     }
 
-    return enqueued;
+    return payloads.length;
 }
 
 export async function fanOutMatchEvents(events: NormalizedMatchEvent[]): Promise<number> {

@@ -21,6 +21,8 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { Transfer } from '../../services/apiFootball';
 import { MATCH_DETAILS_COLORS, ANIMATION_CONFIG } from '../../constants/matchDetailsColors';
+import { useTranslation } from '../../src/i18n';
+import { getLeagueDisplayName } from '../../utils/i18nHelpers';
 
 interface TransferCardProps {
   transfer: Transfer;
@@ -140,6 +142,7 @@ const TransferCard: React.FC<TransferCardProps> = React.memo(({
   onPlayerPress,
   onTeamPress,
 }) => {
+  const { language } = useTranslation();
   const scale = useSharedValue(1);
   
   // Get the latest transfer for display (most recent)
@@ -225,7 +228,11 @@ const TransferCard: React.FC<TransferCardProps> = React.memo(({
               color={MATCH_DETAILS_COLORS.textTertiary}
             />
             <Text style={styles.leagueName} numberOfLines={1}>
-              {transfer.league.name}
+              {getLeagueDisplayName(
+                transfer.league.name,
+                language,
+                transfer.league.id,
+              )}
             </Text>
           </View>
         )}

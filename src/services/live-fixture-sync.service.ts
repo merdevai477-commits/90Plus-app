@@ -6,6 +6,7 @@
  * Only the distributed sync leader instance performs upstream API calls.
  */
 
+import prisma from '../lib/prisma';
 import { footballService } from './football.service';
 import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES } from './match-cache.service';
 import { WebSocketService } from './websocket.service';
@@ -16,6 +17,7 @@ import { isFootballQuotaExhausted } from './football.service';
 import {
     writeLiveFixturesSnapshot,
     writeTerminalFixtureSnapshot,
+    readLiveFixturesList,
 } from './live-fixture-cache.service';
 import LiveMatchIngestorService from './live-match-ingestor.service';
 import {
@@ -50,8 +52,8 @@ class LiveFixtureSyncService {
         if (this.running) return;
 
         const intervalMs = Math.max(
-            45_000,
-            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '45000', 10) || 45_000,
+            10_000,
+            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '15000', 10) || 15_000,
         );
 
         this.running = true;
@@ -169,25 +171,7 @@ class LiveFixtureSyncService {
         this.droppedFromLiveIds.add(fixtureId);
     }
 
-    private async syncOnce(): Promise<void> {
-        if (!footballService.isConfigured()) return;
-
-        if (isFootballQuotaExhausted()) {
-            logger.debug('[LiveFixtureSync] Skipping tick — API-Football daily quota exhausted');
-            return;
-        }
-
-        const isLeader = await tryAcquireSyncLeader('live-fixture-sync');
-        if (!isLeader) {
-            logger.debug('[LiveFixtureSync] Skipping tick — another instance is sync leader');
-            return;
-        }
-
-        const liveFixturesRaw: FixtureFromAPI[] = await footballService.getLiveFixtures({ source: 'job' });
-        const liveFixtures: FixtureFromAPI[] = isWorldCupOnlyMode()
-            ? (filterWorldCupFixtures(liveFixturesRaw) as FixtureFromAPI[])
-            : liveFixturesRaw;
-
+    private async processLiveFixtures(liveFixtures: FixtureFromAPI[]): Promise<void> {
         const currentLiveIds = new Set<number>();
         for (const fixture of liveFixtures) {
             const id = fixture.fixture.id;
@@ -216,13 +200,21 @@ class LiveFixtureSyncService {
             await this.verifyFinishedBatch(batch);
         }
 
-        await writeLiveFixturesSnapshot(liveFixtures);
-
-        if (liveFixtures.length === 0) {
-            return;
-        }
-
-        await matchCacheService.upsertFixtures(liveFixtures);
+        const liveIds = [...currentLiveIds];
+        const favoritedLiveIds = liveIds.length > 0
+            ? new Set(
+                (
+                    await prisma.favoriteMatch.findMany({
+                        where: {
+                            apiMatchId: { in: liveIds },
+                            notifiedEnd: false,
+                        },
+                        select: { apiMatchId: true },
+                        distinct: ['apiMatchId'],
+                    })
+                ).map((row) => row.apiMatchId),
+            )
+            : new Set<number>();
 
         for (const fixture of liveFixtures) {
             const id = fixture.fixture.id;
@@ -243,16 +235,59 @@ class LiveFixtureSyncService {
                 statusChanged ||
                 prev.elapsed !== elapsed;
 
-            if (!changed) continue;
+            if (changed) {
+                this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed });
+                this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed);
+            }
 
-            this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed });
-
-            this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed);
-
-            if (scoreChanged || statusChanged) {
+            // Re-ingest favorited live fixtures every tick so cards/VAR are
+            // detected without waiting for a score or status change.
+            if (favoritedLiveIds.has(id)) {
                 LiveMatchIngestorService.triggerFixtureIngest(id);
             }
         }
+    }
+
+    /** Keep push pipeline alive from Redis when upstream API is rate-limited. */
+    private async syncFromCachedSnapshots(): Promise<void> {
+        const cached = await readLiveFixturesList();
+        if (!cached?.length) {
+            logger.debug('[LiveFixtureSync] Quota pause — no cached live list to process');
+            return;
+        }
+
+        logger.debug(`[LiveFixtureSync] Quota pause — processing ${cached.length} cached live fixture(s)`);
+        await this.processLiveFixtures(cached);
+    }
+
+    private async syncOnce(): Promise<void> {
+        if (!footballService.isConfigured()) return;
+
+        const isLeader = await tryAcquireSyncLeader('live-fixture-sync');
+        if (!isLeader) {
+            logger.debug('[LiveFixtureSync] Skipping tick — another instance is sync leader');
+            return;
+        }
+
+        if (isFootballQuotaExhausted()) {
+            logger.debug('[LiveFixtureSync] API quota pause — continuing from cached snapshots');
+            await this.syncFromCachedSnapshots();
+            return;
+        }
+
+        const liveFixturesRaw: FixtureFromAPI[] = await footballService.getLiveFixtures({ source: 'job' });
+        const liveFixtures: FixtureFromAPI[] = isWorldCupOnlyMode()
+            ? (filterWorldCupFixtures(liveFixturesRaw) as FixtureFromAPI[])
+            : liveFixturesRaw;
+
+        await writeLiveFixturesSnapshot(liveFixtures);
+
+        if (liveFixtures.length === 0) {
+            return;
+        }
+
+        await matchCacheService.upsertFixtures(liveFixtures);
+        await this.processLiveFixtures(liveFixtures);
     }
 }
 

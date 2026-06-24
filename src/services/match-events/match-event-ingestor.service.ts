@@ -8,7 +8,6 @@ import {
     normalizeApiEvents,
     diffScoreGoals,
     diffStatusEvents,
-    buildLineupEvent,
     getCachedFixtureState,
     setCachedFixtureState,
     parseFixtureSnapshot,
@@ -18,21 +17,28 @@ import type { MatchEventIngestResult, NormalizedMatchEvent, FixtureSnapshot } fr
 import { readLiveFixtureById, readTerminalFixtureById } from '../live-fixture-cache.service';
 import { matchCacheService } from '../match-cache.service';
 
-const lineupAnnouncedFixtures = new Set<number>();
+async function readFixtureSnapshotFromCache(
+    fixtureId: number,
+    options?: { preferFresh?: boolean },
+): Promise<any | null> {
+    const readDb = (): Promise<any | null> =>
+        prisma.cachedFixture
+            .findUnique({ where: { fixtureId } })
+            .then((dbRow) => (dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null));
 
-async function readFixtureSnapshotFromCache(fixtureId: number): Promise<any | null> {
+    // Sync-triggered ingest runs right after DB upsert — prefer DB over Redis TTL lag.
+    if (options?.preferFresh) {
+        const fromDb = await readDb();
+        if (fromDb) return fromDb;
+    }
+
     const live = await readLiveFixtureById(fixtureId);
     if (live) return live;
 
     const terminal = await readTerminalFixtureById(fixtureId);
     if (terminal) return terminal;
 
-    const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
-    if (dbRow) {
-        return matchCacheService.convertDbMatchToApiFormat(dbRow);
-    }
-
-    return null;
+    return readDb();
 }
 
 async function persistEvent(event: NormalizedMatchEvent): Promise<boolean> {
@@ -71,7 +77,8 @@ export class MatchEventIngestor {
         if (!lock) return null;
 
         try {
-            const cachedLive = await readFixtureSnapshotFromCache(fixtureId);
+            const preferFresh = options?.forceRefreshEvents === true;
+            const cachedLive = await readFixtureSnapshotFromCache(fixtureId, { preferFresh });
             let snapshot: FixtureSnapshot | null = null;
 
             if (cachedLive) {
@@ -99,11 +106,6 @@ export class MatchEventIngestor {
                 if (Array.isArray(apiEvents)) {
                     normalized.push(...normalizeApiEvents(fixtureId, apiEvents, meta));
                 }
-            }
-
-            if (!snapshot.isLive && (snapshot.status === 'NS' || snapshot.status === 'TBD')) {
-                const lineupEvent = await this.tryLineupEvent(fixtureId, meta);
-                if (lineupEvent) normalized.push(lineupEvent);
             }
 
             const freshEvents: NormalizedMatchEvent[] = [];
@@ -134,27 +136,6 @@ export class MatchEventIngestor {
             return null;
         } finally {
             await lock.release();
-        }
-    }
-
-    private static async tryLineupEvent(
-        fixtureId: number,
-        meta: { homeTeam: string; awayTeam: string },
-    ): Promise<NormalizedMatchEvent | null> {
-        if (lineupAnnouncedFixtures.has(fixtureId)) return null;
-
-        try {
-            const lineups = await footballDataCacheService.getMatchLineups(fixtureId);
-            if (!Array.isArray(lineups) || lineups.length === 0) return null;
-            const hasStartXI = lineups.some(
-                (team) => Array.isArray(team?.startXI) && team.startXI.length > 0,
-            );
-            if (!hasStartXI) return null;
-
-            lineupAnnouncedFixtures.add(fixtureId);
-            return buildLineupEvent(fixtureId, meta);
-        } catch {
-            return null;
         }
     }
 
