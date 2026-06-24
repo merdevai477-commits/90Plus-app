@@ -37,7 +37,7 @@ import { snapshotToMatchRow } from '../../src/utils/snapshotToMatchRow';
 import AdvancedSearchBar, { SearchResult } from '../../components/common/AdvancedSearchBar';
 import LuckyWheelModal from '../../components/common/LuckyWheelModal';
 import { HomeSectionError } from '../../components/home/HomeSectionError';
-import { useHomeStore } from '../../src/store/home.store';
+import { useHomeStore, type Match as HomeMatch } from '../../src/store/home.store';
 import { APP_BG } from '../../constants/ui';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useHomeLikes } from '../../hooks/useHomeLikes';
@@ -53,6 +53,40 @@ import { useScreenFont } from '../../utils/fontSetup';
 import { useTranslation } from '../../src/i18n';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { QuizApiService } from '../../services/quizApi.service';
+
+const LIVE_STATUS_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+const FINISHED_STATUS_SHORTS = new Set(['FT', 'AET', 'PEN']);
+
+/** Map API/live snapshot status → home MatchList badge (never infer FT from 0-0). */
+function deriveHomeMatchListStatus(
+    liveRow: ReturnType<typeof snapshotToMatchRow> | null,
+    m: HomeMatch,
+): MatchListItem['status'] {
+    const fromShort = (short: string | undefined): MatchListItem['status'] | null => {
+        const s = (short ?? '').trim().toUpperCase();
+        if (!s) return null;
+        if (s === 'HT') return 'HT';
+        if (s === '2H') return '2ND';
+        if (s === '1H') return '1ST';
+        if (LIVE_STATUS_SHORTS.has(s)) return 'LIVE';
+        if (FINISHED_STATUS_SHORTS.has(s)) return 'FT';
+        if (s === 'NS' || s === 'TBD' || s === 'PST') return 'UPCOMING';
+        return null;
+    };
+
+    if (liveRow) {
+        const fromLiveShort = fromShort(liveRow.statusShort);
+        if (fromLiveShort) return fromLiveShort;
+        if (liveRow.status === 'live') return 'LIVE';
+        if (liveRow.status === 'finished') return 'FT';
+        return 'UPCOMING';
+    }
+
+    const fromStoreShort = fromShort(m.statusShort);
+    if (fromStoreShort) return fromStoreShort;
+    if (m.isLive) return 'LIVE';
+    return 'UPCOMING';
+}
 import { dailyQuizQueryKey, todayQuizDateKey } from '../../utils/quizDateKey';
 import {
     canMakeAuthenticatedRequests,
@@ -664,7 +698,6 @@ export default function HomeScreen() {
                 const liveRow = snap ? snapshotToMatchRow(snap) : null;
                 const homeScore = liveRow?.score.home ?? m.homeScore ?? 0;
                 const awayScore = liveRow?.score.away ?? m.awayScore ?? 0;
-                const isLive = liveRow?.status === 'live' || m.isLive;
                 return {
                 id: m.id,
                 homeTeam: {
@@ -679,11 +712,7 @@ export default function HomeScreen() {
                     score: awayScore,
                     logo: m.awayLogo,
                 },
-                status: (isLive
-                    ? 'LIVE'
-                    : homeScore !== undefined && awayScore !== undefined && !isLive
-                      ? 'FT'
-                      : 'UPCOMING') as MatchListItem['status'],
+                status: deriveHomeMatchListStatus(liveRow, m),
                 minute: liveRow?.minute ?? m.minute,
                 league: m.league,
                 kickoff: m.time,
