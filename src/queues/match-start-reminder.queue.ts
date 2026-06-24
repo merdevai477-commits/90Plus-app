@@ -116,8 +116,8 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
 export async function scheduleMatchStartReminder(
     data: MatchStartReminderJob,
 ): Promise<void> {
-    // Match kickoff reminders are disabled — only goals, halftime,
-    // second-half start, and fulltime are pushed for subscribed matches.
+    // Match kickoff reminders are disabled — subscribed matches push only
+    // goals, kickoff, red cards, VAR, and fulltime.
     logger.debug(`[match-start] skipped (disabled) for ${data.userId}/${data.fixtureId}`);
 }
 
