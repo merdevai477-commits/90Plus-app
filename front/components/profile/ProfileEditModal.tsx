@@ -223,7 +223,7 @@ const ProfileEditModal = memo(function ProfileEditModal({
 
                         {/* Header */}
                         <View style={s.header}>
-                            <Text style={s.title}>{t.profile.editProfileTitle}</Text>
+                            <Text style={s.title}>{t.profile.editProfileTitle} ✏️</Text>
                             <TouchableOpacity onPress={onClose} style={s.closeBtn}>
                                 <Ionicons name="close" size={20} color="rgba(255,255,255,0.8)" />
                             </TouchableOpacity>
@@ -253,7 +253,7 @@ const ProfileEditModal = memo(function ProfileEditModal({
                                         onBlur={() => setFocusedField(null)}
                                     />
                                 </View>
-                                {nameError ? <Text style={s.errorTxt}>{nameError}</Text> : null}
+                                {nameError ? <Text style={s.errorTxt}>⚠ {nameError}</Text> : null}
                             </View>
 
                             {/* ── Username ──────────────────────────────────── */}
@@ -295,7 +295,7 @@ const ProfileEditModal = memo(function ProfileEditModal({
                                     />
                                 </View>
                                 {usernameError && canEditUsername
-                                    ? <Text style={s.errorTxt}>{usernameError}</Text>
+                                    ? <Text style={s.errorTxt}>⚠ {usernameError}</Text>
                                     : !canEditUsername
                                     ? <Text style={s.warnTxt}>
                                         {`⏳ ${t.profile.usernameChangeAfter} ${daysRemaining > 0 ? `${daysRemaining}d` : ''} ${hoursRemaining > 0 ? `${hoursRemaining}h` : ''}`}

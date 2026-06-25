@@ -102,7 +102,8 @@ export function useTranslation(): UseTranslationReturn {
   // Re-render when auto-translated football names arrive from the API cache.
   const footballTranslationRevision = useFootballTranslationStore(state => state.revision);
 
-  const direction = useMemo((): TextDirection => (isRTL ? 'rtl' : 'ltr'), [isRTL]);
+  // Layout direction is always LTR; Arabic only changes copy and font.
+  const direction = useMemo((): TextDirection => 'ltr', []);
 
   // Get locale for Intl APIs
   const locale = useMemo(() => getLocale(language), [language]);

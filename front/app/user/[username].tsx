@@ -739,29 +739,28 @@ function UserProfileScreen() {
           <ProfileCard
             playerImage={user.avatar ? { uri: user.avatar } : undefined}
             cardType="gold"
-            scale={0.72}
+            scale={0.60}
             uploadedImage={user.avatar || null}
             countryFlag={user.countryFlag || '🌍'}
-            country={user.country || user.location || ''}
-            displayName={user.displayName || user.username}
-            username={user.username}
             position={user.position || 'ST'}
             age={user.age?.toString()}
             height={user.height?.toString()}
             weight={user.weight?.toString()}
             foot={user.preferredFoot || 'R'}
             clubLogo={user.clubLogo || undefined}
-            favoriteTeam={user.favoriteTeam || ''}
           />
         </View>
 
         <UserInfo
-          variant="bio"
           name={user.displayName || user.username}
           username={user.username}
           bio={showFullProfile ? user.bio || undefined : undefined}
+          location={user.country || user.location || ''}
+          countryFlag={user.countryFlag}
+          team={showFullProfile ? user.favoriteTeam || '' : ''}
           isVerified={user.isVerified}
           isDeveloper={user.isDeveloper}
+          clubLogo={user.clubLogo || undefined}
           consecutiveLoginDays={user.consecutiveLoginDays || 0}
         />
 

@@ -20,7 +20,6 @@ type Props = TextInputProps & {
   icon: LucideIcon;
   secureToggle?: boolean;
   containerStyle?: ViewStyle;
-  compact?: boolean;
 };
 
 export function AuthTextField({
@@ -28,21 +27,20 @@ export function AuthTextField({
   secureToggle,
   containerStyle,
   secureTextEntry,
-  compact,
   ...rest
 }: Props) {
   const [hide, setHide] = useState(true);
   const isSecure = !!(secureToggle && (secureTextEntry ?? true));
 
   return (
-    <View style={[styles.wrap, compact && styles.wrapCompact, containerStyle]}>
+    <View style={[styles.wrap, containerStyle]}>
       <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
       <Icon color={TEXT_MUTED} size={20} strokeWidth={2} />
       <TextInput
         {...rest}
         placeholderTextColor="rgba(255,255,255,0.35)"
         cursorColor={TEXT_PRIMARY}
-        style={[styles.input, compact && styles.inputCompact]}
+        style={styles.input}
         secureTextEntry={isSecure ? hide : secureTextEntry}
       />
       {secureToggle ? (
@@ -64,20 +62,14 @@ const styles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 18,
     backgroundColor: 'rgba(15, 15, 25, 0.7)',
     borderWidth: 1,
     borderColor: 'rgba(124,58,237,0.3)',
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     minHeight: 60,
-    gap: 12,
+    gap: 16,
     overflow: 'hidden',
-  },
-  wrapCompact: {
-    minHeight: 50,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    gap: 10,
   },
   input: {
     flex: 1,
@@ -86,10 +78,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     paddingVertical: Platform.OS === 'ios' ? 12 : 10,
     textAlign: 'left',
-  },
-  inputCompact: {
-    fontSize: 14,
-    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
   },
   spacer: { width: 70 },
 });

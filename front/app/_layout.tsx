@@ -26,14 +26,13 @@ import {
   Inter_700Bold,
   Inter_800ExtraBold,
 } from '@expo-google-fonts/inter';
-import { Ionicons, MaterialCommunityIcons, FontAwesome } from '@expo/vector-icons';
 import { applyGlobalFont } from '../utils/fontSetup';
 import '../services/notificationForegroundSetup';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppKeyboardProvider } from '@/utils/keyboardControllerSafe';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, StatusBar, Linking, StyleSheet, Text } from 'react-native';
+import { View, StatusBar, I18nManager, Linking, StyleSheet, Text } from 'react-native';
 import { SettingsProvider } from "../contexts/SettingsContext";
 import { LanguageProvider } from "../contexts/LanguageContext";
 import { CoinsProvider } from "../contexts/CoinsContext";
@@ -74,7 +73,6 @@ import {
 import { PushRegistrationReportBootstrap } from "../components/common/PushRegistrationReportBootstrap";
 import { OtaUpdateBootstrap } from "../components/common/OtaUpdateBootstrap";
 import { FootballCacheEpochBootstrap } from "../components/common/FootballCacheEpochBootstrap";
-import { WidgetSyncBootstrap } from "../components/common/WidgetSyncBootstrap";
 import { GlobalOfflineBanner } from "../components/common/GlobalOfflineBanner";
 import { useOfflineSync } from "../src/hooks/useOfflineSync";
 // ErrorUtils is on `global`, not a reliable named export from react-native in SDK 55+.
@@ -469,6 +467,9 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Key to persist RTL reload flag across app restarts (prevents infinite reload loop)
+const RTL_RELOAD_FLAG_KEY = '@rtl_reload_requested_v1';
+
 function LanguageInitializer({ children }: { children: React.ReactNode }) {
   const initialize = useLanguageStore(state => state.initialize);
   const isInitialized = useLanguageStore(state => state.isInitialized);
@@ -477,6 +478,18 @@ function LanguageInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // Layout stays LTR for all languages. forceRTL is cleared without
+  // Updates.reloadAsync — a cold start may be needed once for native mirror
+  // to fully reset on devices that previously ran Arabic in RTL mode.
+  useEffect(() => {
+    if (!isInitialized) return;
+    if (I18nManager.isRTL) {
+      I18nManager.allowRTL(false);
+      I18nManager.forceRTL(false);
+    }
+    AsyncStorage.removeItem(RTL_RELOAD_FLAG_KEY).catch(() => {});
+  }, [isInitialized]);
 
   // Safety net: never block boot longer than 5s
   useEffect(() => {
@@ -494,9 +507,6 @@ function LanguageInitializer({ children }: { children: React.ReactNode }) {
 function RootLayout() {
   // ── Load Poppins (Latin) + Cairo (Arabic) globally ────────────────────
   const [fontsLoaded] = useFonts({
-    ...Ionicons.font,
-    ...MaterialCommunityIcons.font,
-    ...FontAwesome.font,
     Poppins_400Regular,
     Poppins_500Medium,
     Poppins_600SemiBold,
@@ -712,7 +722,6 @@ function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <OtaUpdateBootstrap />
             <FootballCacheEpochBootstrap />
-            <WidgetSyncBootstrap />
             <PushNotificationSetup />
             <PushRegistrationReportBootstrap />
             <LanguageInitializer>

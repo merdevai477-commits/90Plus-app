@@ -53,7 +53,6 @@ import {
     getScores365MatchesForDate,
     isScores365ExperimentEnabled,
     isScores365ExperimentFixture,
-    resolveApiFixtureIdFor365GameId,
     resolveScores365AppLanguage,
     SCORES365_LEAGUE_ID_OFFSET,
 } from './scores365-experiment.service';
@@ -1679,33 +1678,23 @@ class FootballDataCacheService {
         venue: any | null;
     }> {
         await ensureScores365GameMapping(fixtureId);
-
-        let effectiveFixtureId = fixtureId;
-        if (!isScores365ExperimentFixture(effectiveFixtureId)) {
-            const apiFixtureId = await resolveApiFixtureIdFor365GameId(fixtureId);
-            if (apiFixtureId != null) {
-                effectiveFixtureId = apiFixtureId;
-                await ensureScores365GameMapping(effectiveFixtureId);
-            }
-        }
-
         const forceRefresh =
             options?.forceRefresh === true ||
-            (isScores365ExperimentFixture(effectiveFixtureId) && is365StoreDetailsHotfix());
-        if (isScores365ExperimentFixture(effectiveFixtureId)) {
+            (isScores365ExperimentFixture(fixtureId) && is365StoreDetailsHotfix());
+        if (isScores365ExperimentFixture(fixtureId)) {
             const experiment = await getScores365ExperimentBundle(
-                effectiveFixtureId,
+                fixtureId,
                 resolveScores365AppLanguage(options?.language ?? null),
                 { force: forceRefresh },
             );
             if (experiment) {
                 let statistics = experiment.statistics;
                 if (!hasApiStatistics(statistics)) {
-                    statistics = await this.getMatchStatistics(effectiveFixtureId);
+                    statistics = await this.getMatchStatistics(fixtureId);
                 }
                 let events = experiment.events;
                 if (!events.length || forceRefresh) {
-                    events = await this.getMatchEvents(effectiveFixtureId, {
+                    events = await this.getMatchEvents(fixtureId, {
                         forceRefresh: true,
                         language: resolveScores365AppLanguage(options?.language ?? null),
                     });
@@ -1714,7 +1703,7 @@ class FootballDataCacheService {
                     statistics = buildFallbackStatisticsFromEvents(experiment.fixture, events);
                 }
                 const lineups = await this.get365LineupsMerged(
-                    effectiveFixtureId,
+                    fixtureId,
                     resolveScores365AppLanguage(options?.language ?? null),
                     experiment.lineups,
                     forceRefresh,
@@ -1728,7 +1717,7 @@ class FootballDataCacheService {
                 };
                 const statusShort = experiment.fixture?.fixture?.status?.short ?? '';
                 if (['FT', 'AET', 'PEN'].includes(statusShort)) {
-                    await this.updateFixtureFullData(effectiveFixtureId, {
+                    await this.updateFixtureFullData(fixtureId, {
                         lineups: payload.lineups,
                         events: payload.events,
                         statistics: payload.statistics,
@@ -1738,17 +1727,17 @@ class FootballDataCacheService {
             }
         }
 
-        const bundleKey = `details:${effectiveFixtureId}`;
+        const bundleKey = `details:${fixtureId}`;
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(bundleKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             return redisCached.data;
         }
 
         const [fixture, lineups, statistics, events] = await Promise.all([
-            footballService.getFixtureById(effectiveFixtureId),
-            this.getMatchLineups(effectiveFixtureId),
-            this.getMatchStatistics(effectiveFixtureId),
-            this.getMatchEvents(effectiveFixtureId),
+            footballService.getFixtureById(fixtureId),
+            this.getMatchLineups(fixtureId),
+            this.getMatchStatistics(fixtureId),
+            this.getMatchEvents(fixtureId),
         ]);
 
         let venue: any | null = fixture?.fixture?.venue ?? null;

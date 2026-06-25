@@ -3,21 +3,6 @@ import { COUNTRIES } from '../data/countries';
 
 const GENERIC_FLAGS = new Set(['🌍', '🏳️', '🏴']);
 
-function localizeStoredCountryName(name: string, preferArabic: boolean): string {
-  if (preferArabic) return name;
-
-  const fromListAr = COUNTRIES.find((c) => c.name === name);
-  if (fromListAr) return fromListAr.nameEn;
-
-  const fromLocalAr = ALL_COUNTRY_FLAGS.find((c) => c.nameAr === name);
-  if (fromLocalAr) return fromLocalAr.name;
-
-  const fromListEn = COUNTRIES.find((c) => c.nameEn === name);
-  if (fromListEn) return fromListEn.nameEn;
-
-  return name;
-}
-
 /**
  * Resolve a human-readable country label from stored profile fields.
  * Falls back to flag lookup when `country` text was never saved.
@@ -28,7 +13,7 @@ export function resolveCountryDisplayName(
   preferArabic = true,
 ): string {
   const trimmed = (country ?? '').trim();
-  if (trimmed) return localizeStoredCountryName(trimmed, preferArabic);
+  if (trimmed) return trimmed;
 
   const flag = (countryFlag ?? '').trim();
   if (!flag || GENERIC_FLAGS.has(flag)) return '';

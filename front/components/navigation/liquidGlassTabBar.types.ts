@@ -21,8 +21,6 @@ export interface LiquidGlassTabBarProps {
   onNavigate: (index: number) => void;
   /** Optional avatar URL for the Profile tab. Falls back to a default icon. */
   profileAvatarUrl?: string | null;
-  /** Optional pre-translated tab items (defaults to i18n labels). */
-  tabItems?: LiquidTabItem[];
   /** Safe-area bottom inset used to position the floating bar. */
   bottomInset?: number;
   /** Prefetch adjacent routes when a tab is pressed. */

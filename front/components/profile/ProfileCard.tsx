@@ -1,53 +1,53 @@
-import React, { memo, useMemo, useState, useCallback } from 'react';
+/**
+ * ProfileCard — AAA FIFA Ultimate Team inspired card.
+ * Premium upgrade: crown shape, holographic effects, cinematic image blend,
+ * animated border shimmer, ambient glow system, premium typography.
+ * Preserves all existing props, SVG architecture, and Expo compatibility.
+ */
+
+import { memo, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
+  Animated,
+  Easing,
   ImageSourcePropType,
-  Pressable,
-  useWindowDimensions,
+  Platform,
 } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { Crown, Zap } from 'lucide-react-native';
-
-import {
-  GOLD_PRIMARY,
-  PURPLE_PRIMARY,
-  PURPLE_SOFT,
-  TEXT_PRIMARY,
-} from '../../constants/tokens';
-import { GlassWrapper, glassProps, ACCENT, ACCENT_DARK } from '../../constants/ui';
-import { useTranslation } from '../../src/i18n';
-import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
-import { useCoins } from '../../contexts/CoinsContext';
-import { CoinsInfoModal } from '../common/CoinsInfoModal';
-import { LevelInfoModal } from '../common/LevelInfoModal';
+import Svg, {
+  Defs,
+  LinearGradient as SvgLinearGradient,
+  RadialGradient as SvgRadialGradient,
+  Stop,
+  Path,
+  ClipPath,
+  Image as SvgImage,
+  Rect,
+} from 'react-native-svg';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const AVATAR_PLACEHOLDER = require('../../assets/images/plear 90Plus.png') as number;
+const CARD_BACK = require('../../assets/images/profile-card-back.png') as number;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const AROUND_CARD = require('../../assets/images/around-card.png') as number;
 
-const CARD_W = 340;
-const CARD_H = 448;
-const MAX_SCALE = 1.02;
-
-const POSITION_LABELS: Record<string, string> = {
-  ST: 'STRIKER',
-  CF: 'STRIKER',
-  LW: 'LEFT WINGER',
-  RW: 'RIGHT WINGER',
-  CAM: 'ATT. MID',
-  CM: 'MIDFIELDER',
-  CDM: 'DEF. MID',
-  CB: 'DEFENDER',
-  LB: 'LEFT BACK',
-  RB: 'RIGHT BACK',
-  GK: 'GOALKEEPER',
+// ── Animation helpers ────────────────────────────────────────────────────────
+const useSafeLoop = (from: number, to: number, duration: number, easing = Easing.bezier(0.4, 0, 0.2, 1)) => {
+  const animatedValue = useRef(new Animated.Value(from)).current;
+  const start = () => {
+    animatedValue.setValue(from);
+    Animated.loop(
+      Animated.timing(animatedValue, { toValue: to, duration, easing, useNativeDriver: true })
+    ).start();
+  };
+  return { animatedValue, start };
 };
 
+// ── Types ────────────────────────────────────────────────────────────────────
 export interface ProfileCardProps {
   playerImage?: ImageSourcePropType;
   cardType?: 'gold' | 'icon' | 'toty';
@@ -55,7 +55,6 @@ export interface ProfileCardProps {
   onImageUpload?: () => void;
   uploadedImage?: string | null;
   countryFlag?: string | null;
-  country?: string | null;
   onCountryPress?: () => void;
   position?: string;
   age?: string | number;
@@ -65,658 +64,541 @@ export interface ProfileCardProps {
   onPositionPress?: () => void;
   onStatsPress?: () => void;
   clubLogo?: string;
-  favoriteTeam?: string | null;
   onClubPress?: () => void;
-  displayName?: string;
-  username?: string;
-  level?: number;
-  showEconomyBadges?: boolean;
-  fillWidth?: boolean;
-  widthPadding?: number;
   isAvatarUploading?: boolean;
   isCountryUpdating?: boolean;
   isClubUpdating?: boolean;
   isStatsUpdating?: boolean;
 }
 
-function resolvePhotoUri(
-  uploadedImage?: string | null,
-  playerImage?: ImageSourcePropType,
-): string | null {
-  if (uploadedImage) return uploadedImage;
-  if (playerImage && typeof playerImage === 'object' && 'uri' in playerImage) {
-    return (playerImage as { uri?: string }).uri ?? null;
-  }
-  return null;
-}
+// ── Design constants ─────────────────────────────────────────────────────────
+const WIDTH  = 340;
+const HEIGHT = 520;
 
-function GlassChip({
-  scale,
-  children,
-  onPress,
-  style,
-}: {
-  scale: number;
-  children: React.ReactNode;
-  onPress?: () => void;
-  style?: object;
-}) {
-  const inner = (
-    <View style={[styles.glassChip, { borderRadius: 14 * scale, paddingHorizontal: 10 * scale, paddingVertical: 6 * scale }, style]}>
-      <GlassWrapper {...(glassProps.chip as object)} style={StyleSheet.absoluteFill} />
-      <View style={styles.glassChipTint} />
-      {children}
-    </View>
-  );
-  if (!onPress) return inner;
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => pressed && { opacity: 0.88 }}>
-      {inner}
-    </Pressable>
-  );
-}
+// Gold palette
+const GOLD_0 = '#7A5C1E';
+const GOLD_2 = '#F5C518';
+const GOLD_3 = '#FFF0A0';
+const GOLD_INNER = 'rgba(255,240,160,0.55)';
 
-function StatRow({
-  icon,
-  label,
-  value,
-  scale,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-  scale: number;
-}) {
-  return (
-    <View style={[styles.statRow, { gap: 6 * scale, marginBottom: 7 * scale }]}>
-      <View style={[styles.statIconWrap, { width: 20 * scale, height: 20 * scale, borderRadius: 10 * scale }]}>
-        <Ionicons name={icon} size={10 * scale} color={PURPLE_SOFT} />
-      </View>
-      <View style={styles.statTextCol}>
-        <Text style={[styles.statLabel, { fontSize: 7 * scale }]}>{label}</Text>
-        <Text style={[styles.statValue, { fontSize: 12 * scale }]}>{value}</Text>
-      </View>
-    </View>
-  );
-}
+// Accent
+const ACCENT_POS   = '#F5C518';   // gold position text
+const ACCENT_STAT  = '#C4B5FD';   // soft purple stat values
+const LABEL_COL    = 'rgba(196,181,253,0.55)';
+const DIVIDER_COL  = 'rgba(124,58,237,0.25)';
+const SEP_COL      = 'rgba(124,58,237,0.18)';
 
-function GlassSidePanel({
-  scale,
-  side,
-  onPress,
-  children,
-}: {
-  scale: number;
-  side: 'left' | 'right';
-  onPress?: () => void;
-  children: React.ReactNode;
-}) {
-  const w = 84 * scale;
-  const h = 168 * scale;
-  const panelStyle = [
-    styles.sidePanel,
-    {
-      width: w,
-      height: h,
-      top: 136 * scale,
-      borderRadius: 16 * scale,
-      ...(side === 'left' ? { left: 12 * scale } : { right: 12 * scale }),
-    },
-  ];
+// Holo rainbow stops
+const HOLO_STOPS = [
+  'rgba(255,0,128,0)',
+  'rgba(255,0,128,0.18)',
+  'rgba(255,165,0,0.18)',
+  'rgba(0,255,128,0.18)',
+  'rgba(0,200,255,0.18)',
+  'rgba(180,0,255,0.18)',
+  'rgba(255,0,128,0)',
+] as const;
 
-  const inner = (
-    <>
-      <GlassWrapper {...(glassProps.card as object)} style={StyleSheet.absoluteFill} />
-      <LinearGradient
-        colors={['rgba(168,85,247,0.14)', 'rgba(5,1,13,0.45)']}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={[styles.sidePanelInner, { paddingVertical: 12 * scale, paddingHorizontal: 8 * scale }]}>
-        {children}
-      </View>
-    </>
-  );
+const FONT_BOLD      = 'Inter_700Bold';
+const FONT_EXTRABOLD = 'Inter_800ExtraBold';
 
-  if (!onPress) return <View style={panelStyle}>{inner}</View>;
-  return (
-    <TouchableOpacity style={panelStyle} activeOpacity={0.85} onPress={onPress}>
-      {inner}
-    </TouchableOpacity>
-  );
-}
+const EMOJI_FLAG_REGEX = /[\u{1F1E6}-\u{1F1FF}]/u;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const FALLBACK_FLAG: ImageSourcePropType = require('../../assets/images/football.png');
 
+// ── Component ────────────────────────────────────────────────────────────────
 const ProfileCard = memo(function ProfileCard({
   playerImage,
   scale = 0.66,
-  fillWidth = false,
-  widthPadding = 12,
   onImageUpload,
   uploadedImage,
   countryFlag,
-  country,
   onCountryPress,
   position,
+  onPositionPress,
   age,
   height,
   weight,
   foot,
-  onPositionPress,
   onStatsPress,
   clubLogo,
-  favoriteTeam,
   onClubPress,
-  displayName,
-  username,
-  level,
-  showEconomyBadges = false,
-  isAvatarUploading,
-  isCountryUpdating,
-  isClubUpdating,
-  isStatsUpdating,
 }: ProfileCardProps) {
-  const { t, language } = useTranslation();
-  const { width: windowWidth } = useWindowDimensions();
-  const { coins, loading: coinsLoading } = useCoins();
-  const [showCoinsInfo, setShowCoinsInfo] = useState(false);
-  const [showLevelInfo, setShowLevelInfo] = useState(false);
+  // Animations — only while profile tab is focused (reduces scroll jank on iOS/Android)
+  const isFocused = useIsFocused();
+  const shimmer  = useSafeLoop(0, 1, 3800);
+  const holo     = useSafeLoop(0, 1, 4200, Easing.linear);
+  const [flagFailed, setFlagFailed] = useState(false);
 
-  const openLevelInfo = useCallback(() => setShowLevelInfo(true), []);
-  const closeLevelInfo = useCallback(() => setShowLevelInfo(false), []);
-  const openCoinsInfo = useCallback(() => setShowCoinsInfo(true), []);
-  const closeCoinsInfo = useCallback(() => setShowCoinsInfo(false), []);
+  useEffect(() => {
+    if (!isFocused) return;
+    // Lighter motion on Android — card still looks premium without continuous loops
+    if (Platform.OS === 'android') return;
+    shimmer.start();
+    holo.start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFocused]);
 
-  const effectiveScale = Math.min(
-    fillWidth ? (windowWidth - widthPadding * 2) / CARD_W : scale,
-    MAX_SCALE,
-  );
+  useEffect(() => { setFlagFailed(false); }, [countryFlag]);
 
-  const cardWidth = CARD_W * effectiveScale;
-  const cardHeight = CARD_H * effectiveScale;
-  const radius = 24 * effectiveScale;
-  const economyVisible = showEconomyBadges && level != null;
-  const headerTop = 12 * effectiveScale;
-  const contentTop = economyVisible ? 52 * effectiveScale : 16 * effectiveScale;
-  const coinsDisplay = coinsLoading ? '—' : String(coins);
-  const photoUri = resolvePhotoUri(uploadedImage, playerImage);
+  const cardWidth  = WIDTH  * scale;
+  const cardHeight = HEIGHT * scale;
 
-  const preferArabic = language === 'ar';
-  const countryName = useMemo(
-    () => resolveCountryDisplayName(country, countryFlag, preferArabic),
-    [country, countryFlag, preferArabic],
-  );
-  const flagEmoji = isMeaningfulCountryFlag(countryFlag) ? countryFlag!.trim() : null;
-  const pos = position?.trim() || 'ST';
-  const positionLabel = POSITION_LABELS[pos.toUpperCase()] ?? pos.toUpperCase();
-  const name = displayName?.trim() || '';
-  const handle = username?.trim() ? `@${username.trim()}` : '';
+  // Shimmer
+  const shimmerX = shimmer.animatedValue.interpolate({
+    inputRange: [0, 1], outputRange: [-500 * scale, 800 * scale],
+  });
+  const shimmerOp = shimmer.animatedValue.interpolate({
+    inputRange: [0, 0.25, 0.75, 1], outputRange: [0, 0.9, 0.9, 0],
+  });
+
+  // Holo rainbow sweep
+  const holoX = holo.animatedValue.interpolate({
+    inputRange: [0, 1], outputRange: [-cardWidth * 1.5, cardWidth * 1.5],
+  });
+  const holoOp = holo.animatedValue.interpolate({
+    inputRange: [0, 0.2, 0.5, 0.8, 1], outputRange: [0, 0.55, 0.7, 0.55, 0],
+  });
+
+  // Flag rendering
+  const flagValue   = (countryFlag ?? '').trim();
+  const isEmojiFlag = !!flagValue && EMOJI_FLAG_REGEX.test(flagValue);
+  const isIsoCode   = !!flagValue && !isEmojiFlag && flagValue.length <= 3;
+  const flagSize    = { width: 44 * scale, height: 28 * scale };
+
+  const renderFlag = () => {
+    if (isEmojiFlag) return (
+      <Text style={{ fontSize: 26 * scale, lineHeight: 30 * scale }} accessibilityLabel="country-flag">
+        {flagValue}
+      </Text>
+    );
+    if (isIsoCode && !flagFailed) return (
+      <Image
+        source={{ uri: `https://flagcdn.com/w80/${flagValue.toLowerCase()}.png` }}
+        style={[flagSize, { borderRadius: 3 * scale }]}
+        contentFit="cover" cachePolicy="memory-disk"
+        onError={() => setFlagFailed(true)}
+      />
+    );
+    return (
+      <Image source={FALLBACK_FLAG} style={[flagSize, { borderRadius: 3 * scale, opacity: 0.5 }]}
+        contentFit="cover" cachePolicy="memory-disk" />
+    );
+  };
 
   return (
-    <View style={[styles.outer, { width: cardWidth }]}>
-      <View
-        style={[
-          styles.cardShell,
-          {
-            width: cardWidth,
-            height: cardHeight,
-            borderRadius: radius,
-          },
-        ]}
-      >
-        <View
-          pointerEvents="none"
-          style={[
-            styles.ambientGlow,
-            {
-              width: cardWidth * 1.08,
-              height: cardHeight * 1.06,
-              borderRadius: radius + 4,
-            },
-          ]}
+    <View style={{ alignItems: 'center' }}>
+      <View style={[s.container, { width: cardWidth, height: cardHeight }]}>
+
+        {/* ── around-card.png — static background behind the card ─── */}
+        <Image
+          source={AROUND_CARD}
+          style={[s.aroundCard, {
+            width: cardWidth * 3.399,
+            height: cardHeight * 1.175,
+            left: -cardWidth * 1.215,
+            top: -cardHeight * 0.121,
+          }]}
+          contentFit="contain"
+          cachePolicy="memory-disk"
         />
 
-        <GlassWrapper
-          {...(glassProps.card as object)}
-          style={[StyleSheet.absoluteFill, styles.cardGlass, { borderRadius: radius }]}
-        >
-          <LinearGradient
-            colors={[
-              'rgba(124,58,237,0.18)',
-              'rgba(10,5,22,0.72)',
-              'rgba(5,1,13,0.82)',
-            ]}
-            locations={[0, 0.45, 1]}
-            style={StyleSheet.absoluteFill}
+        {/* ── SVG: border + body + crown + image + energy layers ────── */}
+        <Svg width={cardWidth} height={cardHeight}
+          viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={s.cardSvg}>
+          <Defs>
+            {/* Gold border — 5-stop metallic */}
+            <SvgLinearGradient id="pcBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%"   stopColor={GOLD_0} stopOpacity="1" />
+              <Stop offset="20%"  stopColor={GOLD_2} stopOpacity="1" />
+              <Stop offset="45%"  stopColor={GOLD_3} stopOpacity="1" />
+              <Stop offset="70%"  stopColor={GOLD_2} stopOpacity="1" />
+              <Stop offset="100%" stopColor={GOLD_0} stopOpacity="1" />
+            </SvgLinearGradient>
+
+            {/* Inner gold reflection line */}
+            <SvgLinearGradient id="pcInnerGold" x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%"   stopColor={GOLD_INNER} stopOpacity="0" />
+              <Stop offset="40%"  stopColor={GOLD_INNER} stopOpacity="1" />
+              <Stop offset="60%"  stopColor={GOLD_INNER} stopOpacity="1" />
+              <Stop offset="100%" stopColor={GOLD_INNER} stopOpacity="0" />
+            </SvgLinearGradient>
+
+            {/* Energy radial — center purple bloom */}
+            <SvgRadialGradient id="energyBloom" cx="50%" cy="45%" r="55%">
+              <Stop offset="0%"   stopColor="#3B0080" stopOpacity="0.55" />
+              <Stop offset="60%"  stopColor="#1A0038" stopOpacity="0.25" />
+              <Stop offset="100%" stopColor="#05010D" stopOpacity="0" />
+            </SvgRadialGradient>
+
+            {/* Image cinematic overlay — dark top + purple edge */}
+            <SvgLinearGradient id="imgOverlay" x1="0%" y1="0%" x2="0%" y2="100%">
+              <Stop offset="0%"   stopColor="#000000" stopOpacity="0.45" />
+              <Stop offset="35%"  stopColor="#000000" stopOpacity="0.1" />
+              <Stop offset="70%"  stopColor="#1A0038" stopOpacity="0.2" />
+              <Stop offset="100%" stopColor="#05010D" stopOpacity="0.7" />
+            </SvgLinearGradient>
+
+            {/* Purple light leak on image left edge */}
+            <SvgLinearGradient id="purpleLeak" x1="0%" y1="0%" x2="100%" y2="0%">
+              <Stop offset="0%"   stopColor="#7C3AED" stopOpacity="0.45" />
+              <Stop offset="40%"  stopColor="#7C3AED" stopOpacity="0.1" />
+              <Stop offset="100%" stopColor="#7C3AED" stopOpacity="0" />
+            </SvgLinearGradient>
+
+            {/* Vignette */}
+            <SvgRadialGradient id="vignette" cx="50%" cy="50%" r="70%">
+              <Stop offset="0%"   stopColor="#000000" stopOpacity="0" />
+              <Stop offset="75%"  stopColor="#000000" stopOpacity="0" />
+              <Stop offset="100%" stopColor="#000000" stopOpacity="0.55" />
+            </SvgRadialGradient>
+
+            {/* Player image clip — cinematic curved */}
+            <ClipPath id="pcClip">
+              <Path d="M162 22 Q228 12 308 52 L308 278 Q235 300 162 282 Z" />
+            </ClipPath>
+
+            {/* Crown clip */}
+            <ClipPath id="crownClip">
+              <Rect x="80" y="0" width="180" height="30" />
+            </ClipPath>
+          </Defs>
+
+          {/* ── Outer gold border ──────────────────────────────────── */}
+          <Path
+            d="M170 8 Q252 14 318 52 L318 412 Q318 448 282 472 L170 512 L58 472 Q22 448 22 412 L22 52 Q88 14 170 8 Z"
+            fill="url(#pcBorder)"
           />
 
-          <LinearGradient
-            colors={[ACCENT, ACCENT_DARK, 'transparent']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.topAccent, { height: 2 * effectiveScale, borderTopLeftRadius: radius, borderTopRightRadius: radius }]}
+          {/* ── Crown shape at top center ──────────────────────────── */}
+          <Path
+            d="M120 22 L140 8 L155 18 L170 4 L185 18 L200 8 L220 22 Z"
+            fill="url(#pcBorder)"
+          />
+          {/* Crown inner fill */}
+          <Path
+            d="M124 22 L142 10 L156 19 L170 6 L184 19 L198 10 L216 22 Z"
+            fill="#1A0038"
+          />
+          {/* Crown gold highlight line */}
+          <Path
+            d="M120 22 L140 8 L155 18 L170 4 L185 18 L200 8 L220 22"
+            fill="none" stroke={GOLD_3} strokeWidth="0.8" strokeOpacity="0.7"
           />
 
-          <View
-            pointerEvents="none"
-            style={[styles.glassShine, { top: 8 * effectiveScale, left: 16 * effectiveScale, width: 72 * effectiveScale, height: 28 * effectiveScale, borderRadius: 14 * effectiveScale }]}
+          {/* ── Card body — profile-card-back.png as background ──── */}
+          {/* Clip the image to the card shape */}
+          <ClipPath id="bodyClip">
+            <Path d="M170 16 Q248 22 310 56 L310 406 Q310 438 278 460 L170 502 L62 460 Q30 438 30 406 L30 56 Q92 22 170 16 Z" />
+          </ClipPath>
+          <SvgImage
+            x="30" y="16" width="280" height="490"
+            href={CARD_BACK}
+            preserveAspectRatio="xMidYMid slice"
+            clipPath="url(#bodyClip)"
           />
 
-          {economyVisible ? (
-            <View style={[styles.economyRow, { top: headerTop, left: 14 * effectiveScale, right: 14 * effectiveScale }]}>
-              <GlassChip scale={effectiveScale} onPress={openLevelInfo}>
-                <View style={styles.chipRow}>
-                  <Text style={[styles.lvlLabel, { fontSize: 8 * effectiveScale }]}>LVL</Text>
-                  <Text style={[styles.lvlNumber, { fontSize: 13 * effectiveScale }]}>{level}</Text>
-                </View>
-              </GlassChip>
+          {/* ── Energy bloom overlay (keeps depth) ────────────────── */}
+          <Path
+            d="M170 16 Q248 22 310 56 L310 406 Q310 438 278 460 L170 502 L62 460 Q30 438 30 406 L30 56 Q92 22 170 16 Z"
+            fill="url(#energyBloom)"
+          />
 
-              <GlassChip scale={effectiveScale} onPress={openCoinsInfo}>
-                <View style={styles.chipRow}>
-                  <Zap size={12 * effectiveScale} color={PURPLE_PRIMARY} fill={PURPLE_PRIMARY} />
-                  <Text style={[styles.coinTxt, { fontSize: 12 * effectiveScale }]}>{coinsDisplay}</Text>
-                </View>
-              </GlassChip>
-            </View>
-          ) : null}
-
-          <TouchableOpacity
-            style={[styles.topLeft, { top: contentTop, left: 14 * effectiveScale }]}
-            onPress={onPositionPress}
-            activeOpacity={onPositionPress ? 0.8 : 1}
-            disabled={!onPositionPress}
-          >
-            <View style={styles.positionTagRow}>
-              <Ionicons name="chevron-forward" size={9 * effectiveScale} color={GOLD_PRIMARY} />
-              <Text style={[styles.positionTag, { fontSize: 8 * effectiveScale }]}>{positionLabel}</Text>
-            </View>
-            <Text style={[styles.positionAbbr, { fontSize: 32 * effectiveScale }]}>{pos}</Text>
-          </TouchableOpacity>
-
-          <View style={[styles.topRight, { top: contentTop, right: 14 * effectiveScale, maxWidth: cardWidth * 0.5 }]}>
-            <View style={styles.nameRow}>
-              <Text style={[styles.arName, { fontSize: 14 * effectiveScale }]} numberOfLines={1}>
-                {name || t.profile.profileCardGuest}
-              </Text>
-              <Crown size={13 * effectiveScale} color={GOLD_PRIMARY} fill={GOLD_PRIMARY} strokeWidth={1.5} />
-            </View>
-            {handle ? (
-              <Text style={[styles.cardUsername, { fontSize: 10 * effectiveScale, marginTop: 2 * effectiveScale }]} numberOfLines={1}>
-                {handle}
-              </Text>
-            ) : null}
-            {(countryName || flagEmoji || onCountryPress) ? (
-              <TouchableOpacity
-                onPress={onCountryPress}
-                activeOpacity={onCountryPress ? 0.8 : 1}
-                disabled={!onCountryPress}
-                style={[styles.countryPill, { marginTop: 6 * effectiveScale, paddingHorizontal: 8 * effectiveScale, paddingVertical: 4 * effectiveScale }]}
-              >
-                <GlassWrapper {...(glassProps.chip as object)} style={StyleSheet.absoluteFill} />
-                {isCountryUpdating ? (
-                  <ActivityIndicator size="small" color={PURPLE_SOFT} />
-                ) : (
-                  <View style={styles.countryRow}>
-                    <Ionicons name="location-outline" size={10 * effectiveScale} color={PURPLE_SOFT} />
-                    {countryName ? (
-                      <Text style={[styles.countryTxt, { fontSize: 9 * effectiveScale }]} numberOfLines={1}>
-                        {countryName}
-                      </Text>
-                    ) : null}
-                    {flagEmoji ? <Text style={{ fontSize: 11 * effectiveScale }}>{flagEmoji}</Text> : null}
-                  </View>
-                )}
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          <TouchableOpacity
-            style={[
-              styles.portraitWrap,
-              {
-                width: 118 * effectiveScale,
-                height: 118 * effectiveScale,
-                borderRadius: 59 * effectiveScale,
-                top: (economyVisible ? 92 : 84) * effectiveScale,
-                marginLeft: -59 * effectiveScale,
-                borderWidth: 2.5 * effectiveScale,
-              },
-            ]}
-            onPress={onImageUpload}
-            activeOpacity={onImageUpload ? 0.88 : 1}
-            disabled={!onImageUpload || isAvatarUploading}
-          >
-            <Image
-              source={photoUri ? { uri: photoUri } : AVATAR_PLACEHOLDER}
-              placeholder={AVATAR_PLACEHOLDER}
-              style={[styles.portrait, { borderRadius: 56 * effectiveScale }]}
-              contentFit="cover"
-              contentPosition="top center"
-              cachePolicy="memory-disk"
-              transition={200}
+          {/* ── Player image ───────────────────────────────────────── */}
+          {(uploadedImage || playerImage) && (
+            <SvgImage
+              x="158" y="18" width="152" height="268"
+              href={uploadedImage ? { uri: uploadedImage } : (playerImage as any)}
+              preserveAspectRatio="xMidYMid slice"
+              clipPath="url(#pcClip)"
             />
-            <View style={[styles.portraitRing, { borderRadius: 59 * effectiveScale, borderWidth: 1.5 * effectiveScale }]} />
-            {isAvatarUploading ? (
-              <View style={[StyleSheet.absoluteFill, styles.uploadOverlay]}>
-                <ActivityIndicator color="#fff" size="small" />
-              </View>
-            ) : null}
-            {!photoUri && onImageUpload ? (
-              <View style={[StyleSheet.absoluteFill, styles.uploadHint]}>
-                <Ionicons name="add" size={26 * effectiveScale} color={PURPLE_SOFT} />
-              </View>
-            ) : null}
+          )}
+
+          {/* ── Cinematic image overlay ────────────────────────────── */}
+          <Path
+            d="M162 22 Q228 12 308 52 L308 278 Q235 300 162 282 Z"
+            fill="url(#imgOverlay)"
+          />
+
+          {/* ── Purple light leak on image left edge ──────────────── */}
+          <Path
+            d="M162 22 L175 22 L175 282 L162 282 Z"
+            fill="url(#purpleLeak)"
+          />
+
+          {/* ── Inner gold reflection line ─────────────────────────── */}
+          <Path
+            d="M170 20 Q246 26 308 60 L308 408 Q308 436 278 458 L170 500 L62 458 Q32 436 32 408 L32 60 Q94 26 170 20 Z"
+            fill="none" stroke="url(#pcInnerGold)" strokeWidth="1.2"
+          />
+
+          {/* ── Vignette ──────────────────────────────────────────── */}
+          <Path
+            d="M170 16 Q248 22 310 56 L310 406 Q310 438 278 460 L170 502 L62 460 Q30 438 30 406 L30 56 Q92 22 170 16 Z"
+            fill="url(#vignette)"
+          />
+
+          {/* ── Decorative corner highlights ──────────────────────── */}
+          <Path d="M30 80 L30 56 Q92 22 120 18" fill="none" stroke={GOLD_3} strokeWidth="0.6" strokeOpacity="0.5" />
+          <Path d="M310 80 L310 56 Q248 22 220 18" fill="none" stroke={GOLD_3} strokeWidth="0.6" strokeOpacity="0.5" />
+          <Path d="M30 430 L30 406 Q30 438 62 460 L90 472" fill="none" stroke={GOLD_3} strokeWidth="0.6" strokeOpacity="0.5" />
+          <Path d="M310 430 L310 406 Q310 438 278 460 L250 472" fill="none" stroke={GOLD_3} strokeWidth="0.6" strokeOpacity="0.5" />
+
+          {/* ── Stats section separator line ──────────────────────── */}
+          <Path d="M50 308 L290 308" stroke={GOLD_2} strokeWidth="0.5" strokeOpacity="0.35" />
+
+          {/* ── Bottom decorative line ─────────────────────────────── */}
+          <Path d="M80 488 L260 488" stroke={GOLD_2} strokeWidth="0.4" strokeOpacity="0.3" />
+        </Svg>
+
+        {/* ── Inner border glow (animated pulse) ───────────────────── */}
+
+        {/* ── Glass reflection top-left ─────────────────────────────── */}
+        <View pointerEvents="none" style={[s.glassReflect, {
+          top: 18 * scale, left: 18 * scale,
+          width: 80 * scale, height: 40 * scale,
+          borderRadius: 20 * scale,
+        }]} />
+
+        {/* ── Shimmer sweep ─────────────────────────────────────────── */}
+        <View pointerEvents="none"
+          style={{ position: 'absolute', top: 0, left: 0, width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 32 * scale, zIndex: 6 }}>
+          <Animated.View style={[s.shimmer, { opacity: shimmerOp,
+            transform: [{ translateX: shimmerX }, { rotate: '22deg' }] }]}>
+            <LinearGradient
+              colors={['transparent','rgba(255,255,255,0.06)','rgba(255,255,255,0.32)','rgba(255,255,255,0.06)','transparent']}
+              style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            />
+          </Animated.View>
+        </View>
+
+        {/* ── Holographic rainbow sweep ─────────────────────────────── */}
+        <View pointerEvents="none"
+          style={{ position: 'absolute', top: 0, left: 0, width: cardWidth, height: cardHeight, overflow: 'hidden', borderRadius: 32 * scale, zIndex: 7 }}>
+          <Animated.View style={[s.holoSweep, { opacity: holoOp,
+            transform: [{ translateX: holoX }, { rotate: '18deg' }] }]}>
+            <LinearGradient
+              colors={HOLO_STOPS as any}
+              style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            />
+          </Animated.View>
+        </View>
+
+        {/* ── Soft inner glow overlay ───────────────────────────────── */}
+        <View pointerEvents="none" style={[s.innerGlow, {
+          top: 0, left: 0, width: cardWidth, height: cardHeight, borderRadius: 32 * scale,
+        }]} />
+
+        {/* ── Top-left: position + flag + logos ────────────────────── */}
+        <View style={{ position: 'absolute', top: 22 * scale, left: 14 * scale,
+          width: 130 * scale, height: 230 * scale, alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+
+          <TouchableOpacity onPress={onPositionPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={[s.posTxt, {
+              fontSize: 46 * scale, marginBottom: 6 * scale,
+              color: ACCENT_POS,
+              textShadowColor: 'rgba(245,197,24,0.75)',
+              textShadowRadius: 16,
+              textShadowOffset: { width: 0, height: 0 },
+            }]}>
+              {position || '--'}
+            </Text>
           </TouchableOpacity>
 
-          <View style={[styles.ballFlame, { top: (economyVisible ? 214 : 206) * effectiveScale }]}>
-            <Text style={{ fontSize: 20 * effectiveScale }}>⚽</Text>
+          <TouchableOpacity onPress={onCountryPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            {renderFlag()}
+          </TouchableOpacity>
+
+          <View style={{ flexDirection: 'row', gap: 6 * scale, marginTop: 8 * scale }}>
+            <TouchableOpacity onPress={onClubPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              {clubLogo ? (
+                <Image source={{ uri: clubLogo }}
+                  style={{ width: 32 * scale, height: 32 * scale }}
+                  contentFit="contain" cachePolicy="memory-disk" />
+              ) : (
+                <View style={{ width: 32 * scale, height: 32 * scale,
+                  backgroundColor: 'rgba(124,58,237,0.18)', borderRadius: 16 * scale,
+                  alignItems: 'center', justifyContent: 'center',
+                  borderWidth: 1, borderColor: 'rgba(124,58,237,0.3)' }}>
+                  <Text style={{ fontSize: 16 * scale }}>⚽</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
+        </View>
 
-          <GlassSidePanel scale={effectiveScale} side="left" onPress={onClubPress}>
-            {isClubUpdating ? (
-              <ActivityIndicator color={PURPLE_PRIMARY} size="small" />
-            ) : clubLogo ? (
-              <Image
-                source={{ uri: clubLogo }}
-                style={{ width: 40 * effectiveScale, height: 40 * effectiveScale }}
-                contentFit="contain"
-                cachePolicy="memory-disk"
-              />
-            ) : (
-              <Ionicons name="football-outline" size={26 * effectiveScale} color="rgba(168,85,247,0.5)" />
-            )}
-            {favoriteTeam?.trim() ? (
-              <Text style={[styles.clubName, { fontSize: 8 * effectiveScale, marginTop: 6 * effectiveScale }]} numberOfLines={2}>
-                {favoriteTeam}
-              </Text>
-            ) : (
-              <Text style={[styles.clubPlaceholder, { fontSize: 8 * effectiveScale, marginTop: 6 * effectiveScale }]}>
-                {t.profile.profileCardPickClub}
-              </Text>
-            )}
-          </GlassSidePanel>
+        {/* ── Image upload tap area ─────────────────────────────────── */}
+        <TouchableOpacity
+          style={[s.quadrantContainer, { top: 18 * scale, left: 158 * scale,
+            width: 152 * scale, height: 268 * scale }]}
+          onPress={onImageUpload} activeOpacity={0.85}>
+          {!uploadedImage && (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={[s.plusH, { width: 14 * scale, height: 2 * scale, backgroundColor: ACCENT_STAT }]} />
+              <View style={[s.plusV, { width: 2 * scale, height: 14 * scale, backgroundColor: ACCENT_STAT }]} />
+            </View>
+          )}
+        </TouchableOpacity>
 
-          <GlassSidePanel scale={effectiveScale} side="right" onPress={onStatsPress}>
-            {isStatsUpdating ? (
-              <ActivityIndicator color={PURPLE_PRIMARY} size="small" />
-            ) : (
-              <>
-                <StatRow scale={effectiveScale} icon="person-outline" label="AGE" value={age?.toString() ?? '--'} />
-                <StatRow scale={effectiveScale} icon="resize-outline" label="HGT" value={height?.toString() ?? '--'} />
-                <StatRow scale={effectiveScale} icon="barbell-outline" label="WGT" value={weight?.toString() ?? '--'} />
-                <StatRow scale={effectiveScale} icon="footsteps-outline" label="FOOT" value={foot?.toUpperCase() ?? '--'} />
-              </>
-            )}
-          </GlassSidePanel>
+        {/* ── Stats section ─────────────────────────────────────────── */}
+        <TouchableOpacity
+          style={{ position: 'absolute', top: 308 * scale, left: 22 * scale,
+            right: 22 * scale, bottom: 50 * scale, justifyContent: 'center', zIndex: 10 }}
+          onPress={onStatsPress} activeOpacity={0.9}>
 
-          <View style={[styles.bottomMotto, { bottom: 14 * effectiveScale }]}>
-            <Text style={[styles.mottoLine, { fontSize: 7 * effectiveScale, letterSpacing: 1.4 * effectiveScale }]}>
-              {t.profile.profileCardMotto}
-            </Text>
-            <Text style={[styles.dreamLine, { fontSize: 9 * effectiveScale, marginTop: 3 * effectiveScale }]}>
-              {t.profile.profileCardDream}
-            </Text>
+          {/* Stats background glass */}
+          <View style={[s.statsBg, { borderRadius: 12 * scale, padding: 8 * scale }]}>
+
+            {/* Row 1: AGE + HGT */}
+            <View style={s.statsRow}>
+              <View style={s.statBox}>
+                <Text style={[s.statLabel, { color: LABEL_COL, fontSize: 10 * scale }]}>AGE</Text>
+                <Text style={[s.statValue, { color: ACCENT_STAT, fontSize: 26 * scale }]}>{age ?? '--'}</Text>
+              </View>
+              <View style={[s.statDivider, { backgroundColor: DIVIDER_COL, height: 36 * scale }]} />
+              <View style={s.statBox}>
+                <Text style={[s.statLabel, { color: LABEL_COL, fontSize: 10 * scale }]}>HGT</Text>
+                <Text style={[s.statValue, { color: ACCENT_STAT, fontSize: 26 * scale }]}>{height ?? '--'}</Text>
+              </View>
+            </View>
+
+            {/* Separator */}
+            <View style={[s.statSep, { backgroundColor: SEP_COL, marginVertical: 4 * scale }]} />
+
+            {/* Row 2: WGT + FOOT */}
+            <View style={s.statsRow}>
+              <View style={s.statBox}>
+                <Text style={[s.statLabel, { color: LABEL_COL, fontSize: 10 * scale }]}>WGT</Text>
+                <Text style={[s.statValue, { color: ACCENT_STAT, fontSize: 26 * scale }]}>{weight ?? '--'}</Text>
+              </View>
+              <View style={[s.statDivider, { backgroundColor: DIVIDER_COL, height: 36 * scale }]} />
+              <View style={s.statBox}>
+                <Text style={[s.statLabel, { color: LABEL_COL, fontSize: 10 * scale }]}>FOOT</Text>
+                <Text style={[s.statValue, { color: ACCENT_STAT, fontSize: 26 * scale }]}>
+                  {foot?.toUpperCase() ?? '--'}
+                </Text>
+              </View>
+            </View>
           </View>
-        </GlassWrapper>
+        </TouchableOpacity>
 
-        <View pointerEvents="none" style={[styles.glassBorder, { borderRadius: radius }]} />
       </View>
-
-      {economyVisible ? (
-        <>
-          <LevelInfoModal visible={showLevelInfo} onClose={closeLevelInfo} level={level!} />
-          <CoinsInfoModal visible={showCoinsInfo} onClose={closeCoinsInfo} />
-        </>
-      ) : null}
     </View>
   );
 });
 
 export default ProfileCard;
 
-const styles = StyleSheet.create({
-  outer: {
-    alignSelf: 'center',
-  },
-  cardShell: {
+// ── Styles ───────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  container: {
     position: 'relative',
-    overflow: 'hidden',
+    elevation: 30,
     writingDirection: 'ltr',
   },
-  ambientGlow: {
+  cardSvg: { position: 'absolute', top: 0, left: 0 },
+  quadrantContainer: { position: 'absolute', overflow: 'hidden', zIndex: 10 },
+
+  // around-card.png rotating behind the card
+  aroundCard: {
     position: 'absolute',
-    alignSelf: 'center',
-    top: '2%',
-    backgroundColor: 'rgba(124,58,237,0.22)',
-    shadowColor: PURPLE_PRIMARY,
-    shadowOpacity: 0.65,
-    shadowRadius: 32,
+    zIndex: -1,
+  },
+
+  // Animated inner border glow
+  innerBorderGlow: {
+    position: 'absolute',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,215,0,0.45)',
+    shadowColor: '#FFD700',
     shadowOffset: { width: 0, height: 0 },
-  },
-  cardGlass: {
-    flex: 1,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  glassBorder: {
-    ...StyleSheet.absoluteFillObject,
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.35)',
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 0,
     zIndex: 3,
   },
-  topAccent: {
+
+  // Glass reflection top-left
+  glassReflect: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 2,
-  },
-  glassShine: {
-    position: 'absolute',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    transform: [{ rotate: '-12deg' }],
-    zIndex: 1,
-  },
-  economyRow: {
-    position: 'absolute',
-    zIndex: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  glassChip: {
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  glassChipTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(124,58,237,0.08)',
-  },
-  chipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    zIndex: 1,
-  },
-  lvlLabel: {
-    color: PURPLE_SOFT,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  lvlNumber: {
-    color: '#fff',
-    fontWeight: '900',
-  },
-  coinTxt: {
-    color: '#fff',
-    fontWeight: '800',
-  },
-  topLeft: {
-    position: 'absolute',
+    backgroundColor: 'rgba(255,255,255,0.055)',
     zIndex: 4,
-    maxWidth: '36%',
+    transform: [{ rotate: '-15deg' }],
   },
-  positionTagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  positionTag: {
-    color: 'rgba(255,255,255,0.65)',
-    fontWeight: '700',
-    letterSpacing: 0.6,
-  },
-  positionAbbr: {
-    color: PURPLE_PRIMARY,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    marginTop: 1,
-    textShadowColor: 'rgba(168,85,247,0.6)',
-    textShadowRadius: 10,
-    textShadowOffset: { width: 0, height: 0 },
-  },
-  topRight: {
+
+  // Shimmer bar
+  shimmer: {
+    width: '100%',
+    height: '320%',
     position: 'absolute',
-    zIndex: 4,
-    alignItems: 'flex-end',
+    top: '-110%',
+    left: '-60%',
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    maxWidth: '100%',
-  },
-  arName: {
-    color: TEXT_PRIMARY,
-    fontWeight: '800',
-    flexShrink: 1,
-  },
-  cardUsername: {
-    color: 'rgba(255,255,255,0.45)',
-    fontWeight: '600',
-    textAlign: 'right',
-  },
-  countryPill: {
-    overflow: 'hidden',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    maxWidth: '100%',
-    minWidth: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  countryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    zIndex: 1,
-    paddingHorizontal: 2,
-  },
-  countryTxt: {
-    color: PURPLE_SOFT,
-    fontWeight: '700',
-    flexShrink: 1,
-  },
-  portraitWrap: {
+
+  // Holo rainbow bar
+  holoSweep: {
+    width: '80%',
+    height: '320%',
     position: 'absolute',
-    alignSelf: 'center',
-    left: '50%',
+    top: '-110%',
+    left: '-40%',
+  },
+
+  // Soft inner glow vignette
+  innerGlow: {
+    position: 'absolute',
     zIndex: 5,
-    borderColor: 'rgba(168,85,247,0.75)',
-    backgroundColor: 'rgba(5,1,13,0.35)',
-    shadowColor: PURPLE_PRIMARY,
-    shadowOpacity: 0.5,
-    shadowRadius: 14,
+    shadowColor: '#4C1D95',
     shadowOffset: { width: 0, height: 0 },
-    overflow: 'hidden',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    // Simulated via background
+    backgroundColor: 'transparent',
   },
-  portrait: {
-    width: '100%',
-    height: '100%',
+
+  // Position text
+  posTxt: {
+    fontFamily: FONT_EXTRABOLD,
+    fontWeight: '900',
+    textAlign: 'center',
+    letterSpacing: 2,
   },
-  portraitRing: {
-    ...StyleSheet.absoluteFillObject,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  uploadOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  uploadHint: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(5,1,13,0.35)',
-  },
-  ballFlame: {
-    position: 'absolute',
-    alignSelf: 'center',
-    zIndex: 5,
-    alignItems: 'center',
-  },
-  sidePanel: {
-    position: 'absolute',
-    zIndex: 4,
-    overflow: 'hidden',
+
+  // Stats
+  statsBg: {
+    backgroundColor: 'rgba(5,1,13,0.55)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(124,58,237,0.2)',
   },
-  sidePanelInner: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clubName: {
-    color: 'rgba(255,255,255,0.82)',
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  clubPlaceholder: {
-    color: 'rgba(255,255,255,0.3)',
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  statRow: {
+  statsRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
+    paddingVertical: 3,
+    writingDirection: 'ltr',
   },
-  statIconWrap: {
-    backgroundColor: 'rgba(124,58,237,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  statTextCol: {
-    flex: 1,
-    minWidth: 0,
-  },
+  statBox: { flex: 1, alignItems: 'center', paddingVertical: 2 },
   statLabel: {
-    color: 'rgba(196,181,253,0.55)',
+    fontFamily: FONT_BOLD,
     fontWeight: '700',
-    letterSpacing: 0.6,
+    letterSpacing: 1.8,
+    marginBottom: 1,
+    writingDirection: 'ltr',
+    textTransform: 'uppercase',
   },
   statValue: {
-    color: TEXT_PRIMARY,
-    fontWeight: '800',
+    fontFamily: FONT_EXTRABOLD,
+    fontWeight: '900',
+    writingDirection: 'ltr',
+    letterSpacing: -0.5,
   },
-  bottomMotto: {
-    position: 'absolute',
+  statDivider: { width: 1 },
+  statSep: {
+    height: 1,
+    width: '55%',
     alignSelf: 'center',
-    alignItems: 'center',
-    zIndex: 4,
   },
-  mottoLine: {
-    color: 'rgba(255,255,255,0.38)',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  dreamLine: {
-    color: 'rgba(255,255,255,0.88)',
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
+
+  plusH: { position: 'absolute' },
+  plusV: { position: 'absolute' },
 });

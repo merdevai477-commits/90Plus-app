@@ -97,8 +97,7 @@ export default ContentTabs;
 const styles = StyleSheet.create({
     container: {
         paddingHorizontal: 20,
-        marginTop: 4,
-        marginBottom: 16,
+        marginBottom: 20,
     },
     tabsWrapper: {
         flexDirection: 'row',
@@ -111,7 +110,7 @@ const styles = StyleSheet.create({
     },
     tab: {
         flex: 1,
-        paddingVertical: 10,
+        paddingVertical: 12,
         alignItems: 'center',
         borderRadius: 12,
         position: 'relative',
@@ -131,14 +130,17 @@ const styles = StyleSheet.create({
     },
     tabLabel: {
         color: ProfileTheme.colors.textSecondary,
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '500',
         flexShrink: 1,
-        minWidth: 0,
+        minWidth: 0, // Allow text to shrink below content size
     },
     activeTabLabel: {
         color: ProfileTheme.colors.neonBlue,
-        fontWeight: '700',
+        fontWeight: 'bold',
+        textShadowColor: ProfileTheme.colors.neonBlue,
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 8,
     },
     badge: {
         backgroundColor: 'rgba(255,255,255,0.1)',

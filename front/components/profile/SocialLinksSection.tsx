@@ -13,7 +13,6 @@ import { ProfileTheme } from '../../constants/ProfileTheme';
 import * as Haptics from 'expo-haptics';
 import { logger } from '../../utils/logger';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { useTranslation } from '../../src/i18n';
 
 interface SocialIconConfig {
   icon: keyof typeof FontAwesome.glyphMap | keyof typeof Ionicons.glyphMap;
@@ -81,8 +80,6 @@ export default function SocialLinksSection({
   isOwnProfile = false,
   onEditPress,
 }: SocialLinksSectionProps) {
-  const { t } = useTranslation();
-
   const handleLinkPress = async (link: SocialLink) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
@@ -146,7 +143,7 @@ export default function SocialLinksSection({
             <TouchableOpacity onPress={onEditPress} activeOpacity={0.8} style={styles.emptyBtnWrap}>
               <EmptyGlass {...(emptyProps as any)} style={StyleSheet.absoluteFill} />
               <Ionicons name="add-circle-outline" size={18} color="rgba(255,255,255,0.6)" />
-              <Text style={styles.emptyText}>{t.profile.addSocialLinks}</Text>
+              <Text style={styles.emptyText}>أضف حساباتك على السوشيال ميديا</Text>
             </TouchableOpacity>
           );
         })()
@@ -158,7 +155,7 @@ export default function SocialLinksSection({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 16,
     alignItems: 'center',
   },
   row: {
@@ -198,15 +195,18 @@ const styles = StyleSheet.create({
   emptyBtnWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: isLiquidGlassSupported ? 'transparent' : 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderStyle: 'dashed',
+    backgroundColor: isLiquidGlassSupported ? 'transparent' : 'rgba(255,255,255,0.04)',
   },
   emptyText: {
-    color: 'rgba(255,255,255,0.42)',
+    color: 'rgba(255,255,255,0.55)',
     fontSize: 13,
     fontWeight: '500',
   },

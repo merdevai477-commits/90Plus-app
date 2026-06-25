@@ -331,7 +331,7 @@ class PreloadManagerClass {
             isVerified: userResult.isVerified || false,
             isDeveloper: userResult.isDeveloper || false,
             favoriteTeam: userResult.favoriteTeam || '',
-            location: (userResult as any).country || '',
+            location: (userResult as any).country || 'مصر',
             lastUsernameChange: userResult.lastUsernameChange ? new Date(userResult.lastUsernameChange) : null,
             socials: {},
             socialLinks: (userResult as any).socialLinks || undefined,

@@ -183,17 +183,11 @@ async function handleUserUpdated(data: ClerkWebhookEvent['data']): Promise<void>
     };
 
     if (existingUser) {
-        const clerkName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
-        const shouldRefreshDisplayName =
-            clerkName.length > 0 &&
-            (
-                !existingUser.displayName ||
-                existingUser.displayName === existingUser.username ||
-                /^user_[a-z0-9]+$/i.test(existingUser.displayName)
-            );
-
-        if (shouldRefreshDisplayName) {
-            updateData.displayName = clerkName;
+        // Only update displayName if the user hasn't customized it (i.e. it matches their old Clerk name or is missing)
+        // Or if you prefer, just never overwrite it from Clerk after creation.
+        // Let's protect it: if they already have a displayName, we leave it alone.
+        if (!existingUser.displayName && data.first_name) {
+            updateData.displayName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
         }
 
         // Only update avatar if they don't have one, OR if they are still using the Clerk avatar.

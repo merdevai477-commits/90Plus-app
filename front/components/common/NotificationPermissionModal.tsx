@@ -5,15 +5,16 @@ import {
   Modal,
   TouchableOpacity,
   StyleSheet,
-  useWindowDimensions,
+  Dimensions,
   Animated,
+  Platform,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bell, Radio, Newspaper, X } from 'lucide-react-native';
+import { Bell, Sparkles, X, ChevronRight } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { PURPLE_PRIMARY, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from '@/constants/tokens';
-import { useTranslation } from '../../src/i18n';
+
+const { width } = Dimensions.get('window');
 
 interface NotificationPermissionModalProps {
   visible: boolean;
@@ -26,39 +27,46 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
   onClose,
   onConfirm,
 }) => {
-  const { t, isRTL } = useTranslation();
-  const { width } = useWindowDimensions();
-  const cardWidth = Math.min(width - 40, 360);
-  const scaleAnim = useRef(new Animated.Value(0.94)).current;
+  const scaleAnim = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
-  const textAlign = isRTL ? 'right' : 'left';
-
-  const features = [
-    { id: 'live', Icon: Radio, label: t.notificationPermission.liveGoals },
-    { id: 'news', Icon: Newspaper, label: t.notificationPermission.exclusiveNews },
-  ] as const;
+  const floatingAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
         Animated.spring(scaleAnim, {
           toValue: 1,
-          tension: 120,
-          friction: 14,
+          tension: 100,
+          friction: 12,
           useNativeDriver: true,
         }),
         Animated.timing(opacityAnim, {
           toValue: 1,
-          duration: 220,
+          duration: 300,
           useNativeDriver: true,
         }),
       ]).start();
-      return;
-    }
 
-    scaleAnim.setValue(0.94);
-    opacityAnim.setValue(0);
-  }, [visible, scaleAnim, opacityAnim]);
+      // Floating animation for the bell
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(floatingAnim, {
+            toValue: -15,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(floatingAnim, {
+            toValue: 0,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      scaleAnim.setValue(0);
+      opacityAnim.setValue(0);
+    }
+  }, [visible]);
 
   const handleConfirm = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -79,181 +87,236 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
       onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
-        <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
-
+        <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+        
         <Animated.View
           style={[
             styles.container,
-            { width: cardWidth, opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
+            {
+              opacity: opacityAnim,
+              transform: [{ scale: scaleAnim }],
+            },
           ]}
         >
-          <View style={styles.card}>
-            <TouchableOpacity
-              onPress={handleClose}
-              style={styles.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel={t.notificationPermission.closeA11y}
-            >
-              <X size={18} color={TEXT_MUTED} strokeWidth={2} />
+          <LinearGradient
+            colors={['#1a1a2e', '#0f0f1a']}
+            style={styles.card}
+          >
+            {/* Close Button */}
+            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+              <X size={20} color="#666" />
             </TouchableOpacity>
 
-            <LinearGradient
-              colors={['rgba(124,58,237,0.22)', 'rgba(59,130,246,0.08)']}
-              style={styles.iconWrap}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Bell size={28} color={TEXT_PRIMARY} strokeWidth={1.75} />
-            </LinearGradient>
-
-            <Text style={[styles.title, { textAlign }]}>{t.notificationPermission.title}</Text>
-            <Text style={[styles.description, { textAlign }]}>
-              {t.notificationPermission.description}
-            </Text>
-
-            <View style={styles.features}>
-              {features.map(({ id, Icon, label }) => (
-                <View key={id} style={styles.featureRow}>
-                  <View style={styles.featureIcon}>
-                    <Icon size={16} color={PURPLE_PRIMARY} strokeWidth={2} />
+            {/* Icon Section */}
+            <View style={styles.iconContainer}>
+              <Animated.View style={{ transform: [{ translateY: floatingAnim }] }}>
+                <View style={styles.bellBackground}>
+                  <Bell size={60} color="#22c55e" strokeWidth={1.5} />
+                  <View style={styles.pulseContainer}>
+                    <Animated.View style={styles.pulse} />
                   </View>
-                  <Text style={[styles.featureText, { textAlign }]}>{label}</Text>
                 </View>
-              ))}
+              </Animated.View>
+              <View style={styles.sparkleLeft}>
+                <Sparkles size={20} color="#fbbf24" />
+              </View>
+              <View style={styles.sparkleRight}>
+                <Sparkles size={16} color="#fbbf24" />
+              </View>
             </View>
 
-            <TouchableOpacity onPress={handleConfirm} activeOpacity={0.9} style={styles.primaryButton}>
-              <LinearGradient
-                colors={[PURPLE_PRIMARY, '#5b21b6']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.gradientButton}
-              >
-                <Text style={styles.primaryButtonText}>{t.notificationPermission.turnOn}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+            {/* Content Section */}
+            <View style={styles.content}>
+              <Text style={styles.title}>لا تفوت لحظة حاسمة!</Text>
+              <Text style={styles.description}>
+                احصل على تنبيهات فورية بالأهداف، النتائج المباشرة، وأخبار الأندية المفضلة لديك فور حدوثها.
+              </Text>
+              
+              <View style={styles.features}>
+                <FeatureItem icon={<Bell size={14} color="#22c55e" />} text="أهداف ومباريات مباشرة" />
+                <FeatureItem icon={<Sparkles size={14} color="#fbbf24" />} text="أخبار حصرية وتحديثات" />
+              </View>
+            </View>
 
-            <TouchableOpacity onPress={handleClose} style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>{t.notificationPermission.maybeLater}</Text>
-            </TouchableOpacity>
-          </View>
+            {/* Actions */}
+            <View style={styles.actions}>
+              <TouchableOpacity onPress={handleConfirm} activeOpacity={0.8} style={styles.primaryButton}>
+                <LinearGradient
+                  colors={['#22c55e', '#16a34a']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.gradientButton}
+                >
+                  <Text style={styles.primaryButtonText}>تفعيل التنبيهات الآن</Text>
+                  <ChevronRight size={18} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={handleClose} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>ربما لاحقاً</Text>
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
         </Animated.View>
       </View>
     </Modal>
   );
 };
 
+const FeatureItem = ({ icon, text }: { icon: React.ReactNode; text: string }) => (
+  <View style={styles.featureItem}>
+    <View style={styles.featureIcon}>{icon}</View>
+    <Text style={styles.featureText}>{text}</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   container: {
-    borderRadius: 24,
+    width: width * 0.88,
+    borderRadius: 32,
     overflow: 'hidden',
-    shadowColor: '#7c3aed',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 12,
+    shadowColor: '#22c55e',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
   },
   card: {
-    paddingHorizontal: 22,
-    paddingTop: 28,
-    paddingBottom: 20,
-    backgroundColor: 'rgba(12,8,20,0.98)',
+    padding: 24,
+    paddingTop: 40,
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.22)',
-    borderRadius: 24,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   closeButton: {
     position: 'absolute',
-    top: 14,
-    right: 14,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
+    top: 20,
+    right: 20,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  iconContainer: {
+    width: 140,
+    height: 140,
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  iconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.35)',
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: TEXT_PRIMARY,
-    letterSpacing: -0.4,
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 14,
-    color: TEXT_SECONDARY,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  features: {
-    gap: 10,
     marginBottom: 20,
   },
-  featureRow: {
+  bellBackground: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.2)',
+  },
+  pulseContainer: {
+    position: 'absolute',
+    zIndex: -1,
+  },
+  pulse: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 2,
+    borderColor: 'rgba(34, 197, 94, 0.3)',
+  },
+  sparkleLeft: {
+    position: 'absolute',
+    top: 20,
+    left: 10,
+  },
+  sparkleRight: {
+    position: 'absolute',
+    bottom: 30,
+    right: 5,
+  },
+  content: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 12,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  description: {
+    fontSize: 15,
+    color: '#9ca3af',
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 10,
+    marginBottom: 20,
+  },
+  features: {
+    flexDirection: 'row',
+    gap: 15,
+    justifyContent: 'center',
+  },
+  featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   featureIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
-    backgroundColor: 'rgba(124,58,237,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.2)',
+    alignItems: 'center',
   },
   featureText: {
-    flex: 1,
-    color: TEXT_PRIMARY,
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
+    color: '#d1d5db',
+    fontSize: 12,
+    fontWeight: '500',
   },
   actions: {
     width: '100%',
-    gap: 10,
+    gap: 12,
   },
   primaryButton: {
-    borderRadius: 14,
+    width: '100%',
+    borderRadius: 18,
     overflow: 'hidden',
   },
   gradientButton: {
-    paddingVertical: 15,
+    paddingVertical: 16,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
   },
   primaryButtonText: {
-    color: TEXT_PRIMARY,
-    fontSize: 16,
-    fontWeight: '800',
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: 'bold',
   },
   secondaryButton: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   secondaryButtonText: {
-    color: TEXT_MUTED,
-    fontSize: 14,
+    color: '#6b7280',
+    fontSize: 15,
     fontWeight: '600',
   },
 });

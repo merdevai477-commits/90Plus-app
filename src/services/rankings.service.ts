@@ -3,7 +3,6 @@
  */
 
 import prisma from '../lib/prisma';
-import { resolvePublicDisplayName } from '../utils/display-name.utils';
 import { followCountsFromPrisma } from '../utils/follow-count.utils';
 
 export type RankPeriod = 'weekly' | 'monthly' | '3_days';
@@ -83,7 +82,6 @@ export async function getTopPlayers(
       id: true,
       username: true,
       displayName: true,
-      email: true,
       avatar: true,
       isVerified: true,
       level: true,
@@ -120,9 +118,7 @@ export async function getTopPlayers(
     return {
       id: user.id,
       username: user.username,
-      displayName:
-        resolvePublicDisplayName(user.displayName, user.username, user.email) ||
-        user.displayName,
+      displayName: user.displayName,
       avatar: user.avatar,
       isVerified: user.isVerified,
       level: user.level,

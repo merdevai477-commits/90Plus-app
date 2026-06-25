@@ -185,11 +185,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <AuthScreenShell
-      heroMode="compact"
-      heroTitle="Sign Up"
-      heroSubtitle="Create your account to save picks, reels, and quiz rewards."
-    >
+    <AuthScreenShell heroMode="full" panelOffset={-55}>
       <AuthTextField
         icon={CircleUserRound}
         placeholder="Full Name"
@@ -197,7 +193,6 @@ export default function RegisterScreen() {
         onChangeText={setName}
         autoCapitalize="words"
         autoCorrect={false}
-        compact
       />
       <AuthTextField
         icon={Mail}
@@ -208,7 +203,6 @@ export default function RegisterScreen() {
         value={email}
         onChangeText={setEmail}
         containerStyle={styles.gapTop}
-        compact
       />
       <AuthTextField
         icon={Lock}
@@ -218,7 +212,6 @@ export default function RegisterScreen() {
         value={password}
         onChangeText={setPassword}
         containerStyle={StyleSheet.flatten([styles.gapTop, styles.passwordField])}
-        compact
       />
 
       {!showVerification && (
@@ -313,14 +306,14 @@ function Divider() {
 }
 
 const styles = StyleSheet.create({
-  gapTop: { marginTop: 8 },
-  passwordField: { marginBottom: 4 },
+  gapTop: { marginTop: 12 },
+  passwordField: { marginBottom: 10 },
   termsPressable: {
     width: '100%',
-    marginTop: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    marginTop: 28,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.035)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -366,11 +359,11 @@ const styles = StyleSheet.create({
     backgroundColor: AUTH_ACCENT,
   },
   termsLine: {
-    fontSize: 12.5,
+    fontSize: 13.5,
     color: 'rgba(255,255,255,0.78)',
-    lineHeight: 18,
+    lineHeight: 21,
     fontWeight: '400',
-    letterSpacing: 0.1,
+    letterSpacing: 0.15,
   },
   termsLineRtl: {
     textAlign: 'right',
@@ -378,23 +371,23 @@ const styles = StyleSheet.create({
   },
   termsLink: {
     color: AUTH_ACCENT,
-    fontSize: 12.5,
+    fontSize: 13.5,
     fontWeight: '600',
-    lineHeight: 18,
+    lineHeight: 21,
     textDecorationLine: 'underline',
     textDecorationColor: 'rgba(124,58,237,0.5)',
   },
-  primaryWrap: { marginTop: 12, borderRadius: 14, overflow: 'hidden' },
-  primary: { paddingVertical: 14, alignItems: 'center' },
-  primaryTxt: { fontSize: 16, fontWeight: '800', color: TEXT_PRIMARY },
-  divWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 12, gap: 10 },
+  primaryWrap: { marginTop: 22, borderRadius: 14, overflow: 'hidden' },
+  primary: { paddingVertical: 16, alignItems: 'center' },
+  primaryTxt: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
+  divWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 22, gap: 12 },
   divLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)' },
-  divTxt: { fontSize: 11, color: TEXT_MUTED, fontWeight: '600' },
+  divTxt: { fontSize: 12, color: TEXT_MUTED, fontWeight: '600' },
   socialRow: { flexDirection: 'row', gap: 10 },
-  social: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 12, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  googleG: { fontSize: 17, fontWeight: '800', color: '#4285F4' },
-  socialTxt: { fontSize: 13, fontWeight: '700', color: TEXT_SECONDARY },
-  footer: { marginTop: 8, alignItems: 'center', paddingBottom: 4 },
+  social: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 14, paddingVertical: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  googleG: { fontSize: 18, fontWeight: '800', color: '#4285F4' },
+  socialTxt: { fontSize: 14, fontWeight: '700', color: TEXT_SECONDARY },
+  footer: { marginTop: 5, alignItems: 'center', paddingBottom: 12 },
   footerMuted: { fontSize: 14, color: TEXT_MUTED },
   linkBold: { color: AUTH_ACCENT, fontWeight: '800' },
 

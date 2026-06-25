@@ -11,42 +11,21 @@ const FEATS = [
   { id: 'daily-quiz', Icon: Brain, label: 'Daily\nQuiz' },
 ] as const;
 
-export function AuthHeroBlock({
-  compact,
-  title = 'Login',
-  subtitle,
-  embedded,
-}: {
-  compact?: boolean;
-  title?: string;
-  subtitle?: string;
-  embedded?: boolean;
-}) {
+export function AuthHeroBlock({ compact }: { compact?: boolean }) {
   return (
-    <View
-      style={[
-        styles.hero,
-        compact && styles.heroCompact,
-        embedded && styles.heroEmbedded,
-      ]}
-    >
+    <View style={[styles.hero, compact && styles.heroCompact]}>
       {!compact ? (
         <>
           <Text style={styles.hl1}>All Football.</Text>
           <Text style={styles.hlPurple}>One App.</Text>
           <Text style={styles.sub}>
-            Live scores, breaking news and match updates from leagues worldwide.
+            Live scores, breaking news{'\n'}
+            and match updates from{'\n'}
+            leagues worldwide.
           </Text>
         </>
       ) : (
-        <>
-          <Text style={styles.loginTitle}>{title}</Text>
-          {subtitle ? (
-            <Text style={[styles.subCompact, embedded && styles.subCompactEmbedded]}>
-              {subtitle}
-            </Text>
-          ) : null}
-        </>
+        <Text style={styles.loginTitle}>Login</Text>
       )}
 
       {!compact && (
@@ -56,7 +35,7 @@ export function AuthHeroBlock({
               <View style={styles.featIcon}>
                 <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(124,58,237,0.45)' }]} />
-                <Icon color="#FFFFFF" size={18} strokeWidth={1.5} />
+                <Icon color="#FFFFFF" size={20} strokeWidth={1.5} />
               </View>
               <Text style={styles.featLbl}>{label}</Text>
             </View>
@@ -68,27 +47,24 @@ export function AuthHeroBlock({
 }
 
 const styles = StyleSheet.create({
-  hero: { paddingTop: 8, paddingBottom: 0, paddingHorizontal: 4 },
-  heroCompact: { paddingTop: 8, paddingBottom: 0 },
-  heroEmbedded: { paddingTop: 0, paddingBottom: 12, paddingHorizontal: 0 },
-  hl1: { fontSize: 28, fontWeight: '800', color: TEXT_PRIMARY, letterSpacing: -0.8, lineHeight: 32, textAlign: 'left' },
-  hlPurple: { fontSize: 28, fontWeight: '800', color: AUTH_ACCENT, letterSpacing: -0.8, marginBottom: 2, lineHeight: 32, textAlign: 'left' },
-  sub: { fontSize: 13, lineHeight: 18, color: TEXT_SECONDARY, opacity: 0.95, textAlign: 'left', maxWidth: 320, marginBottom: 6 },
-  subCompact: { fontSize: 13, lineHeight: 18, color: TEXT_SECONDARY, opacity: 0.95, textAlign: 'left', marginTop: 4, marginBottom: 0 },
-  subCompactEmbedded: { marginBottom: 0 },
-  loginTitle: { fontSize: 26, fontWeight: '800', color: TEXT_PRIMARY, letterSpacing: -0.5, textAlign: 'left', marginBottom: 0 },
+  hero: { paddingTop: 85, paddingBottom: 35, paddingHorizontal: 16 },
+  heroCompact: { paddingTop: 60, paddingBottom: 15 },
+  hl1: { fontSize: 34, fontWeight: '800', color: TEXT_PRIMARY, letterSpacing: -1, lineHeight: 40, textAlign: 'left' },
+  hlPurple: { fontSize: 34, fontWeight: '800', color: AUTH_ACCENT, letterSpacing: -1, marginBottom: 4, lineHeight: 40, textAlign: 'left' },
+  sub: { fontSize: 14, lineHeight: 20, color: TEXT_SECONDARY, opacity: 0.95, textAlign: 'left', maxWidth: 340, marginBottom: 20 },
+  loginTitle: { fontSize: 28, fontWeight: '800', color: TEXT_PRIMARY, letterSpacing: -0.5, textAlign: 'left', marginBottom: 4 },
   rowFeats: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
-    marginTop: 4,
-    gap: 18,
+    marginTop: 12,
+    gap: 24,
   },
-  feat: { alignItems: 'center', gap: 6, width: 64 },
+  feat: { alignItems: 'center', gap: 8, width: 72 },
   featIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 1.5,
     borderColor: 'rgba(124,58,237,0.6)',
     alignItems: 'center',

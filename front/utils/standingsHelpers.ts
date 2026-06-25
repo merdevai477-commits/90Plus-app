@@ -94,26 +94,3 @@ export function resolveStandingsGroupsForMatch(
 export function sortStandingsGroups(groups: StandingsGroup[]): StandingsGroup[] {
   return [...groups].sort((a, b) => a.group.localeCompare(b.group));
 }
-
-export function formatStandingsGroupShortName(group: string): string {
-  return group.replace(/^Group\s+/i, '').trim() || group;
-}
-
-export function isMultiGroupStandings(groups: StandingsGroup[]): boolean {
-  return groups.length > 1 && groups.some((g) => g.group !== 'Table');
-}
-
-export function findStandingsGroupForMatch(
-  groups: StandingsGroup[],
-  home: MatchTeamRef,
-  away: MatchTeamRef,
-): StandingsGroup | undefined {
-  const shared = groups.find(
-    (g) => groupContainsTeam(g, home) && groupContainsTeam(g, away),
-  );
-  if (shared) return shared;
-
-  return groups.find(
-    (g) => groupContainsTeam(g, home) || groupContainsTeam(g, away),
-  );
-}

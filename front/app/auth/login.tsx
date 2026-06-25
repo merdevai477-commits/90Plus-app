@@ -260,11 +260,9 @@ export default function LoginScreen() {
           : tCommon.loginMfaEmailHint;
 
   return (
-    <AuthScreenShell
-      heroMode="compact"
-      heroTitle="Login"
-      heroSubtitle="Sign in to keep your picks, alerts, and AI history in sync."
-    >
+    <AuthScreenShell heroMode="compact" panelOffset={60}>
+      <Text style={styles.subMuted}>Sign in to keep your picks, alerts, and AI history in sync.</Text>
+
       <AuthTextField
         icon={Mail}
         placeholder="Email"
@@ -274,7 +272,6 @@ export default function LoginScreen() {
         value={email}
         onChangeText={setEmail}
         containerStyle={styles.mt}
-        compact
       />
       <AuthTextField
         icon={Lock}
@@ -283,7 +280,6 @@ export default function LoginScreen() {
         value={password}
         onChangeText={setPassword}
         containerStyle={styles.gap}
-        compact
       />
 
       <Pressable hitSlop={8} style={styles.forgot} onPress={() => router.push('/auth/forgot-password')}>
@@ -439,21 +435,22 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  mt: { marginTop: 0 },
-  gap: { marginTop: 6 },
-  forgot: { alignSelf: 'flex-end', marginTop: 6 },
+  subMuted: { marginTop: 9, marginBottom: 20, fontSize: 14, color: TEXT_SECONDARY, lineHeight: 20, textAlign: 'left' },
+  mt: { marginTop: 4 },
+  gap: { marginTop: 12 },
+  forgot: { alignSelf: 'flex-end', marginTop: 10 },
   forgotTxt: { fontSize: 13, fontWeight: '700', color: AUTH_ACCENT },
-  primaryWrap: { marginTop: 10, borderRadius: 14, overflow: 'hidden' },
-  primary: { paddingVertical: 13, alignItems: 'center' },
-  primaryTxt: { fontSize: 16, fontWeight: '800', color: TEXT_PRIMARY },
-  divWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 10, gap: 8 },
+  primaryWrap: { marginTop: 22, borderRadius: 14, overflow: 'hidden' },
+  primary: { paddingVertical: 16, alignItems: 'center' },
+  primaryTxt: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
+  divWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 22, gap: 12 },
   divLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)' },
-  divTxt: { fontSize: 11, color: TEXT_MUTED, fontWeight: '600' },
-  socialRow: { flexDirection: 'row', gap: 8 },
-  social: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 11, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  googleG: { fontSize: 17, fontWeight: '800', color: '#4285F4' },
-  socialTxt: { fontSize: 13, fontWeight: '700', color: TEXT_SECONDARY },
-  footer: { marginTop: 8, alignItems: 'center', paddingBottom: 2 },
+  divTxt: { fontSize: 12, color: TEXT_MUTED, fontWeight: '600' },
+  socialRow: { flexDirection: 'row', gap: 10 },
+  social: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  googleG: { fontSize: 18, fontWeight: '800', color: '#4285F4' },
+  socialTxt: { fontSize: 14, fontWeight: '700', color: TEXT_SECONDARY },
+  footer: { marginTop: 20, alignItems: 'center', paddingBottom: 16 },
   footerMuted: { fontSize: 14, color: TEXT_MUTED },
   linkBold: { color: AUTH_ACCENT, fontWeight: '800' },
   modalOverlay: { flex: 1 },
