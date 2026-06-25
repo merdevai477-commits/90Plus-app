@@ -17,7 +17,7 @@ import {
   sortPlayersByGrid,
 } from '../../utils/lineupGrid';
 
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { ratingBadgeColor } from '../../utils/lineupMatchState';
 
 const { width } = Dimensions.get('window');
@@ -438,12 +438,12 @@ export const FootballField: React.FC<FootballFieldProps> = ({
                 <View style={viewStyles.eventBadges}>
                   {goals > 0 ? (
                     <View style={viewStyles.miniBadge}>
-                      <Ionicons name="football" size={8} color="#fff" />
+                      <MaterialCommunityIcons name="soccer" size={9} color="#fff" />
                     </View>
                   ) : null}
                   {assists > 0 ? (
                     <View style={[viewStyles.miniBadge, { backgroundColor: '#3b82f6' }]}>
-                      <Text style={viewStyles.miniBadgeText}>A</Text>
+                      <Ionicons name="star" size={9} color="#fbbf24" />
                     </View>
                   ) : null}
                 </View>
@@ -511,7 +511,7 @@ export const FootballField: React.FC<FootballFieldProps> = ({
                 style={[
                   viewStyles.absolutePlayer,
                   {
-                    top: `${Math.min(92, Math.max(4, player.fieldLine ?? 50))}%`,
+                    top: `${Math.min(92, Math.max(8, player.fieldLine ?? 50))}%`,
                     left: `${Math.min(92, Math.max(8, player.fieldSide ?? 50))}%`,
                   },
                 ]}

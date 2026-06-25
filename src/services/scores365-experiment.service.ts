@@ -9,7 +9,7 @@ import { isWorldCupOnlyMode } from '../config/world-cup-only-mode.config';
 import { matchCacheService } from './match-cache.service';
 import type { FixtureFromAPI } from './match-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
-import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
+import { buildScores365AthletePhotoUrl, buildScores365CoachPhotoUrl } from '../utils/scores365-athlete-photo';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
@@ -1295,7 +1295,7 @@ export function mapScores365Lineups(
       coach: {
         id: coachMember?.id ?? null,
         name: coachMeta?.name ?? coachMeta?.shortName ?? null,
-        photo: coachMember?.id ? buildScores365AthletePhotoUrl(coachMember.id, 80) : null,
+        photo: coachMember?.id ? buildScores365CoachPhotoUrl(coachMember.id, 80) : null,
       },
       formation: side.lineups.formation ?? null,
       startXI: starters.map((m) => {
