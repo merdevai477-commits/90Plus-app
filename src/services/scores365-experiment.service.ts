@@ -10,6 +10,7 @@ import { matchCacheService } from './match-cache.service';
 import type { FixtureFromAPI } from './match-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
+import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
 const SCORES365_FIXTURES_BASE = 'https://webws.365scores.com/web/games/fixtures/';
@@ -1320,7 +1321,7 @@ export function mapScores365Lineups(
             grid,
             fieldLine: m.yardFormation?.fieldLine ?? null,
             fieldSide: m.yardFormation?.fieldSide ?? null,
-            photo: null,
+            photo: buildScores365AthletePhotoUrl(m.id, 80),
             rating: matchStats.rating,
             goals: matchStats.goals,
             assists: matchStats.assists,
@@ -1341,7 +1342,7 @@ export function mapScores365Lineups(
               number: meta?.jerseyNumber ?? 0,
               pos: posFrom365(m.formation?.shortName),
               grid: null,
-              photo: null,
+              photo: buildScores365AthletePhotoUrl(m.id, 80),
               rating: matchStats.rating,
               goals: matchStats.goals,
               assists: matchStats.assists,
@@ -1413,6 +1414,11 @@ export async function mapScores365ToApiFootballFixture(
         id: game.venue?.id ?? base.fixture.venue?.id ?? null,
         name: game.venue?.name ?? base.fixture.venue?.name ?? null,
         city: base.fixture.venue?.city ?? null,
+        image: game.venue?.id
+          ? `https://imagecache.365scores.com/image/upload/f_jpg,w_800,h_450,c_fill,q_auto:eco/v1/Venues/${game.venue.id}`
+          : (base.fixture.venue?.id
+              ? `https://imagecache.365scores.com/image/upload/f_jpg,w_800,h_450,c_fill,q_auto:eco/v1/Venues/${base.fixture.venue.id}`
+              : null),
       },
     },
     goals: {
@@ -1558,14 +1564,32 @@ export async function getScores365ExperimentBundle(
     }
   }
 
+  const lineupData = mapScores365Lineups(game, base, alignment);
+
   let statistics = (base as any).statistics ?? [];
-  if (!hasApiStatistics(statistics) && events.length > 0) {
-    statistics = buildFallbackStatisticsFromEvents(fixture, events);
+  if (!hasApiStatistics(statistics)) {
+    // Try to aggregate full stats from player-level 365Scores data (shots, passes, fouls, xG…).
+    const playersWithSide = [
+      ...(lineupData[0]?.startXI ?? []).map((l: any) => ({ side: 'home' as const, stats: l.player._stats365 })),
+      ...(lineupData[0]?.substitutes ?? []).map((l: any) => ({ side: 'home' as const, stats: l.player._stats365 })),
+      ...(lineupData[1]?.startXI ?? []).map((l: any) => ({ side: 'away' as const, stats: l.player._stats365 })),
+      ...(lineupData[1]?.substitutes ?? []).map((l: any) => ({ side: 'away' as const, stats: l.player._stats365 })),
+    ];
+    const teamRefs = {
+      home: { id: base.teams.home?.id ?? 0, name: base.teams.home?.name ?? 'Home', logo: (base.teams.home as any)?.logo ?? '' },
+      away: { id: base.teams.away?.id ?? 0, name: base.teams.away?.name ?? 'Away', logo: (base.teams.away as any)?.logo ?? '' },
+    };
+    const playerStats = buildTeamStatisticsFrom365Players(playersWithSide, teamRefs);
+    if (playerStats.length > 0) {
+      statistics = playerStats;
+    } else if (events.length > 0) {
+      statistics = buildFallbackStatisticsFromEvents(fixture, events);
+    }
   }
 
   return {
     fixture,
-    lineups: mapScores365Lineups(game, base, alignment),
+    lineups: lineupData,
     events,
     statistics,
     venue: fixture.fixture.venue ?? null,

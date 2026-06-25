@@ -229,7 +229,7 @@ const viewStyles = StyleSheet.create<{
   },
   absolutePlayer: {
     position: 'absolute',
-    transform: [{ translateX: -35 }, { translateY: -28 }],
+    transform: [{ translateX: -41 }, { translateY: -36 }],
     zIndex: 2,
   },
   playerRow: {
@@ -239,20 +239,20 @@ const viewStyles = StyleSheet.create<{
   },
   playerWrapper: {
     alignItems: 'center',
-    width: 70,
+    width: 82,
   },
   playerCircleContainer: {
-    width: 40,
-    height: 40,
+    width: 52,
+    height: 52,
     marginBottom: 4,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   playerPhotoCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#fff',
     overflow: 'hidden',
     alignItems: 'center',
@@ -326,7 +326,7 @@ const imageStyles = StyleSheet.create<{
   playerImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 20,
+    borderRadius: 26,
   },
 });
 
@@ -358,10 +358,13 @@ const textStyles = StyleSheet.create<{
     fontWeight: 'bold',
   },
   playerNameText: {
-    color: '#9ca3af',
-    fontSize: 10,
-    fontWeight: '500',
+    color: '#f0f0f0',
+    fontSize: 11,
+    fontWeight: '700',
     textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });
 
