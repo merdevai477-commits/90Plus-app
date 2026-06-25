@@ -21,7 +21,22 @@ import { prefetchFootballTranslations } from '../../src/stores/footballTranslati
 import { collectUniqueStrings } from '../../utils/footballNamePrefetch';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
+import { TeamToggle } from '../../components/match-details/TeamToggle';
 import { APP_BG } from '../../constants/ui';
+import {
+  BG_BASE,
+  GLASS_BORDER_SIDE,
+  GLASS_BORDER_TOP,
+  GLASS_CARD,
+  PURPLE_GLOW_SM,
+  PURPLE_PRIMARY,
+  PURPLE_SOFT,
+  RADIUS_LG,
+  RADIUS_MD,
+  TEXT_MUTED,
+  TEXT_PRIMARY,
+  TEXT_SECONDARY,
+} from '../../constants/tokens';
 import { FootballField } from '../../components/match-details/FootballField';
 import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
 import { applySubstitutionsToPitch } from '../../utils/lineupMatchState';
@@ -46,6 +61,7 @@ import {
 import { hasLineupData, isAuthoritativeLineupData } from '../../utils/matchLineupsFallback';
 import { sortPlayersByGrid } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
+import { buildScores365AthletePhotoUrl } from '../../utils/scores365AthletePhoto';
 import {
   WC_LEAGUE_ID,
   SCORES365_LEAGUE_ID_OFFSET,
@@ -100,7 +116,13 @@ const MatchDetailsScreen = () => {
   const [standingsSeasonUsed, setStandingsSeasonUsed] = useState<number | null>(null);
   const [standingsUnavailable, setStandingsUnavailable] = useState(false);
 
+  // Home/Away selector shared by Events, Lineups, Previous Results.
+  const [selectedTeamSide, setSelectedTeamSide] = useState<'home' | 'away'>('home');
+  // Selected standings group index (World Cup groups A-G etc.).
+  const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
+
   const fixtureId = parseInt(params.fixtureId || '0', 10);
+
   const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
   const fixture = snapshot?.fixture ?? null;
   const events = snapshot?.events ?? [];
@@ -128,6 +150,15 @@ const MatchDetailsScreen = () => {
   const resolveLineupPlayerPhoto = useCallback(
     (playerId: number, photo?: string | null) =>
       playerPhotoUrl(playerId, photo, is365Fixture ? { source: '365' } : undefined),
+    [is365Fixture],
+  );
+
+  const resolveCoachPhoto = useCallback(
+    (coachId: number | null | undefined, photo?: string | null) => {
+      if (photo?.trim()) return photo;
+      if (is365Fixture && coachId) return buildScores365AthletePhotoUrl(coachId, 80);
+      return '';
+    },
     [is365Fixture],
   );
 
@@ -218,51 +249,7 @@ const MatchDetailsScreen = () => {
     awayLastFixtures,
   ]);
 
-  useEffect(() => {
-    if (!translationsReady) return;
-
-    setHomeLastFixtures([]);
-    setAwayLastFixtures([]);
-    setH2hFixtures([]);
-    setForm365TeamIds({});
-    setStandingsGroups([]);
-    setStandingsSeasonUsed(null);
-    setStandingsUnavailable(false);
-    setLineupFetchAttempts(0);
-    setLineupsError(null);
-    setStatsError(null);
-    setStandingsError(null);
-    setFormError(null);
-    setDetailsFetching(false);
-    setLoading(true);
-    setError(null);
-    setLineupsLoading(false);
-    setStatsLoading(false);
-    setFormLoading(false);
-    setStandingsLoading(false);
-    loadedTabsRef.current = new Set();
-    lineupsPreloadedForRef.current = null;
-
-    void loadMatchDetails();
-
-    fadeAnim.setValue(0);
-    slideAnim.setValue(50);
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 50,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fixtureId, translationsReady]);
-
-  const loadMatchDetails = async () => {
+  const loadMatchDetails = useCallback(async () => {
     if (!t?.matchDetails) return;
 
     if (!fixtureId) {
@@ -315,16 +302,86 @@ const MatchDetailsScreen = () => {
       setLoading(false);
       setDetailsFetching(false);
     }
-  };
+  }, [fixtureId, t]);
+
+  useEffect(() => {
+    if (!translationsReady) return;
+
+    setHomeLastFixtures([]);
+    setAwayLastFixtures([]);
+    setH2hFixtures([]);
+    setForm365TeamIds({});
+    setStandingsGroups([]);
+    setStandingsSeasonUsed(null);
+    setStandingsUnavailable(false);
+    setSelectedTeamSide('home');
+    setSelectedGroupIndex(0);
+    setLineupFetchAttempts(0);
+    setLineupsError(null);
+    setStatsError(null);
+    setStandingsError(null);
+    setFormError(null);
+    setDetailsFetching(false);
+    setLoading(true);
+    setError(null);
+    setLineupsLoading(false);
+    setStatsLoading(false);
+    setFormLoading(false);
+    setStandingsLoading(false);
+    loadedTabsRef.current = new Set();
+    lineupsPreloadedForRef.current = null;
+
+    void loadMatchDetails();
+
+    fadeAnim.setValue(0);
+    slideAnim.setValue(50);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fixtureId, translationsReady, loadMatchDetails]);
+
+  // Default the visible standings group to the one containing either team.
+  useEffect(() => {
+    if (standingsGroups.length <= 1) {
+      setSelectedGroupIndex(0);
+      return;
+    }
+    const homeRef = { id: fixture?.teams?.home?.id, name: fixture?.teams?.home?.name };
+    const awayRef = { id: fixture?.teams?.away?.id, name: fixture?.teams?.away?.name };
+    const idx = standingsGroups.findIndex((g) =>
+      g.standings.some(
+        (row: any) =>
+          standingRowMatchesTeam(row, homeRef) || standingRowMatchesTeam(row, awayRef),
+      ),
+    );
+    setSelectedGroupIndex(idx >= 0 ? idx : 0);
+  }, [standingsGroups, fixture?.teams?.home?.id, fixture?.teams?.away?.id]);
 
   // ── Lazy loaders — called when a tab is first activated ───────────────────
   const loadLineupsIfNeeded = useCallback(async (force = false) => {
+    if (!fixtureId) return;
+
     const snapLineups = useLiveFixtureStore.getState().snapshots[fixtureId]?.lineups;
-    if (!force && loadedTabsRef.current.has('lineups') && isAuthoritativeLineupData(snapLineups)) {
+    if (!force && isAuthoritativeLineupData(snapLineups)) {
+      loadedTabsRef.current.add('lineups');
       return;
     }
+
+    const showLoading = !hasLineupData(snapLineups);
     if (!force) loadedTabsRef.current.add('lineups');
-    setLineupsLoading(true);
+    if (showLoading) {
+      setLineupsLoading(true);
+    }
     setLineupsError(null);
     try {
       const fresh = await ApiFootballService.getFixtureLineups(fixtureId, { skipCache: true });
@@ -431,15 +488,24 @@ const MatchDetailsScreen = () => {
   ]);
 
   const loadStatsIfNeeded = useCallback(async (force = false) => {
-    if (!force && loadedTabsRef.current.has('stats')) return;
+    if (!fixtureId) return;
+
+    const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
+    const snapStats = snap?.statistics ?? [];
+    if (!force && (hasApiStatistics(snapStats) || snap?.statsFromEvents)) {
+      loadedTabsRef.current.add('stats');
+      return;
+    }
+
     if (!force) loadedTabsRef.current.add('stats');
-    setStatsLoading(true);
+    const showLoading = !hasApiStatistics(snapStats) && !snap?.statsFromEvents;
+    if (showLoading) setStatsLoading(true);
     setStatsError(null);
     try {
       await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
-      const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
-      const data = snap?.statistics ?? [];
-      if (isLive() && !hasApiStatistics(data) && !snap?.statsFromEvents) {
+      const freshSnap = useLiveFixtureStore.getState().snapshots[fixtureId];
+      const data = freshSnap?.statistics ?? [];
+      if (isLive() && !hasApiStatistics(data) && !freshSnap?.statsFromEvents) {
         loadedTabsRef.current.delete('stats');
       }
     } catch (err: any) {
@@ -471,17 +537,14 @@ const MatchDetailsScreen = () => {
     };
   }, [fixtureId, isLive, activeTab, loadStatsIfNeeded]);
 
-  const loadFormIfNeeded = useCallback(async () => {
-    if (loadedTabsRef.current.has('form') || !fixture) return;
-    loadedTabsRef.current.add('form');
+  const loadFormIfNeeded = useCallback(async (force = false) => {
+    if (!fixture) return;
+    if (!force && loadedTabsRef.current.has('form')) return;
+    if (!force) loadedTabsRef.current.add('form');
     setFormLoading(true);
+    setFormError(null);
     try {
-      const is365 =
-        (fixture as { _experiment?: string })._experiment === 'scores365' ||
-        (fixture as { _scores365GameId?: number })._scores365GameId != null ||
-        fixture.league?.id === WC_LEAGUE_ID ||
-        (fixture.league?.id ?? 0) >= SCORES365_LEAGUE_ID_OFFSET;
-      if (is365 && fixtureId) {
+      if (is365Fixture && fixtureId) {
         const form365 = await ApiFootballService.get365MatchForm(fixtureId);
         if (form365) {
           setHomeLastFixtures(form365.home);
@@ -493,6 +556,9 @@ const MatchDetailsScreen = () => {
           });
           return;
         }
+        setFormError(t.matchDetails.loadFormFailed || t.matchDetails.noPreviousMatches);
+        loadedTabsRef.current.delete('form');
+        return;
       }
       const homeId = fixture.teams.home.id;
       const awayId = fixture.teams.away.id;
@@ -504,15 +570,24 @@ const MatchDetailsScreen = () => {
       ]);
       if (homeRes.status === 'fulfilled') setHomeLastFixtures(homeRes.value);
       if (awayRes.status === 'fulfilled') setAwayLastFixtures(awayRes.value);
-    } catch { /* silent */ }
-    finally { setFormLoading(false); }
-  }, [fixtureId, fixture]);
+    } catch {
+      setFormError(t.matchDetails.loadFormFailed || t.common.retry);
+      loadedTabsRef.current.delete('form');
+    } finally {
+      setFormLoading(false);
+    }
+  }, [fixtureId, fixture, is365Fixture, t?.matchDetails, t?.common]);
 
   const loadStandingsIfNeeded = useCallback(async (force = false) => {
-    if (!force && loadedTabsRef.current.has('standings')) return;
     if (!fixture) return;
+    if (!force && standingsGroups.length > 0) {
+      loadedTabsRef.current.add('standings');
+      return;
+    }
+    if (!force && loadedTabsRef.current.has('standings')) return;
     if (!force) loadedTabsRef.current.add('standings');
-    setStandingsLoading(true);
+    const showLoading = standingsGroups.length === 0;
+    if (showLoading) setStandingsLoading(true);
     setStandingsError(null);
     setStandingsUnavailable(false);
     try {
@@ -521,12 +596,7 @@ const MatchDetailsScreen = () => {
       // experiment markers, the WC league id, or the namespaced league id, so
       // standings still resolve if a runtime fixture object dropped the markers.
       const non365CompetitionId = scores365CompetitionIdFromLeagueId(fixture.league?.id);
-      const is365 =
-        (fixture as { _experiment?: string })._experiment === 'scores365' ||
-        (fixture as { _scores365GameId?: number })._scores365GameId != null ||
-        fixture.league?.id === WC_LEAGUE_ID ||
-        (fixture.league?.id ?? 0) >= SCORES365_LEAGUE_ID_OFFSET;
-      if (is365) {
+      if (is365Fixture) {
         // Non-WC leagues must pass their 365 competitionId; WC omits it (defaults).
         const result365 = await ApiFootballService.get365StandingsGrouped(
           non365CompetitionId ?? undefined,
@@ -549,6 +619,10 @@ const MatchDetailsScreen = () => {
         // Synthetic 365 leagues have no API-Football leagueId — don't query it
         // with a namespaced id; just show "standings unavailable".
         if (non365CompetitionId != null) {
+          setStandingsUnavailable(true);
+          return;
+        }
+        if (is365Fixture) {
           setStandingsUnavailable(true);
           return;
         }
@@ -585,10 +659,19 @@ const MatchDetailsScreen = () => {
     }
   }, [
     fixture,
+    is365Fixture,
     isLive,
     isFinishedMatch,
+    standingsGroups.length,
     t?.matchDetails?.loadStandingsFailed,
   ]);
+
+  // Preload 365 form (last 5 + H2H) as soon as the fixture is known.
+  useEffect(() => {
+    if (!fixtureId || !fixture || !is365Fixture) return;
+    if (loadedTabsRef.current.has('form')) return;
+    void loadFormIfNeeded();
+  }, [fixtureId, fixture, is365Fixture, loadFormIfNeeded]);
 
   const loadVenueIfNeeded = useCallback(async () => {
     if (loadedTabsRef.current.has('stadium') || !fixture) return;
@@ -759,14 +842,35 @@ const MatchDetailsScreen = () => {
       );
     }
 
+    const matchesSide = (event: FixtureEvent, side: 'home' | 'away') => {
+      const id = side === 'home' ? fixture?.teams?.home?.id : fixture?.teams?.away?.id;
+      const name = side === 'home' ? homeTeamName : awayTeamName;
+      if (id != null && event.team?.id != null) return event.team.id === id;
+      const en = (event.team?.name ?? '').toLowerCase();
+      const tn = name.toLowerCase();
+      return en.includes(tn) || tn.includes(en);
+    };
+    const filteredEvents = events.filter((e) => matchesSide(e, selectedTeamSide));
+
     return (
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
+        <TeamToggle
+          home={{ name: getTeamDisplayName(homeTeamName, language), logo: homeTeamLogo }}
+          away={{ name: getTeamDisplayName(awayTeamName, language), logo: awayTeamLogo }}
+          value={selectedTeamSide}
+          onChange={setSelectedTeamSide}
+        />
         <View style={styles.eventsContainer}>
           <Text style={styles.sectionTitle}>{t.matchDetails.matchEvents}</Text>
-          {events.map((event, index) => {
+          {filteredEvents.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="football-outline" size={48} color="#333" />
+              <Text style={styles.emptyStateText}>{t.matchDetails.noEvents}</Text>
+            </View>
+          ) : filteredEvents.map((event, index) => {
             const homeTeamId = fixture?.teams?.home?.id;
             const isHomeTeam = homeTeamId != null
               ? event.team.id === homeTeamId
@@ -777,7 +881,13 @@ const MatchDetailsScreen = () => {
             const isSubstitution = event.type === 'subst';
 
             return (
-              <View key={index} style={[styles.eventCard, isHomeTeam ? styles.eventHome : styles.eventAway]}>
+              <View
+                key={`${event.time.elapsed}-${event.type}-${event.player?.id ?? index}`}
+                style={[
+                  styles.eventCard,
+                  isHomeTeam ? styles.eventHome : styles.eventAway,
+                ]}
+              >
                 <View style={styles.eventTime}>
                   <Text style={styles.eventTimeText}>{event.time.elapsed}'</Text>
                   {!!event.time.extra && (
@@ -842,7 +952,7 @@ const MatchDetailsScreen = () => {
 
   // Render Lineups Tab
   const renderLineups = () => {
-    if (lineupsLoading) {
+    if (lineupsLoading && !hasLineupData(lineups)) {
       return <LineupsSkeleton shimmerX={shimmerX} />;
     }
 
@@ -888,13 +998,32 @@ const MatchDetailsScreen = () => {
       );
     }
 
+    const selectedTeamId = fixture?.teams?.[selectedTeamSide]?.id;
+    const selectedTeamName = selectedTeamSide === 'home' ? homeTeamName : awayTeamName;
+    const matchLineupSide = (l: typeof lineups[number]) => {
+      if (selectedTeamId != null && l.team?.id != null) return l.team.id === selectedTeamId;
+      const ln = (l.team?.name ?? '').toLowerCase();
+      const tn = selectedTeamName.toLowerCase();
+      return ln.includes(tn) || tn.includes(ln);
+    };
+    const fallbackIndex = selectedTeamSide === 'home' ? 0 : 1;
+    const selectedLineup =
+      lineups.find(matchLineupSide) ?? lineups[fallbackIndex] ?? lineups[0];
+    const visibleLineups = selectedLineup ? [selectedLineup] : [];
+
     return (
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
+        <TeamToggle
+          home={{ name: getTeamDisplayName(homeTeamName, language), logo: homeTeamLogo }}
+          away={{ name: getTeamDisplayName(awayTeamName, language), logo: awayTeamLogo }}
+          value={selectedTeamSide}
+          onChange={setSelectedTeamSide}
+        />
         <View style={styles.lineupsContainer}>
-          {lineups.map((lineup, index) => {
+          {visibleLineups.map((lineup, index) => {
             const formation = lineup.formation || '4-4-2';
             const startingXI = lineup.startXI || [];
             const substitutes = lineup.substitutes || [];
@@ -922,12 +1051,28 @@ const MatchDetailsScreen = () => {
                 <View style={styles.teamHeader}>
                   <TeamBadge name={lineup.team.name} logo={lineup.team.logo} size={60} color="transparent" />
                   <View style={styles.teamInfo}>
-                    <Text style={styles.teamName} numberOfLines={2}>{getTeamDisplayName(lineup.team.name, language)}</Text>
+                    <Text style={styles.teamName} numberOfLines={2}>
+                      {getTeamDisplayName(lineup.team.name, language)}
+                    </Text>
                     <Text style={styles.formationText}>
                       {t.matchDetails.formation}: {formation}
                     </Text>
-                    <Text style={styles.coachText}>
-                      {t.matchDetails.coach}: {lineup.coach?.name || t.common.unknown}
+                  </View>
+                  <View style={styles.coachBlock}>
+                    {resolveCoachPhoto(lineup.coach?.id, lineup.coach?.photo) ? (
+                      <ExpoImage
+                        source={{ uri: resolveCoachPhoto(lineup.coach?.id, lineup.coach?.photo) }}
+                        style={styles.coachPhoto}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                      />
+                    ) : (
+                      <View style={styles.coachPhotoPlaceholder}>
+                        <Ionicons name="person" size={22} color="#888" />
+                      </View>
+                    )}
+                    <Text style={styles.coachName} numberOfLines={2}>
+                      {lineup.coach?.name || t.common.unknown}
                     </Text>
                   </View>
                 </View>
@@ -937,7 +1082,7 @@ const MatchDetailsScreen = () => {
                   formation={formation}
                   players={fieldPlayers}
                   teamName={lineup.team.name}
-                  teamColor={index === 0 ? homeTeamName === lineup.team.name ? '#A855F7' : '#3b82f6' : awayTeamName === lineup.team.name ? '#3b82f6' : '#A855F7'}
+                  teamColor={selectedTeamSide === 'home' ? '#A855F7' : '#3b82f6'}
                   onPlayerPress={(player) => {
                     if (player.id) {
                       openPlayerProfile(
@@ -1010,7 +1155,8 @@ const MatchDetailsScreen = () => {
 
   // Render Statistics Tab
   const renderStatistics = () => {
-    if (statsLoading) {
+    const hasStats = statistics.length > 0 || statsFromEvents;
+    if (statsLoading && !hasStats) {
       return <StatsSkeleton shimmerX={shimmerX} />;
     }
 
@@ -1094,6 +1240,28 @@ const MatchDetailsScreen = () => {
 
 
   const renderForm = () => {
+    if (formLoading && homeLastFixtures.length === 0 && awayLastFixtures.length === 0) {
+      return <FormSkeleton shimmerX={shimmerX} />;
+    }
+
+    if (formError) {
+      return (
+        <View style={styles.emptyState}>
+          <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
+          <Text style={styles.emptyStateText}>{formError}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              loadedTabsRef.current.delete('form');
+              void loadFormIfNeeded(true);
+            }}
+          >
+            <Text style={styles.retryButtonText}>{t.common.retry}</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     const resolveTeamSideInRow = (
       row: TeamFixture,
       side: 'home' | 'away',
@@ -1102,12 +1270,20 @@ const MatchDetailsScreen = () => {
         ? (form365TeamIds.home ?? fixture?.teams.home.id)
         : (form365TeamIds.away ?? fixture?.teams.away.id);
       const refName = side === 'home' ? homeTeamName : awayTeamName;
-      if (refId != null && row.teams.home.id === refId) return true;
-      if (refId != null && row.teams.away.id === refId) return false;
+      if (refId != null) {
+        if (row.teams.home.id === refId) return true;
+        if (row.teams.away.id === refId) return false;
+      }
       const homeN = row.teams.home.name.toLowerCase();
+      const awayN = row.teams.away.name.toLowerCase();
       const n = refName.toLowerCase();
-      return homeN.includes(n) || n.includes(homeN);
+      if (homeN.includes(n) || n.includes(homeN)) return true;
+      if (awayN.includes(n) || n.includes(awayN)) return false;
+      return false;
     };
+
+    const selectedLastFixtures =
+      selectedTeamSide === 'home' ? homeLastFixtures : awayLastFixtures;
 
     return (
       <ScrollView
@@ -1123,12 +1299,20 @@ const MatchDetailsScreen = () => {
             <View style={styles.fixturesList}>
               {h2hFixtures.map((row, index) => (
                 <View key={`h2h-${index}`} style={styles.fixtureCard}>
-                  <TeamBadge
-                    name={row.teams.home.name}
-                    logo={row.teams.home.logo}
-                    size={36}
-                    color="transparent"
-                  />
+                  <View style={styles.h2hTeamsRow}>
+                    <TeamBadge
+                      name={row.teams.home.name}
+                      logo={row.teams.home.logo}
+                      size={32}
+                      color="transparent"
+                    />
+                    <TeamBadge
+                      name={row.teams.away.name}
+                      logo={row.teams.away.logo}
+                      size={32}
+                      color="transparent"
+                    />
+                  </View>
                   <View style={styles.fixtureInfo}>
                     <Text style={styles.fixtureOpponent} numberOfLines={1}>
                       {getTeamDisplayName(row.teams.home.name, language)} vs{' '}
@@ -1158,17 +1342,32 @@ const MatchDetailsScreen = () => {
           )}
         </View>
 
-        {/* Home Team Last 5 Matches */}
+        {/* Team selector */}
+        <TeamToggle
+          home={{ name: getTeamDisplayName(homeTeamName, language), logo: homeTeamLogo }}
+          away={{ name: getTeamDisplayName(awayTeamName, language), logo: awayTeamLogo }}
+          value={selectedTeamSide}
+          onChange={setSelectedTeamSide}
+        />
+
+        {/* Selected Team Last 5 Matches */}
         <View style={styles.formContainer}>
           <View style={styles.formHeader}>
-            <TeamBadge name={homeTeamName} logo={homeTeamLogo} size={50} color="transparent" />
-            <Text style={styles.formTeamName}>{getTeamDisplayName(homeTeamName, language)}</Text>
+            <TeamBadge
+              name={selectedTeamSide === 'home' ? homeTeamName : awayTeamName}
+              logo={selectedTeamSide === 'home' ? homeTeamLogo : awayTeamLogo}
+              size={50}
+              color="transparent"
+            />
+            <Text style={styles.formTeamName}>
+              {getTeamDisplayName(selectedTeamSide === 'home' ? homeTeamName : awayTeamName, language)}
+            </Text>
             <Text style={styles.formTitle}>{t.matchDetails.last5Matches}</Text>
           </View>
-          {homeLastFixtures.length > 0 ? (
+          {selectedLastFixtures.length > 0 ? (
             <View style={styles.fixturesList}>
-              {homeLastFixtures.map((fixture, index) => {
-                const isHome = resolveTeamSideInRow(fixture, 'home');
+              {selectedLastFixtures.map((fixture, index) => {
+                const isHome = resolveTeamSideInRow(fixture, selectedTeamSide);
                 const opponent = isHome ? fixture.teams.away : fixture.teams.home;
                 const teamScore = isHome ? fixture.goals.home : fixture.goals.away;
                 const opponentScore = isHome ? fixture.goals.away : fixture.goals.home;
@@ -1178,53 +1377,9 @@ const MatchDetailsScreen = () => {
                   <View key={index} style={styles.fixtureCard}>
                     <TeamBadge name={opponent.name} logo={opponent.logo} size={40} color="transparent" />
                     <View style={styles.fixtureInfo}>
-                      <Text style={styles.fixtureOpponent}>{getTeamDisplayName(opponent.name, language)}</Text>
-                      <Text style={styles.fixtureLeague}>
-                        {getLeagueDisplayName(
-                          fixture.league.name,
-                          language,
-                          fixture.league.id,
-                          undefined,
-                        )}
+                      <Text style={styles.fixtureOpponent} numberOfLines={1}>
+                        vs {getTeamDisplayName(opponent.name, language)}
                       </Text>
-                    </View>
-                    <View style={[styles.fixtureResult, result === 'win' && styles.fixtureWin,
-                    result === 'lose' && styles.fixtureLose,
-                    result === 'draw' && styles.fixtureDraw]}>
-                      <Text style={styles.fixtureScore}>{teamScore} - {opponentScore}</Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>{t.matchDetails.noPreviousMatches}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Away Team Last 5 Matches */}
-        <View style={styles.formContainer}>
-          <View style={styles.formHeader}>
-            <TeamBadge name={awayTeamName} logo={awayTeamLogo} size={50} color="transparent" />
-            <Text style={styles.formTeamName}>{getTeamDisplayName(awayTeamName, language)}</Text>
-            <Text style={styles.formTitle}>{t.matchDetails.last5Matches}</Text>
-          </View>
-          {awayLastFixtures.length > 0 ? (
-            <View style={styles.fixturesList}>
-              {awayLastFixtures.map((fixture, index) => {
-                const isHome = resolveTeamSideInRow(fixture, 'away');
-                const opponent = isHome ? fixture.teams.away : fixture.teams.home;
-                const teamScore = isHome ? fixture.goals.home : fixture.goals.away;
-                const opponentScore = isHome ? fixture.goals.away : fixture.goals.home;
-                const result = resolveFormResult(teamScore, opponentScore);
-
-                return (
-                  <View key={index} style={styles.fixtureCard}>
-                    <Image source={{ uri: opponent.logo }} style={styles.fixtureTeamLogo} />
-                    <View style={styles.fixtureInfo}>
-                      <Text style={styles.fixtureOpponent}>{getTeamDisplayName(opponent.name, language)}</Text>
                       <Text style={styles.fixtureLeague}>
                         {getLeagueDisplayName(
                           fixture.league.name,
@@ -1283,25 +1438,58 @@ const MatchDetailsScreen = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.stadiumContainer}>
-          {venueData.image && (
-            <Image source={{ uri: venueData.image }} style={styles.stadiumImage} />
+        {/* Hero card: image/map placeholder + pill + name + subtitle */}
+        <View style={styles.stadiumHeroCard}>
+          {venueData.image ? (
+            <Image source={{ uri: venueData.image }} style={styles.stadiumHeroImage} />
+          ) : (
+            <View style={styles.stadiumHeroPlaceholder} />
           )}
-          <View style={styles.stadiumInfo}>
+          <View style={styles.stadiumHeroBody}>
+            <View style={styles.stadiumPill}>
+              <Ionicons name="location" size={12} color={PURPLE_SOFT} />
+              <Text style={styles.stadiumPillText}>{t.matchDetails.stadium || 'Stadium'}</Text>
+            </View>
             <Text style={styles.stadiumName}>{venueData.name || 'Unknown Stadium'}</Text>
-            {venueData.city && (
-              <View style={styles.stadiumDetail}>
-                <Ionicons name="location" size={16} color="#888" />
-                <Text style={styles.stadiumDetailText}>{venueData.city}</Text>
-                {venueData.country && <Text style={styles.stadiumDetailText}> • {venueData.country}</Text>}
-              </View>
+            {(venueData.city || venueData.country) && (
+              <Text style={styles.stadiumSubtitle}>
+                {[venueData.city, venueData.country].filter(Boolean).join(' • ')}
+              </Text>
             )}
-            {venueData.address && (
-              <View style={styles.stadiumDetail}>
-                <Ionicons name="map" size={16} color="#888" />
-                <Text style={styles.stadiumDetailText}>{venueData.address}</Text>
-              </View>
-            )}
+          </View>
+        </View>
+
+        {/* Location card */}
+        {(venueData.city || venueData.country || venueData.address) && (
+          <View style={styles.stadiumInfoCard}>
+            <View style={styles.stadiumInfoIcon}>
+              <Ionicons name="location" size={18} color={PURPLE_SOFT} />
+            </View>
+            <Text style={styles.stadiumInfoText} numberOfLines={2}>
+              {venueData.address ||
+                [venueData.city, venueData.country].filter(Boolean).join(' • ')}
+            </Text>
+          </View>
+        )}
+
+        {/* League card */}
+        {!!leagueName && (
+          <View style={styles.stadiumInfoCard}>
+            <LeagueIcon
+              name={leagueName}
+              logo={fixture?.league?.logo}
+              leagueId={fixture?.league?.id}
+              size={36}
+            />
+            <Text style={styles.stadiumInfoText} numberOfLines={2}>
+              {getLeagueDisplayName(leagueName, language, fixture?.league?.id, fixture?.league?.country)}
+            </Text>
+          </View>
+        )}
+
+        {/* Capacity / surface */}
+        {(venueData.capacity || venueData.surface) && (
+          <View style={styles.stadiumContainer}>
             {venueData.capacity && (
               <View style={styles.stadiumDetail}>
                 <Ionicons name="people" size={16} color="#888" />
@@ -1315,13 +1503,14 @@ const MatchDetailsScreen = () => {
               </View>
             )}
           </View>
-        </View>
+        )}
       </ScrollView>
     );
   };
 
   const renderStandings = () => {
-    if (standingsLoading) {
+    const hasStandings = standingsGroups.length > 0;
+    if (standingsLoading && !hasStandings) {
       return <StandingsSkeleton shimmerX={shimmerX} />;
     }
 
@@ -1409,6 +1598,13 @@ const MatchDetailsScreen = () => {
       </>
     );
 
+    const groupIndex = Math.min(selectedGroupIndex, standingsGroups.length - 1);
+    const activeGroup = standingsGroups[groupIndex];
+    const showGroupChips =
+      standingsGroups.length > 1 ||
+      (standingsGroups[0]?.group && standingsGroups[0].group !== 'Table');
+    const chipLabel = (group: string) => group.replace(/^Group\s+/i, '');
+
     return (
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -1422,19 +1618,39 @@ const MatchDetailsScreen = () => {
             )}
           </Text>
         )}
-        {standingsGroups.map((groupBlock, groupIndex) => (
-          <View key={`${groupBlock.group}-${groupIndex}`} style={styles.standingsContainer}>
-            {groupBlock.group !== 'Table' && (
-              <Text style={styles.standingsGroupTitle}>
-                {(t.matchDetails.standingsGroupLabel || 'Group {name}').replace(
-                  '{name}',
-                  groupBlock.group.replace(/^Group\s+/i, ''),
-                )}
-              </Text>
-            )}
-            {renderStandingsTable(groupBlock.standings, `${groupBlock.group}-${groupIndex}`)}
+
+        {showGroupChips && (
+          <View style={styles.groupsSelector}>
+            <Text style={styles.groupsLabel}>{t.matchDetails.standingsGroups || 'GROUPS'}</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.groupChipsRow}
+            >
+              {standingsGroups.map((g, i) => {
+                const isActive = i === groupIndex;
+                return (
+                  <TouchableOpacity
+                    key={`${g.group}-${i}`}
+                    style={[styles.groupChip, isActive && styles.groupChipActive]}
+                    onPress={() => setSelectedGroupIndex(i)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.groupChipText, isActive && styles.groupChipTextActive]}>
+                      {chipLabel(g.group)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
-        ))}
+        )}
+
+        {activeGroup && (
+          <View style={styles.standingsContainer}>
+            {renderStandingsTable(activeGroup.standings, `${activeGroup.group}-${groupIndex}`)}
+          </View>
+        )}
       </ScrollView>
     );
   };
@@ -1575,21 +1791,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: BG_BASE,
   },
   backButtonRound: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#1e1b4b',
+    backgroundColor: GLASS_CARD,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 0.5,
+    borderColor: GLASS_BORDER_TOP,
   },
   headerTitle: {
-    color: '#fff',
+    color: TEXT_PRIMARY,
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   lineupsContainer: {
     paddingBottom: 40,
@@ -1643,10 +1861,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0a0a0a',
+    backgroundColor: BG_BASE,
   },
   loadingText: {
-    color: '#fff',
+    color: TEXT_PRIMARY,
     marginTop: 16,
     fontSize: 16,
   },
@@ -1654,7 +1872,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0a0a0a',
+    backgroundColor: BG_BASE,
     padding: 20,
   },
   errorText: {
@@ -1665,13 +1883,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   retryButton: {
-    backgroundColor: '#A855F7',
+    backgroundColor: PURPLE_PRIMARY,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 20,
+    borderRadius: RADIUS_LG,
   },
   retryButtonText: {
-    color: '#000',
+    color: TEXT_PRIMARY,
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -1802,13 +2020,13 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyStateText: {
-    color: '#666',
+    color: TEXT_MUTED,
     fontSize: 14,
     marginTop: 16,
     textAlign: 'center',
   },
   emptyStateSubtext: {
-    color: '#888',
+    color: TEXT_MUTED,
     fontSize: 12,
     marginTop: 8,
     textAlign: 'center',
@@ -1846,6 +2064,7 @@ const styles = StyleSheet.create({
   },
   teamInfo: {
     flex: 1,
+    minWidth: 0,
   },
   teamName: {
     color: '#fff',
@@ -1858,9 +2077,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 2,
   },
-  coachText: {
-    color: '#888',
-    fontSize: 12,
+  coachBlock: {
+    alignItems: 'center',
+    maxWidth: 88,
+    flexShrink: 0,
+  },
+  coachPhoto: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(168,85,247,0.35)',
+  },
+  coachPhotoPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#252525',
+    borderWidth: 2,
+    borderColor: 'rgba(168,85,247,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coachName: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 14,
   },
   sectionTitle: {
     color: '#fff',
@@ -2038,6 +2283,11 @@ const styles = StyleSheet.create({
   },
   fixturesList: {
     gap: 12,
+  },
+  h2hTeamsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   fixtureCard: {
     flexDirection: 'row',
@@ -2218,21 +2468,75 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     overflow: 'hidden',
+    marginTop: 12,
   },
-  stadiumImage: {
+  stadiumHeroCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  stadiumHeroImage: {
     width: '100%',
-    height: 200,
-    borderRadius: 12,
-    marginBottom: 20,
+    height: 170,
   },
-  stadiumInfo: {
-    gap: 12,
+  stadiumHeroPlaceholder: {
+    width: '100%',
+    height: 170,
+    backgroundColor: '#0f0a1a',
+  },
+  stadiumHeroBody: {
+    padding: 20,
+  },
+  stadiumPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: PURPLE_GLOW_SM,
+    borderWidth: 1,
+    borderColor: PURPLE_PRIMARY,
+    marginBottom: 12,
+  },
+  stadiumPillText: {
+    color: PURPLE_SOFT,
+    fontSize: 12,
+    fontWeight: '700',
   },
   stadiumName: {
     color: '#fff',
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  stadiumSubtitle: {
+    color: '#888',
+    fontSize: 14,
+  },
+  stadiumInfoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+  },
+  stadiumInfoIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: PURPLE_GLOW_SM,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stadiumInfoText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
   stadiumDetail: {
     flexDirection: 'row',
@@ -2242,6 +2546,44 @@ const styles = StyleSheet.create({
   stadiumDetailText: {
     color: '#888',
     fontSize: 14,
+  },
+  groupsSelector: {
+    marginBottom: 12,
+  },
+  groupsLabel: {
+    color: TEXT_MUTED,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  groupChipsRow: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  groupChip: {
+    minWidth: 44,
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS_MD,
+    backgroundColor: GLASS_CARD,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER_SIDE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupChipActive: {
+    backgroundColor: PURPLE_PRIMARY,
+    borderColor: PURPLE_GLOW_SM,
+  },
+  groupChipText: {
+    color: TEXT_SECONDARY,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  groupChipTextActive: {
+    color: '#fff',
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -8,11 +8,13 @@ import {
     StyleSheet,
     Dimensions,
     type ImageSourcePropType,
+    type ImageStyle,
+    type TextStyle,
+    type ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Heart, Film, WifiOff, Flame, Sparkles, Upload } from 'lucide-react-native';
 import Animated, {
-    FadeInDown,
     useSharedValue,
     withRepeat,
     withTiming,
@@ -23,6 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { SectionHeader } from './SectionHeader';
+import { FeatureInfoModal as ReelsInfoModal } from '../common/FeatureInfoModal';
 import {
     BLUE_ELECTRIC,
     GOLD_PRIMARY,
@@ -33,12 +36,211 @@ import { useTranslation } from '../../src/i18n';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// ─── Hoisted asset requires — Metro needs these at module top-level ──────────
 const IMG_NO_VIDEOS = require('../../assets/images/no videos yet.png') as ImageSourcePropType;
-const IMG_TRENDING  = require('../../assets/images/Treading highlights.png') as ImageSourcePropType;
-const IMG_CREATE    = require('../../assets/images/create contant.png') as ImageSourcePropType;
+const IMG_TRENDING = require('../../assets/images/Treading highlights.png') as ImageSourcePropType;
+const IMG_CREATE = require('../../assets/images/create contant.png') as ImageSourcePropType;
 
-// ─── Shared shimmer ───────────────────────────────────────────────────────────
+type VideoListStyles = {
+    section: ViewStyle;
+    scrollContent: ViewStyle;
+    skeletonCard: ViewStyle;
+    skeletonThumb: ViewStyle;
+    shimmerClip: ViewStyle;
+    shimmerStrip: ViewStyle;
+    shimmerGradient: ViewStyle;
+    skeletonLine: ViewStyle;
+    card: ViewStyle;
+    thumbnail: ViewStyle;
+    playBtnOuter: ViewStyle;
+    playBtnGradientBorder: ViewStyle;
+    playBtnInner: ViewStyle;
+    offlineChip: ViewStyle;
+    offlineChipText: TextStyle;
+    statsRow: ViewStyle;
+    statsLeft: ViewStyle;
+    likeBtn: ViewStyle;
+    statText: TextStyle;
+    title: TextStyle;
+    emptyCard: ViewStyle;
+    emptyCardImage: ViewStyle;
+    emptyCardImageInner: ImageStyle;
+    emptyCardIconWrap: ViewStyle;
+    emptyCardTitle: TextStyle;
+    emptyCardSub: TextStyle;
+    emptyCardCta: ViewStyle;
+    emptyCardCtaText: TextStyle;
+};
+
+const styles = StyleSheet.create<VideoListStyles>({
+    section: { marginBottom: 0 },
+    scrollContent: { paddingHorizontal: SCREEN_PADDING_H, paddingBottom: 4, gap: 12 },
+    skeletonCard: { width: 155, flexShrink: 0 },
+    skeletonThumb: {
+        width: 155,
+        height: 104,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.04)',
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.06)',
+        overflow: 'hidden',
+    },
+    shimmerClip: { overflow: 'hidden', borderRadius: 12 },
+    shimmerStrip: { ...StyleSheet.absoluteFillObject },
+    shimmerGradient: { width: 80, height: '100%' },
+    skeletonLine: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 4 },
+    card: { width: 155, flexShrink: 0 },
+    thumbnail: {
+        width: 155,
+        height: 104,
+        borderRadius: 12,
+        overflow: 'hidden',
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.15)',
+        shadowColor: '#fff',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 0,
+    },
+    playBtnOuter: {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        marginTop: -18,
+        marginLeft: -18,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+    },
+    playBtnGradientBorder: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        padding: 1.5,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    playBtnInner: {
+        flex: 1,
+        width: '100%',
+        borderRadius: 16,
+        backgroundColor: 'rgba(59,130,246,0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    offlineChip: {
+        position: 'absolute',
+        top: 6,
+        left: 6,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 7,
+        paddingVertical: 3,
+        borderRadius: 999,
+        backgroundColor: 'rgba(0,0,0,0.62)',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(255,255,255,0.18)',
+    },
+    offlineChipText: {
+        color: 'rgba(255,255,255,0.85)',
+        fontSize: 9,
+        fontWeight: '700',
+    },
+    statsRow: {
+        position: 'absolute',
+        bottom: 6,
+        left: 7,
+        right: 7,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    statsLeft: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    statText: { color: 'rgba(255,255,255,0.82)', fontSize: 9, fontWeight: '700' },
+    title: {
+        color: 'rgba(255,255,255,0.78)',
+        fontSize: 11,
+        fontWeight: '600',
+        marginTop: 7,
+        lineHeight: 15,
+        letterSpacing: -0.1,
+    },
+    emptyCard: {
+        width: 155,
+        flexShrink: 0,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        paddingVertical: 18,
+        paddingHorizontal: 14,
+        alignItems: 'center',
+        overflow: 'hidden',
+        gap: 6,
+        minHeight: 196,
+        justifyContent: 'space-between',
+    },
+    emptyCardImage: {
+        width: 155,
+        height: 220,
+        minHeight: 0,
+        paddingVertical: 0,
+        paddingHorizontal: 0,
+        borderWidth: 0,
+        backgroundColor: 'transparent',
+        borderRadius: 32,
+        overflow: 'hidden',
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
+    },
+    emptyCardImageInner: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 32,
+    },
+    emptyCardIconWrap: {
+        width: 54,
+        height: 54,
+        borderRadius: 27,
+        borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 6,
+    },
+    emptyCardTitle: {
+        color: 'rgba(255,255,255,0.92)',
+        fontSize: 14,
+        fontWeight: '800',
+        textAlign: 'center',
+        letterSpacing: -0.2,
+        lineHeight: 18,
+    },
+    emptyCardSub: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 11,
+        fontWeight: '600',
+        textAlign: 'center',
+        marginTop: -2,
+    },
+    emptyCardCta: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 999,
+        borderWidth: 1,
+        marginTop: 4,
+        alignSelf: 'stretch',
+    },
+    emptyCardCtaText: {
+        fontSize: 11,
+        fontWeight: '800',
+        letterSpacing: 0.2,
+    },
+});
+
 function useShimmer(): SharedValue<number> {
     const shimmerX = useSharedValue(-SCREEN_WIDTH);
     useEffect(() => {
@@ -51,7 +253,13 @@ function useShimmer(): SharedValue<number> {
     return shimmerX;
 }
 
-// ─── Skeleton Video Card ──────────────────────────────────────────────────────
+function useReelsInfoModal() {
+    const [visible, setVisible] = useState(false);
+    const open = useCallback(() => setVisible(true), []);
+    const close = useCallback(() => setVisible(false), []);
+    return { visible, open, close };
+}
+
 function SkeletonVideoCard({ shimmerX }: { shimmerX: SharedValue<number> }): React.ReactElement {
     const shimmerStyle = useAnimatedStyle(() => ({
         transform: [{ translateX: shimmerX.value }],
@@ -59,16 +267,18 @@ function SkeletonVideoCard({ shimmerX }: { shimmerX: SharedValue<number> }): Rea
     return (
         <View style={styles.skeletonCard}>
             <View style={styles.skeletonThumb}>
-                <Animated.View style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: 12 }]}>
-                    <Animated.View style={[styles.shimmerStrip, shimmerStyle]}>
-                        <LinearGradient
-                            colors={['transparent', 'rgba(255,255,255,0.08)', 'transparent']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={{ width: 80, height: '100%' }}
-                        />
-                    </Animated.View>
-                </Animated.View>
+                <View style={[StyleSheet.absoluteFill, styles.shimmerClip]}>
+                    <View style={styles.shimmerStrip}>
+                        <Animated.View style={shimmerStyle}>
+                            <LinearGradient
+                                colors={['transparent', 'rgba(255,255,255,0.08)', 'transparent']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.shimmerGradient}
+                            />
+                        </Animated.View>
+                    </View>
+                </View>
             </View>
             <View style={{ gap: 4, marginTop: 6 }}>
                 <View style={[styles.skeletonLine, { width: '100%', height: 8 }]} />
@@ -78,10 +288,8 @@ function SkeletonVideoCard({ shimmerX }: { shimmerX: SharedValue<number> }): Rea
     );
 }
 
-// ─── Video Card ───────────────────────────────────────────────────────────────
 interface VideoCardProps {
     video: VideoListItem;
-    index: number;
     liked: boolean;
     isOffline: boolean;
     onOpen?: () => void;
@@ -90,7 +298,6 @@ interface VideoCardProps {
 
 function VideoCard({
     video,
-    index,
     liked,
     isOffline,
     onOpen,
@@ -103,7 +310,7 @@ function VideoCard({
     }));
 
     const handlePress = (): void => {
-        if (isOffline) return; // don't try to navigate to a blocked reel screen
+        if (isOffline) return;
         scale.value = withSpring(0.95, { damping: 15 }, () => {
             scale.value = withSpring(1, { damping: 15 });
         });
@@ -138,7 +345,6 @@ function VideoCard({
                         style={[StyleSheet.absoluteFill, { bottom: '70%' }]}
                     />
 
-                    {/* Play button — hidden while offline to make the disabled state obvious */}
                     {!isOffline && (
                         <View style={styles.playBtnOuter}>
                             <LinearGradient
@@ -197,9 +403,6 @@ function VideoCard({
     );
 }
 
-// ─── Empty Section — confirmed empty (no cache, not loading) ─────────────────
-// Matches the 3-card horizontal empty-state pattern from the design reference,
-// but uses the 90Plus palette (purple / gold / blue) instead of green.
 interface EmptyReelsCardSpec {
     key: string;
     Icon: typeof Film;
@@ -208,8 +411,6 @@ interface EmptyReelsCardSpec {
     borderRgba: string;
     title: string;
     sub: string;
-    /** Optional hero image — when provided, the card becomes image-led
-     *  (image fills the top area, CTA sits in the reserved slot at the bottom). */
     heroImage?: ImageSourcePropType;
 }
 
@@ -224,7 +425,6 @@ function EmptyReelsCard({
 }): React.ReactElement {
     const { Icon, iconColor, tintRgba, borderRgba, title, sub, heroImage } = spec;
 
-    // ── Image-led variant (used for "Create content") ────────────────────
     if (heroImage) {
         return (
             <TouchableOpacity
@@ -243,7 +443,6 @@ function EmptyReelsCard({
         );
     }
 
-    // ── Icon-led variant (used for "No videos" / "Trending") ─────────────
     return (
         <View style={[styles.emptyCard, { borderColor: borderRgba }]}>
             <LinearGradient
@@ -331,7 +530,6 @@ function EmptySection({ onUpload }: { onUpload: () => void }): React.ReactElemen
     );
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
 export interface VideoListItem {
     id: number | string;
     title: string;
@@ -364,14 +562,14 @@ export function VideoList({
     const data = videos ?? [];
     const hasVideos = data.length > 0;
     const shimmerX = useShimmer();
+    const reelsInfo = useReelsInfoModal();
+
     const openReelsHub = (): void => {
         if (isOffline) return;
         if (onViewAllPress) onViewAllPress();
         else router.push('/reels');
     };
 
-    // Race-condition guard: skeleton only while no data. Once we have data,
-    // keep showing it even during a background refresh.
     const showSkeleton = isLoading && !hasVideos;
     const showData = hasVideos;
     const showEmpty = !showSkeleton && !showData;
@@ -382,8 +580,25 @@ export function VideoList({
                 subtitle={t.home.sectionReelsSub}
                 title={t.home.trendingReels}
                 action={t.home.viewAll}
-                onAction={openReelsHub}
+                onTitlePress={reelsInfo.open}
+                onAction={reelsInfo.open}
             />
+
+            <ReelsInfoModal
+                visible={reelsInfo.visible}
+                onClose={reelsInfo.close}
+                icon={<Film size={30} color="#d8b4fe" />}
+                title={t.trendingReelsInfo.title}
+                bullets={[
+                    t.trendingReelsInfo.rule1,
+                    t.trendingReelsInfo.rule2,
+                    t.trendingReelsInfo.rule3,
+                    t.trendingReelsInfo.rule4,
+                ]}
+                hype={t.trendingReelsInfo.hype}
+                gotItLabel={t.trendingReelsInfo.gotIt}
+            />
+
             {showSkeleton ? (
                 <ScrollView
                     horizontal
@@ -402,11 +617,10 @@ export function VideoList({
                     contentContainerStyle={styles.scrollContent}
                     removeClippedSubviews
                 >
-                    {data.map((v, i) => (
+                    {data.map((v) => (
                         <VideoCard
                             key={String(v.id)}
                             video={v}
-                            index={i}
                             liked={likedIds?.has(String(v.id)) ?? false}
                             isOffline={isOffline}
                             onOpen={() => onVideoPress?.(String(v.id))}
@@ -420,182 +634,3 @@ export function VideoList({
         </View>
     );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-    section: { marginBottom: 0 },
-    scrollContent: { paddingHorizontal: SCREEN_PADDING_H, paddingBottom: 4, gap: 12 },
-
-    // Skeleton
-    skeletonCard: { width: 155, flexShrink: 0 },
-    skeletonThumb: {
-        width: 155,
-        height: 104,
-        borderRadius: 12,
-        backgroundColor: 'rgba(255,255,255,0.04)',
-        borderWidth: 0.5,
-        borderColor: 'rgba(255,255,255,0.06)',
-        overflow: 'hidden',
-    },
-    shimmerStrip: { position: 'absolute', top: 0, bottom: 0, left: 0 },
-    skeletonLine: { backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 4 },
-
-    // Card
-    card: { width: 155, flexShrink: 0 },
-    thumbnail: {
-        width: 155,
-        height: 104,
-        borderRadius: 12,
-        overflow: 'hidden',
-        borderWidth: 0.5,
-        borderColor: 'rgba(255,255,255,0.15)',
-        shadowColor: '#fff',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
-        shadowRadius: 0,
-    },
-    playBtnOuter: {
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        marginTop: -18,
-        marginLeft: -18,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-    },
-    playBtnGradientBorder: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        padding: 1.5,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    playBtnInner: {
-        flex: 1,
-        width: '100%',
-        borderRadius: 16,
-        backgroundColor: 'rgba(59,130,246,0.15)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    offlineChip: {
-        position: 'absolute',
-        top: 6,
-        left: 6,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 7,
-        paddingVertical: 3,
-        borderRadius: 999,
-        backgroundColor: 'rgba(0,0,0,0.62)',
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: 'rgba(255,255,255,0.18)',
-    },
-    offlineChipText: {
-        color: 'rgba(255,255,255,0.85)',
-        fontSize: 9,
-        fontWeight: '700',
-    },
-
-    statsRow: {
-        position: 'absolute',
-        bottom: 6,
-        left: 7,
-        right: 7,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    statsLeft: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-    likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-    statText: { color: 'rgba(255,255,255,0.82)', fontSize: 9, fontWeight: '700' },
-    title: {
-        color: 'rgba(255,255,255,0.78)',
-        fontSize: 11,
-        fontWeight: '600',
-        marginTop: 7,
-        lineHeight: 15,
-        letterSpacing: -0.1,
-    },
-
-    // Empty Section (horizontal card row, matches design reference)
-    emptyCard: {
-        width: 155,
-        flexShrink: 0,
-        borderRadius: 18,
-        borderWidth: 1,
-        borderStyle: 'dashed',
-        paddingVertical: 18,
-        paddingHorizontal: 14,
-        alignItems: 'center',
-        overflow: 'hidden',
-        gap: 6,
-        minHeight: 196,
-        justifyContent: 'space-between',
-    },
-    // Image-led variant — the card becomes a pure canvas for the artwork.
-    // Strongly rounded corners, no border, no tint, no padding; the image
-    // fits edge-to-edge and the CTA is baked into the artwork itself.
-    emptyCardImage: {
-        width: 155,
-        height: 220,
-        minHeight: 0,
-        paddingVertical: 0,
-        paddingHorizontal: 0,
-        borderWidth: 0,
-        backgroundColor: 'transparent',
-        borderRadius: 32,
-        overflow: 'hidden',
-        alignItems: 'stretch',
-        justifyContent: 'flex-start',
-    },
-    emptyCardImageInner: {
-        width: '100%',
-        height: '100%',
-        borderRadius: 32,
-    },
-    emptyCardIconWrap: {
-        width: 54,
-        height: 54,
-        borderRadius: 27,
-        borderWidth: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 6,
-    },
-    emptyCardTitle: {
-        color: 'rgba(255,255,255,0.92)',
-        fontSize: 14,
-        fontWeight: '800',
-        textAlign: 'center',
-        letterSpacing: -0.2,
-        lineHeight: 18,
-    },
-    emptyCardSub: {
-        color: 'rgba(255,255,255,0.5)',
-        fontSize: 11,
-        fontWeight: '600',
-        textAlign: 'center',
-        marginTop: -2,
-    },
-    emptyCardCta: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 999,
-        borderWidth: 1,
-        marginTop: 4,
-        alignSelf: 'stretch',
-    },
-    emptyCardCtaText: {
-        fontSize: 11,
-        fontWeight: '800',
-        letterSpacing: 0.2,
-    },
-});

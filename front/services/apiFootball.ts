@@ -1600,8 +1600,13 @@ export const ApiFootballService = {
   } | null> {
     try {
       const baseUrl = getApiUrl();
-      const url = `${baseUrl}/football/cached/365/fixture/${fixtureId}/form`;
-      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
+      const url = new URL(`${baseUrl}/football/cached/365/fixture/${fixtureId}/form`);
+      url.searchParams.set('language', getAppLanguageCode());
+      const response = await withTimeout(
+        fetch(url.toString(), {
+          headers: { Accept: 'application/json', 'Accept-Language': acceptLanguageHeader() },
+        }),
+      );
       if (!response.ok) return null;
       const json = (await response.json()) as {
         response?: {
@@ -1692,11 +1697,20 @@ export const ApiFootballService = {
   }> {
     try {
       const baseUrl = getApiUrl();
-      const url =
+      const url = new URL(
         competitionId != null
-          ? `${baseUrl}/football/cached/365/standings?competitions=${competitionId}`
-          : `${baseUrl}/football/cached/365/standings`;
-      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
+          ? `${baseUrl}/football/cached/365/standings`
+          : `${baseUrl}/football/cached/365/standings`,
+      );
+      if (competitionId != null) {
+        url.searchParams.set('competitions', String(competitionId));
+      }
+      url.searchParams.set('language', getAppLanguageCode());
+      const response = await withTimeout(
+        fetch(url.toString(), {
+          headers: { Accept: 'application/json', 'Accept-Language': acceptLanguageHeader() },
+        }),
+      );
       if (!response.ok) return { groups: [], available: false };
       const json = (await response.json()) as {
         response?: Array<{

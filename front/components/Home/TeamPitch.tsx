@@ -9,8 +9,9 @@ import {
     useWindowDimensions,
     Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Users } from 'lucide-react-native';
 import { SectionHeader } from './SectionHeader';
+import { FeatureInfoModal } from '../common/FeatureInfoModal';
 import { useTranslation } from '../../src/i18n';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -40,7 +41,51 @@ const AnimatedView = Animated.createAnimatedComponent(View);
 
 const HORIZONTAL_PADDING = 16;
 const AVATAR_SIZE = 34;
+/** Anchor pitch coords to avatar center (name sits below). */
 const NODE_OFFSET = AVATAR_SIZE / 2 + 2;
+
+/** 4-3-3 — one player per role; GK left, attack right. */
+const FORMATION_433: Array<{ x: number; y: number; role: string }> = [
+    { x: 7, y: 50, role: 'GK' },
+    { x: 27, y: 84, role: 'RB' },
+    { x: 27, y: 61, role: 'CB' },
+    { x: 27, y: 39, role: 'CB' },
+    { x: 27, y: 16, role: 'LB' },
+    { x: 48, y: 50, role: 'CDM' },
+    { x: 58, y: 66, role: 'CM' },
+    { x: 58, y: 34, role: 'CM' },
+    { x: 79, y: 84, role: 'RW' },
+    { x: 79, y: 50, role: 'ST' },
+    { x: 79, y: 16, role: 'LW' },
+];
+
+/** Max players per role in a single lineup. */
+const ROLE_BUDGET: Record<string, number> = {
+    GK: 1,
+    RB: 1,
+    LB: 1,
+    CB: 2,
+    CDM: 1,
+    CM: 2,
+    RW: 1,
+    LW: 1,
+    ST: 1,
+};
+
+function mapToFormationRole(pos?: string): string | null {
+    const p = (pos || '').toUpperCase().trim();
+    if (!p) return null;
+    if (p === 'GK' || p === 'G') return 'GK';
+    if (p === 'RB' || p === 'RWB') return 'RB';
+    if (p === 'LB' || p === 'LWB') return 'LB';
+    if (p === 'CB' || p === 'SW' || p === 'DEF') return 'CB';
+    if (p === 'CDM' || p === 'DM' || p === 'DMC') return 'CDM';
+    if (p === 'CM' || p === 'CAM' || p === 'AM' || p === 'MID' || p === 'RCM' || p === 'LCM') return 'CM';
+    if (p === 'RW' || p === 'RM') return 'RW';
+    if (p === 'LW' || p === 'LM') return 'LW';
+    if (p === 'ST' || p === 'CF' || p === 'SS' || p === 'ATT') return 'ST';
+    return null;
+}
 
 function displayLabel(player: PitchPlayerItem): string {
     const resolved =
@@ -66,59 +111,9 @@ export type PitchPlayerItem = {
     username?: string;
 };
 
-/**
- * 4-3-3 on horizontal pitch — GK left, attack right.
- * Wider vertical spacing to avoid overlapping labels on mobile.
- */
-const FORMATION_433: Array<{ x: number; y: number; label: string }> = [
-    { x: 7, y: 50, label: 'GK' },
-    { x: 27, y: 84, label: 'RB' },
-    { x: 27, y: 61, label: 'CB' },
-    { x: 27, y: 39, label: 'CB' },
-    { x: 27, y: 16, label: 'LB' },
-    { x: 53, y: 78, label: 'RCM' },
-    { x: 53, y: 50, label: 'CM' },
-    { x: 53, y: 22, label: 'LCM' },
-    { x: 79, y: 84, label: 'RW' },
-    { x: 79, y: 50, label: 'ST' },
-    { x: 79, y: 16, label: 'LW' },
-];
-
-/** Preferred positions per slot (first match wins). */
-const SLOT_POSITION_MAP: Record<string, string[]> = {
-    GK: ['GK'],
-    RB: ['RB', 'RWB'],
-    CB: ['CB', 'SW', 'DEF'],
-    LB: ['LB', 'LWB'],
-    RCM: ['RM', 'RCM', 'CDM', 'CM', 'MID'],
-    CM: ['CM', 'CAM', 'AM', 'CDM', 'DM', 'MID'],
-    LCM: ['LM', 'LCM', 'CM', 'MID'],
-    RW: ['RW', 'RM', 'ATT'],
-    ST: ['ST', 'CF', 'SS', 'ATT'],
-    LW: ['LW', 'LM', 'ATT'],
-};
-
-const FORMATION_LINE_FOR_POS: Record<string, number> = {
-    GK: 0,
-    RB: 1, RWB: 1, LB: 1, LWB: 1, CB: 1, SW: 1, DEF: 1,
-    CM: 2, CDM: 2, CAM: 2, DM: 2, AM: 2, LM: 2, RM: 2, LCM: 2, RCM: 2, MID: 2,
-    RW: 3, LW: 3, ST: 3, CF: 3, SS: 3, ATT: 3,
-};
-
-const LINE_SLOT_INDICES = [
-    [0],
-    [1, 2, 3, 4],
-    [5, 6, 7],
-    [8, 9, 10],
-] as const;
-
 function slotCoords(slotIndex: number): { x: number; y: number } {
     const slot = FORMATION_433[slotIndex];
     return { x: slot.x, y: slot.y };
-}
-
-function normalizePos(pos?: string): string {
-    return (pos || 'CM').toUpperCase().trim();
 }
 
 function playerIdentity(player: PitchPlayerItem): string {
@@ -143,68 +138,45 @@ function dedupePlayers(players: PitchPlayerItem[]): PitchPlayerItem[] {
         if (!key || key === 'n:' || seen.has(key)) continue;
         seen.add(key);
         out.push(p);
-        if (out.length >= FORMATION_433.length) break;
     }
     return out;
 }
 
 function buildPitchPositions(players: PitchPlayerItem[]): (PitchPlayerItem | null)[] {
-    const roster = dedupePlayers(players);
-    const slots = FORMATION_433;
-    const result: (PitchPlayerItem | null)[] = new Array(slots.length).fill(null);
+    const roster = [...dedupePlayers(players)].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    const result: (PitchPlayerItem | null)[] = new Array(FORMATION_433.length).fill(null);
     const usedIndices = new Set<number>();
     const usedIdentities = new Set<string>();
+    const roleUsed: Record<string, number> = {};
+
+    const roleRemaining = (role: string) =>
+        (ROLE_BUDGET[role] ?? 0) - (roleUsed[role] ?? 0);
 
     const tryPlace = (slotIndex: number, pi: number): boolean => {
         const player = roster[pi];
         const identity = playerIdentity(player);
         if (usedIdentities.has(identity)) return false;
+
+        const slotRole = FORMATION_433[slotIndex].role;
+        const playerRole = mapToFormationRole(player.position);
+        if (!playerRole || playerRole !== slotRole || roleRemaining(slotRole) <= 0) {
+            return false;
+        }
+
         usedIdentities.add(identity);
         usedIndices.add(pi);
+        roleUsed[slotRole] = (roleUsed[slotRole] ?? 0) + 1;
         const { x, y } = slotCoords(slotIndex);
         result[slotIndex] = { ...player, x, y };
         return true;
     };
 
-    // Pass 1 — exact slot by position label
-    for (let si = 0; si < slots.length; si++) {
-        const accepted = SLOT_POSITION_MAP[slots[si].label] ?? [slots[si].label];
+    // Fill each slot with the best-rated player for that exact role only.
+    for (let si = 0; si < FORMATION_433.length; si++) {
         for (let pi = 0; pi < roster.length; pi++) {
             if (usedIndices.has(pi)) continue;
-            const pos = normalizePos(roster[pi].position);
-            if (accepted.includes(pos) || pos === slots[si].label) {
-                if (tryPlace(si, pi)) break;
-            }
+            if (tryPlace(si, pi)) break;
         }
-    }
-
-    // Pass 2 — fill empty slots by formation line (DEF/MID/ATT bucket)
-    for (let line = 0; line < LINE_SLOT_INDICES.length; line++) {
-        const emptySlots = LINE_SLOT_INDICES[line].filter((si) => !result[si]);
-        if (emptySlots.length === 0) continue;
-
-        const candidates: number[] = [];
-        for (let pi = 0; pi < roster.length; pi++) {
-            if (usedIndices.has(pi)) continue;
-            const pos = normalizePos(roster[pi].position);
-            if ((FORMATION_LINE_FOR_POS[pos] ?? 2) === line) candidates.push(pi);
-        }
-
-        for (const si of emptySlots) {
-            const pi = candidates.shift();
-            if (pi === undefined) break;
-            tryPlace(si, pi);
-        }
-    }
-
-    // Pass 3 — remaining players in rank order into empty slots
-    let pi = 0;
-    for (let si = 0; si < slots.length; si++) {
-        if (result[si]) continue;
-        while (pi < roster.length && usedIndices.has(pi)) pi++;
-        if (pi >= roster.length) break;
-        tryPlace(si, pi);
-        pi++;
     }
 
     return result;
@@ -291,18 +263,18 @@ function PlayerNode({
                     <View style={styles.circleWrapper}>
                         <View style={styles.playerCircle}>
                             <PlayerAvatar player={player} />
-                            {showNameLabel ? (
-                                <View style={styles.nameOverlay}>
-                                    <Text style={styles.nameText} numberOfLines={1}>
-                                        {label}
-                                    </Text>
-                                </View>
-                            ) : null}
                         </View>
                         <View style={[styles.ratingBadge, { backgroundColor: ratingColor }]}>
                             <Text style={styles.ratingText}>{player.rating}</Text>
                         </View>
                     </View>
+                    {showNameLabel ? (
+                        <View style={styles.nameBadge}>
+                            <Text style={styles.nameText} numberOfLines={1}>
+                                {label}
+                            </Text>
+                        </View>
+                    ) : null}
                 </TouchableOpacity>
             </AnimatedView>
         </View>
@@ -392,18 +364,19 @@ interface TeamPitchProps {
     hasLineup?: boolean;
     players?: PitchPlayerItem[];
     onPlayerPress?: (player: PitchPlayerItem) => void;
-    onDetailsPress?: () => void;
 }
 
 export function TeamPitch({
     isLoading = false,
     players: playersProp,
     onPlayerPress,
-    onDetailsPress,
 }: TeamPitchProps) {
-    const router = useRouter();
     const { t } = useTranslation();
     const { width: screenW } = useWindowDimensions();
+
+    const [showTeamInfo, setShowTeamInfo] = useState(false);
+    const openTeamInfo = useCallback(() => setShowTeamInfo(true), []);
+    const closeTeamInfo = useCallback(() => setShowTeamInfo(false), []);
 
     const [pitchSize, setPitchSize] = useState({ w: 0, h: 0 });
 
@@ -440,9 +413,25 @@ export function TeamPitch({
                     title={t.home.teamOfMonth}
                     badge={formation ?? '---'}
                     action={t.home.details}
-                    onAction={() => (onDetailsPress ? onDetailsPress() : router.push('/rank'))}
+                    onTitlePress={openTeamInfo}
+                    onAction={openTeamInfo}
                 />
             </View>
+
+            <FeatureInfoModal
+                visible={showTeamInfo}
+                onClose={closeTeamInfo}
+                icon={<Users size={30} color="#d8b4fe" />}
+                title={t.teamOfMonthInfo.title}
+                bullets={[
+                    t.teamOfMonthInfo.rule1,
+                    t.teamOfMonthInfo.rule2,
+                    t.teamOfMonthInfo.rule3,
+                    t.teamOfMonthInfo.rule4,
+                ]}
+                hype={t.teamOfMonthInfo.hype}
+                gotItLabel={t.teamOfMonthInfo.gotIt}
+            />
 
             <View style={styles.pitchOuter}>
                 <LinearGradient
@@ -585,8 +574,9 @@ const styles = StyleSheet.create({
     playerNode: {
         position: 'absolute',
         alignItems: 'center',
-        width: AVATAR_SIZE + 12,
-        transform: [{ translateX: -(AVATAR_SIZE + 12) / 2 }, { translateY: -NODE_OFFSET }],
+        minWidth: 52,
+        maxWidth: 64,
+        transform: [{ translateX: -26 }, { translateY: -NODE_OFFSET }],
         zIndex: 10,
     },
     circleWrapper: { position: 'relative', alignItems: 'center', width: AVATAR_SIZE + 8 },
@@ -638,20 +628,19 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     ratingText: { color: '#000', fontSize: 7, fontWeight: '900' },
-    nameOverlay: {
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
+    nameBadge: {
         backgroundColor: 'rgba(8,4,14,0.92)',
-        paddingHorizontal: 2,
-        paddingVertical: 1,
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: 'rgba(167,139,250,0.35)',
+        borderRadius: 5,
+        paddingHorizontal: 5,
+        paddingVertical: 2,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(167,139,250,0.35)',
+        marginTop: 4,
+        maxWidth: 64,
     },
     nameText: {
         color: '#fff',
-        fontSize: 6.5,
+        fontSize: 7.5,
         fontWeight: '800',
         textAlign: 'center',
         letterSpacing: 0.1,

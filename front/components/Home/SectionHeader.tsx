@@ -17,6 +17,8 @@ interface SectionHeaderProps {
   action?: string;
   badge?: string;
   onAction?: () => void;
+  /** Opens info / help when the title block is tapped. */
+  onTitlePress?: () => void;
   /** Vertical accent bar beside title. */
   showAccent?: boolean;
 }
@@ -27,6 +29,7 @@ export function SectionHeader({
   action,
   badge,
   onAction,
+  onTitlePress,
   showAccent = true,
 }: SectionHeaderProps) {
   return (
@@ -40,10 +43,16 @@ export function SectionHeader({
             style={styles.accentBar}
           />
         )}
-        <View style={styles.titleBlock}>
+        <TouchableOpacity
+          style={styles.titleBlock}
+          activeOpacity={onTitlePress ? 0.75 : 1}
+          onPress={onTitlePress}
+          disabled={!onTitlePress}
+          accessibilityRole={onTitlePress ? 'button' : undefined}
+        >
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           <Text style={styles.title}>{title}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.trailing}>

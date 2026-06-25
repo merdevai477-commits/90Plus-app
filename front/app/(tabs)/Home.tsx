@@ -29,15 +29,15 @@ import {
     PlayerList,
     TeamPitch,
     ScreenSection,
-} from '../../components/Home';
-import type { MatchListItem } from '../../components/Home/MatchList';
+} from '../../components/home';
+import type { MatchListItem } from '../../components/home/MatchList';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
 import { useRegisterLiveFixtures } from '../../hooks/useLiveFixture';
 import { snapshotToMatchRow } from '../../src/utils/snapshotToMatchRow';
 import { isMatchFinished, isMatchLive } from '../../utils/matchStatusUtils';
 import AdvancedSearchBar, { SearchResult } from '../../components/common/AdvancedSearchBar';
 import LuckyWheelModal from '../../components/common/LuckyWheelModal';
-import { HomeSectionError } from '../../components/Home/HomeSectionError';
+import { HomeSectionError } from '../../components/home/HomeSectionError';
 import { useHomeStore, type Match as HomeMatch } from '../../src/store/home.store';
 import { APP_BG } from '../../constants/ui';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
@@ -1002,7 +1002,6 @@ export default function HomeScreen() {
                         players={designPitchPlayers}
                         isLoading={loadingRankings && teamOfMonth.length === 0}
                         onPlayerPress={handlePitchPlayerPress}
-                        onDetailsPress={handleViewAllRank}
                     />
                 </ScreenSection>
             </ScrollView>

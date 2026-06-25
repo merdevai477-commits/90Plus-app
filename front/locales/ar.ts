@@ -575,9 +575,6 @@ export const ar = {
     statsLeagueLimited: 'الإحصائيات الكاملة غير متوفرة لهذه البطولة.',
     statsFromEvents: 'إحصائيات جزئية مستخرجة من أحداث المباراة',
     noEvents: 'الأحداث غير متاحة',
-    eventsFilterAll: 'الكل',
-    noEventsForTeam: 'لا توجد أحداث لهذا الفريق',
-    noLineupsForTeam: 'لا توجد تشكيلة لهذا الفريق',
     beforeMatch: 'قد لا تتوفر البيانات قبل المباراة',
     matchEvents: 'أحداث المباراة',
     last5Matches: 'آخر 5 مباريات',
@@ -597,8 +594,6 @@ export const ar = {
     assist: 'أسيست',
 
     // Stats
-    goals: 'الأهداف',
-    substitutions: 'التبديلات',
     shots: 'التسديدات',
     shotsOnGoal: 'تسديدات على المرمى',
     possession: 'الاستحواذ',
@@ -618,12 +613,13 @@ export const ar = {
     loadDetailsFailed: 'فشل تحميل تفاصيل المباراة',
     loadLineupsFailed: 'فشل تحميل التشكيلات',
     loadStatsFailed: 'فشل تحميل الإحصائيات',
+    loadFormFailed: 'فشل تحميل آخر المباريات',
     loadStandingsFailed: 'فشل تحميل الترتيب',
     standingsUnavailable: 'جدول الترتيب غير متاح لهذه البطولة.',
     standingsLeagueLimited: 'مزود البيانات لا ينشر جدول ترتيب لهذه البطولة.',
     standingsSeasonNote: 'عرض موسم {season}',
     standingsGroupLabel: 'المجموعة {name}',
-    standingsGroupsFilterTitle: 'المجموعات',
+    standingsGroups: 'المجموعات',
     standingsRetry: 'إعادة المحاولة',
   },
 
@@ -809,26 +805,6 @@ export const ar = {
     great: 'رائع!',
   },
 
-  nav: {
-    home: 'الرئيسية',
-    matches: 'المباريات',
-    rank: 'الترتيب',
-    reels: 'ريلز',
-    ai: 'الذكاء',
-    profile: 'الملف',
-  },
-
-  notificationPermission: {
-    title: 'لا تفوّت أي لحظة كبيرة',
-    description:
-      'احصل على تنبيهات فورية للأهداف والنتائج المباشرة وتحديثات أنديتك المفضلة.',
-    liveGoals: 'أهداف مباشرة وتنبيهات المباريات',
-    exclusiveNews: 'أخبار حصرية وتحديثات',
-    turnOn: 'تفعيل الإشعارات',
-    maybeLater: 'ليس الآن',
-    closeA11y: 'إغلاق',
-  },
-
   coinsInfo: {
     title: 'تستخدم الكوينز في إيه؟',
     rule1: 'التوقعات: كل توقع بيكلف 5 كوينز. وتكسب كوينز لما توقعك يطلع صح.',
@@ -858,6 +834,36 @@ export const ar = {
     rule2: 'شوف ترتيب الأسبوع/الشهر، والبوديوم، ولوحة الـ Top 11 كاملة.',
     rule3: 'كل حاجة بتفرق — بوستاتك، توقعاتك، كويزك… خليك ثابت.',
     hype: 'دي طريقك للقمة. الأبطال ما بيقفوش.',
+    gotIt: 'تمام',
+  },
+
+  teamOfMonthInfo: {
+    title: 'تشكيلة الشهر',
+    rule1: 'أفضل لاعبين ترتيب الشهر بيظهروا في تشكيلة 4-3-3 على الملعب.',
+    rule2: 'لاعب من كل مركز: حارس · قلبَي دفاع · ظهير يمين · ظهير يسار · وسط مدافع · وسطَي ملعب · جناح يمين · جناح يسار · مهاجم صريح.',
+    rule3: 'كل مكان لمركز واحد بس — مفيش اتنين في نفس المركز (ما عدا قلب الدفاع والوسط، لكل واحد مكانين).',
+    rule4: 'توقعات، كويز يومي، ريلز، ونشاطك طول الشهر يرفعك في الترتيب عشان تدخل التشكيلة.',
+    hype: 'مكانك على الملعب مستنيك — كمّل طول الشهر واثبت إنك تستاهل تشكيلة الشهر!',
+    gotIt: 'تمام',
+  },
+
+  playerOfWeekInfo: {
+    title: 'لاعب الأسبوع',
+    rule1: 'أفضل 7 لاعبين في ترتيب الأسبوع (XP) بياخدوا أماكن البوديوم هنا.',
+    rule2: 'الترتيب بيتجدد كل أسبوع — توقعات، كويز يومي، ريلز، ونشاطك بيزود الـ XP.',
+    rule3: 'الأماكن الفاضية لسه مفتوحة — اطلع في الترتيب قبل ما الأسبوع يخلص.',
+    rule4: 'اضغط على لاعب لفتح بروفايله، أو روح صفحة الرانك للوحة الأسبوع كاملة.',
+    hype: 'أسبوع واحد قوي يكفي يحط اسمك على البوديوم — يلّا!',
+    gotIt: 'تمام',
+  },
+
+  trendingReelsInfo: {
+    title: 'الفيديوهات الرائجة',
+    rule1: 'المقاطع الأكثر مشاهدة وتفاعلًا هذا الأسبوع بتظهر هنا في الهوم.',
+    rule2: 'ارفع ريلز واجمع لايكات ومشاركات — الأقوى يطلع في الترند.',
+    rule3: 'ممكن تشوف عناوين محفوظة بدون نت؛ التشغيل محتاج اتصال.',
+    rule4: 'اضغط على مقطع للمشاهدة، أو افتح الريلز للفيد الكامل.',
+    hype: 'مقطعك الجاي ممكن يكون ترند — أنشئ، شارك، واطلع فوق!',
     gotIt: 'تمام',
   },
 
@@ -1281,11 +1287,6 @@ export const ar = {
     netProfit: 'صافي الربح/الخسارة',
     predictionCost: 'التوقع = 5 كوينز • الفوز = +10 كوينز',
     chooseClub: 'اختر ناديك',
-    chooseCountry: 'اختر بلدك',
-    profileCardGuest: 'لاعب',
-    profileCardPickClub: 'اختر ناديك',
-    profileCardMotto: 'تركيز • شغف • انتصار',
-    profileCardDream: 'الحلم حقيقي',
 
     // QR Code Modal
     qrCode: 'رمز QR',
@@ -1351,8 +1352,6 @@ export const ar = {
     noBlockedUsers: 'لا يوجد مستخدمين محظورين',
     noBlockedUsersDesc: 'عندما تقوم بحظر مستخدم، سيظهر هنا',
     blockedSince: 'محظور منذ',
-    loadBlockedUsersError: 'فشل تحميل المستخدمين المحظورين',
-    blockedUserCountLabel: 'مستخدم محظور',
     // New additions for BlockedUsersScreen
     blockedUsersTitle: 'المستخدمون المحظورون',
     blockedUsersInfo: 'يمكنك إلغاء حظر أي مستخدم من هنا. المستخدمون المحظورون لا يمكنهم رؤية محتواك أو التواصل معك.',
@@ -1511,7 +1510,7 @@ export const ar = {
     noProfileChanges: 'لم يتم إجراء أي تغييرات على الملف الشخصي',
     videoSelectedTitle: 'تم اختيار الفيديو',
     videoSelectedMessage: 'تم إضافة الفيديو وجاري الرفع...',
-    editProfileTitle: 'تعديل الملف الشخصي',
+    editProfileTitle: 'تعديل الملف الشخصي ✏️',
     nameLabel: 'الاسم',
     namePlaceholder: 'الاسم الظاهر',
     usernameLabel: 'اسم المستخدم',
@@ -2261,7 +2260,7 @@ export const ar = {
     deleteAccountFailed: 'فشل حذف الحساب',
     deleteAccountFailedDetail: 'حدث خطأ أثناء الحذف. حاول مرة أخرى.',
     languageChanging: 'جاري تغيير اللغة',
-    languageChangingDetail: 'جاري تطبيق اتجاه الواجهة والترجمة...',
+    languageChangingDetail: 'جاري تطبيق اللغة الجديدة...',
     languageChangeFailed: 'تعذّر تغيير اللغة. حاول مرة تانية.',
     rateThanks: 'شكراً لدعمك!',
     rateThanksDetail: 'يمكنك تقييم التطبيق من المتجر في أي وقت.',

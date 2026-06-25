@@ -15,9 +15,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Polygon } from 'react-native-svg';
-import { User } from 'lucide-react-native';
+import { User, Trophy } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { SectionHeader } from './SectionHeader';
+import { FeatureInfoModal } from '../common/FeatureInfoModal';
 import { useTranslation } from '../../src/i18n';
 import { resolvePublicFirstName } from '../../hooks/useProfileCache';
 import {
@@ -447,6 +448,9 @@ export function PlayerList({ isLoading = false, players: playersProp, onPlayerPr
   // race-condition guard below works correctly.
   const data = playersProp ?? [];
   const shimmerX = useShimmer();
+  const [showWeekInfo, setShowWeekInfo] = useState(false);
+  const openWeekInfo = useCallback(() => setShowWeekInfo(true), []);
+  const closeWeekInfo = useCallback(() => setShowWeekInfo(false), []);
   const openRankHub = useCallback(
     () => (onViewAllPress ? onViewAllPress() : router.push('/rank')),
     [onViewAllPress, router],
@@ -463,7 +467,23 @@ export function PlayerList({ isLoading = false, players: playersProp, onPlayerPr
         subtitle={t.home.sectionPlayersSub}
         title={t.home.playerOfWeek}
         action={t.home.viewAll}
-        onAction={openRankHub}
+        onTitlePress={openWeekInfo}
+        onAction={openWeekInfo}
+      />
+
+      <FeatureInfoModal
+        visible={showWeekInfo}
+        onClose={closeWeekInfo}
+        icon={<Trophy size={30} color="#d8b4fe" />}
+        title={t.playerOfWeekInfo.title}
+        bullets={[
+          t.playerOfWeekInfo.rule1,
+          t.playerOfWeekInfo.rule2,
+          t.playerOfWeekInfo.rule3,
+          t.playerOfWeekInfo.rule4,
+        ]}
+        hype={t.playerOfWeekInfo.hype}
+        gotItLabel={t.playerOfWeekInfo.gotIt}
       />
       {showSkeleton ? (
         <ScrollView

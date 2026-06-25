@@ -363,9 +363,6 @@ export const en = {
     statsLeagueLimited: 'Full statistics are not provided for this competition.',
     statsFromEvents: 'Partial stats derived from match events',
     noEvents: 'No events available',
-    eventsFilterAll: 'All',
-    noEventsForTeam: 'No events for this team',
-    noLineupsForTeam: 'No lineup for this team',
     beforeMatch: 'Data may not be available before match starts',
     matchEvents: 'Match Events',
     last5Matches: 'Last 5 Matches',
@@ -385,8 +382,6 @@ export const en = {
     assist: 'Assist',
 
     // Stats
-    goals: 'Goals',
-    substitutions: 'Substitutions',
     shots: 'Shots',
     shotsOnGoal: 'Shots on Goal',
     possession: 'Possession',
@@ -406,12 +401,13 @@ export const en = {
     loadDetailsFailed: 'Could not load match details',
     loadLineupsFailed: 'Could not load lineups',
     loadStatsFailed: 'Could not load statistics',
+    loadFormFailed: 'Could not load recent form',
     loadStandingsFailed: 'Could not load standings',
     standingsUnavailable: 'Standings are not available for this competition.',
     standingsLeagueLimited: 'The provider does not publish a league table for this competition.',
     standingsSeasonNote: 'Showing season {season}',
     standingsGroupLabel: 'Group {name}',
-    standingsGroupsFilterTitle: 'Groups',
+    standingsGroups: 'GROUPS',
     standingsRetry: 'Check again',
   },
 
@@ -718,26 +714,6 @@ export const en = {
     great: 'Awesome!',
   },
 
-  nav: {
-    home: 'Home',
-    matches: 'Matches',
-    rank: 'Rank',
-    reels: 'Reels',
-    ai: 'AI',
-    profile: 'Profile',
-  },
-
-  notificationPermission: {
-    title: 'Never miss a big moment',
-    description:
-      'Get instant alerts for goals, live scores, and updates from your favorite clubs.',
-    liveGoals: 'Live goals & match alerts',
-    exclusiveNews: 'Exclusive news & updates',
-    turnOn: 'Turn on notifications',
-    maybeLater: 'Maybe later',
-    closeA11y: 'Close',
-  },
-
   coinsInfo: {
     title: 'What can I use coins for?',
     rule1: 'Match predictions: each prediction costs 5 coins. Earn coins back when your prediction is correct.',
@@ -767,6 +743,36 @@ export const en = {
     rule2: 'See weekly/monthly podiums, your level progress, and the full Top 11 board.',
     rule3: 'Every action counts — post, predict, quiz, and keep your streak alive.',
     hype: 'This is your road to the top. Keep grinding — champions don’t stop.',
+    gotIt: 'Got it',
+  },
+
+  teamOfMonthInfo: {
+    title: 'Team of the Month',
+    rule1: 'The top-ranked players of the month fill this 4-3-3 lineup on the pitch.',
+    rule2: 'One player per role: 1 GK · 2 CB · 1 RB · 1 LB · 1 CDM · 2 CM · 1 RW · 1 LW · 1 ST.',
+    rule3: 'Each slot accepts only that position — no two players in the same role (except the two CB and two CM slots).',
+    rule4: 'Predict matches, play the daily quiz, post reels, and stay active all month to climb the board.',
+    hype: 'Your spot on this pitch is waiting — keep grinding and make the Team of the Month!',
+    gotIt: 'Got it',
+  },
+
+  playerOfWeekInfo: {
+    title: 'Player of the Week',
+    rule1: 'The top 7 players on the weekly XP leaderboard claim the podium slots here.',
+    rule2: 'Rankings reset every week — predictions, daily quiz, reels, and activity all earn XP.',
+    rule3: 'Empty slots are still open — climb the board before the week ends to take a spot.',
+    rule4: 'Tap a player to open their profile, or visit Rank for the full weekly leaderboard.',
+    hype: 'One strong week can put your name on the podium — go earn it!',
+    gotIt: 'Got it',
+  },
+
+  trendingReelsInfo: {
+    title: 'Trending Highlights',
+    rule1: 'Clips with the most views and engagement this week are featured here on Home.',
+    rule2: 'Upload reels and collect likes and shares — the hottest posts rise to trending.',
+    rule3: 'Titles may show offline from cache; playback needs an internet connection.',
+    rule4: 'Tap a clip to watch it, or open Reels to browse the full feed.',
+    hype: 'Your next clip could be trending — create, share, and climb the board!',
     gotIt: 'Got it',
   },
 
@@ -1304,11 +1310,6 @@ export const en = {
     netProfit: 'Net Profit/Loss',
     predictionCost: 'Prediction = 5 coins • Win = +10 coins',
     chooseClub: 'Choose your club',
-    chooseCountry: 'Select your country',
-    profileCardGuest: 'Player',
-    profileCardPickClub: 'Choose club',
-    profileCardMotto: 'FOCUS • PASSION • VICTORY',
-    profileCardDream: 'THE DREAM IS REAL',
 
     // QR Code Modal
     qrCode: 'QR Code',
@@ -1374,8 +1375,6 @@ export const en = {
     noBlockedUsers: 'No blocked users',
     noBlockedUsersDesc: 'When you block a user, they will appear here',
     blockedSince: 'Blocked since',
-    loadBlockedUsersError: 'Failed to load blocked users',
-    blockedUserCountLabel: 'blocked user',
     // New additions for BlockedUsersScreen
     blockedUsersTitle: 'Blocked Users',
     blockedUsersInfo: 'You can unblock any user from here. Blocked users cannot see your content or contact you.',
@@ -1536,7 +1535,7 @@ export const en = {
     noProfileChanges: 'No changes were made to your profile.',
     videoSelectedTitle: 'Video selected',
     videoSelectedMessage: 'Video has been added and upload started.',
-    editProfileTitle: 'Edit Profile',
+    editProfileTitle: 'Edit Profile ✏️',
     nameLabel: 'Name',
     namePlaceholder: 'Display name',
     usernameLabel: 'Username',
@@ -2331,7 +2330,7 @@ export const en = {
     deleteAccountFailed: 'Could not delete account',
     deleteAccountFailedDetail: 'Something went wrong. Please try again.',
     languageChanging: 'Changing language',
-    languageChangingDetail: 'Applying layout direction and translations...',
+    languageChangingDetail: 'Applying your new language...',
     languageChangeFailed: 'Could not change language. Please try again.',
     rateThanks: 'Thanks for the support!',
     rateThanksDetail: 'You can rate the app from your store anytime.',
