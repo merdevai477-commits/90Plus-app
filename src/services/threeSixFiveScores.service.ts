@@ -161,6 +161,18 @@ export interface ThreeSixFivePlayerBasicInfo {
   raw: unknown;
 }
 
+export interface ThreeSixFiveCoach {
+  athleteId: number;
+  teamId: number;
+  teamName: string;
+  name: string;
+  nationality?: string;
+  bio?: string;
+  imageUrl: string | null;
+  imageVersion?: number | null;
+  role: 'head_coach' | 'assistant_coach';
+}
+
 interface Scores365Game {
   id: number;
   sportId?: number;
@@ -203,7 +215,7 @@ interface Scores365Member {
   shortName?: string;
   jerseyNumber?: number;
   position?: { name?: string; shortName?: string };
-  formation?: { name?: string; shortName?: string };
+  formation?: { name?: string; shortName?: string; id?: number };
   imageVersion?: number;
   stats?: unknown[];
 }
@@ -1114,6 +1126,110 @@ class ThreeSixFiveScoresService {
       return { data, source: '365scores' };
     } catch (err: unknown) {
       logger.warn(`[365Scores] getPlayerBasicInfo(${athleteId}) failed:`, (err as Error)?.message);
+      return { data: null, source: null };
+    }
+  }
+
+  // ─── 9. Competition Coaches (Extract via Lineups) ─────────────────────────
+
+  async extractCompetitionCoaches(
+    competitionId: number,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFiveCoach[]>> {
+    if (!this.isEnabled()) return { data: null, source: null };
+
+    try {
+      const langId = resolveScores365LangId(language);
+      const cacheKey = `365:competition:${competitionId}:coaches:${langId}`;
+      const cached = await redisCacheService.get<ThreeSixFiveCoach[]>(cacheKey);
+      if (cached) return { data: cached, source: '365scores' };
+
+      // 1. Fetch all games for the competition
+      const gamesPayload = await this.fetchJson<AllScoresPayload>(
+        `/web/games/allscores/?${this.commonParams(langId)}&competitions=${competitionId}`,
+        `coaches-allscores:${competitionId}`,
+        86400000,
+      );
+
+      const games = gamesPayload?.games ?? [];
+
+      // 2. Extract unique teams
+      const teamGameMap = new Map<number, { gameId: number; teamName: string }>(); // teamId -> { gameId, teamName }
+      for (const game of games) {
+        if (!game.id) continue;
+        if (game.homeCompetitor?.id && !teamGameMap.has(game.homeCompetitor.id)) {
+          teamGameMap.set(game.homeCompetitor.id, { gameId: game.id, teamName: game.homeCompetitor.name || 'Unknown' });
+        }
+        if (game.awayCompetitor?.id && !teamGameMap.has(game.awayCompetitor.id)) {
+          teamGameMap.set(game.awayCompetitor.id, { gameId: game.id, teamName: game.awayCompetitor.name || 'Unknown' });
+        }
+      }
+
+      const coaches: ThreeSixFiveCoach[] = [];
+
+      // 3. For each team, fetch game details and extract coach
+      for (const [teamId, { gameId, teamName }] of teamGameMap.entries()) {
+        try {
+          const gamePayload = await this.fetchJson<GamePayload>(
+            `/web/game/?${this.commonParams(langId)}&gameId=${gameId}`,
+            `coaches-game:${gameId}`,
+            86400000,
+          );
+          const game = gamePayload?.game;
+          if (!game?.members) continue;
+
+          // 4. Find coach in lineups.members (formation.id = 16 or 17)
+          const coachMember = game.members.find(
+            (m) =>
+              m.competitorId === teamId &&
+              (m.formation?.id === 16 || m.formation?.id === 17),
+          );
+
+          if (!coachMember || !coachMember.athleteId) continue; // Skip if no lineup/coach
+
+          // 5 & 6. Fetch athlete details
+          const athletePayload = await this.fetchJson<{ athletes?: any[] }>(
+            `/web/athletes/?${this.commonParams(langId)}&athletes=${coachMember.athleteId}`,
+            `coaches-athlete:${coachMember.athleteId}`,
+            86400000,
+          );
+
+          const athlete = athletePayload?.athletes?.[0];
+          if (!athlete) continue;
+
+          // 7. Construct image URL and coach object
+          const imageVersion = athlete.imageVersion ?? coachMember.imageVersion ?? null;
+          // Note: using generic coach photo builder (with imageVersion if supported)
+          const imageUrl = imageVersion
+            ? `https://imagecache.365scores.com/image/upload/f_png,w_200,h_200,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png,r_max,c_thumb,g_face,z_0.65/v${imageVersion}/Athletes/${coachMember.athleteId}`
+            : `https://imagecache.365scores.com/image/upload/f_png,w_200,h_200,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png,r_max,c_thumb,g_face,z_0.65/Athletes/${coachMember.athleteId}`;
+
+          coaches.push({
+            athleteId: coachMember.athleteId,
+            teamId,
+            teamName,
+            name: athlete.name || coachMember.name || 'Unknown',
+            nationality: athlete.countryName,
+            bio: athlete.shortName,
+            imageVersion,
+            imageUrl,
+            role: coachMember.formation?.id === 16 ? 'head_coach' : 'assistant_coach',
+          });
+        } catch (err: unknown) {
+          logger.warn(
+            `[365Scores] extractCompetitionCoaches team ${teamId} in game ${gameId} failed:`,
+            (err as Error)?.message,
+          );
+        }
+      }
+
+      await redisCacheService.set(cacheKey, coaches, 86_400_000); // cache for 1 day
+      return { data: coaches, source: '365scores' };
+    } catch (err: unknown) {
+      logger.error(
+        `[365Scores] extractCompetitionCoaches(${competitionId}) failed:`,
+        (err as Error)?.message,
+      );
       return { data: null, source: null };
     }
   }

@@ -12,6 +12,7 @@ import {
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
 import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping } from '../services/scores365-experiment.service';
+import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 
 /**
  * Football API Proxy Controller
@@ -61,6 +62,31 @@ function formatTransferDate(dateStr: string): string {
 }
 
 export class FootballController {
+  /**
+   * GET /api/football/365/competitions/:competitionId/coaches
+   * Fetches coaches for teams in a 365Scores competition via lineups.
+   */
+  static async get365CompetitionCoaches(req: Request, res: Response): Promise<void> {
+    try {
+      const competitionId = parseInt(String(req.params.competitionId), 10);
+      if (isNaN(competitionId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid competitionId' });
+        return;
+      }
+      
+      const lang = req.headers['accept-language']?.split(',')[0] || 'en';
+      const result = await threeSixFiveScoresService.extractCompetitionCoaches(competitionId, lang);
+      
+      res.json({
+        status: 'SUCCESS',
+        results: result.data?.length ?? 0,
+        response: result.data ?? [],
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
   /**
    * GET /api/football/leagues - Get all available leagues
    */

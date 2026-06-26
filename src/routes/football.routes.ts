@@ -325,6 +325,14 @@ router.get('/teams/:id/coaches', SHARED_CACHE_24H, FootballController.getTeamCoa
 router.get('/teams/:id', SHARED_CACHE_1H, FootballController.getTeamById);
 
 // ============================================
+// 365SCORES COMPETITION ROUTES
+// ============================================
+
+// GET /api/football/365/competitions/:competitionId/coaches
+// Extract coaches for all teams in a 365Scores competition via lineups
+router.get('/365/competitions/:competitionId/coaches', SHARED_CACHE_24H, FootballController.get365CompetitionCoaches);
+
+// ============================================
 // VENUES ROUTES
 // ============================================
 
