@@ -1179,11 +1179,17 @@ class ThreeSixFiveScoresService {
           if (!game?.members) continue;
 
           // 4. Find coach in lineups.members (formation.id = 16 or 17)
-          const coachMember = game.members.find(
-            (m) =>
-              m.competitorId === teamId &&
-              (m.formation?.id === 16 || m.formation?.id === 17),
+          const competitor = game.homeCompetitor?.id === teamId ? game.homeCompetitor : game.awayCompetitor;
+          const lineupMembers = competitor?.lineups?.members || [];
+          
+          const coachLineup = lineupMembers.find(
+            (m: any) => m.formation?.id === 16 || m.formation?.id === 17
           );
+
+          if (!coachLineup) continue;
+
+          // Find the corresponding member in game.members to get athleteId
+          const coachMember = game.members.find((m: any) => m.id === coachLineup.id);
 
           if (!coachMember || !coachMember.athleteId) continue; // Skip if no lineup/coach
 
