@@ -549,4 +549,38 @@ router.get('/archive/:matchId', async (req: Request, res: Response): Promise<voi
     }
 });
 
+// ============================================
+// GET /api/matches/:gameId/coaches
+// Get coaches for a 365Scores game
+// ============================================
+router.get('/:gameId/coaches', SHARED_CACHE_15S, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const gameIdParam = Array.isArray(req.params.gameId) ? req.params.gameId[0] : req.params.gameId;
+        const gameId = parseInt(gameIdParam, 10);
+        const matchupId = req.query.matchupId as string;
+        const lang = req.query.lang as string | undefined;
+
+        if (Number.isNaN(gameId) || !matchupId) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Missing or invalid gameId/matchupId');
+            return;
+        }
+
+        const { coachLookupService } = await import('../services/coach-lookup.service');
+        const coaches = await coachLookupService.getMatchCoaches(gameId, matchupId, lang);
+        
+        res.json({
+            status: 'SUCCESS',
+            data: coaches,
+        });
+    } catch (error: any) {
+        if (error.name === 'Scores365HttpError') {
+             logger.warn(`[matches/coaches] 365 HTTP error: ${error.message}`);
+             sendError(req, res, ErrorCode.INTERNAL, error.message);
+             return;
+        }
+        logger.error('[matches/coaches] Error fetching coaches:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to fetch coaches');
+    }
+});
+
 export default router;
