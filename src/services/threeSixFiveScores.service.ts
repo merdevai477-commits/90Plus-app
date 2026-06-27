@@ -1195,7 +1195,7 @@ class ThreeSixFiveScoresService {
 
           // 5 & 6. Fetch athlete details
           const athletePayload = await this.fetchJson<{ athletes?: any[] }>(
-            `/web/athletes/?${this.commonParams(langId)}&athletes=${coachMember.athleteId}`,
+            `/web/athletes/?${this.commonParams(langId)}&athletes=${coachMember.athleteId}&fullDetails=true`,
             `coaches-athlete:${coachMember.athleteId}`,
             86400000,
           );
