@@ -318,6 +318,9 @@ const viewStyles = StyleSheet.create<{
     borderColor: 'rgba(255,255,255,0.2)',
     zIndex: 4,
   },
+  subbedOffDim: {
+    opacity: 0.5,
+  },
 });
 
 const imageStyles = StyleSheet.create<{
