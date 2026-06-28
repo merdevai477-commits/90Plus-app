@@ -10,6 +10,7 @@ import { matchCacheService } from './match-cache.service';
 import type { FixtureFromAPI } from './match-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 import { buildScores365AthletePhotoUrl, buildScores365CoachPhotoUrl } from '../utils/scores365-athlete-photo';
+import { findCoachInLineup } from './coach-lookup.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
@@ -72,7 +73,7 @@ interface Scores365LineupMember {
   status: number;
   statusText?: string;
   competitorId?: number;
-  formation?: { shortName?: string };
+  formation?: { id?: number; shortName?: string };
   yardFormation?: { line?: number; fieldPosition?: number; fieldLine?: number; fieldSide?: number };
   ranking?: number;
   stats?: Array<{ type?: number; value?: string }>;
@@ -81,9 +82,11 @@ interface Scores365LineupMember {
 interface Scores365Member {
   id: number;
   competitorId: number;
+  athleteId?: number;
   name: string;
   shortName?: string;
   jerseyNumber?: number;
+  imageVersion?: number;
 }
 
 interface Scores365Event {
@@ -1264,8 +1267,17 @@ export function mapScores365Lineups(
       );
     }
 
-    const coachMember = allMembers.find((m) => m.status === 4);
-    const coachMeta = coachMember ? lookup.byId.get(coachMember.id) : undefined;
+    const coachLineup =
+      findCoachInLineup(allMembers as Parameters<typeof findCoachInLineup>[0])?.member ??
+      allMembers.find((m) => m.status === 4);
+    const coachMeta = coachLineup ? lookup.byId.get(coachLineup.id) : undefined;
+    const coachAthleteId = coachMeta?.athleteId ?? null;
+    const coachPhoto =
+      coachAthleteId != null
+        ? coachMeta?.imageVersion != null
+          ? `https://imagecache.365scores.com/image/upload/f_png,w_80,h_80,c_limit,q_auto:eco,dpr_2/v${coachMeta.imageVersion}/Athletes/${coachAthleteId}`
+          : buildScores365CoachPhotoUrl(coachAthleteId, 80)
+        : null;
 
     const starters = allMembers
       .filter((m) => STARTER_STATUSES.has(m.status))
@@ -1293,9 +1305,9 @@ export function mapScores365Lineups(
     return {
       team: { id: team.id, name: displayName ?? team.name, logo: team.logo, colors: null },
       coach: {
-        id: coachMember?.id ?? null,
+        id: coachAthleteId ?? coachLineup?.id ?? null,
         name: coachMeta?.name ?? coachMeta?.shortName ?? null,
-        photo: coachMember?.id ? buildScores365CoachPhotoUrl(coachMember.id, 80) : null,
+        photo: coachPhoto,
       },
       formation: side.lineups.formation ?? null,
       startXI: starters.map((m) => {

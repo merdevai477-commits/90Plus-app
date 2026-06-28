@@ -34,7 +34,8 @@ type Recent365Game = {
 };
 
 function isFinished365Game(g: Recent365Game): boolean {
-  if (g.statusGroup === 3) return true;
+  // 365Scores: 2 = scheduled, 3 = live, 4 = finished (matches backend map365Status).
+  if (g.statusGroup === 4) return true;
   const home = g.homeCompetitor?.score;
   const away = g.awayCompetitor?.score;
   return home != null && away != null && home >= 0 && away >= 0;

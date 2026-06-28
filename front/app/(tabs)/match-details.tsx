@@ -61,7 +61,7 @@ import {
 import { hasLineupData, isAuthoritativeLineupData } from '../../utils/matchLineupsFallback';
 import { sortPlayersByGrid } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
-import { buildScores365AthletePhotoUrl } from '../../utils/scores365AthletePhoto';
+import { buildScores365CoachPhotoUrl } from '../../utils/scores365AthletePhoto';
 import {
   WC_LEAGUE_ID,
   SCORES365_LEAGUE_ID_OFFSET,
@@ -156,7 +156,7 @@ const MatchDetailsScreen = () => {
   const resolveCoachPhoto = useCallback(
     (coachId: number | null | undefined, photo?: string | null) => {
       if (photo?.trim()) return photo;
-      if (is365Fixture && coachId) return buildScores365AthletePhotoUrl(coachId, 80);
+      if (is365Fixture && coachId) return buildScores365CoachPhotoUrl(coachId, 80);
       return '';
     },
     [is365Fixture],
@@ -608,8 +608,12 @@ const MatchDetailsScreen = () => {
           const matchGroups = isWcLeague
             ? sortStandingsGroups(result365.groups)
             : resolveStandingsGroupsForMatch(result365.groups, homeTeam, awayTeam);
-          if (matchGroups.length > 0) {
-            setStandingsGroups(matchGroups);
+          const groupsToShow =
+            matchGroups.length > 0
+              ? matchGroups
+              : sortStandingsGroups(result365.groups);
+          if (groupsToShow.length > 0) {
+            setStandingsGroups(groupsToShow);
             setStandingsSeasonUsed(fixture.league.season);
             return;
           }
