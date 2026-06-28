@@ -731,11 +731,25 @@ class ThreeSixFiveScoresService {
         return { data: null, source: null };
       }
 
-      const homeIds = new Set(
-        (gameResult.homeCompetitor?.lineups?.members ?? []).map((m) => m.id),
+      const isStaffOrMissingLineupMember = (m: {
+        id: number;
+        status?: number;
+        formation?: { id?: number };
+      }): boolean =>
+        m.status === 3 ||
+        m.status === 4 ||
+        m.formation?.id === 16 ||
+        m.formation?.id === 17;
+
+      const homeLineupMembers = gameResult.homeCompetitor?.lineups?.members ?? [];
+      const awayLineupMembers = gameResult.awayCompetitor?.lineups?.members ?? [];
+      const homeIds = new Set(homeLineupMembers.map((m) => m.id));
+      const awayIds = new Set(awayLineupMembers.map((m) => m.id));
+      const joinMissHomeIds = new Set(
+        homeLineupMembers.filter((m) => !isStaffOrMissingLineupMember(m)).map((m) => m.id),
       );
-      const awayIds = new Set(
-        (gameResult.awayCompetitor?.lineups?.members ?? []).map((m) => m.id),
+      const joinMissAwayIds = new Set(
+        awayLineupMembers.filter((m) => !isStaffOrMissingLineupMember(m)).map((m) => m.id),
       );
       const lineupsConfirmed = gameResult.lineupsStatus === 1;
 
@@ -784,17 +798,17 @@ class ThreeSixFiveScoresService {
         `[365Scores] getLineupsWithNames(${gameId}): resolved home=${homePlayers.length}/${homeIds.size} away=${awayPlayers.length}/${awayIds.size} (confirmed=${lineupsConfirmed})`,
       );
 
-      // Log join misses (member IDs present in game payload but absent in athletes response).
-      for (const id of homeIds) {
+      // Log join misses for players only (coaches/missing are absent from athletes/lineups by design).
+      for (const id of joinMissHomeIds) {
         if (!players.some((p) => p.memberId === id)) {
-          logger.warn(
+          logger.debug(
             `[365Scores] getLineupsWithNames(${gameId}): home member id=${id} missing from athletes/lineups response — join miss`,
           );
         }
       }
-      for (const id of awayIds) {
+      for (const id of joinMissAwayIds) {
         if (!players.some((p) => p.memberId === id)) {
-          logger.warn(
+          logger.debug(
             `[365Scores] getLineupsWithNames(${gameId}): away member id=${id} missing from athletes/lineups response — join miss`,
           );
         }

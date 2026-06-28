@@ -1012,6 +1012,8 @@ function eventsMatch365ScoreLine(
   expectedHome: number | null,
   expectedAway: number | null,
 ): boolean {
+  // Many 365 leagues publish score but no event timeline — empty events are valid.
+  if (!events.length) return true;
   if (expectedHome == null || expectedAway == null) return true;
   const tallied = tallyGoalsFromMappedEvents(events, homeId, awayId);
   const expectedTotal = expectedHome + expectedAway;
@@ -1228,6 +1230,8 @@ export function mapScores365Events(
 
 /** Status values recognised as confirmed starters in the 365Scores lineups array. */
 const STARTER_STATUSES = new Set([1, 0]); // 1 = confirmed starter; 0 = used for GK in some feeds
+/** 2 = bench/sub, 3 = missing/injured, 4 = coach/management — excluded from starter XI, not errors. */
+const KNOWN_LINEUP_SKIP_STATUSES = new Set([2, 3, 4]);
 
 export function mapScores365Lineups(
   game: Scores365Game,
@@ -1259,11 +1263,13 @@ export function mapScores365Lineups(
     const allMembers = side.lineups.members;
 
     // Log every non-starter for full auditability.
-    const dropped = allMembers.filter((m) => !STARTER_STATUSES.has(m.status) && m.status !== 2 && m.status !== 4);
+    const dropped = allMembers.filter(
+      (m) => !STARTER_STATUSES.has(m.status) && !KNOWN_LINEUP_SKIP_STATUSES.has(m.status),
+    );
     for (const d of dropped) {
       const meta = lookup.byId.get(d.id);
-      logger.warn(
-        `[Scores365Lineups] game ${game.id} ${sideLabel}: member id=${d.id} name="${meta?.name ?? '?'}" dropped — unexpected status=${d.status}`,
+      logger.debug(
+        `[Scores365Lineups] game ${game.id} ${sideLabel}: member id=${d.id} name="${meta?.name ?? '?'}" skipped — status=${d.status}`,
       );
     }
 

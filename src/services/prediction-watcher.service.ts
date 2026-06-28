@@ -123,23 +123,82 @@ export class PredictionWatcherService {
     }
 
     /**
+     * Resolve match status/score from API-Football, local cache, or 365Scores fallback.
+     */
+    private static async resolveMatchSnapshot(
+        matchId: number,
+    ): Promise<{ status: string; homeScore: number; awayScore: number } | null> {
+        try {
+            const data = await footballService.fetchFromApi<any[]>(
+                '/fixtures',
+                { id: matchId },
+                { source: 'job' },
+            );
+            if (data?.length) {
+                const match = data[0];
+                return {
+                    status: match.fixture.status.short,
+                    homeScore: match.goals.home ?? 0,
+                    awayScore: match.goals.away ?? 0,
+                };
+            }
+        } catch {
+            // fall through to cache / 365
+        }
+
+        const cached = await prisma.cachedFixture.findUnique({
+            where: { fixtureId: matchId },
+            select: { status: true, fullData: true },
+        });
+        if (cached?.status) {
+            const fullData = cached.fullData as { goals?: { home?: number; away?: number } } | null;
+            return {
+                status: cached.status,
+                homeScore: fullData?.goals?.home ?? 0,
+                awayScore: fullData?.goals?.away ?? 0,
+            };
+        }
+
+        if (process.env.SCORES365_EXPERIMENT_ENABLED === 'true' || process.env.SCORES365_EXPERIMENT_ENABLED === '1') {
+            try {
+                const {
+                    ensureScores365GameMapping,
+                    fetchScores365GameById,
+                } = await import('./scores365-experiment.service');
+                const gameId = (await ensureScores365GameMapping(matchId)) ?? matchId;
+                const game = await fetchScores365GameById(gameId, { language: 'en' });
+                if (game) {
+                    const statusGroup = game.statusGroup;
+                    const status =
+                        statusGroup === 4 ? 'FT' : statusGroup === 3 ? 'LIVE' : 'NS';
+                    return {
+                        status,
+                        homeScore: game.homeCompetitor?.score ?? 0,
+                        awayScore: game.awayCompetitor?.score ?? 0,
+                    };
+                }
+            } catch {
+                // ignore
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Check a single match and resolve predictions if finished
      * Returns true if predictions were resolved
      */
     private static async checkAndResolveMatch(matchId: number): Promise<boolean> {
         try {
-            // Fetch match data from API-Football
-            const data = await footballService.fetchFromApi<any[]>('/fixtures', { id: matchId }, { source: 'job' });
+            const snapshot = await this.resolveMatchSnapshot(matchId);
 
-            if (!data || data.length === 0) {
-                logger.warn(`⚠️ No data found for match ${matchId}`);
+            if (!snapshot) {
+                logger.debug(`Prediction watcher: no fixture data for match ${matchId}`);
                 return false;
             }
 
-            const match = data[0];
-            const status = match.fixture.status.short;
-            const homeScore = match.goals.home;
-            const awayScore = match.goals.away;
+            const { status, homeScore, awayScore } = snapshot;
 
             // Check if match is finished (FT, AET, PEN)
             if (['FT', 'AET', 'PEN'].includes(status)) {
