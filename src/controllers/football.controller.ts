@@ -1746,6 +1746,51 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/world-cup/phase/:phase
+   * All World Cup fixtures for a phase (upcoming | live | finished | all) from 365Scores.
+   */
+  static async getCachedWorldCupPhaseMatches(req: Request, res: Response): Promise<void> {
+    const phaseRaw = ensureString(req.params.phase).toLowerCase();
+    const phase =
+      phaseRaw === 'upcoming' || phaseRaw === 'live' || phaseRaw === 'finished' || phaseRaw === 'all'
+        ? phaseRaw
+        : 'upcoming';
+    try {
+      const { getWorldCupTabState } = await import('../services/app-features.service');
+      const wc = getWorldCupTabState();
+      if (!wc.enabled) {
+        res.status(403).json({
+          status: 'ERROR',
+          message: 'World Cup tab is locked',
+          secondsRemaining: wc.secondsRemaining,
+        });
+        return;
+      }
+
+      const language = resolveAppLanguage(req);
+      const matches = await footballDataCacheService.getWorldCupMatchesByPhase(
+        phase,
+        language,
+      );
+
+      res.json({
+        status: 'SUCCESS',
+        results: matches.length,
+        response: matches,
+        _meta: { phase, language, scores365Experiment: true },
+      });
+    } catch (error) {
+      logger.warn(`getCachedWorldCupPhaseMatches(${phaseRaw}): error`, error);
+      res.status(200).json({
+        status: 'SUCCESS',
+        results: 0,
+        response: [],
+        degraded: true,
+      });
+    }
+  }
+
+  /**
    * GET /api/football/cached/world-cup/:date
    * World Cup fixtures for a date (league + season from env / feature config).
    */

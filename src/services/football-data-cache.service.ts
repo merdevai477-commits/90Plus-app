@@ -51,6 +51,7 @@ import {
     getScores365ExperimentEvents,
     getScores365GameIdForFixture,
     getScores365MatchesForDate,
+    getScores365WorldCupPhaseFixtures,
     isScores365ExperimentEnabled,
     isScores365ExperimentFixture,
     resolveScores365AppLanguage,
@@ -605,6 +606,26 @@ class FootballDataCacheService {
                 return [];
             }
         }
+    }
+
+    /** World Cup fixtures by phase (upcoming/live/finished) from full 365 tournament list. */
+    async getWorldCupMatchesByPhase(
+        phase: 'upcoming' | 'live' | 'finished' | 'all',
+        language?: string | null,
+    ): Promise<any[]> {
+        if (!isScores365ExperimentEnabled()) return [];
+        const scores365Lang = resolveScores365AppLanguage(language);
+        const cacheKey = `wc_phase_${phase}_${scores365Lang}`;
+        const ttl = phase === 'live' ? 4_000 : phase === 'upcoming' ? 60_000 : 300_000;
+
+        const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
+        if (cached && cached.length > 0) return cached;
+
+        const from365 = await getScores365WorldCupPhaseFixtures(scores365Lang, phase);
+        if (from365.length > 0) {
+            await matchCacheService.setInMemoryCache(cacheKey, from365, ttl);
+        }
+        return from365;
     }
 
     /**

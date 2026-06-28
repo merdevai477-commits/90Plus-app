@@ -169,6 +169,7 @@ export const mapFixtureToMatch = (fixture: Fixture): Match => {
     logo: fixture.league.logo,
     country: fixture.league.country,
     countryFlag: fixture.league.flag,
+    round: fixture.league.round || undefined,
   };
 
   return {
@@ -388,6 +389,41 @@ const fetchWorldCupMatchesByDateImpl = async (
   }
 
   return [];
+};
+
+/** World Cup fixtures by tournament phase (all upcoming knockout rounds, etc.). */
+export const fetchWorldCupMatchesByPhase = async (
+  phase: 'upcoming' | 'live' | 'finished' | 'all',
+): Promise<Match[]> => {
+  const cacheKey = `wc_phase_${phase}_${getAppLanguageParam()}`;
+  try {
+    const apiUrl = getApiUrl();
+    const lang = getAppLanguageParam();
+    const response = await fetch(
+      `${apiUrl}/football/cached/world-cup/phase/${phase}?language=${lang}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept-Language': acceptLanguageHeader(lang as 'ar' | 'en'),
+        },
+      },
+    );
+    if (response.status === 403) return [];
+    if (!response.ok) return [];
+    const raw = await response.json();
+    const fixtures: Fixture[] = Array.isArray(raw?.response) ? raw.response : [];
+    const matches = mapFixturesToMatches(fixtures);
+    if (matches.length > 0) {
+      const ttl = phase === 'live' ? 3_000 : 60_000;
+      await cacheService.set(cacheKey, matches, ttl);
+    }
+    return matches;
+  } catch (error) {
+    logger.warn(`fetchWorldCupMatchesByPhase(${phase}) failed:`, error);
+    const cached = await cacheService.get<Match[]>(cacheKey);
+    return cached ?? [];
+  }
 };
 
 /**

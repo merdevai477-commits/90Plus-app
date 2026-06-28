@@ -947,7 +947,18 @@ export default function MatchesHubScreenV2() {
   const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
   const wcFetchEnabled =
     worldCupEnabled &&
-    (filter === 'WorldCup' || filter === 'All' || filter === 'Live');
+    (filter === 'WorldCup' ||
+      filter === 'All' ||
+      filter === 'Live' ||
+      filter === 'Upcoming' ||
+      filter === 'Finished' ||
+      filter === 'Predictions');
+  const wcPhaseMode =
+    filter === 'Upcoming'
+      ? 'upcoming'
+      : filter === 'Live'
+        ? 'live'
+        : 'date';
   const wcEnrichCorners =
     wcFetchEnabled && (filter === 'WorldCup' || filter === 'Live');
 
@@ -968,6 +979,7 @@ export default function MatchesHubScreenV2() {
     worldCupLeagueId,
     false,
     wcEnrichCorners,
+    wcPhaseMode,
   );
 
   // Modal state for "View All" league sheet (shared by both LeagueCard and CountryAccordion).
@@ -1223,15 +1235,24 @@ export default function MatchesHubScreenV2() {
 
   const worldCupLeagueGroups = useMemo<LeagueGroup[]>(() => {
     if (worldCupMatches.length === 0) return [];
-    const sample = worldCupMatches[0];
-    return [{
-      id: String(sample.league?.id ?? worldCupLeagueId),
-      league: sample.league?.name ?? 'World Cup',
-      leagueLogo: '',
-      logoSource: WC_2026_OFFICIAL_LOGO,
-      fixtures: worldCupMatches.map(matchToFixture),
-    }];
-  }, [worldCupMatches, worldCupLeagueId]);
+    const byStage = new Map<string, Match[]>();
+    for (const m of worldCupMatches) {
+      const stageKey = m.league?.round?.trim() || m.league?.name?.trim() || 'World Cup';
+      const bucket = byStage.get(stageKey) ?? [];
+      bucket.push(m);
+      byStage.set(stageKey, bucket);
+    }
+    return [...byStage.entries()].map(([stageKey, stageMatches], index) => {
+      const sample = stageMatches[0];
+      return {
+        id: `wc-${index}-${stageKey}`,
+        league: sample?.league?.name ?? stageKey,
+        leagueLogo: sample?.league?.logo ?? '',
+        logoSource: WC_2026_OFFICIAL_LOGO,
+        fixtures: stageMatches.map(matchToFixture),
+      };
+    });
+  }, [worldCupMatches]);
 
   /** Pinned at top on All/Live/Upcoming/Finished/Predictions — filtered by active tab. */
   const pinnedWorldCupGroup = useMemo((): LeagueGroup | null => {

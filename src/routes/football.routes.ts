@@ -123,6 +123,14 @@ router.get('/cached/league/:leagueId/matches/:date', (req, res, next) => {
   return SHARED_CACHE_5MIN(req, res, next);
 }, FootballController.getCachedLeagueMatchesByDate);
 
+// GET /api/football/cached/world-cup/phase/:phase — all WC fixtures by phase (365Scores)
+router.get('/cached/world-cup/phase/:phase', (req, res, next) => {
+  const phase = (req.params.phase as string)?.toLowerCase();
+  if (phase === 'live') return SHARED_CACHE_3S(req, res, next);
+  if (phase === 'upcoming') return SHARED_CACHE_60S(req, res, next);
+  return SHARED_CACHE_5MIN(req, res, next);
+}, FootballController.getCachedWorldCupPhaseMatches);
+
 // GET /api/football/cached/world-cup/:date — World Cup fixtures (league + season from env)
 router.get('/cached/world-cup/:date', (req, res, next) => {
   const dateParam = req.params.date as string;

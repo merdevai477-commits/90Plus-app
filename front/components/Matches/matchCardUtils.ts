@@ -24,6 +24,8 @@ export interface LeagueInfo {
   logo: string;
   country?: string;
   countryFlag?: string | null;
+  /** Knockout round or group label from 365 (e.g. Round of 32, Group A). */
+  round?: string;
 }
 
 export interface Match {

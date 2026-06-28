@@ -45,6 +45,9 @@ interface Scores365Game {
   competitionDisplayName?: string;
   roundName?: string;
   groupName?: string;
+  stageNum?: number;
+  roundNum?: number;
+  groupNum?: number;
   lineupsStatus?: number;
   lineupsStatusText?: string;
   homeCompetitor?: Scores365Competitor;
@@ -572,6 +575,52 @@ function normalize365Score(score?: number): number | null {
   return score;
 }
 
+/** Round label from 365 (group stage vs knockout). Never reuse stale DB round when 365 omits groupName. */
+export function resolve365FixtureRound(game: Scores365Game): string {
+  if (game.groupName?.trim()) {
+    return [game.roundName, game.groupName].filter(Boolean).join(' - ').trim();
+  }
+  if (game.roundName?.trim()) return game.roundName.trim();
+  const display = game.competitionDisplayName ?? '';
+  for (const sep of [' - ', ' – ', ' — ']) {
+    if (!display.includes(sep)) continue;
+    const tail = display.split(sep).pop()?.trim();
+    if (tail && tail !== display.trim()) return tail;
+  }
+  return '';
+}
+
+/** Prefer live 365 competition label (includes knockout round names). */
+export function resolve365LeagueDisplayName(game: Scores365Game, fallback?: string): string {
+  const display = game.competitionDisplayName?.trim();
+  if (display) return display;
+  const round = resolve365FixtureRound(game);
+  const base = fallback?.trim() || 'FIFA World Cup';
+  return round ? `${base} - ${round}` : base;
+}
+
+async function map365GameToFixture(
+  game: Scores365Game,
+  dbRows: Awaited<ReturnType<typeof loadWorldCupDbFixtures>>,
+  language?: string | null,
+  options?: { refreshIfLive?: boolean },
+): Promise<any | null> {
+  let gameForMap = game;
+  if (options?.refreshIfLive && is365Live(game)) {
+    const fresh = await fetchScores365GameById(game.id, {
+      language: resolveScores365AppLanguage(language),
+    });
+    if (fresh) gameForMap = fresh;
+  }
+  const dbRow = resolveDbFixtureFor365Game(gameForMap, dbRows);
+  const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
+  return mapScores365ToApiFootballFixture(
+    gameForMap,
+    base,
+    dbRow?.fixtureId ?? game.id,
+  );
+}
+
 /** Status rules validated against 365Scores feed (statusGroup, score -1, statusText). */
 export function classifyScores365MatchStatus(
   game: Scores365Game,
@@ -764,9 +813,7 @@ export function synthesizeBaseFrom365Game(
   const away = game.awayCompetitor;
   const homeScore = normalize365Score(home?.score);
   const awayScore = normalize365Score(away?.score);
-  const round = game.groupName
-    ? `${game.roundName ?? ''} - ${game.groupName}`.trim()
-    : game.roundName ?? '';
+  const round = resolve365FixtureRound(game);
 
   return {
     fixture: {
@@ -789,7 +836,7 @@ export function synthesizeBaseFrom365Game(
     },
     league: {
       id: overrides?.leagueId ?? cfg.leagueId,
-      name: overrides?.leagueName ?? game.competitionDisplayName ?? 'FIFA World Cup',
+      name: overrides?.leagueName ?? resolve365LeagueDisplayName(game, 'FIFA World Cup'),
       country: overrides?.country ?? 'World',
       logo: overrides?.leagueLogo ?? '',
       flag: null,
@@ -1471,8 +1518,8 @@ export async function mapScores365ToApiFootballFixture(
     },
     league: {
       ...base.league,
-      name: game.competitionDisplayName ?? base.league.name,
-      round: game.groupName ? `${game.roundName ?? ''} - ${game.groupName}`.trim() : base.league.round,
+      name: resolve365LeagueDisplayName(game, base.league.name),
+      round: resolve365FixtureRound(game) || base.league.round || '',
     },
     _scores365GameId: game.id,
     _experiment: 'scores365',
@@ -1649,22 +1696,7 @@ export async function getScores365MatchesForDate(
       continue;
     }
 
-    const dbRow = resolveDbFixtureFor365Game(game, dbRows);
-
-    // Live matches on today: refresh from /web/game/ (fixtures list lags by ~30–60s).
-    let gameForMap = game;
-    if (live && isToday) {
-      const fresh = await fetchScores365GameById(game.id, { language: lang });
-      if (fresh) gameForMap = fresh;
-    }
-
-    // Build directly from 365 data when API-Football has no row (synthetic fixtureId = gameId).
-    const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
-    const fixture = await mapScores365ToApiFootballFixture(
-      gameForMap,
-      base,
-      dbRow?.fixtureId ?? game.id,
-    );
+    const fixture = await map365GameToFixture(game, dbRows, lang, { refreshIfLive: true });
     if (fixture) mapped.push(fixture);
   }
 
@@ -1676,6 +1708,42 @@ export async function getScores365MatchesForDate(
     );
   }
 
+  return mapped;
+}
+
+export type Scores365WorldCupPhaseFilter = 'upcoming' | 'live' | 'finished' | 'all';
+
+/**
+ * All World Cup fixtures from the paginated 365 list, optionally filtered by phase.
+ * Used for the Upcoming tab (all knockout rounds ahead) without day-by-day gaps.
+ */
+export async function getScores365WorldCupPhaseFixtures(
+  language?: string | null,
+  phase: Scores365WorldCupPhaseFilter = 'all',
+): Promise<any[]> {
+  if (!isScores365ExperimentEnabled()) return [];
+
+  const cfg = getScores365ExperimentConfig();
+  const dbRows = await loadWorldCupDbFixtures(cfg.leagueId, cfg.season);
+  const lang = resolveScores365AppLanguage(language);
+  const games = await fetchScores365WorldCupFixtures({ language, liveRefresh: true });
+  if (!games.length) return [];
+
+  const mapped: any[] = [];
+  for (const game of games) {
+    const gamePhase =
+      game.statusGroup === 3 || is365Live(game)
+        ? 'live'
+        : game.statusGroup === 4
+          ? 'finished'
+          : 'upcoming';
+    if (phase !== 'all' && gamePhase !== phase) continue;
+
+    const fixture = await map365GameToFixture(game, dbRows, lang, { refreshIfLive: true });
+    if (fixture) mapped.push(fixture);
+  }
+
+  mapped.sort((a, b) => (a.fixture?.timestamp ?? 0) - (b.fixture?.timestamp ?? 0));
   return mapped;
 }
 

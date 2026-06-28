@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Match } from '../components/Matches/matchCardUtils';
 import {
   fetchWorldCupMatchesByDate,
+  fetchWorldCupMatchesByPhase,
   fetchLiveMatches,
   formatLocalDateKey,
   getLocalTodayKey,
@@ -123,6 +124,7 @@ export function useWorldCupMatches(
   leagueId: number,
   campaignMode = false,
   enrichCorners = true,
+  phaseMode?: 'date' | 'upcoming' | 'finished' | 'live',
 ): UseWorldCupMatchesResult {
   const [calendarMatches, setCalendarMatches] = useState<Match[]>([]);
   const snapshots = useLiveFixtureStore((s) => s.snapshots);
@@ -163,10 +165,13 @@ export function useWorldCupMatches(
     fetchingRef.current = true;
 
     const lang = appLang.startsWith('en') ? 'en' : 'ar';
-    const memKey = `${dateString}:${lang}`;
+    const memKey =
+      phaseMode && phaseMode !== 'date'
+        ? `phase:${phaseMode}:${lang}`
+        : `${dateString}:${lang}`;
     const mem = memoryCache.get(memKey);
     const ttl = TTL_IDLE_MS;
-    if (!isToday && mem && mem.data.length > 0 && Date.now() - mem.ts < ttl) {
+    if (phaseMode === 'date' && !isToday && mem && mem.data.length > 0 && Date.now() - mem.ts < ttl) {
       setCalendarMatches(mem.data);
       setLoading(false);
       fetchingRef.current = false;
@@ -176,10 +181,19 @@ export function useWorldCupMatches(
     if (!hasDataRef.current) setLoading(true);
     setError(null);
     try {
-      let list = await fetchWorldCupMatchesByDate(selectedDate, {
-        skipDiskCache: true,
-      });
-      if (isToday) {
+      let list: Match[];
+      if (phaseMode === 'upcoming') {
+        list = await fetchWorldCupMatchesByPhase('upcoming');
+      } else if (phaseMode === 'finished') {
+        list = await fetchWorldCupMatchesByPhase('finished');
+      } else if (phaseMode === 'live') {
+        list = await fetchWorldCupMatchesByPhase('live');
+      } else {
+        list = await fetchWorldCupMatchesByDate(selectedDate, {
+          skipDiskCache: true,
+        });
+      }
+      if (isToday && phaseMode === 'date') {
         const liveFeed = await fetchLiveMatches();
         list = mergeWorldCupCalendarWithLiveFeed(list, liveFeed, leagueId);
       }
@@ -215,17 +229,20 @@ export function useWorldCupMatches(
       setLoading(false);
       fetchingRef.current = false;
     }
-  }, [appLang, dateString, enabled, enrichCorners, isToday, leagueId, selectedDate]);
+  }, [appLang, dateString, enabled, enrichCorners, isToday, leagueId, phaseMode, selectedDate]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    if (!enabled || !isToday) return;
+    if (!enabled) return;
+    if (phaseMode === 'upcoming') return;
+    const shouldPoll = isToday || phaseMode === 'live';
+    if (!shouldPoll) return;
     const id = setInterval(() => void load(), LIVE_FIXTURE_CALENDAR_POLL_MS);
     return () => clearInterval(id);
-  }, [enabled, isToday, load]);
+  }, [enabled, isToday, load, phaseMode]);
 
   return { matches, loading, error, refetch: load, hasLive };
 }
