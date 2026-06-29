@@ -1747,7 +1747,10 @@ export const ApiFootballService = {
       const baseUrl = getApiUrl();
       const langQ = language ? `?language=${encodeURIComponent(language)}` : '';
       const url = `${baseUrl}/football/cached/365/player/${athleteId}/career${langQ}`;
-      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
+      const response = await withTimeout(
+        fetch(url, { headers: { Accept: 'application/json' } }),
+        60_000,
+      );
       if (!response.ok) return null;
       const json = (await response.json()) as { response?: Player365Career };
       return json.response ?? null;

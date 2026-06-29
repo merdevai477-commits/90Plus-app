@@ -2554,14 +2554,17 @@ class FootballDataCacheService {
             if (dbRow?.data && dbRow.langId === langId) {
                 const age = Date.now() - dbRow.updatedAt.getTime();
                 const data = dbRow.data as unknown as ThreeSixFivePlayerCareer;
-                if (age < CAREER_DB_MAX_AGE_MS) {
+                if (data.seasons?.length && age < CAREER_DB_MAX_AGE_MS) {
                     return { data, source: '365scores' };
                 }
-                // Stale: refresh in background, but return cached data now.
-                this.refresh365PlayerCareer(athleteId, language, langId).catch((err) => {
-                    logger.warn(`[365Career] background refresh ${athleteId} failed:`, err?.message);
-                });
-                return { data, source: '365scores' };
+                if (data.seasons?.length) {
+                    // Stale but valid: refresh in background, return cached data now.
+                    this.refresh365PlayerCareer(athleteId, language, langId).catch((err) => {
+                        logger.warn(`[365Career] background refresh ${athleteId} failed:`, err?.message);
+                    });
+                    return { data, source: '365scores' };
+                }
+                // Empty seasons cached from old bug — force refetch.
             }
         } catch (err: any) {
             logger.warn(`[365Career] DB read ${athleteId} failed:`, err?.message);
@@ -2577,7 +2580,7 @@ class FootballDataCacheService {
         langId: number,
     ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
         const result = await threeSixFiveScoresService.getPlayerCareer(athleteId, language);
-        if (!result.data) return result;
+        if (!result.data?.seasons?.length) return { data: null, source: null };
 
         try {
             await prisma.cached365PlayerCareer.upsert({
