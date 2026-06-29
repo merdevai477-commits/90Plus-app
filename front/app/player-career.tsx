@@ -20,6 +20,7 @@ import { Image as ExpoImage } from 'expo-image';
 import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg';
 import ApiFootballService, {
     type Player365Career,
+    type Player365CareerHighlightCompetition,
     type Player365CareerSeason,
 } from '../services/apiFootball';
 import { ProfileTheme } from '../constants/ProfileTheme';
@@ -71,6 +72,7 @@ export default function PlayerCareerScreen() {
     const [error, setError] = useState(false);
     const [selectedSeasonKey, setSelectedSeasonKey] = useState<string | null>(null);
     const [seasonPickerOpen, setSeasonPickerOpen] = useState(false);
+    const [highlightCompId, setHighlightCompId] = useState<number | null>(null);
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -95,6 +97,8 @@ export default function PlayerCareerScreen() {
                 } else {
                     setCareer(data);
                     setSelectedSeasonKey(data.seasons[0]?.seasonKey ?? null);
+                    const firstHl = data.currentSeasonHighlights?.[0]?.competitionId;
+                    if (firstHl != null) setHighlightCompId(firstHl);
                 }
             } catch (err) {
                 logger.warn('Failed to load 365 career:', err);
@@ -126,6 +130,16 @@ export default function PlayerCareerScreen() {
             null
         );
     }, [career, selectedSeasonKey]);
+
+    const isCurrentSeason =
+        !!career?.currentSeasonKey &&
+        selectedSeason?.seasonKey === career.currentSeasonKey;
+
+    const activeHighlight: Player365CareerHighlightCompetition | null = useMemo(() => {
+        const list = career?.currentSeasonHighlights ?? [];
+        if (!list.length) return null;
+        return list.find((h) => h.competitionId === highlightCompId) ?? list[0];
+    }, [career, highlightCompId]);
 
     const photoUri =
         career?.profile.imageUrl ||
@@ -253,6 +267,81 @@ export default function PlayerCareerScreen() {
                         />
                     </View>
 
+                    {/* Current season — rich stats from 365 highlightStats */}
+                    {(career.currentSeasonHighlights?.length ?? 0) > 0 && activeHighlight && (
+                        <>
+                            <View style={styles.sectionLabelRow}>
+                                <View style={styles.sectionAccent} />
+                                <Text style={styles.sectionLabel}>{pc.currentSeason}</Text>
+                            </View>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                style={styles.compTabScroll}
+                                contentContainerStyle={styles.compTabRow}
+                            >
+                                {career.currentSeasonHighlights!.map((h) => {
+                                    const active = h.competitionId === activeHighlight.competitionId;
+                                    return (
+                                        <TouchableOpacity
+                                            key={h.competitionId}
+                                            style={[styles.compTab, active && styles.compTabActive]}
+                                            onPress={() => setHighlightCompId(h.competitionId)}
+                                            activeOpacity={0.85}
+                                        >
+                                            {h.competitionLogo ? (
+                                                <ExpoImage
+                                                    source={{ uri: h.competitionLogo }}
+                                                    style={styles.compTabLogo}
+                                                    contentFit="contain"
+                                                />
+                                            ) : (
+                                                <Ionicons
+                                                    name="trophy-outline"
+                                                    size={16}
+                                                    color={ProfileTheme.colors.textTertiary}
+                                                />
+                                            )}
+                                            <Text
+                                                style={[styles.compTabText, active && styles.compTabTextActive]}
+                                                numberOfLines={1}
+                                            >
+                                                {h.competitionName}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+
+                            <View style={styles.highlightTopRow}>
+                                {activeHighlight.stats
+                                    .filter((s) => s.isTop)
+                                    .map((s) => (
+                                        <View key={`${s.type}-${s.name}`} style={styles.highlightTopCard}>
+                                            <Text style={styles.highlightTopValue}>{s.value}</Text>
+                                            <Text style={styles.highlightTopLabel} numberOfLines={2}>
+                                                {s.shortName || s.name}
+                                            </Text>
+                                        </View>
+                                    ))}
+                            </View>
+
+                            <Text style={styles.heading}>{pc.detailedStats}</Text>
+                            <View style={styles.detailGrid}>
+                                {activeHighlight.stats
+                                    .filter((s) => !s.isTop)
+                                    .map((s) => (
+                                        <View key={`d-${s.type}-${s.name}`} style={styles.detailCell}>
+                                            <Text style={styles.detailValue}>{s.value}</Text>
+                                            <Text style={styles.detailLabel} numberOfLines={2}>
+                                                {s.name}
+                                            </Text>
+                                        </View>
+                                    ))}
+                            </View>
+                        </>
+                    )}
+
                     {/* Season selector */}
                     <View style={styles.sectionLabelRow}>
                         <View style={styles.sectionAccent} />
@@ -312,7 +401,9 @@ export default function PlayerCareerScreen() {
                             <StatCard icon="football" color={ProfileTheme.colors.neonPurple} value={fmt(selectedSeason.goals)} label={pc.goals} />
                             <StatCard icon="git-network" color={ProfileTheme.colors.neonBlue} value={fmt(selectedSeason.assists)} label={pc.assists} />
                             <StatCard icon="shirt" color={ProfileTheme.colors.neonGreen} value={fmt(selectedSeason.appearances)} label={pc.appearances} />
-                            <StatCard icon="time" color={ProfileTheme.colors.gold} value={fmt(selectedSeason.minutes)} label={pc.minutes} />
+                            {isCurrentSeason && selectedSeason.minutes != null && (
+                                <StatCard icon="time" color={ProfileTheme.colors.gold} value={fmt(selectedSeason.minutes)} label={pc.minutes} />
+                            )}
                             <StatCard icon="square" color={'#FFC400'} value={fmt(sumStat(selectedSeason, 'yellowCards'))} label={pc.yellowCards} />
                             <StatCard icon="square" color={ProfileTheme.colors.neonRed} value={fmt(sumStat(selectedSeason, 'redCards'))} label={pc.redCards} />
                         </View>
@@ -353,7 +444,9 @@ export default function PlayerCareerScreen() {
                                         <CompStat value={fmt(c.appearances)} label={pc.appearances} />
                                         <CompStat value={fmt(c.goals)} label={pc.goals} />
                                         <CompStat value={fmt(c.assists)} label={pc.assists} />
-                                        <CompStat value={fmt(c.minutes)} label={pc.minutes} />
+                                        {c.minutes != null && (
+                                            <CompStat value={fmt(c.minutes)} label={pc.minutes} />
+                                        )}
                                     </View>
                                 </View>
                             ))}
@@ -718,4 +811,64 @@ const styles = StyleSheet.create({
     compStat: { alignItems: 'center', flex: 1 },
     compStatValue: { color: '#fff', fontSize: 16, fontWeight: '800' },
     compStatLabel: { color: ProfileTheme.colors.textTertiary, fontSize: 11, marginTop: 2 },
+
+    compTabScroll: { marginBottom: 12, marginHorizontal: -4 },
+    compTabRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 4 },
+    compTab: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.borderSoft,
+        backgroundColor: ProfileTheme.colors.glass,
+        maxWidth: 180,
+    },
+    compTabActive: {
+        borderColor: ProfileTheme.colors.neonPurple,
+        backgroundColor: 'rgba(142,84,233,0.18)',
+    },
+    compTabLogo: { width: 20, height: 20 },
+    compTabText: { color: ProfileTheme.colors.textSecondary, fontSize: 12, fontWeight: '600', flexShrink: 1 },
+    compTabTextActive: { color: '#fff' },
+
+    highlightTopRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 4,
+    },
+    highlightTopCard: {
+        width: '31%',
+        minWidth: 96,
+        backgroundColor: ProfileTheme.colors.glass,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.borderSoft,
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        alignItems: 'center',
+    },
+    highlightTopValue: { color: '#fff', fontSize: 18, fontWeight: '900' },
+    highlightTopLabel: {
+        color: ProfileTheme.colors.textTertiary,
+        fontSize: 10,
+        marginTop: 4,
+        textAlign: 'center',
+    },
+
+    detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    detailCell: {
+        width: '48%',
+        backgroundColor: ProfileTheme.colors.glass,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.borderSoft,
+        paddingVertical: 10,
+        paddingHorizontal: 10,
+    },
+    detailValue: { color: '#fff', fontSize: 16, fontWeight: '800' },
+    detailLabel: { color: ProfileTheme.colors.textTertiary, fontSize: 11, marginTop: 4 },
 });

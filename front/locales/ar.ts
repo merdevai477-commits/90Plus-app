@@ -691,6 +691,9 @@ export const ar = {
     loading: 'جارٍ تحميل المسيرة...',
     noData: 'لا توجد بيانات للمسيرة',
     goBack: 'رجوع',
+    currentSeason: 'الموسم الحالي',
+    detailedStats: 'إحصائيات تفصيلية',
+    trophies: 'الألقاب',
   },
 
   predictions: {

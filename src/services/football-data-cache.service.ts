@@ -2510,7 +2510,26 @@ class FootballDataCacheService {
         if (!this.is365WorldCupSecondaryEnabled()) {
             return { data: null, source: null };
         }
-        return threeSixFiveScoresService.getPlayerMatchReport(athleteId, gameId, language);
+        const result = await threeSixFiveScoresService.getPlayerMatchReport(athleteId, gameId, language);
+        if (result.data) {
+            void this.invalidate365PlayerCareer(athleteId, language);
+        }
+        return result;
+    }
+
+    /** Drop cached career (Redis + Postgres) so the next view pulls fresh 365 data. */
+    async invalidate365PlayerCareer(athleteId: number, language?: string | null): Promise<void> {
+        const langId = resolveScores365LangId(language);
+        try {
+            await threeSixFiveScoresService.invalidatePlayerCareerCache(athleteId, langId);
+        } catch (err: any) {
+            logger.warn(`[365Career] Redis invalidate ${athleteId} failed:`, err?.message);
+        }
+        try {
+            await prisma.cached365PlayerCareer.deleteMany({ where: { athleteId } });
+        } catch (err: any) {
+            logger.warn(`[365Career] DB invalidate ${athleteId} failed:`, err?.message);
+        }
     }
 
     async getCached365PlayerCareerShotChart(
@@ -2554,10 +2573,11 @@ class FootballDataCacheService {
             if (dbRow?.data && dbRow.langId === langId) {
                 const age = Date.now() - dbRow.updatedAt.getTime();
                 const data = dbRow.data as unknown as ThreeSixFivePlayerCareer;
-                if (data.seasons?.length && age < CAREER_DB_MAX_AGE_MS) {
+                const hasNewShape = Array.isArray(data.currentSeasonHighlights);
+                if (data.seasons?.length && hasNewShape && age < CAREER_DB_MAX_AGE_MS) {
                     return { data, source: '365scores' };
                 }
-                if (data.seasons?.length) {
+                if (data.seasons?.length && hasNewShape) {
                     // Stale but valid: refresh in background, return cached data now.
                     this.refresh365PlayerCareer(athleteId, language, langId).catch((err) => {
                         logger.warn(`[365Career] background refresh ${athleteId} failed:`, err?.message);

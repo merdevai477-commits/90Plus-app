@@ -201,7 +201,7 @@ export interface Player365CareerSeason {
   goals: number;
   assists: number;
   appearances: number;
-  minutes: number;
+  minutes: number | null;
   competitions: Player365CareerCompetition[];
 }
 
@@ -210,6 +210,30 @@ export interface Player365CareerTrendPoint {
   label: string;
   goals: number;
   assists: number;
+}
+
+export interface Player365CareerHighlightStat {
+  name: string;
+  shortName?: string;
+  value: string;
+  type?: number;
+  isTop?: boolean;
+}
+
+export interface Player365CareerHighlightCompetition {
+  competitionId: number;
+  competitionName: string;
+  competitionLogo: string | null;
+  seasonNum?: number | null;
+  stats: Player365CareerHighlightStat[];
+}
+
+export interface Player365CareerTrophy {
+  competitionId: number;
+  name: string;
+  displayName?: string;
+  count: number;
+  categoryName?: string;
 }
 
 export interface Player365Career {
@@ -226,6 +250,9 @@ export interface Player365Career {
   };
   seasons: Player365CareerSeason[];
   trend: Player365CareerTrendPoint[];
+  currentSeasonKey?: string | null;
+  currentSeasonHighlights?: Player365CareerHighlightCompetition[];
+  trophies?: Player365CareerTrophy[];
 }
 
 export interface League {

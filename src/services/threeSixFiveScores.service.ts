@@ -184,7 +184,7 @@ export interface Career365Season {
   goals: number;
   assists: number;
   appearances: number;
-  minutes: number;
+  minutes: number | null;
   competitions: Career365CompetitionStat[];
 }
 
@@ -193,6 +193,30 @@ export interface Career365TrendPoint {
   label: string;
   goals: number;
   assists: number;
+}
+
+export interface Career365HighlightStat {
+  name: string;
+  shortName?: string;
+  value: string;
+  type?: number;
+  isTop?: boolean;
+}
+
+export interface Career365HighlightCompetition {
+  competitionId: number;
+  competitionName: string;
+  competitionLogo: string | null;
+  seasonNum?: number | null;
+  stats: Career365HighlightStat[];
+}
+
+export interface Career365Trophy {
+  competitionId: number;
+  name: string;
+  displayName?: string;
+  count: number;
+  categoryName?: string;
 }
 
 export interface ThreeSixFivePlayerCareer {
@@ -209,6 +233,11 @@ export interface ThreeSixFivePlayerCareer {
   };
   seasons: Career365Season[];
   trend: Career365TrendPoint[];
+  /** Newest season key from 365 (e.g. "2026" for 2025/26). */
+  currentSeasonKey: string | null;
+  /** Rich per-competition stats for the active season (highlightStats). */
+  currentSeasonHighlights: Career365HighlightCompetition[];
+  trophies: Career365Trophy[];
 }
 
 export interface ThreeSixFiveCoach {
@@ -1100,6 +1129,7 @@ class ThreeSixFiveScoresService {
       };
 
       await redisCacheService.set(cacheKey, report, 300_000);
+      void this.invalidatePlayerCareerCache(aid, langId);
       return { data: report, source: '365scores' };
     } catch (err: unknown) {
       logger.error(
@@ -1214,11 +1244,11 @@ class ThreeSixFiveScoresService {
 
     try {
       const langId = resolveScores365LangId(language);
-      const cacheKey = `365:player-career:v3:${athleteId}:${langId}`;
+      const cacheKey = `365:player-career:v4:${athleteId}:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFivePlayerCareer>(cacheKey);
       if (cached?.seasons?.length) return { data: cached, source: '365scores' };
 
-      const detailsPayload = await this.fetchJson<{ athletes?: any[]; competitors?: any[] }>(
+      const detailsPayload = await this.fetchJson<{ athletes?: any[]; competitors?: any[]; competitions?: any[] }>(
         `/web/athletes/?${this.commonParams(langId)}&athletes=${athleteId}&fullDetails=true`,
         `player-career-details:${athleteId}`,
         86_400_000,
@@ -1227,6 +1257,7 @@ class ThreeSixFiveScoresService {
       const athlete = detailsPayload?.athletes?.[0] ?? null;
       if (!athlete) return { data: null, source: null };
 
+      const compLogoMap = this.build365CompetitionLogoMap(detailsPayload?.competitions ?? []);
       const competitorNames = new Map<number, string>(
         (detailsPayload?.competitors ?? [])
           .filter((c: any) => c?.id != null && c?.name)
@@ -1234,6 +1265,9 @@ class ThreeSixFiveScoresService {
       );
 
       const profile = this.build365CareerProfile(athleteId, athlete, competitorNames);
+      const currentSeasonKey = String(athlete.careerStats?.seasons?.[0]?.key ?? '') || null;
+      const currentSeasonHighlights = this.parse365HighlightStats(athlete.highlightStats, compLogoMap);
+      const trophies = this.parse365Trophies(athlete.trophies);
 
       const seasonDefs: Array<{ key: string; name: string; embeddedStats?: any }> = (
         athlete.careerStats?.seasons ?? []
@@ -1250,17 +1284,30 @@ class ThreeSixFiveScoresService {
         return { data: null, source: null };
       }
 
-      const seasons = await this.fetch365CareerSeasons(athleteId, langId, seasonDefs);
+      const seasons = await this.fetch365CareerSeasons(athleteId, langId, seasonDefs, compLogoMap);
       if (!seasons.length) {
         logger.warn(`[365Scores] getPlayerCareer(${athleteId}): all season fetches empty`);
         return { data: null, source: null };
+      }
+
+      if (currentSeasonKey) {
+        const current = seasons.find((s) => s.seasonKey === currentSeasonKey) ?? seasons[0];
+        if (current) this.enrichCurrentSeasonFromHighlights(current, currentSeasonHighlights);
       }
 
       const trend: Career365TrendPoint[] = [...seasons]
         .reverse()
         .map((s) => ({ seasonKey: s.seasonKey, label: s.label, goals: s.goals, assists: s.assists }));
 
-      const data: ThreeSixFivePlayerCareer = { athleteId, profile, seasons, trend };
+      const data: ThreeSixFivePlayerCareer = {
+        athleteId,
+        profile,
+        seasons,
+        trend,
+        currentSeasonKey,
+        currentSeasonHighlights,
+        trophies,
+      };
 
       await redisCacheService.set(cacheKey, data, 86_400_000);
       return { data, source: '365scores' };
@@ -1270,11 +1317,111 @@ class ThreeSixFiveScoresService {
     }
   }
 
+  /** Clears Redis career cache so the next read refetches from 365. */
+  async invalidatePlayerCareerCache(athleteId: number, langId?: number): Promise<void> {
+    const langs = langId != null ? [langId] : [1, 27];
+    for (const lid of langs) {
+      await redisCacheService.del(`365:player-career:v4:${athleteId}:${lid}`);
+      await redisCacheService.del(`365:player-career:v3:${athleteId}:${lid}`);
+      await redisCacheService.del(`365:player-career:${athleteId}:${lid}`);
+    }
+  }
+
+  private build365CompetitionLogoMap(competitions: any[]): Map<number, string | null> {
+    const map = new Map<number, string | null>();
+    for (const c of competitions ?? []) {
+      const id = this.num365(c?.id);
+      if (id != null) {
+        map.set(id, buildLeagueLogoUrl(id, this.num365(c.imageVersion)));
+      }
+    }
+    return map;
+  }
+
+  private parse365HighlightStats(
+    raw: any[] | undefined,
+    compLogoMap: Map<number, string | null>,
+  ): Career365HighlightCompetition[] {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((h) => h?.competitionId != null)
+      .map((h) => {
+        const competitionId = this.num365(h.competitionId) ?? 0;
+        const stats: Career365HighlightStat[] = (h.stats ?? []).map((s: any) => ({
+          name: String(s.name ?? s.shortName ?? '—'),
+          shortName: s.shortName as string | undefined,
+          value: String(s.value ?? '—'),
+          type: this.num365(s.type) ?? undefined,
+          isTop: Boolean(s.isTop),
+        }));
+        return {
+          competitionId,
+          competitionName: String(h.competitionName ?? h.name ?? '—'),
+          competitionLogo: compLogoMap.get(competitionId) ?? null,
+          seasonNum: this.num365(h.seasonNum),
+          stats,
+        };
+      });
+  }
+
+  private parse365Trophies(raw: any): Career365Trophy[] {
+    const out: Career365Trophy[] = [];
+    const categories = raw?.categories ?? [];
+    for (const cat of categories) {
+      const categoryName = cat?.name as string | undefined;
+      for (const t of cat?.trophies ?? []) {
+        const competitionId = this.num365(t?.competitionId);
+        if (competitionId == null) continue;
+        out.push({
+          competitionId,
+          name: String(t.name ?? '—'),
+          displayName: t.displayName as string | undefined,
+          count: this.num365(t.count) ?? 1,
+          categoryName,
+        });
+      }
+    }
+    return out;
+  }
+
+  private enrichCurrentSeasonFromHighlights(
+    season: Career365Season,
+    highlights: Career365HighlightCompetition[],
+  ): void {
+    if (!highlights.length) return;
+    const byCompId = new Map(highlights.map((h) => [h.competitionId, h]));
+    let seasonMinutes = 0;
+    let hasMinutes = false;
+
+    for (const comp of season.competitions) {
+      const cid = comp.competitionId;
+      if (cid == null) continue;
+      const hl = byCompId.get(cid);
+      if (!hl) continue;
+      const minutesStat = hl.stats.find((s) => s.type === 222);
+      const ratingStat = hl.stats.find((s) => s.type === 54);
+      if (minutesStat) {
+        const mins = this.num365(minutesStat.value);
+        if (mins != null) {
+          comp.minutes = mins;
+          seasonMinutes += mins;
+          hasMinutes = true;
+        }
+      }
+      if (ratingStat) {
+        comp.rating = this.num365(ratingStat.value);
+      }
+    }
+
+    if (hasMinutes) season.minutes = seasonMinutes;
+  }
+
   /** Fetches per-season career tables from 365 (requires seasonKey on each call). */
   private async fetch365CareerSeasons(
     athleteId: number,
     langId: number,
     seasonDefs: Array<{ key: string; name: string; embeddedStats?: any }>,
+    compLogoMap: Map<number, string | null>,
   ): Promise<Career365Season[]> {
     const seasons: Career365Season[] = [];
     const BATCH = 4;
@@ -1299,7 +1446,7 @@ class ThreeSixFiveScoresService {
             );
           }
           if (!payload?.stats) return null;
-          return this.parse365SeasonCareerPayload(def, payload);
+          return this.parse365SeasonCareerPayload(def, payload, compLogoMap);
         }),
       );
       for (const s of results) {
@@ -1325,6 +1472,7 @@ class ThreeSixFiveScoresService {
   private parse365SeasonCareerPayload(
     seasonDef: { key: string; name: string },
     payload: any,
+    compLogoMap: Map<number, string | null>,
   ): Career365Season {
     const categories: any[] = payload.stats?.categories ?? [];
     const tables: any[] = payload.stats?.tables ?? [];
@@ -1349,7 +1497,8 @@ class ThreeSixFiveScoresService {
         competitions.push({
           competitionId,
           competitionName: (row.title as string) ?? '—',
-          competitionLogo: null,
+          competitionLogo:
+            competitionId != null ? (compLogoMap.get(competitionId) ?? null) : null,
           teamId,
           teamName,
           appearances: valByCol.get(5) ?? null,
@@ -1372,7 +1521,7 @@ class ThreeSixFiveScoresService {
       goals: sum((c) => c.goals),
       assists: sum((c) => c.assists),
       appearances: sum((c) => c.appearances),
-      minutes: 0,
+      minutes: null,
       competitions,
     };
   }

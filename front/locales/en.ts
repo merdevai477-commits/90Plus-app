@@ -479,6 +479,9 @@ export const en = {
     loading: 'Loading career...',
     noData: 'No career data available',
     goBack: 'Go Back',
+    currentSeason: 'Current Season',
+    detailedStats: 'Detailed Statistics',
+    trophies: 'Trophies',
   },
 
   offlineQueue: {

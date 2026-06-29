@@ -2,7 +2,13 @@
  * Client-side fallback for 365 player career when the backend returns empty seasons
  * (e.g. production not yet redeployed with per-seasonKey career fetch).
  */
-import type { Player365Career, Player365CareerCompetition, Player365CareerSeason } from '../services/apiFootball';
+import type {
+  Player365Career,
+  Player365CareerCompetition,
+  Player365CareerHighlightCompetition,
+  Player365CareerSeason,
+  Player365CareerTrophy,
+} from '../services/apiFootball';
 import { buildScores365AthletePhotoUrl } from './scores365AthletePhoto';
 import { logger } from '../utils/logger';
 
@@ -32,6 +38,22 @@ function num365(v: unknown): number | null {
   return null;
 }
 
+function buildLeagueLogoUrl(competitionId: number, imageVersion: number | null): string | null {
+  if (imageVersion == null) return null;
+  return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2/v${imageVersion}/Competitions/${competitionId}`;
+}
+
+function buildCompetitionLogoMap(competitions: any[]): Map<number, string | null> {
+  const map = new Map<number, string | null>();
+  for (const c of competitions ?? []) {
+    const id = num365(c?.id);
+    if (id != null) {
+      map.set(id, buildLeagueLogoUrl(id, num365(c.imageVersion)));
+    }
+  }
+  return map;
+}
+
 async function fetch365Json<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${BASE_URL}${path}`, { headers: HEADERS });
@@ -52,9 +74,86 @@ function hasEmbeddedRows(stats: any): boolean {
   );
 }
 
+function parseHighlightStats(
+  raw: any[] | undefined,
+  compLogoMap: Map<number, string | null>,
+): Player365CareerHighlightCompetition[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((h) => h?.competitionId != null)
+    .map((h) => {
+      const competitionId = num365(h.competitionId) ?? 0;
+      return {
+        competitionId,
+        competitionName: String(h.competitionName ?? h.name ?? '—'),
+        competitionLogo: compLogoMap.get(competitionId) ?? null,
+        seasonNum: num365(h.seasonNum),
+        stats: (h.stats ?? []).map((s: any) => ({
+          name: String(s.name ?? s.shortName ?? '—'),
+          shortName: s.shortName as string | undefined,
+          value: String(s.value ?? '—'),
+          type: num365(s.type) ?? undefined,
+          isTop: Boolean(s.isTop),
+        })),
+      };
+    });
+}
+
+function parseTrophies(raw: any): Player365CareerTrophy[] {
+  const out: Player365CareerTrophy[] = [];
+  for (const cat of raw?.categories ?? []) {
+    const categoryName = cat?.name as string | undefined;
+    for (const t of cat?.trophies ?? []) {
+      const competitionId = num365(t?.competitionId);
+      if (competitionId == null) continue;
+      out.push({
+        competitionId,
+        name: String(t.name ?? '—'),
+        displayName: t.displayName as string | undefined,
+        count: num365(t.count) ?? 1,
+        categoryName,
+      });
+    }
+  }
+  return out;
+}
+
+function enrichCurrentSeasonFromHighlights(
+  season: Player365CareerSeason,
+  highlights: Player365CareerHighlightCompetition[],
+): void {
+  if (!highlights.length) return;
+  const byCompId = new Map(highlights.map((h) => [h.competitionId, h]));
+  let seasonMinutes = 0;
+  let hasMinutes = false;
+
+  for (const comp of season.competitions) {
+    const cid = comp.competitionId;
+    if (cid == null) continue;
+    const hl = byCompId.get(cid);
+    if (!hl) continue;
+    const minutesStat = hl.stats.find((s) => s.type === 222);
+    const ratingStat = hl.stats.find((s) => s.type === 54);
+    if (minutesStat) {
+      const mins = num365(minutesStat.value);
+      if (mins != null) {
+        comp.minutes = mins;
+        seasonMinutes += mins;
+        hasMinutes = true;
+      }
+    }
+    if (ratingStat) {
+      comp.rating = num365(ratingStat.value);
+    }
+  }
+
+  if (hasMinutes) season.minutes = seasonMinutes;
+}
+
 function parseSeasonPayload(
   seasonDef: { key: string; name: string },
   payload: any,
+  compLogoMap: Map<number, string | null>,
 ): Player365CareerSeason | null {
   const categories: any[] = payload?.stats?.categories ?? [];
   const tables: any[] = payload?.stats?.tables ?? [];
@@ -74,10 +173,12 @@ function parseSeasonPayload(
           valByCol.set(Number(v.columnNum), num365(v.value) ?? 0);
         }
       }
+      const competitionId = num365(row.entityId);
       competitions.push({
-        competitionId: num365(row.entityId),
+        competitionId,
         competitionName: (row.title as string) ?? '—',
-        competitionLogo: null,
+        competitionLogo:
+          competitionId != null ? (compLogoMap.get(competitionId) ?? null) : null,
         teamId,
         teamName,
         appearances: valByCol.get(5) ?? null,
@@ -102,7 +203,7 @@ function parseSeasonPayload(
     goals: sum((c) => c.goals),
     assists: sum((c) => c.assists),
     appearances: sum((c) => c.appearances),
-    minutes: 0,
+    minutes: null,
     competitions,
   };
 }
@@ -116,12 +217,13 @@ export async function fetch365PlayerCareerClient(
   const langId = langIdFor(language);
   const cp = commonParams(langId);
 
-  const details = await fetch365Json<{ athletes?: any[]; competitors?: any[] }>(
+  const details = await fetch365Json<{ athletes?: any[]; competitors?: any[]; competitions?: any[] }>(
     `/web/athletes/?${cp}&athletes=${athleteId}&fullDetails=true`,
   );
   const athlete = details?.athletes?.[0];
   if (!athlete) return null;
 
+  const compLogoMap = buildCompetitionLogoMap(details?.competitions ?? []);
   const competitorNames = new Map<number, string>(
     (details?.competitors ?? [])
       .filter((c: any) => c?.id != null && c?.name)
@@ -141,6 +243,10 @@ export async function fetch365PlayerCareerClient(
     age: num365(athlete.age),
     imageUrl: buildScores365AthletePhotoUrl(athleteId, 250),
   };
+
+  const currentSeasonKey = String(athlete.careerStats?.seasons?.[0]?.key ?? '') || null;
+  const currentSeasonHighlights = parseHighlightStats(athlete.highlightStats, compLogoMap);
+  const trophies = parseTrophies(athlete.trophies);
 
   const seasonDefs: Array<{ key: string; name: string; embeddedStats?: any }> = (
     athlete.careerStats?.seasons ?? []
@@ -168,7 +274,7 @@ export async function fetch365PlayerCareerClient(
           );
         }
         if (!payload?.stats) return null;
-        return parseSeasonPayload(def, payload);
+        return parseSeasonPayload(def, payload, compLogoMap);
       }),
     );
     for (const s of parsed) {
@@ -185,10 +291,23 @@ export async function fetch365PlayerCareerClient(
     return b.label.localeCompare(a.label);
   });
 
+  if (currentSeasonKey) {
+    const current = seasons.find((s) => s.seasonKey === currentSeasonKey) ?? seasons[0];
+    if (current) enrichCurrentSeasonFromHighlights(current, currentSeasonHighlights);
+  }
+
   const trend = [...seasons]
     .reverse()
     .map((s) => ({ seasonKey: s.seasonKey, label: s.label, goals: s.goals, assists: s.assists }));
 
   logger.debug(`[365CareerClient] loaded ${seasons.length} seasons for athlete ${athleteId}`);
-  return { athleteId, profile, seasons, trend };
+  return {
+    athleteId,
+    profile,
+    seasons,
+    trend,
+    currentSeasonKey,
+    currentSeasonHighlights,
+    trophies,
+  };
 }
