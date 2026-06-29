@@ -1013,6 +1013,37 @@ export default function PlayerProfileScreen() {
                                         </Text>
                                     </View>
                                 )}
+                                {is365Source && contextAthleteId > 0 && (
+                                    <TouchableOpacity
+                                        activeOpacity={0.85}
+                                        style={styles.careerButtonWrap}
+                                        onPress={() =>
+                                            router.push({
+                                                pathname: '/player-career' as any,
+                                                params: {
+                                                    athleteId: String(contextAthleteId),
+                                                    name: heroPlayer.name,
+                                                    photo: heroPlayer.photo ?? params.photo ?? '',
+                                                    teamName: params.teamName ?? '',
+                                                    teamLogo: params.teamLogo ?? '',
+                                                    teamId: params.teamId ?? '',
+                                                    dataSource: '365',
+                                                },
+                                            } as any)
+                                        }
+                                    >
+                                        <LinearGradient
+                                            colors={[ProfileTheme.colors.neonPurple, ProfileTheme.colors.neonBlue, ProfileTheme.colors.neonGreen]}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                            style={styles.careerButton}
+                                        >
+                                            <Ionicons name="stats-chart" size={14} color="#fff" />
+                                            <Text style={styles.careerButtonText}>{pp.viewFullCareer}</Text>
+                                            <Ionicons name="chevron-forward" size={14} color="#fff" />
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+                                )}
                                 <Text style={styles.seasonBadge}>
                                     {is365Source ? 'Match stats' : `${pp.seasonStats} ${seasonYear}/${seasonYear + 1}`}
                                 </Text>
@@ -1370,6 +1401,33 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: 'rgba(255,255,255,0.65)',
         fontWeight: '500',
+    },
+    careerButtonWrap: {
+        marginTop: 10,
+        marginBottom: 4,
+        alignSelf: 'flex-start',
+        borderRadius: 20,
+        shadowColor: ProfileTheme.colors.neonPurple,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 12,
+        elevation: 10,
+    },
+    careerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.35)',
+    },
+    careerButtonText: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '800',
+        letterSpacing: 0.3,
     },
     body: {
         paddingHorizontal: 20,

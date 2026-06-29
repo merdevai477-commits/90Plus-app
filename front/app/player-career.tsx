@@ -1,0 +1,708 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    TouchableOpacity,
+    ScrollView,
+    ActivityIndicator,
+    Animated,
+    StatusBar,
+    LayoutAnimation,
+    Platform,
+    UIManager,
+} from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Image as ExpoImage } from 'expo-image';
+import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg';
+import ApiFootballService, {
+    type Player365Career,
+    type Player365CareerSeason,
+} from '../services/apiFootball';
+import { ProfileTheme } from '../constants/ProfileTheme';
+import { buildScores365AthletePhotoUrl } from '../utils/scores365AthletePhoto';
+import { useTranslation } from '../src/i18n';
+import { logger } from '../utils/logger';
+
+if (
+    Platform.OS === 'android' &&
+    UIManager.setLayoutAnimationEnabledExperimental
+) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const fmt = (n: number | null | undefined): string => {
+    if (n == null || !Number.isFinite(n)) return '0';
+    if (Math.abs(n) >= 1000) return n.toLocaleString();
+    return String(n);
+};
+
+const fmtRating = (n: number | null | undefined): string =>
+    n != null && Number.isFinite(n) ? n.toFixed(1) : '—';
+
+export default function PlayerCareerScreen() {
+    const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const { t, language } = useTranslation();
+    const pc = t.playerCareer;
+    const params = useLocalSearchParams() as {
+        athleteId?: string;
+        name?: string;
+        photo?: string;
+        teamName?: string;
+        teamLogo?: string;
+    };
+
+    const athleteId = parseInt(params.athleteId || '0', 10);
+
+    const [career, setCareer] = useState<Player365Career | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
+    const [selectedSeasonKey, setSelectedSeasonKey] = useState<string | null>(null);
+    const [seasonPickerOpen, setSeasonPickerOpen] = useState(false);
+
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        let active = true;
+        (async () => {
+            if (!athleteId) {
+                setError(true);
+                setLoading(false);
+                return;
+            }
+            try {
+                const data = await ApiFootballService.get365PlayerCareer(athleteId, language);
+                if (!active) return;
+                if (!data) {
+                    setError(true);
+                } else {
+                    setCareer(data);
+                    setSelectedSeasonKey(data.seasons[0]?.seasonKey ?? null);
+                }
+            } catch (err) {
+                logger.warn('Failed to load 365 career:', err);
+                if (active) setError(true);
+            } finally {
+                if (active) setLoading(false);
+            }
+        })();
+        return () => {
+            active = false;
+        };
+    }, [athleteId, language]);
+
+    useEffect(() => {
+        if (!loading) {
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 400,
+                useNativeDriver: true,
+            }).start();
+        }
+    }, [loading, fadeAnim]);
+
+    const selectedSeason: Player365CareerSeason | null = useMemo(() => {
+        if (!career) return null;
+        return (
+            career.seasons.find((s) => s.seasonKey === selectedSeasonKey) ??
+            career.seasons[0] ??
+            null
+        );
+    }, [career, selectedSeasonKey]);
+
+    const photoUri =
+        career?.profile.imageUrl ||
+        params.photo ||
+        (athleteId ? buildScores365AthletePhotoUrl(athleteId, 80) : undefined);
+
+    const togglePicker = () => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setSeasonPickerOpen((o) => !o);
+    };
+
+    const pickSeason = (key: string) => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setSelectedSeasonKey(key);
+        setSeasonPickerOpen(false);
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.center}>
+                <StatusBar barStyle="light-content" />
+                <ActivityIndicator size="large" color={ProfileTheme.colors.neonGreen} />
+                <Text style={styles.loadingText}>{pc.loading}</Text>
+            </View>
+        );
+    }
+
+    if (error || !career || !career.seasons.length) {
+        return (
+            <View style={styles.center}>
+                <StatusBar barStyle="light-content" />
+                <Ionicons name="cloud-offline-outline" size={48} color={ProfileTheme.colors.textTertiary} />
+                <Text style={styles.loadingText}>{pc.noData}</Text>
+                <TouchableOpacity style={styles.backPill} onPress={() => router.back()}>
+                    <Text style={styles.backPillText}>{pc.goBack}</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    const profile = career.profile;
+
+    return (
+        <View style={styles.container}>
+            <StatusBar barStyle="light-content" />
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+            >
+                {/* Hero */}
+                <LinearGradient
+                    colors={['#241b3a', '#140e24', ProfileTheme.colors.deepBlack]}
+                    style={[styles.hero, { paddingTop: insets.top + 12 }]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                >
+                    <View style={styles.heroTopRow}>
+                        <TouchableOpacity
+                            style={styles.iconBtn}
+                            onPress={() => router.back()}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="chevron-back" size={22} color="#fff" />
+                        </TouchableOpacity>
+                        {profile.jerseyNumber != null && (
+                            <View style={styles.jerseyBadge}>
+                                <Text style={styles.jerseyText}>#{profile.jerseyNumber}</Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <Animated.View style={[styles.heroBody, { opacity: fadeAnim }]}>
+                        <LinearGradient
+                            colors={[ProfileTheme.colors.neonPurple, ProfileTheme.colors.neonBlue]}
+                            style={styles.avatarRing}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        >
+                            <View style={styles.avatarInner}>
+                                {photoUri ? (
+                                    <ExpoImage
+                                        source={{ uri: photoUri }}
+                                        style={styles.avatar}
+                                        contentFit="cover"
+                                        transition={200}
+                                    />
+                                ) : (
+                                    <Ionicons name="person" size={40} color={ProfileTheme.colors.textTertiary} />
+                                )}
+                            </View>
+                        </LinearGradient>
+
+                        <View style={styles.activeRow}>
+                            <View style={styles.activeDot} />
+                            <Text style={styles.activeText}>{pc.active}</Text>
+                        </View>
+                        <Text style={styles.heroName} numberOfLines={2}>
+                            {profile.name}
+                        </Text>
+                        {!!profile.shortName && profile.shortName !== profile.name && (
+                            <Text style={styles.heroSub}>{profile.shortName}</Text>
+                        )}
+                    </Animated.View>
+                </LinearGradient>
+
+                <View style={styles.body}>
+                    {/* Identity cards */}
+                    <View style={styles.identityRow}>
+                        <IdentityCard
+                            icon="football-outline"
+                            label={pc.club}
+                            value={profile.clubName || params.teamName || '—'}
+                        />
+                        <View style={styles.identityDivider} />
+                        <IdentityCard
+                            icon="flag-outline"
+                            label={pc.country}
+                            value={profile.nationality || '—'}
+                        />
+                        <View style={styles.identityDivider} />
+                        <IdentityCard
+                            icon="locate-outline"
+                            label={pc.position}
+                            value={profile.position || '—'}
+                        />
+                    </View>
+
+                    {/* Season selector */}
+                    <View style={styles.sectionLabelRow}>
+                        <View style={styles.sectionAccent} />
+                        <Text style={styles.sectionLabel}>{pc.season}</Text>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.selector}
+                        activeOpacity={0.85}
+                        onPress={togglePicker}
+                    >
+                        <View style={styles.selectorLeft}>
+                            <Ionicons name="calendar-outline" size={18} color={ProfileTheme.colors.neonPurple} />
+                            <View>
+                                <Text style={styles.selectorHint}>{pc.selectedSeason}</Text>
+                                <Text style={styles.selectorValue}>
+                                    {selectedSeason?.label ?? '—'}
+                                </Text>
+                            </View>
+                        </View>
+                        <Ionicons
+                            name={seasonPickerOpen ? 'chevron-up' : 'chevron-down'}
+                            size={20}
+                            color={ProfileTheme.colors.textSecondary}
+                        />
+                    </TouchableOpacity>
+                    {seasonPickerOpen && (
+                        <View style={styles.dropdown}>
+                            {career.seasons.map((s) => {
+                                const selected = s.seasonKey === selectedSeason?.seasonKey;
+                                return (
+                                    <TouchableOpacity
+                                        key={s.seasonKey}
+                                        style={[styles.dropdownItem, selected && styles.dropdownItemActive]}
+                                        onPress={() => pickSeason(s.seasonKey)}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.dropdownItemText,
+                                                selected && styles.dropdownItemTextActive,
+                                            ]}
+                                        >
+                                            {s.label}
+                                        </Text>
+                                        {selected && (
+                                            <Ionicons name="checkmark" size={16} color={ProfileTheme.colors.neonGreen} />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    )}
+
+                    {/* Season statistics */}
+                    <Text style={styles.heading}>{pc.seasonStatistics}</Text>
+                    {selectedSeason && (
+                        <View style={styles.statGrid}>
+                            <StatCard icon="football" color={ProfileTheme.colors.neonPurple} value={fmt(selectedSeason.goals)} label={pc.goals} />
+                            <StatCard icon="git-network" color={ProfileTheme.colors.neonBlue} value={fmt(selectedSeason.assists)} label={pc.assists} />
+                            <StatCard icon="shirt" color={ProfileTheme.colors.neonGreen} value={fmt(selectedSeason.appearances)} label={pc.appearances} />
+                            <StatCard icon="time" color={ProfileTheme.colors.gold} value={fmt(selectedSeason.minutes)} label={pc.minutes} />
+                            <StatCard icon="square" color={'#FFC400'} value={fmt(sumStat(selectedSeason, 'yellowCards'))} label={pc.yellowCards} />
+                            <StatCard icon="square" color={ProfileTheme.colors.neonRed} value={fmt(sumStat(selectedSeason, 'redCards'))} label={pc.redCards} />
+                        </View>
+                    )}
+
+                    {/* Trend chart */}
+                    {career.trend.length > 1 && (
+                        <>
+                            <Text style={styles.heading}>{pc.goalsAssistsTrend}</Text>
+                            <TrendChart career={career} labels={pc} />
+                        </>
+                    )}
+
+                    {/* Per competition */}
+                    {selectedSeason && selectedSeason.competitions.length > 0 && (
+                        <>
+                            <Text style={styles.heading}>{pc.perCompetition}</Text>
+                            {selectedSeason.competitions.map((c, idx) => (
+                                <View key={`${c.competitionId ?? c.competitionName}-${idx}`} style={styles.compCard}>
+                                    <View style={styles.compHeader}>
+                                        {c.competitionLogo ? (
+                                            <ExpoImage source={{ uri: c.competitionLogo }} style={styles.compLogo} contentFit="contain" />
+                                        ) : (
+                                            <View style={styles.compLogoFallback}>
+                                                <Ionicons name="trophy-outline" size={14} color={ProfileTheme.colors.textTertiary} />
+                                            </View>
+                                        )}
+                                        <Text style={styles.compName} numberOfLines={1}>
+                                            {c.competitionName}
+                                        </Text>
+                                        {c.rating != null && (
+                                            <View style={styles.ratingPill}>
+                                                <Text style={styles.ratingPillText}>{fmtRating(c.rating)}</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                    <View style={styles.compStatsRow}>
+                                        <CompStat value={fmt(c.appearances)} label={pc.appearances} />
+                                        <CompStat value={fmt(c.goals)} label={pc.goals} />
+                                        <CompStat value={fmt(c.assists)} label={pc.assists} />
+                                        <CompStat value={fmt(c.minutes)} label={pc.minutes} />
+                                    </View>
+                                </View>
+                            ))}
+                        </>
+                    )}
+                </View>
+            </ScrollView>
+        </View>
+    );
+}
+
+function sumStat(season: Player365CareerSeason, key: 'yellowCards' | 'redCards'): number {
+    return season.competitions.reduce((acc, c) => acc + (c[key] ?? 0), 0);
+}
+
+function IdentityCard({ icon, label, value }: { icon: any; label: string; value: string }) {
+    return (
+        <View style={styles.identityCard}>
+            <Ionicons name={icon} size={18} color={ProfileTheme.colors.neonBlue} />
+            <Text style={styles.identityValue} numberOfLines={1}>{value}</Text>
+            <Text style={styles.identityLabel}>{label}</Text>
+        </View>
+    );
+}
+
+function StatCard({ icon, color, value, label }: { icon: any; color: string; value: string; label: string }) {
+    return (
+        <View style={styles.statCard}>
+            <View style={[styles.statIconWrap, { backgroundColor: color + '22' }]}>
+                <Ionicons name={icon} size={16} color={color} />
+            </View>
+            <Text style={[styles.statValue, { color }]}>{value}</Text>
+            <Text style={styles.statLabel}>{label}</Text>
+        </View>
+    );
+}
+
+function CompStat({ value, label }: { value: string; label: string }) {
+    return (
+        <View style={styles.compStat}>
+            <Text style={styles.compStatValue}>{value}</Text>
+            <Text style={styles.compStatLabel}>{label}</Text>
+        </View>
+    );
+}
+
+function TrendChart({
+    career,
+    labels,
+}: {
+    career: Player365Career;
+    labels: { goals: string; assists: string; allSeasons: string };
+}) {
+    const points = career.trend;
+    const barGroupWidth = 46;
+    const chartWidth = Math.max(points.length * barGroupWidth + 24, 280);
+    const chartHeight = 160;
+    const topPad = 12;
+    const bottomPad = 28;
+    const usableH = chartHeight - topPad - bottomPad;
+    const maxVal = Math.max(1, ...points.map((p) => Math.max(p.goals, p.assists)));
+    const barW = 12;
+
+    return (
+        <View style={styles.chartCard}>
+            <View style={styles.legendRow}>
+                <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: ProfileTheme.colors.neonPurple }]} />
+                    <Text style={styles.legendText}>{labels.goals}</Text>
+                </View>
+                <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: ProfileTheme.colors.neonBlue }]} />
+                    <Text style={styles.legendText}>{labels.assists}</Text>
+                </View>
+                <Text style={styles.legendAll}>{labels.allSeasons}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <Svg width={chartWidth} height={chartHeight}>
+                    {[0, 0.5, 1].map((g, i) => (
+                        <Line
+                            key={i}
+                            x1={0}
+                            y1={topPad + usableH * (1 - g)}
+                            x2={chartWidth}
+                            y2={topPad + usableH * (1 - g)}
+                            stroke="rgba(255,255,255,0.08)"
+                            strokeWidth={1}
+                        />
+                    ))}
+                    {points.map((p, i) => {
+                        const cx = 16 + i * barGroupWidth;
+                        const gH = (p.goals / maxVal) * usableH;
+                        return (
+                            <Rect
+                                key={`g-${i}`}
+                                x={cx}
+                                y={topPad + (usableH - gH)}
+                                width={barW}
+                                height={Math.max(gH, 1)}
+                                rx={3}
+                                fill={ProfileTheme.colors.neonPurple}
+                            />
+                        );
+                    })}
+                    {points.map((p, i) => {
+                        const cx = 16 + i * barGroupWidth + barW + 3;
+                        const aH = (p.assists / maxVal) * usableH;
+                        return (
+                            <Rect
+                                key={`a-${i}`}
+                                x={cx}
+                                y={topPad + (usableH - aH)}
+                                width={barW}
+                                height={Math.max(aH, 1)}
+                                rx={3}
+                                fill={ProfileTheme.colors.neonBlue}
+                            />
+                        );
+                    })}
+                    {points.map((p, i) => {
+                        const cx = 16 + i * barGroupWidth + barW;
+                        return (
+                            <SvgText
+                                key={`t-${i}`}
+                                x={cx}
+                                y={chartHeight - 8}
+                                fill="rgba(255,255,255,0.55)"
+                                fontSize={9}
+                                textAnchor="middle"
+                            >
+                                {p.label}
+                            </SvgText>
+                        );
+                    })}
+                </Svg>
+            </ScrollView>
+        </View>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: ProfileTheme.colors.deepBlack },
+    center: {
+        flex: 1,
+        backgroundColor: ProfileTheme.colors.deepBlack,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        padding: 24,
+    },
+    loadingText: { color: ProfileTheme.colors.textSecondary, fontSize: 14 },
+    backPill: {
+        marginTop: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 999,
+        backgroundColor: ProfileTheme.colors.glassMedium,
+    },
+    backPillText: { color: '#fff', fontWeight: '700' },
+
+    hero: { paddingHorizontal: 20, paddingBottom: 24 },
+    heroTopRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    iconBtn: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    jerseyBadge: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(142,84,233,0.6)',
+        backgroundColor: 'rgba(142,84,233,0.18)',
+    },
+    jerseyText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+    heroBody: { alignItems: 'center', marginTop: 8 },
+    avatarRing: {
+        width: 104,
+        height: 104,
+        borderRadius: 52,
+        padding: 3,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: ProfileTheme.colors.neonPurple,
+        shadowOpacity: 0.8,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 10,
+    },
+    avatarInner: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 50,
+        backgroundColor: ProfileTheme.colors.surfaceElevated,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    avatar: { width: '100%', height: '100%' },
+    activeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: 'rgba(50,205,50,0.15)',
+    },
+    activeDot: {
+        width: 7,
+        height: 7,
+        borderRadius: 4,
+        backgroundColor: ProfileTheme.colors.neonGreen,
+    },
+    activeText: {
+        color: ProfileTheme.colors.neonGreen,
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.5,
+    },
+    heroName: {
+        color: '#fff',
+        fontSize: 26,
+        fontWeight: '800',
+        marginTop: 8,
+        textAlign: 'center',
+    },
+    heroSub: { color: ProfileTheme.colors.textSecondary, fontSize: 13, marginTop: 2 },
+
+    body: { paddingHorizontal: 16, marginTop: -8 },
+
+    identityRow: {
+        flexDirection: 'row',
+        backgroundColor: ProfileTheme.colors.glass,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.borderSoft,
+        paddingVertical: 16,
+        marginBottom: 20,
+    },
+    identityCard: { flex: 1, alignItems: 'center', gap: 4, paddingHorizontal: 4 },
+    identityDivider: { width: 1, backgroundColor: ProfileTheme.colors.borderSoft },
+    identityValue: { color: '#fff', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+    identityLabel: { color: ProfileTheme.colors.textTertiary, fontSize: 11 },
+
+    sectionLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+    sectionAccent: {
+        width: 3,
+        height: 14,
+        borderRadius: 2,
+        backgroundColor: ProfileTheme.colors.neonPurple,
+    },
+    sectionLabel: { color: ProfileTheme.colors.textSecondary, fontSize: 13, fontWeight: '600' },
+
+    selector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: ProfileTheme.colors.glass,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.borderSoft,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+    },
+    selectorLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    selectorHint: { color: ProfileTheme.colors.textTertiary, fontSize: 11 },
+    selectorValue: { color: '#fff', fontSize: 17, fontWeight: '800' },
+    dropdown: {
+        marginTop: 6,
+        backgroundColor: ProfileTheme.colors.surfaceElevated,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.borderSoft,
+        overflow: 'hidden',
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: ProfileTheme.colors.borderSoft,
+    },
+    dropdownItemActive: { backgroundColor: 'rgba(142,84,233,0.12)' },
+    dropdownItemText: { color: ProfileTheme.colors.textSecondary, fontSize: 15 },
+    dropdownItemTextActive: { color: '#fff', fontWeight: '700' },
+
+    heading: { color: '#fff', fontSize: 18, fontWeight: '800', marginTop: 24, marginBottom: 12 },
+
+    statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    statCard: {
+        width: '31.5%',
+        backgroundColor: ProfileTheme.colors.glass,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.borderSoft,
+        paddingVertical: 16,
+        alignItems: 'center',
+        gap: 6,
+    },
+    statIconWrap: {
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    statValue: { fontSize: 22, fontWeight: '900' },
+    statLabel: { color: ProfileTheme.colors.textTertiary, fontSize: 11 },
+
+    chartCard: {
+        backgroundColor: ProfileTheme.colors.glass,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.borderSoft,
+        padding: 14,
+    },
+    legendRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 10 },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    legendDot: { width: 8, height: 8, borderRadius: 4 },
+    legendText: { color: ProfileTheme.colors.textSecondary, fontSize: 12 },
+    legendAll: { marginLeft: 'auto', color: ProfileTheme.colors.textTertiary, fontSize: 11 },
+
+    compCard: {
+        backgroundColor: ProfileTheme.colors.glass,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.borderSoft,
+        padding: 14,
+        marginBottom: 10,
+    },
+    compHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+    compLogo: { width: 24, height: 24 },
+    compLogoFallback: {
+        width: 24,
+        height: 24,
+        borderRadius: 6,
+        backgroundColor: ProfileTheme.colors.glassMedium,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    compName: { color: '#fff', fontSize: 14, fontWeight: '700', flex: 1 },
+    ratingPill: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255,215,0,0.15)',
+    },
+    ratingPillText: { color: ProfileTheme.colors.gold, fontSize: 12, fontWeight: '800' },
+    compStatsRow: { flexDirection: 'row', justifyContent: 'space-between' },
+    compStat: { alignItems: 'center', flex: 1 },
+    compStatValue: { color: '#fff', fontSize: 16, fontWeight: '800' },
+    compStatLabel: { color: ProfileTheme.colors.textTertiary, fontSize: 11, marginTop: 2 },
+});

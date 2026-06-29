@@ -180,6 +180,54 @@ const withTimeout = async <T>(promise: Promise<T>, timeout = DEFAULT_TIMEOUT): P
   }
 };
 
+export interface Player365CareerCompetition {
+  competitionId: number | null;
+  competitionName: string;
+  competitionLogo: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  appearances: number | null;
+  goals: number | null;
+  assists: number | null;
+  minutes: number | null;
+  yellowCards: number | null;
+  redCards: number | null;
+  rating: number | null;
+}
+
+export interface Player365CareerSeason {
+  seasonKey: string;
+  label: string;
+  goals: number;
+  assists: number;
+  appearances: number;
+  minutes: number;
+  competitions: Player365CareerCompetition[];
+}
+
+export interface Player365CareerTrendPoint {
+  seasonKey: string;
+  label: string;
+  goals: number;
+  assists: number;
+}
+
+export interface Player365Career {
+  athleteId: number;
+  profile: {
+    name: string;
+    shortName?: string;
+    position?: string | null;
+    clubName?: string | null;
+    nationality?: string | null;
+    jerseyNumber?: number | null;
+    age?: number | null;
+    imageUrl: string | null;
+  };
+  seasons: Player365CareerSeason[];
+  trend: Player365CareerTrendPoint[];
+}
+
 export interface League {
   league: {
     id: number;
@@ -1682,6 +1730,26 @@ export const ApiFootballService = {
       const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
       if (!response.ok) return null;
       const json = (await response.json()) as { response?: Record<string, unknown> };
+      return json.response ?? null;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * 365Scores — full player career (all seasons). Persisted server-side in Postgres.
+   */
+  async get365PlayerCareer(
+    athleteId: number,
+    language?: string,
+  ): Promise<Player365Career | null> {
+    try {
+      const baseUrl = getApiUrl();
+      const langQ = language ? `?language=${encodeURIComponent(language)}` : '';
+      const url = `${baseUrl}/football/cached/365/player/${athleteId}/career${langQ}`;
+      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
+      if (!response.ok) return null;
+      const json = (await response.json()) as { response?: Player365Career };
       return json.response ?? null;
     } catch {
       return null;

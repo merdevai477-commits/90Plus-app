@@ -161,6 +161,56 @@ export interface ThreeSixFivePlayerBasicInfo {
   raw: unknown;
 }
 
+export interface Career365CompetitionStat {
+  competitionId: number | null;
+  competitionName: string;
+  competitionLogo: string | null;
+  teamId: number | null;
+  teamName: string | null;
+  appearances: number | null;
+  goals: number | null;
+  assists: number | null;
+  minutes: number | null;
+  yellowCards: number | null;
+  redCards: number | null;
+  rating: number | null;
+}
+
+export interface Career365Season {
+  /** Stable identifier used by the season selector (e.g. "2024" or "2024-2025"). */
+  seasonKey: string;
+  /** Human label (e.g. "2024/25"). */
+  label: string;
+  goals: number;
+  assists: number;
+  appearances: number;
+  minutes: number;
+  competitions: Career365CompetitionStat[];
+}
+
+export interface Career365TrendPoint {
+  seasonKey: string;
+  label: string;
+  goals: number;
+  assists: number;
+}
+
+export interface ThreeSixFivePlayerCareer {
+  athleteId: number;
+  profile: {
+    name: string;
+    shortName?: string;
+    position?: string | null;
+    clubName?: string | null;
+    nationality?: string | null;
+    jerseyNumber?: number | null;
+    age?: number | null;
+    imageUrl: string | null;
+  };
+  seasons: Career365Season[];
+  trend: Career365TrendPoint[];
+}
+
 export interface ThreeSixFiveCoach {
   athleteId: number;
   teamId: number;
@@ -1142,6 +1192,243 @@ class ThreeSixFiveScoresService {
       logger.warn(`[365Scores] getPlayerBasicInfo(${athleteId}) failed:`, (err as Error)?.message);
       return { data: null, source: null };
     }
+  }
+
+  // ─── 8b. Player full career (all seasons) ────────────────────────────────
+
+  /**
+   * Aggregates a player's full career from 365Scores.
+   *
+   * 365 has no single "career" payload with a guaranteed schema, so this method
+   * is intentionally defensive: it pulls the athlete profile from
+   * `/web/athletes/?fullDetails=true` and the per-season breakdown from
+   * `/web/athletes/career`, then normalizes whatever shape comes back into a
+   * stable {@link ThreeSixFivePlayerCareer}. Unknown/missing fields degrade to
+   * null/empty rather than throwing.
+   */
+  async getPlayerCareer(
+    athleteId: number,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
+    if (!this.isEnabled()) return { data: null, source: null };
+
+    try {
+      const langId = resolveScores365LangId(language);
+      const cacheKey = `365:player-career:${athleteId}:${langId}`;
+      const cached = await redisCacheService.get<ThreeSixFivePlayerCareer>(cacheKey);
+      if (cached) return { data: cached, source: '365scores' };
+
+      const [detailsPayload, careerPayload] = await Promise.all([
+        this.fetchJson<{ athletes?: any[] }>(
+          `/web/athletes/?${this.commonParams(langId)}&athletes=${athleteId}&fullDetails=true`,
+          `player-career-details:${athleteId}`,
+          86_400_000,
+        ),
+        this.fetchJson<any>(
+          `/web/athletes/career?${this.commonParams(langId)}&athleteId=${athleteId}`,
+          `player-career:${athleteId}`,
+          86_400_000,
+        ),
+      ]);
+
+      const athlete = detailsPayload?.athletes?.[0] ?? null;
+      if (!athlete && !careerPayload) return { data: null, source: null };
+
+      const profile = this.build365CareerProfile(athleteId, athlete);
+      const seasons = this.normalize365CareerSeasons(careerPayload, athlete);
+      const trend: Career365TrendPoint[] = seasons
+        .map((s) => ({ seasonKey: s.seasonKey, label: s.label, goals: s.goals, assists: s.assists }))
+        .reverse(); // oldest → newest for left-to-right charting
+
+      const data: ThreeSixFivePlayerCareer = { athleteId, profile, seasons, trend };
+
+      await redisCacheService.set(cacheKey, data, 86_400_000);
+      return { data, source: '365scores' };
+    } catch (err: unknown) {
+      logger.warn(`[365Scores] getPlayerCareer(${athleteId}) failed:`, (err as Error)?.message);
+      return { data: null, source: null };
+    }
+  }
+
+  private build365CareerProfile(
+    athleteId: number,
+    raw: any,
+  ): ThreeSixFivePlayerCareer['profile'] {
+    return {
+      name: (raw?.name as string) ?? '—',
+      shortName: (raw?.shortName as string) ?? undefined,
+      position:
+        (raw?.positionName as string) ??
+        (raw?.position?.name as string) ??
+        (typeof raw?.position === 'string' ? raw.position : null) ??
+        null,
+      clubName:
+        (raw?.clubName as string) ??
+        (raw?.competitorName as string) ??
+        (raw?.club?.name as string) ??
+        null,
+      nationality: (raw?.countryName as string) ?? (raw?.nationality as string) ?? null,
+      jerseyNumber: this.num365(raw?.jerseyNumber ?? raw?.shirtNumber ?? raw?.jersey),
+      age: this.num365(raw?.age),
+      imageUrl: buildScores365AthletePhotoUrl(athleteId, 250),
+    };
+  }
+
+  /** Coerces 365's mixed number/string stat values to a number (or null). */
+  private num365(v: unknown): number | null {
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    if (typeof v === 'string') {
+      const n = parseFloat(v.replace(/[^0-9.\-]/g, ''));
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  }
+
+  /** Builds a lowercased name→value map from a 365 `stats: [{name,value}]` array. */
+  private statMap365(stats: unknown): Map<string, number | null> {
+    const map = new Map<string, number | null>();
+    if (!Array.isArray(stats)) return map;
+    for (const entry of stats) {
+      if (!entry || typeof entry !== 'object') continue;
+      const e = entry as Record<string, unknown>;
+      const name = String(e.name ?? e.shortName ?? e.title ?? e.type ?? '').toLowerCase();
+      if (!name) continue;
+      map.set(name, this.num365(e.value ?? e.intValue ?? e.doubleValue ?? e.statValue));
+    }
+    return map;
+  }
+
+  /** Reads a stat by trying both direct object fields and a stats name-map. */
+  private pickStat365(
+    row: Record<string, unknown>,
+    statMap: Map<string, number | null>,
+    keys: string[],
+  ): number | null {
+    for (const k of keys) {
+      const direct = this.num365(row[k]);
+      if (direct != null) return direct;
+    }
+    for (const k of keys) {
+      const fromMap = statMap.get(k.toLowerCase());
+      if (fromMap != null) return fromMap;
+    }
+    return null;
+  }
+
+  /** Finds the first array of objects under any of the given candidate keys. */
+  private firstArray365(obj: any, keys: string[]): any[] {
+    if (!obj || typeof obj !== 'object') return [];
+    for (const k of keys) {
+      const v = obj[k];
+      if (Array.isArray(v) && v.length > 0 && typeof v[0] === 'object') return v;
+    }
+    return [];
+  }
+
+  /**
+   * Normalizes the career payload into seasons sorted newest → oldest.
+   * Tries several known 365 container shapes before giving up.
+   */
+  private normalize365CareerSeasons(careerPayload: any, athlete: any): Career365Season[] {
+    const seasonRows =
+      this.firstArray365(careerPayload, ['career', 'seasons', 'careerStats', 'rows']).length > 0
+        ? this.firstArray365(careerPayload, ['career', 'seasons', 'careerStats', 'rows'])
+        : this.firstArray365(careerPayload?.athletes?.[0], ['career', 'seasons', 'careerStats']) ||
+          this.firstArray365(athlete, ['career', 'seasons', 'careerStats']);
+
+    const seasons: Career365Season[] = [];
+    for (const rawSeason of seasonRows) {
+      if (!rawSeason || typeof rawSeason !== 'object') continue;
+      const s = rawSeason as Record<string, unknown>;
+
+      const seasonNum = this.num365(s.seasonNum ?? s.seasonId ?? s.year ?? s.startYear);
+      const labelRaw =
+        (s.name as string) ??
+        (s.seasonName as string) ??
+        (s.season as string) ??
+        (seasonNum != null ? String(seasonNum) : '');
+      const label = this.formatSeasonLabel365(labelRaw, seasonNum);
+      const seasonKey = String(s.seasonId ?? s.seasonNum ?? labelRaw ?? label).trim() || label;
+
+      const compRows = this.firstArray365(s, [
+        'competitions',
+        'stats',
+        'rows',
+        'tournaments',
+        'competitionStats',
+      ]);
+
+      const competitions: Career365CompetitionStat[] = [];
+      for (const rawComp of compRows) {
+        if (!rawComp || typeof rawComp !== 'object') continue;
+        const c = rawComp as Record<string, unknown>;
+        const statMap = this.statMap365(c.stats);
+        const competitionId = this.num365(c.competitionId ?? c.id ?? c.tournamentId);
+        const comp: Career365CompetitionStat = {
+          competitionId,
+          competitionName:
+            (c.competitionName as string) ??
+            (c.name as string) ??
+            (c.tournamentName as string) ??
+            '—',
+          competitionLogo:
+            competitionId != null
+              ? buildLeagueLogoUrl(competitionId, this.num365(c.imageVersion ?? c.competitionImageVersion))
+              : null,
+          teamId: this.num365(c.competitorId ?? c.teamId),
+          teamName: (c.competitorName as string) ?? (c.teamName as string) ?? null,
+          appearances: this.pickStat365(c, statMap, ['appearances', 'appearences', 'games', 'gamesPlayed', 'apps']),
+          goals: this.pickStat365(c, statMap, ['goals', 'goalsScored']),
+          assists: this.pickStat365(c, statMap, ['assists']),
+          minutes: this.pickStat365(c, statMap, ['minutes', 'minutesPlayed', 'mins']),
+          yellowCards: this.pickStat365(c, statMap, ['yellowCards', 'yellows', 'yellow']),
+          redCards: this.pickStat365(c, statMap, ['redCards', 'reds', 'red']),
+          rating: this.pickStat365(c, statMap, ['rating', 'averageRating', 'avgRating']),
+        };
+        competitions.push(comp);
+      }
+
+      const sum = (sel: (c: Career365CompetitionStat) => number | null) =>
+        competitions.reduce((acc, c) => acc + (sel(c) ?? 0), 0);
+
+      const seasonStatMap = this.statMap365(s.stats);
+      seasons.push({
+        seasonKey,
+        label,
+        goals: competitions.length ? sum((c) => c.goals) : this.pickStat365(s, seasonStatMap, ['goals']) ?? 0,
+        assists: competitions.length ? sum((c) => c.assists) : this.pickStat365(s, seasonStatMap, ['assists']) ?? 0,
+        appearances:
+          competitions.length
+            ? sum((c) => c.appearances)
+            : this.pickStat365(s, seasonStatMap, ['appearances', 'appearences', 'games']) ?? 0,
+        minutes:
+          competitions.length
+            ? sum((c) => c.minutes)
+            : this.pickStat365(s, seasonStatMap, ['minutes', 'minutesPlayed']) ?? 0,
+        competitions,
+      });
+    }
+
+    // Newest first (by numeric season key when possible).
+    seasons.sort((a, b) => {
+      const na = parseInt(a.seasonKey.replace(/[^0-9]/g, ''), 10);
+      const nb = parseInt(b.seasonKey.replace(/[^0-9]/g, ''), 10);
+      if (Number.isFinite(na) && Number.isFinite(nb)) return nb - na;
+      return b.label.localeCompare(a.label);
+    });
+    return seasons;
+  }
+
+  /** "2024" / 2024 → "2024/25"; passes through already-formatted labels. */
+  private formatSeasonLabel365(raw: string, seasonNum: number | null): string {
+    const trimmed = (raw || '').trim();
+    if (trimmed && /\d{4}\s*[\/\-]\s*\d{2,4}/.test(trimmed)) return trimmed.replace(/\s/g, '');
+    const year = seasonNum ?? (trimmed ? parseInt(trimmed.replace(/[^0-9]/g, ''), 10) : NaN);
+    if (Number.isFinite(year) && year > 1900 && year < 2100) {
+      const next = String((year + 1) % 100).padStart(2, '0');
+      return `${year}/${next}`;
+    }
+    return trimmed || '—';
   }
 
   // ─── 9. Competition Coaches (Extract via Lineups) ─────────────────────────

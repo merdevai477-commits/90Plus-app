@@ -2557,6 +2557,38 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/365/player/:athleteId/career — full career across all seasons (365Scores).
+   * Persisted in Postgres; athleteId must be known from a lineup, not cold discovery.
+   */
+  static async getCached365PlayerCareer(req: Request, res: Response): Promise<void> {
+    try {
+      const athleteId = parseInt(ensureString(req.params.athleteId));
+      if (isNaN(athleteId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid athlete ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365PlayerCareer(athleteId, language);
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores player career unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { athleteId },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/cached/search - Unified search with caching
    * Returns teams, players, leagues, and matches
    * Results are cached in PostgreSQL for instant retrieval by all users

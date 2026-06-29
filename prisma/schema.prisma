@@ -1029,6 +1029,22 @@ model CachedPlayer {
   @@map("cached_players")
 }
 
+model Cached365PlayerCareer {
+  id          String   @id @default(uuid())
+  athleteId   Int      @unique
+  name        String
+  photo       String?
+  position    String?
+  clubName    String?
+  nationality String?
+  langId      Int      @default(1)
+  data        Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("cached_365_player_career")
+}
+
 model CachedTeam {
   id            String   @id @default(uuid())
   teamId        Int      @unique

@@ -55,14 +55,19 @@ import {
     isScores365ExperimentEnabled,
     isScores365ExperimentFixture,
     resolveScores365AppLanguage,
+    resolveScores365LangId,
     SCORES365_LEAGUE_ID_OFFSET,
 } from './scores365-experiment.service';
+
+/** 365 player career rows are refreshed once a week (stats change slowly). */
+const CAREER_DB_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 import {
     threeSixFiveScoresService,
     type ThreeSixFiveHeadToHeadForm,
     type ThreeSixFiveLineupPlayer,
     type ThreeSixFiveLiveGameDetails,
     type ThreeSixFivePlayerBasicInfo,
+    type ThreeSixFivePlayerCareer,
     type ThreeSixFivePlayerCareerShotChart,
     type ThreeSixFivePlayerMatchReport,
     type ThreeSixFiveResult,
@@ -2526,6 +2531,82 @@ class FootballDataCacheService {
             return { data: null, source: null };
         }
         return threeSixFiveScoresService.getPlayerBasicInfo(athleteId, language);
+    }
+
+    /**
+     * Full 365 player career, persisted in Postgres so repeated views are cheap.
+     * Tiers: Redis (in service) → Postgres (this method) → live 365 fetch.
+     * DB rows older than {@link CAREER_DB_MAX_AGE_MS} are refreshed in the background.
+     */
+    async getCached365PlayerCareer(
+        athleteId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
+        if (!this.is365WorldCupSecondaryEnabled()) {
+            return { data: null, source: null };
+        }
+
+        const langId = resolveScores365LangId(language);
+
+        // 1. Postgres — serve a fresh row immediately; refresh stale rows in background.
+        try {
+            const dbRow = await prisma.cached365PlayerCareer.findUnique({ where: { athleteId } });
+            if (dbRow?.data && dbRow.langId === langId) {
+                const age = Date.now() - dbRow.updatedAt.getTime();
+                const data = dbRow.data as unknown as ThreeSixFivePlayerCareer;
+                if (age < CAREER_DB_MAX_AGE_MS) {
+                    return { data, source: '365scores' };
+                }
+                // Stale: refresh in background, but return cached data now.
+                this.refresh365PlayerCareer(athleteId, language, langId).catch((err) => {
+                    logger.warn(`[365Career] background refresh ${athleteId} failed:`, err?.message);
+                });
+                return { data, source: '365scores' };
+            }
+        } catch (err: any) {
+            logger.warn(`[365Career] DB read ${athleteId} failed:`, err?.message);
+        }
+
+        // 2. Cold path — fetch from 365 and persist.
+        return this.refresh365PlayerCareer(athleteId, language, langId);
+    }
+
+    private async refresh365PlayerCareer(
+        athleteId: number,
+        language: string | null | undefined,
+        langId: number,
+    ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
+        const result = await threeSixFiveScoresService.getPlayerCareer(athleteId, language);
+        if (!result.data) return result;
+
+        try {
+            await prisma.cached365PlayerCareer.upsert({
+                where: { athleteId },
+                update: {
+                    name: result.data.profile.name,
+                    photo: result.data.profile.imageUrl ?? null,
+                    position: result.data.profile.position ?? null,
+                    clubName: result.data.profile.clubName ?? null,
+                    nationality: result.data.profile.nationality ?? null,
+                    langId,
+                    data: result.data as any,
+                },
+                create: {
+                    athleteId,
+                    name: result.data.profile.name,
+                    photo: result.data.profile.imageUrl ?? null,
+                    position: result.data.profile.position ?? null,
+                    clubName: result.data.profile.clubName ?? null,
+                    nationality: result.data.profile.nationality ?? null,
+                    langId,
+                    data: result.data as any,
+                },
+            });
+        } catch (err: any) {
+            logger.warn(`[365Career] DB upsert ${athleteId} failed:`, err?.message);
+        }
+
+        return result;
     }
 
     /** Merge 365 named players (athleteId, photo) into structured lineups (grid, formation). */

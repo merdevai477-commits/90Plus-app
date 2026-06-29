@@ -7,7 +7,7 @@
  */
 export function buildScores365AthletePhotoUrl(
   athleteId: number,
-  size: 68 | 80 = 80,
+  size: number = 80,
 ): string {
   return (
     `https://imagecache.365scores.com/image/upload/` +
