@@ -563,7 +563,19 @@ export default function PlayerProfileScreen() {
     const forceFreshStats = params.fresh === '1' || params.fresh === 'true';
     const routeShell = useMemo(
         () => buildShellFromParams(params, playerId, contextTeamId),
-        [params, playerId, contextTeamId],
+        [
+            playerId,
+            contextTeamId,
+            params.id,
+            params.name,
+            params.photo,
+            params.teamName,
+            params.teamLogo,
+            params.season,
+            params.dataSource,
+            params.fixtureId,
+            params.athleteId,
+        ],
     );
 
     const [player, setPlayer] = useState<PlayerData | null>(routeShell);
@@ -1022,6 +1034,7 @@ export default function PlayerProfileScreen() {
                                                 pathname: '/player-career' as any,
                                                 params: {
                                                     athleteId: String(contextAthleteId),
+                                                    id: String(contextAthleteId),
                                                     name: heroPlayer.name,
                                                     photo: heroPlayer.photo ?? params.photo ?? '',
                                                     teamName: params.teamName ?? '',

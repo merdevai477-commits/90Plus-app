@@ -2580,7 +2580,14 @@ class FootballDataCacheService {
         langId: number,
     ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
         const result = await threeSixFiveScoresService.getPlayerCareer(athleteId, language);
-        if (!result.data?.seasons?.length) return { data: null, source: null };
+        if (!result.data?.seasons?.length) {
+            try {
+                await prisma.cached365PlayerCareer.deleteMany({ where: { athleteId } });
+            } catch {
+                /* ignore purge errors */
+            }
+            return { data: null, source: null };
+        }
 
         try {
             await prisma.cached365PlayerCareer.upsert({

@@ -43,20 +43,27 @@ const fmt = (n: number | null | undefined): string => {
 const fmtRating = (n: number | null | undefined): string =>
     n != null && Number.isFinite(n) ? n.toFixed(1) : '—';
 
+const parseRouteInt = (value: string | string[] | undefined): number => {
+    const raw = Array.isArray(value) ? value[0] : value;
+    const n = parseInt(raw || '0', 10);
+    return Number.isFinite(n) ? n : 0;
+};
+
 export default function PlayerCareerScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { t, language } = useTranslation();
     const pc = t.playerCareer;
     const params = useLocalSearchParams() as {
-        athleteId?: string;
+        athleteId?: string | string[];
+        id?: string | string[];
         name?: string;
         photo?: string;
         teamName?: string;
         teamLogo?: string;
     };
 
-    const athleteId = parseInt(params.athleteId || '0', 10);
+    const athleteId = parseRouteInt(params.athleteId ?? params.id);
 
     const [career, setCareer] = useState<Player365Career | null>(null);
     const [loading, setLoading] = useState(true);
@@ -75,9 +82,10 @@ export default function PlayerCareerScreen() {
                 return;
             }
             try {
+                logger.debug(`Loading 365 career for athlete ${athleteId}`);
                 const data = await ApiFootballService.get365PlayerCareer(athleteId, language);
                 if (!active) return;
-                if (!data) {
+                if (!data?.seasons?.length) {
                     setError(true);
                 } else {
                     setCareer(data);

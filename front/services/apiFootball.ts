@@ -1745,16 +1745,28 @@ export const ApiFootballService = {
   ): Promise<Player365Career | null> {
     try {
       const baseUrl = getApiUrl();
-      const langQ = language ? `?language=${encodeURIComponent(language)}` : '';
-      const url = `${baseUrl}/football/cached/365/player/${athleteId}/career${langQ}`;
+      const url = new URL(`${baseUrl}/football/cached/365/player/${athleteId}/career`);
+      if (language) url.searchParams.set('language', language);
+      console.log('🔍 Football API Proxy Request [GET]:', url.toString());
       const response = await withTimeout(
-        fetch(url, { headers: { Accept: 'application/json' } }),
-        60_000,
+        fetch(url.toString(), {
+          headers: { Accept: 'application/json', 'Accept-Language': acceptLanguageHeader() },
+        }),
+        90_000,
       );
-      if (!response.ok) return null;
-      const json = (await response.json()) as { response?: Player365Career };
-      return json.response ?? null;
-    } catch {
+      if (!response.ok) {
+        logger.warn(`365 career HTTP ${response.status} for athlete ${athleteId}`);
+        return null;
+      }
+      const json = (await response.json()) as { response?: Player365Career; status?: string };
+      const data = json.response ?? null;
+      if (!data?.seasons?.length) {
+        logger.warn(`365 career empty seasons for athlete ${athleteId}`);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      logger.warn('365 career fetch failed:', err);
       return null;
     }
   },

@@ -2569,7 +2569,7 @@ export class FootballController {
       }
       const language = resolveAppLanguage(req);
       const result = await footballDataCacheService.getCached365PlayerCareer(athleteId, language);
-      if (!result.data) {
+      if (!result.data?.seasons?.length) {
         res.status(503).json({
           status: 'ERROR',
           message: '365Scores player career unavailable',

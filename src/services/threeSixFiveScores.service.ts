@@ -1214,7 +1214,7 @@ class ThreeSixFiveScoresService {
 
     try {
       const langId = resolveScores365LangId(language);
-      const cacheKey = `365:player-career:v2:${athleteId}:${langId}`;
+      const cacheKey = `365:player-career:v3:${athleteId}:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFivePlayerCareer>(cacheKey);
       if (cached?.seasons?.length) return { data: cached, source: '365scores' };
 
@@ -1235,11 +1235,15 @@ class ThreeSixFiveScoresService {
 
       const profile = this.build365CareerProfile(athleteId, athlete, competitorNames);
 
-      const seasonDefs: Array<{ key: string; name: string }> = (
+      const seasonDefs: Array<{ key: string; name: string; embeddedStats?: any }> = (
         athlete.careerStats?.seasons ?? []
       )
         .filter((s: any) => s?.key && String(s.key) !== '-1')
-        .map((s: any) => ({ key: String(s.key), name: String(s.name ?? s.key) }));
+        .map((s: any) => ({
+          key: String(s.key),
+          name: String(s.name ?? s.key),
+          embeddedStats: s.stats,
+        }));
 
       if (!seasonDefs.length) {
         logger.warn(`[365Scores] getPlayerCareer(${athleteId}): no seasons in fullDetails`);
@@ -1270,20 +1274,30 @@ class ThreeSixFiveScoresService {
   private async fetch365CareerSeasons(
     athleteId: number,
     langId: number,
-    seasonDefs: Array<{ key: string; name: string }>,
+    seasonDefs: Array<{ key: string; name: string; embeddedStats?: any }>,
   ): Promise<Career365Season[]> {
     const seasons: Career365Season[] = [];
     const BATCH = 4;
+
+    const hasEmbeddedRows = (stats: any): boolean =>
+      Array.isArray(stats?.tables) &&
+      stats.tables.some((t: any) => Array.isArray(t?.rows) && t.rows.length > 0);
 
     for (let i = 0; i < seasonDefs.length; i += BATCH) {
       const batch = seasonDefs.slice(i, i + BATCH);
       const results = await Promise.all(
         batch.map(async (def) => {
-          const payload = await this.fetchJson<any>(
-            `/web/athletes/career?${this.commonParams(langId)}&athleteId=${athleteId}&seasonKey=${encodeURIComponent(def.key)}`,
-            `player-career:${athleteId}:${def.key}`,
-            120_000,
-          );
+          let payload: any = null;
+          if (hasEmbeddedRows(def.embeddedStats)) {
+            payload = { stats: def.embeddedStats };
+          } else {
+            payload = await this.fetchJson<any>(
+              `/web/athletes/career?${this.commonParams(langId)}&athleteId=${athleteId}&seasonKey=${encodeURIComponent(def.key)}`,
+              `player-career:${athleteId}:${def.key}`,
+              0,
+              true,
+            );
+          }
           if (!payload?.stats) return null;
           return this.parse365SeasonCareerPayload(def, payload);
         }),
