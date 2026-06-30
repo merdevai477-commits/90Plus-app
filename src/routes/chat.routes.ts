@@ -65,6 +65,12 @@ import {
     savePlayerInfoAnswer,
 } from '../services/player-info-cache.service';
 import { getTeamSuggestions } from '../services/chat-suggestions.service';
+import {
+    buildBedrockChatClient,
+    isBedrockChatConfigured,
+    resolveBedrockChatModel,
+    type BedrockChatStreamClient,
+} from '../services/bedrock-chat.client';
 
 // Data-backed factual answers stay valid for a few hours; live data is excluded
 // from caching upstream (see FootballChatContext.cacheable).
@@ -102,15 +108,17 @@ function getTimezone(req: Request): string {
 }
 
 // ─── Config: AI providers ────────────────────────────────────────────────────
+type ChatStreamClient = OpenAI | BedrockChatStreamClient;
+
 interface ProviderConfig {
     name: string;
     apiKey: string;
     baseURL: string;
     model: string;
-    client: OpenAI;
+    client: ChatStreamClient;
 }
 
-function buildClient(apiKey: string, baseURL: string): OpenAI {
+function buildOpenRouterClient(apiKey: string, baseURL: string): OpenAI {
     return new OpenAI({
         apiKey,
         baseURL,
@@ -123,58 +131,84 @@ function buildClient(apiKey: string, baseURL: string): OpenAI {
     });
 }
 
-// FAST model (Qwen): cheap + snappy for simple / short chit-chat.
-const FAST: ProviderConfig | null = (() => {
-    const apiKey = process.env.AI_API_KEY ?? process.env.OPENROUTER_API_KEY ?? '';
-    if (!apiKey) return null;
-    const baseURL = process.env.AI_BASE_URL ?? process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
-    return {
+function initOpenRouterProviders(): ProviderConfig[] {
+    const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
+    if (!apiKey) return [];
+
+    const baseURL =
+        process.env.OPENROUTER_BASE_URL ??
+        process.env.AI_BASE_URL ??
+        'https://openrouter.ai/api/v1';
+    const client = buildOpenRouterClient(apiKey, baseURL);
+
+    // FAST model: free Qwen 80B — strong Arabic/English/dialect chat on OpenRouter.
+    const FAST: ProviderConfig = {
         name: 'fast',
         apiKey,
         baseURL,
-        model: process.env.AI_MODEL ?? process.env.OPENROUTER_CHAT_MODEL ?? 'qwen/qwen3.6-flash',
-        client: buildClient(apiKey, baseURL),
+        model:
+            process.env.AI_MODEL ??
+            process.env.OPENROUTER_CHAT_MODEL ??
+            'qwen/qwen3-next-80b-a3b-instruct:free',
+        client,
     };
-})();
 
-// COMPLEX model (Gemini 3): used for football-data questions and detailed
-// answers where reasoning/accuracy matters most.
-const COMPLEX: ProviderConfig | null = (() => {
-    const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
-    if (!apiKey) return null;
-    const baseURL = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
-    const model =
-        process.env.OPENROUTER_CHAT_COMPLEX_MODEL ??
-        process.env.OPENROUTER_CHAT_SIMPLE_MODEL ??
-        process.env.OPENROUTER_GEMINI_FLASH_MODEL ??
-        'google/gemini-3-flash-preview';
-    return {
+    // COMPLEX model: same primary; override via OPENROUTER_CHAT_COMPLEX_MODEL if needed.
+    const COMPLEX: ProviderConfig = {
         name: 'complex',
         apiKey,
         baseURL,
-        model,
-        client: buildClient(apiKey, baseURL),
+        model:
+            process.env.OPENROUTER_CHAT_COMPLEX_MODEL ??
+            process.env.OPENROUTER_CHAT_SIMPLE_MODEL ??
+            process.env.OPENROUTER_GEMINI_FLASH_MODEL ??
+            process.env.OPENROUTER_CHAT_MODEL ??
+            process.env.AI_MODEL ??
+            'qwen/qwen3-next-80b-a3b-instruct:free',
+        client,
     };
-})();
 
-// FALLBACK model (Gemini 2.5): last resort if the chosen model errors.
-const FALLBACK: ProviderConfig | null = (() => {
-    const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
-    if (!apiKey) return null;
-    const baseURL = process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
-    const fallbackModel = process.env.OPENROUTER_QUIZ_MODEL ?? 'google/gemini-2.5-flash';
-    return {
+    // FALLBACK: alternate free model when primary is rate-limited upstream.
+    const FALLBACK: ProviderConfig = {
         name: 'fallback',
         apiKey,
         baseURL,
-        model: fallbackModel,
-        client: buildClient(apiKey, baseURL),
+        model:
+            process.env.OPENROUTER_CHAT_FALLBACK_MODEL ??
+            'google/gemma-4-26b-a4b-it:free',
+        client,
     };
-})();
 
-const PROVIDERS: ProviderConfig[] = [FAST, COMPLEX, FALLBACK].filter(
-    (p): p is ProviderConfig => p !== null,
-);
+    return [FAST, COMPLEX, FALLBACK];
+}
+
+function initBedrockProviders(): ProviderConfig[] {
+    const client = buildBedrockChatClient();
+    if (!client) return [];
+
+    const region =
+        process.env.AWS_BEDROCK_REGION ?? process.env.AWS_REGION ?? 'us-east-1';
+    const model = resolveBedrockChatModel();
+
+    return [
+        {
+            name: 'bedrock',
+            apiKey: 'aws-iam',
+            baseURL: `bedrock://${region}`,
+            model,
+            client,
+        },
+    ];
+}
+
+const OPENROUTER_PROVIDERS = initOpenRouterProviders();
+const BEDROCK_PROVIDERS = isBedrockChatConfigured() ? initBedrockProviders() : [];
+const PROVIDERS: ProviderConfig[] =
+    BEDROCK_PROVIDERS.length > 0 ? BEDROCK_PROVIDERS : OPENROUTER_PROVIDERS;
+
+const OR_FAST = OPENROUTER_PROVIDERS.find((p) => p.name === 'fast') ?? null;
+const OR_COMPLEX = OPENROUTER_PROVIDERS.find((p) => p.name === 'complex') ?? null;
+const OR_FALLBACK = OPENROUTER_PROVIDERS.find((p) => p.name === 'fallback') ?? null;
 
 const DAILY_LIMIT = getDailyMessageLimit();
 
@@ -186,11 +220,12 @@ if (PROVIDERS.length === 0) {
 }
 
 /**
- * Build the provider attempt chain. When `useComplex` is true (data / detailed
- * questions) Gemini 3 leads; otherwise the fast Qwen model leads. Each option
- * is followed by the others so a provider error still yields an answer.
+ * Build the provider attempt chain. On Bedrock we use a single Haiku model.
+ * On OpenRouter, complex football questions prefer Gemini; simple chat prefers Qwen.
  */
 function providersForRequest(useComplex: boolean): ProviderConfig[] {
+    if (BEDROCK_PROVIDERS.length > 0) return BEDROCK_PROVIDERS;
+
     const chain: ProviderConfig[] = [];
     const seen = new Set<string>();
 
@@ -201,13 +236,13 @@ function providersForRequest(useComplex: boolean): ProviderConfig[] {
     };
 
     if (useComplex) {
-        push(COMPLEX);
-        push(FALLBACK);
-        push(FAST);
+        push(OR_COMPLEX);
+        push(OR_FALLBACK);
+        push(OR_FAST);
     } else {
-        push(FAST);
-        push(COMPLEX);
-        push(FALLBACK);
+        push(OR_FAST);
+        push(OR_COMPLEX);
+        push(OR_FALLBACK);
     }
 
     return chain.length > 0 ? chain : PROVIDERS;
@@ -696,7 +731,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
         // ─── Stream with automatic provider fallback ─────────────────────────
         if (activeProviders.length === 0) {
-            logger.error('[chat] no AI provider configured — check AI_API_KEY / OPENROUTER_API_KEY');
+            logger.error('[chat] no AI provider configured — check AI_PROVIDER / AWS_* or OPENROUTER_API_KEY');
             if (!isResume) await decrementLimit(userId, tz);
             sendError('AI service not configured');
             return;

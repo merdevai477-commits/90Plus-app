@@ -75,6 +75,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-bedrock": "^3.1077.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1077.0",
     "@aws-sdk/client-s3": "^3.957.0",
     "@aws-sdk/s3-request-presigner": "^3.957.0",
     "@callstack/liquid-glass": "^0.7.1",
