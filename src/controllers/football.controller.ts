@@ -2525,8 +2525,38 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/365/search?q= — discover 365 athleteId by player name.
+   */
+  static async search365Athletes(req: Request, res: Response): Promise<void> {
+    try {
+      const query = (req.query.q as string)?.trim();
+      if (!query || query.length < 2) {
+        res.status(400).json({ status: 'ERROR', message: 'Query must be at least 2 characters' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await threeSixFiveScoresService.searchAthletes(query, language);
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores player search unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: { athletes: result.data },
+        _meta: { query, count: result.data.length },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/cached/365/player/:athleteId/info — basic profile + next game (365Scores).
-   * Enrichment only: athleteId must already be known from a lineup or CachedPlayer — not cold discovery.
    */
   static async getCached365PlayerInfo(req: Request, res: Response): Promise<void> {
     try {

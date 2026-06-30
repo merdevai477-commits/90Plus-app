@@ -199,6 +199,9 @@ router.get(
   FootballController.getCached365PlayerCareer,
 );
 
+// GET /api/football/cached/365/search?q= — discover 365 athleteId by player name
+router.get('/cached/365/search', SHARED_CACHE_5MIN, FootballController.search365Athletes);
+
 // GET /api/football/cached/fixture/:id/lineups - Get lineups (permanent for finished, short for empty/live)
 // 5min route cache lets the inner cache logic (which tracks empty vs full
 // results) actually surface fresh data — a 24h shared HTTP cache would lock
