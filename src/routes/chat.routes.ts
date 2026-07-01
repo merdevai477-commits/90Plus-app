@@ -71,6 +71,13 @@ import {
     resolveBedrockChatModel,
     type BedrockChatStreamClient,
 } from '../services/bedrock-chat.client';
+import {
+    buildGeminiChatClient,
+    isGeminiChatConfigured,
+    resolveGeminiChatFallbackModel,
+    resolveGeminiChatModel,
+    type GeminiChatStreamClient,
+} from '../services/gemini-chat.client';
 
 // Data-backed factual answers stay valid for a few hours; live data is excluded
 // from caching upstream (see FootballChatContext.cacheable).
@@ -108,7 +115,7 @@ function getTimezone(req: Request): string {
 }
 
 // ─── Config: AI providers ────────────────────────────────────────────────────
-type ChatStreamClient = OpenAI | BedrockChatStreamClient;
+type ChatStreamClient = OpenAI | BedrockChatStreamClient | GeminiChatStreamClient;
 
 interface ProviderConfig {
     name: string;
@@ -182,6 +189,36 @@ function initOpenRouterProviders(): ProviderConfig[] {
     return [FAST, COMPLEX, FALLBACK];
 }
 
+function initGeminiProviders(): ProviderConfig[] {
+    const client = buildGeminiChatClient();
+    if (!client) return [];
+
+    const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
+    const baseURL =
+        process.env.GEMINI_BASE_URL ??
+        'https://generativelanguage.googleapis.com/v1beta';
+    const primaryModel = resolveGeminiChatModel();
+    const fallbackModel = resolveGeminiChatFallbackModel();
+
+    const PRIMARY: ProviderConfig = {
+        name: 'gemini',
+        apiKey,
+        baseURL,
+        model: primaryModel,
+        client,
+    };
+
+    const FALLBACK: ProviderConfig = {
+        name: 'gemini-fallback',
+        apiKey,
+        baseURL,
+        model: fallbackModel,
+        client,
+    };
+
+    return fallbackModel !== primaryModel ? [PRIMARY, FALLBACK] : [PRIMARY];
+}
+
 function initBedrockProviders(): ProviderConfig[] {
     const client = buildBedrockChatClient();
     if (!client) return [];
@@ -202,9 +239,17 @@ function initBedrockProviders(): ProviderConfig[] {
 }
 
 const OPENROUTER_PROVIDERS = initOpenRouterProviders();
+const GEMINI_PROVIDERS = isGeminiChatConfigured() ? initGeminiProviders() : [];
 const BEDROCK_PROVIDERS = isBedrockChatConfigured() ? initBedrockProviders() : [];
 const PROVIDERS: ProviderConfig[] =
-    BEDROCK_PROVIDERS.length > 0 ? BEDROCK_PROVIDERS : OPENROUTER_PROVIDERS;
+    GEMINI_PROVIDERS.length > 0
+        ? GEMINI_PROVIDERS
+        : BEDROCK_PROVIDERS.length > 0
+          ? BEDROCK_PROVIDERS
+          : OPENROUTER_PROVIDERS;
+
+const GEMINI_PRIMARY = GEMINI_PROVIDERS.find((p) => p.name === 'gemini') ?? null;
+const GEMINI_FALLBACK = GEMINI_PROVIDERS.find((p) => p.name === 'gemini-fallback') ?? null;
 
 const OR_FAST = OPENROUTER_PROVIDERS.find((p) => p.name === 'fast') ?? null;
 const OR_COMPLEX = OPENROUTER_PROVIDERS.find((p) => p.name === 'complex') ?? null;
@@ -220,10 +265,19 @@ if (PROVIDERS.length === 0) {
 }
 
 /**
- * Build the provider attempt chain. On Bedrock we use a single Haiku model.
- * On OpenRouter, complex football questions prefer Gemini; simple chat prefers Qwen.
+ * Build the provider attempt chain.
+ * Gemini: primary 3 Flash (+ optional 2.5 Flash fallback).
+ * Bedrock: single Haiku model.
+ * OpenRouter: complex football → Gemini/Qwen chain.
  */
 function providersForRequest(useComplex: boolean): ProviderConfig[] {
+    if (GEMINI_PROVIDERS.length > 0) {
+        const chain: ProviderConfig[] = [];
+        if (GEMINI_PRIMARY) chain.push(GEMINI_PRIMARY);
+        if (GEMINI_FALLBACK) chain.push(GEMINI_FALLBACK);
+        return chain.length > 0 ? chain : GEMINI_PROVIDERS;
+    }
+
     if (BEDROCK_PROVIDERS.length > 0) return BEDROCK_PROVIDERS;
 
     const chain: ProviderConfig[] = [];
@@ -731,7 +785,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
         // ─── Stream with automatic provider fallback ─────────────────────────
         if (activeProviders.length === 0) {
-            logger.error('[chat] no AI provider configured — check AI_PROVIDER / AWS_* or OPENROUTER_API_KEY');
+            logger.error('[chat] no AI provider configured — check AI_PROVIDER / GEMINI_API_KEY / AWS_* / OPENROUTER_API_KEY');
             if (!isResume) await decrementLimit(userId, tz);
             sendError('AI service not configured');
             return;
