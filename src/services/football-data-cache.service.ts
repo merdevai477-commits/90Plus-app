@@ -69,7 +69,9 @@ import {
     type ThreeSixFivePlayerBasicInfo,
     type ThreeSixFivePlayerCareer,
     type ThreeSixFivePlayerCareerShotChart,
+    type ThreeSixFivePlayerLookupResult,
     type ThreeSixFivePlayerMatchReport,
+    type ThreeSixFiveSearchAthlete,
     type ThreeSixFiveResult,
     type ThreeSixFiveStandingRow,
     type ThreeSixFiveFixtureItem,
@@ -84,6 +86,7 @@ import {
     offsetCalendarDateKey,
 } from '../utils/calendar-day-bounds.util';
 import { map365StandingRowsToApiGroups } from '../utils/scores365-standings-mapper';
+import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
 import { getWorldCupLeagueId, getWorldCupSeason } from '../config/world-cup-only-mode.config';
 import { getScores365CompetitionId } from './scores365-experiment.service';
 
@@ -2546,9 +2549,6 @@ class FootballDataCacheService {
         athleteId: number,
         language?: string | null,
     ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerBasicInfo>> {
-        if (!this.is365WorldCupSecondaryEnabled()) {
-            return { data: null, source: null };
-        }
         return threeSixFiveScoresService.getPlayerBasicInfo(athleteId, language);
     }
 
@@ -2561,10 +2561,6 @@ class FootballDataCacheService {
         athleteId: number,
         language?: string | null,
     ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
-        if (!this.is365WorldCupSecondaryEnabled()) {
-            return { data: null, source: null };
-        }
-
         const langId = resolveScores365LangId(language);
 
         // 1. Postgres — serve a fresh row immediately; refresh stale rows in background.
@@ -2637,6 +2633,97 @@ class FootballDataCacheService {
         }
 
         return result;
+    }
+
+    /**
+     * Search by name (or athleteId) and return 365 profile + career in one response.
+     */
+    async lookup365Player(
+        query: string,
+        language?: string | null,
+        options?: {
+            athleteId?: number;
+            limit?: number;
+            includeInfo?: boolean;
+            includeCareer?: boolean;
+        },
+    ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerLookupResult>> {
+        const includeInfo = options?.includeInfo !== false;
+        const includeCareer = options?.includeCareer !== false;
+        const limit = Math.min(Math.max(options?.limit ?? 1, 1), 5);
+
+        try {
+            let candidates: ThreeSixFiveSearchAthlete[] = [];
+
+            if (options?.athleteId != null && !Number.isNaN(options.athleteId)) {
+                candidates = [
+                    {
+                        athleteId: options.athleteId,
+                        name: '',
+                        shortName: '',
+                        clubName: null,
+                        clubId: null,
+                        nationalityId: null,
+                        sportId: 1,
+                        imageVersion: null,
+                        imageUrl: buildScores365AthletePhotoUrl(options.athleteId, 68),
+                    },
+                ];
+            } else {
+                const trimmed = query.trim();
+                if (trimmed.length < 2) {
+                    return { data: { query: trimmed, players: [] }, source: '365scores' };
+                }
+                const search = await threeSixFiveScoresService.searchAthletes(trimmed, language);
+                if (!search.data) {
+                    return { data: null, source: null };
+                }
+                if (!search.data.length) {
+                    return { data: { query: trimmed, players: [] }, source: '365scores' };
+                }
+                candidates = search.data.slice(0, limit);
+            }
+
+            const players = await Promise.all(
+                candidates.map(async (candidate) => {
+                    const [infoResult, careerResult] = await Promise.all([
+                        includeInfo
+                            ? this.getCached365PlayerBasicInfo(candidate.athleteId, language)
+                            : Promise.resolve({ data: null, source: '365scores' as const }),
+                        includeCareer
+                            ? this.getCached365PlayerCareer(candidate.athleteId, language)
+                            : Promise.resolve({ data: null, source: '365scores' as const }),
+                    ]);
+
+                    const info = infoResult.data;
+                    const career = careerResult.data;
+
+                    return {
+                        athleteId: candidate.athleteId,
+                        name: info?.name ?? candidate.name,
+                        shortName: info?.shortName ?? candidate.shortName,
+                        clubName: info?.club ?? candidate.clubName,
+                        clubId: candidate.clubId,
+                        nationalityId: candidate.nationalityId,
+                        imageUrl:
+                            info?.imageUrl ??
+                            candidate.imageUrl ??
+                            career?.profile.imageUrl ??
+                            null,
+                        info,
+                        career,
+                    };
+                }),
+            );
+
+            return {
+                data: { query: query.trim(), players },
+                source: '365scores',
+            };
+        } catch (err: unknown) {
+            logger.error('[365Scores] lookup365Player failed:', (err as Error)?.message);
+            return { data: null, source: null };
+        }
     }
 
     /** Merge 365 named players (athleteId, photo) into structured lineups (grid, formation). */

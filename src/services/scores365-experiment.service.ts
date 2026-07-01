@@ -199,6 +199,22 @@ export function resolveScores365LangId(appLanguage?: string | null): number {
   return parseInt(process.env.SCORES365_LANG_ID_AR || process.env.SCORES365_LANG_ID || '27', 10);
 }
 
+/** True when the query contains Arabic script (365 search needs langId 27 for these). */
+export function queryLooksArabic(query: string): boolean {
+  return /[\u0600-\u06FF]/.test(query);
+}
+
+/**
+ * Lang id for /web/search/ only — ignores SCORES365_FORCE_ENGLISH so Arabic names resolve.
+ */
+export function resolveScores365SearchLangId(query: string, appLanguage?: string | null): number {
+  const langAr = parseInt(process.env.SCORES365_LANG_ID_AR || process.env.SCORES365_LANG_ID || '27', 10);
+  const langEn = parseInt(process.env.SCORES365_LANG_ID_EN || '1', 10);
+  if (queryLooksArabic(query)) return langAr;
+  const lang = (appLanguage || process.env.SCORES365_DEFAULT_LANG || 'ar').trim().toLowerCase();
+  return lang.startsWith('en') ? langEn : langAr;
+}
+
 export function getScores365CompetitionId(): number {
   return parseInt(process.env.SCORES365_COMPETITION_ID || '5930', 10);
 }

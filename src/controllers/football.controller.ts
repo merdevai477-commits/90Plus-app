@@ -2525,6 +2525,67 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/365/player/lookup?q= — search + profile + career (365Scores).
+   * Optional: ?athleteId=51735 to skip search. ?limit=3 for multiple matches.
+   */
+  static async lookup365Player(req: Request, res: Response): Promise<void> {
+    try {
+      const query = (req.query.q as string)?.trim() ?? '';
+      const athleteIdParam = req.query.athleteId ? parseInt(req.query.athleteId as string) : undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 1;
+      const includeInfo = req.query.info !== 'false';
+      const includeCareer = req.query.career !== 'false';
+
+      if (!athleteIdParam && query.length < 2) {
+        res.status(400).json({
+          status: 'ERROR',
+          message: 'Provide q (min 2 chars) or athleteId',
+        });
+        return;
+      }
+
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.lookup365Player(query, language, {
+        athleteId: athleteIdParam,
+        limit,
+        includeInfo,
+        includeCareer,
+      });
+
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores player lookup unavailable',
+          source: result.source,
+        });
+        return;
+      }
+
+      if (!result.data.players.length) {
+        res.status(404).json({
+          status: 'ERROR',
+          message: 'No players found',
+          source: result.source,
+          response: result.data,
+        });
+        return;
+      }
+
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: {
+          query: result.data.query,
+          count: result.data.players.length,
+        },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/cached/365/search?q= — discover 365 athleteId by player name.
    */
   static async search365Athletes(req: Request, res: Response): Promise<void> {

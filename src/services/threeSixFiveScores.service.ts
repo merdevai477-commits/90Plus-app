@@ -15,6 +15,7 @@ import {
   mapScores365ToApiFootballFixture,
   registerScores365FixtureMapping,
   resolveScores365LangId,
+  resolveScores365SearchLangId,
   scores365CompetitionToLeagueId,
   SCORES365_LEAGUE_ID_OFFSET,
   synthesizeBaseFrom365Game,
@@ -171,6 +172,23 @@ export interface ThreeSixFiveSearchAthlete {
   sportId: number | null;
   imageVersion: number | null;
   imageUrl: string | null;
+}
+
+export interface ThreeSixFivePlayerLookupEntry {
+  athleteId: number;
+  name: string;
+  shortName: string;
+  clubName: string | null;
+  clubId: number | null;
+  nationalityId: number | null;
+  imageUrl: string | null;
+  info: ThreeSixFivePlayerBasicInfo | null;
+  career: ThreeSixFivePlayerCareer | null;
+}
+
+export interface ThreeSixFivePlayerLookupResult {
+  query: string;
+  players: ThreeSixFivePlayerLookupEntry[];
 }
 
 export interface Career365CompetitionStat {
@@ -1088,45 +1106,62 @@ class ThreeSixFiveScoresService {
     }
 
     try {
-      const langId = resolveScores365LangId(language);
-      const cacheKey = `365:search:${langId}:${trimmed.toLowerCase()}`;
-      const cached = await redisCacheService.get<ThreeSixFiveSearchAthlete[]>(cacheKey);
-      if (cached) return { data: cached, source: '365scores' };
+      const primaryLangId = resolveScores365SearchLangId(trimmed, language);
+      const fallbackLangId =
+        primaryLangId === parseInt(process.env.SCORES365_LANG_ID_AR || '27', 10)
+          ? parseInt(process.env.SCORES365_LANG_ID_EN || '1', 10)
+          : parseInt(process.env.SCORES365_LANG_ID_AR || '27', 10);
 
-      const path = `/web/search/?${this.commonParams(langId)}&query=${encodeURIComponent(trimmed)}`;
-      const payload = await this.fetchJson<{
-        athletes?: Array<{
-          id: number;
-          name?: string;
-          shortName?: string;
-          clubId?: number;
-          clubName?: string;
-          nationalityId?: number;
-          sportId?: number;
-          imageVersion?: number;
-        }>;
-      }>(path, `search:${trimmed}`, 60_000);
+      let athletes = await this.fetchSearchAthletes(trimmed, primaryLangId);
+      if (!athletes.length && fallbackLangId !== primaryLangId) {
+        athletes = await this.fetchSearchAthletes(trimmed, fallbackLangId);
+      }
 
-      const athletes = (payload?.athletes ?? [])
-        .filter((a) => a.sportId == null || a.sportId === 1)
-        .map((a) => ({
-          athleteId: a.id,
-          name: a.name ?? '—',
-          shortName: a.shortName ?? a.name ?? '—',
-          clubName: a.clubName ?? null,
-          clubId: a.clubId ?? null,
-          nationalityId: a.nationalityId ?? null,
-          sportId: a.sportId ?? null,
-          imageVersion: a.imageVersion ?? null,
-          imageUrl: buildScores365AthletePhotoUrl(a.id, a.imageVersion ?? 68),
-        }));
-
-      await redisCacheService.set(cacheKey, athletes, 300_000);
       return { data: athletes, source: '365scores' };
     } catch (err: unknown) {
       logger.error('[365Scores] searchAthletes failed:', (err as Error)?.message);
       return { data: null, source: null };
     }
+  }
+
+  private async fetchSearchAthletes(
+    query: string,
+    langId: number,
+  ): Promise<ThreeSixFiveSearchAthlete[]> {
+    const cacheKey = `365:search:${langId}:${query.toLowerCase()}`;
+    const cached = await redisCacheService.get<ThreeSixFiveSearchAthlete[]>(cacheKey);
+    if (cached) return cached;
+
+    const path = `/web/search/?${this.commonParams(langId)}&query=${encodeURIComponent(query)}`;
+    const payload = await this.fetchJson<{
+      athletes?: Array<{
+        id: number;
+        name?: string;
+        shortName?: string;
+        clubId?: number;
+        clubName?: string;
+        nationalityId?: number;
+        sportId?: number;
+        imageVersion?: number;
+      }>;
+    }>(path, `search:${langId}:${query}`, 60_000);
+
+    const athletes = (payload?.athletes ?? [])
+      .filter((a) => a.sportId == null || a.sportId === 1)
+      .map((a) => ({
+        athleteId: a.id,
+        name: a.name ?? '—',
+        shortName: a.shortName ?? a.name ?? '—',
+        clubName: a.clubName ?? null,
+        clubId: a.clubId ?? null,
+        nationalityId: a.nationalityId ?? null,
+        sportId: a.sportId ?? null,
+        imageVersion: a.imageVersion ?? null,
+        imageUrl: buildScores365AthletePhotoUrl(a.id, a.imageVersion ?? 68),
+      }));
+
+    await redisCacheService.set(cacheKey, athletes, 300_000);
+    return athletes;
   }
 
   // ─── 6. Player match report ──────────────────────────────────────────────
@@ -1255,8 +1290,6 @@ class ThreeSixFiveScoresService {
     athleteId: number,
     language?: string | null,
   ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerBasicInfo>> {
-    if (!this.isEnabled()) return { data: null, source: null };
-
     try {
       const langId = resolveScores365LangId(language);
       const cacheKey = `365:player-info:${athleteId}:${langId}`;
@@ -1307,8 +1340,6 @@ class ThreeSixFiveScoresService {
     athleteId: number,
     language?: string | null,
   ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
-    if (!this.isEnabled()) return { data: null, source: null };
-
     try {
       const langId = resolveScores365LangId(language);
       const cacheKey = `365:player-career:v4:${athleteId}:${langId}`;
