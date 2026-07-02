@@ -19,6 +19,8 @@ import {
   fetchPlayerStatsRow,
   type PlayerInfoQueryType,
 } from './chat-football-tools.service';
+import { fetch365PlayerChatContext } from './chat-365-player-context.service';
+import type { MessageLanguage } from '../utils/message-language.util';
 
 const TTL_HOURS_UCL = Number(process.env.PLAYER_INFO_TTL_HOURS_UCL ?? 168);
 const TTL_HOURS_STATS = Number(process.env.PLAYER_INFO_TTL_HOURS_STATS ?? 24);
@@ -69,7 +71,10 @@ export function hashApiContext(context: string): string {
 export async function fetchPlayerApiContext(
   playerName: string,
   queryType: PlayerInfoQueryType,
+  language?: string,
 ): Promise<{ context: string; apiPlayerId?: number; displayName?: string } | null> {
+  const lang: MessageLanguage = language === 'ar' ? 'ar' : 'en';
+
   if (queryType === 'ucl_career') {
     const context = await fetchPlayerUclCareerDossier(playerName);
     if (!context) return null;
@@ -78,6 +83,15 @@ export async function fetchPlayerApiContext(
       context,
       apiPlayerId: row?.apiPlayerId,
       displayName: row?.aliases?.find((a) => !/[\u0600-\u06FF]/.test(a)),
+    };
+  }
+
+  const from365 = await fetch365PlayerChatContext(playerName, lang);
+  if (from365) {
+    return {
+      context: from365.block,
+      apiPlayerId: from365.athleteId,
+      displayName: from365.displayName,
     };
   }
 
@@ -136,7 +150,11 @@ export async function resolvePlayerInfoAnswer(
       };
     }
 
-    const freshApi = await fetchPlayerApiContext(lookup.playerName, lookup.queryType);
+    const freshApi = await fetchPlayerApiContext(
+      lookup.playerName,
+      lookup.queryType,
+      lookup.language,
+    );
     if (!freshApi) {
       if (stillValid) {
         return {

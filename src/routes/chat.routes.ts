@@ -405,6 +405,7 @@ const CORE_BEHAVIOR_PROMPT = `
 - إن لم يُرفق أي بلوك بيانات أصلاً، لا تخترع إحصائيات؛ تحدث بشكل وصفي عام أو وضّح أن البيانات غير متاحة.
 - لا تخترع أهدافاً أو بطولات أو أندية أو مدربين — إذا لم تتوفر البيانات، قل ذلك بوضوح.
 - للاعبين والفرق والترتيب: استخدم الجداول Markdown عند عرض أكثر من 3 حقول.
+- عند سؤال عن مباريات اليوم: اذكر فقط أهم المباريات المرفقة في السياق (لا تسرد كل المباريات). في نهاية الرد وجّه المستخدم لصفحة المباريات في تطبيق 90Plus لو عايز يشوف باقي المباريات.
 
 السلامة:
 - إذا احتوت الرسالة سبابًا، ارفض المتابعة باحترام.
@@ -886,6 +887,8 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     answer: fullText,
                     apiContext: footballCtx.block,
                     usedModel: usedProvider.model,
+                    apiPlayerId: footballCtx.playerMeta?.athleteId,
+                    displayName: footballCtx.playerMeta?.displayName,
                 });
             }
 

@@ -92,7 +92,7 @@ async function refreshPlayerRow(
     }
   }
 
-  const fresh = await fetchPlayerApiContext(row.playerName, queryType);
+  const fresh = await fetchPlayerApiContext(row.playerName, queryType, row.language);
   if (!fresh?.context) {
     // No API data right now (down / quota / not found) → skip, keep old answer.
     return false;

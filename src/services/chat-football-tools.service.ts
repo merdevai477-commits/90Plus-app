@@ -33,6 +33,7 @@ import {
   formatFixturesForChatContext,
   localDateKey,
 } from '../utils/world-cup-campaign.util';
+import { fetch365PlayerChatContext } from './chat-365-player-context.service';
 
 // Dossier-level Redis TTLs (separate namespaces from the football:* proxy keys
 // so clearCache() can't wipe them mid-session).
@@ -558,9 +559,24 @@ export async function fetchPlayerStatsRow(
  * Player context with two cache layers: L1 in-memory (ctxCache, per-process,
  * fast) in front of L2 Postgres (PlayerStatsCache, persistent across restarts).
  */
+async function fetch365PlayerContextCached(
+  rawName: string,
+  language: MessageLanguage,
+): Promise<string | null> {
+  return cachedLookup(
+    `365player:${normalizeName(rawName)}:${language}`,
+    PLAYER_DOSSIER_TTL_MS,
+    async () => {
+      const ctx = await fetch365PlayerChatContext(rawName, language);
+      return ctx?.block ?? null;
+    },
+  );
+}
+
 async function fetchPlayerContextCached(
   rawName: string,
   message: string,
+  language: MessageLanguage = 'en',
 ): Promise<string | null> {
   const statType = detectStatType(message);
   const league = detectLeague(message);
@@ -572,6 +588,12 @@ async function fetchPlayerContextCached(
     `player:${rawName.toLowerCase()}:${statType}:${league?.id ?? 'all'}`,
     30 * 60_000,
     async () => {
+      // 365Scores lookup first — same endpoint as /cached/365/player/lookup.
+      const from365 = await fetch365PlayerContextCached(rawName, language);
+      if (from365) return from365;
+
+      if (!footballService.isConfigured()) return null;
+
       // Redis dossier layer (skipped for volatile live queries).
       if (!isLive) {
         const cached = await redisCacheService.get<string>(redisKey);
@@ -905,22 +927,111 @@ async function fetchLiveMatchesContext(): Promise<string | null> {
   });
 }
 
-async function fetchTodayAllFixturesContext(): Promise<string | null> {
-  if (!footballService.isConfigured()) return null;
+const HIGHLIGHT_LEAGUE_SCORE: Record<number, number> = {
+  2: 100,
+  39: 92,
+  140: 90,
+  135: 89,
+  78: 88,
+  61: 87,
+  3: 85,
+  233: 84,
+  307: 80,
+  848: 78,
+  531: 76,
+  1: 75,
+  13: 74,
+  12: 73,
+  11: 72,
+  9: 71,
+  5: 70,
+  4: 69,
+};
 
+const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'P', 'LIVE', 'BT']);
+
+function scoreFixtureImportance(fixture: any): number {
+  const leagueId = fixture?.league?.id ?? 0;
+  let score = HIGHLIGHT_LEAGUE_SCORE[leagueId] ?? 8;
+  const leagueName = String(fixture?.league?.name ?? '').toLowerCase();
+
+  if (/world\s*cup|كأس\s*العالم/i.test(leagueName)) score += 98;
+  else if (/champions\s*league|دوري\s*الأبطال|ابطال\s*اوروبا/i.test(leagueName)) score += 95;
+  else if (/europa\s*league|الدوري\s*الأوروبي/i.test(leagueName)) score += 82;
+  else if (/premier\s*league|بريمير/i.test(leagueName)) score += 90;
+  else if (/la\s*liga|الدوري\s*الإسباني|الاسباني/i.test(leagueName)) score += 88;
+  else if (/serie\s*a|الدوري\s*الإيطالي/i.test(leagueName)) score += 87;
+  else if (/bundesliga|الدوري\s*الألماني/i.test(leagueName)) score += 86;
+  else if (/ligue\s*1|الدوري\s*الفرنسي/i.test(leagueName)) score += 85;
+  else if (/egypt|مصر/i.test(leagueName)) score += 83;
+  else if (/saudi|سعود/i.test(leagueName)) score += 78;
+
+  const status = fixture?.fixture?.status?.short ?? '';
+  if (LIVE_STATUSES.has(status)) score += 65;
+  if (status === 'FT' || status === 'AET' || status === 'PEN') score += 18;
+
+  const round = String(fixture?.league?.round ?? '');
+  if (/final|نهائي/i.test(round)) score += 40;
+  if (/semi|نصف/i.test(round)) score += 28;
+
+  return score;
+}
+
+function formatFixtureRowWithLeague(fixture: any): string {
+  const home = fixture.teams?.home?.name ?? '—';
+  const away = fixture.teams?.away?.name ?? '—';
+  const gh = fixture.goals?.home ?? '-';
+  const ga = fixture.goals?.away ?? '-';
+  const status = fixture.fixture?.status?.short ?? '';
+  const elapsed = fixture.fixture?.status?.elapsed;
+  const date = fixture.fixture?.date ? String(fixture.fixture.date).slice(11, 16) : '';
+  const minute =
+    status === 'NS' || status === 'TBD'
+      ? date || 'scheduled'
+      : elapsed != null
+        ? `${elapsed}'`
+        : status || 'LIVE';
+  const league = fixture.league?.name ?? '';
+  return league ? `[${league}] ${home} ${gh}-${ga} ${away} (${minute})` : `${home} ${gh}-${ga} ${away} (${minute})`;
+}
+
+const TODAY_HIGHLIGHTS_LIMIT = 8;
+
+async function fetchTodayHighlightsContext(language: MessageLanguage): Promise<string | null> {
   const dateString = localDateKey();
-  return cachedLookup(`fixtures:today:all:${dateString}`, 60_000, async () => {
+  return cachedLookup(`fixtures:today:highlights:${dateString}`, 60_000, async () => {
     try {
       const { footballDataCacheService } = await import('./football-data-cache.service');
       const fixtures = await footballDataCacheService.getMatchesByDate(dateString);
       if (!fixtures.length) {
-        return `No football fixtures scheduled for ${dateString}.`;
+        return language === 'ar'
+          ? `لا توجد مباريات مجدولة اليوم (${dateString}).`
+          : `No football fixtures scheduled for ${dateString}.`;
       }
-      return (
-        formatFixturesForChatContext(fixtures, `Football fixtures on ${dateString}`) ?? null
-      );
+
+      const ranked = [...fixtures]
+        .map((f) => ({ f, score: scoreFixtureImportance(f) }))
+        .sort((a, b) => b.score - a.score);
+      const top = ranked.slice(0, TODAY_HIGHLIGHTS_LIMIT).map((r) => r.f);
+      const rows = top.map(formatFixtureRowWithLeague);
+      const heading =
+        language === 'ar'
+          ? `أهم مباريات اليوم (${dateString})`
+          : `Top important matches today (${dateString})`;
+      const body = `${heading} (${rows.length} من ${fixtures.length}):\n${rows.join('\n')}`;
+
+      const instruction =
+        language === 'ar'
+          ? fixtures.length > top.length
+            ? `\n\nتعليمات للرد: اذكر فقط هذه المباريات الأهم (${rows.length} من ${fixtures.length} مباراة اليوم). لا تسرد كل المباريات. في نهاية ردك قل للمستخدم: لو عايز تشوف باقي المباريات روح صفحة المباريات في تطبيق 90Plus.`
+            : `\n\nتعليمات للرد: اذكر هذه المباريات بوضوح. في نهاية ردك يمكنك تذكير المستخدم بصفحة المباريات في تطبيق 90Plus لمتابعة التفاصيل.`
+          : fixtures.length > top.length
+            ? `\n\nREPLY INSTRUCTION: Mention ONLY these ${rows.length} highlighted matches (from ${fixtures.length} total today). Do NOT list every fixture. End your reply by telling the user to open the Matches tab in the 90Plus app to see the rest.`
+            : `\n\nREPLY INSTRUCTION: Present these matches clearly. You may remind the user to use the Matches tab in the 90Plus app for full details.`;
+
+      return `${body}${instruction}`;
     } catch (err) {
-      logger.warn('[ChatFootball] today fixtures lookup failed:', err);
+      logger.warn('[ChatFootball] today highlights lookup failed:', err);
       return null;
     }
   });
@@ -933,6 +1044,8 @@ export interface FootballChatContext {
   cacheable: boolean;
   /** Provenance of each injected sub-block (additive; safe to ignore). */
   sources?: DataSource[];
+  /** 365Scores metadata when a player lookup succeeded. */
+  playerMeta?: { athleteId: number; displayName: string };
 }
 
 /**
@@ -947,7 +1060,7 @@ export async function buildFootballChatContext(
   opts?: { language?: MessageLanguage },
 ): Promise<FootballChatContext | null> {
   const language = opts?.language ?? 'en';
-  if (!footballService.isConfigured()) return null;
+  const apiConfigured = footballService.isConfigured();
 
   const wantsLive = isLiveMatchesQuery(message);
   const wantsTodayScope = isTodayFootballScopeQuery(message);
@@ -960,18 +1073,34 @@ export async function buildFootballChatContext(
   const wantsPlayer = isPlayerQuery(message) && !wantsTopScorers && !wantsUclCareer;
   const wantsTeam = isTeamQuery(message) && !wantsTopScorers && !wantsStandings;
 
-  const tasks: Array<Promise<ContextPiece | null>> = [];
+  const hasFootballIntent =
+    wantsLive ||
+    wantsTodayScope ||
+    wantsTopScorers ||
+    wantsStandings ||
+    wantsUclCareer ||
+    wantsPlayer ||
+    wantsTeam;
 
-  if (wantsLive) {
+  if (!hasFootballIntent) return null;
+
+  const canUse365Player = wantsPlayer && nameCandidates.length > 0;
+  const canUseTodayHighlights = wantsTodayScope;
+  if (!apiConfigured && !canUse365Player && !canUseTodayHighlights) return null;
+
+  const tasks: Array<Promise<ContextPiece | null>> = [];
+  let playerMeta: FootballChatContext['playerMeta'];
+
+  if (wantsLive && apiConfigured) {
     tasks.push(fetchLiveMatchesContext().then((b) => tagPiece(b, 'api')));
   }
   if (wantsTodayScope) {
-    tasks.push(fetchTodayAllFixturesContext().then((b) => tagPiece(b, 'api')));
+    tasks.push(fetchTodayHighlightsContext(language).then((b) => tagPiece(b, 'api')));
   }
-  if (wantsTopScorers) {
+  if (wantsTopScorers && apiConfigured) {
     tasks.push(fetchTopScorersContext(message).then((b) => tagPiece(b, 'api')));
   }
-  if (wantsStandings) {
+  if (wantsStandings && apiConfigured) {
     tasks.push(
       cachedLookup(`standings:${message.slice(0, 64)}`, 10 * 60_000, () =>
         fetchStandingsContext(message),
@@ -1008,7 +1137,7 @@ export async function buildFootballChatContext(
     }
   }
 
-  if (allowUclCareer && nameCandidates.length > 0) {
+  if (allowUclCareer && nameCandidates.length > 0 && apiConfigured) {
     for (const name of nameCandidates) {
       tasks.push(
         fetchPlayerUclCareerContextCached(name, language).then((b) => tagPiece(b, 'api')),
@@ -1018,7 +1147,22 @@ export async function buildFootballChatContext(
     for (const name of nameCandidates) {
       // Skip the player path for dictionary-confirmed clubs (precedence).
       if (dictTeamNames.has(name)) continue;
-      tasks.push(fetchPlayerContextCached(name, message).then((b) => tagPiece(b, 'api')));
+      tasks.push(
+        (async () => {
+          const block = await fetchPlayerContextCached(name, message, language);
+          if (block?.includes('365SCORES PLAYER DATA')) {
+            const idMatch = block.match(/athleteId=(\d+)/);
+            const nameMatch = block.match(/^PLAYER \(365Scores athleteId=\d+\): (.+)$/m);
+            if (idMatch && nameMatch) {
+              playerMeta = {
+                athleteId: Number(idMatch[1]),
+                displayName: nameMatch[1].trim(),
+              };
+            }
+          }
+          return tagPiece(block, 'api');
+        })(),
+      );
     }
   }
 
@@ -1064,6 +1208,7 @@ export async function buildFootballChatContext(
     // Live scores change minute to minute — never persist those answers.
     cacheable: !wantsLive,
     sources,
+    ...(playerMeta ? { playerMeta } : {}),
   };
 }
 
@@ -1100,7 +1245,8 @@ export function detectPlayerInfoQuery(
     isPlayerQuery(message) &&
     !isTopScorerQuery(message) &&
     !isStandingsQuery(message) &&
-    !isLiveMatchesQuery(message)
+    !isLiveMatchesQuery(message) &&
+    !isTodayFootballScopeQuery(message)
   ) {
     return { playerName: names[0], queryType: 'season_stats' };
   }
