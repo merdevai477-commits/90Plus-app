@@ -174,7 +174,10 @@ export function useDailyQuiz(lang: QuizApiLanguage) {
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    refetchInterval: (q) => (isPackPreparingError(q.state.error) ? 5000 : false),
+    // Poll every 5s while the backend prepares the pack, but stop after ~2 min
+    // so the UI can surface a retry state instead of spinning forever.
+    refetchInterval: (q) =>
+      isPackPreparingError(q.state.error) && q.state.errorUpdateCount < 24 ? 5000 : false,
     placeholderData:
       cachedData?.packDate === dateKey && cachedData.questions?.length
         ? cachedData

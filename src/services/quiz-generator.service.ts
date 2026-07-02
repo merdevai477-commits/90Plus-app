@@ -80,9 +80,40 @@ const QUIZ_MIN_MAX_TOKENS = 4_000;
 const MAX_GENERATION_ATTEMPTS = 3;
 const MAX_THEMED_GENERATION_ATTEMPTS = 10;
 
+/** Hard cap on image enrichment per attempt — never let API lookups stall a pack. */
+const QUIZ_ENRICH_TIMEOUT_MS = 25_000;
+
+/**
+ * Overall wall-clock budget for building one pack. Once exceeded we stop
+ * attempting new AI calls and let the caller fall back, so GET /daily can't
+ * stay in PACK_GENERATING forever. Override with QUIZ_GEN_BUDGET_MS.
+ */
+function resolveQuizGenBudgetMs(): number {
+  const raw = process.env.QUIZ_GEN_BUDGET_MS?.trim();
+  if (raw) {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n >= 30_000) return n;
+  }
+  return 150_000;
+}
+
 export type AiQuizResponse =
   | { questions: unknown[]; status?: 'OK' }
   | { questions: []; status: 'INSUFFICIENT_DATA' };
+
+/**
+ * Race a promise against a timeout so a single slow step can't hang the pack.
+ * A late rejection/resolution from the source promise is swallowed so it can't
+ * surface as an unhandledRejection after the race has already settled.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  promise.catch(() => undefined);
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(label)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
 
 function hashSeed(input: string): number {
   let h = 0;
@@ -155,7 +186,11 @@ function hashQuestion(q: string): string {
 }
 
 function stripMarkdownFences(text: string): string {
-  return text
+  // Strip a leading ```json / ``` fence and a trailing ``` fence even when the
+  // model wraps the block in prose or emits multiple fenced sections.
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = fenceMatch ? fenceMatch[1] : text;
+  return body
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```\s*$/i, '')
     .trim();
@@ -168,10 +203,53 @@ function repairJsonText(jsonText: string): string {
     .replace(/,\s*([}\]])/g, '$1');
 }
 
+/**
+ * Extract the first balanced JSON object/array from a string that may contain
+ * surrounding prose ("Here is your quiz: { ... }"). Respects string literals
+ * and escapes so braces inside text don't break the scan.
+ */
+function extractBalancedJson(text: string): string | null {
+  const startObj = text.indexOf('{');
+  const startArr = text.indexOf('[');
+  const candidates = [startObj, startArr].filter((n) => n >= 0);
+  if (!candidates.length) return null;
+  const start = Math.min(...candidates);
+  const open = text[start];
+  const close = open === '{' ? '}' : ']';
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === open) depth += 1;
+    else if (ch === close) {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 function tryParseJson(text: string): unknown | null {
   try {
     return JSON.parse(repairJsonText(text));
   } catch {
+    const balanced = extractBalancedJson(text);
+    if (balanced && balanced !== text) {
+      try {
+        return JSON.parse(repairJsonText(balanced));
+      } catch {
+        return null;
+      }
+    }
     return null;
   }
 }
@@ -408,12 +486,46 @@ function formatAvoidSample(questions: StoredQuizQuestion[], max = 24): string[] 
   return questions.slice(0, max).map((q) => q.question.slice(0, 90));
 }
 
+/**
+ * Best-effort degradation used when image enrichment times out: keep questions
+ * that don't need a fresh lookup (normal, or already-resolved images) and drop
+ * the rest. Guarantees enrichment can never block returning a pack.
+ */
+function degradeQuestionsWithoutEnrichment(
+  questions: StoredQuizQuestion[],
+): StoredQuizQuestion[] {
+  const out: StoredQuizQuestion[] = [];
+  for (const q of questions) {
+    if (q.type === 'normal') {
+      out.push({ ...q, imageBinding: null, imageUrl: null });
+    } else if (q.imageUrl?.trim()) {
+      out.push(q);
+    }
+    // Otherwise drop: an image question with no resolved image is unusable.
+  }
+  return out;
+}
+
 async function enrichAndFilterValid(
   questions: StoredQuizQuestion[],
   packDate: string,
   language: QuizLanguage,
 ): Promise<StoredQuizQuestion[]> {
-  const enriched = await enrichQuizImages(questions, packDate);
+  let enriched: (StoredQuizQuestion | null)[];
+  try {
+    enriched = await withTimeout(
+      enrichQuizImages(questions, packDate),
+      QUIZ_ENRICH_TIMEOUT_MS,
+      'QUIZ_ENRICH_TIMEOUT',
+    );
+  } catch (err) {
+    logger.warn(
+      `[QuizGen] Image enrichment timed out after ${QUIZ_ENRICH_TIMEOUT_MS}ms — returning best-effort questions`,
+      err instanceof Error ? err.message : err,
+    );
+    enriched = degradeQuestionsWithoutEnrichment(questions);
+  }
+
   return enriched
     .filter((q): q is StoredQuizQuestion => q !== null)
     .map((q) => verifyQuestionConsistency(q, language))
@@ -626,8 +738,16 @@ async function buildPackFromDataset(
   const slotBudget = initSlotBudget(theme);
   const seenHashes = historyQuestionHashes(avoidFromHistory);
   const accumulated: StoredQuizQuestion[] = [];
+  const budgetMs = resolveQuizGenBudgetMs();
+  const deadline = Date.now() + budgetMs;
 
   for (let attempt = 0; attempt < maxAttempts && accumulated.length < QUIZ_PACK_SIZE; attempt += 1) {
+    if (Date.now() >= deadline) {
+      logger.warn(
+        `[QuizGen] Generation budget ${budgetMs}ms exceeded after attempt ${attempt} (pack ${accumulated.length}/${QUIZ_PACK_SIZE}) — stopping`,
+      );
+      break;
+    }
     const slice = enrichSliceForTheme(
       selectDailyEntitySlice(datasetResult.dataset, packDate, language, attempt),
       theme,

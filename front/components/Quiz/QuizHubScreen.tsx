@@ -956,6 +956,18 @@ export default function QuizHubScreen() {
     errorMessage === 'API_ERROR_503' ||
     errorMessage === 'SERVER_WARMING';
 
+  // Escape hatch: if the pack has been "preparing" too long, stop showing a bare
+  // spinner and offer a manual retry so the screen can never hang indefinitely.
+  const [packPreparingTooLong, setPackPreparingTooLong] = useState(false);
+  useEffect(() => {
+    if (!isPackPreparing) {
+      setPackPreparingTooLong(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setPackPreparingTooLong(true), 45_000);
+    return () => clearTimeout(timer);
+  }, [isPackPreparing]);
+
   if (isSignedIn === false) {
     return (
       <View style={[styles.root, styles.centered]}>
@@ -984,6 +996,23 @@ export default function QuizHubScreen() {
         <Text style={styles.loadingText}>
           {isPackPreparing ? t.quiz.packPreparing : t.quiz.loadingQuestions}
         </Text>
+        {isPackPreparing && packPreparingTooLong ? (
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              setPackPreparingTooLong(false);
+              void refetch();
+            }}
+            disabled={isFetching}
+            activeOpacity={0.85}
+          >
+            {isFetching ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.retryButtonText}>{t.quiz.retryLoad}</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
       </View>
     );
   }

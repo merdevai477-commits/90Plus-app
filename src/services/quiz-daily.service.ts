@@ -398,15 +398,14 @@ async function generatePackWithFallback(
     await savePack(packDate, language, generated.questions, generated.expiresAt, generated.generationMeta);
     return generated.questions;
   } catch (err) {
-    if (getQuizThemeCampaign(resolveQuizTheme())) {
-      logger.error(
-        `[QuizDaily] Themed pack generation failed (${dateStr}/${language}) — fallback disabled`,
-        err,
-      );
-      throw err;
-    }
-
-    logger.error(`[QuizDaily] Pack generation failed (${dateStr}/${language}), trying fallback`, err);
+    // Always attempt a recycled-pack fallback (even for themed campaigns) so the
+    // client never gets stuck on an endless PACK_GENERATING spinner. A recycled
+    // pack is still valid football content; themed days recycle prior themed packs.
+    const themed = Boolean(getQuizThemeCampaign(resolveQuizTheme()));
+    logger.error(
+      `[QuizDaily] Pack generation failed (${dateStr}/${language}, themed=${themed}), trying recycled fallback`,
+      err,
+    );
 
     const fallback = await loadMostRecentValidPack(language, packDate);
     if (!fallback) {

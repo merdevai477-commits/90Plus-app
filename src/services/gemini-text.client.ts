@@ -47,6 +47,25 @@ export function isGeminiQuizConfigured(): boolean {
   return !!resolveGeminiQuizApiKey();
 }
 
+/**
+ * Per-request wall-clock cap for a single Gemini call. Kept well below the
+ * pack-generation budget so a slow/hung model can't stall quiz generation.
+ * Override with GEMINI_QUIZ_TIMEOUT_MS.
+ */
+export function resolveGeminiQuizTimeoutMs(): number {
+  const raw = process.env.GEMINI_QUIZ_TIMEOUT_MS?.trim();
+  if (raw) {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n >= 10_000) return n;
+  }
+  return 60_000;
+}
+
+/** HTTP statuses worth retrying on the fallback model (transient upstream). */
+function isRetryableGeminiStatus(status: number): boolean {
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
 export interface GeminiGenerateTextParams {
   system: string;
   user: string;
@@ -84,9 +103,12 @@ export async function generateGeminiText(
   const models = primary === fallback ? [primary] : [primary, fallback];
 
   const baseUrl = resolveGeminiBaseUrl();
+  const timeoutMs = resolveGeminiQuizTimeoutMs();
   let lastErr: Error | null = null;
 
-  for (const model of models) {
+  for (let i = 0; i < models.length; i += 1) {
+    const model = models[i];
+    const hasFallback = i < models.length - 1;
     const url = `${baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
     try {
       const res = await fetch(url, {
@@ -104,13 +126,14 @@ export async function generateGeminiText(
             ...(params.jsonMode !== false ? { responseMimeType: 'application/json' } : {}),
           },
         }),
-        signal: AbortSignal.timeout(180_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
 
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
         const err = new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 400)}`);
-        if (res.status === 503 && models.indexOf(model) < models.length - 1) {
+        // Transient upstream errors (503/5xx/429): try the fallback model before failing.
+        if (isRetryableGeminiStatus(res.status) && hasFallback) {
           lastErr = err;
           continue;
         }
@@ -124,8 +147,10 @@ export async function generateGeminiText(
       }
       return { content, model };
     } catch (err: unknown) {
+      // AbortError (timeout) and network failures also fall through to the
+      // fallback model — a hung/slow primary model must never stall the pack.
       lastErr = err instanceof Error ? err : new Error(String(err));
-      if (models.indexOf(model) < models.length - 1) continue;
+      if (hasFallback) continue;
       throw lastErr;
     }
   }

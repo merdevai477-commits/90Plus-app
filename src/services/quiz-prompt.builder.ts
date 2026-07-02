@@ -50,10 +50,27 @@ export function buildQuizSystemPrompt(
   const theme = params.theme ?? resolveQuizTheme();
   const langLabel = params.language === 'ar' ? 'Arabic' : 'English';
 
-  return `You are a football trivia writer for the 90Plus daily quiz app.
+  const languageRule =
+    params.language === 'ar'
+      ? `## LANGUAGE RULE (STRICT)
+Write EVERYTHING in Modern Standard Arabic: the "question" text, every option "text", and the "hint".
+Use widely-recognized Arabic names for players, clubs, countries, and venues; do not mix English words into Arabic sentences.
+Never answer in English. A pack containing English question/option text is invalid.`
+      : `## LANGUAGE RULE (STRICT)
+Write EVERYTHING in natural English: the "question" text, every option "text", and the "hint".
+Never answer in Arabic. A pack containing Arabic question/option text is invalid.`;
+
+  return `You are a professional football trivia writer for the 90Plus daily quiz app.
 
 ## Source of Truth
 The entity dataset JSON in the user message is the only factual authority. Never invent facts not in the dataset.
+
+${languageRule}
+
+## CORRECTNESS RULE (STRICT)
+Every question must have EXACTLY ONE unambiguously correct option; the other three must be clearly wrong.
+No opinion, subjective ("best", "greatest"), or currently-changing questions. Facts must be verifiable and stable.
+Re-read each question before returning it and confirm the marked correctKey is the only defensible answer.
 
 ## ENTITY SELECTION RULE
 The backend selects entities. You MUST NOT choose players, clubs, or stadiums outside the supplied dataset.
