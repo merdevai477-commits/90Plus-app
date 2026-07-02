@@ -343,11 +343,26 @@ type LengthMode = 'short' | 'medium' | 'detailed';
 function detectLengthMode(message: string): LengthMode {
     const normalized = message.toLowerCase();
     const words = message.trim().split(/\s+/).length;
+
+    // Player / career questions are often short but need thorough answers.
+    if (
+        /مسيرة|سيرة|تاريخ\s*اللاعب|career|biography|bio|history|titles|trophies|ألقاب|القاب|انتقالات|transfers|who\s+is|tell\s+me\s+about|من\s+هو|مين\s+هو|عن\s+اللاعب|about\s+the\s+player|player\s+profile/i.test(
+            normalized,
+        )
+    ) {
+        return 'detailed';
+    }
+
     if (/تحليل|تفصيلي|قارن|مقارنة|استراتيجية|خطة كاملة/.test(normalized)) return 'detailed';
     if (/اشرح|شرح|خطوات|ازاي|كيف|ليه|لماذا/.test(normalized)) return 'medium';
     if (/ألم|إصابة|تعب|استشفاء|نظام غذائي|وجبة|تمرين|تدريب|نصائح/.test(normalized)) return 'medium';
     if (words <= 4 || /^(كم|مين|فين|متى|ايه|ما هو)[؟?\s]/.test(normalized)) return 'short';
     return 'medium';
+}
+
+function footballContextNeedsLongReply(block: string | undefined): boolean {
+    if (!block) return false;
+    return /365SCORES PLAYER|PLAYER UCL CAREER|LIVE FOOTBALL API DATA — PLAYER/i.test(block);
 }
 
 // Dynamic temperature per category: tactical/nutrition info should be precise,
@@ -472,14 +487,24 @@ function buildHistoryWindow(history: HistoryItem[]): HistoryItem[] {
 // so responses never get cut mid-sentence. The floor scales with length mode
 // and the message length so a long question implicitly unlocks a longer
 // answer budget.
-function computeMaxTokens(mode: LengthMode, messageLength: number): number {
+function computeMaxTokens(
+    mode: LengthMode,
+    messageLength: number,
+    opts?: { playerData?: boolean },
+): number {
+    const cap = Number(process.env.CHAT_MAX_OUTPUT_TOKENS ?? 8192);
+    const playerFloor = Number(process.env.CHAT_PLAYER_MAX_OUTPUT_TOKENS ?? 4096);
     const base: Record<LengthMode, number> = {
-        short: 600,
-        medium: 1200,
-        detailed: 2400,
+        short: 900,
+        medium: 1800,
+        detailed: 4096,
     };
-    const bonus = Math.min(800, Math.floor(messageLength / 8)); // ~1 token per 4 chars ≈ ¼ of user's chars
-    return base[mode] + bonus;
+    const bonus = Math.min(800, Math.floor(messageLength / 8));
+    let total = base[mode] + bonus;
+    if (opts?.playerData) {
+        total = Math.max(total, playerFloor);
+    }
+    return Math.min(total, Number.isFinite(cap) && cap > 0 ? cap : 8192);
 }
 
 // ─── GET /chat/limit ─────────────────────────────────────────────────────────
@@ -712,12 +737,19 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
         // ─── Build prompt ────────────────────────────────────────────────────
         const category = detectCategory(trimmedMessage);
-        const lengthMode = detectLengthMode(trimmedMessage);
-        const baseSystemPrompt = buildSystemPrompt(category, lengthMode);
+        let lengthMode = detectLengthMode(trimmedMessage);
 
         const footballCtx = !isResume
             ? await buildFootballChatContext(trimmedMessage, { language: messageLanguage })
             : null;
+
+        const playerDataReply =
+            !!playerInfoQuery || footballContextNeedsLongReply(footballCtx?.block);
+        if (playerDataReply) {
+            lengthMode = 'detailed';
+        }
+
+        const baseSystemPrompt = buildSystemPrompt(category, lengthMode);
         const useComplexModel = shouldUseComplexModel(lengthMode, !!footballCtx?.usedApi);
         const activeProviders = providersForRequest(useComplexModel);
 
@@ -782,7 +814,9 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         const trimmedHistory = buildHistoryWindow(Array.isArray(history) ? history : []);
 
         const temperature = TEMPERATURES[category] ?? 0.45;
-        const maxTokens = computeMaxTokens(lengthMode, trimmedMessage.length);
+        const maxTokens = computeMaxTokens(lengthMode, trimmedMessage.length, {
+            playerData: playerDataReply,
+        });
 
         // ─── Stream with automatic provider fallback ─────────────────────────
         if (activeProviders.length === 0) {

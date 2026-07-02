@@ -326,7 +326,7 @@ export async function regeneratePlayerInfoAnswer(
     const completion = await built.client.chat.completions.create({
       model: built.model,
       temperature: 0.4,
-      max_tokens: 1200,
+      max_tokens: 2500,
       messages: [
         { role: 'system', content: regenSystemPrompt(lookup.language, lookup.queryType) },
         {

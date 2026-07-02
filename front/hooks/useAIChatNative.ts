@@ -85,6 +85,8 @@ const TYPING_TICK_MS = 25;
 const TYPING_BACKLOG_LARGE = 60;   // queue length above which we accelerate
 const TYPING_BACKLOG_HUGE = 200;   // queue length above which we sprint
 const TYPING_DRAIN_TICK_MS = 16;   // post-done, slightly faster ticks
+/** Long answers: flush remaining queue instantly when network is done. */
+const TYPING_FLUSH_IMMEDIATE_THRESHOLD = 80;
 const CODE_BLOCK_REGEX = /```|\|/;
 
 export interface ChatLabels {
@@ -739,11 +741,33 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     networkDoneRef.current = true;
     pendingDoneCallbackRef.current = onAllRendered;
 
-    // Speed up the renderer for the drain phase.
     if (typingTimerRef.current) {
       clearInterval(typingTimerRef.current);
       typingTimerRef.current = null;
     }
+
+    const queueLen = visibleTypingQueueRef.current.length;
+    const id = activeAssistantMessageIdRef.current;
+    if (queueLen >= TYPING_FLUSH_IMMEDIATE_THRESHOLD && id) {
+      const remainder = visibleTypingQueueRef.current.splice(0).join('');
+      if (remainder) {
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === id ? { ...m, text: m.text + remainder, isStreaming: false } : m,
+          ),
+        );
+      } else {
+        setMessages(prev =>
+          prev.map(m => (m.id === id ? { ...m, isStreaming: false } : m)),
+        );
+      }
+      activeAssistantMessageIdRef.current = null;
+      pendingDoneCallbackRef.current = null;
+      networkDoneRef.current = false;
+      onAllRendered();
+      return;
+    }
+
     if (visibleTypingQueueRef.current.length > 0) {
       typingTimerRef.current = setInterval(typingTick, TYPING_DRAIN_TICK_MS);
     } else {
