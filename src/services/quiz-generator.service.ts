@@ -1,5 +1,6 @@
 /**
- * Generates daily football quiz questions via OpenRouter (Gemini).
+ * Generates daily football quiz questions via Google Gemini (direct) or OpenRouter fallback.
+ * Player photos resolve via 365Scores search, then API-Football.
  * Entity selection is backend-owned — see QUIZ_GENERATOR_PROMPT.md.
  */
 
@@ -46,6 +47,11 @@ import {
   resolveQuizMaxTokens,
   type QuizPackGenerationMeta,
 } from '../constants/quiz-generation.constants';
+import {
+  generateGeminiText,
+  isGeminiQuizConfigured,
+  resolveGeminiQuizModel,
+} from './gemini-text.client';
 
 const DIFFICULTY_COUNTS: Record<QuizDifficulty, number> = {
   EASY: QUIZ_DIFFICULTY_COUNTS.EASY,
@@ -442,11 +448,55 @@ function isOpenRouterCreditError(err: unknown): boolean {
   return status === 402;
 }
 
+async function callQuizGeminiJson(
+  system: string,
+  user: string,
+  temperature: number,
+): Promise<AiQuizResponse> {
+  let lastContent = '{}';
+
+  for (let attempt = 1; attempt <= AI_PARSE_MAX_RETRIES; attempt += 1) {
+    const { content, model } = await generateGeminiText({
+      system,
+      user,
+      model: resolveGeminiQuizModel(),
+      temperature: attempt === 1 ? temperature : Math.min(temperature, 0.7),
+      maxOutputTokens: resolveQuizMaxTokens(),
+      jsonMode: true,
+    });
+
+    lastContent = content;
+    const parsed = parseAiQuizResponse(content);
+
+    if (parsed.status === 'INSUFFICIENT_DATA') {
+      return parsed;
+    }
+
+    if (parsed.questions.length > 0) {
+      logger.info(`[QuizGen] Gemini OK model=${model} questions=${parsed.questions.length}`);
+      return parsed;
+    }
+
+    logger.warn('[QuizGen] Gemini returned unparsable or empty JSON', {
+      attempt,
+      model,
+      length: content.length,
+      preview: content.slice(0, 120).replace(/\s+/g, ' '),
+    });
+  }
+
+  return parseAiQuizResponse(lastContent);
+}
+
 async function callQuizAiJson(
   system: string,
   user: string,
   temperature: number,
 ): Promise<AiQuizResponse> {
+  if (isGeminiQuizConfigured()) {
+    return callQuizGeminiJson(system, user, temperature);
+  }
+
   const client = buildClient();
   if (!client) throw new Error('OpenRouter API key not configured');
 

@@ -17,6 +17,7 @@ import {
   getCachedQuizImageUrl,
   setCachedQuizImageUrl,
 } from './quiz-image-cache.service';
+import { resolve365QuizPlayerImage } from './quiz-365-player.service';
 
 /** Known API-Football team IDs for names that search often misses. */
 const KNOWN_TEAM_IDS: Readonly<Record<string, number>> = {
@@ -315,20 +316,10 @@ export async function enrichQuizImages(
   questions: StoredQuizQuestion[],
   dateStr: string,
 ): Promise<(StoredQuizQuestion | null)[]> {
-  if (!footballService.isConfigured()) {
-    return questions.map(q => {
-      if (q.type === 'normal') return q;
-      if (q.type === 'image' && !isImageDependentQuestionText(q.question)) {
-        return degradeToNormalTextQuestion(q);
-      }
-      if (q.type === 'guess_player' && q.imageBinding?.kind === 'player') {
-        if (!isImageDependentQuestionText(q.question)) {
-          return degradeToNormalTextQuestion(q);
-        }
-        return null;
-      }
-      return null;
-    });
+  const apiFootballReady = footballService.isConfigured();
+
+  if (!apiFootballReady) {
+    logger.info('[QuizImage] API-Football not configured — using 365Scores for player photos where possible');
   }
 
   const out: (StoredQuizQuestion | null)[] = [];
@@ -357,6 +348,75 @@ export async function enrichQuizImages(
 
     if (q.imageUrl?.trim()) {
       out.push(q);
+      continue;
+    }
+
+    const correctAnswerText =
+      q.options.find((o) => o.key === q.correctKey)?.text?.trim() ?? '';
+
+    if (binding.kind === 'player') {
+      const athleteIdFromEntity =
+        binding.entityId?.startsWith('365:') ?
+          Number.parseInt(binding.entityId.slice(4), 10)
+        : undefined;
+
+      if (athleteIdFromEntity && Number.isFinite(athleteIdFromEntity)) {
+        const cached365 = await getCachedQuizImageUrl('365player', athleteIdFromEntity);
+        if (cached365) {
+          q.imageUrl = cached365;
+          q.imageBinding = { ...binding, imageUrl: cached365, apiId: athleteIdFromEntity };
+          out.push(q);
+          continue;
+        }
+      }
+
+      if (binding.apiId) {
+        const cached365 = await getCachedQuizImageUrl('365player', binding.apiId);
+        if (cached365) {
+          q.imageUrl = cached365;
+          q.imageBinding = { ...binding, imageUrl: cached365 };
+          out.push(q);
+          continue;
+        }
+      }
+
+      const aliases = getPlayerSearchAliases(binding.entityName);
+      const matchNames = aliases;
+      const targetNames = matchNames.map(normalizeName);
+      const threshold = resolveMatchThreshold(q.type, 'player');
+
+      const from365 = await resolve365QuizPlayerImage({
+        entityName: binding.entityName,
+        teamName: binding.teamName,
+        correctAnswerText,
+        targetNames,
+      });
+
+      if (from365 && from365.score >= threshold && from365.imageUrl?.trim()) {
+        q.imageUrl = from365.imageUrl;
+        q.imageBinding = {
+          ...binding,
+          entityName: from365.name,
+          imageUrl: from365.imageUrl,
+          apiId: from365.athleteId,
+          entityId: binding.entityId ?? `365:${from365.athleteId}`,
+        };
+        void setCachedQuizImageUrl('365player', from365.athleteId, from365.imageUrl);
+        logger.info(
+          `[QuizImage] Resolved ${q.id} via 365Scores: "${binding.entityName}" -> ${from365.imageUrl}`,
+        );
+        out.push(q);
+        continue;
+      }
+    }
+
+    if (!apiFootballReady) {
+      if (binding.kind === 'player') {
+        out.push(handleUnresolvedImageQuestion(q, binding, 0));
+      } else {
+        logger.warn(`[QuizImage] Skipped ${q.id} — ${binding.kind} needs API-Football`);
+        out.push(null);
+      }
       continue;
     }
 
@@ -435,8 +495,6 @@ export async function enrichQuizImages(
         ? [...new Set([...getVenueSearchAliases(binding.entityName), ...expandKnownEntityAliases('venue', binding.entityName)])]
         : aliases;
     const targetNames = matchNames.map(normalizeName);
-    const correctAnswerText =
-      q.options.find((o) => o.key === q.correctKey)?.text?.trim() ?? '';
 
     // Internal consistency: for player photos the correct answer option MUST be
     // the same person as the image entity. Skip when cross-script (ar options +

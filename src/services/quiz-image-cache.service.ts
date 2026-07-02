@@ -15,7 +15,7 @@ function cacheKey(kind: string, apiId: number): string {
 }
 
 export async function getCachedQuizImageUrl(
-  kind: 'player' | 'team' | 'venue' | 'league',
+  kind: 'player' | 'team' | 'venue' | 'league' | '365player',
   apiId: number,
 ): Promise<string | null> {
   if (!apiId) return null;
@@ -29,7 +29,7 @@ export async function getCachedQuizImageUrl(
 }
 
 export async function setCachedQuizImageUrl(
-  kind: 'player' | 'team' | 'venue' | 'league',
+  kind: 'player' | 'team' | 'venue' | 'league' | '365player',
   apiId: number,
   imageUrl: string,
 ): Promise<void> {
