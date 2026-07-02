@@ -1705,6 +1705,8 @@ class FootballDataCacheService {
         statistics: any[];
         events: any[];
         venue: any | null;
+        lineupsAvailable?: boolean;
+        lineupsStatus?: string | null;
     }> {
         await ensureScores365GameMapping(fixtureId);
         const forceRefresh =
@@ -1737,12 +1739,15 @@ class FootballDataCacheService {
                     experiment.lineups,
                     forceRefresh,
                 );
+                const mergedLineups = hasLineupData(lineups) ? lineups : experiment.lineups;
                 const payload = {
                     fixture: experiment.fixture,
-                    lineups: hasLineupData(lineups) ? lineups : experiment.lineups,
+                    lineups: mergedLineups,
                     statistics: statistics ?? [],
                     events,
                     venue: experiment.venue,
+                    lineupsAvailable: hasLineupData(mergedLineups) || experiment.lineupsAvailable,
+                    lineupsStatus: experiment.lineupsStatus,
                 };
                 const statusShort = experiment.fixture?.fixture?.status?.short ?? '';
                 if (['FT', 'AET', 'PEN'].includes(statusShort)) {
@@ -1788,8 +1793,8 @@ class FootballDataCacheService {
         };
 
         const status = fixture?.fixture?.status?.short ?? '';
-        const isLive = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(status);
-        const isFinished = ['FT', 'AET', 'PEN'].includes(status);
+        const isLive = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(status);
+        const isFinished = ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(status);
         const ttl = isLive ? 3_000 : isFinished ? this.TTL.FINISHED : this.TTL.UPCOMING_MATCH;
         const cacheEntry: MemoryCacheEntry<any> = {
             data: payload,

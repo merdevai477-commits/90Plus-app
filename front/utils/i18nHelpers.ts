@@ -227,29 +227,54 @@ export function getLocalizedMatchStatus(
 
   const upper = raw.toUpperCase();
 
+  const anyStatus = tStatus as Record<string, string | undefined>;
+
   switch (upper) {
     case 'LIVE':
     case '1H':
     case '2H':
+      return tStatus.live ?? 'LIVE';
+
     case 'ET':
     case 'BT':
+      return anyStatus.extraTime ?? tStatus.live ?? 'ET';
+
     case 'P':
+      return anyStatus.penaltyShootout ?? anyStatus.penalties ?? 'Penalties';
+
     case 'INT':
-      return tStatus.live ?? 'LIVE';
+      return anyStatus.interrupted ?? tStatus.live ?? 'INT';
 
     case 'HT':
       return tStatus.halftime ?? 'HT';
 
     case 'FT':
-    case 'AET':
       return tStatus.finished ?? 'FT';
 
+    case 'AET':
+      return anyStatus.afterExtraTime ?? tStatus.finished ?? 'AET';
+
     case 'PEN':
-      return tStatus.penalties ?? 'PEN';
+      return anyStatus.penalties ?? 'PEN';
+
+    case 'CANC':
+      return anyStatus.cancelled ?? 'Cancelled';
+
+    case 'ABD':
+      return anyStatus.abandoned ?? 'Abandoned';
+
+    case 'AWD':
+    case 'WO':
+      return anyStatus.walkover ?? 'Walkover';
+
+    case 'SUSP':
+      return anyStatus.suspended ?? 'Suspended';
+
+    case 'PST':
+      return anyStatus.postponed ?? tStatus.upcoming ?? 'Postponed';
 
     case 'NS':
     case 'TBD':
-    case 'PST':
     case 'UPCOMING':
       return tStatus.upcoming ?? 'UPCOMING';
 

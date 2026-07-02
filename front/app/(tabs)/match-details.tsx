@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
-import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
+import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { prefetchFootballTranslations } from '../../src/stores/footballTranslationStore';
 import { collectUniqueStrings } from '../../utils/footballNamePrefetch';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
@@ -1760,6 +1760,11 @@ const MatchDetailsScreen = () => {
           elapsed={fixture?.fixture.status.elapsed ?? undefined}
           stoppage={(fixture?.fixture.status as any)?.extra ?? null}
           startTimestamp={fixture ? getPeriodStartTimestamp(fixture) : undefined}
+          statusLabel={
+            fixture ? getLocalizedMatchStatus(fixture.fixture.status.short, language) : undefined
+          }
+          penaltyHome={fixture?.score?.penalty?.home ?? undefined}
+          penaltyAway={fixture?.score?.penalty?.away ?? undefined}
         />
 
         {/* Modern Tabs */}

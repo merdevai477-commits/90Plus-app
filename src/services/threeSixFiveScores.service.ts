@@ -1798,8 +1798,11 @@ class ThreeSixFiveScoresService {
 
   private classifyPhase(game: Scores365Game): ThreeSixFiveMatchPhase {
     const { short } = classifyScores365MatchStatus(game as Parameters<typeof classifyScores365MatchStatus>[0]);
-    if (short === 'NS') return 'upcoming';
-    if (short === 'FT' || short === 'AET' || short === 'PEN') return 'finished';
+    // Not-yet-played states: scheduled or postponed to a future date.
+    if (short === 'NS' || short === 'PST' || short === 'TBD') return 'upcoming';
+    // Terminal states (played to a result or cancelled/abandoned/walkover).
+    if (['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(short)) return 'finished';
+    // Everything else (1H/2H/HT/ET/BT/P/INT/SUSP/LIVE) is in-play or resumable.
     return 'live';
   }
 

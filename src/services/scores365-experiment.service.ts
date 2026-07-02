@@ -62,6 +62,10 @@ interface Scores365Competitor {
   id: number;
   name: string;
   score?: number;
+  /** Penalty shootout tally when 365 exposes it directly on the competitor. */
+  penaltyScore?: number;
+  /** Aggregate (two-leg) score when 365 exposes it. */
+  aggregatedScore?: number;
   lineups?: {
     status?: string;
     formation?: string;
@@ -651,6 +655,81 @@ export function classifyScores365MatchStatus(
     minuteRaw != null && minuteRaw >= 0 ? Math.floor(minuteRaw) : null;
   const statusGroup = game.statusGroup;
 
+  // Combined haystack across all textual status hints (365 forces EN upstream by
+  // default, so English matches are primary; Arabic kept as best-effort).
+  const hay = `${text} ${shortCode} ${display}`;
+  const has = (...subs: string[]): boolean => subs.some((s) => hay.includes(s));
+
+  // ── Special match states — detected BEFORE the score/-1/statusGroup rules,
+  //    because these carry score -1 (cancelled/postponed) or statusGroup 4
+  //    (after ET/penalties) and would otherwise be mislabelled NS/FT. ──
+
+  // Cancelled — terminal, never played to a result.
+  if (has('cancel', 'ملغا', 'ألغيت', 'الغيت') || shortCode === 'canc' || shortCode === 'cnc') {
+    return { short: 'CANC', long: 'Match Cancelled', elapsed: null };
+  }
+
+  // Postponed — rescheduled to a later date.
+  if (
+    has('postpon', 'مؤجل', 'أجلت', 'اجلت') ||
+    shortCode === 'pp' ||
+    shortCode === 'postp' ||
+    shortCode === 'pst'
+  ) {
+    return { short: 'PST', long: 'Match Postponed', elapsed: null };
+  }
+
+  // Abandoned — started but not resumed (distinct from cancelled).
+  if (has('abandon', 'walkover', 'awarded', 'بالانسحاب') || shortCode === 'abd' || shortCode === 'wo') {
+    const short = has('walkover', 'awarded', 'بالانسحاب') ? 'WO' : 'ABD';
+    return { short, long: short === 'WO' ? 'Walkover' : 'Match Abandoned', elapsed: null };
+  }
+
+  // Penalty shootout — must be checked before the generic finished/live rules.
+  const mentionsPenalties =
+    has('penalt', 'ترجيح', 'shootout', 'pso') ||
+    shortCode === 'pen' ||
+    shortCode === 'ap' ||
+    shortCode === 'pens';
+  if (mentionsPenalties) {
+    // Finished after penalties vs. shootout currently in progress.
+    if (statusGroup === 4 || has('after', 'ended', 'انته', 'full')) {
+      return { short: 'PEN', long: 'Penalty Shootout - Finished', elapsed: 120 };
+    }
+    return { short: 'P', long: 'Penalty Shootout', elapsed: 120 };
+  }
+
+  // Extra time (live) / after extra time (finished) / break before ET.
+  const mentionsExtraTime =
+    has('extra time', 'extra-time', 'e.t.', 'after extra', 'إضاف', 'اضاف', 'وقت اضافي') ||
+    shortCode === 'et' ||
+    shortCode === 'aet' ||
+    shortCode === 'et1' ||
+    shortCode === 'et2' ||
+    shortCode === 'aet1' ||
+    shortCode === 'aet2';
+  if (mentionsExtraTime) {
+    if (statusGroup === 4 || has('after extra', 'ended', 'انته', 'full time')) {
+      return { short: 'AET', long: 'After Extra Time', elapsed: 120 };
+    }
+    if (has('break', 'استراح', 'فاصل')) {
+      return { short: 'BT', long: 'Extra Time Break', elapsed: 105 };
+    }
+    const el = minute != null ? Math.min(Math.max(minute, 91), 120) : 91;
+    return { short: 'ET', long: 'Extra Time', elapsed: el };
+  }
+
+  // Interrupted — temporarily halted, expected to resume (kept live so the
+  // client keeps polling and shows the last minute).
+  if (has('interrupt', 'انقطع', 'انقطاع') || shortCode === 'int') {
+    return { short: 'INT', long: 'Match Interrupted', elapsed: minute };
+  }
+
+  // Suspended — halted, may resume later (also kept polling).
+  if (has('suspend', 'معلق', 'موقوف') || shortCode === 'susp' || shortCode === 'sus') {
+    return { short: 'SUSP', long: 'Match Suspended', elapsed: minute };
+  }
+
   if (homeRaw === -1 || awayRaw === -1) {
     return { short: 'NS', long: 'Not Started', elapsed: null };
   }
@@ -758,7 +837,9 @@ function map365Status(game: Scores365Game): { short: string; long: string; elaps
 
 function is365Live(game: Scores365Game): boolean {
   const status = classifyScores365MatchStatus(game);
-  return ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE'].includes(status.short);
+  // INT/SUSP resume later — keep them in the live set so the client keeps
+  // polling and picks up the restart without waiting for a bulk sync.
+  return ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(status.short);
 }
 
 function calendarDateFromStart(
@@ -830,6 +911,13 @@ export function synthesizeBaseFrom365Game(
   const homeScore = normalize365Score(home?.score);
   const awayScore = normalize365Score(away?.score);
   const round = resolve365FixtureRound(game);
+  // Synthetic base is always non-swapped (teams taken straight from the 365 game).
+  const { extratime, penalty } = resolve365ExtraAndPenalty(
+    game,
+    { swapped: false },
+    status.short,
+    { home: homeScore, away: awayScore },
+  );
 
   return {
     fixture: {
@@ -877,8 +965,8 @@ export function synthesizeBaseFrom365Game(
     score: {
       halftime: { home: null, away: null },
       fulltime: { home: homeScore, away: awayScore },
-      extratime: { home: null, away: null },
-      penalty: { home: null, away: null },
+      extratime: extratime ?? { home: null, away: null },
+      penalty: penalty ?? { home: null, away: null },
     },
   };
 }
@@ -1042,6 +1130,86 @@ function resolve365Scores(
   return alignment.swapped
     ? { home: away365, away: home365 }
     : { home: home365, away: away365 };
+}
+
+type ScorePair = { home: number | null; away: number | null };
+
+/** Read a direct penalty-shootout tally from a 365 competitor when present. */
+function readCompetitorPenaltyScore(competitor?: Scores365Competitor): number | null {
+  const raw = competitor?.penaltyScore;
+  if (typeof raw === 'number' && raw >= 0) return raw;
+  return null;
+}
+
+/**
+ * Count shootout penalties per team from the raw 365 events.
+ * Only used while the match is in a shootout (P) or finished after penalties
+ * (PEN); guarded to `gameTime >= 120` so in-play / extra-time penalties are not
+ * mistaken for shootout kicks. "Missed"/"saved" kicks are not counted as scored.
+ */
+function tallyShootoutFromRawEvents(
+  game: Scores365Game,
+  alignment: Scores365TeamAlignment,
+): ScorePair | null {
+  const events = game.events ?? [];
+  if (!events.length) return null;
+
+  let home365 = 0;
+  let away365 = 0;
+  let found = false;
+  for (const ev of events) {
+    const name = `${ev.eventType?.name ?? ''} ${ev.eventType?.subTypeName ?? ''}`.toLowerCase();
+    const isPenaltyKick = /penalt/.test(name) || /shootout/.test(name);
+    if (!isPenaltyKick) continue;
+    const gt = ev.gameTime ?? 0;
+    if (gt < 120) continue; // exclude normal-time / extra-time penalties
+    found = true;
+    const scored = !/miss|saved|fail/.test(name);
+    if (!scored) continue;
+    if (ev.competitorId === game.homeCompetitor?.id) home365 += 1;
+    else if (ev.competitorId === game.awayCompetitor?.id) away365 += 1;
+  }
+  if (!found) return null;
+  return alignment.swapped
+    ? { home: away365, away: home365 }
+    : { home: home365, away: away365 };
+}
+
+/**
+ * Resolve extra-time and penalty-shootout score lines for a 365 game.
+ * - extratime: total goals after ET (365 does not split the 90' vs ET score,
+ *   so we surface the aggregate goals which is what the app displays).
+ * - penalty: from a direct competitor field if 365 exposes one, else tallied
+ *   from shootout events. Only populated for ET/AET/P/PEN states.
+ */
+function resolve365ExtraAndPenalty(
+  game: Scores365Game,
+  alignment: Scores365TeamAlignment,
+  statusShort: string,
+  goals: ScorePair,
+): { extratime: ScorePair | null; penalty: ScorePair | null } {
+  const isExtraTime = statusShort === 'ET' || statusShort === 'AET' || statusShort === 'BT';
+  const isShootout = statusShort === 'P' || statusShort === 'PEN';
+
+  const extratime: ScorePair | null =
+    isExtraTime || isShootout
+      ? { home: goals.home, away: goals.away }
+      : null;
+
+  let penalty: ScorePair | null = null;
+  if (isShootout) {
+    const homeDirect = readCompetitorPenaltyScore(game.homeCompetitor);
+    const awayDirect = readCompetitorPenaltyScore(game.awayCompetitor);
+    if (homeDirect != null || awayDirect != null) {
+      penalty = alignment.swapped
+        ? { home: awayDirect, away: homeDirect }
+        : { home: homeDirect, away: awayDirect };
+    } else {
+      penalty = tallyShootoutFromRawEvents(game, alignment);
+    }
+  }
+
+  return { extratime, penalty };
 }
 
 function tallyGoalsFromMappedEvents(
@@ -1473,6 +1641,12 @@ export async function mapScores365ToApiFootballFixture(
   const scores = resolve365Scores(game, alignment);
   const homeScore = scores.home;
   const awayScore = scores.away;
+  const { extratime, penalty } = resolve365ExtraAndPenalty(
+    game,
+    alignment,
+    status.short,
+    scores,
+  );
   const kickoff = game.startTime ?? base.fixture.date;
   const home365 = game.homeCompetitor;
   const away365 = game.awayCompetitor;
@@ -1481,6 +1655,12 @@ export async function mapScores365ToApiFootballFixture(
 
   return {
     ...base,
+    score: {
+      halftime: base.score?.halftime ?? { home: null, away: null },
+      fulltime: { home: homeScore, away: awayScore },
+      extratime: extratime ?? base.score?.extratime ?? { home: null, away: null },
+      penalty: penalty ?? base.score?.penalty ?? { home: null, away: null },
+    },
     fixture: {
       ...base.fixture,
       id: fixtureId,
@@ -1606,6 +1786,10 @@ export async function getScores365ExperimentBundle(
   statistics: any[];
   events: any[];
   venue: any | null;
+  /** True once at least one side has a usable starting XI from 365. */
+  lineupsAvailable: boolean;
+  /** Raw 365 lineups status text (e.g. "Confirmed", "Probable") when present. */
+  lineupsStatus: string | null;
   source: 'scores365-experiment';
 } | null> {
   const gameId = (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
@@ -1668,12 +1852,18 @@ export async function getScores365ExperimentBundle(
     }
   }
 
+  const lineupsAvailable = lineupData.some(
+    (side: any) => Array.isArray(side?.startXI) && side.startXI.length > 0,
+  );
+
   return {
     fixture,
     lineups: lineupData,
     events,
     statistics,
     venue: fixture.fixture.venue ?? null,
+    lineupsAvailable,
+    lineupsStatus: game.lineupsStatusText ?? null,
     source: 'scores365-experiment',
   };
 }

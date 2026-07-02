@@ -56,4 +56,90 @@ describe('classifyScores365MatchStatus', () => {
     );
     expect(result.short).toBe('FT');
   });
+
+  it('maps live extra time to ET with a 91–120 minute', () => {
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 3, statusText: 'Extra Time', shortStatusText: 'ET', gameTime: 98 }),
+    );
+    expect(result.short).toBe('ET');
+    expect(result.elapsed).toBe(98);
+  });
+
+  it('maps finished after extra time to AET', () => {
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 4, statusText: 'After Extra Time', shortStatusText: 'AET', gameTime: 120 }),
+    );
+    expect(result.short).toBe('AET');
+  });
+
+  it('maps a live penalty shootout to P', () => {
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 3, statusText: 'Penalties', shortStatusText: 'Pen.', gameTime: 120 }),
+    );
+    expect(result.short).toBe('P');
+  });
+
+  it('maps finished after penalties to PEN', () => {
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 4, statusText: 'After Penalties', shortStatusText: 'Pen.', gameTime: 120 }),
+    );
+    expect(result.short).toBe('PEN');
+  });
+
+  it('maps cancelled matches to CANC even with score -1', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 2,
+        statusText: 'Cancelled',
+        shortStatusText: 'Canc.',
+        gameTime: -1,
+        homeCompetitor: { id: 1, name: 'H', score: -1 },
+        awayCompetitor: { id: 2, name: 'A', score: -1 },
+      }),
+    );
+    expect(result.short).toBe('CANC');
+    expect(result.elapsed).toBeNull();
+  });
+
+  it('maps postponed matches to PST', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 2,
+        statusText: 'Postponed',
+        shortStatusText: 'Postp.',
+        gameTime: -1,
+        homeCompetitor: { id: 1, name: 'H', score: -1 },
+        awayCompetitor: { id: 2, name: 'A', score: -1 },
+      }),
+    );
+    expect(result.short).toBe('PST');
+  });
+
+  it('maps suspended matches to SUSP', () => {
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 3, statusText: 'Suspended', shortStatusText: 'Susp.', gameTime: 63 }),
+    );
+    expect(result.short).toBe('SUSP');
+  });
+
+  it('maps interrupted matches to INT', () => {
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 3, statusText: 'Interrupted', shortStatusText: 'Int.', gameTime: 71 }),
+    );
+    expect(result.short).toBe('INT');
+  });
+
+  it('maps abandoned matches to ABD', () => {
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 4, statusText: 'Abandoned', shortStatusText: 'Aband.', gameTime: 55 }),
+    );
+    expect(result.short).toBe('ABD');
+  });
+
+  it('still maps a normal 2nd half to 2H (no false special-state match)', () => {
+    const result = classifyScores365MatchStatus(
+      game({ statusGroup: 3, statusText: '2nd Half', shortStatusText: '2nd Half', gameTime: 67 }),
+    );
+    expect(result.short).toBe('2H');
+  });
 });

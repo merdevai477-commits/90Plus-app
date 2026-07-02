@@ -42,10 +42,19 @@ interface MatchHeaderProps {
   elapsed?: number | null;
   /** Stoppage time minutes (when API supplies extra time). */
   stoppage?: number | null;
+  /** Localized status label for finished/special states (AET, Pens, Cancelled…). */
+  statusLabel?: string;
+  /** Penalty shootout tally (after/ during penalties). */
+  penaltyHome?: number | string | null;
+  penaltyAway?: number | string | null;
 }
 
 const LIVE_STATUSES = ['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
 const FINISHED_STATUSES = ['FT', 'AET', 'PEN'];
+/** Terminal states with no meaningful score/live indicator. */
+const NOT_PLAYED_STATUSES = ['CANC', 'PST', 'ABD', 'AWD', 'WO', 'TBD'];
+/** Halted-but-resumable states — keep the score, drop the live pulse. */
+const PAUSED_STATUSES = ['SUSP'];
 
 function PulsingDot({ color = LIVE_RED }: { color?: string }): React.ReactElement {
   const pulse = useSharedValue(1);
@@ -95,14 +104,34 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   elapsed,
   stoppage,
   startTimestamp,
+  statusLabel,
+  penaltyHome,
+  penaltyAway,
 }) => {
   const short = statusShort || '';
   const isHalftime = short === 'HT';
+  const isNotPlayed = NOT_PLAYED_STATUSES.includes(short);
+  const isPaused = PAUSED_STATUSES.includes(short);
   const isLive =
-    LIVE_STATUSES.includes(short) || (status === 'live' && !isHalftime);
-  const isFinished = FINISHED_STATUSES.includes(short) || status === 'finished';
-  const isUpcoming = !isLive && !isFinished && !isHalftime;
+    !isNotPlayed &&
+    !isPaused &&
+    (LIVE_STATUSES.includes(short) || (status === 'live' && !isHalftime));
+  const isFinished =
+    !isNotPlayed &&
+    (FINISHED_STATUSES.includes(short) || (status === 'finished' && !isPaused));
+  const isUpcoming =
+    !isLive && !isFinished && !isHalftime && !isNotPlayed && !isPaused;
   const isStoppage = isLive && !!stoppage && stoppage > 0;
+  const hasPenaltyScore =
+    penaltyHome != null &&
+    penaltyAway != null &&
+    String(penaltyHome).length > 0 &&
+    String(penaltyAway).length > 0;
+  // Badge text for finished/paused/not-played states (falls back to English).
+  const finishedBadgeText =
+    statusLabel ||
+    (short === 'AET' ? 'AET' : short === 'PEN' ? 'Pens' : 'FT');
+  const specialBadgeText = statusLabel || short || '—';
 
   const kickoffTime = useMemo(() => {
     if (fixtureDate) return formatMatchTime(fixtureDate);
@@ -180,9 +209,17 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
             <View style={styles.htBadge}>
               <Text style={styles.htText}>HT</Text>
             </View>
+          ) : isNotPlayed ? (
+            <View style={styles.specialBadge}>
+              <Text style={styles.specialText} numberOfLines={1}>{specialBadgeText}</Text>
+            </View>
+          ) : isPaused ? (
+            <View style={styles.pausedBadge}>
+              <Text style={styles.pausedText} numberOfLines={1}>{specialBadgeText}</Text>
+            </View>
           ) : isFinished ? (
             <View style={styles.ftBadge}>
-              <Text style={styles.ftText}>FT</Text>
+              <Text style={styles.ftText}>{finishedBadgeText}</Text>
             </View>
           ) : (
             <Text style={styles.kickoffText}>{kickoffTime}</Text>
@@ -203,39 +240,54 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
                 <Text style={styles.vsText}>VS</Text>
                 <Text style={styles.kickoffLarge}>{kickoffTime}</Text>
               </View>
-            ) : (
-              <View style={styles.scoreRow}>
-                <Text style={styles.scoreNum}>{homeScore || '0'}</Text>
-                <View style={styles.scoreSep}>
-                  <Text
-                    style={[
-                      styles.sepMinute,
-                      {
-                        color: isLive
-                          ? isStoppage
-                            ? LIVE_RED
-                            : PURPLE_SOFT
-                          : 'rgba(255,255,255,0.3)',
-                      },
-                    ]}
-                  >
-                    {sepText}
-                  </Text>
-                  {isLive ? (
-                    <LinearGradient
-                      colors={
-                        isStoppage
-                          ? ([LIVE_RED, LIVE_RED] as const)
-                          : ([PURPLE_PRIMARY, BLUE_PRIMARY] as const)
-                      }
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.liveBar}
-                    />
-                  ) : null}
-                </View>
-                <Text style={styles.scoreNum}>{awayScore || '0'}</Text>
+            ) : isNotPlayed ? (
+              <View style={styles.vsContainer}>
+                <Text style={styles.notPlayedLabel} numberOfLines={2}>
+                  {specialBadgeText}
+                </Text>
               </View>
+            ) : (
+              <>
+                <View style={styles.scoreRow}>
+                  <Text style={styles.scoreNum}>{homeScore || '0'}</Text>
+                  <View style={styles.scoreSep}>
+                    <Text
+                      style={[
+                        styles.sepMinute,
+                        {
+                          color: isLive
+                            ? isStoppage
+                              ? LIVE_RED
+                              : PURPLE_SOFT
+                            : 'rgba(255,255,255,0.3)',
+                        },
+                      ]}
+                    >
+                      {sepText}
+                    </Text>
+                    {isLive ? (
+                      <LinearGradient
+                        colors={
+                          isStoppage
+                            ? ([LIVE_RED, LIVE_RED] as const)
+                            : ([PURPLE_PRIMARY, BLUE_PRIMARY] as const)
+                        }
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.liveBar}
+                      />
+                    ) : null}
+                  </View>
+                  <Text style={styles.scoreNum}>{awayScore || '0'}</Text>
+                </View>
+                {hasPenaltyScore ? (
+                  <Text style={styles.penaltyLine} numberOfLines={1}>
+                    {`(${String(penaltyHome)} - ${String(penaltyAway)} ${
+                      statusLabel && short !== 'FT' ? statusLabel : 'pens'
+                    })`}
+                  </Text>
+                ) : null}
+              </>
             )}
           </View>
 
@@ -335,6 +387,50 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   htText: { color: '#F5C518', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  specialBadge: {
+    backgroundColor: 'rgba(148,163,184,0.14)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(148,163,184,0.35)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    maxWidth: 140,
+  },
+  specialText: {
+    color: '#cbd5e1',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  pausedBadge: {
+    backgroundColor: 'rgba(245,158,11,0.14)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(245,158,11,0.4)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    maxWidth: 140,
+  },
+  pausedText: {
+    color: '#fbbf24',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  notPlayedLabel: {
+    color: '#94a3b8',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+  },
+  penaltyLine: {
+    color: PURPLE_SOFT,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+    fontVariant: ['tabular-nums'],
+  },
   kickoffText: { color: PURPLE_SOFT, fontSize: 11, fontWeight: '600' },
   teamsRow: {
     flexDirection: 'row',

@@ -26,7 +26,7 @@ import { useMatchEventsMonitor } from '../../src/hooks/useMatchEventsMonitor';
 import type { Match } from '../../components/Matches/matchCardUtils';
 import { CountryAccordion } from '../../components/Matches/CountryAccordion';
 import type { CountryGroup } from '../../hooks/useMatchesData';
-import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
+import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { fetchLeagueMatchesByDate } from '../../components/Matches/leagueApiUtils';
 import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
 import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModal';
@@ -315,6 +315,17 @@ const MatchRow = memo(function MatchRow({
   // Disabled only for finished matches.
   const canSubscribe = fixture.status !== 'FT';
 
+  // Special match states get an explicit, localized label instead of the coarse
+  // LIVE/FT/UPCOMING bucket. Not-played states (cancelled/postponed/abandoned)
+  // also suppress the score so we never show a misleading 0-0.
+  const shortStatus = (fixture.statusShort ?? '').toUpperCase();
+  const isNotPlayedStatus = ['CANC', 'PST', 'ABD', 'AWD', 'WO', 'TBD'].includes(shortStatus);
+  const isSuspendedStatus = shortStatus === 'SUSP';
+  const specialStatusLabel =
+    isNotPlayedStatus || isSuspendedStatus
+      ? getLocalizedMatchStatus(shortStatus, language)
+      : null;
+
   const rowContent = (
     <>
       <View style={[styles.rowWrap, worldCupCard && styles.rowWrapInCard]}>
@@ -347,7 +358,11 @@ const MatchRow = memo(function MatchRow({
             <Text style={styles.teamTxt} numberOfLines={1}>{homeName}</Text>
           </View>
           <View style={styles.scoreCol}>
-            {fixture.status === 'UPCOMING' ? (
+            {specialStatusLabel ? (
+              <View style={styles.specialBadgeWrap}>
+                <Text style={styles.specialBadge} numberOfLines={1}>{specialStatusLabel}</Text>
+              </View>
+            ) : fixture.status === 'UPCOMING' ? (
               <View style={styles.upcomingBadgeWrap}><Text style={styles.upcomingBadge}>{t('matches.status.upcoming')}</Text></View>
             ) : fixture.live ? (
               <Animated.Text style={[styles.liveBadge, { opacity: sharedLivePulse }]}>
@@ -357,7 +372,11 @@ const MatchRow = memo(function MatchRow({
               <Text style={styles.ftBadge}>{t('matches.status.finished')}</Text>
             )}
 
-            {fixture.status === 'UPCOMING' ? (
+            {specialStatusLabel && isNotPlayedStatus ? (
+              <Text style={styles.timeTxt} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+                –
+              </Text>
+            ) : fixture.status === 'UPCOMING' ? (
               <Text
                 style={styles.timeTxt}
                 numberOfLines={1}
@@ -2319,6 +2338,8 @@ const styles = StyleSheet.create({
   wcCardBody: { paddingBottom: 4 },
   upcomingBadgeWrap: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
   upcomingBadge: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700' },
+  specialBadgeWrap: { backgroundColor: 'rgba(148,163,184,0.16)', borderWidth: 0.5, borderColor: 'rgba(148,163,184,0.35)', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, maxWidth: 96 },
+  specialBadge: { color: '#cbd5e1', fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
   timeTxt: {
     marginTop: 6,
     color: '#fff',
