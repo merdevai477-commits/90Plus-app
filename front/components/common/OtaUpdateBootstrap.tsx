@@ -1,20 +1,24 @@
 /**
- * Fetch EAS updates on launch. Required because app.json uses
- * checkAutomatically: ON_LOAD — store builds otherwise never pull OTA.
+ * Fetch EAS updates on launch. app.json uses checkAutomatically: ON_LOAD.
  *
- * Defers reloadAsync while Captain AI has an active conversation so the
- * chat screen is not wiped mid-reply.
+ * IMPORTANT: Never call reloadAsync() in the same session after fetch — that
+ * was causing mass logouts (Clerk SecureStore read interrupted mid-hydration).
+ * Download now, apply on the *next* cold start via OtaPendingReloadGate.
  */
 import { useEffect, useRef } from 'react';
+import { useAuth } from '@clerk/clerk-expo';
 import * as Updates from 'expo-updates';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from '../../services/logger';
-import { isChatSessionActive, waitForChatSessionIdle } from '../../utils/chatSessionState';
+
+export const OTA_PENDING_RELOAD_KEY = '@90plus_pending_ota_reload';
 
 export function OtaUpdateBootstrap() {
+    const { isLoaded } = useAuth();
     const ran = useRef(false);
 
     useEffect(() => {
-        if (__DEV__ || ran.current) return;
+        if (__DEV__ || ran.current || !isLoaded) return;
         ran.current = true;
 
         (async () => {
@@ -24,24 +28,14 @@ export function OtaUpdateBootstrap() {
                 const check = await Updates.checkForUpdateAsync();
                 if (!check.isAvailable) return;
 
-                logger.info('[OTA] Update available — fetching');
+                logger.info('[OTA] Update available — fetching (reload deferred to next launch)');
                 await Updates.fetchUpdateAsync();
-
-                if (isChatSessionActive()) {
-                    logger.info('[OTA] Chat active — waiting before reload');
-                    const idle = await waitForChatSessionIdle();
-                    if (!idle) {
-                        logger.info('[OTA] Reload deferred — chat still active');
-                        return;
-                    }
-                }
-
-                await Updates.reloadAsync();
+                await AsyncStorage.setItem(OTA_PENDING_RELOAD_KEY, '1');
             } catch (err) {
                 logger.warn('[OTA] Update check failed:', err);
             }
         })();
-    }, []);
+    }, [isLoaded]);
 
     return null;
 }

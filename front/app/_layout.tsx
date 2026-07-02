@@ -72,6 +72,7 @@ import {
 } from "../components/common/PushTokenSyncBootstrap";
 import { PushRegistrationReportBootstrap } from "../components/common/PushRegistrationReportBootstrap";
 import { OtaUpdateBootstrap } from "../components/common/OtaUpdateBootstrap";
+import { OtaPendingReloadGate } from "../components/common/OtaPendingReloadGate";
 import { FootballCacheEpochBootstrap } from "../components/common/FootballCacheEpochBootstrap";
 import { GlobalOfflineBanner } from "../components/common/GlobalOfflineBanner";
 import { useOfflineSync } from "../src/hooks/useOfflineSync";
@@ -153,29 +154,51 @@ const layoutStyles = StyleSheet.create({
   },
 });
 
-// Token cache for Clerk
+// Token cache for Clerk — AFTER_FIRST_UNLOCK keeps session across device lock/reboot.
+const CLERK_SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+};
+
+async function secureGetWithRetry(key: string): Promise<string | null> {
+  const maxAttempts = 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await SecureStore.getItemAsync(key, CLERK_SECURE_STORE_OPTIONS);
+    } catch (err) {
+      if (attempt === maxAttempts - 1) {
+        logger.warn('SecureStore getToken error (giving up):', err);
+        try {
+          captureException(err instanceof Error ? err : new Error(String(err)), {
+            tags: { area: 'clerk_token_cache', op: 'getToken' },
+          });
+        } catch {
+          /* Sentry optional */
+        }
+        return null;
+      }
+      await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
+    }
+  }
+  return null;
+}
+
 const tokenCache = {
   async getToken(key: string) {
-    try {
-      return await SecureStore.getItemAsync(key);
-    } catch (err) {
-      console.warn('SecureStore getToken error:', err);
-      return null;
-    }
+    return secureGetWithRetry(key);
   },
   async saveToken(key: string, value: string) {
     try {
-      return await SecureStore.setItemAsync(key, value);
+      return await SecureStore.setItemAsync(key, value, CLERK_SECURE_STORE_OPTIONS);
     } catch (err) {
-      console.warn('SecureStore saveToken error:', err);
+      logger.warn('SecureStore saveToken error:', err);
       return;
     }
   },
   async clearToken(key: string) {
     try {
-      return await SecureStore.deleteItemAsync(key);
+      return await SecureStore.deleteItemAsync(key, CLERK_SECURE_STORE_OPTIONS);
     } catch (err) {
-      console.warn('SecureStore clearToken error:', err);
+      logger.warn('SecureStore clearToken error:', err);
       return;
     }
   },
@@ -712,6 +735,7 @@ function RootLayout() {
       {!clerkPublishableKey ? (
         <ClerkKeyMissingScreen />
       ) : (
+      <OtaPendingReloadGate>
       <TamaguiProvider config={config} defaultTheme="dark">
         <BootReadyProvider>
         <ClerkProvider
@@ -769,6 +793,7 @@ function RootLayout() {
         </ClerkProvider>
         </BootReadyProvider>
       </TamaguiProvider>
+      </OtaPendingReloadGate>
       )}
     </ErrorBoundary>
   );

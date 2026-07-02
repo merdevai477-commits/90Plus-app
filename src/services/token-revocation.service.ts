@@ -216,6 +216,10 @@ export class TokenRevocationService {
       });
 
       for (const revoked of revokedFromDb) {
+        // Placeholder audit rows — not real JWTs; must not enter the blacklist map.
+        if (revoked.token.startsWith('ALL_TOKENS_')) {
+          continue;
+        }
         revokedTokens.set(revoked.token, {
           userId: revoked.userId,
           revokedAt: revoked.createdAt,
