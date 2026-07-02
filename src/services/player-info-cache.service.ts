@@ -76,7 +76,7 @@ export async function fetchPlayerApiContext(
   const lang: MessageLanguage = language === 'ar' ? 'ar' : 'en';
 
   if (queryType === 'ucl_career') {
-    const context = await fetchPlayerUclCareerDossier(playerName);
+    const context = await fetchPlayerUclCareerDossier(playerName, lang);
     if (!context) return null;
     const row = await fetchPlayerStatsRow(playerName);
     return {

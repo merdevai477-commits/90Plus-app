@@ -885,7 +885,10 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     lookup: { ...playerInfoQuery, language: cacheLang },
                     question: trimmedMessage,
                     answer: fullText,
-                    apiContext: footballCtx.block,
+                    // Fingerprint over the RAW player block (matches the drift
+                    // check in fetchPlayerApiContext) so cache hits keep skipping
+                    // the LLM instead of regenerating on every fingerprint check.
+                    apiContext: footballCtx.playerApiContext ?? footballCtx.block,
                     usedModel: usedProvider.model,
                     apiPlayerId: footballCtx.playerMeta?.athleteId,
                     displayName: footballCtx.playerMeta?.displayName,
