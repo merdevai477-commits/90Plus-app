@@ -41,6 +41,7 @@
     },
     "production": {
       "channel": "production",
+      "autoIncrement": true,
       "node": "22.15.0",
       "prebuildCommand": "prebuild --no-install --clean",
       "env": {

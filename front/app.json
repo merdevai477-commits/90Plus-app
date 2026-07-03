@@ -18,7 +18,7 @@
         "applinks:clerk.90plus.pro"
       ],
       "usesAppleSignIn": true,
-      "buildNumber": "118",
+      "buildNumber": "119",
       "requireFullScreen": false,
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
