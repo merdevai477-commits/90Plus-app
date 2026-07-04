@@ -226,7 +226,7 @@ export default function RankScreen() {
   const handleCompetitionPress = useCallback(
     (id: string) => {
       if (id === '1') {
-        router.push({ pathname: '/(tabs)/matches', params: { filter: 'Predictions' } } as never);
+        router.push('/prediction-groups' as never);
       } else if (id === '3') {
         const quizLang = appLanguage === 'en' ? 'en' : 'ar';
         void prefetchDailyQuiz(queryClient, getToken, quizLang);

@@ -292,6 +292,7 @@ function RootLayoutNav() {
       <Stack.Screen name="player-profile" options={{ headerShown: false }} />
       <Stack.Screen name="player-career" options={{ headerShown: false }} />
       <Stack.Screen name="team-profile" options={{ headerShown: false }} />
+      <Stack.Screen name="prediction-groups" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="world-cup-news" options={{ headerShown: false }} />
       <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />
