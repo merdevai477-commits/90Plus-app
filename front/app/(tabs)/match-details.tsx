@@ -162,11 +162,11 @@ const MatchDetailsScreen = () => {
     [is365Fixture],
   );
 
-  const kickoffDate = fixture?.fixture?.date
-    ? new Date(fixture.fixture.date).toISOString().split('T')[0]
-    : '';
-  const kickoffTime = fixture?.fixture?.date
-    ? new Date(fixture.fixture.date).toLocaleTimeString(undefined, {
+  const kickoffMoment = fixture?.fixture?.date ? new Date(fixture.fixture.date) : null;
+  const kickoffValid = kickoffMoment != null && !Number.isNaN(kickoffMoment.getTime());
+  const kickoffDate = kickoffValid ? kickoffMoment!.toISOString().split('T')[0] : '';
+  const kickoffTime = kickoffValid
+    ? kickoffMoment!.toLocaleTimeString(undefined, {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
@@ -278,14 +278,15 @@ const MatchDetailsScreen = () => {
             Promise.resolve(snap.statistics ?? []),
             Promise.resolve(snap.events ?? []),
           ]).then(([lineupsRes, statsRes, eventsRes]) => {
-            try {
-              matchArchiveService.archiveMatchFromData(
+            // Archiving is best-effort; never let it surface as a screen error.
+            void matchArchiveService
+              .archiveMatchFromData(
                 details,
                 lineupsRes.status === 'fulfilled' ? lineupsRes.value : [],
                 statsRes.status === 'fulfilled' ? statsRes.value : [],
                 eventsRes.status === 'fulfilled' ? eventsRes.value : [],
-              );
-            } catch { /* non-fatal */ }
+              )
+              .catch(() => {});
           }).catch(() => {});
         }
         if (isAuthoritativeLineupData(snap.lineups)) loadedTabsRef.current.add('lineups');

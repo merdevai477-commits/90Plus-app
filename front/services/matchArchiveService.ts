@@ -156,10 +156,13 @@ function convertFixtureToArchive(
     }));
   };
 
+  const parsedDate = new Date(fixture.fixture.date);
+  const safeDate = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+
   return {
     matchId: `match_${fixture.fixture.id}`,
     fixtureId: fixture.fixture.id,
-    date: new Date(fixture.fixture.date),
+    date: safeDate,
     homeTeam: {
       id: fixture.teams.home.id,
       name: fixture.teams.home.name,
@@ -246,6 +249,16 @@ function convertFixtureToArchive(
  */
 function getArchiveKey(matchId: string): string {
   return `${ARCHIVE_PREFIX}${matchId}`;
+}
+
+/**
+ * Serialize a Date to ISO safely. Hermes throws `RangeError: Date value out of
+ * bounds` when `toISOString()` is called on an Invalid Date, so fall back to the
+ * current time for any unparseable/malformed date.
+ */
+function safeToISOString(date: Date | string | number | null | undefined): string {
+  const d = date instanceof Date ? date : new Date(date ?? Date.now());
+  return (Number.isNaN(d.getTime()) ? new Date() : d).toISOString();
 }
 
 class MatchArchiveService {
@@ -354,8 +367,8 @@ class MatchArchiveService {
       const key = getArchiveKey(archive.matchId);
       const data = JSON.stringify({
         ...archive,
-        date: archive.date.toISOString(),
-        archivedAt: archive.archivedAt.toISOString(),
+        date: safeToISOString(archive.date),
+        archivedAt: safeToISOString(archive.archivedAt),
       });
       await AsyncStorage.setItem(key, data);
     } catch (error) {
@@ -377,8 +390,8 @@ class MatchArchiveService {
         },
         body: JSON.stringify({
           ...archive,
-          date: archive.date.toISOString(),
-          archivedAt: archive.archivedAt.toISOString(),
+          date: safeToISOString(archive.date),
+          archivedAt: safeToISOString(archive.archivedAt),
         }),
       });
 
