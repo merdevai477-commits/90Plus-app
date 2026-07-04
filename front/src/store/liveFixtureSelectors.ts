@@ -41,7 +41,8 @@ export function selectIsFinished(snapshot: LiveFixtureSnapshot): boolean {
 }
 
 export function getPeriodStartTimestamp(fixture: Fixture): number | undefined {
-  const short = fixture.fixture.status.short;
+  const short = fixture.fixture?.status?.short;
+  if (!short) return undefined;
   return short === '2H'
     ? fixture.fixture.periods.second ?? undefined
     : fixture.fixture.periods.first ?? undefined;

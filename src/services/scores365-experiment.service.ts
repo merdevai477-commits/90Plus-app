@@ -318,6 +318,19 @@ export async function ensureScores365GameMapping(fixtureId: number): Promise<num
     return directGame.id;
   }
 
+  const cfg = getScores365ExperimentConfig();
+  if (dbRow && dbRow.leagueId === cfg.leagueId) {
+    const wcRows = await loadWorldCupDbFixtures(cfg.leagueId, cfg.season);
+    const games = await fetchScores365WorldCupFixtures({ language: 'en' });
+    for (const game of games) {
+      const mapped = resolveDbFixtureFor365Game(game, wcRows);
+      if (mapped?.fixtureId === fixtureId) {
+        registerScores365FixtureMapping(fixtureId, game.id);
+        return game.id;
+      }
+    }
+  }
+
   const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
   const isPlausiblyLive = !!dbRow && LIVE_STATUSES.has(dbRow.status);
 
@@ -1015,6 +1028,43 @@ function teamNamesMatch(a?: string | null, b?: string | null): boolean {
 
 type Scores365TeamAlignment = { swapped: boolean };
 
+function synthesizeOverridesFromBase(
+  base: FixtureFromAPI | null | undefined,
+): SynthesizeBaseOverrides | undefined {
+  if (!base?.league) return undefined;
+  return {
+    leagueId: base.league.id,
+    season: base.league.season,
+    leagueName: base.league.name,
+    country: base.league.country,
+    leagueLogo: base.league.logo,
+  };
+}
+
+/**
+ * Resolve the API-football base row + home/away alignment for a 365 game.
+ * When a cached DB row exists but team labels differ from 365 (AR vs EN,
+ * stale API-Football names), fall back to a synthetic base built from 365.
+ */
+async function resolve365BaseAndAlignment(
+  game: Scores365Game,
+  fixtureId: number,
+  baseInput?: FixtureFromAPI | null,
+): Promise<{ base: FixtureFromAPI; alignment: Scores365TeamAlignment } | null> {
+  let base =
+    baseInput ?? (await loadBaseFixture(fixtureId)) ?? null;
+  let alignment = base ? detect365TeamAlignment(game, base) : null;
+
+  if (!alignment) {
+    const overrides = synthesizeOverridesFromBase(base);
+    base = synthesizeBaseFrom365Game(game, fixtureId, overrides);
+    alignment = detect365TeamAlignment(game, base);
+  }
+
+  if (!alignment || !base) return null;
+  return { base, alignment };
+}
+
 function scoreDbRowTeamsFor365Game(
   game: Scores365Game,
   row: Awaited<ReturnType<typeof loadWorldCupDbFixtures>>[number],
@@ -1624,16 +1674,14 @@ export async function mapScores365ToApiFootballFixture(
 ): Promise<FixtureFromAPI | null> {
   const fixtureId =
     fixtureIdOverride ?? baseInput?.fixture?.id ?? getScores365ExperimentConfig().fixtureId;
-  const base =
-    baseInput ?? (await loadBaseFixture(fixtureId)) ?? synthesizeBaseFrom365Game(game, fixtureId);
-
-  const alignment = detect365TeamAlignment(game, base);
-  if (!alignment) {
+  const resolved = await resolve365BaseAndAlignment(game, fixtureId, baseInput);
+  if (!resolved) {
     logger.warn(
-      `[Scores365Experiment] refuse fixture map game ${game.id} → ${fixtureId}: team names mismatch (${game.homeCompetitor?.name}/${game.awayCompetitor?.name} vs ${base.teams.home?.name}/${base.teams.away?.name})`,
+      `[Scores365Experiment] refuse fixture map game ${game.id} → ${fixtureId}: team names mismatch (${game.homeCompetitor?.name}/${game.awayCompetitor?.name})`,
     );
     return null;
   }
+  const { base, alignment } = resolved;
 
   registerScores365FixtureMapping(fixtureId, game.id);
 
@@ -1801,13 +1849,12 @@ export async function getScores365ExperimentBundle(
   });
   if (!game) return null;
 
-  const base = (await loadBaseFixture(fixtureId)) ?? synthesizeBaseFrom365Game(game, fixtureId);
+  const resolved = await resolve365BaseAndAlignment(game, fixtureId);
+  if (!resolved) return null;
+  const { base, alignment } = resolved;
 
   const fixture = await mapScores365ToApiFootballFixture(game, base, fixtureId);
   if (!fixture) return null;
-
-  const alignment = detect365TeamAlignment(game, base);
-  if (!alignment) return null;
 
   let events = mapScores365Events(game, base, alignment);
   const homeId = base.teams.home?.id;

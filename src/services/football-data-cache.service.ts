@@ -1713,12 +1713,19 @@ class FootballDataCacheService {
             options?.forceRefresh === true ||
             (isScores365ExperimentFixture(fixtureId) && is365StoreDetailsHotfix());
         if (isScores365ExperimentFixture(fixtureId)) {
-            const experiment = await getScores365ExperimentBundle(
+            let experiment = await getScores365ExperimentBundle(
                 fixtureId,
                 resolveScores365AppLanguage(options?.language ?? null),
                 { force: forceRefresh },
             );
-            if (experiment) {
+            if (!experiment?.fixture) {
+                experiment = await getScores365ExperimentBundle(
+                    fixtureId,
+                    resolveScores365AppLanguage(options?.language ?? null),
+                    { force: true },
+                );
+            }
+            if (experiment?.fixture) {
                 let statistics = experiment.statistics;
                 if (!hasApiStatistics(statistics)) {
                     statistics = await this.getMatchStatistics(fixtureId);

@@ -200,8 +200,10 @@ const MatchDetailsScreen = () => {
 
   const isLive = useCallback(() => {
     if (!fixture) return snapshot?.phase === 'live';
+    const short = fixture.fixture?.status?.short;
+    if (!short) return snapshot?.phase === 'live';
     return LIVE_MATCH_STATUSES.includes(
-      fixture.fixture.status.short as (typeof LIVE_MATCH_STATUSES)[number],
+      short as (typeof LIVE_MATCH_STATUSES)[number],
     );
   }, [fixture, snapshot?.phase]);
 
@@ -269,7 +271,8 @@ const MatchDetailsScreen = () => {
       if (snap?.fixture) {
         const details = snap.fixture;
         const finishedStatuses = ['FT', 'AET', 'PEN'];
-        if (finishedStatuses.includes(details.fixture.status.short)) {
+        const statusShort = details.fixture?.status?.short;
+        if (statusShort && finishedStatuses.includes(statusShort)) {
           Promise.allSettled([
             Promise.resolve(snap.lineups ?? []),
             Promise.resolve(snap.statistics ?? []),
@@ -1743,8 +1746,8 @@ const MatchDetailsScreen = () => {
           homeScore={fixture?.goals?.home != null ? String(fixture.goals.home) : undefined}
           awayScore={fixture?.goals?.away != null ? String(fixture.goals.away) : undefined}
           status={fixture ? (
-            ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(fixture.fixture.status.short) ? 'live'
-            : ['FT', 'AET', 'PEN'].includes(fixture.fixture.status.short) ? 'finished'
+            ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(fixture.fixture?.status?.short ?? '') ? 'live'
+            : ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(fixture.fixture?.status?.short ?? '') ? 'finished'
             : 'upcoming'
           ) : 'upcoming'}
           league={getLeagueDisplayName(
@@ -1756,12 +1759,14 @@ const MatchDetailsScreen = () => {
           date={kickoffDate}
           time={kickoffTime}
           fixtureDate={fixture?.fixture?.date}
-          statusShort={fixture?.fixture.status.short}
-          elapsed={fixture?.fixture.status.elapsed ?? undefined}
-          stoppage={(fixture?.fixture.status as any)?.extra ?? null}
+          statusShort={fixture?.fixture?.status?.short}
+          elapsed={fixture?.fixture?.status?.elapsed ?? undefined}
+          stoppage={(fixture?.fixture?.status as { extra?: number | null } | undefined)?.extra ?? null}
           startTimestamp={fixture ? getPeriodStartTimestamp(fixture) : undefined}
           statusLabel={
-            fixture ? getLocalizedMatchStatus(fixture.fixture.status.short, language) : undefined
+            fixture?.fixture?.status?.short
+              ? getLocalizedMatchStatus(fixture.fixture.status.short, language)
+              : undefined
           }
           penaltyHome={fixture?.score?.penalty?.home ?? undefined}
           penaltyAway={fixture?.score?.penalty?.away ?? undefined}

@@ -85,7 +85,7 @@ export function buildSnapshotFromRaw(params: {
   if (!params.fixture) return null;
 
   const reconciled = reconcileFixtureWithEvents(params.fixture, params.events);
-  const statusShort = reconciled.fixture.status.short;
+  const statusShort = reconciled.fixture?.status?.short ?? 'NS';
   const { statistics, statsFromEvents } = resolveStatistics(
     reconciled,
     params.events,
