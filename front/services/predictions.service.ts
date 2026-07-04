@@ -158,6 +158,8 @@ export const PredictionsService = {
       awayTeamLogo?: string;
       matchDate: string;
       leagueName?: string;
+      predictedHomeScore?: number;
+      predictedAwayScore?: number;
     }
   ): Promise<Prediction> => {
     try {

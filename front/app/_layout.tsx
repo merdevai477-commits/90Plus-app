@@ -44,7 +44,7 @@ import { configureAudioVideo } from "../utils/videoConfig";
 import { ClerkProvider } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
-import { parseReelIdFromUrl, parseProfileUsernameFromUrl } from '../constants/shareLinks';
+import { parseGroupInviteCodeFromUrl, parseReelIdFromUrl, parseProfileUsernameFromUrl } from '../constants/shareLinks';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from "../src/i18n";
@@ -271,6 +271,8 @@ function RootLayoutNav() {
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="world-cup-news" options={{ headerShown: false }} />
       <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />
+      <Stack.Screen name="groups" options={{ headerShown: false }} />
+      <Stack.Screen name="matches" options={{ headerShown: false }} />
       <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       <Stack.Screen name="push-diagnostics" options={{ title: 'Push Diagnostics' }} />
       <Stack.Screen name="+not-found" options={{ headerShown: false }} />
@@ -561,6 +563,15 @@ function RootLayout() {
       const reelId = parseReelIdFromUrl(url);
       if (reelId) {
         navigateToReel(reelId);
+        return;
+      }
+
+      const inviteCode = parseGroupInviteCodeFromUrl(url);
+      if (inviteCode) {
+        router.push({
+          pathname: '/groups',
+          params: { invite: inviteCode },
+        });
       }
     };
 

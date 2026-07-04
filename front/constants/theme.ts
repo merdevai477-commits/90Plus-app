@@ -87,6 +87,16 @@ export const Colors = {
   tabReels: '#ef4444',
   tabStats: '#ec4899',
 
+  // Groups module
+  groupsBg: '#09061A',
+  groupsSurface: '#15102C',
+  groupsBorder: 'rgba(164, 94, 255, 0.22)',
+  groupsBorderStrong: 'rgba(193, 133, 255, 0.45)',
+  groupsTextDim: 'rgba(255,255,255,0.64)',
+  groupsAccentAmber: '#F59E0B',
+  groupsSuccessMint: '#37E1A6',
+  groupsWarningGold: '#F8D06A',
+
   // Overlay
   overlayDark: 'rgba(0,0,0,0.6)',
   overlayBlur: 'rgba(0,0,0,0.8)',

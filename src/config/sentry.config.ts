@@ -127,32 +127,32 @@ export function initializeSentry(app: Application): void {
   const profilesSampleRate = getProfilesSampleRate();
   
   try {
-    Sentry.init({
-      dsn,
-      environment,
-      tracesSampleRate,
-      profilesSampleRate,
+    // Sentry.init({
+    //   dsn,
+    //   environment,
+    //   tracesSampleRate,
+    //   profilesSampleRate,
       
-      // Integrations for performance monitoring and profiling
-      integrations: [
-        nodeProfilingIntegration(),
-      ],
+    //   // Integrations for performance monitoring and profiling
+    //   integrations: [
+    //     nodeProfilingIntegration(),
+    //   ],
       
-      // Filter sensitive data before sending
-      beforeSend: beforeSendHook,
+    //   // Filter sensitive data before sending
+    //   beforeSend: beforeSendHook,
       
-      // Ignore expected errors that don't require tracking
-      ignoreErrors: [
-        'NetworkError',
-        'AbortError',
-        'Unauthorized',
-        'Not found',
-        // Common client-side errors that shouldn't be tracked
-        'Network request failed',
-        'Failed to fetch',
-        'Load failed',
-      ],
-    });
+    //   // Ignore expected errors that don't require tracking
+    //   ignoreErrors: [
+    //     'NetworkError',
+    //     'AbortError',
+    //     'Unauthorized',
+    //     'Not found',
+    //     // Common client-side errors that shouldn't be tracked
+    //     'Network request failed',
+    //     'Failed to fetch',
+    //     'Load failed',
+    //   ],
+    // });
     
     // Setup Express error handler (combines request handler, tracing handler, and error handler)
     // This must be called after Sentry.init() and will add the necessary middleware

@@ -209,21 +209,33 @@ function getNgrokUrl(): string | null {
  */
 export function getApiUrl(): string {
   const config = getAPIConfig();
+  const envApiUrl = process.env.EXPO_PUBLIC_API_URL;
 
-  // For mobile in development without ngrok, use local IP
+  // For mobile development without ngrok, prefer the local backend now.
+  // Do not fall back to app.json production apiUrl unless it is already a local address.
   if (
     __DEV__ &&
     Platform.OS !== 'web' &&
     !getNgrokUrl() &&
-    config.baseUrl.includes('localhost')
+    !envApiUrl
   ) {
-    // Use apiUrl from app.json if available, otherwise fallback
     const extraApiUrl = Constants.expoConfig?.extra?.apiUrl;
-    if (extraApiUrl) {
+
+    if (
+      typeof extraApiUrl === 'string' &&
+      (extraApiUrl.includes('192.168.') ||
+        extraApiUrl.includes('10.') ||
+        extraApiUrl.includes('127.0.0.1') ||
+        extraApiUrl.includes('localhost'))
+    ) {
       return extraApiUrl;
     }
+
+    const hostUri = typeof Constants.expoConfig?.hostUri === 'string'
+      ? Constants.expoConfig.hostUri.split(':')[0]
+      : '';
     const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.1.6';
-    return `http://${LOCAL_IP}:3000/api`;
+    return `http://${hostUri || LOCAL_IP}:3000/api`;
   }
 
   return config.baseUrl;

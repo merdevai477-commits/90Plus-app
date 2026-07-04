@@ -81,6 +81,17 @@ export function buildProfileDeepLink(username: string): string {
   return `ninetyplus://user/${clean}`;
 }
 
+export function buildGroupInviteShareUrl(inviteCode: string): string {
+  const clean = inviteCode.trim().toUpperCase();
+  if (!clean) return `${SHARE_BASE_URL}/groups`;
+  return `${SHARE_BASE_URL}/groups/join?code=${encodeURIComponent(clean)}`;
+}
+
+export function buildGroupInviteDeepLink(inviteCode: string): string {
+  const clean = inviteCode.trim().toUpperCase();
+  return `ninetyplus://groups/join?code=${encodeURIComponent(clean)}`;
+}
+
 /**
  * Public link included when inviting friends to install 90Plus.
  * Android → Play Store listing (direct install).
@@ -133,6 +144,29 @@ export function parseProfileUsernameFromUrl(url: string): string | null {
   if (httpsMatch?.[1]) {
     const username = normalizeShareUsername(httpsMatch[1]);
     return isValidShareUsername(username) ? username : null;
+  }
+
+  return null;
+}
+
+export function parseGroupInviteCodeFromUrl(url: string): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+
+  try {
+    if (trimmed.startsWith('ninetyplus://groups/join')) {
+      const parsed = new URL(trimmed);
+      const code = parsed.searchParams.get('code')?.trim().toUpperCase();
+      return code || null;
+    }
+
+    if (trimmed.includes('/groups/join')) {
+      const parsed = new URL(trimmed);
+      const code = parsed.searchParams.get('code')?.trim().toUpperCase();
+      return code || null;
+    }
+  } catch {
+    return null;
   }
 
   return null;

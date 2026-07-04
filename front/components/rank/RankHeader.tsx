@@ -23,9 +23,10 @@ const blurTint: BlurTint = 'dark';
 
 interface RankHeaderProps {
   topInset: number;
+  onCrownPress?: () => void;
 }
 
-const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
+const RankHeader: React.FC<RankHeaderProps> = ({ topInset, onCrownPress }) => {
   const { coins, loading } = useCoins();
   const { t } = useTranslation();
   const [showCoinsInfo, setShowCoinsInfo] = React.useState(false);
@@ -61,6 +62,18 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
         <Zap size={13} color={ACCENT} fill={ACCENT} />
         <Text style={s.coinTxt}>{display}</Text>
       </Pressable>
+
+      {onCrownPress ? (
+        <Pressable
+          style={s.crownChip}
+          onPress={onCrownPress}
+          accessibilityRole="button"
+          accessibilityLabel={t.groups?.openFromRank ?? 'Open groups'}
+        >
+          <Crown size={14} color="#F59E0B" />
+          <Text style={s.crownTxt}>{t.groups?.openFromRank ?? 'Groups'}</Text>
+        </Pressable>
+      ) : null}
 
       <CoinsInfoModal
         visible={showCoinsInfo}
@@ -153,4 +166,16 @@ const s = StyleSheet.create({
     gap: 5,
   },
   coinTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  crownChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245,158,11,0.16)',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.35)',
+    gap: 5,
+  },
+  crownTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });

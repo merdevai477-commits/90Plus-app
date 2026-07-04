@@ -110,6 +110,8 @@ model User {
   notifications                 Notification[]
   parentalConsentRequests       ParentalConsentRequest[]
   predictions                   Prediction[]
+  createdPredictionGroups       PredictionGroup[]        @relation("PredictionGroupOwner")
+  predictionGroupMemberships    PredictionGroupMember[]
   quizAttempts                  QuizAttempt[]
   reelShares                    ReelShare[]
   reelViews                     ReelView[]
@@ -1116,6 +1118,39 @@ model Prediction {
   @@map("predictions")
 }
 
+model PredictionGroup {
+  id          String                @id @default(uuid())
+  name        String
+  imageUrl    String?
+  inviteCode  String                @unique
+  visibility  PredictionGroupType   @default(PRIVATE)
+  ownerId     String
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  owner       User                  @relation("PredictionGroupOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     PredictionGroupMember[]
+
+  @@index([ownerId])
+  @@index([visibility])
+  @@index([createdAt])
+  @@map("prediction_groups")
+}
+
+model PredictionGroupMember {
+  id        String               @id @default(uuid())
+  groupId   String
+  userId    String
+  role      PredictionGroupRole  @default(MEMBER)
+  createdAt DateTime             @default(now())
+  group     PredictionGroup      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+  @@map("prediction_group_members")
+}
+
 model PlayerVote {
   id        String   @id @default(uuid())
   voterId   String
@@ -1699,6 +1734,16 @@ enum MatchStatus {
   FINISHED
   POSTPONED
   CANCELLED
+}
+
+enum PredictionGroupType {
+  PRIVATE
+  PUBLIC
+}
+
+enum PredictionGroupRole {
+  OWNER
+  MEMBER
 }
 
 enum Difficulty {

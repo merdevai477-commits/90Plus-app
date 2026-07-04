@@ -12,6 +12,7 @@ import { responseCacheMiddleware, clearResponseCache } from '../middleware/respo
 import { getBlockRelation } from '../services/block.service';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
+import { PREDICTION_SUBMIT_LEAD_HOURS } from '../constants/predictions.constants';
 
 const router = Router();
 
@@ -92,7 +93,18 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        const { apiMatchId, predictionType, homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, matchDate, leagueName } = req.body;
+        const {
+            apiMatchId,
+            predictionType,
+            homeTeam,
+            awayTeam,
+            homeTeamLogo,
+            awayTeamLogo,
+            matchDate,
+            leagueName,
+            predictedHomeScore,
+            predictedAwayScore,
+        } = req.body;
 
         const parsedMatchId = parseInt(String(apiMatchId), 10);
         if (!apiMatchId || Number.isNaN(parsedMatchId) || parsedMatchId <= 0) {
@@ -102,17 +114,77 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        if (!predictionType) {
-            sendError(req, res, ErrorCode.VALIDATION, 'Missing predictionType', {
-                required: ['predictionType'],
+        const normalizedPredictionType = typeof predictionType === 'string' ? predictionType.trim().toLowerCase() : '';
+        if (normalizedPredictionType && !['home', 'draw', 'away'].includes(normalizedPredictionType)) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid prediction type', {
+                field: 'predictionType',
+                allowed: ['home', 'draw', 'away'],
             });
             return;
         }
 
-        if (!['home', 'draw', 'away'].includes(predictionType)) {
-            sendError(req, res, ErrorCode.VALIDATION, 'Invalid prediction type', {
+        const hasHomeScore = predictedHomeScore !== undefined && predictedHomeScore !== null && String(predictedHomeScore).trim() !== '';
+        const hasAwayScore = predictedAwayScore !== undefined && predictedAwayScore !== null && String(predictedAwayScore).trim() !== '';
+
+        if (hasHomeScore !== hasAwayScore) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Both predictedHomeScore and predictedAwayScore are required together', {
+                required: ['predictedHomeScore', 'predictedAwayScore'],
+            });
+            return;
+        }
+
+        const parsedHomeScore = hasHomeScore ? Number.parseInt(String(predictedHomeScore), 10) : null;
+        const parsedAwayScore = hasAwayScore ? Number.parseInt(String(predictedAwayScore), 10) : null;
+
+        if (hasHomeScore && (Number.isNaN(parsedHomeScore as number) || Number.isNaN(parsedAwayScore as number))) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Predicted scores must be valid integers', {
+                fields: ['predictedHomeScore', 'predictedAwayScore'],
+            });
+            return;
+        }
+
+        if (hasHomeScore && ((parsedHomeScore as number) < 0 || (parsedAwayScore as number) < 0)) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Predicted scores cannot be negative', {
+                fields: ['predictedHomeScore', 'predictedAwayScore'],
+            });
+            return;
+        }
+
+        let scoreDerivedType: 'home' | 'draw' | 'away' | null = null;
+        if (hasHomeScore) {
+            if ((parsedHomeScore as number) > (parsedAwayScore as number)) scoreDerivedType = 'home';
+            else if ((parsedHomeScore as number) < (parsedAwayScore as number)) scoreDerivedType = 'away';
+            else scoreDerivedType = 'draw';
+        }
+
+        const finalPredictionType = (normalizedPredictionType || scoreDerivedType) as 'home' | 'draw' | 'away' | null;
+        if (!finalPredictionType) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Missing predictionType or predicted score', {
+                required: ['predictionType or predictedHomeScore/predictedAwayScore'],
+            });
+            return;
+        }
+
+        if (normalizedPredictionType && scoreDerivedType && normalizedPredictionType !== scoreDerivedType) {
+            sendError(req, res, ErrorCode.VALIDATION, 'predictionType does not match predicted score', {
                 field: 'predictionType',
-                allowed: ['home', 'draw', 'away'],
+            });
+            return;
+        }
+
+        const parsedMatchDate = matchDate ? new Date(matchDate) : null;
+        if (!parsedMatchDate || Number.isNaN(parsedMatchDate.getTime())) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid matchDate', {
+                field: 'matchDate',
+            });
+            return;
+        }
+
+        const cutoffTime = new Date(parsedMatchDate.getTime() - PREDICTION_SUBMIT_LEAD_HOURS * 60 * 60 * 1000);
+        if (new Date() >= cutoffTime) {
+            sendError(req, res, ErrorCode.AUTHORIZATION, 'Prediction window closed for this match', {
+                reason: 'PREDICTION_WINDOW_CLOSED',
+                leadHours: PREDICTION_SUBMIT_LEAD_HOURS,
             });
             return;
         }
@@ -183,15 +255,17 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
                     data: {
                         userId: user.id,
                         apiMatchId: parsedMatchId,
-                        predictionType,
+                        predictionType: finalPredictionType,
                         coinsSpent: PREDICTION_COST, // = 0
                         isCorrect: null,
                         homeTeam,
                         awayTeam,
                         homeTeamLogo,
                         awayTeamLogo,
-                        matchDate: matchDate ? new Date(matchDate) : null,
-                        leagueName
+                        matchDate: parsedMatchDate,
+                        leagueName,
+                        predictedHomeScore: parsedHomeScore,
+                        predictedAwayScore: parsedAwayScore,
                     }
                 });
 
