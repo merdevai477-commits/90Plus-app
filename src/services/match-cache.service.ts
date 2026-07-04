@@ -227,6 +227,16 @@ class MatchCacheService {
      */
     private buildFixtureDbPayload(fixture: FixtureFromAPI): { create: Record<string, unknown>; update: Record<string, unknown> } {
         const status = fixture.fixture.status.short;
+        // A malformed fixture.date would make `new Date(...)` Invalid, which
+        // Prisma rejects when writing the DateTime column (failing the whole
+        // upsert). Fall back to the numeric timestamp, then to now.
+        const parsedMatchDate = new Date(fixture.fixture.date);
+        const matchDate = !Number.isNaN(parsedMatchDate.getTime())
+            ? parsedMatchDate
+            : fixture.fixture.timestamp
+                ? new Date(fixture.fixture.timestamp * 1000)
+                : new Date();
+        const safeMatchDate = Number.isNaN(matchDate.getTime()) ? new Date() : matchDate;
         const base = {
             fixtureId: fixture.fixture.id,
             leagueId: fixture.league.id,
@@ -245,7 +255,7 @@ class MatchCacheService {
             awayScore: fixture.goals.away,
             homeHalftimeScore: fixture.score?.halftime?.home ?? null,
             awayHalftimeScore: fixture.score?.halftime?.away ?? null,
-            matchDate: new Date(fixture.fixture.date),
+            matchDate: safeMatchDate,
             matchTimestamp: fixture.fixture.timestamp,
             status,
             statusLong: fixture.fixture.status.long,

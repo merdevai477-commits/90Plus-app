@@ -88,7 +88,10 @@ export const useFavoriteMatches = (): UseFavoriteMatchesResult => {
                 awayTeam: match.awayTeam?.name || '',
                 homeTeamLogo: match.homeTeam?.logo || '',
                 awayTeamLogo: match.awayTeam?.logo || '',
-                matchDate: match.fixtureDate ? new Date(match.fixtureDate).toISOString() : new Date().toISOString(),
+                matchDate: (() => {
+                  const d = match.fixtureDate ? new Date(match.fixtureDate) : null;
+                  return d && !Number.isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
+                })(),
                 leagueName: match.league?.name || '',
               },
               token

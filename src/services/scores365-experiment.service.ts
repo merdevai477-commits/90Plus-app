@@ -918,7 +918,16 @@ export function synthesizeBaseFrom365Game(
 ): FixtureFromAPI {
   const cfg = getScores365ExperimentConfig();
   const status = map365Status(game);
-  const kickoff = game.startTime ?? new Date().toISOString();
+  // Guard against missing/malformed 365 startTime: an invalid kickoff string
+  // propagates to clients where `new Date(...).toISOString()` throws
+  // `RangeError: Date value out of bounds` under Hermes.
+  const kickoff = (() => {
+    if (game.startTime) {
+      const parsed = new Date(game.startTime);
+      if (!Number.isNaN(parsed.getTime())) return game.startTime;
+    }
+    return new Date().toISOString();
+  })();
   const home = game.homeCompetitor;
   const away = game.awayCompetitor;
   const homeScore = normalize365Score(home?.score);
