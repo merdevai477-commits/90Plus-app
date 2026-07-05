@@ -22,7 +22,7 @@ import PlayerAvatar from '../components/common/PlayerAvatar';
 import TeamBadge from '../components/common/TeamBadge';
 import { useTranslation } from '../src/i18n';
 import type { Language } from '../src/i18n';
-import { getTeamDisplayName, getLeagueDisplayName } from '../utils/i18nHelpers';
+import { getTeamDisplayName, getLeagueDisplayName, getLocalizedStatType } from '../utils/i18nHelpers';
 import { Image as ExpoImage } from 'expo-image';
 import LeagueIcon from '../components/common/LeagueIcon';
 import {
@@ -119,14 +119,18 @@ interface MatchReport365 {
     chartEvents: unknown[];
 }
 
-function format365StatEntry(raw: unknown): { label: string; value: string } | null {
+function format365StatEntry(
+  raw: unknown,
+  language: Language,
+): { label: string; value: string } | null {
     if (!raw || typeof raw !== 'object') return null;
     const o = raw as Record<string, unknown>;
-    const label =
+    const rawLabel =
         (typeof o.name === 'string' && o.name) ||
         (typeof o.shortName === 'string' && o.shortName) ||
         (typeof o.typeName === 'string' && o.typeName) ||
         (o.type != null ? `#${String(o.type)}` : null);
+    const label = rawLabel ? getLocalizedStatType(rawLabel, language) || rawLabel : null;
     const rawValue = o.value ?? o.val ?? o.statValue;
     const value = rawValue != null ? String(rawValue) : null;
     if (!label && !value) return null;
@@ -630,10 +634,17 @@ export default function PlayerProfileScreen() {
         try {
             setLoading(true);
             setError(null);
-            const report = await ApiFootballService.get365PlayerMatchReport(
+            let report = await ApiFootballService.get365PlayerMatchReport(
                 contextFixtureId,
                 contextAthleteId,
             );
+            if ((!report || (report.stats?.length ?? 0) === 0) && language === 'ar') {
+                report = await ApiFootballService.get365PlayerMatchReport(
+                    contextFixtureId,
+                    contextAthleteId,
+                    'en',
+                );
+            }
             if (!report) {
                 setMatchReport365(null);
                 if (!player) {
@@ -1081,7 +1092,7 @@ export default function PlayerProfileScreen() {
                                             </Text>
                                         )}
                                         {(matchReport365.stats ?? [])
-                                            .map(format365StatEntry)
+                                            .map((raw) => format365StatEntry(raw, language))
                                             .filter((row): row is { label: string; value: string } => row != null)
                                             .map((row) => (
                                                 <View key={`${row.label}-${row.value}`} style={styles.matchStatRow}>

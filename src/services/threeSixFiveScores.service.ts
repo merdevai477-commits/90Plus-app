@@ -15,6 +15,7 @@ import {
   mapScores365ToApiFootballFixture,
   registerScores365FixtureMapping,
   resolveScores365LangId,
+  resolveScores365AppLanguage,
   resolveScores365SearchLangId,
   scores365CompetitionToLeagueId,
   SCORES365_LEAGUE_ID_OFFSET,
@@ -1167,6 +1168,70 @@ class ThreeSixFiveScoresService {
   // ─── 6. Player match report ──────────────────────────────────────────────
   // athleteId can also come from searchAthletes() or a game lineup.
 
+  private async fetchPlayerMatchReportForLang(
+    athleteId: number,
+    gameId: number,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerMatchReport>> {
+    const langId = resolveScores365LangId(language);
+    const cacheKey = `365:player-report:${athleteId}:${gameId}:${langId}`;
+    const cached = await redisCacheService.get<ThreeSixFivePlayerMatchReport>(cacheKey);
+    if (cached) return { data: cached, source: '365scores' };
+
+    const [playerPayload, gameLineups] = await Promise.all([
+      this.fetchJson<LineupsPayload>(
+        `/web/athletes/games/lineups?${this.commonParams(langId)}&athleteId=${athleteId}&gameId=${gameId}`,
+        `player-report:${athleteId}:${gameId}`,
+        300_000,
+      ),
+      this.fetchJson<LineupsPayload>(
+        `/web/athletes/games/lineups?${this.commonParams(langId)}&gameId=${gameId}`,
+        `lineups-chart:${gameId}`,
+        120_000,
+      ),
+    ]);
+
+    let member = playerPayload?.members?.[0];
+    if (!member && gameLineups?.members?.length) {
+      member = gameLineups.members.find(
+        (m) => m.athleteId === athleteId || m.id === athleteId,
+      );
+    }
+    if (!member) return { data: null, source: null };
+
+    const aid = member.athleteId ?? member.id;
+    const allEvents = gameLineups?.chartEvents?.events ?? [];
+    const chartEvents = Array.isArray(allEvents)
+      ? allEvents.filter((ev) => {
+          const e = ev as { athleteId?: number; playerId?: number; memberId?: number };
+          return (
+            e.athleteId === aid ||
+            e.playerId === aid ||
+            e.athleteId === member!.id ||
+            e.playerId === member!.id ||
+            e.memberId === member!.id
+          );
+        })
+      : [];
+
+    const report: ThreeSixFivePlayerMatchReport = {
+      athleteId: aid,
+      gameId,
+      name: member.name ?? '—',
+      shortName: member.shortName ?? member.name ?? '—',
+      jerseyNumber: member.jerseyNumber ?? null,
+      position: member.position?.shortName ?? member.position?.name ?? null,
+      formation: member.formation?.shortName ?? member.formation?.name ?? null,
+      imageUrl: buildScores365AthletePhotoUrl(aid, 68),
+      stats: member.stats ?? [],
+      chartEvents,
+    };
+
+    await redisCacheService.set(cacheKey, report, 300_000);
+    void this.invalidatePlayerCareerCache(aid, langId);
+    return { data: report, source: '365scores' };
+  }
+
   async getPlayerMatchReport(
     athleteId: number,
     gameId: number,
@@ -1175,64 +1240,28 @@ class ThreeSixFiveScoresService {
     if (!this.isEnabled()) return { data: null, source: null };
 
     try {
-      const langId = resolveScores365LangId(language);
-      const cacheKey = `365:player-report:${athleteId}:${gameId}:${langId}`;
-      const cached = await redisCacheService.get<ThreeSixFivePlayerMatchReport>(cacheKey);
-      if (cached) return { data: cached, source: '365scores' };
+      const primary = await this.fetchPlayerMatchReportForLang(athleteId, gameId, language);
+      const primaryStats = primary.data?.stats?.length ?? 0;
+      if (primary.data && primaryStats > 0) return primary;
 
-      const [playerPayload, gameLineups] = await Promise.all([
-        this.fetchJson<LineupsPayload>(
-          `/web/athletes/games/lineups?${this.commonParams(langId)}&athleteId=${athleteId}&gameId=${gameId}`,
-          `player-report:${athleteId}:${gameId}`,
-          300_000,
-        ),
-        this.fetchJson<LineupsPayload>(
-          `/web/athletes/games/lineups?${this.commonParams(langId)}&gameId=${gameId}`,
-          `lineups-chart:${gameId}`,
-          120_000,
-        ),
-      ]);
+      const appLang = resolveScores365AppLanguage(language);
+      if (appLang === 'en') return primary;
 
-      // Callers may pass 365 memberId (game.members[].id) instead of athleteId — resolve from full lineup.
-      let member = playerPayload?.members?.[0];
-      if (!member && gameLineups?.members?.length) {
-        member = gameLineups.members.find(
-          (m) => m.athleteId === athleteId || m.id === athleteId,
-        );
+      const fallback = await this.fetchPlayerMatchReportForLang(athleteId, gameId, 'en');
+      if (!fallback.data) return primary;
+
+      if (primary.data?.name && fallback.data) {
+        fallback.data = {
+          ...fallback.data,
+          name: primary.data.name,
+          shortName: primary.data.shortName ?? primary.data.name,
+        };
       }
-      if (!member) return { data: null, source: null };
 
-      const aid = member.athleteId ?? member.id;
-      const allEvents = gameLineups?.chartEvents?.events ?? [];
-      const chartEvents = Array.isArray(allEvents)
-        ? allEvents.filter((ev) => {
-            const e = ev as { athleteId?: number; playerId?: number; memberId?: number };
-            return (
-              e.athleteId === aid ||
-              e.playerId === aid ||
-              e.athleteId === member!.id ||
-              e.playerId === member!.id ||
-              e.memberId === member!.id
-            );
-          })
-        : [];
-
-      const report: ThreeSixFivePlayerMatchReport = {
-        athleteId: aid,
-        gameId,
-        name: member.name ?? '—',
-        shortName: member.shortName ?? member.name ?? '—',
-        jerseyNumber: member.jerseyNumber ?? null,
-        position: member.position?.shortName ?? member.position?.name ?? null,
-        formation: member.formation?.shortName ?? member.formation?.name ?? null,
-        imageUrl: buildScores365AthletePhotoUrl(aid, 68),
-        stats: member.stats ?? [],
-        chartEvents,
-      };
-
-      await redisCacheService.set(cacheKey, report, 300_000);
-      void this.invalidatePlayerCareerCache(aid, langId);
-      return { data: report, source: '365scores' };
+      logger.debug(
+        `[365Scores] player report ${athleteId}/${gameId}: EN fallback (${fallback.data.stats?.length ?? 0} stats)`,
+      );
+      return fallback;
     } catch (err: unknown) {
       logger.error(
         `[365Scores] getPlayerMatchReport(${athleteId}, ${gameId}) failed:`,

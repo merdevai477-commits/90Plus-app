@@ -6,6 +6,7 @@ import type {
   Venue,
 } from '../../services/apiFootball';
 import { ApiFootballService } from '../../services/apiFootball';
+import { getAppLanguageCode } from '../../utils/appLanguage';
 import { reconcileFixtureWithEvents } from '../../utils/matchDetailsLiveSync';
 import {
   buildFallbackStatisticsFromEvents,
@@ -200,9 +201,22 @@ export async function fetchFullSnapshot(
 
   const promise = (async () => {
     try {
-      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, {
+      let bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, {
         skipCache: true,
       });
+      if (
+        getAppLanguageCode() === 'ar' &&
+        bundle.fixture &&
+        (!bundle.events || bundle.events.length === 0)
+      ) {
+        const enBundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, {
+          skipCache: true,
+          language: 'en',
+        });
+        if (enBundle.events?.length) {
+          bundle = { ...bundle, events: enBundle.events };
+        }
+      }
       let venue: Venue | null = bundle.venue ?? null;
       if (!venue && bundle.fixture?.fixture?.venue) {
         venue = bundle.fixture.fixture.venue as Venue;

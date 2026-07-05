@@ -1593,6 +1593,9 @@ class FootballDataCacheService {
             if (!events.length) {
                 events = await getScores365ExperimentEvents(fixtureId, true, language);
             }
+            if (!events.length && language !== 'en') {
+                events = await getScores365ExperimentEvents(fixtureId, true, 'en');
+            }
             const ttl = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '3000', 10) || 3_000);
             if (events.length > 0) {
                 const cacheEntry: MemoryCacheEntry<any> = {
@@ -2879,7 +2882,11 @@ class FootballDataCacheService {
         }
         if (!hasLineupData(structured)) return [];
 
-        const named = await this.getCached365LineupsWithNames(fixtureId, language);
+        const appLang = resolveScores365AppLanguage(language);
+        let named = await this.getCached365LineupsWithNames(fixtureId, language);
+        if (!named.data?.length && appLang !== 'en') {
+            named = await this.getCached365LineupsWithNames(fixtureId, 'en');
+        }
         const merged = named.data?.length
             ? this.merge365NamesIntoLineups(structured ?? [], named.data, fixtureId)
             : (structured ?? []);
@@ -2902,7 +2909,10 @@ class FootballDataCacheService {
             );
             const retryStructured = retryBundle?.lineups;
             if (hasLineupData(retryStructured)) {
-                const retryNamed = await this.getCached365LineupsWithNames(fixtureId, language);
+                let retryNamed = await this.getCached365LineupsWithNames(fixtureId, language);
+                if (!retryNamed.data?.length && appLang !== 'en') {
+                    retryNamed = await this.getCached365LineupsWithNames(fixtureId, 'en');
+                }
                 const retryMerged = retryNamed.data?.length
                     ? this.merge365NamesIntoLineups(retryStructured!, retryNamed.data, fixtureId)
                     : retryStructured!;

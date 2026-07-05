@@ -1036,7 +1036,7 @@ function normalizeTeamNameForMatch(name?: string | null): string {
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+    .replace(/[^\p{L}\p{N}]/gu, '');
 }
 
 function teamNamesMatch(a?: string | null, b?: string | null): boolean {
@@ -1104,6 +1104,16 @@ function detect365TeamAlignment(
   game: Scores365Game,
   base: FixtureFromAPI,
 ): Scores365TeamAlignment | null {
+  const h365Id = game.homeCompetitor?.id;
+  const a365Id = game.awayCompetitor?.id;
+  const homeId = base.teams.home?.id;
+  const awayId = base.teams.away?.id;
+
+  if (h365Id && a365Id && homeId && awayId) {
+    if (h365Id === homeId && a365Id === awayId) return { swapped: false };
+    if (h365Id === awayId && a365Id === homeId) return { swapped: true };
+  }
+
   const h365 = game.homeCompetitor?.name;
   const a365 = game.awayCompetitor?.name;
   const dbHome = base.teams.home?.name;
@@ -1119,6 +1129,82 @@ function detect365TeamAlignment(
   if (direct === 1 && swapped === 0) return { swapped: false };
   if (swapped === 1 && direct === 0) return { swapped: true };
   return null;
+}
+
+/**
+ * Fetch 365 game for structural mapping (always EN) plus optional localized
+ * payload for display-name overlay when the app language is Arabic.
+ */
+async function fetch365GamePair(
+  gameId: number,
+  appLang: 'ar' | 'en',
+  force = false,
+): Promise<{ structural: Scores365Game | null; localized: Scores365Game | null }> {
+  const structural = await fetchScores365GameById(gameId, { language: 'en', force });
+  if (!structural) return { structural: null, localized: null };
+  const localized =
+    appLang !== 'en'
+      ? await fetchScores365GameById(gameId, { language: appLang, force })
+      : null;
+  return { structural, localized };
+}
+
+/** Shared EN-structural resolve used by bundle, events, and fixture mappers. */
+async function resolve365ExperimentCore(
+  fixtureId: number,
+  gameId: number,
+  language?: string | null,
+  options?: { force?: boolean },
+): Promise<{
+  game: Scores365Game;
+  gameLocalized: Scores365Game | null;
+  base: FixtureFromAPI;
+  alignment: Scores365TeamAlignment;
+} | null> {
+  const force = options?.force === true;
+  const appLang = resolveScores365AppLanguage(language);
+  const { structural, localized } = await fetch365GamePair(gameId, appLang, force);
+  if (!structural) return null;
+
+  const resolved = await resolve365BaseAndAlignment(structural, fixtureId);
+  if (!resolved) return null;
+
+  return {
+    game: structural,
+    gameLocalized: localized,
+    base: resolved.base,
+    alignment: resolved.alignment,
+  };
+}
+
+function validate365MappedEvents(
+  fixtureId: number,
+  game: Scores365Game,
+  base: FixtureFromAPI,
+  alignment: Scores365TeamAlignment,
+  events: any[],
+  expectedHome: number | null,
+  expectedAway: number | null,
+): any[] {
+  const homeId = base.teams.home?.id;
+  const awayId = base.teams.away?.id;
+  if (
+    !homeId ||
+    !awayId ||
+    eventsMatch365ScoreLine(events, homeId, awayId, expectedHome, expectedAway)
+  ) {
+    return events;
+  }
+  if (shouldServe365EventsDespiteMismatch(game, events)) {
+    logger.warn(
+      `[Scores365Experiment] fixture ${fixtureId}: events/score tally mismatch — serving ${events.length} events anyway`,
+    );
+    return events;
+  }
+  logger.warn(
+    `[Scores365Experiment] drop events for fixture ${fixtureId}: tally ${JSON.stringify(tallyGoalsFromMappedEvents(events, homeId, awayId))} ≠ 365 score ${expectedHome}-${expectedAway}`,
+  );
+  return [];
 }
 
 export function resolveDbFixtureFor365Game(
@@ -1805,50 +1891,45 @@ export async function getScores365ExperimentEvents(
   const gameId = (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
   if (!gameId) return [];
 
-  const game = await fetchScores365GameById(gameId, { force, language });
-  if (!game) return [];
+  const core = await resolve365ExperimentCore(fixtureId, gameId, language, { force });
+  if (!core) return [];
 
-  const base = (await loadBaseFixture(fixtureId)) ?? synthesizeBaseFrom365Game(game, fixtureId);
-
-  const alignment = detect365TeamAlignment(game, base);
-  if (!alignment) return [];
-
+  const { game, base, alignment } = core;
   const events = mapScores365Events(game, base, alignment);
   const scores = resolve365Scores(game, alignment);
-  const homeId = base.teams.home?.id;
-  const awayId = base.teams.away?.id;
-  if (
-    homeId &&
-    awayId &&
-    !eventsMatch365ScoreLine(events, homeId, awayId, scores.home, scores.away)
-  ) {
-    if (shouldServe365EventsDespiteMismatch(game, events)) {
-      logger.warn(
-        `[Scores365Experiment] fixture ${fixtureId}: events/score tally mismatch — serving ${events.length} events anyway`,
-      );
-      return events;
-    }
-    logger.warn(
-      `[Scores365Experiment] drop events for fixture ${fixtureId}: tally ${JSON.stringify(tallyGoalsFromMappedEvents(events, homeId, awayId))} ≠ 365 score ${scores.home}-${scores.away}`,
-    );
-    return [];
-  }
-
-  return events;
+  return validate365MappedEvents(
+    fixtureId,
+    game,
+    base,
+    alignment,
+    events,
+    scores.home,
+    scores.away,
+  );
 }
 
 export async function getScores365ExperimentFixture(
   fixtureId: number,
   language?: string | null,
 ): Promise<FixtureFromAPI | null> {
-  const gameId = getScores365GameIdForFixture(fixtureId);
+  const gameId =
+    (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
   if (!gameId) return null;
 
-  const game = await fetchScores365GameById(gameId, { language });
-  if (!game) return null;
+  const core = await resolve365ExperimentCore(fixtureId, gameId, language);
+  if (!core) return null;
 
-  const base = await loadBaseFixture(fixtureId);
-  return mapScores365ToApiFootballFixture(game, base, fixtureId);
+  let fixture = await mapScores365ToApiFootballFixture(
+    core.game,
+    core.base,
+    fixtureId,
+  );
+  if (!fixture) return null;
+
+  if (core.gameLocalized) {
+    fixture = overlay365LocalizedFixtureNames(fixture, core.gameLocalized, core.alignment);
+  }
+  return fixture;
 }
 
 function overlay365LocalizedFixtureNames(
@@ -1899,21 +1980,10 @@ export async function getScores365ExperimentBundle(
   if (!gameId) return null;
 
   const force = options?.force === true;
-  const appLang = resolveScores365AppLanguage(language);
+  const core = await resolve365ExperimentCore(fixtureId, gameId, language, { force });
+  if (!core) return null;
 
-  // Structural mapping (alignment, lineups, events) uses the English 365 feed —
-  // Arabic upstream responses can fail team alignment and return empty bundles.
-  let game = await fetchScores365GameById(gameId, { language: 'en', force });
-  if (!game) return null;
-
-  const gameLocalized =
-    appLang !== 'en'
-      ? await fetchScores365GameById(gameId, { language: appLang, force })
-      : null;
-
-  const resolved = await resolve365BaseAndAlignment(game, fixtureId);
-  if (!resolved) return null;
-  const { base, alignment } = resolved;
+  const { game, gameLocalized, base, alignment } = core;
 
   let fixture = await mapScores365ToApiFootballFixture(game, base, fixtureId);
   if (!fixture) return null;
@@ -1923,24 +1993,15 @@ export async function getScores365ExperimentBundle(
   }
 
   let events = mapScores365Events(game, base, alignment);
-  const homeId = base.teams.home?.id;
-  const awayId = base.teams.away?.id;
-  if (
-    homeId &&
-    awayId &&
-    !eventsMatch365ScoreLine(events, homeId, awayId, fixture.goals.home, fixture.goals.away)
-  ) {
-    if (!shouldServe365EventsDespiteMismatch(game, events)) {
-      logger.warn(
-        `[Scores365Experiment] bundle ${fixtureId}: events/score mismatch — serving score only`,
-      );
-      events = [];
-    } else {
-      logger.warn(
-        `[Scores365Experiment] bundle ${fixtureId}: events/score mismatch — keeping ${events.length} events`,
-      );
-    }
-  }
+  events = validate365MappedEvents(
+    fixtureId,
+    game,
+    base,
+    alignment,
+    events,
+    fixture.goals.home,
+    fixture.goals.away,
+  );
 
   const lineupData = mapScores365Lineups(game, base, alignment);
 

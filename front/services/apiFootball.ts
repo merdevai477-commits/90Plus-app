@@ -1519,7 +1519,7 @@ export const ApiFootballService = {
    */
   async getFixtureDetailsBundle(
     fixtureId: number,
-    options?: { skipCache?: boolean },
+    options?: { skipCache?: boolean; language?: 'ar' | 'en' },
   ): Promise<{
     fixture: Fixture | null;
     lineups: Lineup[];
@@ -1527,10 +1527,11 @@ export const ApiFootballService = {
     events: FixtureEvent[];
     venue: Venue | null;
   }> {
+    const langParams = options?.language ? { language: options.language } : {};
     const fetchBundle = async (id: number) => {
       const raw = await fetchFromProxy<any>(
         `/cached/fixture/${id}/details`,
-        {},
+        langParams,
         options?.skipCache ? { fresh: true } : {},
       );
       const bundle = raw?.response ?? raw;
@@ -1710,6 +1711,7 @@ export const ApiFootballService = {
   async get365PlayerMatchReport(
     fixtureId: number,
     athleteId: number,
+    language?: 'ar' | 'en',
   ): Promise<{
     athleteId: number;
     gameId: number;
@@ -1723,9 +1725,17 @@ export const ApiFootballService = {
     chartEvents: unknown[];
   } | null> {
     try {
+      const lang = language ?? getAppLanguageCode();
       const baseUrl = getApiUrl();
-      const url = `${baseUrl}/football/cached/365/fixture/${fixtureId}/player/${athleteId}/report`;
-      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }));
+      const url = `${baseUrl}/football/cached/365/fixture/${fixtureId}/player/${athleteId}/report?language=${lang}`;
+      const response = await withTimeout(
+        fetch(url, {
+          headers: {
+            Accept: 'application/json',
+            'Accept-Language': acceptLanguageHeader(lang),
+          },
+        }),
+      );
       if (!response.ok) return null;
       const json = (await response.json()) as {
         response?: {
