@@ -17,6 +17,7 @@ import {
   Award,
   Calendar,
   Flame,
+  Gem,
   Target,
   TrendingUp,
   Trophy,
@@ -95,7 +96,7 @@ export function HomeSection({ isRTL, onSeeAll }: { isRTL: boolean; onSeeAll: () 
               .springify()
               .damping(16)}
           >
-            <LeaderboardRow member={m} isRTL={isRTL} animatePoints={false} />
+            <LeaderboardRow member={m} isRTL={isRTL} animatePoints={false} showPoints={false} />
           </Animated.View>
         ))}
       </View>
@@ -176,10 +177,53 @@ export function LeaderboardSection({
 // ─── Predictions ────────────────────────────────────────────────────────────
 
 const ROUND_TABS = [
-  { key: 'next', label: 'القادمة' },
-  { key: 'current', label: 'الحالية' },
+  { key: 'current', label: 'الجولة الحالية' },
+  { key: 'next', label: 'الجولة القادمة' },
   { key: 'results', label: 'النتائج' },
 ];
+
+function PointsSystemCard({ isRTL }: { isRTL: boolean }) {
+  const { medium, bold } = usePGFonts();
+  const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
+  return (
+    <GlassCard style={styles.pointsCard}>
+      <Text style={[styles.pointsCardTitle, { fontFamily: bold, textAlign: isRTL ? 'right' : 'left' }]}>
+        نظام النقاط
+      </Text>
+      <View style={[styles.pointsCols, row]}>
+        <View style={[styles.pointsCol, row]}>
+          <View style={[styles.pointsIcon, { backgroundColor: 'rgba(124,58,237,0.2)' }]}>
+            <Target size={18} color={PG.purpleSoft} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.pointsColTitle, { fontFamily: medium, textAlign: isRTL ? 'right' : 'left' }]}>
+              توقع الفائز أو التعادل
+            </Text>
+            <Text style={[styles.pointsColValue, { fontFamily: bold, textAlign: isRTL ? 'right' : 'left', color: PG.purpleSoft }]}>
+              نقطة واحدة
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.pointsDivider} />
+
+        <View style={[styles.pointsCol, row]}>
+          <View style={[styles.pointsIcon, { backgroundColor: 'rgba(245,185,66,0.18)' }]}>
+            <Gem size={18} color={PG.gold} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.pointsColTitle, { fontFamily: medium, textAlign: isRTL ? 'right' : 'left' }]}>
+              النتيجة الدقيقة
+            </Text>
+            <Text style={[styles.pointsColValue, { fontFamily: bold, textAlign: isRTL ? 'right' : 'left', color: PG.gold }]}>
+              3 نقاط
+            </Text>
+          </View>
+        </View>
+      </View>
+    </GlassCard>
+  );
+}
 
 export function PredictionsSection({ isRTL }: { isRTL: boolean }) {
   const { medium, bold, extra } = usePGFonts();
@@ -211,6 +255,8 @@ export function PredictionsSection({ isRTL }: { isRTL: boolean }) {
     <View style={{ gap: PG_SPACING.lg }}>
       <AnimatedTabs tabs={ROUND_TABS} activeKey={roundTab} onChange={setRoundTab} isRTL={isRTL} />
 
+      <PointsSystemCard isRTL={isRTL} />
+
       <View style={styles.roundCard}>
         <LinearGradient
           colors={PG_GRADIENTS.roundWash}
@@ -230,11 +276,6 @@ export function PredictionsSection({ isRTL }: { isRTL: boolean }) {
           <View style={styles.calBox}>
             <Calendar size={20} color={PG.purpleSoft} />
           </View>
-        </View>
-        <View style={[styles.pointsSystem, row]}>
-          <Text style={[styles.pointsSystemTxt, { fontFamily: medium }]}>
-            فائز/تعادل = نقطة · نتيجة دقيقة = 3 نقاط
-          </Text>
         </View>
       </View>
 
@@ -369,14 +410,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(124,58,237,0.2)',
   },
-  pointsSystem: {
+  pointsCard: { padding: 14, gap: 12 },
+  pointsCardTitle: { color: PG.text, fontSize: 14 },
+  pointsCols: { alignItems: 'center', gap: 12 },
+  pointsCol: { flex: 1, alignItems: 'center', gap: 8 },
+  pointsIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
   },
-  pointsSystemTxt: { color: PG.textMuted, fontSize: 12 },
+  pointsColTitle: { color: PG.textSecondary, fontSize: 11 },
+  pointsColValue: { fontSize: 13, marginTop: 1 },
+  pointsDivider: { width: 1, alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.08)' },
 
   saveBtn: {
     borderRadius: PG_RADII.lg,

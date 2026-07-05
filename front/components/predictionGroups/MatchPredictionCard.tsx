@@ -14,9 +14,9 @@
 
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Minus, Plus } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Star, Target } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { Crest, GlassCard, PressableScale } from './atoms';
 import type { PredictionMatch } from './data';
@@ -48,27 +48,33 @@ function Stepper({
       Haptics.selectionAsync().catch(() => {});
     }
   };
+  const arrow = disabled ? PG.textMuted : PG.purpleSoft;
   return (
-    <View style={styles.stepper}>
-      <PressableScale
-        disabled={disabled}
-        onPress={() => bump(1)}
-        style={[styles.stepBtn, disabled && styles.stepBtnDisabled]}
-        accessibilityRole="button"
-        accessibilityLabel="زيادة"
-      >
-        <Plus size={16} color={disabled ? PG.textMuted : PG.purpleSoft} />
-      </PressableScale>
-      <Text style={[styles.score, { fontFamily: extra }]}>{value}</Text>
-      <PressableScale
-        disabled={disabled}
-        onPress={() => bump(-1)}
-        style={[styles.stepBtn, disabled && styles.stepBtnDisabled]}
-        accessibilityRole="button"
-        accessibilityLabel="إنقاص"
-      >
-        <Minus size={16} color={disabled ? PG.textMuted : PG.purpleSoft} />
-      </PressableScale>
+    <View style={[styles.spinner, disabled && styles.spinnerDisabled]}>
+      <Text style={[styles.spinnerNum, { fontFamily: extra }]}>{value}</Text>
+      <View style={styles.spinnerBtns}>
+        <Pressable
+          disabled={disabled}
+          onPress={() => bump(1)}
+          hitSlop={6}
+          style={styles.spinnerBtn}
+          accessibilityRole="button"
+          accessibilityLabel="زيادة"
+        >
+          <ChevronUp size={14} color={arrow} />
+        </Pressable>
+        <View style={styles.spinnerDivider} />
+        <Pressable
+          disabled={disabled}
+          onPress={() => bump(-1)}
+          hitSlop={6}
+          style={styles.spinnerBtn}
+          accessibilityRole="button"
+          accessibilityLabel="إنقاص"
+        >
+          <ChevronDown size={14} color={arrow} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -120,10 +126,13 @@ export function MatchPredictionCard({ match, isRTL, locked, finished }: MatchPre
               <Text style={[styles.bigScore, { fontFamily: extra }]}>{awayScore}</Text>
             </View>
           ) : (
-            <View style={[styles.stepperRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-              <Stepper value={home} onChange={setHome} />
-              <Text style={[styles.scoreDash, { fontFamily: extra }]}>-</Text>
-              <Stepper value={away} onChange={setAway} />
+            <View style={{ alignItems: 'center', gap: 6 }}>
+              <Text style={[styles.predictLabel, { fontFamily: medium }]}>توقع النتيجة</Text>
+              <View style={[styles.stepperRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+                <Stepper value={home} onChange={setHome} />
+                <Text style={[styles.scoreDash, { fontFamily: extra }]}>-</Text>
+                <Stepper value={away} onChange={setAway} />
+              </View>
             </View>
           )}
         </View>
@@ -145,14 +154,14 @@ export function MatchPredictionCard({ match, isRTL, locked, finished }: MatchPre
       {!readOnly && (
         <View style={[styles.modes, row]}>
           <ModeButton
-            label="فائز أو تعادل"
-            points="نقطة"
+            label="فائز أو تعادل (نقطة)"
+            icon={Star}
             active={mode === 'winner'}
             onPress={() => pickMode('winner')}
           />
           <ModeButton
-            label="نتيجة دقيقة"
-            points="3 نقاط"
+            label="نتيجة دقيقة (3 نقاط)"
+            icon={Target}
             active={mode === 'exact'}
             onPress={() => pickMode('exact')}
           />
@@ -164,16 +173,16 @@ export function MatchPredictionCard({ match, isRTL, locked, finished }: MatchPre
 
 function ModeButton({
   label,
-  points,
+  icon: Icon,
   active,
   onPress,
 }: {
   label: string;
-  points: string;
+  icon: typeof Star;
   active: boolean;
   onPress: () => void;
 }) {
-  const { medium, bold } = usePGFonts();
+  const { bold } = usePGFonts();
   return (
     <PressableScale
       onPress={onPress}
@@ -184,15 +193,16 @@ function ModeButton({
     >
       {active && (
         <LinearGradient
-          colors={['rgba(124,58,237,0.35)', 'rgba(159,90,251,0.15)']}
+          colors={['rgba(124,58,237,0.4)', 'rgba(159,90,251,0.18)']}
           style={StyleSheet.absoluteFill}
         />
       )}
-      <Text style={[styles.modeLabel, { fontFamily: bold, color: active ? PG.text : PG.textSecondary }]}>
+      <Icon size={13} color={active ? PG.purpleSoft : PG.textMuted} />
+      <Text
+        style={[styles.modeLabel, { fontFamily: bold, color: active ? PG.text : PG.textSecondary }]}
+        numberOfLines={1}
+      >
         {label}
-      </Text>
-      <Text style={[styles.modePoints, { fontFamily: medium, color: active ? PG.purpleSoft : PG.textMuted }]}>
-        {points}
       </Text>
     </PressableScale>
   );
@@ -219,31 +229,38 @@ const styles = StyleSheet.create({
   bigScore: { color: PG.text, fontSize: 30, minWidth: 26, textAlign: 'center' },
   scoreDash: { color: PG.textMuted, fontSize: 22 },
 
-  stepperRow: { alignItems: 'center', gap: 8 },
-  stepper: { alignItems: 'center', gap: 6 },
-  stepBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+  predictLabel: { color: PG.textMuted, fontSize: 11 },
+  stepperRow: { alignItems: 'center', gap: 10 },
+  spinner: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(124,58,237,0.20)',
+    gap: 6,
+    paddingLeft: 12,
+    paddingRight: 6,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(159,90,251,0.35)',
+    borderColor: 'rgba(159,90,251,0.28)',
   },
-  stepBtnDisabled: { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: PG.borderSoft },
-  score: { color: PG.text, fontSize: 26, minWidth: 30, textAlign: 'center' },
+  spinnerDisabled: { borderColor: PG.borderSoft, backgroundColor: 'rgba(255,255,255,0.03)' },
+  spinnerNum: { color: PG.text, fontSize: 22, minWidth: 20, textAlign: 'center' },
+  spinnerBtns: { alignItems: 'center' },
+  spinnerBtn: { paddingVertical: 1, paddingHorizontal: 2 },
+  spinnerDivider: { width: 14, height: 1, backgroundColor: 'rgba(255,255,255,0.12)' },
 
   lockedNote: { color: PG.textMuted, fontSize: 12, textAlign: 'center' },
 
   modes: { gap: 10 },
   modeBtn: {
     flex: 1,
-    paddingVertical: 12,
+    flexDirection: 'row',
+    paddingVertical: 11,
+    paddingHorizontal: 8,
     borderRadius: PG_RADII.md,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: 6,
     overflow: 'hidden',
     borderWidth: 1,
   },
@@ -253,6 +270,5 @@ const styles = StyleSheet.create({
     borderColor: PG.purpleLight,
     ...PG_GLOW_PURPLE,
   },
-  modeLabel: { fontSize: 13 },
-  modePoints: { fontSize: 11 },
+  modeLabel: { fontSize: 12 },
 });

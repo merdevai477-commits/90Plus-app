@@ -9,8 +9,9 @@
  * `useAnimatedProps` (Reanimated). Fully RTL-aware (fills from the right).
  */
 
+import { Gem } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { LayoutChangeEvent, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedProps,
@@ -43,7 +44,7 @@ const ORDINAL: Record<number, string> = {
 };
 
 export function GroupProgressCard({ rank, myPoints, abovePoints, isRTL }: GroupProgressCardProps) {
-  const { medium, bold, extra } = usePGFonts();
+  const { medium, extra } = usePGFonts();
   const [trackW, setTrackW] = useState(0);
   const fill = useSharedValue(0);
 
@@ -64,27 +65,20 @@ export function GroupProgressCard({ rank, myPoints, abovePoints, isRTL }: GroupP
   });
 
   const onLayout = (e: LayoutChangeEvent) => setTrackW(e.nativeEvent.layout.width);
-  const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
-  const align = isRTL ? 'right' : 'left';
 
   return (
     <GlassCard style={styles.card}>
-      <View style={[styles.head, row]}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { fontFamily: bold, textAlign: align }]}>
-            أنت في المركز {ORDINAL[rank] ?? rank}
-          </Text>
-          <Text style={[styles.sub, { fontFamily: medium, textAlign: align }]}>
-            {gap > 0
-              ? `تفصلك ${gap} نقاط عن المركز ${ORDINAL[rank - 1] ?? rank - 1}`
-              : 'أنت في الصدارة! حافظ على مركزك'}
-          </Text>
-        </View>
-        <View style={styles.pointsPill}>
-          <Text style={[styles.pointsPillTxt, { fontFamily: extra }]}>{myPoints}</Text>
-          <Text style={[styles.pointsPillLabel, { fontFamily: medium }]}>نقطة</Text>
-        </View>
+      <View style={styles.titleRow}>
+        <Gem size={16} color={PG.purpleLight} />
+        <Text style={[styles.title, { fontFamily: extra }]}>
+          أنت في المركز {ORDINAL[rank] ?? rank}
+        </Text>
       </View>
+      <Text style={[styles.sub, { fontFamily: medium }]}>
+        {gap > 0
+          ? `تفصلك ${gap} ${gap === 1 ? 'نقطة' : gap === 2 ? 'نقطتان' : 'نقاط'} عن المركز ${ORDINAL[rank - 1] ?? rank - 1}`
+          : 'أنت في الصدارة! حافظ على مركزك'}
+      </Text>
 
       <View style={styles.track} onLayout={onLayout}>
         {trackW > 0 && (
@@ -118,20 +112,21 @@ export function GroupProgressCard({ rank, myPoints, abovePoints, isRTL }: GroupP
 }
 
 const styles = StyleSheet.create({
-  card: { padding: PG_SPACING.lg, gap: PG_SPACING.md },
-  head: { alignItems: 'center', gap: PG_SPACING.md },
-  title: { color: PG.text, fontSize: 15 },
-  sub: { color: PG.textSecondary, fontSize: 12, marginTop: 3 },
-  pointsPill: {
+  card: {
+    padding: PG_SPACING.lg,
+    gap: PG_SPACING.sm,
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(124,58,237,0.22)',
-    borderWidth: 1,
-    borderColor: 'rgba(159,90,251,0.4)',
+    borderColor: 'rgba(159,90,251,0.35)',
+    backgroundColor: 'rgba(124,58,237,0.08)',
   },
-  pointsPillTxt: { color: PG.text, fontSize: 18 },
-  pointsPillLabel: { color: PG.textMuted, fontSize: 10, marginTop: -2 },
-  track: { height: BAR_HEIGHT, borderRadius: BAR_HEIGHT / 2, overflow: 'hidden' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  title: { color: PG.purpleSoft, fontSize: 15 },
+  sub: { color: PG.textSecondary, fontSize: 12, textAlign: 'center' },
+  track: {
+    height: BAR_HEIGHT,
+    borderRadius: BAR_HEIGHT / 2,
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+    marginTop: 4,
+  },
 });

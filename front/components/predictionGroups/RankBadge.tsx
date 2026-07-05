@@ -23,8 +23,21 @@ export interface RankBadgeProps {
 
 const MEDAL_RING: Record<number, string> = {
   1: '#FFF3D0',
-  2: '#EAD9A8',
-  3: '#E7C79A',
+  2: '#F2F4F7',
+  3: '#F0C9A0',
+};
+
+/** Gradient stops (light → base → deep) per medal rank. */
+const MEDAL_STOPS: Record<number, [string, string, string]> = {
+  1: ['#FCE3A0', PG.gold, PG.goldDeep], // gold
+  2: ['#F5F7FA', '#C9CFD8', '#8A93A0'], // silver
+  3: ['#F3C79B', '#D08B4E', '#9A5A26'], // bronze
+};
+
+const MEDAL_TEXT: Record<number, string> = {
+  1: '#3A2600',
+  2: '#2B303A',
+  3: '#3A2208',
 };
 
 export function RankBadge({ rank, size = 36 }: RankBadgeProps) {
@@ -43,14 +56,15 @@ export function RankBadge({ rank, size = 36 }: RankBadgeProps) {
   }
 
   const r = size / 2;
+  const stops = MEDAL_STOPS[rank];
   return (
-    <View style={[{ width: size, height: size }, PG_GLOW_GOLD]}>
+    <View style={[{ width: size, height: size }, rank === 1 && PG_GLOW_GOLD]}>
       <Svg width={size} height={size}>
         <Defs>
           <RadialGradient id={gradientId} cx="50%" cy="36%" r="68%">
-            <Stop offset="0" stopColor="#FCE3A0" />
-            <Stop offset="0.55" stopColor={PG.gold} />
-            <Stop offset="1" stopColor={PG.goldDeep} />
+            <Stop offset="0" stopColor={stops[0]} />
+            <Stop offset="0.55" stopColor={stops[1]} />
+            <Stop offset="1" stopColor={stops[2]} />
           </RadialGradient>
         </Defs>
         <Circle
@@ -64,7 +78,9 @@ export function RankBadge({ rank, size = 36 }: RankBadgeProps) {
       </Svg>
       <View style={StyleSheet.absoluteFill}>
         <View style={styles.center}>
-          <Text style={[styles.medalTxt, { fontFamily: extra, fontSize: size * 0.44 }]}>
+          <Text
+            style={[styles.medalTxt, { fontFamily: extra, fontSize: size * 0.44, color: MEDAL_TEXT[rank] }]}
+          >
             {rank}
           </Text>
         </View>

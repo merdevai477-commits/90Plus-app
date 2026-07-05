@@ -26,6 +26,8 @@ export interface LeaderboardRowProps {
   showSubtitle?: boolean;
   /** Animate the points counter (disable for long off-screen lists if needed). */
   animatePoints?: boolean;
+  /** Show the trailing points column (hidden on the compact home top-5). */
+  showPoints?: boolean;
 }
 
 function initials(name: string): string {
@@ -37,6 +39,7 @@ export function LeaderboardRow({
   isRTL,
   showSubtitle = false,
   animatePoints = true,
+  showPoints = true,
 }: LeaderboardRowProps) {
   const { medium, bold, extra } = usePGFonts();
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
@@ -63,6 +66,7 @@ export function LeaderboardRow({
         )}
       </View>
 
+      {showPoints && (
       <View style={[styles.pointsBox, { alignItems: isRTL ? 'flex-start' : 'flex-end' }]}>
         {animatePoints ? (
           <AnimatedCounter
@@ -76,6 +80,7 @@ export function LeaderboardRow({
         )}
         <Text style={[styles.pointsLabel, { fontFamily: medium }]}>نقطة</Text>
       </View>
+      )}
     </View>
   );
 }
