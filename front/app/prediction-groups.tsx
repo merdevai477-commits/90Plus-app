@@ -23,8 +23,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useToast } from '../contexts/ToastContext';
 import { useTranslation } from '../src/i18n';
 import { useScreenFont } from '../utils/fontSetup';
-import { AnimatedTabs } from '../components/predictionGroups/AnimatedTabs';
 import { GROUP } from '../components/predictionGroups/data';
+import {
+  GROUP_NAV_CLEARANCE,
+  GroupBottomNav,
+  GroupNavKey,
+} from '../components/predictionGroups/GroupBottomNav';
 import { GroupHeaderCard } from '../components/predictionGroups/GroupHeaderCard';
 import {
   HomeSection,
@@ -34,13 +38,6 @@ import {
 } from '../components/predictionGroups/sections';
 import { PG, PG_GRADIENTS, usePGFonts } from '../components/predictionGroups/theme';
 
-const MAIN_TABS = [
-  { key: 'home', label: 'الرئيسية' },
-  { key: 'standings', label: 'الترتيب' },
-  { key: 'predictions', label: 'التوقعات' },
-  { key: 'stats', label: 'الإحصائيات' },
-];
-
 export default function PredictionGroupsScreen() {
   useScreenFont();
   const insets = useSafeAreaInsets();
@@ -49,7 +46,7 @@ export default function PredictionGroupsScreen() {
   const toast = useToast();
   const { extra } = usePGFonts();
 
-  const [tab, setTab] = useState('home');
+  const [tab, setTab] = useState<GroupNavKey>('group');
   const [copied, setCopied] = useState(false);
 
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
@@ -78,7 +75,8 @@ export default function PredictionGroupsScreen() {
     }
   }, []);
 
-  const contentPadding = { paddingHorizontal: 16, paddingBottom: insets.bottom + 32, gap: 16 };
+  const navClearance = insets.bottom + GROUP_NAV_CLEARANCE;
+  const contentPadding = { paddingHorizontal: 16, paddingBottom: navClearance, gap: 16 };
 
   return (
     <View style={styles.root}>
@@ -106,15 +104,11 @@ export default function PredictionGroupsScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.tabsWrap}>
-        <AnimatedTabs tabs={MAIN_TABS} activeKey={tab} onChange={setTab} isRTL={isRTL} />
-      </View>
-
       {tab === 'standings' ? (
-        <LeaderboardSection isRTL={isRTL} contentPaddingBottom={insets.bottom + 32} />
+        <LeaderboardSection isRTL={isRTL} contentPaddingBottom={navClearance} />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={contentPadding}>
-          {tab === 'home' && (
+          {tab === 'group' && (
             <>
               <GroupHeaderCard
                 name={GROUP.name}
@@ -127,12 +121,19 @@ export default function PredictionGroupsScreen() {
                 isRTL={isRTL}
               />
               <HomeSection isRTL={isRTL} onSeeAll={() => setTab('standings')} />
+              <StatsSection isRTL={isRTL} />
             </>
           )}
-          {tab === 'predictions' && <PredictionsSection isRTL={isRTL} />}
-          {tab === 'stats' && <StatsSection isRTL={isRTL} />}
+          {tab === 'round' && <PredictionsSection isRTL={isRTL} />}
         </ScrollView>
       )}
+
+      <GroupBottomNav
+        activeKey={tab}
+        onChange={setTab}
+        isRTL={isRTL}
+        bottomInset={insets.bottom}
+      />
     </View>
   );
 }
@@ -150,6 +151,4 @@ const styles = StyleSheet.create({
   },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: PG.text, fontSize: 19, flex: 1, textAlign: 'center' },
-
-  tabsWrap: { paddingHorizontal: 16, paddingBottom: 12 },
 });
