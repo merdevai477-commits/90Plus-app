@@ -286,6 +286,120 @@ export function getLocalizedMatchStatus(
   }
 }
 
+// ─── Match statistics type localization ──────────────────────────────────────
+
+/**
+ * Normalize a provider stat label (API-Football / 365Scores) to a stable key
+ * so we can look it up in `matchDetails.statTypes`. Providers use different
+ * casing/spacing/spelling (e.g. "Shots on Goal", "shots_on_goal", "Ball
+ * Possession", "Possession %"), so we strip everything but letters and digits.
+ */
+function normalizeStatKey(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+const STAT_TYPE_ALIASES: Record<string, string> = {
+  shotsongoal: 'shotsOnGoal',
+  shotsontarget: 'shotsOnGoal',
+  shotsoffgoal: 'shotsOffGoal',
+  shotsofftarget: 'shotsOffGoal',
+  totalshots: 'totalShots',
+  shotstotal: 'totalShots',
+  blockedshots: 'blockedShots',
+  shotsblocked: 'blockedShots',
+  shotsinsidebox: 'shotsInsidebox',
+  shotsoutsidebox: 'shotsOutsidebox',
+  fouls: 'fouls',
+  cornerkicks: 'cornerKicks',
+  corners: 'cornerKicks',
+  offsides: 'offsides',
+  ballpossession: 'ballPossession',
+  possession: 'ballPossession',
+  possessionpercentage: 'ballPossession',
+  yellowcards: 'yellowCards',
+  redcards: 'redCards',
+  goalkeepersaves: 'goalkeeperSaves',
+  saves: 'goalkeeperSaves',
+  totalpasses: 'totalPasses',
+  passes: 'totalPasses',
+  passesaccurate: 'passesAccurate',
+  accuratepasses: 'passesAccurate',
+  passespercentage: 'passesPercentage',
+  passaccuracy: 'passesPercentage',
+  expectedgoals: 'expectedGoals',
+  xg: 'expectedGoals',
+  expectedgoalsxg: 'expectedGoals',
+  tackles: 'tackles',
+  attacks: 'attacks',
+  dangerousattacks: 'dangerousAttacks',
+  crosses: 'crosses',
+  freekicks: 'freeKicks',
+  throwins: 'throwIns',
+  goalkicks: 'goalKicks',
+  substitutions: 'substitutions',
+  penalties: 'penalties',
+};
+
+/**
+ * Localize a match statistics row label coming from the provider. Falls back
+ * to the raw label when we don't have a mapping, so new stat types still show
+ * something meaningful (in the provider's language) instead of nothing.
+ */
+export function getLocalizedStatType(
+  type: string | null | undefined,
+  language: Language,
+): string {
+  const raw = (type ?? '').toString().trim();
+  if (!raw) return '';
+
+  const key = STAT_TYPE_ALIASES[normalizeStatKey(raw)];
+  if (!key) return raw;
+
+  const tMatchDetails = (translations[language]?.matchDetails
+    ?? translations.en.matchDetails) as Record<string, unknown>;
+  const statTypes = (tMatchDetails.statTypes
+    ?? (translations.en.matchDetails as Record<string, unknown>).statTypes) as
+    | Record<string, string>
+    | undefined;
+
+  return statTypes?.[key] ?? raw;
+}
+
+// ─── Match event type localization ───────────────────────────────────────────
+
+/**
+ * Localize a match event's descriptive label. Known types (goals, cards,
+ * substitutions) map to locale keys; unknown types fall back to the provider
+ * `detail` string so we never show a blank label.
+ */
+export function getLocalizedEventLabel(
+  type: string | null | undefined,
+  detail: string | null | undefined,
+  language: Language,
+): string {
+  const md = (translations[language]?.matchDetails
+    ?? translations.en.matchDetails) as Record<string, unknown>;
+  const label = (key: string, fallback: string): string =>
+    typeof md[key] === 'string' ? (md[key] as string) : fallback;
+
+  const rawType = (type ?? '').toString().toLowerCase();
+  const rawDetail = (detail ?? '').toString();
+
+  if (rawType === 'goal') {
+    if (/own/i.test(rawDetail)) return label('ownGoal', 'Own Goal');
+    if (/penalty/i.test(rawDetail)) return label('penaltyGoal', 'Penalty Goal');
+    return label('goal', 'Goal');
+  }
+  if (rawType === 'card') {
+    if (/yellow/i.test(rawDetail)) return label('yellowCard', 'Yellow Card');
+    if (/red/i.test(rawDetail)) return label('redCard', 'Red Card');
+  }
+  if (rawType === 'subst') return label('substitution', 'Substitution');
+  if (rawType === 'var') return rawDetail || 'VAR';
+
+  return rawDetail || label('events', 'Event');
+}
+
 // ─── Server error code localization ──────────────────────────────────────────
 
 /**

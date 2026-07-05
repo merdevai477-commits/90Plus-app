@@ -1058,7 +1058,7 @@ export default function PlayerProfileScreen() {
                                     </TouchableOpacity>
                                 )}
                                 <Text style={styles.seasonBadge}>
-                                    {is365Source ? 'Match stats' : `${pp.seasonStats} ${seasonYear}/${seasonYear + 1}`}
+                                    {is365Source ? pp.matchStats : `${pp.seasonStats} ${seasonYear}/${seasonYear + 1}`}
                                 </Text>
                             </View>
                         </View>
@@ -1068,7 +1068,7 @@ export default function PlayerProfileScreen() {
                 <Animated.View style={[styles.body, { opacity: fadeAnim }]}>
                     {is365Source && (
                         <View style={styles.infoSection}>
-                            <Text style={styles.sectionTitle}>Match stats</Text>
+                            <Text style={styles.sectionTitle}>{pp.matchStats}</Text>
                             <View style={styles.infoCardContainer}>
                                 {loading && !matchReport365 ? (
                                     <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
@@ -1094,7 +1094,7 @@ export default function PlayerProfileScreen() {
                                         )}
                                         {(matchReport365.chartEvents ?? []).length > 0 && (
                                             <View style={{ marginTop: 12 }}>
-                                                <Text style={[styles.infoLabel, { marginBottom: 8 }]}>Events</Text>
+                                                <Text style={[styles.infoLabel, { marginBottom: 8 }]}>{pp.eventsSection}</Text>
                                                 {(matchReport365.chartEvents ?? [])
                                                     .map(format365ChartEvent)
                                                     .filter((line): line is string => !!line)

@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   Dimensions,
-  Image,
   TouchableOpacity,
   ViewStyle,
   TextStyle,
   ImageStyle,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   groupPlayersByGridLine,
@@ -456,7 +456,15 @@ export const FootballField: React.FC<FootballFieldProps> = ({
 
           <View style={viewStyles.playerPhotoCircle}>
             {player.photo ? (
-              <Image source={{ uri: player.photo }} style={imageStyles.playerImage} />
+              <ExpoImage
+                source={{ uri: player.photo }}
+                style={imageStyles.playerImage}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={120}
+                recyclingKey={player.photo}
+                placeholder={require('../../assets/images/football.png')}
+              />
             ) : (
               <View style={viewStyles.placeholderParams}>
                 <Text style={textStyles.placeholderNumber}>

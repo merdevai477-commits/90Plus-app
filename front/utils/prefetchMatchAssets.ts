@@ -25,6 +25,20 @@ export function prefetchVideoThumbnails(thumbnails: string[]): void {
   }
 }
 
+/**
+ * Warm the disk cache with a batch of image URLs (player/coach photos, etc.)
+ * so they render in a snap when their tab/section opens. Silently deduped,
+ * capped, and non-blocking.
+ */
+export function prefetchImageUrls(urls: Array<string | null | undefined>, cap = 60): void {
+  const unique = Array.from(
+    new Set(urls.filter((u): u is string => typeof u === 'string' && u.length > 0)),
+  ).slice(0, cap);
+  if (unique.length > 0) {
+    Image.prefetch(unique, 'memory-disk').catch(() => {});
+  }
+}
+
 /** Prefetch team/league logos + fast country flags after matches load. */
 export function prefetchMatchAssets(matches: Match[]): void {
   if (matches.length === 0) return;

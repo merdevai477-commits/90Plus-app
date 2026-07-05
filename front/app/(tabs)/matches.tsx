@@ -34,7 +34,8 @@ import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { getWorldCupTimeLeft, WC_2026_OFFICIAL_LOGO } from '../../constants/worldCup';
 import type { ImageSource } from 'expo-image';
-import { resolveLiveMinuteLabel } from '../../components/Matches/leagueApiUtils';
+import { resolveLiveMinuteLabel, resolveLiveSecondsLabel } from '../../components/Matches/leagueApiUtils';
+import { useSecondTick } from '../../hooks/useSecondTick';
 import {
   getSharedLivePulse,
   subscribeSharedLivePulse,
@@ -305,6 +306,16 @@ const MatchRow = memo(function MatchRow({
   const awayName = getTeamDisplayName(fixture.away, language);
   const sharedLivePulse = getSharedLivePulse();
 
+  // Live MM:SS clock: tick every second only while this row is in normal play.
+  const liveInPlay =
+    !!fixture.live && ['1H', '2H', 'ET'].includes((fixture.statusShort ?? '').toUpperCase());
+  useSecondTick(liveInPlay);
+  const liveClock = liveInPlay
+    ? resolveLiveSecondsLabel(fixture.statusShort, fixture.elapsed, {
+        startTimestamp: fixture.startTimestamp,
+      })
+    : undefined;
+
   useEffect(() => {
     if (!fixture.live) return;
     subscribeSharedLivePulse();
@@ -393,7 +404,8 @@ const MatchRow = memo(function MatchRow({
             {fixture.live ? (
               <View style={styles.liveMetaCol}>
                 <Text style={styles.minuteTxtLive}>
-                  {fixture.minute ??
+                  {liveClock ??
+                    fixture.minute ??
                     resolveLiveMinuteLabel(fixture.statusShort, fixture.elapsed, {
                       startTimestamp: fixture.startTimestamp,
                     }) ??
@@ -1022,7 +1034,10 @@ export default function MatchesHubScreenV2() {
   // (empty until the server sync completes).
   useEffect(() => {
     setPredictedMatches({});
-    setTicketsRemaining(10);
+    // Guests have no usable tickets (they must sign in to predict). Signed-in
+    // users start at the daily default until the server sync returns the real
+    // remaining count.
+    setTicketsRemaining(userId ? 10 : 0);
   }, [userId]);
 
   useEffect(() => {
@@ -1297,6 +1312,16 @@ export default function MatchesHubScreenV2() {
   //  6. Offline? enqueue for later and return. Online? call the backend.
   //  7. On failure, match by error CODE (not string) and roll back.
   const handlePredict = useCallback(async (fixtureId: string, type: 'home' | 'draw' | 'away') => {
+    // Guests cannot predict — gate BEFORE the optimistic update so we never
+    // show a fake "saved" toast / decremented ticket that later rolls back.
+    if (!userId) {
+      toastManager.showWarning(
+        t('matches.prediction.signInRequired'),
+        t('matches.prediction.signInRequiredMessage'),
+        { position: 'top' },
+      );
+      return;
+    }
     if (ticketsRemaining <= 0) {
       toastManager.showWarning(
         t('matches.prediction.noTicketsTitle'),

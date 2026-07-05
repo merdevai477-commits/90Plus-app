@@ -126,6 +126,47 @@ export const resolveLiveMinuteLabel = (
 };
 
 /**
+ * Live "MM:SS" clock for in-play periods, computed locally from the period
+ * start timestamp so the seconds tick smoothly between API updates.
+ *
+ * Returns undefined (caller falls back to the minute-only label) when:
+ *  - the status is not normal in-play (HT/BT/P/stoppage), or
+ *  - we have no reliable period start, or
+ *  - the locally computed minute drifts more than 2' from the API elapsed
+ *    (avoids showing a clock that disagrees with the authoritative minute).
+ */
+export const resolveLiveSecondsLabel = (
+  statusShort: string | undefined | null,
+  elapsed: number | null | undefined,
+  options?: { startTimestamp?: number },
+): string | undefined => {
+  const short = (statusShort ?? '').trim();
+  if (short !== '1H' && short !== '2H' && short !== 'ET') return undefined;
+
+  const start = options?.startTimestamp;
+  if (!start) return undefined;
+  const startSec = start > 1_000_000_000_000 ? Math.floor(start / 1000) : start;
+  const now = Math.floor(Date.now() / 1000);
+  const intoPeriod = now - startSec;
+  if (intoPeriod < 0) return undefined;
+
+  const offsetMin = short === '2H' ? 45 : short === 'ET' ? 90 : 0;
+  const totalSeconds = intoPeriod + offsetMin * 60;
+  const minute = Math.floor(totalSeconds / 60);
+
+  // Let the minute-only label handle stoppage overflow (45+X / 90+X / 120+X).
+  if (short === '1H' && minute >= 45) return undefined;
+  if (short === '2H' && minute >= 90) return undefined;
+  if (short === 'ET' && minute >= 120) return undefined;
+
+  // Guard against clock drift vs. the authoritative API minute.
+  if (elapsed != null && Math.abs(minute - elapsed) > 2) return undefined;
+
+  const seconds = totalSeconds % 60;
+  return `${minute}:${String(seconds).padStart(2, '0')}`;
+};
+
+/**
  * Formats match minute for display
  * Uses unified status engine with correct 90+X format
  */

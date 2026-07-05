@@ -180,9 +180,11 @@ export function getScores365ExperimentConfig(): Scores365ExperimentConfig {
 
 export function isScores365ForceEnglish(): boolean {
   const raw = process.env.SCORES365_FORCE_ENGLISH?.trim();
-  if (raw === 'false' || raw === '0') return false;
-  // Default ON until app OTA ships i18n→365Scores locale sync.
-  return true;
+  // Default OFF: 365Scores upstream is queried in the user's language (langId 27
+  // for Arabic, 1 for English). Per-language caching is keyed by langId, so this
+  // does not cause cross-language collisions. Set SCORES365_FORCE_ENGLISH=true to
+  // force English everywhere (e.g. for debugging or legacy clients).
+  return raw === 'true' || raw === '1';
 }
 
 /** Language passed into 365Scores upstream (forced EN when isScores365ForceEnglish). */

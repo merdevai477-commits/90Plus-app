@@ -14,9 +14,9 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent } from '../../services/apiFootball';
+import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent, Fixture } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
-import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
+import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus, getLocalizedStatType, getLocalizedEventLabel } from '../../utils/i18nHelpers';
 import { prefetchFootballTranslations } from '../../src/stores/footballTranslationStore';
 import { collectUniqueStrings } from '../../utils/footballNamePrefetch';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
@@ -40,7 +40,7 @@ import {
 import { FootballField } from '../../components/match-details/FootballField';
 import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
 import { applySubstitutionsToPitch } from '../../utils/lineupMatchState';
-import { matchArchiveService } from '../../services/matchArchiveService';
+import { matchArchiveService, type MatchArchive } from '../../services/matchArchiveService';
 import TeamBadge from '../../components/common/TeamBadge';
 import LeagueIcon from '../../components/common/LeagueIcon';
 import { useScreenFont } from '../../utils/fontSetup';
@@ -55,6 +55,7 @@ import {
 } from '../../components/match-details/MatchDetailsSkeleton';
 import { useLiveFixture } from '../../hooks/useLiveFixture';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
+import { buildSnapshotFromRaw } from '../../src/store/liveFixtureSync';
 import {
   hasApiStatistics,
 } from '../../utils/matchStatsFallback';
@@ -62,6 +63,7 @@ import { hasLineupData, isAuthoritativeLineupData } from '../../utils/matchLineu
 import { sortPlayersByGrid } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
 import { buildScores365CoachPhotoUrl } from '../../utils/scores365AthletePhoto';
+import { prefetchImageUrls } from '../../utils/prefetchMatchAssets';
 import {
   WC_LEAGUE_ID,
   SCORES365_LEAGUE_ID_OFFSET,
@@ -81,7 +83,77 @@ const LIVE_MATCH_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] a
 const FINISHED_MATCH_STATUSES = ['FT', 'AET', 'PEN'] as const;
 
 interface MatchDetailsParams {
-  fixtureId: string;
+  fixtureId: string | string[];
+}
+
+/**
+ * Rebuild the raw API-Football shapes the live store expects from a locally
+ * archived (finished) match. Lets us ingest an archived match into the live
+ * store when the network fetch returns nothing, so the details screen renders
+ * the header/score/events instead of a blank shell.
+ */
+function buildFixtureFromArchive(archive: MatchArchive): {
+  fixture: Fixture;
+  events: FixtureEvent[];
+} {
+  const date = archive.date instanceof Date ? archive.date : new Date(archive.date);
+  const iso = Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+
+  const fixture: Fixture = {
+    fixture: {
+      id: archive.fixtureId,
+      referee: null,
+      timezone: 'UTC',
+      date: iso,
+      timestamp: Math.floor(date.getTime() / 1000) || 0,
+      periods: { first: null, second: null },
+      venue: {
+        id: null,
+        name: archive.venue?.name ?? null,
+        city: archive.venue?.city ?? null,
+      },
+      status: {
+        long: archive.status,
+        short: archive.status,
+        elapsed: null,
+      },
+    },
+    league: {
+      id: archive.league?.id ?? 0,
+      name: archive.league?.name ?? '',
+      country: archive.league?.country ?? '',
+      logo: archive.league?.logo ?? '',
+      flag: null,
+      season: date.getFullYear(),
+      round: archive.league?.round ?? '',
+    },
+    teams: {
+      home: { ...archive.homeTeam, winner: null },
+      away: { ...archive.awayTeam, winner: null },
+    },
+    goals: { home: archive.score?.home ?? null, away: archive.score?.away ?? null },
+    score: {
+      halftime: { home: null, away: null },
+      fulltime: { home: archive.score?.home ?? null, away: archive.score?.away ?? null },
+      extratime: { home: null, away: null },
+      penalty: { home: null, away: null },
+    },
+  };
+
+  const events: FixtureEvent[] = (archive.events ?? []).map((e) => {
+    const team = e.team === 'home' ? archive.homeTeam : archive.awayTeam;
+    return {
+      time: { elapsed: e.minute ?? 0, extra: e.extraMinute ?? null },
+      team: { id: team.id, name: team.name, logo: team.logo },
+      player: { id: 0, name: e.player ?? '' },
+      assist: { id: null, name: e.assist ?? null },
+      type: e.type,
+      detail: e.detail,
+      comments: e.comments ?? null,
+    };
+  });
+
+  return { fixture, events };
 }
 
 /** Win/loss/draw from the displayed team's score — not fixture home/away winner flags. */
@@ -121,7 +193,14 @@ const MatchDetailsScreen = () => {
   // Selected standings group index (World Cup groups A-G etc.).
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
 
-  const fixtureId = parseInt(params.fixtureId || '0', 10);
+  // Expo Router can deliver a param as `string`, `string[]`, or drop it entirely
+  // on physical devices during tab navigation. Normalize defensively so a valid
+  // id is never lost (which previously showed an "Invalid match ID" screen).
+  const rawFixtureId = Array.isArray(params.fixtureId)
+    ? params.fixtureId[0]
+    : params.fixtureId;
+  const parsedFixtureId = parseInt(String(rawFixtureId ?? '').trim(), 10);
+  const fixtureId = Number.isFinite(parsedFixtureId) && parsedFixtureId > 0 ? parsedFixtureId : 0;
 
   const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
   const fixture = snapshot?.fixture ?? null;
@@ -293,10 +372,30 @@ const MatchDetailsScreen = () => {
         if (hasApiStatistics(snap.statistics)) loadedTabsRef.current.add('stats');
         if (snap.venue) loadedTabsRef.current.add('stadium');
       } else {
+        // Live fetch returned nothing — fall back to a locally/remotely archived
+        // match and ingest it so the screen renders instead of a blank shell.
         const archived = await matchArchiveService.getArchivedMatch(String(fixtureId));
-        if (!archived) {
-          setError(t.matchDetails.loadDetailsFailed);
+        if (archived) {
+          try {
+            const { fixture: archivedFixture, events: archivedEvents } =
+              buildFixtureFromArchive(archived);
+            const snapshotFromArchive = buildSnapshotFromRaw({
+              fixtureId,
+              fixture: archivedFixture,
+              events: archivedEvents,
+              source: 'http-full',
+            });
+            if (snapshotFromArchive) {
+              useLiveFixtureStore.getState().ingestSnapshot(snapshotFromArchive);
+            } else {
+              setError(t.matchDetails.loadDetailsFailed);
+            }
+          } catch {
+            setError(t.matchDetails.loadDetailsFailed);
+          }
         }
+        // No archive and no live data: leave `fixture` null. The render path
+        // shows a dedicated "match unavailable" empty state (not a blank shell).
       }
 
       setLoading(false);
@@ -457,6 +556,9 @@ const MatchDetailsScreen = () => {
   }, [fixtureId, isLive, activeTab, loadLineupsIfNeeded]);
 
   // Auto-retry lineups while the tab is open (capped — then show empty state + manual retry).
+  // Live matches keep retrying (lineups can appear late); non-live matches (weak
+  // leagues / lower divisions that never publish lineups) get a single quick
+  // attempt so the user sees the empty state fast instead of a long spinner.
   useEffect(() => {
     if (lineupsTabRetryRef.current) {
       clearInterval(lineupsTabRetryRef.current);
@@ -464,15 +566,16 @@ const MatchDetailsScreen = () => {
     }
     if (activeTab !== 'lineups' || !fixtureId || lineupsError) return;
     if (isAuthoritativeLineupData(lineups)) return;
-    if (lineupFetchAttempts >= MAX_LINEUP_AUTO_RETRIES) return;
+    const maxAttempts = isLive() ? MAX_LINEUP_AUTO_RETRIES : 1;
+    if (lineupFetchAttempts >= maxAttempts) return;
 
     const tick = () => {
-      if (!lineupsLoading && lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES) {
+      if (!lineupsLoading && lineupFetchAttempts < maxAttempts) {
         void loadLineupsIfNeeded(true);
       }
     };
     tick();
-    lineupsTabRetryRef.current = setInterval(tick, 8_000);
+    lineupsTabRetryRef.current = setInterval(tick, isLive() ? 8_000 : 4_000);
 
     return () => {
       if (lineupsTabRetryRef.current) {
@@ -488,8 +591,27 @@ const MatchDetailsScreen = () => {
     lineupsLoading,
     lineupFetchAttempts,
     isFinishedMatch,
+    isLive,
     loadLineupsIfNeeded,
   ]);
+
+  // Warm the image cache with lineup player + coach photos as soon as lineups
+  // are available (even before the user opens the tab) so pitch/bench photos
+  // render instantly instead of loading one-by-one.
+  useEffect(() => {
+    if (!hasLineupData(lineups)) return;
+    const urls: Array<string | null | undefined> = [];
+    for (const lineup of lineups) {
+      urls.push(resolveCoachPhoto(lineup.coach?.id, lineup.coach?.photo));
+      for (const s of lineup.startXI ?? []) {
+        urls.push(resolveLineupPlayerPhoto(s.player.id, s.player.photo));
+      }
+      for (const s of lineup.substitutes ?? []) {
+        urls.push(resolveLineupPlayerPhoto(s.player.id, s.player.photo));
+      }
+    }
+    prefetchImageUrls(urls);
+  }, [lineups, resolveCoachPhoto, resolveLineupPlayerPhoto]);
 
   const loadStatsIfNeeded = useCallback(async (force = false) => {
     if (!fixtureId) return;
@@ -928,19 +1050,7 @@ const MatchDetailsScreen = () => {
                     <>
                       {!!event.player.name && <Text style={styles.eventPlayer}>{String(event.player.name)}</Text>}
                       <Text style={styles.eventType}>
-                        {event.type === 'Goal' && /own/i.test(event.detail)
-                          ? t.matchDetails.ownGoal
-                          : event.type === 'Goal' && /penalty/i.test(event.detail)
-                            ? t.matchDetails.penaltyGoal
-                            : event.type === 'Goal'
-                              ? t.matchDetails.goal
-                              : event.type === 'Card' && /yellow/i.test(event.detail)
-                                ? t.matchDetails.yellowCard
-                                : event.type === 'Card' && /red/i.test(event.detail)
-                                  ? t.matchDetails.redCard
-                                  : event.type === 'subst'
-                                    ? t.matchDetails.substitution
-                                    : event.detail}
+                        {getLocalizedEventLabel(event.type, event.detail, language)}
                       </Text>
                       {!!event.assist?.name && event.type === 'Goal' && (
                         <Text style={styles.eventAssist}>{t.matchDetails?.assist || 'Assist'}: {String(event.assist.name)}</Text>
@@ -978,7 +1088,7 @@ const MatchDetailsScreen = () => {
       // live matches always poll; non-finished matches retry until the cap.
       // Finished matches with no data must fall through to the empty state
       // immediately so the user never gets stuck on an infinite spinner.
-      const stillRetrying = lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES;
+      const stillRetrying = lineupFetchAttempts < (isLive() ? MAX_LINEUP_AUTO_RETRIES : 1);
       if (stillRetrying) {
         return (
           <View style={styles.emptyState}>
@@ -1231,7 +1341,7 @@ const MatchDetailsScreen = () => {
               <View key={index} style={styles.statRow}>
                 <Text style={styles.statValue}>{String(homeValue || '0')}</Text>
                 <View style={styles.statCenter}>
-                  <Text style={styles.statLabel}>{String(stat.type || '')}</Text>
+                  <Text style={styles.statLabel}>{getLocalizedStatType(stat.type, language)}</Text>
                   <View style={styles.statBarsContainer}>
                     <View style={[styles.statBar, styles.statBarHome, { width: `${homePercentage}%` }]} />
                     <View style={[styles.statBar, styles.statBarAway, { width: `${awayPercentage}%` }]} />
@@ -1323,7 +1433,7 @@ const MatchDetailsScreen = () => {
                   </View>
                   <View style={styles.fixtureInfo}>
                     <Text style={styles.fixtureOpponent} numberOfLines={1}>
-                      {getTeamDisplayName(row.teams.home.name, language)} vs{' '}
+                      {getTeamDisplayName(row.teams.home.name, language)} {t.matchDetails.vs}{' '}
                       {getTeamDisplayName(row.teams.away.name, language)}
                     </Text>
                     <Text style={styles.fixtureLeague}>
@@ -1386,7 +1496,7 @@ const MatchDetailsScreen = () => {
                     <TeamBadge name={opponent.name} logo={opponent.logo} size={40} color="transparent" />
                     <View style={styles.fixtureInfo}>
                       <Text style={styles.fixtureOpponent} numberOfLines={1}>
-                        vs {getTeamDisplayName(opponent.name, language)}
+                        {t.matchDetails.vs} {getTeamDisplayName(opponent.name, language)}
                       </Text>
                       <Text style={styles.fixtureLeague}>
                         {getLeagueDisplayName(
@@ -1458,7 +1568,7 @@ const MatchDetailsScreen = () => {
               <Ionicons name="location" size={12} color={PURPLE_SOFT} />
               <Text style={styles.stadiumPillText}>{t.matchDetails.stadium || 'Stadium'}</Text>
             </View>
-            <Text style={styles.stadiumName}>{venueData.name || 'Unknown Stadium'}</Text>
+            <Text style={styles.stadiumName}>{venueData.name || t.matchDetails.stadium || 'Stadium'}</Text>
             {(venueData.city || venueData.country) && (
               <Text style={styles.stadiumSubtitle}>
                 {[venueData.city, venueData.country].filter(Boolean).join(' • ')}
@@ -1568,9 +1678,9 @@ const MatchDetailsScreen = () => {
         <View style={styles.standingsHeader}>
           <Text style={[styles.standingsHeaderText, { width: 30 }]}>#</Text>
           <Text style={[styles.standingsHeaderText, { flex: 1, textAlign: 'left' }]}>{t.matchDetails.team}</Text>
-          <Text style={[styles.standingsHeaderText, { width: 30 }]}>P</Text>
-          <Text style={[styles.standingsHeaderText, { width: 30 }]}>GD</Text>
-          <Text style={[styles.standingsHeaderText, { width: 30 }]}>Pts</Text>
+          <Text style={[styles.standingsHeaderText, { width: 30 }]}>{t.matchDetails.standingsPlayed}</Text>
+          <Text style={[styles.standingsHeaderText, { width: 30 }]}>{t.matchDetails.standingsGoalDiff}</Text>
+          <Text style={[styles.standingsHeaderText, { width: 30 }]}>{t.matchDetails.standingsPoints}</Text>
         </View>
         {rows.map((team: any, index: number) => {
           const homeRef = {
@@ -1710,6 +1820,36 @@ const MatchDetailsScreen = () => {
     );
   }
 
+  // No live data, no archive, not loading, no error: show a dedicated empty
+  // state instead of an empty header/tabs shell on a dark background.
+  if (!fixture && !loading) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#0f0720" />
+        <View style={styles.customHeader}>
+          <TouchableOpacity
+            style={styles.backButtonRound}
+            onPress={() => router.push('/(tabs)/matches' as any)}
+            accessibilityRole="button"
+            accessibilityLabel={t.matchDetails.backToMatches}
+          >
+            <Ionicons name="chevron-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t.matchDetails.title}</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Ionicons name="football-outline" size={64} color="#333" />
+          <Text style={styles.errorText}>{t.matchDetails.matchUnavailable}</Text>
+          <Text style={styles.emptyStateSubtext}>{t.matchDetails.matchUnavailableSubtext}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadMatchDetails}>
+            <Text style={styles.retryButtonText}>{t.common.retry}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   const tabs = [
     { key: 'events', label: t.matchDetails.events, icon: 'football' as const },
     { key: 'lineups', label: t.matchDetails.lineups, icon: 'people' as const },
@@ -1729,7 +1869,7 @@ const MatchDetailsScreen = () => {
           style={styles.backButtonRound}
           onPress={() => router.push('/(tabs)/matches' as any)}
           accessibilityRole="button"
-          accessibilityLabel="العودة إلى المباريات"
+          accessibilityLabel={t.matchDetails.backToMatches}
         >
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -1771,6 +1911,11 @@ const MatchDetailsScreen = () => {
           }
           penaltyHome={fixture?.score?.penalty?.home ?? undefined}
           penaltyAway={fixture?.score?.penalty?.away ?? undefined}
+          halftimeLabel={getLocalizedMatchStatus('HT', language)}
+          finishedLabel={getLocalizedMatchStatus('FT', language)}
+          liveLabel={getLocalizedMatchStatus('LIVE', language)}
+          vsLabel={t.matchDetails.vs}
+          penaltiesShortLabel={getLocalizedMatchStatus('PEN', language)}
         />
 
         {/* Modern Tabs */}

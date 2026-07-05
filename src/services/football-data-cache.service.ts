@@ -1768,6 +1768,15 @@ class FootballDataCacheService {
             }
         }
 
+        // Synthetic 365 gameIds (stored AS the fixtureId) are far above the
+        // API-Football id range. If we reach here for such an id, the 365
+        // mapping/experiment could not resolve it — never query API-Football
+        // with a 365 gameId (returns 404 or collides with an unrelated match).
+        // Return an empty bundle so the client shows the "unavailable" state.
+        if (fixtureId >= SCORES365_LEAGUE_ID_OFFSET || fixtureId >= 4_000_000) {
+            return { fixture: null, lineups: [], statistics: [], events: [], venue: null };
+        }
+
         const bundleKey = `details:${fixtureId}`;
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(bundleKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {

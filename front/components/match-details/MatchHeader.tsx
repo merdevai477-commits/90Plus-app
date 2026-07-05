@@ -11,7 +11,9 @@ import Animated, {
 import {
   formatMatchTime,
   resolveLiveMinuteLabel,
+  resolveLiveSecondsLabel,
 } from '../../components/Matches/leagueApiUtils';
+import { useSecondTick } from '../../hooks/useSecondTick';
 import {
   PURPLE_PRIMARY,
   PURPLE_SOFT,
@@ -47,6 +49,12 @@ interface MatchHeaderProps {
   /** Penalty shootout tally (after/ during penalties). */
   penaltyHome?: number | string | null;
   penaltyAway?: number | string | null;
+  /** Localized short labels (fall back to English when not supplied). */
+  halftimeLabel?: string;
+  finishedLabel?: string;
+  vsLabel?: string;
+  liveLabel?: string;
+  penaltiesShortLabel?: string;
 }
 
 const LIVE_STATUSES = ['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
@@ -107,6 +115,11 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   statusLabel,
   penaltyHome,
   penaltyAway,
+  halftimeLabel = 'HT',
+  finishedLabel = 'FT',
+  vsLabel = 'VS',
+  liveLabel = 'LIVE',
+  penaltiesShortLabel = 'Pens',
 }) => {
   const short = statusShort || '';
   const isHalftime = short === 'HT';
@@ -130,7 +143,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   // Badge text for finished/paused/not-played states (falls back to English).
   const finishedBadgeText =
     statusLabel ||
-    (short === 'AET' ? 'AET' : short === 'PEN' ? 'Pens' : 'FT');
+    (short === 'AET' ? 'AET' : short === 'PEN' ? penaltiesShortLabel : finishedLabel);
   const specialBadgeText = statusLabel || short || '—';
 
   const kickoffTime = useMemo(() => {
@@ -138,21 +151,29 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
     return time || '--:--';
   }, [fixtureDate, time]);
 
-  const minuteLabel = useMemo(
-    () =>
-      resolveLiveMinuteLabel(short, elapsed, { startTimestamp }) ??
-      (isLive ? short || 'LIVE' : ''),
-    [elapsed, isLive, short, startTimestamp],
-  );
+  // Tick every second only while a live match is in normal play (not stoppage,
+  // HT, or a paused/terminal state) so the seconds clock animates smoothly.
+  const clockActive = isLive && !isStoppage && !isHalftime;
+  useSecondTick(clockActive);
+
+  // Computed every render (the second-tick forces a re-render) so the MM:SS
+  // clock advances. Falls back to the minute-only label outside normal play.
+  const secondsLabel = clockActive
+    ? resolveLiveSecondsLabel(short, elapsed, { startTimestamp })
+    : undefined;
+  const minuteLabel =
+    secondsLabel ??
+    resolveLiveMinuteLabel(short, elapsed, { startTimestamp }) ??
+    (isLive ? short || liveLabel : '');
 
   const sepText = isLive
     ? isStoppage
       ? `+${stoppage}`
       : minuteLabel
     : isFinished
-    ? 'FT'
+    ? finishedLabel
     : isHalftime
-    ? 'HT'
+    ? halftimeLabel
     : '–';
 
   return (
@@ -207,7 +228,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
             </View>
           ) : isHalftime ? (
             <View style={styles.htBadge}>
-              <Text style={styles.htText}>HT</Text>
+              <Text style={styles.htText}>{halftimeLabel}</Text>
             </View>
           ) : isNotPlayed ? (
             <View style={styles.specialBadge}>
@@ -237,7 +258,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           <View style={styles.scoreArea}>
             {isUpcoming ? (
               <View style={styles.vsContainer}>
-                <Text style={styles.vsText}>VS</Text>
+                <Text style={styles.vsText}>{vsLabel}</Text>
                 <Text style={styles.kickoffLarge}>{kickoffTime}</Text>
               </View>
             ) : isNotPlayed ? (
@@ -283,7 +304,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
                 {hasPenaltyScore ? (
                   <Text style={styles.penaltyLine} numberOfLines={1}>
                     {`(${String(penaltyHome)} - ${String(penaltyAway)} ${
-                      statusLabel && short !== 'FT' ? statusLabel : 'pens'
+                      statusLabel && short !== 'FT' ? statusLabel : penaltiesShortLabel
                     })`}
                   </Text>
                 ) : null}
