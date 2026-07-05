@@ -1865,6 +1865,16 @@ export default function MatchesHubScreenV2() {
   const listError = filter === 'WorldCup' && worldCupEnabled ? worldCupError : error;
   const listRefetch = filter === 'WorldCup' && worldCupEnabled ? refetchWorldCup : refetch;
 
+  const listErrorMessage = useMemo(() => {
+    if (!listError) return null;
+    if (listError === 'load_failed') return t('matches.screen.loadFailed');
+    if (listError.toLowerCase().includes('date value out of bounds')) {
+      return t('matches.screen.loadFailed');
+    }
+    if (listError === 'Failed to load matches') return t('matches.screen.loadFailed');
+    return listError;
+  }, [listError, t]);
+
   const listEmptyNode = useMemo(() => {
     if (listLoading) {
       return (
@@ -1874,10 +1884,10 @@ export default function MatchesHubScreenV2() {
         </View>
       );
     }
-    if (listError) {
+    if (listErrorMessage) {
       return (
         <View style={styles.errorWrap}>
-          <Text style={styles.errorTxt}>⚠️ {listError}</Text>
+          <Text style={styles.errorTxt}>⚠️ {listErrorMessage}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={listRefetch} activeOpacity={0.7}>
             <Text style={styles.retryTxt}>{t('matches.screen.retry')}</Text>
           </TouchableOpacity>
@@ -1889,7 +1899,7 @@ export default function MatchesHubScreenV2() {
         <Text style={styles.emptyTxt}>{t('matches.screen.noMatchesFound')}</Text>
       </View>
     );
-  }, [listLoading, listError, listRefetch, t]);
+  }, [listLoading, listErrorMessage, listRefetch, t]);
 
   return (
     <View style={{ flex: 1, backgroundColor: APP_BG }}>

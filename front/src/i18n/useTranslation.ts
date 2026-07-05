@@ -10,6 +10,7 @@
 import { useCallback, useMemo } from 'react';
 import { useLanguageStore } from './store';
 import { useFootballTranslationStore } from '../stores/footballTranslationStore';
+import { safeParseDate } from '../../utils/safeDate';
 import { Language, TextDirection } from './types';
 import { getTranslation, getTranslationsForLanguage, TranslationKeys } from './utils';
 import { syncToBackend } from './syncService';
@@ -153,9 +154,16 @@ export function useTranslation(): UseTranslationReturn {
     try {
       return new Intl.DateTimeFormat(locale, options).format(date);
     } catch (error) {
-      // Fallback to ISO string if Intl fails
       console.warn('Date formatting failed:', error);
-      return date.toISOString().split('T')[0];
+      const parsed = safeParseDate(date);
+      if (parsed) {
+        try {
+          return parsed.toISOString().split('T')[0];
+        } catch {
+          /* fall through */
+        }
+      }
+      return '';
     }
   }, [locale]);
 

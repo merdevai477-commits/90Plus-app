@@ -9,6 +9,7 @@ import { cacheService } from '../../services/cacheService';
 import { logger } from '../../utils/logger';
 import { getApiUrl } from '../../config/api.config';
 import { getAppLanguageCode, acceptLanguageHeader } from '../../utils/appLanguage';
+import { safeFormatMatchTime } from '../../utils/safeDate';
 
 function getAppLanguageParam(): string {
   return getAppLanguageCode();
@@ -180,15 +181,8 @@ export const formatMatchMinute = (fixture: Fixture): string | undefined => {
 /**
  * Formats fixture time for display (e.g., "20:00")
  */
-export const formatMatchTime = (fixtureDate: string): string => {
-  const date = new Date(fixtureDate);
-  if (Number.isNaN(date.getTime())) return '--:--';
-  return date.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-};
+export const formatMatchTime = (fixtureDate: string): string =>
+  safeFormatMatchTime(fixtureDate);
 
 /**
  * Maps a single API Fixture to component Match model
@@ -238,7 +232,18 @@ export const mapFixtureToMatch = (fixture: Fixture): Match => {
  * Maps an array of API Fixtures to component Match models
  */
 export const mapFixturesToMatches = (fixtures: Fixture[]): Match[] => {
-  return fixtures.map(mapFixtureToMatch);
+  const matches: Match[] = [];
+  for (const fixture of fixtures) {
+    try {
+      matches.push(mapFixtureToMatch(fixture));
+    } catch (err) {
+      logger.warn(
+        `Skipping fixture ${fixture?.fixture?.id ?? '?'} — map failed:`,
+        err,
+      );
+    }
+  }
+  return matches;
 };
 
 // ─── In-flight request deduplication ──────────────────────────────────────────

@@ -298,6 +298,15 @@ export async function ensureScores365GameMapping(fixtureId: number): Promise<num
     select: { status: true, leagueId: true },
   });
 
+  // 365 gameIds stored as fixtureId (>= 4M) — resolve directly without waiting for bulk sync.
+  if (fixtureId >= 4_000_000) {
+    const direct = await fetchScores365GameById(fixtureId, { language: 'en' });
+    if (direct?.id) {
+      registerScores365FixtureMapping(fixtureId, direct.id);
+      return direct.id;
+    }
+  }
+
   // Non-WC synthetic 365 fixtures store the 365 gameId AS the fixtureId and use
   // a namespaced leagueId (>= SCORES365_LEAGUE_ID_OFFSET). The fixture↔game map
   // is only built inside the sync worker process, so the web process never has
@@ -1706,7 +1715,14 @@ export async function mapScores365ToApiFootballFixture(
     status.short,
     scores,
   );
-  const kickoff = game.startTime ?? base.fixture.date;
+  const kickoff = (() => {
+    const raw = game.startTime ?? base.fixture.date;
+    if (raw) {
+      const parsed = new Date(raw);
+      if (!Number.isNaN(parsed.getTime())) return raw;
+    }
+    return new Date().toISOString();
+  })();
   const home365 = game.homeCompetitor;
   const away365 = game.awayCompetitor;
   const homeDisplay = alignment.swapped ? away365?.name : home365?.name;
@@ -1835,6 +1851,34 @@ export async function getScores365ExperimentFixture(
   return mapScores365ToApiFootballFixture(game, base, fixtureId);
 }
 
+function overlay365LocalizedFixtureNames(
+  fixture: FixtureFromAPI,
+  localized: Scores365Game,
+  alignment: Scores365TeamAlignment,
+): FixtureFromAPI {
+  const home365 = localized.homeCompetitor;
+  const away365 = localized.awayCompetitor;
+  const homeDisplay = alignment.swapped ? away365?.name : home365?.name;
+  const awayDisplay = alignment.swapped ? home365?.name : away365?.name;
+  return {
+    ...fixture,
+    teams: {
+      home: {
+        ...fixture.teams.home,
+        name: homeDisplay ?? fixture.teams.home.name,
+      },
+      away: {
+        ...fixture.teams.away,
+        name: awayDisplay ?? fixture.teams.away.name,
+      },
+    },
+    league: {
+      ...fixture.league,
+      name: resolve365LeagueDisplayName(localized, fixture.league.name),
+    },
+  };
+}
+
 export async function getScores365ExperimentBundle(
   fixtureId: number,
   language?: string | null,
@@ -1854,18 +1898,29 @@ export async function getScores365ExperimentBundle(
   const gameId = (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
   if (!gameId) return null;
 
-  const game = await fetchScores365GameById(gameId, {
-    language,
-    force: options?.force === true,
-  });
+  const force = options?.force === true;
+  const appLang = resolveScores365AppLanguage(language);
+
+  // Structural mapping (alignment, lineups, events) uses the English 365 feed —
+  // Arabic upstream responses can fail team alignment and return empty bundles.
+  let game = await fetchScores365GameById(gameId, { language: 'en', force });
   if (!game) return null;
+
+  const gameLocalized =
+    appLang !== 'en'
+      ? await fetchScores365GameById(gameId, { language: appLang, force })
+      : null;
 
   const resolved = await resolve365BaseAndAlignment(game, fixtureId);
   if (!resolved) return null;
   const { base, alignment } = resolved;
 
-  const fixture = await mapScores365ToApiFootballFixture(game, base, fixtureId);
+  let fixture = await mapScores365ToApiFootballFixture(game, base, fixtureId);
   if (!fixture) return null;
+
+  if (gameLocalized) {
+    fixture = overlay365LocalizedFixtureNames(fixture, gameLocalized, alignment);
+  }
 
   let events = mapScores365Events(game, base, alignment);
   const homeId = base.teams.home?.id;

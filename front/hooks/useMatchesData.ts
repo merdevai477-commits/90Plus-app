@@ -23,6 +23,7 @@ import { useLiveFixtureStore } from '../src/store/liveFixtureStore';
 import { LIVE_FIXTURE_CALENDAR_POLL_MS } from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
+import { dateFromLocalKey } from '../utils/safeDate';
 
 export interface GroupedMatches {
   leagueId: number;
@@ -506,7 +507,11 @@ export const useMatchesData = (
           elapsedMs: typeof performance !== 'undefined' && performance.now ? Math.round(performance.now()) : undefined,
         });
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load matches';
+        const rawMessage = err instanceof Error ? err.message : 'Failed to load matches';
+        const errorMessage =
+          rawMessage.toLowerCase().includes('date value out of bounds')
+            ? 'Failed to load matches'
+            : rawMessage;
         setCalendarMatches((prev) => {
           if (prev.length > 0) {
             setIsDataStale(true);
@@ -579,9 +584,8 @@ export const useMatchesData = (
     lastBackgroundFetch.set(dateStr, Date.now());
 
     try {
-      const date = new Date(dateStr);
+      const date = dateFromLocalKey(dateStr);
       let fetchedMatches: Match[];
-
       fetchedMatches = isTodayFlag
         ? await fetchTodayMatchesWithLiveFeed(date)
         : await fetchMatchesByDate(date);

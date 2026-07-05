@@ -76,6 +76,7 @@ import {
   standingRowMatchesTeam,
 } from '../../utils/standingsHelpers';
 import { getPeriodStartTimestamp } from '../../src/store/liveFixtureSelectors';
+import { safeParseDate, safeToISOString } from '../../utils/safeDate';
 
 const { width, height } = Dimensions.get('window');
 
@@ -96,8 +97,9 @@ function buildFixtureFromArchive(archive: MatchArchive): {
   fixture: Fixture;
   events: FixtureEvent[];
 } {
-  const date = archive.date instanceof Date ? archive.date : new Date(archive.date);
-  const iso = Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+  const date = safeParseDate(archive.date instanceof Date ? archive.date : archive.date);
+  const iso = safeToISOString(date);
+  const kickoffMs = date?.getTime() ?? Date.now();
 
   const fixture: Fixture = {
     fixture: {
@@ -105,7 +107,7 @@ function buildFixtureFromArchive(archive: MatchArchive): {
       referee: null,
       timezone: 'UTC',
       date: iso,
-      timestamp: Math.floor(date.getTime() / 1000) || 0,
+      timestamp: Math.floor(kickoffMs / 1000),
       periods: { first: null, second: null },
       venue: {
         id: null,
@@ -124,7 +126,7 @@ function buildFixtureFromArchive(archive: MatchArchive): {
       country: archive.league?.country ?? '',
       logo: archive.league?.logo ?? '',
       flag: null,
-      season: date.getFullYear(),
+      season: date?.getFullYear() ?? new Date().getFullYear(),
       round: archive.league?.round ?? '',
     },
     teams: {
@@ -241,15 +243,21 @@ const MatchDetailsScreen = () => {
     [is365Fixture],
   );
 
-  const kickoffMoment = fixture?.fixture?.date ? new Date(fixture.fixture.date) : null;
-  const kickoffValid = kickoffMoment != null && !Number.isNaN(kickoffMoment.getTime());
-  const kickoffDate = kickoffValid ? kickoffMoment!.toISOString().split('T')[0] : '';
+  const kickoffMoment = fixture?.fixture?.date ? safeParseDate(fixture.fixture.date) : null;
+  const kickoffValid = kickoffMoment != null;
+  const kickoffDate = kickoffValid ? safeToISOString(kickoffMoment).split('T')[0] : '';
   const kickoffTime = kickoffValid
-    ? kickoffMoment!.toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      })
+    ? (() => {
+        try {
+          return kickoffMoment!.toLocaleTimeString(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          });
+        } catch {
+          return '';
+        }
+      })()
     : '';
 
   const [loading, setLoading] = useState(true);
