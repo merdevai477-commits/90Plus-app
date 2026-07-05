@@ -15,20 +15,16 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, ChevronRight, MoreVertical } from 'lucide-react-native';
-import React, { useCallback, useState } from 'react';
+import { CalendarDays, ChevronLeft, ChevronRight, MoreVertical, Trophy, Users } from 'lucide-react-native';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useToast } from '../contexts/ToastContext';
 import { useTranslation } from '../src/i18n';
 import { useScreenFont } from '../utils/fontSetup';
+import { LiquidTab, LiquidTabBar, LIQUID_TAB_BAR_HEIGHT } from '../components/navigation/LiquidTabBar';
 import { GROUP } from '../components/predictionGroups/data';
-import {
-  GROUP_NAV_CLEARANCE,
-  GroupBottomNav,
-  GroupNavKey,
-} from '../components/predictionGroups/GroupBottomNav';
 import { GroupHeaderCard } from '../components/predictionGroups/GroupHeaderCard';
 import {
   HomeSection,
@@ -37,6 +33,8 @@ import {
   StatsSection,
 } from '../components/predictionGroups/sections';
 import { PG, PG_GRADIENTS, usePGFonts } from '../components/predictionGroups/theme';
+
+type GroupNavKey = 'group' | 'round' | 'standings';
 
 export default function PredictionGroupsScreen() {
   useScreenFont();
@@ -48,6 +46,19 @@ export default function PredictionGroupsScreen() {
 
   const [tab, setTab] = useState<GroupNavKey>('group');
   const [copied, setCopied] = useState(false);
+
+  const navTabs = useMemo<LiquidTab[]>(
+    () => [
+      { key: 'group', label: 'الجروب', icon: Users },
+      { key: 'round', label: 'الجولة', icon: CalendarDays },
+      { key: 'standings', label: 'الترتيب', icon: Trophy },
+    ],
+    [],
+  );
+
+  const handleTabChange = useCallback((key: string) => {
+    setTab(key as GroupNavKey);
+  }, []);
 
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const BackIcon = isRTL ? ChevronRight : ChevronLeft;
@@ -75,7 +86,7 @@ export default function PredictionGroupsScreen() {
     }
   }, []);
 
-  const navClearance = insets.bottom + GROUP_NAV_CLEARANCE;
+  const navClearance = insets.bottom + LIQUID_TAB_BAR_HEIGHT + 28;
   const contentPadding = { paddingHorizontal: 16, paddingBottom: navClearance, gap: 16 };
 
   return (
@@ -128,9 +139,16 @@ export default function PredictionGroupsScreen() {
         </ScrollView>
       )}
 
-      <GroupBottomNav
-        activeKey={tab}
-        onChange={setTab}
+      <LinearGradient
+        colors={['transparent', PG.bg]}
+        style={[styles.bottomScrim, { height: navClearance }]}
+        pointerEvents="none"
+      />
+
+      <LiquidTabBar
+        tabs={navTabs}
+        activeTab={tab}
+        onTabChange={handleTabChange}
         isRTL={isRTL}
         bottomInset={insets.bottom}
       />
@@ -151,4 +169,6 @@ const styles = StyleSheet.create({
   },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: PG.text, fontSize: 19, flex: 1, textAlign: 'center' },
+
+  bottomScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 50 },
 });
