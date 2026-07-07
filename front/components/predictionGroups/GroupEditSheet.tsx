@@ -6,10 +6,11 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Camera, Crown, ImageIcon, Shield, X } from 'lucide-react-native';
+import { Camera, Crown, LogOut, Shield, Trash2, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Platform,
   Pressable,
@@ -25,7 +26,6 @@ import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlass
 import { useImagePicker } from '../../hooks/useImagePicker';
 import { useImageUpload } from '../../hooks/useImageUpload';
 import { useToast } from '../../contexts/ToastContext';
-import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { SheetBlurBackdrop } from './SheetBlurBackdrop';
 import { PG, PG_RADII, PG_SPACING, PG_TYPE, usePGFonts } from './theme';
 
@@ -41,6 +41,8 @@ export interface GroupEditSheetProps {
   groupName: string;
   groupImage: string | null;
   onSave: (name: string, imageUri: string | null) => void | Promise<void>;
+  onLeaveGroup?: () => void | Promise<void>;
+  onDeleteGroup?: () => void | Promise<void>;
   isRTL?: boolean;
   isAdmin?: boolean;
 }
@@ -57,6 +59,8 @@ export function GroupEditSheet({
   groupName,
   groupImage,
   onSave,
+  onLeaveGroup,
+  onDeleteGroup,
   isRTL = false,
   isAdmin = false,
 }: GroupEditSheetProps) {
@@ -68,7 +72,7 @@ export function GroupEditSheet({
 
   const [draftName, setDraftName] = useState(groupName);
   const [draftImage, setDraftImage] = useState<string | null>(groupImage);
-  const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+  const [dangerBusy, setDangerBusy] = useState(false);
 
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const textAlign = isRTL ? 'right' : 'left';
@@ -77,7 +81,7 @@ export function GroupEditSheet({
     if (visible) {
       setDraftName(groupName);
       setDraftImage(groupImage);
-      setSourcePickerOpen(false);
+      setDangerBusy(false);
     }
   }, [visible, groupName, groupImage]);
 
@@ -97,24 +101,76 @@ export function GroupEditSheet({
 
   const handlePickSource = useCallback(
     (source: 'gallery' | 'camera') => {
-      setSourcePickerOpen(false);
-      setTimeout(() => {
-        void pickImage(source);
-      }, 160);
+      void pickImage(source);
     },
     [pickImage],
   );
 
   const openImagePicker = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setSourcePickerOpen(true);
-  }, []);
+    Alert.alert('صورة المجموعة', 'اختر مصدر الصورة', [
+      { text: 'إلغاء', style: 'cancel' },
+      { text: 'المعرض', onPress: () => handlePickSource('gallery') },
+      { text: 'الكاميرا', onPress: () => handlePickSource('camera') },
+      ...(draftImage
+        ? [{ text: 'إزالة الصورة', style: 'destructive' as const, onPress: () => setDraftImage(null) }]
+        : []),
+    ]);
+  }, [draftImage, handlePickSource]);
 
-  const removeImage = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    setDraftImage(null);
-    setSourcePickerOpen(false);
-  }, []);
+  const confirmDelete = useCallback(() => {
+    Alert.alert(
+      'مسح المجموعة؟',
+      'سيتم حذف المجموعة نهائياً. إذا كان لديك توقعات نشطة في جولة جارية قد تفقد نقاطها. هل أنت متأكد؟',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: 'مسح المجموعة',
+          style: 'destructive',
+          onPress: () => {
+            setDangerBusy(true);
+            void (async () => {
+              try {
+                await onDeleteGroup?.();
+                onClose();
+              } catch (e: any) {
+                toast.showError('تعذر الحذف', e?.message ?? '');
+              } finally {
+                setDangerBusy(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [onClose, onDeleteGroup, toast]);
+
+  const confirmLeave = useCallback(() => {
+    Alert.alert(
+      'الخروج من المجموعة؟',
+      'لن تظهر في ترتيب المجموعة بعد الخروج. يمكنك الانضمام لمجموعة أخرى لاحقاً.',
+      [
+        { text: 'إلغاء', style: 'cancel' },
+        {
+          text: 'خروج',
+          style: 'destructive',
+          onPress: () => {
+            setDangerBusy(true);
+            void (async () => {
+              try {
+                await onLeaveGroup?.();
+                onClose();
+              } catch (e: any) {
+                toast.showError('تعذر الخروج', e?.message ?? '');
+              } finally {
+                setDangerBusy(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [onClose, onLeaveGroup, toast]);
 
   const handleSave = useCallback(async () => {
     const trimmed = draftName.trim();
@@ -151,7 +207,7 @@ export function GroupEditSheet({
       onRequestClose={onClose}
     >
       <View style={styles.modalRoot}>
-        <SheetBlurBackdrop onPress={sourcePickerOpen ? () => setSourcePickerOpen(false) : onClose} />
+        <SheetBlurBackdrop onPress={onClose} />
 
       <View style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]}>
         <SheetGlass {...SHEET_GLASS_PROPS} style={styles.sheetGlass}>
@@ -204,9 +260,32 @@ export function GroupEditSheet({
             maxLength={32}
           />
 
+          <View style={styles.dangerZone}>
+            {isAdmin && onDeleteGroup ? (
+              <Pressable
+                onPress={confirmDelete}
+                disabled={dangerBusy || isUploading}
+                style={({ pressed }) => [styles.dangerBtn, pressed && { opacity: 0.85 }]}
+              >
+                <Trash2 size={16} color="#F87171" />
+                <Text style={[styles.dangerTxt, { fontFamily: bold }]}>مسح المجموعة</Text>
+              </Pressable>
+            ) : null}
+            {onLeaveGroup ? (
+              <Pressable
+                onPress={confirmLeave}
+                disabled={dangerBusy || isUploading}
+                style={({ pressed }) => [styles.leaveBtn, pressed && { opacity: 0.85 }]}
+              >
+                <LogOut size={15} color={PG.textSecondary} />
+                <Text style={[styles.leaveTxt, { fontFamily: medium }]}>خروج من المجموعة</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
           <Pressable
             onPress={() => void handleSave()}
-            disabled={isUploading}
+            disabled={isUploading || dangerBusy}
             style={({ pressed }) => [styles.saveBtn, (pressed || isUploading) && { opacity: 0.9 }]}
           >
             <LinearGradient
@@ -224,72 +303,6 @@ export function GroupEditSheet({
           </Pressable>
         </SheetGlass>
       </View>
-
-      {sourcePickerOpen ? (
-        <View style={styles.sourceOverlay} pointerEvents="box-none">
-          <Pressable
-            style={styles.sourceScrim}
-            onPress={() => setSourcePickerOpen(false)}
-            accessibilityRole="button"
-            accessibilityLabel="إلغاء"
-          />
-          <View style={[styles.sourceSheet, { paddingBottom: insets.bottom + 16 }]}>
-            <LiquidGlassSurface borderRadius={PG_RADII.xl} subtleShadow style={styles.sourceCard}>
-              <View style={styles.sourceHandle} />
-              <Text style={[styles.sourceTitle, { fontFamily: extra, textAlign }]}>صورة المجموعة</Text>
-              <Text style={[styles.sourceSub, { fontFamily: medium, textAlign }]}>
-                اختر مصدر الصورة
-              </Text>
-
-              <View style={styles.sourceOptions}>
-                <Pressable
-                  onPress={() => handlePickSource('gallery')}
-                  style={({ pressed }) => [styles.sourceOption, pressed && styles.sourceOptionPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="المعرض"
-                >
-                  <View style={styles.sourceIconWrap}>
-                    <ImageIcon size={22} color={PG.primaryLight} />
-                  </View>
-                  <Text style={[styles.sourceOptionText, { fontFamily: bold }]}>المعرض</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => handlePickSource('camera')}
-                  style={({ pressed }) => [styles.sourceOption, pressed && styles.sourceOptionPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel="الكاميرا"
-                >
-                  <View style={styles.sourceIconWrap}>
-                    <Camera size={22} color={PG.primaryLight} />
-                  </View>
-                  <Text style={[styles.sourceOptionText, { fontFamily: bold }]}>الكاميرا</Text>
-                </Pressable>
-              </View>
-
-              {draftImage ? (
-                <Pressable
-                  onPress={removeImage}
-                  style={({ pressed }) => [styles.removeBtn, pressed && { opacity: 0.85 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="إزالة الصورة"
-                >
-                  <Text style={[styles.removeBtnText, { fontFamily: medium }]}>إزالة الصورة</Text>
-                </Pressable>
-              ) : null}
-
-              <Pressable
-                onPress={() => setSourcePickerOpen(false)}
-                style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.85 }]}
-                accessibilityRole="button"
-                accessibilityLabel="إلغاء"
-              >
-                <Text style={[styles.cancelBtnText, { fontFamily: medium }]}>إلغاء</Text>
-              </Pressable>
-            </LiquidGlassSurface>
-          </View>
-        </View>
-      ) : null}
       </View>
     </Modal>
   );
@@ -402,8 +415,29 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     color: PG.text,
     fontSize: PG_TYPE.body,
-    marginBottom: PG_SPACING.lg,
+    marginBottom: PG_SPACING.md,
   },
+  dangerZone: { gap: 8, marginBottom: PG_SPACING.lg },
+  dangerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: PG_RADII.md,
+    backgroundColor: 'rgba(248,113,113,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.35)',
+  },
+  dangerTxt: { color: '#F87171', fontSize: PG_TYPE.body },
+  leaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+  },
+  leaveTxt: { color: PG.textSecondary, fontSize: PG_TYPE.caption },
   saveBtn: {
     borderRadius: PG_RADII.lg,
     overflow: 'hidden',

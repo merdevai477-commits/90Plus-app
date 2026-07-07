@@ -30,6 +30,7 @@ export interface MyGroupState {
   hasGroup: boolean;
   group: PredictionGroupInfo | null;
   membership: GroupMembershipInfo | null;
+  groupBan?: { until: string } | null;
 }
 
 export interface GroupMemberRow {
@@ -74,6 +75,7 @@ export interface RankedGroupRow {
   points: number;
   members: number;
   isMine?: boolean;
+  hasScores?: boolean;
 }
 
 async function parseError(response: Response): Promise<Error> {
@@ -91,6 +93,7 @@ async function authFetch(token: string, path: string, init?: RequestInit) {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
       ...(init?.headers ?? {}),
     },
   });
@@ -100,7 +103,8 @@ async function authFetch(token: string, path: string, init?: RequestInit) {
 }
 
 export const PredictionGroupsService = {
-  getMe: (token: string) => authFetch(token, '/me') as Promise<MyGroupState>,
+  getMe: (token: string, bustCache = false) =>
+    authFetch(token, bustCache ? `/me?_=${Date.now()}` : '/me') as Promise<MyGroupState>,
 
   createGroup: (token: string, name: string, avatarUrl?: string | null) =>
     authFetch(token, '/', {
@@ -124,7 +128,18 @@ export const PredictionGroupsService = {
     }) as Promise<MyGroupState>,
 
   leave: (token: string) =>
-    authFetch(token, '/leave', { method: 'POST' }),
+    authFetch(token, '/leave', { method: 'POST' }) as Promise<{
+      success: boolean;
+      groupBan?: { until: string } | null;
+      state: MyGroupState;
+    }>,
+
+  deleteGroup: (token: string, groupId: string) =>
+    authFetch(token, `/${groupId}`, { method: 'DELETE' }) as Promise<{
+      success: boolean;
+      groupBan?: { until: string } | null;
+      state: MyGroupState;
+    }>,
 
   updateGroup: (token: string, groupId: string, data: { name?: string; avatarUrl?: string | null }) =>
     authFetch(token, `/${groupId}`, {
@@ -184,13 +199,15 @@ export function mapRoundMatchToCard(m: GroupRoundMatch) {
     prediction: m.prediction,
     home: {
       name: m.home.name,
-      crest: [m.home.logo ?? '#7C3AED', m.home.logo ?? '#5B21B6'] as [string, string],
+      crest: ['#7C3AED', '#5B21B6'] as [string, string],
       short: m.home.short,
+      logo: m.home.logo,
     },
     away: {
       name: m.away.name,
-      crest: [m.away.logo ?? '#7C3AED', m.away.logo ?? '#5B21B6'] as [string, string],
+      crest: ['#7C3AED', '#5B21B6'] as [string, string],
       short: m.away.short,
+      logo: m.away.logo,
     },
     day: m.day,
     time: m.time,

@@ -3,7 +3,7 @@
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -56,6 +56,29 @@ export default function PredictionGroupsScreen() {
   const params = useLocalSearchParams<{ joinCode?: string; inviteId?: string }>();
 
   const pg = usePredictionGroup();
+  const {
+    loading,
+    state,
+    members,
+    roundMatches,
+    roundMeta,
+    globalGroups,
+    groupStats,
+    groupBan,
+    isOwner,
+    refreshMe,
+    refreshGroupData,
+    refreshLeaderboard,
+    createGroup,
+    joinGroup,
+    updateGroup,
+    leaveGroup,
+    deleteGroup,
+    savePredictions,
+    inviteUser,
+    kickMember,
+  } = pg;
+
   const [tab, setTab] = useState<GroupNavKey>('group');
   const headerRef = useRef<GroupScreenHeaderHandle>(null);
   const [joinSheetOpen, setJoinSheetOpen] = useState(false);
@@ -74,8 +97,15 @@ export default function PredictionGroupsScreen() {
   }, [params.joinCode, params.inviteId]);
 
   useEffect(() => {
-    if (tab === 'standings') void pg.refreshLeaderboard('all');
-  }, [tab, pg.refreshLeaderboard]);
+    if (tab === 'standings') void refreshLeaderboard('all');
+  }, [tab, refreshLeaderboard]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMe(true);
+      if (state?.hasGroup) void refreshGroupData();
+    }, [refreshMe, refreshGroupData, state?.hasGroup]),
+  );
 
   const activeTabIndex = useMemo(
     () => Math.max(0, GROUP_NAV_KEYS.indexOf(tab)),
@@ -90,7 +120,7 @@ export default function PredictionGroupsScreen() {
   const chromeInset = GROUP_FIXED_HEADER_HEIGHT + 4;
 
   const groupHeader = useMemo(() => {
-    const g = pg.state?.group;
+    const g = state?.group;
     if (!g) return null;
     return {
       name: g.name,
@@ -102,11 +132,21 @@ export default function PredictionGroupsScreen() {
       avatarUrl: g.avatarUrl,
       id: g.id,
     };
-  }, [pg.state?.group]);
+  }, [state?.group]);
+
+  const memberUserIds = useMemo(() => members.map((m) => m.userId), [members]);
+
+  const handleLeaveGroup = useCallback(async () => {
+    await leaveGroup();
+  }, [leaveGroup]);
+
+  const handleDeleteGroup = useCallback(async () => {
+    await deleteGroup();
+  }, [deleteGroup]);
 
   const memberRows = useMemo(
     () =>
-      pg.members.map((m) => ({
+      members.map((m) => ({
         rank: m.rank,
         name: m.name,
         points: m.points,
@@ -117,10 +157,10 @@ export default function PredictionGroupsScreen() {
         username: m.username,
         userId: m.userId,
       })),
-    [pg.members],
+    [members],
   );
 
-  if (pg.loading) {
+  if (loading) {
     return (
       <View style={[styles.root, styles.centered]}>
         <LinearGradient colors={PG_GRADIENTS.screen} style={StyleSheet.absoluteFill} />
@@ -129,7 +169,7 @@ export default function PredictionGroupsScreen() {
     );
   }
 
-  if (!pg.state?.hasGroup) {
+  if (!state?.hasGroup) {
     return (
       <View style={styles.root}>
         <LinearGradient colors={PG_GRADIENTS.screen} style={StyleSheet.absoluteFill} />
@@ -142,12 +182,16 @@ export default function PredictionGroupsScreen() {
         <ScrollView contentContainerStyle={{ paddingTop: insets.top + chromeInset, paddingBottom: navClearance }}>
           <GroupOnboarding
             isRTL={isRTL}
+            groupBan={groupBan}
             onCreate={async (name) => {
-              await pg.createGroup(name);
+              await createGroup(name);
             }}
             onJoinByCode={async (code) => {
-              setPendingJoinCode(code);
-              setJoinSheetOpen(true);
+              const joined = await joinGroup({ code });
+              if (!joined?.hasGroup) {
+                setPendingJoinCode(code);
+                setJoinSheetOpen(true);
+              }
             }}
           />
         </ScrollView>
@@ -156,7 +200,8 @@ export default function PredictionGroupsScreen() {
           code={pendingJoinCode}
           inviteId={pendingInviteId}
           onClose={() => setJoinSheetOpen(false)}
-          onJoined={() => void pg.refreshMe()}
+          onJoin={joinGroup}
+          onJoined={() => void refreshMe(true)}
         />
       </View>
     );
@@ -190,10 +235,13 @@ export default function PredictionGroupsScreen() {
             ref={headerRef}
             group={groupHeader}
             isRTL={isRTL}
-            isAdmin={pg.isOwner}
+            isAdmin={isOwner}
             showProfile={tab !== 'standings'}
-            onSaveGroup={pg.updateGroup}
-            onInviteUser={pg.inviteUser}
+            memberUserIds={memberUserIds}
+            onSaveGroup={updateGroup}
+            onInviteUser={inviteUser}
+            onLeaveGroup={handleLeaveGroup}
+            onDeleteGroup={handleDeleteGroup}
           />
         )}
 
@@ -201,9 +249,9 @@ export default function PredictionGroupsScreen() {
           <HomeLeaderboardCard
             isRTL={isRTL}
             members={memberRows}
-            groupStats={pg.groupStats}
-            isOwner={pg.isOwner}
-            onKickMember={pg.kickMember}
+            groupStats={groupStats}
+            isOwner={isOwner}
+            onKickMember={kickMember}
           />
         )}
         {tab === 'round' && groupHeader && (
@@ -211,16 +259,16 @@ export default function PredictionGroupsScreen() {
             <PredictionsSection
               isRTL={isRTL}
               groupId={groupHeader.id}
-              roundMatches={pg.roundMatches}
-              roundMeta={pg.roundMeta}
-              onSave={pg.savePredictions}
+              roundMatches={roundMatches}
+              roundMeta={roundMeta}
+              onSave={savePredictions}
             />
           </View>
         )}
         {tab === 'standings' && (
           <GroupsStandingsSection
             isRTL={isRTL}
-            groups={pg.globalGroups.map((g) => ({
+            groups={globalGroups.map((g) => ({
               rank: g.rank,
               name: g.name,
               points: g.points,
@@ -228,9 +276,10 @@ export default function PredictionGroupsScreen() {
               avatar: g.avatarUrl,
               isMine: g.isMine,
               id: g.id,
+              hasScores: g.hasScores,
             }))}
-            onPeriodChange={pg.refreshLeaderboard}
-            myGroupId={pg.state?.group?.id}
+            onPeriodChange={refreshLeaderboard}
+            myGroupId={state?.group?.id}
           />
         )}
       </ScrollView>
@@ -254,7 +303,8 @@ export default function PredictionGroupsScreen() {
         code={pendingJoinCode}
         inviteId={pendingInviteId}
         onClose={() => setJoinSheetOpen(false)}
-        onJoined={() => void pg.refreshMe()}
+        onJoin={joinGroup}
+        onJoined={() => void refreshMe(true)}
       />
     </View>
   );

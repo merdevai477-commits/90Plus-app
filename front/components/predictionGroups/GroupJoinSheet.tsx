@@ -27,7 +27,8 @@ export interface GroupJoinSheetProps {
   code?: string | null;
   inviteId?: string | null;
   onClose: () => void;
-  onJoined: () => void;
+  onJoined: (state?: unknown) => void;
+  onJoin?: (opts: { code?: string; inviteId?: string }) => Promise<unknown>;
 }
 
 export function GroupJoinSheet({
@@ -36,6 +37,7 @@ export function GroupJoinSheet({
   inviteId,
   onClose,
   onJoined,
+  onJoin,
 }: GroupJoinSheetProps) {
   const { getToken } = useAuth();
   const toast = useToast();
@@ -76,18 +78,24 @@ export function GroupJoinSheet({
   const handleJoin = useCallback(async () => {
     setJoining(true);
     try {
-      const token = await getToken();
-      if (!token) return;
-      await PredictionGroupsService.join(token, { code: code ?? undefined, inviteId: inviteId ?? undefined });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      onJoined();
+      if (onJoin) {
+        const state = await onJoin({ code: code ?? undefined, inviteId: inviteId ?? undefined });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        onJoined(state);
+      } else {
+        const token = await getToken();
+        if (!token) return;
+        const state = await PredictionGroupsService.join(token, { code: code ?? undefined, inviteId: inviteId ?? undefined });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        onJoined(state);
+      }
       onClose();
     } catch (e: any) {
       toast.showError('تعذر الانضمام', e?.message ?? '');
     } finally {
       setJoining(false);
     }
-  }, [code, inviteId, getToken, onClose, onJoined, toast]);
+  }, [code, inviteId, getToken, onClose, onJoin, onJoined, toast]);
 
   if (!visible) return null;
 

@@ -97,16 +97,22 @@ export function HomeLeaderboardRow({
           ) : null}
         </View>
       </View>
-      <Text
-        style={[
-          styles.points,
-          { fontFamily: extra },
-          podium && { fontSize: 16 },
-          member.rank === 1 && { color: '#FDE68A' },
-        ]}
-      >
-        {member.points}
-      </Text>
+      {member.points > 0 ? (
+        <Text
+          style={[
+            styles.points,
+            { fontFamily: extra },
+            podium && { fontSize: 16 },
+            member.rank === 1 && { color: '#FDE68A' },
+          ]}
+        >
+          {member.points}
+        </Text>
+      ) : (
+        <Text style={[styles.emptyPoints, { fontFamily: medium }]} numberOfLines={2}>
+          توقعو كونو اول المصنفين
+        </Text>
+      )}
     </>
   );
 
@@ -192,5 +198,12 @@ const styles = StyleSheet.create({
   points: {
     fontSize: 14,
     color: PG.text,
+  },
+  emptyPoints: {
+    fontSize: 10,
+    color: PG.textMuted,
+    maxWidth: 88,
+    textAlign: 'center',
+    lineHeight: 14,
   },
 });

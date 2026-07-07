@@ -80,6 +80,8 @@ model User {
   updatedAt                     DateTime                 @updatedAt
   lastActiveAt                  DateTime?
   streakFreezes                 Int                      @default(0)
+  groupExitCount                Int                      @default(0)
+  groupBannedUntil              DateTime?
   dateOfBirth                   DateTime?
   ageVerifiedAt                 DateTime?
   ageTier                       AgeTier?

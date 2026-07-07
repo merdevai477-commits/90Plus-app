@@ -14,6 +14,59 @@ import { getCurrentRoundWithMatches, isMatchLocked } from './group-round.service
 
 const INVITE_CODE_PREFIX = '90PLUS';
 const INVITE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const GROUP_BAN_DAYS = 3;
+const GROUP_EXIT_LIMIT = 3;
+
+async function getUserGroupBan(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { groupExitCount: true, groupBannedUntil: true },
+  });
+  if (!user) return null;
+
+  const now = new Date();
+  if (user.groupBannedUntil && user.groupBannedUntil <= now) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { groupBannedUntil: null, groupExitCount: 0 },
+    });
+    return null;
+  }
+
+  if (user.groupBannedUntil && user.groupBannedUntil > now) {
+    return { until: user.groupBannedUntil, exitCount: user.groupExitCount };
+  }
+
+  return null;
+}
+
+async function assertNotGroupBanned(userId: string) {
+  const ban = await getUserGroupBan(userId);
+  if (ban) throw new Error('GROUP_BANNED');
+}
+
+async function recordGroupExit(userId: string) {
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { groupExitCount: { increment: 1 } },
+    select: { groupExitCount: true },
+  });
+
+  if (updated.groupExitCount > GROUP_EXIT_LIMIT) {
+    const until = new Date(Date.now() + GROUP_BAN_DAYS * 24 * 60 * 60 * 1000);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { groupBannedUntil: until, groupExitCount: 0 },
+    });
+    return until;
+  }
+
+  return null;
+}
+
+export async function getGroupBanStatus(userId: string) {
+  return getUserGroupBan(userId);
+}
 
 export function generateInviteCode(): string {
   let suffix = '';
@@ -59,8 +112,15 @@ async function getOwnedActiveGroup(userId: string) {
 
 export async function getMyGroupState(userId: string) {
   const membership = await getActiveMembership(userId);
+  const groupBan = await getUserGroupBan(userId);
+
   if (!membership) {
-    return { hasGroup: false as const, group: null, membership: null };
+    return {
+      hasGroup: false as const,
+      group: null,
+      membership: null,
+      groupBan: groupBan ? { until: groupBan.until.toISOString() } : null,
+    };
   }
 
   const group = membership.group;
@@ -85,10 +145,13 @@ export async function getMyGroupState(userId: string) {
       createdAt: group.createdAt,
       isPrivate: true,
     },
+    groupBan: null,
   };
 }
 
 export async function createGroup(userId: string, name: string, avatarUrl?: string | null) {
+  await assertNotGroupBanned(userId);
+
   const trimmed = name.trim();
   if (trimmed.length < 2 || trimmed.length > 40) {
     throw new Error('INVALID_NAME');
@@ -151,6 +214,8 @@ export async function previewGroupByCode(code: string) {
 }
 
 export async function joinGroup(userId: string, opts: { code?: string; inviteId?: string }) {
+  await assertNotGroupBanned(userId);
+
   const existing = await getActiveMembership(userId);
   if (existing) throw new Error('ALREADY_IN_GROUP');
 
@@ -215,7 +280,43 @@ export async function leaveGroup(userId: string) {
     }
   });
 
-  return { success: true };
+  const banUntil = await recordGroupExit(userId);
+  return {
+    success: true,
+    groupBan: banUntil ? { until: banUntil.toISOString() } : null,
+  };
+}
+
+export async function deleteGroup(userId: string, groupId: string) {
+  const membership = await getActiveMembership(userId);
+  if (!membership || membership.groupId !== groupId || membership.role !== 'OWNER') {
+    throw new Error('FORBIDDEN');
+  }
+
+  const group = await prisma.predictionGroup.findUnique({
+    where: { id: groupId },
+    select: { avatarStoragePath: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.groupPrediction.deleteMany({ where: { groupId } });
+    await tx.groupMember.updateMany({
+      where: { groupId, leftAt: null },
+      data: { leftAt: new Date() },
+    });
+    await tx.predictionGroup.delete({ where: { id: groupId } });
+  });
+
+  if (group?.avatarStoragePath) {
+    const { r2MediaStorage } = await import('./r2-media-storage.service');
+    r2MediaStorage.deleteObject(group.avatarStoragePath).catch(() => undefined);
+  }
+
+  const banUntil = await recordGroupExit(userId);
+  return {
+    success: true,
+    groupBan: banUntil ? { until: banUntil.toISOString() } : null,
+  };
 }
 
 export async function updateGroup(
@@ -429,6 +530,7 @@ export async function getGlobalLeaderboard(period: 'all' | 'week' | 'month' = 'a
     inviteCode: string;
     points: number;
     members: number;
+    hasScores: boolean;
   };
 
   const rows: Row[] = [];
@@ -456,8 +558,9 @@ export async function getGlobalLeaderboard(period: 'all' | 'week' | 'month' = 'a
       name: g.name,
       avatarUrl: g.avatarUrl,
       inviteCode: g.inviteCode,
-      points,
+      points: Math.max(0, points),
       members: g.members.length,
+      hasScores: points > 0,
     });
   }
 

@@ -353,7 +353,7 @@ export function PredictionsSection({
   const roundMetaDisplay = useMemo(() => {
     if (apiMode && roundMeta) {
       return {
-        title: `جولة ${roundMeta.date}`,
+        title: 'الجولة الأولى',
         sub: 'أهم 10 مباريات اليوم — أكمل توقعاتك قبل انطلاق المباريات',
       };
     }

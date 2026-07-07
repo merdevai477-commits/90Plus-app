@@ -14,6 +14,11 @@ import { NotificationType } from './notification.service';
 
 // ─── XP Values Map ──────────────────────────────────────────────────────────
 
+const GROUP_PREDICTION_XP_VALUES = {
+  GROUP_PREDICTION_WINNER: 2,
+  GROUP_PREDICTION_EXACT: 5,
+} satisfies Record<'GROUP_PREDICTION_WINNER' | 'GROUP_PREDICTION_EXACT', number>;
+
 export const XP_VALUES: Record<XpActionType, number> = {
   PROFILE_AVATAR: 50,
   PROFILE_DISPLAY_NAME: 30,
@@ -43,8 +48,7 @@ export const XP_VALUES: Record<XpActionType, number> = {
   RECEIVED_FOLLOW: 5,
   PREDICTION_EXACT: 30,
   PREDICTION_WINNER: 10,
-  GROUP_PREDICTION_WINNER: 2,
-  GROUP_PREDICTION_EXACT: 5,
+  ...GROUP_PREDICTION_XP_VALUES,
   QUIZ_ANSWER_CORRECT: 2,
   QUIZ_COMPLETED_HIGH: 20,
   DAILY_LOGIN: 5, // base; actual value comes from LOGIN_STREAK_TABLE

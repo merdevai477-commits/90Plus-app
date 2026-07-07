@@ -1,6 +1,5 @@
 /**
- * Header — centered avatar, name below, invite row. Fixed top bar is separate
- * (`GroupFixedTopBar` in prediction-groups).
+ * GroupScreenHeader — centered avatar, name, invite row.
  */
 
 import * as Haptics from 'expo-haptics';
@@ -8,11 +7,12 @@ import {
   Calendar,
   Crown,
   Lock,
-  Pencil,
+  LogOut,
+  Settings,
   Users,
 } from 'lucide-react-native';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
-import { Pressable, Share, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Alert, Pressable, Share, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { FeatureInfoModal } from '../common/FeatureInfoModal';
 import { useTranslation } from '../../src/i18n';
@@ -47,11 +47,24 @@ export const GroupScreenHeader = forwardRef<
     isRTL: boolean;
     isAdmin?: boolean;
     showProfile?: boolean;
+    memberUserIds?: string[];
     onSaveGroup?: (name?: string, avatarUrl?: string | null) => Promise<unknown>;
     onInviteUser?: (userId: string) => Promise<void>;
+    onLeaveGroup?: () => Promise<unknown>;
+    onDeleteGroup?: () => Promise<unknown>;
   }
 >(function GroupScreenHeader(
-  { group, isRTL, showProfile = true, isAdmin = false, onSaveGroup, onInviteUser },
+  {
+    group,
+    isRTL,
+    showProfile = true,
+    isAdmin = false,
+    memberUserIds = [],
+    onSaveGroup,
+    onInviteUser,
+    onLeaveGroup,
+    onDeleteGroup,
+  },
   ref,
 ) {
   const { medium, extra } = usePGFonts();
@@ -85,6 +98,19 @@ export const GroupScreenHeader = forwardRef<
     },
     [onSaveGroup],
   );
+
+  const handleQuickLeave = useCallback(() => {
+    Alert.alert('الخروج من المجموعة؟', 'لن تظهر في ترتيب المجموعة بعد الخروج.', [
+      { text: 'إلغاء', style: 'cancel' },
+      {
+        text: 'خروج',
+        style: 'destructive',
+        onPress: () => {
+          void onLeaveGroup?.();
+        },
+      },
+    ]);
+  }, [onLeaveGroup]);
 
   const handleShare = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -126,11 +152,22 @@ export const GroupScreenHeader = forwardRef<
                   hitSlop={8}
                   style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.75 }]}
                   accessibilityRole="button"
-                  accessibilityLabel="تعديل المجموعة"
+                  accessibilityLabel="إعدادات المجموعة"
                 >
-                  <Pencil size={14} color={PG.primaryLight} />
+                  <Settings size={14} color={PG.primaryLight} />
                 </Pressable>
-              ) : null}
+              ) : (
+                <Pressable
+                  onPress={handleQuickLeave}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.leaveChip, row, pressed && { opacity: 0.75 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="خروج من المجموعة"
+                >
+                  <LogOut size={11} color={PG.textMuted} />
+                  <Text style={[styles.leaveChipTxt, { fontFamily: medium }]}>خروج</Text>
+                </Pressable>
+              )}
             </View>
             <View style={[styles.privacyRow, row]}>
               <Text style={[styles.privacyText, { fontFamily: medium }]}>{group.tagline}</Text>
@@ -166,6 +203,8 @@ export const GroupScreenHeader = forwardRef<
         groupName={groupName}
         groupImage={groupImage}
         onSave={handleSave}
+        onLeaveGroup={onLeaveGroup}
+        onDeleteGroup={isAdmin ? onDeleteGroup : undefined}
         isRTL={isRTL}
         isAdmin={isAdmin}
       />
@@ -176,6 +215,7 @@ export const GroupScreenHeader = forwardRef<
         groupName={groupName}
         inviteCode={group.code}
         isRTL={isRTL}
+        excludeUserIds={memberUserIds}
         onInviteUser={onInviteUser}
       />
 
@@ -214,7 +254,7 @@ const styles = StyleSheet.create({
   groupName: {
     fontSize: 22,
     color: PG.text,
-    maxWidth: 260,
+    maxWidth: 220,
     textAlign: 'center',
   },
   editBtn: {
@@ -226,6 +266,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(139,92,246,0.2)',
     borderWidth: 1,
     borderColor: 'rgba(167,139,250,0.35)',
+  },
+  leaveChip: {
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  leaveChipTxt: {
+    fontSize: 10,
+    color: PG.textMuted,
   },
   privacyRow: {
     alignItems: 'center',

@@ -39,7 +39,7 @@ export function GroupRankingRow({
   group: RankedGroup;
   isRTL: boolean;
 }) {
-  const { bold, extra } = usePGFonts();
+  const { bold, extra, medium } = usePGFonts();
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const podium = PODIUM[group.rank];
   const isMine = group.isMine;
@@ -88,17 +88,23 @@ export function GroupRankingRow({
       >
         {group.name}
       </Text>
-      <Text
-        style={[
-          styles.points,
-          { fontFamily: extra },
-          podium && { fontSize: 16 },
-          group.rank === 1 && { color: '#FDE68A' },
-          isMine && !podium && { color: PG.primaryLight },
-        ]}
-      >
-        {group.points}
-      </Text>
+      {group.points > 0 && group.hasScores !== false ? (
+        <Text
+          style={[
+            styles.points,
+            { fontFamily: extra },
+            podium && { fontSize: 16 },
+            group.rank === 1 && { color: '#FDE68A' },
+            isMine && !podium && { color: PG.primaryLight },
+          ]}
+        >
+          {group.points}
+        </Text>
+      ) : (
+        <Text style={[styles.emptyPoints, { fontFamily: medium }]} numberOfLines={2}>
+          توقعو كونو اول المصنفين
+        </Text>
+      )}
     </>
   );
 
@@ -161,5 +167,12 @@ const styles = StyleSheet.create({
     color: PG.text,
     minWidth: 40,
     textAlign: 'center',
+  },
+  emptyPoints: {
+    fontSize: 10,
+    color: PG.textMuted,
+    maxWidth: 96,
+    textAlign: 'center',
+    lineHeight: 14,
   },
 });

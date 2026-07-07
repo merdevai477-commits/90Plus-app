@@ -11,6 +11,7 @@ export interface Team {
   /** Two-color gradient used to render a neutral crest placeholder. */
   crest: [string, string];
   short: string;
+  logo?: string | null;
 }
 
 export interface PredictionMatch {
@@ -43,6 +44,7 @@ export interface RankedGroup {
   avatar?: string | null;
   isMine?: boolean;
   id?: string;
+  hasScores?: boolean;
 }
 
 export const GROUP = {

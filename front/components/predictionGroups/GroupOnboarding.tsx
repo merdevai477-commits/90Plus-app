@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 
 import { useToast } from '../../contexts/ToastContext';
+import { GroupBanBanner } from './GroupBanBanner';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { PG, PG_GRADIENTS, PG_RADII, usePGFonts } from './theme';
 
@@ -25,10 +26,12 @@ export function GroupOnboarding({
   isRTL,
   onCreate,
   onJoinByCode,
+  groupBan,
 }: {
   isRTL: boolean;
   onCreate: (name: string) => Promise<void>;
   onJoinByCode: (code: string) => Promise<void>;
+  groupBan?: { until: string } | null;
 }) {
   const { medium, bold, extra } = usePGFonts();
   const toast = useToast();
@@ -40,8 +43,13 @@ export function GroupOnboarding({
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const isBanned = Boolean(groupBan?.until && new Date(groupBan.until) > new Date());
 
   const handleCreate = useCallback(async () => {
+    if (isBanned) {
+      toast.showError('موقوف مؤقتاً', 'لا يمكنك إنشاء مجموعة حتى ينتهي الحظر');
+      return;
+    }
     if (name.trim().length < 2) {
       toast.showError('خطأ', 'اكتب اسم المجموعة (حرفين على الأقل)');
       return;
@@ -57,9 +65,13 @@ export function GroupOnboarding({
     } finally {
       setBusy(false);
     }
-  }, [name, onCreate, toast]);
+  }, [isBanned, name, onCreate, toast]);
 
   const handleJoin = useCallback(async () => {
+    if (isBanned) {
+      toast.showError('موقوف مؤقتاً', 'لا يمكنك الانضمام حتى ينتهي الحظر');
+      return;
+    }
     const normalized = code.trim().toUpperCase();
     if (!/^90PLUS[A-Z0-9]+$/.test(normalized)) {
       toast.showError('كود غير صالح', 'الكود يبدأ بـ 90PLUS');
@@ -76,10 +88,11 @@ export function GroupOnboarding({
     } finally {
       setBusy(false);
     }
-  }, [code, onJoinByCode, toast]);
+  }, [code, isBanned, onJoinByCode, toast]);
 
   return (
     <View style={styles.wrap}>
+      {groupBan?.until ? <GroupBanBanner untilIso={groupBan.until} /> : null}
       <Text style={[styles.title, { fontFamily: extra, textAlign: 'center' }]}>
         ملك التوقعات
       </Text>
@@ -88,14 +101,14 @@ export function GroupOnboarding({
       </Text>
 
       <View style={styles.actions}>
-        <LiquidGlassSurface borderRadius={PG_RADII.lg} onPress={() => setCreateOpen(true)}>
+        <LiquidGlassSurface borderRadius={PG_RADII.lg} onPress={() => !isBanned && setCreateOpen(true)}>
           <View style={[styles.actionBtn, row]}>
             <Plus size={22} color={PG.primaryLight} />
             <Text style={[styles.actionTxt, { fontFamily: bold }]}>إنشاء مجموعة</Text>
           </View>
         </LiquidGlassSurface>
 
-        <LiquidGlassSurface borderRadius={PG_RADII.lg} onPress={() => setJoinOpen(true)}>
+        <LiquidGlassSurface borderRadius={PG_RADII.lg} onPress={() => !isBanned && setJoinOpen(true)}>
           <View style={[styles.actionBtn, row]}>
             <Users size={22} color={PG.gold} />
             <Text style={[styles.actionTxt, { fontFamily: bold }]}>الانضمام لمجموعة</Text>

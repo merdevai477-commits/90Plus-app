@@ -43,6 +43,7 @@ export interface GroupInviteSheetProps {
   inviteCode: string;
   isRTL?: boolean;
   onInviteUser?: (userId: string) => Promise<void>;
+  excludeUserIds?: string[];
 }
 
 export function GroupInviteSheet({
@@ -52,6 +53,7 @@ export function GroupInviteSheet({
   inviteCode,
   isRTL = false,
   onInviteUser,
+  excludeUserIds = [],
 }: GroupInviteSheetProps) {
   const insets = useSafeAreaInsets();
   const toast = useToast();
@@ -67,6 +69,7 @@ export function GroupInviteSheet({
   const textAlign = isRTL ? 'right' : 'left';
 
   const wasVisibleRef = useRef(visible);
+  const excludeSet = useMemo(() => new Set(excludeUserIds), [excludeUserIds]);
 
   useEffect(() => {
     if (wasVisibleRef.current && !visible) {
@@ -101,9 +104,13 @@ export function GroupInviteSheet({
             return;
           }
           const users = await AuthService.searchUsers(token, q, 20);
-          if (!cancelled) setResults(users);
-        } catch {
-          if (!cancelled) setResults([]);
+          const filtered = users.filter((u) => !excludeSet.has(u.id));
+          if (!cancelled) setResults(filtered);
+        } catch (err: any) {
+          if (!cancelled) {
+            setResults([]);
+            toast.showError('تعذر البحث', err?.message ?? 'حاول مرة أخرى');
+          }
         } finally {
           if (!cancelled) setLoading(false);
         }

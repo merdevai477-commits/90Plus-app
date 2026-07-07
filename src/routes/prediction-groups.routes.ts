@@ -10,6 +10,7 @@ import { ErrorCode, sendError, type ErrorCodeValue } from '../constants/errors';
 import { logger } from '../utils/logger';
 import {
   createGroup,
+  deleteGroup,
   getGlobalLeaderboard,
   getGroupMembers,
   getGroupStandings,
@@ -56,13 +57,17 @@ function mapError(req: Request, res: Response, err: unknown): void {
     MATCH_LOCKED: { status: ErrorCode.CONFLICT, message: 'التوقعات مغلقة لهذه المباراة' },
     MEMBER_NOT_FOUND: { status: ErrorCode.NOT_FOUND, message: 'العضو غير موجود' },
     CANNOT_KICK_SELF: { status: ErrorCode.VALIDATION, message: 'لا يمكن طرد نفسك' },
+    GROUP_BANNED: {
+      status: ErrorCode.AUTHORIZATION,
+      message: 'تم إيقاف نشاط المجموعات مؤقتاً — حاول لاحقاً',
+    },
   };
   const mapped = map[code] ?? { status: ErrorCode.INTERNAL, message: 'Internal server error' };
   if (!map[code]) logger.error('[PredictionGroups] unhandled error:', err);
   sendError(req, res, mapped.status, mapped.message);
 }
 
-router.get('/me', requireAuth, responseCacheMiddleware({ ttl: 15_000 }), async (req, res) => {
+router.get('/me', requireAuth, responseCacheMiddleware({ ttl: 3_000 }), async (req, res) => {
   try {
     const user = await resolveUser(req);
     if (!user) {
@@ -123,13 +128,29 @@ router.post('/leave', requireAuth, async (req, res) => {
       return;
     }
     const result = await leaveGroup(user.id);
-    res.json({ success: true, data: result });
+    const state = await getMyGroupState(user.id);
+    res.json({ success: true, data: { ...result, state } });
   } catch (err) {
     mapError(req, res, err);
   }
 });
 
-router.get('/leaderboard', requireAuth, responseCacheMiddleware({ ttl: 60_000 }), async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) {
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
+      return;
+    }
+    const result = await deleteGroup(user.id, param(req.params.id));
+    const state = await getMyGroupState(user.id);
+    res.json({ success: true, data: { ...result, state } });
+  } catch (err) {
+    mapError(req, res, err);
+  }
+});
+
+router.get('/leaderboard', requireAuth, responseCacheMiddleware({ ttl: 30_000 }), async (req, res) => {
   try {
     const period = (req.query.period as 'all' | 'week' | 'month') || 'all';
     const rows = await getGlobalLeaderboard(period);

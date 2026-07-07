@@ -18,7 +18,8 @@ import { ChevronDown, ChevronUp, Star, Target } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
-import { Crest, GlassCard, PressableScale } from './atoms';
+import TeamBadge from '../common/TeamBadge';
+import { GlassCard, PressableScale } from './atoms';
 import type { PredictionMatch } from './data';
 import { PG, PG_GLOW_PURPLE, PG_RADII, usePGFonts } from './theme';
 
@@ -174,7 +175,7 @@ export function MatchPredictionCard({
 
       <View style={[styles.teams, row]}>
         <View style={styles.teamSide}>
-          <Crest team={match.home} size={46} />
+          <TeamBadge name={match.home.name} logo={match.home.logo ?? undefined} size={46} color="transparent" />
           <Text style={[styles.teamName, { fontFamily: bold }]} numberOfLines={1}>
             {match.home.name}
           </Text>
@@ -200,7 +201,7 @@ export function MatchPredictionCard({
         </View>
 
         <View style={styles.teamSide}>
-          <Crest team={match.away} size={46} />
+          <TeamBadge name={match.away.name} logo={match.away.logo ?? undefined} size={46} color="transparent" />
           <Text style={[styles.teamName, { fontFamily: bold }]} numberOfLines={1}>
             {match.away.name}
           </Text>
