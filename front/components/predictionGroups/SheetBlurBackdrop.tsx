@@ -8,7 +8,7 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 const BLUR_INTENSITY = Platform.OS === 'ios' ? 48 : 90;
 
-export function SheetBlurBackdrop({ onPress }: { onPress: () => void }) {
+export function SheetBlurBackdrop({ onPress }: { onPress?: () => void }) {
   return (
     <Pressable style={StyleSheet.absoluteFill} onPress={onPress} accessibilityRole="button">
       <BlurView intensity={BLUR_INTENSITY} tint="dark" style={StyleSheet.absoluteFill} />

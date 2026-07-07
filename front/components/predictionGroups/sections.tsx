@@ -459,11 +459,12 @@ export function PredictionsSection({
 
       {data.map((m) => {
         const apiMatchId = (m as { apiMatchId?: number }).apiMatchId;
+        const status = (m as { status?: string }).status;
         const locked = apiMode
-          ? m.status !== 'NS' && m.status !== 'TBD' && m.status !== ''
+          ? status !== 'NS' && status !== 'TBD' && status !== ''
           : roundTab === 'next';
         const finished = apiMode
-          ? m.status === 'FT' || m.status === 'AET' || m.status === 'PEN'
+          ? status === 'FT' || status === 'AET' || status === 'PEN'
           : roundTab === 'results';
         return (
           <MatchPredictionCard

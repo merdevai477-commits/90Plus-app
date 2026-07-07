@@ -16,6 +16,12 @@ export interface GroupImageSourceSheetProps {
   visible: boolean;
   hasImage?: boolean;
   isRTL?: boolean;
+  /**
+   * When true, renders as an in-place absolute overlay instead of a native
+   * Modal. Use this when opened from inside another Modal (nested Modals
+   * render as a black screen on Android/iOS).
+   */
+  embedded?: boolean;
   onClose: () => void;
   onPickGallery: () => void;
   onPickCamera: () => void;
@@ -26,6 +32,7 @@ export function GroupImageSourceSheet({
   visible,
   hasImage = false,
   isRTL = false,
+  embedded = false,
   onClose,
   onPickGallery,
   onPickCamera,
@@ -46,65 +53,74 @@ export function GroupImageSourceSheet({
 
   if (!visible) return null;
 
-  return (
-    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
-      <View style={styles.root}>
-        <SheetBlurBackdrop onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-          <LiquidGlassSurface borderRadius={PG_RADII.xl} subtleShadow style={styles.card}>
-            <View style={styles.handle} />
-            <Text style={[styles.title, { fontFamily: extra, textAlign }]}>صورة المجموعة</Text>
-            <Text style={[styles.sub, { fontFamily: medium, textAlign }]}>اختر مصدر الصورة</Text>
+  const content = (
+    <>
+      <SheetBlurBackdrop onPress={onClose} />
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+        <LiquidGlassSurface borderRadius={PG_RADII.xl} subtleShadow style={styles.card}>
+          <View style={styles.handle} />
+          <Text style={[styles.title, { fontFamily: extra, textAlign }]}>صورة المجموعة</Text>
+          <Text style={[styles.sub, { fontFamily: medium, textAlign }]}>اختر مصدر الصورة</Text>
 
-            <View style={styles.options}>
-              <Pressable
-                onPress={() => pick('gallery')}
-                style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
-              >
-                <View style={styles.iconWrap}>
-                  <ImageIcon size={22} color={PG.primaryLight} />
-                </View>
-                <Text style={[styles.optionText, { fontFamily: bold }]}>المعرض</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => pick('camera')}
-                style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
-              >
-                <View style={styles.iconWrap}>
-                  <Camera size={22} color={PG.primaryLight} />
-                </View>
-                <Text style={[styles.optionText, { fontFamily: bold }]}>الكاميرا</Text>
-              </Pressable>
-            </View>
-
-            {hasImage && onRemoveImage ? (
-              <Pressable
-                onPress={() => {
-                  onClose();
-                  onRemoveImage();
-                }}
-                style={({ pressed }) => [styles.removeBtn, pressed && { opacity: 0.85 }]}
-              >
-                <Text style={[styles.removeTxt, { fontFamily: medium }]}>إزالة الصورة</Text>
-              </Pressable>
-            ) : null}
+          <View style={styles.options}>
+            <Pressable
+              onPress={() => pick('gallery')}
+              style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
+            >
+              <View style={styles.iconWrap}>
+                <ImageIcon size={22} color={PG.primaryLight} />
+              </View>
+              <Text style={[styles.optionText, { fontFamily: bold }]}>المعرض</Text>
+            </Pressable>
 
             <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.85 }]}
+              onPress={() => pick('camera')}
+              style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
             >
-              <Text style={[styles.cancelTxt, { fontFamily: medium }]}>إلغاء</Text>
+              <View style={styles.iconWrap}>
+                <Camera size={22} color={PG.primaryLight} />
+              </View>
+              <Text style={[styles.optionText, { fontFamily: bold }]}>الكاميرا</Text>
             </Pressable>
-          </LiquidGlassSurface>
-        </View>
+          </View>
+
+          {hasImage && onRemoveImage ? (
+            <Pressable
+              onPress={() => {
+                onClose();
+                onRemoveImage();
+              }}
+              style={({ pressed }) => [styles.removeBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={[styles.removeTxt, { fontFamily: medium }]}>إزالة الصورة</Text>
+            </Pressable>
+          ) : null}
+
+          <Pressable
+            onPress={onClose}
+            style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={[styles.cancelTxt, { fontFamily: medium }]}>إلغاء</Text>
+          </Pressable>
+        </LiquidGlassSurface>
       </View>
+    </>
+  );
+
+  if (embedded) {
+    return <View style={[StyleSheet.absoluteFillObject, styles.root, styles.embeddedRoot]}>{content}</View>;
+  }
+
+  return (
+    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+      <View style={styles.root}>{content}</View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
+  embeddedRoot: { zIndex: 3000, elevation: 3000 },
   sheet: { paddingHorizontal: 12, zIndex: 2 },
   card: {
     paddingHorizontal: PG_SPACING.lg,

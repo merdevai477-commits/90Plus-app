@@ -8,7 +8,9 @@ import { BarChart3, ChevronLeft } from 'lucide-react-native';
 import React, { useCallback, useState } from 'react';
 import { I18nManager, Platform, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
+import type { GroupDailyInsight } from '../../services/predictionGroups.service';
 import { GroupMembersSheet } from './GroupMembersSheet';
+import { GroupMotivationCard } from './GroupMotivationCard';
 import { GroupStatsPopup } from './GroupStatsPopup';
 import type { GroupMember } from './data';
 import { HomeLeaderboardRow } from './HomeLeaderboardRow';
@@ -20,12 +22,14 @@ export function HomeLeaderboardCard({
   isRTL,
   members,
   groupStats,
+  dailyInsight,
   isOwner,
   onKickMember,
 }: {
   isRTL: boolean;
   members: GroupMember[];
   groupStats?: { totalPredictions: number; correctPredictions: number; wrongPredictions: number } | null;
+  dailyInsight?: GroupDailyInsight | null;
   isOwner?: boolean;
   onKickMember?: (userId: string) => Promise<void>;
 }) {
@@ -51,6 +55,8 @@ export function HomeLeaderboardCard({
   });
 
   return (
+    <>
+    <GroupMotivationCard insight={dailyInsight} isRTL={isRTL} />
     <View style={[styles.wrap, shellGlow]}>
       <View style={styles.darkBase}>
         <LinearGradient
@@ -71,7 +77,10 @@ export function HomeLeaderboardCard({
           <View style={[styles.cardHeader, row]}>
             <View style={[styles.titleBlock, row]}>
               <PurpleTrophyIcon size={38} />
-              <Text style={[styles.title, { fontFamily: extra }]}>ترتيب المجموعة</Text>
+              <View>
+                <Text style={[styles.title, { fontFamily: extra }]}>ترتيب اليوم</Text>
+                <Text style={[styles.subtitle, { fontFamily: medium }]}>يتجدد كل يوم</Text>
+              </View>
             </View>
             <Pressable onPress={openMembers} hitSlop={8}>
               <Text style={[styles.viewAll, { fontFamily: medium }]}>عرض الكل</Text>
@@ -130,6 +139,7 @@ export function HomeLeaderboardCard({
         stats={groupStats}
       />
     </View>
+    </>
   );
 }
 
@@ -149,6 +159,7 @@ const styles = StyleSheet.create({
   },
   titleBlock: { alignItems: 'center', gap: 10, flex: 1 },
   title: { fontSize: 17, color: PG.text },
+  subtitle: { fontSize: 11, color: PG.textMuted, marginTop: 1 },
   viewAll: { fontSize: 12, color: PG.primaryLight },
   divider: {
     height: 1,

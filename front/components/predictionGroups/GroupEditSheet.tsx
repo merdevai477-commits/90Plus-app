@@ -275,41 +275,44 @@ export function GroupEditSheet({
           </Pressable>
         </SheetGlass>
       </View>
+
+        <GroupImageSourceSheet
+          visible={imageSourceOpen}
+          embedded
+          hasImage={Boolean(draftImage)}
+          isRTL={isRTL}
+          onClose={() => setImageSourceOpen(false)}
+          onPickGallery={() => handlePickSource('gallery')}
+          onPickCamera={() => handlePickSource('camera')}
+          onRemoveImage={() => setDraftImage(null)}
+        />
+
+        <GroupConfirmDialog
+          visible={deleteConfirmOpen}
+          embedded
+          title="مسح المجموعة؟"
+          message="سيتم حذف المجموعة نهائياً. إذا كان لديك توقعات نشطة في جولة جارية قد تفقد نقاطها. هل أنت متأكد؟"
+          confirmLabel="مسح المجموعة"
+          destructive
+          loading={dangerBusy}
+          isRTL={isRTL}
+          onConfirm={() => void runDelete()}
+          onCancel={() => setDeleteConfirmOpen(false)}
+        />
+
+        <GroupConfirmDialog
+          visible={leaveConfirmOpen}
+          embedded
+          title="الخروج من المجموعة؟"
+          message="لن تظهر في ترتيب المجموعة بعد الخروج. يمكنك الانضمام لمجموعة أخرى لاحقاً."
+          confirmLabel="خروج"
+          destructive
+          loading={dangerBusy}
+          isRTL={isRTL}
+          onConfirm={() => void runLeave()}
+          onCancel={() => setLeaveConfirmOpen(false)}
+        />
       </View>
-
-      <GroupImageSourceSheet
-        visible={imageSourceOpen}
-        hasImage={Boolean(draftImage)}
-        isRTL={isRTL}
-        onClose={() => setImageSourceOpen(false)}
-        onPickGallery={() => handlePickSource('gallery')}
-        onPickCamera={() => handlePickSource('camera')}
-        onRemoveImage={() => setDraftImage(null)}
-      />
-
-      <GroupConfirmDialog
-        visible={deleteConfirmOpen}
-        title="مسح المجموعة؟"
-        message="سيتم حذف المجموعة نهائياً. إذا كان لديك توقعات نشطة في جولة جارية قد تفقد نقاطها. هل أنت متأكد؟"
-        confirmLabel="مسح المجموعة"
-        destructive
-        loading={dangerBusy}
-        isRTL={isRTL}
-        onConfirm={() => void runDelete()}
-        onCancel={() => setDeleteConfirmOpen(false)}
-      />
-
-      <GroupConfirmDialog
-        visible={leaveConfirmOpen}
-        title="الخروج من المجموعة؟"
-        message="لن تظهر في ترتيب المجموعة بعد الخروج. يمكنك الانضمام لمجموعة أخرى لاحقاً."
-        confirmLabel="خروج"
-        destructive
-        loading={dangerBusy}
-        isRTL={isRTL}
-        onConfirm={() => void runLeave()}
-        onCancel={() => setLeaveConfirmOpen(false)}
-      />
     </Modal>
   );
 }

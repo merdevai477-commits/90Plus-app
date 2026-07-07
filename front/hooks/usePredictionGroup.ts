@@ -2,6 +2,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  GroupDailyInsight,
   GroupMemberRow,
   GroupRoundMatch,
   MyGroupState,
@@ -30,6 +31,7 @@ export function usePredictionGroup() {
     correctPredictions: number;
     wrongPredictions: number;
   } | null>(null);
+  const [dailyInsight, setDailyInsight] = useState<GroupDailyInsight | null>(null);
 
   const getTokenRef = useRef(getToken);
   const isSignedInRef = useRef(isSignedIn);
@@ -56,6 +58,7 @@ export function usePredictionGroup() {
       setRoundMatches([]);
       setRoundMeta(null);
       setGroupStats(null);
+      setDailyInsight(null);
     }
   }, []);
 
@@ -105,6 +108,7 @@ export function usePredictionGroup() {
       if (standings) {
         setMembers(standings.members);
         setGroupStats(standings.groupStats);
+        setDailyInsight(standings.insight ?? null);
       }
       if (round) {
         setRoundMatches(round.matches);
@@ -269,6 +273,7 @@ export function usePredictionGroup() {
     roundMeta,
     globalGroups,
     groupStats,
+    dailyInsight,
     groupBan: state?.groupBan ?? null,
     isOwner: state?.membership?.isOwner ?? false,
     refreshMe,

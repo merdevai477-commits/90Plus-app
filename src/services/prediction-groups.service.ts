@@ -462,39 +462,118 @@ export async function getGroupMembers(groupId: string, viewerId: string) {
   }));
 }
 
+/** UTC midnight for the given moment — the daily leaderboard reset boundary. */
+export function startOfTodayUtc(now = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+export interface GroupDailyInsight {
+  /** Viewer daily rank (only when they have daily points), else null. */
+  rank: number | null;
+  /** Viewer daily points. */
+  points: number;
+  /** Points needed to reach the next higher rank today, else null. */
+  pointsToNextRank: number | null;
+  /** The next higher rank number, else null. */
+  nextRank: number | null;
+  /** True when the viewer leads today's ranking with points. */
+  isLeading: boolean;
+}
+
 export async function getGroupStandings(groupId: string, viewerId: string) {
+  // All-time ordered members (groupXpTotal). We re-rank by daily points below.
   const members = await getGroupMembers(groupId, viewerId);
+
+  const dayStart = startOfTodayUtc();
 
   const allSettled = await prisma.groupPrediction.findMany({
     where: { groupId, isCorrect: { not: null } },
-    select: { userId: true, isCorrect: true },
+    select: { userId: true, isCorrect: true, xpAwarded: true, settledAt: true },
   });
+
   const correctByUser = new Map<string, number>();
-  const wrongCounts = new Map<string, number>();
+  const wrongByUser = new Map<string, number>();
+  const dailyPointsByUser = new Map<string, number>();
+
   for (const row of allSettled) {
     if (row.isCorrect) {
       correctByUser.set(row.userId, (correctByUser.get(row.userId) ?? 0) + 1);
+      if (row.settledAt && row.settledAt >= dayStart) {
+        dailyPointsByUser.set(
+          row.userId,
+          (dailyPointsByUser.get(row.userId) ?? 0) + (row.xpAwarded ?? 0),
+        );
+      }
     } else {
-      wrongCounts.set(row.userId, (wrongCounts.get(row.userId) ?? 0) + 1);
+      wrongByUser.set(row.userId, (wrongByUser.get(row.userId) ?? 0) + 1);
     }
   }
 
-  const enriched = members
-    .filter((m) => m.points > 0 || correctByUser.has(m.userId))
-    .map((m) => {
-      const correct = correctByUser.get(m.userId) ?? 0;
-      const wrong = wrongCounts.get(m.userId) ?? 0;
-      const total = correct + wrong;
-      return {
-        ...m,
-        correct,
-        wrong,
-        accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
-      };
-    });
+  // Keep every member so the daily board shows newcomers with the "start
+  // predicting" nudge instead of hiding them.
+  const enriched = members.map((m) => {
+    const correct = correctByUser.get(m.userId) ?? 0;
+    const wrong = wrongByUser.get(m.userId) ?? 0;
+    const total = correct + wrong;
+    const dailyPoints = dailyPointsByUser.get(m.userId) ?? 0;
+    return {
+      ...m,
+      totalPoints: m.points,
+      dailyPoints,
+      // Primary display value is the daily score.
+      points: dailyPoints,
+      correct,
+      wrong,
+      accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
+    };
+  });
+
+  enriched.sort((a, b) => {
+    if (b.dailyPoints !== a.dailyPoints) return b.dailyPoints - a.dailyPoints;
+    if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+    return 0;
+  });
+
+  const ranked = enriched.map((m, i) => ({ ...m, rank: i + 1 }));
+
+  const meIndex = ranked.findIndex((m) => m.isMe);
+  let insight: GroupDailyInsight = {
+    rank: null,
+    points: 0,
+    pointsToNextRank: null,
+    nextRank: null,
+    isLeading: false,
+  };
+
+  if (meIndex !== -1) {
+    const me = ranked[meIndex];
+    if (me.dailyPoints > 0) {
+      if (meIndex === 0) {
+        insight = {
+          rank: 1,
+          points: me.dailyPoints,
+          pointsToNextRank: null,
+          nextRank: null,
+          isLeading: true,
+        };
+      } else {
+        const next = ranked[meIndex - 1];
+        insight = {
+          rank: me.rank,
+          points: me.dailyPoints,
+          pointsToNextRank: Math.max(0, next.dailyPoints - me.dailyPoints),
+          nextRank: next.rank,
+          isLeading: false,
+        };
+      }
+    }
+  }
 
   return {
-    members: enriched,
+    members: ranked,
+    period: 'daily' as const,
+    dayStart: dayStart.toISOString(),
+    insight,
     groupStats: {
       totalPredictions: allSettled.length,
       correctPredictions: allSettled.filter((r) => r.isCorrect).length,

@@ -115,7 +115,7 @@ export function GroupInviteSheet({
           if (!cancelled) setLoading(false);
         }
       })();
-    }, 320);
+    }, 300);
 
     return () => {
       cancelled = true;

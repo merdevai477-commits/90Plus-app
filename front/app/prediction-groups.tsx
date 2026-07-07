@@ -64,6 +64,7 @@ export default function PredictionGroupsScreen() {
     roundMeta,
     globalGroups,
     groupStats,
+    dailyInsight,
     groupBan,
     isOwner,
     refreshMe,
@@ -250,6 +251,7 @@ export default function PredictionGroupsScreen() {
             isRTL={isRTL}
             members={memberRows}
             groupStats={groupStats}
+            dailyInsight={dailyInsight}
             isOwner={isOwner}
             onKickMember={kickMember}
           />

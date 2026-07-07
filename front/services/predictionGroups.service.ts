@@ -39,12 +39,33 @@ export interface GroupMemberRow {
   username: string;
   name: string;
   avatar: string | null;
+  /** Primary display value — today's points (daily ranking). */
   points: number;
+  /** Today's points (same as `points`, explicit). */
+  dailyPoints?: number;
+  /** All-time group XP total. */
+  totalPoints?: number;
   isMe: boolean;
   isAdmin: boolean;
   correct?: number;
   wrong?: number;
   accuracy?: number;
+}
+
+export interface GroupDailyInsight {
+  rank: number | null;
+  points: number;
+  pointsToNextRank: number | null;
+  nextRank: number | null;
+  isLeading: boolean;
+}
+
+export interface GroupStandings {
+  members: GroupMemberRow[];
+  period: 'daily';
+  dayStart: string;
+  insight: GroupDailyInsight;
+  groupStats: { totalPredictions: number; correctPredictions: number; wrongPredictions: number };
 }
 
 export interface GroupRoundMatch {
@@ -151,10 +172,7 @@ export const PredictionGroupsService = {
     authFetch(token, `/${groupId}/members`) as Promise<GroupMemberRow[]>,
 
   getStandings: (token: string, groupId: string) =>
-    authFetch(token, `/${groupId}/standings`) as Promise<{
-      members: GroupMemberRow[];
-      groupStats: { totalPredictions: number; correctPredictions: number; wrongPredictions: number };
-    }>,
+    authFetch(token, `/${groupId}/standings`) as Promise<GroupStandings>,
 
   kickMember: (token: string, groupId: string, userId: string) =>
     authFetch(token, `/${groupId}/members/${userId}`, { method: 'DELETE' }),
