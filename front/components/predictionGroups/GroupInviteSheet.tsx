@@ -176,9 +176,10 @@ export function GroupInviteSheet({
   const emptyHint = useMemo(() => {
     if (query.trim().length < 2) return 'ابحث باسم المستخدم للدعوة';
     if (loading) return null;
+    if (results.length > 0) return null;
     if (errored) return 'تعذّر البحث — تحقق من الاتصال وحاول مرة أخرى';
     return 'لا توجد نتائج';
-  }, [query, loading, errored]);
+  }, [query, loading, errored, results.length]);
 
   const sheetBottomPad = insets.bottom + COMPACT_TAB_BAR_HEIGHT + 20;
 
