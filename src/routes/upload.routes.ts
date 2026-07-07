@@ -698,6 +698,97 @@ router.post(
   },
 );
 
+// ─── POST /api/upload/group-avatar ───────────────────────────────────────────
+// Prediction group photo → Cloudflare R2 (group-avatars/{groupId}/...)
+
+router.post(
+  '/group-avatar',
+  requireAuth,
+  uploadImage.single('file'),
+  validateUploadMagicBytes,
+  validateUploadedImage,
+  optimizeUploadedImage,
+  async (req: Request, res: Response): Promise<void> => {
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) {
+      sendError(req, res, 401, ErrorCode.AUTHENTICATION, 'UNAUTHORIZED', 'Unauthorized');
+      return;
+    }
+
+    const groupId = String(req.body?.groupId ?? '').trim();
+    if (!groupId) {
+      sendError(req, res, 400, ErrorCode.VALIDATION, 'GROUP_ID_REQUIRED', 'groupId is required');
+      return;
+    }
+
+    const file = req.file;
+    if (!file?.buffer?.length) {
+      sendError(req, res, 400, ErrorCode.FILE_UPLOAD, 'NO_FILE', 'No file provided');
+      return;
+    }
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { clerkUserId },
+        select: { id: true },
+      });
+      if (!user) {
+        sendError(req, res, 404, ErrorCode.NOT_FOUND, 'USER_NOT_FOUND', 'User not found');
+        return;
+      }
+
+      const membership = await prisma.groupMember.findFirst({
+        where: { groupId, userId: user.id, leftAt: null, role: 'OWNER' },
+        include: { group: { select: { avatarStoragePath: true } } },
+      });
+      if (!membership) {
+        sendError(req, res, 403, ErrorCode.AUTHORIZATION, 'FORBIDDEN', 'Only group owner can update avatar');
+        return;
+      }
+
+      const quotaOk = await checkQuota(user.id, file.buffer.length, req, res);
+      if (!quotaOk) return;
+
+      if (membership.group.avatarStoragePath) {
+        r2MediaStorage.deleteObject(membership.group.avatarStoragePath).catch((err: any) =>
+          logger.warn('[upload/group-avatar] Old R2 delete failed:', err?.message),
+        );
+      }
+
+      const safeName = sanitizeOriginalName(file.originalname, 'group-avatar');
+      const result = await r2MediaStorage.uploadPublic(
+        'group-avatars',
+        groupId,
+        file.buffer,
+        safeName,
+        file.mimetype,
+      );
+
+      if (!result.success || !result.url || !result.key) {
+        sendError(req, res, 500, ErrorCode.EXTERNAL_SERVICE, 'STORAGE_UPLOAD_FAILED', result.error || 'Upload failed');
+        return;
+      }
+
+      await incrementQuota(user.id, file.buffer.length);
+
+      await prisma.predictionGroup.update({
+        where: { id: groupId },
+        data: { avatarUrl: result.url, avatarStoragePath: result.key },
+      });
+
+      res.json({
+        status: 'SUCCESS',
+        message: 'Group avatar uploaded successfully.',
+        url: result.url,
+        data: { url: result.url, storagePath: result.key },
+      });
+    } catch (error: any) {
+      logger.error('[upload/group-avatar] error:', error);
+      sendError(req, res, 500, ErrorCode.INTERNAL, 'UPLOAD_ERROR', error?.message || 'Upload failed');
+    }
+  },
+);
+
 /** Heavy Mux PUT + metadata — runs after HTTP response so mobile clients don't 499. */
 async function processReelMuxUploadInBackground(params: {
   userId: string;

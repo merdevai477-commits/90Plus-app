@@ -19,7 +19,7 @@ import { logger } from '../utils/logger';
 import { registerOrphan, resolveOrphan } from './r2-cleanup.service';
 import { redisCacheService } from './redis-cache.service';
 
-export type R2MediaBucket = 'avatars' | 'covers' | 'reels' | 'thumbnails' | 'videos';
+export type R2MediaBucket = 'avatars' | 'covers' | 'reels' | 'thumbnails' | 'videos' | 'group-avatars';
 
 export interface R2UploadResult {
   success: boolean;
@@ -56,8 +56,6 @@ function cacheControlFor(bucket: R2MediaBucket): string {
   }
   return 'public, max-age=31536000, immutable';
 }
-
-// ─── Service ──────────────────────────────────────────────────────────────────
 
 export class R2MediaStorageService {
   private client: S3Client;

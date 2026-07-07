@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Camera, Crown, ImageIcon, Shield, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
@@ -22,6 +23,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
 import { useImagePicker } from '../../hooks/useImagePicker';
+import { useImageUpload } from '../../hooks/useImageUpload';
+import { useToast } from '../../contexts/ToastContext';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { SheetBlurBackdrop } from './SheetBlurBackdrop';
 import { PG, PG_RADII, PG_SPACING, PG_TYPE, usePGFonts } from './theme';
@@ -34,16 +37,23 @@ const SHEET_GLASS_PROPS = isLiquidGlassSupported
 export interface GroupEditSheetProps {
   visible: boolean;
   onClose: () => void;
+  groupId: string;
   groupName: string;
   groupImage: string | null;
-  onSave: (name: string, imageUri: string | null) => void;
+  onSave: (name: string, imageUri: string | null) => void | Promise<void>;
   isRTL?: boolean;
   isAdmin?: boolean;
+}
+
+function isLocalImageUri(uri: string | null | undefined): boolean {
+  if (!uri) return false;
+  return uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('ph://');
 }
 
 export function GroupEditSheet({
   visible,
   onClose,
+  groupId,
   groupName,
   groupImage,
   onSave,
@@ -53,6 +63,8 @@ export function GroupEditSheet({
   const insets = useSafeAreaInsets();
   const { medium, bold, extra } = usePGFonts();
   const { pickFromGallery, pickFromCamera } = useImagePicker();
+  const { upload, isUploading } = useImageUpload();
+  const toast = useToast();
 
   const [draftName, setDraftName] = useState(groupName);
   const [draftImage, setDraftImage] = useState<string | null>(groupImage);
@@ -104,13 +116,30 @@ export function GroupEditSheet({
     setSourcePickerOpen(false);
   }, []);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     const trimmed = draftName.trim();
     if (!trimmed) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    onSave(trimmed, draftImage);
-    onClose();
-  }, [draftName, draftImage, onSave, onClose]);
+    try {
+      let finalImage = draftImage;
+      if (isLocalImageUri(draftImage)) {
+        const result = await upload(draftImage!, {
+          endpoint: '/upload/group-avatar',
+          fieldName: 'file',
+          additionalData: { groupId },
+        });
+        if (!result.success || !result.url) {
+          toast.showError('تعذر رفع الصورة', result.error ?? 'حاول مرة أخرى');
+          return;
+        }
+        finalImage = result.url;
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      await onSave(trimmed, finalImage);
+      onClose();
+    } catch (e: any) {
+      toast.showError('تعذر الحفظ', e?.message ?? '');
+    }
+  }, [draftName, draftImage, groupId, onClose, onSave, toast, upload]);
 
   return (
     <Modal
@@ -176,8 +205,9 @@ export function GroupEditSheet({
           />
 
           <Pressable
-            onPress={handleSave}
-            style={({ pressed }) => [styles.saveBtn, pressed && { opacity: 0.9 }]}
+            onPress={() => void handleSave()}
+            disabled={isUploading}
+            style={({ pressed }) => [styles.saveBtn, (pressed || isUploading) && { opacity: 0.9 }]}
           >
             <LinearGradient
               colors={[PG.primaryLight, PG.primary]}
@@ -185,7 +215,11 @@ export function GroupEditSheet({
               end={{ x: 1, y: 0 }}
               style={styles.saveGrad}
             >
-              <Text style={[styles.saveText, { fontFamily: bold }]}>حفظ التعديلات</Text>
+              {isUploading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={[styles.saveText, { fontFamily: bold }]}>حفظ التعديلات</Text>
+              )}
             </LinearGradient>
           </Pressable>
         </SheetGlass>

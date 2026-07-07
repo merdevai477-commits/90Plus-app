@@ -162,6 +162,7 @@ export const GroupScreenHeader = forwardRef<
       <GroupEditSheet
         visible={editOpen}
         onClose={() => setEditOpen(false)}
+        groupId={group.id}
         groupName={groupName}
         groupImage={groupImage}
         onSave={handleSave}

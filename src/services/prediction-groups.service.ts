@@ -234,7 +234,20 @@ export async function updateGroup(
     if (trimmed.length < 2 || trimmed.length > 40) throw new Error('INVALID_NAME');
     update.name = trimmed;
   }
-  if (data.avatarUrl !== undefined) update.avatarUrl = data.avatarUrl;
+  if (data.avatarUrl !== undefined) {
+    update.avatarUrl = data.avatarUrl;
+    if (data.avatarUrl === null) {
+      const group = await prisma.predictionGroup.findUnique({
+        where: { id: groupId },
+        select: { avatarStoragePath: true },
+      });
+      if (group?.avatarStoragePath) {
+        const { r2MediaStorage } = await import('./r2-media-storage.service');
+        r2MediaStorage.deleteObject(group.avatarStoragePath).catch(() => undefined);
+      }
+      update.avatarStoragePath = null;
+    }
+  }
 
   await prisma.predictionGroup.update({ where: { id: groupId }, data: update });
   return getMyGroupState(userId);
