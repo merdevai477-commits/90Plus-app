@@ -98,10 +98,10 @@ export function GroupEditSheet({
 
   const pickImage = useCallback(
     async (source: 'gallery' | 'camera') => {
-      // Hide this modal first so iOS can present the native picker on top,
-      // then wait for the dismiss animation to settle before launching.
+      // The edit sheet is already hidden (pickerActive) — wait for the source
+      // sheet dismiss animation to settle so the OS picker can present cleanly.
       setPickerActive(true);
-      await new Promise((resolve) => setTimeout(resolve, Platform.OS === 'ios' ? 350 : 150));
+      await new Promise((resolve) => setTimeout(resolve, Platform.OS === 'ios' ? 400 : 250));
       try {
         const result =
           source === 'gallery'
@@ -120,6 +120,9 @@ export function GroupEditSheet({
 
   const handlePickSource = useCallback(
     (source: 'gallery' | 'camera') => {
+      // Close the source sheet but keep the edit sheet hidden (pickerActive)
+      // until the picker returns — avoids any modal flashing back in.
+      setImageSourceOpen(false);
       void pickImage(source);
     },
     [pickImage],
@@ -127,7 +130,15 @@ export function GroupEditSheet({
 
   const openImagePicker = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    // Hide the edit sheet and show the source sheet as a standalone modal so
+    // the two are never presented as nested modals (which renders black).
+    setPickerActive(true);
     setImageSourceOpen(true);
+  }, []);
+
+  const closeImageSource = useCallback(() => {
+    setImageSourceOpen(false);
+    setPickerActive(false);
   }, []);
 
   const runDelete = useCallback(async () => {
@@ -182,6 +193,7 @@ export function GroupEditSheet({
   }, [draftName, draftImage, groupId, onClose, onSave, toast, upload]);
 
   return (
+    <>
     <Modal
       visible={visible && !pickerActive}
       transparent
@@ -288,17 +300,6 @@ export function GroupEditSheet({
         </SheetGlass>
       </View>
 
-        <GroupImageSourceSheet
-          visible={imageSourceOpen}
-          embedded
-          hasImage={Boolean(draftImage)}
-          isRTL={isRTL}
-          onClose={() => setImageSourceOpen(false)}
-          onPickGallery={() => handlePickSource('gallery')}
-          onPickCamera={() => handlePickSource('camera')}
-          onRemoveImage={() => setDraftImage(null)}
-        />
-
         <GroupConfirmDialog
           visible={deleteConfirmOpen}
           embedded
@@ -326,6 +327,17 @@ export function GroupEditSheet({
         />
       </View>
     </Modal>
+
+    <GroupImageSourceSheet
+      visible={imageSourceOpen}
+      hasImage={Boolean(draftImage)}
+      isRTL={isRTL}
+      onClose={closeImageSource}
+      onPickGallery={() => handlePickSource('gallery')}
+      onPickCamera={() => handlePickSource('camera')}
+      onRemoveImage={() => setDraftImage(null)}
+    />
+    </>
   );
 }
 

@@ -44,11 +44,10 @@ export function GroupImageSourceSheet({
 
   const pick = (source: 'gallery' | 'camera') => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    onClose();
-    setTimeout(() => {
-      if (source === 'gallery') onPickGallery();
-      else onPickCamera();
-    }, 160);
+    // The parent closes this sheet and launches the picker — calling onClose
+    // here too would reset its keep-hidden state and flash the edit sheet back.
+    if (source === 'gallery') onPickGallery();
+    else onPickCamera();
   };
 
   if (!visible) return null;
