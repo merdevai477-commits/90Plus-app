@@ -47,6 +47,7 @@ export enum NotificationType {
     AI_CHECKIN = 'AI_CHECKIN',                 // 12-hourly AI coach check-in
     COOLDOWN_EXPIRED = 'COOLDOWN_EXPIRED',     // Avatar/cover/reel/username cooldown ended
     DAILY_QUIZ_RENEWED = 'DAILY_QUIZ_RENEWED', // Daily quiz pack ready
+    GROUP_INVITE = 'GROUP_INVITE',
 }
 
 export interface NotificationActor {

@@ -861,6 +861,16 @@ export const en = {
     gotIt: 'Got it',
   },
 
+  predictionGroupsInfo: {
+    title: 'Kings of Predictions',
+    brandTitle: 'Kings',
+    rule1: 'Join a group or create your own and invite friends with your code.',
+    rule2: 'Team up and predict round results — winner/draw earns 2 XP, exact score earns 5 XP.',
+    rule3: 'Climb the group leaderboard on the quest to become Kings of Predictions.',
+    hype: 'Every round is a new shot at the crown — who will reign supreme?',
+    gotIt: 'Got it',
+  },
+
   chatInfo: {
     title: 'Captain AI',
     rule1: 'Ask for match analysis, tactics breakdowns, and quick football answers.',

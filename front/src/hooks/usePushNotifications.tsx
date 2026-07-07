@@ -192,6 +192,14 @@ export function usePushNotifications(): PushNotificationState {
                 r.push('/(tabs)/profile' as any);
             } else if (type === 'AI_CHECKIN') {
                 r.push('/(tabs)/chat' as any);
+            } else if (type === 'GROUP_INVITE') {
+                r.push({
+                  pathname: '/prediction-groups',
+                  params: {
+                    joinCode: data.joinCode ?? data.code,
+                    inviteId: data.inviteId,
+                  },
+                });
             } else if (type === 'DAILY_QUIZ_RENEWED' || type === 'QUIZ_REWARD') {
                 r.push('/(tabs)/quiz' as any);
             } else if (type === 'LUCKY_WHEEL_RENEWED') {

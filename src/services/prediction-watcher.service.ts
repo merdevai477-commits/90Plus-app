@@ -11,6 +11,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { footballService } from './football.service';
 import { PredictionResolverService } from './prediction-resolver.service';
+import { GroupPredictionResolverService } from './group-prediction-resolver.service';
 import { notifyUser } from './notify.service';
 import { NotificationType } from './notification.service';
 
@@ -76,23 +77,29 @@ export class PredictionWatcherService {
 
         try {
             // Get all unique match IDs that have unresolved predictions
-            const unresolvedPredictions = await (prisma as any).prediction.findMany({
-                where: {
-                    isCorrect: null, // Not yet resolved
-                },
-                select: {
-                    apiMatchId: true,
-                },
-                distinct: ['apiMatchId'],
-            });
+            const [unresolvedPredictions, unresolvedGroupPredictions] = await Promise.all([
+                (prisma as any).prediction.findMany({
+                    where: { isCorrect: null },
+                    select: { apiMatchId: true },
+                    distinct: ['apiMatchId'],
+                }),
+                prisma.groupPrediction.findMany({
+                    where: { isCorrect: null },
+                    select: { apiMatchId: true },
+                    distinct: ['apiMatchId'],
+                }),
+            ]);
 
-            if (unresolvedPredictions.length === 0) {
+            const matchIdSet = new Set<number>([
+                ...unresolvedPredictions.map((p: any) => p.apiMatchId),
+                ...unresolvedGroupPredictions.map((p) => p.apiMatchId),
+            ]);
+            const matchIds = Array.from(matchIdSet);
+            if (matchIds.length === 0) {
                 logger.debug('📭 No unresolved predictions to check');
                 this.isRunning = false;
                 return;
             }
-
-            const matchIds = unresolvedPredictions.map((p: any) => p.apiMatchId);
             logger.info(`📊 Checking ${matchIds.length} matches with unresolved predictions...`);
 
             const oldBoard = await this.getTopUserIds(10);
@@ -206,6 +213,7 @@ export class PredictionWatcherService {
                 
                 // Resolve all predictions for this match
                 await PredictionResolverService.resolveMatchPredictions(matchId, homeScore, awayScore);
+                await GroupPredictionResolverService.resolveMatchPredictions(matchId, homeScore, awayScore);
                 return true;
             } else {
                 logger.debug(`⏳ Match ${matchId} status: ${status} - not finished yet`);

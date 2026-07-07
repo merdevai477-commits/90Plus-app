@@ -44,7 +44,7 @@ import { configureAudioVideo } from "../utils/videoConfig";
 import { ClerkProvider } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
-import { parseReelIdFromUrl, parseProfileUsernameFromUrl } from '../constants/shareLinks';
+import { parseReelIdFromUrl, parseProfileUsernameFromUrl, parseGroupCodeFromUrl } from '../constants/shareLinks';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from "../src/i18n";
@@ -580,6 +580,15 @@ function RootLayout() {
       const profileUsername = parseProfileUsernameFromUrl(url);
       if (profileUsername) {
         navigateToProfile(profileUsername);
+        return;
+      }
+
+      const groupCode = parseGroupCodeFromUrl(url);
+      if (groupCode) {
+        router.push({
+          pathname: '/prediction-groups',
+          params: { joinCode: groupCode },
+        });
         return;
       }
 

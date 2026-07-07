@@ -138,6 +138,26 @@ export function parseProfileUsernameFromUrl(url: string): string | null {
   return null;
 }
 
+export function buildGroupJoinShareUrl(code: string): string {
+  const normalized = code.trim().toUpperCase();
+  return `${SHARE_BASE_URL}/groups/join/${normalized}`;
+}
+
+export function buildGroupJoinDeepLink(code: string): string {
+  return `ninetyplus://group/join/${code.trim().toUpperCase()}`;
+}
+
+export function parseGroupCodeFromUrl(url: string): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  const custom = trimmed.match(/ninetyplus:\/\/group\/join\/([A-Z0-9]+)/i);
+  if (custom?.[1]) return custom[1].toUpperCase();
+  const https = trimmed.match(/\/groups\/join\/([A-Z0-9]+)/i);
+  if (https?.[1]) return https[1].toUpperCase();
+  if (/^90PLUS[A-Z0-9]+$/i.test(trimmed)) return trimmed.toUpperCase();
+  return null;
+}
+
 /** Play Store / App Store URL for the current platform */
 export function getStoreUrl(): string {
   if (Platform.OS === 'ios') {

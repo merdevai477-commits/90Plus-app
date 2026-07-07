@@ -90,6 +90,7 @@ const TYPE_TO_PREF: Partial<Record<NotificationType, PrefKey>> = {
     [NotificationType.FOLLOW_ACTIVITY]: 'socialFollow',
     // Predictions / leaderboards / rewards
     [NotificationType.PREDICTION_RESULT]: 'predictionResults',
+    [NotificationType.GROUP_INVITE]: 'predictionResults',
     [NotificationType.LEADERBOARD_TOP10]: 'leaderboard',
     [NotificationType.LEADERBOARD_TOP3]: 'leaderboard',
     [NotificationType.LUCKY_WHEEL]: 'luckyWheel',

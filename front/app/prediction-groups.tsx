@@ -1,143 +1,239 @@
 /**
  * ملك التوقعات — Prediction Groups
- *
- * Opened from the Rank tab ("ملك التوقعات" card). A private prediction group:
- * members join by invite code, predict a round of 10 matches (winner = 1pt,
- * exact score = 3pts) and compete on the group leaderboard.
- *
- * This container hosts three "screens" behind animated tabs (الرئيسية / الترتيب
- * / التوقعات / الإحصائيات). All visuals live in reusable components under
- * `components/predictionGroups/`; animations run on the UI thread (Reanimated 4
- * worklets). UI-only data for now (see components/predictionGroups/data.ts).
  */
 
-import * as Clipboard from 'expo-clipboard';
-import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { CalendarDays, ChevronLeft, ChevronRight, MoreVertical, Trophy, Users } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useToast } from '../contexts/ToastContext';
-import { useTranslation } from '../src/i18n';
-import { useScreenFont } from '../utils/fontSetup';
-import { LiquidTab, LiquidTabBar, LIQUID_TAB_BAR_HEIGHT } from '../components/navigation/LiquidTabBar';
-import { GROUP } from '../components/predictionGroups/data';
-import { GroupHeaderCard } from '../components/predictionGroups/GroupHeaderCard';
+import { usePredictionGroup } from '../hooks/usePredictionGroup';
+import { LiquidGlassTabBar } from '../components/navigation/LiquidGlassTabBar';
+import { COMPACT_TAB_BAR_HEIGHT } from '../components/navigation/liquidGlassTabBar.constants';
+import type { ConfigurableLiquidTabItem } from '../components/navigation/liquidGlassTabBar.types';
 import {
-  HomeSection,
-  LeaderboardSection,
+  GROUP_FIXED_HEADER_HEIGHT,
+  GroupFixedTopBar,
+} from '../components/predictionGroups/GroupFixedTopBar';
+import {
+  GroupScreenHeader,
+  type GroupScreenHeaderHandle,
+} from '../components/predictionGroups/GroupScreenHeader';
+import { GroupJoinSheet } from '../components/predictionGroups/GroupJoinSheet';
+import { GroupOnboarding } from '../components/predictionGroups/GroupOnboarding';
+import { HomeLeaderboardCard } from '../components/predictionGroups/HomeLeaderboardCard';
+import {
+  GroupTabIcon,
+  RankPodiumTabIcon,
+  RoundsTabIcon,
+} from '../components/predictionGroups/PredictionGroupTabIcons';
+import {
+  GroupsStandingsSection,
   PredictionsSection,
-  StatsSection,
 } from '../components/predictionGroups/sections';
 import { PG, PG_GRADIENTS, usePGFonts } from '../components/predictionGroups/theme';
+import { parseGroupCodeFromUrl } from '../services/predictionGroups.service';
+import { useTranslation } from '../src/i18n';
+import { useScreenFont } from '../utils/fontSetup';
 
 type GroupNavKey = 'group' | 'round' | 'standings';
 
+const GROUP_NAV_KEYS: GroupNavKey[] = ['group', 'round', 'standings'];
+
+const PREDICTION_GROUP_TABS: ConfigurableLiquidTabItem[] = [
+  { id: 'group', label: 'جروب', accent: PG.primaryLight, icon: GroupTabIcon, bubbleWidth: 58 },
+  { id: 'round', label: 'الجولة', accent: PG.gold, icon: RoundsTabIcon, bubbleWidth: 64 },
+  { id: 'standings', label: 'الترتيب', accent: PG.primaryLight, icon: RankPodiumTabIcon, bubbleWidth: 62 },
+];
+
 export default function PredictionGroupsScreen() {
   useScreenFont();
+  usePGFonts();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isRTL } = useTranslation();
-  const toast = useToast();
-  const { extra } = usePGFonts();
+  const { isRTL, t } = useTranslation();
+  const params = useLocalSearchParams<{ joinCode?: string; inviteId?: string }>();
 
+  const pg = usePredictionGroup();
   const [tab, setTab] = useState<GroupNavKey>('group');
-  const [copied, setCopied] = useState(false);
+  const headerRef = useRef<GroupScreenHeaderHandle>(null);
+  const [joinSheetOpen, setJoinSheetOpen] = useState(false);
+  const [pendingJoinCode, setPendingJoinCode] = useState<string | null>(null);
+  const [pendingInviteId, setPendingInviteId] = useState<string | null>(null);
 
-  const navTabs = useMemo<LiquidTab[]>(
-    () => [
-      { key: 'group', label: 'الجروب', icon: Users },
-      { key: 'round', label: 'الجولة', icon: CalendarDays },
-      { key: 'standings', label: 'الترتيب', icon: Trophy },
-    ],
-    [],
+  useEffect(() => {
+    const raw = params.joinCode;
+    const code = typeof raw === 'string' ? parseGroupCodeFromUrl(raw) ?? raw.toUpperCase() : null;
+    const inviteId = typeof params.inviteId === 'string' ? params.inviteId : null;
+    if (code || inviteId) {
+      setPendingJoinCode(code);
+      setPendingInviteId(inviteId);
+      setJoinSheetOpen(true);
+    }
+  }, [params.joinCode, params.inviteId]);
+
+  useEffect(() => {
+    if (tab === 'standings') void pg.refreshLeaderboard('all');
+  }, [tab, pg.refreshLeaderboard]);
+
+  const activeTabIndex = useMemo(
+    () => Math.max(0, GROUP_NAV_KEYS.indexOf(tab)),
+    [tab],
   );
 
-  const handleTabChange = useCallback((key: string) => {
-    setTab(key as GroupNavKey);
+  const handleNavigate = useCallback((index: number) => {
+    setTab(GROUP_NAV_KEYS[index] ?? 'group');
   }, []);
 
-  const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
-  const BackIcon = isRTL ? ChevronRight : ChevronLeft;
+  const navClearance = Math.max(insets.bottom, 16) + COMPACT_TAB_BAR_HEIGHT + 20;
+  const chromeInset = GROUP_FIXED_HEADER_HEIGHT + 4;
 
-  const handleCopy = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    try {
-      await Clipboard.setStringAsync(GROUP.code);
-      setCopied(true);
-      toast.showSuccess('تم النسخ', 'تم نسخ كود الدعوة إلى الحافظة');
-      setTimeout(() => setCopied(false), 1600);
-    } catch {
-      /* no-op */
-    }
-  }, [toast]);
+  const groupHeader = useMemo(() => {
+    const g = pg.state?.group;
+    if (!g) return null;
+    return {
+      name: g.name,
+      code: g.inviteCode,
+      membersCount: g.membersCount,
+      createdAt: new Date(g.createdAt).toLocaleDateString('ar-EG'),
+      tagline: 'مجموعة خاصة',
+      isPrivate: g.isPrivate,
+      avatarUrl: g.avatarUrl,
+      id: g.id,
+    };
+  }, [pg.state?.group]);
 
-  const handleInvite = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    try {
-      await Share.share({
-        message: `انضم إلى مجموعة "${GROUP.name}" في ملك التوقعات ⚽️\nكود الدعوة: ${GROUP.code}`,
-      });
-    } catch {
-      /* no-op */
-    }
-  }, []);
+  const memberRows = useMemo(
+    () =>
+      pg.members.map((m) => ({
+        rank: m.rank,
+        name: m.name,
+        points: m.points,
+        isMe: m.isMe,
+        isAdmin: m.isAdmin,
+        correct: m.correct ?? 0,
+        avatar: m.avatar ?? undefined,
+        username: m.username,
+        userId: m.userId,
+      })),
+    [pg.members],
+  );
 
-  const navClearance = insets.bottom + LIQUID_TAB_BAR_HEIGHT + 28;
-  const contentPadding = { paddingHorizontal: 16, paddingBottom: navClearance, gap: 16 };
+  if (pg.loading) {
+    return (
+      <View style={[styles.root, styles.centered]}>
+        <LinearGradient colors={PG_GRADIENTS.screen} style={StyleSheet.absoluteFill} />
+        <ActivityIndicator color={PG.primaryLight} size="large" />
+      </View>
+    );
+  }
+
+  if (!pg.state?.hasGroup) {
+    return (
+      <View style={styles.root}>
+        <LinearGradient colors={PG_GRADIENTS.screen} style={StyleSheet.absoluteFill} />
+        <GroupFixedTopBar
+          topInset={insets.top}
+          isRTL={isRTL}
+          brandTitle={t.predictionGroupsInfo.brandTitle}
+          onBack={() => router.back()}
+        />
+        <ScrollView contentContainerStyle={{ paddingTop: insets.top + chromeInset, paddingBottom: navClearance }}>
+          <GroupOnboarding
+            isRTL={isRTL}
+            onCreate={async (name) => {
+              await pg.createGroup(name);
+            }}
+            onJoinByCode={async (code) => {
+              setPendingJoinCode(code);
+              setJoinSheetOpen(true);
+            }}
+          />
+        </ScrollView>
+        <GroupJoinSheet
+          visible={joinSheetOpen}
+          code={pendingJoinCode}
+          inviteId={pendingInviteId}
+          onClose={() => setJoinSheetOpen(false)}
+          onJoined={() => void pg.refreshMe()}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
       <LinearGradient colors={PG_GRADIENTS.screen} style={StyleSheet.absoluteFill} />
       <LinearGradient colors={PG_GRADIENTS.ambient} style={styles.ambient} pointerEvents="none" />
 
-      <View style={[styles.header, row, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={10}
-          style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.7 }]}
-          accessibilityRole="button"
-        >
-          <BackIcon size={24} color="#fff" />
-        </Pressable>
-        <Text style={[styles.headerTitle, { fontFamily: extra }]} numberOfLines={1}>
-          ملك التوقعات
-        </Text>
-        <Pressable
-          hitSlop={10}
-          style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.7 }]}
-          accessibilityRole="button"
-        >
-          <MoreVertical size={22} color="#fff" />
-        </Pressable>
-      </View>
+      <GroupFixedTopBar
+        topInset={insets.top}
+        isRTL={isRTL}
+        brandTitle={t.predictionGroupsInfo.brandTitle}
+        onBack={() => router.back()}
+        onBrandPress={() => headerRef.current?.openInfo()}
+        onShare={() => {
+          void headerRef.current?.share();
+        }}
+      />
 
-      {tab === 'standings' ? (
-        <LeaderboardSection isRTL={isRTL} contentPaddingBottom={navClearance} />
-      ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={contentPadding}>
-          {tab === 'group' && (
-            <>
-              <GroupHeaderCard
-                name={GROUP.name}
-                membersCount={GROUP.membersCount}
-                createdAt={GROUP.createdAt}
-                code={GROUP.code}
-                copied={copied}
-                onCopy={handleCopy}
-                onInvite={handleInvite}
-                isRTL={isRTL}
-              />
-              <HomeSection isRTL={isRTL} onSeeAll={() => setTab('standings')} />
-              <StatsSection isRTL={isRTL} />
-            </>
-          )}
-          {tab === 'round' && <PredictionsSection isRTL={isRTL} />}
-        </ScrollView>
-      )}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + chromeInset, paddingBottom: navClearance },
+        ]}
+      >
+        {groupHeader && (
+          <GroupScreenHeader
+            ref={headerRef}
+            group={groupHeader}
+            isRTL={isRTL}
+            isAdmin={pg.isOwner}
+            showProfile={tab !== 'standings'}
+            onSaveGroup={pg.updateGroup}
+            onInviteUser={pg.inviteUser}
+          />
+        )}
+
+        {tab === 'group' && (
+          <HomeLeaderboardCard
+            isRTL={isRTL}
+            members={memberRows}
+            groupStats={pg.groupStats}
+            isOwner={pg.isOwner}
+            onKickMember={pg.kickMember}
+          />
+        )}
+        {tab === 'round' && groupHeader && (
+          <View style={styles.tabPad}>
+            <PredictionsSection
+              isRTL={isRTL}
+              groupId={groupHeader.id}
+              roundMatches={pg.roundMatches}
+              roundMeta={pg.roundMeta}
+              onSave={pg.savePredictions}
+            />
+          </View>
+        )}
+        {tab === 'standings' && (
+          <GroupsStandingsSection
+            isRTL={isRTL}
+            groups={pg.globalGroups.map((g) => ({
+              rank: g.rank,
+              name: g.name,
+              points: g.points,
+              members: g.members,
+              avatar: g.avatarUrl,
+              isMine: g.isMine,
+              id: g.id,
+            }))}
+            onPeriodChange={pg.refreshLeaderboard}
+            myGroupId={pg.state?.group?.id}
+          />
+        )}
+      </ScrollView>
 
       <LinearGradient
         colors={['transparent', PG.bg]}
@@ -145,12 +241,20 @@ export default function PredictionGroupsScreen() {
         pointerEvents="none"
       />
 
-      <LiquidTabBar
-        tabs={navTabs}
-        activeTab={tab}
-        onTabChange={handleTabChange}
-        isRTL={isRTL}
+      <LiquidGlassTabBar
+        tabs={PREDICTION_GROUP_TABS}
+        activeIndex={activeTabIndex}
+        onNavigate={handleNavigate}
         bottomInset={insets.bottom}
+        compact
+      />
+
+      <GroupJoinSheet
+        visible={joinSheetOpen}
+        code={pendingJoinCode}
+        inviteId={pendingInviteId}
+        onClose={() => setJoinSheetOpen(false)}
+        onJoined={() => void pg.refreshMe()}
       />
     </View>
   );
@@ -158,17 +262,9 @@ export default function PredictionGroupsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: PG.bg },
-  ambient: { position: 'absolute', top: 0, left: 0, right: 0, height: 320 },
-
-  header: {
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    gap: 8,
-  },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { color: PG.text, fontSize: 19, flex: 1, textAlign: 'center' },
-
+  centered: { alignItems: 'center', justifyContent: 'center' },
+  ambient: { position: 'absolute', top: 0, left: 0, right: 0, height: 280 },
+  scrollContent: { gap: 0 },
+  tabPad: { paddingHorizontal: 16, paddingTop: 12 },
   bottomScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 50 },
 });

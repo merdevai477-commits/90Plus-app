@@ -234,6 +234,7 @@ import matchesRoutes from './routes/matches.routes';
 import dailySpinRoutes from './routes/daily-spin.routes';
 import footballRoutes from './routes/football.routes';
 import predictionsRoutes from './routes/predictions.routes';
+import predictionGroupsRoutes from './routes/prediction-groups.routes';
 import coinsRoutes from './routes/coins.routes';
 
 import adminRoutes from './routes/admin.routes';
@@ -385,6 +386,7 @@ app.use(`${API_PREFIX}/football`, footballRoutes);
 app.use(`${API_PREFIX}/news`, newsRoutes);
 app.use(`${API_PREFIX}/i18n`, i18nRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
+app.use(`${API_PREFIX}/prediction-groups`, predictionGroupsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
 app.use(`${API_PREFIX}/app`, appVersionRoutes);
 app.use(`${API_PREFIX}/terms`, termsRoutes);

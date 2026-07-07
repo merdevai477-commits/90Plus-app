@@ -112,16 +112,16 @@ export function PressableScale({
   );
 }
 
-// ─── StatCard ─────────────────────────────────────────────────────────────
+// ─── SimpleStatCard ─────────────────────────────────────────────────────────
 
-export interface StatCardProps {
+export interface SimpleStatCardProps {
   value: string;
   label: string;
   color: string;
   icon: React.ReactNode;
 }
 
-export function StatCard({ value, label, color, icon }: StatCardProps) {
+export function SimpleStatCard({ value, label, color, icon }: SimpleStatCardProps) {
   const { medium, extra } = usePGFonts();
   return (
     <View style={styles.statCard}>

@@ -23,14 +23,14 @@ import {
   Trophy,
   X as XIcon,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 
 import { useToast } from '../../contexts/ToastContext';
 import { AnimatedCounter } from './AnimatedCounter';
 import { AnimatedTabs } from './AnimatedTabs';
-import { GlassCard, StatCard } from './atoms';
+import { GlassCard, SimpleStatCard } from './atoms';
 import {
   CURRENT_ROUND,
   GROUP,
@@ -41,8 +41,12 @@ import {
   RESULTS_ROUND,
 } from './data';
 import { GroupProgressCard } from './GroupProgressCard';
+import { HomeLeaderboardRow } from './HomeLeaderboardRow';
+import { PurpleTrophyIcon } from './PurpleTrophyIcon';
 import { LeaderboardRow } from './LeaderboardRow';
 import { MatchPredictionCard } from './MatchPredictionCard';
+import { mapRoundMatchToCard } from '../../services/predictionGroups.service';
+import type { GroupRoundMatch } from '../../services/predictionGroups.service';
 import { PG, PG_GRADIENTS, PG_RADII, PG_SPACING, usePGFonts } from './theme';
 
 // ─── Section title ──────────────────────────────────────────────────────────
@@ -111,7 +115,7 @@ export function HomeSection({ isRTL, onSeeAll }: { isRTL: boolean; onSeeAll: () 
   );
 }
 
-// ─── Leaderboard ──────────────────────────────────────────────────────────
+export { GroupsStandingsSection } from './GroupsStandingsSection';
 
 function reRank(members: GroupMember[]): GroupMember[] {
   return [...members]
@@ -122,12 +126,17 @@ function reRank(members: GroupMember[]): GroupMember[] {
 export function LeaderboardSection({
   isRTL,
   contentPaddingBottom,
+  embedded = false,
 }: {
   isRTL: boolean;
   contentPaddingBottom: number;
+  /** When true, render inside the main ScrollView (reference full-tab layout). */
+  embedded?: boolean;
 }) {
-  const { medium, bold } = usePGFonts();
+  const { medium, bold, extra } = usePGFonts();
   const [members, setMembers] = useState<GroupMember[]>(() => reRank(MEMBERS));
+  const [period, setPeriod] = useState<'all' | 'week' | 'month'>('all');
+  const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
 
   const simulate = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -141,13 +150,70 @@ export function LeaderboardSection({
     );
   }, []);
 
+  const periodTabs = (
+    <View style={[styles.periodTabs, row]}>
+      {(
+        [
+          { key: 'all' as const, label: 'الترتيب العام' },
+          { key: 'week' as const, label: 'هذا الأسبوع' },
+          { key: 'month' as const, label: 'هذا الشهر' },
+        ] as const
+      ).map((tab) => (
+        <Pressable key={tab.key} onPress={() => setPeriod(tab.key)} hitSlop={6}>
+          <Text
+            style={[
+              styles.periodTab,
+              { fontFamily: medium },
+              period === tab.key && styles.periodTabActive,
+              period === tab.key && { fontFamily: bold },
+            ]}
+          >
+            {tab.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
+  const gradientHeader = (
+    <LinearGradient
+      colors={['rgba(20,14,32,0.98)', 'rgba(10,8,18,0.99)']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.fullHeader}
+    >
+      <PurpleTrophyIcon size={44} />
+      <Text style={[styles.fullHeaderTitle, { fontFamily: extra }]}>ترتيب المجموعة</Text>
+    </LinearGradient>
+  );
+
+  const tableHeader = (
+    <View style={[styles.tableHeader, row]}>
+      <Text style={[styles.tableHeaderText, { fontFamily: medium }]}>النقاط</Text>
+      <Text style={[styles.tableHeaderText, { fontFamily: medium }]}>الاسم</Text>
+      <Text style={[styles.tableHeaderText, { fontFamily: medium }]}>الترتيب</Text>
+    </View>
+  );
+
+  if (embedded) {
+    return (
+      <View style={styles.embeddedWrap}>
+        {gradientHeader}
+        {periodTabs}
+        {tableHeader}
+        {members.map((item) => (
+          <HomeLeaderboardRow key={item.name} member={item} isRTL={isRTL} />
+        ))}
+      </View>
+    );
+  }
+
   const header = (
     <View style={{ gap: PG_SPACING.md, paddingBottom: PG_SPACING.md }}>
-      <View style={[styles.sectionHead, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-        <View style={[styles.sectionHeadLeft, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-          <Trophy size={18} color={PG.gold} />
-          <Text style={[styles.sectionTitle, { fontFamily: bold }]}>الترتيب الكامل</Text>
-        </View>
+      {gradientHeader}
+      {periodTabs}
+      {tableHeader}
+      <View style={[styles.sectionHead, row]}>
         <Pressable onPress={simulate} hitSlop={8} style={styles.simBtn}>
           <Text style={[styles.simTxt, { fontFamily: medium }]}>محاكاة نتيجة</Text>
         </Pressable>
@@ -200,7 +266,7 @@ function PointsSystemCard({ isRTL }: { isRTL: boolean }) {
               توقع الفائز أو التعادل
             </Text>
             <Text style={[styles.pointsColValue, { fontFamily: bold, textAlign: isRTL ? 'right' : 'left', color: PG.purpleSoft }]}>
-              نقطة واحدة
+              2 XP
             </Text>
           </View>
         </View>
@@ -216,7 +282,7 @@ function PointsSystemCard({ isRTL }: { isRTL: boolean }) {
               النتيجة الدقيقة
             </Text>
             <Text style={[styles.pointsColValue, { fontFamily: bold, textAlign: isRTL ? 'right' : 'left', color: PG.gold }]}>
-              3 نقاط
+              5 XP
             </Text>
           </View>
         </View>
@@ -225,35 +291,147 @@ function PointsSystemCard({ isRTL }: { isRTL: boolean }) {
   );
 }
 
-export function PredictionsSection({ isRTL }: { isRTL: boolean }) {
+export function PredictionsSection({
+  isRTL,
+  groupId,
+  roundMatches,
+  roundMeta,
+  onSave,
+}: {
+  isRTL: boolean;
+  groupId?: string;
+  roundMatches?: GroupRoundMatch[];
+  roundMeta?: { id: string; date: string; status: string } | null;
+  onSave?: (
+    predictions: Array<{
+      apiMatchId: number;
+      mode: 'WINNER' | 'EXACT';
+      predictedWinner?: 'home' | 'draw' | 'away';
+      predictedHomeScore?: number;
+      predictedAwayScore?: number;
+    }>,
+  ) => Promise<void>;
+}) {
   const { medium, bold, extra } = usePGFonts();
   const toast = useToast();
   const [roundTab, setRoundTab] = useState('current');
+  const [drafts, setDrafts] = useState<
+    Record<number, { mode: 'WINNER' | 'EXACT'; home: number; away: number; winner: 'home' | 'draw' | 'away' | null }>
+  >({});
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const align = isRTL ? 'right' : 'left';
 
+  const apiMode = Boolean(groupId && roundMatches && onSave);
+
+  useEffect(() => {
+    if (!roundMatches?.length) return;
+    const seeded: typeof drafts = {};
+    for (const m of roundMatches) {
+      if (!m.prediction) continue;
+      const p = m.prediction;
+      seeded[m.apiMatchId] = {
+        mode: p.mode,
+        home: p.predictedHomeScore ?? 0,
+        away: p.predictedAwayScore ?? 0,
+        winner: (p.predictedWinner as 'home' | 'draw' | 'away' | null) ?? null,
+      };
+    }
+    if (Object.keys(seeded).length > 0) {
+      setDrafts((prev) => ({ ...seeded, ...prev }));
+    }
+  }, [roundMatches]);
+
   const data = useMemo(() => {
+    if (apiMode && roundMatches) {
+      return roundMatches.map(mapRoundMatchToCard);
+    }
     if (roundTab === 'next') return NEXT_ROUND;
     if (roundTab === 'results') return RESULTS_ROUND;
     return CURRENT_ROUND;
-  }, [roundTab]);
+  }, [apiMode, roundMatches, roundTab]);
 
-  const roundMeta = useMemo(() => {
+  const roundMetaDisplay = useMemo(() => {
+    if (apiMode && roundMeta) {
+      return {
+        title: `جولة ${roundMeta.date}`,
+        sub: 'أهم 10 مباريات اليوم — أكمل توقعاتك قبل انطلاق المباريات',
+      };
+    }
     if (roundTab === 'results')
       return { title: 'الجولة 11', sub: 'نتائج الجولة السابقة' };
     if (roundTab === 'next')
       return { title: 'الجولة 13', sub: 'تفتح بعد انتهاء الجولة الحالية' };
     return { title: 'الجولة 12', sub: 'أكمل توقعاتك قبل انطلاق المباريات' };
-  }, [roundTab]);
+  }, [apiMode, roundMeta, roundTab]);
 
-  const onSave = useCallback(() => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    toast.showSuccess('تم الحفظ', 'تم حفظ توقعاتك لهذه الجولة بنجاح');
-  }, [toast]);
+  const handleDraft = useCallback(
+    (
+      apiMatchId: number,
+      patch: Partial<{ mode: 'WINNER' | 'EXACT'; home: number; away: number; winner: 'home' | 'draw' | 'away' | null }>,
+    ) => {
+      setDrafts((prev) => ({
+        ...prev,
+        [apiMatchId]: {
+          mode: patch.mode ?? prev[apiMatchId]?.mode ?? 'WINNER',
+          home: patch.home ?? prev[apiMatchId]?.home ?? 0,
+          away: patch.away ?? prev[apiMatchId]?.away ?? 0,
+          winner: patch.winner !== undefined ? patch.winner : (prev[apiMatchId]?.winner ?? null),
+        },
+      }));
+    },
+    [],
+  );
+
+  const onSavePress = useCallback(async () => {
+    if (!apiMode || !onSave) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      toast.showSuccess('تم الحفظ', 'تم حفظ توقعاتك لهذه الجولة بنجاح');
+      return;
+    }
+
+    const predictions = Object.entries(drafts).map(([id, d]) => {
+      const apiMatchId = Number(id);
+      if (d.mode === 'EXACT') {
+        let predictedWinner: 'home' | 'draw' | 'away' = 'draw';
+        if (d.home > d.away) predictedWinner = 'home';
+        else if (d.away > d.home) predictedWinner = 'away';
+        return {
+          apiMatchId,
+          mode: 'EXACT' as const,
+          predictedHomeScore: d.home,
+          predictedAwayScore: d.away,
+          predictedWinner,
+        };
+      }
+      const predictedWinner = d.winner ?? 'home';
+      return {
+        apiMatchId,
+        mode: 'WINNER' as const,
+        predictedWinner,
+        predictedHomeScore: d.home,
+        predictedAwayScore: d.away,
+      };
+    });
+
+    if (predictions.length === 0) {
+      toast.showError('لا توجد توقعات', 'اختر وضع التوقع لكل مباراة');
+      return;
+    }
+
+    try {
+      await onSave(predictions);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      toast.showSuccess('تم الحفظ', 'تم حفظ توقعاتك لهذه الجولة بنجاح');
+    } catch (e: any) {
+      toast.showError('تعذر الحفظ', e?.message ?? '');
+    }
+  }, [apiMode, drafts, onSave, toast]);
 
   return (
     <View style={{ gap: PG_SPACING.lg }}>
-      <AnimatedTabs tabs={ROUND_TABS} activeKey={roundTab} onChange={setRoundTab} isRTL={isRTL} />
+      {!apiMode && (
+        <AnimatedTabs tabs={ROUND_TABS} activeKey={roundTab} onChange={setRoundTab} isRTL={isRTL} />
+      )}
 
       <PointsSystemCard isRTL={isRTL} />
 
@@ -267,10 +445,10 @@ export function PredictionsSection({ isRTL }: { isRTL: boolean }) {
         <View style={[styles.roundHead, row]}>
           <View style={{ flex: 1 }}>
             <Text style={[styles.roundTitle, { fontFamily: extra, textAlign: align }]}>
-              {roundMeta.title}
+              {roundMetaDisplay.title}
             </Text>
             <Text style={[styles.roundSub, { fontFamily: medium, textAlign: align }]}>
-              {roundMeta.sub}
+              {roundMetaDisplay.sub}
             </Text>
           </View>
           <View style={styles.calBox}>
@@ -279,19 +457,35 @@ export function PredictionsSection({ isRTL }: { isRTL: boolean }) {
         </View>
       </View>
 
-      {data.map((m) => (
-        <MatchPredictionCard
-          key={m.id}
-          match={m}
-          isRTL={isRTL}
-          locked={roundTab === 'next'}
-          finished={roundTab === 'results'}
-        />
-      ))}
+      {data.map((m) => {
+        const apiMatchId = (m as { apiMatchId?: number }).apiMatchId;
+        const locked = apiMode
+          ? m.status !== 'NS' && m.status !== 'TBD' && m.status !== ''
+          : roundTab === 'next';
+        const finished = apiMode
+          ? m.status === 'FT' || m.status === 'AET' || m.status === 'PEN'
+          : roundTab === 'results';
+        return (
+          <MatchPredictionCard
+            key={m.id}
+            match={m}
+            isRTL={isRTL}
+            locked={locked}
+            finished={finished}
+            apiMatchId={apiMatchId}
+            initialPrediction={(m as { prediction?: GroupRoundMatch['prediction'] }).prediction}
+            onDraftChange={
+              apiMatchId
+                ? (patch) => handleDraft(apiMatchId, patch)
+                : undefined
+            }
+          />
+        );
+      })}
 
-      {roundTab === 'current' && (
+      {(apiMode || roundTab === 'current') && (
         <Pressable
-          onPress={onSave}
+          onPress={() => void onSavePress()}
           style={({ pressed }) => [pressed && { opacity: 0.92 }]}
           accessibilityRole="button"
         >
@@ -336,16 +530,16 @@ export function StatsSection({ isRTL }: { isRTL: boolean }) {
       </GlassCard>
 
       <View style={[{ gap: 12 }, row]}>
-        <StatCard value={String(MY_STATS.wins)} label="توقعات صحيحة" color={PG.win} icon={<Award size={22} color={PG.win} />} />
-        <StatCard value={String(MY_STATS.losses)} label="توقعات خاطئة" color={PG.loss} icon={<XIcon size={22} color={PG.loss} />} />
+        <SimpleStatCard value={String(MY_STATS.wins)} label="توقعات صحيحة" color={PG.win} icon={<Award size={22} color={PG.win} />} />
+        <SimpleStatCard value={String(MY_STATS.losses)} label="توقعات خاطئة" color={PG.loss} icon={<XIcon size={22} color={PG.loss} />} />
       </View>
       <View style={[{ gap: 12 }, row]}>
-        <StatCard value={`${MY_STATS.accuracy}%`} label="نسبة الدقة" color={PG.info} icon={<Target size={22} color={PG.info} />} />
-        <StatCard value={String(MY_STATS.bestStreak)} label="أطول سلسلة" color={PG.gold} icon={<Flame size={22} color={PG.gold} />} />
+        <SimpleStatCard value={`${MY_STATS.accuracy}%`} label="نسبة الدقة" color={PG.info} icon={<Target size={22} color={PG.info} />} />
+        <SimpleStatCard value={String(MY_STATS.bestStreak)} label="أطول سلسلة" color={PG.gold} icon={<Flame size={22} color={PG.gold} />} />
       </View>
       <View style={[{ gap: 12 }, row]}>
-        <StatCard value={String(MY_STATS.exactHits)} label="نتائج دقيقة" color={PG.purpleSoft} icon={<Trophy size={22} color={PG.purpleSoft} />} />
-        <StatCard value={String(MY_STATS.currentStreak)} label="السلسلة الحالية" color="#F97316" icon={<TrendingUp size={22} color="#F97316" />} />
+        <SimpleStatCard value={String(MY_STATS.exactHits)} label="نتائج دقيقة" color={PG.purpleSoft} icon={<Trophy size={22} color={PG.purpleSoft} />} />
+        <SimpleStatCard value={String(MY_STATS.currentStreak)} label="السلسلة الحالية" color={PG.goldDeep} icon={<TrendingUp size={22} color={PG.goldDeep} />} />
       </View>
 
       <GlassCard style={styles.recordCard}>
@@ -388,8 +582,59 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(124,58,237,0.2)',
     borderWidth: 1,
     borderColor: 'rgba(159,90,251,0.35)',
+    alignSelf: 'flex-end',
   },
   simTxt: { color: PG.purpleSoft, fontSize: 12 },
+
+  embeddedWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 8,
+  },
+  fullHeader: {
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.25)',
+  },
+  fullHeaderTitle: {
+    fontSize: 18,
+    color: '#FFFFFF',
+  },
+  periodTabs: {
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  periodTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    fontSize: 12,
+    color: PG.textMuted,
+    backgroundColor: PG.card,
+  },
+  periodTabActive: {
+    backgroundColor: PG.primary,
+    color: '#FFFFFF',
+  },
+  tableHeader: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
+  tableHeaderText: {
+    fontSize: 12,
+    color: PG.textMuted,
+    flex: 1,
+    textAlign: 'center',
+  },
 
   roundCard: {
     borderRadius: PG_RADII.lg,

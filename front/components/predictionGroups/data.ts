@@ -28,8 +28,11 @@ export interface GroupMember {
   name: string;
   points: number;
   isMe?: boolean;
-  /** wins this window, used for the subtitle. */
+  isAdmin?: boolean;
   correct: number;
+  avatar?: string | null;
+  username?: string;
+  userId?: string;
 }
 
 export interface RankedGroup {
@@ -37,13 +40,16 @@ export interface RankedGroup {
   name: string;
   points: number;
   members: number;
+  avatar?: string | null;
+  isMine?: boolean;
+  id?: string;
 }
 
 export const GROUP = {
   name: 'شلة الكورة',
   tagline: 'مجموعة خاصة',
   membersCount: 20,
-  createdAt: 'أنشئت في 20 مايو 2024',
+  createdAt: 'أُنشئت في 20 مايو 2024',
   code: '90PLUS123',
   isPrivate: true,
   myRank: 4,
@@ -104,20 +110,42 @@ export const RESULTS_ROUND: PredictionMatch[] = [
 ];
 
 export const MEMBERS: GroupMember[] = [
-  { rank: 1, name: 'محمد', points: 45, correct: 14 },
-  { rank: 2, name: 'أحمد', points: 42, correct: 13 },
-  { rank: 3, name: 'علي', points: 38, correct: 12 },
-  { rank: 4, name: 'سامر', points: 35, correct: 11, isMe: true },
-  { rank: 5, name: 'كريم', points: 31, correct: 10 },
-  { rank: 6, name: 'يوسف', points: 28, correct: 9 },
-  { rank: 7, name: 'خالد', points: 24, correct: 8 },
-  { rank: 8, name: 'طارق', points: 21, correct: 7 },
+  { rank: 1, name: 'محمد', points: 45, correct: 14, avatar: 'https://i.pravatar.cc/150?u=pg1' },
+  { rank: 2, name: 'أحمد', points: 42, correct: 13, avatar: 'https://i.pravatar.cc/150?u=pg2' },
+  { rank: 3, name: 'علي', points: 38, correct: 12, avatar: 'https://i.pravatar.cc/150?u=pg3' },
+  { rank: 4, name: 'سامر', points: 35, correct: 11, isMe: true, isAdmin: true, avatar: 'https://i.pravatar.cc/150?u=pg4' },
+  { rank: 5, name: 'كريم', points: 31, correct: 10, avatar: 'https://i.pravatar.cc/150?u=pg5' },
+  { rank: 6, name: 'يوسف', points: 28, correct: 9, avatar: 'https://i.pravatar.cc/150?u=pg6' },
+  { rank: 7, name: 'خالد', points: 24, correct: 8, avatar: 'https://i.pravatar.cc/150?u=pg7' },
+  { rank: 8, name: 'طارق', points: 21, correct: 7, avatar: 'https://i.pravatar.cc/150?u=pg8' },
 ];
 
-export const TOP_GROUPS: RankedGroup[] = [
+const GROUP_AVATARS: Record<string, string> = {
+  'أساطير الكرة': 'https://i.pravatar.cc/150?u=rg-legends',
+  'نجوم الدوري': 'https://i.pravatar.cc/150?u=rg-stars',
+  'شلة الكورة': 'https://i.pravatar.cc/150?u=rg-shilla',
+  'عشاق الساحرة': 'https://i.pravatar.cc/150?u=rg-magic',
+  'ملوك التوقع': 'https://i.pravatar.cc/150?u=rg-kings',
+  'صقور التحدي': 'https://i.pravatar.cc/150?u=rg-hawks',
+  'فرسان الملعب': 'https://i.pravatar.cc/150?u=rg-knights',
+  'أبطال الجولة': 'https://i.pravatar.cc/150?u=rg-round',
+  'محترفو التوقع': 'https://i.pravatar.cc/150?u=rg-pros',
+  'عمالقة الكرة': 'https://i.pravatar.cc/150?u=rg-giants',
+};
+
+function rankGroups(
+  entries: Array<Omit<RankedGroup, 'avatar'> & { avatar?: string }>,
+): RankedGroup[] {
+  return entries.map((entry) => ({
+    ...entry,
+    avatar: entry.avatar ?? GROUP_AVATARS[entry.name] ?? 'https://i.pravatar.cc/150?u=rg-default',
+  }));
+}
+
+const TOP_GROUPS_RAW = [
   { rank: 1, name: 'أساطير الكرة', points: 512, members: 20 },
   { rank: 2, name: 'نجوم الدوري', points: 498, members: 18 },
-  { rank: 3, name: 'شلة الكورة', points: 476, members: 20 },
+  { rank: 3, name: 'شلة الكورة', points: 476, members: 20, isMine: true },
   { rank: 4, name: 'عشاق الساحرة', points: 455, members: 16 },
   { rank: 5, name: 'ملوك التوقع', points: 441, members: 19 },
   { rank: 6, name: 'صقور التحدي', points: 420, members: 15 },
@@ -125,7 +153,44 @@ export const TOP_GROUPS: RankedGroup[] = [
   { rank: 8, name: 'أبطال الجولة', points: 377, members: 14 },
   { rank: 9, name: 'محترفو التوقع', points: 350, members: 12 },
   { rank: 10, name: 'عمالقة الكرة', points: 333, members: 13 },
-];
+] as const;
+
+export const TOP_GROUPS: RankedGroup[] = rankGroups([...TOP_GROUPS_RAW]);
+
+/** Global groups leaderboard — weekly window (mock). */
+export const TOP_GROUPS_WEEK: RankedGroup[] = rankGroups([
+  { rank: 1, name: 'شلة الكورة', points: 94, members: 20, isMine: true },
+  { rank: 2, name: 'أساطير الكرة', points: 91, members: 20 },
+  { rank: 3, name: 'نجوم الدوري', points: 88, members: 18 },
+  { rank: 4, name: 'ملوك التوقع', points: 82, members: 19 },
+  { rank: 5, name: 'عشاق الساحرة', points: 79, members: 16 },
+  { rank: 6, name: 'صقور التحدي', points: 74, members: 15 },
+  { rank: 7, name: 'فرسان الملعب', points: 70, members: 17 },
+  { rank: 8, name: 'أبطال الجولة', points: 66, members: 14 },
+  { rank: 9, name: 'محترفو التوقع', points: 61, members: 12 },
+  { rank: 10, name: 'عمالقة الكرة', points: 58, members: 13 },
+]);
+
+/** Global groups leaderboard — monthly window (mock). */
+export const TOP_GROUPS_MONTH: RankedGroup[] = rankGroups([
+  { rank: 1, name: 'نجوم الدوري', points: 312, members: 18 },
+  { rank: 2, name: 'أساطير الكرة', points: 305, members: 20 },
+  { rank: 3, name: 'شلة الكورة', points: 298, members: 20, isMine: true },
+  { rank: 4, name: 'ملوك التوقع', points: 284, members: 19 },
+  { rank: 5, name: 'عشاق الساحرة', points: 271, members: 16 },
+  { rank: 6, name: 'صقور التحدي', points: 256, members: 15 },
+  { rank: 7, name: 'فرسان الملعب', points: 241, members: 17 },
+  { rank: 8, name: 'أبطال الجولة', points: 228, members: 14 },
+  { rank: 9, name: 'محترفو التوقع', points: 214, members: 12 },
+  { rank: 10, name: 'عمالقة الكرة', points: 199, members: 13 },
+]);
+
+export const GROUP_STATS = {
+  accuracyPercent: 72,
+  totalPredictions: 340,
+  wins: 245,
+  losses: 95,
+} as const;
 
 export const MY_STATS = {
   totalPoints: 35,

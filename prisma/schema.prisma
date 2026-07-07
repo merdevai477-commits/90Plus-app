@@ -110,6 +110,11 @@ model User {
   notifications                 Notification[]
   parentalConsentRequests       ParentalConsentRequest[]
   predictions                   Prediction[]
+  ownedPredictionGroups         PredictionGroup[]        @relation("OwnedPredictionGroups")
+  groupMemberships              GroupMember[]
+  groupInvitesSent              GroupInvite[]            @relation("GroupInvitesSent")
+  groupInvitesReceived          GroupInvite[]            @relation("GroupInvitesReceived")
+  groupPredictions              GroupPrediction[]
   quizAttempts                  QuizAttempt[]
   reelShares                    ReelShare[]
   reelViews                     ReelView[]
@@ -1132,6 +1137,94 @@ model Prediction {
   @@map("predictions")
 }
 
+model PredictionGroup {
+  id         String        @id @default(uuid())
+  name       String
+  avatarUrl  String?
+  inviteCode String        @unique
+  ownerId    String
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  owner      User          @relation("OwnedPredictionGroups", fields: [ownerId], references: [id], onDelete: Cascade)
+  members    GroupMember[]
+  invites    GroupInvite[]
+
+  @@index([ownerId])
+  @@map("prediction_groups")
+}
+
+model GroupMember {
+  id           String          @id @default(uuid())
+  groupId      String
+  userId       String
+  role         GroupMemberRole @default(MEMBER)
+  groupXpTotal Int             @default(0)
+  joinedAt     DateTime        @default(now())
+  leftAt       DateTime?
+  group        PredictionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([userId])
+  @@index([groupId, groupXpTotal(sort: Desc)])
+  @@map("group_members")
+}
+
+model GroupInvite {
+  id        String            @id @default(uuid())
+  groupId   String
+  inviterId String
+  inviteeId String
+  status    GroupInviteStatus @default(PENDING)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  group     PredictionGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  inviter   User              @relation("GroupInvitesSent", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee   User              @relation("GroupInvitesReceived", fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, inviteeId])
+  @@index([inviteeId, status])
+  @@map("group_invites")
+}
+
+model GroupRound {
+  id          String           @id @default(uuid())
+  date        String           @unique
+  matchIds    Json
+  status      GroupRoundStatus @default(OPEN)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  predictions GroupPrediction[]
+
+  @@map("group_rounds")
+}
+
+model GroupPrediction {
+  id                 String              @id @default(uuid())
+  roundId            String
+  groupId            String
+  userId             String
+  apiMatchId         Int
+  mode               GroupPredictionMode
+  predictedWinner    String?
+  predictedHomeScore Int?
+  predictedAwayScore Int?
+  isCorrect          Boolean?
+  xpAwarded          Int                 @default(0)
+  settledAt          DateTime?
+  createdAt          DateTime            @default(now())
+  round              GroupRound          @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roundId, apiMatchId])
+  @@index([roundId])
+  @@index([groupId])
+  @@index([apiMatchId])
+  @@index([userId])
+  @@index([settledAt])
+  @@map("group_predictions")
+}
+
 model PlayerVote {
   id        String   @id @default(uuid())
   voterId   String
@@ -1984,4 +2077,29 @@ enum XpActionType {
   REEL_RECEIVED_SHARE
   RECEIVED_FOLLOW
   APP_SHARE
+  GROUP_PREDICTION_WINNER
+  GROUP_PREDICTION_EXACT
+}
+
+enum GroupMemberRole {
+  OWNER
+  MEMBER
+}
+
+enum GroupInviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+enum GroupRoundStatus {
+  OPEN
+  LOCKED
+  SETTLED
+}
+
+enum GroupPredictionMode {
+  WINNER
+  EXACT
 }

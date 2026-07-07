@@ -12,10 +12,19 @@ import { useAppFont } from '../../utils/fontSetup';
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 export const PG = {
-  // Background — deep purple-black, subtle top→bottom gradient.
-  bgTop: '#150A22',
-  bgBottom: '#0B0710',
-  bg: '#0B0710',
+  // Background — extra dark purple-black.
+  bgTop: '#0A0812',
+  bgBottom: '#020103',
+  bg: '#040208',
+
+  /** Reference accent purple (#8B5CF6). */
+  primary: '#8B5CF6',
+  primaryLight: '#A78BFA',
+  primaryDark: '#6D28D9',
+  silver: '#C0C0C0',
+  bronze: '#CD7F32',
+  card: 'rgba(255,255,255,0.06)',
+  cardElevated: 'rgba(255,255,255,0.10)',
 
   // Primary purple accent (buttons, featured cards).
   purple: '#7C3AED',
@@ -42,16 +51,27 @@ export const PG = {
   win: '#22C55E',
   draw: '#F5B942',
   loss: '#EF4444',
+  /** Desaturated red-purple for loss stats — stays within the dark palette. */
+  lossMuted: '#9B5678',
+  lossMutedSoft: 'rgba(155,86,120,0.18)',
   info: '#60A5FA',
+
+  // Deep purple used in crest / ring accents.
+  purpleDeep: '#5B21B6',
+  purpleTint: 'rgba(124,58,237,0.22)',
+  memberAvatarBg: 'rgba(124,58,237,0.32)',
+
+  /** Rank-screen ProfileCard glass border — reused on group hero. */
+  heroGlassBorder: 'rgba(69, 5, 128, 0.25)',
 } as const;
 
 // ─── Gradients (expo-linear-gradient color arrays) ─────────────────────────────
 
 export const PG_GRADIENTS = {
-  /** Full screen background — top→bottom. */
+  /** Full screen background — top→bottom, barely perceptible. */
   screen: [PG.bgTop, PG.bgBottom] as const,
-  /** Purple ambient glow bleeding from the top of the screen. */
-  ambient: ['rgba(124,58,237,0.30)', 'transparent'] as const,
+  /** Subtle top vignette — kept very faint so the screen reads as flat dark. */
+  ambient: ['rgba(124,58,237,0.06)', 'transparent'] as const,
   /** Primary purple CTA / featured card. */
   purple: [PG.purple, PG.purpleLight] as const,
   /** Translucent purple round card wash over the dark background. */
@@ -60,6 +80,10 @@ export const PG_GRADIENTS = {
   gold: ['#FCD98A', PG.gold, PG.goldDeep] as const,
   /** Progress bar fill. */
   progress: [PG.purpleLight, PG.purple] as const,
+  /** Group avatar ring — purple → gold. */
+  avatarRing: [PG.purpleLight, PG.gold] as const,
+  /** Accuracy donut stroke — purple → gold. */
+  accuracyRing: [PG.purple, PG.gold] as const,
 } as const;
 
 // ─── Radii ──────────────────────────────────────────────────────────────────

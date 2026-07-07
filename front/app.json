@@ -114,6 +114,21 @@
             {
               "scheme": "https",
               "host": "90plus.pro",
+              "pathPrefix": "/groups/join"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "90plus.pro",
               "path": "/"
             }
           ],

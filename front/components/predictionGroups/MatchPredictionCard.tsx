@@ -15,7 +15,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { ChevronDown, ChevronUp, Star, Target } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { Crest, GlassCard, PressableScale } from './atoms';
@@ -25,10 +25,23 @@ import { PG, PG_GLOW_PURPLE, PG_RADII, usePGFonts } from './theme';
 type Mode = 'winner' | 'exact' | null;
 
 export interface MatchPredictionCardProps {
-  match: PredictionMatch;
+  match: PredictionMatch & { status?: string };
   isRTL: boolean;
   locked?: boolean;
   finished?: boolean;
+  apiMatchId?: number;
+  initialPrediction?: {
+    mode: 'WINNER' | 'EXACT';
+    predictedWinner: string | null;
+    predictedHomeScore: number | null;
+    predictedAwayScore: number | null;
+  } | null;
+  onDraftChange?: (patch: {
+    mode?: 'WINNER' | 'EXACT';
+    home?: number;
+    away?: number;
+    winner?: 'home' | 'draw' | 'away' | null;
+  }) => void;
 }
 
 function Stepper({
@@ -79,17 +92,66 @@ function Stepper({
   );
 }
 
-export function MatchPredictionCard({ match, isRTL, locked, finished }: MatchPredictionCardProps) {
+export function MatchPredictionCard({
+  match,
+  isRTL,
+  locked,
+  finished,
+  initialPrediction,
+  onDraftChange,
+}: MatchPredictionCardProps) {
   const { medium, bold, extra } = usePGFonts();
-  const [home, setHome] = useState(finished ? match.result?.home ?? 0 : 0);
-  const [away, setAway] = useState(finished ? match.result?.away ?? 0 : 0);
-  const [mode, setMode] = useState<Mode>(null);
+  const [home, setHome] = useState(
+    finished ? match.result?.home ?? 0 : initialPrediction?.predictedHomeScore ?? 0,
+  );
+  const [away, setAway] = useState(
+    finished ? match.result?.away ?? 0 : initialPrediction?.predictedAwayScore ?? 0,
+  );
+  const [mode, setMode] = useState<Mode>(
+    initialPrediction?.mode === 'EXACT' ? 'exact' : initialPrediction ? 'winner' : null,
+  );
+
+  useEffect(() => {
+    if (initialPrediction) {
+      setHome(initialPrediction.predictedHomeScore ?? 0);
+      setAway(initialPrediction.predictedAwayScore ?? 0);
+      setMode(initialPrediction.mode === 'EXACT' ? 'exact' : 'winner');
+    }
+  }, [initialPrediction]);
+
+  const emit = (patch: {
+    mode?: 'WINNER' | 'EXACT';
+    home?: number;
+    away?: number;
+    winner?: 'home' | 'draw' | 'away' | null;
+  }) => {
+    onDraftChange?.(patch);
+  };
+
+  const setHomeScore = (n: number) => {
+    setHome(n);
+    const winner = n > away ? 'home' : n < away ? 'away' : 'draw';
+    emit({ home: n, winner, mode: mode === 'exact' ? 'EXACT' : 'WINNER' });
+  };
+
+  const setAwayScore = (n: number) => {
+    setAway(n);
+    const winner = home > n ? 'home' : home < n ? 'away' : 'draw';
+    emit({ away: n, winner, mode: mode === 'exact' ? 'EXACT' : 'WINNER' });
+  };
 
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const readOnly = locked || finished;
 
   const pickMode = (m: Mode) => {
     setMode(m);
+    const winner = home > away ? 'home' : home < away ? 'away' : 'draw';
+    emit({
+      mode: m === 'exact' ? 'EXACT' : 'WINNER',
+      home,
+      away,
+      winner,
+    });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   };
 
@@ -129,9 +191,9 @@ export function MatchPredictionCard({ match, isRTL, locked, finished }: MatchPre
             <View style={{ alignItems: 'center', gap: 6 }}>
               <Text style={[styles.predictLabel, { fontFamily: medium }]}>توقع النتيجة</Text>
               <View style={[styles.stepperRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                <Stepper value={home} onChange={setHome} />
+                <Stepper value={home} onChange={setHomeScore} />
                 <Text style={[styles.scoreDash, { fontFamily: extra }]}>-</Text>
-                <Stepper value={away} onChange={setAway} />
+                <Stepper value={away} onChange={setAwayScore} />
               </View>
             </View>
           )}
@@ -154,13 +216,13 @@ export function MatchPredictionCard({ match, isRTL, locked, finished }: MatchPre
       {!readOnly && (
         <View style={[styles.modes, row]}>
           <ModeButton
-            label="فائز أو تعادل (نقطة)"
+            label="فائز أو تعادل (2 XP)"
             icon={Star}
             active={mode === 'winner'}
             onPress={() => pickMode('winner')}
           />
           <ModeButton
-            label="نتيجة دقيقة (3 نقاط)"
+            label="نتيجة دقيقة (5 XP)"
             icon={Target}
             active={mode === 'exact'}
             onPress={() => pickMode('exact')}
