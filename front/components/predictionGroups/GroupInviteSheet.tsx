@@ -24,10 +24,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { COMPACT_TAB_BAR_HEIGHT } from '../navigation/liquidGlassTabBar.constants';
 import { useToast } from '../../contexts/ToastContext';
-import { AuthService, type SearchUserResult } from '../../src/services/authService';
+import { type SearchUserResult } from '../../src/services/authService';
+import { getApiUrl } from '../../config/api.config';
 import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
 import { SheetBlurBackdrop } from './SheetBlurBackdrop';
 import { PG, PG_RADII, PG_SPACING, PG_TYPE, usePGFonts } from './theme';
+
+const API_URL = getApiUrl();
 
 const PLACEHOLDER = require('../../assets/images/plear 90Plus.png');
 
@@ -62,6 +65,7 @@ export function GroupInviteSheet({
 
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errored, setErrored] = useState(false);
   const [results, setResults] = useState<SearchUserResult[]>([]);
   const [invitedIds, setInvitedIds] = useState<Set<string>>(() => new Set());
 
@@ -76,6 +80,7 @@ export function GroupInviteSheet({
       setQuery('');
       setResults([]);
       setLoading(false);
+      setErrored(false);
       setInvitedIds(new Set());
     }
     wasVisibleRef.current = visible;
@@ -88,30 +93,58 @@ export function GroupInviteSheet({
     if (q.length < 2) {
       setResults((prev) => (prev.length > 0 ? [] : prev));
       setLoading((prev) => (prev ? false : prev));
+      setErrored(false);
       return;
     }
 
     let cancelled = false;
     setLoading(true);
+    setErrored(false);
 
     const timer = setTimeout(() => {
       void (async () => {
+        // Direct fetch (not AuthService.searchUsers, which swallows errors and
+        // returns []) so we can tell "no results" apart from a real failure.
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
         try {
           const token = await getToken();
           if (cancelled) return;
           if (!token) {
+            console.warn('[GroupInvite] search skipped — no auth token');
             setResults([]);
+            setErrored(true);
             return;
           }
-          const users = await AuthService.searchUsers(token, q, 20);
+
+          const url = `${API_URL}/clerk/search?q=${encodeURIComponent(q)}&limit=20`;
+          const res = await fetch(url, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            signal: controller.signal,
+          });
+          const data = await res.json().catch(() => null);
+          if (cancelled) return;
+
+          if (!res.ok || !data || data.status !== 'SUCCESS') {
+            console.warn('[GroupInvite] search failed', res.status, data?.message ?? '');
+            setResults([]);
+            setErrored(true);
+            return;
+          }
+
+          const users = (data.data?.users ?? []) as SearchUserResult[];
           const filtered = users.filter((u) => !excludeSet.has(u.id));
-          if (!cancelled) setResults(filtered);
+          console.log(`[GroupInvite] search "${q}" → ${users.length} users, ${filtered.length} after exclude`);
+          setResults(filtered);
         } catch (err: any) {
           if (!cancelled) {
+            console.warn('[GroupInvite] search error', err?.message ?? err);
             setResults([]);
-            toast.showError('تعذر البحث', err?.message ?? 'حاول مرة أخرى');
+            setErrored(true);
           }
         } finally {
+          clearTimeout(timeout);
           if (!cancelled) setLoading(false);
         }
       })();
@@ -143,8 +176,9 @@ export function GroupInviteSheet({
   const emptyHint = useMemo(() => {
     if (query.trim().length < 2) return 'ابحث باسم المستخدم للدعوة';
     if (loading) return null;
+    if (errored) return 'تعذّر البحث — تحقق من الاتصال وحاول مرة أخرى';
     return 'لا توجد نتائج';
-  }, [query, loading]);
+  }, [query, loading, errored]);
 
   const sheetBottomPad = insets.bottom + COMPACT_TAB_BAR_HEIGHT + 20;
 
