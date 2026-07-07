@@ -77,6 +77,10 @@ export function GroupEditSheet({
   const [imageSourceOpen, setImageSourceOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  // While the OS image picker is presenting we must hide this RN Modal —
+  // otherwise iOS refuses to present the picker over an open modal (the
+  // gallery/camera never appears).
+  const [pickerActive, setPickerActive] = useState(false);
 
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const textAlign = isRTL ? 'right' : 'left';
@@ -94,13 +98,21 @@ export function GroupEditSheet({
 
   const pickImage = useCallback(
     async (source: 'gallery' | 'camera') => {
-      const result =
-        source === 'gallery'
-          ? await pickFromGallery({ type: 'avatar', allowsEditing: true, aspect: [1, 1] })
-          : await pickFromCamera({ type: 'avatar', allowsEditing: true, aspect: [1, 1] });
-      if (result?.uri) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        setDraftImage(result.uri);
+      // Hide this modal first so iOS can present the native picker on top,
+      // then wait for the dismiss animation to settle before launching.
+      setPickerActive(true);
+      await new Promise((resolve) => setTimeout(resolve, Platform.OS === 'ios' ? 350 : 150));
+      try {
+        const result =
+          source === 'gallery'
+            ? await pickFromGallery({ type: 'avatar', allowsEditing: true, aspect: [1, 1] })
+            : await pickFromCamera({ type: 'avatar', allowsEditing: true, aspect: [1, 1] });
+        if (result?.uri) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          setDraftImage(result.uri);
+        }
+      } finally {
+        setPickerActive(false);
       }
     },
     [pickFromCamera, pickFromGallery],
@@ -171,7 +183,7 @@ export function GroupEditSheet({
 
   return (
     <Modal
-      visible={visible}
+      visible={visible && !pickerActive}
       transparent
       animationType="slide"
       statusBarTranslucent
