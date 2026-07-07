@@ -15,7 +15,7 @@ export function GroupKingsBrandTitle({
   title = 'Kings',
   compact = false,
 }: {
-  onPress: () => void;
+  onPress?: () => void;
   isRTL: boolean;
   title?: string;
   /** Fixed header — tighter pill, no extra gap. */
@@ -23,6 +23,30 @@ export function GroupKingsBrandTitle({
 }) {
   const { extra } = usePGFonts();
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
+
+  const content = (
+    <View style={[styles.logoPill, row]}>
+      <Text style={[styles.logo90, { fontFamily: extra }]}>90</Text>
+      <View style={styles.plusChip}>
+        <Text style={styles.logoPlus}>PLUS</Text>
+      </View>
+      <View style={[styles.titleDivider, isRTL ? styles.titleDividerRtl : styles.titleDividerLtr]} />
+      <Text
+        style={[styles.title, compact && styles.titleCompact, { fontFamily: extra }]}
+        numberOfLines={1}
+      >
+        {title}
+      </Text>
+    </View>
+  );
+
+  if (!onPress) {
+    return (
+      <View style={[styles.wrap, compact && styles.wrapCompact]} accessibilityLabel={title}>
+        {content}
+      </View>
+    );
+  }
 
   return (
     <Pressable
@@ -35,19 +59,7 @@ export function GroupKingsBrandTitle({
       accessibilityRole="button"
       accessibilityLabel={title}
     >
-      <View style={[styles.logoPill, row]}>
-        <Text style={[styles.logo90, { fontFamily: extra }]}>90</Text>
-        <View style={styles.plusChip}>
-          <Text style={styles.logoPlus}>PLUS</Text>
-        </View>
-        <View style={[styles.titleDivider, isRTL ? styles.titleDividerRtl : styles.titleDividerLtr]} />
-        <Text
-          style={[styles.title, compact && styles.titleCompact, { fontFamily: extra }]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
-      </View>
+      {content}
     </Pressable>
   );
 }

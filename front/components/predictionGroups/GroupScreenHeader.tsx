@@ -12,11 +12,12 @@ import {
   Users,
 } from 'lucide-react-native';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
-import { Alert, Pressable, Share, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Pressable, Share, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { FeatureInfoModal } from '../common/FeatureInfoModal';
 import { useTranslation } from '../../src/i18n';
 import { GroupAvatar } from './GroupAvatar';
+import { GroupConfirmDialog } from './GroupConfirmDialog';
 import { GroupEditSheet } from './GroupEditSheet';
 import { GroupInviteSheet } from './GroupInviteSheet';
 import { LiquidGlassInviteCard } from './LiquidGlassInviteCard';
@@ -74,6 +75,8 @@ export const GroupScreenHeader = forwardRef<
   const [editOpen, setEditOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [leaveBusy, setLeaveBusy] = useState(false);
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
 
   const shareMessage = `انضم لمجموعة "${groupName}" على 90Plus!\n${buildGroupJoinShareUrl(group.code)}`;
@@ -100,16 +103,18 @@ export const GroupScreenHeader = forwardRef<
   );
 
   const handleQuickLeave = useCallback(() => {
-    Alert.alert('الخروج من المجموعة؟', 'لن تظهر في ترتيب المجموعة بعد الخروج.', [
-      { text: 'إلغاء', style: 'cancel' },
-      {
-        text: 'خروج',
-        style: 'destructive',
-        onPress: () => {
-          void onLeaveGroup?.();
-        },
-      },
-    ]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setLeaveConfirmOpen(true);
+  }, []);
+
+  const runQuickLeave = useCallback(async () => {
+    setLeaveBusy(true);
+    try {
+      await onLeaveGroup?.();
+      setLeaveConfirmOpen(false);
+    } finally {
+      setLeaveBusy(false);
+    }
   }, [onLeaveGroup]);
 
   const handleShare = useCallback(async () => {
@@ -231,6 +236,18 @@ export const GroupScreenHeader = forwardRef<
         ]}
         hype={t.predictionGroupsInfo.hype}
         gotItLabel={t.predictionGroupsInfo.gotIt}
+      />
+
+      <GroupConfirmDialog
+        visible={leaveConfirmOpen}
+        title="الخروج من المجموعة؟"
+        message="لن تظهر في ترتيب المجموعة بعد الخروج."
+        confirmLabel="خروج"
+        destructive
+        loading={leaveBusy}
+        isRTL={isRTL}
+        onConfirm={() => void runQuickLeave()}
+        onCancel={() => setLeaveConfirmOpen(false)}
       />
     </>
   );

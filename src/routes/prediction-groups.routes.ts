@@ -4,7 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/clerk.middleware';
-import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
+import { clearResponseCache, responseCacheMiddleware } from '../middleware/responseCache.middleware';
 import prisma from '../lib/prisma';
 import { ErrorCode, sendError, type ErrorCodeValue } from '../constants/errors';
 import { logger } from '../utils/logger';
@@ -26,6 +26,10 @@ import {
 } from '../services/prediction-groups.service';
 
 const router = Router();
+
+async function invalidateGroupCaches(): Promise<void> {
+  await clearResponseCache('/prediction-groups').catch(() => undefined);
+}
 
 function param(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
@@ -90,6 +94,7 @@ router.post('/', requireAuth, async (req, res) => {
     }
     const { name, avatarUrl } = req.body ?? {};
     const state = await createGroup(user.id, String(name ?? ''), avatarUrl);
+    await invalidateGroupCaches();
     res.status(201).json({ success: true, data: state });
   } catch (err) {
     mapError(req, res, err);
@@ -114,6 +119,7 @@ router.post('/join', requireAuth, async (req, res) => {
     }
     const { code, inviteId } = req.body ?? {};
     const state = await joinGroup(user.id, { code, inviteId });
+    await invalidateGroupCaches();
     res.json({ success: true, data: state });
   } catch (err) {
     mapError(req, res, err);
@@ -129,6 +135,7 @@ router.post('/leave', requireAuth, async (req, res) => {
     }
     const result = await leaveGroup(user.id);
     const state = await getMyGroupState(user.id);
+    await invalidateGroupCaches();
     res.json({ success: true, data: { ...result, state } });
   } catch (err) {
     mapError(req, res, err);
@@ -144,6 +151,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
     }
     const result = await deleteGroup(user.id, param(req.params.id));
     const state = await getMyGroupState(user.id);
+    await invalidateGroupCaches();
     res.json({ success: true, data: { ...result, state } });
   } catch (err) {
     mapError(req, res, err);
@@ -169,6 +177,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
     }
     const { name, avatarUrl } = req.body ?? {};
     const state = await updateGroup(user.id, param(req.params.id), { name, avatarUrl });
+    await invalidateGroupCaches();
     res.json({ success: true, data: state });
   } catch (err) {
     mapError(req, res, err);
@@ -211,6 +220,7 @@ router.delete('/:id/members/:userId', requireAuth, async (req, res) => {
       return;
     }
     const result = await kickMember(user.id, param(req.params.id), param(req.params.userId));
+    await invalidateGroupCaches();
     res.json({ success: true, data: result });
   } catch (err) {
     mapError(req, res, err);
@@ -263,6 +273,7 @@ router.post('/:id/predictions', requireAuth, async (req, res) => {
       return;
     }
     const result = await saveGroupPredictions(user.id, param(req.params.id), predictions);
+    await invalidateGroupCaches();
     res.json({ success: true, data: result });
   } catch (err) {
     mapError(req, res, err);

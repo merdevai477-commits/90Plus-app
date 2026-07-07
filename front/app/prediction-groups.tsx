@@ -67,6 +67,7 @@ export default function PredictionGroupsScreen() {
     groupBan,
     isOwner,
     refreshMe,
+    refreshMeIfStale,
     refreshGroupData,
     refreshLeaderboard,
     createGroup,
@@ -102,9 +103,8 @@ export default function PredictionGroupsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshMe(true);
-      if (state?.hasGroup) void refreshGroupData();
-    }, [refreshMe, refreshGroupData, state?.hasGroup]),
+      void refreshMeIfStale(2000);
+    }, [refreshMeIfStale]),
   );
 
   const activeTabIndex = useMemo(
@@ -201,7 +201,7 @@ export default function PredictionGroupsScreen() {
           inviteId={pendingInviteId}
           onClose={() => setJoinSheetOpen(false)}
           onJoin={joinGroup}
-          onJoined={() => void refreshMe(true)}
+          onJoined={() => void refreshMe()}
         />
       </View>
     );
@@ -304,7 +304,7 @@ export default function PredictionGroupsScreen() {
         inviteId={pendingInviteId}
         onClose={() => setJoinSheetOpen(false)}
         onJoin={joinGroup}
-        onJoined={() => void refreshMe(true)}
+        onJoined={() => void refreshMe()}
       />
     </View>
   );

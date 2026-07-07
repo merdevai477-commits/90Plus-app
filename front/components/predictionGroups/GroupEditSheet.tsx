@@ -10,7 +10,6 @@ import { Camera, Crown, LogOut, Shield, Trash2, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   Pressable,
@@ -26,6 +25,8 @@ import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlass
 import { useImagePicker } from '../../hooks/useImagePicker';
 import { useImageUpload } from '../../hooks/useImageUpload';
 import { useToast } from '../../contexts/ToastContext';
+import { GroupConfirmDialog } from './GroupConfirmDialog';
+import { GroupImageSourceSheet } from './GroupImageSourceSheet';
 import { SheetBlurBackdrop } from './SheetBlurBackdrop';
 import { PG, PG_RADII, PG_SPACING, PG_TYPE, usePGFonts } from './theme';
 
@@ -41,8 +42,8 @@ export interface GroupEditSheetProps {
   groupName: string;
   groupImage: string | null;
   onSave: (name: string, imageUri: string | null) => void | Promise<void>;
-  onLeaveGroup?: () => void | Promise<void>;
-  onDeleteGroup?: () => void | Promise<void>;
+  onLeaveGroup?: () => void | Promise<unknown>;
+  onDeleteGroup?: () => void | Promise<unknown>;
   isRTL?: boolean;
   isAdmin?: boolean;
 }
@@ -73,6 +74,9 @@ export function GroupEditSheet({
   const [draftName, setDraftName] = useState(groupName);
   const [draftImage, setDraftImage] = useState<string | null>(groupImage);
   const [dangerBusy, setDangerBusy] = useState(false);
+  const [imageSourceOpen, setImageSourceOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
 
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const textAlign = isRTL ? 'right' : 'left';
@@ -82,6 +86,9 @@ export function GroupEditSheet({
       setDraftName(groupName);
       setDraftImage(groupImage);
       setDangerBusy(false);
+      setImageSourceOpen(false);
+      setDeleteConfirmOpen(false);
+      setLeaveConfirmOpen(false);
     }
   }, [visible, groupName, groupImage]);
 
@@ -108,68 +115,33 @@ export function GroupEditSheet({
 
   const openImagePicker = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    Alert.alert('صورة المجموعة', 'اختر مصدر الصورة', [
-      { text: 'إلغاء', style: 'cancel' },
-      { text: 'المعرض', onPress: () => handlePickSource('gallery') },
-      { text: 'الكاميرا', onPress: () => handlePickSource('camera') },
-      ...(draftImage
-        ? [{ text: 'إزالة الصورة', style: 'destructive' as const, onPress: () => setDraftImage(null) }]
-        : []),
-    ]);
-  }, [draftImage, handlePickSource]);
+    setImageSourceOpen(true);
+  }, []);
 
-  const confirmDelete = useCallback(() => {
-    Alert.alert(
-      'مسح المجموعة؟',
-      'سيتم حذف المجموعة نهائياً. إذا كان لديك توقعات نشطة في جولة جارية قد تفقد نقاطها. هل أنت متأكد؟',
-      [
-        { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'مسح المجموعة',
-          style: 'destructive',
-          onPress: () => {
-            setDangerBusy(true);
-            void (async () => {
-              try {
-                await onDeleteGroup?.();
-                onClose();
-              } catch (e: any) {
-                toast.showError('تعذر الحذف', e?.message ?? '');
-              } finally {
-                setDangerBusy(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
+  const runDelete = useCallback(async () => {
+    setDangerBusy(true);
+    try {
+      await onDeleteGroup?.();
+      setDeleteConfirmOpen(false);
+      onClose();
+    } catch (e: any) {
+      toast.showError('تعذر الحذف', e?.message ?? '');
+    } finally {
+      setDangerBusy(false);
+    }
   }, [onClose, onDeleteGroup, toast]);
 
-  const confirmLeave = useCallback(() => {
-    Alert.alert(
-      'الخروج من المجموعة؟',
-      'لن تظهر في ترتيب المجموعة بعد الخروج. يمكنك الانضمام لمجموعة أخرى لاحقاً.',
-      [
-        { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'خروج',
-          style: 'destructive',
-          onPress: () => {
-            setDangerBusy(true);
-            void (async () => {
-              try {
-                await onLeaveGroup?.();
-                onClose();
-              } catch (e: any) {
-                toast.showError('تعذر الخروج', e?.message ?? '');
-              } finally {
-                setDangerBusy(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
+  const runLeave = useCallback(async () => {
+    setDangerBusy(true);
+    try {
+      await onLeaveGroup?.();
+      setLeaveConfirmOpen(false);
+      onClose();
+    } catch (e: any) {
+      toast.showError('تعذر الخروج', e?.message ?? '');
+    } finally {
+      setDangerBusy(false);
+    }
   }, [onClose, onLeaveGroup, toast]);
 
   const handleSave = useCallback(async () => {
@@ -263,7 +235,7 @@ export function GroupEditSheet({
           <View style={styles.dangerZone}>
             {isAdmin && onDeleteGroup ? (
               <Pressable
-                onPress={confirmDelete}
+                onPress={() => setDeleteConfirmOpen(true)}
                 disabled={dangerBusy || isUploading}
                 style={({ pressed }) => [styles.dangerBtn, pressed && { opacity: 0.85 }]}
               >
@@ -273,7 +245,7 @@ export function GroupEditSheet({
             ) : null}
             {onLeaveGroup ? (
               <Pressable
-                onPress={confirmLeave}
+                onPress={() => setLeaveConfirmOpen(true)}
                 disabled={dangerBusy || isUploading}
                 style={({ pressed }) => [styles.leaveBtn, pressed && { opacity: 0.85 }]}
               >
@@ -304,6 +276,40 @@ export function GroupEditSheet({
         </SheetGlass>
       </View>
       </View>
+
+      <GroupImageSourceSheet
+        visible={imageSourceOpen}
+        hasImage={Boolean(draftImage)}
+        isRTL={isRTL}
+        onClose={() => setImageSourceOpen(false)}
+        onPickGallery={() => handlePickSource('gallery')}
+        onPickCamera={() => handlePickSource('camera')}
+        onRemoveImage={() => setDraftImage(null)}
+      />
+
+      <GroupConfirmDialog
+        visible={deleteConfirmOpen}
+        title="مسح المجموعة؟"
+        message="سيتم حذف المجموعة نهائياً. إذا كان لديك توقعات نشطة في جولة جارية قد تفقد نقاطها. هل أنت متأكد؟"
+        confirmLabel="مسح المجموعة"
+        destructive
+        loading={dangerBusy}
+        isRTL={isRTL}
+        onConfirm={() => void runDelete()}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
+
+      <GroupConfirmDialog
+        visible={leaveConfirmOpen}
+        title="الخروج من المجموعة؟"
+        message="لن تظهر في ترتيب المجموعة بعد الخروج. يمكنك الانضمام لمجموعة أخرى لاحقاً."
+        confirmLabel="خروج"
+        destructive
+        loading={dangerBusy}
+        isRTL={isRTL}
+        onConfirm={() => void runLeave()}
+        onCancel={() => setLeaveConfirmOpen(false)}
+      />
     </Modal>
   );
 }
@@ -448,97 +454,6 @@ const styles = StyleSheet.create({
   },
   saveText: {
     color: '#FFFFFF',
-    fontSize: PG_TYPE.body,
-  },
-  sourceOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 20,
-    justifyContent: 'flex-end',
-  },
-  sourceScrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  sourceSheet: {
-    paddingHorizontal: 12,
-  },
-  sourceCard: {
-    paddingHorizontal: PG_SPACING.lg,
-    paddingTop: PG_SPACING.sm,
-    paddingBottom: PG_SPACING.md,
-    overflow: 'hidden',
-  },
-  sourceHandle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: PG.border,
-    marginBottom: PG_SPACING.md,
-  },
-  sourceTitle: {
-    color: PG.text,
-    fontSize: PG_TYPE.title,
-    marginBottom: 4,
-  },
-  sourceSub: {
-    color: PG.textMuted,
-    fontSize: PG_TYPE.caption,
-    marginBottom: PG_SPACING.lg,
-  },
-  sourceOptions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: PG_SPACING.md,
-  },
-  sourceOption: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: PG_RADII.lg,
-    backgroundColor: PG.glassStrong,
-    borderWidth: 1,
-    borderColor: PG.borderSoft,
-  },
-  sourceOptionPressed: {
-    opacity: 0.88,
-    backgroundColor: 'rgba(139,92,246,0.14)',
-    borderColor: 'rgba(167,139,250,0.35)',
-  },
-  sourceIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(139,92,246,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.28)',
-  },
-  sourceOptionText: {
-    color: PG.text,
-    fontSize: PG_TYPE.body,
-  },
-  removeBtn: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    marginBottom: 4,
-  },
-  removeBtnText: {
-    color: '#F87171',
-    fontSize: PG_TYPE.body,
-  },
-  cancelBtn: {
-    alignItems: 'center',
-    paddingVertical: 14,
-    marginTop: 4,
-    borderRadius: PG_RADII.md,
-    backgroundColor: PG.glass,
-  },
-  cancelBtnText: {
-    color: PG.textSecondary,
     fontSize: PG_TYPE.body,
   },
 });

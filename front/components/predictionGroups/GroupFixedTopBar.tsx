@@ -23,8 +23,8 @@ type Props = {
   isRTL: boolean;
   brandTitle: string;
   onBack: () => void;
-  onBrandPress: () => void;
-  onShare: () => void;
+  onBrandPress?: () => void;
+  onShare?: () => void;
 };
 
 export function GroupFixedTopBar({
@@ -52,13 +52,20 @@ export function GroupFixedTopBar({
       </View>
 
       <View style={styles.centerSlot}>
-        <GroupKingsBrandTitle onPress={onBrandPress} isRTL={isRTL} title={brandTitle} compact />
+        <GroupKingsBrandTitle
+          onPress={onBrandPress}
+          isRTL={isRTL}
+          title={brandTitle}
+          compact
+        />
       </View>
 
       <View style={[styles.sideSlot, styles.sideSlotEnd]}>
-        <LiquidGlassIconButton onPress={onShare} accessibilityLabel="مشاركة" size={SIDE_SLOT}>
-          <ShareIcon size={19} color="#FFFFFF" strokeWidth={2.25} />
-        </LiquidGlassIconButton>
+        {onShare ? (
+          <LiquidGlassIconButton onPress={onShare} accessibilityLabel="مشاركة" size={SIDE_SLOT}>
+            <ShareIcon size={19} color="#FFFFFF" strokeWidth={2.25} />
+          </LiquidGlassIconButton>
+        ) : null}
       </View>
     </View>
   );

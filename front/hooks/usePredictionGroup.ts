@@ -1,5 +1,5 @@
 import { useAuth } from '@clerk/clerk-expo';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   GroupMemberRow,
@@ -9,6 +9,13 @@ import {
   RankedGroupRow,
 } from '../services/predictionGroups.service';
 import { logger } from '../utils/logger';
+
+const EMPTY_GROUP_STATE: MyGroupState = {
+  hasGroup: false,
+  group: null,
+  membership: null,
+  groupBan: null,
+};
 
 export function usePredictionGroup() {
   const { getToken, isSignedIn } = useAuth();
@@ -24,13 +31,25 @@ export function usePredictionGroup() {
     wrongPredictions: number;
   } | null>(null);
 
+  const getTokenRef = useRef(getToken);
+  const isSignedInRef = useRef(isSignedIn);
+  const stateRef = useRef(state);
+  const refreshMeInFlight = useRef(false);
+  const refreshGroupInFlight = useRef(false);
+  const lastRefreshMeAt = useRef(0);
+
+  getTokenRef.current = getToken;
+  isSignedInRef.current = isSignedIn;
+  stateRef.current = state;
+
   const withToken = useCallback(async <T,>(fn: (token: string) => Promise<T>): Promise<T | null> => {
-    const token = await getToken();
+    const token = await getTokenRef.current();
     if (!token) return null;
     return fn(token);
-  }, [getToken]);
+  }, []);
 
   const applyState = useCallback((data: MyGroupState) => {
+    stateRef.current = data;
     setState(data);
     if (!data.hasGroup) {
       setMembers([]);
@@ -41,11 +60,17 @@ export function usePredictionGroup() {
   }, []);
 
   const refreshMe = useCallback(async (bustCache = false) => {
-    if (!isSignedIn) {
-      setState({ hasGroup: false, group: null, membership: null, groupBan: null });
+    if (refreshMeInFlight.current) return;
+    refreshMeInFlight.current = true;
+    lastRefreshMeAt.current = Date.now();
+
+    if (!isSignedInRef.current) {
+      applyState(EMPTY_GROUP_STATE);
       setLoading(false);
+      refreshMeInFlight.current = false;
       return;
     }
+
     try {
       const data = await withToken((t) => PredictionGroupsService.getMe(t, bustCache));
       if (data) applyState(data);
@@ -53,12 +78,23 @@ export function usePredictionGroup() {
       logger.error('[usePredictionGroup] getMe failed:', err);
     } finally {
       setLoading(false);
+      refreshMeInFlight.current = false;
     }
-  }, [applyState, isSignedIn, withToken]);
+  }, [applyState, withToken]);
+
+  const refreshMeIfStale = useCallback(
+    async (minIntervalMs = 2000) => {
+      if (Date.now() - lastRefreshMeAt.current < minIntervalMs) return;
+      await refreshMe();
+    },
+    [refreshMe],
+  );
 
   const refreshGroupData = useCallback(async (groupId?: string) => {
-    const id = groupId ?? state?.group?.id;
-    if (!id) return;
+    const id = groupId ?? stateRef.current?.group?.id;
+    if (!id || refreshGroupInFlight.current) return;
+
+    refreshGroupInFlight.current = true;
     try {
       const [membersData, standings, round] = await Promise.all([
         withToken((t) => PredictionGroupsService.getMembers(t, id)),
@@ -76,22 +112,24 @@ export function usePredictionGroup() {
       }
     } catch (err) {
       logger.error('[usePredictionGroup] refreshGroupData failed:', err);
+    } finally {
+      refreshGroupInFlight.current = false;
     }
-  }, [state?.group?.id, withToken]);
+  }, [withToken]);
 
   const refreshLeaderboard = useCallback(
     async (period: 'all' | 'week' | 'month' = 'all') => {
       try {
         const rows = await withToken((t) => PredictionGroupsService.getLeaderboard(t, period));
         if (rows) {
-          const mineId = state?.group?.id;
+          const mineId = stateRef.current?.group?.id;
           setGlobalGroups(rows.map((r) => ({ ...r, isMine: r.id === mineId })));
         }
       } catch (err) {
         logger.error('[usePredictionGroup] leaderboard failed:', err);
       }
     },
-    [state?.group?.id, withToken],
+    [withToken],
   );
 
   useEffect(() => {
@@ -99,7 +137,9 @@ export function usePredictionGroup() {
   }, [refreshMe]);
 
   useEffect(() => {
-    if (state?.hasGroup && state.group) void refreshGroupData(state.group.id);
+    if (state?.hasGroup && state.group?.id) {
+      void refreshGroupData(state.group.id);
+    }
   }, [state?.hasGroup, state?.group?.id, refreshGroupData]);
 
   const createGroup = useCallback(
@@ -132,28 +172,57 @@ export function usePredictionGroup() {
 
   const updateGroup = useCallback(
     async (name?: string, avatarUrl?: string | null) => {
-      if (!state?.group) return null;
+      const groupId = stateRef.current?.group?.id;
+      if (!groupId) return null;
       const data = await withToken((t) =>
-        PredictionGroupsService.updateGroup(t, state.group!.id, { name, avatarUrl }),
+        PredictionGroupsService.updateGroup(t, groupId, { name, avatarUrl }),
       );
       if (data) applyState(data);
       return data;
     },
-    [applyState, state?.group, withToken],
+    [applyState, withToken],
   );
 
   const leaveGroup = useCallback(async () => {
-    const result = await withToken((t) => PredictionGroupsService.leave(t));
-    if (result?.state) applyState(result.state);
-    return result;
+    const prevState = stateRef.current;
+    applyState({
+      hasGroup: false,
+      group: null,
+      membership: null,
+      groupBan: prevState?.groupBan ?? null,
+    });
+
+    try {
+      const result = await withToken((t) => PredictionGroupsService.leave(t));
+      if (result?.state) applyState(result.state);
+      return result;
+    } catch (err) {
+      if (prevState) applyState(prevState);
+      throw err;
+    }
   }, [applyState, withToken]);
 
   const deleteGroup = useCallback(async () => {
-    if (!state?.group) return null;
-    const result = await withToken((t) => PredictionGroupsService.deleteGroup(t, state.group!.id));
-    if (result?.state) applyState(result.state);
-    return result;
-  }, [applyState, state?.group, withToken]);
+    const prevState = stateRef.current;
+    const groupId = prevState?.group?.id;
+    if (!groupId) return null;
+
+    applyState({
+      hasGroup: false,
+      group: null,
+      membership: null,
+      groupBan: prevState?.groupBan ?? null,
+    });
+
+    try {
+      const result = await withToken((t) => PredictionGroupsService.deleteGroup(t, groupId));
+      if (result?.state) applyState(result.state);
+      return result;
+    } catch (err) {
+      if (prevState) applyState(prevState);
+      throw err;
+    }
+  }, [applyState, withToken]);
 
   const savePredictions = useCallback(
     async (
@@ -165,28 +234,31 @@ export function usePredictionGroup() {
         predictedAwayScore?: number;
       }>,
     ) => {
-      if (!state?.group) return;
-      await withToken((t) => PredictionGroupsService.savePredictions(t, state.group!.id, predictions));
-      await refreshGroupData(state.group.id);
+      const groupId = stateRef.current?.group?.id;
+      if (!groupId) return;
+      await withToken((t) => PredictionGroupsService.savePredictions(t, groupId, predictions));
+      await refreshGroupData(groupId);
     },
-    [state?.group, withToken, refreshGroupData],
+    [withToken, refreshGroupData],
   );
 
   const inviteUser = useCallback(
     async (userId: string) => {
-      if (!state?.group) return;
-      await withToken((t) => PredictionGroupsService.inviteUser(t, state.group!.id, userId));
+      const groupId = stateRef.current?.group?.id;
+      if (!groupId) return;
+      await withToken((t) => PredictionGroupsService.inviteUser(t, groupId, userId));
     },
-    [state?.group, withToken],
+    [withToken],
   );
 
   const kickMember = useCallback(
     async (userId: string) => {
-      if (!state?.group) return;
-      await withToken((t) => PredictionGroupsService.kickMember(t, state.group!.id, userId));
-      await refreshGroupData(state.group.id);
+      const groupId = stateRef.current?.group?.id;
+      if (!groupId) return;
+      await withToken((t) => PredictionGroupsService.kickMember(t, groupId, userId));
+      await refreshGroupData(groupId);
     },
-    [state?.group, withToken, refreshGroupData],
+    [withToken, refreshGroupData],
   );
 
   return {
@@ -200,6 +272,7 @@ export function usePredictionGroup() {
     groupBan: state?.groupBan ?? null,
     isOwner: state?.membership?.isOwner ?? false,
     refreshMe,
+    refreshMeIfStale,
     refreshGroupData,
     refreshLeaderboard,
     createGroup,
