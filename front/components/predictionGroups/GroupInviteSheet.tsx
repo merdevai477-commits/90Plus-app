@@ -14,6 +14,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -248,7 +249,12 @@ export function GroupInviteSheet({
                 <Text style={[styles.empty, { fontFamily: medium, textAlign }]}>{emptyHint}</Text>
               </View>
             ) : (
-              <View style={styles.list}>
+              <ScrollView
+                style={styles.list}
+                contentContainerStyle={styles.listContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
               {results.map((user) => {
                 const sent = invitedIds.has(user.id);
                 const name = user.displayName || user.username;
@@ -286,7 +292,7 @@ export function GroupInviteSheet({
                   </View>
                 );
               })}
-              </View>
+              </ScrollView>
             )}
           </View>
         </SheetGlass>
@@ -395,7 +401,8 @@ const styles = StyleSheet.create({
     fontSize: PG_TYPE.body,
     lineHeight: 22,
   },
-  list: { gap: 8, maxHeight: 360 },
+  list: { maxHeight: 340, alignSelf: 'stretch' },
+  listContent: { gap: 8, paddingBottom: 4 },
   userRow: {
     alignItems: 'center',
     gap: PG_SPACING.sm,
