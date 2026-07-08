@@ -518,7 +518,10 @@ const s = StyleSheet.create({
   arenaImg: {
     width: '100%',
     height: '100%',
-    opacity: 0.5,
+    opacity: 0.6,
+    // Zoom the stadium in so the pitch fills the frame and the card reads as
+    // if it's standing on the field.
+    transform: [{ scale: 1.45 }],
   },
 
   // Animated inner border glow
