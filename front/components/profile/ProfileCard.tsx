@@ -33,7 +33,7 @@ import Svg, {
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const CARD_BACK = require('../../assets/images/profile-card-back.png') as number;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const ARENA_BG = require('../../assets/images/arena.png') as number;
+const ARENA_BG = require('../../assets/images/arena_profile.png') as number;
 
 // ── Animation helpers ────────────────────────────────────────────────────────
 const useSafeLoop = (from: number, to: number, duration: number, easing = Easing.bezier(0.4, 0, 0.2, 1)) => {
@@ -190,14 +190,14 @@ const ProfileCard = memo(function ProfileCard({
     <View style={{ alignItems: 'center' }}>
       <View style={[s.container, { width: cardWidth, height: cardHeight }]}>
 
-        {/* ── arena.png — stadium backdrop behind the card (matches Rank) ─── */}
+        {/* ── arena_profile.png — pitch backdrop; card floats over the grass ── */}
         <View
           pointerEvents="none"
           style={[s.arenaBg, {
             width: cardWidth * 1.9,
-            height: cardHeight * 1.12,
+            height: cardHeight * 1.3,
             left: -cardWidth * 0.45,
-            top: -cardHeight * 0.06,
+            top: cardHeight * 0.02,
           }]}
         >
           <Image
@@ -206,8 +206,11 @@ const ProfileCard = memo(function ProfileCard({
             contentFit="cover"
             cachePolicy="memory-disk"
           />
+          {/* Fade only the top into the page bg so the grass stays visible
+              beneath the card — reads as if the card is standing on the pitch. */}
           <LinearGradient
-            colors={['#05010D', 'transparent', '#05010D']}
+            colors={['#05010D', 'transparent', 'transparent']}
+            locations={[0, 0.35, 1]}
             style={StyleSheet.absoluteFill}
           />
         </View>
@@ -508,7 +511,7 @@ const s = StyleSheet.create({
   cardSvg: { position: 'absolute', top: 0, left: 0 },
   quadrantContainer: { position: 'absolute', overflow: 'hidden', zIndex: 10 },
 
-  // arena.png stadium backdrop behind the card
+  // arena_profile.png pitch backdrop behind the card
   arenaBg: {
     position: 'absolute',
     zIndex: -1,
@@ -518,10 +521,10 @@ const s = StyleSheet.create({
   arenaImg: {
     width: '100%',
     height: '100%',
-    opacity: 0.6,
-    // Zoom the stadium in so the pitch fills the frame and the card reads as
-    // if it's standing on the field.
-    transform: [{ scale: 1.45 }],
+    opacity: 0.8,
+    // Zoom the pitch in so the grass fills the frame and the card reads as if
+    // it's floating over the field.
+    transform: [{ scale: 1.25 }],
   },
 
   // Animated inner border glow
