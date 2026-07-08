@@ -5,7 +5,7 @@
 import * as Haptics from 'expo-haptics';
 import { Camera, ImageIcon } from 'lucide-react-native';
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LiquidGlassSurface } from './LiquidGlassSurface';
@@ -52,6 +52,55 @@ export function GroupImageSourceSheet({
 
   if (!visible) return null;
 
+  const cardInner = (
+    <>
+      <View style={styles.handle} />
+      <Text style={[styles.title, { fontFamily: extra, textAlign }]}>صورة المجموعة</Text>
+      <Text style={[styles.sub, { fontFamily: medium, textAlign }]}>اختر مصدر الصورة</Text>
+
+      <View style={styles.options}>
+        <Pressable
+          onPress={() => pick('gallery')}
+          style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
+        >
+          <View style={styles.iconWrap}>
+            <ImageIcon size={22} color={PG.primaryLight} />
+          </View>
+          <Text style={[styles.optionText, { fontFamily: bold }]}>المعرض</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => pick('camera')}
+          style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
+        >
+          <View style={styles.iconWrap}>
+            <Camera size={22} color={PG.primaryLight} />
+          </View>
+          <Text style={[styles.optionText, { fontFamily: bold }]}>الكاميرا</Text>
+        </Pressable>
+      </View>
+
+      {hasImage && onRemoveImage ? (
+        <Pressable
+          onPress={() => {
+            onClose();
+            onRemoveImage();
+          }}
+          style={({ pressed }) => [styles.removeBtn, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={[styles.removeTxt, { fontFamily: medium }]}>إزالة الصورة</Text>
+        </Pressable>
+      ) : null}
+
+      <Pressable
+        onPress={onClose}
+        style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.85 }]}
+      >
+        <Text style={[styles.cancelTxt, { fontFamily: medium }]}>إلغاء</Text>
+      </Pressable>
+    </>
+  );
+
   const content = (
     <>
       {embedded ? (
@@ -63,52 +112,17 @@ export function GroupImageSourceSheet({
         <SheetBlurBackdrop onPress={onClose} />
       )}
       <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-        <LiquidGlassSurface borderRadius={PG_RADII.xl} subtleShadow style={styles.card}>
-          <View style={styles.handle} />
-          <Text style={[styles.title, { fontFamily: extra, textAlign }]}>صورة المجموعة</Text>
-          <Text style={[styles.sub, { fontFamily: medium, textAlign }]}>اختر مصدر الصورة</Text>
-
-          <View style={styles.options}>
-            <Pressable
-              onPress={() => pick('gallery')}
-              style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
-            >
-              <View style={styles.iconWrap}>
-                <ImageIcon size={22} color={PG.primaryLight} />
-              </View>
-              <Text style={[styles.optionText, { fontFamily: bold }]}>المعرض</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => pick('camera')}
-              style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
-            >
-              <View style={styles.iconWrap}>
-                <Camera size={22} color={PG.primaryLight} />
-              </View>
-              <Text style={[styles.optionText, { fontFamily: bold }]}>الكاميرا</Text>
-            </Pressable>
-          </View>
-
-          {hasImage && onRemoveImage ? (
-            <Pressable
-              onPress={() => {
-                onClose();
-                onRemoveImage();
-              }}
-              style={({ pressed }) => [styles.removeBtn, pressed && { opacity: 0.85 }]}
-            >
-              <Text style={[styles.removeTxt, { fontFamily: medium }]}>إزالة الصورة</Text>
-            </Pressable>
-          ) : null}
-
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.85 }]}
-          >
-            <Text style={[styles.cancelTxt, { fontFamily: medium }]}>إلغاء</Text>
-          </Pressable>
-        </LiquidGlassSurface>
+        {embedded ? (
+          // Inside another modal, a second BlurView (LiquidGlassSurface) over
+          // the parent's BlurView renders behind the backdrop on Android
+          // (native blur layers ignore RN z-order), hiding the card. Use a
+          // solid surface instead.
+          <View style={[styles.card, styles.solidCard]}>{cardInner}</View>
+        ) : (
+          <LiquidGlassSurface borderRadius={PG_RADII.xl} subtleShadow style={styles.card}>
+            {cardInner}
+          </LiquidGlassSurface>
+        )}
       </View>
     </>
   );
@@ -134,6 +148,22 @@ const styles = StyleSheet.create({
     paddingTop: PG_SPACING.sm,
     paddingBottom: PG_SPACING.md,
     overflow: 'hidden',
+  },
+  solidCard: {
+    borderRadius: PG_RADII.xl,
+    backgroundColor: 'rgba(15,5,25,0.98)',
+    borderWidth: 1,
+    borderColor: PG.heroGlassBorder,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+      },
+      android: { elevation: 12 },
+      default: {},
+    }),
   },
   handle: {
     alignSelf: 'center',
