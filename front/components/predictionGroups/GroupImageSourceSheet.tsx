@@ -54,7 +54,14 @@ export function GroupImageSourceSheet({
 
   const content = (
     <>
-      <SheetBlurBackdrop onPress={onClose} />
+      {embedded ? (
+        // Inside another modal the parent already renders a blurred backdrop —
+        // a second full-screen BlurView on top of it renders as an opaque black
+        // layer on Android, so use a plain dim instead.
+        <Pressable style={[StyleSheet.absoluteFill, styles.embeddedDim]} onPress={onClose} />
+      ) : (
+        <SheetBlurBackdrop onPress={onClose} />
+      )}
       <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
         <LiquidGlassSurface borderRadius={PG_RADII.xl} subtleShadow style={styles.card}>
           <View style={styles.handle} />
@@ -120,6 +127,7 @@ export function GroupImageSourceSheet({
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
   embeddedRoot: { zIndex: 3000, elevation: 3000 },
+  embeddedDim: { backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet: { paddingHorizontal: 12, zIndex: 2 },
   card: {
     paddingHorizontal: PG_SPACING.lg,

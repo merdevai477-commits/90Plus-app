@@ -130,15 +130,14 @@ export function GroupEditSheet({
 
   const openImagePicker = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    // Hide the edit sheet and show the source sheet as a standalone modal so
-    // the two are never presented as nested modals (which renders black).
-    setPickerActive(true);
+    // Keep the edit modal open and show the source picker as an embedded
+    // overlay inside it — toggling two separate RN modals in one frame races
+    // on Android and shows a dim backdrop with no content.
     setImageSourceOpen(true);
   }, []);
 
   const closeImageSource = useCallback(() => {
     setImageSourceOpen(false);
-    setPickerActive(false);
   }, []);
 
   const runDelete = useCallback(async () => {
@@ -193,7 +192,6 @@ export function GroupEditSheet({
   }, [draftName, draftImage, groupId, onClose, onSave, toast, upload]);
 
   return (
-    <>
     <Modal
       visible={visible && !pickerActive}
       transparent
@@ -300,6 +298,17 @@ export function GroupEditSheet({
         </SheetGlass>
       </View>
 
+        <GroupImageSourceSheet
+          visible={imageSourceOpen}
+          embedded
+          hasImage={Boolean(draftImage)}
+          isRTL={isRTL}
+          onClose={closeImageSource}
+          onPickGallery={() => handlePickSource('gallery')}
+          onPickCamera={() => handlePickSource('camera')}
+          onRemoveImage={() => setDraftImage(null)}
+        />
+
         <GroupConfirmDialog
           visible={deleteConfirmOpen}
           embedded
@@ -327,17 +336,6 @@ export function GroupEditSheet({
         />
       </View>
     </Modal>
-
-    <GroupImageSourceSheet
-      visible={imageSourceOpen}
-      hasImage={Boolean(draftImage)}
-      isRTL={isRTL}
-      onClose={closeImageSource}
-      onPickGallery={() => handlePickSource('gallery')}
-      onPickCamera={() => handlePickSource('camera')}
-      onRemoveImage={() => setDraftImage(null)}
-    />
-    </>
   );
 }
 
