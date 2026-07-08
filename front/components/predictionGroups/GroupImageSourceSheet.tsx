@@ -54,7 +54,7 @@ export function GroupImageSourceSheet({
 
   const cardInner = (
     <>
-      <View style={styles.handle} />
+      {!embedded ? <View style={styles.handle} /> : null}
       <Text style={[styles.title, { fontFamily: extra, textAlign }]}>صورة المجموعة</Text>
       <Text style={[styles.sub, { fontFamily: medium, textAlign }]}>اختر مصدر الصورة</Text>
 
@@ -101,47 +101,44 @@ export function GroupImageSourceSheet({
     </>
   );
 
-  const content = (
-    <>
-      {embedded ? (
-        // Inside another modal the parent already renders a blurred backdrop —
-        // a second full-screen BlurView on top of it renders as an opaque black
-        // layer on Android, so use a plain dim instead.
-        <Pressable style={[StyleSheet.absoluteFill, styles.embeddedDim]} onPress={onClose} />
-      ) : (
-        <SheetBlurBackdrop onPress={onClose} />
-      )}
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
-        {embedded ? (
-          // Inside another modal, a second BlurView (LiquidGlassSurface) over
-          // the parent's BlurView renders behind the backdrop on Android
-          // (native blur layers ignore RN z-order), hiding the card. Use a
-          // solid surface instead.
-          <View style={[styles.card, styles.solidCard]}>{cardInner}</View>
-        ) : (
-          <LiquidGlassSurface borderRadius={PG_RADII.xl} subtleShadow style={styles.card}>
-            {cardInner}
-          </LiquidGlassSurface>
-        )}
-      </View>
-    </>
-  );
-
+  // Embedded (opened from inside another modal): render as a centered popup on
+  // a solid surface. A second BlurView over the parent's BlurView renders
+  // behind the backdrop on Android (native blur ignores RN z-order), and a
+  // bottom-sheet layout collides with the parent sheet — so center a solid card.
   if (embedded) {
-    return <View style={[StyleSheet.absoluteFillObject, styles.root, styles.embeddedRoot]}>{content}</View>;
+    return (
+      <View style={[StyleSheet.absoluteFillObject, styles.embeddedRoot]}>
+        <Pressable style={[StyleSheet.absoluteFill, styles.embeddedDim]} onPress={onClose} />
+        <View style={[styles.card, styles.solidCard, styles.popupCard]}>{cardInner}</View>
+      </View>
+    );
   }
 
   return (
     <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
-      <View style={styles.root}>{content}</View>
+      <View style={styles.root}>
+        <SheetBlurBackdrop onPress={onClose} />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <LiquidGlassSurface borderRadius={PG_RADII.xl} subtleShadow style={styles.card}>
+            {cardInner}
+          </LiquidGlassSurface>
+        </View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
-  embeddedRoot: { zIndex: 3000, elevation: 3000 },
+  embeddedRoot: {
+    justifyContent: 'center',
+    alignItems: 'stretch',
+    paddingHorizontal: 20,
+    zIndex: 3000,
+    elevation: 3000,
+  },
   embeddedDim: { backgroundColor: 'rgba(0,0,0,0.6)' },
+  popupCard: { zIndex: 2, paddingTop: PG_SPACING.lg },
   sheet: { paddingHorizontal: 12, zIndex: 2 },
   card: {
     paddingHorizontal: PG_SPACING.lg,
