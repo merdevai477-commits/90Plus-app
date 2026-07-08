@@ -124,7 +124,7 @@ export function useWorldCupMatches(
   leagueId: number,
   campaignMode = false,
   enrichCorners = true,
-  phaseMode?: 'date' | 'upcoming' | 'finished' | 'live',
+  phaseMode?: 'date' | 'upcoming' | 'finished' | 'live' | 'all',
 ): UseWorldCupMatchesResult {
   const [calendarMatches, setCalendarMatches] = useState<Match[]>([]);
   const snapshots = useLiveFixtureStore((s) => s.snapshots);
@@ -188,6 +188,8 @@ export function useWorldCupMatches(
         list = await fetchWorldCupMatchesByPhase('finished');
       } else if (phaseMode === 'live') {
         list = await fetchWorldCupMatchesByPhase('live');
+      } else if (phaseMode === 'all') {
+        list = await fetchWorldCupMatchesByPhase('all');
       } else {
         list = await fetchWorldCupMatchesByDate(selectedDate, {
           skipDiskCache: true,
@@ -237,7 +239,10 @@ export function useWorldCupMatches(
 
   useEffect(() => {
     if (!enabled) return;
-    if (phaseMode === 'upcoming') return;
+    // 'upcoming'/'all' pull the full tournament (100+ fixtures). Polling that
+    // repeatedly is wasteful — live scores still flow via the WebSocket
+    // snapshot overlay (useRegisterLiveFixtures), so skip the calendar poll.
+    if (phaseMode === 'upcoming' || phaseMode === 'all') return;
     const shouldPoll = isToday || phaseMode === 'live';
     if (!shouldPoll) return;
     const id = setInterval(() => void load(), LIVE_FIXTURE_CALENDAR_POLL_MS);

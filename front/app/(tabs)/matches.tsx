@@ -984,12 +984,21 @@ export default function MatchesHubScreenV2() {
       filter === 'Upcoming' ||
       filter === 'Finished' ||
       filter === 'Predictions');
+  // On the World Cup tab we default to the whole-tournament view (so it's never
+  // empty on rest days — it shows recent finished + upcoming stages). Picking a
+  // specific day from the calendar still narrows it to that day's fixtures.
+  const isSelectedToday =
+    startOfLocalDay(selectedDate).getTime() === startOfLocalDay().getTime();
   const wcPhaseMode =
     filter === 'Upcoming'
       ? 'upcoming'
       : filter === 'Live'
         ? 'live'
-        : 'date';
+        : filter === 'WorldCup'
+          ? isSelectedToday
+            ? 'all'
+            : 'date'
+          : 'date';
   const wcEnrichCorners =
     wcFetchEnabled && (filter === 'WorldCup' || filter === 'Live');
 
@@ -1271,21 +1280,56 @@ export default function MatchesHubScreenV2() {
     if (worldCupMatches.length === 0) return [];
     const byStage = new Map<string, Match[]>();
     for (const m of worldCupMatches) {
-      const stageKey = m.league?.round?.trim() || m.league?.name?.trim() || 'World Cup';
+      // Group by the specific stage name ("… دور الـ 16", "… ربع النهائي",
+      // "… المجموعة أ"). The `round` field is a generic "الجولة" for every
+      // knockout tie, so keying on it would merge R32/R16/QF into one card.
+      const stageKey = m.league?.name?.trim() || m.league?.round?.trim() || 'World Cup';
       const bucket = byStage.get(stageKey) ?? [];
       bucket.push(m);
       byStage.set(stageKey, bucket);
     }
-    return [...byStage.entries()].map(([stageKey, stageMatches], index) => {
+
+    // Order stages by relevance so the World Cup tab (which now pulls the whole
+    // tournament) surfaces live → upcoming → most-recently-finished first.
+    // Plain chronological order would bury the next rounds under the entire
+    // finished group stage.
+    const tsOf = (m: Match): number =>
+      m.startTimestamp ??
+      (m.fixtureDate ? Math.floor(new Date(m.fixtureDate).getTime() / 1000) : 0);
+
+    const stageEntries = [...byStage.entries()].map(([stageKey, stageMatches], index) => {
       const sample = stageMatches[0];
+      const hasLive = stageMatches.some((m) => m.status === 'live');
+      const upcomingTs = stageMatches
+        .filter((m) => m.status !== 'live' && m.status !== 'finished')
+        .map(tsOf)
+        .filter((t) => t > 0);
+      const finishedTs = stageMatches
+        .filter((m) => m.status === 'finished')
+        .map(tsOf)
+        .filter((t) => t > 0);
       return {
-        id: `wc-${index}-${stageKey}`,
-        league: sample?.league?.name ?? stageKey,
-        leagueLogo: sample?.league?.logo ?? '',
-        logoSource: WC_2026_OFFICIAL_LOGO,
-        fixtures: stageMatches.map(matchToFixture),
+        group: {
+          id: `wc-${index}-${stageKey}`,
+          league: sample?.league?.name ?? stageKey,
+          leagueLogo: sample?.league?.logo ?? '',
+          logoSource: WC_2026_OFFICIAL_LOGO,
+          fixtures: stageMatches.map(matchToFixture),
+        },
+        tier: hasLive ? 0 : upcomingTs.length > 0 ? 1 : 2,
+        soonestUpcoming: upcomingTs.length ? Math.min(...upcomingTs) : Number.MAX_SAFE_INTEGER,
+        latestFinished: finishedTs.length ? Math.max(...finishedTs) : 0,
       };
     });
+
+    stageEntries.sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier - b.tier;
+      if (a.tier === 1) return a.soonestUpcoming - b.soonestUpcoming; // soonest upcoming first
+      if (a.tier === 2) return b.latestFinished - a.latestFinished; // most recent finished first
+      return 0;
+    });
+
+    return stageEntries.map((e) => e.group);
   }, [worldCupMatches]);
 
   /** Pinned at top on All/Live/Upcoming/Finished/Predictions — filtered by active tab. */
