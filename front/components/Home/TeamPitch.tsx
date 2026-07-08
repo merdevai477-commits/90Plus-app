@@ -72,6 +72,19 @@ const ROLE_BUDGET: Record<string, number> = {
     ST: 1,
 };
 
+/** Broad line a role belongs to, used to keep players near their position. */
+const ROLE_LINE: Record<string, 'GK' | 'DEF' | 'MID' | 'ATT'> = {
+    GK: 'GK',
+    RB: 'DEF',
+    CB: 'DEF',
+    LB: 'DEF',
+    CDM: 'MID',
+    CM: 'MID',
+    RW: 'ATT',
+    ST: 'ATT',
+    LW: 'ATT',
+};
+
 function mapToFormationRole(pos?: string): string | null {
     const p = (pos || '').toUpperCase().trim();
     if (!p) return null;
@@ -85,6 +98,12 @@ function mapToFormationRole(pos?: string): string | null {
     if (p === 'LW' || p === 'LM') return 'LW';
     if (p === 'ST' || p === 'CF' || p === 'SS' || p === 'ATT') return 'ST';
     return null;
+}
+
+/** Line group of a player (defaults to attack, matching the default "ST"). */
+function playerLine(player: PitchPlayerItem): 'GK' | 'DEF' | 'MID' | 'ATT' {
+    const role = mapToFormationRole(player.position);
+    return role ? ROLE_LINE[role] : 'ATT';
 }
 
 function displayLabel(player: PitchPlayerItem): string {
@@ -179,25 +198,39 @@ function buildPitchPositions(players: PitchPlayerItem[]): (PitchPlayerItem | nul
         }
     }
 
-    // Pass 2 — the roster is the top players of the month, but most share the
-    // same position (default "ST") while the 4-3-3 has only one ST slot. Without
-    // this pass the highest-XP players would be dropped just because their role
-    // is already taken, leaving "?" slots. So fill every remaining empty slot
-    // with the next best un-placed player, regardless of position, so the team
-    // always reflects the actual top players of the month.
-    for (let si = 0; si < FORMATION_433.length; si++) {
-        if (result[si]) continue;
+    // The roster is the top players of the month, but most share the same
+    // position (default "ST") while the 4-3-3 has only one ST slot. Without the
+    // passes below the highest-XP players would be dropped just because their
+    // role is already taken, leaving "?" slots.
+    const placeInSlot = (slotIndex: number, sameLineOnly: boolean): boolean => {
+        const slotLine = ROLE_LINE[FORMATION_433[slotIndex].role];
         for (let pi = 0; pi < roster.length; pi++) {
             if (usedIndices.has(pi)) continue;
             const player = roster[pi];
             const identity = playerIdentity(player);
             if (usedIdentities.has(identity)) continue;
+            if (sameLineOnly && playerLine(player) !== slotLine) continue;
             usedIdentities.add(identity);
             usedIndices.add(pi);
-            const { x, y } = slotCoords(si);
-            result[si] = { ...player, x, y };
-            break;
+            const { x, y } = slotCoords(slotIndex);
+            result[slotIndex] = { ...player, x, y };
+            return true;
         }
+        return false;
+    };
+
+    // Pass 2 — fill empty slots with the best un-placed player from the SAME
+    // line (keep a player in each position/line as much as possible).
+    for (let si = 0; si < FORMATION_433.length; si++) {
+        if (result[si]) continue;
+        placeInSlot(si, true);
+    }
+
+    // Pass 3 — any slots still empty get the next best player regardless of
+    // position, so the team always reflects the actual top players of the month.
+    for (let si = 0; si < FORMATION_433.length; si++) {
+        if (result[si]) continue;
+        placeInSlot(si, false);
     }
 
     return result;
