@@ -1199,6 +1199,7 @@ export const ar = {
     rankNotRanked: 'لم تُصنَّف بعد',
     periodWeekly: 'هذا الأسبوع',
     periodMonthly: 'هذا الشهر',
+    periodLifetime: 'كل الأوقات',
     emptyLeaderboard: 'لا يوجد متصدرون في هذه الفترة بعد',
     emptyLeaderboardHint: 'ابدأ تجمع XP هذا الأسبوع لتظهر في لوحة المتصدرين!',
     shareAppMessage:

@@ -44,7 +44,7 @@ export interface TopPlayer {
   badge: 'gold' | 'silver' | 'bronze' | null;
 }
 
-export type TopPlayersPeriod = 'weekly' | 'monthly';
+export type TopPlayersPeriod = 'weekly' | 'monthly' | 'lifetime';
 
 export interface UseTopPlayersOptions {
   limit?: number;

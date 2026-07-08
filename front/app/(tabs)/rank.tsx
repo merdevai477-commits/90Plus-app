@@ -176,7 +176,9 @@ export default function RankScreen() {
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [period, setPeriod] = useState<TopPlayersPeriod>('weekly');
+  // Default to the all-time board so the leaderboard matches the profile card's
+  // XP + global rank out of the box (weekly/monthly remain one tap away).
+  const [period, setPeriod] = useState<TopPlayersPeriod>('lifetime');
   const [refreshing, setRefreshing] = useState(false);
   const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
   const isFocused = useIsFocused();
@@ -437,7 +439,7 @@ export default function RankScreen() {
           <View style={s.secHead}>
             <Text style={[s.secTitle, { fontFamily: fontExtraBold }]}>{t.rank.topPlayers}</Text>
             <View style={s.periodToggle}>
-              {(['weekly', 'monthly'] as const).map(p => (
+              {(['lifetime', 'weekly', 'monthly'] as const).map(p => (
                 <Pressable
                   key={p}
                   onPress={() => setPeriod(p)}
@@ -446,7 +448,11 @@ export default function RankScreen() {
                   accessibilityState={{ selected: period === p }}
                 >
                   <Text style={[s.periodBtnTxt, period === p && s.periodBtnTxtActive]}>
-                    {p === 'weekly' ? t.rank.periodWeekly : t.rank.periodMonthly}
+                    {p === 'weekly'
+                      ? t.rank.periodWeekly
+                      : p === 'monthly'
+                      ? t.rank.periodMonthly
+                      : t.rank.periodLifetime}
                   </Text>
                 </Pressable>
               ))}

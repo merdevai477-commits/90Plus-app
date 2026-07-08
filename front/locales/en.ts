@@ -1224,6 +1224,7 @@ export const en = {
     rankNotRanked: 'Not ranked yet',
     periodWeekly: 'This week',
     periodMonthly: 'This month',
+    periodLifetime: 'All-time',
     emptyLeaderboard: 'No rankings yet this period',
     emptyLeaderboardHint: 'Start earning XP this week to appear on the board!',
     shareAppMessage:

@@ -44,16 +44,100 @@ export interface TopPlayerRow {
   badge: 'gold' | 'silver' | 'bronze' | null;
 }
 
+const TOP_PLAYER_USER_SELECT = {
+  id: true,
+  username: true,
+  displayName: true,
+  avatar: true,
+  isVerified: true,
+  level: true,
+  xp: true,
+  profileViews: true,
+  position: true,
+  countryFlag: true,
+  age: true,
+  height: true,
+  weight: true,
+  preferredFoot: true,
+  favoriteTeam: true,
+  clubLogo: true,
+  _count: { select: { followers: true, following: true } },
+} as const;
+
+/**
+ * Leaderboard ranked by total lifetime XP (`user.xp`). This mirrors the value
+ * shown on the profile card / global XP rank, so the "Lifetime" tab is always
+ * consistent with the user's own card (same points, same position).
+ */
+async function getLifetimeTopPlayers(
+  take: number,
+  offset: number,
+): Promise<TopPlayerRow[]> {
+  const startDate = getPeriodStartDate('monthly');
+  const users = await prisma.user.findMany({
+    where: { isDeleted: false, isBanned: false, xp: { gt: 0 } },
+    orderBy: [{ xp: 'desc' }, { id: 'asc' }],
+    skip: offset,
+    take,
+    select: {
+      ...TOP_PLAYER_USER_SELECT,
+      reels: {
+        where: { createdAt: { gte: startDate } },
+        select: { views: true, _count: { select: { likes: true } } },
+      },
+    },
+  });
+
+  return users.map((user, index) => {
+    const totalViews = user.reels.reduce((sum, reel) => sum + (reel.views || 0), 0);
+    const totalLikes = user.reels.reduce(
+      (sum, reel) => sum + (reel._count?.likes || 0),
+      0,
+    );
+    return {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      avatar: user.avatar,
+      isVerified: user.isVerified,
+      level: user.level,
+      // Lifetime tab: the ranking + displayed metric is total lifetime XP.
+      xp: user.xp,
+      lifetimeXp: user.xp,
+      position: user.position || 'ST',
+      countryFlag: user.countryFlag || '🏳️',
+      age: user.age ?? null,
+      height: user.height ?? null,
+      weight: user.weight ?? null,
+      preferredFoot: user.preferredFoot ?? null,
+      favoriteTeam: user.favoriteTeam ?? null,
+      clubLogo: user.clubLogo,
+      ...followCountsFromPrisma(user._count),
+      stats: { totalViews, totalLikes, profileViews: user.profileViews || 0 },
+      score: totalViews * 1 + totalLikes * 3,
+      rank: offset + index + 1,
+      badge:
+        index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : null,
+    };
+  });
+}
+
 /**
  * Top players ranked by XP earned in the period, with engagement score and
- * lifetime XP as tiebreakers.
+ * lifetime XP as tiebreakers. For `lifetime`, ranking is by total lifetime XP
+ * (matching the profile card / global rank).
  */
 export async function getTopPlayers(
   limit: number,
-  period: 'weekly' | 'monthly',
+  period: 'weekly' | 'monthly' | 'lifetime',
   offset = 0,
 ): Promise<TopPlayerRow[]> {
   const take = Math.min(limit, 50);
+
+  if (period === 'lifetime') {
+    return getLifetimeTopPlayers(take, offset);
+  }
+
   const startDate = getPeriodStartDate(period);
 
   const periodXpRows = await prisma.xpTransaction.groupBy({

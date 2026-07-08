@@ -2817,15 +2817,18 @@ router.get('/rankings/all', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), asy
  *   Now the ordering matches what the UI shows; the engagement score still
  *   matters when two users have the same XP.
  *
- * @query period - 'weekly' | 'monthly' (default: 'weekly') — only affects the
- *                 tiebreaker score window.
+ * @query period - 'weekly' | 'monthly' | 'lifetime' (default: 'weekly').
+ *                 'lifetime' ranks by total lifetime XP (matches the profile
+ *                 card / global rank); 'weekly'/'monthly' rank by XP earned in
+ *                 that window.
  */
 router.get('/rankings/top-players', responseCacheMiddleware({ ttl: 5 * 60 * 1000 }), async (req: Request, res: Response): Promise<void> => {
     try {
         const { limit = '11', period = 'weekly', offset = '0' } = req.query;
         const take = Math.min(parseInt(limit as string) || 11, 50);
         const skip = Math.max(parseInt(offset as string) || 0, 0);
-        const periodKey = period === 'monthly' ? 'monthly' : 'weekly';
+        const periodKey =
+            period === 'monthly' ? 'monthly' : period === 'lifetime' ? 'lifetime' : 'weekly';
 
         const topPlayers = await getTopPlayers(take, periodKey, skip);
 

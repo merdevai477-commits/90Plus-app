@@ -64,13 +64,6 @@ const USER_PROFILE_CACHE = 'user_profile';
 const USER_VIDEOS_CACHE  = 'user_videos';
 const REELS_PAGE_SIZE = 30;
 
-// ─── XP helpers (mirrors backend formula) ────────────────────────────────────
-const xpForLevel = (level: number): number => {
-  if (level <= 1) return 0;
-  if (level === 2) return 290;
-  return 40 + 125 * level * (level - 1);
-};
-
 const ACCENT = '#A855F7';
 const ACCENT_DARK = '#7C3AED';
 
@@ -579,10 +572,10 @@ function UserProfileScreen() {
     );
   }
 
-  // Derive XP relative to current level
+  // Show total lifetime XP (all points earned since joining), matching the
+  // leaderboard's "All-time" board and the global XP rank.
   const userLevel = user.level ?? 1;
   const userXp = user.xp ?? 0;
-  const relativeXp = Math.max(0, userXp - xpForLevel(userLevel));
 
   // Social links — guard malformed API rows
   const socialLinks = Array.isArray(user.socialLinks)
@@ -675,7 +668,7 @@ function UserProfileScreen() {
       <UserTopBar
         topInset={insets.top}
         level={userLevel}
-        xp={relativeXp}
+        xp={userXp}
         onBack={() => router.back()}
       />
 
