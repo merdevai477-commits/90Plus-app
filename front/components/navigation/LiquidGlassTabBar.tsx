@@ -12,6 +12,7 @@ import { Home, User, BarChart3, Sparkles, Clapperboard } from 'lucide-react-nati
 import Svg, { Circle, Line, Rect } from 'react-native-svg';
 
 import { isLiquidGlassSupported, LiquidGlassView } from '@/utils/liquidGlassSafe';
+import { useAppFont } from '@/utils/fontSetup';
 
 import { LiquidGlassBlob } from './LiquidGlassBlob';
 import {
@@ -268,6 +269,9 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
   const bubbleTint = accentToGlassTint(accent, 0.12);
   const bubbleLabelColor = accent || ICON_ACTIVE_FALLBACK;
   const useMainProfileAvatar = !tabsProp;
+  // Explicit Cairo/Inter weight — iOS ignores fontWeight with custom fonts and
+  // clips Arabic glyphs when lineHeight is missing in the tight bubble.
+  const bubbleLabelFont = useAppFont(600);
 
   const tabGestures = useMemo(
     () => tabItems.map((_, index) => createTabGesture(index)),
@@ -325,8 +329,12 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
                 isActive
               />
               <Text
-                style={[s.bubbleLabel, { color: bubbleLabelColor }]}
+                style={[
+                  s.bubbleLabel,
+                  { color: bubbleLabelColor, fontFamily: bubbleLabelFont },
+                ]}
                 numberOfLines={1}
+                allowFontScaling={false}
               >
                 {activeTab.label}
               </Text>
@@ -433,8 +441,10 @@ const s = StyleSheet.create({
   },
   bubbleLabel: {
     fontSize: TAB_LABEL_FONT_SIZE,
-    fontWeight: '600',
-    letterSpacing: 0.2,
+    lineHeight: TAB_LABEL_FONT_SIZE + 5,
+    letterSpacing: 0.15,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   avatarRing: {
     width: TAB_ICON_SIZE + 4,

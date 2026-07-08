@@ -3,7 +3,8 @@ import type { LiquidTabItem } from './liquidGlassTabBar.types';
 export const TAB_BAR_HEIGHT = 58;
 /** Compact floating bar (3 tabs). */
 export const COMPACT_TAB_BAR_HEIGHT = 50;
-export const COMPACT_TAB_BAR_WIDTH = 236;
+/** Wide enough for 3 Arabic labels (جروب / الجولة / الترتيب) without clipping. */
+export const COMPACT_TAB_BAR_WIDTH = 268;
 export const TAB_BAR_HORIZONTAL_MARGIN = 12;
 export const TAB_BAR_PADDING_H = 4;
 
@@ -33,7 +34,8 @@ export const TAB_BUBBLE_VERTICAL_OFFSET = 2;
 export const TAB_LONG_PRESS_MS = 280;
 export const TAB_FLOAT_OFFSET = -12;
 export const TAB_ICON_SIZE = 20;
-export const TAB_LABEL_FONT_SIZE = 11;
+/** Slightly larger than 11 so Arabic (Cairo) stays crisp inside the bubble. */
+export const TAB_LABEL_FONT_SIZE = 12;
 
 export const TAB_SPRING = {
   damping: 22,

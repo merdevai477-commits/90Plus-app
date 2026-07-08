@@ -17,7 +17,7 @@ const PATHS = [
 ] as const;
 
 const EXPECTED_BUNDLE = 'com.mhmdsh1892.ninetyplusapp';
-const EXPECTED_PATHS = ['/reels/*', '/@*'];
+const EXPECTED_PATHS = ['/reels/*', '/@*', '/groups/join/*'];
 
 interface CheckResult {
   label: string;

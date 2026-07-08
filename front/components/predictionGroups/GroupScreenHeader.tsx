@@ -270,9 +270,11 @@ const styles = StyleSheet.create({
   },
   groupName: {
     fontSize: 22,
+    lineHeight: 30,
     color: PG.text,
     maxWidth: 220,
     textAlign: 'center',
+    includeFontPadding: false,
   },
   editBtn: {
     width: 28,
@@ -295,8 +297,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   leaveChipTxt: {
-    fontSize: 10,
+    fontSize: 11,
+    lineHeight: 15,
     color: PG.textMuted,
+    includeFontPadding: false,
   },
   privacyRow: {
     alignItems: 'center',
@@ -304,7 +308,9 @@ const styles = StyleSheet.create({
   },
   privacyText: {
     fontSize: 12,
+    lineHeight: 17,
     color: PG.textMuted,
+    includeFontPadding: false,
   },
   metaRow: {
     alignItems: 'center',
@@ -319,6 +325,8 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
+    lineHeight: 17,
     color: PG.textMuted,
+    includeFontPadding: false,
   },
 });

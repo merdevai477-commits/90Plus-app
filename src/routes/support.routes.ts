@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import {
     buildProfileLandingPage,
     buildReelLandingPage,
+    buildGroupJoinLandingPage,
 } from '../utils/share-landing-pages';
 import { resolvePublicFile } from '../utils/public-path.util';
 
@@ -61,6 +62,20 @@ router.get('/@:username', (req: Request, res: Response): void => {
     }
 
     res.type('html').send(buildProfileLandingPage(username));
+});
+
+/**
+ * GET /groups/join/:code
+ * Group invite share — app installed → open join sheet; otherwise → store
+ */
+router.get('/groups/join/:code', (req: Request, res: Response): void => {
+    const raw = ensureString(req.params.code).trim().toUpperCase();
+    if (!/^90PLUS[A-Z0-9]{4,12}$/.test(raw)) {
+        res.status(404).type('html').send('<!DOCTYPE html><html><body><p>Invite not found</p></body></html>');
+        return;
+    }
+
+    res.type('html').send(buildGroupJoinLandingPage(raw));
 });
 
 function ensureString(param: string | string[] | undefined): string {

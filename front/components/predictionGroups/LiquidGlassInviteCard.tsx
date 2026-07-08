@@ -13,7 +13,7 @@ import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { PG, usePGFonts } from './theme';
 
 const PILL_RADIUS = 24;
-const ROW_HEIGHT = 46;
+const ROW_HEIGHT = 52;
 const ICON_HIT = 44;
 
 export function LiquidGlassInviteCard({
@@ -44,11 +44,17 @@ export function LiquidGlassInviteCard({
     <View style={styles.row}>
       <LiquidGlassSurface borderRadius={PILL_RADIUS} style={styles.codeIsland}>
         <View style={styles.codeInner}>
-          <Text style={[styles.label, { fontFamily: medium, textAlign }]}>كود الدعوة</Text>
+          <Text
+            style={[styles.label, { fontFamily: medium, textAlign }]}
+            allowFontScaling={false}
+          >
+            كود الدعوة
+          </Text>
           <Text
             style={[styles.code, { fontFamily: extra, textAlign }]}
             numberOfLines={1}
             adjustsFontSizeToFit
+            allowFontScaling={false}
           >
             {code}
           </Text>
@@ -103,17 +109,21 @@ const styles = StyleSheet.create({
     minHeight: ROW_HEIGHT,
     paddingHorizontal: 16,
     justifyContent: 'center',
-    gap: 1,
+    gap: 2,
   },
   label: {
-    fontSize: 9,
+    fontSize: 11,
+    lineHeight: 15,
     color: PG.textMuted,
     letterSpacing: 0.2,
+    includeFontPadding: false,
   },
   code: {
     fontSize: 15,
+    lineHeight: 20,
     color: PG.text,
     letterSpacing: 1.1,
+    includeFontPadding: false,
   },
   iconActions: {
     flexDirection: 'row',

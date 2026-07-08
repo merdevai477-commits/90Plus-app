@@ -42,9 +42,10 @@ type GroupNavKey = 'group' | 'round' | 'standings';
 const GROUP_NAV_KEYS: GroupNavKey[] = ['group', 'round', 'standings'];
 
 const PREDICTION_GROUP_TABS: ConfigurableLiquidTabItem[] = [
-  { id: 'group', label: 'جروب', accent: PG.primaryLight, icon: GroupTabIcon, bubbleWidth: 58 },
-  { id: 'round', label: 'الجولة', accent: PG.gold, icon: RoundsTabIcon, bubbleWidth: 64 },
-  { id: 'standings', label: 'الترتيب', accent: PG.primaryLight, icon: RankPodiumTabIcon, bubbleWidth: 62 },
+  // Wider bubbles so Arabic labels (Cairo) never clip against the glass pill.
+  { id: 'group', label: 'جروب', accent: PG.primaryLight, icon: GroupTabIcon, bubbleWidth: 78 },
+  { id: 'round', label: 'الجولة', accent: PG.gold, icon: RoundsTabIcon, bubbleWidth: 86 },
+  { id: 'standings', label: 'الترتيب', accent: PG.primaryLight, icon: RankPodiumTabIcon, bubbleWidth: 88 },
 ];
 
 export default function PredictionGroupsScreen() {

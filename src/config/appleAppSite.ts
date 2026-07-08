@@ -11,7 +11,7 @@ export const IOS_BUNDLE_ID = 'com.mhmdsh1892.ninetyplusapp';
 export const APPLE_APP_ID = `${APPLE_TEAM_ID}.${IOS_BUNDLE_ID}`;
 
 /** Active universal link path patterns (must match front/app/_layout.tsx handleDeepLink). */
-export const AASA_ACTIVE_PATHS = ['/reels/*', '/@*'] as const;
+export const AASA_ACTIVE_PATHS = ['/reels/*', '/@*', '/groups/join/*'] as const;
 
 export interface AppleAppSiteAssociation {
   applinks: {

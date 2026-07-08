@@ -158,9 +158,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   titleBlock: { alignItems: 'center', gap: 10, flex: 1 },
-  title: { fontSize: 17, color: PG.text },
-  subtitle: { fontSize: 11, color: PG.textMuted, marginTop: 1 },
-  viewAll: { fontSize: 12, color: PG.primaryLight },
+  title: { fontSize: 17, lineHeight: 24, color: PG.text, includeFontPadding: false },
+  subtitle: { fontSize: 12, lineHeight: 17, color: PG.textMuted, marginTop: 2, includeFontPadding: false },
+  viewAll: { fontSize: 12, lineHeight: 17, color: PG.primaryLight, includeFontPadding: false },
   divider: {
     height: 1,
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -177,5 +177,5 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   statsCtaLeft: { alignItems: 'center', gap: 10 },
-  statsCtaText: { color: PG.text, fontSize: 14 },
+  statsCtaText: { color: PG.text, fontSize: 14, lineHeight: 20, includeFontPadding: false },
 });

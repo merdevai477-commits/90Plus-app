@@ -24,46 +24,47 @@ export const RoundsTabIcon = memo(function RoundsTabIcon({
   color = '#FFFFFF',
   size = 22,
 }: IconProps) {
+  // Full 24×24 viewBox so the glyph isn't cropped (old viewBox clipped heads/bodies).
   return (
-    <Svg width={size} height={size} viewBox="1.5 2.5 21 11">
-      <Circle cx="5.5" cy="8" r="2.4" fill={color} />
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Circle cx="5.5" cy="9" r="2.2" fill={color} />
       <Path
-        d="M3.2 11.8c0-1.3 1-2.3 2.3-2.3h0"
+        d="M2.8 15.2c0-1.5 1.2-2.7 2.7-2.7h0"
         stroke={color}
-        strokeWidth={1.8}
+        strokeWidth={1.7}
         strokeLinecap="round"
         fill="none"
       />
-      <Circle cx="9" cy="8" r="2.4" fill={color} />
+      <Circle cx="9.2" cy="9" r="2.2" fill={color} />
       <Path
-        d="M6.5 11.8c0-1.3 1-2.3 2.5-2.3"
+        d="M6.4 15.2c0-1.5 1.2-2.7 2.8-2.7"
         stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        fill="none"
-      />
-
-      <Circle cx="15" cy="8" r="2.4" fill={color} />
-      <Path
-        d="M12.5 11.8c0-1.3 1-2.3 2.5-2.3"
-        stroke={color}
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        fill="none"
-      />
-      <Circle cx="18.5" cy="8" r="2.4" fill={color} />
-      <Path
-        d="M16.5 11.8c0-1.3 1-2.3 2.3-2.3h0"
-        stroke={color}
-        strokeWidth={1.8}
+        strokeWidth={1.7}
         strokeLinecap="round"
         fill="none"
       />
 
-      <Line x1="10.8" y1="11.4" x2="13.2" y2="11.4" stroke={color} strokeWidth={1.7} strokeLinecap="round" />
-      <Line x1="11.2" y1="4" x2="11.2" y2="6.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" />
-      <Line x1="9.2" y1="4.8" x2="10.4" y2="6.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" />
-      <Line x1="13.2" y1="4.8" x2="12" y2="6.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" />
+      <Circle cx="14.8" cy="9" r="2.2" fill={color} />
+      <Path
+        d="M12 15.2c0-1.5 1.2-2.7 2.8-2.7"
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        fill="none"
+      />
+      <Circle cx="18.5" cy="9" r="2.2" fill={color} />
+      <Path
+        d="M15.8 15.2c0-1.5 1.2-2.7 2.7-2.7h0"
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        fill="none"
+      />
+
+      <Line x1="10.6" y1="14.6" x2="13.4" y2="14.6" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+      <Line x1="12" y1="4.2" x2="12" y2="7" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+      <Line x1="10" y1="5.2" x2="11.2" y2="7" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+      <Line x1="14" y1="5.2" x2="12.8" y2="7" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
     </Svg>
   );
 });

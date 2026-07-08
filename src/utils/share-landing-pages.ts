@@ -213,3 +213,17 @@ export function buildProfileLandingPage(username: string): string {
     customSchemeUrl: `ninetyplus://user/${username}`,
   });
 }
+
+export function buildGroupJoinLandingPage(code: string): string {
+  const normalized = code.trim().toUpperCase();
+  return buildSmartLandingPage({
+    title: '90Plus — انضم للمجموعة',
+    ogTitle: '90Plus — دعوة مجموعة توقعات',
+    ogDescription: 'افتح الدعوة وانضم لمجموعة التوقعات في تطبيق 90Plus',
+    ogUrl: shareUrl(`/groups/join/${normalized}`),
+    loadingText: 'جاري فتح دعوة المجموعة في التطبيق…',
+    downloadText: 'حمّل 90Plus للانضمام لمجموعة التوقعات',
+    deepPath: `group/join/${normalized}`,
+    customSchemeUrl: `ninetyplus://group/join/${normalized}`,
+  });
+}

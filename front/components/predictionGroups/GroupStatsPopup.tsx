@@ -35,8 +35,17 @@ function StatIsland({
     <LiquidGlassSurface borderRadius={PG_RADII.lg} style={styles.island} fill>
       <View style={styles.islandInner}>
         <View style={[styles.iconWrap, { backgroundColor: `${accent}22` }]}>{icon}</View>
-        <Text style={[styles.islandValue, { fontFamily: extra, color: accent }]}>{value}</Text>
-        <Text style={[styles.islandLabel, { fontFamily: medium }]} numberOfLines={2}>
+        <Text
+          style={[styles.islandValue, { fontFamily: extra, color: accent }]}
+          allowFontScaling={false}
+        >
+          {value}
+        </Text>
+        <Text
+          style={[styles.islandLabel, { fontFamily: medium }]}
+          numberOfLines={2}
+          allowFontScaling={false}
+        >
           {label}
         </Text>
       </View>
@@ -88,7 +97,9 @@ export function GroupStatsPopup({
 
             <View style={styles.head}>
               <BarChart3 size={28} color={PG.primaryLight} />
-              <Text style={[styles.title, { fontFamily: extra }]}>إحصائيات المجموعة</Text>
+              <Text style={[styles.title, { fontFamily: extra }]} allowFontScaling={false}>
+                إحصائيات المجموعة
+              </Text>
             </View>
 
             <View style={styles.grid}>
@@ -129,7 +140,9 @@ export function GroupStatsPopup({
                 end={{ x: 1, y: 0 }}
                 style={styles.doneGrad}
               >
-                <Text style={[styles.doneText, { fontFamily: bold }]}>حسناً</Text>
+                <Text style={[styles.doneText, { fontFamily: bold }]} allowFontScaling={false}>
+                  حسناً
+                </Text>
               </LinearGradient>
             </Pressable>
           </View>
@@ -184,17 +197,20 @@ const styles = StyleSheet.create({
   title: {
     color: PG.text,
     fontSize: PG_TYPE.title,
+    lineHeight: 28,
     textAlign: 'center',
+    writingDirection: 'rtl',
   },
   grid: { gap: 10, marginBottom: PG_SPACING.lg },
   gridRow: { gap: 10 },
-  island: { flex: 1, minHeight: 108 },
+  island: { flex: 1, minHeight: 118 },
   islandInner: {
-    padding: PG_SPACING.md,
+    paddingVertical: PG_SPACING.md,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    minHeight: 96,
+    minHeight: 106,
   },
   iconWrap: {
     width: 36,
@@ -203,14 +219,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  islandValue: { fontSize: 22 },
+  islandValue: {
+    fontSize: 22,
+    lineHeight: 28,
+    textAlign: 'center',
+  },
   islandLabel: {
     color: PG.textMuted,
-    fontSize: 11,
+    fontSize: 12,
     textAlign: 'center',
-    lineHeight: 15,
+    lineHeight: 18,
+    writingDirection: 'rtl',
+    paddingHorizontal: 2,
   },
   doneBtn: { borderRadius: PG_RADII.lg, overflow: 'hidden' },
   doneGrad: { paddingVertical: 14, alignItems: 'center' },
-  doneText: { color: '#fff', fontSize: PG_TYPE.body },
+  doneText: { color: '#fff', fontSize: PG_TYPE.body, lineHeight: 20 },
 });

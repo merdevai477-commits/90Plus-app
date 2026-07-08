@@ -235,7 +235,8 @@ export function mapRoundMatchToCard(m: GroupRoundMatch) {
 
 export function buildGroupJoinShareUrl(code: string): string {
   const base = process.env.EXPO_PUBLIC_SHARE_BASE_URL?.replace(/\/$/, '') || 'https://90plus.pro';
-  return `${base}/groups/join/${code}`;
+  const normalized = code.trim().toUpperCase();
+  return `${base}/groups/join/${normalized}`;
 }
 
 export function parseGroupCodeFromUrl(url: string): string | null {
