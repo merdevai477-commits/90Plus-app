@@ -49,3 +49,8 @@ coverage/
 *.orig
 .cache/
 *.md
+
+# EAS also respects root .gitignore when packing the upload. PNGs under
+# assets/images are ignored globally except an allowlist there — keep
+# arena_profile.png available in the archive for Metro on the builder.
+!assets/images/arena_profile.png
