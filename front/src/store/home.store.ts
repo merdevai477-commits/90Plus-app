@@ -159,6 +159,50 @@ const mapLeagueMatchToHomeMatch = (m: LeagueMatch, isFavorited: boolean): Match 
     date: m.fixtureDate,
 });
 
+/**
+ * Fallback for the Home matches strip when there are no World Cup fixtures
+ * today (e.g. a rest day between knockout rounds): show any live or upcoming
+ * match from the general calendar so the section is never empty.
+ */
+async function fetchGeneralLiveUpcomingMatches(favoriteIds: string[]): Promise<Match[]> {
+    const today = new Date();
+
+    let liveFixtures: Fixture[] = [];
+    try {
+        liveFixtures = await ApiFootballService.getLiveFixtures();
+    } catch (err) {
+        logger.warn('WC fallback: failed to fetch live fixtures:', err);
+    }
+
+    let batchedFixtures: Fixture[] = [];
+    try {
+        batchedFixtures = await matchesBatchService.getMatches(today);
+    } catch (err) {
+        logger.warn('WC fallback: failed to fetch batched fixtures:', err);
+    }
+
+    const uniqueFixturesMap = new Map<number, Fixture>();
+    const isValid = (f: Fixture) =>
+        f?.fixture?.id && f?.teams?.home?.name && f?.teams?.away?.name && f?.league?.name;
+    liveFixtures.forEach((f) => {
+        if (isValid(f)) uniqueFixturesMap.set(f.fixture.id, f);
+    });
+    batchedFixtures.forEach((f) => {
+        if (isValid(f) && !uniqueFixturesMap.has(f.fixture.id)) {
+            uniqueFixturesMap.set(f.fixture.id, f);
+        }
+    });
+
+    const mapped = Array.from(uniqueFixturesMap.values()).map((fixture) =>
+        mapFixtureToMatch(fixture, favoriteIds.includes(String(fixture.fixture.id))),
+    );
+    // Only live or upcoming — drop finished matches.
+    const liveOrUpcoming = mapped.filter(
+        (m) => m.isLive || !isMatchFinished(m.statusShort ?? ''),
+    );
+    return sortMatches(liveOrUpcoming, favoriteIds).slice(0, 15);
+}
+
 async function fetchWorldCupHomeMatches(
     favoriteIds: string[],
     leagueId: number,
@@ -168,7 +212,11 @@ async function fetchWorldCupHomeMatches(
     const mapped = list.map((m) =>
         mapLeagueMatchToHomeMatch(m, favoriteIds.includes(m.id)),
     );
-    return sortMatches(mapped, favoriteIds).slice(0, 15);
+    const sorted = sortMatches(mapped, favoriteIds).slice(0, 15);
+    if (sorted.length > 0) return sorted;
+
+    // No World Cup matches today → fall back to any live/upcoming matches.
+    return fetchGeneralLiveUpcomingMatches(favoriteIds);
 }
 
 async function ensureCampaignFeaturesHydrated(): Promise<{

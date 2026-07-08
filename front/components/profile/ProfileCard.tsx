@@ -33,7 +33,7 @@ import Svg, {
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const CARD_BACK = require('../../assets/images/profile-card-back.png') as number;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const AROUND_CARD = require('../../assets/images/around-card.png') as number;
+const ARENA_BG = require('../../assets/images/arena.png') as number;
 
 // ── Animation helpers ────────────────────────────────────────────────────────
 const useSafeLoop = (from: number, to: number, duration: number, easing = Easing.bezier(0.4, 0, 0.2, 1)) => {
@@ -190,18 +190,27 @@ const ProfileCard = memo(function ProfileCard({
     <View style={{ alignItems: 'center' }}>
       <View style={[s.container, { width: cardWidth, height: cardHeight }]}>
 
-        {/* ── around-card.png — static background behind the card ─── */}
-        <Image
-          source={AROUND_CARD}
-          style={[s.aroundCard, {
-            width: cardWidth * 3.399,
-            height: cardHeight * 1.175,
-            left: -cardWidth * 1.215,
-            top: -cardHeight * 0.121,
+        {/* ── arena.png — stadium backdrop behind the card (matches Rank) ─── */}
+        <View
+          pointerEvents="none"
+          style={[s.arenaBg, {
+            width: cardWidth * 1.9,
+            height: cardHeight * 1.12,
+            left: -cardWidth * 0.45,
+            top: -cardHeight * 0.06,
           }]}
-          contentFit="contain"
-          cachePolicy="memory-disk"
-        />
+        >
+          <Image
+            source={ARENA_BG}
+            style={s.arenaImg}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+          <LinearGradient
+            colors={['#05010D', 'transparent', '#05010D']}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
 
         {/* ── SVG: border + body + crown + image + energy layers ────── */}
         <Svg width={cardWidth} height={cardHeight}
@@ -499,10 +508,17 @@ const s = StyleSheet.create({
   cardSvg: { position: 'absolute', top: 0, left: 0 },
   quadrantContainer: { position: 'absolute', overflow: 'hidden', zIndex: 10 },
 
-  // around-card.png rotating behind the card
-  aroundCard: {
+  // arena.png stadium backdrop behind the card
+  arenaBg: {
     position: 'absolute',
     zIndex: -1,
+    overflow: 'hidden',
+    borderRadius: 24,
+  },
+  arenaImg: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.5,
   },
 
   // Animated inner border glow
