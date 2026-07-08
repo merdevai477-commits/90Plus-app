@@ -18,6 +18,7 @@ import {
   BAR_BORDER_COLOR,
   BAR_GLASS_TINT,
   BUBBLE_GLASS_TINT,
+  COMPACT_TAB_BAR_HEIGHT,
   ICON_ACTIVE_FALLBACK,
   ICON_INACTIVE,
   LIQUID_TAB_ITEMS,
@@ -26,9 +27,15 @@ import {
   TAB_BAR_PADDING_H,
   TAB_ICON_SIZE,
   TAB_LABEL_FONT_SIZE,
+  TAB_BUBBLE_WIDTHS,
 } from './liquidGlassTabBar.constants';
-import type { LiquidGlassTabBarProps, LiquidTabIconKind } from './liquidGlassTabBar.types';
-import { accentToGlassTint, getTabBarLayout } from './liquidGlassTabBar.utils';
+import type {
+  ConfigurableLiquidTabItem,
+  LiquidGlassTabBarProps,
+  LiquidTabIconComponent,
+  LiquidTabIconKind,
+} from './liquidGlassTabBar.types';
+import { accentToGlassTint, getTabBarLayout, mainAppBubbleWidths, resolveBubbleWidths } from './liquidGlassTabBar.utils';
 import { useLiquidTabBarGesture } from './useLiquidTabBarGesture';
 
 const BAR_GLASS_PROPS = isLiquidGlassSupported
@@ -60,7 +67,11 @@ const PitchIcon = memo(function PitchIcon({
   );
 });
 
-function TabIcon({
+function isIconKind(icon: LiquidTabIconKind | LiquidTabIconComponent): icon is LiquidTabIconKind {
+  return typeof icon === 'string';
+}
+
+function BuiltInTabIcon({
   icon,
   color,
   size,
@@ -105,13 +116,46 @@ function TabIcon({
   }
 }
 
+function TabIcon({
+  icon,
+  color,
+  size,
+  avatarUrl,
+  accent,
+  isActive,
+}: {
+  icon: LiquidTabIconKind | LiquidTabIconComponent;
+  color: string;
+  size: number;
+  avatarUrl?: string | null;
+  accent: string;
+  isActive: boolean;
+}) {
+  if (!isIconKind(icon)) {
+    const Icon = icon;
+    return <Icon color={color} size={size} />;
+  }
+
+  return (
+    <BuiltInTabIcon
+      icon={icon}
+      color={color}
+      size={size}
+      avatarUrl={avatarUrl}
+      accent={accent}
+      isActive={isActive}
+    />
+  );
+}
+
 interface TabSlotProps {
   index: number;
   activeIndex: number;
   highlightIndex: number;
   accent: string;
-  icon: LiquidTabIconKind;
+  icon: LiquidTabIconKind | LiquidTabIconComponent;
   profileAvatarUrl?: string | null;
+  useProfileAvatar: boolean;
   gesture: ReturnType<typeof useLiquidTabBarGesture>['createTabGesture'] extends (
     index: number,
   ) => infer G
@@ -126,6 +170,7 @@ const TabSlot = memo(function TabSlot({
   accent,
   icon,
   profileAvatarUrl,
+  useProfileAvatar,
   gesture,
 }: TabSlotProps) {
   const isHighlighted = highlightIndex === index;
@@ -133,6 +178,7 @@ const TabSlot = memo(function TabSlot({
   const hideIcon =
     isHighlighted || (isTransitioning && activeIndex === index);
   const color = isHighlighted ? accent || ICON_ACTIVE_FALLBACK : ICON_INACTIVE;
+  const avatarUrl = useProfileAvatar && isIconKind(icon) && icon === 'profile' ? profileAvatarUrl : undefined;
 
   return (
     <GestureDetector gesture={gesture}>
@@ -146,7 +192,7 @@ const TabSlot = memo(function TabSlot({
             icon={icon}
             color={color}
             size={TAB_ICON_SIZE}
-            avatarUrl={profileAvatarUrl}
+            avatarUrl={avatarUrl}
             accent={accent}
             isActive={isHighlighted}
           />
@@ -159,14 +205,36 @@ const TabSlot = memo(function TabSlot({
 export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
   activeIndex,
   onNavigate,
+  tabs: tabsProp,
   profileAvatarUrl,
   bottomInset = 16,
+  compact = false,
   onTabPressIn,
 }: LiquidGlassTabBarProps) {
-  const layout = useMemo(
-    () => getTabBarLayout(LIQUID_TAB_ITEMS.length),
-    [],
+  const tabItems: ConfigurableLiquidTabItem[] = useMemo(
+    () =>
+      tabsProp ??
+      LIQUID_TAB_ITEMS.map((tab) => ({
+        id: tab.id,
+        label: tab.label,
+        accent: tab.accent,
+        icon: tab.icon,
+        bubbleWidth: TAB_BUBBLE_WIDTHS[tab.id],
+      })),
+    [tabsProp],
   );
+
+  const bubbleWidths = useMemo(
+    () => (tabsProp ? resolveBubbleWidths(tabItems) : mainAppBubbleWidths()),
+    [tabsProp, tabItems],
+  );
+
+  const layout = useMemo(
+    () => getTabBarLayout(tabItems.length, compact),
+    [tabItems.length, compact],
+  );
+
+  const barHeight = compact ? COMPACT_TAB_BAR_HEIGHT : TAB_BAR_HEIGHT;
 
   const [highlightIndex, setHighlightIndex] = useState(activeIndex);
   const pendingIndexRef = useRef<number | null>(null);
@@ -176,9 +244,10 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
     setHighlightIndex((prev) => (prev === index ? prev : index));
   }, []);
 
-  const { blobAnimatedStyle, createTabGesture } = useLiquidTabBarGesture({
+  const { blobAnimatedStyle, blobSpecularStyle, createTabGesture } = useLiquidTabBarGesture({
     layout,
     activeIndex,
+    bubbleWidths,
     onNavigate,
     onHighlightChange: handleHighlightChange,
     onTabPressIn,
@@ -194,24 +263,34 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
     }
   }, [activeIndex]);
 
-  const activeTab = LIQUID_TAB_ITEMS[highlightIndex];
+  const activeTab = tabItems[highlightIndex];
   const accent = activeTab?.accent ?? '#FFFFFF';
   const bubbleTint = accentToGlassTint(accent, 0.12);
   const bubbleLabelColor = accent || ICON_ACTIVE_FALLBACK;
+  const useMainProfileAvatar = !tabsProp;
 
   const tabGestures = useMemo(
-    () => LIQUID_TAB_ITEMS.map((_, index) => createTabGesture(index)),
-    [createTabGesture],
+    () => tabItems.map((_, index) => createTabGesture(index)),
+    [createTabGesture, tabItems],
   );
 
   return (
     <View
-      style={[s.container, { bottom: Math.max(bottomInset, 16) }]}
+      style={[
+        s.container,
+        compact && s.containerCompact,
+        { bottom: Math.max(bottomInset, 16) },
+      ]}
       pointerEvents="box-none"
     >
       <View style={s.barGlowShell}>
-        <View style={[s.navWrapper, { width: layout.navWidth, height: layout.navHeight }]}>
-        <View style={s.barGlassClip} pointerEvents="none">
+        <View
+          style={[
+            s.navWrapper,
+            { width: layout.navWidth, height: layout.navHeight, borderRadius: barHeight / 2 },
+          ]}
+        >
+        <View style={[s.barGlassClip, { borderRadius: barHeight / 2 }]} pointerEvents="none">
           <GlassWrapper
             {...(BAR_GLASS_PROPS as object)}
             style={StyleSheet.absoluteFill}
@@ -219,13 +298,14 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
           {!isLiquidGlassSupported && Platform.OS === 'android' ? (
             <View style={s.androidBarTint} />
           ) : null}
-          <View style={s.barRim} />
+          <View style={[s.barRim, { borderRadius: barHeight / 2 }]} />
         </View>
 
         <LiquidGlassBlob
           tint={bubbleTint || BUBBLE_GLASS_TINT}
           glowColor={accent}
           animatedStyle={blobAnimatedStyle}
+          specularStyle={blobSpecularStyle}
           elevated
         >
           {activeTab ? (
@@ -234,7 +314,13 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
                 icon={activeTab.icon}
                 color={bubbleLabelColor}
                 size={TAB_ICON_SIZE}
-                avatarUrl={activeTab.icon === 'profile' ? profileAvatarUrl : undefined}
+                avatarUrl={
+                  useMainProfileAvatar &&
+                  isIconKind(activeTab.icon) &&
+                  activeTab.icon === 'profile'
+                    ? profileAvatarUrl
+                    : undefined
+                }
                 accent={accent}
                 isActive
               />
@@ -249,7 +335,7 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
         </LiquidGlassBlob>
 
         <View style={s.navItemsContainer}>
-          {LIQUID_TAB_ITEMS.map((tab, index) => (
+          {tabItems.map((tab, index) => (
             <TabSlot
               key={tab.id}
               index={index}
@@ -257,7 +343,8 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
               highlightIndex={highlightIndex}
               accent={tab.accent}
               icon={tab.icon}
-              profileAvatarUrl={tab.icon === 'profile' ? profileAvatarUrl : undefined}
+              profileAvatarUrl={profileAvatarUrl}
+              useProfileAvatar={useMainProfileAvatar}
               gesture={tabGestures[index]!}
             />
           ))}
@@ -277,6 +364,10 @@ const s = StyleSheet.create({
     zIndex: 9999,
     elevation: 100,
   },
+  containerCompact: {
+    left: 0,
+    right: 0,
+  },
   barGlowShell: Platform.select({
     ios: {
       shadowColor: '#FFFFFF',
@@ -288,7 +379,6 @@ const s = StyleSheet.create({
     default: {},
   }),
   navWrapper: {
-    borderRadius: TAB_BAR_HEIGHT / 2,
     overflow: 'visible',
     backgroundColor: 'transparent',
     borderWidth: 1,
@@ -305,7 +395,6 @@ const s = StyleSheet.create({
   },
   barGlassClip: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: TAB_BAR_HEIGHT / 2,
     overflow: 'hidden',
     backgroundColor: 'transparent',
   },
@@ -315,7 +404,6 @@ const s = StyleSheet.create({
   },
   barRim: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: TAB_BAR_HEIGHT / 2,
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.18)',
   },

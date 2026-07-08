@@ -24,6 +24,7 @@ export const LiquidGlassBlob = memo(function LiquidGlassBlob({
   glowColor = '#FFFFFF',
   elevated = false,
   animatedStyle,
+  specularStyle,
   children,
 }: LiquidGlassBlobProps) {
   const pillRadius = TAB_BUBBLE_HEIGHT / 2;
@@ -99,7 +100,10 @@ export const LiquidGlassBlob = memo(function LiquidGlassBlob({
           </>
         )}
         {children ? <View style={s.content}>{children}</View> : null}
-        <View style={[s.bubbleSpecular, { borderRadius: pillRadius }]} pointerEvents="none" />
+        <Animated.View
+          style={[s.bubbleSpecular, { borderRadius: pillRadius }, specularStyle]}
+          pointerEvents="none"
+        />
         <View
           style={[
             s.bubbleRim,

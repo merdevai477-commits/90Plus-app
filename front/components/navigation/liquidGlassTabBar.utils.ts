@@ -3,16 +3,38 @@ import { Dimensions } from 'react-native';
 import {
   TAB_BAR_HORIZONTAL_MARGIN,
   TAB_BAR_HEIGHT,
+  COMPACT_TAB_BAR_HEIGHT,
+  COMPACT_TAB_BAR_WIDTH,
   TAB_BAR_PADDING_H,
   TAB_BUBBLE_WIDTH,
+  TAB_BUBBLE_WIDTH_BY_INDEX,
+  TAB_BUBBLE_WIDTHS,
 } from './liquidGlassTabBar.constants';
-import type { TabBarLayoutMetrics } from './liquidGlassTabBar.types';
+import type { ConfigurableLiquidTabItem, TabBarLayoutMetrics } from './liquidGlassTabBar.types';
 
-export function getTabBarLayout(tabCount: number): TabBarLayoutMetrics {
+export function estimateBubbleWidth(label: string): number {
+  return Math.min(112, Math.max(58, label.length * 10 + 28));
+}
+
+export function resolveBubbleWidths(tabs: ConfigurableLiquidTabItem[]): number[] {
+  return tabs.map((tab) => {
+    if (tab.bubbleWidth != null) return tab.bubbleWidth;
+    const preset = TAB_BUBBLE_WIDTHS[tab.id as keyof typeof TAB_BUBBLE_WIDTHS];
+    if (preset != null) return preset;
+    return estimateBubbleWidth(tab.label);
+  });
+}
+
+/** Bubble widths for the main app tab bar (worklet-safe array). */
+export function mainAppBubbleWidths(): number[] {
+  return TAB_BUBBLE_WIDTH_BY_INDEX;
+}
+
+export function getTabBarLayout(tabCount: number, compact = false): TabBarLayoutMetrics {
   const screenWidth = Dimensions.get('window').width;
   return {
-    navWidth: screenWidth - TAB_BAR_HORIZONTAL_MARGIN * 2,
-    navHeight: TAB_BAR_HEIGHT,
+    navWidth: compact ? COMPACT_TAB_BAR_WIDTH : screenWidth - TAB_BAR_HORIZONTAL_MARGIN * 2,
+    navHeight: compact ? COMPACT_TAB_BAR_HEIGHT : TAB_BAR_HEIGHT,
     paddingHorizontal: TAB_BAR_PADDING_H,
     bubbleSize: TAB_BUBBLE_WIDTH,
     tabCount,

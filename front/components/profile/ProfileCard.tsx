@@ -201,9 +201,9 @@ const ProfileCard = memo(function ProfileCard({
           pointerEvents="none"
           style={[s.arenaBg, {
             width: arenaWidth,
-            height: cardHeight * 1.06,
+            height: cardHeight * 1.10,
             left: arenaLeft,
-            top: -cardHeight * 0.05,
+            top: -cardHeight * 0.04,
           }]}
         >
           <Image

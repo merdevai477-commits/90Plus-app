@@ -1,6 +1,9 @@
 import type { LiquidTabItem } from './liquidGlassTabBar.types';
 
 export const TAB_BAR_HEIGHT = 58;
+/** Compact floating bar (3 tabs). */
+export const COMPACT_TAB_BAR_HEIGHT = 50;
+export const COMPACT_TAB_BAR_WIDTH = 236;
 export const TAB_BAR_HORIZONTAL_MARGIN = 12;
 export const TAB_BAR_PADDING_H = 4;
 
@@ -37,6 +40,22 @@ export const TAB_SPRING = {
   stiffness: 420,
   mass: 0.55,
 } as const;
+
+/** WhatsApp-style liquid droplet morph — stretch / squash / surface tension. */
+export const TAB_MORPH_SPRING = {
+  damping: 14,
+  stiffness: 300,
+  mass: 0.62,
+} as const;
+
+export const TAB_MORPH_SETTLE_SPRING = {
+  damping: 18,
+  stiffness: 360,
+  mass: 0.5,
+} as const;
+
+/** Max horizontal stretch during tab morph (1 + value). */
+export const TAB_LIQUID_STRETCH = 0.24;
 
 export const TAB_BLOB_SPAWN_SPRING = {
   damping: 14,
