@@ -15,6 +15,7 @@ import {
   Easing,
   ImageSourcePropType,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { Image } from 'expo-image';
@@ -144,6 +145,11 @@ const ProfileCard = memo(function ProfileCard({
   const cardWidth  = WIDTH  * scale;
   const cardHeight = HEIGHT * scale;
 
+  // Full-bleed backdrop: span the whole screen width, centered behind the card.
+  const { width: screenWidth } = useWindowDimensions();
+  const arenaWidth = Math.max(screenWidth, cardWidth * 1.9);
+  const arenaLeft  = -(arenaWidth - cardWidth) / 2;
+
   // Shimmer
   const shimmerX = shimmer.animatedValue.interpolate({
     inputRange: [0, 1], outputRange: [-500 * scale, 800 * scale],
@@ -190,14 +196,14 @@ const ProfileCard = memo(function ProfileCard({
     <View style={{ alignItems: 'center' }}>
       <View style={[s.container, { width: cardWidth, height: cardHeight }]}>
 
-        {/* ── arena_profile.png — pitch backdrop; card floats over the grass ── */}
+        {/* ── arena_profile.png — full-bleed pitch backdrop behind the card ── */}
         <View
           pointerEvents="none"
           style={[s.arenaBg, {
-            width: cardWidth * 1.9,
-            height: cardHeight * 1.3,
-            left: -cardWidth * 0.45,
-            top: cardHeight * 0.02,
+            width: arenaWidth,
+            height: cardHeight * 1.06,
+            left: arenaLeft,
+            top: -cardHeight * 0.05,
           }]}
         >
           <Image
@@ -206,11 +212,11 @@ const ProfileCard = memo(function ProfileCard({
             contentFit="cover"
             cachePolicy="memory-disk"
           />
-          {/* Fade only the top into the page bg so the grass stays visible
-              beneath the card — reads as if the card is standing on the pitch. */}
+          {/* Fade the top and bottom into the page bg so the backdrop blends to
+              the screen edges and ends cleanly ABOVE the name/username. */}
           <LinearGradient
-            colors={['#05010D', 'transparent', 'transparent']}
-            locations={[0, 0.35, 1]}
+            colors={['#05010D', 'transparent', 'transparent', '#05010D']}
+            locations={[0, 0.28, 0.72, 1]}
             style={StyleSheet.absoluteFill}
           />
         </View>
