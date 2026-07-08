@@ -171,11 +171,32 @@ function buildPitchPositions(players: PitchPlayerItem[]): (PitchPlayerItem | nul
         return true;
     };
 
-    // Fill each slot with the best-rated player for that exact role only.
+    // Pass 1 — fill each slot with the best-rated player for that exact role.
     for (let si = 0; si < FORMATION_433.length; si++) {
         for (let pi = 0; pi < roster.length; pi++) {
             if (usedIndices.has(pi)) continue;
             if (tryPlace(si, pi)) break;
+        }
+    }
+
+    // Pass 2 — the roster is the top players of the month, but most share the
+    // same position (default "ST") while the 4-3-3 has only one ST slot. Without
+    // this pass the highest-XP players would be dropped just because their role
+    // is already taken, leaving "?" slots. So fill every remaining empty slot
+    // with the next best un-placed player, regardless of position, so the team
+    // always reflects the actual top players of the month.
+    for (let si = 0; si < FORMATION_433.length; si++) {
+        if (result[si]) continue;
+        for (let pi = 0; pi < roster.length; pi++) {
+            if (usedIndices.has(pi)) continue;
+            const player = roster[pi];
+            const identity = playerIdentity(player);
+            if (usedIdentities.has(identity)) continue;
+            usedIdentities.add(identity);
+            usedIndices.add(pi);
+            const { x, y } = slotCoords(si);
+            result[si] = { ...player, x, y };
+            break;
         }
     }
 
