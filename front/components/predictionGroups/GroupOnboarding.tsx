@@ -21,6 +21,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { GroupBanBanner } from './GroupBanBanner';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { PG, PG_GRADIENTS, PG_RADII, usePGFonts } from './theme';
+import { parseGroupCodeFromUrl } from '../../services/predictionGroups.service';
 
 export function GroupOnboarding({
   isRTL,
@@ -72,7 +73,7 @@ export function GroupOnboarding({
       toast.showError('موقوف مؤقتاً', 'لا يمكنك الانضمام حتى ينتهي الحظر');
       return;
     }
-    const normalized = code.trim().toUpperCase();
+    const normalized = parseGroupCodeFromUrl(code) ?? code.trim().toUpperCase();
     if (!/^90PLUS[A-Z0-9]+$/.test(normalized)) {
       toast.showError('كود غير صالح', 'الكود يبدأ بـ 90PLUS');
       return;

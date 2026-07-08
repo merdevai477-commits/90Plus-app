@@ -301,7 +301,7 @@ export function PredictionsSection({
   isRTL: boolean;
   groupId?: string;
   roundMatches?: GroupRoundMatch[];
-  roundMeta?: { id: string; date: string; status: string } | null;
+  roundMeta?: { id: string; date: string; status: string; number?: number | null } | null;
   onSave?: (
     predictions: Array<{
       apiMatchId: number;
@@ -352,8 +352,9 @@ export function PredictionsSection({
 
   const roundMetaDisplay = useMemo(() => {
     if (apiMode && roundMeta) {
+      const n = roundMeta.number != null ? Number(roundMeta.number) : null;
       return {
-        title: 'الجولة الأولى',
+        title: n ? `الجولة ${n}` : 'الجولة',
         sub: 'أهم 10 مباريات اليوم — أكمل توقعاتك قبل انطلاق المباريات',
       };
     }

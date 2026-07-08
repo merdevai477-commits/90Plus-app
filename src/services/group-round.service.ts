@@ -66,6 +66,11 @@ export async function ensureDailyRound(dateString = localDateKey()) {
 
 export async function getCurrentRoundWithMatches(dateString = localDateKey()) {
   const round = await ensureDailyRound(dateString);
+  // Round number is the count of daily rounds up to this date.
+  // This keeps "الجولة 1/2/3..." consistent across clients and days.
+  const roundNumber = await prisma.groupRound.count({
+    where: { date: { lte: dateString } },
+  });
   const matchIds = (round.matchIds as number[]) ?? [];
   const fixtures = await footballDataCacheService.getMatchesByDate(dateString);
   const byId = new Map(fixtures.map((f: any) => [f?.fixture?.id, f]));
@@ -75,7 +80,7 @@ export async function getCurrentRoundWithMatches(dateString = localDateKey()) {
     .filter(Boolean)
     .map(formatFixtureForClient);
 
-  return { round, matches };
+  return { round: { ...round, number: roundNumber }, matches };
 }
 
 export function isMatchLocked(status: string): boolean {

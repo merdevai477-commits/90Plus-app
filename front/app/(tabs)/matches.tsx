@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions, Animated, FlatList, InteractionManager } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions, Animated, FlatList, InteractionManager } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -348,7 +348,20 @@ const MatchRow = memo(function MatchRow({
           activeOpacity={0.75}
           onPress={() => onOpenDetails(fixture)}
         >
-          <View style={styles.teamCol}>
+          <Pressable
+            onPress={() => onPredict(fixture.id, 'home')}
+            disabled={!showPreds || fixture.status !== 'UPCOMING' || !!existingPrediction || isSubmitting}
+            style={({ pressed }) => [
+              styles.teamColPressable,
+              existingPrediction === 'home' && styles.teamColPressableActive,
+              pressed && showPreds && fixture.status === 'UPCOMING' && !existingPrediction && !isSubmitting
+                ? styles.teamColPressablePressed
+                : null,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={homeName}
+          >
+            <View style={styles.teamCol}>
             <View style={styles.logoStub}>
               {fixture.homeLogo ? (
                 <Image
@@ -367,7 +380,8 @@ const MatchRow = memo(function MatchRow({
               )}
             </View>
             <Text style={styles.teamTxt} numberOfLines={1}>{homeName}</Text>
-          </View>
+            </View>
+          </Pressable>
           <View style={styles.scoreCol}>
             {specialStatusLabel ? (
               <View style={styles.specialBadgeWrap}>
@@ -422,7 +436,20 @@ const MatchRow = memo(function MatchRow({
               <Text style={styles.minuteTxt}>{fixture.minute ?? ''}</Text>
             )}
           </View>
-          <View style={styles.teamCol}>
+          <Pressable
+            onPress={() => onPredict(fixture.id, 'away')}
+            disabled={!showPreds || fixture.status !== 'UPCOMING' || !!existingPrediction || isSubmitting}
+            style={({ pressed }) => [
+              styles.teamColPressable,
+              existingPrediction === 'away' && styles.teamColPressableActive,
+              pressed && showPreds && fixture.status === 'UPCOMING' && !existingPrediction && !isSubmitting
+                ? styles.teamColPressablePressed
+                : null,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={awayName}
+          >
+            <View style={styles.teamCol}>
             <View style={styles.logoStub}>
               {fixture.awayLogo ? (
                 <Image
@@ -441,7 +468,8 @@ const MatchRow = memo(function MatchRow({
               )}
             </View>
             <Text style={styles.teamTxt} numberOfLines={1}>{awayName}</Text>
-          </View>
+            </View>
+          </Pressable>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.rowIcon}
@@ -472,28 +500,22 @@ const MatchRow = memo(function MatchRow({
               <ActivityIndicator size="small" color={PURPLE_PRIMARY} style={styles.predTitleSpinner} />
             )}
           </View>
-          <View style={styles.predButtons}>
-            <PredictionButton
-              label={homeName}
-              kind="home"
-              isActive={existingPrediction === 'home'}
-              onPress={() => onPredict(fixture.id, 'home')}
-              disabled={!!existingPrediction || isSubmitting}
-            />
-            <PredictionButton
-              label={t('matches.prediction.drawLabel')}
-              kind="draw"
-              isActive={existingPrediction === 'draw'}
+
+          {/* UX: tap on either team above selects winner. Keep a single explicit draw button. */}
+          <View style={styles.predQuickRow}>
+            <Pressable
               onPress={() => onPredict(fixture.id, 'draw')}
               disabled={!!existingPrediction || isSubmitting}
-            />
-            <PredictionButton
-              label={awayName}
-              kind="away"
-              isActive={existingPrediction === 'away'}
-              onPress={() => onPredict(fixture.id, 'away')}
-              disabled={!!existingPrediction || isSubmitting}
-            />
+              style={({ pressed }) => [
+                styles.predDrawBtn,
+                existingPrediction === 'draw' && styles.predDrawBtnActive,
+                pressed && !existingPrediction && !isSubmitting && { opacity: 0.85 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t('matches.prediction.drawLabel')}
+            >
+              <Text style={styles.predDrawTxt}>{t('matches.prediction.drawLabel')}</Text>
+            </Pressable>
           </View>
         </View>
       )}
@@ -2439,7 +2461,27 @@ const styles = StyleSheet.create({
   predResultWin: { color: '#22c55e', fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 },
   predResultLoss: { color: '#ef4444', fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 },
   predResultPending: { color: '#f59e0b', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 8 },
-  predButtons: { flexDirection: 'row', gap: 10, paddingHorizontal: 4 },
+  predQuickRow: { flexDirection: 'row', justifyContent: 'center', paddingHorizontal: 4 },
+  predDrawBtn: {
+    height: 44,
+    minWidth: 120,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.45)',
+    backgroundColor: 'rgba(168,85,247,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  predDrawBtnActive: {
+    borderColor: 'rgba(216,180,254,0.75)',
+    backgroundColor: 'rgba(168,85,247,0.28)',
+  },
+  predDrawTxt: { color: 'rgba(255,255,255,0.92)', fontSize: 13, fontWeight: '900', letterSpacing: 0.2 },
+  // Tap-to-predict areas (home/away) — only active in Predictions tab.
+  teamColPressable: { borderRadius: 12, paddingVertical: 6, paddingHorizontal: 6 },
+  teamColPressablePressed: { backgroundColor: 'rgba(168,85,247,0.10)' },
+  teamColPressableActive: { backgroundColor: 'rgba(168,85,247,0.16)', borderWidth: 1, borderColor: 'rgba(216,180,254,0.35)' },
   predBtn: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   predBtnTxt: { color: 'rgba(255,255,255,0.72)', fontSize: 13, fontWeight: '800', textAlign: 'center', zIndex: 1 },
 

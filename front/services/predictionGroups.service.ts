@@ -185,7 +185,7 @@ export const PredictionGroupsService = {
 
   getCurrentRound: (token: string, groupId: string) =>
     authFetch(token, `/${groupId}/round/current`) as Promise<{
-      round: { id: string; date: string; status: string };
+      round: { id: string; date: string; status: string; number?: number | null };
       matches: GroupRoundMatch[];
     }>,
 

@@ -296,7 +296,9 @@ export function useLiquidTabBarGesture({
     },
   );
 
-  const blobAnimatedStyle = useAnimatedStyle(() => {
+  // NOTE: Reanimated's transform typing is stricter than RN's ViewStyle in TS,
+  // especially for scale/scaleX/scaleY combos. Cast to keep runtime behavior.
+  const blobAnimatedStyle = useAnimatedStyle<any>(() => {
     'worklet';
     const morphRadius = bubbleRadius / Math.max(blobScaleX.value, 0.85);
     return {
@@ -311,15 +313,15 @@ export function useLiquidTabBarGesture({
         { scaleY: blobScaleY.value },
       ],
       opacity: interpolate(blobGlow.value, [0.4, 1], [0.94, 1]),
-    };
+    } as any;
   });
 
-  const blobSpecularStyle = useAnimatedStyle(() => {
+  const blobSpecularStyle = useAnimatedStyle<any>(() => {
     'worklet';
     return {
       transform: [{ translateX: blobSpecularShift.value }],
       opacity: interpolate(blobGlow.value, [0.4, 1], [0.55, 1]),
-    };
+    } as any;
   });
 
   const createTabGesture = useCallback(

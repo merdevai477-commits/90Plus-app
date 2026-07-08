@@ -24,7 +24,7 @@ export function usePredictionGroup() {
   const [state, setState] = useState<MyGroupState | null>(null);
   const [members, setMembers] = useState<GroupMemberRow[]>([]);
   const [roundMatches, setRoundMatches] = useState<GroupRoundMatch[]>([]);
-  const [roundMeta, setRoundMeta] = useState<{ id: string; date: string; status: string } | null>(null);
+  const [roundMeta, setRoundMeta] = useState<{ id: string; date: string; status: string; number?: number | null } | null>(null);
   const [globalGroups, setGlobalGroups] = useState<RankedGroupRow[]>([]);
   const [groupStats, setGroupStats] = useState<{
     totalPredictions: number;

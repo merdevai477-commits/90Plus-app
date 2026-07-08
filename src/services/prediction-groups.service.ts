@@ -728,7 +728,12 @@ export async function getMyRoundPredictions(userId: string, groupId: string) {
   const byMatch = new Map(mine.map((p) => [p.apiMatchId, p]));
 
   return {
-    round: { id: round.id, date: round.date, status: round.status },
+    round: {
+      id: round.id,
+      date: round.date,
+      status: round.status,
+      number: (round as any).number ?? null,
+    },
     matches: matches.map((m) => ({
       ...m,
       prediction: byMatch.get(m.apiMatchId) ?? null,
