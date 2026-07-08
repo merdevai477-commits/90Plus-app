@@ -18,6 +18,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   ViewStyle,
 } from 'react-native';
@@ -60,6 +61,7 @@ export function GroupInviteSheet({
   excludeUserIds = [],
 }: GroupInviteSheetProps) {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const toast = useToast();
   const { getToken } = useAuth();
   const { medium, bold, extra } = usePGFonts();
@@ -183,6 +185,12 @@ export function GroupInviteSheet({
   }, [query, loading, errored, results.length]);
 
   const sheetBottomPad = insets.bottom + COMPACT_TAB_BAR_HEIGHT + 20;
+  // Numeric caps (percentage maxHeight misbehaves against an absolutely-
+  // positioned parent with no explicit height, which clipped the sheet).
+  const topGap = insets.top + 24;
+  const maxSheetHeight = Math.max(320, windowHeight - sheetBottomPad - topGap);
+  // Space taken by the handle + header + search row before the list.
+  const listMaxHeight = Math.max(160, maxSheetHeight - 210);
 
   return (
     <Modal
@@ -197,7 +205,7 @@ export function GroupInviteSheet({
         <SheetBlurBackdrop onPress={onClose} />
 
       <View style={[styles.sheet, { paddingBottom: sheetBottomPad }]}>
-        <SheetGlass {...SHEET_GLASS_PROPS} style={styles.sheetGlass}>
+        <SheetGlass {...SHEET_GLASS_PROPS} style={[styles.sheetGlass, { maxHeight: maxSheetHeight }]}>
           <LinearGradient
             colors={['rgba(124,58,237,0.14)', 'transparent']}
             style={StyleSheet.absoluteFillObject}
@@ -250,8 +258,8 @@ export function GroupInviteSheet({
               </View>
             ) : (
               <ScrollView
-                style={styles.list}
-                contentContainerStyle={styles.listContent}
+                style={[styles.list, { maxHeight: listMaxHeight }]}
+                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 16 }]}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
@@ -323,7 +331,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: PG_SPACING.lg,
     paddingTop: PG_SPACING.sm,
     paddingBottom: PG_SPACING.lg,
-    maxHeight: '72%',
     backgroundColor: Platform.OS === 'android' ? 'rgba(4,2,8,0.98)' : undefined,
   },
   sheetTint: {
@@ -373,6 +380,7 @@ const styles = StyleSheet.create({
   },
   body: {
     minHeight: 132,
+    flexShrink: 1,
   },
   loader: {
     marginTop: 36,
@@ -401,8 +409,8 @@ const styles = StyleSheet.create({
     fontSize: PG_TYPE.body,
     lineHeight: 22,
   },
-  list: { maxHeight: 340, alignSelf: 'stretch' },
-  listContent: { gap: 8, paddingBottom: 4 },
+  list: { alignSelf: 'stretch' },
+  listContent: { gap: 8 },
   userRow: {
     alignItems: 'center',
     gap: PG_SPACING.sm,
