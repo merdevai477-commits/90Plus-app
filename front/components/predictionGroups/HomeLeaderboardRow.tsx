@@ -5,12 +5,13 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Crown } from 'lucide-react-native';
-import React from 'react';
+import React, { memo } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import type { GroupMember } from './data';
 import { HomeRankBadge } from './HomeRankBadge';
 import { PG, usePGFonts } from './theme';
+import { useTranslation } from '../../src/i18n';
 
 const PODIUM: Record<number, { bg: [string, string]; border: string; glow: string; avatar: number }> = {
   1: {
@@ -45,6 +46,8 @@ export function HomeLeaderboardRow({
   onLongPress?: () => void;
 }) {
   const { bold, extra, medium } = usePGFonts();
+  const { t } = useTranslation();
+  const lb = t.predictionGroups.leaderboard;
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const isMe = member.isMe;
   const podium = PODIUM[member.rank];
@@ -92,25 +95,35 @@ export function HomeLeaderboardRow({
           {member.isAdmin ? (
             <View style={[styles.adminChip, row]}>
               <Crown size={10} color={PG.gold} fill={PG.gold} />
-              <Text style={[styles.adminLabel, { fontFamily: medium }]}>مدير</Text>
+              <Text style={[styles.adminLabel, { fontFamily: medium }]}>{lb.admin}</Text>
             </View>
           ) : null}
         </View>
+        {(member.totalPoints ?? 0) > 0 || member.correct > 0 ? (
+          <Text style={[styles.metaLine, { fontFamily: medium, textAlign: isRTL ? 'right' : 'left' }]}>
+            {member.correct > 0 ? lb.correctCount.replace('{count}', String(member.correct)) : ''}
+            {member.correct > 0 && (member.totalPoints ?? 0) > 0 ? ' · ' : ''}
+            {(member.totalPoints ?? 0) > 0 ? `${member.totalPoints} ${lb.xp}` : ''}
+          </Text>
+        ) : null}
       </View>
-      {member.points > 0 ? (
-        <Text
-          style={[
-            styles.points,
-            { fontFamily: extra },
-            podium && { fontSize: 16 },
-            member.rank === 1 && { color: '#FDE68A' },
-          ]}
-        >
-          {member.points}
-        </Text>
+      {(member.totalPoints ?? 0) > 0 ? (
+        <View style={styles.pointsCol}>
+          <Text
+            style={[
+              styles.points,
+              { fontFamily: extra },
+              podium && { fontSize: 16 },
+              member.rank === 1 && { color: '#FDE68A' },
+            ]}
+          >
+            {member.totalPoints}
+          </Text>
+          <Text style={[styles.xpLabel, { fontFamily: medium }]}>{lb.xp}</Text>
+        </View>
       ) : (
         <Text style={[styles.emptyPoints, { fontFamily: medium }]} numberOfLines={2}>
-          توقعو كونو اول المصنفين
+          {lb.emptyNudge}
         </Text>
       )}
     </>
@@ -198,6 +211,23 @@ const styles = StyleSheet.create({
   points: {
     fontSize: 14,
     color: PG.text,
+    lineHeight: 18,
+  },
+  pointsCol: {
+    alignItems: 'center',
+    minWidth: 44,
+  },
+  xpLabel: {
+    fontSize: 9,
+    color: PG.textMuted,
+    letterSpacing: 0.3,
+    marginTop: 1,
+  },
+  metaLine: {
+    fontSize: 10,
+    color: PG.textMuted,
+    lineHeight: 14,
+    marginTop: 2,
   },
   emptyPoints: {
     fontSize: 10,

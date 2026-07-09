@@ -28,6 +28,7 @@ import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 
 import { useToast } from '../../contexts/ToastContext';
+import { useTranslation } from '../../src/i18n';
 import { AnimatedCounter } from './AnimatedCounter';
 import { AnimatedTabs } from './AnimatedTabs';
 import { GlassCard, SimpleStatCard } from './atoms';
@@ -250,11 +251,13 @@ const ROUND_TABS = [
 
 function PointsSystemCard({ isRTL }: { isRTL: boolean }) {
   const { medium, bold } = usePGFonts();
+  const { t } = useTranslation();
+  const pg = t.predictionGroups.predictions;
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   return (
     <GlassCard style={styles.pointsCard}>
       <Text style={[styles.pointsCardTitle, { fontFamily: bold, textAlign: isRTL ? 'right' : 'left' }]}>
-        نظام النقاط
+        {pg.pointsTitle}
       </Text>
       <View style={[styles.pointsCols, row]}>
         <View style={[styles.pointsCol, row]}>
@@ -263,7 +266,7 @@ function PointsSystemCard({ isRTL }: { isRTL: boolean }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.pointsColTitle, { fontFamily: medium, textAlign: isRTL ? 'right' : 'left' }]}>
-              توقع الفائز أو التعادل
+              {pg.winnerOrDraw}
             </Text>
             <Text style={[styles.pointsColValue, { fontFamily: bold, textAlign: isRTL ? 'right' : 'left', color: PG.purpleSoft }]}>
               2 XP
@@ -279,7 +282,7 @@ function PointsSystemCard({ isRTL }: { isRTL: boolean }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.pointsColTitle, { fontFamily: medium, textAlign: isRTL ? 'right' : 'left' }]}>
-              النتيجة الدقيقة
+              {pg.exactScore}
             </Text>
             <Text style={[styles.pointsColValue, { fontFamily: bold, textAlign: isRTL ? 'right' : 'left', color: PG.gold }]}>
               5 XP
@@ -313,6 +316,8 @@ export function PredictionsSection({
   ) => Promise<void>;
 }) {
   const { medium, bold, extra } = usePGFonts();
+  const { t } = useTranslation();
+  const pg = t.predictionGroups;
   const toast = useToast();
   const [roundTab, setRoundTab] = useState('current');
   const [drafts, setDrafts] = useState<
@@ -322,6 +327,11 @@ export function PredictionsSection({
   const align = isRTL ? 'right' : 'left';
 
   const apiMode = Boolean(groupId && roundMatches && onSave);
+
+  const savedMatchIds = useMemo(
+    () => new Set((roundMatches ?? []).filter((m) => m.prediction).map((m) => m.apiMatchId)),
+    [roundMatches],
+  );
 
   useEffect(() => {
     if (!roundMatches?.length) return;
@@ -337,7 +347,7 @@ export function PredictionsSection({
       };
     }
     if (Object.keys(seeded).length > 0) {
-      setDrafts((prev) => ({ ...seeded, ...prev }));
+      setDrafts((prev) => ({ ...prev, ...seeded }));
     }
   }, [roundMatches]);
 
@@ -354,8 +364,8 @@ export function PredictionsSection({
     if (apiMode && roundMeta) {
       const n = roundMeta.number != null ? Number(roundMeta.number) : null;
       return {
-        title: n ? `الجولة ${n}` : 'الجولة',
-        sub: 'أهم 10 مباريات اليوم — أكمل توقعاتك قبل انطلاق المباريات',
+        title: n ? pg.predictions.roundTitle.replace('{n}', String(n)) : pg.predictions.roundTitleDefault,
+        sub: pg.predictions.roundSubLive,
       };
     }
     if (roundTab === 'results')
@@ -363,13 +373,14 @@ export function PredictionsSection({
     if (roundTab === 'next')
       return { title: 'الجولة 13', sub: 'تفتح بعد انتهاء الجولة الحالية' };
     return { title: 'الجولة 12', sub: 'أكمل توقعاتك قبل انطلاق المباريات' };
-  }, [apiMode, roundMeta, roundTab]);
+  }, [apiMode, roundMeta, roundTab, pg.predictions]);
 
   const handleDraft = useCallback(
     (
       apiMatchId: number,
       patch: Partial<{ mode: 'WINNER' | 'EXACT'; home: number; away: number; winner: 'home' | 'draw' | 'away' | null }>,
     ) => {
+      if (savedMatchIds.has(apiMatchId)) return;
       setDrafts((prev) => ({
         ...prev,
         [apiMatchId]: {
@@ -380,53 +391,65 @@ export function PredictionsSection({
         },
       }));
     },
-    [],
+    [savedMatchIds],
+  );
+
+  const hasUnsavedPicks = useMemo(
+    () =>
+      Object.entries(drafts).some(([id, d]) => {
+        if (savedMatchIds.has(Number(id))) return false;
+        return d.mode === 'EXACT' || d.winner != null;
+      }),
+    [drafts, savedMatchIds],
   );
 
   const onSavePress = useCallback(async () => {
     if (!apiMode || !onSave) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      toast.showSuccess('تم الحفظ', 'تم حفظ توقعاتك لهذه الجولة بنجاح');
+      toast.showSuccess(pg.toast.savedTitle, pg.toast.savedBody);
       return;
     }
 
-    const predictions = Object.entries(drafts).map(([id, d]) => {
-      const apiMatchId = Number(id);
-      if (d.mode === 'EXACT') {
-        let predictedWinner: 'home' | 'draw' | 'away' = 'draw';
-        if (d.home > d.away) predictedWinner = 'home';
-        else if (d.away > d.home) predictedWinner = 'away';
+    const predictions = Object.entries(drafts)
+      .filter(([id, d]) => !savedMatchIds.has(Number(id)) && d.mode && (d.mode === 'EXACT' || d.winner != null))
+      .map(([id, d]) => {
+        const apiMatchId = Number(id);
+        if (d.mode === 'EXACT') {
+          let predictedWinner: 'home' | 'draw' | 'away' = 'draw';
+          if (d.home > d.away) predictedWinner = 'home';
+          else if (d.away > d.home) predictedWinner = 'away';
+          return {
+            apiMatchId,
+            mode: 'EXACT' as const,
+            predictedHomeScore: d.home,
+            predictedAwayScore: d.away,
+            predictedWinner,
+          };
+        }
         return {
           apiMatchId,
-          mode: 'EXACT' as const,
-          predictedHomeScore: d.home,
-          predictedAwayScore: d.away,
-          predictedWinner,
+          mode: 'WINNER' as const,
+          predictedWinner: d.winner as 'home' | 'draw' | 'away',
         };
-      }
-      const predictedWinner = d.winner ?? 'home';
-      return {
-        apiMatchId,
-        mode: 'WINNER' as const,
-        predictedWinner,
-        predictedHomeScore: d.home,
-        predictedAwayScore: d.away,
-      };
-    });
+      });
 
     if (predictions.length === 0) {
-      toast.showError('لا توجد توقعات', 'اختر وضع التوقع لكل مباراة');
+      toast.showError(pg.toast.noPredictionsTitle, pg.toast.noPredictionsBody);
       return;
     }
 
     try {
       await onSave(predictions);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      toast.showSuccess('تم الحفظ', 'تم حفظ توقعاتك لهذه الجولة بنجاح');
+      toast.showSuccess(pg.toast.savedTitle, pg.toast.savedBody);
     } catch (e: any) {
-      toast.showError('تعذر الحفظ', e?.message ?? '');
+      const msg = e?.message ?? '';
+      toast.showError(
+        pg.toast.saveFailedTitle,
+        msg.includes('تعديل') || msg.includes('change') ? pg.toast.alreadySaved : msg,
+      );
     }
-  }, [apiMode, drafts, onSave, toast]);
+  }, [apiMode, drafts, onSave, pg.toast, savedMatchIds, toast]);
 
   return (
     <View style={{ gap: PG_SPACING.lg }}>
@@ -461,9 +484,11 @@ export function PredictionsSection({
       {data.map((m) => {
         const apiMatchId = (m as { apiMatchId?: number }).apiMatchId;
         const status = (m as { status?: string }).status;
-        const locked = apiMode
-          ? status !== 'NS' && status !== 'TBD' && status !== ''
-          : roundTab === 'next';
+        const prediction = (m as { prediction?: GroupRoundMatch['prediction'] }).prediction;
+        const saved = Boolean(prediction);
+        const locked =
+          saved ||
+          (apiMode ? status !== 'NS' && status !== 'TBD' && status !== '' : roundTab === 'next');
         const finished = apiMode
           ? status === 'FT' || status === 'AET' || status === 'PEN'
           : roundTab === 'results';
@@ -473,19 +498,18 @@ export function PredictionsSection({
             match={m}
             isRTL={isRTL}
             locked={locked}
+            saved={saved}
             finished={finished}
             apiMatchId={apiMatchId}
-            initialPrediction={(m as { prediction?: GroupRoundMatch['prediction'] }).prediction}
+            initialPrediction={prediction}
             onDraftChange={
-              apiMatchId
-                ? (patch) => handleDraft(apiMatchId, patch)
-                : undefined
+              apiMatchId && !saved ? (patch) => handleDraft(apiMatchId, patch) : undefined
             }
           />
         );
       })}
 
-      {(apiMode || roundTab === 'current') && (
+      {(apiMode || roundTab === 'current') && hasUnsavedPicks && (
         <Pressable
           onPress={() => void onSavePress()}
           style={({ pressed }) => [pressed && { opacity: 0.92 }]}
@@ -497,7 +521,7 @@ export function PredictionsSection({
             end={{ x: 1, y: 0 }}
             style={styles.saveBtn}
           >
-            <Text style={[styles.saveTxt, { fontFamily: bold }]}>حفظ التوقعات</Text>
+            <Text style={[styles.saveTxt, { fontFamily: bold }]}>{pg.predictions.save}</Text>
           </LinearGradient>
         </Pressable>
       )}

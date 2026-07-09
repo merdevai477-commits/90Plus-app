@@ -70,6 +70,8 @@ export const GroupScreenHeader = forwardRef<
 ) {
   const { medium, extra } = usePGFonts();
   const { t } = useTranslation();
+  const hdr = t.predictionGroups.header;
+  const common = t.predictionGroups.common;
   const [groupName, setGroupName] = useState(group.name);
   const [groupImage, setGroupImage] = useState<string | null>(group.avatarUrl ?? null);
   const [editOpen, setEditOpen] = useState(false);
@@ -79,7 +81,9 @@ export const GroupScreenHeader = forwardRef<
   const [leaveBusy, setLeaveBusy] = useState(false);
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
 
-  const shareMessage = `انضم لمجموعة "${groupName}" على 90Plus!\n${buildGroupJoinShareUrl(group.code)}`;
+  const shareMessage = hdr.shareMessage
+    .replace('{name}', groupName)
+    .replace('{url}', buildGroupJoinShareUrl(group.code));
 
   useEffect(() => {
     setGroupName(group.name);
@@ -157,7 +161,7 @@ export const GroupScreenHeader = forwardRef<
                   hitSlop={8}
                   style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.75 }]}
                   accessibilityRole="button"
-                  accessibilityLabel="إعدادات المجموعة"
+                  accessibilityLabel={common.settings}
                 >
                   <Settings size={14} color={PG.primaryLight} />
                 </Pressable>
@@ -167,10 +171,10 @@ export const GroupScreenHeader = forwardRef<
                   hitSlop={8}
                   style={({ pressed }) => [styles.leaveChip, row, pressed && { opacity: 0.75 }]}
                   accessibilityRole="button"
-                  accessibilityLabel="خروج من المجموعة"
+                  accessibilityLabel={common.leaveGroup}
                 >
                   <LogOut size={11} color={PG.textMuted} />
-                  <Text style={[styles.leaveChipTxt, { fontFamily: medium }]}>خروج</Text>
+                  <Text style={[styles.leaveChipTxt, { fontFamily: medium }]}>{common.leave}</Text>
                 </Pressable>
               )}
             </View>
@@ -184,7 +188,7 @@ export const GroupScreenHeader = forwardRef<
             <View style={[styles.metaItem, row]}>
               <Users size={14} color={PG.textMuted} />
               <Text style={[styles.metaText, { fontFamily: medium }]}>
-                {group.membersCount} عضو
+                {common.members.replace('{count}', String(group.membersCount))}
               </Text>
             </View>
             <View style={[styles.metaItem, row]}>
@@ -240,9 +244,9 @@ export const GroupScreenHeader = forwardRef<
 
       <GroupConfirmDialog
         visible={leaveConfirmOpen}
-        title="الخروج من المجموعة؟"
-        message="لن تظهر في ترتيب المجموعة بعد الخروج."
-        confirmLabel="خروج"
+        title={hdr.leaveTitle}
+        message={hdr.leaveMessage}
+        confirmLabel={common.leave}
         destructive
         loading={leaveBusy}
         isRTL={isRTL}

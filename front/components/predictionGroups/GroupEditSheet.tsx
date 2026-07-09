@@ -25,6 +25,7 @@ import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlass
 import { useImagePicker } from '../../hooks/useImagePicker';
 import { useImageUpload } from '../../hooks/useImageUpload';
 import { useToast } from '../../contexts/ToastContext';
+import { useTranslation } from '../../src/i18n';
 import { GroupConfirmDialog } from './GroupConfirmDialog';
 import { GroupImageSourceSheet } from './GroupImageSourceSheet';
 import { SheetBlurBackdrop } from './SheetBlurBackdrop';
@@ -70,6 +71,9 @@ export function GroupEditSheet({
   const { pickFromGallery, pickFromCamera } = useImagePicker();
   const { upload, isUploading } = useImageUpload();
   const toast = useToast();
+  const { t } = useTranslation();
+  const es = t.predictionGroups.editSheet;
+  const common = t.predictionGroups.common;
 
   const [draftName, setDraftName] = useState(groupName);
   const [draftImage, setDraftImage] = useState<string | null>(groupImage);
@@ -147,7 +151,7 @@ export function GroupEditSheet({
       setDeleteConfirmOpen(false);
       onClose();
     } catch (e: any) {
-      toast.showError('تعذر الحذف', e?.message ?? '');
+      toast.showError(es.deleteFailed, e?.message ?? '');
     } finally {
       setDangerBusy(false);
     }
@@ -160,7 +164,7 @@ export function GroupEditSheet({
       setLeaveConfirmOpen(false);
       onClose();
     } catch (e: any) {
-      toast.showError('تعذر الخروج', e?.message ?? '');
+      toast.showError(es.leaveFailed, e?.message ?? '');
     } finally {
       setDangerBusy(false);
     }
@@ -178,7 +182,7 @@ export function GroupEditSheet({
           additionalData: { groupId },
         });
         if (!result.success || !result.url) {
-          toast.showError('تعذر رفع الصورة', result.error ?? 'حاول مرة أخرى');
+          toast.showError(es.uploadFailed, result.error ?? t.predictionGroups.onboarding.tryAgain);
           return;
         }
         finalImage = result.url;
@@ -187,7 +191,7 @@ export function GroupEditSheet({
       await onSave(trimmed, finalImage);
       onClose();
     } catch (e: any) {
-      toast.showError('تعذر الحفظ', e?.message ?? '');
+      toast.showError(es.saveFailed, e?.message ?? '');
     }
   }, [draftName, draftImage, groupId, onClose, onSave, toast, upload]);
 
@@ -217,12 +221,12 @@ export function GroupEditSheet({
           {isAdmin && (
             <View style={[styles.adminBadge, row]}>
               <Crown size={14} color={PG.gold} fill={PG.gold} />
-              <Text style={[styles.adminText, { fontFamily: bold }]}>مدير الجروب</Text>
+              <Text style={[styles.adminText, { fontFamily: bold }]}>{common.groupAdmin}</Text>
             </View>
           )}
 
           <View style={[styles.header, row]}>
-            <Text style={[styles.title, { fontFamily: extra, textAlign }]}>تعديل المجموعة</Text>
+            <Text style={[styles.title, { fontFamily: extra, textAlign }]}>{es.title}</Text>
             <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
               <X size={20} color={PG.textSecondary} />
             </Pressable>
@@ -240,15 +244,15 @@ export function GroupEditSheet({
             </View>
             <View style={[styles.changePhotoBtn, row]}>
               <Camera size={14} color={PG.primaryLight} />
-              <Text style={[styles.changePhotoText, { fontFamily: medium }]}>تغيير الصورة</Text>
+              <Text style={[styles.changePhotoText, { fontFamily: medium }]}>{es.changePhoto}</Text>
             </View>
           </Pressable>
 
-          <Text style={[styles.fieldLabel, { fontFamily: medium, textAlign }]}>اسم المجموعة</Text>
+          <Text style={[styles.fieldLabel, { fontFamily: medium, textAlign }]}>{es.groupName}</Text>
           <TextInput
             value={draftName}
             onChangeText={setDraftName}
-            placeholder="اسم المجموعة"
+            placeholder={es.groupNamePlaceholder}
             placeholderTextColor={PG.textMuted}
             style={[styles.input, { fontFamily: medium, textAlign }]}
             maxLength={32}
@@ -262,7 +266,7 @@ export function GroupEditSheet({
                 style={({ pressed }) => [styles.dangerBtn, pressed && { opacity: 0.85 }]}
               >
                 <Trash2 size={16} color="#F87171" />
-                <Text style={[styles.dangerTxt, { fontFamily: bold }]}>مسح المجموعة</Text>
+                <Text style={[styles.dangerTxt, { fontFamily: bold }]}>{es.deleteGroup}</Text>
               </Pressable>
             ) : null}
             {onLeaveGroup ? (
@@ -272,7 +276,7 @@ export function GroupEditSheet({
                 style={({ pressed }) => [styles.leaveBtn, pressed && { opacity: 0.85 }]}
               >
                 <LogOut size={15} color={PG.textSecondary} />
-                <Text style={[styles.leaveTxt, { fontFamily: medium }]}>خروج من المجموعة</Text>
+                <Text style={[styles.leaveTxt, { fontFamily: medium }]}>{common.leaveGroup}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -291,7 +295,7 @@ export function GroupEditSheet({
               {isUploading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={[styles.saveText, { fontFamily: bold }]}>حفظ التعديلات</Text>
+                <Text style={[styles.saveText, { fontFamily: bold }]}>{es.saveChanges}</Text>
               )}
             </LinearGradient>
           </Pressable>
@@ -312,9 +316,9 @@ export function GroupEditSheet({
         <GroupConfirmDialog
           visible={deleteConfirmOpen}
           embedded
-          title="مسح المجموعة؟"
-          message="سيتم حذف المجموعة نهائياً. إذا كان لديك توقعات نشطة في جولة جارية قد تفقد نقاطها. هل أنت متأكد؟"
-          confirmLabel="مسح المجموعة"
+          title={es.deleteTitle}
+          message={es.deleteMessage}
+          confirmLabel={es.deleteConfirm}
           destructive
           loading={dangerBusy}
           isRTL={isRTL}
@@ -325,9 +329,9 @@ export function GroupEditSheet({
         <GroupConfirmDialog
           visible={leaveConfirmOpen}
           embedded
-          title="الخروج من المجموعة؟"
-          message="لن تظهر في ترتيب المجموعة بعد الخروج. يمكنك الانضمام لمجموعة أخرى لاحقاً."
-          confirmLabel="خروج"
+          title={es.leaveTitle}
+          message={es.leaveMessage}
+          confirmLabel={common.leave}
           destructive
           loading={dangerBusy}
           isRTL={isRTL}

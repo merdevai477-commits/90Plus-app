@@ -10,6 +10,13 @@ import { requireAuth, optionalAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/rbac.middleware';
 import { responseCacheMiddleware, clearResponseCache } from '../middleware/responseCache.middleware';
 import { getBlockRelation } from '../services/block.service';
+import {
+  buildGroupPredictionStats,
+  fetchGroupPredictionsForProfile,
+  mergePredictionLists,
+  mergePredictionStats,
+  type ProfilePredictionRow,
+} from '../services/profile-predictions.service';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
 
@@ -266,13 +273,35 @@ router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }), as
             return;
         }
 
-        const predictions = await prisma.prediction.findMany({
-            where: { userId: user.id },
-            orderBy: { createdAt: 'desc' },
-            take: 50
-        });
+        const [predictions, groupPredictions] = await Promise.all([
+            prisma.prediction.findMany({
+                where: { userId: user.id },
+                orderBy: { createdAt: 'desc' },
+                take: 50,
+            }),
+            fetchGroupPredictionsForProfile(user.id, 50),
+        ]);
 
-        // Group by match for frontend consumption
+        const regularRows: ProfilePredictionRow[] = predictions.map((p) => ({
+            id: p.id,
+            apiMatchId: p.apiMatchId,
+            predictionType: p.predictionType,
+            homeTeam: p.homeTeam,
+            awayTeam: p.awayTeam,
+            homeTeamLogo: p.homeTeamLogo,
+            awayTeamLogo: p.awayTeamLogo,
+            matchDate: p.matchDate?.toISOString() ?? null,
+            leagueName: p.leagueName,
+            isCorrect: p.isCorrect,
+            coinsWon: p.coinsWon,
+            coinsSpent: p.coinsSpent,
+            createdAt: p.createdAt.toISOString(),
+            source: 'match',
+        }));
+
+        const merged = mergePredictionLists(regularRows, groupPredictions, 50);
+
+        // Group by match for frontend consumption (regular predictions tab only)
         const predictionsMap: { [key: number]: any } = {};
         predictions.forEach((p: any) => {
             predictionsMap[p.apiMatchId] = {
@@ -292,7 +321,7 @@ router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }), as
         res.json({
             success: true,
             data: {
-                predictions,
+                predictions: merged,
                 predictionsMap
             }
         });
@@ -417,47 +446,12 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
             return;
         }
 
-        // ✅ Single round-trip aggregation (was 5 separate count + 1 aggregate)
-        // groupBy returns the count for each isCorrect value (true/false/null)
-        // in one query — turns ~6× DB round trips into 2 (groupBy + aggregate).
-        const [grouped, coinsAgg] = await Promise.all([
-            prisma.prediction.groupBy({
-                by: ['isCorrect'],
-                where: { userId: user.id },
-                _count: { _all: true },
-            }),
-            prisma.prediction.aggregate({
-                where: { userId: user.id, isCorrect: true },
-                _sum: { coinsWon: true },
-            }),
-        ]);
-
-        let correct = 0;
-        let incorrect = 0;
-        let pending = 0;
-        for (const row of grouped) {
-            const c = row._count._all || 0;
-            if (row.isCorrect === true) correct = c;
-            else if (row.isCorrect === false) incorrect = c;
-            else pending = c;
-        }
-
-        const total = correct + incorrect + pending;
-        const resolved = correct + incorrect;
-        const accuracy = resolved > 0 ? Math.round((correct / resolved) * 100) : 0;
-        const totalCoinsWon = coinsAgg._sum.coinsWon || 0;
+        const baseStats = await buildPredictionStatsForUser(user.id);
+        const groupStats = await buildGroupPredictionStats(user.id);
 
         res.json({
             success: true,
-            data: {
-                total,
-                correct,
-                incorrect,
-                pending,
-                accuracy,
-                resolved,
-                totalCoinsWon,
-            }
+            data: mergePredictionStats(baseStats, groupStats),
         });
     } catch (error) {
         logger.error('Error getting prediction stats:', error);
@@ -493,7 +487,9 @@ async function buildPredictionStatsForUser(userId: string) {
     const accuracy = resolved > 0 ? Math.round((correct / resolved) * 100) : 0;
     const totalCoinsWon = coinsAgg._sum.coinsWon || 0;
 
-    return { total, correct, incorrect, pending, accuracy, resolved, totalCoinsWon };
+    const base = { total, correct, incorrect, pending, accuracy, resolved, totalCoinsWon };
+    const groupStats = await buildGroupPredictionStats(userId);
+    return mergePredictionStats(base, groupStats);
 }
 
 const EMPTY_PUBLIC_PREDICTIONS = {
@@ -548,7 +544,7 @@ router.get('/public/:username', optionalAuth, responseCacheMiddleware({ ttl: 60 
             }
         }
 
-        const [stats, predictions] = await Promise.all([
+        const [stats, predictions, groupPredictions] = await Promise.all([
             buildPredictionStatsForUser(targetUser.id),
             prisma.prediction.findMany({
                 where: { userId: targetUser.id },
@@ -570,13 +566,33 @@ router.get('/public/:username', optionalAuth, responseCacheMiddleware({ ttl: 60 
                     createdAt: true,
                 },
             }),
+            fetchGroupPredictionsForProfile(targetUser.id, 50),
         ]);
+
+        const regularRows: ProfilePredictionRow[] = predictions.map((p) => ({
+            id: p.id,
+            apiMatchId: p.apiMatchId,
+            predictionType: p.predictionType,
+            homeTeam: p.homeTeam,
+            awayTeam: p.awayTeam,
+            homeTeamLogo: p.homeTeamLogo,
+            awayTeamLogo: p.awayTeamLogo,
+            matchDate: p.matchDate?.toISOString() ?? null,
+            leagueName: p.leagueName,
+            isCorrect: p.isCorrect,
+            coinsWon: p.coinsWon,
+            coinsSpent: p.coinsSpent,
+            createdAt: p.createdAt.toISOString(),
+            source: 'match',
+        }));
+
+        const mergedPredictions = mergePredictionLists(regularRows, groupPredictions, 50);
 
         res.json({
             success: true,
             data: {
                 stats,
-                predictions,
+                predictions: mergedPredictions,
             },
         });
     } catch (error) {

@@ -9,6 +9,7 @@ import React from 'react';
 import { Platform, StyleSheet, View, ViewStyle } from 'react-native';
 
 import { glassProps } from '../../constants/ui';
+import { useTranslation } from '../../src/i18n';
 import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
 import { GroupKingsBrandTitle } from './GroupKingsBrandTitle';
 import { LiquidGlassIconButton } from './LiquidGlassIconButton';
@@ -36,6 +37,8 @@ export function GroupFixedTopBar({
   onShare,
 }: Props) {
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
+  const { t } = useTranslation();
+  const common = t.predictionGroups.common;
   const BackIcon = isRTL ? ChevronRight : ChevronLeft;
 
   const shellStyle = [
@@ -46,7 +49,7 @@ export function GroupFixedTopBar({
   const content = (
     <View style={[styles.row, row]}>
       <View style={styles.sideSlot}>
-        <LiquidGlassIconButton onPress={onBack} accessibilityLabel="رجوع" size={SIDE_SLOT}>
+        <LiquidGlassIconButton onPress={onBack} accessibilityLabel={common.back} size={SIDE_SLOT}>
           <BackIcon size={20} color="#FFFFFF" strokeWidth={2.25} />
         </LiquidGlassIconButton>
       </View>
@@ -62,7 +65,7 @@ export function GroupFixedTopBar({
 
       <View style={[styles.sideSlot, styles.sideSlotEnd]}>
         {onShare ? (
-          <LiquidGlassIconButton onPress={onShare} accessibilityLabel="مشاركة" size={SIDE_SLOT}>
+          <LiquidGlassIconButton onPress={onShare} accessibilityLabel={common.share} size={SIDE_SLOT}>
             <ShareIcon size={19} color="#FFFFFF" strokeWidth={2.25} />
           </LiquidGlassIconButton>
         ) : null}

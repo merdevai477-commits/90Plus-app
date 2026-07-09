@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 
 import { useToast } from '../../contexts/ToastContext';
+import { useTranslation } from '../../src/i18n';
 import { GroupBanBanner } from './GroupBanBanner';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { PG, PG_GRADIENTS, PG_RADII, usePGFonts } from './theme';
@@ -35,6 +36,9 @@ export function GroupOnboarding({
   groupBan?: { until: string } | null;
 }) {
   const { medium, bold, extra } = usePGFonts();
+  const { t } = useTranslation();
+  const ob = t.predictionGroups.onboarding;
+  const common = t.predictionGroups.common;
   const toast = useToast();
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const align = isRTL ? 'right' : 'left';
@@ -48,11 +52,11 @@ export function GroupOnboarding({
 
   const handleCreate = useCallback(async () => {
     if (isBanned) {
-      toast.showError('موقوف مؤقتاً', 'لا يمكنك إنشاء مجموعة حتى ينتهي الحظر');
+      toast.showError(ob.bannedTitle, ob.bannedCreate);
       return;
     }
     if (name.trim().length < 2) {
-      toast.showError('خطأ', 'اكتب اسم المجموعة (حرفين على الأقل)');
+      toast.showError(ob.nameError, ob.nameRequired);
       return;
     }
     setBusy(true);
@@ -62,20 +66,20 @@ export function GroupOnboarding({
       setCreateOpen(false);
       setName('');
     } catch (e: any) {
-      toast.showError('تعذر الإنشاء', e?.message ?? 'حاول مرة أخرى');
+      toast.showError(ob.createFailed, e?.message ?? ob.tryAgain);
     } finally {
       setBusy(false);
     }
-  }, [isBanned, name, onCreate, toast]);
+  }, [isBanned, name, ob, onCreate, toast]);
 
   const handleJoin = useCallback(async () => {
     if (isBanned) {
-      toast.showError('موقوف مؤقتاً', 'لا يمكنك الانضمام حتى ينتهي الحظر');
+      toast.showError(ob.bannedTitle, ob.bannedJoin);
       return;
     }
     const normalized = parseGroupCodeFromUrl(code) ?? code.trim().toUpperCase();
     if (!/^90PLUS[A-Z0-9]+$/.test(normalized)) {
-      toast.showError('كود غير صالح', 'الكود يبدأ بـ 90PLUS');
+      toast.showError(ob.invalidCodeTitle, ob.invalidCodeBody);
       return;
     }
     setBusy(true);
@@ -85,34 +89,34 @@ export function GroupOnboarding({
       setJoinOpen(false);
       setCode('');
     } catch (e: any) {
-      toast.showError('تعذر الانضمام', e?.message ?? 'تحقق من الكود');
+      toast.showError(ob.joinFailed, e?.message ?? ob.joinFailedHint);
     } finally {
       setBusy(false);
     }
-  }, [code, isBanned, onJoinByCode, toast]);
+  }, [code, isBanned, ob, onJoinByCode, toast]);
 
   return (
     <View style={styles.wrap}>
       {groupBan?.until ? <GroupBanBanner untilIso={groupBan.until} /> : null}
       <Text style={[styles.title, { fontFamily: extra, textAlign: 'center' }]}>
-        ملك التوقعات
+        {ob.heroTitle}
       </Text>
       <Text style={[styles.sub, { fontFamily: medium, textAlign: 'center' }]}>
-        أنشئ مجموعتك أو انضم لمجموعة أصدقائك وتنافسوا على التوقعات اليومية
+        {ob.heroSubtitle}
       </Text>
 
       <View style={styles.actions}>
         <LiquidGlassSurface borderRadius={PG_RADII.lg} onPress={() => !isBanned && setCreateOpen(true)}>
           <View style={[styles.actionBtn, row]}>
             <Plus size={22} color={PG.primaryLight} />
-            <Text style={[styles.actionTxt, { fontFamily: bold }]}>إنشاء مجموعة</Text>
+            <Text style={[styles.actionTxt, { fontFamily: bold }]}>{ob.createGroup}</Text>
           </View>
         </LiquidGlassSurface>
 
         <LiquidGlassSurface borderRadius={PG_RADII.lg} onPress={() => !isBanned && setJoinOpen(true)}>
           <View style={[styles.actionBtn, row]}>
             <Users size={22} color={PG.gold} />
-            <Text style={[styles.actionTxt, { fontFamily: bold }]}>الانضمام لمجموعة</Text>
+            <Text style={[styles.actionTxt, { fontFamily: bold }]}>{ob.joinGroup}</Text>
           </View>
         </LiquidGlassSurface>
       </View>
@@ -120,11 +124,11 @@ export function GroupOnboarding({
       <Modal visible={createOpen} transparent animationType="fade">
         <Pressable style={styles.backdrop} onPress={() => !busy && setCreateOpen(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={[styles.sheetTitle, { fontFamily: bold, textAlign: align }]}>اسم المجموعة</Text>
+            <Text style={[styles.sheetTitle, { fontFamily: bold, textAlign: align }]}>{ob.groupName}</Text>
             <TextInput
               value={name}
               onChangeText={setName}
-              placeholder="مثال: شلة الكورة"
+              placeholder={ob.groupNamePlaceholder}
               placeholderTextColor={PG.textMuted}
               style={[styles.input, { fontFamily: medium, textAlign: align }]}
               maxLength={40}
@@ -134,7 +138,7 @@ export function GroupOnboarding({
                 {busy ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={[styles.primaryTxt, { fontFamily: bold }]}>إنشاء</Text>
+                  <Text style={[styles.primaryTxt, { fontFamily: bold }]}>{common.create}</Text>
                 )}
               </LinearGradient>
             </Pressable>
@@ -145,7 +149,7 @@ export function GroupOnboarding({
       <Modal visible={joinOpen} transparent animationType="fade">
         <Pressable style={styles.backdrop} onPress={() => !busy && setJoinOpen(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={[styles.sheetTitle, { fontFamily: bold, textAlign: align }]}>كود الدعوة</Text>
+            <Text style={[styles.sheetTitle, { fontFamily: bold, textAlign: align }]}>{ob.inviteCode}</Text>
             <TextInput
               value={code}
               onChangeText={setCode}
@@ -159,7 +163,7 @@ export function GroupOnboarding({
                 {busy ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={[styles.primaryTxt, { fontFamily: bold }]}>انضمام</Text>
+                  <Text style={[styles.primaryTxt, { fontFamily: bold }]}>{common.join}</Text>
                 )}
               </LinearGradient>
             </Pressable>

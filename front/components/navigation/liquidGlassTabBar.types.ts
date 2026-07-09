@@ -28,6 +28,8 @@ export interface ConfigurableLiquidTabItem {
   icon: LiquidTabIconKind | LiquidTabIconComponent;
   /** Pill width when this tab is active; defaults to a label-based estimate. */
   bubbleWidth?: number;
+  /** Override default tab icon size (e.g. bolder round icon). */
+  iconSize?: number;
 }
 
 export interface LiquidGlassTabBarProps {

@@ -155,6 +155,7 @@ interface TabSlotProps {
   highlightIndex: number;
   accent: string;
   icon: LiquidTabIconKind | LiquidTabIconComponent;
+  iconSize?: number;
   profileAvatarUrl?: string | null;
   useProfileAvatar: boolean;
   gesture: ReturnType<typeof useLiquidTabBarGesture>['createTabGesture'] extends (
@@ -170,6 +171,7 @@ const TabSlot = memo(function TabSlot({
   highlightIndex,
   accent,
   icon,
+  iconSize,
   profileAvatarUrl,
   useProfileAvatar,
   gesture,
@@ -192,7 +194,7 @@ const TabSlot = memo(function TabSlot({
           <TabIcon
             icon={icon}
             color={color}
-            size={TAB_ICON_SIZE}
+            size={iconSize ?? TAB_ICON_SIZE}
             avatarUrl={avatarUrl}
             accent={accent}
             isActive={isHighlighted}
@@ -317,7 +319,7 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
               <TabIcon
                 icon={activeTab.icon}
                 color={bubbleLabelColor}
-                size={TAB_ICON_SIZE}
+                size={activeTab.iconSize ?? TAB_ICON_SIZE}
                 avatarUrl={
                   useMainProfileAvatar &&
                   isIconKind(activeTab.icon) &&
@@ -351,6 +353,7 @@ export const LiquidGlassTabBar = memo(function LiquidGlassTabBar({
               highlightIndex={highlightIndex}
               accent={tab.accent}
               icon={tab.icon}
+              iconSize={tab.iconSize}
               profileAvatarUrl={profileAvatarUrl}
               useProfileAvatar={useMainProfileAvatar}
               gesture={tabGestures[index]!}

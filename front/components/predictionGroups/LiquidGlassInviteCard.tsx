@@ -9,6 +9,7 @@ import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useToast } from '../../contexts/ToastContext';
+import { useTranslation } from '../../src/i18n';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { PG, usePGFonts } from './theme';
 
@@ -26,14 +27,16 @@ export function LiquidGlassInviteCard({
   onInvite: () => void;
 }) {
   const { medium, extra } = usePGFonts();
+  const { t } = useTranslation();
+  const common = t.predictionGroups.common;
   const toast = useToast();
   const textAlign = isRTL ? ('right' as const) : ('left' as const);
 
   const copyCode = useCallback(async () => {
     await Clipboard.setStringAsync(code);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    toast.showSuccess('تم النسخ', 'تم نسخ كود الدعوة');
-  }, [code, toast]);
+    toast.showSuccess(common.copiedTitle, common.copiedInvite);
+  }, [code, common.copiedInvite, common.copiedTitle, toast]);
 
   const openInvite = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -48,7 +51,7 @@ export function LiquidGlassInviteCard({
             style={[styles.label, { fontFamily: medium, textAlign }]}
             allowFontScaling={false}
           >
-            كود الدعوة
+            {common.inviteCode}
           </Text>
           <Text
             style={[styles.code, { fontFamily: extra, textAlign }]}
@@ -67,7 +70,7 @@ export function LiquidGlassInviteCard({
           hitSlop={6}
           style={({ pressed }) => [styles.iconBtn, pressed && styles.iconPressed]}
           accessibilityRole="button"
-          accessibilityLabel="نسخ الكود"
+          accessibilityLabel={common.copyCodeBtn}
         >
           <Copy size={22} color={PG.primaryLight} strokeWidth={2} />
         </Pressable>
@@ -77,7 +80,7 @@ export function LiquidGlassInviteCard({
           hitSlop={6}
           style={({ pressed }) => [styles.iconBtn, pressed && styles.iconPressed]}
           accessibilityRole="button"
-          accessibilityLabel="دعوة عضو"
+          accessibilityLabel={common.inviteMember}
         >
           <View style={styles.inviteIcon}>
             <User size={22} color={PG.primaryLight} strokeWidth={2} />

@@ -34,7 +34,10 @@ function toPredictionItems(raw: PublicUserPredictionsPayload['predictions']): Us
     isCorrect: p.isCorrect ?? null,
     coinsWon: p.coinsWon ?? null,
     coinsSpent: p.coinsSpent ?? 0,
+    xpAwarded: (p as { xpAwarded?: number }).xpAwarded,
     createdAt: p.createdAt,
+    source: (p as { source?: 'match' | 'group' }).source,
+    sourceLabel: (p as { sourceLabel?: string }).sourceLabel,
   }));
 }
 

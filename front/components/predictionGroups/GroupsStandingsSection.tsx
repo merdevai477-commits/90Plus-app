@@ -11,14 +11,10 @@ import type { RankedGroup } from './data';
 import { GroupRankingRow } from './GroupRankingRow';
 import { PurpleTrophyIcon } from './PurpleTrophyIcon';
 import { PG, usePGFonts } from './theme';
+import { useTranslation } from '../../src/i18n';
 
-const PERIOD_TABS = [
-  { key: 'all', label: 'العالم' },
-  { key: 'week', label: 'الأسبوعي' },
-  { key: 'month', label: 'الشهري' },
-] as const;
-
-type PeriodKey = (typeof PERIOD_TABS)[number]['key'];
+const PERIOD_TAB_KEYS = ['all', 'week', 'month'] as const;
+type PeriodKey = (typeof PERIOD_TAB_KEYS)[number];
 
 export function GroupsStandingsSection({
   isRTL,
@@ -32,6 +28,16 @@ export function GroupsStandingsSection({
   myGroupId?: string;
 }) {
   const { medium, extra } = usePGFonts();
+  const { t } = useTranslation();
+  const gs = t.predictionGroups.globalStandings;
+  const periodTabs = useMemo(
+    () => [
+      { key: 'all' as const, label: gs.periodAll },
+      { key: 'week' as const, label: gs.periodWeek },
+      { key: 'month' as const, label: gs.periodMonth },
+    ],
+    [gs.periodAll, gs.periodMonth, gs.periodWeek],
+  );
   const [period, setPeriod] = useState<PeriodKey>('all');
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
 
@@ -79,16 +85,16 @@ export function GroupsStandingsSection({
             <View style={[styles.titleBlock, row]}>
               <PurpleTrophyIcon size={38} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.title, { fontFamily: extra }]}>ترتيب المجموعات</Text>
+                <Text style={[styles.title, { fontFamily: extra }]}>{gs.title}</Text>
                 <Text style={[styles.subtitle, { fontFamily: medium, textAlign: isRTL ? 'right' : 'left' }]}>
-                  أفضل المجموعات على 90Plus
+                  {gs.subtitle}
                 </Text>
               </View>
             </View>
           </View>
 
           <AnimatedTabs
-            tabs={[...PERIOD_TABS]}
+            tabs={periodTabs}
             activeKey={period}
             onChange={handlePeriod}
             isRTL={isRTL}

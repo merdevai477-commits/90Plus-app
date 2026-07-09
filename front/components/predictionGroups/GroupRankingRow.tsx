@@ -10,6 +10,7 @@ import { Platform, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import type { RankedGroup } from './data';
 import { HomeRankBadge } from './HomeRankBadge';
 import { PG, usePGFonts } from './theme';
+import { useTranslation } from '../../src/i18n';
 
 const PODIUM: Record<number, { bg: [string, string]; border: string; glow: string; avatar: number }> = {
   1: {
@@ -40,6 +41,8 @@ export function GroupRankingRow({
   isRTL: boolean;
 }) {
   const { bold, extra, medium } = usePGFonts();
+  const { t } = useTranslation();
+  const lb = t.predictionGroups.leaderboard;
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const podium = PODIUM[group.rank];
   const isMine = group.isMine;
@@ -76,33 +79,43 @@ export function GroupRankingRow({
         contentFit="cover"
         cachePolicy="memory-disk"
       />
-      <Text
-        style={[
-          styles.name,
-          { fontFamily: bold, textAlign: isRTL ? 'right' : 'left' },
-          podium && { fontSize: 15 },
-          group.rank === 1 && { color: '#FDE68A' },
-          isMine && !podium && { color: PG.primaryLight },
-        ]}
-        numberOfLines={1}
-      >
-        {group.name}
-      </Text>
-      {group.points > 0 && group.hasScores !== false ? (
+      <View style={[styles.nameCol, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
         <Text
           style={[
-            styles.points,
-            { fontFamily: extra },
-            podium && { fontSize: 16 },
+            styles.name,
+            { fontFamily: bold, textAlign: isRTL ? 'right' : 'left' },
+            podium && { fontSize: 15 },
             group.rank === 1 && { color: '#FDE68A' },
             isMine && !podium && { color: PG.primaryLight },
           ]}
+          numberOfLines={1}
         >
-          {group.points}
+          {group.name}
         </Text>
+        {(group.correctPredictions ?? 0) > 0 ? (
+          <Text style={[styles.metaLine, { fontFamily: medium, textAlign: isRTL ? 'right' : 'left' }]}>
+            {lb.correctPredictions.replace('{count}', String(group.correctPredictions ?? 0))}
+          </Text>
+        ) : null}
+      </View>
+      {group.points > 0 && group.hasScores !== false ? (
+        <View style={styles.pointsCol}>
+          <Text
+            style={[
+              styles.points,
+              { fontFamily: extra },
+              podium && { fontSize: 16 },
+              group.rank === 1 && { color: '#FDE68A' },
+              isMine && !podium && { color: PG.primaryLight },
+            ]}
+          >
+            {group.points}
+          </Text>
+          <Text style={[styles.xpLabel, { fontFamily: medium }]}>{lb.xp}</Text>
+        </View>
       ) : (
         <Text style={[styles.emptyPoints, { fontFamily: medium }]} numberOfLines={2}>
-          توقعو كونو اول المصنفين
+          {lb.emptyNudge}
         </Text>
       )}
     </>
@@ -157,15 +170,35 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(167,139,250,0.45)',
   },
   name: {
-    flex: 1,
-    minWidth: 0,
     fontSize: 14,
     color: PG.text,
+    flexShrink: 1,
+  },
+  nameCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  metaLine: {
+    fontSize: 10,
+    color: PG.textMuted,
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  pointsCol: {
+    alignItems: 'center',
+    minWidth: 44,
   },
   points: {
     fontSize: 14,
     color: PG.text,
-    minWidth: 40,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  xpLabel: {
+    fontSize: 9,
+    color: PG.textMuted,
+    letterSpacing: 0.3,
+    marginTop: 1,
     textAlign: 'center',
   },
   emptyPoints: {

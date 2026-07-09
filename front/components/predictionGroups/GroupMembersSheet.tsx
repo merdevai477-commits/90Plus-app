@@ -21,6 +21,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useTranslation } from '../../src/i18n';
 import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
 import type { GroupMember } from './data';
 import { HomeLeaderboardRow } from './HomeLeaderboardRow';
@@ -53,16 +54,20 @@ export function GroupMembersSheet({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { medium, extra } = usePGFonts();
+  const { t } = useTranslation();
+  const lb = t.predictionGroups.leaderboard;
+  const ms = t.predictionGroups.membersSheet;
+  const common = t.predictionGroups.common;
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const textAlign = isRTL ? 'right' : 'left';
 
   const confirmKick = useCallback(
     (member: GroupMember) => {
       if (!member.userId || !onKickMember || member.isMe) return;
-      Alert.alert('طرد عضو', `هل تريد طرد ${member.name} من المجموعة؟`, [
-        { text: 'إلغاء', style: 'cancel' },
+      Alert.alert(ms.kickTitle, ms.kickMessage.replace('{name}', member.name), [
+        { text: common.cancel, style: 'cancel' },
         {
-          text: 'طرد',
+          text: ms.kickConfirm,
           style: 'destructive',
           onPress: () => {
             void onKickMember(member.userId!).then(() => {
@@ -72,7 +77,7 @@ export function GroupMembersSheet({
         },
       ]);
     },
-    [onKickMember],
+    [common.cancel, ms.kickConfirm, ms.kickMessage, ms.kickTitle, onKickMember],
   );
 
   return (
@@ -93,7 +98,7 @@ export function GroupMembersSheet({
             <View style={[styles.header, row]}>
               <View style={[styles.titleRow, row]}>
                 <PurpleTrophyIcon size={34} />
-                <Text style={[styles.title, { fontFamily: extra, textAlign }]}>ترتيب المجموعة</Text>
+                <Text style={[styles.title, { fontFamily: extra, textAlign }]}>{lb.title}</Text>
               </View>
               <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
                 <X size={20} color={PG.textSecondary} />
@@ -101,7 +106,7 @@ export function GroupMembersSheet({
             </View>
 
             <Text style={[styles.sub, { fontFamily: medium, textAlign }]}>
-              {members.length} عضو · الترتيب العام
+              {lb.memberCount.replace('{count}', String(members.length))}
             </Text>
 
             <ScrollView

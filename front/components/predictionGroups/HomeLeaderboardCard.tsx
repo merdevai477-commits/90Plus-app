@@ -9,6 +9,7 @@ import React, { useCallback, useState } from 'react';
 import { I18nManager, Platform, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import type { GroupDailyInsight } from '../../services/predictionGroups.service';
+import { useTranslation } from '../../src/i18n';
 import { GroupMembersSheet } from './GroupMembersSheet';
 import { GroupMotivationCard } from './GroupMotivationCard';
 import { GroupStatsPopup } from './GroupStatsPopup';
@@ -34,7 +35,9 @@ export function HomeLeaderboardCard({
   onKickMember?: (userId: string) => Promise<void>;
 }) {
   const router = useRouter();
+  const { t } = useTranslation();
   const { medium, bold, extra } = usePGFonts();
+  const lb = t.predictionGroups.leaderboard;
   const [membersOpen, setMembersOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
@@ -78,12 +81,12 @@ export function HomeLeaderboardCard({
             <View style={[styles.titleBlock, row]}>
               <PurpleTrophyIcon size={38} />
               <View>
-                <Text style={[styles.title, { fontFamily: extra }]}>ترتيب اليوم</Text>
-                <Text style={[styles.subtitle, { fontFamily: medium }]}>يتجدد كل يوم</Text>
+                <Text style={[styles.title, { fontFamily: extra }]}>{lb.title}</Text>
+                <Text style={[styles.subtitle, { fontFamily: medium }]}>{lb.subtitle}</Text>
               </View>
             </View>
             <Pressable onPress={openMembers} hitSlop={8}>
-              <Text style={[styles.viewAll, { fontFamily: medium }]}>عرض الكل</Text>
+              <Text style={[styles.viewAll, { fontFamily: medium }]}>{lb.viewAll}</Text>
             </Pressable>
           </View>
 
@@ -106,12 +109,12 @@ export function HomeLeaderboardCard({
             borderRadius={PG_RADII.lg}
             style={styles.statsCtaShell}
             onPress={openStats}
-            accessibilityLabel="إحصائيات المجموعة"
+            accessibilityLabel={lb.statsCta}
           >
             <View style={[styles.statsCta, row]}>
               <View style={[styles.statsCtaLeft, row]}>
                 <BarChart3 size={20} color={PG.primaryLight} />
-                <Text style={[styles.statsCtaText, { fontFamily: bold }]}>إحصائيات المجموعة</Text>
+                <Text style={[styles.statsCtaText, { fontFamily: bold }]}>{lb.statsCta}</Text>
               </View>
               <ChevronLeft
                 size={18}

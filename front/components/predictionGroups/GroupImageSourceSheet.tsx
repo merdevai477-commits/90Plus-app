@@ -9,6 +9,7 @@ import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LiquidGlassSurface } from './LiquidGlassSurface';
+import { useTranslation } from '../../src/i18n';
 import { SheetBlurBackdrop } from './SheetBlurBackdrop';
 import { PG, PG_RADII, PG_SPACING, PG_TYPE, usePGFonts } from './theme';
 
@@ -40,6 +41,9 @@ export function GroupImageSourceSheet({
 }: GroupImageSourceSheetProps) {
   const insets = useSafeAreaInsets();
   const { medium, bold, extra } = usePGFonts();
+  const { t } = useTranslation();
+  const img = t.predictionGroups.imageSheet;
+  const common = t.predictionGroups.common;
   const textAlign = isRTL ? 'right' : 'left';
 
   const pick = (source: 'gallery' | 'camera') => {
@@ -55,8 +59,8 @@ export function GroupImageSourceSheet({
   const cardInner = (
     <>
       {!embedded ? <View style={styles.handle} /> : null}
-      <Text style={[styles.title, { fontFamily: extra, textAlign }]}>صورة المجموعة</Text>
-      <Text style={[styles.sub, { fontFamily: medium, textAlign }]}>اختر مصدر الصورة</Text>
+      <Text style={[styles.title, { fontFamily: extra, textAlign }]}>{img.title}</Text>
+      <Text style={[styles.sub, { fontFamily: medium, textAlign }]}>{img.subtitle}</Text>
 
       <View style={styles.options}>
         <Pressable
@@ -66,7 +70,7 @@ export function GroupImageSourceSheet({
           <View style={styles.iconWrap}>
             <ImageIcon size={22} color={PG.primaryLight} />
           </View>
-          <Text style={[styles.optionText, { fontFamily: bold }]}>المعرض</Text>
+          <Text style={[styles.optionText, { fontFamily: bold }]}>{img.gallery}</Text>
         </Pressable>
 
         <Pressable
@@ -76,7 +80,7 @@ export function GroupImageSourceSheet({
           <View style={styles.iconWrap}>
             <Camera size={22} color={PG.primaryLight} />
           </View>
-          <Text style={[styles.optionText, { fontFamily: bold }]}>الكاميرا</Text>
+          <Text style={[styles.optionText, { fontFamily: bold }]}>{img.camera}</Text>
         </Pressable>
       </View>
 
@@ -88,7 +92,7 @@ export function GroupImageSourceSheet({
           }}
           style={({ pressed }) => [styles.removeBtn, pressed && { opacity: 0.85 }]}
         >
-          <Text style={[styles.removeTxt, { fontFamily: medium }]}>إزالة الصورة</Text>
+          <Text style={[styles.removeTxt, { fontFamily: medium }]}>{img.remove}</Text>
         </Pressable>
       ) : null}
 
@@ -96,7 +100,7 @@ export function GroupImageSourceSheet({
         onPress={onClose}
         style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.85 }]}
       >
-        <Text style={[styles.cancelTxt, { fontFamily: medium }]}>إلغاء</Text>
+        <Text style={[styles.cancelTxt, { fontFamily: medium }]}>{common.cancel}</Text>
       </Pressable>
     </>
   );

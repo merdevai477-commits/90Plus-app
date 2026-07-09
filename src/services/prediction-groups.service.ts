@@ -529,14 +529,20 @@ export async function getGroupStandings(groupId: string, viewerId: string) {
   });
 
   enriched.sort((a, b) => {
-    if (b.dailyPoints !== a.dailyPoints) return b.dailyPoints - a.dailyPoints;
     if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+    if (b.correct !== a.correct) return b.correct - a.correct;
     return 0;
   });
 
   const ranked = enriched.map((m, i) => ({ ...m, rank: i + 1 }));
 
-  const meIndex = ranked.findIndex((m) => m.isMe);
+  const dailySorted = [...enriched].sort((a, b) => {
+    if (b.dailyPoints !== a.dailyPoints) return b.dailyPoints - a.dailyPoints;
+    if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+    return 0;
+  });
+
+  const meIndex = dailySorted.findIndex((m) => m.isMe);
   let insight: GroupDailyInsight = {
     rank: null,
     points: 0,
@@ -546,23 +552,24 @@ export async function getGroupStandings(groupId: string, viewerId: string) {
   };
 
   if (meIndex !== -1) {
-    const me = ranked[meIndex];
+    const me = dailySorted[meIndex];
+    const dailyRank = dailySorted.findIndex((m) => m.userId === me.userId) + 1;
     if (me.dailyPoints > 0) {
       if (meIndex === 0) {
         insight = {
-          rank: 1,
+          rank: dailyRank,
           points: me.dailyPoints,
           pointsToNextRank: null,
           nextRank: null,
           isLeading: true,
         };
       } else {
-        const next = ranked[meIndex - 1];
+        const next = dailySorted[meIndex - 1];
         insight = {
-          rank: me.rank,
+          rank: dailyRank,
           points: me.dailyPoints,
           pointsToNextRank: Math.max(0, next.dailyPoints - me.dailyPoints),
-          nextRank: next.rank,
+          nextRank: meIndex,
           isLeading: false,
         };
       }
@@ -608,6 +615,7 @@ export async function getGlobalLeaderboard(period: 'all' | 'week' | 'month' = 'a
     avatarUrl: string | null;
     inviteCode: string;
     points: number;
+    correctPredictions: number;
     members: number;
     hasScores: boolean;
   };
@@ -616,13 +624,21 @@ export async function getGlobalLeaderboard(period: 'all' | 'week' | 'month' = 'a
 
   for (const g of groups) {
     let points = 0;
+    let correctPredictions = 0;
+    const correctWhere = {
+      groupId: g.id,
+      isCorrect: true,
+      ...(since ? { settledAt: { gte: since } } : {}),
+    };
+    const correctAgg = await prisma.groupPrediction.aggregate({
+      where: correctWhere,
+      _count: { _all: true },
+    });
+    correctPredictions = correctAgg._count._all ?? 0;
+
     if (since) {
       const agg = await prisma.groupPrediction.aggregate({
-        where: {
-          groupId: g.id,
-          settledAt: { gte: since },
-          isCorrect: true,
-        },
+        where: correctWhere,
         _sum: { xpAwarded: true },
       });
       points = agg._sum.xpAwarded ?? 0;
@@ -630,7 +646,7 @@ export async function getGlobalLeaderboard(period: 'all' | 'week' | 'month' = 'a
       points = g.members.reduce((sum, m) => sum + m.groupXpTotal, 0);
     }
 
-    if (points <= 0 && g.members.length === 0) continue;
+    if (points <= 0 && correctPredictions <= 0 && g.members.length === 0) continue;
 
     rows.push({
       id: g.id,
@@ -638,8 +654,9 @@ export async function getGlobalLeaderboard(period: 'all' | 'week' | 'month' = 'a
       avatarUrl: g.avatarUrl,
       inviteCode: g.inviteCode,
       points: Math.max(0, points),
+      correctPredictions,
       members: g.members.length,
-      hasScores: points > 0,
+      hasScores: points > 0 || correctPredictions > 0,
     });
   }
 
@@ -684,7 +701,7 @@ export async function saveGroupPredictions(
       throw new Error('INVALID_WINNER');
     }
 
-    await prisma.groupPrediction.upsert({
+    const existing = await prisma.groupPrediction.findUnique({
       where: {
         userId_roundId_apiMatchId: {
           userId,
@@ -692,7 +709,12 @@ export async function saveGroupPredictions(
           apiMatchId: p.apiMatchId,
         },
       },
-      create: {
+      select: { id: true },
+    });
+    if (existing) throw new Error('PREDICTION_ALREADY_SET');
+
+    await prisma.groupPrediction.create({
+      data: {
         roundId: round.id,
         groupId,
         userId,
@@ -701,15 +723,6 @@ export async function saveGroupPredictions(
         predictedWinner: p.predictedWinner ?? null,
         predictedHomeScore: p.predictedHomeScore ?? null,
         predictedAwayScore: p.predictedAwayScore ?? null,
-      },
-      update: {
-        mode: p.mode,
-        predictedWinner: p.predictedWinner ?? null,
-        predictedHomeScore: p.predictedHomeScore ?? null,
-        predictedAwayScore: p.predictedAwayScore ?? null,
-        isCorrect: null,
-        xpAwarded: 0,
-        settledAt: null,
       },
     });
   }

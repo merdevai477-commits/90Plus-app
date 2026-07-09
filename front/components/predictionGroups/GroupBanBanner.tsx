@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { PG, PG_RADII, usePGFonts } from './theme';
+import { useTranslation } from '../../src/i18n';
 
 function formatRemaining(until: Date) {
   const diff = Math.max(0, until.getTime() - Date.now());
@@ -20,6 +21,8 @@ function formatRemaining(until: Date) {
 
 export function GroupBanBanner({ untilIso }: { untilIso: string }) {
   const { medium, bold } = usePGFonts();
+  const { t } = useTranslation();
+  const ban = t.predictionGroups.ban;
   const until = new Date(untilIso);
   const [remaining, setRemaining] = useState(() => formatRemaining(until));
 
@@ -39,12 +42,13 @@ export function GroupBanBanner({ untilIso }: { untilIso: string }) {
       <View style={styles.row}>
         <Clock size={20} color="#F87171" />
         <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { fontFamily: bold }]}>نشاط المجموعات موقوف مؤقتاً</Text>
-          <Text style={[styles.sub, { fontFamily: medium }]}>
-            يُرفع الحظر بعد أكثر من 3 خروج/حذف للمجموعات. يتفك الحظر خلال:
-          </Text>
+          <Text style={[styles.title, { fontFamily: bold }]}>{ban.title}</Text>
+          <Text style={[styles.sub, { fontFamily: medium }]}>{ban.body}</Text>
           <Text style={[styles.timer, { fontFamily: bold }]}>
-            {remaining.days} يوم · {remaining.hours} ساعة · {remaining.minutes} دقيقة
+            {ban.remaining
+              .replace('{days}', String(remaining.days))
+              .replace('{hours}', String(remaining.hours))
+              .replace('{minutes}', String(remaining.minutes))}
           </Text>
         </View>
       </View>

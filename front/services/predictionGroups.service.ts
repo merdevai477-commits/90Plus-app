@@ -94,6 +94,7 @@ export interface RankedGroupRow {
   avatarUrl: string | null;
   inviteCode: string;
   points: number;
+  correctPredictions?: number;
   members: number;
   isMine?: boolean;
   hasScores?: boolean;
@@ -183,8 +184,11 @@ export const PredictionGroupsService = {
       body: JSON.stringify({ userId }),
     }),
 
-  getCurrentRound: (token: string, groupId: string) =>
-    authFetch(token, `/${groupId}/round/current`) as Promise<{
+  getCurrentRound: (token: string, groupId: string, bustCache = false) =>
+    authFetch(
+      token,
+      bustCache ? `/${groupId}/round/current?_=${Date.now()}` : `/${groupId}/round/current`,
+    ) as Promise<{
       round: { id: string; date: string; status: string; number?: number | null };
       matches: GroupRoundMatch[];
     }>,

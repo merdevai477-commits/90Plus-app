@@ -28,6 +28,8 @@ export interface GroupMember {
   rank: number;
   name: string;
   points: number;
+  /** All-time group XP accumulated. */
+  totalPoints?: number;
   isMe?: boolean;
   isAdmin?: boolean;
   correct: number;
@@ -40,6 +42,7 @@ export interface RankedGroup {
   rank: number;
   name: string;
   points: number;
+  correctPredictions?: number;
   members: number;
   avatar?: string | null;
   isMine?: boolean;

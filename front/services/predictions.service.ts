@@ -38,15 +38,18 @@ export interface Prediction {
   apiMatchId: string;
   predictionType: 'home' | 'draw' | 'away';
   coinsSpent: number;
-  coinsWon?: number;
+  coinsWon?: number | null;
   isCorrect?: boolean | null;
+  homeTeam?: string | null;
+  awayTeam?: string | null;
+  homeTeamLogo?: string | null;
+  awayTeamLogo?: string | null;
+  matchDate?: string | null;
+  leagueName?: string | null;
   createdAt: string;
-  homeTeam?: string;
-  awayTeam?: string;
-  homeTeamLogo?: string;
-  awayTeamLogo?: string;
-  matchDate?: string;
-  leagueName?: string;
+  source?: 'match' | 'group';
+  sourceLabel?: string;
+  xpAwarded?: number;
 }
 
 export interface PredictionRemaining {

@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { COMPACT_TAB_BAR_HEIGHT } from '../navigation/liquidGlassTabBar.constants';
 import { useToast } from '../../contexts/ToastContext';
+import { useTranslation } from '../../src/i18n';
 import { type SearchUserResult } from '../../src/services/authService';
 import { getApiUrl } from '../../config/api.config';
 import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
@@ -63,6 +64,9 @@ export function GroupInviteSheet({
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const toast = useToast();
+  const { t } = useTranslation();
+  const inv = t.predictionGroups.inviteSheet;
+  const common = t.predictionGroups.common;
   const { getToken } = useAuth();
   const { medium, bold, extra } = usePGFonts();
 
@@ -168,21 +172,21 @@ export function GroupInviteSheet({
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         setInvitedIds((prev) => new Set(prev).add(user.id));
         const label = user.displayName || user.username;
-        toast.showSuccess('تمت الدعوة', `تم إرسال دعوة إلى ${label}`);
+        toast.showSuccess(inv.invitedTitle, inv.invitedBody.replace('{name}', label));
       } catch (e: any) {
-        toast.showError('تعذر الإرسال', e?.message ?? 'حاول مرة أخرى');
+        toast.showError(inv.sendFailed, e?.message ?? t.predictionGroups.onboarding.tryAgain);
       }
     },
-    [onInviteUser, toast],
+    [inv, onInviteUser, t.predictionGroups.onboarding.tryAgain, toast],
   );
 
   const emptyHint = useMemo(() => {
-    if (query.trim().length < 2) return 'ابحث باسم المستخدم للدعوة';
+    if (query.trim().length < 2) return inv.searchHint;
     if (loading) return null;
     if (results.length > 0) return null;
-    if (errored) return 'تعذّر البحث — تحقق من الاتصال وحاول مرة أخرى';
-    return 'لا توجد نتائج';
-  }, [query, loading, errored, results.length]);
+    if (errored) return inv.searchError;
+    return inv.noResults;
+  }, [query, loading, errored, results.length, inv]);
 
   const sheetBottomPad = insets.bottom + COMPACT_TAB_BAR_HEIGHT + 20;
   // Numeric caps (percentage maxHeight misbehaves against an absolutely-
@@ -217,7 +221,7 @@ export function GroupInviteSheet({
 
           <View style={[styles.header, row]}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { fontFamily: extra, textAlign }]}>دعوة أعضاء</Text>
+              <Text style={[styles.title, { fontFamily: extra, textAlign }]}>{inv.title}</Text>
               <Text style={[styles.sub, { fontFamily: medium, textAlign }]} numberOfLines={1}>
                 {groupName} · {inviteCode}
               </Text>
@@ -232,7 +236,7 @@ export function GroupInviteSheet({
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="ابحث عن مستخدم..."
+              placeholder={inv.searchPlaceholder}
               placeholderTextColor={PG.textMuted}
               style={[styles.searchInput, { fontFamily: medium, textAlign }]}
               autoCorrect={false}
@@ -294,7 +298,7 @@ export function GroupInviteSheet({
                     >
                       <UserPlus size={15} color={sent ? PG.textMuted : PG.text} />
                       <Text style={[styles.inviteTxt, { fontFamily: bold, color: sent ? PG.textMuted : PG.text }]}>
-                        {sent ? 'تم' : 'دعوة'}
+                        {sent ? common.invited : common.invite}
                       </Text>
                     </Pressable>
                   </View>

@@ -49,7 +49,10 @@ export interface UserPredictionItem {
   isCorrect: boolean | null;
   coinsWon: number | null;
   coinsSpent: number;
+  xpAwarded?: number;
   createdAt: string;
+  source?: 'match' | 'group';
+  sourceLabel?: string;
 }
 
 type PredictionFilter = 'all' | 'pending' | 'correct' | 'wrong';
@@ -189,9 +192,18 @@ function PredictionMatchCard({ item }: { item: UserPredictionItem }) {
       />
 
       <View style={matchStyles.cardTop}>
-        <Text style={matchStyles.leagueText} numberOfLines={1}>
-          {item.leagueName || t.profile.predictionHistory}
-        </Text>
+        <View style={matchStyles.leagueRow}>
+          <Text style={matchStyles.leagueText} numberOfLines={1}>
+            {item.leagueName || t.profile.predictionHistory}
+          </Text>
+          {item.source === 'group' && item.sourceLabel ? (
+            <View style={matchStyles.sourceBadge}>
+              <Text style={matchStyles.sourceBadgeText} numberOfLines={1}>
+                {item.sourceLabel}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         <View
           style={[
             matchStyles.statusBadge,
@@ -230,7 +242,12 @@ function PredictionMatchCard({ item }: { item: UserPredictionItem }) {
         <Text style={matchStyles.pickHint}>
           {t.profile.yourPick}: <Text style={matchStyles.pickHintValue}>{pickLabel}</Text>
         </Text>
-        <Text style={matchStyles.dateText}>{dateLabel}</Text>
+        <View style={matchStyles.bottomMeta}>
+          {item.source === 'group' && item.isCorrect === true && (item.xpAwarded ?? 0) > 0 ? (
+            <Text style={matchStyles.xpEarned}>+{item.xpAwarded} XP</Text>
+          ) : null}
+          <Text style={matchStyles.dateText}>{dateLabel}</Text>
+        </View>
       </View>
     </View>
   );
@@ -430,11 +447,32 @@ const matchStyles = StyleSheet.create({
     gap: 8,
   },
   leagueText: {
-    flex: 1,
+    flexShrink: 1,
     color: TEXT_MUTED,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.3,
+  },
+  leagueRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
+  sourceBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(245,185,66,0.18)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(245,185,66,0.45)',
+    maxWidth: 120,
+  },
+  sourceBadgeText: {
+    color: '#F5B942',
+    fontSize: 9,
+    fontWeight: '800',
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -551,6 +589,15 @@ const matchStyles = StyleSheet.create({
   pickHintValue: {
     color: TEXT_PRIMARY,
     fontWeight: '700',
+  },
+  bottomMeta: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  xpEarned: {
+    fontSize: 10,
+    color: '#22c55e',
+    fontWeight: '800',
   },
   dateText: {
     fontSize: 10,

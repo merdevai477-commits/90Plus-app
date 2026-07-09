@@ -17,6 +17,7 @@ import {
 import { useAuth } from '@clerk/clerk-expo';
 
 import { useToast } from '../../contexts/ToastContext';
+import { useTranslation } from '../../src/i18n';
 import { PredictionGroupsService } from '../../services/predictionGroups.service';
 import { GroupAvatar } from './GroupAvatar';
 import { SheetBlurBackdrop } from './SheetBlurBackdrop';
@@ -41,6 +42,9 @@ export function GroupJoinSheet({
 }: GroupJoinSheetProps) {
   const { getToken } = useAuth();
   const toast = useToast();
+  const { t } = useTranslation();
+  const js = t.predictionGroups.joinSheet;
+  const common = t.predictionGroups.common;
   const { medium, bold, extra } = usePGFonts();
   const [preview, setPreview] = useState<{
     name: string;
@@ -65,7 +69,7 @@ export function GroupJoinSheet({
         const data = await PredictionGroupsService.previewByCode(token, code);
         if (!cancelled) setPreview(data);
       } catch (e: any) {
-        if (!cancelled) toast.showError('مجموعة غير موجودة', e?.message ?? '');
+        if (!cancelled) toast.showError(js.notFound, e?.message ?? '');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -73,7 +77,7 @@ export function GroupJoinSheet({
     return () => {
       cancelled = true;
     };
-  }, [visible, code, getToken, toast]);
+  }, [visible, code, getToken, js.notFound, toast]);
 
   const handleJoin = useCallback(async () => {
     setJoining(true);
@@ -91,11 +95,11 @@ export function GroupJoinSheet({
       }
       onClose();
     } catch (e: any) {
-      toast.showError('تعذر الانضمام', e?.message ?? '');
+      toast.showError(js.joinFailed, e?.message ?? '');
     } finally {
       setJoining(false);
     }
-  }, [code, inviteId, getToken, onClose, onJoin, onJoined, toast]);
+  }, [code, inviteId, getToken, js.joinFailed, onClose, onJoin, onJoined, toast]);
 
   if (!visible) return null;
 
@@ -115,20 +119,20 @@ export function GroupJoinSheet({
               <GroupAvatar imageUri={preview.avatarUrl} size={88} />
               <Text style={[styles.name, { fontFamily: extra }]}>{preview.name}</Text>
               <Text style={[styles.meta, { fontFamily: medium }]}>
-                {preview.membersCount} عضو · {preview.inviteCode}
+                {common.members.replace('{count}', String(preview.membersCount))} · {preview.inviteCode}
               </Text>
               <Pressable disabled={joining} onPress={() => void handleJoin()}>
                 <LinearGradient colors={PG_GRADIENTS.purple} style={styles.joinBtn}>
                   {joining ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={[styles.joinTxt, { fontFamily: bold }]}>انضمام للمجموعة</Text>
+                    <Text style={[styles.joinTxt, { fontFamily: bold }]}>{js.joinCta}</Text>
                   )}
                 </LinearGradient>
               </Pressable>
             </>
           ) : (
-            <Text style={[styles.meta, { fontFamily: medium }]}>تعذر تحميل المجموعة</Text>
+            <Text style={[styles.meta, { fontFamily: medium }]}>{js.loadFailed}</Text>
           )}
         </View>
       </View>

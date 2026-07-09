@@ -41,19 +41,21 @@ type GroupNavKey = 'group' | 'round' | 'standings';
 
 const GROUP_NAV_KEYS: GroupNavKey[] = ['group', 'round', 'standings'];
 
-const PREDICTION_GROUP_TABS: ConfigurableLiquidTabItem[] = [
-  // Wider bubbles so Arabic labels (Cairo) never clip against the glass pill.
-  { id: 'group', label: 'جروب', accent: PG.primaryLight, icon: GroupTabIcon, bubbleWidth: 78 },
-  { id: 'round', label: 'الجولة', accent: PG.gold, icon: RoundsTabIcon, bubbleWidth: 86 },
-  { id: 'standings', label: 'الترتيب', accent: PG.primaryLight, icon: RankPodiumTabIcon, bubbleWidth: 88 },
-];
-
 export default function PredictionGroupsScreen() {
   useScreenFont();
   usePGFonts();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isRTL, t } = useTranslation();
+  const predictionGroupTabs = useMemo<ConfigurableLiquidTabItem[]>(
+    () => [
+      { id: 'group', label: t.predictionGroups.tabs.group, accent: PG.primaryLight, icon: GroupTabIcon, bubbleWidth: 78 },
+      { id: 'round', label: t.predictionGroups.tabs.round, accent: PG.gold, icon: RoundsTabIcon, bubbleWidth: 86, iconSize: 26 },
+      { id: 'standings', label: t.predictionGroups.tabs.standings, accent: PG.primaryLight, icon: RankPodiumTabIcon, bubbleWidth: 88 },
+    ],
+    [t.predictionGroups.tabs],
+  );
+
   const params = useLocalSearchParams<{ joinCode?: string; inviteId?: string }>();
 
   const pg = usePredictionGroup();
@@ -100,6 +102,12 @@ export default function PredictionGroupsScreen() {
   }, [params.joinCode, params.inviteId]);
 
   useEffect(() => {
+    if (tab === 'round' && state?.group?.id) {
+      void refreshGroupData(state.group.id, { roundOnly: true });
+    }
+  }, [tab, state?.group?.id, refreshGroupData]);
+
+  useEffect(() => {
     if (tab === 'standings') void refreshLeaderboard('all');
   }, [tab, refreshLeaderboard]);
 
@@ -128,13 +136,13 @@ export default function PredictionGroupsScreen() {
       name: g.name,
       code: g.inviteCode,
       membersCount: g.membersCount,
-      createdAt: new Date(g.createdAt).toLocaleDateString('ar-EG'),
-      tagline: 'مجموعة خاصة',
+      createdAt: new Date(g.createdAt).toLocaleDateString(isRTL ? 'ar-EG' : 'en-US'),
+      tagline: t.predictionGroups.tagline,
       isPrivate: g.isPrivate,
       avatarUrl: g.avatarUrl,
       id: g.id,
     };
-  }, [state?.group]);
+  }, [isRTL, state?.group, t.predictionGroups.tagline]);
 
   const memberUserIds = useMemo(() => members.map((m) => m.userId), [members]);
 
@@ -151,7 +159,8 @@ export default function PredictionGroupsScreen() {
       members.map((m) => ({
         rank: m.rank,
         name: m.name,
-        points: m.points,
+        points: m.dailyPoints ?? m.points,
+        totalPoints: m.totalPoints ?? m.points,
         isMe: m.isMe,
         isAdmin: m.isAdmin,
         correct: m.correct ?? 0,
@@ -227,6 +236,7 @@ export default function PredictionGroupsScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews
         contentContainerStyle={[
           styles.scrollContent,
           { paddingTop: insets.top + chromeInset, paddingBottom: navClearance },
@@ -275,6 +285,7 @@ export default function PredictionGroupsScreen() {
               rank: g.rank,
               name: g.name,
               points: g.points,
+              correctPredictions: g.correctPredictions ?? 0,
               members: g.members,
               avatar: g.avatarUrl,
               isMine: g.isMine,
@@ -294,7 +305,7 @@ export default function PredictionGroupsScreen() {
       />
 
       <LiquidGlassTabBar
-        tabs={PREDICTION_GROUP_TABS}
+        tabs={predictionGroupTabs}
         activeIndex={activeTabIndex}
         onNavigate={handleNavigate}
         bottomInset={insets.bottom}

@@ -10,6 +10,7 @@ import React from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
+import { useTranslation } from '../../src/i18n';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { SheetBlurBackdrop } from './SheetBlurBackdrop';
 import { PG, PG_RADII, PG_SPACING, PG_TYPE, usePGFonts } from './theme';
@@ -65,6 +66,9 @@ export function GroupStatsPopup({
   stats?: { totalPredictions: number; correctPredictions: number; wrongPredictions: number } | null;
 }) {
   const { bold, extra } = usePGFonts();
+  const { t } = useTranslation();
+  const sp = t.predictionGroups.statsPopup;
+  const common = t.predictionGroups.common;
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
 
   const total = stats?.totalPredictions ?? 0;
@@ -98,20 +102,20 @@ export function GroupStatsPopup({
             <View style={styles.head}>
               <BarChart3 size={28} color={PG.primaryLight} />
               <Text style={[styles.title, { fontFamily: extra }]} allowFontScaling={false}>
-                إحصائيات المجموعة
+                {sp.title}
               </Text>
             </View>
 
             <View style={styles.grid}>
               <View style={[styles.gridRow, row]}>
                 <StatIsland
-                  label="نسبة التوقعات الصحيحة"
+                  label={sp.accuracy}
                   value={`${accuracyPercent}%`}
                   accent={PG.gold}
                   icon={<Target size={20} color={PG.gold} />}
                 />
                 <StatIsland
-                  label="إجمالي التوقعات"
+                  label={sp.totalPredictions}
                   value={String(total)}
                   accent={PG.primaryLight}
                   icon={<BarChart3 size={20} color={PG.primaryLight} />}
@@ -119,13 +123,13 @@ export function GroupStatsPopup({
               </View>
               <View style={[styles.gridRow, row]}>
                 <StatIsland
-                  label="توقعات صحيحة"
+                  label={sp.correct}
                   value={String(wins)}
                   accent={PG.win}
                   icon={<CheckCircle2 size={20} color={PG.win} />}
                 />
                 <StatIsland
-                  label="توقعات خاطئة"
+                  label={sp.wrong}
                   value={String(losses)}
                   accent={PG.lossMuted}
                   icon={<XCircle size={20} color={PG.lossMuted} />}
@@ -141,7 +145,7 @@ export function GroupStatsPopup({
                 style={styles.doneGrad}
               >
                 <Text style={[styles.doneText, { fontFamily: bold }]} allowFontScaling={false}>
-                  حسناً
+                  {common.ok}
                 </Text>
               </LinearGradient>
             </Pressable>

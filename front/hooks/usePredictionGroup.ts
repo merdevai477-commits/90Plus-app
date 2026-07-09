@@ -93,18 +93,38 @@ export function usePredictionGroup() {
     [refreshMe],
   );
 
-  const refreshGroupData = useCallback(async (groupId?: string) => {
+  const refreshGroupData = useCallback(async (
+    groupId?: string,
+    opts?: { roundOnly?: boolean; standingsOnly?: boolean },
+  ) => {
     const id = groupId ?? stateRef.current?.group?.id;
     if (!id || refreshGroupInFlight.current) return;
 
     refreshGroupInFlight.current = true;
     try {
-      const [membersData, standings, round] = await Promise.all([
-        withToken((t) => PredictionGroupsService.getMembers(t, id)),
+      if (opts?.roundOnly) {
+        const round = await withToken((t) => PredictionGroupsService.getCurrentRound(t, id, true));
+        if (round) {
+          setRoundMatches(round.matches);
+          setRoundMeta(round.round);
+        }
+        return;
+      }
+
+      if (opts?.standingsOnly) {
+        const standings = await withToken((t) => PredictionGroupsService.getStandings(t, id));
+        if (standings) {
+          setMembers(standings.members);
+          setGroupStats(standings.groupStats);
+          setDailyInsight(standings.insight ?? null);
+        }
+        return;
+      }
+
+      const [standings, round] = await Promise.all([
         withToken((t) => PredictionGroupsService.getStandings(t, id)),
         withToken((t) => PredictionGroupsService.getCurrentRound(t, id)),
       ]);
-      if (membersData) setMembers(membersData);
       if (standings) {
         setMembers(standings.members);
         setGroupStats(standings.groupStats);
@@ -142,7 +162,7 @@ export function usePredictionGroup() {
 
   useEffect(() => {
     if (state?.hasGroup && state.group?.id) {
-      void refreshGroupData(state.group.id);
+      void refreshGroupData(state.group.id, { standingsOnly: true });
     }
   }, [state?.hasGroup, state?.group?.id, refreshGroupData]);
 
@@ -241,7 +261,24 @@ export function usePredictionGroup() {
       const groupId = stateRef.current?.group?.id;
       if (!groupId) return;
       await withToken((t) => PredictionGroupsService.savePredictions(t, groupId, predictions));
-      await refreshGroupData(groupId);
+      setRoundMatches((prev) =>
+        prev.map((m) => {
+          const p = predictions.find((x) => x.apiMatchId === m.apiMatchId);
+          if (!p || m.prediction) return m;
+          return {
+            ...m,
+            prediction: {
+              mode: p.mode,
+              predictedWinner: p.predictedWinner ?? null,
+              predictedHomeScore: p.predictedHomeScore ?? null,
+              predictedAwayScore: p.predictedAwayScore ?? null,
+              isCorrect: null,
+              xpAwarded: 0,
+            },
+          };
+        }),
+      );
+      await refreshGroupData(groupId, { roundOnly: true });
     },
     [withToken, refreshGroupData],
   );

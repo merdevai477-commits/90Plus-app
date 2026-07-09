@@ -8,6 +8,7 @@ import { Crown, Flame, Target } from 'lucide-react-native';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 
+import { useTranslation } from '../../src/i18n';
 import type { GroupDailyInsight } from '../../services/predictionGroups.service';
 import { buildGroupMotivationText } from '../../utils/groupInsights';
 import { LiquidGlassSurface } from './LiquidGlassSurface';
@@ -21,10 +22,14 @@ export function GroupMotivationCard({
   isRTL: boolean;
 }) {
   const { medium, bold, extra } = usePGFonts();
+  const { t } = useTranslation();
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const textAlign = isRTL ? 'right' : 'left';
 
-  const message = useMemo(() => buildGroupMotivationText(insight), [insight]);
+  const message = useMemo(
+    () => buildGroupMotivationText(insight, t.predictionGroups.motivation),
+    [insight, t.predictionGroups.motivation],
+  );
 
   const leading = Boolean(insight?.isLeading);
   const ranked = insight?.rank != null;
@@ -50,7 +55,7 @@ export function GroupMotivationCard({
             <Icon size={20} color={accent} />
           </View>
           <View style={styles.textCol}>
-            <Text style={[styles.title, { fontFamily: extra, textAlign }]}>ترتيب اليوم</Text>
+            <Text style={[styles.title, { fontFamily: extra, textAlign }]}>{t.predictionGroups.motivation.title}</Text>
             <Text style={[styles.message, { fontFamily: medium, textAlign }]}>{message}</Text>
           </View>
           {ranked ? (

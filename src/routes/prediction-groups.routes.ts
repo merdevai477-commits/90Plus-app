@@ -59,6 +59,7 @@ function mapError(req: Request, res: Response, err: unknown): void {
     INVALID_NAME: { status: ErrorCode.VALIDATION, message: 'اسم المجموعة غير صالح' },
     MATCH_NOT_IN_ROUND: { status: ErrorCode.VALIDATION, message: 'المباراة ليست في الجولة الحالية' },
     MATCH_LOCKED: { status: ErrorCode.CONFLICT, message: 'التوقعات مغلقة لهذه المباراة' },
+    PREDICTION_ALREADY_SET: { status: ErrorCode.CONFLICT, message: 'لا يمكن تعديل التوقع بعد الحفظ' },
     MEMBER_NOT_FOUND: { status: ErrorCode.NOT_FOUND, message: 'العضو غير موجود' },
     CANNOT_KICK_SELF: { status: ErrorCode.VALIDATION, message: 'لا يمكن طرد نفسك' },
     GROUP_BANNED: {
