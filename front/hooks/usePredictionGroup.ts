@@ -18,9 +18,13 @@ const EMPTY_GROUP_STATE: MyGroupState = {
   groupBan: null,
 };
 
+export type GroupNavKey = 'group' | 'round' | 'standings';
+
 export function usePredictionGroup() {
   const { getToken, isSignedIn } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [roundLoading, setRoundLoading] = useState(false);
   const [state, setState] = useState<MyGroupState | null>(null);
   const [members, setMembers] = useState<GroupMemberRow[]>([]);
   const [roundMatches, setRoundMatches] = useState<GroupRoundMatch[]>([]);
@@ -36,6 +40,7 @@ export function usePredictionGroup() {
   const getTokenRef = useRef(getToken);
   const isSignedInRef = useRef(isSignedIn);
   const stateRef = useRef(state);
+  const roundMatchesRef = useRef(roundMatches);
   const refreshMeInFlight = useRef(false);
   const refreshGroupInFlight = useRef(false);
   const lastRefreshMeAt = useRef(0);
@@ -43,10 +48,11 @@ export function usePredictionGroup() {
   getTokenRef.current = getToken;
   isSignedInRef.current = isSignedIn;
   stateRef.current = state;
+  roundMatchesRef.current = roundMatches;
 
-  const withToken = useCallback(async <T,>(fn: (token: string) => Promise<T>): Promise<T | null> => {
+  const withToken = useCallback(async <T,>(fn: (token: string) => Promise<T>): Promise<T> => {
     const token = await getTokenRef.current();
-    if (!token) return null;
+    if (!token) throw new Error('NOT_AUTHENTICATED');
     return fn(token);
   }, []);
 
@@ -76,9 +82,10 @@ export function usePredictionGroup() {
 
     try {
       const data = await withToken((t) => PredictionGroupsService.getMe(t, bustCache));
-      if (data) applyState(data);
+      applyState(data);
     } catch (err) {
       logger.error('[usePredictionGroup] getMe failed:', err);
+      throw err;
     } finally {
       setLoading(false);
       refreshMeInFlight.current = false;
@@ -95,85 +102,95 @@ export function usePredictionGroup() {
 
   const refreshGroupData = useCallback(async (
     groupId?: string,
-    opts?: { roundOnly?: boolean; standingsOnly?: boolean },
+    opts?: { roundOnly?: boolean; standingsOnly?: boolean; force?: boolean },
   ) => {
     const id = groupId ?? stateRef.current?.group?.id;
-    if (!id || refreshGroupInFlight.current) return;
+    if (!id) return;
+    if (refreshGroupInFlight.current && !opts?.force) return;
 
     refreshGroupInFlight.current = true;
+    if (opts?.roundOnly) setRoundLoading(true);
+
     try {
       if (opts?.roundOnly) {
         const round = await withToken((t) => PredictionGroupsService.getCurrentRound(t, id, true));
-        if (round) {
-          setRoundMatches(round.matches);
-          setRoundMeta(round.round);
-        }
+        setRoundMatches(round.matches);
+        setRoundMeta(round.round);
         return;
       }
 
       if (opts?.standingsOnly) {
         const standings = await withToken((t) => PredictionGroupsService.getStandings(t, id));
-        if (standings) {
-          setMembers(standings.members);
-          setGroupStats(standings.groupStats);
-          setDailyInsight(standings.insight ?? null);
-        }
+        setMembers(standings.members);
+        setGroupStats(standings.groupStats);
+        setDailyInsight(standings.insight ?? null);
         return;
       }
 
       const [standings, round] = await Promise.all([
         withToken((t) => PredictionGroupsService.getStandings(t, id)),
-        withToken((t) => PredictionGroupsService.getCurrentRound(t, id)),
+        withToken((t) => PredictionGroupsService.getCurrentRound(t, id, true)),
       ]);
-      if (standings) {
-        setMembers(standings.members);
-        setGroupStats(standings.groupStats);
-        setDailyInsight(standings.insight ?? null);
-      }
-      if (round) {
-        setRoundMatches(round.matches);
-        setRoundMeta(round.round);
-      }
+      setMembers(standings.members);
+      setGroupStats(standings.groupStats);
+      setDailyInsight(standings.insight ?? null);
+      setRoundMatches(round.matches);
+      setRoundMeta(round.round);
     } catch (err) {
       logger.error('[usePredictionGroup] refreshGroupData failed:', err);
+      throw err;
     } finally {
+      if (opts?.roundOnly) setRoundLoading(false);
       refreshGroupInFlight.current = false;
     }
   }, [withToken]);
 
   const refreshLeaderboard = useCallback(
     async (period: 'all' | 'week' | 'month' = 'all') => {
-      try {
-        const rows = await withToken((t) => PredictionGroupsService.getLeaderboard(t, period));
-        if (rows) {
-          const mineId = stateRef.current?.group?.id;
-          setGlobalGroups(rows.map((r) => ({ ...r, isMine: r.id === mineId })));
-        }
-      } catch (err) {
-        logger.error('[usePredictionGroup] leaderboard failed:', err);
-      }
+      const rows = await withToken((t) => PredictionGroupsService.getLeaderboard(t, period));
+      const mineId = stateRef.current?.group?.id;
+      setGlobalGroups(rows.map((r) => ({ ...r, isMine: r.id === mineId })));
     },
     [withToken],
   );
 
+  const refreshActiveTab = useCallback(
+    async (tab: GroupNavKey) => {
+      const groupId = stateRef.current?.group?.id;
+      setRefreshing(true);
+      try {
+        if (tab === 'group') {
+          if (!groupId) return;
+          await refreshGroupData(groupId, { standingsOnly: true, force: true });
+        } else if (tab === 'round') {
+          if (!groupId) return;
+          await refreshGroupData(groupId, { roundOnly: true, force: true });
+        } else {
+          await refreshLeaderboard('all');
+        }
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [refreshGroupData, refreshLeaderboard],
+  );
+
   useEffect(() => {
-    void refreshMe();
+    void refreshMe().catch(() => undefined);
   }, [refreshMe]);
 
   useEffect(() => {
     if (state?.hasGroup && state.group?.id) {
-      void refreshGroupData(state.group.id, { standingsOnly: true });
+      void refreshGroupData(state.group.id, { standingsOnly: true }).catch(() => undefined);
     }
   }, [state?.hasGroup, state?.group?.id, refreshGroupData]);
 
   const createGroup = useCallback(
     async (name: string, avatarUrl?: string | null) => {
       const data = await withToken((t) => PredictionGroupsService.createGroup(t, name, avatarUrl));
-      if (data) {
-        applyState(data);
-        if (data.hasGroup && data.group) {
-          void refreshGroupData(data.group.id);
-        }
+      applyState(data);
+      if (data.hasGroup && data.group) {
+        await refreshGroupData(data.group.id);
       }
       return data;
     },
@@ -183,11 +200,9 @@ export function usePredictionGroup() {
   const joinGroup = useCallback(
     async (opts: { code?: string; inviteId?: string }) => {
       const data = await withToken((t) => PredictionGroupsService.join(t, opts));
-      if (data) {
-        applyState(data);
-        if (data.hasGroup && data.group) {
-          void refreshGroupData(data.group.id);
-        }
+      applyState(data);
+      if (data.hasGroup && data.group) {
+        await refreshGroupData(data.group.id);
       }
       return data;
     },
@@ -201,7 +216,7 @@ export function usePredictionGroup() {
       const data = await withToken((t) =>
         PredictionGroupsService.updateGroup(t, groupId, { name, avatarUrl }),
       );
-      if (data) applyState(data);
+      applyState(data);
       return data;
     },
     [applyState, withToken],
@@ -259,11 +274,21 @@ export function usePredictionGroup() {
       }>,
     ) => {
       const groupId = stateRef.current?.group?.id;
-      if (!groupId) return;
-      await withToken((t) => PredictionGroupsService.savePredictions(t, groupId, predictions));
+      if (!groupId) throw new Error('NOT_IN_GROUP');
+
+      const unsaved = predictions.filter((p) => {
+        const match = roundMatchesRef.current.find((m) => m.apiMatchId === p.apiMatchId);
+        return !match?.prediction;
+      });
+      if (unsaved.length === 0) {
+        throw new Error('PREDICTION_ALREADY_SET');
+      }
+
+      await withToken((t) => PredictionGroupsService.savePredictions(t, groupId, unsaved));
+
       setRoundMatches((prev) =>
         prev.map((m) => {
-          const p = predictions.find((x) => x.apiMatchId === m.apiMatchId);
+          const p = unsaved.find((x) => x.apiMatchId === m.apiMatchId);
           if (!p || m.prediction) return m;
           return {
             ...m,
@@ -278,9 +303,10 @@ export function usePredictionGroup() {
           };
         }),
       );
-      await refreshGroupData(groupId, { roundOnly: true });
+
+      await refreshGroupData(groupId, { roundOnly: true, force: true });
     },
-    [withToken, refreshGroupData],
+    [refreshGroupData, withToken],
   );
 
   const inviteUser = useCallback(
@@ -297,13 +323,15 @@ export function usePredictionGroup() {
       const groupId = stateRef.current?.group?.id;
       if (!groupId) return;
       await withToken((t) => PredictionGroupsService.kickMember(t, groupId, userId));
-      await refreshGroupData(groupId);
+      await refreshGroupData(groupId, { force: true });
     },
-    [withToken, refreshGroupData],
+    [refreshGroupData, withToken],
   );
 
   return {
     loading,
+    refreshing,
+    roundLoading,
     state,
     members,
     roundMatches,
@@ -317,6 +345,7 @@ export function usePredictionGroup() {
     refreshMeIfStale,
     refreshGroupData,
     refreshLeaderboard,
+    refreshActiveTab,
     createGroup,
     joinGroup,
     updateGroup,

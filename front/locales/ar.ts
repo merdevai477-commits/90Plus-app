@@ -1026,6 +1026,13 @@ export const ar = {
     profileSource: '90 بلس كينجز',
     privateGroup: 'مجموعة خاصة',
     tagline: 'مجموعة خاصة',
+    screen: {
+      roundLoading: 'جاري تحميل مباريات الجولة...',
+      noMatches: 'لا توجد مباريات في الجولة الحالية',
+      emptyStandings: 'لا توجد مجموعات في الترتيب بعد',
+      loadFailed: 'تعذر تحميل البيانات — حاول مرة أخرى',
+      refreshFailed: 'تعذر التحديث — تحقق من الاتصال',
+    },
     common: {
       cancel: 'إلغاء',
       ok: 'حسناً',

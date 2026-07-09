@@ -5,9 +5,10 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useToast } from '../contexts/ToastContext';
 import { usePredictionGroup } from '../hooks/usePredictionGroup';
 import { LiquidGlassTabBar } from '../components/navigation/LiquidGlassTabBar';
 import { COMPACT_TAB_BAR_HEIGHT } from '../components/navigation/liquidGlassTabBar.constants';
@@ -47,6 +48,8 @@ export default function PredictionGroupsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isRTL, t } = useTranslation();
+  const toast = useToast();
+  const pgScreen = t.predictionGroups.screen;
   const predictionGroupTabs = useMemo<ConfigurableLiquidTabItem[]>(
     () => [
       { id: 'group', label: t.predictionGroups.tabs.group, accent: PG.primaryLight, icon: GroupTabIcon, bubbleWidth: 78 },
@@ -61,6 +64,8 @@ export default function PredictionGroupsScreen() {
   const pg = usePredictionGroup();
   const {
     loading,
+    refreshing,
+    roundLoading,
     state,
     members,
     roundMatches,
@@ -74,6 +79,7 @@ export default function PredictionGroupsScreen() {
     refreshMeIfStale,
     refreshGroupData,
     refreshLeaderboard,
+    refreshActiveTab,
     createGroup,
     joinGroup,
     updateGroup,
@@ -116,6 +122,14 @@ export default function PredictionGroupsScreen() {
       void refreshMeIfStale(2000);
     }, [refreshMeIfStale]),
   );
+
+  const handleRefresh = useCallback(async () => {
+    try {
+      await refreshActiveTab(tab);
+    } catch {
+      toast.showError(pgScreen.refreshFailed, pgScreen.loadFailed);
+    }
+  }, [pgScreen.loadFailed, pgScreen.refreshFailed, refreshActiveTab, tab, toast]);
 
   const activeTabIndex = useMemo(
     () => Math.max(0, GROUP_NAV_KEYS.indexOf(tab)),
@@ -237,6 +251,14 @@ export default function PredictionGroupsScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void handleRefresh()}
+            tintColor={PG.primaryLight}
+            colors={[PG.primaryLight]}
+          />
+        }
         contentContainerStyle={[
           styles.scrollContent,
           { paddingTop: insets.top + chromeInset, paddingBottom: navClearance },
@@ -274,6 +296,7 @@ export default function PredictionGroupsScreen() {
               groupId={groupHeader.id}
               roundMatches={roundMatches}
               roundMeta={roundMeta}
+              roundLoading={roundLoading}
               onSave={savePredictions}
             />
           </View>

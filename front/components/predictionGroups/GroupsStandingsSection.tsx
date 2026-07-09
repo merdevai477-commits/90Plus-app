@@ -101,9 +101,15 @@ export function GroupsStandingsSection({
           />
 
           <View style={styles.list}>
-            {list.map((group) => (
-              <GroupRankingRow key={`${period}-${group.rank}-${group.name}`} group={group} isRTL={isRTL} />
-            ))}
+            {list.length === 0 ? (
+              <Text style={[styles.emptyText, { fontFamily: medium, textAlign: isRTL ? 'right' : 'left' }]}>
+                {t.predictionGroups.screen.emptyStandings}
+              </Text>
+            ) : (
+              list.map((group) => (
+                <GroupRankingRow key={`${period}-${group.rank}-${group.name}`} group={group} isRTL={isRTL} />
+              ))
+            )}
           </View>
         </View>
       </View>
@@ -148,5 +154,13 @@ const styles = StyleSheet.create({
   list: {
     gap: 2,
     marginTop: 2,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: PG.textMuted,
+    textAlign: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 8,
+    lineHeight: 20,
   },
 });

@@ -700,32 +700,36 @@ export async function saveGroupPredictions(
     } else if (!p.predictedWinner) {
       throw new Error('INVALID_WINNER');
     }
-
-    const existing = await prisma.groupPrediction.findUnique({
-      where: {
-        userId_roundId_apiMatchId: {
-          userId,
-          roundId: round.id,
-          apiMatchId: p.apiMatchId,
-        },
-      },
-      select: { id: true },
-    });
-    if (existing) throw new Error('PREDICTION_ALREADY_SET');
-
-    await prisma.groupPrediction.create({
-      data: {
-        roundId: round.id,
-        groupId,
-        userId,
-        apiMatchId: p.apiMatchId,
-        mode: p.mode,
-        predictedWinner: p.predictedWinner ?? null,
-        predictedHomeScore: p.predictedHomeScore ?? null,
-        predictedAwayScore: p.predictedAwayScore ?? null,
-      },
-    });
   }
+
+  await prisma.$transaction(async (tx) => {
+    for (const p of predictions) {
+      const existing = await tx.groupPrediction.findUnique({
+        where: {
+          userId_roundId_apiMatchId: {
+            userId,
+            roundId: round.id,
+            apiMatchId: p.apiMatchId,
+          },
+        },
+        select: { id: true },
+      });
+      if (existing) throw new Error('PREDICTION_ALREADY_SET');
+
+      await tx.groupPrediction.create({
+        data: {
+          roundId: round.id,
+          groupId,
+          userId,
+          apiMatchId: p.apiMatchId,
+          mode: p.mode,
+          predictedWinner: p.predictedWinner ?? null,
+          predictedHomeScore: p.predictedHomeScore ?? null,
+          predictedAwayScore: p.predictedAwayScore ?? null,
+        },
+      });
+    }
+  });
 
   return { success: true, roundId: round.id };
 }

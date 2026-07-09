@@ -247,7 +247,10 @@ router.post('/:id/invites', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/:id/round/current', requireAuth, responseCacheMiddleware({ ttl: 60_000 }), async (req, res) => {
+router.get('/:id/round/current', requireAuth, responseCacheMiddleware({
+  ttl: 5_000,
+  skip: (req) => typeof req.query._ === 'string',
+}), async (req, res) => {
   try {
     const user = await resolveUser(req);
     if (!user) {

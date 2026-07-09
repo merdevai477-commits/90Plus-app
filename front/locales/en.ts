@@ -935,6 +935,13 @@ export const en = {
     profileSource: '90 Plus Kings',
     privateGroup: 'Private group',
     tagline: 'Private group',
+    screen: {
+      roundLoading: 'Loading round matches...',
+      noMatches: 'No matches in the current round',
+      emptyStandings: 'No groups on the leaderboard yet',
+      loadFailed: 'Could not load data — try again',
+      refreshFailed: 'Could not refresh — check your connection',
+    },
     common: {
       cancel: 'Cancel',
       ok: 'OK',

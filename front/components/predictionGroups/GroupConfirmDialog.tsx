@@ -19,6 +19,7 @@ import {
 import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
 import { SheetBlurBackdrop } from './SheetBlurBackdrop';
 import { PG, PG_RADII, PG_SPACING, PG_TYPE, usePGFonts } from './theme';
+import { useTranslation } from '../../src/i18n';
 
 const DialogGlass = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 const DIALOG_GLASS_PROPS = isLiquidGlassSupported
@@ -49,7 +50,7 @@ export function GroupConfirmDialog({
   title,
   message,
   confirmLabel,
-  cancelLabel = 'إلغاء',
+  cancelLabel,
   destructive = false,
   loading = false,
   isRTL = false,
@@ -58,6 +59,8 @@ export function GroupConfirmDialog({
   onCancel,
 }: GroupConfirmDialogProps) {
   const { medium, bold, extra } = usePGFonts();
+  const { t } = useTranslation();
+  const resolvedCancel = cancelLabel ?? t.predictionGroups.common.cancel;
   const textAlign = isRTL ? 'right' : 'left';
 
   if (!visible) return null;
@@ -91,7 +94,7 @@ export function GroupConfirmDialog({
               disabled={loading}
               style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.85 }]}
             >
-              <Text style={[styles.cancelTxt, { fontFamily: medium }]}>{cancelLabel}</Text>
+              <Text style={[styles.cancelTxt, { fontFamily: medium }]}>{resolvedCancel}</Text>
             </Pressable>
 
             <Pressable
