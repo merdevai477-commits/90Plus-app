@@ -21,6 +21,24 @@ import { PG, PG_GLOW_PURPLE, PG_RADII, usePGFonts } from './theme';
 type Mode = 'winner' | 'exact' | null;
 type Winner = 'home' | 'draw' | 'away' | null;
 
+function parseWinner(w: string | null | undefined): Winner {
+  const v = w?.toLowerCase();
+  if (v === 'home' || v === 'draw' || v === 'away') return v;
+  return null;
+}
+
+function winnerFromPrediction(pred: NonNullable<MatchPredictionCardProps['initialPrediction']>): Winner {
+  const parsed = parseWinner(pred.predictedWinner);
+  if (parsed) return parsed;
+  if (pred.mode !== 'EXACT') return null;
+  const h = pred.predictedHomeScore ?? 0;
+  const a = pred.predictedAwayScore ?? 0;
+  if (h > a) return 'home';
+  if (a > h) return 'away';
+  if (h === a) return 'draw';
+  return null;
+}
+
 export interface MatchPredictionCardProps {
   match: PredictionMatch & { status?: string };
   isRTL: boolean;
@@ -126,17 +144,9 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
   const [mode, setMode] = useState<Mode>(
     initialPrediction?.mode === 'EXACT' ? 'exact' : initialPrediction ? 'winner' : null,
   );
-  const [winner, setWinner] = useState<Winner>(() => {
-    if (!initialPrediction) return null;
-    const w = initialPrediction.predictedWinner;
-    if (w === 'home' || w === 'draw' || w === 'away') return w;
-    const h = initialPrediction.predictedHomeScore ?? 0;
-    const a = initialPrediction.predictedAwayScore ?? 0;
-    if (h > a) return 'home';
-    if (a > h) return 'away';
-    if (h === a && initialPrediction.mode === 'EXACT') return 'draw';
-    return null;
-  });
+  const [winner, setWinner] = useState<Winner>(() =>
+    initialPrediction ? winnerFromPrediction(initialPrediction) : null,
+  );
 
   useEffect(() => {
     if (initialPrediction) {
@@ -149,19 +159,7 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
         setHome(initialPrediction.predictedHomeScore ?? 0);
         setAway(initialPrediction.predictedAwayScore ?? 0);
       }
-      const w = initialPrediction.predictedWinner;
-      if (w === 'home' || w === 'draw' || w === 'away') {
-        setWinner(w);
-      } else if (!isWinner) {
-        const h = initialPrediction.predictedHomeScore ?? 0;
-        const a = initialPrediction.predictedAwayScore ?? 0;
-        if (h > a) setWinner('home');
-        else if (a > h) setWinner('away');
-        else if (h === a) setWinner('draw');
-        else setWinner(null);
-      } else {
-        setWinner(null);
-      }
+      setWinner(winnerFromPrediction(initialPrediction));
     }
   }, [initialPrediction]);
 
@@ -213,9 +211,12 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
   const readOnly = !isEditable;
   const exactMode = mode === 'exact';
   const winnerMode = mode === 'winner';
-  const homeLogoActive = !readOnly && winnerMode && winner === 'home';
-  const awayLogoActive = !readOnly && winnerMode && winner === 'away';
-  const drawActive = !readOnly && winnerMode && winner === 'draw';
+  const homeLogoActive = winnerMode && winner === 'home';
+  const awayLogoActive = winnerMode && winner === 'away';
+  const drawActive = winnerMode && winner === 'draw';
+  const showSavedWinnerPick = Boolean(saved && winnerMode && winner && !finished);
+  const showSavedExactScores = Boolean((saved || finished) && exactMode && !finished);
+  const showFinishedScores = Boolean(finished);
 
   const modeHintText = useMemo(() => {
     if (mode === 'exact') return pg.modeExact.replace('{home}', String(home)).replace('{away}', String(away));
@@ -227,6 +228,24 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
 
   const homeScore = finished ? match.result?.home ?? 0 : home;
   const awayScore = finished ? match.result?.away ?? 0 : away;
+
+  const SavedLogoWrap = ({
+    children,
+    active,
+  }: {
+    children: React.ReactNode;
+    active: boolean;
+  }) => (
+    <View style={[styles.logoTap, active && styles.logoTapActive]}>
+      {active && (
+        <LinearGradient
+          colors={['rgba(124,58,237,0.45)', 'rgba(159,90,251,0.15)']}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+      {children}
+    </View>
+  );
 
   const LogoPick = ({
     side,
@@ -244,7 +263,11 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
     );
 
     if (readOnly) {
-      return badge;
+      return (
+        <SavedLogoWrap active={active}>
+          {badge}
+        </SavedLogoWrap>
+      );
     }
 
     return (
@@ -284,13 +307,50 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
       <View style={[styles.teams, row]}>
         <View style={styles.teamSide}>
           <LogoPick side="home" name={match.home.name} logo={match.home.logo} active={homeLogoActive} />
-          <Text style={[styles.teamName, { fontFamily: bold }]} numberOfLines={2}>
+          <Text
+            style={[styles.teamName, { fontFamily: bold }, homeLogoActive && styles.teamNameActive]}
+            numberOfLines={2}
+          >
             {match.home.name}
           </Text>
         </View>
 
         <View style={styles.scoreArea}>
-          {readOnly ? (
+          {showFinishedScores || showSavedExactScores ? (
+            <View style={[styles.scoreLine, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+              <Text
+                style={[
+                  styles.bigScore,
+                  { fontFamily: extra },
+                  homeLogoActive && styles.bigScoreActive,
+                ]}
+              >
+                {homeScore}
+              </Text>
+              <Text style={[styles.scoreDash, { fontFamily: extra }]}>-</Text>
+              <Text
+                style={[
+                  styles.bigScore,
+                  { fontFamily: extra },
+                  awayLogoActive && styles.bigScoreActive,
+                ]}
+              >
+                {awayScore}
+              </Text>
+            </View>
+          ) : showSavedWinnerPick ? (
+            <View style={styles.savedPickCol}>
+              <Text style={[styles.savedPickLabel, { fontFamily: medium }]}>{pg.yourPick}</Text>
+              <Text style={[styles.savedPickValue, { fontFamily: bold }]} numberOfLines={3}>
+                {modeHintText}
+              </Text>
+              {winner === 'draw' && (
+                <View style={[styles.savedDrawPill, drawActive && styles.drawBtnActive]}>
+                  <Text style={[styles.savedDrawTxt, { fontFamily: bold }]}>{pg.drawAny}</Text>
+                </View>
+              )}
+            </View>
+          ) : readOnly ? (
             <View style={[styles.scoreLine, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
               <Text style={[styles.bigScore, { fontFamily: extra }]}>{homeScore}</Text>
               <Text style={[styles.scoreDash, { fontFamily: extra }]}>-</Text>
@@ -349,7 +409,7 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
 
         <View style={styles.teamSide}>
           <LogoPick side="away" name={match.away.name} logo={match.away.logo} active={awayLogoActive} />
-          <Text style={[styles.teamName, { fontFamily: bold }]} numberOfLines={2}>
+          <Text style={[styles.teamName, { fontFamily: bold }, awayLogoActive && styles.teamNameActive]} numberOfLines={2}>
             {match.away.name}
           </Text>
         </View>
@@ -357,6 +417,10 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
 
       {!readOnly && mode && (
         <Text style={[styles.modeHint, { fontFamily: medium }]}>{modeHintText}</Text>
+      )}
+
+      {(saved || finished) && mode && !showSavedWinnerPick && (
+        <Text style={[styles.modeHint, styles.modeHintSaved, { fontFamily: medium }]}>{modeHintText}</Text>
       )}
 
       {saved && !finished && (
@@ -402,7 +466,23 @@ const styles = StyleSheet.create({
   scoreInputCol: { alignItems: 'center', gap: 8 },
   scoreLine: { alignItems: 'center', gap: 10 },
   bigScore: { color: PG.text, fontSize: 30, minWidth: 26, textAlign: 'center' },
+  bigScoreActive: { color: PG.purpleSoft },
   scoreDash: { color: PG.textMuted, fontSize: 22 },
+
+  savedPickCol: { alignItems: 'center', gap: 6, paddingHorizontal: 4, minWidth: 120 },
+  savedPickLabel: { color: PG.textMuted, fontSize: 10, letterSpacing: 0.3 },
+  savedPickValue: { color: PG.text, fontSize: 13, textAlign: 'center', lineHeight: 18 },
+  savedDrawPill: {
+    marginTop: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: PG_RADII.md,
+    borderWidth: 1,
+    borderColor: PG.borderSoft,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  savedDrawTxt: { color: PG.purpleSoft, fontSize: 11 },
+  teamNameActive: { color: PG.purpleSoft },
 
   predictLabel: { color: PG.textMuted, fontSize: 11 },
   stepperRow: { alignItems: 'center', gap: 10 },
@@ -450,6 +530,7 @@ const styles = StyleSheet.create({
   drawLabel: { fontSize: 12 },
 
   modeHint: { color: PG.textMuted, fontSize: 11, textAlign: 'center' },
+  modeHintSaved: { color: PG.purpleSoft },
 
   lockedNote: { color: PG.textMuted, fontSize: 12, textAlign: 'center' },
 });

@@ -917,6 +917,7 @@ export const en = {
       finished: 'FT',
       lockedFuture: 'Predictions open after the current round ends',
       savedLocked: 'Prediction saved — cannot be changed',
+      yourPick: 'Your pick',
       save: 'Save predictions',
       roundTitle: 'Round {n}',
       roundTitleDefault: 'Round',

@@ -1008,6 +1008,7 @@ export const ar = {
       finished: 'انتهت',
       lockedFuture: 'تفتح التوقعات بعد انتهاء الجولة الحالية',
       savedLocked: 'تم حفظ توقعك — لا يمكن التعديل',
+      yourPick: 'توقعك',
       save: 'حفظ التوقعات',
       roundTitle: 'الجولة {n}',
       roundTitleDefault: 'الجولة',
