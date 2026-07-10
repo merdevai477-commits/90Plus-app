@@ -12,6 +12,7 @@ import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/ma
 import { buildScores365AthletePhotoUrl, buildScores365CoachPhotoUrl } from '../utils/scores365-athlete-photo';
 import { findCoachInLineup } from './coach-lookup.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
+import { calendarTodayKey } from '../utils/calendar-day-bounds.util';
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
 const SCORES365_FIXTURES_BASE = 'https://webws.365scores.com/web/games/fixtures/';
@@ -2056,29 +2057,25 @@ export async function getScores365MatchesForDate(
 
   const dbRows = await loadWorldCupDbFixtures(leagueId, season);
 
-  const todayKey = new Intl.DateTimeFormat('en-CA', {
-    timeZone: process.env.SCORES365_TIMEZONE || 'Africa/Cairo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-
+  const todayKey = calendarTodayKey();
   const isToday = dateString === todayKey;
   const lang = resolveScores365AppLanguage(language);
   const games = await fetchScores365WorldCupFixtures({ language, liveRefresh: isToday });
   if (!games.length) return [];
 
-  const mapped: any[] = [];
-  for (const game of games) {
+  const dayGames = games.filter((game) => {
     const matchDate = calendarDateFromStart(game.startTime);
     const live = is365Live(game);
-    if (dateString !== matchDate && !(live && isToday)) {
-      continue;
-    }
+    return dateString === matchDate || (live && isToday);
+  });
 
-    const fixture = await map365GameToFixture(game, dbRows, lang, { refreshIfLive: true });
-    if (fixture) mapped.push(fixture);
-  }
+  // List endpoint: fixtures list already refreshed for today — skip per-game
+  // HTTP (was sequential and made /cached/world-cup/:date >1s).
+  const mapped = (
+    await Promise.all(
+      dayGames.map((game) => map365GameToFixture(game, dbRows, lang, { refreshIfLive: false })),
+    )
+  ).filter(Boolean) as any[];
 
   mapped.sort((a, b) => (a.fixture?.timestamp ?? 0) - (b.fixture?.timestamp ?? 0));
 
@@ -2109,19 +2106,26 @@ export async function getScores365WorldCupPhaseFixtures(
   const games = await fetchScores365WorldCupFixtures({ language, liveRefresh: true });
   if (!games.length) return [];
 
-  const mapped: any[] = [];
-  for (const game of games) {
+  const filtered = games.filter((game) => {
     const gamePhase =
       game.statusGroup === 3 || is365Live(game)
         ? 'live'
         : game.statusGroup === 4
           ? 'finished'
           : 'upcoming';
-    if (phase !== 'all' && gamePhase !== phase) continue;
+    return phase === 'all' || gamePhase === phase;
+  });
 
-    const fixture = await map365GameToFixture(game, dbRows, lang, { refreshIfLive: true });
-    if (fixture) mapped.push(fixture);
-  }
+  // Parallel map; only refresh individual live games for the live phase tab.
+  const mapped = (
+    await Promise.all(
+      filtered.map((game) =>
+        map365GameToFixture(game, dbRows, lang, {
+          refreshIfLive: phase === 'live',
+        }),
+      ),
+    )
+  ).filter(Boolean) as any[];
 
   mapped.sort((a, b) => (a.fixture?.timestamp ?? 0) - (b.fixture?.timestamp ?? 0));
   return mapped;
@@ -2167,12 +2171,7 @@ export async function applyScores365ExperimentToWorldCupList(
   if (!fixture) return matches;
 
   const matchDate = calendarDateFromStart(game.startTime);
-  const todayKey = new Intl.DateTimeFormat('en-CA', {
-    timeZone: process.env.SCORES365_TIMEZONE || 'Africa/Cairo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
+  const todayKey = calendarTodayKey();
   const live = is365Live(game);
   const shouldShow = dateString === matchDate || (live && dateString === todayKey);
   if (!shouldShow) return matches;

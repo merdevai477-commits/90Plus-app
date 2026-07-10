@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { FootballController } from '../controllers/football.controller';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
+import {
+  calendarTodayKey,
+  offsetCalendarDateKey,
+} from '../utils/calendar-day-bounds.util';
 
 // Shared public cache TTLs for football data (no userId in key — same response for all users)
 const SHARED_CACHE_3S   = responseCacheMiddleware({ ttl: 3   * 1000, sharedCache: true });
@@ -134,10 +138,8 @@ router.get('/cached/world-cup/phase/:phase', (req, res, next) => {
 // GET /api/football/cached/world-cup/:date — World Cup fixtures (league + season from env)
 router.get('/cached/world-cup/:date', (req, res, next) => {
   const dateParam = req.params.date as string;
-  const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date();
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-  const yesterdayKey = yesterday.toISOString().split('T')[0];
+  const today = calendarTodayKey();
+  const yesterdayKey = offsetCalendarDateKey(today, -1);
   if (dateParam < today) {
     // Yesterday may still receive status corrections — avoid locking stale 2H for 24h.
     if (dateParam === yesterdayKey) {
@@ -146,7 +148,8 @@ router.get('/cached/world-cup/:date', (req, res, next) => {
     return SHARED_CACHE_24H(req, res, next);
   }
   if (dateParam === today) {
-    return SHARED_CACHE_3S(req, res, next);
+    // Align with 365 fixtures live list cache (~8s).
+    return SHARED_CACHE_8S(req, res, next);
   }
   return SHARED_CACHE_5MIN(req, res, next);
 }, FootballController.getCachedWorldCupMatches);

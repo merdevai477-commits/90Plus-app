@@ -123,6 +123,7 @@ class FootballDataCacheService {
     private pendingStatisticsRequests = new Map<number, Promise<any[]>>();
     private pendingEventsRequests = new Map<number, Promise<any[]>>();
     private pendingMatchesByDate = new Map<string, Promise<any[]>>();
+    private pendingWorldCupByDate = new Map<string, Promise<any[]>>();
     private backgroundRefreshDates = new Set<string>();
 
     // TTL values
@@ -548,68 +549,80 @@ class FootballDataCacheService {
     ): Promise<any[]> {
         const scores365Lang = resolveScores365AppLanguage(language);
         const cacheKey = `wc_${leagueId}_${season}_${dateString}_${scores365Lang}`;
-        const todayKey = new Date().toISOString().split('T')[0];
+        const todayKey = calendarTodayKey();
         const ttl =
             dateString < todayKey
                 ? this.TTL.MATCHES_BY_DATE_PAST
                 : dateString === todayKey
-                  ? 4 * 1000
+                  ? 8 * 1000
                   : this.TTL.MATCHES_BY_DATE_FUTURE;
 
         try {
-            if (isScores365ExperimentEnabled()) {
-                const from365 = await getScores365MatchesForDate(
-                    dateString,
-                    leagueId,
-                    season,
-                    scores365Lang,
-                );
-                if (from365.length > 0) {
-                    await matchCacheService.setInMemoryCache(cacheKey, from365, ttl);
-                    return from365;
-                }
-            }
-
+            // Serve warm cache first — previously 365 was hit on every request
+            // before the cache read, which made /cached/world-cup/:date ~1s+.
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
             if (cached && cached.length > 0) {
-                const normalized = this.normalizePastCalendarFixtures(cached, dateString);
-                return applyScores365ExperimentToWorldCupList(normalized, dateString, scores365Lang);
+                return this.normalizePastCalendarFixtures(cached, dateString);
             }
 
-            // DB / by-date cache first — avoids a league-scoped API call per calendar day.
-            const byDate = await this.getMatchesByDate(dateString);
-            let list = this.filterWorldCupFixtures(byDate, leagueId, season);
+            const pending = this.pendingWorldCupByDate.get(cacheKey);
+            if (pending) return pending;
 
-            if (list.length === 0) {
-                const { footballService } = await import('./football.service');
-                const fixtures = await footballService.getFixtures(
-                    { date: dateString, league: leagueId, season },
-                    { source: 'internal' },
-                );
-                list = Array.isArray(fixtures) ? fixtures : [];
-                if (list.length > 0) {
-                    logger.info(
-                        `[WC ${dateString}] by-date empty — ${list.length} fixtures from league-scoped API`,
-                    );
+            const fetchPromise = (async () => {
+                try {
+                    if (isScores365ExperimentEnabled()) {
+                        const from365 = await getScores365MatchesForDate(
+                            dateString,
+                            leagueId,
+                            season,
+                            scores365Lang,
+                        );
+                        if (from365.length > 0) {
+                            const normalized = this.normalizePastCalendarFixtures(from365, dateString);
+                            await matchCacheService.setInMemoryCache(cacheKey, normalized, ttl);
+                            return normalized;
+                        }
+                    }
+
+                    // DB / by-date cache — avoids a league-scoped API call per calendar day.
+                    const byDate = await this.getMatchesByDate(dateString);
+                    let list = this.filterWorldCupFixtures(byDate, leagueId, season);
+
+                    if (list.length === 0) {
+                        const { footballService } = await import('./football.service');
+                        const fixtures = await footballService.getFixtures(
+                            { date: dateString, league: leagueId, season },
+                            { source: 'internal' },
+                        );
+                        list = Array.isArray(fixtures) ? fixtures : [];
+                        if (list.length > 0) {
+                            logger.info(
+                                `[WC ${dateString}] by-date empty — ${list.length} fixtures from league-scoped API`,
+                            );
+                        }
+                    }
+
+                    if (list.length > 0) {
+                        list = this.normalizePastCalendarFixtures(list, dateString);
+                        await matchCacheService.setInMemoryCache(cacheKey, list, ttl);
+                    }
+                    // Do not call applyScores365ExperimentToWorldCupList here — it
+                    // re-fetches the same 365 day list we already tried above.
+                    return list;
+                } finally {
+                    this.pendingWorldCupByDate.delete(cacheKey);
                 }
-            }
+            })();
 
-            if (list.length > 0) {
-                list = this.normalizePastCalendarFixtures(list, dateString);
-                await matchCacheService.setInMemoryCache(cacheKey, list, ttl);
-            }
-            return applyScores365ExperimentToWorldCupList(list, dateString, scores365Lang);
+            this.pendingWorldCupByDate.set(cacheKey, fetchPromise);
+            return await fetchPromise;
         } catch (error) {
             logger.error(`[WC ${dateString}] getWorldCupMatchesByDate failed:`, error);
             try {
                 const byDate = await this.getMatchesByDate(dateString);
-                return applyScores365ExperimentToWorldCupList(
-                    this.normalizePastCalendarFixtures(
-                        this.filterWorldCupFixtures(byDate, leagueId, season),
-                        dateString,
-                    ),
+                return this.normalizePastCalendarFixtures(
+                    this.filterWorldCupFixtures(byDate, leagueId, season),
                     dateString,
-                    scores365Lang,
                 );
             } catch {
                 return [];
