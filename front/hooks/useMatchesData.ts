@@ -148,6 +148,24 @@ async function fetchTodayMatchesWithLiveFeed(date: Date): Promise<Match[]> {
   return mergeTodayCalendarWithLiveFeed(byDate, liveFeed);
 }
 
+/**
+ * Poll fixtures that are live, about to kick off, or overdue still marked upcoming.
+ * Without this, the list never discovers NS→live until calendar/live-feed catches up.
+ */
+const NEAR_KICKOFF_POLL_MS = 12 * 60 * 1000;
+const OVERDUE_NS_POLL_MS = 3 * 60 * 60 * 1000;
+
+function shouldPollFixtureOnMatchesList(match: Match, now = Date.now()): boolean {
+  if (match.status === 'live') return true;
+  if (match.status === 'finished') return false;
+  if (!match.fixtureDate) return false;
+  const kickoff = new Date(match.fixtureDate).getTime();
+  if (Number.isNaN(kickoff)) return false;
+  const delta = kickoff - now;
+  // Within 12 min before kickoff, or past kickoff but still showing upcoming (up to 3h).
+  return delta <= NEAR_KICKOFF_POLL_MS && delta >= -OVERDUE_NS_POLL_MS;
+}
+
 /** Overlay Zustand live snapshots onto calendar rows for live/finished fixtures. */
 function overlaySnapshotsOnCalendar(
   calendarRows: Match[],
@@ -158,7 +176,13 @@ function overlaySnapshotsOnCalendar(
     if (Number.isNaN(id)) return row;
     const snap = snapshots[id];
     if (!snap) return row;
-    if (row.status === 'live' || snap.phase === 'live' || snap.phase === 'finished') {
+    // Promote NS→live/finished from per-fixture polls even when calendar is still stale.
+    if (
+      row.status === 'live' ||
+      snap.phase === 'live' ||
+      snap.phase === 'finished' ||
+      (row.status === 'upcoming' && snap.phase !== 'upcoming' && snap.phase !== 'unknown')
+    ) {
       return snapshotToMatchRow(snap);
     }
     return row;
@@ -310,16 +334,16 @@ export const useMatchesData = (
     () => overlaySnapshotsOnCalendar(calendarMatches, snapshots),
     [calendarMatches, snapshots],
   );
-  const liveFixtureIds = useMemo(
+  const pollFixtureIds = useMemo(
     () =>
       matches
-        .filter((m) => m.status === 'live')
+        .filter((m) => shouldPollFixtureOnMatchesList(m))
         .map((m) => parseInt(m.id, 10))
         .filter((id) => !Number.isNaN(id) && id > 0),
     [matches],
   );
   useRegisterLiveFixtures(
-    pauseBackgroundRefresh || !isToday ? [] : liveFixtureIds,
+    pauseBackgroundRefresh || !isToday ? [] : pollFixtureIds,
   );
   
   // Stale-while-revalidate: show disk cache immediately when date changes

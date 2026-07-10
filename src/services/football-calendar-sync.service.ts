@@ -15,10 +15,15 @@ import {
     isWorldCupOnlyMode,
     logWorldCupOnlyModeStartup,
 } from '../config/world-cup-only-mode.config';
+import {
+    calendarTodayKey,
+    offsetCalendarDateKey,
+} from '../utils/calendar-day-bounds.util';
 
 function calendarSyncIntervalMs(): number {
-    const fromEnv = parseInt(process.env.FOOTBALL_CALENDAR_SYNC_MS || '180000', 10);
-    return Math.max(60_000, Number.isFinite(fromEnv) ? fromEnv : 180_000);
+    // Default 60s so kickoff status on the matches list catches up faster.
+    const fromEnv = parseInt(process.env.FOOTBALL_CALENDAR_SYNC_MS || '60000', 10);
+    return Math.max(60_000, Number.isFinite(fromEnv) ? fromEnv : 60_000);
 }
 
 function prefetchIntervalMs(): number {
@@ -26,10 +31,9 @@ function prefetchIntervalMs(): number {
     return Math.max(300_000, Number.isFinite(fromEnv) ? fromEnv : 1_800_000);
 }
 
-function utcDateKey(offsetDays = 0): string {
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() + offsetDays);
-    return d.toISOString().split('T')[0];
+/** App calendar day (Africa/Cairo by default) — must match HTTP matches-by-date keys. */
+function appDateKey(offsetDays = 0): string {
+    return offsetCalendarDateKey(calendarTodayKey(), offsetDays);
 }
 
 class FootballCalendarSyncService {
@@ -125,13 +129,13 @@ class FootballCalendarSyncService {
 
     /** One upstream call for today → cache + DB. */
     async syncToday(): Promise<number> {
-        return this.syncDate(utcDateKey(0));
+        return this.syncDate(appDateKey(0));
     }
 
     /** Warm tomorrow (+ optional yesterday) with one call each. */
     async syncUpcomingDays(): Promise<number> {
-        const tomorrow = await this.syncDate(utcDateKey(1));
-        const yesterday = await this.syncDate(utcDateKey(-1));
+        const tomorrow = await this.syncDate(appDateKey(1));
+        const yesterday = await this.syncDate(appDateKey(-1));
         return tomorrow + yesterday;
     }
 

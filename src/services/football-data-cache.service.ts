@@ -145,11 +145,12 @@ class FootballDataCacheService {
         // the API quota is exhausted), we cache the empty array briefly so we
         // don't poison long-lived caches. The next request after this window
         // will re-hit the API.
-        EMPTY: 2 * 60 * 1000, // 2 minutes
-        MATCHES_BY_DATE_TODAY: 3 * 60 * 1000,
+        // Short empty TTL so lineups/stats appear soon after providers populate them.
+        EMPTY: 45 * 1000,
+        MATCHES_BY_DATE_TODAY: 60 * 1000,
         MATCHES_BY_DATE_FUTURE: 15 * 60 * 1000,
         MATCHES_BY_DATE_PAST: 24 * 60 * 60 * 1000,
-        TODAY_API_REFRESH: 3 * 60 * 1000,
+        TODAY_API_REFRESH: 60 * 1000,
     };
 
     // ============================================

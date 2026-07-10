@@ -131,12 +131,22 @@ export async function fetchFastSnapshot(
   const promise = (async () => {
     try {
       if (existing?.fixture) {
-        const eventData = await ApiFootballService.getFixtureEvents(fixtureId, {
-          skipCache: true,
-        }).catch(() => existing.events ?? []);
+        // Always refresh fixture status alongside events. Events-only polls left
+        // NS→1H / HT→2H / 2H→FT stuck until a focused full-bundle fetch.
+        const [fixtureData, eventData] = await Promise.all([
+          ApiFootballService.getFixtureById(fixtureId, { skipCache: true }).catch(
+            () => existing.fixture,
+          ),
+          ApiFootballService.getFixtureEvents(fixtureId, {
+            skipCache: true,
+          }).catch(() => existing.events ?? []),
+        ]);
         return buildSnapshotFromRaw({
           fixtureId,
-          fixture: reconcileFixtureWithEvents(existing.fixture, eventData ?? []),
+          fixture: reconcileFixtureWithEvents(
+            fixtureData ?? existing.fixture,
+            eventData ?? [],
+          ),
           events: eventData ?? [],
           source: 'http-fast',
           existing,

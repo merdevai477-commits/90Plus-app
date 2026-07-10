@@ -19,6 +19,10 @@ import { footballDataCacheService } from '../services/football-data-cache.servic
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 import { isScores365ExperimentEnabled, sync365SyntheticLiveSnapshots } from '../services/scores365-experiment.service';
 import { getRedisClient } from '../lib/redis';
+import {
+  calendarTodayKey,
+  offsetCalendarDateKey,
+} from '../utils/calendar-day-bounds.util';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -55,11 +59,9 @@ function isAllScoresEnabled(): boolean {
 
 const isRunning = { calendar: false, live: false, allScores: false, scores365Live: false, catalog: false, fixturesBatch: false };
 
-/** Local YYYY-MM-DD offset by `days` from today. */
+/** App-calendar YYYY-MM-DD offset by `days` from today (Cairo by default). */
 function dateKeyOffset(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  return offsetCalendarDateKey(calendarTodayKey(), days);
 }
 
 // ─── Calendar sync tick ───────────────────────────────────────────────────────
@@ -73,7 +75,7 @@ async function runCalendarSyncTick(): Promise<void> {
   isRunning.calendar = true;
 
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = calendarTodayKey();
     const count = await footballDataCacheService.syncCalendarDateFromApi(today);
     logger.info(`[${WORKER}][calendar] synced today ${today}: ${count} fixtures`, {
       worker: 'other-leagues-sync',

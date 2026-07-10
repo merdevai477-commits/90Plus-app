@@ -30,6 +30,19 @@ const CORNERS_REFRESH_MS = 20_000;
 
 registerWorldCupMemoryCacheClear(() => memoryCache.clear());
 
+const NEAR_KICKOFF_POLL_MS = 12 * 60 * 1000;
+const OVERDUE_NS_POLL_MS = 3 * 60 * 60 * 1000;
+
+function shouldPollFixture(match: Match, now = Date.now()): boolean {
+  if (match.status === 'live') return true;
+  if (match.status === 'finished') return false;
+  if (!match.fixtureDate) return false;
+  const kickoff = new Date(match.fixtureDate).getTime();
+  if (Number.isNaN(kickoff)) return false;
+  const delta = kickoff - now;
+  return delta <= NEAR_KICKOFF_POLL_MS && delta >= -OVERDUE_NS_POLL_MS;
+}
+
 function overlaySnapshots(
   calendarRows: Match[],
   snapshots: Record<number, import('../src/store/liveFixtureStore.types').LiveFixtureSnapshot>,
@@ -39,7 +52,12 @@ function overlaySnapshots(
     if (Number.isNaN(id)) return row;
     const snap = snapshots[id];
     if (!snap) return row;
-    if (row.status === 'live' || snap.phase === 'live' || snap.phase === 'finished') {
+    if (
+      row.status === 'live' ||
+      snap.phase === 'live' ||
+      snap.phase === 'finished' ||
+      (row.status === 'upcoming' && snap.phase !== 'upcoming' && snap.phase !== 'unknown')
+    ) {
       return snapshotToMatchRow(snap);
     }
     return row;
@@ -142,15 +160,15 @@ export function useWorldCupMatches(
   const isToday = dateString === getLocalTodayKey();
   const appLang = useLanguageStore((s) => s.language);
 
-  const liveFixtureIds = useMemo(
+  const pollFixtureIds = useMemo(
     () =>
       matches
-        .filter((m) => m.status === 'live')
+        .filter((m) => shouldPollFixture(m))
         .map((m) => parseInt(m.id, 10))
         .filter((id) => !Number.isNaN(id) && id > 0),
     [matches],
   );
-  useRegisterLiveFixtures(enabled && isToday ? liveFixtureIds : []);
+  useRegisterLiveFixtures(enabled && isToday ? pollFixtureIds : []);
 
   const hasLive = matches.some((m) => m.status === 'live');
 

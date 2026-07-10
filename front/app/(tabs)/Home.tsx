@@ -729,13 +729,22 @@ export default function HomeScreen() {
 
     const displayMatches = useMemo(() => matches.slice(0, 3), [matches]);
     const snapshots = useLiveFixtureStore((s) => s.snapshots);
-    const liveHomeFixtureIds = useMemo(
-        () =>
-            displayMatches
-                .filter((m) => m.isLive && m.fixtureId)
-                .map((m) => m.fixtureId),
-        [displayMatches],
-    );
+    const liveHomeFixtureIds = useMemo(() => {
+      const now = Date.now();
+      const NEAR_MS = 12 * 60 * 1000;
+      const OVERDUE_MS = 3 * 60 * 60 * 1000;
+      return displayMatches
+        .filter((m) => {
+          if (!m.fixtureId) return false;
+          if (m.isLive) return true;
+          if (!m.date) return false;
+          const kickoff = new Date(m.date).getTime();
+          if (Number.isNaN(kickoff)) return false;
+          const delta = kickoff - now;
+          return delta <= NEAR_MS && delta >= -OVERDUE_MS;
+        })
+        .map((m) => m.fixtureId);
+    }, [displayMatches]);
     useRegisterLiveFixtures(liveHomeFixtureIds);
 
     // ─── Adapters: store shape → design component shape ──────────────────────
