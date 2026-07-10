@@ -44,7 +44,6 @@ interface MemoryCacheEntry<T> {
 }
 
 import {
-    applyScores365ExperimentToWorldCupList,
     ensureScores365GameMapping,
     getScores365ExperimentBundle,
     is365StoreDetailsHotfix,
