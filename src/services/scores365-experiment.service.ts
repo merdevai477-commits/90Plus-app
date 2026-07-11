@@ -80,6 +80,16 @@ interface Scores365Game {
   venue?: { id?: number; name?: string; shortName?: string; capacity?: number };
   hasStats?: boolean;
   promotedPredictions?: { predictions?: Scores365PromotedPrediction[] };
+  /** SportRadar embeds (LMT pitch tracker, momentum, …). */
+  widgets?: Scores365Widget[];
+}
+
+interface Scores365Widget {
+  provider?: string;
+  partnerId?: string | number;
+  widgetUrl?: string;
+  widgetRatio?: number;
+  widgetType?: string;
 }
 
 interface Scores365Competitor {
@@ -2452,6 +2462,141 @@ export async function sync365SyntheticLiveSnapshots(
   }
 
   return updated;
+}
+
+const SCORES365_LMT_WIDGET_BASE = 'https://lmtsrcf.365scores.com/api/SportRadarLMT/GetWidget';
+
+export type Scores365LmtWidgetInfo = {
+  gameId: number;
+  fixtureId: number | null;
+  partnerId: string;
+  langId: number;
+  sportTypeId: number;
+  widgetUrl: string;
+  widgetType: string;
+  widgetRatio: number | null;
+  provider: string | null;
+  homeName: string | null;
+  awayName: string | null;
+  statusText: string | null;
+};
+
+function pickLmtWidget(game: Scores365Game): Scores365Widget | null {
+  const widgets = Array.isArray(game.widgets) ? game.widgets : [];
+  const byType = widgets.find(
+    (w) =>
+      String(w.widgetType ?? '').toUpperCase() === 'LMT' ||
+      String(w.provider ?? '').toLowerCase().includes('sportradarlmt'),
+  );
+  return byType ?? widgets.find((w) => w.partnerId != null && w.widgetUrl) ?? null;
+}
+
+function partnerIdFromWidget(widget: Scores365Widget): string | null {
+  if (widget.partnerId != null && String(widget.partnerId).trim()) {
+    return String(widget.partnerId).trim();
+  }
+  const url = widget.widgetUrl ?? '';
+  const match = url.match(/[?&]partnerid=([^&]+)/i);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+export function buildScores365LmtWidgetUrl(partnerId: string, langId: number, sportTypeId = 1): string {
+  const params = new URLSearchParams({
+    partnerid: partnerId,
+    lang: String(langId),
+    sportTypeId: String(sportTypeId),
+  });
+  return `${SCORES365_LMT_WIDGET_BASE}?${params.toString()}`;
+}
+
+/**
+ * Resolve SportRadar Live Match Tracker widget for a 365 gameId.
+ * partnerId comes from game.widgets — it is NOT the gameId.
+ */
+export async function getScores365LmtWidgetForGameId(
+  gameId: number,
+  options?: { language?: string | null; force?: boolean },
+): Promise<Scores365LmtWidgetInfo | null> {
+  if (!isScores365ExperimentEnabled()) return null;
+
+  const language = options?.language ?? 'ar';
+  const langId = resolveScores365LangId(language);
+  const game = await fetchScores365GameById(gameId, {
+    language,
+    force: options?.force === true,
+  });
+  if (!game?.id) return null;
+
+  const widget = pickLmtWidget(game);
+  if (!widget) {
+    logger.debug(`[Scores365LMT] game ${gameId} has no LMT widget/partnerId`);
+    return null;
+  }
+
+  const partnerId = partnerIdFromWidget(widget);
+  if (!partnerId) return null;
+
+  const sportTypeId =
+    typeof game.sportId === 'number' && game.sportId > 0 ? game.sportId : 1;
+  const widgetUrl =
+    widget.widgetUrl && /partnerid=/i.test(widget.widgetUrl)
+      ? widget.widgetUrl.replace(/lang=\d+/i, `lang=${langId}`)
+      : buildScores365LmtWidgetUrl(partnerId, langId, sportTypeId);
+
+  const mappedFixture =
+    (await resolveApiFixtureIdFor365GameId(gameId)) ??
+    (gameId >= 4_000_000 ? gameId : null);
+
+  return {
+    gameId: game.id,
+    fixtureId: mappedFixture,
+    partnerId,
+    langId,
+    sportTypeId,
+    widgetUrl,
+    widgetType: widget.widgetType ?? 'LMT',
+    widgetRatio: typeof widget.widgetRatio === 'number' ? widget.widgetRatio : null,
+    provider: widget.provider ?? null,
+    homeName: game.homeCompetitor?.name ?? null,
+    awayName: game.awayCompetitor?.name ?? null,
+    statusText: game.statusText ?? game.shortStatusText ?? null,
+  };
+}
+
+/** Resolve LMT widget via API-Football / synthetic fixtureId → 365 gameId map. */
+export async function getScores365LmtWidgetForFixtureId(
+  fixtureId: number,
+  options?: { language?: string | null; force?: boolean },
+): Promise<Scores365LmtWidgetInfo | null> {
+  const gameId =
+    (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
+  if (!gameId) return null;
+  const info = await getScores365LmtWidgetForGameId(gameId, options);
+  if (!info) return null;
+  return { ...info, fixtureId };
+}
+
+/** Proxy upstream LMT HTML (for WebView / embedding without hitting 365 directly). */
+export async function fetchScores365LmtWidgetHtml(
+  partnerId: string,
+  langId: number,
+  sportTypeId = 1,
+): Promise<string | null> {
+  const url = buildScores365LmtWidgetUrl(partnerId, langId, sportTypeId);
+  try {
+    const res = await fetch(url, {
+      headers: scores365FetchHeaders(langId),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      logger.warn(`[Scores365LMT] GetWidget HTTP ${res.status} partnerId=${partnerId}`);
+      return null;
+    }
+    return await res.text();
+  } catch (err: unknown) {
+    logger.warn(`[Scores365LMT] GetWidget failed:`, (err as Error)?.message);
+    return null;
+  }
 }
 
 export function getScores365ExperimentFeatureState(): {

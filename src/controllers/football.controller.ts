@@ -11,7 +11,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId, fetchScores365LmtWidgetHtml } from '../services/scores365-experiment.service';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 
 /**
@@ -2441,6 +2441,115 @@ export class FootballController {
       }
 
       res.status(404).json({ status: 'ERROR', message: '365Scores game not found' });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/game/:gameId/lmt
+   * SportRadar Live Match Tracker (pitch) — resolves partnerId from game.widgets.
+   * Query: format=json (default) | format=html to proxy upstream widget HTML.
+   */
+  static async getCached365GameLmt(req: Request, res: Response): Promise<void> {
+    try {
+      const gameId = parseInt(ensureString(req.params.gameId));
+      if (isNaN(gameId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid game ID' });
+        return;
+      }
+      if (!isScores365ExperimentEnabled()) {
+        res.status(503).json({ status: 'ERROR', message: '365Scores experiment disabled' });
+        return;
+      }
+
+      const language = resolveAppLanguage(req);
+      const force = wantsFreshMatchDetails(req);
+      const info = await getScores365LmtWidgetForGameId(gameId, { language, force });
+      if (!info) {
+        res.status(404).json({
+          status: 'ERROR',
+          message: 'LMT widget / partnerId not available for this game',
+        });
+        return;
+      }
+
+      const format = String(req.query.format ?? 'json').toLowerCase();
+      if (format === 'html') {
+        const html = await fetchScores365LmtWidgetHtml(
+          info.partnerId,
+          info.langId,
+          info.sportTypeId,
+        );
+        if (!html) {
+          res.status(502).json({ status: 'ERROR', message: 'Upstream LMT widget unavailable' });
+          return;
+        }
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=15');
+        res.status(200).send(html);
+        return;
+      }
+
+      res.json({
+        status: 'SUCCESS',
+        source: '365scores',
+        response: info,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/fixture/:id/lmt
+   * Same as game LMT, but resolves fixtureId → 365 gameId first.
+   */
+  static async getCached365FixtureLmt(req: Request, res: Response): Promise<void> {
+    try {
+      const fixtureId = parseInt(ensureString(req.params.id));
+      if (isNaN(fixtureId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
+        return;
+      }
+      if (!isScores365ExperimentEnabled()) {
+        res.status(503).json({ status: 'ERROR', message: '365Scores experiment disabled' });
+        return;
+      }
+
+      const language = resolveAppLanguage(req);
+      const force = wantsFreshMatchDetails(req);
+      const info = await getScores365LmtWidgetForFixtureId(fixtureId, { language, force });
+      if (!info) {
+        res.status(404).json({
+          status: 'ERROR',
+          message: 'LMT widget not available (missing 365 mapping or partnerId)',
+        });
+        return;
+      }
+
+      const format = String(req.query.format ?? 'json').toLowerCase();
+      if (format === 'html') {
+        const html = await fetchScores365LmtWidgetHtml(
+          info.partnerId,
+          info.langId,
+          info.sportTypeId,
+        );
+        if (!html) {
+          res.status(502).json({ status: 'ERROR', message: 'Upstream LMT widget unavailable' });
+          return;
+        }
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=15');
+        res.status(200).send(html);
+        return;
+      }
+
+      res.json({
+        status: 'SUCCESS',
+        source: '365scores',
+        response: info,
+      });
     } catch (error) {
       FootballController.handleError(res, error);
     }
