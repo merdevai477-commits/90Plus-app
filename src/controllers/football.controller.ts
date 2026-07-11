@@ -57,7 +57,11 @@ function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'preview'
 
 async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWidgetInfo): Promise<void> {
   const format = resolveLmtResponseFormat(req);
-  const pitchLogoOverlayUrl = resolveLmtPitchBrandLogoUrl();
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const proto = forwardedProto || req.protocol || 'https';
+  const host = String(req.headers['x-forwarded-host'] || req.get('host') || '').split(',')[0].trim();
+  const publicBaseUrl = host ? `${proto}://${host}` : null;
+  const pitchLogoOverlayUrl = resolveLmtPitchBrandLogoUrl(publicBaseUrl);
 
   if (format === 'json') {
     res.json({
@@ -82,7 +86,7 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=15');
-  res.status(200).send(buildScores365LmtBrowserPreviewHtml(info));
+  res.status(200).send(buildScores365LmtBrowserPreviewHtml(info, { publicBaseUrl }));
 }
 
 // Helper function to format transfer date

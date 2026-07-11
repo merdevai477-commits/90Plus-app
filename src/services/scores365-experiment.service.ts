@@ -2599,22 +2599,21 @@ export async function fetchScores365LmtWidgetHtml(
   }
 }
 
-/** Public URL (or data-URI) used to cover the SportRadar pitch "365 scores" mark. */
-export function resolveLmtPitchBrandLogoUrl(): string {
+/** Public URL used to cover the SportRadar pitch "365 scores" mark. */
+export function resolveLmtPitchBrandLogoUrl(publicBaseUrl?: string | null): string {
   const fromEnv = process.env.LMT_PITCH_LOGO_URL?.trim();
   if (fromEnv) return fromEnv;
-  const share = process.env.SHARE_BASE_URL?.replace(/\/$/, '').trim();
-  if (share) return `${share}/90Plus.png`;
-  // Inline SVG so preview works even when static assets aren't reachable.
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="72" viewBox="0 0 280 72">
-  <rect x="8" y="10" width="264" height="52" rx="10" fill="#0f2918" fill-opacity="0.92"/>
-  <text x="140" y="46" text-anchor="middle" font-family="Arial Black, Helvetica, Arial, sans-serif" font-size="30" font-weight="900" fill="#ffffff" letter-spacing="2">90PLUS</text>
-</svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  const path = '/90plus-pitch-logo.png';
+  const base = (publicBaseUrl || process.env.SHARE_BASE_URL || '').replace(/\/$/, '').trim();
+  if (base) return `${base}${path}`;
+  return path;
 }
 
 /** Full-page browser preview: iframe (licensed 365 origin) + 90PLUS logo cover over pitch mark. */
-export function buildScores365LmtBrowserPreviewHtml(info: Scores365LmtWidgetInfo): string {
+export function buildScores365LmtBrowserPreviewHtml(
+  info: Scores365LmtWidgetInfo,
+  options?: { publicBaseUrl?: string | null },
+): string {
   const escape = (s: string) =>
     s
       .replace(/&/g, '&amp;')
@@ -2625,7 +2624,7 @@ export function buildScores365LmtBrowserPreviewHtml(info: Scores365LmtWidgetInfo
   const away = info.awayName ? escape(info.awayName) : 'Away';
   const status = info.statusText ? escape(info.statusText) : '';
   const widgetUrl = escape(info.widgetUrl);
-  const brandLogo = escape(resolveLmtPitchBrandLogoUrl());
+  const brandLogo = escape(resolveLmtPitchBrandLogoUrl(options?.publicBaseUrl));
   const title = `${home} vs ${away}`;
   const ratio = info.widgetRatio && info.widgetRatio > 0 ? info.widgetRatio : 16 / 9;
   const paddingPct = ((1 / ratio) * 100).toFixed(4);
@@ -2639,61 +2638,44 @@ export function buildScores365LmtBrowserPreviewHtml(info: Scores365LmtWidgetInfo
   <style>
     :root { color-scheme: dark; }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: #0b1220; color: #e8eefc; font-family: system-ui, sans-serif; }
-    header {
-      display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline;
-      justify-content: space-between; padding: 10px 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.08); background: #111827;
+    html, body {
+      margin: 0; height: 100%; background: #000; color: #e8eefc;
+      font-family: system-ui, sans-serif;
     }
-    h1 { margin: 0; font-size: 15px; font-weight: 700; }
-    .meta { font-size: 12px; color: rgba(232,238,252,0.65); }
-    .stage { width: 100%; max-width: 960px; margin: 0 auto; }
+    .stage { width: 100%; max-width: 1100px; margin: 0 auto; }
     .frame-wrap {
       position: relative; width: 100%; padding-top: ${paddingPct}%;
       background: #000; overflow: hidden;
     }
-    .frame-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-    /* Cover SportRadar's on-pitch "365 scores" mark (bottom-center). */
+    .frame-wrap iframe {
+      position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
+    }
+    /* User-provided 90PLUS-app banner covering the 365 pitch mark. */
     .brand-cover {
       position: absolute;
       left: 50%;
-      bottom: 5.5%;
+      bottom: 3.8%;
       transform: translateX(-50%);
-      width: min(22%, 168px);
+      width: min(42%, 320px);
       height: auto;
-      z-index: 5;
+      z-index: 6;
       pointer-events: none;
-      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55));
+      border-radius: 2px;
     }
-    .hint { padding: 10px 16px; font-size: 12px; color: rgba(232,238,252,0.5); text-align: center; }
-    a { color: #a78bfa; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>90PLUS · ${title}</h1>
-    <div class="meta">
-      gameId=${info.gameId}
-      · partnerId=${escape(info.partnerId)}
-      ${status ? `· ${status}` : ''}
-    </div>
-  </header>
   <div class="stage">
     <div class="frame-wrap">
       <iframe
         src="${widgetUrl}"
-        title="SportRadar LMT"
+        title="90PLUS Live Pitch"
         allow="fullscreen; autoplay"
         referrerpolicy="no-referrer-when-downgrade"
       ></iframe>
-      <img class="brand-cover" src="${brandLogo}" alt="90PLUS" />
+      <img class="brand-cover" src="${brandLogo}" alt="90PLUS-app" />
     </div>
   </div>
-  <p class="hint">
-    الملعب من 365/SportRadar — لوجو الملعب مغطى بـ 90PLUS.
-    JSON: <code>?format=json</code>
-    · بدون غطاء: <code>?format=redirect</code>
-  </p>
 </body>
 </html>`;
 }
