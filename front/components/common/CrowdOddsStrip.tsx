@@ -65,7 +65,10 @@ export const CrowdOddsStrip = memo(function CrowdOddsStrip({
               ]}
             >
               {seg.pct >= seg.minShowLabel ? (
-                <Text style={styles.segTxt} numberOfLines={1}>
+                <Text
+                  style={[styles.segTxt, seg.key === 'draw' && styles.segTxtOnYellow]}
+                  numberOfLines={1}
+                >
                   {seg.pct}%
                 </Text>
               ) : null}
@@ -116,8 +119,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: 2,
   },
-  segHome: { backgroundColor: 'rgba(37,99,235,0.92)' },
-  segDraw: { backgroundColor: 'rgba(100,116,139,0.9)' },
+  segHome: { backgroundColor: 'rgba(22,163,74,0.92)' },
+  segDraw: { backgroundColor: 'rgba(234,179,8,0.92)' },
   segAway: { backgroundColor: 'rgba(225,29,72,0.92)' },
   segLead: { opacity: 1 },
   segTxt: {
@@ -129,5 +132,9 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.35)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+  },
+  segTxtOnYellow: {
+    color: '#1a1a1a',
+    textShadowColor: 'transparent',
   },
 });
