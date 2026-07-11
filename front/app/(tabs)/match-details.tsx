@@ -283,6 +283,8 @@ const MatchDetailsScreen = () => {
 
   const loadedTabsRef = useRef<Set<string>>(new Set());
   const lineupsPreloadedForRef = useRef<number | null>(null);
+  /** Kept for Fast Refresh safety — previously used to auto-open Tracking tab. */
+  const lmtAutoOpenedRef = useRef<number | null>(null);
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lineupsTabRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -445,6 +447,7 @@ const MatchDetailsScreen = () => {
     setStandingsLoading(false);
     setLmtInfo(null);
     setLmtChecked(false);
+    lmtAutoOpenedRef.current = null;
     loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
 
