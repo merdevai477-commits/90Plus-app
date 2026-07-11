@@ -11,7 +11,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId, fetchScores365LmtWidgetHtml, buildScores365LmtBrowserPreviewHtml } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId } from '../services/scores365-experiment.service';
 import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 
@@ -38,19 +38,22 @@ function wantsFreshMatchDetails(req: Request): boolean {
 
 /**
  * LMT responses:
- * - default / format=html|raw → proxy upstream GetWidget HTML (same as 365 domain)
- * - format=preview → our chrome + iframe (optional)
- * - format=json → metadata for app clients
+ * - default → 302 redirect to official lmtsrcf GetWidget (SportRadar license OK)
+ * - format=json → metadata (WebView must load response.widgetUrl on 365 domain)
+ * - format=preview → HTML that navigates to widgetUrl
+ *
+ * Serving GetWidget HTML from our Railway domain makes SportRadar show
+ * "License has expired" (embed key licensed for 365scores.com only).
  */
-function resolveLmtResponseFormat(req: Request): 'preview' | 'json' | 'raw' {
+function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'preview' {
   const raw = String(req.query.format ?? '').toLowerCase().trim();
   if (raw === 'json') return 'json';
   if (raw === 'preview') return 'preview';
-  if (raw === 'html' || raw === 'raw') return 'raw';
   const accept = String(req.headers.accept ?? '');
-  if (accept.includes('application/json') && !accept.includes('text/html')) return 'json';
-  // Browser / WebView: serve the real SportRadar HTML via our API (avoids domain quirks).
-  return 'raw';
+  if (raw === '' && accept.includes('application/json') && !accept.includes('text/html')) {
+    return 'json';
+  }
+  return 'redirect';
 }
 
 async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWidgetInfo): Promise<void> {
@@ -59,29 +62,36 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
     res.json({
       status: 'SUCCESS',
       source: '365scores',
-      response: info,
+      response: {
+        ...info,
+        /** Load this URL in WebView / browser — do not proxy HTML on our domain. */
+        embedMode: 'redirect-to-365-widget',
+      },
     });
     return;
   }
 
   if (format === 'preview') {
+    const escape = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const url = escape(info.widgetUrl);
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<meta http-equiv="refresh" content="0;url=${url}"/>
+<title>LMT → 365Scores</title>
+<script>location.replace(${JSON.stringify(info.widgetUrl)});</script>
+</head><body style="background:#0b1220;color:#fff;font-family:system-ui;padding:24px">
+Redirecting to SportRadar LMT…
+<a href="${url}" style="color:#a78bfa">Open widget</a>
+</body></html>`;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=15');
-    res.status(200).send(buildScores365LmtBrowserPreviewHtml(info));
+    res.status(200).send(html);
     return;
   }
 
-  const html = await fetchScores365LmtWidgetHtml(info.partnerId, info.langId, info.sportTypeId);
-  if (!html) {
-    res.status(502).json({ status: 'ERROR', message: 'Upstream LMT widget unavailable' });
-    return;
-  }
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  // Default: send the browser to the licensed 365Scores widget origin.
   res.setHeader('Cache-Control', 'public, max-age=15');
-  // Allow embedding our proxied widget in the app WebView / future iframes.
-  res.setHeader('Content-Security-Policy', "frame-ancestors *");
-  res.removeHeader('X-Frame-Options');
-  res.status(200).send(html);
+  res.redirect(302, info.widgetUrl);
 }
 
 // Helper function to format transfer date
