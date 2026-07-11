@@ -107,7 +107,8 @@ async function fetchLmtJson(
   options?: { language?: string; force?: boolean },
 ): Promise<Omit<Scores365LmtInfo, 'embedUrl'> | null> {
   const params = new URLSearchParams({ format: 'json' });
-  if (options?.language) params.set('lang', options.language);
+  // Backend resolveAppLanguage() reads `language` (not `lang`).
+  if (options?.language) params.set('language', options.language);
   if (options?.force) params.set('fresh', '1');
 
   try {
