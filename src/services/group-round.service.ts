@@ -13,6 +13,10 @@ export function formatFixtureForClient(fixture: any) {
   const home = fixture?.teams?.home;
   const away = fixture?.teams?.away;
   const fixtureMeta = fixture?.fixture ?? {};
+  const crowd =
+    fixture?.crowdPrediction ??
+    fixture?._crowdPrediction ??
+    null;
   return {
     apiMatchId: fixtureMeta.id,
     home: {
@@ -38,6 +42,18 @@ export function formatFixtureForClient(fixture: any) {
             away: fixture?.goals?.away ?? 0,
           }
         : undefined,
+    crowdPrediction:
+      crowd &&
+      typeof crowd.homePercent === 'number' &&
+      typeof crowd.drawPercent === 'number' &&
+      typeof crowd.awayPercent === 'number'
+        ? {
+            homePercent: crowd.homePercent,
+            drawPercent: crowd.drawPercent,
+            awayPercent: crowd.awayPercent,
+            totalVotes: typeof crowd.totalVotes === 'number' ? crowd.totalVotes : 0,
+          }
+        : null,
   };
 }
 
@@ -75,10 +91,20 @@ export async function getCurrentRoundWithMatches(dateString = localDateKey()) {
   const fixtures = await footballDataCacheService.getMatchesByDate(dateString);
   const byId = new Map(fixtures.map((f: any) => [f?.fixture?.id, f]));
 
-  const matches = matchIds
-    .map((id) => byId.get(id))
-    .filter(Boolean)
-    .map(formatFixtureForClient);
+  const raw = matchIds.map((id) => byId.get(id)).filter(Boolean);
+  // Round is only ~10 matches — enrich them explicitly so group cards always
+  // get crowd % even if the big calendar list skipped these kickoffs.
+  let enriched = raw;
+  try {
+    const { enrichFixturesWithCrowdPredictions } = await import(
+      './scores365-crowd-prediction.service'
+    );
+    enriched = await enrichFixturesWithCrowdPredictions(raw);
+  } catch (err) {
+    logger.warn('[GroupRound] crowd enrich failed:', err);
+  }
+
+  const matches = enriched.map(formatFixtureForClient);
 
   return { round: { ...round, number: roundNumber }, matches };
 }

@@ -22,6 +22,13 @@ export interface PredictionMatch {
   time: string;
   /** Present only for finished matches (النتائج tab). */
   result?: { home: number; away: number };
+  /** 365 community Who Will Win? percentages (optional). */
+  crowdPrediction?: {
+    homePercent: number;
+    drawPercent: number;
+    awayPercent: number;
+    totalVotes?: number;
+  } | null;
 }
 
 export interface GroupMember {

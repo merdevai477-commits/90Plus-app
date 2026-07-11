@@ -13,6 +13,7 @@ import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
+import { CrowdOddsStrip } from '../common/CrowdOddsStrip';
 import TeamBadge from '../common/TeamBadge';
 import { GlassCard, PressableScale } from './atoms';
 import type { PredictionMatch } from './data';
@@ -303,6 +304,17 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
           </View>
         )}
       </View>
+
+      {match.crowdPrediction && !finished ? (
+        <CrowdOddsStrip
+          homePercent={match.crowdPrediction.homePercent}
+          drawPercent={match.crowdPrediction.drawPercent}
+          awayPercent={match.crowdPrediction.awayPercent}
+          label={t.matches.crowdPrediction.label}
+          compact
+          labelColor={PG.purpleSoft}
+        />
+      ) : null}
 
       <View style={[styles.teams, row]}>
         <View style={styles.teamSide}>

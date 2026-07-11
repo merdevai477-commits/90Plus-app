@@ -29,6 +29,7 @@ import type { CountryGroup } from '../../hooks/useMatchesData';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { fetchLeagueMatchesByDate } from '../../components/Matches/leagueApiUtils';
 import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
+import { CrowdOddsStrip } from '../../components/common/CrowdOddsStrip';
 import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModal';
 import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
@@ -292,80 +293,6 @@ const PredictionButton = memo(function PredictionButton({
         {label}
       </Text>
     </TouchableOpacity>
-  );
-});
-
-/** Professional 1X2 crowd strip — percentages live inside the segments. */
-const CrowdOddsStrip = memo(function CrowdOddsStrip({
-  homePercent,
-  drawPercent,
-  awayPercent,
-  label,
-  compact,
-}: {
-  homePercent: number;
-  drawPercent: number;
-  awayPercent: number;
-  label: string;
-  compact?: boolean;
-}) {
-  const home = Math.max(0, homePercent);
-  const draw = Math.max(0, drawPercent);
-  const away = Math.max(0, awayPercent);
-  const lead =
-    home >= draw && home >= away ? 'home' : away >= draw && away >= home ? 'away' : 'draw';
-
-  const segments: Array<{
-    key: 'home' | 'draw' | 'away';
-    pct: number;
-    barStyle: object;
-    minShowLabel: number;
-  }> = [
-    { key: 'home', pct: home, barStyle: styles.crowdSegHome, minShowLabel: 12 },
-    { key: 'draw', pct: draw, barStyle: styles.crowdSegDraw, minShowLabel: 10 },
-    { key: 'away', pct: away, barStyle: styles.crowdSegAway, minShowLabel: 12 },
-  ];
-
-  return (
-    <View style={[styles.crowdStrip, compact && styles.crowdStripCompact]}>
-      <View style={styles.crowdStripHeader}>
-        <Text style={styles.crowdStripLabel}>{label}</Text>
-        <View style={styles.crowdStripLegend}>
-          <Text style={[styles.crowdLegendTxt, lead === 'home' && styles.crowdLegendLead]}>
-            {home}%
-          </Text>
-          <Text style={styles.crowdLegendSep}>·</Text>
-          <Text style={[styles.crowdLegendTxt, lead === 'draw' && styles.crowdLegendLead]}>
-            {draw}%
-          </Text>
-          <Text style={styles.crowdLegendSep}>·</Text>
-          <Text style={[styles.crowdLegendTxt, lead === 'away' && styles.crowdLegendLead]}>
-            {away}%
-          </Text>
-        </View>
-      </View>
-      <View style={styles.crowdStripTrack}>
-        {segments.map((seg) =>
-          seg.pct <= 0 ? null : (
-            <View
-              key={seg.key}
-              style={[
-                styles.crowdSeg,
-                seg.barStyle,
-                lead === seg.key && styles.crowdSegLead,
-                { flex: Math.max(seg.pct, 1) },
-              ]}
-            >
-              {seg.pct >= seg.minShowLabel ? (
-                <Text style={styles.crowdSegTxt} numberOfLines={1}>
-                  {seg.pct}%
-                </Text>
-              ) : null}
-            </View>
-          ),
-        )}
-      </View>
-    </View>
   );
 });
 
@@ -2558,82 +2485,6 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   crowdStripOuterInCard: { paddingHorizontal: 12 },
-  crowdStrip: {
-    marginBottom: 12,
-    gap: 8,
-  },
-  crowdStripCompact: {
-    marginBottom: 0,
-  },
-  crowdStripHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  crowdStripLabel: {
-    color: 'rgba(233,213,255,0.7)',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  crowdStripLegend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  crowdLegendTxt: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 11,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
-  crowdLegendLead: {
-    color: '#fff',
-    fontWeight: '900',
-  },
-  crowdLegendSep: {
-    color: 'rgba(255,255,255,0.25)',
-    fontSize: 11,
-  },
-  crowdStripTrack: {
-    flexDirection: 'row',
-    height: 28,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  crowdSeg: {
-    height: '100%' as const,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 2,
-  },
-  crowdSegHome: {
-    backgroundColor: 'rgba(37,99,235,0.92)',
-  },
-  crowdSegDraw: {
-    backgroundColor: 'rgba(100,116,139,0.9)',
-  },
-  crowdSegAway: {
-    backgroundColor: 'rgba(225,29,72,0.92)',
-  },
-  crowdSegLead: {
-    opacity: 1,
-  },
-  crowdSegTxt: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.2,
-    fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
   predTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
   predTitleSpinner: { marginLeft: 4 },
   predTitle: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },

@@ -77,6 +77,12 @@ export interface GroupRoundMatch {
   status: string;
   leagueName: string | null;
   result?: { home: number; away: number };
+  crowdPrediction?: {
+    homePercent: number;
+    drawPercent: number;
+    awayPercent: number;
+    totalVotes?: number;
+  } | null;
   prediction?: {
     mode: 'WINNER' | 'EXACT';
     predictedWinner: string | null;
@@ -234,6 +240,7 @@ export function mapRoundMatchToCard(m: GroupRoundMatch) {
     day: m.day,
     time: m.time,
     result: m.result,
+    crowdPrediction: m.crowdPrediction ?? null,
   };
 }
 
