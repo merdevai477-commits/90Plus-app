@@ -37,17 +37,20 @@ function wantsFreshMatchDetails(req: Request): boolean {
 }
 
 /**
- * LMT responses: default HTML preview in the browser; ?format=json for API clients.
- * format=raw proxies the upstream GetWidget HTML without our chrome.
+ * LMT responses:
+ * - default / format=html|raw → proxy upstream GetWidget HTML (same as 365 domain)
+ * - format=preview → our chrome + iframe (optional)
+ * - format=json → metadata for app clients
  */
 function resolveLmtResponseFormat(req: Request): 'preview' | 'json' | 'raw' {
   const raw = String(req.query.format ?? '').toLowerCase().trim();
   if (raw === 'json') return 'json';
-  if (raw === 'raw') return 'raw';
-  if (raw === 'html' || raw === 'preview') return 'preview';
+  if (raw === 'preview') return 'preview';
+  if (raw === 'html' || raw === 'raw') return 'raw';
   const accept = String(req.headers.accept ?? '');
   if (accept.includes('application/json') && !accept.includes('text/html')) return 'json';
-  return 'preview';
+  // Browser / WebView: serve the real SportRadar HTML via our API (avoids domain quirks).
+  return 'raw';
 }
 
 async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWidgetInfo): Promise<void> {
@@ -61,21 +64,24 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
     return;
   }
 
-  if (format === 'raw') {
-    const html = await fetchScores365LmtWidgetHtml(info.partnerId, info.langId, info.sportTypeId);
-    if (!html) {
-      res.status(502).json({ status: 'ERROR', message: 'Upstream LMT widget unavailable' });
-      return;
-    }
+  if (format === 'preview') {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=15');
-    res.status(200).send(html);
+    res.status(200).send(buildScores365LmtBrowserPreviewHtml(info));
     return;
   }
 
+  const html = await fetchScores365LmtWidgetHtml(info.partnerId, info.langId, info.sportTypeId);
+  if (!html) {
+    res.status(502).json({ status: 'ERROR', message: 'Upstream LMT widget unavailable' });
+    return;
+  }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=15');
-  res.status(200).send(buildScores365LmtBrowserPreviewHtml(info));
+  // Allow embedding our proxied widget in the app WebView / future iframes.
+  res.setHeader('Content-Security-Policy', "frame-ancestors *");
+  res.removeHeader('X-Frame-Options');
+  res.status(200).send(html);
 }
 
 // Helper function to format transfer date
