@@ -14,7 +14,10 @@ import { findCoachInLineup } from './coach-lookup.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import { calendarTodayKey, calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
 import { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
-import { buildScores365LmtHtml } from '../utils/scores365-lmt-html';
+import {
+  buildScores365LmtHtml,
+  customizeScores365LmtWidgetHtml,
+} from '../utils/scores365-lmt-html';
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
 const SCORES365_FIXTURES_BASE = 'https://webws.365scores.com/web/games/fixtures/';
@@ -2465,10 +2468,6 @@ export async function sync365SyntheticLiveSnapshots(
   return updated;
 }
 
-const SCORES365_SR_WIDGETLOADER =
-  process.env.SCORES365_SR_WIDGETLOADER?.trim() ||
-  'https://widgets.sir.sportradar.com/f0c087409e8b510632407044a316885a/widgetloader';
-
 const TRANSPARENT_PIXEL =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
@@ -2482,13 +2481,14 @@ export function resolveLmtPitchBrandLogoUrl(publicBaseUrl?: string | null): stri
   return path;
 }
 
-/** @deprecated use buildScores365LmtHtml — kept for existing controller import name. */
+/** Preview HTML — mirrors c:\DD (original GetWidget URL + 90PLUS brand). */
 export function buildScores365LmtBrowserPreviewHtml(
   info: Scores365LmtWidgetInfo,
   options?: {
     publicBaseUrl?: string | null;
     hidePitchBrand?: boolean;
-    mode?: 'iframe' | 'sir' | 'auto';
+    mode?: 'iframe' | 'branded' | 'sir';
+    brandedHtml?: string | null;
   },
 ): string {
   const hideBrand =
@@ -2510,10 +2510,24 @@ export function buildScores365LmtBrowserPreviewHtml(
     {
       brandLogoUrl,
       hidePitchBrand: hideBrand,
-      mode: options?.mode ?? 'auto',
-      widgetloaderUrl: SCORES365_SR_WIDGETLOADER,
+      mode: options?.mode ?? 'iframe',
+      brandedHtml: options?.brandedHtml,
     },
   );
+}
+
+/** DD `customizeWidgetHtml` — rewrite logos on upstream GetWidget HTML. */
+export function brandScores365LmtWidgetHtml(
+  html: string,
+  options?: { publicBaseUrl?: string | null; hidePitchBrand?: boolean },
+): string {
+  const hideBrand =
+    options?.hidePitchBrand === true ||
+    process.env.LMT_HIDE_PITCH_BRAND === 'true' ||
+    process.env.LMT_HIDE_PITCH_BRAND === '1';
+  if (hideBrand) return html;
+  const brandLogoUrl = resolveLmtPitchBrandLogoUrl(options?.publicBaseUrl);
+  return customizeScores365LmtWidgetHtml(html, brandLogoUrl);
 }
 
 const SCORES365_LMT_WIDGET_BASE = 'https://lmtsrcf.365scores.com/api/SportRadarLMT/GetWidget';
@@ -2533,14 +2547,20 @@ export type Scores365LmtWidgetInfo = {
   statusText: string | null;
 };
 
+/** Same as DD `getPartnerIdFromGame` — LMT widget partnerId, never gameId. */
 function pickLmtWidget(game: Scores365Game): Scores365Widget | null {
   const widgets = Array.isArray(game.widgets) ? game.widgets : [];
-  const byType = widgets.find(
-    (w) =>
-      String(w.widgetType ?? '').toUpperCase() === 'LMT' ||
-      String(w.provider ?? '').toLowerCase().includes('sportradarlmt'),
+  const byType = widgets.find((w) => String(w.widgetType ?? '') === 'LMT');
+  if (byType) return byType;
+  return (
+    widgets.find(
+      (w) =>
+        String(w.widgetType ?? '').toUpperCase() === 'LMT' ||
+        String(w.provider ?? '').toLowerCase().includes('sportradarlmt'),
+    ) ??
+    widgets.find((w) => w.partnerId != null || w.widgetUrl) ??
+    null
   );
-  return byType ?? widgets.find((w) => w.partnerId != null && w.widgetUrl) ?? null;
 }
 
 function partnerIdFromWidget(widget: Scores365Widget): string | null {
@@ -2548,13 +2568,20 @@ function partnerIdFromWidget(widget: Scores365Widget): string | null {
     return String(widget.partnerId).trim();
   }
   const url = widget.widgetUrl ?? '';
-  const match = url.match(/[?&]partnerid=([^&]+)/i);
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
+  try {
+    const fromUrl = new URL(url).searchParams.get('partnerid');
+    if (fromUrl) return fromUrl;
+  } catch {
+    const match = url.match(/[?&]partnerid=([^&]+)/i);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  }
+  return null;
 }
 
+/** Original 365scores GetWidget URL — partnerid + lang + sportTypeId. */
 export function buildScores365LmtWidgetUrl(partnerId: string, langId: number, sportTypeId = 1): string {
   const params = new URLSearchParams({
-    partnerid: partnerId,
+    partnerid: String(partnerId),
     lang: String(langId),
     sportTypeId: String(sportTypeId),
   });
@@ -2588,12 +2615,9 @@ export async function getScores365LmtWidgetForGameId(
   const partnerId = partnerIdFromWidget(widget);
   if (!partnerId) return null;
 
-  const sportTypeId =
-    typeof game.sportId === 'number' && game.sportId > 0 ? game.sportId : 1;
-  const widgetUrl =
-    widget.widgetUrl && /partnerid=/i.test(widget.widgetUrl)
-      ? widget.widgetUrl.replace(/lang=\d+/i, `lang=${langId}`)
-      : buildScores365LmtWidgetUrl(partnerId, langId, sportTypeId);
+  // Always build the canonical GetWidget URL (DD WIDGET_BASE) — do not use gameId.
+  const sportTypeId = 1;
+  const widgetUrl = buildScores365LmtWidgetUrl(partnerId, langId, sportTypeId);
 
   const mappedFixture =
     (await resolveApiFixtureIdFor365GameId(gameId)) ??

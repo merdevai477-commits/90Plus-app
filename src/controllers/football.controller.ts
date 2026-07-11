@@ -11,7 +11,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId, buildScores365LmtBrowserPreviewHtml, resolveLmtPitchBrandLogoUrl } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId, buildScores365LmtBrowserPreviewHtml, resolveLmtPitchBrandLogoUrl, fetchScores365LmtWidgetHtml, brandScores365LmtWidgetHtml } from '../services/scores365-experiment.service';
 import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 
@@ -37,25 +37,27 @@ function wantsFreshMatchDetails(req: Request): boolean {
 }
 
 /**
- * LMT responses:
- * - default (auto) → user's SIR match.lmtPlus template, then iframe+logo if license blanks
- * - format=sir → SIR only (needs SportRadar-licensed origin)
- * - format=iframe|preview|html → iframe lmtsrcf + 90PLUS logo overlay
- * - format=json → metadata
- * - format=redirect → 302 to lmtsrcf only
+ * LMT responses (mirrors c:\DD\js\app.js on the original 365 GetWidget URL):
+ * - default → iframe lmtsrcf GetWidget?partnerid=… + 90PLUS logo cover (works on Railway)
+ * - format=branded|proxy → fetch GetWidget HTML, rewrite logos (DD customizeWidgetHtml)
+ * - format=sir → SIR addWidget with branded props (licensed origin only)
+ * - format=json → metadata (includes partnerId + widgetUrl)
+ * - format=redirect → 302 to original GetWidget URL
  */
-function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'auto' | 'sir' | 'iframe' {
+function resolveLmtResponseFormat(
+  req: Request,
+): 'redirect' | 'json' | 'iframe' | 'branded' | 'sir' {
   const raw = String(req.query.format ?? '').toLowerCase().trim();
   if (raw === 'json') return 'json';
   if (raw === 'redirect') return 'redirect';
   if (raw === 'sir') return 'sir';
-  if (raw === 'iframe' || raw === 'preview' || raw === 'html') return 'iframe';
-  if (raw === 'auto') return 'auto';
+  if (raw === 'branded' || raw === 'proxy' || raw === 'html') return 'branded';
+  if (raw === 'iframe' || raw === 'preview' || raw === 'auto') return 'iframe';
   const accept = String(req.headers.accept ?? '');
   if (raw === '' && accept.includes('application/json') && !accept.includes('text/html')) {
     return 'json';
   }
-  return 'auto';
+  return 'iframe';
 }
 
 async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWidgetInfo): Promise<void> {
@@ -78,15 +80,19 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
       source: '365scores',
       response: {
         ...info,
-        embedMode: 'sir-lmtPlus-auto-fallback-iframe',
+        embedMode: 'iframe-original-getwidget-plus-logo-cover',
         brandLogoUrl,
+        getWidgetUrl: info.widgetUrl,
         widgetProps: {
           matchId: info.partnerId,
           pitchLogo: brandLogoUrl,
           goalBannerImage: brandLogoUrl,
           vlmtCourtBannerUrl: brandLogoUrl,
         },
-        note: 'Default HTML uses SIR match.lmtPlus (partnerId as matchId) with 90PLUS brand props, then falls back to lmtsrcf iframe + logo overlay if the host is not SportRadar-licensed.',
+        note:
+          'partnerId comes from game.widgets (NOT gameId). Default HTML iframes the original ' +
+          'lmtsrcf GetWidget URL and covers 365 logos with brandLogoUrl. Use format=branded to ' +
+          'proxy+rewrite GetWidget HTML (DD customizeWidgetHtml).',
       },
     });
     return;
@@ -98,14 +104,33 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
     return;
   }
 
-  const mode = format === 'sir' || format === 'iframe' ? format : 'auto';
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=15');
+
+  if (format === 'branded') {
+    const upstream = await fetchScores365LmtWidgetHtml(
+      info.partnerId,
+      info.langId,
+      info.sportTypeId,
+    );
+    if (!upstream) {
+      res.status(502).send('Failed to fetch original GetWidget HTML');
+      return;
+    }
+    res.status(200).send(
+      brandScores365LmtWidgetHtml(upstream, {
+        publicBaseUrl,
+        hidePitchBrand: Boolean(hidePitchBrand),
+      }),
+    );
+    return;
+  }
+
   res.status(200).send(
     buildScores365LmtBrowserPreviewHtml(info, {
       publicBaseUrl,
       hidePitchBrand: Boolean(hidePitchBrand),
-      mode,
+      mode: format === 'sir' ? 'sir' : 'iframe',
     }),
   );
 }
