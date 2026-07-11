@@ -270,6 +270,7 @@ const MatchDetailsScreen = () => {
   const [standingsLoading, setStandingsLoading] = useState(false);
   const [lmtInfo, setLmtInfo] = useState<Scores365LmtInfo | null>(null);
   const [lmtChecked, setLmtChecked] = useState(false);
+  const lmtAutoOpenedRef = useRef<number | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [lineupsError, setLineupsError] = useState<string | null>(null);
@@ -445,6 +446,7 @@ const MatchDetailsScreen = () => {
     setStandingsLoading(false);
     setLmtInfo(null);
     setLmtChecked(false);
+    lmtAutoOpenedRef.current = null;
     loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
 
@@ -845,23 +847,26 @@ const MatchDetailsScreen = () => {
         force,
       });
       setLmtInfo(info);
-      // If tracking disappeared while that tab was open, fall back to Events.
-      if (!info) {
-        setActiveTab((tab) => (tab === 'tracking' ? 'events' : tab));
-      }
     } catch {
       setLmtInfo(null);
-      setActiveTab((tab) => (tab === 'tracking' ? 'events' : tab));
     } finally {
       setLmtChecked(true);
     }
   }, [fixtureId, language, lmtChecked]);
 
-  // Quietly probe LMT for every match. Tab appears only when partnerId exists.
+  // Probe LMT for every opened match (404 = no pitch — normal).
   useEffect(() => {
     if (!fixtureId || !fixture) return;
     void loadLmtIfNeeded();
   }, [fixtureId, fixture?.fixture?.id, loadLmtIfNeeded]);
+
+  // Live + has partnerId → open Tracking once so the pitch is visible immediately.
+  useEffect(() => {
+    if (!fixtureId || !lmtInfo?.widgetUrl || !isLive()) return;
+    if (lmtAutoOpenedRef.current === fixtureId) return;
+    lmtAutoOpenedRef.current = fixtureId;
+    setActiveTab('tracking');
+  }, [fixtureId, lmtInfo?.widgetUrl, isLive]);
 
   // Reload stats when match reaches HT or full time
   useEffect(() => {
@@ -1681,20 +1686,41 @@ const MatchDetailsScreen = () => {
   };
 
   const renderTracking = () => {
-    // No partnerId → tab should be hidden; keep Events/score card as normal UI.
-    if (!lmtInfo?.widgetUrl) {
-      return null;
+    if (!lmtChecked) {
+      return (
+        <View style={styles.emptyState}>
+          <ActivityIndicator color="#a78bfa" size="large" />
+          <Text style={styles.emptyStateText}>
+            {t.matchDetails.trackingLoading || 'Loading live pitch…'}
+          </Text>
+        </View>
+      );
+    }
+
+    if (lmtInfo?.widgetUrl) {
+      return (
+        <MatchLmtWebView
+          widgetUrl={lmtInfo.widgetUrl}
+          embedUrl={lmtInfo.embedUrl}
+          aspectRatio={lmtInfo.widgetRatio}
+          loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
+          unavailableLabel={t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
+          retryLabel={t.matchDetails.retry || t.common.retry}
+        />
+      );
     }
 
     return (
-      <MatchLmtWebView
-        widgetUrl={lmtInfo.widgetUrl}
-        embedUrl={lmtInfo.embedUrl}
-        aspectRatio={lmtInfo.widgetRatio}
-        loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
-        unavailableLabel={t.matchDetails.trackingUnavailable || 'Live tracking is not available for this match.'}
-        retryLabel={t.matchDetails.retry || t.common.retry}
-      />
+      <View style={styles.emptyState}>
+        <Ionicons name="football-outline" size={64} color="#333" />
+        <Text style={styles.emptyStateText}>
+          {t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
+        </Text>
+        <Text style={[styles.emptyStateText, { marginTop: 8, opacity: 0.7, fontSize: 13 }]}>
+          {t.matchDetails.trackingUnavailableHint ||
+            'SportRadar tracking is only available for some competitions.'}
+        </Text>
+      </View>
     );
   };
 
@@ -1922,9 +1948,11 @@ const MatchDetailsScreen = () => {
     );
   }
 
+  const showTrackingTab = Boolean(lmtInfo?.widgetUrl) || isLive() || isFinishedMatch();
+
   const tabs = [
     { key: 'events', label: t.matchDetails.events, icon: 'football' as const },
-    ...(lmtInfo?.widgetUrl
+    ...(showTrackingTab
       ? [{ key: 'tracking', label: t.matchDetails.tracking || 'Tracking', icon: 'navigate' as const }]
       : []),
     { key: 'lineups', label: t.matchDetails.lineups, icon: 'people' as const },
