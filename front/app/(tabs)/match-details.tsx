@@ -39,6 +39,8 @@ import {
 } from '../../constants/tokens';
 import { FootballField } from '../../components/match-details/FootballField';
 import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
+import { MatchLmtWebView } from '../../components/match-details/MatchLmtWebView';
+import { fetchFixtureLmt, type Scores365LmtInfo } from '../../services/lmt.service';
 import { applySubstitutionsToPitch } from '../../utils/lineupMatchState';
 import { matchArchiveService, type MatchArchive } from '../../services/matchArchiveService';
 import TeamBadge from '../../components/common/TeamBadge';
@@ -177,7 +179,7 @@ const MatchDetailsScreen = () => {
   const shimmerX = useShimmer();
   const translationsReady = Boolean(t?.matchDetails);
 
-  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'stadium'>('events');
+  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'stadium' | 'tracking'>('events');
 
   const [homeLastFixtures, setHomeLastFixtures] = useState<TeamFixture[]>([]);
   const [awayLastFixtures, setAwayLastFixtures] = useState<TeamFixture[]>([]);
@@ -266,6 +268,9 @@ const MatchDetailsScreen = () => {
   const [statsLoading, setStatsLoading] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [standingsLoading, setStandingsLoading] = useState(false);
+  const [lmtInfo, setLmtInfo] = useState<Scores365LmtInfo | null>(null);
+  const [lmtLoading, setLmtLoading] = useState(false);
+  const [lmtChecked, setLmtChecked] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [lineupsError, setLineupsError] = useState<string | null>(null);
@@ -439,6 +444,9 @@ const MatchDetailsScreen = () => {
     setStatsLoading(false);
     setFormLoading(false);
     setStandingsLoading(false);
+    setLmtInfo(null);
+    setLmtLoading(false);
+    setLmtChecked(false);
     loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
 
@@ -830,6 +838,32 @@ const MatchDetailsScreen = () => {
     }
   }, [fixtureId, fixture]);
 
+  const loadLmtIfNeeded = useCallback(async (force = false) => {
+    if (!fixtureId) return;
+    if (!force && loadedTabsRef.current.has('tracking') && lmtChecked) return;
+    loadedTabsRef.current.add('tracking');
+    setLmtLoading(true);
+    try {
+      const info = await fetchFixtureLmt(fixtureId, {
+        language,
+        force,
+      });
+      setLmtInfo(info);
+    } catch {
+      setLmtInfo(null);
+    } finally {
+      setLmtChecked(true);
+      setLmtLoading(false);
+    }
+  }, [fixtureId, language, lmtChecked]);
+
+  // Soft-preload LMT for live matches so the Tracking tab opens faster.
+  useEffect(() => {
+    if (!fixtureId || !fixture || !isLive()) return;
+    if (loadedTabsRef.current.has('tracking')) return;
+    void loadLmtIfNeeded();
+  }, [fixtureId, fixture?.fixture?.id, isLive, loadLmtIfNeeded]);
+
   // Reload stats when match reaches HT or full time
   useEffect(() => {
     const short = fixture?.fixture?.status?.short;
@@ -885,8 +919,9 @@ const MatchDetailsScreen = () => {
       case 'form':      loadFormIfNeeded(); break;
       case 'standings': loadStandingsIfNeeded(); break;
       case 'stadium':   loadVenueIfNeeded(); break;
+      case 'tracking':  loadLmtIfNeeded(); break;
     }
-  }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded, loadVenueIfNeeded]);
+  }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded, loadVenueIfNeeded, loadLmtIfNeeded]);
 
   const openPlayerProfile = useCallback(
     (
@@ -1646,6 +1681,51 @@ const MatchDetailsScreen = () => {
     );
   };
 
+  const renderTracking = () => {
+    if (lmtLoading && !lmtInfo) {
+      return (
+        <View style={styles.emptyState}>
+          <ActivityIndicator color="#a78bfa" size="large" />
+          <Text style={styles.emptyStateText}>
+            {t.matchDetails.trackingLoading || 'Loading live pitch…'}
+          </Text>
+        </View>
+      );
+    }
+
+    if (!lmtInfo?.embedUrl) {
+      return (
+        <View style={styles.emptyState}>
+          <Ionicons name="football-outline" size={64} color="#333" />
+          <Text style={styles.emptyStateText}>
+            {t.matchDetails.trackingUnavailable || 'Live tracking is not available for this match.'}
+          </Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              loadedTabsRef.current.delete('tracking');
+              setLmtChecked(false);
+              void loadLmtIfNeeded(true);
+            }}
+          >
+            <Text style={styles.retryButtonText}>{t.matchDetails.retry || t.common.retry}</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <MatchLmtWebView
+        embedUrl={lmtInfo.embedUrl}
+        widgetUrl={lmtInfo.widgetUrl}
+        aspectRatio={lmtInfo.widgetRatio}
+        loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
+        unavailableLabel={t.matchDetails.trackingUnavailable || 'Live tracking is not available for this match.'}
+        retryLabel={t.matchDetails.retry || t.common.retry}
+      />
+    );
+  };
+
   const renderStandings = () => {
     const hasStandings = standingsGroups.length > 0;
     if (standingsLoading && !hasStandings) {
@@ -1872,6 +1952,7 @@ const MatchDetailsScreen = () => {
 
   const tabs = [
     { key: 'events', label: t.matchDetails.events, icon: 'football' as const },
+    { key: 'tracking', label: t.matchDetails.tracking || 'Tracking', icon: 'navigate' as const },
     { key: 'lineups', label: t.matchDetails.lineups, icon: 'people' as const },
     { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
     { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },
@@ -1948,6 +2029,7 @@ const MatchDetailsScreen = () => {
         {/* Content */}
         <View style={styles.content}>
           {activeTab === 'events' && renderEvents()}
+          {activeTab === 'tracking' && renderTracking()}
           {activeTab === 'lineups' && renderLineups()}
           {activeTab === 'stats' && renderStatistics()}
           {activeTab === 'form' && renderForm()}

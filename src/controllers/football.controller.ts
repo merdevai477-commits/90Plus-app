@@ -13,6 +13,7 @@ import {
 } from '../services/live-fixture-cache.service';
 import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId } from '../services/scores365-experiment.service';
 import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
+import { buildScores365LmtEmbedHtml } from '../utils/scores365-lmt-html';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 
 /**
@@ -38,20 +39,21 @@ function wantsFreshMatchDetails(req: Request): boolean {
 
 /**
  * LMT responses:
- * - default → 302 to official lmtsrcf GetWidget?partnerid=… (365 tracking as-is)
- * - format=json → metadata (use response.widgetUrl in WebView)
- * - format=preview → tiny HTML that navigates to widgetUrl
+ * - default / format=embed|html → HTML page with iframe → official GetWidget
+ * - format=json → metadata (partnerId + widgetUrl)
+ * - format=redirect → 302 to GetWidget URL
  */
-function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'preview' {
+function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'embed' {
   const raw = String(req.query.format ?? '').toLowerCase().trim();
   if (raw === 'json') return 'json';
-  if (raw === 'preview' || raw === 'html') return 'preview';
   if (raw === 'redirect') return 'redirect';
+  if (raw === 'embed' || raw === 'html' || raw === 'preview') return 'embed';
   const accept = String(req.headers.accept ?? '');
   if (raw === '' && accept.includes('application/json') && !accept.includes('text/html')) {
     return 'json';
   }
-  return 'redirect';
+  // Default HTML embed — WebView-friendly.
+  return 'embed';
 }
 
 async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWidgetInfo): Promise<void> {
@@ -63,33 +65,28 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
       source: '365scores',
       response: {
         ...info,
-        embedMode: 'redirect-to-365-widget',
-        note: 'Load widgetUrl directly (GetWidget?partnerid=…). partnerId is not gameId.',
+        embedMode: 'html-iframe-getwidget',
+        note: 'Default response is HTML that iframes widgetUrl. WebView should load this endpoint or widgetUrl.',
       },
     });
     return;
   }
 
-  if (format === 'preview') {
-    const escape = (s: string) =>
-      s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-    const url = escape(info.widgetUrl);
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<meta http-equiv="refresh" content="0;url=${url}"/>
-<title>LMT → 365Scores</title>
-<script>location.replace(${JSON.stringify(info.widgetUrl)});</script>
-</head><body style="background:#0b1220;color:#fff;font-family:system-ui;padding:24px">
-Redirecting to SportRadar LMT…
-<a href="${url}" style="color:#a78bfa">Open widget</a>
-</body></html>`;
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  if (format === 'redirect') {
     res.setHeader('Cache-Control', 'public, max-age=15');
-    res.status(200).send(html);
+    res.redirect(302, info.widgetUrl);
     return;
   }
 
+  const html = buildScores365LmtEmbedHtml({
+    widgetUrl: info.widgetUrl,
+    partnerId: info.partnerId,
+    homeName: info.homeName,
+    awayName: info.awayName,
+  });
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=15');
-  res.redirect(302, info.widgetUrl);
+  res.status(200).send(html);
 }
 
 // Helper function to format transfer date
