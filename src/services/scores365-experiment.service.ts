@@ -2464,6 +2464,122 @@ export async function sync365SyntheticLiveSnapshots(
   return updated;
 }
 
+const SCORES365_SR_WIDGETLOADER =
+  process.env.SCORES365_SR_WIDGETLOADER?.trim() ||
+  'https://widgets.sir.sportradar.com/f0c087409e8b510632407044a316885a/widgetloader';
+
+const TRANSPARENT_PIXEL =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+function mapScores365LangIdToSirLanguage(langId: number): string {
+  // 365 uses langId 27 for Arabic; SportRadar expects ISO-ish codes.
+  if (langId === 27) return 'ar';
+  return 'en';
+}
+
+/** Public URL used for SportRadar pitch branding props (replaces 365 marks). */
+export function resolveLmtPitchBrandLogoUrl(publicBaseUrl?: string | null): string {
+  const fromEnv = process.env.LMT_PITCH_LOGO_URL?.trim();
+  if (fromEnv) return fromEnv;
+  const path = '/90plus-pitch-logo.png';
+  const base = (publicBaseUrl || process.env.SHARE_BASE_URL || '').replace(/\/$/, '').trim();
+  if (base) return `${base}${path}`;
+  return path;
+}
+
+/**
+ * Embed SportRadar LMT directly (same tracking/data as 365 GetWidget),
+ * but pass 90PLUS branding into pitchLogo / goalBannerImage / vlmtCourtBannerUrl.
+ * Does not iframe lmtsrcf — only the matchId (= partnerId) drives the live feed.
+ */
+export function buildScores365LmtBrowserPreviewHtml(
+  info: Scores365LmtWidgetInfo,
+  options?: { publicBaseUrl?: string | null; hidePitchBrand?: boolean },
+): string {
+  const escape = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+  const hideBrand =
+    options?.hidePitchBrand === true ||
+    process.env.LMT_HIDE_PITCH_BRAND === 'true' ||
+    process.env.LMT_HIDE_PITCH_BRAND === '1';
+
+  const brandLogo = hideBrand
+    ? TRANSPARENT_PIXEL
+    : resolveLmtPitchBrandLogoUrl(options?.publicBaseUrl);
+
+  const sirLang = mapScores365LangIdToSirLanguage(info.langId);
+  const matchId = String(info.partnerId);
+  const ratio = info.widgetRatio && info.widgetRatio > 0 ? info.widgetRatio : 16 / 9;
+  const paddingPct = ((1 / ratio) * 100).toFixed(4);
+  const home = info.homeName ? escape(info.homeName) : 'Home';
+  const away = info.awayName ? escape(info.awayName) : 'Away';
+  const title = `${home} vs ${away}`;
+
+  // JSON-serialized into the page script (safe for JS string context).
+  const brandLogoJs = JSON.stringify(brandLogo);
+  const matchIdJs = JSON.stringify(matchId);
+  const sirLangJs = JSON.stringify(sirLang);
+  const loaderJs = JSON.stringify(SCORES365_SR_WIDGETLOADER);
+
+  return `<!DOCTYPE html>
+<html lang="${escape(sirLang)}" dir="auto">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <title>${title} — 90PLUS LMT</title>
+  <link rel="stylesheet" type="text/css" href="https://statics3.365scores.com/SRWidget/theme.css" />
+  <style>
+    html, body { margin: 0; background: #000; }
+    .sr-widget { width: 100%; }
+    .wrap { position: relative; width: 100%; max-width: 1100px; margin: 0 auto; padding-top: ${paddingPct}%; background: #000; }
+    .wrap-inner { position: absolute; inset: 0; }
+    .sr-bb .sr-lmt-clock-v2 { display: none; }
+    .sr-lmt-plus__footer-wrapper { display: none; }
+    .sr-bb .sr-lmt-clock__wrap { display: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap"><div class="wrap-inner"><div class="sr-widget"></div></div></div>
+  <script>
+    (function (a, b, c, d, e, f, g, h, i) {
+      a[e] || (i = a[e] = function () { (a[e].q = a[e].q || []).push(arguments) },
+        i.l = 1 * new Date, i.o = f,
+        g = b.createElement(c), h = b.getElementsByTagName(c)[0],
+        g.async = 1, g.src = d, g.setAttribute("n", e),
+        h.parentNode.insertBefore(g, h));
+    })(window, document, "script", ${loaderJs}, "SIR", {
+      theme: false,
+      language: ${sirLangJs}
+    });
+
+    var BRAND_LOGO_URL = ${brandLogoJs};
+    var widgetProps = {
+      pitchCustomBgColor: "#257A37",
+      disableOverlayPanels: true,
+      scoreboard: "disable",
+      detailedScoreboard: "disable",
+      tabsPosition: "disable",
+      vlmtEnableMilestones: false,
+      goalBannerImage: BRAND_LOGO_URL,
+      onPitchLogoPosition: "true",
+      disablePitchClock: true,
+      pitchLogo: BRAND_LOGO_URL,
+      matchId: ${matchIdJs},
+      vlmtCourtBannerUrl: BRAND_LOGO_URL
+    };
+
+    SIR("addWidget", ".sr-widget", "match.lmtPlus", widgetProps);
+  </script>
+</body>
+</html>`;
+}
+
 const SCORES365_LMT_WIDGET_BASE = 'https://lmtsrcf.365scores.com/api/SportRadarLMT/GetWidget';
 
 export type Scores365LmtWidgetInfo = {
@@ -2597,87 +2713,6 @@ export async function fetchScores365LmtWidgetHtml(
     logger.warn(`[Scores365LMT] GetWidget failed:`, (err as Error)?.message);
     return null;
   }
-}
-
-/** Public URL used to cover the SportRadar pitch "365 scores" mark. */
-export function resolveLmtPitchBrandLogoUrl(publicBaseUrl?: string | null): string {
-  const fromEnv = process.env.LMT_PITCH_LOGO_URL?.trim();
-  if (fromEnv) return fromEnv;
-  const path = '/90plus-pitch-logo.png';
-  const base = (publicBaseUrl || process.env.SHARE_BASE_URL || '').replace(/\/$/, '').trim();
-  if (base) return `${base}${path}`;
-  return path;
-}
-
-/** Full-page browser preview: iframe (licensed 365 origin) + 90PLUS logo cover over pitch mark. */
-export function buildScores365LmtBrowserPreviewHtml(
-  info: Scores365LmtWidgetInfo,
-  options?: { publicBaseUrl?: string | null },
-): string {
-  const escape = (s: string) =>
-    s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  const home = info.homeName ? escape(info.homeName) : 'Home';
-  const away = info.awayName ? escape(info.awayName) : 'Away';
-  const status = info.statusText ? escape(info.statusText) : '';
-  const widgetUrl = escape(info.widgetUrl);
-  const brandLogo = escape(resolveLmtPitchBrandLogoUrl(options?.publicBaseUrl));
-  const title = `${home} vs ${away}`;
-  const ratio = info.widgetRatio && info.widgetRatio > 0 ? info.widgetRatio : 16 / 9;
-  const paddingPct = ((1 / ratio) * 100).toFixed(4);
-
-  return `<!DOCTYPE html>
-<html lang="ar" dir="auto">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>${title} — 90PLUS LMT</title>
-  <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0; height: 100%; background: #000; color: #e8eefc;
-      font-family: system-ui, sans-serif;
-    }
-    .stage { width: 100%; max-width: 1100px; margin: 0 auto; }
-    .frame-wrap {
-      position: relative; width: 100%; padding-top: ${paddingPct}%;
-      background: #000; overflow: hidden;
-    }
-    .frame-wrap iframe {
-      position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
-    }
-    /* User-provided 90PLUS-app banner covering the 365 pitch mark. */
-    .brand-cover {
-      position: absolute;
-      left: 50%;
-      bottom: 3.8%;
-      transform: translateX(-50%);
-      width: min(42%, 320px);
-      height: auto;
-      z-index: 6;
-      pointer-events: none;
-      border-radius: 2px;
-    }
-  </style>
-</head>
-<body>
-  <div class="stage">
-    <div class="frame-wrap">
-      <iframe
-        src="${widgetUrl}"
-        title="90PLUS Live Pitch"
-        allow="fullscreen; autoplay"
-        referrerpolicy="no-referrer-when-downgrade"
-      ></iframe>
-      <img class="brand-cover" src="${brandLogo}" alt="90PLUS-app" />
-    </div>
-  </div>
-</body>
-</html>`;
 }
 
 export function getScores365ExperimentFeatureState(): {

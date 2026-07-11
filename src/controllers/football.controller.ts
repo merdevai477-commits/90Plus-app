@@ -38,9 +38,10 @@ function wantsFreshMatchDetails(req: Request): boolean {
 
 /**
  * LMT responses:
- * - default / format=preview → branded HTML (365 iframe + 90PLUS pitch logo cover)
- * - format=json → metadata + pitchLogoOverlayUrl for app WebView overlay
- * - format=redirect → 302 to official lmtsrcf GetWidget (365 branding visible)
+ * - default / format=preview|html → SportRadar SIR embed with 90PLUS pitchLogo props
+ * - format=json → metadata + brandLogoUrl for clients
+ * - format=redirect → 302 to official lmtsrcf GetWidget (365 branding)
+ * - ?hideBrand=1 → transparent pitch logos
  */
 function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'preview' {
   const raw = String(req.query.format ?? '').toLowerCase().trim();
@@ -51,7 +52,6 @@ function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'preview'
   if (raw === '' && accept.includes('application/json') && !accept.includes('text/html')) {
     return 'json';
   }
-  // Browser default: show pitch with 90PLUS covering the 365 mark.
   return 'preview';
 }
 
@@ -61,7 +61,13 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
   const proto = forwardedProto || req.protocol || 'https';
   const host = String(req.headers['x-forwarded-host'] || req.get('host') || '').split(',')[0].trim();
   const publicBaseUrl = host ? `${proto}://${host}` : null;
-  const pitchLogoOverlayUrl = resolveLmtPitchBrandLogoUrl(publicBaseUrl);
+  const hidePitchBrand =
+    req.query.hideBrand === '1' ||
+    req.query.hideBrand === 'true' ||
+    req.query.hidePitchBrand === '1';
+  const brandLogoUrl = hidePitchBrand
+    ? 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+    : resolveLmtPitchBrandLogoUrl(publicBaseUrl);
 
   if (format === 'json') {
     res.json({
@@ -69,10 +75,15 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
       source: '365scores',
       response: {
         ...info,
-        embedMode: 'webview-365-widget-url',
-        pitchLogoOverlayUrl,
-        pitchLogoOverlayNote:
-          'Load widgetUrl in WebView, then overlay pitchLogoOverlayUrl at bottom-center to replace the 365 pitch mark.',
+        embedMode: 'sir-direct-with-brand-props',
+        brandLogoUrl,
+        widgetProps: {
+          matchId: info.partnerId,
+          pitchLogo: brandLogoUrl,
+          goalBannerImage: brandLogoUrl,
+          vlmtCourtBannerUrl: brandLogoUrl,
+        },
+        note: 'Tracking uses SportRadar matchId (= partnerId). Only branding image URLs are overridden.',
       },
     });
     return;
@@ -86,7 +97,12 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=15');
-  res.status(200).send(buildScores365LmtBrowserPreviewHtml(info, { publicBaseUrl }));
+  res.status(200).send(
+    buildScores365LmtBrowserPreviewHtml(info, {
+      publicBaseUrl,
+      hidePitchBrand: Boolean(hidePitchBrand),
+    }),
+  );
 }
 
 // Helper function to format transfer date
