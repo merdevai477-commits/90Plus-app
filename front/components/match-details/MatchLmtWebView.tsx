@@ -44,16 +44,19 @@ export function MatchLmtWebView({
   const { width } = useWindowDimensions();
   const ratio = aspectRatio && aspectRatio > 0 ? aspectRatio : 16 / 9;
   const sidePad = 16;
-  const frameWidth = Math.max(280, width - sidePad * 2);
+  // hero = full-bleed (بدون هوامش جانبية)، card = بهوامش زي الأول
+  const frameWidth = variant === 'hero'
+    ? width
+    : Math.max(280, width - sidePad * 2);
   // Slightly taller than 16:9 so H2H strip under pitch still fits.
   const frameHeight = Math.max(
-    variant === 'hero' ? 260 : 220,
+    variant === 'hero' ? 300 : 220,
     Math.round(frameWidth / ratio) + (variant === 'hero' ? 48 : 0),
   );
 
-  // Match DD SVG aspect 240×72
-  const brandWidth = Math.min(168, Math.round(frameWidth * 0.42));
-  const brandHeight = Math.round(brandWidth * (72 / 240));
+  // Match DD SVG aspect 240×72 — مكبّرة عشان تغطي شعار 365scores بالكامل
+  const brandWidth = Math.min(220, Math.round(frameWidth * 0.58));
+  const brandHeight = Math.round(brandWidth * (90 / 240));
 
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -163,14 +166,13 @@ export function MatchLmtWebView({
 
 const styles = StyleSheet.create({
   hero: {
-    marginHorizontal: 16,
+    marginHorizontal: 0,
     marginTop: 4,
     marginBottom: 8,
-    borderRadius: 20,
+    borderRadius: 0,
     overflow: 'hidden',
     backgroundColor: '#000',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 0,
   },
   card: {
     marginHorizontal: 16,
@@ -188,17 +190,17 @@ const styles = StyleSheet.create({
   brandCover: {
     position: 'absolute',
     left: '50%',
-    // Mid-pitch where SportRadar draws pitchLogo (above H2H strip).
-    top: '42%',
-    zIndex: 3,
+    // شعار 365scores الفعلي أسفل خط الوسط، مش عند 42%
+    top: '58%',
+    zIndex: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   brandPatch: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#257A37',
-    borderRadius: 4,
-    opacity: 0.95,
+    backgroundColor: '#1a5c2a',
+    borderRadius: 6,
+    opacity: 1,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,

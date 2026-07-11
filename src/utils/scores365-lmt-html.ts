@@ -54,16 +54,19 @@ export function buildScores365LmtEmbedHtml(opts: {
     .brand-cover {
       position: absolute;
       left: 50%;
-      top: 42%;
+      top: 58%;
       transform: translate(-50%, -50%);
-      width: min(34%, 160px);
-      height: auto;
+      width: min(50%, 200px);
+      height: min(18%, 70px);
       z-index: 6;
       pointer-events: none;
-      background: #257A37;
-      border-radius: 4px;
-      padding: 4px 8px;
+      background: #1a5c2a;
+      border-radius: 6px;
+      padding: 6px 10px;
       box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .brand-cover img {
       display: block;
