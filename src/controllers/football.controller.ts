@@ -38,22 +38,24 @@ function wantsFreshMatchDetails(req: Request): boolean {
 
 /**
  * LMT responses:
- * - default → iframe lmtsrcf (works) + 90PLUS logo overlay
- * - format=sir → direct SportRadar embed with brand props (needs licensed origin)
+ * - default (auto) → user's SIR match.lmtPlus template, then iframe+logo if license blanks
+ * - format=sir → SIR only (needs SportRadar-licensed origin)
+ * - format=iframe|preview|html → iframe lmtsrcf + 90PLUS logo overlay
  * - format=json → metadata
  * - format=redirect → 302 to lmtsrcf only
  */
-function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'preview' | 'sir' {
+function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'auto' | 'sir' | 'iframe' {
   const raw = String(req.query.format ?? '').toLowerCase().trim();
   if (raw === 'json') return 'json';
   if (raw === 'redirect') return 'redirect';
   if (raw === 'sir') return 'sir';
-  if (raw === 'preview' || raw === 'html' || raw === 'iframe') return 'preview';
+  if (raw === 'iframe' || raw === 'preview' || raw === 'html') return 'iframe';
+  if (raw === 'auto') return 'auto';
   const accept = String(req.headers.accept ?? '');
   if (raw === '' && accept.includes('application/json') && !accept.includes('text/html')) {
     return 'json';
   }
-  return 'preview';
+  return 'auto';
 }
 
 async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWidgetInfo): Promise<void> {
@@ -76,7 +78,7 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
       source: '365scores',
       response: {
         ...info,
-        embedMode: 'iframe-365-widget-plus-logo-overlay',
+        embedMode: 'sir-lmtPlus-auto-fallback-iframe',
         brandLogoUrl,
         widgetProps: {
           matchId: info.partnerId,
@@ -84,7 +86,7 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
           goalBannerImage: brandLogoUrl,
           vlmtCourtBannerUrl: brandLogoUrl,
         },
-        note: 'Default HTML iframes licensed lmtsrcf widget and overlays brandLogoUrl. Use format=sir only on a SportRadar-licensed domain.',
+        note: 'Default HTML uses SIR match.lmtPlus (partnerId as matchId) with 90PLUS brand props, then falls back to lmtsrcf iframe + logo overlay if the host is not SportRadar-licensed.',
       },
     });
     return;
@@ -96,13 +98,14 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
     return;
   }
 
+  const mode = format === 'sir' || format === 'iframe' ? format : 'auto';
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=15');
   res.status(200).send(
     buildScores365LmtBrowserPreviewHtml(info, {
       publicBaseUrl,
       hidePitchBrand: Boolean(hidePitchBrand),
-      mode: format === 'sir' ? 'sir' : 'iframe',
+      mode,
     }),
   );
 }
