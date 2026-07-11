@@ -1916,6 +1916,14 @@ const MatchDetailsScreen = () => {
       widgetUrl={lmtInfo.widgetUrl}
       embedUrl={lmtInfo.embedUrl}
       aspectRatio={lmtInfo.widgetRatio}
+      // DD branding: rewrite GetWidget HTML (pitchLogo / goalBannerImage / vlmtCourtBannerUrl).
+      // hideBrand=true → transparent pixel; false → 90PLUS-app (or brandLogoUrl).
+      hideBrand={
+        process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === 'true' ||
+        process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === '1'
+      }
+      brandLogoUrl={process.env.EXPO_PUBLIC_LMT_PITCH_LOGO_URL?.trim() || null}
+      coverBrand
       loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
       unavailableLabel={t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
       retryLabel={t.matchDetails.retry || t.common.retry}

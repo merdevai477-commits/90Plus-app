@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,31 +11,52 @@ import {
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { PitchBrandLogo } from './PitchBrandLogo';
+import {
+  fetchBrandedLmtHtml,
+  LMT_WIDGET_BASE_ORIGIN,
+} from '../../services/lmt.service';
 
 type MatchLmtWebViewProps = {
-  /** Official 365 GetWidget URL — primary source for RN WebView. */
+  /** Official 365 GetWidget URL (partnerid — NOT gameId). */
   widgetUrl: string;
-  /** Optional backend HTML shell (nested iframe — fallback only). */
+  /** Optional backend HTML shell — last-resort URI fallback. */
   embedUrl?: string | null;
   aspectRatio?: number | null;
   /** hero = replaces score card at top of match details */
   variant?: 'hero' | 'card';
-  /** Hide 365 pitch mark with 90PLUS cover (default true). */
+  /**
+   * true → transparent pitchLogo (hide 365 mark entirely).
+   * false → brandLogoUrl or default 90PLUS-app SVG data URI.
+   */
+  hideBrand?: boolean;
+  /** Absolute / data URI used as pitchLogo when hideBrand is false. */
+  brandLogoUrl?: string | null;
+  /**
+   * Visual overlay fallback only when GetWidget HTML branding failed
+   * and we fell back to loading widgetUrl as uri.
+   */
   coverBrand?: boolean;
   unavailableLabel?: string;
   loadingLabel?: string;
   retryLabel?: string;
 };
 
+type LoadMode = 'html' | 'uri';
+
 /**
- * WebView for live pitch tracking (official 365 GetWidget).
- * Cross-origin widget can't be edited, so we cover the 365 pitch logo with an overlay.
+ * Live Match Tracker WebView — DD-style branding:
+ * 1) fetch GetWidget HTML
+ * 2) replace pitchLogo / goalBannerImage / vlmtCourtBannerUrl
+ * 3) render via source={{ html, baseUrl }}
+ * Overlay + uri only if that path fails.
  */
 export function MatchLmtWebView({
   widgetUrl,
   embedUrl,
   aspectRatio,
   variant = 'hero',
+  hideBrand = false,
+  brandLogoUrl = null,
   coverBrand = true,
   unavailableLabel = 'Live tracking is not available for this match.',
   loadingLabel = 'Loading tracking…',
@@ -44,42 +65,75 @@ export function MatchLmtWebView({
   const { width } = useWindowDimensions();
   const ratio = aspectRatio && aspectRatio > 0 ? aspectRatio : 16 / 9;
   const sidePad = 16;
-  // hero = full-bleed (بدون هوامش جانبية)، card = بهوامش زي الأول
   const frameWidth = variant === 'hero'
     ? width
     : Math.max(280, width - sidePad * 2);
-  // Slightly taller than 16:9 so H2H strip under pitch still fits.
   const frameHeight = Math.max(
     variant === 'hero' ? 300 : 220,
     Math.round(frameWidth / ratio) + (variant === 'hero' ? 48 : 0),
   );
 
-  // Match DD SVG aspect 240×72 — مكبّرة عشان تغطي شعار 365scores بالكامل
   const brandWidth = Math.min(220, Math.round(frameWidth * 0.58));
   const brandHeight = Math.round(brandWidth * (90 / 240));
 
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [useEmbedFallback, setUseEmbedFallback] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [mode, setMode] = useState<LoadMode>('html');
+  const [brandedHtml, setBrandedHtml] = useState<string | null>(null);
+  const [uriFallback, setUriFallback] = useState(widgetUrl);
 
-  const uri = useMemo(() => {
-    if (useEmbedFallback && embedUrl) return embedUrl;
-    return widgetUrl;
-  }, [widgetUrl, embedUrl, useEmbedFallback]);
+  const prepareHtml = useCallback(async () => {
+    setLoading(true);
+    setFailed(false);
+    setMode('html');
+    setBrandedHtml(null);
+    try {
+      const html = await fetchBrandedLmtHtml(widgetUrl, { hideBrand, brandLogoUrl });
+      setBrandedHtml(html);
+      setMode('html');
+    } catch {
+      // DD fallback path: load licensed GetWidget URI + optional visual cover
+      setBrandedHtml(null);
+      setMode('uri');
+      setUriFallback(widgetUrl);
+    }
+  }, [widgetUrl, hideBrand, brandLogoUrl]);
+
+  useEffect(() => {
+    void prepareHtml();
+  }, [prepareHtml, reloadKey]);
 
   const handleRetry = useCallback(() => {
-    setFailed(false);
-    setLoading(true);
-    if (failed && embedUrl && !useEmbedFallback) {
-      setUseEmbedFallback(true);
+    // First retry: re-fetch branded HTML. Second path already uses uri.
+    if (mode === 'uri' && embedUrl && uriFallback === widgetUrl) {
+      setUriFallback(embedUrl);
+      setReloadKey((k) => k + 1);
+      setFailed(false);
+      setLoading(true);
+      return;
     }
     setReloadKey((k) => k + 1);
-  }, [failed, embedUrl, useEmbedFallback]);
+  }, [mode, embedUrl, uriFallback, widgetUrl]);
 
-  if (!uri?.trim()) {
+  const webSource = useMemo(() => {
+    if (mode === 'html' && brandedHtml) {
+      return {
+        html: brandedHtml,
+        baseUrl: `${LMT_WIDGET_BASE_ORIGIN}/`,
+      };
+    }
+    return { uri: uriFallback };
+  }, [mode, brandedHtml, uriFallback]);
+
+  const showOverlayFallback = coverBrand && mode === 'uri' && !loading && !failed;
+
+  if (!widgetUrl?.trim()) {
     return null;
   }
+
+  // Still preparing branded HTML — keep spinner until we have html or switched to uri
+  const waitingForHtml = mode === 'html' && !brandedHtml && !failed;
 
   return (
     <View
@@ -88,7 +142,7 @@ export function MatchLmtWebView({
         { height: frameHeight },
       ]}
     >
-      {loading && !failed ? (
+      {(loading || waitingForHtml) && !failed ? (
         <View style={styles.overlay} pointerEvents="none">
           <ActivityIndicator color="#a78bfa" size="large" />
           <Text style={styles.loadingText}>{loadingLabel}</Text>
@@ -103,13 +157,13 @@ export function MatchLmtWebView({
             <Text style={styles.retryText}>{retryLabel}</Text>
           </TouchableOpacity>
         </View>
-      ) : (
+      ) : brandedHtml || mode === 'uri' ? (
         <>
           <WebView
-            key={`${uri}-${reloadKey}`}
-            source={{ uri }}
+            key={`${mode}-${reloadKey}-${mode === 'html' ? 'html' : uriFallback}`}
+            source={webSource}
             style={styles.webview}
-            originWhitelist={['https://*', 'http://*']}
+            originWhitelist={['https://*', 'http://*', 'about:blank']}
             javaScriptEnabled
             domStorageEnabled
             allowsFullscreenVideo
@@ -126,23 +180,37 @@ export function MatchLmtWebView({
             }}
             onLoadEnd={() => setLoading(false)}
             onError={() => {
+              if (mode === 'html') {
+                // HTML injection failed at render — drop to official URI
+                setMode('uri');
+                setBrandedHtml(null);
+                setUriFallback(widgetUrl);
+                setLoading(true);
+                return;
+              }
               setLoading(false);
               setFailed(true);
             }}
             onHttpError={(e) => {
               const code = e.nativeEvent?.statusCode ?? 0;
-              if (code >= 400) {
-                setLoading(false);
-                setFailed(true);
+              if (code < 400) return;
+              if (mode === 'html') {
+                setMode('uri');
+                setBrandedHtml(null);
+                setUriFallback(widgetUrl);
+                setLoading(true);
+                return;
               }
+              setLoading(false);
+              setFailed(true);
             }}
             {...(Platform.OS === 'ios'
               ? { allowsBackForwardNavigationGestures: false }
               : {})}
           />
 
-          {/* Cover mid-pitch 365 logo — cannot edit cross-origin GetWidget HTML. */}
-          {coverBrand && !loading ? (
+          {/* Overlay only when branded HTML path failed */}
+          {showOverlayFallback ? (
             <View
               pointerEvents="none"
               style={[
@@ -155,11 +223,13 @@ export function MatchLmtWebView({
               ]}
             >
               <View style={styles.brandPatch} />
-              <PitchBrandLogo width={brandWidth} height={brandHeight} />
+              {!hideBrand ? (
+                <PitchBrandLogo width={brandWidth} height={brandHeight} />
+              ) : null}
             </View>
           ) : null}
         </>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -190,7 +260,6 @@ const styles = StyleSheet.create({
   brandCover: {
     position: 'absolute',
     left: '50%',
-    // شعار 365scores الفعلي أسفل خط الوسط، مش عند 42%
     top: '58%',
     zIndex: 5,
     alignItems: 'center',
