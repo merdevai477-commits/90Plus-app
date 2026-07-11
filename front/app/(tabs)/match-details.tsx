@@ -840,8 +840,7 @@ const MatchDetailsScreen = () => {
 
   const loadLmtIfNeeded = useCallback(async (force = false) => {
     if (!fixtureId) return;
-    if (!force && loadedTabsRef.current.has('tracking') && lmtChecked) return;
-    loadedTabsRef.current.add('tracking');
+    if (!force && lmtChecked) return;
     setLmtLoading(true);
     try {
       const info = await fetchFixtureLmt(fixtureId, {
@@ -849,20 +848,24 @@ const MatchDetailsScreen = () => {
         force,
       });
       setLmtInfo(info);
+      // If tracking disappeared while that tab was open, fall back to Events.
+      if (!info) {
+        setActiveTab((tab) => (tab === 'tracking' ? 'events' : tab));
+      }
     } catch {
       setLmtInfo(null);
+      setActiveTab((tab) => (tab === 'tracking' ? 'events' : tab));
     } finally {
       setLmtChecked(true);
       setLmtLoading(false);
     }
   }, [fixtureId, language, lmtChecked]);
 
-  // Soft-preload LMT for live matches so the Tracking tab opens faster.
+  // Quietly probe LMT for every match. Tab appears only when partnerId exists.
   useEffect(() => {
-    if (!fixtureId || !fixture || !isLive()) return;
-    if (loadedTabsRef.current.has('tracking')) return;
+    if (!fixtureId || !fixture) return;
     void loadLmtIfNeeded();
-  }, [fixtureId, fixture?.fixture?.id, isLive, loadLmtIfNeeded]);
+  }, [fixtureId, fixture?.fixture?.id, loadLmtIfNeeded]);
 
   // Reload stats when match reaches HT or full time
   useEffect(() => {
@@ -1682,42 +1685,15 @@ const MatchDetailsScreen = () => {
   };
 
   const renderTracking = () => {
-    if (lmtLoading && !lmtInfo) {
-      return (
-        <View style={styles.emptyState}>
-          <ActivityIndicator color="#a78bfa" size="large" />
-          <Text style={styles.emptyStateText}>
-            {t.matchDetails.trackingLoading || 'Loading live pitch…'}
-          </Text>
-        </View>
-      );
-    }
-
-    if (!lmtInfo?.embedUrl) {
-      return (
-        <View style={styles.emptyState}>
-          <Ionicons name="football-outline" size={64} color="#333" />
-          <Text style={styles.emptyStateText}>
-            {t.matchDetails.trackingUnavailable || 'Live tracking is not available for this match.'}
-          </Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => {
-              loadedTabsRef.current.delete('tracking');
-              setLmtChecked(false);
-              void loadLmtIfNeeded(true);
-            }}
-          >
-            <Text style={styles.retryButtonText}>{t.matchDetails.retry || t.common.retry}</Text>
-          </TouchableOpacity>
-        </View>
-      );
+    // No partnerId → tab should be hidden; keep Events/score card as normal UI.
+    if (!lmtInfo?.widgetUrl) {
+      return null;
     }
 
     return (
       <MatchLmtWebView
-        embedUrl={lmtInfo.embedUrl}
         widgetUrl={lmtInfo.widgetUrl}
+        embedUrl={lmtInfo.embedUrl}
         aspectRatio={lmtInfo.widgetRatio}
         loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
         unavailableLabel={t.matchDetails.trackingUnavailable || 'Live tracking is not available for this match.'}
@@ -1952,7 +1928,9 @@ const MatchDetailsScreen = () => {
 
   const tabs = [
     { key: 'events', label: t.matchDetails.events, icon: 'football' as const },
-    { key: 'tracking', label: t.matchDetails.tracking || 'Tracking', icon: 'navigate' as const },
+    ...(lmtInfo?.widgetUrl
+      ? [{ key: 'tracking', label: t.matchDetails.tracking || 'Tracking', icon: 'navigate' as const }]
+      : []),
     { key: 'lineups', label: t.matchDetails.lineups, icon: 'people' as const },
     { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
     { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },

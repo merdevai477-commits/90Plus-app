@@ -12,10 +12,10 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 
 type MatchLmtWebViewProps = {
-  /** Backend HTML embed URL (iframes official GetWidget). */
-  embedUrl: string;
-  /** Direct 365 GetWidget URL — used as fallback if embed fails. */
-  widgetUrl?: string | null;
+  /** Official 365 GetWidget URL — primary source for RN WebView. */
+  widgetUrl: string;
+  /** Optional backend HTML shell (nested iframe — fallback only). */
+  embedUrl?: string | null;
   aspectRatio?: number | null;
   unavailableLabel?: string;
   loadingLabel?: string;
@@ -23,11 +23,12 @@ type MatchLmtWebViewProps = {
 };
 
 /**
- * WebView that loads our LMT HTML shell (iframe → lmtsrcf GetWidget).
+ * WebView for live pitch tracking.
+ * Loads lmtsrcf GetWidget directly (reliable on mobile); score card stays above.
  */
 export function MatchLmtWebView({
-  embedUrl,
   widgetUrl,
+  embedUrl,
   aspectRatio,
   unavailableLabel = 'Live tracking is not available for this match.',
   loadingLabel = 'Loading tracking…',
@@ -36,40 +37,35 @@ export function MatchLmtWebView({
   const { width } = useWindowDimensions();
   const ratio = aspectRatio && aspectRatio > 0 ? aspectRatio : 16 / 9;
   const frameWidth = Math.max(280, width - 32);
-  const frameHeight = Math.round(frameWidth / ratio);
+  const frameHeight = Math.max(220, Math.round(frameWidth / ratio));
 
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [useFallback, setUseFallback] = useState(false);
+  const [useEmbedFallback, setUseEmbedFallback] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   const uri = useMemo(() => {
-    if (useFallback && widgetUrl) return widgetUrl;
-    return embedUrl;
-  }, [embedUrl, widgetUrl, useFallback]);
+    if (useEmbedFallback && embedUrl) return embedUrl;
+    return widgetUrl;
+  }, [widgetUrl, embedUrl, useEmbedFallback]);
 
   const handleRetry = useCallback(() => {
     setFailed(false);
     setLoading(true);
-    if (failed && widgetUrl && !useFallback) {
-      setUseFallback(true);
+    if (failed && embedUrl && !useEmbedFallback) {
+      setUseEmbedFallback(true);
     }
     setReloadKey((k) => k + 1);
-  }, [failed, widgetUrl, useFallback]);
+  }, [failed, embedUrl, useEmbedFallback]);
 
-  if (!uri) {
-    return (
-      <View style={[styles.empty, { minHeight: frameHeight }]}>
-        <Ionicons name="football-outline" size={36} color="#6b7280" />
-        <Text style={styles.emptyText}>{unavailableLabel}</Text>
-      </View>
-    );
+  if (!uri?.trim()) {
+    return null;
   }
 
   return (
     <View style={[styles.card, { height: frameHeight }]}>
       {loading && !failed ? (
-        <View style={styles.overlay}>
+        <View style={styles.overlay} pointerEvents="none">
           <ActivityIndicator color="#a78bfa" size="large" />
           <Text style={styles.loadingText}>{loadingLabel}</Text>
         </View>
@@ -88,7 +84,7 @@ export function MatchLmtWebView({
           key={`${uri}-${reloadKey}`}
           source={{ uri }}
           style={styles.webview}
-          originWhitelist={['*']}
+          originWhitelist={['https://*', 'http://*']}
           javaScriptEnabled
           domStorageEnabled
           allowsFullscreenVideo
@@ -97,7 +93,7 @@ export function MatchLmtWebView({
           mixedContentMode="always"
           setSupportMultipleWindows={false}
           nestedScrollEnabled
-          scrollEnabled
+          scrollEnabled={false}
           startInLoadingState={false}
           onLoadStart={() => {
             setLoading(true);
@@ -108,9 +104,12 @@ export function MatchLmtWebView({
             setLoading(false);
             setFailed(true);
           }}
-          onHttpError={() => {
-            setLoading(false);
-            setFailed(true);
+          onHttpError={(e) => {
+            const code = e.nativeEvent?.statusCode ?? 0;
+            if (code >= 400) {
+              setLoading(false);
+              setFailed(true);
+            }
           }}
           {...(Platform.OS === 'ios'
             ? { allowsBackForwardNavigationGestures: false }
@@ -124,7 +123,7 @@ export function MatchLmtWebView({
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 20,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#000',
@@ -147,16 +146,6 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#9ca3af',
     fontSize: 13,
-  },
-  empty: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    padding: 24,
-    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   emptyText: {
     color: '#9ca3af',
