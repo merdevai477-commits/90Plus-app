@@ -595,7 +595,7 @@ export const en = {
       signInRequiredMessage: 'Log in to make predictions and earn rewards.',
     },
     crowdPrediction: {
-      label: '365 fans',
+      label: 'Crowd tip',
     },
     tickets: {
       sheetTitle: 'Match Tickets',

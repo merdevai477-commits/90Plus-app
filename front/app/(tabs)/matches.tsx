@@ -216,12 +216,14 @@ const PredictionButton = memo(function PredictionButton({
   onPress,
   kind,
   disabled,
+  percent,
 }: {
   label: string;
   isActive: boolean;
   onPress: () => void;
   kind: PredictionKind;
   disabled?: boolean;
+  percent?: number | null;
 }) {
   const palette = PRED_COLORS[kind];
   return (
@@ -264,9 +266,20 @@ const PredictionButton = memo(function PredictionButton({
           />
         )}
       </View>
+      {percent != null ? (
+        <Text
+          style={[
+            styles.predBtnPct,
+            isActive && { color: '#fff' },
+          ]}
+        >
+          {percent}%
+        </Text>
+      ) : null}
       <Text
         style={[
           styles.predBtnTxt,
+          percent != null && styles.predBtnTxtWithPct,
           isActive && {
             color: '#fff',
             textShadowColor: palette.glow,
@@ -279,6 +292,80 @@ const PredictionButton = memo(function PredictionButton({
         {label}
       </Text>
     </TouchableOpacity>
+  );
+});
+
+/** Professional 1X2 crowd strip — percentages live inside the segments. */
+const CrowdOddsStrip = memo(function CrowdOddsStrip({
+  homePercent,
+  drawPercent,
+  awayPercent,
+  label,
+  compact,
+}: {
+  homePercent: number;
+  drawPercent: number;
+  awayPercent: number;
+  label: string;
+  compact?: boolean;
+}) {
+  const home = Math.max(0, homePercent);
+  const draw = Math.max(0, drawPercent);
+  const away = Math.max(0, awayPercent);
+  const lead =
+    home >= draw && home >= away ? 'home' : away >= draw && away >= home ? 'away' : 'draw';
+
+  const segments: Array<{
+    key: 'home' | 'draw' | 'away';
+    pct: number;
+    barStyle: object;
+    minShowLabel: number;
+  }> = [
+    { key: 'home', pct: home, barStyle: styles.crowdSegHome, minShowLabel: 12 },
+    { key: 'draw', pct: draw, barStyle: styles.crowdSegDraw, minShowLabel: 10 },
+    { key: 'away', pct: away, barStyle: styles.crowdSegAway, minShowLabel: 12 },
+  ];
+
+  return (
+    <View style={[styles.crowdStrip, compact && styles.crowdStripCompact]}>
+      <View style={styles.crowdStripHeader}>
+        <Text style={styles.crowdStripLabel}>{label}</Text>
+        <View style={styles.crowdStripLegend}>
+          <Text style={[styles.crowdLegendTxt, lead === 'home' && styles.crowdLegendLead]}>
+            {home}%
+          </Text>
+          <Text style={styles.crowdLegendSep}>·</Text>
+          <Text style={[styles.crowdLegendTxt, lead === 'draw' && styles.crowdLegendLead]}>
+            {draw}%
+          </Text>
+          <Text style={styles.crowdLegendSep}>·</Text>
+          <Text style={[styles.crowdLegendTxt, lead === 'away' && styles.crowdLegendLead]}>
+            {away}%
+          </Text>
+        </View>
+      </View>
+      <View style={styles.crowdStripTrack}>
+        {segments.map((seg) =>
+          seg.pct <= 0 ? null : (
+            <View
+              key={seg.key}
+              style={[
+                styles.crowdSeg,
+                seg.barStyle,
+                lead === seg.key && styles.crowdSegLead,
+                { flex: Math.max(seg.pct, 1) },
+              ]}
+            >
+              {seg.pct >= seg.minShowLabel ? (
+                <Text style={styles.crowdSegTxt} numberOfLines={1}>
+                  {seg.pct}%
+                </Text>
+              ) : null}
+            </View>
+          ),
+        )}
+      </View>
+    </View>
   );
 });
 
@@ -469,72 +556,29 @@ const MatchRow = memo(function MatchRow({
         </TouchableOpacity>
       </View>
 
-      {fixture.status === 'UPCOMING' && fixture.crowdPrediction ? (
-        <View style={[styles.crowdWrap, worldCupCard && styles.crowdWrapInCard]}>
-          <Text style={styles.crowdLabel}>{t('matches.crowdPrediction.label')}</Text>
-          <View style={styles.crowdBarTrack}>
-            <View
-              style={[
-                styles.crowdBarSeg,
-                styles.crowdBarHome,
-                { flex: Math.max(fixture.crowdPrediction.homePercent, 1) },
-              ]}
-            />
-            <View
-              style={[
-                styles.crowdBarSeg,
-                styles.crowdBarDraw,
-                { flex: Math.max(fixture.crowdPrediction.drawPercent, 1) },
-              ]}
-            />
-            <View
-              style={[
-                styles.crowdBarSeg,
-                styles.crowdBarAway,
-                { flex: Math.max(fixture.crowdPrediction.awayPercent, 1) },
-              ]}
-            />
-          </View>
-          <View style={styles.crowdPctRow}>
-            <Text
-              style={[
-                styles.crowdPct,
-                styles.crowdPctHome,
-                fixture.crowdPrediction.homePercent >= fixture.crowdPrediction.awayPercent &&
-                  fixture.crowdPrediction.homePercent >= fixture.crowdPrediction.drawPercent &&
-                  styles.crowdPctLead,
-              ]}
-            >
-              {fixture.crowdPrediction.homePercent}%
-            </Text>
-            <Text
-              style={[
-                styles.crowdPct,
-                styles.crowdPctDraw,
-                fixture.crowdPrediction.drawPercent > fixture.crowdPrediction.homePercent &&
-                  fixture.crowdPrediction.drawPercent > fixture.crowdPrediction.awayPercent &&
-                  styles.crowdPctLead,
-              ]}
-            >
-              {fixture.crowdPrediction.drawPercent}%
-            </Text>
-            <Text
-              style={[
-                styles.crowdPct,
-                styles.crowdPctAway,
-                fixture.crowdPrediction.awayPercent > fixture.crowdPrediction.homePercent &&
-                  fixture.crowdPrediction.awayPercent >= fixture.crowdPrediction.drawPercent &&
-                  styles.crowdPctLead,
-              ]}
-            >
-              {fixture.crowdPrediction.awayPercent}%
-            </Text>
-          </View>
+      {fixture.status === 'UPCOMING' && fixture.crowdPrediction && !showPreds ? (
+        <View style={[styles.crowdStripOuter, worldCupCard && styles.crowdStripOuterInCard]}>
+          <CrowdOddsStrip
+            homePercent={fixture.crowdPrediction.homePercent}
+            drawPercent={fixture.crowdPrediction.drawPercent}
+            awayPercent={fixture.crowdPrediction.awayPercent}
+            label={t('matches.crowdPrediction.label')}
+            compact
+          />
         </View>
       ) : null}
 
       {showPreds && fixture.status === 'UPCOMING' && (
         <View style={[styles.predWrap, worldCupCard && styles.predWrapInCard]}>
+          {fixture.crowdPrediction ? (
+            <CrowdOddsStrip
+              homePercent={fixture.crowdPrediction.homePercent}
+              drawPercent={fixture.crowdPrediction.drawPercent}
+              awayPercent={fixture.crowdPrediction.awayPercent}
+              label={t('matches.crowdPrediction.label')}
+            />
+          ) : null}
+
           <View style={styles.predTitleRow}>
             <Text style={styles.predTitle}>
               {existingPrediction ? t('matches.prediction.yourPrediction') : t('matches.prediction.title')}
@@ -548,6 +592,7 @@ const MatchRow = memo(function MatchRow({
             <PredictionButton
               label={homeName}
               kind="home"
+              percent={fixture.crowdPrediction?.homePercent}
               isActive={existingPrediction === 'home'}
               onPress={() => onPredict(fixture.id, 'home')}
               disabled={!!existingPrediction || isSubmitting}
@@ -555,6 +600,7 @@ const MatchRow = memo(function MatchRow({
             <PredictionButton
               label={t('matches.prediction.drawLabel')}
               kind="draw"
+              percent={fixture.crowdPrediction?.drawPercent}
               isActive={existingPrediction === 'draw'}
               onPress={() => onPredict(fixture.id, 'draw')}
               disabled={!!existingPrediction || isSubmitting}
@@ -562,6 +608,7 @@ const MatchRow = memo(function MatchRow({
             <PredictionButton
               label={awayName}
               kind="away"
+              percent={fixture.crowdPrediction?.awayPercent}
               isActive={existingPrediction === 'away'}
               onPress={() => onPredict(fixture.id, 'away')}
               disabled={!!existingPrediction || isSubmitting}
@@ -2505,47 +2552,88 @@ const styles = StyleSheet.create({
   },
   predWrap: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 6 },
   predWrapInCard: { paddingHorizontal: 14, paddingBottom: 14 },
-  crowdWrap: {
+  crowdStripOuter: {
     paddingHorizontal: 16,
     paddingBottom: 12,
-    paddingTop: 2,
-    gap: 6,
+    paddingTop: 0,
   },
-  crowdWrapInCard: { paddingHorizontal: 12 },
-  crowdLabel: {
-    color: 'rgba(255,255,255,0.4)',
+  crowdStripOuterInCard: { paddingHorizontal: 12 },
+  crowdStrip: {
+    marginBottom: 12,
+    gap: 8,
+  },
+  crowdStripCompact: {
+    marginBottom: 0,
+  },
+  crowdStripHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  crowdStripLabel: {
+    color: 'rgba(233,213,255,0.7)',
     fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-    letterSpacing: 0.6,
+    fontWeight: '800',
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
-  crowdBarTrack: {
+  crowdStripLegend: {
     flexDirection: 'row',
-    height: 5,
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  crowdBarSeg: { height: '100%' as const },
-  crowdBarHome: { backgroundColor: 'rgba(59,130,246,0.9)' },
-  crowdBarDraw: { backgroundColor: 'rgba(148,163,184,0.75)' },
-  crowdBarAway: { backgroundColor: 'rgba(244,63,94,0.9)' },
-  crowdPctRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 4,
   },
-  crowdPct: {
+  crowdLegendTxt: {
+    color: 'rgba(255,255,255,0.5)',
     fontSize: 11,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.55)',
-    minWidth: 36,
+    fontVariant: ['tabular-nums'],
   },
-  crowdPctHome: { textAlign: 'left' as const, color: 'rgba(147,197,253,0.95)' },
-  crowdPctDraw: { textAlign: 'center' as const, color: 'rgba(203,213,225,0.9)' },
-  crowdPctAway: { textAlign: 'right' as const, color: 'rgba(251,113,133,0.95)' },
-  crowdPctLead: { color: '#fff', fontWeight: '800' },
+  crowdLegendLead: {
+    color: '#fff',
+    fontWeight: '900',
+  },
+  crowdLegendSep: {
+    color: 'rgba(255,255,255,0.25)',
+    fontSize: 11,
+  },
+  crowdStripTrack: {
+    flexDirection: 'row',
+    height: 28,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  crowdSeg: {
+    height: '100%' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 2,
+  },
+  crowdSegHome: {
+    backgroundColor: 'rgba(37,99,235,0.92)',
+  },
+  crowdSegDraw: {
+    backgroundColor: 'rgba(100,116,139,0.9)',
+  },
+  crowdSegAway: {
+    backgroundColor: 'rgba(225,29,72,0.92)',
+  },
+  crowdSegLead: {
+    opacity: 1,
+  },
+  crowdSegTxt: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   predTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
   predTitleSpinner: { marginLeft: 4 },
   predTitle: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },
@@ -2553,8 +2641,10 @@ const styles = StyleSheet.create({
   predResultLoss: { color: '#ef4444', fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 },
   predResultPending: { color: '#f59e0b', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 8 },
   predButtons: { flexDirection: 'row', gap: 10, paddingHorizontal: 4 },
-  predBtn: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  predBtn: { flex: 1, minHeight: 52, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 8, gap: 2 },
+  predBtnPct: { color: 'rgba(233,213,255,0.95)', fontSize: 15, fontWeight: '900', zIndex: 1, fontVariant: ['tabular-nums'] },
   predBtnTxt: { color: 'rgba(255,255,255,0.72)', fontSize: 13, fontWeight: '800', textAlign: 'center', zIndex: 1 },
+  predBtnTxtWithPct: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.55)' },
 
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   calendarModalOuter: { width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 35, elevation: 20 },

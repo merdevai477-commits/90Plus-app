@@ -502,7 +502,7 @@ export const ar = {
       signInRequiredMessage: 'سجّل الدخول عشان تقدر تتوقع وتكسب مكافآت.',
     },
     crowdPrediction: {
-      label: 'جمهور 365',
+      label: 'نسب الجمهور',
     },
     tickets: {
       sheetTitle: 'تذاكر المباريات',
