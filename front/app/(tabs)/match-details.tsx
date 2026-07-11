@@ -269,7 +269,6 @@ const MatchDetailsScreen = () => {
   const [formLoading, setFormLoading] = useState(false);
   const [standingsLoading, setStandingsLoading] = useState(false);
   const [lmtInfo, setLmtInfo] = useState<Scores365LmtInfo | null>(null);
-  const [lmtLoading, setLmtLoading] = useState(false);
   const [lmtChecked, setLmtChecked] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
@@ -445,7 +444,6 @@ const MatchDetailsScreen = () => {
     setFormLoading(false);
     setStandingsLoading(false);
     setLmtInfo(null);
-    setLmtLoading(false);
     setLmtChecked(false);
     loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
@@ -841,7 +839,6 @@ const MatchDetailsScreen = () => {
   const loadLmtIfNeeded = useCallback(async (force = false) => {
     if (!fixtureId) return;
     if (!force && lmtChecked) return;
-    setLmtLoading(true);
     try {
       const info = await fetchFixtureLmt(fixtureId, {
         language,
@@ -857,7 +854,6 @@ const MatchDetailsScreen = () => {
       setActiveTab((tab) => (tab === 'tracking' ? 'events' : tab));
     } finally {
       setLmtChecked(true);
-      setLmtLoading(false);
     }
   }, [fixtureId, language, lmtChecked]);
 
