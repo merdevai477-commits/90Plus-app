@@ -1927,6 +1927,8 @@ const MatchDetailsScreen = () => {
       loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
       unavailableLabel={t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
       retryLabel={t.matchDetails.retry || t.common.retry}
+      expandLabel={t.matchDetails.trackingExpand || 'Wider view'}
+      collapseLabel={t.matchDetails.trackingCollapse || 'Close wider view'}
     />
   ) : (
     <MatchHeader

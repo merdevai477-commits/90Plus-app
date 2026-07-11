@@ -353,6 +353,8 @@ export const en = {
     trackingLoading: 'Loading live pitch…',
     trackingUnavailable: 'Live pitch tracking is not provided for this match.',
     trackingUnavailableHint: 'SportRadar tracking is only available for some competitions.',
+    trackingExpand: 'Wider view',
+    trackingCollapse: 'Close wider view',
     startingXI: 'Starting XI',
     substitutes: 'Substitutes',
     coach: 'Coach',

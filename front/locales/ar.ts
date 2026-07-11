@@ -578,6 +578,8 @@ export const ar = {
     trackingLoading: 'جاري تحميل الملعب المباشر…',
     trackingUnavailable: 'تتبع الملعب غير متوفر لهذه المباراة.',
     trackingUnavailableHint: 'التتبع المباشر متاح لبعض البطولات فقط من مزوّد البيانات.',
+    trackingExpand: 'عرض أوسع',
+    trackingCollapse: 'إغلاق العرض الأوسع',
     startingXI: 'التشكيلة الأساسية',
     substitutes: 'البدلاء',
     coach: 'المدرب',

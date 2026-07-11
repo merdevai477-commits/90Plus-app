@@ -7,9 +7,12 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   Platform,
+  Modal,
+  StatusBar,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PitchBrandLogo } from './PitchBrandLogo';
 import {
   fetchBrandedLmtHtml,
@@ -39,16 +42,88 @@ type MatchLmtWebViewProps = {
   unavailableLabel?: string;
   loadingLabel?: string;
   retryLabel?: string;
+  expandLabel?: string;
+  collapseLabel?: string;
 };
 
 type LoadMode = 'html' | 'uri';
 
+type WebSource =
+  | { html: string; baseUrl: string }
+  | { uri: string };
+
+function LmtPitchSurface({
+  webSource,
+  webKey,
+  showOverlayFallback,
+  hideBrand,
+  brandWidth,
+  brandHeight,
+  onLoadStart,
+  onLoadEnd,
+  onError,
+  onHttpError,
+}: {
+  webSource: WebSource;
+  webKey: string;
+  showOverlayFallback: boolean;
+  hideBrand: boolean;
+  brandWidth: number;
+  brandHeight: number;
+  onLoadStart: () => void;
+  onLoadEnd: () => void;
+  onError: () => void;
+  onHttpError: (code: number) => void;
+}) {
+  return (
+    <View style={styles.surfaceFill}>
+      <WebView
+        key={webKey}
+        source={webSource}
+        style={styles.webview}
+        originWhitelist={['https://*', 'http://*', 'about:blank']}
+        javaScriptEnabled
+        domStorageEnabled
+        allowsFullscreenVideo
+        allowsInlineMediaPlayback
+        mediaPlaybackRequiresUserAction={false}
+        mixedContentMode="always"
+        setSupportMultipleWindows={false}
+        nestedScrollEnabled
+        scrollEnabled={false}
+        startInLoadingState={false}
+        onLoadStart={onLoadStart}
+        onLoadEnd={onLoadEnd}
+        onError={onError}
+        onHttpError={(e) => onHttpError(e.nativeEvent?.statusCode ?? 0)}
+        {...(Platform.OS === 'ios'
+          ? { allowsBackForwardNavigationGestures: false }
+          : {})}
+      />
+      {showOverlayFallback ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.brandCover,
+            {
+              width: brandWidth,
+              height: brandHeight,
+              marginLeft: -brandWidth / 2,
+            },
+          ]}
+        >
+          <View style={styles.brandPatch} />
+          {!hideBrand ? (
+            <PitchBrandLogo width={brandWidth} height={brandHeight} />
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 /**
- * Live Match Tracker WebView — DD-style branding:
- * 1) fetch GetWidget HTML
- * 2) replace pitchLogo / goalBannerImage / vlmtCourtBannerUrl
- * 3) render via source={{ html, baseUrl }}
- * Overlay + uri only if that path fails.
+ * Live Match Tracker WebView — DD-style branding + optional landscape expand.
  */
 export function MatchLmtWebView({
   widgetUrl,
@@ -61,8 +136,11 @@ export function MatchLmtWebView({
   unavailableLabel = 'Live tracking is not available for this match.',
   loadingLabel = 'Loading tracking…',
   retryLabel = 'Retry',
+  expandLabel = 'Wider view',
+  collapseLabel = 'Close wider view',
 }: MatchLmtWebViewProps) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const ratio = aspectRatio && aspectRatio > 0 ? aspectRatio : 16 / 9;
   const sidePad = 16;
   const frameWidth = variant === 'hero'
@@ -76,12 +154,19 @@ export function MatchLmtWebView({
   const brandWidth = Math.min(280, Math.round(frameWidth * 0.72));
   const brandHeight = Math.round(brandWidth * (84 / 280));
 
+  // Landscape-like frame while device stays portrait (rotate content 90°).
+  const landscapeW = Math.max(width, height);
+  const landscapeH = Math.min(width, height);
+  const landscapeBrandW = Math.min(320, Math.round(landscapeW * 0.55));
+  const landscapeBrandH = Math.round(landscapeBrandW * (84 / 280));
+
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [mode, setMode] = useState<LoadMode>('html');
   const [brandedHtml, setBrandedHtml] = useState<string | null>(null);
   const [uriFallback, setUriFallback] = useState(widgetUrl);
+  const [landscapeOpen, setLandscapeOpen] = useState(false);
 
   const prepareHtml = useCallback(async () => {
     setLoading(true);
@@ -93,7 +178,6 @@ export function MatchLmtWebView({
       setBrandedHtml(html);
       setMode('html');
     } catch {
-      // DD fallback path: load licensed GetWidget URI + optional visual cover
       setBrandedHtml(null);
       setMode('uri');
       setUriFallback(widgetUrl);
@@ -105,7 +189,6 @@ export function MatchLmtWebView({
   }, [prepareHtml, reloadKey]);
 
   const handleRetry = useCallback(() => {
-    // First retry: re-fetch branded HTML. Second path already uses uri.
     if (mode === 'uri' && embedUrl && uriFallback === widgetUrl) {
       setUriFallback(embedUrl);
       setReloadKey((k) => k + 1);
@@ -116,7 +199,7 @@ export function MatchLmtWebView({
     setReloadKey((k) => k + 1);
   }, [mode, embedUrl, uriFallback, widgetUrl]);
 
-  const webSource = useMemo(() => {
+  const webSource = useMemo((): WebSource => {
     if (mode === 'html' && brandedHtml) {
       return {
         html: brandedHtml,
@@ -127,110 +210,141 @@ export function MatchLmtWebView({
   }, [mode, brandedHtml, uriFallback]);
 
   const showOverlayFallback = coverBrand && mode === 'uri' && !loading && !failed;
+  const ready = Boolean(brandedHtml || mode === 'uri');
+  const waitingForHtml = mode === 'html' && !brandedHtml && !failed;
+  const webKey = `${mode}-${reloadKey}-${mode === 'html' ? 'html' : uriFallback}`;
+
+  const onWebError = useCallback(() => {
+    if (mode === 'html') {
+      setMode('uri');
+      setBrandedHtml(null);
+      setUriFallback(widgetUrl);
+      setLoading(true);
+      return;
+    }
+    setLoading(false);
+    setFailed(true);
+  }, [mode, widgetUrl]);
+
+  const onWebHttpError = useCallback(
+    (code: number) => {
+      if (code < 400) return;
+      onWebError();
+    },
+    [onWebError],
+  );
 
   if (!widgetUrl?.trim()) {
     return null;
   }
 
-  // Still preparing branded HTML — keep spinner until we have html or switched to uri
-  const waitingForHtml = mode === 'html' && !brandedHtml && !failed;
-
   return (
-    <View
-      style={[
-        variant === 'hero' ? styles.hero : styles.card,
-        { height: frameHeight },
-      ]}
-    >
-      {(loading || waitingForHtml) && !failed ? (
-        <View style={styles.overlay} pointerEvents="none">
-          <ActivityIndicator color="#a78bfa" size="large" />
-          <Text style={styles.loadingText}>{loadingLabel}</Text>
-        </View>
-      ) : null}
+    <>
+      <View
+        style={[
+          variant === 'hero' ? styles.hero : styles.card,
+          { height: frameHeight },
+        ]}
+      >
+        {(loading || waitingForHtml) && !failed ? (
+          <View style={styles.overlay} pointerEvents="none">
+            <ActivityIndicator color="#a78bfa" size="large" />
+            <Text style={styles.loadingText}>{loadingLabel}</Text>
+          </View>
+        ) : null}
 
-      {failed ? (
-        <View style={styles.overlay}>
-          <Ionicons name="cloud-offline-outline" size={36} color="#9ca3af" />
-          <Text style={styles.emptyText}>{unavailableLabel}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.85}>
-            <Text style={styles.retryText}>{retryLabel}</Text>
+        {failed ? (
+          <View style={styles.overlay}>
+            <Ionicons name="cloud-offline-outline" size={36} color="#9ca3af" />
+            <Text style={styles.emptyText}>{unavailableLabel}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.85}>
+              <Text style={styles.retryText}>{retryLabel}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : ready ? (
+          <>
+            <LmtPitchSurface
+              webSource={webSource}
+              webKey={webKey}
+              showOverlayFallback={showOverlayFallback}
+              hideBrand={hideBrand}
+              brandWidth={brandWidth}
+              brandHeight={brandHeight}
+              onLoadStart={() => {
+                setLoading(true);
+                setFailed(false);
+              }}
+              onLoadEnd={() => setLoading(false)}
+              onError={onWebError}
+              onHttpError={onWebHttpError}
+            />
+
+            {/* Expand to wide / landscape-like view (video-style) */}
+            <TouchableOpacity
+              style={styles.expandBtn}
+              onPress={() => setLandscapeOpen(true)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={expandLabel}
+            >
+              <Ionicons name="phone-landscape-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+          </>
+        ) : null}
+      </View>
+
+      <Modal
+        visible={landscapeOpen}
+        animationType="fade"
+        presentationStyle="fullScreen"
+        supportedOrientations={['portrait', 'landscape']}
+        onRequestClose={() => setLandscapeOpen(false)}
+      >
+        <StatusBar hidden={landscapeOpen} />
+        <View style={styles.landscapeRoot}>
+          <View
+            style={[
+              styles.landscapeStage,
+              {
+                width: landscapeW,
+                height: landscapeH,
+              },
+            ]}
+          >
+            {ready ? (
+              <LmtPitchSurface
+                webSource={webSource}
+                webKey={`land-${webKey}`}
+                showOverlayFallback={showOverlayFallback}
+                hideBrand={hideBrand}
+                brandWidth={landscapeBrandW}
+                brandHeight={landscapeBrandH}
+                onLoadStart={() => {}}
+                onLoadEnd={() => {}}
+                onError={onWebError}
+                onHttpError={onWebHttpError}
+              />
+            ) : null}
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.landscapeClose,
+              {
+                top: Math.max(insets.top, 12) + 8,
+                right: Math.max(insets.right, 12) + 8,
+              },
+            ]}
+            onPress={() => setLandscapeOpen(false)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={collapseLabel}
+          >
+            <Ionicons name="close" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
-      ) : brandedHtml || mode === 'uri' ? (
-        <>
-          <WebView
-            key={`${mode}-${reloadKey}-${mode === 'html' ? 'html' : uriFallback}`}
-            source={webSource}
-            style={styles.webview}
-            originWhitelist={['https://*', 'http://*', 'about:blank']}
-            javaScriptEnabled
-            domStorageEnabled
-            allowsFullscreenVideo
-            allowsInlineMediaPlayback
-            mediaPlaybackRequiresUserAction={false}
-            mixedContentMode="always"
-            setSupportMultipleWindows={false}
-            nestedScrollEnabled
-            scrollEnabled={false}
-            startInLoadingState={false}
-            onLoadStart={() => {
-              setLoading(true);
-              setFailed(false);
-            }}
-            onLoadEnd={() => setLoading(false)}
-            onError={() => {
-              if (mode === 'html') {
-                // HTML injection failed at render — drop to official URI
-                setMode('uri');
-                setBrandedHtml(null);
-                setUriFallback(widgetUrl);
-                setLoading(true);
-                return;
-              }
-              setLoading(false);
-              setFailed(true);
-            }}
-            onHttpError={(e) => {
-              const code = e.nativeEvent?.statusCode ?? 0;
-              if (code < 400) return;
-              if (mode === 'html') {
-                setMode('uri');
-                setBrandedHtml(null);
-                setUriFallback(widgetUrl);
-                setLoading(true);
-                return;
-              }
-              setLoading(false);
-              setFailed(true);
-            }}
-            {...(Platform.OS === 'ios'
-              ? { allowsBackForwardNavigationGestures: false }
-              : {})}
-          />
-
-          {/* Overlay only when branded HTML path failed */}
-          {showOverlayFallback ? (
-            <View
-              pointerEvents="none"
-              style={[
-                styles.brandCover,
-                {
-                  width: brandWidth,
-                  height: brandHeight,
-                  marginLeft: -brandWidth / 2,
-                },
-              ]}
-            >
-              <View style={styles.brandPatch} />
-              {!hideBrand ? (
-                <PitchBrandLogo width={brandWidth} height={brandHeight} />
-              ) : null}
-            </View>
-          ) : null}
-        </>
-      ) : null}
-    </View>
+      </Modal>
+    </>
   );
 }
 
@@ -253,9 +367,50 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
+  surfaceFill: {
+    flex: 1,
+  },
   webview: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  expandBtn: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    zIndex: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  landscapeRoot: {
+    flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  landscapeStage: {
+    backgroundColor: '#000',
+    overflow: 'hidden',
+    // Rotate so pitch reads as landscape while app stays portrait-locked.
+    transform: [{ rotate: '90deg' }],
+  },
+  landscapeClose: {
+    position: 'absolute',
+    zIndex: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   brandCover: {
     position: 'absolute',
