@@ -225,7 +225,10 @@ export const mapFixtureToMatch = (fixture: Fixture): Match => {
     time: formatMatchTime(fixture.fixture.date),
     league,
     fixtureDate: fixture.fixture.date, // Full ISO kickoff — used for bell reminders + timezone-safe display
-    crowdPrediction: (fixture as { _crowdPrediction?: Match['crowdPrediction'] })._crowdPrediction,
+    crowdPrediction:
+      (fixture as { _crowdPrediction?: Match['crowdPrediction']; crowdPrediction?: Match['crowdPrediction'] })
+        ._crowdPrediction ??
+      (fixture as { crowdPrediction?: Match['crowdPrediction'] }).crowdPrediction,
   };
 };
 

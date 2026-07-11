@@ -528,14 +528,22 @@ class MatchCacheService {
     convertDbMatchToApiFormat(dbMatch: CachedFixture): FixtureFromAPI {
         // If we have the full data stored, use it
         if (dbMatch.fullData && typeof dbMatch.fullData === 'object') {
-            const fromJson = dbMatch.fullData as unknown as FixtureFromAPI;
+            const fromJson = dbMatch.fullData as unknown as FixtureFromAPI & {
+                _scores365GameId?: number;
+                _experiment?: string;
+            };
             if (dbMatch.elapsed != null && fromJson.fixture?.status) {
                 fromJson.fixture.status.elapsed = dbMatch.elapsed;
+            }
+            if (dbMatch.leagueId >= 7_000_000 && fromJson._scores365GameId == null) {
+                fromJson._scores365GameId = dbMatch.fixtureId;
+                fromJson._experiment = fromJson._experiment ?? 'scores365';
             }
             return fromJson;
         }
 
         // Otherwise, reconstruct from individual fields
+        const is365Synthetic = dbMatch.leagueId >= 7_000_000;
         return {
             fixture: {
                 id: dbMatch.fixtureId,
@@ -598,7 +606,15 @@ class MatchCacheService {
                 extratime: { home: null, away: null },
                 penalty: { home: null, away: null },
             },
-        };
+            // Lightweight list queries omit fullData — stamp synthetic 365 ids so
+            // crowd-prediction enrich can resolve gameId without the in-memory map.
+            ...(is365Synthetic
+                ? {
+                    _scores365GameId: dbMatch.fixtureId,
+                    _experiment: 'scores365',
+                }
+                : {}),
+        } as FixtureFromAPI;
     }
 
     /**

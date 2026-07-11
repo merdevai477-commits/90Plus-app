@@ -2,11 +2,13 @@
  * Enrich fixture lists with 365 community win/draw/away percentages.
  */
 
+import { logger } from '../utils/logger';
 import { redisCacheService } from './redis-cache.service';
 import {
   fetchScores365GameById,
   getScores365GameIdForFixture,
   isScores365ExperimentEnabled,
+  SCORES365_LEAGUE_ID_OFFSET,
 } from './scores365-experiment.service';
 import {
   extractScores365CrowdWinPrediction,
@@ -29,9 +31,9 @@ const CROWD_PRED_TTL_MS = Math.max(
 );
 const CROWD_PRED_MAX_PER_LIST = Math.max(
   8,
-  parseInt(process.env.SCORES365_CROWD_PRED_MAX || '36', 10) || 36,
+  parseInt(process.env.SCORES365_CROWD_PRED_MAX || '80', 10) || 80,
 );
-const CROWD_PRED_CONCURRENCY = 6;
+const CROWD_PRED_CONCURRENCY = 8;
 
 function swapCrowdSides(
   prediction: Scores365CrowdPrediction | null,
@@ -93,14 +95,27 @@ async function fetchCrowdPredictionForGameId(
 function resolveCrowdGameId(fixture: any): number | null {
   const fromField = fixture?._scores365GameId;
   if (typeof fromField === 'number' && fromField > 0) return fromField;
+
   const fixtureId = fixture?.fixture?.id;
   if (typeof fixtureId !== 'number' || fixtureId <= 0) return null;
-  return getScores365GameIdForFixture(fixtureId);
+
+  const mapped = getScores365GameIdForFixture(fixtureId);
+  if (mapped) return mapped;
+
+  // Synthetic 365 rows use gameId as fixtureId (and leagueId >= 7_000_000).
+  const leagueId = fixture?.league?.id;
+  if (typeof leagueId === 'number' && leagueId >= SCORES365_LEAGUE_ID_OFFSET) {
+    return fixtureId;
+  }
+  // Common synthetic fixture id range used across 365 experiment paths.
+  if (fixtureId >= 4_000_000) return fixtureId;
+
+  return null;
 }
 
 function isUpcomingCrowdStatus(short?: string): boolean {
   const s = (short ?? '').toUpperCase();
-  return s === 'NS' || s === 'TBD' || s === 'PST' || s === '';
+  return s === 'NS' || s === 'TBD' || s === 'PST' || s === '' || s === 'NSY';
 }
 
 /** Attach 365 community win/draw/away % onto upcoming fixtures (cached, capped). */
@@ -112,6 +127,7 @@ export async function enrichFixturesWithCrowdPredictions(
     return fixtures;
   }
 
+  const nowSec = Math.floor(Date.now() / 1000);
   const targets = fixtures
     .map((f, index) => ({ f, index, gameId: resolveCrowdGameId(f) }))
     .filter(
@@ -120,12 +136,25 @@ export async function enrichFixturesWithCrowdPredictions(
         !(row.f as { _crowdPrediction?: unknown })?._crowdPrediction &&
         isUpcomingCrowdStatus(row.f?.fixture?.status?.short),
     )
-    .sort((a, b) => (a.f?.fixture?.timestamp ?? 0) - (b.f?.fixture?.timestamp ?? 0))
+    // Prefer kickoffs closest to now so evening Predictions-tab matches aren't starved.
+    .sort((a, b) => {
+      const da = Math.abs((a.f?.fixture?.timestamp ?? 0) - nowSec);
+      const db = Math.abs((b.f?.fixture?.timestamp ?? 0) - nowSec);
+      return da - db;
+    })
     .slice(0, CROWD_PRED_MAX_PER_LIST);
 
-  if (targets.length === 0) return fixtures;
+  if (targets.length === 0) {
+    logger.debug(
+      `[CrowdPred] no enrich targets (fixtures=${fixtures.length}) — missing gameIds or all have crowd already`,
+    );
+    return fixtures;
+  }
+
+  logger.info(`[CrowdPred] enriching ${targets.length}/${fixtures.length} upcoming fixtures`);
 
   const out = fixtures.slice();
+  let attached = 0;
   for (let i = 0; i < targets.length; i += CROWD_PRED_CONCURRENCY) {
     const batch = targets.slice(i, i + CROWD_PRED_CONCURRENCY);
     await Promise.all(
@@ -133,9 +162,17 @@ export async function enrichFixturesWithCrowdPredictions(
         const swapped = Boolean((f as { _scores365TeamsSwapped?: boolean })?._scores365TeamsSwapped);
         const prediction = await fetchCrowdPredictionForGameId(gameId!, language, swapped);
         if (!prediction) return;
-        out[index] = { ...out[index], _crowdPrediction: prediction };
+        attached += 1;
+        // Expose both underscore + plain key so clients can't miss it.
+        out[index] = {
+          ...out[index],
+          _crowdPrediction: prediction,
+          crowdPrediction: prediction,
+        };
       }),
     );
   }
+
+  logger.info(`[CrowdPred] attached ${attached}/${targets.length} crowd strips`);
   return out;
 }
