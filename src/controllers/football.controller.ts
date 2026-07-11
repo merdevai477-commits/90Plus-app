@@ -11,7 +11,8 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId, fetchScores365LmtWidgetHtml } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId, fetchScores365LmtWidgetHtml, buildScores365LmtBrowserPreviewHtml } from '../services/scores365-experiment.service';
+import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 
 /**
@@ -33,6 +34,48 @@ function wantsFreshMatchDetails(req: Request): boolean {
     req.query.fresh === 'true' ||
     req.query.forceRefresh === '1'
   );
+}
+
+/**
+ * LMT responses: default HTML preview in the browser; ?format=json for API clients.
+ * format=raw proxies the upstream GetWidget HTML without our chrome.
+ */
+function resolveLmtResponseFormat(req: Request): 'preview' | 'json' | 'raw' {
+  const raw = String(req.query.format ?? '').toLowerCase().trim();
+  if (raw === 'json') return 'json';
+  if (raw === 'raw') return 'raw';
+  if (raw === 'html' || raw === 'preview') return 'preview';
+  const accept = String(req.headers.accept ?? '');
+  if (accept.includes('application/json') && !accept.includes('text/html')) return 'json';
+  return 'preview';
+}
+
+async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWidgetInfo): Promise<void> {
+  const format = resolveLmtResponseFormat(req);
+  if (format === 'json') {
+    res.json({
+      status: 'SUCCESS',
+      source: '365scores',
+      response: info,
+    });
+    return;
+  }
+
+  if (format === 'raw') {
+    const html = await fetchScores365LmtWidgetHtml(info.partnerId, info.langId, info.sportTypeId);
+    if (!html) {
+      res.status(502).json({ status: 'ERROR', message: 'Upstream LMT widget unavailable' });
+      return;
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=15');
+    res.status(200).send(html);
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=15');
+  res.status(200).send(buildScores365LmtBrowserPreviewHtml(info));
 }
 
 // Helper function to format transfer date
@@ -2448,8 +2491,9 @@ export class FootballController {
 
   /**
    * GET /api/football/cached/365/game/:gameId/lmt
-   * SportRadar Live Match Tracker (pitch) — resolves partnerId from game.widgets.
-   * Query: format=json (default) | format=html to proxy upstream widget HTML.
+   * SportRadar Live Match Tracker — resolves partnerId from 365 game.widgets.
+   * Default: HTML preview (open in browser to see the pitch).
+   * ?format=json | ?format=raw (upstream HTML) | ?format=html|preview
    */
   static async getCached365GameLmt(req: Request, res: Response): Promise<void> {
     try {
@@ -2474,28 +2518,7 @@ export class FootballController {
         return;
       }
 
-      const format = String(req.query.format ?? 'json').toLowerCase();
-      if (format === 'html') {
-        const html = await fetchScores365LmtWidgetHtml(
-          info.partnerId,
-          info.langId,
-          info.sportTypeId,
-        );
-        if (!html) {
-          res.status(502).json({ status: 'ERROR', message: 'Upstream LMT widget unavailable' });
-          return;
-        }
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=15');
-        res.status(200).send(html);
-        return;
-      }
-
-      res.json({
-        status: 'SUCCESS',
-        source: '365scores',
-        response: info,
-      });
+      await sendLmtResponse(req, res, info);
     } catch (error) {
       FootballController.handleError(res, error);
     }
@@ -2528,28 +2551,7 @@ export class FootballController {
         return;
       }
 
-      const format = String(req.query.format ?? 'json').toLowerCase();
-      if (format === 'html') {
-        const html = await fetchScores365LmtWidgetHtml(
-          info.partnerId,
-          info.langId,
-          info.sportTypeId,
-        );
-        if (!html) {
-          res.status(502).json({ status: 'ERROR', message: 'Upstream LMT widget unavailable' });
-          return;
-        }
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=15');
-        res.status(200).send(html);
-        return;
-      }
-
-      res.json({
-        status: 'SUCCESS',
-        source: '365scores',
-        response: info,
-      });
+      await sendLmtResponse(req, res, info);
     } catch (error) {
       FootballController.handleError(res, error);
     }

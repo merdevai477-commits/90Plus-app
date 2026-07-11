@@ -181,9 +181,9 @@ router.get('/cached/h2h', SHARED_CACHE_24H, FootballController.getCachedH2H);
 router.get('/cached/365/standings', SHARED_CACHE_5MIN, FootballController.getCached365Standings);
 router.get('/cached/365/fixture/:id/form', SHARED_CACHE_1H, FootballController.getCached365FixtureForm);
 router.get('/cached/365/game/:gameId/resolve', SHARED_CACHE_1H, FootballController.resolve365GameFixture);
-// SportRadar LMT (live pitch tracker) — partnerId resolved from game.widgets
-router.get('/cached/365/game/:gameId/lmt', SHARED_CACHE_15S, FootballController.getCached365GameLmt);
-router.get('/cached/365/fixture/:id/lmt', SHARED_CACHE_15S, FootballController.getCached365FixtureLmt);
+// SportRadar LMT (live pitch tracker) — default HTML preview; ?format=json for API
+router.get('/cached/365/game/:gameId/lmt', FootballController.getCached365GameLmt);
+router.get('/cached/365/fixture/:id/lmt', FootballController.getCached365FixtureLmt);
 router.get(
   '/cached/365/fixture/:id/player/:athleteId/report',
   SHARED_CACHE_5MIN,
