@@ -198,8 +198,10 @@ const styles = StyleSheet.create({
   },
   brandPatch: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#1a5c2a',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
     opacity: 1,
   },
   overlay: {

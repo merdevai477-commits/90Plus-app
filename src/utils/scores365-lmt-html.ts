@@ -60,13 +60,16 @@ export function buildScores365LmtEmbedHtml(opts: {
       height: min(18%, 70px);
       z-index: 6;
       pointer-events: none;
-      background: #1a5c2a;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.22);
       border-radius: 6px;
       padding: 6px 10px;
       box-sizing: border-box;
       display: flex;
       align-items: center;
       justify-content: center;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
     .brand-cover img {
       display: block;
