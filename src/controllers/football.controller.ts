@@ -58,6 +58,19 @@ function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'embed' {
 
 async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWidgetInfo): Promise<void> {
   const format = resolveLmtResponseFormat(req);
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const proto = forwardedProto || req.protocol || 'https';
+  const host = String(req.headers['x-forwarded-host'] || req.get('host') || '').split(',')[0].trim();
+  const publicBase = (host ? `${proto}://${host}` : process.env.SHARE_BASE_URL || '').replace(/\/$/, '');
+  const hideBrand =
+    req.query.hideBrand === '1' ||
+    req.query.hideBrand === 'true' ||
+    process.env.LMT_HIDE_PITCH_BRAND === 'true' ||
+    process.env.LMT_HIDE_PITCH_BRAND === '1';
+  const brandLogoUrl = hideBrand
+    ? null
+    : process.env.LMT_PITCH_LOGO_URL?.trim() ||
+      (publicBase ? `${publicBase}/90plus-pitch-logo.png` : null);
 
   if (format === 'json') {
     res.json({
@@ -66,7 +79,8 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
       response: {
         ...info,
         embedMode: 'html-iframe-getwidget',
-        note: 'Default response is HTML that iframes widgetUrl. WebView should load this endpoint or widgetUrl.',
+        brandLogoUrl,
+        note: 'Default HTML iframes widgetUrl and covers the mid-pitch 365 mark with brandLogoUrl.',
       },
     });
     return;
@@ -83,6 +97,7 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
     partnerId: info.partnerId,
     homeName: info.homeName,
     awayName: info.awayName,
+    brandLogoUrl,
   });
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=15');

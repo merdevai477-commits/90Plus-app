@@ -7,9 +7,13 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   Platform,
+  Image,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+
+// Covers the mid-pitch 365 mark (same asset used on backend LMT branding).
+const PITCH_BRAND_LOGO = require('../../assets/images/90plus-pitch-logo.png');
 
 type MatchLmtWebViewProps = {
   /** Official 365 GetWidget URL — primary source for RN WebView. */
@@ -19,6 +23,8 @@ type MatchLmtWebViewProps = {
   aspectRatio?: number | null;
   /** hero = replaces score card at top of match details */
   variant?: 'hero' | 'card';
+  /** Hide 365 pitch mark with 90PLUS cover (default true). */
+  coverBrand?: boolean;
   unavailableLabel?: string;
   loadingLabel?: string;
   retryLabel?: string;
@@ -26,25 +32,30 @@ type MatchLmtWebViewProps = {
 
 /**
  * WebView for live pitch tracking (official 365 GetWidget).
+ * Cross-origin widget can't be edited, so we cover the 365 pitch logo with an overlay.
  */
 export function MatchLmtWebView({
   widgetUrl,
   embedUrl,
   aspectRatio,
   variant = 'hero',
+  coverBrand = true,
   unavailableLabel = 'Live tracking is not available for this match.',
   loadingLabel = 'Loading tracking…',
   retryLabel = 'Retry',
 }: MatchLmtWebViewProps) {
   const { width } = useWindowDimensions();
   const ratio = aspectRatio && aspectRatio > 0 ? aspectRatio : 16 / 9;
-  const sidePad = variant === 'hero' ? 16 : 16;
+  const sidePad = 16;
   const frameWidth = Math.max(280, width - sidePad * 2);
   // Slightly taller than 16:9 so H2H strip under pitch still fits.
   const frameHeight = Math.max(
     variant === 'hero' ? 260 : 220,
     Math.round(frameWidth / ratio) + (variant === 'hero' ? 48 : 0),
   );
+
+  const brandWidth = Math.min(140, Math.round(frameWidth * 0.34));
+  const brandHeight = Math.round(brandWidth * 0.28);
 
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -92,41 +103,66 @@ export function MatchLmtWebView({
           </TouchableOpacity>
         </View>
       ) : (
-        <WebView
-          key={`${uri}-${reloadKey}`}
-          source={{ uri }}
-          style={styles.webview}
-          originWhitelist={['https://*', 'http://*']}
-          javaScriptEnabled
-          domStorageEnabled
-          allowsFullscreenVideo
-          allowsInlineMediaPlayback
-          mediaPlaybackRequiresUserAction={false}
-          mixedContentMode="always"
-          setSupportMultipleWindows={false}
-          nestedScrollEnabled
-          scrollEnabled={false}
-          startInLoadingState={false}
-          onLoadStart={() => {
-            setLoading(true);
-            setFailed(false);
-          }}
-          onLoadEnd={() => setLoading(false)}
-          onError={() => {
-            setLoading(false);
-            setFailed(true);
-          }}
-          onHttpError={(e) => {
-            const code = e.nativeEvent?.statusCode ?? 0;
-            if (code >= 400) {
+        <>
+          <WebView
+            key={`${uri}-${reloadKey}`}
+            source={{ uri }}
+            style={styles.webview}
+            originWhitelist={['https://*', 'http://*']}
+            javaScriptEnabled
+            domStorageEnabled
+            allowsFullscreenVideo
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
+            mixedContentMode="always"
+            setSupportMultipleWindows={false}
+            nestedScrollEnabled
+            scrollEnabled={false}
+            startInLoadingState={false}
+            onLoadStart={() => {
+              setLoading(true);
+              setFailed(false);
+            }}
+            onLoadEnd={() => setLoading(false)}
+            onError={() => {
               setLoading(false);
               setFailed(true);
-            }
-          }}
-          {...(Platform.OS === 'ios'
-            ? { allowsBackForwardNavigationGestures: false }
-            : {})}
-        />
+            }}
+            onHttpError={(e) => {
+              const code = e.nativeEvent?.statusCode ?? 0;
+              if (code >= 400) {
+                setLoading(false);
+                setFailed(true);
+              }
+            }}
+            {...(Platform.OS === 'ios'
+              ? { allowsBackForwardNavigationGestures: false }
+              : {})}
+          />
+
+          {/* Cover mid-pitch 365 logo — cannot edit cross-origin GetWidget HTML. */}
+          {coverBrand && !loading ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.brandCover,
+                {
+                  width: brandWidth,
+                  height: brandHeight,
+                  marginLeft: -brandWidth / 2,
+                },
+              ]}
+            >
+              <View style={styles.brandPatch} />
+              <Image
+                source={PITCH_BRAND_LOGO}
+                style={styles.brandLogo}
+                resizeMode="contain"
+                accessibilityLabel="90PLUS"
+              />
+            </View>
+          ) : null}
+        </>
       )}
     </View>
   );
@@ -156,9 +192,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  brandCover: {
+    position: 'absolute',
+    left: '50%',
+    // Mid-pitch where SportRadar draws pitchLogo (above H2H strip).
+    top: '42%',
+    zIndex: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandPatch: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#257A37',
+    borderRadius: 4,
+    opacity: 0.95,
+  },
+  brandLogo: {
+    width: '100%',
+    height: '100%',
+  },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 2,
+    zIndex: 4,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,

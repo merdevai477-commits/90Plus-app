@@ -1,6 +1,6 @@
 /**
  * HTML shell that embeds official 365scores SportRadar LMT (GetWidget).
- * Used by browser preview and React Native WebView.
+ * Optional brandLogoUrl covers the mid-pitch 365 mark (cross-origin can't rewrite logos).
  */
 
 export function buildScores365LmtEmbedHtml(opts: {
@@ -8,6 +8,7 @@ export function buildScores365LmtEmbedHtml(opts: {
   partnerId: string;
   homeName?: string | null;
   awayName?: string | null;
+  brandLogoUrl?: string | null;
 }): string {
   const escape = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -16,6 +17,7 @@ export function buildScores365LmtEmbedHtml(opts: {
   const title = titleBits ? escape(titleBits) : 'Live Tracking';
   const widgetUrl = escape(opts.widgetUrl);
   const partnerId = escape(String(opts.partnerId));
+  const brand = opts.brandLogoUrl ? escape(opts.brandLogoUrl) : '';
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -49,17 +51,41 @@ export function buildScores365LmtEmbedHtml(opts: {
       display: block;
       background: #000;
     }
+    .brand-cover {
+      position: absolute;
+      left: 50%;
+      top: 42%;
+      transform: translate(-50%, -50%);
+      width: min(34%, 160px);
+      height: auto;
+      z-index: 6;
+      pointer-events: none;
+      background: #257A37;
+      border-radius: 4px;
+      padding: 4px 8px;
+      box-sizing: border-box;
+    }
+    .brand-cover img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <iframe
       src="${widgetUrl}"
-      title="365 Live Match Tracker"
+      title="Live Match Tracker"
       allow="fullscreen; autoplay"
       referrerpolicy="no-referrer-when-downgrade"
       loading="eager"
     ></iframe>
+    ${
+      brand
+        ? `<div class="brand-cover"><img src="${brand}" alt="90PLUS" /></div>`
+        : ''
+    }
   </div>
 </body>
 </html>`;
