@@ -30,11 +30,11 @@ type LmtJsonResponse = {
 export const LMT_TRANSPARENT_LOGO =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-/** Same mark as DD assets/90plus-pitch-logo.svg — usable as pitchLogo URL. */
+/** High-contrast 90PLUS-app mark for SportRadar pitchLogo / banners. */
 export const LMT_DEFAULT_BRAND_LOGO_DATA_URI =
   'data:image/svg+xml,' +
   encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="72" viewBox="0 0 240 72"><text x="120" y="46" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="26" fill="rgba(255,255,255,0.9)" letter-spacing="0.5">90PLUS-app</text></svg>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="84" viewBox="0 0 280 84"><text x="140" y="54" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="900" font-size="34" fill="rgba(0,0,0,0.45)" letter-spacing="0.8">90PLUS-app</text><text x="140" y="52" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="900" font-size="34" fill="#FFFFFF" letter-spacing="0.8">90PLUS-app</text></svg>`,
   );
 
 export const LMT_WIDGET_BASE_ORIGIN = 'https://lmtsrcf.365scores.com';

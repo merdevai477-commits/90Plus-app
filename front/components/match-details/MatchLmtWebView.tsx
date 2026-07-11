@@ -73,8 +73,8 @@ export function MatchLmtWebView({
     Math.round(frameWidth / ratio) + (variant === 'hero' ? 48 : 0),
   );
 
-  const brandWidth = Math.min(220, Math.round(frameWidth * 0.58));
-  const brandHeight = Math.round(brandWidth * (90 / 240));
+  const brandWidth = Math.min(280, Math.round(frameWidth * 0.72));
+  const brandHeight = Math.round(brandWidth * (84 / 280));
 
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
