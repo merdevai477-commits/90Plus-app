@@ -83,7 +83,7 @@ export function buildScores365LmtEmbedHtml(opts: {
     ></iframe>
     ${
       brand
-        ? `<div class="brand-cover"><img src="${brand}" alt="90PLUS" /></div>`
+        ? `<div class="brand-cover"><img src="${brand}" alt="90PLUS-app" /></div>`
         : ''
     }
   </div>

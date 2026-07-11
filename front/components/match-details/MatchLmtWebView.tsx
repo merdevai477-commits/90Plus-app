@@ -7,13 +7,10 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   Platform,
-  Image,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-
-// Covers the mid-pitch 365 mark (same asset used on backend LMT branding).
-const PITCH_BRAND_LOGO = require('../../assets/images/90plus-pitch-logo.png');
+import { PitchBrandLogo } from './PitchBrandLogo';
 
 type MatchLmtWebViewProps = {
   /** Official 365 GetWidget URL — primary source for RN WebView. */
@@ -54,8 +51,9 @@ export function MatchLmtWebView({
     Math.round(frameWidth / ratio) + (variant === 'hero' ? 48 : 0),
   );
 
-  const brandWidth = Math.min(140, Math.round(frameWidth * 0.34));
-  const brandHeight = Math.round(brandWidth * 0.28);
+  // Match DD SVG aspect 240×72
+  const brandWidth = Math.min(168, Math.round(frameWidth * 0.42));
+  const brandHeight = Math.round(brandWidth * (72 / 240));
 
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -154,12 +152,7 @@ export function MatchLmtWebView({
               ]}
             >
               <View style={styles.brandPatch} />
-              <Image
-                source={PITCH_BRAND_LOGO}
-                style={styles.brandLogo}
-                resizeMode="contain"
-                accessibilityLabel="90PLUS"
-              />
+              <PitchBrandLogo width={brandWidth} height={brandHeight} />
             </View>
           ) : null}
         </>
@@ -206,10 +199,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#257A37',
     borderRadius: 4,
     opacity: 0.95,
-  },
-  brandLogo: {
-    width: '100%',
-    height: '100%',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
