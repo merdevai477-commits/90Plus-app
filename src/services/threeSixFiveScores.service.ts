@@ -450,8 +450,8 @@ function supplementCompetitionLimit(): number {
 }
 
 function fixturesSyncBatchSize(): number {
-  const raw = parseInt(process.env.SCORES365_FIXTURES_SYNC_BATCH || '30', 10);
-  return Number.isFinite(raw) && raw > 0 ? raw : 30;
+  const raw = parseInt(process.env.SCORES365_FIXTURES_SYNC_BATCH || '60', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 60;
 }
 
 function trackedCompetitionStoreLimit(): number {
@@ -724,6 +724,7 @@ class ThreeSixFiveScoresService {
   /**
    * Round-robin batch sync: walks the full catalog so 2nd/3rd-tier leagues
    * eventually populate the DB even when /allscores/ omits them.
+   * Competitions with matches today/tomorrow are synced first each tick.
    */
   async syncCompetitionFixturesBatch(
     language?: string | null,
@@ -737,13 +738,25 @@ class ThreeSixFiveScoresService {
     const allIds = await this.loadAllCompetitionIds();
     if (!allIds.length) return { batchSize: 0, fixtures: 0, cursor: 0, total: 0 };
 
+    const allSet = new Set(allIds);
+    const priorityIds = (await this.loadCompetitionIdsWithMatchesNearToday()).filter((id) =>
+      allSet.has(id),
+    );
+    const prioritySlice = priorityIds.slice(0, batchSize);
+    const remainingSlots = Math.max(0, batchSize - prioritySlice.length);
+    const prioritySet = new Set(prioritySlice);
+
     const cursor =
       (await redisCacheService.get<number>(FIXTURES_SYNC_CURSOR_KEY)) ?? 0;
-    const slice =
-      cursor + batchSize <= allIds.length
-        ? allIds.slice(cursor, cursor + batchSize)
-        : [...allIds.slice(cursor), ...allIds.slice(0, batchSize - (allIds.length - cursor))];
-    const nextCursor = (cursor + batchSize) % allIds.length;
+    const roundRobin: number[] = [];
+    if (remainingSlots > 0) {
+      for (let i = 0; i < allIds.length && roundRobin.length < remainingSlots; i++) {
+        const id = allIds[(cursor + i) % allIds.length];
+        if (!prioritySet.has(id)) roundRobin.push(id);
+      }
+    }
+    const slice = [...prioritySlice, ...roundRobin];
+    const nextCursor = (cursor + Math.max(remainingSlots, 1)) % allIds.length;
 
     let fixtures = 0;
     for (let i = 0; i < slice.length; i += SUPPLEMENT_COMPETITION_BATCH) {
@@ -758,11 +771,41 @@ class ThreeSixFiveScoresService {
 
     if (fixtures > 0) {
       logger.info(
-        `[365Scores] fixtures batch synced ${fixtures} fixtures for ${slice.length}/${allIds.length} competitions (cursor ${cursor}→${nextCursor})`,
+        `[365Scores] fixtures batch synced ${fixtures} fixtures for ${slice.length}/${allIds.length} competitions (priority=${prioritySlice.length}, cursor ${cursor}→${nextCursor})`,
       );
     }
 
     return { batchSize: slice.length, fixtures, cursor: nextCursor, total: allIds.length };
+  }
+
+  /** Competition IDs that already have synthetic fixtures for today or tomorrow. */
+  private async loadCompetitionIdsWithMatchesNearToday(): Promise<number[]> {
+    try {
+      const { calendarTodayKey, offsetCalendarDateKey, calendarDayBounds } = await import(
+        '../utils/calendar-day-bounds.util'
+      );
+      const today = calendarTodayKey();
+      const tomorrow = offsetCalendarDateKey(today, 1);
+      const { start } = calendarDayBounds(today);
+      const { end } = calendarDayBounds(tomorrow);
+      const rows = await prisma.cachedFixture.findMany({
+        where: {
+          leagueId: { gte: SCORES365_LEAGUE_ID_OFFSET },
+          matchDate: { gte: start, lte: end },
+        },
+        select: { leagueId: true },
+        distinct: ['leagueId'],
+      });
+      return rows
+        .map((r) => r.leagueId - SCORES365_LEAGUE_ID_OFFSET)
+        .filter((id) => id > 0);
+    } catch (err: unknown) {
+      logger.debug(
+        '[365Scores] loadCompetitionIdsWithMatchesNearToday failed:',
+        (err as Error)?.message,
+      );
+      return [];
+    }
   }
 
   // ─── 2. Live game details ────────────────────────────────────────────────

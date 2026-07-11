@@ -447,7 +447,8 @@ class MatchCacheService {
 
             await this.fetchAndStoreMatchDetailsWithRetry(row.fixtureId);
             processed++;
-            await new Promise((r) => setTimeout(r, 400));
+            // 365-aware path is heavier than raw API-Football — pace requests.
+            await new Promise((r) => setTimeout(r, 700));
         }
         return processed;
     }
@@ -471,52 +472,45 @@ class MatchCacheService {
 
     private async fetchAndStoreMatchDetails(fixtureId: number): Promise<void> {
         try {
-            // Import here to avoid circular dependencies
-            const { footballService } = await import('./football.service');
-            
-            // Fetch all match details in parallel (1 API call per type, but only once)
-            const [lineups, statistics, events] = await Promise.allSettled([
-                footballService.getFixtureLineups(fixtureId),
-                footballService.getFixtureStatistics(fixtureId),
-                footballService.getFixtureEvents(fixtureId),
-            ]);
+            // Prefer the unified cache layer so synthetic/mapped 365 fixtures
+            // get lineups/stats/events (API-Football alone misses most lower tiers).
+            const { footballDataCacheService } = await import('./football-data-cache.service');
+            const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId, {
+                forceRefresh: true,
+                language: 'en',
+            });
 
-            // Get existing fullData
             const existing = await prisma.cachedFixture.findUnique({
                 where: { fixtureId },
                 select: { fullData: true },
             });
 
-            if (existing) {
-                const currentData = existing.fullData as any || {};
-                const updatedData: any = { ...currentData };
+            if (!existing) return;
 
-                // Add lineups if fetched successfully
-                if (lineups.status === 'fulfilled' && lineups.value?.length) {
-                    updatedData.lineups = lineups.value;
-                }
+            const currentData = (existing.fullData as Record<string, unknown>) || {};
+            const updatedData: Record<string, unknown> = { ...currentData };
 
-                // Add statistics if fetched successfully
-                if (statistics.status === 'fulfilled' && statistics.value?.length) {
-                    updatedData.statistics = statistics.value;
-                }
-
-                // Add events if fetched successfully
-                if (events.status === 'fulfilled' && events.value?.length) {
-                    updatedData.events = events.value;
-                }
-
-                // Update fullData with all match details
-                await prisma.cachedFixture.update({
-                    where: { fixtureId },
-                    data: {
-                        fullData: updatedData,
-                        updatedAt: new Date(),
-                    },
-                });
-
-                logger.debug(`💾 Stored match details for fixture ${fixtureId} (lineups, statistics, events) - future requests = 0 API calls`);
+            if (Array.isArray(bundle.lineups) && bundle.lineups.length > 0) {
+                updatedData.lineups = bundle.lineups;
             }
+            if (Array.isArray(bundle.statistics) && bundle.statistics.length > 0) {
+                updatedData.statistics = bundle.statistics;
+            }
+            if (Array.isArray(bundle.events) && bundle.events.length > 0) {
+                updatedData.events = bundle.events;
+            }
+
+            await prisma.cachedFixture.update({
+                where: { fixtureId },
+                data: {
+                    fullData: updatedData as object,
+                    updatedAt: new Date(),
+                },
+            });
+
+            logger.debug(
+                `💾 Stored match details for fixture ${fixtureId} via cache/365 bundle (lineups/stats/events)`,
+            );
         } catch (error) {
             logger.error(`Failed to fetch and store match details for fixture ${fixtureId}:`, error);
         }

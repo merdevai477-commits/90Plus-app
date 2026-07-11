@@ -12,7 +12,7 @@ import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/ma
 import { buildScores365AthletePhotoUrl, buildScores365CoachPhotoUrl } from '../utils/scores365-athlete-photo';
 import { findCoachInLineup } from './coach-lookup.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
-import { calendarTodayKey } from '../utils/calendar-day-bounds.util';
+import { calendarTodayKey, calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
 import { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
@@ -307,7 +307,104 @@ export function isScores365ExperimentFixture(fixtureId: number): boolean {
 }
 
 const ON_DEMAND_REFRESH_MIN_INTERVAL_MS = 30_000;
+const ON_DEMAND_DAY_MAP_MIN_INTERVAL_MS = 12_000;
 let lastOnDemandRefresh = 0;
+let lastOnDemandDayMap = 0;
+
+/**
+ * Find a 365 gameId for an API-Football (or cached) row via team names + kickoff.
+ */
+function find365GameIdForDbRow(
+  row: {
+    fixtureId: number;
+    homeTeamName: string;
+    awayTeamName: string;
+    matchDate: Date;
+    matchTimestamp: number | null;
+  },
+  games: Scores365Game[],
+): number | null {
+  const rowMs = row.matchTimestamp ? row.matchTimestamp * 1000 : row.matchDate.getTime();
+  const maxDeltaMs = 3 * 60 * 60 * 1000;
+  type Candidate = { gameId: number; delta: number; teamHits: number };
+  const candidates: Candidate[] = [];
+
+  for (const game of games) {
+    if (typeof game?.id !== 'number') continue;
+    const gameMs = kickoffMs(game.startTime);
+    if (gameMs == null) continue;
+    const delta = Math.abs(rowMs - gameMs);
+    if (delta > maxDeltaMs) continue;
+    const { direct, swapped } = scoreDbRowTeamsFor365Game(game, row);
+    const teamHits = Math.max(direct, swapped);
+    if (teamHits < 2) continue;
+    candidates.push({ gameId: game.id, delta, teamHits });
+  }
+
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => a.delta - b.delta || b.teamHits - a.teamHits);
+  const best = candidates[0];
+  const tied = candidates.filter(
+    (c) => c.delta === best.delta && c.teamHits === best.teamHits,
+  );
+  if (tied.length > 1) return null;
+  return best.gameId;
+}
+
+/**
+ * Map unmapped API fixtureIds by pulling that calendar day's /allscores/ feed
+ * (cached) and fuzzy-matching team + kickoff. Works for NS/FT — not only live.
+ */
+async function tryMapFixtureViaDayAllScores(
+  fixtureId: number,
+  dbRow: {
+    homeTeamName: string;
+    awayTeamName: string;
+    matchDate: Date;
+    matchTimestamp: number | null;
+  } | null,
+): Promise<number | null> {
+  if (!dbRow) return null;
+
+  const dateKey =
+    calendarDateFromKickoff(dbRow.matchDate.toISOString()) ??
+    dbRow.matchDate.toISOString().slice(0, 10);
+
+  const now = Date.now();
+  const rateLimited = now - lastOnDemandDayMap < ON_DEMAND_DAY_MAP_MIN_INTERVAL_MS;
+
+  try {
+    const { threeSixFiveScoresService } = await import('./threeSixFiveScores.service');
+    // Prefer cache when rate-limited; otherwise allow a fresh day pull.
+    const result = await threeSixFiveScoresService.getAllScores(dateKey, dateKey, 'en', {
+      force: !rateLimited,
+    });
+    if (!rateLimited) lastOnDemandDayMap = now;
+
+    const mappedAfterPersist = getScores365GameIdForFixture(fixtureId);
+    if (mappedAfterPersist) return mappedAfterPersist;
+
+    const games = (result.data ?? [])
+      .map((item) => item.raw)
+      .filter((g): g is Scores365Game => !!g && typeof g.id === 'number');
+    if (!games.length) return null;
+
+    const gameId = find365GameIdForDbRow({ fixtureId, ...dbRow }, games);
+    if (gameId) {
+      registerScores365FixtureMapping(fixtureId, gameId);
+      logger.info(
+        `[Scores365] on-demand day map fixtureId=${fixtureId} → gameId=${gameId} (${dateKey})`,
+      );
+      return gameId;
+    }
+  } catch (err: unknown) {
+    logger.debug(
+      `[Scores365] day allscores map failed for fixture ${fixtureId}:`,
+      (err as Error)?.message,
+    );
+  }
+  return null;
+}
 
 /** Lazy map API-Football fixtureId → 365 gameId (passive check + rate-limited live fallback). */
 export async function ensureScores365GameMapping(fixtureId: number): Promise<number | null> {
@@ -319,7 +416,14 @@ export async function ensureScores365GameMapping(fixtureId: number): Promise<num
 
   const dbRow = await prisma.cachedFixture.findUnique({
     where: { fixtureId },
-    select: { status: true, leagueId: true },
+    select: {
+      status: true,
+      leagueId: true,
+      homeTeamName: true,
+      awayTeamName: true,
+      matchDate: true,
+      matchTimestamp: true,
+    },
   });
 
   // 365 gameIds stored as fixtureId (>= 4M) — resolve directly without waiting for bulk sync.
@@ -365,6 +469,11 @@ export async function ensureScores365GameMapping(fixtureId: number): Promise<num
       }
     }
   }
+
+  // Any status (NS / live / FT): try calendar-day allscores fuzzy map so opening
+  // match details on lower-tier API fixtures can still use 365 lineups/stats.
+  const dayMapped = await tryMapFixtureViaDayAllScores(fixtureId, dbRow);
+  if (dayMapped) return dayMapped;
 
   const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
   const isPlausiblyLive = !!dbRow && LIVE_STATUSES.has(dbRow.status);
@@ -1111,7 +1220,7 @@ async function resolve365BaseAndAlignment(
 
 function scoreDbRowTeamsFor365Game(
   game: Scores365Game,
-  row: Awaited<ReturnType<typeof loadWorldCupDbFixtures>>[number],
+  row: { homeTeamName: string; awayTeamName: string },
 ): { direct: number; swapped: number } {
   const h365 = game.homeCompetitor?.name;
   const a365 = game.awayCompetitor?.name;
@@ -2213,10 +2322,18 @@ export async function applyScores365ExperimentToWorldCupList(
 }
 
 const SYNTHETIC_LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] as const;
-const SYNTHETIC_LIVE_BATCH = 40;
+const SYNTHETIC_LIVE_BATCH = (() => {
+  const raw = parseInt(process.env.SCORES365_SYNTHETIC_LIVE_BATCH || '80', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 80;
+})();
+const LIVE_DETAIL_MAX = (() => {
+  const raw = parseInt(process.env.SCORES365_LIVE_DETAIL_MAX || '20', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 20;
+})();
 
 /**
  * Refresh non-WC 365 synthetic fixtures from GET /web/game/ — accurate minutes/scores
+ * plus a prioritized warm of lineups/stats for live matches.
  * (allscores list lags ~30–60s; mirrors WC liveRefresh in getScores365MatchesForDate).
  * Writes live rows into Redis overlay so /fixtures/live and today's calendar stay fresh.
  */
@@ -2245,15 +2362,31 @@ export async function sync365SyntheticLiveSnapshots(
       },
       select: { fixtureId: true },
       orderBy: { updatedAt: 'asc' },
-      take: SYNTHETIC_LIVE_BATCH,
+      take: SYNTHETIC_LIVE_BATCH * 2,
     });
     targetIds = rows.map((r) => r.fixtureId);
+
+    try {
+      const favRows = await prisma.favoriteMatch.findMany({
+        where: { apiMatchId: { in: targetIds } },
+        select: { apiMatchId: true },
+        distinct: ['apiMatchId'],
+      });
+      const favSet = new Set(favRows.map((f) => f.apiMatchId));
+      if (favSet.size > 0) {
+        targetIds.sort((a, b) => Number(favSet.has(b)) - Number(favSet.has(a)));
+      }
+    } catch {
+      // FavoriteMatch may be unavailable — keep updatedAt order.
+    }
+    targetIds = targetIds.slice(0, SYNTHETIC_LIVE_BATCH);
   }
 
   if (!targetIds.length) return 0;
 
   const refreshedLive: FixtureFromAPI[] = [];
   let updated = 0;
+  const detailCandidates: number[] = [];
 
   for (const fixtureId of targetIds) {
     try {
@@ -2271,6 +2404,7 @@ export async function sync365SyntheticLiveSnapshots(
       const short = mapped.fixture?.status?.short ?? '';
       if (liveSet.has(short)) {
         refreshedLive.push(mapped);
+        detailCandidates.push(fixtureId);
       }
     } catch (err: unknown) {
       logger.warn(`[365Live] refresh fixture ${fixtureId} failed:`, (err as Error)?.message);
@@ -2280,6 +2414,35 @@ export async function sync365SyntheticLiveSnapshots(
   if (refreshedLive.length > 0) {
     const { mergeLiveFixturesIntoRedisSnapshot } = await import('./live-fixture-cache.service');
     await mergeLiveFixturesIntoRedisSnapshot(refreshedLive);
+  }
+
+  const detailIds = detailCandidates.slice(0, LIVE_DETAIL_MAX);
+  if (detailIds.length > 0) {
+    try {
+      const { footballDataCacheService } = await import('./football-data-cache.service');
+      for (const fixtureId of detailIds) {
+        try {
+          await Promise.allSettled([
+            footballDataCacheService.getMatchLineups(fixtureId),
+            footballDataCacheService.getMatchStatistics(fixtureId),
+            footballDataCacheService.getMatchEvents(fixtureId, {
+              forceRefresh: true,
+              language: lang,
+            }),
+          ]);
+        } catch (err: unknown) {
+          logger.debug(
+            `[365Live] detail warm fixture ${fixtureId} failed:`,
+            (err as Error)?.message,
+          );
+        }
+      }
+      logger.info(
+        `[365Live] warmed lineups/stats/events for ${detailIds.length} live synthetic fixtures`,
+      );
+    } catch (err: unknown) {
+      logger.warn(`[365Live] detail warm batch failed:`, (err as Error)?.message);
+    }
   }
 
   if (updated > 0) {

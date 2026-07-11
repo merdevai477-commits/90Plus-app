@@ -650,6 +650,12 @@ const MatchDetailsScreen = () => {
     }
   }, [fixtureId, isLive, t?.matchDetails?.loadStatsFailed]);
 
+  const retryStats = useCallback(() => {
+    loadedTabsRef.current.delete('stats');
+    setStatsError(null);
+    void loadStatsIfNeeded(true);
+  }, [loadStatsIfNeeded]);
+
   // Retry stats every 45s while live (lower-tier leagues often publish late)
   useEffect(() => {
     if (statsPollingRef.current) {
@@ -1291,6 +1297,9 @@ const MatchDetailsScreen = () => {
         <View style={styles.emptyState}>
           <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
           <Text style={styles.emptyStateText}>{statsError}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={retryStats}>
+            <Text style={styles.retryButtonText}>{t.matchDetails.retry}</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -1305,6 +1314,9 @@ const MatchDetailsScreen = () => {
               ? (t.matchDetails.statsLiveRetry || 'Stats may appear later for this league. Retrying…')
               : (t.matchDetails.statsLeagueLimited || 'Full statistics are not provided for this competition.')}
           </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={retryStats}>
+            <Text style={styles.retryButtonText}>{t.matchDetails.retry}</Text>
+          </TouchableOpacity>
         </View>
       );
     }

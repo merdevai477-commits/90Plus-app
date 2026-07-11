@@ -1804,7 +1804,7 @@ class FootballDataCacheService {
 
         const bundleKey = `details:${fixtureId}`;
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(bundleKey);
-        if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
+        if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl && !forceRefresh) {
             return redisCached.data;
         }
 
@@ -1825,7 +1825,7 @@ class FootballDataCacheService {
             }
         }
 
-        const payload = {
+        let payload = {
             fixture: fixture ?? null,
             lineups: lineups ?? [],
             statistics: statistics ?? [],
@@ -1833,7 +1833,39 @@ class FootballDataCacheService {
             venue,
         };
 
-        const status = fixture?.fixture?.status?.short ?? '';
+        // Sparse API payload — remapping may have landed after day allscores; prefer 365.
+        if (
+            (!hasLineupData(payload.lineups) || !hasApiStatistics(payload.statistics)) &&
+            !isScores365ExperimentFixture(fixtureId)
+        ) {
+            await ensureScores365GameMapping(fixtureId);
+            if (isScores365ExperimentFixture(fixtureId)) {
+                const experiment = await getScores365ExperimentBundle(
+                    fixtureId,
+                    resolveScores365AppLanguage(options?.language ?? null),
+                    { force: true },
+                );
+                if (experiment?.fixture) {
+                    const mergedLineups = hasLineupData(experiment.lineups)
+                        ? experiment.lineups
+                        : payload.lineups;
+                    const mergedStats = hasApiStatistics(experiment.statistics)
+                        ? experiment.statistics
+                        : payload.statistics;
+                    const mergedEvents =
+                        experiment.events?.length > 0 ? experiment.events : payload.events;
+                    payload = {
+                        fixture: experiment.fixture,
+                        lineups: mergedLineups,
+                        statistics: mergedStats ?? [],
+                        events: mergedEvents,
+                        venue: experiment.venue ?? payload.venue,
+                    };
+                }
+            }
+        }
+
+        const status = fixture?.fixture?.status?.short ?? payload.fixture?.fixture?.status?.short ?? '';
         const isLive = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(status);
         const isFinished = ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(status);
         const ttl = isLive ? 3_000 : isFinished ? this.TTL.FINISHED : this.TTL.UPCOMING_MATCH;
