@@ -47,6 +47,13 @@ export interface Match {
   league: LeagueInfo;
   fixtureDate?: string; // ISO date string for filtering
   isFavorited?: boolean; // ✅ Added isFavorited
+  /** 365 community Who Will Win? percentages (fan votes). */
+  crowdPrediction?: {
+    homePercent: number;
+    drawPercent: number;
+    awayPercent: number;
+    totalVotes: number;
+  };
 }
 
 export interface TeamDisplayData {

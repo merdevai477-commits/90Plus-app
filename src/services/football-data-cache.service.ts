@@ -853,22 +853,31 @@ class FootballDataCacheService {
         try {
             const { resolveLiveFixturesForClient } = await import('./live-fixture-cache.service');
             const live365 = await resolveLiveFixturesForClient();
-            if (!live365.fixtures.length) return merged;
-
-            const byId = new Map<number, any>();
-            for (const m of merged) {
-                const id = m?.fixture?.id;
-                if (id != null) byId.set(id, m);
+            if (live365.fixtures.length) {
+                const byId = new Map<number, any>();
+                for (const m of merged) {
+                    const id = m?.fixture?.id;
+                    if (id != null) byId.set(id, m);
+                }
+                for (const f of live365.fixtures) {
+                    const id = f?.fixture?.id;
+                    if (id != null) byId.set(id, f);
+                }
+                merged = Array.from(byId.values()).sort(
+                    (a, b) => (a?.fixture?.timestamp ?? 0) - (b?.fixture?.timestamp ?? 0),
+                );
             }
-            for (const f of live365.fixtures) {
-                const id = f?.fixture?.id;
-                if (id != null) byId.set(id, f);
-            }
-            return Array.from(byId.values()).sort(
-                (a, b) => (a?.fixture?.timestamp ?? 0) - (b?.fixture?.timestamp ?? 0),
-            );
         } catch (err) {
             logger.warn('365 live calendar merge failed:', err);
+        }
+
+        try {
+            const { enrichFixturesWithCrowdPredictions } = await import(
+                './scores365-crowd-prediction.service'
+            );
+            return await enrichFixturesWithCrowdPredictions(merged);
+        } catch (err) {
+            logger.warn('365 crowd prediction enrich failed:', err);
             return merged;
         }
     }

@@ -98,6 +98,7 @@ function matchToFixture(m: Match): Fixture {
     statusShort: m.statusShort,
     startTimestamp: m.startTimestamp,
     corners: m.corners,
+    crowdPrediction: m.crowdPrediction,
   };
 }
 
@@ -167,6 +168,12 @@ type Fixture = {
   elapsed?: number | null;
   startTimestamp?: number;
   corners?: { home: number; away: number };
+  crowdPrediction?: {
+    homePercent: number;
+    drawPercent: number;
+    awayPercent: number;
+    totalVotes: number;
+  };
 };
 
 type LeagueGroup = {
@@ -461,6 +468,70 @@ const MatchRow = memo(function MatchRow({
           )}
         </TouchableOpacity>
       </View>
+
+      {fixture.status === 'UPCOMING' && fixture.crowdPrediction ? (
+        <View style={[styles.crowdWrap, worldCupCard && styles.crowdWrapInCard]}>
+          <Text style={styles.crowdLabel}>{t('matches.crowdPrediction.label')}</Text>
+          <View style={styles.crowdBarTrack}>
+            <View
+              style={[
+                styles.crowdBarSeg,
+                styles.crowdBarHome,
+                { flex: Math.max(fixture.crowdPrediction.homePercent, 1) },
+              ]}
+            />
+            <View
+              style={[
+                styles.crowdBarSeg,
+                styles.crowdBarDraw,
+                { flex: Math.max(fixture.crowdPrediction.drawPercent, 1) },
+              ]}
+            />
+            <View
+              style={[
+                styles.crowdBarSeg,
+                styles.crowdBarAway,
+                { flex: Math.max(fixture.crowdPrediction.awayPercent, 1) },
+              ]}
+            />
+          </View>
+          <View style={styles.crowdPctRow}>
+            <Text
+              style={[
+                styles.crowdPct,
+                styles.crowdPctHome,
+                fixture.crowdPrediction.homePercent >= fixture.crowdPrediction.awayPercent &&
+                  fixture.crowdPrediction.homePercent >= fixture.crowdPrediction.drawPercent &&
+                  styles.crowdPctLead,
+              ]}
+            >
+              {fixture.crowdPrediction.homePercent}%
+            </Text>
+            <Text
+              style={[
+                styles.crowdPct,
+                styles.crowdPctDraw,
+                fixture.crowdPrediction.drawPercent > fixture.crowdPrediction.homePercent &&
+                  fixture.crowdPrediction.drawPercent > fixture.crowdPrediction.awayPercent &&
+                  styles.crowdPctLead,
+              ]}
+            >
+              {fixture.crowdPrediction.drawPercent}%
+            </Text>
+            <Text
+              style={[
+                styles.crowdPct,
+                styles.crowdPctAway,
+                fixture.crowdPrediction.awayPercent > fixture.crowdPrediction.homePercent &&
+                  fixture.crowdPrediction.awayPercent >= fixture.crowdPrediction.drawPercent &&
+                  styles.crowdPctLead,
+              ]}
+            >
+              {fixture.crowdPrediction.awayPercent}%
+            </Text>
+          </View>
+        </View>
+      ) : null}
 
       {showPreds && fixture.status === 'UPCOMING' && (
         <View style={[styles.predWrap, worldCupCard && styles.predWrapInCard]}>
@@ -2434,6 +2505,47 @@ const styles = StyleSheet.create({
   },
   predWrap: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 6 },
   predWrapInCard: { paddingHorizontal: 14, paddingBottom: 14 },
+  crowdWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    paddingTop: 2,
+    gap: 6,
+  },
+  crowdWrapInCard: { paddingHorizontal: 12 },
+  crowdLabel: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  crowdBarTrack: {
+    flexDirection: 'row',
+    height: 5,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  crowdBarSeg: { height: '100%' as const },
+  crowdBarHome: { backgroundColor: 'rgba(59,130,246,0.9)' },
+  crowdBarDraw: { backgroundColor: 'rgba(148,163,184,0.75)' },
+  crowdBarAway: { backgroundColor: 'rgba(244,63,94,0.9)' },
+  crowdPctRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  crowdPct: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.55)',
+    minWidth: 36,
+  },
+  crowdPctHome: { textAlign: 'left' as const, color: 'rgba(147,197,253,0.95)' },
+  crowdPctDraw: { textAlign: 'center' as const, color: 'rgba(203,213,225,0.9)' },
+  crowdPctAway: { textAlign: 'right' as const, color: 'rgba(251,113,133,0.95)' },
+  crowdPctLead: { color: '#fff', fontWeight: '800' },
   predTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
   predTitleSpinner: { marginLeft: 4 },
   predTitle: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },

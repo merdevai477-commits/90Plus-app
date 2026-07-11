@@ -594,6 +594,9 @@ export const en = {
       signInRequired: 'Sign in to predict',
       signInRequiredMessage: 'Log in to make predictions and earn rewards.',
     },
+    crowdPrediction: {
+      label: '365 fans',
+    },
     tickets: {
       sheetTitle: 'Match Tickets',
       rule1: '1 Ticket = 1 Match Prediction',
@@ -1624,7 +1627,9 @@ export const en = {
     successRate: 'Success Rate',
     predictionHistory: 'Recent Predictions',
     predictionFilterAll: 'All',
+    predictionFilterGroup: 'Group',
     noPredictionsYet: 'No predictions yet',
+    noGroupPredictionsYet: 'No group predictions yet',
     yourPick: 'Your pick',
     coinsEarned: 'Coins Earned from Predictions',
     achievementsTitle: 'Achievements',

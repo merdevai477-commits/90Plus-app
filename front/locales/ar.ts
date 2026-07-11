@@ -501,6 +501,9 @@ export const ar = {
       signInRequired: 'سجّل الدخول للتوقع',
       signInRequiredMessage: 'سجّل الدخول عشان تقدر تتوقع وتكسب مكافآت.',
     },
+    crowdPrediction: {
+      label: 'جمهور 365',
+    },
     tickets: {
       sheetTitle: 'تذاكر المباريات',
       rule1: 'تذكرة واحدة = توقع واحد',
@@ -1601,7 +1604,9 @@ export const ar = {
     successRate: 'نسبة النجاح',
     predictionHistory: 'آخر التوقعات',
     predictionFilterAll: 'الكل',
+    predictionFilterGroup: 'الجروب',
     noPredictionsYet: 'لا توقعات بعد',
+    noGroupPredictionsYet: 'لا توقعات جروب بعد',
     yourPick: 'توقعك',
     coinsEarned: 'كوينز مكتسبة من التوقعات',
     achievementsTitle: 'الإنجازات',

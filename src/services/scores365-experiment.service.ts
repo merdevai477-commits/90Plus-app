@@ -13,6 +13,7 @@ import { buildScores365AthletePhotoUrl, buildScores365CoachPhotoUrl } from '../u
 import { findCoachInLineup } from './coach-lookup.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import { calendarTodayKey } from '../utils/calendar-day-bounds.util';
+import { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
 const SCORES365_FIXTURES_BASE = 'https://webws.365scores.com/web/games/fixtures/';
@@ -30,6 +31,27 @@ interface Scores365FixturesPayload {
     previousPage?: string;
     nextPage?: string;
   };
+}
+
+interface Scores365CrowdVoteOption {
+  num?: number;
+  name?: string;
+  vote?: { count?: number; percentage?: number };
+}
+
+interface Scores365PromotedPrediction {
+  id?: number;
+  type?: number;
+  title?: string;
+  totalVotes?: number;
+  options?: Scores365CrowdVoteOption[];
+}
+
+export interface Scores365CrowdPrediction {
+  homePercent: number;
+  drawPercent: number;
+  awayPercent: number;
+  totalVotes: number;
 }
 
 interface Scores365Game {
@@ -57,6 +79,7 @@ interface Scores365Game {
   members?: Scores365Member[];
   venue?: { id?: number; name?: string; shortName?: string; capacity?: number };
   hasStats?: boolean;
+  promotedPredictions?: { predictions?: Scores365PromotedPrediction[] };
 }
 
 interface Scores365Competitor {
@@ -1814,6 +1837,9 @@ export async function mapScores365ToApiFootballFixture(
   const away365 = game.awayCompetitor;
   const homeDisplay = alignment.swapped ? away365?.name : home365?.name;
   const awayDisplay = alignment.swapped ? home365?.name : away365?.name;
+  const crowdPrediction = extractScores365CrowdWinPrediction(game, {
+    swapped: alignment.swapped,
+  });
 
   return {
     ...base,
@@ -1880,7 +1906,9 @@ export async function mapScores365ToApiFootballFixture(
       round: resolve365FixtureRound(game) || base.league.round || '',
     },
     _scores365GameId: game.id,
+    _scores365TeamsSwapped: alignment.swapped,
     _experiment: 'scores365',
+    ...(crowdPrediction ? { _crowdPrediction: crowdPrediction } : {}),
   } as FixtureFromAPI;
 }
 
@@ -2085,7 +2113,10 @@ export async function getScores365MatchesForDate(
     );
   }
 
-  return mapped;
+  const { enrichFixturesWithCrowdPredictions } = await import(
+    './scores365-crowd-prediction.service'
+  );
+  return enrichFixturesWithCrowdPredictions(mapped, lang);
 }
 
 export type Scores365WorldCupPhaseFilter = 'upcoming' | 'live' | 'finished' | 'all';
