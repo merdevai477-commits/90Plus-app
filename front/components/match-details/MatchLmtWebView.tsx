@@ -17,27 +17,34 @@ type MatchLmtWebViewProps = {
   /** Optional backend HTML shell (nested iframe — fallback only). */
   embedUrl?: string | null;
   aspectRatio?: number | null;
+  /** hero = replaces score card at top of match details */
+  variant?: 'hero' | 'card';
   unavailableLabel?: string;
   loadingLabel?: string;
   retryLabel?: string;
 };
 
 /**
- * WebView for live pitch tracking.
- * Loads lmtsrcf GetWidget directly (reliable on mobile); score card stays above.
+ * WebView for live pitch tracking (official 365 GetWidget).
  */
 export function MatchLmtWebView({
   widgetUrl,
   embedUrl,
   aspectRatio,
+  variant = 'hero',
   unavailableLabel = 'Live tracking is not available for this match.',
   loadingLabel = 'Loading tracking…',
   retryLabel = 'Retry',
 }: MatchLmtWebViewProps) {
   const { width } = useWindowDimensions();
   const ratio = aspectRatio && aspectRatio > 0 ? aspectRatio : 16 / 9;
-  const frameWidth = Math.max(280, width - 32);
-  const frameHeight = Math.max(220, Math.round(frameWidth / ratio));
+  const sidePad = variant === 'hero' ? 16 : 16;
+  const frameWidth = Math.max(280, width - sidePad * 2);
+  // Slightly taller than 16:9 so H2H strip under pitch still fits.
+  const frameHeight = Math.max(
+    variant === 'hero' ? 260 : 220,
+    Math.round(frameWidth / ratio) + (variant === 'hero' ? 48 : 0),
+  );
 
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -63,7 +70,12 @@ export function MatchLmtWebView({
   }
 
   return (
-    <View style={[styles.card, { height: frameHeight }]}>
+    <View
+      style={[
+        variant === 'hero' ? styles.hero : styles.card,
+        { height: frameHeight },
+      ]}
+    >
       {loading && !failed ? (
         <View style={styles.overlay} pointerEvents="none">
           <ActivityIndicator color="#a78bfa" size="large" />
@@ -121,6 +133,16 @@ export function MatchLmtWebView({
 }
 
 const styles = StyleSheet.create({
+  hero: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 8,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
   card: {
     marginHorizontal: 16,
     marginBottom: 20,

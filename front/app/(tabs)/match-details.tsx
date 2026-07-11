@@ -179,7 +179,7 @@ const MatchDetailsScreen = () => {
   const shimmerX = useShimmer();
   const translationsReady = Boolean(t?.matchDetails);
 
-  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'stadium' | 'tracking'>('events');
+  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'stadium'>('events');
 
   const [homeLastFixtures, setHomeLastFixtures] = useState<TeamFixture[]>([]);
   const [awayLastFixtures, setAwayLastFixtures] = useState<TeamFixture[]>([]);
@@ -270,7 +270,6 @@ const MatchDetailsScreen = () => {
   const [standingsLoading, setStandingsLoading] = useState(false);
   const [lmtInfo, setLmtInfo] = useState<Scores365LmtInfo | null>(null);
   const [lmtChecked, setLmtChecked] = useState(false);
-  const lmtAutoOpenedRef = useRef<number | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [lineupsError, setLineupsError] = useState<string | null>(null);
@@ -446,7 +445,6 @@ const MatchDetailsScreen = () => {
     setStandingsLoading(false);
     setLmtInfo(null);
     setLmtChecked(false);
-    lmtAutoOpenedRef.current = null;
     loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
 
@@ -854,19 +852,11 @@ const MatchDetailsScreen = () => {
     }
   }, [fixtureId, language, lmtChecked]);
 
-  // Probe LMT for every opened match (404 = no pitch — normal).
+  // Probe LMT for every opened match (404 = no pitch — show score card instead).
   useEffect(() => {
     if (!fixtureId || !fixture) return;
     void loadLmtIfNeeded();
   }, [fixtureId, fixture?.fixture?.id, loadLmtIfNeeded]);
-
-  // Live + has partnerId → open Tracking once so the pitch is visible immediately.
-  useEffect(() => {
-    if (!fixtureId || !lmtInfo?.widgetUrl || !isLive()) return;
-    if (lmtAutoOpenedRef.current === fixtureId) return;
-    lmtAutoOpenedRef.current = fixtureId;
-    setActiveTab('tracking');
-  }, [fixtureId, lmtInfo?.widgetUrl, isLive]);
 
   // Reload stats when match reaches HT or full time
   useEffect(() => {
@@ -923,9 +913,8 @@ const MatchDetailsScreen = () => {
       case 'form':      loadFormIfNeeded(); break;
       case 'standings': loadStandingsIfNeeded(); break;
       case 'stadium':   loadVenueIfNeeded(); break;
-      case 'tracking':  loadLmtIfNeeded(); break;
     }
-  }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded, loadVenueIfNeeded, loadLmtIfNeeded]);
+  }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded, loadVenueIfNeeded]);
 
   const openPlayerProfile = useCallback(
     (
@@ -1685,45 +1674,6 @@ const MatchDetailsScreen = () => {
     );
   };
 
-  const renderTracking = () => {
-    if (!lmtChecked) {
-      return (
-        <View style={styles.emptyState}>
-          <ActivityIndicator color="#a78bfa" size="large" />
-          <Text style={styles.emptyStateText}>
-            {t.matchDetails.trackingLoading || 'Loading live pitch…'}
-          </Text>
-        </View>
-      );
-    }
-
-    if (lmtInfo?.widgetUrl) {
-      return (
-        <MatchLmtWebView
-          widgetUrl={lmtInfo.widgetUrl}
-          embedUrl={lmtInfo.embedUrl}
-          aspectRatio={lmtInfo.widgetRatio}
-          loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
-          unavailableLabel={t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
-          retryLabel={t.matchDetails.retry || t.common.retry}
-        />
-      );
-    }
-
-    return (
-      <View style={styles.emptyState}>
-        <Ionicons name="football-outline" size={64} color="#333" />
-        <Text style={styles.emptyStateText}>
-          {t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
-        </Text>
-        <Text style={[styles.emptyStateText, { marginTop: 8, opacity: 0.7, fontSize: 13 }]}>
-          {t.matchDetails.trackingUnavailableHint ||
-            'SportRadar tracking is only available for some competitions.'}
-        </Text>
-      </View>
-    );
-  };
-
   const renderStandings = () => {
     const hasStandings = standingsGroups.length > 0;
     if (standingsLoading && !hasStandings) {
@@ -1948,19 +1898,65 @@ const MatchDetailsScreen = () => {
     );
   }
 
-  const showTrackingTab = Boolean(lmtInfo?.widgetUrl) || isLive() || isFinishedMatch();
-
   const tabs = [
     { key: 'events', label: t.matchDetails.events, icon: 'football' as const },
-    ...(showTrackingTab
-      ? [{ key: 'tracking', label: t.matchDetails.tracking || 'Tracking', icon: 'navigate' as const }]
-      : []),
     { key: 'lineups', label: t.matchDetails.lineups, icon: 'people' as const },
     { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
     { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },
     { key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const },
     { key: 'stadium', label: t.matchDetails.stadium || 'Stadium', icon: 'business' as const },
   ];
+
+  const matchHero = lmtInfo?.widgetUrl ? (
+    <MatchLmtWebView
+      variant="hero"
+      widgetUrl={lmtInfo.widgetUrl}
+      embedUrl={lmtInfo.embedUrl}
+      aspectRatio={lmtInfo.widgetRatio}
+      loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
+      unavailableLabel={t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
+      retryLabel={t.matchDetails.retry || t.common.retry}
+    />
+  ) : (
+    <MatchHeader
+      homeTeam={getTeamDisplayName(homeTeamName, language)}
+      awayTeam={getTeamDisplayName(awayTeamName, language)}
+      homeLogo={homeTeamLogo}
+      awayLogo={awayTeamLogo}
+      homeScore={fixture?.goals?.home != null ? String(fixture.goals.home) : undefined}
+      awayScore={fixture?.goals?.away != null ? String(fixture.goals.away) : undefined}
+      status={fixture ? (
+        ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(fixture.fixture?.status?.short ?? '') ? 'live'
+        : ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(fixture.fixture?.status?.short ?? '') ? 'finished'
+        : 'upcoming'
+      ) : 'upcoming'}
+      league={getLeagueDisplayName(
+        leagueName,
+        language,
+        fixture?.league?.id,
+        fixture?.league?.country,
+      )}
+      date={kickoffDate}
+      time={kickoffTime}
+      fixtureDate={fixture?.fixture?.date}
+      statusShort={fixture?.fixture?.status?.short}
+      elapsed={fixture?.fixture?.status?.elapsed ?? undefined}
+      stoppage={(fixture?.fixture?.status as { extra?: number | null } | undefined)?.extra ?? null}
+      startTimestamp={fixture ? getPeriodStartTimestamp(fixture) : undefined}
+      statusLabel={
+        fixture?.fixture?.status?.short
+          ? getLocalizedMatchStatus(fixture.fixture.status.short, language)
+          : undefined
+      }
+      penaltyHome={fixture?.score?.penalty?.home ?? undefined}
+      penaltyAway={fixture?.score?.penalty?.away ?? undefined}
+      halftimeLabel={getLocalizedMatchStatus('HT', language)}
+      finishedLabel={getLocalizedMatchStatus('FT', language)}
+      liveLabel={getLocalizedMatchStatus('LIVE', language)}
+      vsLabel={t.matchDetails.vs}
+      penaltiesShortLabel={getLocalizedMatchStatus('PEN', language)}
+    />
+  );
 
   return (
     <View style={styles.container}>
@@ -1981,45 +1977,8 @@ const MatchDetailsScreen = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Modern Header (Score Card) */}
-        <MatchHeader
-          homeTeam={getTeamDisplayName(homeTeamName, language)}
-          awayTeam={getTeamDisplayName(awayTeamName, language)}
-          homeLogo={homeTeamLogo}
-          awayLogo={awayTeamLogo}
-          homeScore={fixture?.goals?.home != null ? String(fixture.goals.home) : undefined}
-          awayScore={fixture?.goals?.away != null ? String(fixture.goals.away) : undefined}
-          status={fixture ? (
-            ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(fixture.fixture?.status?.short ?? '') ? 'live'
-            : ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(fixture.fixture?.status?.short ?? '') ? 'finished'
-            : 'upcoming'
-          ) : 'upcoming'}
-          league={getLeagueDisplayName(
-            leagueName,
-            language,
-            fixture?.league?.id,
-            fixture?.league?.country,
-          )}
-          date={kickoffDate}
-          time={kickoffTime}
-          fixtureDate={fixture?.fixture?.date}
-          statusShort={fixture?.fixture?.status?.short}
-          elapsed={fixture?.fixture?.status?.elapsed ?? undefined}
-          stoppage={(fixture?.fixture?.status as { extra?: number | null } | undefined)?.extra ?? null}
-          startTimestamp={fixture ? getPeriodStartTimestamp(fixture) : undefined}
-          statusLabel={
-            fixture?.fixture?.status?.short
-              ? getLocalizedMatchStatus(fixture.fixture.status.short, language)
-              : undefined
-          }
-          penaltyHome={fixture?.score?.penalty?.home ?? undefined}
-          penaltyAway={fixture?.score?.penalty?.away ?? undefined}
-          halftimeLabel={getLocalizedMatchStatus('HT', language)}
-          finishedLabel={getLocalizedMatchStatus('FT', language)}
-          liveLabel={getLocalizedMatchStatus('LIVE', language)}
-          vsLabel={t.matchDetails.vs}
-          penaltiesShortLabel={getLocalizedMatchStatus('PEN', language)}
-        />
+        {/* Pitch tracker replaces score card when SportRadar LMT is available */}
+        {matchHero}
 
         {/* Modern Tabs */}
         <ModernTabs
@@ -2031,7 +1990,6 @@ const MatchDetailsScreen = () => {
         {/* Content */}
         <View style={styles.content}>
           {activeTab === 'events' && renderEvents()}
-          {activeTab === 'tracking' && renderTracking()}
           {activeTab === 'lineups' && renderLineups()}
           {activeTab === 'stats' && renderStatistics()}
           {activeTab === 'form' && renderForm()}
