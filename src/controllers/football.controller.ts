@@ -11,7 +11,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId, buildScores365LmtBrowserPreviewHtml, resolveLmtPitchBrandLogoUrl, fetchScores365LmtWidgetHtml, brandScores365LmtWidgetHtml } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId } from '../services/scores365-experiment.service';
 import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 
@@ -37,42 +37,25 @@ function wantsFreshMatchDetails(req: Request): boolean {
 }
 
 /**
- * LMT responses (mirrors c:\DD\js\app.js on the original 365 GetWidget URL):
- * - default → iframe lmtsrcf GetWidget?partnerid=… + 90PLUS logo cover (works on Railway)
- * - format=branded|proxy → fetch GetWidget HTML, rewrite logos (DD customizeWidgetHtml)
- * - format=sir → SIR addWidget with branded props (licensed origin only)
- * - format=json → metadata (includes partnerId + widgetUrl)
- * - format=redirect → 302 to original GetWidget URL
+ * LMT responses:
+ * - default → 302 to official lmtsrcf GetWidget?partnerid=… (365 tracking as-is)
+ * - format=json → metadata (use response.widgetUrl in WebView)
+ * - format=preview → tiny HTML that navigates to widgetUrl
  */
-function resolveLmtResponseFormat(
-  req: Request,
-): 'redirect' | 'json' | 'iframe' | 'branded' | 'sir' {
+function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'preview' {
   const raw = String(req.query.format ?? '').toLowerCase().trim();
   if (raw === 'json') return 'json';
+  if (raw === 'preview' || raw === 'html') return 'preview';
   if (raw === 'redirect') return 'redirect';
-  if (raw === 'sir') return 'sir';
-  if (raw === 'branded' || raw === 'proxy' || raw === 'html') return 'branded';
-  if (raw === 'iframe' || raw === 'preview' || raw === 'auto') return 'iframe';
   const accept = String(req.headers.accept ?? '');
   if (raw === '' && accept.includes('application/json') && !accept.includes('text/html')) {
     return 'json';
   }
-  return 'iframe';
+  return 'redirect';
 }
 
 async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWidgetInfo): Promise<void> {
   const format = resolveLmtResponseFormat(req);
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
-  const proto = forwardedProto || req.protocol || 'https';
-  const host = String(req.headers['x-forwarded-host'] || req.get('host') || '').split(',')[0].trim();
-  const publicBaseUrl = host ? `${proto}://${host}` : null;
-  const hidePitchBrand =
-    req.query.hideBrand === '1' ||
-    req.query.hideBrand === 'true' ||
-    req.query.hidePitchBrand === '1';
-  const brandLogoUrl = hidePitchBrand
-    ? 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
-    : resolveLmtPitchBrandLogoUrl(publicBaseUrl);
 
   if (format === 'json') {
     res.json({
@@ -80,59 +63,33 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
       source: '365scores',
       response: {
         ...info,
-        embedMode: 'iframe-original-getwidget-plus-logo-cover',
-        brandLogoUrl,
-        getWidgetUrl: info.widgetUrl,
-        widgetProps: {
-          matchId: info.partnerId,
-          pitchLogo: brandLogoUrl,
-          goalBannerImage: brandLogoUrl,
-          vlmtCourtBannerUrl: brandLogoUrl,
-        },
-        note:
-          'partnerId comes from game.widgets (NOT gameId). Default HTML iframes the original ' +
-          'lmtsrcf GetWidget URL and covers 365 logos with brandLogoUrl. Use format=branded to ' +
-          'proxy+rewrite GetWidget HTML (DD customizeWidgetHtml).',
+        embedMode: 'redirect-to-365-widget',
+        note: 'Load widgetUrl directly (GetWidget?partnerid=…). partnerId is not gameId.',
       },
     });
     return;
   }
 
-  if (format === 'redirect') {
+  if (format === 'preview') {
+    const escape = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const url = escape(info.widgetUrl);
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<meta http-equiv="refresh" content="0;url=${url}"/>
+<title>LMT → 365Scores</title>
+<script>location.replace(${JSON.stringify(info.widgetUrl)});</script>
+</head><body style="background:#0b1220;color:#fff;font-family:system-ui;padding:24px">
+Redirecting to SportRadar LMT…
+<a href="${url}" style="color:#a78bfa">Open widget</a>
+</body></html>`;
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=15');
-    res.redirect(302, info.widgetUrl);
+    res.status(200).send(html);
     return;
   }
 
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=15');
-
-  if (format === 'branded') {
-    const upstream = await fetchScores365LmtWidgetHtml(
-      info.partnerId,
-      info.langId,
-      info.sportTypeId,
-    );
-    if (!upstream) {
-      res.status(502).send('Failed to fetch original GetWidget HTML');
-      return;
-    }
-    res.status(200).send(
-      brandScores365LmtWidgetHtml(upstream, {
-        publicBaseUrl,
-        hidePitchBrand: Boolean(hidePitchBrand),
-      }),
-    );
-    return;
-  }
-
-  res.status(200).send(
-    buildScores365LmtBrowserPreviewHtml(info, {
-      publicBaseUrl,
-      hidePitchBrand: Boolean(hidePitchBrand),
-      mode: format === 'sir' ? 'sir' : 'iframe',
-    }),
-  );
+  res.redirect(302, info.widgetUrl);
 }
 
 // Helper function to format transfer date

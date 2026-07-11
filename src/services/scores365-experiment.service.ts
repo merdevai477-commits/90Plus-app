@@ -14,10 +14,6 @@ import { findCoachInLineup } from './coach-lookup.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import { calendarTodayKey, calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
 import { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
-import {
-  buildScores365LmtHtml,
-  customizeScores365LmtWidgetHtml,
-} from '../utils/scores365-lmt-html';
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
 const SCORES365_FIXTURES_BASE = 'https://webws.365scores.com/web/games/fixtures/';
@@ -2468,68 +2464,6 @@ export async function sync365SyntheticLiveSnapshots(
   return updated;
 }
 
-const TRANSPARENT_PIXEL =
-  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-
-/** Public URL used for SportRadar pitch branding props (replaces 365 marks). */
-export function resolveLmtPitchBrandLogoUrl(publicBaseUrl?: string | null): string {
-  const fromEnv = process.env.LMT_PITCH_LOGO_URL?.trim();
-  if (fromEnv) return fromEnv;
-  const path = '/90plus-pitch-logo.png';
-  const base = (publicBaseUrl || process.env.SHARE_BASE_URL || '').replace(/\/$/, '').trim();
-  if (base) return `${base}${path}`;
-  return path;
-}
-
-/** Preview HTML — mirrors c:\DD (original GetWidget URL + 90PLUS brand). */
-export function buildScores365LmtBrowserPreviewHtml(
-  info: Scores365LmtWidgetInfo,
-  options?: {
-    publicBaseUrl?: string | null;
-    hidePitchBrand?: boolean;
-    mode?: 'iframe' | 'branded' | 'sir';
-    brandedHtml?: string | null;
-  },
-): string {
-  const hideBrand =
-    options?.hidePitchBrand === true ||
-    process.env.LMT_HIDE_PITCH_BRAND === 'true' ||
-    process.env.LMT_HIDE_PITCH_BRAND === '1';
-  const brandLogoUrl = hideBrand
-    ? TRANSPARENT_PIXEL
-    : resolveLmtPitchBrandLogoUrl(options?.publicBaseUrl);
-
-  return buildScores365LmtHtml(
-    {
-      partnerId: info.partnerId,
-      widgetUrl: info.widgetUrl,
-      widgetRatio: info.widgetRatio,
-      homeName: info.homeName,
-      awayName: info.awayName,
-    },
-    {
-      brandLogoUrl,
-      hidePitchBrand: hideBrand,
-      mode: options?.mode ?? 'iframe',
-      brandedHtml: options?.brandedHtml,
-    },
-  );
-}
-
-/** DD `customizeWidgetHtml` — rewrite logos on upstream GetWidget HTML. */
-export function brandScores365LmtWidgetHtml(
-  html: string,
-  options?: { publicBaseUrl?: string | null; hidePitchBrand?: boolean },
-): string {
-  const hideBrand =
-    options?.hidePitchBrand === true ||
-    process.env.LMT_HIDE_PITCH_BRAND === 'true' ||
-    process.env.LMT_HIDE_PITCH_BRAND === '1';
-  if (hideBrand) return html;
-  const brandLogoUrl = resolveLmtPitchBrandLogoUrl(options?.publicBaseUrl);
-  return customizeScores365LmtWidgetHtml(html, brandLogoUrl);
-}
-
 const SCORES365_LMT_WIDGET_BASE = 'https://lmtsrcf.365scores.com/api/SportRadarLMT/GetWidget';
 
 export type Scores365LmtWidgetInfo = {
@@ -2547,7 +2481,7 @@ export type Scores365LmtWidgetInfo = {
   statusText: string | null;
 };
 
-/** Same as DD `getPartnerIdFromGame` — LMT widget partnerId, never gameId. */
+/** LMT widget from game.widgets — partnerId is NOT gameId. */
 function pickLmtWidget(game: Scores365Game): Scores365Widget | null {
   const widgets = Array.isArray(game.widgets) ? game.widgets : [];
   const byType = widgets.find((w) => String(w.widgetType ?? '') === 'LMT');
@@ -2578,7 +2512,7 @@ function partnerIdFromWidget(widget: Scores365Widget): string | null {
   return null;
 }
 
-/** Original 365scores GetWidget URL — partnerid + lang + sportTypeId. */
+/** Official 365scores GetWidget URL. */
 export function buildScores365LmtWidgetUrl(partnerId: string, langId: number, sportTypeId = 1): string {
   const params = new URLSearchParams({
     partnerid: String(partnerId),
@@ -2615,7 +2549,7 @@ export async function getScores365LmtWidgetForGameId(
   const partnerId = partnerIdFromWidget(widget);
   if (!partnerId) return null;
 
-  // Always build the canonical GetWidget URL (DD WIDGET_BASE) — do not use gameId.
+  // Canonical GetWidget URL — partnerId from widgets, never gameId.
   const sportTypeId = 1;
   const widgetUrl = buildScores365LmtWidgetUrl(partnerId, langId, sportTypeId);
 
