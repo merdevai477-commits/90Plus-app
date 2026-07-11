@@ -38,16 +38,17 @@ function wantsFreshMatchDetails(req: Request): boolean {
 
 /**
  * LMT responses:
- * - default / format=preview|html → SportRadar SIR embed with 90PLUS pitchLogo props
- * - format=json → metadata + brandLogoUrl for clients
- * - format=redirect → 302 to official lmtsrcf GetWidget (365 branding)
- * - ?hideBrand=1 → transparent pitch logos
+ * - default → iframe lmtsrcf (works) + 90PLUS logo overlay
+ * - format=sir → direct SportRadar embed with brand props (needs licensed origin)
+ * - format=json → metadata
+ * - format=redirect → 302 to lmtsrcf only
  */
-function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'preview' {
+function resolveLmtResponseFormat(req: Request): 'redirect' | 'json' | 'preview' | 'sir' {
   const raw = String(req.query.format ?? '').toLowerCase().trim();
   if (raw === 'json') return 'json';
   if (raw === 'redirect') return 'redirect';
-  if (raw === 'preview' || raw === 'html') return 'preview';
+  if (raw === 'sir') return 'sir';
+  if (raw === 'preview' || raw === 'html' || raw === 'iframe') return 'preview';
   const accept = String(req.headers.accept ?? '');
   if (raw === '' && accept.includes('application/json') && !accept.includes('text/html')) {
     return 'json';
@@ -75,7 +76,7 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
       source: '365scores',
       response: {
         ...info,
-        embedMode: 'sir-direct-with-brand-props',
+        embedMode: 'iframe-365-widget-plus-logo-overlay',
         brandLogoUrl,
         widgetProps: {
           matchId: info.partnerId,
@@ -83,7 +84,7 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
           goalBannerImage: brandLogoUrl,
           vlmtCourtBannerUrl: brandLogoUrl,
         },
-        note: 'Tracking uses SportRadar matchId (= partnerId). Only branding image URLs are overridden.',
+        note: 'Default HTML iframes licensed lmtsrcf widget and overlays brandLogoUrl. Use format=sir only on a SportRadar-licensed domain.',
       },
     });
     return;
@@ -101,6 +102,7 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
     buildScores365LmtBrowserPreviewHtml(info, {
       publicBaseUrl,
       hidePitchBrand: Boolean(hidePitchBrand),
+      mode: format === 'sir' ? 'sir' : 'iframe',
     }),
   );
 }

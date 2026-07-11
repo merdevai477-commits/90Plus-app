@@ -2488,13 +2488,22 @@ export function resolveLmtPitchBrandLogoUrl(publicBaseUrl?: string | null): stri
 }
 
 /**
- * Embed SportRadar LMT directly (same tracking/data as 365 GetWidget),
- * but pass 90PLUS branding into pitchLogo / goalBannerImage / vlmtCourtBannerUrl.
- * Does not iframe lmtsrcf — only the matchId (= partnerId) drives the live feed.
+ * Embed LMT for browser/WebView preview.
+ *
+ * Default strategy: iframe the licensed lmtsrcf GetWidget (tracking works on any
+ * host) and overlay 90PLUS pitch logo — SportRadar's widgetloader refuses our
+ * Railway domain with a blank/"License has expired" screen when embedded directly.
+ *
+ * format=sir keeps the direct SIR("addWidget") path with brand props (only works
+ * on a SportRadar-licensed origin).
  */
 export function buildScores365LmtBrowserPreviewHtml(
   info: Scores365LmtWidgetInfo,
-  options?: { publicBaseUrl?: string | null; hidePitchBrand?: boolean },
+  options?: {
+    publicBaseUrl?: string | null;
+    hidePitchBrand?: boolean;
+    mode?: 'iframe' | 'sir';
+  },
 ): string {
   const escape = (s: string) =>
     s
@@ -2512,17 +2521,64 @@ export function buildScores365LmtBrowserPreviewHtml(
     ? TRANSPARENT_PIXEL
     : resolveLmtPitchBrandLogoUrl(options?.publicBaseUrl);
 
-  const sirLang = mapScores365LangIdToSirLanguage(info.langId);
-  const matchId = String(info.partnerId);
+  const mode = options?.mode === 'sir' ? 'sir' : 'iframe';
   const ratio = info.widgetRatio && info.widgetRatio > 0 ? info.widgetRatio : 16 / 9;
   const paddingPct = ((1 / ratio) * 100).toFixed(4);
   const home = info.homeName ? escape(info.homeName) : 'Home';
   const away = info.awayName ? escape(info.awayName) : 'Away';
   const title = `${home} vs ${away}`;
+  const widgetUrl = escape(info.widgetUrl);
+  const brandLogoAttr = escape(brandLogo);
 
-  // JSON-serialized into the page script (safe for JS string context).
+  if (mode === 'iframe') {
+    return `<!DOCTYPE html>
+<html lang="ar" dir="auto">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>${title} — 90PLUS LMT</title>
+  <style>
+    html, body { margin: 0; background: #000; height: 100%; }
+    .stage { width: 100%; max-width: 1100px; margin: 0 auto; }
+    .frame-wrap {
+      position: relative; width: 100%; padding-top: ${paddingPct}%;
+      background: #000; overflow: hidden;
+    }
+    .frame-wrap iframe {
+      position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
+    }
+    .brand-cover {
+      position: absolute;
+      left: 50%;
+      bottom: 3.8%;
+      transform: translateX(-50%);
+      width: min(42%, 320px);
+      height: auto;
+      z-index: 6;
+      pointer-events: none;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="frame-wrap">
+      <iframe
+        src="${widgetUrl}"
+        title="90PLUS Live Pitch"
+        allow="fullscreen; autoplay"
+        referrerpolicy="no-referrer-when-downgrade"
+      ></iframe>
+      ${hideBrand ? '' : `<img class="brand-cover" src="${brandLogoAttr}" alt="90PLUS-app" />`}
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  const sirLang = mapScores365LangIdToSirLanguage(info.langId);
   const brandLogoJs = JSON.stringify(brandLogo);
-  const matchIdJs = JSON.stringify(matchId);
+  const matchIdJs = JSON.stringify(String(info.partnerId));
   const sirLangJs = JSON.stringify(sirLang);
   const loaderJs = JSON.stringify(SCORES365_SR_WIDGETLOADER);
 
@@ -2531,7 +2587,6 @@ export function buildScores365LmtBrowserPreviewHtml(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
   <title>${title} — 90PLUS LMT</title>
   <link rel="stylesheet" type="text/css" href="https://statics3.365scores.com/SRWidget/theme.css" />
   <style>
@@ -2539,8 +2594,8 @@ export function buildScores365LmtBrowserPreviewHtml(
     .sr-widget { width: 100%; }
     .wrap { position: relative; width: 100%; max-width: 1100px; margin: 0 auto; padding-top: ${paddingPct}%; background: #000; }
     .wrap-inner { position: absolute; inset: 0; }
-    .sr-bb .sr-lmt-clock-v2 { display: none; }
-    .sr-lmt-plus__footer-wrapper { display: none; }
+    .sr-bb .sr-lmt-clock-v2,
+    .sr-lmt-plus__footer-wrapper,
     .sr-bb .sr-lmt-clock__wrap { display: none; }
   </style>
 </head>
