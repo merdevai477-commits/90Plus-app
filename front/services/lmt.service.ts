@@ -30,7 +30,7 @@ type LmtJsonResponse = {
 export const LMT_TRANSPARENT_LOGO =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-/** High-contrast 90PLUS-app mark for SportRadar pitchLogo / banners. */
+/** High-contrast 90PLUS-app mark (SVG data URI) — last-resort if hosted PNG unavailable. */
 export const LMT_DEFAULT_BRAND_LOGO_DATA_URI =
   'data:image/svg+xml,' +
   encodeURIComponent(
@@ -38,6 +38,50 @@ export const LMT_DEFAULT_BRAND_LOGO_DATA_URI =
   );
 
 export const LMT_WIDGET_BASE_ORIGIN = 'https://lmtsrcf.365scores.com';
+
+/**
+ * Injected into GetWidget when we must load via uri.
+ * Replaces 365 pitch / banner images with our mark.
+ */
+export function buildLmtBrandInjectScript(logoUrl: string): string {
+  const logo = JSON.stringify(logoUrl);
+  return `
+(function () {
+  var LOGO = ${logo};
+  var RE = /365|scores365|sportradar\\/|ALL_SPORT_TYPES_PITCH|T_B_365|pitch.?logo|goal.?banner/i;
+  function swapImg(img) {
+    try {
+      var s = img.getAttribute('src') || img.src || '';
+      if (!s || s === LOGO) return;
+      if (RE.test(s)) {
+        img.setAttribute('src', LOGO);
+        try { img.src = LOGO; } catch (e) {}
+      }
+    } catch (e) {}
+  }
+  function patch() {
+    try {
+      if (window.widgetProps && typeof window.widgetProps === 'object') {
+        window.widgetProps.vlmtCourtBannerUrl = LOGO;
+      }
+    } catch (e) {}
+    try {
+      document.querySelectorAll('img').forEach(swapImg);
+    } catch (e) {}
+  }
+  patch();
+  try {
+    new MutationObserver(patch).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['src'],
+    });
+  } catch (e) {}
+  true;
+})();
+`.trim();
+}
 
 function buildEmbedUrl(kind: 'fixture' | 'game', id: number): string {
   const base = getApiUrl().replace(/\/$/, '');
@@ -48,29 +92,29 @@ function buildEmbedUrl(kind: 'fixture' | 'game', id: number): string {
   return `${base}/${path}`;
 }
 
-/** Absolute URL to hosted SVG (when data URI not preferred). */
+/** Absolute URL to hosted PNG (SportRadar pitchLogo expects a raster image). */
 export function resolveLmtBrandLogoUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_LMT_PITCH_LOGO_URL?.trim();
   if (fromEnv) return fromEnv;
   const api = getApiUrl().replace(/\/$/, '');
   const origin = api.replace(/\/api$/i, '');
-  return `${origin}/90plus-pitch-logo.svg`;
+  return `${origin}/90plus-pitch-logo.png`;
 }
 
 /**
  * Same replacements as DD `customizeWidgetHtml`.
- * Matches GetWidget shape:
+ * Matches GetWidget shape (may appear more than once):
  *   pitchLogo: "..."
  *   goalBannerImage: "..."
  *   widgetProps.vlmtCourtBannerUrl = "...";
  */
 export function customizeScores365LmtWidgetHtml(html: string, logoUrl: string): string {
-  const logo = logoUrl.replace(/"/g, '\\"');
+  const logo = logoUrl.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   return html
-    .replace(/pitchLogo:\s*"[^"]*"/, `pitchLogo: "${logo}"`)
-    .replace(/goalBannerImage:\s*"[^"]*"/, `goalBannerImage: "${logo}"`)
+    .replace(/pitchLogo:\s*"[^"]*"/g, `pitchLogo: "${logo}"`)
+    .replace(/goalBannerImage:\s*"[^"]*"/g, `goalBannerImage: "${logo}"`)
     .replace(
-      /widgetProps\.vlmtCourtBannerUrl\s*=\s*"[^"]*";/,
+      /widgetProps\.vlmtCourtBannerUrl\s*=\s*"[^"]*";/g,
       `widgetProps.vlmtCourtBannerUrl = "${logo}";`,
     );
 }
@@ -82,7 +126,8 @@ export function resolveLmtBrandLogoForHtml(options?: {
   if (options?.hideBrand) return LMT_TRANSPARENT_LOGO;
   const custom = options?.brandLogoUrl?.trim();
   if (custom) return custom;
-  return LMT_DEFAULT_BRAND_LOGO_DATA_URI;
+  // Prefer hosted PNG — SVG data URIs often fail inside SportRadar on iOS WKWebView.
+  return resolveLmtBrandLogoUrl();
 }
 
 /** Fetch official GetWidget HTML and rewrite pitch branding (DD flow). */
@@ -90,7 +135,12 @@ export async function fetchBrandedLmtHtml(
   widgetUrl: string,
   options?: { hideBrand?: boolean; brandLogoUrl?: string | null },
 ): Promise<string> {
-  const res = await fetch(widgetUrl);
+  const res = await fetch(widgetUrl, {
+    headers: {
+      Accept: 'text/html,application/xhtml+xml',
+      'Cache-Control': 'no-cache',
+    },
+  });
   if (!res.ok) {
     throw new Error(`GetWidget HTTP ${res.status}`);
   }
@@ -99,7 +149,12 @@ export async function fetchBrandedLmtHtml(
     throw new Error('GetWidget HTML missing pitchLogo');
   }
   const logo = resolveLmtBrandLogoForHtml(options);
-  return customizeScores365LmtWidgetHtml(html, logo);
+  const branded = customizeScores365LmtWidgetHtml(html, logo);
+  if (/ALL_SPORT_TYPES_PITCH|T_B_365|365-LogoNew/i.test(branded)) {
+    // Replacement missed — treat as failure so caller can try URI+inject.
+    throw new Error('GetWidget branding replace incomplete');
+  }
+  return branded;
 }
 
 async function fetchLmtJson(
