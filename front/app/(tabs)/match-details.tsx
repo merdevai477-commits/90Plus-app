@@ -288,6 +288,7 @@ const MatchDetailsScreen = () => {
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lineupsTabRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const eventsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -861,6 +862,29 @@ const MatchDetailsScreen = () => {
     void loadLmtIfNeeded();
   }, [fixtureId, fixture?.fixture?.id, loadLmtIfNeeded]);
 
+  // Refresh events while empty on the Events tab (live / not finished) — no manual retry.
+  useEffect(() => {
+    if (eventsPollingRef.current) {
+      clearInterval(eventsPollingRef.current);
+      eventsPollingRef.current = null;
+    }
+    if (activeTab !== 'events' || !fixtureId || events.length > 0) return;
+    if (isFinishedMatch()) return;
+
+    const tick = () => {
+      void useLiveFixtureStore.getState().fetchAndIngestFast(fixtureId);
+    };
+    tick();
+    eventsPollingRef.current = setInterval(tick, isLive() ? 8_000 : 20_000);
+
+    return () => {
+      if (eventsPollingRef.current) {
+        clearInterval(eventsPollingRef.current);
+        eventsPollingRef.current = null;
+      }
+    };
+  }, [activeTab, fixtureId, events.length, isLive, isFinishedMatch]);
+
   // Reload stats when match reaches HT or full time
   useEffect(() => {
     const short = fixture?.fixture?.status?.short;
@@ -995,24 +1019,49 @@ const MatchDetailsScreen = () => {
       return <EventsSkeleton shimmerX={shimmerX} />;
     }
     if (events.length === 0) {
-      const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
-      const inPlay =
-        liveStatuses.includes(fixture?.fixture?.status?.short ?? '') ||
-        isLive();
+      const finished = isFinishedMatch();
+      const live =
+        LIVE_MATCH_STATUSES.includes(
+          (fixture?.fixture?.status?.short ?? '') as (typeof LIVE_MATCH_STATUSES)[number],
+        ) || isLive();
+
+      if (!finished) {
+        return (
+          <View style={styles.emptyState}>
+            <View style={styles.eventsWaitingIcon}>
+              <Ionicons name="football-outline" size={36} color={PURPLE_SOFT} />
+            </View>
+            <Text style={styles.emptyStateText}>
+              {live
+                ? (t.matchDetails.eventsWaitingLive || 'Waiting for the first event…')
+                : (t.matchDetails.eventsBeforeKickoff || 'Events will appear once the match starts')}
+            </Text>
+            {live ? (
+              <>
+                <ActivityIndicator
+                  style={{ marginTop: 18 }}
+                  size="small"
+                  color={PURPLE_PRIMARY}
+                />
+                <Text style={styles.emptyStateSubtext}>
+                  {t.matchDetails.eventsUpdatingAuto || 'Updating automatically'}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.emptyStateSubtext}>
+                {t.matchDetails.beforeMatch}
+              </Text>
+            )}
+          </View>
+        );
+      }
+
       return (
         <View style={styles.emptyState}>
-          <Ionicons name="football-outline" size={64} color="#333" />
-          <Text style={styles.emptyStateText}>{t.matchDetails.noEvents}</Text>
-          {inPlay ? (
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={() => void useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId)}
-            >
-              <Text style={styles.retryButtonText}>
-                {t.matchDetails.standingsRetry || t.common.retry}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
+          <Ionicons name="football-outline" size={56} color="#333" />
+          <Text style={styles.emptyStateText}>
+            {t.matchDetails.eventsNoneRecorded || t.matchDetails.noEvents}
+          </Text>
         </View>
       );
     }
@@ -2266,6 +2315,16 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  eventsWaitingIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(168,85,247,0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(168,85,247,0.28)',
   },
   retryInlineBtn: {
     marginTop: 16,
