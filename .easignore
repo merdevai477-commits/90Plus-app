@@ -1,27 +1,64 @@
-# EAS packs from the git repo root. Keep only the Expo app (front/).
+# EAS packs from the git repo root. Exclude backend/monorepo junk; keep front/.
 # Docs: https://expo.fyi/eas-build-archive
-# When this file exists, .gitignore rules are NOT used — list everything here.
+# Patterns without a leading "/" match in EVERY folder — always prefix root-only rules.
 
-# ── Ignore entire monorepo by default ───────────────────────────────────────
-/*
+# ── Backend / monorepo (not needed for Expo) ────────────────────────────────
+/src/
+/prisma/
+/public/
+/scripts/
+/Backend/
+/dist/
+/docs/
+/SETTINGS/
+/PredictionKingPage-temp/
+/.postman-tmp/
+/.tmp-90plusNews/
+/.cursor/
+/.kiro/
+/.vscode/
+/node_modules/
 
-# ── Keep the mobile app ─────────────────────────────────────────────────────
-!/front/
-!/front/**
+# Root server / deploy configs (leading / = repo root ONLY)
+/Dockerfile
+/railway.toml
+/nixpacks.toml
+/nixpacks.json
+/nodemon.json
+/.eslintrc.json
+/.prettierrc
+/.railwayignore
+/.dockerignore
+/.nixpacks
+/.branch-protection.json
+/.postman.json
+/api-football-quota-hotfix.patch
+/package.json
+/package-lock.json
+/tsconfig.json
+/tsconfig.scripts.json
+/jest.config.js
+/.env
+/.env.example
+/*.md
+/_tmp_*.png
+/tmp-*.txt
+/app.json
+/eas.json
 
-# ── Front: dependencies & native (EAS installs / prebuilds these) ───────────
-front/node_modules/
-front/android/
-front/ios/
-front/dist/
-front/build/
-front/.expo/
-front/.expo-shared/
+# ── Always ignore deps & native (EAS installs / prebuilds) ──────────────────
+**/node_modules/
+**/.expo/
+**/android/
+**/ios/
+**/dist/
+**/build/
 
-# ── Front: local export / metro junk (was ~72MB of the 199MB archive) ───────
+# ── Front local junk ────────────────────────────────────────────────────────
 front/.expo-tmp-export/
 front/.expo-tmp-export-check/
 front/.metro-cache/
+front/.expo-shared/
 front/coverage/
 front/docs/
 front/__tests__/
@@ -30,20 +67,14 @@ front/*.log
 front/.eas-log.txt
 front/tsconfig.tsbuildinfo
 front/.tmp-expo-config.json
-
-# ── Front: local env / secrets ──────────────────────────────────────────────
 front/.env.local
 front/.env.*.local
 front/.env.development
 front/.env.test
-
-# ── Front: IDE / OS ─────────────────────────────────────────────────────────
 front/.vscode/
 front/.idea/
 front/.DS_Store
 front/Thumbs.db
-
-# ── Front: tests (not needed on the builder) ────────────────────────────────
 front/**/*.test.ts
 front/**/*.test.tsx
 front/**/*.test.js
