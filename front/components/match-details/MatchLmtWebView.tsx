@@ -16,8 +16,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PitchBrandLogo } from './PitchBrandLogo';
 import {
   fetchBrandedLmtHtml,
-  buildLmtBrandInjectScript,
-  resolveLmtBrandLogoForHtml,
   LMT_WIDGET_BASE_ORIGIN,
 } from '../../services/lmt.service';
 
@@ -37,8 +35,8 @@ type MatchLmtWebViewProps = {
   /** Absolute / data URI used as pitchLogo when hideBrand is false. */
   brandLogoUrl?: string | null;
   /**
-   * Always cover the mid-pitch brand zone (iOS + Android).
-   * SportRadar often paints the logo on canvas — DOM inject alone is not enough.
+   * Visual overlay fallback only when GetWidget HTML branding failed
+   * and we fell back to loading widgetUrl as uri.
    */
   coverBrand?: boolean;
   unavailableLabel?: string;
@@ -61,7 +59,6 @@ function LmtPitchSurface({
   hideBrand,
   brandWidth,
   brandHeight,
-  brandInjectJs,
   onLoadStart,
   onLoadEnd,
   onError,
@@ -73,7 +70,6 @@ function LmtPitchSurface({
   hideBrand: boolean;
   brandWidth: number;
   brandHeight: number;
-  brandInjectJs?: string | null;
   onLoadStart: () => void;
   onLoadEnd: () => void;
   onError: () => void;
@@ -101,8 +97,6 @@ function LmtPitchSurface({
         scrollEnabled={false}
         startInLoadingState={false}
         cacheEnabled
-        injectedJavaScript={brandInjectJs || undefined}
-        injectedJavaScriptBeforeContentLoaded={brandInjectJs || undefined}
         onLoadStart={onLoadStart}
         onLoadEnd={onLoadEnd}
         onError={onError}
@@ -193,16 +187,6 @@ export function MatchLmtWebView({
   const [uriFallback, setUriFallback] = useState(widgetUrl);
   const [landscapeOpen, setLandscapeOpen] = useState(false);
 
-  const effectiveLogoUrl = useMemo(
-    () => resolveLmtBrandLogoForHtml({ hideBrand, brandLogoUrl }),
-    [hideBrand, brandLogoUrl],
-  );
-
-  const brandInjectJs = useMemo(() => {
-    // Always inject on both platforms / modes — belt-and-suspenders vs 365 marks.
-    return buildLmtBrandInjectScript(effectiveLogoUrl);
-  }, [effectiveLogoUrl]);
-
   const prepareHtml = useCallback(async () => {
     setLoading(true);
     setFailed(false);
@@ -244,15 +228,12 @@ export function MatchLmtWebView({
     return { uri: uriFallback };
   }, [mode, brandedHtml, uriFallback]);
 
+  const showOverlayFallback = coverBrand && mode === 'uri' && !loading && !failed;
   const ready = Boolean(brandedHtml || mode === 'uri');
-  // Always cover mid-pitch on iOS + Android so a canvas-drawn 365 mark cannot leak.
-  const showOverlayFallback = coverBrand && !loading && !failed && ready;
   const waitingForHtml = mode === 'html' && !brandedHtml && !failed;
   const webKey = `${mode}-${reloadKey}-${mode === 'html' ? 'html' : uriFallback}`;
 
   const onWebError = useCallback(() => {
-    // Only fall back once from branded HTML → official URI (+ inject/cover).
-    // Do NOT treat subresource HTTP errors as fatal (common on iOS WKWebView).
     if (mode === 'html') {
       setMode('uri');
       setBrandedHtml(null);
@@ -267,12 +248,9 @@ export function MatchLmtWebView({
   const onWebHttpError = useCallback(
     (code: number) => {
       if (code < 400) return;
-      // Subresource 4xx/5xx (logos, analytics, SIR chunks) must NOT drop HTML branding.
-      // Falling back to uri was showing the raw 365 pitch logo under our glass cover on iPhone.
-      if (mode === 'html') return;
       onWebError();
     },
-    [mode, onWebError],
+    [onWebError],
   );
 
   if (!widgetUrl?.trim()) {
@@ -311,7 +289,6 @@ export function MatchLmtWebView({
               hideBrand={hideBrand}
               brandWidth={brandWidth}
               brandHeight={brandHeight}
-              brandInjectJs={brandInjectJs}
               onLoadStart={() => {
                 setLoading(true);
                 setFailed(false);
@@ -367,7 +344,6 @@ export function MatchLmtWebView({
                 hideBrand={hideBrand}
                 brandWidth={landscapeBrandW}
                 brandHeight={landscapeBrandH}
-                brandInjectJs={brandInjectJs}
                 onLoadStart={() => {}}
                 onLoadEnd={() => {}}
                 onError={onWebError}
@@ -471,10 +447,10 @@ const styles = StyleSheet.create({
   },
   brandPatch: {
     ...StyleSheet.absoluteFillObject,
-    // Opaque pitch green — translucent glass let the 365 mark bleed through on iPhone.
-    backgroundColor: '#1B7A3A',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     borderRadius: 6,
-    borderWidth: 0,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
     opacity: 1,
   },
   overlay: {
