@@ -2,6 +2,10 @@
 # Docs: https://expo.fyi/eas-build-archive
 # Patterns without a leading "/" match in EVERY folder — always prefix root-only rules.
 
+# Never upload git metadata (can double archive size)
+.git/
+.eas-archive-check/
+
 # ── Backend / monorepo (not needed for Expo) ────────────────────────────────
 /src/
 /prisma/
