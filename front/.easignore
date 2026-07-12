@@ -7,6 +7,9 @@ node_modules/
 # Expo cache
 .expo/
 .expo-shared/
+.expo-tmp-export/
+.expo-tmp-export-check/
+.metro-cache/
 
 # Build outputs
 dist/

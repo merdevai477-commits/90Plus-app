@@ -1,0 +1,52 @@
+# EAS packs from the git repo root. Keep only the Expo app (front/).
+# Docs: https://expo.fyi/eas-build-archive
+# When this file exists, .gitignore rules are NOT used — list everything here.
+
+# ── Ignore entire monorepo by default ───────────────────────────────────────
+/*
+
+# ── Keep the mobile app ─────────────────────────────────────────────────────
+!/front/
+!/front/**
+
+# ── Front: dependencies & native (EAS installs / prebuilds these) ───────────
+front/node_modules/
+front/android/
+front/ios/
+front/dist/
+front/build/
+front/.expo/
+front/.expo-shared/
+
+# ── Front: local export / metro junk (was ~72MB of the 199MB archive) ───────
+front/.expo-tmp-export/
+front/.expo-tmp-export-check/
+front/.metro-cache/
+front/coverage/
+front/docs/
+front/__tests__/
+front/__mocks__/
+front/*.log
+front/.eas-log.txt
+front/tsconfig.tsbuildinfo
+front/.tmp-expo-config.json
+
+# ── Front: local env / secrets ──────────────────────────────────────────────
+front/.env.local
+front/.env.*.local
+front/.env.development
+front/.env.test
+
+# ── Front: IDE / OS ─────────────────────────────────────────────────────────
+front/.vscode/
+front/.idea/
+front/.DS_Store
+front/Thumbs.db
+
+# ── Front: tests (not needed on the builder) ────────────────────────────────
+front/**/*.test.ts
+front/**/*.test.tsx
+front/**/*.test.js
+front/**/*.spec.ts
+front/**/*.spec.tsx
+front/**/*.spec.js
