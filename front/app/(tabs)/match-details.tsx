@@ -1113,9 +1113,9 @@ const MatchDetailsScreen = () => {
                 ]}
               >
                 <View style={styles.eventTime}>
-                  <Text style={styles.eventTimeText}>{event.time.elapsed}'</Text>
+                  <Text style={styles.eventTimeText}>{`${event.time.elapsed}'`}</Text>
                   {!!event.time.extra && (
-                    <Text style={styles.eventExtraTime}>+{event.time.extra}'</Text>
+                    <Text style={styles.eventExtraTime}>{`+${event.time.extra}'`}</Text>
                   )}
                 </View>
 
