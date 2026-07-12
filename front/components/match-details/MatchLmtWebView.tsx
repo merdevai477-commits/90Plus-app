@@ -37,8 +37,8 @@ type MatchLmtWebViewProps = {
   /** Absolute / data URI used as pitchLogo when hideBrand is false. */
   brandLogoUrl?: string | null;
   /**
-   * Visual overlay fallback only when GetWidget HTML branding failed
-   * and we fell back to loading widgetUrl as uri.
+   * Always cover the mid-pitch brand zone (iOS + Android).
+   * SportRadar often paints the logo on canvas — DOM inject alone is not enough.
    */
   coverBrand?: boolean;
   unavailableLabel?: string;
@@ -199,10 +199,9 @@ export function MatchLmtWebView({
   );
 
   const brandInjectJs = useMemo(() => {
-    // URI mode only — HTML mode already rewrote pitchLogo in the document.
-    if (mode !== 'uri' || hideBrand) return null;
+    // Always inject on both platforms / modes — belt-and-suspenders vs 365 marks.
     return buildLmtBrandInjectScript(effectiveLogoUrl);
-  }, [mode, hideBrand, effectiveLogoUrl]);
+  }, [effectiveLogoUrl]);
 
   const prepareHtml = useCallback(async () => {
     setLoading(true);
@@ -245,8 +244,9 @@ export function MatchLmtWebView({
     return { uri: uriFallback };
   }, [mode, brandedHtml, uriFallback]);
 
-  const showOverlayFallback = coverBrand && mode === 'uri' && !loading && !failed;
   const ready = Boolean(brandedHtml || mode === 'uri');
+  // Always cover mid-pitch on iOS + Android so a canvas-drawn 365 mark cannot leak.
+  const showOverlayFallback = coverBrand && !loading && !failed && ready;
   const waitingForHtml = mode === 'html' && !brandedHtml && !failed;
   const webKey = `${mode}-${reloadKey}-${mode === 'html' ? 'html' : uriFallback}`;
 
