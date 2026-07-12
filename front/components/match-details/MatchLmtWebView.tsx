@@ -75,29 +75,48 @@ function LmtPitchSurface({
   onError: () => void;
   onHttpError: (code: number) => void;
 }) {
+  const isHtmlSource = 'html' in webSource;
+  // Static HTML on iOS requires ['*'] or WKWebView can render blank.
+  const originWhitelist = isHtmlSource
+    ? (['*'] as const)
+    : (['https://*', 'http://*', 'about:blank'] as const);
+
   return (
     <View style={styles.surfaceFill}>
       <WebView
         key={webKey}
         source={webSource}
         style={styles.webview}
-        originWhitelist={['https://*', 'http://*', 'about:blank']}
+        originWhitelist={[...originWhitelist]}
         javaScriptEnabled
         domStorageEnabled
         allowsFullscreenVideo
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
-        mixedContentMode="always"
         setSupportMultipleWindows={false}
-        nestedScrollEnabled
         scrollEnabled={false}
         startInLoadingState={false}
+        cacheEnabled
         onLoadStart={onLoadStart}
         onLoadEnd={onLoadEnd}
         onError={onError}
         onHttpError={(e) => onHttpError(e.nativeEvent?.statusCode ?? 0)}
         {...(Platform.OS === 'ios'
-          ? { allowsBackForwardNavigationGestures: false }
+          ? {
+              allowsBackForwardNavigationGestures: false,
+              allowsLinkPreview: false,
+              bounces: false,
+              sharedCookiesEnabled: true,
+              dataDetectorTypes: 'none' as const,
+            }
+          : {})}
+        {...(Platform.OS === 'android'
+          ? {
+              mixedContentMode: 'always' as const,
+              nestedScrollEnabled: true,
+              thirdPartyCookiesEnabled: true,
+              overScrollMode: 'never' as const,
+            }
           : {})}
       />
       {showOverlayFallback ? (
@@ -261,7 +280,7 @@ export function MatchLmtWebView({
               <Text style={styles.retryText}>{retryLabel}</Text>
             </TouchableOpacity>
           </View>
-        ) : ready ? (
+        ) : ready && !landscapeOpen ? (
           <>
             <LmtPitchSurface
               webSource={webSource}
@@ -290,6 +309,11 @@ export function MatchLmtWebView({
               <Ionicons name="phone-landscape-outline" size={20} color="#fff" />
             </TouchableOpacity>
           </>
+        ) : ready && landscapeOpen ? (
+          // Keep hero chrome while landscape modal owns the only WKWebView (iOS memory).
+          <View style={styles.overlay} pointerEvents="none">
+            <ActivityIndicator color="#a78bfa" size="large" />
+          </View>
         ) : null}
       </View>
 
@@ -299,6 +323,7 @@ export function MatchLmtWebView({
         presentationStyle="fullScreen"
         supportedOrientations={['portrait', 'landscape']}
         onRequestClose={() => setLandscapeOpen(false)}
+        statusBarTranslucent={Platform.OS === 'android'}
       >
         <StatusBar hidden={landscapeOpen} />
         <View style={styles.landscapeRoot}>
