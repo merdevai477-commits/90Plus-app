@@ -18,6 +18,23 @@ import {
   fetchBrandedLmtHtml,
   LMT_WIDGET_BASE_ORIGIN,
 } from '../../services/lmt.service';
+import { getApiEndpoint } from '../../config/api.config';
+
+const LMT_REMOTE_LOG_URL = getApiEndpoint('debug/lmt-log');
+
+function remoteLog(event: string, data: Record<string, unknown> = {}): void {
+  console.warn(event, data);
+  fetch(LMT_REMOTE_LOG_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      event,
+      ...data,
+      platform: Platform.OS,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+}
 
 type MatchLmtWebViewProps = {
   /** Official 365 GetWidget URL (partnerid — NOT gameId). */
@@ -196,7 +213,10 @@ export function MatchLmtWebView({
       const html = await fetchBrandedLmtHtml(widgetUrl, { hideBrand, brandLogoUrl });
       setBrandedHtml(html);
       setMode('html');
-    } catch {
+    } catch (err) {
+      remoteLog('[LMT] fetchBrandedLmtHtml failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
       setBrandedHtml(null);
       setMode('uri');
       setUriFallback(widgetUrl);
@@ -228,6 +248,13 @@ export function MatchLmtWebView({
     return { uri: uriFallback };
   }, [mode, brandedHtml, uriFallback]);
 
+  useEffect(() => {
+    remoteLog('[LMT] source mode resolved', {
+      mode,
+      isHtml: 'html' in webSource,
+    });
+  }, [mode, webSource]);
+
   const showOverlayFallback = coverBrand && mode === 'uri' && !loading && !failed;
   const ready = Boolean(brandedHtml || mode === 'uri');
   const waitingForHtml = mode === 'html' && !brandedHtml && !failed;
@@ -235,6 +262,7 @@ export function MatchLmtWebView({
 
   const onWebError = useCallback(() => {
     if (mode === 'html') {
+      remoteLog('[LMT] WebView error → fallback triggered', { mode });
       setMode('uri');
       setBrandedHtml(null);
       setUriFallback(widgetUrl);
@@ -248,9 +276,10 @@ export function MatchLmtWebView({
   const onWebHttpError = useCallback(
     (code: number) => {
       if (code < 400) return;
+      remoteLog('[LMT] WebView HTTP error', { mode, code });
       onWebError();
     },
-    [onWebError],
+    [mode, onWebError],
   );
 
   if (!widgetUrl?.trim()) {
@@ -447,10 +476,10 @@ const styles = StyleSheet.create({
   },
   brandPatch: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    // Opaque pitch green — semi-transparent glass let 365 bleed through on iOS uri fallback.
+    backgroundColor: '#257A37',
     borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 0,
     opacity: 1,
   },
   overlay: {

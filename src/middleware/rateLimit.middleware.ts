@@ -68,6 +68,8 @@ function isSkippablePath(req: Request): boolean {
     // Don't rate limit preflight and obvious health/metrics endpoints.
     if (req.method === 'OPTIONS') return true;
     if (p === '/health' || p === '/metrics' || p === '/csrf-token') return true;
+    // TEMP: remote LMT diagnostics from mobile (no auth)
+    if (p === '/debug/lmt-log') return true;
     // Socket.IO lives outside /api in this app, but keep it safe if proxied under /api.
     if (p.startsWith('/socket.io')) return true;
     return false;

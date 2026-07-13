@@ -86,7 +86,7 @@ export function resolveLmtBrandLogoForHtml(options?: {
 }
 
 /** Fetch official GetWidget HTML and rewrite pitch branding (DD flow). */
-export async function fetchBrandedLmtHtml(
+async function fetchBrandedLmtHtmlOnce(
   widgetUrl: string,
   options?: { hideBrand?: boolean; brandLogoUrl?: string | null },
 ): Promise<string> {
@@ -100,6 +100,22 @@ export async function fetchBrandedLmtHtml(
   }
   const logo = resolveLmtBrandLogoForHtml(options);
   return customizeScores365LmtWidgetHtml(html, logo);
+}
+
+export async function fetchBrandedLmtHtml(
+  widgetUrl: string,
+  options?: { hideBrand?: boolean; brandLogoUrl?: string | null },
+): Promise<string> {
+  try {
+    return await fetchBrandedLmtHtmlOnce(widgetUrl, options);
+  } catch (firstErr) {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    try {
+      return await fetchBrandedLmtHtmlOnce(widgetUrl, options);
+    } catch {
+      throw firstErr;
+    }
+  }
 }
 
 async function fetchLmtJson(
