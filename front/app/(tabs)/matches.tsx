@@ -11,6 +11,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { FlashList } from '@shopify/flash-list';
 import { TEXT_PRIMARY, PURPLE_PRIMARY } from '../../constants/tokens';
 import { APP_BG } from '../../constants/ui';
+import { TEMP_FREEZE_PREDICTIONS_TAB_MATCHES } from '../../constants/tempSurfaceFreeze';
 import { useMatchesData } from '../../hooks/useMatchesData';
 import { PredictionsService, PredictionApiError } from '../../services/predictions.service';
 import { toastManager } from '../../services/toastManager';
@@ -1255,6 +1256,7 @@ export default function MatchesHubScreenV2() {
       return allGroups.map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.status === 'UPCOMING') })).filter(g => g.fixtures.length > 0);
     }
     if (filter === 'Predictions') {
+      if (TEMP_FREEZE_PREDICTIONS_TAB_MATCHES) return [];
       return allGroups.map(g => ({
         ...g,
         fixtures: g.fixtures.filter(f =>
@@ -1282,6 +1284,7 @@ export default function MatchesHubScreenV2() {
         return m.status !== 'live' && m.status !== 'finished';
       }
       if (filter === 'Predictions') {
+        if (TEMP_FREEZE_PREDICTIONS_TAB_MATCHES) return false;
         if (m.status === 'live') return false;
         if (m.status === 'finished') return Boolean(predictedMatches[m.id]);
         return true;

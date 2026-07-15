@@ -61,6 +61,20 @@ export async function ensureDailyRound(dateString = localDateKey()) {
   const existing = await prisma.groupRound.findUnique({ where: { date: dateString } });
   if (existing) return existing;
 
+  const { TEMP_FREEZE_GROUP_PREDICTION_MATCHES } = await import(
+    '../config/temp-surface-freeze.config'
+  );
+  if (TEMP_FREEZE_GROUP_PREDICTION_MATCHES) {
+    logger.warn(`[GroupRound] TEMP freeze — creating empty round for ${dateString}`);
+    return prisma.groupRound.create({
+      data: {
+        date: dateString,
+        matchIds: [],
+        status: 'OPEN',
+      },
+    });
+  }
+
   const fixtures = await footballDataCacheService.getMatchesByDate(dateString);
   const top = pickTopFixtures(fixtures, ROUND_MATCH_LIMIT);
   const matchIds = top
@@ -81,12 +95,21 @@ export async function ensureDailyRound(dateString = localDateKey()) {
 }
 
 export async function getCurrentRoundWithMatches(dateString = localDateKey()) {
+  const { TEMP_FREEZE_GROUP_PREDICTION_MATCHES } = await import(
+    '../config/temp-surface-freeze.config'
+  );
   const round = await ensureDailyRound(dateString);
   // Round number is the count of daily rounds up to this date.
   // This keeps "الجولة 1/2/3..." consistent across clients and days.
   const roundNumber = await prisma.groupRound.count({
     where: { date: { lte: dateString } },
   });
+
+  if (TEMP_FREEZE_GROUP_PREDICTION_MATCHES) {
+    logger.warn(`[GroupRound] TEMP freeze — serving 0 matches for ${dateString}`);
+    return { round: { ...round, roundNumber }, matches: [] as any[] };
+  }
+
   const matchIds = (round.matchIds as number[]) ?? [];
   const fixtures = await footballDataCacheService.getMatchesByDate(dateString);
   const byId = new Map(fixtures.map((f: any) => [f?.fixture?.id, f]));

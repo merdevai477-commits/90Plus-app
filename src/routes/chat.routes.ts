@@ -541,6 +541,15 @@ async function maybeAutoTitleConversation(
 
 // ─── POST /chat/stream (SSE) ─────────────────────────────────────────────────
 router.post('/chat/stream', async (req: Request, res: Response): Promise<void> => {
+    const { TEMP_FREEZE_AI_CHAT } = await import('../config/temp-surface-freeze.config');
+    if (TEMP_FREEZE_AI_CHAT) {
+        res.status(503).json({
+            error: 'AI temporarily unavailable',
+            message: 'المساعد الذكي متوقف مؤقتًا. حاول لاحقًا.',
+        });
+        return;
+    }
+
     const userId = getUserId(req);
     const tz = getTimezone(req);
 
