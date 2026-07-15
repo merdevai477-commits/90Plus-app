@@ -97,11 +97,17 @@ Rules:
 - Keep JSON keys identical to inputs (case-sensitive).`;
 
   const user = `Translate each name to Arabic:\n${listJson}`;
+  // Cap completion size — default SDK max (~65535) causes OpenRouter 402 when credits are low.
+  const maxTokens = Math.min(
+    4096,
+    Math.max(512, texts.length * 40),
+  );
 
   try {
     const completion = await client.chat.completions.create({
       model,
       temperature: 0.2,
+      max_tokens: maxTokens,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -123,7 +129,14 @@ Rules:
       }
     }
     return out;
-  } catch (err) {
+  } catch (err: any) {
+    const status = err?.status ?? err?.code;
+    if (status === 402) {
+      logger.warn(
+        'football-translation OpenRouter 402 (credits/max_tokens) — skipping AI for this batch',
+      );
+      return {};
+    }
     logger.warn('football-translation OpenRouter batch failed:', err);
     return {};
   }

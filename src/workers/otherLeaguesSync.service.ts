@@ -9,7 +9,9 @@
  * Config (env):
  *   OTHER_LEAGUES_SYNC_ENABLED   — enable/disable (default: true)
  *   OTHER_LEAGUES_SYNC_CRON      — cron expression (default: every 5 min)
- *   OTHER_LEAGUES_LIVE_CRON      — cron for live-match refresh (default: every 1 min)
+ *   OTHER_LEAGUES_LIVE_CRON      — cron for live-match refresh (default: every 2 min)
+ *   OTHER_LEAGUES_ALLSCORES_CRON — cron for 365 /allscores/ calendar sync (default: every 10 min)
+ *   OTHER_LEAGUES_365_LIVE_CRON  — cron for 365 live overlay refresh (default: every 2 min)
  */
 
 import cron from 'node-cron';
@@ -282,9 +284,9 @@ export function startOtherLeaguesSyncWorker(): void {
   }
 
   const calendarCron = process.env.OTHER_LEAGUES_SYNC_CRON?.trim() || '*/5 * * * *';
-  const liveCron = process.env.OTHER_LEAGUES_LIVE_CRON?.trim() || '* * * * *';
+  const liveCron = process.env.OTHER_LEAGUES_LIVE_CRON?.trim() || '*/2 * * * *';
   const allScoresCron = process.env.OTHER_LEAGUES_ALLSCORES_CRON?.trim() || '*/10 * * * *';
-  const scores365LiveCron = process.env.OTHER_LEAGUES_365_LIVE_CRON?.trim() || '* * * * *';
+  const scores365LiveCron = process.env.OTHER_LEAGUES_365_LIVE_CRON?.trim() || '*/2 * * * *';
   const catalogCron = process.env.OTHER_LEAGUES_365_CATALOG_CRON?.trim() || '0 4 * * *';
   const fixturesBatchCron = process.env.OTHER_LEAGUES_365_FIXTURES_CRON?.trim() || '*/5 * * * *';
 

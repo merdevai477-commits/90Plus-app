@@ -15,8 +15,21 @@ interface CacheEntry<T> {
 }
 
 class RedisCacheService {
-  // Fallback in-memory cache
+  // Fallback in-memory cache — hard-capped so Redis outages cannot OOM the process
   private memoryCache = new Map<string, CacheEntry<any>>();
+  private readonly MAX_MEMORY_ENTRIES = 500;
+
+  private putMemoryFallback(key: string, entry: CacheEntry<any>): void {
+    if (!this.memoryCache.has(key) && this.memoryCache.size >= this.MAX_MEMORY_ENTRIES) {
+      const oldest = this.memoryCache.keys().next().value;
+      if (oldest !== undefined) this.memoryCache.delete(oldest);
+    }
+    this.memoryCache.set(key, entry);
+  }
+
+  memoryFallbackSize(): number {
+    return this.memoryCache.size;
+  }
 
   /**
    * Get value from cache
@@ -87,8 +100,8 @@ class RedisCacheService {
       }
     }
 
-    // Fallback to memory cache
-    this.memoryCache.set(key, entry);
+    // Fallback to memory cache (capped)
+    this.putMemoryFallback(key, entry);
     logger.debug(`📦 Memory cache SET: ${key} (TTL: ${ttlMs}ms)`);
   }
 

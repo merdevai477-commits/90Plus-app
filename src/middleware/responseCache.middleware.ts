@@ -21,9 +21,23 @@ interface CacheEntry {
 class ResponseCache {
     private memoryCache = new Map<string, CacheEntry>(); // Fallback in-memory cache
     private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
+    private readonly MAX_MEMORY_ENTRIES = 200;
+    private readonly MAX_ENTRY_BYTES = 256_000; // skip L1 for huge calendar/fixture payloads
     private pending = new Map<string, Promise<CacheEntry>>(); // stampede protection per key
     private pendingResolvers = new Map<string, (entry: CacheEntry) => void>();
     private pendingRejectors = new Map<string, (err: unknown) => void>();
+
+    private putMemory(key: string, entry: CacheEntry): void {
+        if (!this.memoryCache.has(key) && this.memoryCache.size >= this.MAX_MEMORY_ENTRIES) {
+            const oldest = this.memoryCache.keys().next().value;
+            if (oldest !== undefined) this.memoryCache.delete(oldest);
+        }
+        this.memoryCache.set(key, entry);
+    }
+
+    size(): number {
+        return this.memoryCache.size;
+    }
 
     /**
      * Generate cache key from request.
@@ -70,7 +84,7 @@ class ResponseCache {
         try {
             const cached = await redisCacheService.get<CacheEntry>(redisKey);
             if (cached) {
-                this.memoryCache.set(key, cached);
+                this.putMemory(key, cached);
                 return cached;
             }
         } catch (err) {
@@ -171,8 +185,16 @@ class ResponseCache {
         const redisKey = `response:${key}`;
         await redisCacheService.set(redisKey, entry, entry.ttl);
 
-        // Also store in memory cache as fallback
-        this.memoryCache.set(key, entry);
+        // L1 only for modest payloads — huge calendars must not fill process RAM.
+        let approxBytes = 0;
+        try {
+            approxBytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
+        } catch {
+            approxBytes = this.MAX_ENTRY_BYTES + 1;
+        }
+        if (approxBytes <= this.MAX_ENTRY_BYTES) {
+            this.putMemory(key, entry);
+        }
 
         // Resolve any waiters.
         this.endFill(req, entry, sharedCache);
@@ -367,6 +389,10 @@ export function responseCacheMiddleware(options: {
  */
 export async function clearResponseCache(pattern?: string): Promise<void> {
     await responseCache.clear(pattern);
+}
+
+export function getResponseCacheMemorySize(): number {
+    return responseCache.size();
 }
 
 export default responseCacheMiddleware;

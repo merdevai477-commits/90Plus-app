@@ -26,7 +26,7 @@ const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
 const CACHE_TTL = {
     LIVE: 3 * 1000,           // 3 seconds — aligned with matches tab + WS
     SCHEDULED: 5 * 60 * 1000, // 5 minutes for scheduled matches
-    FINISHED: Infinity,       // Permanent (stored in DB)
+    FINISHED: 24 * 60 * 60 * 1000, // 24h in RAM — durable copy lives in DB
 };
 
 interface CacheEntry<T> {
@@ -109,6 +109,7 @@ import { redisCacheService } from './redis-cache.service';
 class MatchCacheService {
     // In-memory cache for live and scheduled matches (fallback)
     private memoryCache = new Map<string, CacheEntry<any>>();
+    private readonly MAX_MEMORY_ENTRIES = 200;
 
     // Track which fixture IDs are already in database
     private dbFixtureIds = new Set<number>();
@@ -119,6 +120,18 @@ class MatchCacheService {
 
     // ✅ Request deduplication: prevent multiple simultaneous API calls for the same data
     private pendingRequests = new Map<string, Promise<FixtureFromAPI[]>>();
+
+    private putMemory(key: string, entry: CacheEntry<any>): void {
+        // Never hold Infinity TTL in process RAM
+        if (!Number.isFinite(entry.ttl) || entry.ttl <= 0) {
+            entry = { ...entry, ttl: CACHE_TTL.FINISHED };
+        }
+        if (!this.memoryCache.has(key) && this.memoryCache.size >= this.MAX_MEMORY_ENTRIES) {
+            const oldest = this.memoryCache.keys().next().value;
+            if (oldest !== undefined) this.memoryCache.delete(oldest);
+        }
+        this.memoryCache.set(key, entry);
+    }
 
     constructor() {
         // Initial DB sync
@@ -214,10 +227,11 @@ class MatchCacheService {
         };
 
         // In-process first so the next request on this instance never waits on Redis I/O.
-        this.memoryCache.set(key, entry);
+        this.putMemory(key, entry);
 
         const redisKey = `match:${key}`;
-        redisCacheService.set(redisKey, entry, ttl).catch((err) => {
+        const redisTtl = Number.isFinite(ttl) && ttl > 0 ? ttl : CACHE_TTL.FINISHED;
+        redisCacheService.set(redisKey, entry, redisTtl).catch((err) => {
             logger.warn(`match cache Redis set failed for ${key}:`, err);
         });
     }

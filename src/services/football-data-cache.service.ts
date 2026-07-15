@@ -125,13 +125,24 @@ class FootballDataCacheService {
     private pendingWorldCupByDate = new Map<string, Promise<any[]>>();
     private backgroundRefreshDates = new Set<string>();
 
+    /** Cap in-process detail caches so finished fixtures cannot grow RAM forever. */
+    private readonly MAX_DETAIL_CACHE = 500;
+
+    private setBoundedCache<K, V>(map: Map<K, V>, key: K, value: V): void {
+        if (!map.has(key) && map.size >= this.MAX_DETAIL_CACHE) {
+            const oldest = map.keys().next().value;
+            if (oldest !== undefined) map.delete(oldest);
+        }
+        map.set(key, value);
+    }
+
     // TTL values
     private readonly TTL = {
         STANDINGS: 60 * 60 * 1000,      // 1 hour
         LIVE_MATCH: 30 * 1000,          // 30s — shared across all users via Redis
         LIVE_EVENT_INGEST: 20 * 1000,   // sync-triggered ingest refresh window
         UPCOMING_MATCH: 5 * 60 * 1000,  // 5 minutes
-        FINISHED: Infinity,              // Permanent
+        FINISHED: 6 * 60 * 60 * 1000,   // 6h in-process (durable copy lives in Redis/DB)
         TEAM_STATISTICS: 60 * 60 * 1000, // 1 hour
         TOP_SCORERS: 60 * 60 * 1000,     // 1 hour
         TOP_ASSISTS: 60 * 60 * 1000,    // 1 hour
@@ -1287,7 +1298,7 @@ class FootballDataCacheService {
                 cacheUsable(redisCached.data)
             ) {
                 logger.debug(`📦 Lineups ${fixtureId} from Redis cache (shared for all users)`);
-                this.lineupsCache.set(fixtureId, redisCached);
+                this.setBoundedCache(this.lineupsCache, fixtureId, redisCached);
                 return redisCached.data;
             }
 
@@ -1357,7 +1368,7 @@ class FootballDataCacheService {
                 const redisTtl =
                     cacheEntry.ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : cacheEntry.ttl;
                 await redisCacheService.set(redisKey, cacheEntry, redisTtl);
-                this.lineupsCache.set(fixtureId, cacheEntry);
+                this.setBoundedCache(this.lineupsCache, fixtureId, cacheEntry);
                 if (isFinished) {
                     await this.updateFixtureFullData(fixtureId, { lineups: from365 });
                 }
@@ -1418,7 +1429,7 @@ class FootballDataCacheService {
                     ttl,
                 };
                 await redisCacheService.set(redisKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
-                this.lineupsCache.set(fixtureId, cacheEntry);
+                this.setBoundedCache(this.lineupsCache, fixtureId, cacheEntry);
 
                 if (isFinished && !isEmpty && lineups?.length) {
                     await this.updateFixtureFullData(fixtureId, { lineups });
@@ -1467,7 +1478,7 @@ class FootballDataCacheService {
                             cacheEntry,
                             this.TTL.LIVE_MATCH,
                         );
-                        this.statisticsCache.set(fixtureId, cacheEntry);
+                        this.setBoundedCache(this.statisticsCache, fixtureId, cacheEntry);
                         return aggregated;
                     }
                 }
@@ -1488,7 +1499,7 @@ class FootballDataCacheService {
                         ttl: this.TTL.LIVE_MATCH,
                     };
                     await redisCacheService.set(`statistics:${fixtureId}`, cacheEntry, this.TTL.LIVE_MATCH);
-                    this.statisticsCache.set(fixtureId, cacheEntry);
+                    this.setBoundedCache(this.statisticsCache, fixtureId, cacheEntry);
                     return derived;
                 }
             }
@@ -1503,7 +1514,7 @@ class FootballDataCacheService {
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Statistics ${fixtureId} from Redis cache`);
             // Update memory cache
-            this.statisticsCache.set(fixtureId, redisCached);
+            this.setBoundedCache(this.statisticsCache, fixtureId, redisCached);
             return redisCached.data;
         }
 
@@ -1585,7 +1596,7 @@ class FootballDataCacheService {
             ttl,
         };
         await redisCacheService.set(redisKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
-        this.statisticsCache.set(fixtureId, cacheEntry);
+        this.setBoundedCache(this.statisticsCache, fixtureId, cacheEntry);
 
         if (isFinished && !isEmpty && statistics?.length) {
             await this.updateFixtureFullData(fixtureId, { statistics });
@@ -1625,7 +1636,7 @@ class FootballDataCacheService {
                     timestamp: Date.now(),
                     ttl,
                 };
-                this.eventsCache.set(fixtureId, cacheEntry);
+                this.setBoundedCache(this.eventsCache, fixtureId, cacheEntry);
                 await redisCacheService.set(`events:${fixtureId}`, cacheEntry, ttl);
             }
             return events;
@@ -1639,7 +1650,7 @@ class FootballDataCacheService {
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Events ${fixtureId} from Redis cache (shared for all users)`);
             // Update memory cache
-            this.eventsCache.set(fixtureId, redisCached);
+            this.setBoundedCache(this.eventsCache, fixtureId, redisCached);
             return redisCached.data;
         }
 
@@ -1695,7 +1706,7 @@ class FootballDataCacheService {
                     ttl,
                 };
                 await redisCacheService.set(redisKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
-                this.eventsCache.set(fixtureId, cacheEntry);
+                this.setBoundedCache(this.eventsCache, fixtureId, cacheEntry);
 
                 // Persist only non-empty event sets for finished matches.
                 if (isFinished && !isEmpty && events?.length) {
@@ -2125,6 +2136,22 @@ class FootballDataCacheService {
                 statistics: this.statisticsCache.size,
                 events: this.eventsCache.size,
             },
+        };
+    }
+
+    getInProcessCacheSizes(): {
+        lineups: number;
+        statistics: number;
+        events: number;
+        standings: number;
+        matchesByDateLocal: number;
+    } {
+        return {
+            lineups: this.lineupsCache.size,
+            statistics: this.statisticsCache.size,
+            events: this.eventsCache.size,
+            standings: this.standingsCache.size,
+            matchesByDateLocal: this.matchesByDateLocal.size,
         };
     }
 

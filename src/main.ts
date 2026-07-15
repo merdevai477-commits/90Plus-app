@@ -343,6 +343,8 @@ app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
                 heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
                 rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
                 external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
+                heapUsedBytes: memoryUsage.heapUsed,
+                rssBytes: memoryUsage.rss,
             },
             security: {
                 revokedTokens: tokenStats.totalRevoked,
@@ -351,6 +353,32 @@ app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
                 blockedUsers: abuseStats.blockedUsers,
                 blockedIPs: abuseStats.blockedIPs,
             },
+            caches: await (async () => {
+                try {
+                    const { footballDataCacheService } = await import(
+                        './services/football-data-cache.service'
+                    );
+                    const { getScores365InProcessCacheSizes } = await import(
+                        './services/scores365-experiment.service'
+                    );
+                    const { getResponseCacheMemorySize } = await import(
+                        './middleware/responseCache.middleware'
+                    );
+                    const { redisCacheService } = await import('./services/redis-cache.service');
+                    const { matchCacheService } = await import('./services/match-cache.service');
+                    const { playerCacheService } = await import('./services/player-cache.service');
+                    return {
+                        football: footballDataCacheService.getInProcessCacheSizes(),
+                        scores365: getScores365InProcessCacheSizes(),
+                        responseCacheL1: getResponseCacheMemorySize(),
+                        redisMemoryFallback: redisCacheService.memoryFallbackSize(),
+                        matchCache: matchCacheService.getCacheStats().memoryCacheSize,
+                        players: playerCacheService.getInProcessCacheSizes(),
+                    };
+                } catch {
+                    return null;
+                }
+            })(),
         });
     } catch (error: any) {
         res.status(200).json({
@@ -905,30 +933,21 @@ async function startServer() {
                     });
                     logger.info('✅ Account Deletion Cron Job scheduled (daily at 2 AM)');
                     
-                    // ✅ Setup GDPR Cron Jobs
-                    // 1. Check for scheduled deletions (every hour)
+                    // GDPR maintenance — run the work directly (no nested setInterval).
+                    // Previously setupGDPRCronJobs() was called every hour and each call
+                    // created a NEW setInterval → unbounded timer leak.
                     cron.schedule('0 * * * *', async () => {
-                        logger.info('⏰ GDPR Cron: Checking scheduled deletions...');
+                        logger.info('⏰ GDPR Cron: scheduled deletions + export cleanup...');
                         try {
-                            const { setupGDPRCronJobs } = await import('./services/data-anonymization.service');
-                            await setupGDPRCronJobs();
+                            const { runGdprMaintenanceJobs } = await import(
+                                './services/data-anonymization.service'
+                            );
+                            await runGdprMaintenanceJobs();
                         } catch (error) {
                             logger.error('❌ GDPR cron job failed:', error);
                         }
                     });
-                    logger.info('✅ GDPR Cron Jobs scheduled (hourly)');
-                    
-                    // 2. Cleanup expired export files (daily at 3 AM)
-                    cron.schedule('0 3 * * *', async () => {
-                        logger.info('⏰ GDPR Cron: Cleaning up expired export files...');
-                        try {
-                            const { cleanupOldExports } = await import('./services/data-anonymization.service');
-                            await cleanupOldExports();
-                        } catch (error) {
-                            logger.error('❌ Export cleanup cron job failed:', error);
-                        }
-                    });
-                    logger.info('✅ GDPR Export Cleanup Cron Job scheduled (daily at 3 AM)');
+                    logger.info('✅ GDPR Cron Jobs scheduled (hourly, no nested intervals)');
 
                     // Match event retention — daily at 4:30 AM UTC
                     cron.schedule('30 4 * * *', async () => {

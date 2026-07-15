@@ -279,12 +279,27 @@ export async function cleanupOldExports(): Promise<void> {
 // Cron Job Setup
 // ============================================================================
 
-export function setupGDPRCronJobs(): void {
-  // Run every hour
-  setInterval(async () => {
-    await processScheduledDeletions();
-    await cleanupOldExports();
-  }, 60 * 60 * 1000); // 1 hour
+/**
+ * Run GDPR deletion + export cleanup once.
+ * Prefer scheduling via node-cron in main.ts — do not wrap this in setInterval
+ * that gets re-registered every hour (timer leak).
+ */
+export async function runGdprMaintenanceJobs(): Promise<void> {
+  await processScheduledDeletions();
+  await cleanupOldExports();
+}
 
-  logger.info('[Anonymization] GDPR cron jobs setup complete');
+/**
+ * @deprecated Prefer runGdprMaintenanceJobs from a single node-cron.
+ * Kept idempotent so accidental re-entry cannot multiply intervals.
+ */
+let gdprInterval: NodeJS.Timeout | null = null;
+export function setupGDPRCronJobs(): void {
+  if (gdprInterval) return;
+  gdprInterval = setInterval(() => {
+    void runGdprMaintenanceJobs().catch((err) =>
+      logger.error('[Anonymization] GDPR interval job failed:', err),
+    );
+  }, 60 * 60 * 1000);
+  logger.info('[Anonymization] GDPR cron jobs setup complete (idempotent interval)');
 }

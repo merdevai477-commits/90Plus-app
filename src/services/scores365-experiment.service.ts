@@ -157,6 +157,26 @@ let lastGoodGameByKey = new Map<string, Scores365Game>();
 /** Coalesce concurrent upstream calls per game+lang. */
 let inFlightGameFetch = new Map<string, Promise<Scores365Game | null>>();
 
+const MAX_365_GAME_CACHE = 300;
+
+function setBoundedMapEntry<V>(map: Map<string, V>, key: string, value: V): void {
+  if (!map.has(key) && map.size >= MAX_365_GAME_CACHE) {
+    const oldest = map.keys().next().value;
+    if (oldest !== undefined) map.delete(oldest);
+  }
+  map.set(key, value);
+}
+
+export function getScores365InProcessCacheSizes(): {
+  cachedGameByKey: number;
+  lastGoodGameByKey: number;
+} {
+  return {
+    cachedGameByKey: cachedGameByKey.size,
+    lastGoodGameByKey: lastGoodGameByKey.size,
+  };
+}
+
 let cachedFixturesByLang = new Map<number, { fetchedAt: number; games: Scores365Game[] }>();
 let inFlightFixturesFetch = new Map<number, Promise<Scores365Game[]>>();
 
@@ -624,8 +644,11 @@ async function fetchScores365GameOnce(gameId: number, langId: number): Promise<S
     const payload = (await res.json()) as Scores365GamePayload;
     const game = payload?.game ?? null;
     if (game) {
-      lastGoodGameByKey.set(staleKey, game);
-      cachedGameByKey.set(gameCacheKey(gameId, langId), { fetchedAt: Date.now(), game });
+      setBoundedMapEntry(lastGoodGameByKey, staleKey, game);
+      setBoundedMapEntry(cachedGameByKey, gameCacheKey(gameId, langId), {
+        fetchedAt: Date.now(),
+        game,
+      });
       logger.debug(
         `[Scores365Experiment] game ${gameId} lang=${langId}: ${game.homeCompetitor?.name} ${normalize365Score(game.homeCompetitor?.score)}-${normalize365Score(game.awayCompetitor?.score)} ${game.awayCompetitor?.name} (${game.gameTimeDisplay ?? game.statusText}) events=${game.events?.length ?? 0}`,
       );
@@ -648,7 +671,10 @@ export async function fetchScores365GameById(
   const key = gameCacheKey(gameId, langId);
   const cached = cachedGameByKey.get(key);
 
-  if (!options?.force && cached && Date.now() - cached.fetchedAt < ttlMs) {
+  if (cached && Date.now() - cached.fetchedAt >= ttlMs * 30) {
+    // Drop long-stale entries so the Map cannot retain forever across langs.
+    cachedGameByKey.delete(key);
+  } else if (!options?.force && cached && Date.now() - cached.fetchedAt < ttlMs) {
     return cached.game ?? lastGoodGameByKey.get(lastGoodGameKey(gameId, langId)) ?? null;
   }
 
@@ -2333,11 +2359,11 @@ export async function applyScores365ExperimentToWorldCupList(
 
 const SYNTHETIC_LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] as const;
 const SYNTHETIC_LIVE_BATCH = (() => {
-  const raw = parseInt(process.env.SCORES365_SYNTHETIC_LIVE_BATCH || '80', 10);
+  const raw = parseInt(process.env.SCORES365_SYNTHETIC_LIVE_BATCH || '10', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : 80;
 })();
 const LIVE_DETAIL_MAX = (() => {
-  const raw = parseInt(process.env.SCORES365_LIVE_DETAIL_MAX || '20', 10);
+  const raw = parseInt(process.env.SCORES365_LIVE_DETAIL_MAX || '5', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : 20;
 })();
 

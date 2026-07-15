@@ -107,10 +107,27 @@ class PlayerCacheService {
     private playerCache = new Map<number, CacheEntry<any>>();
     private teamCache = new Map<number, CacheEntry<any>>();
     private h2hCache = new Map<string, CacheEntry<any>>();
+    private readonly MAX_CACHE_ENTRIES = 1000;
 
     // ✅ Request deduplication: prevent multiple simultaneous API calls for the same player/team
     private pendingPlayerRequests = new Map<number, Promise<PlayerFromAPI | null>>();
     private pendingTeamRequests = new Map<number, Promise<TeamFromAPI | null>>();
+
+    private setBoundedCache<K, V>(map: Map<K, V>, key: K, value: V): void {
+        if (!map.has(key) && map.size >= this.MAX_CACHE_ENTRIES) {
+            const oldest = map.keys().next().value;
+            if (oldest !== undefined) map.delete(oldest);
+        }
+        map.set(key, value);
+    }
+
+    getInProcessCacheSizes(): { players: number; teams: number; h2h: number } {
+        return {
+            players: this.playerCache.size,
+            teams: this.teamCache.size,
+            h2h: this.h2hCache.size,
+        };
+    }
 
     /**
      * Get H2H cache key
@@ -139,7 +156,7 @@ class PlayerCacheService {
             const redisCached = await redisCacheService.get<CacheEntry<any>>(redisKey);
             if (redisCached && Date.now() - redisCached.timestamp < MEMORY_CACHE_TTL) {
                 logger.debug(`📦 Player ${playerId} from Redis cache (shared for all users)`);
-                this.playerCache.set(playerId, redisCached);
+                this.setBoundedCache(this.playerCache, playerId, redisCached);
                 return redisCached.data;
             }
 
@@ -160,7 +177,7 @@ class PlayerCacheService {
                     const playerData = dbPlayer.fullData as unknown as PlayerFromAPI;
                     const cacheEntry: CacheEntry<any> = { data: playerData, timestamp: Date.now() };
                     await redisCacheService.set(redisKey, cacheEntry, MEMORY_CACHE_TTL);
-                    this.playerCache.set(playerId, cacheEntry);
+                    this.setBoundedCache(this.playerCache, playerId, cacheEntry);
                     logger.debug(`📦 Player ${playerId} from database (${Math.round(dbAge / 1000)}s old)`);
                     return playerData;
                 }
@@ -192,7 +209,7 @@ class PlayerCacheService {
                     // Cache in Redis and memory
                     const cacheEntry: CacheEntry<any> = { data: player, timestamp: Date.now() };
                     await redisCacheService.set(redisKey, cacheEntry, MEMORY_CACHE_TTL);
-                    this.playerCache.set(playerId, cacheEntry);
+                    this.setBoundedCache(this.playerCache, playerId, cacheEntry);
 
                     logger.debug(`✅ Player ${playerId} cached (shared for all users)`);
                     return player;
@@ -360,7 +377,7 @@ class PlayerCacheService {
         if (redisCached && Date.now() - redisCached.timestamp < TEAM_MEMORY_CACHE_TTL) {
             logger.debug(`📦 Team ${teamId} from Redis cache (shared for all users)`);
             // Update memory cache
-            this.teamCache.set(teamId, redisCached);
+            this.setBoundedCache(this.teamCache, teamId, redisCached);
             return redisCached.data;
         }
 
@@ -384,7 +401,7 @@ class PlayerCacheService {
             await redisCacheService.set(redisKey, cacheEntry, TEAM_MEMORY_CACHE_TTL);
             
             // Update memory cache
-            this.teamCache.set(teamId, cacheEntry);
+            this.setBoundedCache(this.teamCache, teamId, cacheEntry);
             logger.debug(`📦 Team ${teamId} from database (shared for all users)`);
             return teamData;
         }
@@ -408,7 +425,7 @@ class PlayerCacheService {
                     // Cache in Redis and memory
                     const cacheEntry: CacheEntry<any> = { data: team, timestamp: Date.now() };
                     await redisCacheService.set(redisKey, cacheEntry, TEAM_MEMORY_CACHE_TTL);
-                    this.teamCache.set(teamId, cacheEntry);
+                    this.setBoundedCache(this.teamCache, teamId, cacheEntry);
                     logger.debug(`✅ Team ${teamId} cached (shared for all users)`);
                     return team;
                 }
@@ -507,7 +524,7 @@ class PlayerCacheService {
                 },
                 matches: dbH2H.lastMatches as any[],
             };
-            this.h2hCache.set(cacheKey, { data: h2hData, timestamp: Date.now() });
+            this.setBoundedCache(this.h2hCache, cacheKey, { data: h2hData, timestamp: Date.now() });
             logger.debug(`📦 H2H ${cacheKey} from database`);
             return h2hData;
         }
@@ -543,7 +560,7 @@ class PlayerCacheService {
                     matches: apiData,
                 };
 
-                this.h2hCache.set(cacheKey, { data: h2hData, timestamp: Date.now() });
+                this.setBoundedCache(this.h2hCache, cacheKey, { data: h2hData, timestamp: Date.now() });
                 return h2hData;
             }
         } catch (error) {

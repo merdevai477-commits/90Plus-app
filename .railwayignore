@@ -1,4 +1,4 @@
-# Railway ignore file
+# Railway ignore file — keep Nixpacks upload small (prevents Out of storage)
 node_modules/
 dist/
 .env.local
@@ -15,3 +15,24 @@ Backend/
 Backend/**
 profile-completion-backup/
 profile-completion-backup/**
+
+# Frontend (deployed separately via EAS) — ~8GB locally
+front/
+front/**
+
+# Git / IDE / agent artifacts
+.git/
+.cursor/
+canvases/
+*.canvas.tsx
+
+# Temp / scratch
+tmp/
+temp/
+.tmp-*/
+.postman-tmp/
+PredictionKingPage-temp/
+scripts/test-bedrock-*.ts
+scripts/test-cloudflare-*.ts
+scripts/lookup-player-id.ts
+scripts/search-365-player.ts
