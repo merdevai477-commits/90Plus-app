@@ -168,7 +168,7 @@ export function MatchLmtWebView({
   variant = 'hero',
   hideBrand = false,
   brandLogoUrl = null,
-  coverBrand = true,
+  coverBrand = false,
   unavailableLabel = 'Live tracking is not available for this match.',
   loadingLabel = 'Loading tracking…',
   retryLabel = 'Retry',
@@ -261,6 +261,13 @@ export function MatchLmtWebView({
   const webKey = `${mode}-${reloadKey}-${mode === 'html' ? 'html' : uriFallback}`;
 
   const onWebError = useCallback(() => {
+    // iOS WKWebView often fires onError for subresources even when branded HTML
+    // loaded fine. Falling back to uri showed raw 365 + a green cover — keep HTML.
+    if (mode === 'html' && brandedHtml) {
+      remoteLog('[LMT] WebView error ignored (keeping branded html)', { mode });
+      setLoading(false);
+      return;
+    }
     if (mode === 'html') {
       remoteLog('[LMT] WebView error → fallback triggered', { mode });
       setMode('uri');
@@ -271,15 +278,23 @@ export function MatchLmtWebView({
     }
     setLoading(false);
     setFailed(true);
-  }, [mode, widgetUrl]);
+  }, [mode, brandedHtml, widgetUrl]);
 
   const onWebHttpError = useCallback(
     (code: number) => {
       if (code < 400) return;
+      // Same as onError: do not drop successful HTML branding on subresource 4xx/5xx.
+      if (mode === 'html' && brandedHtml) {
+        remoteLog('[LMT] WebView HTTP error ignored (keeping branded html)', {
+          mode,
+          code,
+        });
+        return;
+      }
       remoteLog('[LMT] WebView HTTP error', { mode, code });
       onWebError();
     },
-    [mode, onWebError],
+    [mode, brandedHtml, onWebError],
   );
 
   if (!widgetUrl?.trim()) {
@@ -476,10 +491,10 @@ const styles = StyleSheet.create({
   },
   brandPatch: {
     ...StyleSheet.absoluteFillObject,
-    // Opaque pitch green — semi-transparent glass let 365 bleed through on iOS uri fallback.
-    backgroundColor: '#257A37',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     borderRadius: 6,
-    borderWidth: 0,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
     opacity: 1,
   },
   overlay: {
