@@ -59,14 +59,11 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
   const resultScaleAnim = useRef(new Animated.Value(0)).current;
   const buttonScaleAnim = useRef(new Animated.Value(1)).current;
   const spinValueRef = useRef(0);
-  const spinListenerRef = useRef<string | null>(null);
-  const spinSequenceRef = useRef<Animated.CompositeAnimation | null>(null);
-  const spinLoopActiveRef = useRef(false);
+  const spinAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const glowLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  const MIN_FULL_SPINS = 6;
-  const SPIN_LOOP_MS = 850;
-  const MIN_SPIN_BEFORE_STOP_MS = 2200;
+  const FULL_SPINS = 10;
+  const SPIN_DURATION_MS = 4000;
   
   const { getToken } = useAuth();
   const { coins: currentCoins, addCoins } = useCoins();
@@ -92,32 +89,9 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
   }, [getToken]);
 
   const stopAllSpinAnimations = useCallback(() => {
-    spinLoopActiveRef.current = false;
-    spinSequenceRef.current?.stop();
-    spinSequenceRef.current = null;
+    spinAnimationRef.current?.stop();
+    spinAnimationRef.current = null;
     spinAnim.stopAnimation();
-  }, [spinAnim]);
-
-  /** Cumulative 360° steps — avoids Animated.loop resetting back to 0. */
-  const startSpinLoop = useCallback(() => {
-    spinLoopActiveRef.current = true;
-
-    const tick = (fromAngle: number) => {
-      if (!spinLoopActiveRef.current) return;
-
-      Animated.timing(spinAnim, {
-        toValue: fromAngle + 360,
-        duration: SPIN_LOOP_MS,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (!finished || !spinLoopActiveRef.current) return;
-        tick(fromAngle + 360);
-      });
-    };
-
-    const start = spinValueRef.current || 0;
-    tick(start);
   }, [spinAnim]);
 
   useEffect(() => {
@@ -156,23 +130,6 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     };
   }, [visible, fetchStatus, stopAllSpinAnimations, spinAnim, glowAnim]);
 
-  // Track current spin value for multi-phase animation
-  useEffect(() => {
-    if (spinListenerRef.current) {
-      spinAnim.removeListener(spinListenerRef.current);
-      spinListenerRef.current = null;
-    }
-    spinListenerRef.current = spinAnim.addListener(({ value }) => {
-      spinValueRef.current = value;
-    });
-    return () => {
-      if (spinListenerRef.current) {
-        spinAnim.removeListener(spinListenerRef.current);
-        spinListenerRef.current = null;
-      }
-    };
-  }, [spinAnim]);
-
   const computeFinalRotation = (startAngle: number, prizeIndex: number): number => {
     const segmentAngle = 360 / PRIZES.length;
     // Segment center under the top pointer when rotation ≡ this angle (mod 360)
@@ -181,35 +138,26 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     const startMod = ((startAngle % 360) + 360) % 360;
     let extra = (targetMod - startMod + 360) % 360;
     if (extra < 10) extra += 360;
-    return startAngle + MIN_FULL_SPINS * 360 + extra;
+    return startAngle + FULL_SPINS * 360 + extra;
   };
 
-  const runDecelerationSequence = (
+  const runSpinAnimation = (
     startAngle: number,
     prizeIndex: number,
     prize: typeof PRIZES[0],
   ) => {
     const finalRotation = computeFinalRotation(startAngle, prizeIndex);
-    const midRotation = startAngle + (finalRotation - startAngle) * 0.72;
 
-    spinSequenceRef.current = Animated.sequence([
-      Animated.timing(spinAnim, {
-        toValue: midRotation,
-        duration: 2800,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(spinAnim, {
-        toValue: finalRotation,
-        duration: 1400,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-    ]);
+    spinAnimationRef.current = Animated.timing(spinAnim, {
+      toValue: finalRotation,
+      duration: SPIN_DURATION_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
 
-    spinSequenceRef.current.start(async ({ finished }) => {
+    spinAnimationRef.current.start(async ({ finished }) => {
       if (!finished) return;
-      // Keep cumulative angle — do not modulo (prevents visible snap / short spin)
+      spinAnimationRef.current = null;
       spinAnim.setValue(finalRotation);
       spinValueRef.current = finalRotation;
 
@@ -221,6 +169,7 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
       setWonPrize({ coins: prize.coins });
       setCanSpin(false);
       setIsSpinning(false);
+      void fetchStatus();
 
       try {
         await addCoins(prize.coins);
@@ -269,15 +218,6 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
     ]).start();
 
     stopAllSpinAnimations();
-    spinAnim.setValue(0);
-    spinValueRef.current = 0;
-
-    startSpinLoop();
-
-    const spinStartedAt = Date.now();
-    let finalPrizeIndex = 0;
-    let finalPrize = PRIZES[0];
-    let apiSucceeded = false;
 
     try {
       const token = await getToken();
@@ -299,30 +239,15 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
           typeof prizeIndex === 'number' && prizeIndex >= 0 && prizeIndex < PRIZES.length
             ? prizeIndex
             : 0;
-        finalPrizeIndex = idx;
-        finalPrize = PRIZES[idx];
-        apiSucceeded = true;
+        runSpinAnimation(spinValueRef.current, idx, PRIZES[idx]);
+        return;
       }
+
+      throw new Error(data?.message || 'Spin request failed');
     } catch (error) {
       console.error('Spin API error:', error);
-    }
-
-    const elapsed = Date.now() - spinStartedAt;
-    if (elapsed < MIN_SPIN_BEFORE_STOP_MS) {
-      await new Promise((resolve) => setTimeout(resolve, MIN_SPIN_BEFORE_STOP_MS - elapsed));
-    }
-
-    spinLoopActiveRef.current = false;
-    spinAnim.stopAnimation();
-
-    if (!apiSucceeded) {
       setIsSpinning(false);
-      return;
     }
-
-    const currentAngle = spinValueRef.current;
-    spinAnim.setValue(currentAngle);
-    runDecelerationSequence(currentAngle, finalPrizeIndex, finalPrize);
   };
 
   // رسم العجلة بالتصميم الجديد (مع السلاسل لو مقفولة)
