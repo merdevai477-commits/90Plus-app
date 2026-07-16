@@ -37,10 +37,10 @@ function resolveChannelId(type?: string): string {
         type === 'SHARE' ||
         type === 'COMMENT_LIKE'
     ) {
-        return 'social';
+        return 'social-v2';
     }
-    if (type.includes('MATCH')) return 'match-updates';
-    return 'general';
+    if (type.includes('MATCH') || type.includes('PREDICTION')) return 'match-updates-v2';
+    return 'general-v2';
 }
 
 const recentNotificationIds = new Map<string, number>();
@@ -94,10 +94,8 @@ export async function presentTrayNotification(params: {
                 data: params.data ?? {},
                 ...(Platform.OS === 'android'
                     ? {
-                          android: {
-                              channelId,
-                              priority: Notifications.AndroidNotificationPriority.HIGH,
-                          },
+                          channelId,
+                          priority: Notifications.AndroidNotificationPriority.MAX,
                       }
                     : {}),
             },

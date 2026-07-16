@@ -166,48 +166,57 @@ export class NotificationService {
                 data: notificationData,
             });
 
-            // 3. Send push notification (auto-resolve token + consent if not provided)
+            // 3. Send push notification to ALL registered devices (Android + iOS).
             if (!skipPush) {
-                let effectivePushToken = pushToken ?? null;
+                let pushTokens: string[] = [];
                 let pushSkipReason: string | null = null;
 
-                if (!effectivePushToken) {
+                if (pushToken) {
+                    pushTokens = [pushToken];
+                } else {
                     try {
                         const user = await prisma.user.findUnique({
                             where: { id: userId },
-                            select: { expoPushToken: true, pushNotificationsConsent: true },
+                            select: { pushNotificationsConsent: true },
                         });
                         if (!user?.pushNotificationsConsent) {
                             pushSkipReason = 'consent_false';
-                        } else if (!user?.expoPushToken) {
-                            pushSkipReason = 'no_token';
                         } else {
-                            effectivePushToken = user.expoPushToken;
+                            const { getUserPushTokens } = await import('./user-push-devices.service');
+                            pushTokens = await getUserPushTokens(userId);
+                            if (pushTokens.length === 0) {
+                                pushSkipReason = 'no_token';
+                            }
                         }
                     } catch (err) {
                         pushSkipReason = 'token_lookup_failed';
-                        logger.warn('Failed to resolve push token for user:', { userId, err });
+                        logger.warn('Failed to resolve push tokens for user:', { userId, err });
                     }
                 }
 
-                if (effectivePushToken) {
-                    const sent = await PushNotificationService.sendNotification({
-                        to: effectivePushToken,
-                        title,
-                        body: message,
-                        ...(threadId ? { threadId } : {}),
-                        channelId: resolveChannelId(type, channelId),
-                        data: {
-                            type: String(type),
-                            ...notificationData,
-                            notificationId: notification.id,
-                        },
-                    });
-                    if (!sent) {
-                        logger.warn('[Push] Expo send returned false', {
+                if (pushTokens.length > 0) {
+                    const results = await Promise.all(
+                        pushTokens.map((to) =>
+                            PushNotificationService.sendNotification({
+                                to,
+                                title,
+                                body: message,
+                                ...(threadId ? { threadId } : {}),
+                                channelId: resolveChannelId(type, channelId),
+                                data: {
+                                    type: String(type),
+                                    ...notificationData,
+                                    notificationId: notification.id,
+                                },
+                            }),
+                        ),
+                    );
+                    if (results.every((sent) => !sent)) {
+                        logger.warn('[Push] Expo send returned false for all devices', {
                             userId,
                             type: String(type),
                             notificationId: notification.id,
+                            devices: pushTokens.length,
                         });
                     }
                 } else if (pushSkipReason) {
@@ -556,7 +565,6 @@ export class NotificationService {
 
             return this.createNotification({
                 userId,
-                pushToken: (user?.pushNotificationsConsent && user?.expoPushToken) ? user.expoPushToken : null,
                 title,
                 message,
                 type: NotificationType.PREDICTION_RESULT,

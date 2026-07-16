@@ -63,31 +63,62 @@ let channelsReady = false;
 async function setupAndroidChannels(Notifications: NotificationsModule): Promise<void> {
     if (Platform.OS !== 'android') return;
 
+    // Channel ids are versioned (…-v2). Android freezes importance after first
+    // create — renaming forces a fresh HIGH/MAX channel so heads-up banners work
+    // on Android 8–12 and 13+.
+    const common = {
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250] as number[],
+        enableVibrate: true,
+        showBadge: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        sound: 'default' as const,
+    };
+
     await Notifications.setNotificationChannelAsync('default', {
         name: 'إشعارات عامة',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
+        ...common,
         lightColor: '#32cd32',
     });
 
-    await Notifications.setNotificationChannelAsync('match-updates', {
+    await Notifications.setNotificationChannelAsync('match-updates-v2', {
         name: 'تحديثات المباريات',
-        importance: Notifications.AndroidImportance.MAX,
+        ...common,
         vibrationPattern: [0, 500, 250, 500],
         lightColor: '#22c55e',
     });
 
-    await Notifications.setNotificationChannelAsync('social', {
+    await Notifications.setNotificationChannelAsync('social-v2', {
         name: 'تفاعلات اجتماعية',
+        ...common,
         importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
         lightColor: '#a855f7',
     });
 
-    await Notifications.setNotificationChannelAsync('general', {
+    await Notifications.setNotificationChannelAsync('general-v2', {
         name: 'إشعارات التطبيق',
-        importance: Notifications.AndroidImportance.DEFAULT,
-        vibrationPattern: [0, 250, 250, 250],
+        ...common,
+        importance: Notifications.AndroidImportance.HIGH,
+        lightColor: '#32cd32',
+    });
+
+    // Keep legacy ids so older queued pushes still have a channel (best-effort).
+    await Notifications.setNotificationChannelAsync('match-updates', {
+        name: 'تحديثات المباريات (قديم)',
+        ...common,
+        vibrationPattern: [0, 500, 250, 500],
+        lightColor: '#22c55e',
+    });
+    await Notifications.setNotificationChannelAsync('social', {
+        name: 'تفاعلات اجتماعية (قديم)',
+        ...common,
+        importance: Notifications.AndroidImportance.HIGH,
+        lightColor: '#a855f7',
+    });
+    await Notifications.setNotificationChannelAsync('general', {
+        name: 'إشعارات التطبيق (قديم)',
+        ...common,
+        importance: Notifications.AndroidImportance.HIGH,
         lightColor: '#32cd32',
     });
 }

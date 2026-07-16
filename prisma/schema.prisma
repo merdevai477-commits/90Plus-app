@@ -56,6 +56,8 @@ model User {
   lastLoginDate                 DateTime?
   consecutiveLoginDays          Int                      @default(0)
   expoPushToken                 String?
+  /// Multi-device Expo push tokens (Android + iOS can both stay registered).
+  pushDevices                   UserPushDevice[]
   emailVerified                 Boolean                  @default(false)
   emailVerificationToken        String?                  @unique
   emailVerificationTokenExpires DateTime?
@@ -153,6 +155,22 @@ model User {
   @@index([parentalConsent])
   @@index([xp(sort: Desc), level(sort: Desc)])
   @@map("users")
+}
+
+/// One Expo push token per physical device. Keeps Android + iOS registered together
+/// (User.expoPushToken alone was overwritten when switching phones).
+model UserPushDevice {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  platform  String   @default("unknown")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([platform])
+  @@map("user_push_devices")
 }
 
 model ParentalConsentRequest {

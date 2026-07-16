@@ -309,6 +309,7 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
             return;
         }
 
+        // Clear token from any other account (reinstall / device hand-off).
         await prisma.user.updateMany({
             where: {
                 expoPushToken: token,
@@ -343,6 +344,14 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
             }
             throw updateErr;
         }
+
+        // Persist per-device so Android + iOS tokens coexist.
+        const { registerUserPushDevice } = await import('../services/user-push-devices.service');
+        await registerUserPushDevice({
+            userId: existingUser.id,
+            token,
+            platform: resolvedPlatform,
+        });
 
         const verify = await prisma.user.findUnique({
             where: { clerkUserId },

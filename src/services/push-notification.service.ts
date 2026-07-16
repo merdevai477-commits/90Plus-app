@@ -13,6 +13,7 @@ import {
     logExpoPushReceipt,
     logExpoPushTicket,
 } from '../utils/expo-push-log.util';
+import { removePushTokenEverywhere } from './user-push-devices.service';
 
 // Create a new Expo SDK client
 const expo = new Expo();
@@ -23,15 +24,8 @@ const RECEIPT_TTL_SECONDS = 60 * 35; // 35 min (Expo receipts available for ~30 
  * Handle invalid/expired push tokens by clearing them from DB
  */
 async function handleInvalidToken(token: string, reason: ExpoPushErrorCode): Promise<void> {
-    try {
-        await prisma.user.updateMany({
-            where: { expoPushToken: token },
-            data: { expoPushToken: null },
-        });
-        logger.info(`Cleared invalid push token from DB (${reason}): ${token.substring(0, 20)}...`);
-    } catch (err) {
-        logger.warn('Failed to clear invalid push token from DB:', err);
-    }
+    await removePushTokenEverywhere(token);
+    logger.info(`Cleared invalid push token from DB (${reason}): ${token.substring(0, 20)}...`);
 }
 
 async function handleExpoPushError(
@@ -190,10 +184,16 @@ function resolvePushChannelId(
     data?: Record<string, unknown>,
     explicit?: string,
 ): string {
-    if (explicit) return explicit;
+    if (explicit) {
+        // Map legacy channel ids to v2 heads-up channels.
+        if (explicit === 'match-updates') return 'match-updates-v2';
+        if (explicit === 'social') return 'social-v2';
+        if (explicit === 'general') return 'general-v2';
+        return explicit;
+    }
     const type = typeof data?.type === 'string' ? data.type : undefined;
     if (!type) return 'default';
-    if (type.includes('MATCH')) return 'match-updates';
+    if (type.includes('MATCH') || type.includes('PREDICTION')) return 'match-updates-v2';
     if (
         type === 'LIKE' ||
         type === 'COMMENT' ||
@@ -203,7 +203,7 @@ function resolvePushChannelId(
         type === 'SHARE' ||
         type === 'COMMENT_LIKE'
     ) {
-        return 'social';
+        return 'social-v2';
     }
     return 'default';
 }

@@ -36,7 +36,16 @@ async function ensureAndroidNotificationPermission(
     if (!shouldPromptForNotificationPermission(status)) return;
 
     const alreadyAsked = await AsyncStorage.getItem(NOTIFICATION_PERMISSION_REQUESTED_KEY);
-    if (alreadyAsked) return;
+    // Already prompted once and still denied — user must enable in Settings.
+    // Token sync still runs separately when permission later becomes granted.
+    if (alreadyAsked) {
+        if (status === 'denied') {
+            logger.info(
+                '[Push] Android notification permission denied — enable in system Settings → Apps → 90Plus → Notifications',
+            );
+        }
+        return;
+    }
 
     // Brief delay so home screen finishes mounting before the system dialog.
     await new Promise((r) => setTimeout(r, 2500));
