@@ -13,6 +13,7 @@
 
 import cron from 'node-cron';
 import { logger } from '../utils/logger';
+import { shouldSkipHeavyJob } from '../utils/memory-guard.util';
 import { isStartupSyncDisabled } from '../config/startup-sync.config';
 import {
   isScores365ExperimentEnabled,
@@ -24,6 +25,7 @@ import {
   loadWorldCupDbFixtures,
 } from '../services/scores365-experiment.service';
 import { footballDataCacheService } from '../services/football-data-cache.service';
+import { startupJobQueue } from '../services/startup-job-queue.service';
 import { hasLineupData } from '../utils/lineups-fallback';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 
@@ -57,6 +59,7 @@ const recentGameIds = new Set<number>();
 
 export async function runBulkFixtureSyncTick(): Promise<void> {
   if (!isEnabled()) return;
+  if (shouldSkipHeavyJob('wc-bulk-fixtures')) return;
   if (isRunning.bulk) {
     logger.debug(`[${WORKER}][bulk] previous tick still running — skipping`);
     return;
@@ -118,6 +121,7 @@ export async function runBulkFixtureSyncTick(): Promise<void> {
 
 async function runStandingsSyncTick(): Promise<void> {
   if (!isEnabled()) return;
+  if (shouldSkipHeavyJob('wc-standings')) return;
   if (isRunning.standings) {
     logger.debug(`[${WORKER}][standings] previous tick still running — skipping`);
     return;
@@ -318,13 +322,16 @@ export function startWorldCupSyncWorker(): void {
       parseInt(process.env.WC_SYNC_STARTUP_DELAY_MS || '20000', 10) || 20_000,
     );
     setTimeout(() => {
-      runBulkFixtureSyncTick().finally(() => {
-        void runStandingsSyncTick();
-        void runLineupSyncTick();
+      startupJobQueue.enqueue('wc-bulk', async () => {
+        await runBulkFixtureSyncTick();
+      });
+      startupJobQueue.enqueue('wc-standings', () => runStandingsSyncTick());
+      startupJobQueue.enqueue('wc-lineup', async () => {
+        await runLineupSyncTick();
       });
     }, startupDelayMs);
     logger.info(
-      `[${WORKER}] started — bulk sync every 5m (first in ${startupDelayMs / 1000}s), standings every 10m, lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s`,
+      `[${WORKER}] started — bulk sync every 5m (boot queued after ${startupDelayMs / 1000}s), standings every 10m, lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s`,
     );
     return;
   }

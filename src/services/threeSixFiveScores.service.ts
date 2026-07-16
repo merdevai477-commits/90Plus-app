@@ -450,8 +450,8 @@ function supplementCompetitionLimit(): number {
 }
 
 function fixturesSyncBatchSize(): number {
-  const raw = parseInt(process.env.SCORES365_FIXTURES_SYNC_BATCH || '60', 10);
-  return Number.isFinite(raw) && raw > 0 ? raw : 60;
+  const raw = parseInt(process.env.SCORES365_FIXTURES_SYNC_BATCH || '15', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 15;
 }
 
 function trackedCompetitionStoreLimit(): number {
@@ -2186,10 +2186,8 @@ class ThreeSixFiveScoresService {
 
   /**
    * League-agnostic persistence for the /allscores/ feed (non-WC competitions).
-   * Unlike persistFinishedFixtures (WC-scoped), candidate DB rows are loaded by a
-   * date window across ALL leagues so resolveDbRow can reuse an existing
-   * API-Football row when present; unmatched games become synthetic fixtures with
-   * a namespaced leagueId derived from the 365 competitionId.
+   * Processes one calendar day at a time with paged DB loads so a multi-day
+   * window cannot explode RSS in a single unbounded findMany.
    */
   private async persistAllScoresFixtures(
     items: ThreeSixFiveFixtureItem[],
@@ -2197,34 +2195,70 @@ class ThreeSixFiveScoresService {
   ): Promise<void> {
     if (!items.length) return;
 
-    // Date window covering all kickoffs ±3h, so resolveDbRow can match existing
-    // API-Football rows without a leagueId/season restriction.
-    let minMs = Infinity;
-    let maxMs = -Infinity;
+    const byDay = new Map<string, ThreeSixFiveFixtureItem[]>();
     for (const item of items) {
-      const ms = item.raw.startTime ? new Date(item.raw.startTime).getTime() : NaN;
-      if (Number.isNaN(ms)) continue;
-      if (ms < minMs) minMs = ms;
-      if (ms > maxMs) maxMs = ms;
+      const day = calendarDateFromKickoff(item.raw.startTime);
+      if (!day) continue;
+      const list = byDay.get(day);
+      if (list) list.push(item);
+      else byDay.set(day, [item]);
     }
-    if (!Number.isFinite(minMs) || !Number.isFinite(maxMs)) return;
+
+    for (const [day, dayItems] of byDay) {
+      await this.persistAllScoresFixturesForDay(day, dayItems, competitionMeta);
+    }
+
+    const liveGameIds = items.filter((i) => i.phase === 'live').map((i) => i.gameId);
+    if (liveGameIds.length > 0) {
+      void sync365SyntheticLiveSnapshots({ gameIds: liveGameIds, language: 'en' });
+    }
+  }
+
+  /** Page CachedFixture rows for a date range — never one unbounded query. */
+  private async loadCachedFixturesPaged(
+    gte: Date,
+    lte: Date,
+  ): Promise<Awaited<ReturnType<typeof prisma.cachedFixture.findMany>>> {
+    const PAGE = Math.max(
+      200,
+      Math.min(2000, parseInt(process.env.ALLSCORES_DB_PAGE_SIZE || '1000', 10) || 1000),
+    );
+    const out: Awaited<ReturnType<typeof prisma.cachedFixture.findMany>> = [];
+    let cursorId: string | undefined;
+
+    for (;;) {
+      const page = await prisma.cachedFixture.findMany({
+        where: { matchDate: { gte, lte } },
+        orderBy: [{ matchDate: 'asc' }, { id: 'asc' }],
+        take: PAGE,
+        ...(cursorId ? { skip: 1, cursor: { id: cursorId } } : {}),
+      });
+      if (!page.length) break;
+      out.push(...page);
+      cursorId = page[page.length - 1]?.id;
+      if (page.length < PAGE) break;
+    }
+
+    return out;
+  }
+
+  private async persistAllScoresFixturesForDay(
+    day: string,
+    items: ThreeSixFiveFixtureItem[],
+    competitionMeta?: CompetitionMetaMap,
+  ): Promise<void> {
+    if (!items.length) return;
+
+    const dayStart = new Date(`${day}T00:00:00.000Z`);
+    const dayEnd = new Date(`${day}T23:59:59.999Z`);
+    if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) return;
 
     const WINDOW_MS = 3 * 60 * 60 * 1000;
-    const dbRows = await prisma.cachedFixture.findMany({
-      where: {
-        matchDate: {
-          gte: new Date(minMs - WINDOW_MS),
-          lte: new Date(maxMs + WINDOW_MS),
-        },
-      },
-      orderBy: { matchDate: 'asc' },
-    });
+    const dbRows = await this.loadCachedFixturesPaged(
+      new Date(dayStart.getTime() - WINDOW_MS),
+      new Date(dayEnd.getTime() + WINDOW_MS),
+    );
 
-    // Self-heal: finished synthetic fixtures are Redis-guarded and never
-    // re-upserted, so any metadata written by older code (e.g. country
-    // "World", missing logo) would persist forever. Reconcile every tick
-    // against the freshly-built competition meta so country/logo stay correct
-    // even for rows we won't otherwise touch below.
     if (competitionMeta) {
       await this.reconcileSyntheticLeagueMeta(dbRows, competitionMeta);
     }
@@ -2233,8 +2267,6 @@ class ThreeSixFiveScoresService {
     const competitions = new Set<number>();
 
     for (const item of items) {
-      // Finished fixtures are immutable — upsert once, then skip on later ticks.
-      // Upcoming/live fixtures change (score, status) — refresh every tick.
       const isFinished = item.phase === 'finished';
       const upsertedKey = `${FINISHED_UPSERTED_KEY_PREFIX}${item.gameId}`;
       if (isFinished) {
@@ -2254,7 +2286,6 @@ class ThreeSixFiveScoresService {
       let base: FixtureFromAPI | null;
       let fixtureId: number;
       if (dbRow) {
-        // Reuse the existing API-Football row (keeps its real leagueId).
         base = matchCacheService.convertDbMatchToApiFormat(dbRow);
         fixtureId = dbRow.fixtureId;
       } else {
@@ -2300,11 +2331,9 @@ class ThreeSixFiveScoresService {
     if (toUpsert.length > 0) {
       const count = await matchCacheService.upsertFixtures(toUpsert);
       logger.info(
-        `[OtherLeagues-365] upserted ${count} fixtures across ${competitions.size} competitions`,
+        `[OtherLeagues-365] upserted ${count} fixtures across ${competitions.size} competitions (day=${day})`,
       );
 
-      // Persist each distinct competition as its own league record so the app
-      // can render league logo/name/country for any 365 competition.
       if (competitionMeta) {
         const leagueRecords = [...competitions]
           .map((compId) => {
@@ -2337,11 +2366,6 @@ class ThreeSixFiveScoresService {
           }
         }
       }
-    }
-
-    const liveGameIds = items.filter((i) => i.phase === 'live').map((i) => i.gameId);
-    if (liveGameIds.length > 0) {
-      void sync365SyntheticLiveSnapshots({ gameIds: liveGameIds, language: 'en' });
     }
   }
 

@@ -10,16 +10,18 @@
  *   OTHER_LEAGUES_SYNC_ENABLED   — enable/disable (default: true)
  *   OTHER_LEAGUES_SYNC_CRON      — cron expression (default: every 5 min)
  *   OTHER_LEAGUES_LIVE_CRON      — cron for live-match refresh (default: every 2 min)
- *   OTHER_LEAGUES_ALLSCORES_CRON — cron for 365 /allscores/ calendar sync (default: every 10 min)
+ *   OTHER_LEAGUES_ALLSCORES_CRON — cron for 365 /allscores/ calendar sync (default: daily 05:00)
  *   OTHER_LEAGUES_365_LIVE_CRON  — cron for 365 live overlay refresh (default: every 2 min)
  */
 
 import cron from 'node-cron';
 import { logger } from '../utils/logger';
+import { shouldSkipHeavyJob } from '../utils/memory-guard.util';
 import { isWorldCupOnlyMode } from '../config/world-cup-only-mode.config';
 import { isStartupSyncDisabled } from '../config/startup-sync.config';
 import { footballDataCacheService } from '../services/football-data-cache.service';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
+import { startupJobQueue } from '../services/startup-job-queue.service';
 import { isScores365ExperimentEnabled, sync365SyntheticLiveSnapshots } from '../services/scores365-experiment.service';
 import { getRedisClient } from '../lib/redis';
 import {
@@ -158,6 +160,7 @@ async function runLiveRefreshTick(): Promise<void> {
  */
 async function runAllScoresSyncTick(): Promise<void> {
   if (!isAllScoresEnabled()) return;
+  if (shouldSkipHeavyJob('other-leagues-allscores')) return;
   if (isRunning.allScores) {
     logger.debug(`[${WORKER}][allscores] previous tick still running — skipping`);
     return;
@@ -165,8 +168,9 @@ async function runAllScoresSyncTick(): Promise<void> {
   isRunning.allScores = true;
 
   try {
-    const start = dateKeyOffset(-1); // yesterday (catch late-finished results)
-    const end = dateKeyOffset(14); // today + 14 days (upcoming calendar)
+    // ~5 calendar days: yesterday → today+3 (was 16 days — OOM driver).
+    const start = dateKeyOffset(-1);
+    const end = dateKeyOffset(3);
     const res = await threeSixFiveScoresService.getAllScores(start, end, 'en');
     const items = res.data ?? [];
     const competitions = new Set<number>();
@@ -217,6 +221,7 @@ async function run365LiveRefreshTick(): Promise<void> {
 
 async function runCompetitionsCatalogSyncTick(force = false): Promise<void> {
   if (!isAllScoresEnabled()) return;
+  if (shouldSkipHeavyJob('other-leagues-365catalog')) return;
   if (isRunning.catalog) {
     logger.debug(`[${WORKER}][365catalog] previous tick still running — skipping`);
     return;
@@ -240,6 +245,7 @@ async function runCompetitionsCatalogSyncTick(force = false): Promise<void> {
 
 async function runCompetitionFixturesBatchTick(): Promise<void> {
   if (!isAllScoresEnabled()) return;
+  if (shouldSkipHeavyJob('other-leagues-365fixtures')) return;
   if (isRunning.fixturesBatch) {
     logger.debug(`[${WORKER}][365fixtures] previous tick still running — skipping`);
     return;
@@ -286,7 +292,8 @@ export function startOtherLeaguesSyncWorker(): void {
 
   const calendarCron = process.env.OTHER_LEAGUES_SYNC_CRON?.trim() || '*/5 * * * *';
   const liveCron = process.env.OTHER_LEAGUES_LIVE_CRON?.trim() || '*/2 * * * *';
-  const allScoresCron = process.env.OTHER_LEAGUES_ALLSCORES_CRON?.trim() || '*/10 * * * *';
+  // Default once daily 05:00 — set OTHER_LEAGUES_ALLSCORES_CRON on Railway if needed.
+  const allScoresCron = process.env.OTHER_LEAGUES_ALLSCORES_CRON?.trim() || '0 5 * * *';
   const scores365LiveCron = process.env.OTHER_LEAGUES_365_LIVE_CRON?.trim() || '*/2 * * * *';
   const catalogCron = process.env.OTHER_LEAGUES_365_CATALOG_CRON?.trim() || '0 4 * * *';
   const fixturesBatchCron = process.env.OTHER_LEAGUES_365_FIXTURES_CRON?.trim() || '*/5 * * * *';
@@ -323,24 +330,20 @@ export function startOtherLeaguesSyncWorker(): void {
         `[${WORKER}] STARTUP_SYNC_DISABLED=true — skipping boot catalog/allscores/365live/fixtures; crons remain active`,
       );
     } else {
-      // Stagger startup work — firing catalog + allscores + live + fixtures in
-      // parallel spikes RSS (multi-GB) and Node rarely returns that RAM to the OS.
+      // Serial startup queue (max 1–2) — never fire catalog+allscores+live+fixtures together.
       const startupDelayMs = Math.max(
         15_000,
         parseInt(process.env.OTHER_LEAGUES_STARTUP_DELAY_MS || '30000', 10) || 30_000,
       );
       setTimeout(() => {
-        void runCompetitionsCatalogSyncTick(true);
+        startupJobQueue.enqueue('other-leagues-catalog', () => runCompetitionsCatalogSyncTick(true));
+        startupJobQueue.enqueue('other-leagues-allscores', () => runAllScoresSyncTick());
+        startupJobQueue.enqueue('other-leagues-365live', () => run365LiveRefreshTick());
+        startupJobQueue.enqueue('other-leagues-fixtures', () => runCompetitionFixturesBatchTick());
       }, startupDelayMs);
-      setTimeout(() => {
-        void runAllScoresSyncTick();
-      }, startupDelayMs + 45_000);
-      setTimeout(() => {
-        void run365LiveRefreshTick();
-      }, startupDelayMs + 90_000);
-      setTimeout(() => {
-        void runCompetitionFixturesBatchTick();
-      }, startupDelayMs + 120_000);
+      logger.info(
+        `[${WORKER}] boot jobs queued (serial) after ${startupDelayMs / 1000}s`,
+      );
     }
   }
 
