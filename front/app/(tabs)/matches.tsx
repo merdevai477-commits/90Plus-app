@@ -852,7 +852,9 @@ const LeagueCard = memo(function LeagueCard({
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const showExpanded = filter === 'WorldCup' || filter === 'International' || isExpanded;
+  // World Cup keeps its campaign presentation open. International and normal
+  // league lists start collapsed and expand only when the user taps the header.
+  const showExpanded = filter === 'WorldCup' || isExpanded;
   const { translate: t, language } = useTranslation();
   const localizedLeagueName = getLeagueDisplayName(
     group.league,
@@ -2497,7 +2499,9 @@ const styles = StyleSheet.create({
   cornersTxt: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '700', fontVariant: ['tabular-nums'] },
   viewAllBtn: { height: 46, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   viewAllTxt: { color: PURPLE_PRIMARY, fontSize: 15, fontWeight: '800' },
-  rowWrapCol: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  // rowWrap already owns the separator. A second full-width border here
+  // overlapped the rounded league-card edge and produced crossed/thick lines.
+  rowWrapCol: {},
   rowWrapInCard: {
     borderBottomWidth: 0,
     minHeight: 112,
