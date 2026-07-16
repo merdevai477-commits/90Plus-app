@@ -1325,12 +1325,20 @@ export default function MatchesHubScreenV2() {
 
   // Country → League hierarchy after filtering. Drops empty leagues and
   // empty countries so the accordion list only renders sections with data.
+  // World Cup + International comps live on their dedicated tabs — not in All.
   const filteredCountryGroups = useMemo<CountryGroup[]>(() => {
     return countryGroups
       .map(cg => {
         const leagues = cg.leagues
           .map(l => ({ ...l, matches: l.matches.filter(matchPassesFilter) }))
-          .filter(l => l.matches.length > 0 && l.leagueId !== worldCupLeagueId);
+          .filter((l) => {
+            if (l.matches.length === 0) return false;
+            if (l.leagueId === worldCupLeagueId) return false;
+            const sample = l.matches[0]?.league;
+            return !isInternationalCompetition(sample ?? { id: l.leagueId, name: l.leagueName }, {
+              excludeLeagueId: worldCupLeagueId,
+            });
+          });
         return { ...cg, leagues };
       })
       .filter(cg => cg.leagues.length > 0);
