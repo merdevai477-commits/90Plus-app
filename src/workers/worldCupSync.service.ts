@@ -13,6 +13,7 @@
 
 import cron from 'node-cron';
 import { logger } from '../utils/logger';
+import { isStartupSyncDisabled } from '../config/startup-sync.config';
 import {
   isScores365ExperimentEnabled,
   ensureScores365GameMapping,
@@ -306,20 +307,30 @@ export function startWorldCupSyncWorker(): void {
     void runStatsSyncTick();
   }, sMs);
 
-  // Kick off after a short delay so boot + warmup don't overlap with WC sync.
-  const startupDelayMs = Math.max(
-    10_000,
-    parseInt(process.env.WC_SYNC_STARTUP_DELAY_MS || '20000', 10) || 20_000,
-  );
-  setTimeout(() => {
-    runBulkFixtureSyncTick().finally(() => {
-      void runStandingsSyncTick();
-      void runLineupSyncTick();
-    });
-  }, startupDelayMs);
+  // Immediate bulk+lineup kickoff on boot — gated (crons/intervals above still run).
+  if (isStartupSyncDisabled()) {
+    logger.warn(
+      `[${WORKER}] STARTUP_SYNC_DISABLED=true — skipping boot bulk/standings/lineup kickoff; timers/crons remain active`,
+    );
+  } else {
+    const startupDelayMs = Math.max(
+      10_000,
+      parseInt(process.env.WC_SYNC_STARTUP_DELAY_MS || '20000', 10) || 20_000,
+    );
+    setTimeout(() => {
+      runBulkFixtureSyncTick().finally(() => {
+        void runStandingsSyncTick();
+        void runLineupSyncTick();
+      });
+    }, startupDelayMs);
+    logger.info(
+      `[${WORKER}] started — bulk sync every 5m (first in ${startupDelayMs / 1000}s), standings every 10m, lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s`,
+    );
+    return;
+  }
 
   logger.info(
-    `[${WORKER}] started — bulk sync every 5m (first in ${startupDelayMs / 1000}s), standings every 10m, lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s`,
+    `[${WORKER}] started — bulk cron every 5m, standings every 10m, lineup every ${lMs / 1000}s, stats every ${sMs / 1000}s (no boot kickoff)`,
   );
 }
 

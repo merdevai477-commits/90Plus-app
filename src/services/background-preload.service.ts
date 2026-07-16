@@ -14,6 +14,7 @@ import { logger } from '../utils/logger';
 import { footballDataCacheService } from './football-data-cache.service';
 import { footballService } from './football.service';
 import prisma from '../lib/prisma';
+import { isStartupSyncDisabled } from '../config/startup-sync.config';
 
 class BackgroundPreloadService {
     private isRunning = false;
@@ -36,6 +37,13 @@ class BackgroundPreloadService {
      * Start background preloading service
      */
     start(): void {
+        if (isStartupSyncDisabled()) {
+            logger.warn(
+                '[BackgroundPreload] STARTUP_SYNC_DISABLED=true — service not started (set false to re-enable)',
+            );
+            return;
+        }
+
         if (this.isFreePlan()) {
             logger.warn('[BackgroundPreload] ⚠️ Service DISABLED - Free Plan detected (API-Football daily limit)');
             logger.info('[BackgroundPreload] 💡 Set FOOTBALL_API_PLAN=pro to enable background preloading');
