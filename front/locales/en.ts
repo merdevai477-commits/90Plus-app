@@ -355,6 +355,8 @@ export const en = {
     trackingUnavailableHint: 'SportRadar tracking is only available for some competitions.',
     trackingExpand: 'Wider view',
     trackingCollapse: 'Close wider view',
+    viewPitch: 'Pitch',
+    viewScore: 'Score',
     startingXI: 'Starting XI',
     substitutes: 'Substitutes',
     coach: 'Coach',

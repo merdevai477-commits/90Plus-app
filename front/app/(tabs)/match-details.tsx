@@ -270,6 +270,8 @@ const MatchDetailsScreen = () => {
   const [standingsLoading, setStandingsLoading] = useState(false);
   const [lmtInfo, setLmtInfo] = useState<Scores365LmtInfo | null>(null);
   const [lmtChecked, setLmtChecked] = useState(false);
+  /** When LMT is available: show live pitch or the score/time card. */
+  const [heroView, setHeroView] = useState<'pitch' | 'score'>('pitch');
 
   const [error, setError] = useState<string | null>(null);
   const [lineupsError, setLineupsError] = useState<string | null>(null);
@@ -448,6 +450,7 @@ const MatchDetailsScreen = () => {
     setStandingsLoading(false);
     setLmtInfo(null);
     setLmtChecked(false);
+    setHeroView('pitch');
     lmtAutoOpenedRef.current = null;
     loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
@@ -923,13 +926,32 @@ const MatchDetailsScreen = () => {
     return () => clearInterval(interval);
   }, [fixtureId, isLive, activeTab, loadStandingsIfNeeded]);
 
-  // Preload lineups for live matches so the tab is ready when opened
+  // If lineups tab is hidden, fall back to events so no orphan active state.
   useEffect(() => {
-    if (!fixtureId || !fixture || !isLive()) return;
-    if (lineupsPreloadedForRef.current === fixtureId) return;
-    lineupsPreloadedForRef.current = fixtureId;
-    void loadLineupsIfNeeded(true);
-  }, [fixtureId, fixture?.fixture?.id, isLive, loadLineupsIfNeeded]);
+    if (!hasLineupData(lineups) && activeTab === 'lineups') {
+      setActiveTab('events');
+    }
+  }, [lineups, activeTab]);
+
+  // Poll lineups in the background for non-finished matches so the tab can
+  // appear as soon as the provider publishes a lineup (tab stays hidden until then).
+  useEffect(() => {
+    if (!fixtureId || !fixture || hasLineupData(lineups) || isFinishedMatch()) return;
+
+    if (lineupsPreloadedForRef.current !== fixtureId) {
+      lineupsPreloadedForRef.current = fixtureId;
+      void loadLineupsIfNeeded(true);
+    }
+
+    const intervalMs = isLive() ? 15_000 : 30_000;
+    const interval = setInterval(() => {
+      const current = useLiveFixtureStore.getState().snapshots[fixtureId]?.lineups;
+      if (hasLineupData(current)) return;
+      void loadLineupsIfNeeded(true);
+    }, intervalMs);
+
+    return () => clearInterval(interval);
+  }, [fixtureId, fixture?.fixture?.id, isLive, isFinishedMatch, loadLineupsIfNeeded, lineups]);
 
   // ── Tab change handler — triggers lazy load ───────────────────────────────
   const handleTabChange = useCallback((tab: string) => {
@@ -1950,7 +1972,7 @@ const MatchDetailsScreen = () => {
     );
   }
 
-  const tabs = [
+  const baseTabs = [
     { key: 'events', label: t.matchDetails.events, icon: 'football' as const },
     { key: 'lineups', label: t.matchDetails.lineups, icon: 'people' as const },
     { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
@@ -1958,28 +1980,14 @@ const MatchDetailsScreen = () => {
     { key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const },
     { key: 'stadium', label: t.matchDetails.stadium || 'Stadium', icon: 'business' as const },
   ];
+  const tabs = baseTabs.filter(
+    (tab) => tab.key !== 'lineups' || hasLineupData(lineups),
+  );
 
-  const matchHero = lmtInfo?.widgetUrl ? (
-    <MatchLmtWebView
-      variant="hero"
-      widgetUrl={lmtInfo.widgetUrl}
-      embedUrl={lmtInfo.embedUrl}
-      aspectRatio={lmtInfo.widgetRatio}
-      // DD branding: rewrite GetWidget HTML (pitchLogo / goalBannerImage / vlmtCourtBannerUrl).
-      // hideBrand=true → transparent pixel; false → 90PLUS-app (or brandLogoUrl).
-      hideBrand={
-        process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === 'true' ||
-        process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === '1'
-      }
-      brandLogoUrl={process.env.EXPO_PUBLIC_LMT_PITCH_LOGO_URL?.trim() || null}
-      coverBrand={false}
-      loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
-      unavailableLabel={t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
-      retryLabel={t.matchDetails.retry || t.common.retry}
-      expandLabel={t.matchDetails.trackingExpand || 'Wider view'}
-      collapseLabel={t.matchDetails.trackingCollapse || 'Close wider view'}
-    />
-  ) : (
+  const hasLmt = Boolean(lmtInfo?.widgetUrl);
+  const showPitch = hasLmt && heroView === 'pitch';
+
+  const scoreHeader = (
     <MatchHeader
       homeTeam={getTeamDisplayName(homeTeamName, language)}
       awayTeam={getTeamDisplayName(awayTeamName, language)}
@@ -2020,6 +2028,30 @@ const MatchDetailsScreen = () => {
     />
   );
 
+  const matchHero = showPitch ? (
+    <MatchLmtWebView
+      variant="hero"
+      widgetUrl={lmtInfo!.widgetUrl}
+      embedUrl={lmtInfo!.embedUrl}
+      aspectRatio={lmtInfo!.widgetRatio}
+      // DD branding: rewrite GetWidget HTML (pitchLogo / goalBannerImage / vlmtCourtBannerUrl).
+      // hideBrand=true → transparent pixel; false → 90PLUS-app (or brandLogoUrl).
+      hideBrand={
+        process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === 'true' ||
+        process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === '1'
+      }
+      brandLogoUrl={process.env.EXPO_PUBLIC_LMT_PITCH_LOGO_URL?.trim() || null}
+      coverBrand={false}
+      loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
+      unavailableLabel={t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
+      retryLabel={t.matchDetails.retry || t.common.retry}
+      expandLabel={t.matchDetails.trackingExpand || 'Wider view'}
+      collapseLabel={t.matchDetails.trackingCollapse || 'Close wider view'}
+    />
+  ) : (
+    scoreHeader
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0f0720" />
@@ -2039,8 +2071,59 @@ const MatchDetailsScreen = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Pitch tracker replaces score card when SportRadar LMT is available */}
+        {/* Pitch tracker or score card — user can switch when LMT is available */}
         {matchHero}
+
+        {hasLmt ? (
+          <View style={styles.heroViewToggleWrap}>
+            <View style={styles.heroViewToggle}>
+              <TouchableOpacity
+                style={[styles.heroViewToggleBtn, heroView === 'pitch' && styles.heroViewToggleBtnActive]}
+                onPress={() => setHeroView('pitch')}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityState={{ selected: heroView === 'pitch' }}
+                accessibilityLabel={t.matchDetails.viewPitch || 'Pitch'}
+              >
+                <Ionicons
+                  name="football-outline"
+                  size={14}
+                  color={heroView === 'pitch' ? '#fff' : '#9ca3af'}
+                />
+                <Text
+                  style={[
+                    styles.heroViewToggleText,
+                    heroView === 'pitch' && styles.heroViewToggleTextActive,
+                  ]}
+                >
+                  {t.matchDetails.viewPitch || 'Pitch'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.heroViewToggleBtn, heroView === 'score' && styles.heroViewToggleBtnActive]}
+                onPress={() => setHeroView('score')}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityState={{ selected: heroView === 'score' }}
+                accessibilityLabel={t.matchDetails.viewScore || 'Score'}
+              >
+                <Ionicons
+                  name="timer-outline"
+                  size={14}
+                  color={heroView === 'score' ? '#fff' : '#9ca3af'}
+                />
+                <Text
+                  style={[
+                    styles.heroViewToggleText,
+                    heroView === 'score' && styles.heroViewToggleTextActive,
+                  ]}
+                >
+                  {t.matchDetails.viewScore || 'Score'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
 
         {/* Modern Tabs */}
         <ModernTabs
@@ -2092,6 +2175,40 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.2,
+  },
+  heroViewToggleWrap: {
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 2,
+    paddingHorizontal: 20,
+  },
+  heroViewToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 22,
+    padding: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  heroViewToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+  },
+  heroViewToggleBtnActive: {
+    backgroundColor: '#8b5cf6',
+  },
+  heroViewToggleText: {
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  heroViewToggleTextActive: {
+    color: '#fff',
   },
   lineupsContainer: {
     paddingBottom: 40,
