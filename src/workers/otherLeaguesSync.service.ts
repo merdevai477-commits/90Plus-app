@@ -315,11 +315,25 @@ export function startOtherLeaguesSyncWorker(): void {
     cron.schedule(fixturesBatchCron, () => {
       void runCompetitionFixturesBatchTick();
     });
-    // Immediate pass on startup (don't wait for the first cron).
-    void runCompetitionsCatalogSyncTick(true);
-    void runAllScoresSyncTick();
-    void run365LiveRefreshTick();
-    void runCompetitionFixturesBatchTick();
+    // Stagger startup work — firing catalog + allscores + live + fixtures in
+    // parallel spikes RSS (multi-GB) and Node rarely returns that RAM to the OS,
+    // which caused OOM kills under a 6GB Railway limit.
+    const startupDelayMs = Math.max(
+      15_000,
+      parseInt(process.env.OTHER_LEAGUES_STARTUP_DELAY_MS || '30000', 10) || 30_000,
+    );
+    setTimeout(() => {
+      void runCompetitionsCatalogSyncTick(true);
+    }, startupDelayMs);
+    setTimeout(() => {
+      void runAllScoresSyncTick();
+    }, startupDelayMs + 45_000);
+    setTimeout(() => {
+      void run365LiveRefreshTick();
+    }, startupDelayMs + 90_000);
+    setTimeout(() => {
+      void runCompetitionFixturesBatchTick();
+    }, startupDelayMs + 120_000);
   }
 
   logger.info(
