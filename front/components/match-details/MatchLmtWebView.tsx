@@ -116,8 +116,44 @@ function LmtPitchSurface({
         cacheEnabled
         onLoadStart={onLoadStart}
         onLoadEnd={onLoadEnd}
-        onError={onError}
+        onError={(e) => {
+          remoteLog('[LMT] WebView onError detail', {
+            code: e.nativeEvent?.code,
+            description: e.nativeEvent?.description,
+            url: String(e.nativeEvent?.url ?? '').slice(0, 160),
+            domain: (e.nativeEvent as { domain?: string } | undefined)?.domain,
+          });
+          onError();
+        }}
         onHttpError={(e) => onHttpError(e.nativeEvent?.statusCode ?? 0)}
+        onShouldStartLoadWithRequest={(request) => {
+          const url = request.url ?? '';
+          // 365 GetWidget calls widgetrender://postrender on iOS after render.
+          // Blocking prevents NSURLErrorUnsupportedURL (-1002) white error page.
+          if (
+            url.startsWith('widgetrender://') ||
+            url.startsWith('sportradar://') ||
+            url.startsWith('intent://')
+          ) {
+            remoteLog('[LMT] blocked unsupported scheme', {
+              url: url.slice(0, 120),
+            });
+            return false;
+          }
+          if (
+            url &&
+            !/^https?:\/\//i.test(url) &&
+            !url.startsWith('about:') &&
+            !url.startsWith('data:') &&
+            !url.startsWith('blob:')
+          ) {
+            remoteLog('[LMT] blocked non-http navigation', {
+              url: url.slice(0, 120),
+            });
+            return false;
+          }
+          return true;
+        }}
         {...(Platform.OS === 'ios'
           ? {
               allowsBackForwardNavigationGestures: false,

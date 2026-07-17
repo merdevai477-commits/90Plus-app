@@ -63,6 +63,10 @@ export function resolveLmtBrandLogoUrl(): string {
  *   pitchLogo: "..."
  *   goalBannerImage: "..."
  *   widgetProps.vlmtCourtBannerUrl = "...";
+ *
+ * Also neutralize 365's iOS callback:
+ *   window.location.href = "widgetrender://postrender"
+ * WKWebView treats that custom scheme as NSURLErrorUnsupportedURL (-1002).
  */
 export function customizeScores365LmtWidgetHtml(html: string, logoUrl: string): string {
   const logo = logoUrl.replace(/"/g, '\\"');
@@ -72,6 +76,10 @@ export function customizeScores365LmtWidgetHtml(html: string, logoUrl: string): 
     .replace(
       /widgetProps\.vlmtCourtBannerUrl\s*=\s*"[^"]*";/,
       `widgetProps.vlmtCourtBannerUrl = "${logo}";`,
+    )
+    .replace(
+      /window\.location\.href\s*=\s*["']widgetrender:\/\/[^"']*["']/g,
+      '/* 90plus: blocked widgetrender:// for WKWebView */ void 0',
     );
 }
 
@@ -82,7 +90,8 @@ export function resolveLmtBrandLogoForHtml(options?: {
   if (options?.hideBrand) return LMT_TRANSPARENT_LOGO;
   const custom = options?.brandLogoUrl?.trim();
   if (custom) return custom;
-  return LMT_DEFAULT_BRAND_LOGO_DATA_URI;
+  // Prefer https host over data: SVG — safer for SportRadar/WKWebView asset loads.
+  return resolveLmtBrandLogoUrl();
 }
 
 /** Fetch official GetWidget HTML and rewrite pitch branding (DD flow). */
