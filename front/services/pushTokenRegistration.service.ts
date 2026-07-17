@@ -12,7 +12,7 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { MatchesService } from '../src/services/authService';
 import { logger } from './logger';
-import { getApiUrl } from '../config/api.config';
+import { getApiUrl, getApiEndpoint } from '../config/api.config';
 import { pushStep, pushTrace } from '../utils/pushTrace';
 import { getClerkBearerToken } from '../utils/clerkAuthToken';
 
@@ -28,6 +28,10 @@ let lastSyncedPushToken: string | null = null;
 export const PENDING_PUSH_TOKEN_KEY = '@90plus/pendingExpoPushToken';
 export const NOTIFICATION_PERMISSION_REQUESTED_KEY = 'notification_permission_requested_v3';
 
+/** Must match app.json extra.eas.projectId — release manifests sometimes omit extra.eas. */
+const FALLBACK_EAS_PROJECT_ID = '17b8b105-8756-4a9b-a2ff-b7a831eb946b';
+const PUSH_REMOTE_LOG_URL = getApiEndpoint('debug/push-log');
+
 /** Wait for Clerk JWT — avoids race where token is generated before auth is ready. */
 async function resolveAuthToken(
     getAuthToken: () => Promise<string | null>,
@@ -39,6 +43,67 @@ function ownershipLabel(): string {
     const o = Constants.appOwnership;
     if (o === 'expo' || o === 'standalone' || o === 'guest') return o;
     return o ?? 'null';
+}
+
+function resolveEasProjectId(): string {
+    const fromConfig =
+        Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+    return (typeof fromConfig === 'string' && fromConfig.trim()) || FALLBACK_EAS_PROJECT_ID;
+}
+
+function remotePushLog(event: string, data: Record<string, unknown> = {}): void {
+    console.log('[PUSH REPORT]', event, data);
+    fetch(PUSH_REMOTE_LOG_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            event,
+            ...data,
+            platform: Platform.OS,
+            isDevice: Device.isDevice,
+            appOwnership: ownershipLabel(),
+            timestamp: Date.now(),
+        }),
+    }).catch(() => {});
+}
+
+async function fetchExpoPushTokenWithRetry(
+    Notifications: NotificationsModule,
+    projectId: string,
+): Promise<{ data: string } | null> {
+    // Android FCM often needs a beat after permission grant / cold start.
+    const delaysMs = Platform.OS === 'android' ? [0, 800, 2000, 4000] : [0, 600, 1500];
+    let lastError: string | null = null;
+
+    for (let i = 0; i < delaysMs.length; i++) {
+        if (delaysMs[i] > 0) {
+            await new Promise((r) => setTimeout(r, delaysMs[i]));
+        }
+        try {
+            const withId = await Notifications.getExpoPushTokenAsync({ projectId });
+            if (withId?.data) return withId;
+        } catch (err: unknown) {
+            lastError = err instanceof Error ? err.message : String(err);
+            pushTrace(`[PUSH TRACE] getExpoPushTokenAsync attempt ${i + 1} error: ${lastError}`);
+        }
+
+        // Fallback: some release builds reject an explicit projectId; try default.
+        try {
+            const withoutId = await Notifications.getExpoPushTokenAsync();
+            if (withoutId?.data) return withoutId;
+        } catch (err: unknown) {
+            lastError = err instanceof Error ? err.message : String(err);
+        }
+    }
+
+    if (lastError) {
+        remotePushLog('getExpoPushTokenAsync_failed', {
+            projectId,
+            error: lastError,
+            attempts: delaysMs.length,
+        });
+    }
+    return null;
 }
 
 function loadNotifications(): NotificationsModule | null {
@@ -190,16 +255,19 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
         pushStep('2', `Permission status: ${permission.status}`);
         pushTrace(`[PUSH TRACE] permissions=${permission.status}`);
 
-        const projectId =
-            Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+        const projectId = resolveEasProjectId();
 
         if (permission.status !== 'granted') {
             pushStep('EARLY EXIT', `permission=${permission.status}`);
+            remotePushLog('permission_not_granted', {
+                projectId,
+                permission: permission.status,
+            });
             console.log('[PUSH REPORT]', {
                 platform: Platform.OS,
                 isDevice: Device.isDevice,
                 appOwnership: Constants.appOwnership,
-                projectId: projectId ?? null,
+                projectId,
                 permission: permission.status,
                 token: null,
             });
@@ -209,52 +277,49 @@ export async function getExpoPushTokenIfPermitted(): Promise<string | null> {
 
         await ensureAndroidNotificationChannels();
 
-        pushTrace(`[PUSH TRACE] projectId=${projectId ?? 'undefined'}`);
-        if (!projectId) {
-            pushStep('EARLY EXIT', 'projectId missing');
-        }
+        pushTrace(`[PUSH TRACE] projectId=${projectId}`);
         pushStep('3', 'Getting Expo token');
         pushTrace('[PUSH TRACE] before getExpoPushTokenAsync');
 
-        let pushTokenData: { data: string } | null = null;
-        try {
-            pushTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-            pushStep(
-                '4',
-                pushTokenData.data
-                    ? `Expo token received: ${pushTokenData.data.substring(0, 28)}...`
-                    : 'Expo token received: null',
-            );
-            pushTrace(`[PUSH TRACE] token=${pushTokenData.data}`);
-        } catch (tokenErr: unknown) {
-            const msg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
-            pushStep('EARLY EXIT', `getExpoPushTokenAsync failed: ${msg}`);
-            pushTrace(`[PUSH TRACE] token=error:${msg}`);
-            pushTrace('[PUSH TRACE] EXIT → reason: getExpoPushTokenAsync failed');
-            logger.error('Error getting push token:', tokenErr);
-        }
+        const pushTokenData = await fetchExpoPushTokenWithRetry(Notifications, projectId);
+        pushStep(
+            '4',
+            pushTokenData?.data
+                ? `Expo token received: ${pushTokenData.data.substring(0, 28)}...`
+                : 'Expo token received: null',
+        );
+        pushTrace(`[PUSH TRACE] token=${pushTokenData?.data ?? 'null'}`);
 
         console.log('[PUSH REPORT]', {
             platform: Platform.OS,
             isDevice: Device.isDevice,
             appOwnership: Constants.appOwnership,
-            projectId: projectId ?? null,
+            projectId,
             permission: permission.status,
             token: pushTokenData?.data ?? null,
         });
 
         if (!pushTokenData?.data) {
+            remotePushLog('token_null_after_retries', {
+                projectId,
+                permission: permission.status,
+            });
             return null;
         }
 
         const token = pushTokenData.data;
         await ensureAndroidNotificationChannels();
         logger.debug('📱 Expo push token obtained:', token.substring(0, 25));
+        remotePushLog('token_obtained', {
+            projectId,
+            tokenPrefix: token.substring(0, 32),
+        });
         return token;
     } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         pushTrace(`[PUSH TRACE] token=error:${msg}`);
         pushTrace('[PUSH TRACE] EXIT → reason: unexpected error in getExpoPushTokenIfPermitted');
+        remotePushLog('getExpoPushToken_unexpected', { error: msg });
         logger.error('Error getting push token:', error);
         return null;
     }
@@ -344,6 +409,10 @@ async function registerTokenWithBackend(
             logger.debug('✅ Push token synced with backend');
             lastSyncedPushToken = pushToken;
             await clearPendingPushToken();
+            remotePushLog('backend_register_ok', {
+                tokenPrefix: pushToken.substring(0, 32),
+                platform: Platform.OS,
+            });
             pushTrace('[PUSH TRACE] success ✓');
             return true;
         }
@@ -366,6 +435,13 @@ async function registerTokenWithBackend(
         pushTrace(
             `[PUSH TRACE] registerPushToken response=failed status=${result.statusCode ?? '?'} code=${result.errorCode ?? '?'}`,
         );
+        remotePushLog('backend_register_failed', {
+            tokenPrefix: pushToken.substring(0, 32),
+            statusCode: result.statusCode,
+            errorCode: result.errorCode,
+            reason: result.reason,
+            attempt,
+        });
         logger.warn('Push token sync rejected by backend', {
             attempt,
             statusCode: result.statusCode,

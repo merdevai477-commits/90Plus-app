@@ -54,7 +54,17 @@ async function ensureAndroidNotificationPermission(
     await AsyncStorage.setItem(NOTIFICATION_PERMISSION_REQUESTED_KEY, 'true');
 
     if (newStatus === 'granted') {
-        await capturePushTokenAfterPermission(getToken);
+        // FCM token is often not ready immediately after the system dialog.
+        await new Promise((r) => setTimeout(r, 1000));
+        let token = await capturePushTokenAfterPermission(getToken);
+        if (!token) {
+            await new Promise((r) => setTimeout(r, 2500));
+            token = await capturePushTokenAfterPermission(getToken);
+        }
+        if (!token) {
+            await new Promise((r) => setTimeout(r, 4000));
+            await capturePushTokenAfterPermission(getToken);
+        }
     } else if (newStatus === 'denied') {
         logger.info(
             '[Push] Android notification permission denied — enable in system Settings → Apps → 90Plus → Notifications',

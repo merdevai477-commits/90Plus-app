@@ -13,6 +13,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { pushTrace, PUSH_TRACE_ENABLED } from '../utils/pushTrace';
 import { loadNotifications, isPushRegistrationAvailable } from './pushTokenRegistration.service';
+import { getApiEndpoint } from '../config/api.config';
 
 export type PushRegistrationReport = {
     context: string;
@@ -49,7 +50,7 @@ function ownershipLabel(): string {
 function resolveProjectId(): string | null {
     const id =
         Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-    return id ?? null;
+    return id ?? '17b8b105-8756-4a9b-a2ff-b7a831eb946b';
 }
 
 function buildVerdict(report: Omit<PushRegistrationReport, 'verdict'>): string {
@@ -169,6 +170,13 @@ export async function logPushRegistrationReport(context: string): Promise<PushRe
         console.log(`[PUSH REPORT] verdict=${report.verdict}`);
         console.log('[PUSH REPORT] ────────────────────────────────────────');
     }
+
+    // Always ship to backend so store Android builds are diagnosable without Metro.
+    fetch(getApiEndpoint('debug/push-log'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: 'push_registration_report', ...report }),
+    }).catch(() => {});
 
     return report;
 }
