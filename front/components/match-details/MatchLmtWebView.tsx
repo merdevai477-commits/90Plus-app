@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -236,42 +236,37 @@ export function MatchLmtWebView({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [mode, setMode] = useState<LoadMode>('uri');
+  const [mode, setMode] = useState<LoadMode>('html');
   const [brandedHtml, setBrandedHtml] = useState<string | null>(null);
   const [uriFallback, setUriFallback] = useState(widgetUrl);
   const [landscapeOpen, setLandscapeOpen] = useState(false);
-  /** Once SportRadar has painted, avoid remounting into branded HTML (kills live session). */
-  const webLoadedRef = useRef(false);
 
   const prepareHtml = useCallback(async () => {
+    setLoading(true);
     setFailed(false);
-    webLoadedRef.current = false;
+    setMode('html');
+    setBrandedHtml(null);
     setUriFallback(widgetUrl);
 
+    // Prefer cached branded HTML so our pitchLogo shows immediately (never raw 365).
     const cached = peekBrandedLmtHtml(widgetUrl, { hideBrand, brandLogoUrl });
     if (cached) {
       setBrandedHtml(cached);
       setMode('html');
-      setLoading(true);
       return;
     }
 
-    // Fast path: boot the tracker URI immediately, brand in parallel.
-    setMode('uri');
-    setBrandedHtml(null);
-    setLoading(true);
-
     try {
       const html = await fetchBrandedLmtHtml(widgetUrl, { hideBrand, brandLogoUrl });
-      if (!webLoadedRef.current) {
-        setBrandedHtml(html);
-        setMode('html');
-      }
+      setBrandedHtml(html);
+      setMode('html');
     } catch (err) {
       remoteLog('[LMT] fetchBrandedLmtHtml failed', {
         error: err instanceof Error ? err.message : String(err),
       });
-      // Stay on URI — overlay brand covers 365 mark.
+      setBrandedHtml(null);
+      setMode('uri');
+      setUriFallback(widgetUrl);
     }
   }, [widgetUrl, hideBrand, brandLogoUrl]);
 
@@ -307,9 +302,8 @@ export function MatchLmtWebView({
     });
   }, [mode, webSource]);
 
-  // URI mode: show our logo overlay (branded HTML injects pitchLogo instead).
-  const showOverlayFallback =
-    (coverBrand || mode === 'uri') && !hideBrand && !loading && !failed;
+  // Overlay only when we fell back to raw widget URI (covers 365 pitch mark).
+  const showOverlayFallback = (coverBrand || mode === 'uri') && !hideBrand && !loading && !failed;
   const ready = Boolean(brandedHtml || mode === 'uri');
   const waitingForHtml = mode === 'html' && !brandedHtml && !failed;
   const webKey = `${mode}-${reloadKey}-${mode === 'html' ? 'html' : uriFallback}`;
@@ -391,10 +385,7 @@ export function MatchLmtWebView({
                 setLoading(true);
                 setFailed(false);
               }}
-              onLoadEnd={() => {
-                webLoadedRef.current = true;
-                setLoading(false);
-              }}
+              onLoadEnd={() => setLoading(false)}
               onError={onWebError}
               onHttpError={onWebHttpError}
             />
