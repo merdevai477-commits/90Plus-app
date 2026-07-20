@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PitchBrandLogo } from './PitchBrandLogo';
 import {
   fetchBrandedLmtHtml,
+  peekBrandedLmtHtml,
   LMT_WIDGET_BASE_ORIGIN,
 } from '../../services/lmt.service';
 import { getApiEndpoint } from '../../config/api.config';
@@ -235,27 +236,42 @@ export function MatchLmtWebView({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [mode, setMode] = useState<LoadMode>('html');
+  const [mode, setMode] = useState<LoadMode>('uri');
   const [brandedHtml, setBrandedHtml] = useState<string | null>(null);
   const [uriFallback, setUriFallback] = useState(widgetUrl);
   const [landscapeOpen, setLandscapeOpen] = useState(false);
+  /** Once SportRadar has painted, avoid remounting into branded HTML (kills live session). */
+  const webLoadedRef = useRef(false);
 
   const prepareHtml = useCallback(async () => {
-    setLoading(true);
     setFailed(false);
-    setMode('html');
+    webLoadedRef.current = false;
+    setUriFallback(widgetUrl);
+
+    const cached = peekBrandedLmtHtml(widgetUrl, { hideBrand, brandLogoUrl });
+    if (cached) {
+      setBrandedHtml(cached);
+      setMode('html');
+      setLoading(true);
+      return;
+    }
+
+    // Fast path: boot the tracker URI immediately, brand in parallel.
+    setMode('uri');
     setBrandedHtml(null);
+    setLoading(true);
+
     try {
       const html = await fetchBrandedLmtHtml(widgetUrl, { hideBrand, brandLogoUrl });
-      setBrandedHtml(html);
-      setMode('html');
+      if (!webLoadedRef.current) {
+        setBrandedHtml(html);
+        setMode('html');
+      }
     } catch (err) {
       remoteLog('[LMT] fetchBrandedLmtHtml failed', {
         error: err instanceof Error ? err.message : String(err),
       });
-      setBrandedHtml(null);
-      setMode('uri');
-      setUriFallback(widgetUrl);
+      // Stay on URI — overlay brand covers 365 mark.
     }
   }, [widgetUrl, hideBrand, brandLogoUrl]);
 
@@ -291,7 +307,9 @@ export function MatchLmtWebView({
     });
   }, [mode, webSource]);
 
-  const showOverlayFallback = coverBrand && mode === 'uri' && !loading && !failed;
+  // URI mode: show our logo overlay (branded HTML injects pitchLogo instead).
+  const showOverlayFallback =
+    (coverBrand || mode === 'uri') && !hideBrand && !loading && !failed;
   const ready = Boolean(brandedHtml || mode === 'uri');
   const waitingForHtml = mode === 'html' && !brandedHtml && !failed;
   const webKey = `${mode}-${reloadKey}-${mode === 'html' ? 'html' : uriFallback}`;
@@ -373,7 +391,10 @@ export function MatchLmtWebView({
                 setLoading(true);
                 setFailed(false);
               }}
-              onLoadEnd={() => setLoading(false)}
+              onLoadEnd={() => {
+                webLoadedRef.current = true;
+                setLoading(false);
+              }}
               onError={onWebError}
               onHttpError={onWebHttpError}
             />

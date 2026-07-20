@@ -39,6 +39,12 @@ export const LMT_DEFAULT_BRAND_LOGO_DATA_URI =
 
 export const LMT_WIDGET_BASE_ORIGIN = 'https://lmtsrcf.365scores.com';
 
+const LMT_INFO_TTL_MS = 5 * 60 * 1000;
+const LMT_HTML_TTL_MS = 10 * 60 * 1000;
+
+const lmtInfoCache = new Map<string, { at: number; value: Scores365LmtInfo | null }>();
+const brandedHtmlCache = new Map<string, { at: number; html: string }>();
+
 function buildEmbedUrl(kind: 'fixture' | 'game', id: number): string {
   const base = getApiUrl().replace(/\/$/, '');
   const path =
@@ -46,6 +52,13 @@ function buildEmbedUrl(kind: 'fixture' | 'game', id: number): string {
       ? `football/cached/365/fixture/${id}/lmt`
       : `football/cached/365/game/${id}/lmt`;
   return `${base}/${path}`;
+}
+
+function brandCacheKey(
+  widgetUrl: string,
+  options?: { hideBrand?: boolean; brandLogoUrl?: string | null },
+): string {
+  return `${widgetUrl}|${options?.hideBrand ? '1' : '0'}|${options?.brandLogoUrl?.trim() || ''}`;
 }
 
 /** Absolute URL to hosted SVG (when data URI not preferred). */
@@ -94,6 +107,20 @@ export function resolveLmtBrandLogoForHtml(options?: {
   return resolveLmtBrandLogoUrl();
 }
 
+export function peekBrandedLmtHtml(
+  widgetUrl: string,
+  options?: { hideBrand?: boolean; brandLogoUrl?: string | null },
+): string | null {
+  const key = brandCacheKey(widgetUrl, options);
+  const hit = brandedHtmlCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > LMT_HTML_TTL_MS) {
+    brandedHtmlCache.delete(key);
+    return null;
+  }
+  return hit.html;
+}
+
 /** Fetch official GetWidget HTML and rewrite pitch branding (DD flow). */
 async function fetchBrandedLmtHtmlOnce(
   widgetUrl: string,
@@ -115,16 +142,34 @@ export async function fetchBrandedLmtHtml(
   widgetUrl: string,
   options?: { hideBrand?: boolean; brandLogoUrl?: string | null },
 ): Promise<string> {
+  const key = brandCacheKey(widgetUrl, options);
+  const cached = peekBrandedLmtHtml(widgetUrl, options);
+  if (cached) return cached;
+
   try {
-    return await fetchBrandedLmtHtmlOnce(widgetUrl, options);
+    const html = await fetchBrandedLmtHtmlOnce(widgetUrl, options);
+    brandedHtmlCache.set(key, { at: Date.now(), html });
+    return html;
   } catch (firstErr) {
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 80));
     try {
-      return await fetchBrandedLmtHtmlOnce(widgetUrl, options);
+      const html = await fetchBrandedLmtHtmlOnce(widgetUrl, options);
+      brandedHtmlCache.set(key, { at: Date.now(), html });
+      return html;
     } catch {
       throw firstErr;
     }
   }
+}
+
+/** Warm GetWidget HTML so the pitch WebView can paint branded HTML immediately. */
+export function prefetchBrandedLmtHtml(
+  widgetUrl: string,
+  options?: { hideBrand?: boolean; brandLogoUrl?: string | null },
+): void {
+  if (!widgetUrl?.trim()) return;
+  if (peekBrandedLmtHtml(widgetUrl, options)) return;
+  void fetchBrandedLmtHtml(widgetUrl, options).catch(() => {});
 }
 
 async function fetchLmtJson(
@@ -157,12 +202,29 @@ export async function fetchFixtureLmt(
   options?: { language?: string; force?: boolean },
 ): Promise<Scores365LmtInfo | null> {
   if (!fixtureId || fixtureId <= 0) return null;
+  const cacheKey = `fixture:${fixtureId}:${options?.language || ''}`;
+  if (!options?.force) {
+    const hit = lmtInfoCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < LMT_INFO_TTL_MS) {
+      if (hit.value?.widgetUrl) {
+        prefetchBrandedLmtHtml(hit.value.widgetUrl);
+      }
+      return hit.value;
+    }
+  }
+
   const info = await fetchLmtJson(
     `/football/cached/365/fixture/${fixtureId}/lmt`,
     options,
   );
-  if (!info) return null;
-  return { ...info, embedUrl: buildEmbedUrl('fixture', fixtureId) };
+  if (!info) {
+    lmtInfoCache.set(cacheKey, { at: Date.now(), value: null });
+    return null;
+  }
+  const full = { ...info, embedUrl: buildEmbedUrl('fixture', fixtureId) };
+  lmtInfoCache.set(cacheKey, { at: Date.now(), value: full });
+  prefetchBrandedLmtHtml(full.widgetUrl);
+  return full;
 }
 
 export async function fetchGameLmt(
@@ -170,7 +232,24 @@ export async function fetchGameLmt(
   options?: { language?: string; force?: boolean },
 ): Promise<Scores365LmtInfo | null> {
   if (!gameId || gameId <= 0) return null;
+  const cacheKey = `game:${gameId}:${options?.language || ''}`;
+  if (!options?.force) {
+    const hit = lmtInfoCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < LMT_INFO_TTL_MS) {
+      if (hit.value?.widgetUrl) {
+        prefetchBrandedLmtHtml(hit.value.widgetUrl);
+      }
+      return hit.value;
+    }
+  }
+
   const info = await fetchLmtJson(`/football/cached/365/game/${gameId}/lmt`, options);
-  if (!info) return null;
-  return { ...info, embedUrl: buildEmbedUrl('game', gameId) };
+  if (!info) {
+    lmtInfoCache.set(cacheKey, { at: Date.now(), value: null });
+    return null;
+  }
+  const full = { ...info, embedUrl: buildEmbedUrl('game', gameId) };
+  lmtInfoCache.set(cacheKey, { at: Date.now(), value: full });
+  prefetchBrandedLmtHtml(full.widgetUrl);
+  return full;
 }
