@@ -125,6 +125,14 @@ function MatchCard({ match, index, onOpenHub }: { match: Match; index: number; o
   const isLive = status === 'LIVE' || status === '1ST' || status === '2ND' || status === 'HT';
   const isUpcoming = status === 'UPCOMING';
   const isStoppage = isLive && !!stoppageTime;
+  const minuteLabel =
+    minute && String(minute).includes('+')
+      ? (String(minute).endsWith("'") ? String(minute) : `${minute}'`)
+      : stoppageTime && minute
+        ? `${String(minute).replace(/'$/, '')}+${stoppageTime}'`
+        : minute
+          ? (String(minute).endsWith("'") ? String(minute) : `${minute}'`)
+          : '';
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 80).springify().damping(14)}>
@@ -153,8 +161,7 @@ function MatchCard({ match, index, onOpenHub }: { match: Match; index: number; o
           {isLive ? (
             <View style={[styles.liveMinuteContainer, styles.liveMinuteBorder]}>
               <Text style={[styles.minuteText, isStoppage && { color: LIVE_RED }]}>
-                {minute}{!stoppageTime && "'"}
-                {stoppageTime ? <Text style={styles.stoppageInline}> +{stoppageTime}</Text> : null}
+                {minuteLabel}
               </Text>
               <PulsingDot color={LIVE_RED} />
             </View>
@@ -183,7 +190,7 @@ function MatchCard({ match, index, onOpenHub }: { match: Match; index: number; o
                   <Text style={[styles.sepMinute, {
                     color: isLive ? (isStoppage ? LIVE_RED : PURPLE_SOFT) : 'rgba(255,255,255,0.2)',
                   }]}>
-                    {isLive ? (stoppageTime ? `+${stoppageTime}` : minute) : '–'}
+                    {isLive ? minuteLabel || '–' : '–'}
                   </Text>
                   {isLive && (
                     <LinearGradient

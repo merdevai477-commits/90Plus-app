@@ -295,6 +295,8 @@ export interface Fixture {
       long: string;
       short: string;
       elapsed: number | null;
+      /** Injury / stoppage minutes when the feed keeps elapsed at period end. */
+      extra?: number | null;
     };
   };
   league: {

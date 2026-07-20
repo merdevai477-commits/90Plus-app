@@ -25,11 +25,12 @@ export function selectScore(snapshot: LiveFixtureSnapshot): {
 export function selectMinuteLabel(snapshot: LiveFixtureSnapshot): string | undefined {
   const short = snapshot.fixture.fixture.status.short;
   const elapsed = snapshot.fixture.fixture.status.elapsed;
+  const extra = snapshot.fixture.fixture.status.extra ?? null;
   const startTimestamp =
     short === '2H'
       ? snapshot.fixture.fixture.periods.second ?? undefined
       : snapshot.fixture.fixture.periods.first ?? undefined;
-  return resolveLiveMinuteLabel(short, elapsed, { startTimestamp });
+  return resolveLiveMinuteLabel(short, elapsed, { startTimestamp, extra });
 }
 
 export function selectIsLive(snapshot: LiveFixtureSnapshot): boolean {

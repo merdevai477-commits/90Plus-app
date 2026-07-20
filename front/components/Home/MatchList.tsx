@@ -120,7 +120,10 @@ function MatchCard({
 }): React.ReactElement {
     const { language, t } = useTranslation();
     const isLive = match.status === 'LIVE' || match.status === '1ST' || match.status === '2ND';
-    const isStoppage = match.status === 'HT' && (match.stoppageTime ?? 0) > 0;
+    const liveMinute = isLive ? match.minute ?? '' : '';
+    const isStoppage =
+        isLive &&
+        ((match.stoppageTime ?? 0) > 0 || /\+/.test(liveMinute));
     const isFinished = match.status === 'FT';
     const isUpcoming = match.status === 'UPCOMING';
 
@@ -152,10 +155,6 @@ function MatchCard({
     const pinned = match.isPinned ?? false;
 
     const ftLabel = getLocalizedMatchStatus('FT', language);
-
-    const liveMinute = isLive || isStoppage ? match.minute ?? '' : '';
-    const stoppageSuffix =
-        isStoppage && match.stoppageTime ? `+${match.stoppageTime}` : '';
 
     const handleStar = () => {
         if (!onFavoritePress) return;
@@ -195,7 +194,6 @@ function MatchCard({
                             <View style={styles.liveMinuteContainer}>
                                 <Text style={styles.minuteText}>
                                     {liveMinute}
-                                    {stoppageSuffix}
                                 </Text>
                             </View>
                         )}
@@ -242,7 +240,7 @@ function MatchCard({
                                         ]}
                                     >
                                         {isLive || isStoppage
-                                            ? `${liveMinute}${stoppageSuffix}`
+                                            ? liveMinute || '–'
                                             : '–'}
                                     </Text>
                                     {isLive && <View style={[styles.liveBar, styles.liveBarActive]} />}

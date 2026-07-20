@@ -65,6 +65,36 @@ describe('classifyScores365MatchStatus', () => {
     expect(result.elapsed).toBe(98);
   });
 
+  it('parses stoppage from gameTimeDisplay when clock stays at 90', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '2nd Half',
+        shortStatusText: '2nd Half',
+        gameTime: 90,
+        gameTimeDisplay: '90+4',
+      }),
+    );
+    expect(result.short).toBe('2H');
+    expect(result.elapsed).toBe(90);
+    expect(result.extra).toBe(4);
+  });
+
+  it('parses first-half stoppage from gameTimeDisplay', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '1st Half',
+        shortStatusText: '1st Half',
+        gameTime: 45,
+        gameTimeDisplay: '45+2',
+      }),
+    );
+    expect(result.short).toBe('1H');
+    expect(result.elapsed).toBe(45);
+    expect(result.extra).toBe(2);
+  });
+
   it('maps finished after extra time to AET', () => {
     const result = classifyScores365MatchStatus(
       game({ statusGroup: 4, statusText: 'After Extra Time', shortStatusText: 'AET', gameTime: 120 }),

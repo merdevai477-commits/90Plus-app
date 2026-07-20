@@ -40,6 +40,8 @@ export interface Match {
   statusShort?: string; // Raw status from API (e.g., "1H", "2H", "HT")
   /** Raw elapsed minute from API — authoritative for live clock display */
   elapsed?: number | null;
+  /** Injury/stoppage minutes from API (`status.extra`) when elapsed stays at 45/90. */
+  extra?: number | null;
   minute?: string;
   startTimestamp?: number; // Timestamp of period start
   corners?: { home: number; away: number };

@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { FlashList } from '@shopify/flash-list';
-import { TEXT_PRIMARY, PURPLE_PRIMARY } from '../../constants/tokens';
+import { TEXT_PRIMARY, PURPLE_PRIMARY, LIVE_RED } from '../../constants/tokens';
 import { APP_BG } from '../../constants/ui';
 import { TEMP_FREEZE_PREDICTIONS_TAB_MATCHES } from '../../constants/tempSurfaceFreeze';
 import { useMatchesData } from '../../hooks/useMatchesData';
@@ -36,7 +36,7 @@ import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
 import { getWorldCupTimeLeft, WC_2026_OFFICIAL_LOGO } from '../../constants/worldCup';
 import type { ImageSource } from 'expo-image';
-import { resolveLiveMinuteLabel, resolveLiveSecondsLabel } from '../../components/Matches/leagueApiUtils';
+import { resolveLiveMinuteLabel, resolveLiveSecondsLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
 import { useSecondTick } from '../../hooks/useSecondTick';
 import {
   getSharedLivePulse,
@@ -94,6 +94,7 @@ function matchToFixture(m: Match): Fixture {
     status: mapStatus(m.status),
     minute: m.minute,
     elapsed: m.elapsed ?? null,
+    extra: m.extra ?? null,
     live: m.status === 'live',
     time: m.time,
     leagueName: m.league?.name,
@@ -180,6 +181,8 @@ type Fixture = {
   matchDate?: string;
   statusShort?: string;
   elapsed?: number | null;
+  /** Injury/stoppage minutes from API when elapsed stays at 45/90. */
+  extra?: number | null;
   startTimestamp?: number;
   corners?: { home: number; away: number };
   crowdPrediction?: {
@@ -341,12 +344,17 @@ const MatchRow = memo(function MatchRow({
   const sharedLivePulse = getSharedLivePulse();
 
   // Live MM:SS clock: tick every second only while this row is in normal play.
+  const shortUpper = (fixture.statusShort ?? '').toUpperCase();
+  const inStoppage = isLiveStoppage(fixture.statusShort, fixture.elapsed, fixture.extra);
   const liveInPlay =
-    !!fixture.live && ['1H', '2H', 'ET'].includes((fixture.statusShort ?? '').toUpperCase());
+    !!fixture.live &&
+    ['1H', '2H', 'ET'].includes(shortUpper) &&
+    !inStoppage;
   useSecondTick(liveInPlay);
   const liveClock = liveInPlay
     ? resolveLiveSecondsLabel(fixture.statusShort, fixture.elapsed, {
         startTimestamp: fixture.startTimestamp,
+        extra: fixture.extra,
       })
     : undefined;
 
@@ -437,11 +445,12 @@ const MatchRow = memo(function MatchRow({
             )}
             {fixture.live ? (
               <View style={styles.liveMetaCol}>
-                <Text style={styles.minuteTxtLive}>
+                <Text style={[styles.minuteTxtLive, inStoppage && styles.minuteTxtStoppage]}>
                   {liveClock ??
                     fixture.minute ??
                     resolveLiveMinuteLabel(fixture.statusShort, fixture.elapsed, {
                       startTimestamp: fixture.startTimestamp,
+                      extra: fixture.extra,
                     }) ??
                     fixture.statusShort ??
                     t('matches.status.live')}
@@ -2504,6 +2513,7 @@ const styles = StyleSheet.create({
   minuteTxt: { marginTop: 3, color: PURPLE_PRIMARY, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
   liveMetaCol: { marginTop: 3, alignItems: 'center', gap: 2 },
   minuteTxtLive: { color: '#f87171', fontSize: 15, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  minuteTxtStoppage: { color: LIVE_RED },
   cornersTxt: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '700', fontVariant: ['tabular-nums'] },
   viewAllBtn: { height: 46, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' },
   viewAllTxt: { color: PURPLE_PRIMARY, fontSize: 15, fontWeight: '800' },

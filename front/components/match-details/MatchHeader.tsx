@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import {
   formatMatchTime,
+  isLiveStoppage,
   resolveLiveMinuteLabel,
   resolveLiveSecondsLabel,
 } from '../../components/Matches/leagueApiUtils';
@@ -134,7 +135,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
     (FINISHED_STATUSES.includes(short) || (status === 'finished' && !isPaused));
   const isUpcoming =
     !isLive && !isFinished && !isHalftime && !isNotPlayed && !isPaused;
-  const isStoppage = isLive && !!stoppage && stoppage > 0;
+  const isStoppage = isLive && isLiveStoppage(short, elapsed, stoppage);
   const hasPenaltyScore =
     penaltyHome != null &&
     penaltyAway != null &&
@@ -159,17 +160,17 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   // Computed every render (the second-tick forces a re-render) so the MM:SS
   // clock advances. Falls back to the minute-only label outside normal play.
   const secondsLabel = clockActive
-    ? resolveLiveSecondsLabel(short, elapsed, { startTimestamp })
+    ? resolveLiveSecondsLabel(short, elapsed, { startTimestamp, extra: stoppage })
     : undefined;
   const minuteLabel =
     secondsLabel ??
-    resolveLiveMinuteLabel(short, elapsed, { startTimestamp }) ??
+    resolveLiveMinuteLabel(short, elapsed, { startTimestamp, extra: stoppage }) ??
     (isLive ? short || liveLabel : '');
 
+  // Score separator shows the same clear clock (`90+4'`) during stoppage —
+  // never a bare `+4` that hides which period we're in.
   const sepText = isLive
-    ? isStoppage
-      ? `+${stoppage}`
-      : minuteLabel
+    ? minuteLabel
     : isFinished
     ? finishedLabel
     : isHalftime
@@ -220,9 +221,6 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
             <View style={[styles.liveMinuteContainer, styles.liveMinuteBorder]}>
               <Text style={[styles.minuteText, isStoppage && { color: LIVE_RED }]}>
                 {minuteLabel}
-                {isStoppage ? (
-                  <Text style={styles.stoppageInline}> +{stoppage}</Text>
-                ) : null}
               </Text>
               <PulsingDot color={LIVE_RED} />
             </View>

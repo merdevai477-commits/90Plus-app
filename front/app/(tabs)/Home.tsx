@@ -777,6 +777,10 @@ export default function HomeScreen() {
                 },
                 status: deriveHomeMatchListStatus(liveRow, m),
                 minute: liveRow?.minute ?? m.minute,
+                stoppageTime:
+                  liveRow?.extra != null && liveRow.extra > 0
+                    ? liveRow.extra
+                    : m.stoppageTime ?? undefined,
                 league: m.league,
                 leagueId: m.leagueId,
                 kickoff: m.time,

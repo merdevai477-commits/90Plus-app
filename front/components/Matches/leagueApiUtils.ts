@@ -72,12 +72,52 @@ export const estimateElapsedFromPeriodStart = (
   return diffMin;
 };
 
+/** Cap announced / running stoppage minutes for display. */
+const clampStoppage = (n: number): number => Math.min(Math.max(Math.floor(n), 1), 15);
+
+/**
+ * Build `45+2'` / `90+4'` / `120+3'` from period base, elapsed, and optional API `extra`.
+ * Prefer elapsed overflow when the clock already advanced past the period end;
+ * otherwise use `extra` when the feed keeps elapsed pinned at 45/90/120.
+ */
+export const formatStoppageMinute = (
+  base: number,
+  elapsed: number,
+  extra?: number | null,
+): string => {
+  if (elapsed > base) return `${base}+${clampStoppage(elapsed - base)}'`;
+  if (extra != null && extra > 0 && elapsed >= base) {
+    return `${base}+${clampStoppage(extra)}'`;
+  }
+  return `${elapsed}'`;
+};
+
+/** True when the match clock is in injury/stoppage time. */
+export const isLiveStoppage = (
+  statusShort: string | undefined | null,
+  elapsed?: number | null,
+  extra?: number | null,
+): boolean => {
+  const short = (statusShort ?? '').trim();
+  const hasExtra = extra != null && extra > 0;
+  if (short === '1H') return hasExtra || (elapsed != null && elapsed > 45);
+  if (short === '2H' || short === 'LIVE') {
+    return hasExtra || (elapsed != null && elapsed > 90);
+  }
+  if (short === 'ET') {
+    return hasExtra || (elapsed != null && elapsed > 120);
+  }
+  return false;
+};
+
 /**
  * Live minute label shared by list cards and match-details header.
+ * Always prefers clear stoppage form: `90+4'` / `45+2'` (not bare `90'`).
  */
 export const formatLiveMinuteDisplay = (
   statusShort: string,
   elapsed: number | null | undefined,
+  extra?: number | null,
 ): string | undefined => {
   const status = statusShort;
   if (status === 'FT' || status === 'AET') return undefined;
@@ -86,14 +126,18 @@ export const formatLiveMinuteDisplay = (
   if (status === 'BT') return 'BT';
 
   if (status === 'ET' && elapsed != null) {
-    if (elapsed > 90) return `90+${elapsed - 90}' (ET)`;
+    if (elapsed > 120 || (elapsed >= 120 && extra != null && extra > 0)) {
+      return `${formatStoppageMinute(120, elapsed, extra)} (ET)`;
+    }
+    if (elapsed > 90) return `${formatStoppageMinute(90, elapsed, extra)} (ET)`;
     return `${elapsed}' (ET)`;
   }
 
-  if ((status === '1H' || status === '2H') && elapsed != null) {
-    if (status === '1H' && elapsed > 45) return `45+${Math.min(elapsed - 45, 15)}'`;
-    if (status === '2H' && elapsed > 90) return `90+${Math.min(elapsed - 90, 15)}'`;
-    return `${elapsed}'`;
+  if ((status === '1H' || status === '2H' || status === 'LIVE') && elapsed != null) {
+    if (status === '1H' || (status === 'LIVE' && elapsed <= 45)) {
+      return formatStoppageMinute(45, elapsed, status === '1H' || elapsed >= 45 ? extra : null);
+    }
+    return formatStoppageMinute(90, elapsed, extra);
   }
 
   return undefined;
@@ -106,18 +150,18 @@ export const formatLiveMinuteDisplay = (
 export const resolveLiveMinuteLabel = (
   statusShort: string | undefined | null,
   elapsed: number | null | undefined,
-  options?: { startTimestamp?: number },
+  options?: { startTimestamp?: number; extra?: number | null },
 ): string | undefined => {
   const short = (statusShort ?? '').trim();
   if (!short || !LIVE_STATUS_SHORTS.has(short)) return undefined;
 
-  const fromApi = formatLiveMinuteDisplay(short, elapsed);
+  const fromApi = formatLiveMinuteDisplay(short, elapsed, options?.extra);
   if (fromApi) return fromApi;
 
   if (elapsed == null && options?.startTimestamp) {
     const estimated = estimateElapsedFromPeriodStart(short, options.startTimestamp);
     if (estimated != null) {
-      return formatLiveMinuteDisplay(short, estimated);
+      return formatLiveMinuteDisplay(short, estimated, options?.extra);
     }
   }
 
@@ -139,10 +183,13 @@ export const resolveLiveMinuteLabel = (
 export const resolveLiveSecondsLabel = (
   statusShort: string | undefined | null,
   elapsed: number | null | undefined,
-  options?: { startTimestamp?: number },
+  options?: { startTimestamp?: number; extra?: number | null },
 ): string | undefined => {
   const short = (statusShort ?? '').trim();
   if (short !== '1H' && short !== '2H' && short !== 'ET') return undefined;
+
+  // Injury / stoppage time uses the minute-only `90+4'` label, not MM:SS.
+  if (isLiveStoppage(short, elapsed, options?.extra)) return undefined;
 
   const start = options?.startTimestamp;
   if (!start) return undefined;
@@ -174,8 +221,9 @@ export const resolveLiveSecondsLabel = (
 export const formatMatchMinute = (fixture: Fixture): string | undefined => {
   const status = fixture.fixture.status.short;
   const elapsed = fixture.fixture.status.elapsed;
+  const extra = fixture.fixture.status.extra ?? null;
 
-  return formatLiveMinuteDisplay(status, elapsed);
+  return formatLiveMinuteDisplay(status, elapsed, extra);
 };
 
 /**
@@ -218,6 +266,7 @@ export const mapFixtureToMatch = (fixture: Fixture): Match => {
     status: mapFixtureStatus(fixture.fixture.status.short, fixture.fixture.status.elapsed),
     statusShort: fixture.fixture.status.short,
     elapsed: fixture.fixture.status.elapsed ?? null,
+    extra: fixture.fixture.status.extra ?? null,
     minute: formatMatchMinute(fixture),
     startTimestamp: fixture.fixture.status.short === '2H'
       ? fixture.fixture.periods.second || undefined

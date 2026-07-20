@@ -2011,7 +2011,7 @@ const MatchDetailsScreen = () => {
       fixtureDate={fixture?.fixture?.date}
       statusShort={fixture?.fixture?.status?.short}
       elapsed={fixture?.fixture?.status?.elapsed ?? undefined}
-      stoppage={(fixture?.fixture?.status as { extra?: number | null } | undefined)?.extra ?? null}
+      stoppage={fixture?.fixture?.status?.extra ?? null}
       startTimestamp={fixture ? getPeriodStartTimestamp(fixture) : undefined}
       statusLabel={
         fixture?.fixture?.status?.short

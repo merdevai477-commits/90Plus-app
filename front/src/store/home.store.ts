@@ -9,6 +9,7 @@ import { cacheService } from '../../services/cacheService';
 import { useAppFeaturesStore } from '../stores/appFeaturesStore';
 import {
     fetchWorldCupMatchesByDate,
+    formatLiveMinuteDisplay,
     formatMatchTime,
 } from '../../components/Matches/leagueApiUtils';
 import { resolvePublicFirstName } from '../../hooks/useProfileCache';
@@ -43,6 +44,8 @@ export interface Match {
     fixtureId: number;
     startTimestamp?: number;
     statusShort?: string;
+    /** Injury/stoppage minutes when API keeps elapsed at 45/90. */
+    stoppageTime?: number | null;
     date?: string; // ✅ Added date
 }
 
@@ -323,36 +326,13 @@ const refreshMatchesInBackground = async (
 const mapFixtureToMatch = (fixture: Fixture, isFavorited: boolean = false): Match => {
     const isLive = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE'].includes(fixture.fixture.status.short);
 
-    // Get minute for live matches using unified status engine
-    let minute: string | undefined;
-    if (isLive) {
-        const status = fixture.fixture.status.short;
-        const elapsed = fixture.fixture.status.elapsed;
-        
-        // Use unified status logic: never show > 90 minutes directly
-        if (status === 'HT') {
-            minute = 'HT';
-        } else if (status === 'ET' && elapsed !== null && elapsed !== undefined) {
-            if (elapsed > 90) {
-                minute = `90+${elapsed - 90}' (ET)`;
-            } else {
-                minute = `${elapsed}' (ET)`;
-            }
-        } else if ((status === '1H' || status === '2H') && elapsed !== null && elapsed !== undefined) {
-            // First half: show 45+X after 45 minutes
-            if (status === '1H' && elapsed > 45) {
-                minute = `45+${elapsed - 45}'`;
-            }
-            // Second half: show 90+X after 90 minutes
-            else if (status === '2H' && elapsed > 90) {
-                minute = `90+${elapsed - 90}'`;
-            } else {
-                minute = `${elapsed}'`;
-            }
-        } else if (status === 'P' || status === 'PEN') {
-            minute = 'PEN';
-        }
-    }
+    const status = fixture.fixture.status.short;
+    const elapsed = fixture.fixture.status.elapsed;
+    const extra = fixture.fixture.status.extra ?? null;
+    const minute = isLive
+      ? formatLiveMinuteDisplay(status, elapsed, extra) ??
+        (status === 'P' || status === 'PEN' ? 'PEN' : undefined)
+      : undefined;
 
     const timeString = formatMatchTime(fixture.fixture.date);
     const statusShort = fixture.fixture.status.short;
@@ -375,6 +355,7 @@ const mapFixtureToMatch = (fixture: Fixture, isFavorited: boolean = false): Matc
         homeLogo: fixture.teams.home.logo,
         awayLogo: fixture.teams.away.logo,
         minute,
+        stoppageTime: extra != null && extra > 0 ? extra : null,
         statusShort: fixture.fixture.status.short,
         date: fixture.fixture.date, // ✅ Map date
         startTimestamp: fixture.fixture.status.short === '2H'

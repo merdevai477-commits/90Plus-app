@@ -55,6 +55,7 @@ interface FixtureFromAPI {
             long: string;
             short: string;
             elapsed: number | null;
+            extra?: number | null;
         };
     };
     league: {

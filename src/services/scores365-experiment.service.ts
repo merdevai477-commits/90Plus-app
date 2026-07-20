@@ -834,24 +834,53 @@ async function map365GameToFixture(
   );
 }
 
+/** Parse injury/stoppage from 365 `gameTimeDisplay` like `90+4`, `45+2`, `+3'`. */
+function parse365StoppageExtra(
+  displayRaw: string,
+  minute: number | null,
+): number | null {
+  const display = displayRaw.trim();
+  if (!display) return null;
+  const plusMatch = display.match(/(\d+)\s*\+\s*(\d+)/);
+  if (plusMatch) {
+    const n = Number(plusMatch[2]);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 15) : null;
+  }
+  const barePlus = display.match(/^\+?\s*(\d+)\s*'?$/);
+  if (barePlus && minute != null && (minute === 45 || minute === 90 || minute === 105 || minute === 120)) {
+    const n = Number(barePlus[1]);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 15) : null;
+  }
+  return null;
+}
+
 /** Status rules validated against 365Scores feed (statusGroup, score -1, statusText). */
 export function classifyScores365MatchStatus(
   game: Scores365Game,
-): { short: string; long: string; elapsed: number | null } {
+): { short: string; long: string; elapsed: number | null; extra: number | null } {
   const homeRaw = game.homeCompetitor?.score;
   const awayRaw = game.awayCompetitor?.score;
   const text = (game.statusText ?? '').toLowerCase();
   const shortCode = (game.shortStatusText ?? '').trim().toLowerCase();
-  const display = (game.gameTimeDisplay ?? '').trim().toLowerCase();
+  const displayRaw = (game.gameTimeDisplay ?? '').trim();
+  const display = displayRaw.toLowerCase();
   const minuteRaw = game.gameTime;
   const minute =
     minuteRaw != null && minuteRaw >= 0 ? Math.floor(minuteRaw) : null;
   const statusGroup = game.statusGroup;
+  const stoppageFromDisplay = parse365StoppageExtra(displayRaw, minute);
 
   // Combined haystack across all textual status hints (365 forces EN upstream by
   // default, so English matches are primary; Arabic kept as best-effort).
   const hay = `${text} ${shortCode} ${display}`;
   const has = (...subs: string[]): boolean => subs.some((s) => hay.includes(s));
+
+  const withExtra = (
+    short: string,
+    long: string,
+    elapsed: number | null,
+    extra: number | null = null,
+  ) => ({ short, long, elapsed, extra });
 
   // ── Special match states — detected BEFORE the score/-1/statusGroup rules,
   //    because these carry score -1 (cancelled/postponed) or statusGroup 4
@@ -859,7 +888,7 @@ export function classifyScores365MatchStatus(
 
   // Cancelled — terminal, never played to a result.
   if (has('cancel', 'ملغا', 'ألغيت', 'الغيت') || shortCode === 'canc' || shortCode === 'cnc') {
-    return { short: 'CANC', long: 'Match Cancelled', elapsed: null };
+    return withExtra('CANC', 'Match Cancelled', null);
   }
 
   // Postponed — rescheduled to a later date.
@@ -869,13 +898,13 @@ export function classifyScores365MatchStatus(
     shortCode === 'postp' ||
     shortCode === 'pst'
   ) {
-    return { short: 'PST', long: 'Match Postponed', elapsed: null };
+    return withExtra('PST', 'Match Postponed', null);
   }
 
   // Abandoned — started but not resumed (distinct from cancelled).
   if (has('abandon', 'walkover', 'awarded', 'بالانسحاب') || shortCode === 'abd' || shortCode === 'wo') {
     const short = has('walkover', 'awarded', 'بالانسحاب') ? 'WO' : 'ABD';
-    return { short, long: short === 'WO' ? 'Walkover' : 'Match Abandoned', elapsed: null };
+    return withExtra(short, short === 'WO' ? 'Walkover' : 'Match Abandoned', null);
   }
 
   // Penalty shootout — must be checked before the generic finished/live rules.
@@ -887,9 +916,9 @@ export function classifyScores365MatchStatus(
   if (mentionsPenalties) {
     // Finished after penalties vs. shootout currently in progress.
     if (statusGroup === 4 || has('after', 'ended', 'انته', 'full')) {
-      return { short: 'PEN', long: 'Penalty Shootout - Finished', elapsed: 120 };
+      return withExtra('PEN', 'Penalty Shootout - Finished', 120);
     }
-    return { short: 'P', long: 'Penalty Shootout', elapsed: 120 };
+    return withExtra('P', 'Penalty Shootout', 120);
   }
 
   // Extra time (live) / after extra time (finished) / break before ET.
@@ -903,37 +932,37 @@ export function classifyScores365MatchStatus(
     shortCode === 'aet2';
   if (mentionsExtraTime) {
     if (statusGroup === 4 || has('after extra', 'ended', 'انته', 'full time')) {
-      return { short: 'AET', long: 'After Extra Time', elapsed: 120 };
+      return withExtra('AET', 'After Extra Time', 120);
     }
     if (has('break', 'استراح', 'فاصل')) {
-      return { short: 'BT', long: 'Extra Time Break', elapsed: 105 };
+      return withExtra('BT', 'Extra Time Break', 105);
     }
     const el = minute != null ? Math.min(Math.max(minute, 91), 120) : 91;
-    return { short: 'ET', long: 'Extra Time', elapsed: el };
+    return withExtra('ET', 'Extra Time', el, stoppageFromDisplay);
   }
 
   // Interrupted — temporarily halted, expected to resume (kept live so the
   // client keeps polling and shows the last minute).
   if (has('interrupt', 'انقطع', 'انقطاع') || shortCode === 'int') {
-    return { short: 'INT', long: 'Match Interrupted', elapsed: minute };
+    return withExtra('INT', 'Match Interrupted', minute, stoppageFromDisplay);
   }
 
   // Suspended — halted, may resume later (also kept polling).
   if (has('suspend', 'معلق', 'موقوف') || shortCode === 'susp' || shortCode === 'sus') {
-    return { short: 'SUSP', long: 'Match Suspended', elapsed: minute };
+    return withExtra('SUSP', 'Match Suspended', minute, stoppageFromDisplay);
   }
 
   if (homeRaw === -1 || awayRaw === -1) {
-    return { short: 'NS', long: 'Not Started', elapsed: null };
+    return withExtra('NS', 'Not Started', null);
   }
 
   // 365 statusGroup: 2 = scheduled, 3 = live, 4 = finished (verified on allscores).
   if (statusGroup === 2) {
-    return { short: 'NS', long: 'Not Started', elapsed: null };
+    return withExtra('NS', 'Not Started', null);
   }
 
   if (statusGroup === 4) {
-    return { short: 'FT', long: 'Match Finished', elapsed: 90 };
+    return withExtra('FT', 'Match Finished', 90);
   }
 
   if (
@@ -942,7 +971,7 @@ export function classifyScores365MatchStatus(
     shortCode === 'ns' ||
     shortCode === 'sched'
   ) {
-    return { short: 'NS', long: 'Not Started', elapsed: null };
+    return withExtra('NS', 'Not Started', null);
   }
 
   const isFinishedText =
@@ -960,18 +989,18 @@ export function classifyScores365MatchStatus(
     display.includes('ended');
 
   if (isFinishedText) {
-    return { short: 'FT', long: 'Match Finished', elapsed: 90 };
+    return withExtra('FT', 'Match Finished', 90);
   }
 
   // Stale/high clocks — finished matches sometimes keep gameTime > 90 without FT text.
   if (minute != null && minute > 120) {
-    return { short: 'FT', long: 'Match Finished', elapsed: 90 };
+    return withExtra('FT', 'Match Finished', 90);
   }
   if (statusGroup !== 3 && minute != null && minute >= 90) {
-    return { short: 'FT', long: 'Match Finished', elapsed: 90 };
+    return withExtra('FT', 'Match Finished', 90);
   }
   if (minute != null && minute > 105) {
-    return { short: 'FT', long: 'Match Finished', elapsed: 90 };
+    return withExtra('FT', 'Match Finished', 90);
   }
 
   if (
@@ -981,7 +1010,7 @@ export function classifyScores365MatchStatus(
     text.includes('half-time') ||
     shortCode === 'ht'
   ) {
-    return { short: 'HT', long: 'Halftime', elapsed: 45 };
+    return withExtra('HT', 'Halftime', 45);
   }
 
   // 2nd half — require live statusGroup OR explicit 2nd-half text (not minute > 45 alone).
@@ -995,11 +1024,16 @@ export function classifyScores365MatchStatus(
   ) {
     const elapsed =
       minute != null ? Math.min(Math.max(minute, 46), 105) : 46;
-    return {
-      short: '2H',
-      long: 'Second Half',
-      elapsed,
-    };
+    // When clock is still at 90 but display is `90+4`, keep elapsed at 90 and set extra.
+    const pinnedExtra =
+      elapsed === 90 && stoppageFromDisplay != null
+        ? stoppageFromDisplay
+        : elapsed > 90
+          ? null
+          : stoppageFromDisplay;
+    const displayElapsed =
+      elapsed === 90 && pinnedExtra != null ? 90 : elapsed;
+    return withExtra('2H', 'Second Half', displayElapsed, pinnedExtra);
   }
 
   if (
@@ -1010,21 +1044,31 @@ export function classifyScores365MatchStatus(
     shortCode === '1h' ||
     (statusGroup === 3 && minute != null && minute > 0 && minute <= 45)
   ) {
-    return { short: '1H', long: 'First Half', elapsed: minute };
+    const elapsed = minute;
+    const pinnedExtra =
+      elapsed === 45 && stoppageFromDisplay != null
+        ? stoppageFromDisplay
+        : elapsed != null && elapsed > 45
+          ? null
+          : stoppageFromDisplay;
+    return withExtra('1H', 'First Half', elapsed, pinnedExtra);
   }
 
   if (statusGroup === 3) {
-    return {
-      short: 'LIVE',
-      long: 'In Progress',
-      elapsed: minute != null ? Math.min(minute, 105) : null,
-    };
+    return withExtra(
+      'LIVE',
+      'In Progress',
+      minute != null ? Math.min(minute, 105) : null,
+      stoppageFromDisplay,
+    );
   }
 
-  return { short: 'NS', long: 'Not Started', elapsed: null };
+  return withExtra('NS', 'Not Started', null);
 }
 
-function map365Status(game: Scores365Game): { short: string; long: string; elapsed: number | null } {
+function map365Status(
+  game: Scores365Game,
+): { short: string; long: string; elapsed: number | null; extra: number | null } {
   return classifyScores365MatchStatus(game);
 }
 
@@ -1138,6 +1182,7 @@ export function synthesizeBaseFrom365Game(
         long: status.long,
         short: status.short,
         elapsed: status.elapsed,
+        extra: status.extra ?? null,
       },
     },
     league: {
@@ -2003,6 +2048,7 @@ export async function mapScores365ToApiFootballFixture(
         long: status.long,
         short: status.short,
         elapsed: status.elapsed,
+        extra: status.extra ?? null,
       },
       venue: {
         id: game.venue?.id ?? base.fixture.venue?.id ?? null,

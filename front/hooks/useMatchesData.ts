@@ -132,6 +132,7 @@ function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Match[]): M
             score: liveRow.score,
             minute: liveRow.minute ?? existing.minute,
             elapsed: liveRow.elapsed ?? existing.elapsed,
+            extra: liveRow.extra ?? existing.extra,
             statusShort: liveRow.statusShort ?? existing.statusShort,
           }
         : liveRow,
