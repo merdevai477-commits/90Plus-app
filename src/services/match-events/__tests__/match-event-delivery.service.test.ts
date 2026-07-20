@@ -2,6 +2,11 @@ import { isPushNotifiableMatchEvent } from '../match-event-delivery.service';
 import { diffScoreGoals, diffStatusEvents } from '../match-event-normalizer';
 import type { NormalizedMatchEvent } from '../match-event.types';
 import { NotificationType } from '../../notification.service';
+import {
+    localizeMatchVarDetail,
+    normalizeSupportedLanguage,
+    renderPushTemplate,
+} from '../../push-templates.service';
 
 function baseEvent(eventType: NormalizedMatchEvent['eventType']): NormalizedMatchEvent {
     return {
@@ -28,9 +33,10 @@ function legacyEvent(eventType: string): NormalizedMatchEvent {
 }
 
 describe('isPushNotifiableMatchEvent', () => {
-    it('allows only goals, kickoff, red card, VAR, and fulltime', () => {
+    it('allows goals, cancelled goals, kickoff, red card, VAR, and fulltime', () => {
         expect(isPushNotifiableMatchEvent(baseEvent('goal_home'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('goal_away'))).toBe(true);
+        expect(isPushNotifiableMatchEvent(baseEvent('goal_cancelled'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('kickoff'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('card_red'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('var'))).toBe(true);
@@ -98,6 +104,55 @@ describe('diffScoreGoals', () => {
 
         expect(events).toHaveLength(1);
         expect(events[0].eventType).toBe('goal_home');
+        expect(events[0].bodyKey).toBe('goalScoreBody');
         expect(events[0].payload).toMatchObject({ homeScore: 1, awayScore: 0 });
+    });
+
+    it('emits goal_cancelled when the scoreboard drops', () => {
+        const events = diffScoreGoals(
+            7,
+            { homeScore: 2, awayScore: 0 },
+            { homeScore: 1, awayScore: 0 },
+            meta,
+        );
+
+        expect(events).toHaveLength(1);
+        expect(events[0].eventType).toBe('goal_cancelled');
+        expect(events[0].titleKey).toBe('goalCancelledTitle');
+        expect(events[0].payload).toMatchObject({
+            cancelledTeam: 'home',
+            homeScore: 1,
+            awayScore: 0,
+        });
+    });
+});
+
+describe('push language helpers', () => {
+    it('normalizes locale tags to ar/en', () => {
+        expect(normalizeSupportedLanguage('ar')).toBe('ar');
+        expect(normalizeSupportedLanguage('ar-EG')).toBe('ar');
+        expect(normalizeSupportedLanguage('en-US')).toBe('en');
+        expect(normalizeSupportedLanguage('fr')).toBe('en');
+    });
+
+    it('localizes common VAR details for Arabic pushes', () => {
+        expect(localizeMatchVarDetail('Goal cancelled', 'ar')).toBe('إلغاء هدف');
+        expect(localizeMatchVarDetail('Goal Disallowed - Offside', 'ar')).toContain('تسلل');
+        expect(localizeMatchVarDetail('Goal cancelled', 'en')).toBe('Goal cancelled');
+    });
+
+    it('renders goal and cancel copy in the user language', () => {
+        expect(renderPushTemplate('goalTitle', 'ar')).toContain('هدف');
+        expect(renderPushTemplate('goalCancelledTitle', 'ar')).toContain('إلغاء');
+        expect(
+            renderPushTemplate('goalScoreBody', 'ar', {
+                scorer: 'الأهلي',
+                home: 'الأهلي',
+                away: 'الزمالك',
+                homeScore: 1,
+                awayScore: 0,
+            }),
+        ).toContain('الأهلي');
+        expect(renderPushTemplate('goalTitle', 'en')).toContain('Goal');
     });
 });

@@ -22,16 +22,35 @@ function buildPushPayload(sub: SubscriptionRow, event: NormalizedMatchEvent) {
         matchDate: sub.matchDate,
     };
 
-    let vars = event.templateVars;
-    let customMessage: string | undefined;
+    let vars = { ...event.templateVars };
 
     if (event.eventType === 'goal_home' || event.eventType === 'goal_away') {
         const side = event.eventType === 'goal_home' ? 'home' : 'away';
         const scorer = side === 'home' ? sub.homeTeam : sub.awayTeam;
         const homeScore = Number(event.payload.homeScore ?? 0);
         const awayScore = Number(event.payload.awayScore ?? 0);
-        customMessage = `${scorer} — ${sub.homeTeam} ${homeScore} - ${awayScore} ${sub.awayTeam}`;
-        vars = { ...vars, scorer, homeScore, awayScore };
+        vars = {
+            ...vars,
+            scorer,
+            team: scorer,
+            home: sub.homeTeam,
+            away: sub.awayTeam,
+            homeScore,
+            awayScore,
+        };
+    }
+
+    if (event.eventType === 'goal_cancelled') {
+        const side = String(event.payload.cancelledTeam ?? 'home') === 'away' ? 'away' : 'home';
+        const team = side === 'home' ? sub.homeTeam : sub.awayTeam;
+        vars = {
+            ...vars,
+            team,
+            home: sub.homeTeam,
+            away: sub.awayTeam,
+            homeScore: Number(event.payload.homeScore ?? 0),
+            awayScore: Number(event.payload.awayScore ?? 0),
+        };
     }
 
     return {
@@ -42,7 +61,7 @@ function buildPushPayload(sub: SubscriptionRow, event: NormalizedMatchEvent) {
         notificationType: event.notificationType,
         titleKey: event.titleKey,
         bodyKey: event.bodyKey,
-        message: customMessage,
+        // Never hard-code copy here — processor renders localized templates.
         vars,
         prefKey: event.prefKey,
         data: {

@@ -41,6 +41,11 @@ export function shouldDeliverToSubscription(
         return !isBaselinedGoal(sub, event);
     }
 
+    // Score drops after subscribe are always relevant (VAR / disallowed goals).
+    if (event.eventType === 'goal_cancelled') {
+        return true;
+    }
+
     if (event.minute != null && event.minute > 0) {
         if (isEventBeforeSubscribeMinute(sub, event.minute)) return false;
     }
@@ -79,7 +84,11 @@ export async function updateSubscriptionFlags(
         await PredictionResolverService.resolveMatchPredictions(sub.apiMatchId, homeScore, awayScore);
     }
 
-    if (event.eventType === 'goal_home' || event.eventType === 'goal_away') {
+    if (
+        event.eventType === 'goal_home' ||
+        event.eventType === 'goal_away' ||
+        event.eventType === 'goal_cancelled'
+    ) {
         const homeScore = Number(event.payload.homeScore ?? 0);
         const awayScore = Number(event.payload.awayScore ?? 0);
         data.lastHomeScore = homeScore;

@@ -115,6 +115,7 @@ export class LiveMatchIngestorService {
             this.pendingSyncIngest.delete(fixtureId);
             void this.ingestFixtureById(fixtureId, {
                 forceRefreshEvents: true,
+                // Fresh events feed for VAR / cards on every live-sync tick.
                 forceApiRefresh: false,
             }).catch((err) =>
                 logger.warn(`[LiveMatchIngestor] sync-trigger ingest ${fixtureId} failed:`, err?.message),

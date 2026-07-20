@@ -3,6 +3,7 @@ import type { PushTemplateKey } from '../push-templates.service';
 import {
     buildMatchEventKey,
     buildScoreGoalEventKey,
+    buildScoreCancelledEventKey,
     buildStatusEventKey,
 } from '../../utils/match-event-key.util';
 import type { MatchEventKind, NormalizedMatchEvent, FixtureSnapshot } from './match-event.types';
@@ -141,6 +142,20 @@ export function diffScoreGoals(
         out.push(buildGoalEvent(fixtureId, 'away', current.homeScore, a, eventKey, now, meta));
     }
 
+    // Scoreboard drop → goal cancelled / disallowed (common after VAR).
+    for (let h = prevHome; h > current.homeScore; h--) {
+        const homeScore = h - 1;
+        const awayScore = current.awayScore;
+        const eventKey = buildScoreCancelledEventKey(fixtureId, 'home', homeScore, awayScore);
+        out.push(buildCancelledGoalEvent(fixtureId, 'home', homeScore, awayScore, eventKey, now, meta));
+    }
+    for (let a = prevAway; a > current.awayScore; a--) {
+        const homeScore = current.homeScore;
+        const awayScore = a - 1;
+        const eventKey = buildScoreCancelledEventKey(fixtureId, 'away', homeScore, awayScore);
+        out.push(buildCancelledGoalEvent(fixtureId, 'away', homeScore, awayScore, eventKey, now, meta));
+    }
+
     return out;
 }
 
@@ -166,6 +181,7 @@ function buildGoalEvent(
         payload: { scoringTeam: side, homeScore, awayScore },
         templateVars: {
             scorer,
+            team: scorer,
             home: meta.homeTeam,
             away: meta.awayTeam,
             homeScore,
@@ -173,7 +189,7 @@ function buildGoalEvent(
         },
         notificationType: NotificationType.MATCH_GOAL,
         titleKey: 'goalTitle',
-        bodyKey: 'goalTitle',
+        bodyKey: 'goalScoreBody',
         prefKey: 'matchGoals',
         data: {
             type: 'MATCH_GOAL',
@@ -181,6 +197,49 @@ function buildGoalEvent(
             homeScore,
             awayScore,
             scoringTeam: side,
+            homeTeam: meta.homeTeam,
+            awayTeam: meta.awayTeam,
+        },
+    };
+}
+
+function buildCancelledGoalEvent(
+    fixtureId: number,
+    side: 'home' | 'away',
+    homeScore: number,
+    awayScore: number,
+    eventKey: string,
+    detectedAt: Date,
+    meta: { homeTeam: string; awayTeam: string },
+): NormalizedMatchEvent {
+    const team = side === 'home' ? meta.homeTeam : meta.awayTeam;
+    return {
+        fixtureId,
+        eventKey,
+        eventType: 'goal_cancelled',
+        minute: null,
+        extraMinute: null,
+        teamId: null,
+        playerId: null,
+        detectedAt,
+        payload: { cancelledTeam: side, homeScore, awayScore },
+        templateVars: {
+            team,
+            home: meta.homeTeam,
+            away: meta.awayTeam,
+            homeScore,
+            awayScore,
+        },
+        notificationType: NotificationType.MATCH_UPDATE,
+        titleKey: 'goalCancelledTitle',
+        bodyKey: 'goalCancelledBody',
+        prefKey: 'matchGoals',
+        data: {
+            type: 'MATCH_GOAL_CANCELLED',
+            eventKind: 'goal_cancelled',
+            homeScore,
+            awayScore,
+            cancelledTeam: side,
             homeTeam: meta.homeTeam,
             awayTeam: meta.awayTeam,
         },

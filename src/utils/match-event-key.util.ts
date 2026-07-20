@@ -43,6 +43,19 @@ export function buildScoreGoalEventKey(
     });
 }
 
+/** Stable key when the scoreboard drops (VAR / disallowed goal). */
+export function buildScoreCancelledEventKey(
+    fixtureId: number,
+    side: 'home' | 'away',
+    homeScore: number,
+    awayScore: number,
+): string {
+    return buildMatchEventKey(fixtureId, {
+        eventType: 'goal_cancelled',
+        scoreMarker: `${side}:${homeScore}-${awayScore}`,
+    });
+}
+
 /** Stable key for status-transition events (kickoff, HT, FT). */
 export function buildStatusEventKey(fixtureId: number, eventType: string, status: string): string {
     return buildMatchEventKey(fixtureId, {

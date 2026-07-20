@@ -6,7 +6,7 @@
 import prisma from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { claimNotifyIdempotency } from '../notify.service';
-import { renderPushTemplate, getUserLanguage } from '../push-templates.service';
+import { renderPushTemplate, getUserLanguage, localizeMatchVarDetail } from '../push-templates.service';
 import { NotificationService } from '../notification.service';
 import type { MatchEventPushJob } from '../../queues/match-event-push.queue';
 import {
@@ -54,17 +54,23 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
     }
 
     const lang = await getUserLanguage(userId);
+    const vars: Record<string, string | number> = { ...(job.vars ?? {}) };
+    if (event.eventType === 'var' && vars.detail != null) {
+        vars.detail = localizeMatchVarDetail(String(vars.detail), lang);
+    }
+
     let title: string | undefined;
     let message: string | undefined;
 
-    if (job.message) {
+    // Prefer localized templates so Arabic/English matches User.settings.language.
+    if (job.titleKey && job.bodyKey) {
+        title = renderPushTemplate(job.titleKey as any, lang, vars);
+        message = renderPushTemplate(job.bodyKey as any, lang, vars);
+    } else if (job.message) {
         title = job.titleKey
-            ? renderPushTemplate(job.titleKey as any, lang, job.vars ?? {})
+            ? renderPushTemplate(job.titleKey as any, lang, vars)
             : renderPushTemplate('goalTitle', lang);
         message = job.message;
-    } else if (job.titleKey && job.bodyKey) {
-        title = renderPushTemplate(job.titleKey as any, lang, job.vars ?? {});
-        message = renderPushTemplate(job.bodyKey as any, lang, job.vars ?? {});
     }
 
     if (!title || !message) {

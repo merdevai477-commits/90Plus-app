@@ -8,6 +8,7 @@ import type { NotificationType } from '../notification.service';
 export const MATCH_PUSH_EVENT_KINDS = [
     'goal_home',
     'goal_away',
+    'goal_cancelled',
     'kickoff',
     'card_red',
     'var',

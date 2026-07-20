@@ -32,6 +32,9 @@ export type PushTemplateKey =
     | 'matchStartBody'
     | 'goalTitle'
     | 'goalBody'
+    | 'goalScoreBody'
+    | 'goalCancelledTitle'
+    | 'goalCancelledBody'
     | 'halftimeTitle'
     | 'halftimeBody'
     | 'matchSecondHalfTitle'
@@ -200,6 +203,9 @@ const en: TemplateMap = {
     matchStartBody: '{home} vs {away} — the match has started',
     goalTitle: '⚽ Goal!',
     goalBody: "{player} scores for {team} ({minute}')",
+    goalScoreBody: '{scorer} — {home} {homeScore}-{awayScore} {away}',
+    goalCancelledTitle: '🚫 Goal cancelled',
+    goalCancelledBody: '{team} — {home} {homeScore}-{awayScore} {away}',
     halftimeTitle: 'Half time',
     halftimeBody: '{home} {homeScore} - {awayScore} {away}',
     matchSecondHalfTitle: 'Second half',
@@ -355,7 +361,7 @@ const en: TemplateMap = {
     matchSubstitutionTitle: '🔁 Substitution',
     matchSubstitutionBody: "{playerIn} on for {playerOut} ({team}) - {minute}'",
     matchVarTitle: '📺 VAR review',
-    matchVarBody: "{team} - {detail} ({minute}')",
+    matchVarBody: "{team} — {detail} ({minute}')",
     matchPenaltyTitle: '🎯 Penalty!',
     matchPenaltyBody: "{team} awarded a penalty ({minute}')",
     matchLineupTitle: '📋 Lineup announced',
@@ -368,6 +374,9 @@ const ar: TemplateMap = {
     matchStartBody: '{home} ضد {away} — المباراة بدأت الآن',
     goalTitle: '⚽ هدف!',
     goalBody: '{player} يسجل لـ{team} في الدقيقة {minute}',
+    goalScoreBody: '{scorer} — {home} {homeScore}-{awayScore} {away}',
+    goalCancelledTitle: '🚫 تم إلغاء الهدف',
+    goalCancelledBody: '{team} — {home} {homeScore}-{awayScore} {away}',
     halftimeTitle: 'استراحة بين الشوطين',
     halftimeBody: '{home} {homeScore} - {awayScore} {away}',
     matchSecondHalfTitle: 'الشوط الثاني',
@@ -377,9 +386,9 @@ const ar: TemplateMap = {
     predictionWinTitle: '🎉 توقع صحيح!',
     predictionWinBody: 'كسبت {coins} كوينز في {match}',
     predictionLossTitle: '😔 توقع خاطئ',
-    predictionLossBody: 'توقعك في {match} ما اشتغلش',
-    predictionReminderTitle: '⏰ فيه ماتش جاي',
-    predictionReminderBody: '{match} هتبدأ قريب — حدّد توقعك',
+    predictionLossBody: 'توقعك في {match} لم يتحقق',
+    predictionReminderTitle: '⏰ مباراة قادمة',
+    predictionReminderBody: '{match} تبدأ قريبًا — حدّد توقعك',
     quizReminderTitle: '🎯 الكويز اليومي جاهز',
     quizReminderBody: 'اختبر معلوماتك الكروية واكسب عملات',
     newFollowerTitle: 'متابع جديد',
@@ -418,10 +427,10 @@ const ar: TemplateMap = {
     cooldownReelBody: 'تقدر ترفع فيديو جديد دلوقتي. شارك موهبتك مع الجمهور!',
     cooldownUsernameTitle: '✏️ غيّر اسمك!',
     cooldownUsernameBody: 'تقدر تغير اسم المستخدم دلوقتي.',
-    videoReadyTitle: '✅ فيديوهك جاهز!',
-    videoReadyBody: 'تم معالجة فيديوهك بنجاح وهو متاح الآن للمشاهدة.',
+    videoReadyTitle: '✅ فيديوك جاهز!',
+    videoReadyBody: 'تمت معالجة فيديوك بنجاح وهو متاح الآن للمشاهدة.',
     videoFailedTitle: '❌ فشل رفع الفيديو',
-    videoFailedBody: 'حدث خطأ أثناء معالجة فيديوهك. حاول تاني من البروفايل.',
+    videoFailedBody: 'حدث خطأ أثناء معالجة فيديوك. حاول مرة أخرى من الملف الشخصي.',
     avatarUpdatedTitle: '🖼️ صورة البروفايل',
     avatarUpdatedBody: 'تم تحديث صورة البروفايل بنجاح.',
     coverUpdatedTitle: '🎨 صورة الغلاف',
@@ -476,10 +485,10 @@ const ar: TemplateMap = {
     matchRedCardTitle: '🟥 بطاقة حمراء!',
     matchCardBody: '{player} ({team}) - الدقيقة {minute}',
     matchCardPlayerFallback: 'لاعب',
-    leagueMatchSoonTitle: '⏰ مباراة قريباً!',
-    leagueMatchSoonBody: '{home} vs {away} - بعد {minutes} دقيقة',
+    leagueMatchSoonTitle: '⏰ مباراة قريبًا!',
+    leagueMatchSoonBody: '{home} ضد {away} - بعد {minutes} دقيقة',
     leagueMatchStartedTitle: '🚀 بدأت المباراة!',
-    leagueMatchStartedBody: '{home} vs {away}\n{league}\nالمباراة بدأت الآن',
+    leagueMatchStartedBody: '{home} ضد {away}\n{league}\nالمباراة بدأت الآن',
     // إنجاز عدد المتابعين
     followerMilestoneTitle: '🎉 إنجاز جديد!',
     followerMilestoneBody: 'وصلت لـ {count} متابع!',
@@ -511,7 +520,7 @@ const ar: TemplateMap = {
     dailyQuizRenewedTitle: '🧠 كويز اليوم جاهز!',
     dailyQuizRenewedBody: 'كويز اليوم جاهز — العب دلوقتي واكسب XP.',
     luckyWheelRenewedTitle: '🎡 عجلة الحظ رجعت!',
-    luckyWheelRenewedBody: 'تقدر تلف دلوقتي — اكسب جايزة اليوم.',
+    luckyWheelRenewedBody: 'تقدر تلف دلوقتي — اكسب جائزة اليوم.',
     // كولداون عام
     cooldownReadyTitle: '✨ تقدر تعمل دي تاني',
     cooldownReadyBody: 'تقدر {resource} دلوقتي. اضغط للمتابعة.',
@@ -522,15 +531,75 @@ const ar: TemplateMap = {
     // أحداث المباراة الموسعة
     matchSubstitutionTitle: '🔁 تبديل',
     matchSubstitutionBody: '{playerIn} مكان {playerOut} ({team}) - الدقيقة {minute}',
-    matchVarTitle: '📺 تدخل VAR',
-    matchVarBody: '{team} - {detail} (الدقيقة {minute})',
+    matchVarTitle: '📺 مراجعة الفار',
+    matchVarBody: '{team} — {detail} (الدقيقة {minute})',
     matchPenaltyTitle: '🎯 ضربة جزاء!',
     matchPenaltyBody: 'احتسبت ضربة جزاء لـ{team} (الدقيقة {minute})',
-    matchLineupTitle: '📋 التشكيلات اتعلنت',
-    matchLineupBody: '{home} ضد {away} — التشكيلات ظهرت',
+    matchLineupTitle: '📋 تم إعلان التشكيلات',
+    matchLineupBody: '{home} ضد {away} — ظهرت التشكيلات',
 };
 
 const TEMPLATES: Record<SupportedLanguage, TemplateMap> = { en, ar };
+
+/** Common API-Football / 365 VAR detail strings → Arabic for push copy. */
+const VAR_DETAIL_AR: Record<string, string> = {
+    'goal cancelled': 'إلغاء هدف',
+    'goal canceled': 'إلغاء هدف',
+    'goal disallowed': 'هدف غير محتسب',
+    'goal disallowed - offside': 'هدف غير محتسب — تسلل',
+    'goal disallowed - foul': 'هدف غير محتسب — خطأ',
+    'goal disallowed - handball': 'هدف غير محتسب — لمسة يد',
+    'goal disallowed - encroachment': 'هدف غير محتسب — دخول مبكر',
+    'goal confirmed': 'تأكيد الهدف',
+    'penalty confirmed': 'تأكيد ركلة الجزاء',
+    'penalty cancelled': 'إلغاء ركلة الجزاء',
+    'penalty canceled': 'إلغاء ركلة الجزاء',
+    'card upgrade': 'ترقية البطاقة',
+};
+
+/**
+ * Localize VAR event detail text for push bodies.
+ * Unknown English details are returned as-is for EN, and lightly cleaned for AR.
+ */
+export function localizeMatchVarDetail(
+    detail: string,
+    language: SupportedLanguage | string | null | undefined,
+): string {
+    const raw = (detail || '').trim();
+    if (!raw) return raw;
+    const lang = language === 'ar' ? 'ar' : 'en';
+    if (lang !== 'ar') return raw;
+
+    const key = raw.toLowerCase();
+    if (VAR_DETAIL_AR[key]) return VAR_DETAIL_AR[key];
+
+    for (const [en, ar] of Object.entries(VAR_DETAIL_AR)) {
+        if (key.includes(en)) return ar;
+    }
+
+    return raw
+        .replace(/Goal cancelled/gi, 'إلغاء هدف')
+        .replace(/Goal canceled/gi, 'إلغاء هدف')
+        .replace(/Goal Disallowed/gi, 'هدف غير محتسب')
+        .replace(/Goal confirmed/gi, 'تأكيد الهدف')
+        .replace(/Penalty cancelled/gi, 'إلغاء ركلة الجزاء')
+        .replace(/Penalty canceled/gi, 'إلغاء ركلة الجزاء')
+        .replace(/Penalty confirmed/gi, 'تأكيد ركلة الجزاء')
+        .replace(/Card upgrade/gi, 'ترقية البطاقة')
+        .replace(/offside/gi, 'تسلل')
+        .replace(/handball/gi, 'لمسة يد')
+        .replace(/foul/gi, 'خطأ');
+}
+
+export function normalizeSupportedLanguage(
+    raw: string | null | undefined,
+): SupportedLanguage {
+    if (!raw) return DEFAULT_LANGUAGE;
+    const lower = raw.trim().toLowerCase();
+    if (lower === 'ar' || lower.startsWith('ar-') || lower.startsWith('ar_')) return 'ar';
+    if (lower === 'en' || lower.startsWith('en-') || lower.startsWith('en_')) return 'en';
+    return DEFAULT_LANGUAGE;
+}
 
 /**
  * Render a single push template key for the given language. Variable
@@ -542,7 +611,9 @@ export function renderPushTemplate(
     language: SupportedLanguage | string | null | undefined,
     vars: Record<string, string | number> = {},
 ): string {
-    const lang = (language === 'ar' ? 'ar' : 'en') as SupportedLanguage;
+    const lang = normalizeSupportedLanguage(
+        typeof language === 'string' ? language : language ?? undefined,
+    );
     const fallback = TEMPLATES[DEFAULT_LANGUAGE][key];
     const template = TEMPLATES[lang]?.[key] ?? fallback ?? '';
 
@@ -600,8 +671,13 @@ export async function getUserLanguage(userId: string): Promise<SupportedLanguage
             select: { settings: true },
         });
         const settings = (user?.settings as Record<string, unknown> | null) ?? null;
-        const raw = settings && typeof settings.language === 'string' ? settings.language : '';
-        const lang: SupportedLanguage = raw === 'ar' || raw === 'en' ? raw : DEFAULT_LANGUAGE;
+        const raw =
+            settings && typeof settings.language === 'string'
+                ? settings.language
+                : settings && typeof settings.locale === 'string'
+                  ? settings.locale
+                  : '';
+        const lang = normalizeSupportedLanguage(raw);
         writeCachedLanguage(userId, lang);
         return lang;
     } catch (err) {
@@ -642,6 +718,12 @@ export function readLanguageFromSettings(
     settings: unknown,
 ): SupportedLanguage {
     if (!settings || typeof settings !== 'object') return DEFAULT_LANGUAGE;
-    const raw = (settings as Record<string, unknown>).language;
-    return raw === 'ar' || raw === 'en' ? raw : DEFAULT_LANGUAGE;
+    const obj = settings as Record<string, unknown>;
+    const raw =
+        typeof obj.language === 'string'
+            ? obj.language
+            : typeof obj.locale === 'string'
+              ? obj.locale
+              : '';
+    return normalizeSupportedLanguage(raw);
 }
