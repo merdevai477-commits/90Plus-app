@@ -50,6 +50,9 @@ export interface Prediction {
   source?: 'match' | 'group';
   sourceLabel?: string;
   xpAwarded?: number;
+  mode?: 'WINNER' | 'EXACT';
+  predictedHomeScore?: number | null;
+  predictedAwayScore?: number | null;
 }
 
 export interface PredictionRemaining {

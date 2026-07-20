@@ -34,10 +34,13 @@ function toPredictionItems(raw: PublicUserPredictionsPayload['predictions']): Us
     isCorrect: p.isCorrect ?? null,
     coinsWon: p.coinsWon ?? null,
     coinsSpent: p.coinsSpent ?? 0,
-    xpAwarded: (p as { xpAwarded?: number }).xpAwarded,
+    xpAwarded: p.xpAwarded,
     createdAt: p.createdAt,
-    source: (p as { source?: 'match' | 'group' }).source,
-    sourceLabel: (p as { sourceLabel?: string }).sourceLabel,
+    source: p.source,
+    sourceLabel: p.sourceLabel,
+    mode: p.mode,
+    predictedHomeScore: p.predictedHomeScore,
+    predictedAwayScore: p.predictedAwayScore,
   }));
 }
 

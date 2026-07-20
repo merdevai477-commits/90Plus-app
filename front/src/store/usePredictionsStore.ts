@@ -80,7 +80,13 @@ interface PredictionsState {
         isCorrect: boolean | null;
         coinsWon: number | null;
         coinsSpent: number;
+        xpAwarded?: number;
         createdAt: string;
+        source?: 'match' | 'group';
+        sourceLabel?: string;
+        mode?: 'WINNER' | 'EXACT';
+        predictedHomeScore?: number | null;
+        predictedAwayScore?: number | null;
     }>;
 
     // Match prediction counts

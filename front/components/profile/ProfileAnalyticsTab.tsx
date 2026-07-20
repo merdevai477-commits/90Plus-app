@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -53,9 +54,12 @@ export interface UserPredictionItem {
   createdAt: string;
   source?: 'match' | 'group';
   sourceLabel?: string;
+  mode?: 'WINNER' | 'EXACT';
+  predictedHomeScore?: number | null;
+  predictedAwayScore?: number | null;
 }
 
-type PredictionFilter = 'all' | 'pending' | 'correct' | 'wrong';
+type PredictionFilter = 'all' | 'group' | 'pending' | 'correct' | 'wrong';
 
 interface Props {
   analytics: ProfileAnalytics | null;
@@ -148,12 +152,25 @@ function PredictionMatchCard({ item }: { item: UserPredictionItem }) {
 
   const homeName = item.homeTeam || '—';
   const awayName = item.awayTeam || '—';
+  const groupSourceLabel = t.predictionGroups.profileSource;
 
   const pickLabel = useMemo(() => {
+    if (
+      item.mode === 'EXACT' &&
+      item.predictedHomeScore != null &&
+      item.predictedAwayScore != null
+    ) {
+      return `${item.predictedHomeScore}-${item.predictedAwayScore}`;
+    }
     if (item.predictionType === 'home') return homeName;
     if (item.predictionType === 'away') return awayName;
     return t.predictions.draw;
-  }, [item.predictionType, homeName, awayName, t]);
+  }, [item, homeName, awayName, t]);
+
+  const pickKindLabel =
+    item.mode === 'EXACT'
+      ? t.predictionGroups.predictions.exactScore
+      : t.profile.yourPick;
 
   const isPending = item.isCorrect === null;
   const isCorrect = item.isCorrect === true;
@@ -173,6 +190,13 @@ function PredictionMatchCard({ item }: { item: UserPredictionItem }) {
   const dateLabel = item.matchDate
     ? formatDate(new Date(item.matchDate), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : formatDate(new Date(item.createdAt), { day: 'numeric', month: 'short' });
+
+  const rewardLabel =
+    item.source === 'group' && isCorrect && (item.xpAwarded ?? 0) > 0
+      ? `+${item.xpAwarded} XP`
+      : item.source !== 'group' && isCorrect && (item.coinsWon ?? 0) > 0
+        ? `+${item.coinsWon}`
+        : null;
 
   return (
     <View
@@ -196,10 +220,10 @@ function PredictionMatchCard({ item }: { item: UserPredictionItem }) {
           <Text style={matchStyles.leagueText} numberOfLines={1}>
             {item.leagueName || t.profile.predictionHistory}
           </Text>
-          {item.source === 'group' && item.sourceLabel ? (
+          {item.source === 'group' ? (
             <View style={matchStyles.sourceBadge}>
               <Text style={matchStyles.sourceBadgeText} numberOfLines={1}>
-                {item.sourceLabel}
+                {groupSourceLabel}
               </Text>
             </View>
           ) : null}
@@ -240,12 +264,10 @@ function PredictionMatchCard({ item }: { item: UserPredictionItem }) {
 
       <View style={matchStyles.cardBottom}>
         <Text style={matchStyles.pickHint}>
-          {t.profile.yourPick}: <Text style={matchStyles.pickHintValue}>{pickLabel}</Text>
+          {pickKindLabel}: <Text style={matchStyles.pickHintValue}>{pickLabel}</Text>
         </Text>
         <View style={matchStyles.bottomMeta}>
-          {item.source === 'group' && item.isCorrect === true && (item.xpAwarded ?? 0) > 0 ? (
-            <Text style={matchStyles.xpEarned}>+{item.xpAwarded} XP</Text>
-          ) : null}
+          {rewardLabel ? <Text style={matchStyles.xpEarned}>{rewardLabel}</Text> : null}
           <Text style={matchStyles.dateText}>{dateLabel}</Text>
         </View>
       </View>
@@ -253,8 +275,12 @@ function PredictionMatchCard({ item }: { item: UserPredictionItem }) {
   );
 }
 
-const FILTER_OPTIONS: { id: PredictionFilter; labelKey: 'predictionFilterAll' | 'pendingPredictions' | 'correctPredictions' | 'wrongPredictions' }[] = [
+const FILTER_OPTIONS: {
+  id: PredictionFilter;
+  labelKey: 'predictionFilterAll' | 'predictionFilterGroup' | 'pendingPredictions' | 'correctPredictions' | 'wrongPredictions';
+}[] = [
   { id: 'all', labelKey: 'predictionFilterAll' },
+  { id: 'group', labelKey: 'predictionFilterGroup' },
   { id: 'pending', labelKey: 'pendingPredictions' },
   { id: 'correct', labelKey: 'correctPredictions' },
   { id: 'wrong', labelKey: 'wrongPredictions' },
@@ -298,11 +324,15 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
 
   const filteredPredictions = useMemo(() => {
     let list = [...predictions];
-    if (filter === 'pending') list = list.filter((p) => p.isCorrect === null);
+    if (filter === 'group') list = list.filter((p) => p.source === 'group');
+    else if (filter === 'pending') list = list.filter((p) => p.isCorrect === null);
     else if (filter === 'correct') list = list.filter((p) => p.isCorrect === true);
     else if (filter === 'wrong') list = list.filter((p) => p.isCorrect === false);
-    return list.slice(0, 5);
+    return list.slice(0, filter === 'group' ? 10 : 5);
   }, [predictions, filter]);
+
+  const emptyMessage =
+    filter === 'group' ? t.profile.noGroupPredictionsYet : t.profile.noPredictionsYet;
 
   const fmt = (n?: number): string => {
     if (!n) return '0';
@@ -362,28 +392,34 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
 
       <SectionHeader icon="list-outline" title={t.profile.predictionHistory} />
 
-      <View style={styles.filterRow}>
-        {FILTER_OPTIONS.map(({ id, labelKey }) => {
-          const active = filter === id;
-          return (
-            <TouchableOpacity
-              key={id}
-              style={[styles.filterChip, active && styles.filterChipActive]}
-              onPress={() => setFilter(id)}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                {t.profile[labelKey]}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={styles.filterScrollWrap}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          {FILTER_OPTIONS.map(({ id, labelKey }) => {
+            const active = filter === id;
+            return (
+              <TouchableOpacity
+                key={id}
+                style={[styles.filterChip, active && styles.filterChipActive]}
+                onPress={() => setFilter(id)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                  {t.profile[labelKey]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {filteredPredictions.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Ionicons name="football-outline" size={28} color={TEXT_MUTED} />
-          <Text style={styles.emptyText}>{t.profile.noPredictionsYet}</Text>
+          <Text style={styles.emptyText}>{emptyMessage}</Text>
         </View>
       ) : (
         <View style={styles.predList}>
@@ -718,11 +754,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.5,
   },
+  filterScrollWrap: {
+    marginBottom: 12,
+  },
   filterRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12,
+    paddingRight: 4,
   },
   filterChip: {
     paddingHorizontal: 12,

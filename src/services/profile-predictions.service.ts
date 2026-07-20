@@ -23,6 +23,9 @@ export interface ProfilePredictionRow {
   createdAt: string;
   source?: 'match' | 'group';
   sourceLabel?: string;
+  mode?: 'WINNER' | 'EXACT';
+  predictedHomeScore?: number | null;
+  predictedAwayScore?: number | null;
 }
 
 function resolveGroupPredictionType(pred: {
@@ -98,6 +101,9 @@ export async function fetchGroupPredictionsForProfile(
       createdAt: p.createdAt.toISOString(),
       source: 'group' as const,
       sourceLabel: GROUP_PREDICTION_SOURCE_LABEL,
+      mode: p.mode as 'WINNER' | 'EXACT',
+      predictedHomeScore: p.predictedHomeScore,
+      predictedAwayScore: p.predictedAwayScore,
     };
   });
 }
