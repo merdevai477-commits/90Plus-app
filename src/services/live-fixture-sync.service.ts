@@ -52,8 +52,8 @@ class LiveFixtureSyncService {
         if (this.running) return;
 
         const intervalMs = Math.max(
-            10_000,
-            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '10000', 10) || 10_000,
+            5_000,
+            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '5000', 10) || 5_000,
         );
 
         this.running = true;
@@ -64,7 +64,7 @@ class LiveFixtureSyncService {
             this.syncOnce().catch((err) => logger.warn('Live fixture sync tick failed:', err));
         };
 
-        setTimeout(tick, 5_000);
+        setTimeout(tick, 2_000);
         this.intervalRef = setInterval(tick, intervalMs);
     }
 

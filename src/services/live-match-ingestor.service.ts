@@ -34,10 +34,11 @@ const FORCE_REFRESH_AFTER_MS = 15 * 60 * 1000;
 
 function pollIntervalMs(): number {
     const fromEnv = parseInt(
-        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '10000',
+        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '5000',
         10,
     );
-    return Math.max(10_000, Number.isFinite(fromEnv) ? fromEnv : 10_000);
+    // Cap discovery latency for subscribed matches (~5s worst-case poll gap).
+    return Math.max(5_000, Number.isFinite(fromEnv) ? fromEnv : 5_000);
 }
 
 const FIXTURE_INGEST_CONCURRENCY = Math.max(
@@ -81,13 +82,13 @@ export class LiveMatchIngestorService {
 
         setTimeout(() => {
             this.tick().catch((err) => logger.error('Live match ingestor first tick failed:', err));
-        }, 5_000);
+        }, 2_000);
 
         this.intervalId = setInterval(() => {
             this.tick().catch((err) => logger.error('Live match ingestor tick failed:', err));
         }, intervalMs);
 
-        logger.info(`✅ Live match ingestor started (first tick in 5s)`);
+        logger.info(`✅ Live match ingestor started (first tick in 2s)`);
     }
 
     static stop(): void {
