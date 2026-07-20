@@ -6,9 +6,9 @@ import {
     StyleSheet,
     ActivityIndicator,
     RefreshControl,
-    ScrollView,
     Platform,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -172,11 +172,14 @@ function formatRelativeTime(iso: string, t: ReturnType<typeof useTranslation>['t
     return date.toLocaleDateString();
 }
 
-// ─── Liquid Glass Header (pinned) ──────────────────────────────────────────
-const HeaderGlass: any = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-const headerGlassProps: any = isLiquidGlassSupported
+// ─── Liquid Glass Header (pinned) — skip blur on Android for perf ──────────
+const useGlassHeader = Platform.OS !== 'android' && isLiquidGlassSupported;
+const HeaderGlass: any = useGlassHeader ? LiquidGlassView : Platform.OS === 'ios' ? BlurView : View;
+const headerGlassProps: any = useGlassHeader
     ? { effect: 'clear', interactive: true }
-    : { intensity: 22, tint: 'dark' };
+    : Platform.OS === 'ios'
+      ? { intensity: 22, tint: 'dark' }
+      : {};
 
 type HeaderProps = {
     unreadCount: number;
@@ -265,7 +268,7 @@ const headerStyles = StyleSheet.create({
         left: 0,
         right: 0,
         zIndex: 50,
-        backgroundColor: Platform.OS === 'android' ? 'rgba(6,4,10,0.5)' : 'transparent',
+        backgroundColor: Platform.OS === 'android' ? 'rgba(6,4,10,0.92)' : 'rgba(6,4,10,0.5)',
     },
     inner: {
         minHeight: HEADER_BODY_HEIGHT,
@@ -386,14 +389,8 @@ const LuckyWheelPinned = React.memo(function LuckyWheelPinned({
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
             />
-            {/* Glass overlay */}
-            {isLiquidGlassSupported ? (
-                <LiquidGlassView
-                    {...({ style: StyleSheet.absoluteFill, effect: 'clear' } as any)}
-                />
-            ) : (
-                <BlurView intensity={12} tint="dark" style={StyleSheet.absoluteFill} />
-            )}
+            {/* Solid overlay — avoid BlurView/LiquidGlass (expensive on open + scroll) */}
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,6,14,0.35)' }]} />
 
             <View style={luckyStyles.row}>
                 <View
@@ -539,6 +536,45 @@ const luckyStyles = StyleSheet.create({
         fontVariant: ['tabular-nums'],
         letterSpacing: 0.3,
     },
+});
+
+// ─── Row (memoized for FlashList) ─────────────────────────────────────────
+type NotificationRowProps = {
+    item: SocialNotification;
+    onPress: (item: SocialNotification) => void;
+    relativeTime: string;
+};
+
+const NotificationRow = React.memo(function NotificationRow({
+    item,
+    onPress,
+    relativeTime,
+}: NotificationRowProps) {
+    const kind = mapTypeToKind(item.type);
+    const { Icon, color } = KIND_META[kind];
+    return (
+        <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => onPress(item)}
+            style={[styles.card, !item.isRead && styles.cardUnread]}
+        >
+            <View style={[styles.iconWrap, { borderColor: `${color}44` }]}>
+                <Icon size={18} color={color} strokeWidth={2.2} />
+            </View>
+            <View style={styles.cardMid}>
+                <Text style={styles.cardTitle} numberOfLines={1}>
+                    {item.title}
+                </Text>
+                <Text style={styles.cardBody} numberOfLines={2}>
+                    {item.message}
+                </Text>
+            </View>
+            <View style={styles.cardRight}>
+                <Text style={styles.time}>{relativeTime}</Text>
+                {!item.isRead ? <View style={styles.dot} /> : null}
+            </View>
+        </TouchableOpacity>
+    );
 });
 
 // ─── Skeleton (shown briefly while cache is warming) ──────────────────────
@@ -774,9 +810,77 @@ export default function NotificationsScreen() {
 
     const bottomPad = Math.max(insets.bottom, 16) + 56 + 32;
 
+    const listHeader = useMemo(
+        () => (
+            <LuckyWheelPinned
+                canSpin={canSpin}
+                timeRemaining={spinTimeRemaining}
+                onPress={handleLuckyWheelPress}
+                readyTitle={t.notifications.luckyWheelReady}
+                readySub={t.notifications.tapToWin}
+                lockedTitle={t.home?.wheelLocked || t.luckyWheel?.locked || t.common.unavailable}
+                lockedSub={t.notifications.wheelAvailableIn}
+            />
+        ),
+        [canSpin, spinTimeRemaining, handleLuckyWheelPress, t],
+    );
+
+    const listEmpty = useMemo(() => {
+        if (isLoading) return <NotificationSkeleton />;
+        if (error) {
+            return (
+                <View style={styles.errorWrap}>
+                    <Text style={styles.errorTitle}>{t.notifications.loadFailed}</Text>
+                    <Text style={styles.errorSub}>{error}</Text>
+                    <TouchableOpacity
+                        activeOpacity={0.85}
+                        style={styles.retryBtn}
+                        onPress={refreshNotifications}
+                    >
+                        <Text style={styles.retryTxt}>{t.notifications.tryAgain}</Text>
+                    </TouchableOpacity>
+                </View>
+            );
+        }
+        return (
+            <View style={styles.emptyWrap}>
+                <View style={styles.emptyIconWrap}>
+                    <MessageSquare size={22} color="rgba(167,139,250,0.55)" strokeWidth={2} />
+                </View>
+                <Text style={styles.emptyTitle}>{t.notifications.noNotifications}</Text>
+                <Text style={styles.emptySub}>{t.notifications.emptyDefaultSubtitle}</Text>
+            </View>
+        );
+    }, [isLoading, error, refreshNotifications, t]);
+
+    const listFooter = useMemo(() => {
+        if (!hasMore || notifications.length === 0) return null;
+        return (
+            <View style={styles.loadMoreBtn}>
+                {isLoadingMore ? (
+                    <ActivityIndicator color={PURPLE_SOFT} />
+                ) : (
+                    <Text style={styles.loadMoreTxt}>{t.notifications.loadMore}</Text>
+                )}
+            </View>
+        );
+    }, [hasMore, notifications.length, isLoadingMore, t.notifications.loadMore]);
+
+    const keyExtractor = useCallback((item: SocialNotification) => item.id, []);
+
+    const renderItem = useCallback(
+        ({ item }: { item: SocialNotification }) => (
+            <NotificationRow
+                item={item}
+                onPress={handleNotificationTap}
+                relativeTime={formatRelativeTime(item.createdAt, t)}
+            />
+        ),
+        [handleNotificationTap, t],
+    );
+
     return (
         <View style={styles.root}>
-            {/* Same gradient background as all other screens (matches notifications screen body) */}
             <LinearGradient
                 colors={[...GRADIENT_BG_COLORS]}
                 style={StyleSheet.absoluteFill}
@@ -785,7 +889,6 @@ export default function NotificationsScreen() {
                 locations={[...GRADIENT_BG_LOCATIONS]}
             />
 
-            {/* Pinned liquid-glass header */}
             <NotificationsHeader
                 unreadCount={unreadCount}
                 total={notifications.length}
@@ -802,121 +905,46 @@ export default function NotificationsScreen() {
                 backLabel={t.notifications.a11yBack}
             />
 
-            <ScrollView
-                style={styles.scroll}
-                contentContainerStyle={{
-                    paddingTop: insets.top + HEADER_BODY_HEIGHT + 16,
-                    paddingHorizontal: SCREEN_PADDING_H,
-                    paddingBottom: bottomPad + SECTION_GAP,
-                }}
-                showsVerticalScrollIndicator={false}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={isRefreshing}
-                        onRefresh={refreshNotifications}
-                        tintColor={PURPLE_SOFT}
-                        colors={[PURPLE_SOFT]}
-                        progressBackgroundColor={BG_BASE}
-                    />
-                }
-            >
-                {/* Always-pinned Lucky Wheel access */}
-                <LuckyWheelPinned
-                    canSpin={canSpin}
-                    timeRemaining={spinTimeRemaining}
-                    onPress={handleLuckyWheelPress}
-                    readyTitle={t.notifications.luckyWheelReady}
-                    readySub={t.notifications.tapToWin}
-                    lockedTitle={t.home?.wheelLocked || t.luckyWheel?.locked || t.common.unavailable}
-                    lockedSub={t.notifications.wheelAvailableIn}
+            <View style={styles.scroll}>
+                <FlashList
+                    data={notifications}
+                    keyExtractor={keyExtractor}
+                    renderItem={renderItem}
+                    contentContainerStyle={{
+                        paddingTop: insets.top + HEADER_BODY_HEIGHT + 16,
+                        paddingHorizontal: SCREEN_PADDING_H,
+                        paddingBottom: bottomPad + SECTION_GAP,
+                    }}
+                    showsVerticalScrollIndicator={false}
+                    ListHeaderComponent={listHeader}
+                    ListEmptyComponent={listEmpty}
+                    ListFooterComponent={listFooter}
+                    onEndReached={handleLoadMore}
+                    onEndReachedThreshold={0.4}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={isRefreshing}
+                            onRefresh={refreshNotifications}
+                            tintColor={PURPLE_SOFT}
+                            colors={[PURPLE_SOFT]}
+                            progressBackgroundColor={BG_BASE}
+                        />
+                    }
+                    drawDistance={280}
                 />
-
-                {/* Notifications list */}
-                {isLoading && notifications.length === 0 ? (
-                    <NotificationSkeleton />
-                ) : error && notifications.length === 0 ? (
-                    <View style={styles.errorWrap}>
-                        <Text style={styles.errorTitle}>{t.notifications.loadFailed}</Text>
-                        <Text style={styles.errorSub}>{error}</Text>
-                        <TouchableOpacity
-                            activeOpacity={0.85}
-                            style={styles.retryBtn}
-                            onPress={refreshNotifications}
-                        >
-                            <Text style={styles.retryTxt}>{t.notifications.tryAgain}</Text>
-                        </TouchableOpacity>
-                    </View>
-                ) : notifications.length === 0 ? (
-                    <View style={styles.emptyWrap}>
-                        <View style={styles.emptyIconWrap}>
-                            <MessageSquare size={22} color="rgba(167,139,250,0.55)" strokeWidth={2} />
-                        </View>
-                        <Text style={styles.emptyTitle}>
-                            {t.notifications.noNotifications}
-                        </Text>
-                        <Text style={styles.emptySub}>
-                            {t.notifications.emptyDefaultSubtitle}
-                        </Text>
-                    </View>
-                ) : (
-                    <>
-                        {notifications.map((row) => {
-                            const kind = mapTypeToKind(row.type);
-                            const { Icon, color } = KIND_META[kind];
-                            return (
-                                <TouchableOpacity
-                                    key={row.id}
-                                    activeOpacity={0.85}
-                                    onPress={() => handleNotificationTap(row)}
-                                    style={[styles.card, !row.isRead && styles.cardUnread]}
-                                >
-                                    <View style={[styles.iconWrap, { borderColor: `${color}44` }]}>
-                                        <Icon size={18} color={color} strokeWidth={2.2} />
-                                    </View>
-                                    <View style={styles.cardMid}>
-                                        <Text style={styles.cardTitle} numberOfLines={1}>
-                                            {row.title}
-                                        </Text>
-                                        <Text style={styles.cardBody} numberOfLines={2}>
-                                            {row.message}
-                                        </Text>
-                                    </View>
-                                    <View style={styles.cardRight}>
-                                        <Text style={styles.time}>{formatRelativeTime(row.createdAt, t)}</Text>
-                                        {!row.isRead ? <View style={styles.dot} /> : null}
-                                    </View>
-                                </TouchableOpacity>
-                            );
-                        })}
-
-                        {hasMore && (
-                            <TouchableOpacity
-                                activeOpacity={0.85}
-                                onPress={handleLoadMore}
-                                disabled={isLoadingMore}
-                                style={styles.loadMoreBtn}
-                            >
-                                {isLoadingMore ? (
-                                    <ActivityIndicator color={PURPLE_SOFT} />
-                                ) : (
-                                    <Text style={styles.loadMoreTxt}>{t.notifications.loadMore}</Text>
-                                )}
-                            </TouchableOpacity>
-                        )}
-                    </>
-                )}
-            </ScrollView>
-
+            </View>
             <BottomNav />
 
-            <LuckyWheelModal
-                visible={showLuckyWheel}
-                onClose={() => {
-                    setShowLuckyWheel(false);
-                    checkSpinStatus();
-                }}
-                onCoinsWon={() => { }}
-            />
+            {showLuckyWheel ? (
+                <LuckyWheelModal
+                    visible
+                    onClose={() => {
+                        setShowLuckyWheel(false);
+                        checkSpinStatus();
+                    }}
+                    onCoinsWon={() => { }}
+                />
+            ) : null}
         </View>
     );
 }

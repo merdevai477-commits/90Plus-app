@@ -8,6 +8,12 @@ import { cacheService, CACHE_KEYS, CACHE_TTL } from '../../../services/cacheServ
 import { useNotificationEvents } from '../../../hooks/useWebSocket';
 
 const ITEMS_PER_PAGE = 20;
+/** Skip full refetch on focus if we loaded recently. */
+const FOCUS_REFETCH_THROTTLE_MS = 45_000;
+/** Cap local match-store rows merged into the inbox list. */
+const MAX_LOCAL_MATCH_NOTIFICATIONS = 30;
+/** Hard cap on merged list size shown in the UI. */
+const MAX_MERGED_NOTIFICATIONS = 200;
 
 export function useNotifications() {
   const { getToken, userId } = useAuth();
@@ -30,6 +36,12 @@ export function useNotifications() {
 
   const matchNotificationsRef = useRef(matchNotifications);
   matchNotificationsRef.current = matchNotifications;
+
+  const lastFetchAtRef = useRef(0);
+  const hasLoadedRef = useRef(false);
+  const loadNotificationsRef = useRef<(pageNum?: number, append?: boolean, forceRefresh?: boolean) => Promise<void>>(
+    async () => undefined,
+  );
 
   const checkSpinStatus = useCallback(async () => {
     try {
@@ -83,6 +95,7 @@ export function useNotifications() {
         setPage(pageNum);
 
         if (pageNum === 1) {
+          lastFetchAtRef.current = Date.now();
           const localUnread = matchNotificationsRef.current.filter(n => !n.read).length;
           setUnreadCount((backendUnread ?? 0) + localUnread);
         }
@@ -106,6 +119,8 @@ export function useNotifications() {
     [getToken, notificationsCacheKey]
   );
 
+  loadNotificationsRef.current = loadNotifications;
+
   const refreshNotifications = useCallback(() => {
     setIsRefreshing(true);
     setHasMore(true);
@@ -118,9 +133,8 @@ export function useNotifications() {
   }, [isLoading, isRefreshing, isLoadingMore, hasMore, loadNotifications, page]);
 
   const allNotifications = useMemo(() => {
-    const convertedMatchNotifications: SocialNotification[] = matchNotifications.map(mn => {
-      // mn.time may be a display string like '21:00', not a parseable ISO date.
-      // Use it only if it parses to a valid Date, otherwise use now.
+    const localSlice = matchNotifications.slice(0, MAX_LOCAL_MATCH_NOTIFICATIONS);
+    const convertedMatchNotifications: SocialNotification[] = localSlice.map(mn => {
       let createdAt = mn.time;
       const parsed = new Date(mn.time);
       if (isNaN(parsed.getTime())) {
@@ -138,19 +152,24 @@ export function useNotifications() {
     });
 
     const merged = [...backendNotifications, ...convertedMatchNotifications];
-    return merged.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }, [backendNotifications, matchNotifications]);
+    const deduped = new Map<string, SocialNotification>();
+    for (const item of merged) {
+      if (!deduped.has(item.id)) deduped.set(item.id, item);
+    }
 
-  const loadNotificationsRef = useRef(loadNotifications);
-  loadNotificationsRef.current = loadNotifications;
+    return Array.from(deduped.values())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, MAX_MERGED_NOTIFICATIONS);
+  }, [backendNotifications, matchNotifications]);
 
   const appStateRef = useRef(AppState.currentState);
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
-        loadNotificationsRef.current(1, false, false);
+        const elapsed = Date.now() - lastFetchAtRef.current;
+        if (elapsed >= FOCUS_REFETCH_THROTTLE_MS) {
+          loadNotificationsRef.current(1, false, false);
+        }
       }
       appStateRef.current = nextAppState;
     };
@@ -162,11 +181,12 @@ export function useNotifications() {
   useFocusEffect(
     useCallback(() => {
       if (!hasLoadedRef.current) return;
+      const elapsed = Date.now() - lastFetchAtRef.current;
+      if (elapsed < FOCUS_REFETCH_THROTTLE_MS) return;
       loadNotificationsRef.current(1, false, false);
     }, [])
   );
 
-  const hasLoadedRef = useRef(false);
   useEffect(() => {
     if (hasLoadedRef.current) return;
     hasLoadedRef.current = true;
@@ -178,7 +198,6 @@ export function useNotifications() {
     setBackendNotifications(prev => {
       const exists = prev.some(n => n.id === (notification as any).id);
       if (exists) return prev;
-      // UX Fix 7: Increment badge count immediately on WebSocket notification
       setUnreadCount(prevCount => prevCount + 1);
       return [notification as SocialNotification, ...prev];
     });
@@ -193,7 +212,7 @@ export function useNotifications() {
         }
         cacheService.set(
           notificationsCacheKey,
-          Array.from(deduped.values()),
+          Array.from(deduped.values()).slice(0, ITEMS_PER_PAGE * 3),
           CACHE_TTL.NOTIFICATIONS
         );
       })
@@ -201,29 +220,24 @@ export function useNotifications() {
   });
 
   return {
-    // data
     notifications: allNotifications,
     backendNotifications,
     matchNotifications,
 
-    // pagination
     page,
     hasMore,
     handleLoadMore,
 
-    // state
     isLoading,
     isRefreshing,
     isLoadingMore,
     error,
     unreadCount,
 
-    // spin
     canSpin,
     spinTimeRemaining,
     checkSpinStatus,
 
-    // actions
     loadNotifications,
     refreshNotifications,
     clearMatchNotifications,
@@ -233,4 +247,3 @@ export function useNotifications() {
     setPage,
   };
 }
-
