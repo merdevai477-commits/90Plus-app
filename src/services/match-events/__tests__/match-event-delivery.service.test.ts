@@ -1,5 +1,5 @@
 import { isPushNotifiableMatchEvent } from '../match-event-delivery.service';
-import { diffScoreGoals, diffStatusEvents } from '../match-event-normalizer';
+import { diffScoreGoals, diffStatusEvents, normalizeApiEvents } from '../match-event-normalizer';
 import type { NormalizedMatchEvent } from '../match-event.types';
 import { NotificationType } from '../../notification.service';
 import {
@@ -33,13 +33,14 @@ function legacyEvent(eventType: string): NormalizedMatchEvent {
 }
 
 describe('isPushNotifiableMatchEvent', () => {
-    it('allows goals, cancelled goals, kickoff, red card, VAR, and fulltime', () => {
+    it('allows goals, cancelled goals, kickoff, red card, VAR, substitutions, and fulltime', () => {
         expect(isPushNotifiableMatchEvent(baseEvent('goal_home'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('goal_away'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('goal_cancelled'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('kickoff'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('card_red'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('var'))).toBe(true);
+        expect(isPushNotifiableMatchEvent(baseEvent('substitution'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('fulltime'))).toBe(true);
     });
 
@@ -47,7 +48,6 @@ describe('isPushNotifiableMatchEvent', () => {
         expect(isPushNotifiableMatchEvent(legacyEvent('halftime'))).toBe(false);
         expect(isPushNotifiableMatchEvent(legacyEvent('second_half_start'))).toBe(false);
         expect(isPushNotifiableMatchEvent(legacyEvent('card_yellow'))).toBe(false);
-        expect(isPushNotifiableMatchEvent(legacyEvent('substitution'))).toBe(false);
         expect(isPushNotifiableMatchEvent(legacyEvent('penalty'))).toBe(false);
         expect(isPushNotifiableMatchEvent(legacyEvent('lineup'))).toBe(false);
     });
@@ -88,6 +88,31 @@ describe('diffStatusEvents', () => {
         const events = diffStatusEvents(99, '2H', 'FT', scores, meta);
         expect(events).toHaveLength(1);
         expect(events[0].eventType).toBe('fulltime');
+    });
+});
+
+describe('normalizeApiEvents substitutions', () => {
+    it('emits substitution with player in and out names', () => {
+        const events = normalizeApiEvents(
+            55,
+            [
+                {
+                    time: { elapsed: 62, extra: null },
+                    team: { id: 1, name: 'Home FC' },
+                    player: { id: 10, name: 'Player In' },
+                    assist: { id: 9, name: 'Player Out' },
+                    type: 'subst',
+                    detail: 'Substitution 1',
+                },
+            ],
+            { homeTeam: 'Home FC', awayTeam: 'Away FC' },
+        );
+
+        expect(events).toHaveLength(1);
+        expect(events[0].eventType).toBe('substitution');
+        expect(events[0].templateVars.playerIn).toBe('Player In');
+        expect(events[0].templateVars.playerOut).toBe('Player Out');
+        expect(events[0].prefKey).toBe('matchSubs');
     });
 });
 

@@ -291,7 +291,7 @@ export class LeagueMatchWatcherService {
         leagueId: number
     ) {
         // League kickoff reminders are disabled — match pushes are limited to
-        // goals, kickoff, red cards, VAR, and fulltime on subscribed matches.
+        // goals, kickoff, red cards, VAR, substitutions, and fulltime on subscribed matches.
         logger.debug(`[LeagueMatchWatcher] skipped league match notification for user ${userId}`);
     }
 }

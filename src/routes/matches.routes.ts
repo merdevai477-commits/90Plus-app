@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { logger } from '../utils/logger';
-import { enqueueNotification } from '../queues/notification.queue';
 import { ErrorCode, sendError } from '../constants/errors';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 
@@ -60,43 +59,55 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
             return;
         }
 
-        // Create favorite
-        const favorite = await prisma.favoriteMatch.create({
-            data: {
-                userId: user.id,
-                apiMatchId,
-                homeTeam: homeTeam || 'Unknown',
-                awayTeam: awayTeam || 'Unknown',
-                homeTeamLogo,
-                awayTeamLogo,
-                matchDate: matchDate ? new Date(matchDate) : new Date(),
-                leagueName,
-            },
+        const home = homeTeam || 'Unknown';
+        const away = awayTeam || 'Unknown';
+        const kickoff = matchDate ? new Date(matchDate) : new Date();
+
+        const {
+            subscribeWithBaseline,
+            notifyMatchFavoriteConfirmation,
+        } = await import('../services/match-events/match-subscription.service');
+
+        const subscription = await subscribeWithBaseline({
+            userId: user.id,
+            fixtureId: apiMatchId,
+            matchDate: kickoff,
+            homeTeam: home,
+            awayTeam: away,
+            homeTeamLogo: homeTeamLogo ?? null,
+            awayTeamLogo: awayTeamLogo ?? null,
+            leagueName: leagueName ?? null,
         });
 
-        // 🔔 Fire instant push notification (non-blocking) when user favorites a match
-        const home = homeTeam || 'الفريق الأول';
-        const away = awayTeam || 'الفريق الثاني';
-        enqueueNotification({
-            userId: user.id,
-            title: '🔔 تم تفضيل المباراة',
-            message: `${home} ضد ${away} — سيتم إخبارك بكل الأهداف والأحداث المهمة!`,
-            type: 'MATCH_FAVORITE',
-            data: {
-                type: 'MATCH_FAVORITE',
-                matchId: String(apiMatchId),
-                fixtureId: String(apiMatchId),
+        try {
+            const { scheduleMatchStartReminder } = await import('../queues/match-start-reminder.queue');
+            await scheduleMatchStartReminder({
+                userId: user.id,
+                fixtureId: apiMatchId,
                 homeTeam: home,
                 awayTeam: away,
-                leagueName,
-                screen: '/(tabs)/match-details',
-            },
-        }).catch(err => logger.warn('[matches/favorite] Notification enqueue failed (non-fatal):', err));
+                matchDate: kickoff.toISOString(),
+            });
+        } catch (err) {
+            logger.warn('[matches/favorite] failed to schedule reminder:', err);
+        }
+
+        notifyMatchFavoriteConfirmation({
+            userId: user.id,
+            fixtureId: apiMatchId,
+            homeTeam: home,
+            awayTeam: away,
+            leagueName,
+        }).catch((err) =>
+            logger.warn('[matches/favorite] Notification failed (non-fatal):', err?.message ?? err),
+        );
 
         res.json({
             status: 'SUCCESS',
             message: 'Match added to favorites',
-            data: { favorite },
+            data: {
+                favorite: { id: subscription.subscriptionId, apiMatchId },
+            },
         });
     } catch (error: any) {
         logger.error('Add favorite match error:', error);

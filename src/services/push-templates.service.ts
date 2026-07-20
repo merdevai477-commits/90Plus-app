@@ -194,7 +194,9 @@ export type PushTemplateKey =
     | 'matchPenaltyTitle'
     | 'matchPenaltyBody'
     | 'matchLineupTitle'
-    | 'matchLineupBody';
+    | 'matchLineupBody'
+    | 'matchFavoriteTitle'
+    | 'matchFavoriteBody';
 
 type TemplateMap = Record<PushTemplateKey, string>;
 
@@ -359,13 +361,15 @@ const en: TemplateMap = {
     aiCheckinFallbackBody: '{name}, ready for another round? Tap to keep your streak alive.',
     // Extended live match events
     matchSubstitutionTitle: '🔁 Substitution',
-    matchSubstitutionBody: "{playerIn} on for {playerOut} ({team}) - {minute}'",
+    matchSubstitutionBody: "{playerIn} on for {playerOut} ({team}) — {minute}'",
     matchVarTitle: '📺 VAR review',
     matchVarBody: "{team} — {detail} ({minute}')",
     matchPenaltyTitle: '🎯 Penalty!',
     matchPenaltyBody: "{team} awarded a penalty ({minute}')",
     matchLineupTitle: '📋 Lineup announced',
     matchLineupBody: '{home} vs {away} — lineups are out',
+    matchFavoriteTitle: '🔔 Match followed',
+    matchFavoriteBody: '{home} vs {away} — you will get goals and key events',
 };
 
 
@@ -530,13 +534,15 @@ const ar: TemplateMap = {
     aiCheckinFallbackBody: '{name}، جاهز لجولة تانية؟ ادخل وكمّل ستريكك.',
     // أحداث المباراة الموسعة
     matchSubstitutionTitle: '🔁 تبديل',
-    matchSubstitutionBody: '{playerIn} مكان {playerOut} ({team}) - الدقيقة {minute}',
+    matchSubstitutionBody: '{playerIn} بدل {playerOut} ({team}) — الدقيقة {minute}',
     matchVarTitle: '📺 مراجعة الفار',
     matchVarBody: '{team} — {detail} (الدقيقة {minute})',
     matchPenaltyTitle: '🎯 ضربة جزاء!',
     matchPenaltyBody: 'احتسبت ضربة جزاء لـ{team} (الدقيقة {minute})',
     matchLineupTitle: '📋 تم إعلان التشكيلات',
     matchLineupBody: '{home} ضد {away} — ظهرت التشكيلات',
+    matchFavoriteTitle: '🔔 تم تمييز المباراة',
+    matchFavoriteBody: '{home} ضد {away} — سنخبرك بالأهداف والأحداث المهمة',
 };
 
 const TEMPLATES: Record<SupportedLanguage, TemplateMap> = { en, ar };

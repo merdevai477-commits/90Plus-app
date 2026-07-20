@@ -130,6 +130,38 @@ export async function subscribeWithBaseline(input: SubscribeBaselineInput): Prom
     return { subscriptionId: subscription.id, snapshot };
 }
 
+/** Localized push confirming the user followed/starred a match (home + matches bell). */
+export async function notifyMatchFavoriteConfirmation(params: {
+    userId: string;
+    fixtureId: number;
+    homeTeam: string;
+    awayTeam: string;
+    leagueName?: string | null;
+}): Promise<void> {
+    const { notifyUser } = await import('../notify.service');
+    const { NotificationType } = await import('../notification.service');
+    const { userId, fixtureId, homeTeam, awayTeam, leagueName } = params;
+
+    await notifyUser({
+        userId,
+        type: NotificationType.MATCH_FAVORITE,
+        titleKey: 'matchFavoriteTitle',
+        bodyKey: 'matchFavoriteBody',
+        vars: { home: homeTeam, away: awayTeam },
+        bypassPreferences: true,
+        idempotencyKey: `match-favorite:${userId}:${fixtureId}`,
+        data: {
+            type: 'MATCH_FAVORITE',
+            matchId: String(fixtureId),
+            fixtureId: String(fixtureId),
+            homeTeam,
+            awayTeam,
+            leagueName: leagueName ?? '',
+            screen: '/(tabs)/match-details',
+        },
+    });
+}
+
 export function isLiveStatus(status: string): boolean {
     return LIVE_STATUSES.has(status);
 }

@@ -325,7 +325,7 @@ router.post('/match-subscribe', requireAuth, async (req: Request, res: Response)
             return;
         }
 
-        const { subscribeWithBaseline } = await import('../services/match-events/match-subscription.service');
+        const { subscribeWithBaseline, notifyMatchFavoriteConfirmation } = await import('../services/match-events/match-subscription.service');
 
         const subscription = await subscribeWithBaseline({
             userId: user.id,
@@ -351,6 +351,17 @@ router.post('/match-subscribe', requireAuth, async (req: Request, res: Response)
         } catch (err) {
             logger.warn('[match-subscribe] failed to schedule reminder:', err);
         }
+
+        // Same confirmation push as Home-screen favorite.
+        notifyMatchFavoriteConfirmation({
+            userId: user.id,
+            fixtureId: parsedFixtureId,
+            homeTeam: String(homeTeam),
+            awayTeam: String(awayTeam),
+            leagueName: leagueName ? String(leagueName) : null,
+        }).catch((err) =>
+            logger.warn('[match-subscribe] favorite confirmation failed (non-fatal):', err?.message ?? err),
+        );
 
         res.json({
             status: 'SUCCESS',

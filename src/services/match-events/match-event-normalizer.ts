@@ -55,6 +55,17 @@ function classifyApiEvent(event: ApiFootballEvent): {
             prefKey: 'matchVar',
         };
     }
+    // API-Football uses "subst"; some feeds use "Substitution".
+    const typeLower = (event.type || '').toLowerCase();
+    if (typeLower === 'subst' || typeLower === 'substitution') {
+        return {
+            kind: 'substitution',
+            notificationType: NotificationType.MATCH_UPDATE,
+            titleKey: 'matchSubstitutionTitle',
+            bodyKey: 'matchSubstitutionBody',
+            prefKey: 'matchSubs',
+        };
+    }
     return null;
 }
 
@@ -74,8 +85,17 @@ export function normalizeApiEvents(
         const extraMinute = event.time?.extra ?? null;
         const teamId = event.team?.id ?? null;
         const playerId = event.player?.id ?? null;
-        const playerOff = event.player?.name || '';
-        const playerOn = event.assist?.name || playerOff;
+
+        // API-Football / 365: player = IN, assist = OUT on substitutions.
+        const playerIn =
+            classified.kind === 'substitution'
+                ? event.player?.name || ''
+                : event.assist?.name || event.player?.name || '';
+        const playerOut =
+            classified.kind === 'substitution'
+                ? event.assist?.name || ''
+                : event.player?.name || '';
+        const playerName = event.player?.name || event.assist?.name || '';
 
         const eventKey = buildMatchEventKey(fixtureId, {
             eventType: classified.kind,
@@ -83,7 +103,7 @@ export function normalizeApiEvents(
             extraMinute,
             teamId,
             playerId,
-            playerName: event.player?.name ?? event.assist?.name ?? null,
+            playerName: playerName || null,
             detail: event.detail || '',
         });
 
@@ -99,8 +119,8 @@ export function normalizeApiEvents(
             payload: { api: event },
             templateVars: {
                 player: event.player?.name || '',
-                playerIn: playerOn,
-                playerOut: playerOff,
+                playerIn: playerIn || '—',
+                playerOut: playerOut || '—',
                 team: event.team?.name || '',
                 minute: minute ?? '',
                 detail: event.detail || '',
@@ -113,6 +133,8 @@ export function normalizeApiEvents(
                 eventKind: classified.kind,
                 team: event.team?.name || '',
                 elapsed: minute ?? '',
+                playerIn,
+                playerOut,
                 homeTeam: meta.homeTeam,
                 awayTeam: meta.awayTeam,
             },
