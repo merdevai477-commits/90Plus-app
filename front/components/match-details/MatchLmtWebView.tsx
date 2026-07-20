@@ -16,7 +16,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PitchBrandLogo } from './PitchBrandLogo';
 import {
   fetchBrandedLmtHtml,
-  peekBrandedLmtHtml,
   LMT_WIDGET_BASE_ORIGIN,
 } from '../../services/lmt.service';
 import { getApiEndpoint } from '../../config/api.config';
@@ -246,16 +245,6 @@ export function MatchLmtWebView({
     setFailed(false);
     setMode('html');
     setBrandedHtml(null);
-    setUriFallback(widgetUrl);
-
-    // Prefer cached branded HTML so our pitchLogo shows immediately (never raw 365).
-    const cached = peekBrandedLmtHtml(widgetUrl, { hideBrand, brandLogoUrl });
-    if (cached) {
-      setBrandedHtml(cached);
-      setMode('html');
-      return;
-    }
-
     try {
       const html = await fetchBrandedLmtHtml(widgetUrl, { hideBrand, brandLogoUrl });
       setBrandedHtml(html);
@@ -302,8 +291,7 @@ export function MatchLmtWebView({
     });
   }, [mode, webSource]);
 
-  // Overlay only when we fell back to raw widget URI (covers 365 pitch mark).
-  const showOverlayFallback = (coverBrand || mode === 'uri') && !hideBrand && !loading && !failed;
+  const showOverlayFallback = coverBrand && mode === 'uri' && !loading && !failed;
   const ready = Boolean(brandedHtml || mode === 'uri');
   const waitingForHtml = mode === 'html' && !brandedHtml && !failed;
   const webKey = `${mode}-${reloadKey}-${mode === 'html' ? 'html' : uriFallback}`;

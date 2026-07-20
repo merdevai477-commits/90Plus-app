@@ -859,11 +859,11 @@ const MatchDetailsScreen = () => {
     }
   }, [fixtureId, language, lmtChecked]);
 
-  // Probe LMT as soon as fixtureId is known (don't wait for full fixture payload).
+  // Probe LMT for every opened match (404 = no pitch — show score card instead).
   useEffect(() => {
-    if (!fixtureId) return;
+    if (!fixtureId || !fixture) return;
     void loadLmtIfNeeded();
-  }, [fixtureId, loadLmtIfNeeded]);
+  }, [fixtureId, fixture?.fixture?.id, loadLmtIfNeeded]);
 
   // Refresh events while empty on the Events tab (live / not finished) — no manual retry.
   useEffect(() => {
