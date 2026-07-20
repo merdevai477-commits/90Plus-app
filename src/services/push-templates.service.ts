@@ -196,8 +196,8 @@ export type PushTemplateKey =
 type TemplateMap = Record<PushTemplateKey, string>;
 
 const en: TemplateMap = {
-    matchStartTitle: '⚽ Match starting',
-    matchStartBody: '{home} vs {away} kicks off in {minutes} minutes',
+    matchStartTitle: '⚽ Match started',
+    matchStartBody: '{home} vs {away} — the match has started',
     goalTitle: '⚽ Goal!',
     goalBody: "{player} scores for {team} ({minute}')",
     halftimeTitle: 'Half time',
@@ -364,8 +364,8 @@ const en: TemplateMap = {
 
 
 const ar: TemplateMap = {
-    matchStartTitle: '⚽ المباراة على وشك البدء',
-    matchStartBody: '{home} ضد {away} - تبدأ خلال {minutes} دقيقة',
+    matchStartTitle: '⚽ بدأت المباراة',
+    matchStartBody: '{home} ضد {away} — المباراة بدأت الآن',
     goalTitle: '⚽ هدف!',
     goalBody: '{player} يسجل لـ{team} في الدقيقة {minute}',
     halftimeTitle: 'استراحة بين الشوطين',

@@ -2815,8 +2815,8 @@ export const en = {
 
   // ── Push notifications — extended templates ──────────────────────────
   pushTemplates: {
-    matchStartTitle: '⚽ Match starting',
-    matchStartBody: '{home} vs {away} kicks off in {minutes} minutes',
+    matchStartTitle: '⚽ Match started',
+    matchStartBody: '{home} vs {away} — the match has started',
     goalTitle: '⚽ Goal!',
     goalBody: '{player} scores for {team} ({minute}\')',
     halftimeTitle: 'Half time',

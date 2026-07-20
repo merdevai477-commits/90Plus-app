@@ -5,6 +5,9 @@
  * Cache-first: reuses Redis live/events data written by liveFixtureSync before
  * calling API-Football. Runs only on the distributed sync leader instance.
  *
+ * Near kickoff / live favorites force a per-fixture API refresh so small leagues
+ * that lag behind `live=all` still get start + goal pushes quickly.
+ *
  * Score/status changes from LiveFixtureSync trigger immediate per-fixture ingest.
  */
 
@@ -19,19 +22,46 @@ import {
     isWorldCupOnlyMode,
     logSkippingNonWorldCup,
 } from '../config/world-cup-only-mode.config';
+import {
+    LIVE_STATUSES,
+    FINISHED_STATUSES,
+    NS_LIKE_STATUSES,
+} from './match-events/match-event-normalizer';
+
+/** Force API refresh from 20 min before kickoff through 15 min after while still NS-like. */
+const FORCE_REFRESH_BEFORE_MS = 20 * 60 * 1000;
+const FORCE_REFRESH_AFTER_MS = 15 * 60 * 1000;
 
 function pollIntervalMs(): number {
     const fromEnv = parseInt(
-        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '15000',
+        process.env.MATCH_EVENT_POLL_MS ?? process.env.MATCH_WATCHER_INTERVAL_MS ?? '10000',
         10,
     );
-    return Math.max(10_000, Number.isFinite(fromEnv) ? fromEnv : 15_000);
+    return Math.max(10_000, Number.isFinite(fromEnv) ? fromEnv : 10_000);
 }
 
 const FIXTURE_INGEST_CONCURRENCY = Math.max(
     1,
     Math.min(8, parseInt(process.env.MATCH_EVENT_INGEST_CONCURRENCY || '4', 10) || 4),
 );
+
+function shouldForceApiRefresh(
+    matchDate: Date,
+    status: string | null | undefined,
+    now: Date,
+): boolean {
+    const s = status || 'NS';
+    if (FINISHED_STATUSES.has(s)) return false;
+    if (LIVE_STATUSES.has(s)) return true;
+
+    const t = matchDate.getTime();
+    if (!Number.isFinite(t)) return false;
+    const inWindow =
+        now.getTime() >= t - FORCE_REFRESH_BEFORE_MS &&
+        now.getTime() <= t + FORCE_REFRESH_AFTER_MS;
+
+    return inWindow && (NS_LIKE_STATUSES.has(s) || !LIVE_STATUSES.has(s));
+}
 
 export class LiveMatchIngestorService {
     private static intervalId: NodeJS.Timeout | null = null;
@@ -83,7 +113,10 @@ export class LiveMatchIngestorService {
 
         const timer = setTimeout(() => {
             this.pendingSyncIngest.delete(fixtureId);
-            void this.ingestFixtureById(fixtureId, { forceRefreshEvents: true }).catch((err) =>
+            void this.ingestFixtureById(fixtureId, {
+                forceRefreshEvents: true,
+                forceApiRefresh: false,
+            }).catch((err) =>
                 logger.warn(`[LiveMatchIngestor] sync-trigger ingest ${fixtureId} failed:`, err?.message),
             );
         }, 0);
@@ -105,7 +138,7 @@ export class LiveMatchIngestorService {
 
     private static async ingestFixtureById(
         fixtureId: number,
-        options?: { forceRefreshEvents?: boolean },
+        options?: { forceRefreshEvents?: boolean; forceApiRefresh?: boolean },
     ): Promise<void> {
         if (this.inFlightFixtures.has(fixtureId)) {
             this.pendingRetries.add(fixtureId);
@@ -141,7 +174,7 @@ export class LiveMatchIngestorService {
     private static async processFixture(
         fixtureId: number,
         meta: { homeTeam: string; awayTeam: string },
-        options?: { forceRefreshEvents?: boolean },
+        options?: { forceRefreshEvents?: boolean; forceApiRefresh?: boolean },
     ): Promise<void> {
         if (isWorldCupOnlyMode()) {
             const allowed = await isWorldCupFixtureIdAllowed(fixtureId);
@@ -186,6 +219,8 @@ export class LiveMatchIngestorService {
                 apiMatchId: true,
                 homeTeam: true,
                 awayTeam: true,
+                matchDate: true,
+                lastStatus: true,
             },
         });
 
@@ -194,12 +229,28 @@ export class LiveMatchIngestorService {
             return;
         }
 
-        const byFixture = new Map<number, { homeTeam: string; awayTeam: string }>();
+        const byFixture = new Map<
+            number,
+            { homeTeam: string; awayTeam: string; matchDate: Date; lastStatus: string | null }
+        >();
         for (const f of favoriteMatches) {
             if (!byFixture.has(f.apiMatchId)) {
-                byFixture.set(f.apiMatchId, { homeTeam: f.homeTeam, awayTeam: f.awayTeam });
+                byFixture.set(f.apiMatchId, {
+                    homeTeam: f.homeTeam,
+                    awayTeam: f.awayTeam,
+                    matchDate: f.matchDate,
+                    lastStatus: f.lastStatus,
+                });
             }
         }
+
+        // Prefer CachedFixture.status when available (more current than FavoriteMatch.lastStatus).
+        const fixtureIds = [...byFixture.keys()];
+        const cachedRows = await prisma.cachedFixture.findMany({
+            where: { fixtureId: { in: fixtureIds } },
+            select: { fixtureId: true, status: true },
+        });
+        const statusByFixture = new Map(cachedRows.map((r) => [r.fixtureId, r.status]));
 
         logger.info(`📊 Ingesting ${byFixture.size} favorited fixture(s) (cache-first)...`);
 
@@ -207,11 +258,17 @@ export class LiveMatchIngestorService {
         for (let i = 0; i < entries.length; i += FIXTURE_INGEST_CONCURRENCY) {
             const batch = entries.slice(i, i + FIXTURE_INGEST_CONCURRENCY);
             await Promise.all(
-                batch.map(([fixtureId, meta]) =>
-                    this.processFixture(fixtureId, meta, { forceRefreshEvents: true }).catch((err: any) => {
+                batch.map(([fixtureId, meta]) => {
+                    const status = statusByFixture.get(fixtureId) ?? meta.lastStatus;
+                    const forceApiRefresh = shouldForceApiRefresh(meta.matchDate, status, now);
+                    return this.processFixture(
+                        fixtureId,
+                        { homeTeam: meta.homeTeam, awayTeam: meta.awayTeam },
+                        { forceRefreshEvents: true, forceApiRefresh },
+                    ).catch((err: any) => {
                         logger.error(`[LiveMatchIngestor] fixture ${fixtureId} error:`, err?.message);
-                    }),
-                ),
+                    });
+                }),
             );
         }
     }

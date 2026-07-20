@@ -53,7 +53,7 @@ class LiveFixtureSyncService {
 
         const intervalMs = Math.max(
             10_000,
-            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '15000', 10) || 15_000,
+            parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '10000', 10) || 10_000,
         );
 
         this.running = true;

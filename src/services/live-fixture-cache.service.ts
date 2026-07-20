@@ -16,7 +16,7 @@ export const FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX = 'football:fixture_terminal:'
 
 const LIVE_LIST_TTL_SEC = Math.max(
     70,
-    Math.ceil((parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '15000', 10) || 15_000) / 1000) + 20,
+    Math.ceil((parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '10000', 10) || 10_000) / 1000) + 20,
 );
 const LIVE_FIXTURE_TTL_SEC = LIVE_LIST_TTL_SEC;
 const TERMINAL_FIXTURE_TTL_SEC = 600;

@@ -1,5 +1,5 @@
 import { isPushNotifiableMatchEvent } from '../match-event-delivery.service';
-import { diffStatusEvents } from '../match-event-normalizer';
+import { diffScoreGoals, diffStatusEvents } from '../match-event-normalizer';
 import type { NormalizedMatchEvent } from '../match-event.types';
 import { NotificationType } from '../../notification.service';
 
@@ -58,8 +58,46 @@ describe('diffStatusEvents', () => {
         expect(events[0].eventType).toBe('kickoff');
     });
 
+    it('emits synthetic kickoff when score advances while status stays NS', () => {
+        const events = diffStatusEvents(99, 'NS', 'NS', { homeScore: 1, awayScore: 0 }, meta);
+
+        expect(events).toHaveLength(1);
+        expect(events[0].eventType).toBe('kickoff');
+        expect(events[0].payload.status).toBe('1H');
+    });
+
+    it('uses a stable kickoff eventKey across status and synthetic paths', () => {
+        const fromStatus = diffStatusEvents(42, 'NS', '1H', { homeScore: 0, awayScore: 0 }, meta);
+        const fromScore = diffStatusEvents(42, 'NS', 'NS', { homeScore: 1, awayScore: 0 }, meta);
+
+        expect(fromStatus[0].eventKey).toBe(fromScore[0].eventKey);
+    });
+
     it('does not emit halftime or second-half events', () => {
         expect(diffStatusEvents(99, '1H', 'HT', scores, meta)).toHaveLength(0);
         expect(diffStatusEvents(99, 'HT', '2H', scores, meta)).toHaveLength(0);
+    });
+
+    it('emits fulltime when status moves to FT', () => {
+        const events = diffStatusEvents(99, '2H', 'FT', scores, meta);
+        expect(events).toHaveLength(1);
+        expect(events[0].eventType).toBe('fulltime');
+    });
+});
+
+describe('diffScoreGoals', () => {
+    const meta = { homeTeam: 'Home FC', awayTeam: 'Away FC' };
+
+    it('emits a goal when home score increases (no events feed required)', () => {
+        const events = diffScoreGoals(
+            7,
+            { homeScore: 0, awayScore: 0 },
+            { homeScore: 1, awayScore: 0 },
+            meta,
+        );
+
+        expect(events).toHaveLength(1);
+        expect(events[0].eventType).toBe('goal_home');
+        expect(events[0].payload).toMatchObject({ homeScore: 1, awayScore: 0 });
     });
 });

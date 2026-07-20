@@ -2745,8 +2745,8 @@ export const ar = {
 
   // ── قوالب الإشعارات الفورية ────────────────────────────────────────
   pushTemplates: {
-    matchStartTitle: '⚽ المباراة على وشك البدء',
-    matchStartBody: '{home} ضد {away} - تبدأ خلال {minutes} دقيقة',
+    matchStartTitle: '⚽ بدأت المباراة',
+    matchStartBody: '{home} ضد {away} — المباراة بدأت الآن',
     goalTitle: '⚽ هدف!',
     goalBody: '{player} يسجل لـ{team} في الدقيقة {minute}',
     halftimeTitle: 'استراحة بين الشوطين',

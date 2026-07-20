@@ -5,12 +5,16 @@
  * Each subscription schedules ONE delayed Bull job (jobId = userId:fixtureId)
  * with a stable ID so re-subscribing overwrites the old schedule and
  * unsubscribing removes it cleanly.
+ *
+ * Status-based kickoff from the live ingestor remains a fallback; `notifiedStart`
+ * prevents duplicate pushes if both paths fire.
  */
 
 import Bull, { Queue, Job } from 'bull';
 import { bullCreateClient } from '../lib/bull-redis';
 import { logger } from '../utils/logger';
 import { NotificationService } from '../services/notification.service';
+import { getUserPushTokens } from '../services/user-push-devices.service';
 import prisma from '../lib/prisma';
 
 export interface MatchStartReminderJob {
@@ -48,17 +52,23 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
         const { userId, fixtureId, homeTeam, awayTeam } = job.data;
 
         try {
-            // Read the latest subscription + push token at send time. The
+            // Read the latest subscription + consent at send time. The
             // subscription may have been removed after the job was scheduled,
             // in which case we silently skip.
             const [subscription, user] = await Promise.all([
                 prisma.favoriteMatch.findUnique({
                     where: { userId_apiMatchId: { userId, apiMatchId: fixtureId } },
-                    select: { notifiedStart: true, matchDate: true, homeTeamLogo: true, awayTeamLogo: true, leagueName: true },
+                    select: {
+                        notifiedStart: true,
+                        matchDate: true,
+                        homeTeamLogo: true,
+                        awayTeamLogo: true,
+                        leagueName: true,
+                    },
                 }),
                 prisma.user.findUnique({
                     where: { id: userId },
-                    select: { expoPushToken: true, pushNotificationsConsent: true },
+                    select: { pushNotificationsConsent: true },
                 }),
             ]);
 
@@ -70,14 +80,21 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
                 logger.debug(`[match-start] already notified for ${userId}/${fixtureId}`);
                 return;
             }
-            if (!user?.expoPushToken || !user.pushNotificationsConsent) {
-                logger.debug(`[match-start] no push token/consent for ${userId}`);
+            if (!user?.pushNotificationsConsent) {
+                logger.debug(`[match-start] no consent for ${userId}`);
                 return;
             }
 
+            const tokens = await getUserPushTokens(userId);
+            if (tokens.length === 0) {
+                logger.debug(`[match-start] no push tokens for ${userId}`);
+                return;
+            }
+
+            // Pass null so createNotification fans out to every registered device.
             await NotificationService.createMatchStartNotification(
                 userId,
-                user.expoPushToken,
+                null,
                 homeTeam,
                 awayTeam,
                 fixtureId,
@@ -94,7 +111,7 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
                 data: { notifiedStart: true },
             });
 
-            logger.info(`[match-start] ✅ notified ${userId} for fixture ${fixtureId}`);
+            logger.info(`[match-start] ✅ notified ${userId} for fixture ${fixtureId} (${tokens.length} device(s))`);
         } catch (err: any) {
             logger.error(`[match-start] job failed for ${userId}/${fixtureId}:`, err?.message);
             throw err; // let Bull retry
@@ -109,16 +126,54 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
 }
 
 /**
- * Schedule a push reminder that fires when the match kicks off.
- * If the match is already in the past, we skip scheduling (caller should
- * still persist the subscription — the DB is the source of truth for UI).
+ * Schedule a push that fires at kickoff (`matchDate`).
+ * Past kickoffs are skipped — status/score ingest remains the fallback.
  */
 export async function scheduleMatchStartReminder(
     data: MatchStartReminderJob,
 ): Promise<void> {
-    // Match kickoff reminders are disabled — subscribed matches push only
-    // goals, kickoff, red cards, VAR, and fulltime.
-    logger.debug(`[match-start] skipped (disabled) for ${data.userId}/${data.fixtureId}`);
+    const q = getMatchStartReminderQueue();
+    if (!q) {
+        logger.debug(`[match-start] queue unavailable — skip schedule for ${data.userId}/${data.fixtureId}`);
+        return;
+    }
+
+    const kickoffMs = new Date(data.matchDate).getTime();
+    if (!Number.isFinite(kickoffMs)) {
+        logger.warn(`[match-start] invalid matchDate for ${data.userId}/${data.fixtureId}`);
+        return;
+    }
+
+    const delay = kickoffMs - Date.now();
+    if (delay <= 0) {
+        logger.debug(
+            `[match-start] kickoff already passed for ${data.userId}/${data.fixtureId} — skip schedule`,
+        );
+        return;
+    }
+
+    const jobId = matchStartJobId(data.userId, data.fixtureId);
+    try {
+        const existing = await q.getJob(jobId);
+        if (existing) {
+            await existing.remove();
+        }
+    } catch {
+        // ignore — add below still works if remove fails
+    }
+
+    await q.add(data, {
+        jobId,
+        delay,
+        removeOnComplete: true,
+        removeOnFail: 50,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+    });
+
+    logger.info(
+        `[match-start] scheduled ${jobId} in ${Math.round(delay / 1000)}s (kickoff ${data.matchDate})`,
+    );
 }
 
 /**

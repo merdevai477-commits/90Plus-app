@@ -17,6 +17,12 @@ import type { MatchEventIngestResult, NormalizedMatchEvent, FixtureSnapshot } fr
 import { readLiveFixtureById, readTerminalFixtureById } from '../live-fixture-cache.service';
 import { matchCacheService } from '../match-cache.service';
 
+export type IngestFixtureOptions = {
+    forceRefreshEvents?: boolean;
+    /** Bypass stale Redis/DB snapshot and hit API-Football for this fixture. */
+    forceApiRefresh?: boolean;
+};
+
 async function readFixtureSnapshotFromCache(
     fixtureId: number,
     options?: { preferFresh?: boolean },
@@ -71,22 +77,31 @@ export class MatchEventIngestor {
     static async ingestFixture(
         fixtureId: number,
         meta: { homeTeam: string; awayTeam: string },
-        options?: { forceRefreshEvents?: boolean },
+        options?: IngestFixtureOptions,
     ): Promise<MatchEventIngestResult | null> {
         const lock = await acquireIngestorLock(fixtureId);
         if (!lock) return null;
 
         try {
-            const preferFresh = options?.forceRefreshEvents === true;
-            const cachedLive = await readFixtureSnapshotFromCache(fixtureId, { preferFresh });
+            const preferFresh = options?.forceRefreshEvents === true || options?.forceApiRefresh === true;
             let snapshot: FixtureSnapshot | null = null;
 
-            if (cachedLive) {
-                snapshot = parseFixtureSnapshot(fixtureId, cachedLive);
-            } else if (!isFootballQuotaExhausted()) {
+            if (options?.forceApiRefresh && !isFootballQuotaExhausted()) {
                 const fixtureRow = await footballService.getFixtureById(fixtureId, { source: 'job' });
                 if (fixtureRow) {
                     snapshot = parseFixtureSnapshot(fixtureId, fixtureRow);
+                }
+            }
+
+            if (!snapshot) {
+                const cachedLive = await readFixtureSnapshotFromCache(fixtureId, { preferFresh });
+                if (cachedLive) {
+                    snapshot = parseFixtureSnapshot(fixtureId, cachedLive);
+                } else if (!isFootballQuotaExhausted()) {
+                    const fixtureRow = await footballService.getFixtureById(fixtureId, { source: 'job' });
+                    if (fixtureRow) {
+                        snapshot = parseFixtureSnapshot(fixtureId, fixtureRow);
+                    }
                 }
             }
 
@@ -101,7 +116,7 @@ export class MatchEventIngestor {
 
             if (snapshot.isLive) {
                 const apiEvents = await footballDataCacheService.getMatchEvents(fixtureId, {
-                    forceRefresh: options?.forceRefreshEvents === true,
+                    forceRefresh: options?.forceRefreshEvents === true || options?.forceApiRefresh === true,
                 });
                 if (Array.isArray(apiEvents)) {
                     normalized.push(...normalizeApiEvents(fixtureId, apiEvents, meta));

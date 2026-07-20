@@ -9,6 +9,8 @@ import type { MatchEventKind, NormalizedMatchEvent, FixtureSnapshot } from './ma
 
 export const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE']);
 export const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
+/** Pre-kickoff / not-started statuses (API sometimes stalls here while score advances). */
+export const NS_LIKE_STATUSES = new Set(['NS', 'TBD']);
 
 interface ApiFootballEvent {
     time: { elapsed?: number; extra?: number | null };
@@ -185,6 +187,32 @@ function buildGoalEvent(
     };
 }
 
+function buildKickoffEvent(
+    fixtureId: number,
+    status: string,
+    detectedAt: Date,
+    meta: { homeTeam: string; awayTeam: string },
+): NormalizedMatchEvent {
+    return {
+        fixtureId,
+        // Stable key so status-path and synthetic score-path kickoffs are idempotent.
+        eventKey: buildStatusEventKey(fixtureId, 'kickoff', 'kickoff'),
+        eventType: 'kickoff',
+        minute: 0,
+        extraMinute: null,
+        teamId: null,
+        playerId: null,
+        detectedAt,
+        payload: { status },
+        templateVars: { home: meta.homeTeam, away: meta.awayTeam, minutes: 0 },
+        notificationType: NotificationType.MATCH_START,
+        titleKey: 'matchStartTitle',
+        bodyKey: 'matchStartBody',
+        prefKey: 'matchStart',
+        data: { type: 'MATCH_START', homeTeam: meta.homeTeam, awayTeam: meta.awayTeam },
+    };
+}
+
 export function diffStatusEvents(
     fixtureId: number,
     prevStatus: string | null | undefined,
@@ -196,24 +224,26 @@ export function diffStatusEvents(
     const out: NormalizedMatchEvent[] = [];
     const last = prevStatus ?? 'NS';
 
-    if (!['1H', 'LIVE', 'HT'].includes(last) && ['1H', 'LIVE', 'HT'].includes(currentStatus)) {
-        out.push({
-            fixtureId,
-            eventKey: buildStatusEventKey(fixtureId, 'kickoff', currentStatus),
-            eventType: 'kickoff',
-            minute: 0,
-            extraMinute: null,
-            teamId: null,
-            playerId: null,
-            detectedAt: now,
-            payload: { status: currentStatus },
-            templateVars: { home: meta.homeTeam, away: meta.awayTeam, minutes: 0 },
-            notificationType: NotificationType.MATCH_START,
-            titleKey: 'matchStartTitle',
-            bodyKey: 'matchStartBody',
-            prefKey: 'matchStart',
-            data: { type: 'MATCH_START', homeTeam: meta.homeTeam, awayTeam: meta.awayTeam },
-        });
+    const statusKickoff =
+        !['1H', 'LIVE', 'HT'].includes(last) && ['1H', 'LIVE', 'HT'].includes(currentStatus);
+
+    // Small leagues sometimes leave status at NS while the scoreboard advances.
+    const syntheticKickoff =
+        !statusKickoff &&
+        NS_LIKE_STATUSES.has(currentStatus) &&
+        (scores.homeScore > 0 || scores.awayScore > 0) &&
+        !LIVE_STATUSES.has(last) &&
+        !FINISHED_STATUSES.has(last);
+
+    if (statusKickoff || syntheticKickoff) {
+        out.push(
+            buildKickoffEvent(
+                fixtureId,
+                statusKickoff ? currentStatus : '1H',
+                now,
+                meta,
+            ),
+        );
     }
 
     if (!FINISHED_STATUSES.has(last) && FINISHED_STATUSES.has(currentStatus)) {

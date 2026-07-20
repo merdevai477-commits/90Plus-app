@@ -308,8 +308,9 @@ flowchart TD
 ### 8.1 إشعارات المباريات (Match Events)
 
 - المستخدم يشترك عبر **جرس المباراة** → `POST /api/notifications/match-subscribe`
-- يُحفظ في `FavoriteMatch` + Bull job لتذكير بداية المباراة (`match-start-reminder.queue`)
-- أحداث live (هدف، بطاقة، نهاية...) → `match-event-push.queue` → `processMatchEventPushJob`
+- يُحفظ في `FavoriteMatch` + Bull job عند `matchDate` لإشعار «المباراة بدأت» (`match-start-reminder.queue`؛ multi-device + `notifiedStart` يمنع التكرار مع مسار الحالة)
+- أحداث live (هدف، بطاقة، نهاية...) من تغيّر النتيجة/الحالة (+ أحداث API إن وُجدت) → fan-out فوري
+- دوريات بدون feed أحداث: بداية/أهداف/نهاية عبر status+score؛ لا بطاقات/VAR
 - Preferences: `matchGoals`, `matchStart`, `matchEnd`, `matchHalftime`, `matchCards`, `leagueMatches`, إلخ
 
 ### 8.2 إشعارات اجتماعية
