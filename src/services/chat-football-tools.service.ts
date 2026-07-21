@@ -948,7 +948,7 @@ const HIGHLIGHT_LEAGUE_SCORE: Record<number, number> = {
   4: 69,
 };
 
-const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'P', 'LIVE', 'BT']);
+const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'P', 'LIVE', 'BT', 'INT', 'SUSP']);
 
 function scoreFixtureImportance(fixture: any): number {
   const leagueId = fixture?.league?.id ?? 0;

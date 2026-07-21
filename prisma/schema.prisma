@@ -789,15 +789,16 @@ model ReelShare {
 }
 
 model Notification {
-  id        String           @id @default(uuid())
-  userId    String
-  title     String
-  message   String
-  type      NotificationType
-  isRead    Boolean          @default(false)
-  data      Json?
-  createdAt DateTime         @default(now())
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String           @id @default(uuid())
+  userId         String
+  title          String
+  message        String
+  type           NotificationType
+  isRead         Boolean          @default(false)
+  data           Json?
+  idempotencyKey String?          @unique
+  createdAt      DateTime         @default(now())
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([isRead])
@@ -959,16 +960,20 @@ model MatchEvent {
 
 /// Per-subscription delivery ledger — prevents duplicate pushes at scale
 model MatchEventDelivery {
-  id             String        @id @default(uuid())
-  subscriptionId String
-  eventKey       String
-  deliveredAt    DateTime      @default(now())
-  fixtureId      Int
-  event          MatchEvent    @relation(fields: [fixtureId, eventKey], references: [fixtureId, eventKey], onDelete: Cascade)
-  subscription   FavoriteMatch @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  id              String        @id @default(uuid())
+  subscriptionId  String
+  eventKey        String
+  status          String        @default("PENDING")
+  processingToken String?
+  processingUntil DateTime?
+  deliveredAt     DateTime?
+  fixtureId       Int
+  event           MatchEvent    @relation(fields: [fixtureId, eventKey], references: [fixtureId, eventKey], onDelete: Cascade)
+  subscription    FavoriteMatch @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@unique([subscriptionId, eventKey])
   @@index([subscriptionId])
+  @@index([status, processingUntil])
   @@map("match_event_deliveries")
 }
 
@@ -1018,6 +1023,8 @@ model CachedFixture {
   @@index([matchDate, status])
   @@index([matchTimestamp])
   @@index([leagueId])
+  @@index([leagueId, leagueSeason, matchDate])
+  @@index([updatedAt, matchDate], map: "cached_fixtures_synthetic_live_queue_idx")
   @@index([status])
   @@index([homeTeamId])
   @@index([awayTeamId])
@@ -1125,6 +1132,23 @@ model CachedLeague {
   @@index([name])
   @@index([country])
   @@map("cached_leagues")
+}
+
+model CachedStandings {
+  id            String   @id @default(uuid())
+  provider      String   @default("api-football")
+  competitionId Int
+  leagueId      Int
+  season        Int
+  language      String   @db.VarChar(8)
+  payload       Json
+  source        String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([provider, competitionId, season, language])
+  @@index([leagueId, season])
+  @@map("cached_standings")
 }
 
 model Prediction {

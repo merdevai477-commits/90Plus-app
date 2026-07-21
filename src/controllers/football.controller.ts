@@ -15,6 +15,13 @@ import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDet
 import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
 import { buildScores365LmtEmbedHtml } from '../utils/scores365-lmt-html';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
+import { isHistoricalHttpDbOnlyEnabled } from '../config/football-reliability-rollout.config';
+import { getWorldCupLeagueId, getWorldCupSeason } from '../config/world-cup-only-mode.config';
+import {
+  calendarDateRangeBounds,
+  calendarTodayKey,
+  offsetCalendarDateKey,
+} from '../utils/calendar-day-bounds.util';
 
 /**
  * Football API Proxy Controller
@@ -25,6 +32,38 @@ import { threeSixFiveScoresService } from '../services/threeSixFiveScores.servic
 function ensureString(param: string | string[] | undefined): string {
   if (Array.isArray(param)) return param[0] || '';
   return param || '';
+}
+
+function filterCachedFixturesByQuery(fixtures: any[], query: Request['query']): any[] {
+  const teamId = query.team == null ? null : Number(query.team);
+  const fixtureId = query.id == null ? null : Number(query.id);
+  const fixtureIds = query.ids == null
+    ? null
+    : new Set(
+        String(query.ids)
+          .split(/[-,]/)
+          .map(Number)
+          .filter((value) => Number.isInteger(value)),
+      );
+  const statuses = query.status == null
+    ? null
+    : new Set(String(query.status).split(/[-,]/).map((value) => value.trim().toUpperCase()));
+
+  return fixtures.filter((fixture) => {
+    if (query.league != null && fixture?.league?.id !== Number(query.league)) return false;
+    if (query.season != null && fixture?.league?.season !== Number(query.season)) return false;
+    if (
+      teamId != null &&
+      fixture?.teams?.home?.id !== teamId &&
+      fixture?.teams?.away?.id !== teamId
+    ) return false;
+    if (fixtureId != null && fixture?.fixture?.id !== fixtureId) return false;
+    if (fixtureIds && !fixtureIds.has(fixture?.fixture?.id)) return false;
+    if (statuses && !statuses.has(String(fixture?.fixture?.status?.short ?? '').toUpperCase())) {
+      return false;
+    }
+    return true;
+  });
 }
 
 /** fresh=1 query param, or WC store hotfix (legacy app compatibility). */
@@ -193,6 +232,59 @@ export class FootballController {
    */
   static async getFixtures(req: Request, res: Response): Promise<void> {
     try {
+      const requestedDate = typeof req.query.date === 'string' ? req.query.date : null;
+      const isPastCalendarDate =
+        requestedDate != null &&
+        /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) &&
+        requestedDate < calendarTodayKey();
+      const isConfiguredWorldCupRequest =
+        Number(req.query.league) === getWorldCupLeagueId() &&
+        Number(req.query.season) === getWorldCupSeason();
+      const canUseDateCache =
+        isPastCalendarDate &&
+        req.query.live == null &&
+        req.query.last == null &&
+        req.query.next == null &&
+        req.query.from == null &&
+        req.query.to == null;
+
+      if (canUseDateCache && isHistoricalHttpDbOnlyEnabled() && isConfiguredWorldCupRequest) {
+        const durable = await footballDataCacheService.getWorldCupMatchesByDate(
+          requestedDate!,
+          getWorldCupLeagueId(),
+          getWorldCupSeason(),
+          resolveAppLanguage(req),
+        );
+        const fixtures = filterCachedFixturesByQuery(durable, req.query);
+        res.json({
+          status: 'SUCCESS',
+          results: fixtures.length,
+          response: fixtures,
+          cached: true,
+          degraded: fixtures.length === 0,
+        });
+        return;
+      }
+
+      const isUnfilteredAllLeagueDate =
+        canUseDateCache &&
+        req.query.league == null &&
+        req.query.season == null &&
+        req.query.team == null &&
+        req.query.status == null &&
+        req.query.id == null &&
+        req.query.ids == null;
+      if (isUnfilteredAllLeagueDate) {
+        const fixtures = await footballDataCacheService.getMatchesByDate(requestedDate!);
+        res.json({
+          status: 'SUCCESS',
+          results: fixtures.length,
+          response: fixtures,
+          cached: true,
+        });
+        return;
+      }
+
       if (!footballService.isConfigured()) {
         res.status(503).json({
           status: 'ERROR',
@@ -256,6 +348,34 @@ export class FootballController {
    */
   static async getOptimizedFixtures(req: Request, res: Response): Promise<void> {
     try {
+      const { from, to } = req.query;
+
+      const fromKey = typeof from === 'string' ? from : calendarTodayKey();
+      const toKey = typeof to === 'string' ? to : offsetCalendarDateKey(fromKey, 7);
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(fromKey) ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(toKey)
+      ) {
+        res.status(400).json({
+          status: 'ERROR',
+          message: 'Invalid date format. Use YYYY-MM-DD',
+        });
+        return;
+      }
+
+      const { start: fromDate, end: toDate } = calendarDateRangeBounds(fromKey, toKey);
+      if (
+        Number.isNaN(fromDate.getTime()) ||
+        Number.isNaN(toDate.getTime()) ||
+        fromDate.getTime() > toDate.getTime()
+      ) {
+        res.status(400).json({
+          status: 'ERROR',
+          message: 'Invalid date range',
+        });
+        return;
+      }
+
       if (!footballService.isConfigured()) {
         res.status(503).json({
           status: 'ERROR',
@@ -264,28 +384,7 @@ export class FootballController {
         return;
       }
 
-      const { from, to } = req.query;
-
-      // Default to today + 7 days if no range specified
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const defaultTo = new Date(today);
-      defaultTo.setDate(defaultTo.getDate() + 7);
-
-      const fromDate = from ? new Date(from as string) : today;
-      const toDate = to ? new Date(to as string) : defaultTo;
-
-      // Validate dates
-      if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
-        res.status(400).json({
-          status: 'ERROR',
-          message: 'Invalid date format. Use YYYY-MM-DD',
-        });
-        return;
-      }
-
-      logger.debug(`📅 Optimized fixtures request: ${fromDate.toISOString().split('T')[0]} to ${toDate.toISOString().split('T')[0]}`);
+      logger.debug(`📅 Optimized fixtures request: ${fromKey} to ${toKey}`);
 
       // Use the MatchCacheService for intelligent caching
       const fixtures = await matchCacheService.getOptimizedMatches(
@@ -293,12 +392,9 @@ export class FootballController {
         toDate,
         async () => {
           // This function is called only when API fetch is needed
-          const fromStr = fromDate.toISOString().split('T')[0];
-          const toStr = toDate.toISOString().split('T')[0];
+          logger.debug(`📡 Fetching from API: ${fromKey} to ${toKey}`);
 
-          logger.debug(`📡 Fetching from API: ${fromStr} to ${toStr}`);
-
-          return footballService.getFixtures({ from: fromStr, to: toStr }) as Promise<FixtureFromAPI[]>;
+          return footballService.getFixtures({ from: fromKey, to: toKey }) as Promise<FixtureFromAPI[]>;
         }
       );
 
@@ -311,8 +407,8 @@ export class FootballController {
         response: fixtures,
         _meta: {
           dateRange: {
-            from: fromDate.toISOString().split('T')[0],
-            to: toDate.toISOString().split('T')[0],
+            from: fromKey,
+            to: toKey,
           },
           cacheStats: {
             finishedInDb: cacheStats.dbFixtureCount,
@@ -2175,7 +2271,11 @@ export class FootballController {
         return;
       }
 
-      const parsed = await footballDataCacheService.getStandingsParsed(leagueId, season);
+      const parsed = await footballDataCacheService.getStandingsParsed(
+        leagueId,
+        season,
+        resolveAppLanguage(req),
+      );
 
       res.json({
         status: 'SUCCESS',
@@ -2394,19 +2494,6 @@ export class FootballController {
       const competitionId = Number.isFinite(parsedCompetition) ? parsedCompetition : undefined;
       const result = await footballDataCacheService.getCached365Standings(competitionId, language);
       if (!result.data?.length) {
-        const count = await footballDataCacheService.syncWorldCupStandingsFrom365(language);
-        if (count > 0) {
-          const retry = await footballDataCacheService.getCached365Standings(competitionId, language);
-          if (retry.data?.length) {
-            res.json({
-              status: 'SUCCESS',
-              source: retry.source,
-              results: retry.data.length,
-              response: retry.data,
-            });
-            return;
-          }
-        }
         res.status(503).json({
           status: 'ERROR',
           message: '365Scores standings unavailable',

@@ -31,6 +31,7 @@ import { matchCacheService } from './match-cache.service';
 import { playerCacheService } from './player-cache.service';
 import { leagueCacheService } from './league-cache.service';
 import {
+    isWorldCupHistoricalOnlyMode,
     isWorldCupOnlyMode,
     logSkippingNonWorldCup,
 } from '../config/world-cup-only-mode.config';
@@ -88,6 +89,85 @@ import { map365StandingRowsToApiGroups } from '../utils/scores365-standings-mapp
 import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
 import { getWorldCupLeagueId, getWorldCupSeason } from '../config/world-cup-only-mode.config';
 import { getScores365CompetitionId } from './scores365-experiment.service';
+import { withSyncLeaderLease } from './football-sync-leader.service';
+import {
+    isHistoricalHttpDbOnlyEnabled,
+    isStandingsSwrEnabled,
+    matchesByDateLocalMaxEntries,
+    standingsFreshMs,
+    standingsStaleMs,
+} from '../config/football-reliability-rollout.config';
+
+const HISTORICAL_WORLD_CUP_STATUSES = ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'];
+
+export function isPastOrFinishedFixture(
+    status: string | null | undefined,
+    matchDate: Date | string | null | undefined,
+    now = new Date(),
+): boolean {
+    if (status && HISTORICAL_WORLD_CUP_STATUSES.includes(status)) return true;
+    if (!matchDate) return false;
+    const date = matchDate instanceof Date ? matchDate : new Date(matchDate);
+    return !Number.isNaN(date.getTime()) && date.getTime() < now.getTime();
+}
+
+export function mergeFixtureProviders(baseFixtures: any[], overlays: any[]): any[] {
+    const merged = [...baseFixtures];
+    const byId = new Map<number, number>();
+    const normalize = (value: unknown) =>
+        String(value ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const identity = (fixture: any) => {
+        const timestamp = Number(fixture?.fixture?.timestamp ?? 0);
+        const home = normalize(fixture?.teams?.home?.name);
+        const away = normalize(fixture?.teams?.away?.name);
+        return timestamp > 0 && home && away ? `${Math.round(timestamp / 300)}:${home}:${away}` : null;
+    };
+    const byIdentity = new Map<string, number>();
+
+    merged.forEach((fixture, index) => {
+        const id = fixture?.fixture?.id;
+        if (Number.isFinite(id)) byId.set(id, index);
+        const key = identity(fixture);
+        if (key) byIdentity.set(key, index);
+    });
+
+    for (const overlay of overlays) {
+        const id = overlay?.fixture?.id;
+        const key = identity(overlay);
+        const index =
+            (Number.isFinite(id) ? byId.get(id) : undefined) ??
+            (key ? byIdentity.get(key) : undefined);
+        if (index == null) {
+            const nextIndex = merged.push(overlay) - 1;
+            if (Number.isFinite(id)) byId.set(id, nextIndex);
+            if (key) byIdentity.set(key, nextIndex);
+            continue;
+        }
+
+        const current = merged[index];
+        const currentId = current?.fixture?.id;
+        merged[index] = {
+            ...current,
+            ...overlay,
+            fixture: {
+                ...current?.fixture,
+                ...overlay?.fixture,
+                id: currentId ?? id,
+                status: { ...current?.fixture?.status, ...overlay?.fixture?.status },
+            },
+            league: { ...current?.league, ...overlay?.league },
+            teams: {
+                home: { ...current?.teams?.home, ...overlay?.teams?.home },
+                away: { ...current?.teams?.away, ...overlay?.teams?.away },
+            },
+            goals: { ...current?.goals, ...overlay?.goals },
+            score: { ...current?.score, ...overlay?.score },
+        };
+    }
+    return merged.sort(
+        (a, b) => (a?.fixture?.timestamp ?? 0) - (b?.fixture?.timestamp ?? 0),
+    );
+}
 
 class FootballDataCacheService {
     /** Hot in-process cache for matches-by-date (avoids Redis round-trip per request). */
@@ -124,6 +204,7 @@ class FootballDataCacheService {
     private pendingMatchesByDate = new Map<string, Promise<any[]>>();
     private pendingWorldCupByDate = new Map<string, Promise<any[]>>();
     private backgroundRefreshDates = new Set<string>();
+    private standingsRefreshes = new Set<string>();
 
     /** Cap in-process detail caches so finished fixtures cannot grow RAM forever. */
     private readonly MAX_DETAIL_CACHE = 500;
@@ -330,6 +411,14 @@ class FootballDataCacheService {
         data: any[],
         responseTtl: number,
     ): void {
+        if (this.matchesByDateLocal.has(dateString)) {
+            this.matchesByDateLocal.delete(dateString);
+        }
+        while (this.matchesByDateLocal.size >= matchesByDateLocalMaxEntries()) {
+            const oldest = this.matchesByDateLocal.keys().next().value;
+            if (oldest === undefined) break;
+            this.matchesByDateLocal.delete(oldest);
+        }
         this.matchesByDateLocal.set(dateString, {
             data,
             expiresAt: Date.now() + responseTtl,
@@ -339,6 +428,7 @@ class FootballDataCacheService {
     private tryLocalMatchesByDate(
         dateString: string,
         isToday: boolean,
+        isPastDate: boolean,
         cacheKey: string,
         responseTtl: number,
     ): any[] | null {
@@ -400,7 +490,13 @@ class FootballDataCacheService {
                     ? this.TTL.MATCHES_BY_DATE_TODAY
                     : this.TTL.MATCHES_BY_DATE_FUTURE;
 
-            const localData = this.tryLocalMatchesByDate(dateString, isToday, cacheKey, responseTtl);
+            const localData = this.tryLocalMatchesByDate(
+                dateString,
+                isToday,
+                isPastDate,
+                cacheKey,
+                responseTtl,
+            );
             if (localData) {
                 const scoped = this.filterFixturesToCalendarDay(localData, dateString);
                 return isToday ? this.mergeCalendarWithLiveSources(scoped) : scoped;
@@ -422,33 +518,6 @@ class FootballDataCacheService {
                 responseTtl,
             );
             fromDb = this.filterFixturesToCalendarDay(fromDb, dateString);
-
-            if (fromDb.length === 0 && isScores365ExperimentEnabled()) {
-                await this.ensure365CalendarDate(dateString);
-                fromDb = await this.loadMatchesFromDbForDate(
-                    startOfDay,
-                    endOfDay,
-                    cacheKey,
-                    dateString,
-                    responseTtl,
-                );
-                fromDb = this.filterFixturesToCalendarDay(fromDb, dateString);
-            }
-
-            if (fromDb.length === 0 && isScores365ExperimentEnabled()) {
-                await threeSixFiveScoresService.supplementCalendarDateFromCompetitionFixtures(
-                    dateString,
-                    'en',
-                );
-                fromDb = await this.loadMatchesFromDbForDate(
-                    startOfDay,
-                    endOfDay,
-                    cacheKey,
-                    dateString,
-                    responseTtl,
-                );
-                fromDb = this.filterFixturesToCalendarDay(fromDb, dateString);
-            }
 
             if (fromDb.length > 0) {
                 if (isToday) {
@@ -511,9 +580,25 @@ class FootballDataCacheService {
         );
     }
 
+    private async getDurableWorldCupFixtures(
+        leagueId: number,
+        season: number,
+        where: Record<string, unknown> = {},
+    ): Promise<any[]> {
+        const rows = await prisma.cachedFixture.findMany({
+            where: {
+                leagueId,
+                leagueSeason: season,
+                ...where,
+            } as any,
+            orderBy: { matchTimestamp: 'asc' },
+        });
+        return rows.map((row) => matchCacheService.convertDbMatchToApiFormat(row));
+    }
+
     /** Live status left in DB after quota outage on a calendar day that already passed. */
     private isStaleLiveOnPastDay(status: string, matchDate?: Date | string | null): boolean {
-        const liveShorts = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+        const liveShorts = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
         if (!liveShorts.has(status)) return false;
         if (!matchDate) return false;
         const d = typeof matchDate === 'string' ? new Date(matchDate) : matchDate;
@@ -527,7 +612,7 @@ class FootballDataCacheService {
         const todayKey = new Date().toISOString().split('T')[0];
         if (dateString >= todayKey) return fixtures;
 
-        const liveShorts = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+        const liveShorts = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
         return fixtures.map((f) => {
             const short = f?.fixture?.status?.short;
             if (!short || !liveShorts.has(short)) return f;
@@ -568,6 +653,22 @@ class FootballDataCacheService {
                   : this.TTL.MATCHES_BY_DATE_FUTURE;
 
         try {
+            if (dateString < todayKey && isHistoricalHttpDbOnlyEnabled()) {
+                const { start, end } = calendarDayBounds(dateString);
+                const durable = await this.getDurableWorldCupFixtures(leagueId, season, {
+                    matchDate: { gte: start, lte: end },
+                });
+                return this.normalizePastCalendarFixtures(durable, dateString);
+            }
+
+            if (isWorldCupHistoricalOnlyMode() && dateString < todayKey) {
+                const { start, end } = calendarDayBounds(dateString);
+                const durable = await this.getDurableWorldCupFixtures(leagueId, season, {
+                    matchDate: { gte: start, lte: end },
+                });
+                return this.normalizePastCalendarFixtures(durable, dateString);
+            }
+
             // Serve warm cache first — previously 365 was hit on every request
             // before the cache read, which made /cached/world-cup/:date ~1s+.
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
@@ -645,19 +746,48 @@ class FootballDataCacheService {
         phase: 'upcoming' | 'live' | 'finished' | 'all',
         language?: string | null,
     ): Promise<any[]> {
-        if (!isScores365ExperimentEnabled()) return [];
+        const leagueId = getWorldCupLeagueId();
+        const season = getWorldCupSeason();
+        const durableFinished =
+            phase === 'finished' || phase === 'all'
+                ? await this.getDurableWorldCupFixtures(leagueId, season, {
+                    status: { in: HISTORICAL_WORLD_CUP_STATUSES },
+                })
+                : [];
+        if (phase === 'finished' && isWorldCupHistoricalOnlyMode()) {
+            return durableFinished;
+        }
+        if (phase === 'all' && isWorldCupHistoricalOnlyMode()) {
+            const durableAll = await this.getDurableWorldCupFixtures(leagueId, season);
+            const expectedFixtureCount = season >= 2026 ? 104 : 64;
+            const tournamentFullyFinished =
+                durableAll.length >= expectedFixtureCount &&
+                durableAll.every((fixture) =>
+                    HISTORICAL_WORLD_CUP_STATUSES.includes(
+                        String(fixture?.fixture?.status?.short ?? ''),
+                    ),
+                );
+            if (tournamentFullyFinished) return durableAll;
+        }
+        if (!isScores365ExperimentEnabled()) return durableFinished;
         const scores365Lang = resolveScores365AppLanguage(language);
         const cacheKey = `wc_phase_${phase}_${scores365Lang}`;
         const ttl = phase === 'live' ? 4_000 : phase === 'upcoming' ? 60_000 : 300_000;
 
         const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
-        if (cached && cached.length > 0) return cached;
+        if (cached && cached.length > 0) {
+            return phase === 'all'
+                ? mergeFixtureProviders(durableFinished, cached)
+                : cached;
+        }
 
         const from365 = await getScores365WorldCupPhaseFixtures(scores365Lang, phase);
         if (from365.length > 0) {
             await matchCacheService.setInMemoryCache(cacheKey, from365, ttl);
         }
-        return from365;
+        return phase === 'all'
+            ? mergeFixtureProviders(durableFinished, from365)
+            : from365;
     }
 
     /**
@@ -835,15 +965,10 @@ class FootballDataCacheService {
             return this.applyLiveOverlay(apiMatches, this.liveOverlayCache.fixtures);
         }
 
-        const redis = getRedisClient();
-        if (!redis) return apiMatches;
-
         try {
-            const raw = await redis.get('football:live_matches');
-            if (!raw) return apiMatches;
-
-            const liveFixtures: any[] = JSON.parse(raw);
-            if (!Array.isArray(liveFixtures) || liveFixtures.length === 0) return apiMatches;
+            const { readLiveFixturesList } = await import('./live-fixture-cache.service');
+            const liveFixtures = await readLiveFixturesList();
+            if (!liveFixtures?.length) return apiMatches;
 
             this.liveOverlayCache = {
                 fixtures: liveFixtures,
@@ -865,18 +990,7 @@ class FootballDataCacheService {
             const { resolveLiveFixturesForClient } = await import('./live-fixture-cache.service');
             const live365 = await resolveLiveFixturesForClient();
             if (live365.fixtures.length) {
-                const byId = new Map<number, any>();
-                for (const m of merged) {
-                    const id = m?.fixture?.id;
-                    if (id != null) byId.set(id, m);
-                }
-                for (const f of live365.fixtures) {
-                    const id = f?.fixture?.id;
-                    if (id != null) byId.set(id, f);
-                }
-                merged = Array.from(byId.values()).sort(
-                    (a, b) => (a?.fixture?.timestamp ?? 0) - (b?.fixture?.timestamp ?? 0),
-                );
+                merged = mergeFixtureProviders(merged, live365.fixtures);
             }
         } catch (err) {
             logger.warn('365 live calendar merge failed:', err);
@@ -893,26 +1007,6 @@ class FootballDataCacheService {
         }
     }
 
-    /** On-demand 365 allscores fetch for a single calendar day (upcoming/live leagues). */
-    private async ensure365CalendarDate(dateString: string): Promise<number> {
-        if (!isScores365ExperimentEnabled()) return 0;
-        try {
-            const start = offsetCalendarDateKey(dateString, -2);
-            const end = offsetCalendarDateKey(dateString, 7);
-            const res = await threeSixFiveScoresService.getAllScores(start, end, 'en', {
-                force: true,
-            });
-            const count = res.data?.length ?? 0;
-            if (count > 0) {
-                logger.info(`[365Calendar] synced ${count} allscores fixtures for window ${start}..${end}`);
-            }
-            return count;
-        } catch (err: unknown) {
-            logger.warn(`[365Calendar] ensure failed for ${dateString}:`, (err as Error)?.message);
-            return 0;
-        }
-    }
-
     private filterFixturesToCalendarDay(fixtures: any[], dateString: string): any[] {
         if (!fixtures.length) return fixtures;
         return fixtures.filter(
@@ -921,18 +1015,7 @@ class FootballDataCacheService {
     }
 
     private applyLiveOverlay(apiMatches: any[], liveFixtures: any[]): any[] {
-        const byId = new Map<number, any>();
-        for (const m of apiMatches) {
-            const id = m?.fixture?.id;
-            if (id != null) byId.set(id, m);
-        }
-        for (const live of liveFixtures) {
-            const id = live?.fixture?.id;
-            if (id != null) byId.set(id, live);
-        }
-        return Array.from(byId.values()).sort(
-            (a, b) => (a?.fixture?.timestamp ?? 0) - (b?.fixture?.timestamp ?? 0),
-        );
+        return mergeFixtureProviders(apiMatches, liveFixtures);
     }
 
     // ============================================
@@ -1097,11 +1180,111 @@ class FootballDataCacheService {
         return (await this.getStandingsParsed(leagueId, season)).flat;
     }
 
+    private async loadDurableStandings(
+        provider: string,
+        competitionId: number,
+        season: number,
+        language: string,
+    ): Promise<{
+        data: { flat: any[]; groups: Array<{ group: string; standings: any[] }> };
+        updatedAt: Date;
+    } | null> {
+        try {
+            const row = await prisma.cachedStandings.findUnique({
+                where: {
+                    provider_competitionId_season_language: {
+                        provider,
+                        competitionId,
+                        season,
+                        language,
+                    },
+                },
+                select: { payload: true, updatedAt: true },
+            });
+            const payload = row?.payload as any;
+            const parsed = payload?.parsed ?? payload;
+            return parsed?.flat && parsed?.groups && row?.updatedAt
+                ? { data: parsed, updatedAt: row.updatedAt }
+                : null;
+        } catch (error) {
+            logger.warn('[Standings] durable read unavailable:', error);
+            return null;
+        }
+    }
+
+    private async persistDurableStandings(
+        provider: string,
+        competitionId: number,
+        leagueId: number,
+        season: number,
+        language: string,
+        payload: { flat: any[]; groups: Array<{ group: string; standings: any[] }> },
+        source: string,
+    ): Promise<void> {
+        if (!payload.flat?.length) return;
+        try {
+            const existing = await prisma.cachedStandings.findUnique({
+                where: {
+                    provider_competitionId_season_language: {
+                        provider,
+                        competitionId,
+                        season,
+                        language,
+                    },
+                },
+                select: { payload: true },
+            });
+            const durablePayload = {
+                ...((existing?.payload as Record<string, unknown> | null) ?? {}),
+                parsed: payload,
+            };
+            await prisma.cachedStandings.upsert({
+                where: {
+                    provider_competitionId_season_language: {
+                        provider,
+                        competitionId,
+                        season,
+                        language,
+                    },
+                },
+                create: {
+                    provider,
+                    competitionId,
+                    leagueId,
+                    season,
+                    language,
+                    payload: durablePayload,
+                    source,
+                },
+                update: {
+                    leagueId,
+                    payload: durablePayload,
+                    source,
+                    updatedAt: new Date(),
+                },
+            });
+        } catch (error) {
+            logger.warn('[Standings] durable write unavailable:', error);
+        }
+    }
+
     async getStandingsParsed(
         leagueId: number,
         season: number = 2024,
+        language?: string | null,
     ): Promise<{ flat: any[]; groups: Array<{ group: string; standings: any[] }> }> {
-        const cacheKey = `${leagueId}_${season}`;
+        const resolvedLanguage = resolveScores365AppLanguage(language);
+        const uses365 =
+            isScores365ExperimentEnabled() &&
+            (leagueId === getWorldCupLeagueId() || leagueId >= SCORES365_LEAGUE_ID_OFFSET);
+        const competitionId =
+            leagueId === getWorldCupLeagueId()
+                ? getScores365CompetitionId()
+                : leagueId >= SCORES365_LEAGUE_ID_OFFSET
+                  ? leagueId - SCORES365_LEAGUE_ID_OFFSET
+                  : leagueId;
+        const provider = uses365 ? '365scores' : 'api-football';
+        const cacheKey = `${provider}_${leagueId}_${season}_${resolvedLanguage}`;
 
         const cached = this.standingsCache.get(cacheKey);
         if (cached && Date.now() - cached.timestamp < cached.ttl) {
@@ -1117,38 +1300,116 @@ class FootballDataCacheService {
             return { flat: [], groups: [] };
         }
 
+        const durable = await this.loadDurableStandings(
+            provider,
+            competitionId,
+            season,
+            resolvedLanguage,
+        );
         if (
+            durable &&
             leagueId === getWorldCupLeagueId() &&
-            isScores365ExperimentEnabled()
+            isWorldCupHistoricalOnlyMode()
         ) {
-            const from365 = await this.getStandingsParsedFrom365(getScores365CompetitionId());
-            if (from365.groups.length > 0) {
-                this.standingsCache.set(cacheKey, {
-                    data: from365,
+            return durable.data;
+        }
+
+        if (durable && isStandingsSwrEnabled()) {
+            const age = Date.now() - durable.updatedAt.getTime();
+            if (age <= standingsFreshMs()) {
+                this.setBoundedCache(this.standingsCache, cacheKey, {
+                    data: durable.data,
                     timestamp: Date.now(),
-                    ttl: this.TTL.STANDINGS,
+                    ttl: standingsFreshMs(),
                 });
-                return from365;
+                return durable.data;
+            }
+            if (age <= standingsFreshMs() + standingsStaleMs()) {
+                this.scheduleStandingsRefresh({
+                    competitionId,
+                    leagueId,
+                    season,
+                    language: resolvedLanguage,
+                    cacheKey,
+                    uses365,
+                });
+                return durable.data;
             }
         }
 
-        logger.debug(`📡 Fetching standings for league ${leagueId}`);
-        const parsed = await footballService.getStandingsParsed(leagueId, season);
+        let lease;
+        try {
+            lease = await withSyncLeaderLease(
+                `standings:${provider}:${competitionId}:${season}:${resolvedLanguage}`,
+                () => this.refreshParsedStandings({
+                    competitionId,
+                    leagueId,
+                    season,
+                    language: resolvedLanguage,
+                    cacheKey,
+                    uses365,
+                }),
+                { ttlSec: 30 },
+            );
+        } catch (error) {
+            if (durable) return durable.data;
+            throw error;
+        }
+        if (lease.acquired && lease.value?.flat?.length) return lease.value;
+        if (durable) return durable.data;
+        return lease.value ?? { flat: [], groups: [] };
+    }
 
-        this.standingsCache.set(cacheKey, {
+    private scheduleStandingsRefresh(input: {
+        competitionId: number;
+        leagueId: number;
+        season: number;
+        language: string;
+        cacheKey: string;
+        uses365: boolean;
+    }): void {
+        const provider = input.uses365 ? '365scores' : 'api-football';
+        const refreshKey = `${provider}:${input.competitionId}:${input.season}:${input.language}`;
+        if (this.standingsRefreshes.has(refreshKey)) return;
+        this.standingsRefreshes.add(refreshKey);
+        void withSyncLeaderLease(
+            `standings:${refreshKey}`,
+            () => this.refreshParsedStandings(input),
+            { ttlSec: 30 },
+        )
+            .catch((error) => logger.warn(`[Standings] background refresh ${refreshKey} failed:`, error))
+            .finally(() => this.standingsRefreshes.delete(refreshKey));
+    }
+
+    private async refreshParsedStandings(input: {
+        competitionId: number;
+        leagueId: number;
+        season: number;
+        language: string;
+        cacheKey: string;
+        uses365: boolean;
+    }): Promise<{ flat: any[]; groups: Array<{ group: string; standings: any[] }> }> {
+        logger.debug(`📡 Refreshing standings for competition ${input.competitionId}`);
+        const parsed = input.uses365
+            ? await this.getStandingsParsedFrom365(input.competitionId, input.language, true)
+            : await footballService.getStandingsParsed(input.leagueId, input.season);
+        if (!parsed.flat?.length) return { flat: [], groups: [] };
+
+        await this.persistDurableStandings(
+            input.uses365 ? '365scores' : 'api-football',
+            input.competitionId,
+            input.leagueId,
+            input.season,
+            input.language,
+            parsed,
+            input.uses365 ? '365scores' : 'api-football',
+        );
+        await this.cacheChangedTeamsFromStandings(parsed.flat);
+        this.setBoundedCache(this.standingsCache, input.cacheKey, {
             data: parsed,
             timestamp: Date.now(),
-            ttl: this.TTL.STANDINGS,
+            ttl: standingsFreshMs(),
         });
-
-        if (parsed.flat?.length) {
-            for (const standing of parsed.flat) {
-                if (standing.team) {
-                    await this.cacheTeamFromStanding(standing.team);
-                }
-            }
-        }
-
         return parsed;
     }
 
@@ -1156,41 +1417,104 @@ class FootballDataCacheService {
     async getStandingsParsedFrom365(
         competitionId: number = getScores365CompetitionId(),
         language?: string | null,
+        force = false,
     ): Promise<{ flat: any[]; groups: Array<{ group: string; standings: any[] }> }> {
-        const result = await threeSixFiveScoresService.getStandings(competitionId, language);
+        const result = await threeSixFiveScoresService.getStandings(
+            competitionId,
+            language,
+            { force },
+        );
         if (!result.data?.length) {
             return { flat: [], groups: [] };
         }
-        const mapped = map365StandingRowsToApiGroups(result.data);
-        for (const standing of mapped.flat) {
-            const team = standing.team as { id?: number; name?: string; logo?: string } | undefined;
-            if (team?.id) {
-                await this.cacheTeamFromStanding(team);
-            }
-        }
-        return mapped;
+        return map365StandingRowsToApiGroups(result.data);
     }
 
-    async syncWorldCupStandingsFrom365(language?: string | null): Promise<number> {
+    async syncWorldCupStandingsFrom365(
+        language?: string | null,
+        competitionId = getScores365CompetitionId(),
+    ): Promise<number> {
         if (!isScores365ExperimentEnabled()) return 0;
         const parsed = await this.getStandingsParsedFrom365(
-            getScores365CompetitionId(),
+            competitionId,
             language ?? 'en',
+            true,
         );
-        const wcLeagueId = getWorldCupLeagueId();
+        const leagueId =
+            competitionId === getScores365CompetitionId()
+                ? getWorldCupLeagueId()
+                : SCORES365_LEAGUE_ID_OFFSET + competitionId;
         const season = getWorldCupSeason();
-        const cacheKey = `${wcLeagueId}_${season}`;
+        const resolvedLanguage = resolveScores365AppLanguage(language ?? 'en');
+        const cacheKey = `365scores_${leagueId}_${season}_${resolvedLanguage}`;
         if (parsed.groups.length > 0) {
-            this.standingsCache.set(cacheKey, {
+            await this.persistDurableStandings(
+                '365scores',
+                competitionId,
+                leagueId,
+                season,
+                resolvedLanguage,
+                parsed,
+                '365scores',
+            );
+            await this.cacheChangedTeamsFromStandings(parsed.flat);
+            this.setBoundedCache(this.standingsCache, cacheKey, {
                 data: parsed,
                 timestamp: Date.now(),
-                ttl: this.TTL.STANDINGS,
+                ttl: standingsFreshMs(),
             });
-            logger.info(
-                `[365Standings] synced ${parsed.flat.length} rows across ${parsed.groups.length} WC groups`,
+            logger.debug(
+                `[365Standings] synced ${parsed.flat.length} rows across ${parsed.groups.length} groups for competition ${competitionId}`,
             );
         }
         return parsed.flat.length;
+    }
+
+    private async cacheChangedTeamsFromStandings(standings: any[]): Promise<void> {
+        const teams = [
+            ...new Map(
+                standings
+                    .map((standing) => standing?.team)
+                    .filter((team) => Number.isFinite(team?.id) && team.id > 0)
+                    .map((team) => [team.id, team]),
+            ).values(),
+        ] as any[];
+        if (!teams.length) return;
+
+        try {
+            const existing = await prisma.cachedTeam.findMany({
+                where: { teamId: { in: teams.map((team) => team.id) } },
+                select: { teamId: true, name: true, logo: true },
+            });
+            const existingById = new Map(existing.map((team) => [team.teamId, team]));
+            const changed = teams.filter((team) => {
+                const current = existingById.get(team.id);
+                return !current || current.name !== team.name || current.logo !== (team.logo ?? null);
+            });
+            if (!changed.length) return;
+
+            await prisma.$transaction(
+                changed.map((team) =>
+                    prisma.cachedTeam.upsert({
+                        where: { teamId: team.id },
+                        update: {
+                            name: team.name,
+                            logo: team.logo ?? null,
+                            updatedAt: new Date(),
+                        },
+                        create: {
+                            teamId: team.id,
+                            name: team.name,
+                            logo: team.logo ?? null,
+                            fullData: { team },
+                        },
+                    }),
+                ),
+            );
+            logger.debug(`[Standings] persisted ${changed.length}/${teams.length} changed teams`);
+        } catch (error) {
+            logger.warn('[Standings] changed-team batch unavailable:', error);
+        }
     }
 
     private async cacheTeamFromStanding(team: any): Promise<void> {
@@ -1275,7 +1599,7 @@ class FootballDataCacheService {
         fixtureId: number,
         options?: { forceRefresh?: boolean; language?: string | null },
     ): Promise<any[]> {
-        const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+        const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'];
         const forceRefresh =
             options?.forceRefresh === true ||
             (isScores365ExperimentFixture(fixtureId) && is365StoreDetailsHotfix());
@@ -1320,6 +1644,8 @@ class FootballDataCacheService {
             where: { fixtureId },
             select: {
                 status: true,
+                leagueId: true,
+                matchDate: true,
                 fullData: true,
                 homeTeamId: true,
                 homeTeamName: true,
@@ -1333,8 +1659,14 @@ class FootballDataCacheService {
         const isFinished = dbMatch && ['FT', 'AET', 'PEN'].includes(dbMatch.status);
         const isLive = dbMatch && LIVE_STATUSES.includes(dbMatch.status);
         const fullData = dbMatch?.fullData as any;
+        const durableHistoricalOnly =
+            isWorldCupHistoricalOnlyMode() &&
+            dbMatch?.leagueId === getWorldCupLeagueId() &&
+            isPastOrFinishedFixture(dbMatch.status, dbMatch.matchDate);
 
-        await ensureScores365GameMapping(fixtureId);
+        if (durableHistoricalOnly) {
+            return hasLineupData(fullData?.lineups) ? fullData.lineups : [];
+        }
 
         const dbLineupsHaveGrid = (lineups: unknown) =>
             Array.isArray(lineups) &&
@@ -1351,6 +1683,8 @@ class FootballDataCacheService {
             logger.debug(`📦 Lineups ${fixtureId} from DB fullData (shared for all users, no API call)`);
             return fullData.lineups;
         }
+
+        await ensureScores365GameMapping(fixtureId);
 
         if (isScores365ExperimentFixture(fixtureId)) {
             const from365 = await this.get365LineupsMerged(
@@ -1451,14 +1785,21 @@ class FootballDataCacheService {
      * Get match statistics
      */
     async getMatchStatistics(fixtureId: number): Promise<any[]> {
+        const dbMatch = await prisma.cachedFixture.findUnique({
+            where: { fixtureId },
+            select: { status: true, fullData: true, matchDate: true, leagueId: true },
+        });
+        const fullData = dbMatch?.fullData as any;
+        if (
+            isWorldCupHistoricalOnlyMode() &&
+            dbMatch?.leagueId === getWorldCupLeagueId() &&
+            isPastOrFinishedFixture(dbMatch.status, dbMatch.matchDate)
+        ) {
+            return Array.isArray(fullData?.statistics) ? fullData.statistics : [];
+        }
+
         await ensureScores365GameMapping(fixtureId);
         if (isScores365ExperimentFixture(fixtureId)) {
-            const dbMatch = await prisma.cachedFixture.findUnique({
-                where: { fixtureId },
-                select: { fullData: true, status: true },
-            });
-            const fullData = dbMatch?.fullData as any;
-
             // Primary: aggregate real team stats from 365 player-level stats.
             if (fullData?.teams) {
                 const named = await this.getCached365LineupsWithNames(fixtureId);
@@ -1526,12 +1867,6 @@ class FootballDataCacheService {
         }
 
         // Check if match is finished (or stale live on a past calendar day)
-        const dbMatch = await prisma.cachedFixture.findUnique({
-            where: { fixtureId },
-            select: { status: true, fullData: true, matchDate: true },
-        });
-
-        const fullData = dbMatch?.fullData as any;
         const isFinished =
             !!dbMatch &&
             (['FT', 'AET', 'PEN'].includes(dbMatch.status) ||
@@ -1618,6 +1953,23 @@ class FootballDataCacheService {
             options?.forceRefresh === true ||
             (isScores365ExperimentFixture(fixtureId) && is365StoreDetailsHotfix());
         const language = resolveScores365AppLanguage(options?.language ?? null);
+        const dbMatch = await prisma.cachedFixture.findUnique({
+            where: { fixtureId },
+            select: {
+                status: true,
+                fullData: true,
+                leagueId: true,
+                matchDate: true,
+            },
+        });
+        const fullData = dbMatch?.fullData as any;
+        if (
+            isWorldCupHistoricalOnlyMode() &&
+            dbMatch?.leagueId === getWorldCupLeagueId() &&
+            isPastOrFinishedFixture(dbMatch.status, dbMatch.matchDate)
+        ) {
+            return Array.isArray(fullData?.events) ? fullData.events : [];
+        }
 
         // 365Scores experiment — single shared upstream fetch; never API-Football quota.
         await ensureScores365GameMapping(fixtureId);
@@ -1663,17 +2015,10 @@ class FootballDataCacheService {
         }
 
         // 2. Check if match is finished (permanent cache in DB, shared for all users)
-        const dbMatch = await prisma.cachedFixture.findUnique({
-            where: { fixtureId },
-            select: { status: true, fullData: true },
-        });
-
         const isFinished = dbMatch && ['FT', 'AET', 'PEN'].includes(dbMatch.status);
         const isLiveStatus =
             dbMatch &&
             ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(dbMatch.status);
-        const fullData = dbMatch?.fullData as any;
-
         // ✅ If finished and we have events in fullData, use them (no API call, shared for all users)
         if (!forceRefresh && isFinished && fullData?.events) {
             logger.debug(`📦 Events ${fixtureId} from DB fullData (shared for all users, no API call)`);
@@ -1744,6 +2089,28 @@ class FootballDataCacheService {
         lineupsAvailable?: boolean;
         lineupsStatus?: string | null;
     }> {
+        const durableRow = await prisma.cachedFixture.findUnique({
+            where: { fixtureId },
+        });
+        if (
+            isWorldCupHistoricalOnlyMode() &&
+            durableRow?.leagueId === getWorldCupLeagueId() &&
+            isPastOrFinishedFixture(durableRow.status, durableRow.matchDate)
+        ) {
+            const fullData = durableRow.fullData as any;
+            const fixture = matchCacheService.convertDbMatchToApiFormat(durableRow);
+            const lineups = Array.isArray(fullData?.lineups) ? fullData.lineups : [];
+            return {
+                fixture,
+                lineups,
+                statistics: Array.isArray(fullData?.statistics) ? fullData.statistics : [],
+                events: Array.isArray(fullData?.events) ? fullData.events : [],
+                venue: fixture.fixture?.venue ?? null,
+                lineupsAvailable: hasLineupData(lineups),
+                lineupsStatus: fullData?.lineupsStatus ?? null,
+            };
+        }
+
         await ensureScores365GameMapping(fixtureId);
         const forceRefresh =
             options?.forceRefresh === true ||
@@ -1798,6 +2165,10 @@ class FootballDataCacheService {
                         lineups: payload.lineups,
                         events: payload.events,
                         statistics: payload.statistics,
+                        _scores365GameId: (experiment.fixture as any)._scores365GameId,
+                        ...((experiment.fixture as any)._lmt
+                            ? { _lmt: (experiment.fixture as any)._lmt }
+                            : {}),
                     });
                 }
                 return payload;
@@ -2173,6 +2544,8 @@ class FootballDataCacheService {
         this.coachesCache.clear();
         this.venuesCache.clear();
         this.roundsCache.clear();
+        this.matchesByDateLocal.clear();
+        this.standingsRefreshes.clear();
         logger.info('🧹 Memory cache cleared');
     }
 
@@ -2191,7 +2564,7 @@ class FootballDataCacheService {
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Team statistics from Redis cache`);
-            this.teamStatisticsCache.set(cacheKey, redisCached);
+            this.setBoundedCache(this.teamStatisticsCache, cacheKey, redisCached);
             return redisCached.data;
         }
 
@@ -2211,7 +2584,7 @@ class FootballDataCacheService {
         };
 
         // Store in both caches
-        this.teamStatisticsCache.set(cacheKey, entry);
+        this.setBoundedCache(this.teamStatisticsCache, cacheKey, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.TEAM_STATISTICS);
 
         return data;
@@ -2228,7 +2601,7 @@ class FootballDataCacheService {
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any[]>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Top scorers from Redis cache`);
-            this.topScorersCache.set(cacheKey, redisCached);
+            this.setBoundedCache(this.topScorersCache, cacheKey, redisCached);
             return redisCached.data;
         }
 
@@ -2248,7 +2621,7 @@ class FootballDataCacheService {
         };
 
         // Store in both caches
-        this.topScorersCache.set(cacheKey, entry);
+        this.setBoundedCache(this.topScorersCache, cacheKey, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.TOP_SCORERS);
 
         return data;
@@ -2265,7 +2638,7 @@ class FootballDataCacheService {
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any[]>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Top assists from Redis cache`);
-            this.topAssistsCache.set(cacheKey, redisCached);
+            this.setBoundedCache(this.topAssistsCache, cacheKey, redisCached);
             return redisCached.data;
         }
 
@@ -2285,7 +2658,7 @@ class FootballDataCacheService {
         };
 
         // Store in both caches
-        this.topAssistsCache.set(cacheKey, entry);
+        this.setBoundedCache(this.topAssistsCache, cacheKey, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.TOP_ASSISTS);
 
         return data;
@@ -2302,7 +2675,7 @@ class FootballDataCacheService {
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any[]>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Top yellow cards from Redis cache`);
-            this.topYellowCardsCache.set(cacheKey, redisCached);
+            this.setBoundedCache(this.topYellowCardsCache, cacheKey, redisCached);
             return redisCached.data;
         }
 
@@ -2322,7 +2695,7 @@ class FootballDataCacheService {
         };
 
         // Store in both caches
-        this.topYellowCardsCache.set(cacheKey, entry);
+        this.setBoundedCache(this.topYellowCardsCache, cacheKey, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.TOP_SCORERS);
 
         return data;
@@ -2339,7 +2712,7 @@ class FootballDataCacheService {
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any[]>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Top red cards from Redis cache`);
-            this.topRedCardsCache.set(cacheKey, redisCached);
+            this.setBoundedCache(this.topRedCardsCache, cacheKey, redisCached);
             return redisCached.data;
         }
 
@@ -2359,7 +2732,7 @@ class FootballDataCacheService {
         };
 
         // Store in both caches
-        this.topRedCardsCache.set(cacheKey, entry);
+        this.setBoundedCache(this.topRedCardsCache, cacheKey, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.TOP_SCORERS);
 
         return data;
@@ -2374,7 +2747,7 @@ class FootballDataCacheService {
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any[]>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Injuries from Redis cache`);
-            this.injuriesCache.set(teamId, redisCached);
+            this.setBoundedCache(this.injuriesCache, teamId, redisCached);
             return redisCached.data;
         }
 
@@ -2394,7 +2767,7 @@ class FootballDataCacheService {
         };
 
         // Store in both caches
-        this.injuriesCache.set(teamId, entry);
+        this.setBoundedCache(this.injuriesCache, teamId, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.INJURIES);
 
         return data;
@@ -2411,7 +2784,7 @@ class FootballDataCacheService {
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any[]>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Trophies from Redis cache`);
-            this.trophiesCache.set(teamId, redisCached);
+            this.setBoundedCache(this.trophiesCache, teamId, redisCached);
             return redisCached.data;
         }
 
@@ -2431,7 +2804,7 @@ class FootballDataCacheService {
         };
 
         // Store in both caches
-        this.trophiesCache.set(teamId, entry);
+        this.setBoundedCache(this.trophiesCache, teamId, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.TROPHIES);
 
         return data;
@@ -2446,7 +2819,7 @@ class FootballDataCacheService {
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any[]>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Coaches from Redis cache`);
-            this.coachesCache.set(teamId, redisCached);
+            this.setBoundedCache(this.coachesCache, teamId, redisCached);
             return redisCached.data;
         }
 
@@ -2466,7 +2839,7 @@ class FootballDataCacheService {
         };
 
         // Store in both caches
-        this.coachesCache.set(teamId, entry);
+        this.setBoundedCache(this.coachesCache, teamId, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.COACHES);
 
         return data;
@@ -2481,7 +2854,7 @@ class FootballDataCacheService {
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Venue from Redis cache`);
-            this.venuesCache.set(venueId, redisCached);
+            this.setBoundedCache(this.venuesCache, venueId, redisCached);
             return redisCached.data;
         }
 
@@ -2501,7 +2874,7 @@ class FootballDataCacheService {
         };
 
         // Store in both caches
-        this.venuesCache.set(venueId, entry);
+        this.setBoundedCache(this.venuesCache, venueId, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.VENUES);
 
         return data;
@@ -2518,7 +2891,7 @@ class FootballDataCacheService {
         const redisCached = await redisCacheService.get<MemoryCacheEntry<string[]>>(redisKey);
         if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
             logger.debug(`📦 Rounds from Redis cache`);
-            this.roundsCache.set(cacheKey, redisCached);
+            this.setBoundedCache(this.roundsCache, cacheKey, redisCached);
             return redisCached.data;
         }
 
@@ -2538,7 +2911,7 @@ class FootballDataCacheService {
         };
 
         // Store in both caches
-        this.roundsCache.set(cacheKey, entry);
+        this.setBoundedCache(this.roundsCache, cacheKey, entry);
         await redisCacheService.set(redisKey, entry, this.TTL.ROUNDS);
 
         return data;
@@ -2594,10 +2967,152 @@ class FootballDataCacheService {
         competitionId?: number,
         language?: string | null,
     ): Promise<ThreeSixFiveResult<ThreeSixFiveStandingRow[]>> {
-        if (!this.is365WorldCupSecondaryEnabled()) {
-            return { data: null, source: null };
+        const resolvedCompetitionId = competitionId ?? getScores365CompetitionId();
+        const resolvedLanguage = resolveScores365AppLanguage(language);
+        const season = getWorldCupSeason();
+        let durableRaw: ThreeSixFiveStandingRow[] | null = null;
+        let durableUpdatedAt: Date | null = null;
+        try {
+            const row = await prisma.cachedStandings.findUnique({
+                where: {
+                    provider_competitionId_season_language: {
+                        provider: '365scores',
+                        competitionId: resolvedCompetitionId,
+                        season,
+                        language: resolvedLanguage,
+                    },
+                },
+                select: { payload: true, updatedAt: true },
+            });
+            const raw = (row?.payload as { raw?: unknown } | null)?.raw;
+            durableRaw = Array.isArray(raw) ? (raw as ThreeSixFiveStandingRow[]) : null;
+            durableUpdatedAt = row?.updatedAt ?? null;
+        } catch {
+            // Migration may not be deployed yet; upstream behavior remains unchanged.
         }
-        return threeSixFiveScoresService.getStandings(competitionId, language);
+
+        if (
+            durableRaw?.length &&
+            isWorldCupHistoricalOnlyMode() &&
+            resolvedCompetitionId === getScores365CompetitionId()
+        ) {
+            return { data: durableRaw, source: '365scores' };
+        }
+        if (!this.is365WorldCupSecondaryEnabled()) {
+            return durableRaw?.length
+                ? { data: durableRaw, source: '365scores' }
+                : { data: null, source: null };
+        }
+
+        if (durableRaw?.length && durableUpdatedAt && isStandingsSwrEnabled()) {
+            const age = Date.now() - durableUpdatedAt.getTime();
+            if (age <= standingsFreshMs()) {
+                return { data: durableRaw, source: '365scores' };
+            }
+            if (age <= standingsFreshMs() + standingsStaleMs()) {
+                this.scheduleRaw365StandingsRefresh(
+                    resolvedCompetitionId,
+                    season,
+                    resolvedLanguage,
+                );
+                return { data: durableRaw, source: '365scores' };
+            }
+        }
+
+        const lease = await withSyncLeaderLease(
+            `standings:${resolvedCompetitionId}:${season}:${resolvedLanguage}`,
+            () => this.refreshRaw365Standings(
+                resolvedCompetitionId,
+                season,
+                resolvedLanguage,
+            ),
+            { ttlSec: 30 },
+        );
+        if (lease.acquired && lease.value?.data?.length) return lease.value;
+        return durableRaw?.length
+            ? { data: durableRaw, source: '365scores' }
+            : (lease.value ?? { data: null, source: null });
+    }
+
+    private scheduleRaw365StandingsRefresh(
+        competitionId: number,
+        season: number,
+        language: string,
+    ): void {
+        const refreshKey = `${competitionId}:${season}:${language}:raw`;
+        if (this.standingsRefreshes.has(refreshKey)) return;
+        this.standingsRefreshes.add(refreshKey);
+        void withSyncLeaderLease(
+            `standings:${competitionId}:${season}:${language}`,
+            () => this.refreshRaw365Standings(competitionId, season, language),
+            { ttlSec: 30 },
+        )
+            .catch((error) => logger.warn(`[365Standings] background refresh failed:`, error))
+            .finally(() => this.standingsRefreshes.delete(refreshKey));
+    }
+
+    private async refreshRaw365Standings(
+        competitionId: number,
+        season: number,
+        language: string,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveStandingRow[]>> {
+        const result = await threeSixFiveScoresService.getStandings(
+            competitionId,
+            language,
+            { force: true },
+        );
+        if (result.data?.length) {
+            try {
+                const existing = await prisma.cachedStandings.findUnique({
+                    where: {
+                        provider_competitionId_season_language: {
+                            provider: '365scores',
+                            competitionId,
+                            season,
+                            language,
+                        },
+                    },
+                    select: { payload: true },
+                });
+                const payload = {
+                    ...((existing?.payload as Record<string, unknown> | null) ?? {}),
+                    raw: result.data,
+                };
+                await prisma.cachedStandings.upsert({
+                    where: {
+                        provider_competitionId_season_language: {
+                            provider: '365scores',
+                            competitionId,
+                            season,
+                            language,
+                        },
+                    },
+                    create: {
+                        provider: '365scores',
+                        competitionId,
+                        leagueId:
+                            competitionId === getScores365CompetitionId()
+                                ? getWorldCupLeagueId()
+                                : SCORES365_LEAGUE_ID_OFFSET + competitionId,
+                        season,
+                        language,
+                        payload: payload as any,
+                        source: '365scores',
+                    },
+                    update: {
+                        payload: payload as any,
+                        source: '365scores',
+                        updatedAt: new Date(),
+                    },
+                });
+                await this.cacheChangedTeamsFromStandings(
+                    map365StandingRowsToApiGroups(result.data).flat,
+                );
+            } catch (error) {
+                logger.warn('[365Standings] durable raw write unavailable:', error);
+            }
+        }
+        return result;
     }
 
     async getCached365HeadToHeadForm(
@@ -3025,7 +3540,7 @@ class FootballDataCacheService {
             );
         }
 
-        logger.info(
+        logger.debug(
             `[365LineupsMerged] fixture=${fixtureId}: ✅ home=${startersHome} away=${startersAway} (confirmed=${isConfirmed})`,
         );
         return this.finalize365MergedLineups(fixtureId, merged);

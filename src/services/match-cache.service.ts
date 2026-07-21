@@ -20,7 +20,7 @@ import prisma from '../lib/prisma'; // ✅ Use centralized singleton
 const FINISHED_STATUSES = ['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO'];
 
 // Status codes for live matches
-const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'];
 
 // Cache TTL values
 const CACHE_TTL = {
@@ -291,31 +291,94 @@ class MatchCacheService {
      */
     async upsertFixtures(
         fixtures: FixtureFromAPI[],
-        options?: { fetchDetails?: boolean },
+        options?: { fetchDetails?: boolean; preserveFullData?: boolean },
     ): Promise<number> {
         if (!fixtures.length) return 0;
 
         const fetchDetails =
             options?.fetchDetails === true && process.env.FETCH_MATCH_DETAILS === 'true';
+        // Last snapshot wins if an upstream page contains the same fixture twice.
+        const uniqueFixtures = [
+            ...new Map(fixtures.map((fixture) => [fixture.fixture.id, fixture])).values(),
+        ];
+        const fixtureIds = uniqueFixtures.map((fixture) => fixture.fixture.id);
+        const existingRows = await prisma.cachedFixture.findMany({
+            where: { fixtureId: { in: fixtureIds } },
+            select: {
+                fixtureId: true,
+                leagueId: true,
+                leagueName: true,
+                leagueLogo: true,
+                leagueCountry: true,
+                leagueSeason: true,
+                leagueRound: true,
+                homeTeamId: true,
+                homeTeamName: true,
+                homeTeamLogo: true,
+                awayTeamId: true,
+                awayTeamName: true,
+                awayTeamLogo: true,
+                homeScore: true,
+                awayScore: true,
+                homeHalftimeScore: true,
+                awayHalftimeScore: true,
+                matchDate: true,
+                matchTimestamp: true,
+                status: true,
+                statusLong: true,
+                elapsed: true,
+                venue: true,
+                referee: true,
+                fullData: true,
+            },
+        });
+        const existingById = new Map(existingRows.map((row) => [row.fixtureId, row]));
 
         let upserted = 0;
         const CHUNK_SIZE = 25;
-        for (let i = 0; i < fixtures.length; i += CHUNK_SIZE) {
-            const chunk = fixtures.slice(i, i + CHUNK_SIZE);
+        for (let i = 0; i < uniqueFixtures.length; i += CHUNK_SIZE) {
+            const chunk = uniqueFixtures.slice(i, i + CHUNK_SIZE);
             try {
-                await prisma.$transaction(
-                    chunk.map((fixture) => {
-                        const { create, update } = this.buildFixtureDbPayload(fixture);
-                        return prisma.cachedFixture.upsert({
+                const writes = chunk.flatMap((fixture) => {
+                    const { create, update } = this.buildFixtureDbPayload(fixture);
+                    const existing = existingById.get(fixture.fixture.id) as
+                        | Record<string, unknown>
+                        | undefined;
+                    if (!existing) {
+                        return [prisma.cachedFixture.create({ data: create as any })];
+                    }
+
+                    const candidate = { ...update };
+                    delete candidate.updatedAt;
+                    // Live/calendar/provider list payloads are commonly partial.
+                    // Preserve previously enriched events/lineups by default;
+                    // callers with an authoritative full detail snapshot can opt out.
+                    if (options?.preserveFullData !== false) delete candidate.fullData;
+                    const changed = Object.entries(candidate).some(([field, value]) => {
+                        const current = existing[field];
+                        if (current instanceof Date && value instanceof Date) {
+                            return current.getTime() !== value.getTime();
+                        }
+                        if (value && typeof value === 'object') {
+                            return JSON.stringify(current) !== JSON.stringify(value);
+                        }
+                        return current !== value;
+                    });
+                    if (!changed) return [];
+
+                    return [prisma.cachedFixture.update({
                             where: { fixtureId: fixture.fixture.id },
-                            create: create as any,
-                            update: update as any,
-                        });
-                    }),
-                );
+                            data: { ...candidate, updatedAt: new Date() } as any,
+                        })];
+                });
+                if (writes.length > 0) {
+                    await prisma.$transaction(writes);
+                }
+                // Preserve the method's historical "successfully processed"
+                // return contract even when change detection skips DB writes.
+                upserted += chunk.length;
                 for (const fixture of chunk) {
                     this.dbFixtureIds.add(fixture.fixture.id);
-                    upserted++;
                     if (fetchDetails && this.isFinishedStatus(fixture.fixture.status.short)) {
                         this.fetchAndStoreMatchDetails(fixture.fixture.id).catch((error) => {
                             logger.error(`Failed to fetch match details for fixture ${fixture.fixture.id}:`, error);
@@ -535,20 +598,82 @@ class MatchCacheService {
      * Convert CachedFixture from database to API-like format
      */
     convertDbMatchToApiFormat(dbMatch: CachedFixture): FixtureFromAPI {
-        // If we have the full data stored, use it
+        // Preserve enriched arrays/metadata from fullData, but DB scalar columns
+        // are authoritative because live scalar-only writes intentionally leave
+        // fullData untouched.
         if (dbMatch.fullData && typeof dbMatch.fullData === 'object') {
             const fromJson = dbMatch.fullData as unknown as FixtureFromAPI & {
                 _scores365GameId?: number;
                 _experiment?: string;
             };
-            if (dbMatch.elapsed != null && fromJson.fixture?.status) {
-                fromJson.fixture.status.elapsed = dbMatch.elapsed;
-            }
-            if (dbMatch.leagueId >= 7_000_000 && fromJson._scores365GameId == null) {
-                fromJson._scores365GameId = dbMatch.fixtureId;
-                fromJson._experiment = fromJson._experiment ?? 'scores365';
-            }
-            return fromJson;
+            const homeWinner =
+                dbMatch.homeScore != null && dbMatch.awayScore != null
+                    ? dbMatch.homeScore > dbMatch.awayScore
+                    : null;
+            const awayWinner =
+                dbMatch.homeScore != null && dbMatch.awayScore != null
+                    ? dbMatch.awayScore > dbMatch.homeScore
+                    : null;
+            return {
+                ...fromJson,
+                fixture: {
+                    ...fromJson.fixture,
+                    id: dbMatch.fixtureId,
+                    referee: dbMatch.referee,
+                    date: dbMatch.matchDate.toISOString(),
+                    timestamp: dbMatch.matchTimestamp,
+                    venue: {
+                        ...fromJson.fixture?.venue,
+                        name: dbMatch.venue,
+                    },
+                    status: {
+                        ...fromJson.fixture?.status,
+                        long: dbMatch.statusLong || dbMatch.status,
+                        short: dbMatch.status,
+                        elapsed: dbMatch.elapsed ?? null,
+                    },
+                },
+                league: {
+                    ...fromJson.league,
+                    id: dbMatch.leagueId,
+                    name: dbMatch.leagueName,
+                    country: dbMatch.leagueCountry || '',
+                    logo: dbMatch.leagueLogo || '',
+                    season: dbMatch.leagueSeason || fromJson.league?.season || 2024,
+                    round: dbMatch.leagueRound || '',
+                },
+                teams: {
+                    home: {
+                        ...fromJson.teams?.home,
+                        id: dbMatch.homeTeamId,
+                        name: dbMatch.homeTeamName,
+                        logo: dbMatch.homeTeamLogo || '',
+                        winner: homeWinner,
+                    },
+                    away: {
+                        ...fromJson.teams?.away,
+                        id: dbMatch.awayTeamId,
+                        name: dbMatch.awayTeamName,
+                        logo: dbMatch.awayTeamLogo || '',
+                        winner: awayWinner,
+                    },
+                },
+                goals: { home: dbMatch.homeScore, away: dbMatch.awayScore },
+                score: {
+                    ...fromJson.score,
+                    halftime: {
+                        home: dbMatch.homeHalftimeScore,
+                        away: dbMatch.awayHalftimeScore,
+                    },
+                    fulltime: { home: dbMatch.homeScore, away: dbMatch.awayScore },
+                },
+                ...(dbMatch.leagueId >= 7_000_000
+                    ? {
+                        _scores365GameId: fromJson._scores365GameId ?? dbMatch.fixtureId,
+                        _experiment: fromJson._experiment ?? 'scores365',
+                    }
+                    : {}),
+            };
         }
 
         // Otherwise, reconstruct from individual fields

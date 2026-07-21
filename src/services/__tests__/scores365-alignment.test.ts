@@ -1,3 +1,12 @@
+jest.mock('../../lib/prisma', () => ({
+  __esModule: true,
+  default: {
+    cachedFixture: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+  },
+}));
+
 import { mapScores365ToApiFootballFixture } from '../scores365-experiment.service';
 import type { FixtureFromAPI } from '../match-cache.service';
 
@@ -13,6 +22,14 @@ const game = {
   startTime: '2026-07-03T19:00:00.000Z',
   homeCompetitor: { id: 1232, name: 'Huachipato', score: 0 },
   awayCompetitor: { id: 8629, name: 'Deportes Concepcion', score: 2 },
+  widgets: [
+    {
+      provider: 'SportRadarLMT',
+      partnerId: 'sr:match:123',
+      widgetType: 'LMT',
+      widgetRatio: 1.6,
+    },
+  ],
 } as Parameters<typeof mapScores365ToApiFootballFixture>[0];
 
 const mismatchedDbBase: FixtureFromAPI = {
@@ -55,5 +72,10 @@ describe('mapScores365ToApiFootballFixture alignment fallback', () => {
     expect(fixture?.teams.home.name).toBe('Huachipato');
     expect(fixture?.teams.away.name).toBe('Deportes Concepcion');
     expect(fixture?.fixture.status.short).toBe('FT');
+    expect((fixture as any)?._lmt).toMatchObject({
+      partnerId: 'sr:match:123',
+      provider: 'SportRadarLMT',
+      widgetType: 'LMT',
+    });
   });
 });

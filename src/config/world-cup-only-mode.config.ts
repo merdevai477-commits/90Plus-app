@@ -14,6 +14,15 @@ export function isWorldCupOnlyMode(): boolean {
   return raw === 'true' || raw === '1';
 }
 
+/**
+ * Keep completed/past World Cup reads on durable PostgreSQL snapshots.
+ * This is independent of WORLD_CUP_ONLY_MODE and does not affect other leagues.
+ */
+export function isWorldCupHistoricalOnlyMode(): boolean {
+  const raw = process.env.WORLD_CUP_HISTORICAL_ONLY?.trim();
+  return raw === 'true' || raw === '1';
+}
+
 export function getWorldCupLeagueId(): number {
   return getWorldCupTabState().leagueId;
 }

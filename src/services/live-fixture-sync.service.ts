@@ -12,7 +12,7 @@ import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES } f
 import { WebSocketService } from './websocket.service';
 import { PredictionResolverService } from './prediction-resolver.service';
 import { logger } from '../utils/logger';
-import { tryAcquireSyncLeader } from './football-sync-leader.service';
+import { withSyncLeaderLease } from './football-sync-leader.service';
 import { isFootballQuotaExhausted } from './football.service';
 import {
     writeLiveFixturesSnapshot,
@@ -39,6 +39,7 @@ type LiveSnapshot = {
 class LiveFixtureSyncService {
     private intervalRef: NodeJS.Timeout | null = null;
     private running = false;
+    private syncInFlight = false;
     private lastSnapshots = new Map<number, LiveSnapshot>();
     private previouslyLiveIds = new Set<number>();
     private finishingInFlight = new Set<number>();
@@ -262,13 +263,27 @@ class LiveFixtureSyncService {
 
     private async syncOnce(): Promise<void> {
         if (!footballService.isConfigured()) return;
-
-        const isLeader = await tryAcquireSyncLeader('live-fixture-sync');
-        if (!isLeader) {
-            logger.debug('[LiveFixtureSync] Skipping tick — another instance is sync leader');
+        if (this.syncInFlight) {
+            logger.debug('[LiveFixtureSync] Skipping tick — previous local tick still running');
             return;
         }
+        this.syncInFlight = true;
+        try {
+            const lease = await withSyncLeaderLease(
+                'live-fixture-sync',
+                ({ signal }) => this.syncOnceAsLeader(signal),
+                { ttlSec: 30 },
+            );
+            if (!lease.acquired) {
+                logger.debug('[LiveFixtureSync] Skipping tick — distributed lease busy');
+            }
+        } finally {
+            this.syncInFlight = false;
+        }
+    }
 
+    private async syncOnceAsLeader(signal: AbortSignal): Promise<void> {
+        signal.throwIfAborted();
         if (isFootballQuotaExhausted()) {
             logger.debug('[LiveFixtureSync] API quota pause — continuing from cached snapshots');
             await this.syncFromCachedSnapshots();
@@ -280,13 +295,16 @@ class LiveFixtureSyncService {
             ? (filterWorldCupFixtures(liveFixturesRaw) as FixtureFromAPI[])
             : liveFixturesRaw;
 
+        signal.throwIfAborted();
         await writeLiveFixturesSnapshot(liveFixtures);
 
         if (liveFixtures.length === 0) {
             return;
         }
 
+        signal.throwIfAborted();
         await matchCacheService.upsertFixtures(liveFixtures);
+        signal.throwIfAborted();
         await this.processLiveFixtures(liveFixtures);
     }
 }

@@ -6,6 +6,10 @@
 import { getRedisClient } from '../lib/redis';
 import { logger } from '../utils/logger';
 import {
+  FOOTBALL_365_LIVE_FIXTURE_KEY_PREFIX,
+  FOOTBALL_365_LIVE_MATCHES_KEY,
+  FOOTBALL_API_LIVE_FIXTURE_KEY_PREFIX,
+  FOOTBALL_API_LIVE_MATCHES_KEY,
   FOOTBALL_LIVE_MATCHES_KEY,
 } from '../utils/football-cache-keys.util';
 import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES } from './match-cache.service';
@@ -39,8 +43,49 @@ function liveFixtureKey(fixtureId: number): string {
   return `${FOOTBALL_LIVE_FIXTURE_KEY_PREFIX}${fixtureId}`;
 }
 
+function providerLiveFixtureKey(
+  provider: 'api-football' | '365',
+  fixtureId: number,
+): string {
+  const prefix =
+    provider === 'api-football'
+      ? FOOTBALL_API_LIVE_FIXTURE_KEY_PREFIX
+      : FOOTBALL_365_LIVE_FIXTURE_KEY_PREFIX;
+  return `${prefix}${fixtureId}`;
+}
+
+function mergeFixtureLists(...lists: FixtureFromAPI[][]): FixtureFromAPI[] {
+  const byId = new Map<number, FixtureFromAPI>();
+  for (const list of lists) {
+    for (const fixture of list) {
+      const id = fixture?.fixture?.id;
+      if (id != null && LIVE_STATUSES_SET.has(fixture.fixture?.status?.short ?? '')) {
+        byId.set(id, fixture);
+      }
+    }
+  }
+  return Array.from(byId.values());
+}
+
+function parseFixtureList(raw: string | null): FixtureFromAPI[] {
+  if (!raw) return [];
+  const parsed = JSON.parse(raw) as FixtureFromAPI[];
+  return Array.isArray(parsed) ? parsed : [];
+}
+
 function terminalFixtureKey(fixtureId: number): string {
   return `${FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX}${fixtureId}`;
+}
+
+async function suppressTerminalTombstones(
+  redis: NonNullable<ReturnType<typeof getRedisClient>>,
+  fixtures: FixtureFromAPI[],
+): Promise<FixtureFromAPI[]> {
+  const ids = [...new Set(fixtures.map((f) => f?.fixture?.id).filter((id): id is number => id != null))];
+  if (!ids.length) return fixtures;
+  const tombstones = await Promise.all(ids.map((id) => redis.get(terminalFixtureKey(id))));
+  const terminalIds = new Set(ids.filter((_id, index) => tombstones[index] != null));
+  return fixtures.filter((fixture) => !terminalIds.has(fixture.fixture.id));
 }
 
 export async function writeLiveFixturesSnapshot(fixtures: FixtureFromAPI[]): Promise<void> {
@@ -48,15 +93,39 @@ export async function writeLiveFixturesSnapshot(fixtures: FixtureFromAPI[]): Pro
   if (!redis) return;
 
   try {
+    const [previousApiRaw, scores365Raw] = await Promise.all([
+      redis.get(FOOTBALL_API_LIVE_MATCHES_KEY),
+      redis.get(FOOTBALL_365_LIVE_MATCHES_KEY),
+    ]);
+    const previousApi = parseFixtureList(previousApiRaw);
+    const currentIds = new Set(
+      fixtures.map((fixture) => fixture?.fixture?.id).filter((id): id is number => id != null),
+    );
     const pipeline = redis.pipeline();
-    pipeline.setex(FOOTBALL_LIVE_MATCHES_KEY, LIVE_LIST_TTL_SEC, JSON.stringify(fixtures));
+    pipeline.setex(FOOTBALL_API_LIVE_MATCHES_KEY, LIVE_LIST_TTL_SEC, JSON.stringify(fixtures));
+    pipeline.setex(
+      FOOTBALL_LIVE_MATCHES_KEY,
+      LIVE_LIST_TTL_SEC,
+      JSON.stringify(mergeFixtureLists(fixtures, parseFixtureList(scores365Raw))),
+    );
+
+    for (const previous of previousApi) {
+      const id = previous?.fixture?.id;
+      if (id != null && !currentIds.has(id)) {
+        pipeline.del(providerLiveFixtureKey('api-football', id));
+      }
+    }
 
     for (const fixture of fixtures) {
       const id = fixture?.fixture?.id;
       if (id == null) continue;
       const status = fixture.fixture?.status?.short ?? '';
       if (LIVE_STATUSES_SET.has(status)) {
-        pipeline.setex(liveFixtureKey(id), LIVE_FIXTURE_TTL_SEC, JSON.stringify(fixture));
+        pipeline.setex(
+          providerLiveFixtureKey('api-football', id),
+          LIVE_FIXTURE_TTL_SEC,
+          JSON.stringify(fixture),
+        );
       }
     }
 
@@ -76,12 +145,11 @@ export async function mergeLiveFixturesIntoRedisSnapshot(incoming: FixtureFromAP
   if (!redis) return;
 
   try {
-    const existingRaw = await redis.get(FOOTBALL_LIVE_MATCHES_KEY);
-    let existing: FixtureFromAPI[] = [];
-    if (existingRaw) {
-      const parsed = JSON.parse(existingRaw) as FixtureFromAPI[];
-      if (Array.isArray(parsed)) existing = parsed;
-    }
+    const [existingRaw, apiRaw] = await Promise.all([
+      redis.get(FOOTBALL_365_LIVE_MATCHES_KEY),
+      redis.get(FOOTBALL_API_LIVE_MATCHES_KEY),
+    ]);
+    const existing = parseFixtureList(existingRaw);
 
     const byId = new Map<number, FixtureFromAPI>();
     for (const fixture of existing) {
@@ -95,22 +163,48 @@ export async function mergeLiveFixturesIntoRedisSnapshot(incoming: FixtureFromAP
       const status = fixture.fixture?.status?.short ?? '';
       if (LIVE_STATUSES_SET.has(status)) {
         byId.set(id, fixture);
-      } else if (FINISHED_STATUSES_SET.has(status)) {
+      } else {
         byId.delete(id);
-        void writeTerminalFixtureSnapshot(fixture);
+        if (FINISHED_STATUSES_SET.has(status)) {
+          await writeTerminalFixtureSnapshot(fixture, '365');
+        }
       }
     }
 
     const merged = Array.from(byId.values()).filter((f) =>
       LIVE_STATUSES_SET.has(f?.fixture?.status?.short ?? ''),
     );
-    await writeLiveFixturesSnapshot(merged);
+    const pipeline = redis.pipeline();
+    pipeline.setex(FOOTBALL_365_LIVE_MATCHES_KEY, LIVE_LIST_TTL_SEC, JSON.stringify(merged));
+    pipeline.setex(
+      FOOTBALL_LIVE_MATCHES_KEY,
+      LIVE_LIST_TTL_SEC,
+      JSON.stringify(mergeFixtureLists(parseFixtureList(apiRaw), merged)),
+    );
+    for (const fixture of incoming) {
+      const id = fixture?.fixture?.id;
+      if (id == null) continue;
+      const status = fixture.fixture?.status?.short ?? '';
+      if (LIVE_STATUSES_SET.has(status)) {
+        pipeline.setex(
+          providerLiveFixtureKey('365', id),
+          LIVE_FIXTURE_TTL_SEC,
+          JSON.stringify(fixture),
+        );
+      } else {
+        pipeline.del(providerLiveFixtureKey('365', id));
+      }
+    }
+    await pipeline.exec();
   } catch (err) {
     logger.warn('[LiveFixtureCache] mergeLiveFixturesIntoRedisSnapshot failed:', err);
   }
 }
 
-export async function writeTerminalFixtureSnapshot(fixture: FixtureFromAPI): Promise<void> {
+export async function writeTerminalFixtureSnapshot(
+  fixture: FixtureFromAPI,
+  provider: 'api-football' | '365' = 'api-football',
+): Promise<void> {
   const redis = getRedisClient();
   if (!redis) return;
 
@@ -120,6 +214,8 @@ export async function writeTerminalFixtureSnapshot(fixture: FixtureFromAPI): Pro
   try {
     const pipeline = redis.pipeline();
     pipeline.setex(terminalFixtureKey(id), TERMINAL_FIXTURE_TTL_SEC, JSON.stringify(fixture));
+    pipeline.del(providerLiveFixtureKey(provider, id));
+    // Remove the legacy per-fixture key during migration without touching the other provider.
     pipeline.del(liveFixtureKey(id));
     await pipeline.exec();
   } catch (err) {
@@ -132,10 +228,21 @@ export async function readLiveFixturesList(): Promise<FixtureFromAPI[] | null> {
   if (!redis) return null;
 
   try {
-    const raw = await redis.get(FOOTBALL_LIVE_MATCHES_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as FixtureFromAPI[];
-    return Array.isArray(parsed) ? parsed : null;
+    const [legacyRaw, apiRaw, scores365Raw] = await Promise.all([
+      redis.get(FOOTBALL_LIVE_MATCHES_KEY),
+      redis.get(FOOTBALL_API_LIVE_MATCHES_KEY),
+      redis.get(FOOTBALL_365_LIVE_MATCHES_KEY),
+    ]);
+    if (!legacyRaw && !apiRaw && !scores365Raw) return null;
+    // Provider keys override the legacy compatibility snapshot on duplicate ids.
+    const merged = mergeFixtureLists(
+      parseFixtureList(legacyRaw),
+      parseFixtureList(apiRaw),
+      parseFixtureList(scores365Raw),
+    );
+    // A terminal observation from either provider wins over stale live rows
+    // left in the other provider's snapshot until its TTL expires.
+    return suppressTerminalTombstones(redis, merged);
   } catch (err) {
     logger.warn('[LiveFixtureCache] readLiveFixturesList failed:', err);
     return null;
@@ -147,15 +254,20 @@ export async function readLiveFixtureById(fixtureId: number): Promise<FixtureFro
   if (!redis) return null;
 
   try {
-    const raw = await redis.get(liveFixtureKey(fixtureId));
-    if (raw) {
-      return JSON.parse(raw) as FixtureFromAPI;
+    const [terminalRaw, scores365Raw, apiRaw, legacyRaw] = await Promise.all([
+      redis.get(terminalFixtureKey(fixtureId)),
+      redis.get(providerLiveFixtureKey('365', fixtureId)),
+      redis.get(providerLiveFixtureKey('api-football', fixtureId)),
+      redis.get(liveFixtureKey(fixtureId)),
+    ]);
+    if (terminalRaw) return null;
+    const directRaw = scores365Raw ?? apiRaw ?? legacyRaw;
+    if (directRaw) {
+      return JSON.parse(directRaw) as FixtureFromAPI;
     }
 
-    const listRaw = await redis.get(FOOTBALL_LIVE_MATCHES_KEY);
-    if (!listRaw) return null;
-    const list = JSON.parse(listRaw) as FixtureFromAPI[];
-    if (!Array.isArray(list)) return null;
+    const list = await readLiveFixturesList();
+    if (!list) return null;
     return list.find((f) => f?.fixture?.id === fixtureId) ?? null;
   } catch (err) {
     logger.warn(`[LiveFixtureCache] readLiveFixtureById failed for ${fixtureId}:`, err);
@@ -184,6 +296,11 @@ export async function resolveFixtureForClient(
   fixtureId: number,
   language?: string | null,
 ): Promise<{ fixture: FixtureFromAPI | null; source: LiveFixtureReadSource }> {
+  const terminal = await readTerminalFixtureById(fixtureId);
+  if (terminal) {
+    return { fixture: terminal, source: 'redis-terminal' };
+  }
+
   if (isScores365ExperimentFixture(fixtureId)) {
     const experimentFixture = await getScores365ExperimentFixture(
       fixtureId,
@@ -197,11 +314,6 @@ export async function resolveFixtureForClient(
   const live = await readLiveFixtureById(fixtureId);
   if (live) {
     return { fixture: live, source: 'redis-live' };
-  }
-
-  const terminal = await readTerminalFixtureById(fixtureId);
-  if (terminal) {
-    return { fixture: terminal, source: 'redis-terminal' };
   }
 
   const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
@@ -287,6 +399,13 @@ export async function resolveLiveFixturesForClient(
       fixtures = Array.from(byId.values());
       source = source ?? 'scores365-experiment';
     }
+  }
+
+  if (fixtures.length > 0) {
+    const terminalRows = await Promise.all(
+      fixtures.map((fixture) => readTerminalFixtureById(fixture.fixture.id)),
+    );
+    fixtures = fixtures.filter((_fixture, index) => terminalRows[index] == null);
   }
 
   return { fixtures, source };

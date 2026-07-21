@@ -16,7 +16,7 @@ import { WebSocketService } from './websocket.service';
 import { logger } from '../utils/logger';
 import { MatchEventIngestor } from './match-events/match-event-ingestor.service';
 import { fanOutMatchEvent } from './match-events/match-event-fanout.service';
-import { tryAcquireSyncLeader } from './football-sync-leader.service';
+import { withSyncLeaderLease } from './football-sync-leader.service';
 import {
     isWorldCupFixtureIdAllowed,
     isWorldCupOnlyMode,
@@ -70,6 +70,7 @@ export class LiveMatchIngestorService {
     private static pendingSyncIngest = new Map<number, NodeJS.Timeout>();
     private static inFlightFixtures = new Set<number>();
     private static pendingRetries = new Set<number>();
+    private static tickInFlight = false;
 
     static start(): void {
         if (this.intervalId) {
@@ -114,11 +115,15 @@ export class LiveMatchIngestorService {
 
         const timer = setTimeout(() => {
             this.pendingSyncIngest.delete(fixtureId);
-            void this.ingestFixtureById(fixtureId, {
-                forceRefreshEvents: true,
-                // Fresh events feed for VAR / cards on every live-sync tick.
-                forceApiRefresh: false,
-            }).catch((err) =>
+            void withSyncLeaderLease(
+                `match-ingestor-fixture:${fixtureId}`,
+                () => this.ingestFixtureById(fixtureId, {
+                    forceRefreshEvents: true,
+                    // Fresh events feed for VAR / cards on every live-sync tick.
+                    forceApiRefresh: false,
+                }),
+                { ttlSec: 30 },
+            ).catch((err) =>
                 logger.warn(`[LiveMatchIngestor] sync-trigger ingest ${fixtureId} failed:`, err?.message),
             );
         }, 0);
@@ -127,15 +132,23 @@ export class LiveMatchIngestorService {
     }
 
     static async tick(): Promise<void> {
-        const isLeader = await tryAcquireSyncLeader('match-ingestor');
-        if (!isLeader) {
-            logger.debug('[LiveMatchIngestor] Skipping tick — another instance is sync leader');
+        if (this.tickInFlight) {
+            logger.debug('[LiveMatchIngestor] Skipping tick — previous local tick still running');
             return;
         }
-
-        void this.checkFavoritedFixtures().catch((err) =>
-            logger.error('Live match ingestor tick failed:', err),
-        );
+        this.tickInFlight = true;
+        try {
+            const lease = await withSyncLeaderLease(
+                'match-ingestor',
+                ({ signal }) => this.checkFavoritedFixtures(signal),
+                { ttlSec: 60 },
+            );
+            if (!lease.acquired) {
+                logger.debug('[LiveMatchIngestor] Skipping tick — distributed lease busy');
+            }
+        } finally {
+            this.tickInFlight = false;
+        }
     }
 
     private static async ingestFixtureById(
@@ -168,7 +181,7 @@ export class LiveMatchIngestorService {
         } finally {
             this.inFlightFixtures.delete(fixtureId);
             if (this.pendingRetries.delete(fixtureId)) {
-                void this.ingestFixtureById(fixtureId, options);
+                this.triggerFixtureIngest(fixtureId);
             }
         }
     }
@@ -207,7 +220,8 @@ export class LiveMatchIngestorService {
         });
     }
 
-    private static async checkFavoritedFixtures(): Promise<void> {
+    private static async checkFavoritedFixtures(signal?: AbortSignal): Promise<void> {
+        signal?.throwIfAborted();
         const now = new Date();
         const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
         const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -252,12 +266,14 @@ export class LiveMatchIngestorService {
             where: { fixtureId: { in: fixtureIds } },
             select: { fixtureId: true, status: true },
         });
+        signal?.throwIfAborted();
         const statusByFixture = new Map(cachedRows.map((r) => [r.fixtureId, r.status]));
 
         logger.info(`📊 Ingesting ${byFixture.size} favorited fixture(s) (cache-first)...`);
 
         const entries = [...byFixture.entries()];
         for (let i = 0; i < entries.length; i += FIXTURE_INGEST_CONCURRENCY) {
+            signal?.throwIfAborted();
             const batch = entries.slice(i, i + FIXTURE_INGEST_CONCURRENCY);
             await Promise.all(
                 batch.map(([fixtureId, meta]) => {

@@ -5,7 +5,10 @@
 
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { isWorldCupOnlyMode } from '../config/world-cup-only-mode.config';
+import {
+  isWorldCupHistoricalOnlyMode,
+  isWorldCupOnlyMode,
+} from '../config/world-cup-only-mode.config';
 import { matchCacheService } from './match-cache.service';
 import type { FixtureFromAPI } from './match-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
@@ -14,6 +17,7 @@ import { findCoachInLineup } from './coach-lookup.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import { calendarTodayKey, calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
 import { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
+import { withSyncLeaderLease } from './football-sync-leader.service';
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
 const SCORES365_FIXTURES_BASE = 'https://webws.365scores.com/web/games/fixtures/';
@@ -284,6 +288,81 @@ export function registerScores365FixtureMapping(fixtureId: number, gameId: numbe
   gameIdToFixtureId.set(gameId, fixtureId);
 }
 
+export function readPersistedScores365GameId(fullData: unknown): number | null {
+  if (!fullData || typeof fullData !== 'object') return null;
+  const raw = (fullData as { _scores365GameId?: unknown })._scores365GameId;
+  const gameId = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isInteger(gameId) && gameId > 0 ? gameId : null;
+}
+
+export type Scores365FixtureMetadataMapping = {
+  fixtureId: number;
+  game: Scores365Game;
+};
+
+/**
+ * Merge provider identity and LMT metadata into the durable fixture JSON.
+ * Scalar/full fixture data is preserved so reconciliation cannot erase details.
+ */
+export async function persistScores365FixtureMetadata(
+  mappings: Scores365FixtureMetadataMapping[],
+): Promise<number> {
+  const byFixtureId = new Map(
+    mappings
+      .filter(({ fixtureId, game }) => fixtureId > 0 && Number.isInteger(game?.id))
+      .map((mapping) => [mapping.fixtureId, mapping]),
+  );
+  if (!byFixtureId.size) return 0;
+
+  const rows = await prisma.cachedFixture.findMany({
+    where: { fixtureId: { in: [...byFixtureId.keys()] } },
+    select: { fixtureId: true, fullData: true },
+  });
+  let updated = 0;
+  await Promise.all(
+    rows.map(async (row) => {
+      const mapping = byFixtureId.get(row.fixtureId);
+      if (!mapping) return;
+      const existing = (row.fullData as Record<string, unknown> | null) ?? {};
+      const widget = pickLmtWidget(mapping.game);
+      const partnerId = widget ? partnerIdFromWidget(widget) : null;
+      const existingLmt =
+        existing._lmt && typeof existing._lmt === 'object'
+          ? (existing._lmt as Record<string, unknown>)
+          : {};
+      const next = {
+        ...existing,
+        _scores365GameId: mapping.game.id,
+        ...(partnerId
+          ? {
+              _lmt: {
+                ...existingLmt,
+                partnerId,
+                provider: widget?.provider ?? null,
+                widgetType: widget?.widgetType ?? 'LMT',
+                widgetRatio:
+                  typeof widget?.widgetRatio === 'number' ? widget.widgetRatio : null,
+                sourceUrl: widget?.widgetUrl ?? null,
+              },
+            }
+          : {}),
+      };
+      const alreadyCurrent =
+        readPersistedScores365GameId(existing) === mapping.game.id &&
+        (!partnerId || String(existingLmt.partnerId ?? '') === partnerId);
+      if (alreadyCurrent) return;
+      await prisma.cachedFixture.update({
+        where: { fixtureId: row.fixtureId },
+        data: { fullData: next as never },
+      });
+      registerScores365FixtureMapping(row.fixtureId, mapping.game.id);
+      updated += 1;
+    }),
+  );
+  if (updated > 0) cachedWorldCupDbRows = null;
+  return updated;
+}
+
 /**
  * Resolve a 365Scores gameId to the API-Football fixtureId used in our DB/cache.
  * Returns null when the game is unknown or only exists as a synthetic 365-only row.
@@ -306,11 +385,27 @@ export async function resolveApiFixtureIdFor365GameId(gameId: number): Promise<n
 
   const wcRows = await loadWorldCupDbFixtures(cfg.leagueId, cfg.season);
   for (const row of wcRows) {
-    const mapped = getScores365GameIdForFixture(row.fixtureId);
+    const mapped =
+      getScores365GameIdForFixture(row.fixtureId) ??
+      readPersistedScores365GameId(row.fullData);
     if (mapped === gameId) {
       registerScores365FixtureMapping(row.fixtureId, gameId);
       return row.fixtureId;
     }
+  }
+
+  const persistedMapping = await prisma.cachedFixture.findFirst({
+    where: {
+      fullData: {
+        path: ['_scores365GameId'],
+        equals: gameId,
+      },
+    },
+    select: { fixtureId: true },
+  });
+  if (persistedMapping) {
+    registerScores365FixtureMapping(persistedMapping.fixtureId, gameId);
+    return persistedMapping.fixtureId;
   }
 
   const dbRow = await prisma.cachedFixture.findUnique({
@@ -453,8 +548,24 @@ export async function ensureScores365GameMapping(fixtureId: number): Promise<num
       awayTeamName: true,
       matchDate: true,
       matchTimestamp: true,
+      fullData: true,
     },
   });
+
+  const persistedGameId = readPersistedScores365GameId(dbRow?.fullData);
+  if (persistedGameId) {
+    registerScores365FixtureMapping(fixtureId, persistedGameId);
+    return persistedGameId;
+  }
+  if (
+    isWorldCupHistoricalOnlyMode() &&
+    dbRow &&
+    dbRow.leagueId === getScores365ExperimentConfig().leagueId &&
+    (['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(dbRow.status) ||
+      dbRow.matchDate.getTime() < Date.now())
+  ) {
+    return null;
+  }
 
   // 365 gameIds stored as fixtureId (>= 4M) — resolve directly without waiting for bulk sync.
   if (fixtureId >= 4_000_000) {
@@ -505,7 +616,7 @@ export async function ensureScores365GameMapping(fixtureId: number): Promise<num
   const dayMapped = await tryMapFixtureViaDayAllScores(fixtureId, dbRow);
   if (dayMapped) return dayMapped;
 
-  const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+  const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
   const isPlausiblyLive = !!dbRow && LIVE_STATUSES.has(dbRow.status);
 
   if (!isPlausiblyLive) {
@@ -549,12 +660,15 @@ export async function syncScores365FixtureMappingsFromFixturesList(
   });
 
   let mapped = 0;
+  const durableMappings: Scores365FixtureMetadataMapping[] = [];
   for (const game of games) {
     const row = resolveDbFixtureFor365Game(game, dbRows);
     if (!row) continue;
     registerScores365FixtureMapping(row.fixtureId, game.id);
+    durableMappings.push({ fixtureId: row.fixtureId, game });
     mapped += 1;
   }
+  await persistScores365FixtureMetadata(durableMappings);
 
   const coverageRatio = dbRows.length > 0 ? mapped / dbRows.length : 1;
   const logMsg = `[Scores365] fixture↔game sync: ${mapped}/${games.length} games mapped (${dbRows.length} DB fixtures)`;
@@ -566,6 +680,32 @@ export async function syncScores365FixtureMappingsFromFixturesList(
   }
 
   return mapped;
+}
+
+/** Audit/backfill durable WC fixture↔365 and LMT metadata coverage. */
+export async function auditAndBackfillWorldCup365Metadata(
+  options?: { force?: boolean },
+): Promise<{ fixtures: number; games: number; mapped: number; updated: number; missing: number }> {
+  const cfg = getScores365ExperimentConfig();
+  const dbRows = await loadWorldCupDbFixtures(cfg.leagueId, cfg.season);
+  const games = await fetchScores365WorldCupFixtures({
+    language: 'en',
+    force: options?.force === true,
+  });
+  const mappings: Scores365FixtureMetadataMapping[] = [];
+  for (const game of games) {
+    const row = resolveDbFixtureFor365Game(game, dbRows);
+    if (!row) continue;
+    mappings.push({ fixtureId: row.fixtureId, game });
+  }
+  const updated = await persistScores365FixtureMetadata(mappings);
+  return {
+    fixtures: dbRows.length,
+    games: games.length,
+    mapped: mappings.length,
+    updated,
+    missing: Math.max(0, dbRows.length - mappings.length),
+  };
 }
 
 function is365FinishedGame(game: Scores365Game): boolean {
@@ -676,6 +816,24 @@ export async function fetchScores365GameById(
     cachedGameByKey.delete(key);
   } else if (!options?.force && cached && Date.now() - cached.fetchedAt < ttlMs) {
     return cached.game ?? lastGoodGameByKey.get(lastGoodGameKey(gameId, langId)) ?? null;
+  }
+
+  if (isWorldCupHistoricalOnlyMode()) {
+    const durable = await prisma.cachedFixture.findFirst({
+      where: {
+        fullData: {
+          path: ['_scores365GameId'],
+          equals: gameId,
+        },
+      },
+      select: { status: true, matchDate: true, leagueId: true },
+    });
+    const isHistorical =
+      !!durable &&
+      durable.leagueId === getScores365ExperimentConfig().leagueId &&
+      (['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(durable.status) ||
+        durable.matchDate.getTime() < Date.now());
+    if (isHistorical) return null;
   }
 
   const inFlight = inFlightGameFetch.get(key);
@@ -2030,6 +2188,8 @@ export async function mapScores365ToApiFootballFixture(
   const crowdPrediction = extractScores365CrowdWinPrediction(game, {
     swapped: alignment.swapped,
   });
+  const lmtWidget = pickLmtWidget(game);
+  const lmtPartnerId = lmtWidget ? partnerIdFromWidget(lmtWidget) : null;
 
   return {
     ...base,
@@ -2099,6 +2259,18 @@ export async function mapScores365ToApiFootballFixture(
     _scores365GameId: game.id,
     _scores365TeamsSwapped: alignment.swapped,
     _experiment: 'scores365',
+    ...(lmtWidget && lmtPartnerId
+      ? {
+          _lmt: {
+            partnerId: lmtPartnerId,
+            provider: lmtWidget.provider ?? null,
+            widgetType: lmtWidget.widgetType ?? 'LMT',
+            widgetRatio:
+              typeof lmtWidget.widgetRatio === 'number' ? lmtWidget.widgetRatio : null,
+            sourceUrl: lmtWidget.widgetUrl ?? null,
+          },
+        }
+      : {}),
     ...(crowdPrediction ? { _crowdPrediction: crowdPrediction } : {}),
   } as FixtureFromAPI;
 }
@@ -2403,7 +2575,7 @@ export async function applyScores365ExperimentToWorldCupList(
   return [{ ...fixture, _experiment: 'scores365' }, ...without];
 }
 
-const SYNTHETIC_LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] as const;
+const SYNTHETIC_LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'] as const;
 const SYNTHETIC_LIVE_BATCH = (() => {
   const raw = parseInt(process.env.SCORES365_SYNTHETIC_LIVE_BATCH || '10', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : 80;
@@ -2412,6 +2584,30 @@ const LIVE_DETAIL_MAX = (() => {
   const raw = parseInt(process.env.SCORES365_LIVE_DETAIL_MAX || '5', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : 20;
 })();
+const SYNTHETIC_LIVE_CONCURRENCY = (() => {
+  const raw = parseInt(process.env.SCORES365_SYNTHETIC_LIVE_CONCURRENCY || '4', 10);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 12) : 4;
+})();
+const liveDetailWarms = new Map<number, Promise<void>>();
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      for (;;) {
+        const index = next++;
+        if (index >= items.length) return;
+        results[index] = await worker(items[index], index);
+      }
+    }),
+  );
+  return results;
+}
 
 /**
  * Refresh non-WC 365 synthetic fixtures from GET /web/game/ — accurate minutes/scores
@@ -2419,10 +2615,18 @@ const LIVE_DETAIL_MAX = (() => {
  * (allscores list lags ~30–60s; mirrors WC liveRefresh in getScores365MatchesForDate).
  * Writes live rows into Redis overlay so /fixtures/live and today's calendar stay fresh.
  */
-export async function sync365SyntheticLiveSnapshots(
-  options?: { language?: string | null; gameIds?: number[] },
+type SyntheticLiveRefreshOptions = {
+  language?: string | null;
+  gameIds?: number[];
+  favoritedOnly?: boolean;
+};
+
+async function sync365SyntheticLiveSnapshotsAsLeader(
+  options?: SyntheticLiveRefreshOptions,
+  signal?: AbortSignal,
 ): Promise<number> {
   if (!isScores365ExperimentEnabled()) return 0;
+  signal?.throwIfAborted();
 
   const lang = resolveScores365AppLanguage(options?.language ?? null);
   const liveSet = new Set<string>(SYNTHETIC_LIVE_STATUSES);
@@ -2432,6 +2636,26 @@ export async function sync365SyntheticLiveSnapshots(
   let targetIds: number[];
   if (options?.gameIds?.length) {
     targetIds = [...new Set(options.gameIds)].slice(0, SYNTHETIC_LIVE_BATCH);
+  } else if (options?.favoritedOnly) {
+    const favorites = await prisma.favoriteMatch.findMany({
+      where: { notifiedEnd: false },
+      select: { apiMatchId: true },
+      distinct: ['apiMatchId'],
+      take: SYNTHETIC_LIVE_BATCH * 2,
+    });
+    const favoriteIds = favorites.map((row) => row.apiMatchId);
+    if (!favoriteIds.length) return 0;
+    const rows = await prisma.cachedFixture.findMany({
+      where: {
+        fixtureId: { in: favoriteIds },
+        leagueId: { gte: SCORES365_LEAGUE_ID_OFFSET },
+        status: { in: [...SYNTHETIC_LIVE_STATUSES] },
+      },
+      select: { fixtureId: true },
+      orderBy: { updatedAt: 'asc' },
+      take: SYNTHETIC_LIVE_BATCH,
+    });
+    targetIds = rows.map((row) => row.fixtureId);
   } else {
     const rows = await prisma.cachedFixture.findMany({
       where: {
@@ -2465,60 +2689,98 @@ export async function sync365SyntheticLiveSnapshots(
   }
 
   if (!targetIds.length) return 0;
+  signal?.throwIfAborted();
 
+  const dbRows = await prisma.cachedFixture.findMany({
+    where: { fixtureId: { in: targetIds } },
+  });
+  const dbByFixtureId = new Map(dbRows.map((row) => [row.fixtureId, row]));
   const refreshedLive: FixtureFromAPI[] = [];
-  let updated = 0;
   const detailCandidates: number[] = [];
-
-  for (const fixtureId of targetIds) {
-    try {
-      const game = await fetchScores365GameById(fixtureId, { force: true, language: lang });
-      if (!game) continue;
-
-      const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
-      const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
-      const mapped = await mapScores365ToApiFootballFixture(game, base, fixtureId);
-      if (!mapped) continue;
-
-      await matchCacheService.upsertFixtures([mapped]);
-      updated += 1;
-
-      const short = mapped.fixture?.status?.short ?? '';
-      if (liveSet.has(short)) {
-        refreshedLive.push(mapped);
-        detailCandidates.push(fixtureId);
+  const mappedResults = await mapWithConcurrency(
+    targetIds,
+    SYNTHETIC_LIVE_CONCURRENCY,
+    async (fixtureId): Promise<FixtureFromAPI | null> => {
+      try {
+        const game = await fetchScores365GameById(fixtureId, { force: true, language: lang });
+        if (!game) return null;
+        const dbRow = dbByFixtureId.get(fixtureId);
+        const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
+        return await mapScores365ToApiFootballFixture(game, base, fixtureId);
+      } catch (err: unknown) {
+        logger.warn(`[365Live] refresh fixture ${fixtureId} failed:`, (err as Error)?.message);
+        return null;
       }
-    } catch (err: unknown) {
-      logger.warn(`[365Live] refresh fixture ${fixtureId} failed:`, (err as Error)?.message);
+    },
+  );
+  const mappedFixtures = mappedResults.filter((fixture): fixture is FixtureFromAPI => fixture != null);
+  signal?.throwIfAborted();
+  if (mappedFixtures.length > 0) {
+    await matchCacheService.upsertFixtures(mappedFixtures, { preserveFullData: true });
+  }
+  signal?.throwIfAborted();
+
+  const changedIds = mappedFixtures
+    .filter((mapped) => {
+      const previous = dbByFixtureId.get(mapped.fixture.id);
+      return (
+        !previous ||
+        previous.homeScore !== mapped.goals.home ||
+        previous.awayScore !== mapped.goals.away ||
+        previous.status !== mapped.fixture.status.short
+      );
+    })
+    .map((mapped) => mapped.fixture.id);
+  if (changedIds.length > 0) {
+    const favorites = await prisma.favoriteMatch.findMany({
+      where: { apiMatchId: { in: changedIds }, notifiedEnd: false },
+      select: { apiMatchId: true },
+      distinct: ['apiMatchId'],
+    });
+    if (favorites.length > 0) {
+      const { default: LiveMatchIngestorService } = await import('./live-match-ingestor.service');
+      for (const favorite of favorites) {
+        LiveMatchIngestorService.triggerFixtureIngest(favorite.apiMatchId);
+      }
     }
   }
+  for (const mapped of mappedFixtures) {
+    const short = mapped.fixture?.status?.short ?? '';
+    if (liveSet.has(short)) {
+      refreshedLive.push(mapped);
+      detailCandidates.push(mapped.fixture.id);
+    }
+  }
+  const updated = mappedFixtures.length;
 
-  if (refreshedLive.length > 0) {
+  if (mappedFixtures.length > 0) {
     const { mergeLiveFixturesIntoRedisSnapshot } = await import('./live-fixture-cache.service');
-    await mergeLiveFixturesIntoRedisSnapshot(refreshedLive);
+    // Include terminal transitions so only the 365-owned snapshot drops those ids.
+    await mergeLiveFixturesIntoRedisSnapshot(mappedFixtures);
   }
 
   const detailIds = detailCandidates.slice(0, LIVE_DETAIL_MAX);
   if (detailIds.length > 0) {
     try {
       const { footballDataCacheService } = await import('./football-data-cache.service');
-      for (const fixtureId of detailIds) {
+      await mapWithConcurrency(detailIds, SYNTHETIC_LIVE_CONCURRENCY, async (fixtureId) => {
+        const existing = liveDetailWarms.get(fixtureId);
+        if (existing) return existing;
+        const warm = Promise.allSettled([
+          footballDataCacheService.getMatchLineups(fixtureId),
+          footballDataCacheService.getMatchStatistics(fixtureId),
+          footballDataCacheService.getMatchEvents(fixtureId, {
+            forceRefresh: true,
+            language: lang,
+          }),
+        ]).then(() => undefined);
+        liveDetailWarms.set(fixtureId, warm);
         try {
-          await Promise.allSettled([
-            footballDataCacheService.getMatchLineups(fixtureId),
-            footballDataCacheService.getMatchStatistics(fixtureId),
-            footballDataCacheService.getMatchEvents(fixtureId, {
-              forceRefresh: true,
-              language: lang,
-            }),
-          ]);
-        } catch (err: unknown) {
-          logger.debug(
-            `[365Live] detail warm fixture ${fixtureId} failed:`,
-            (err as Error)?.message,
-          );
+          await warm;
+        } finally {
+          if (liveDetailWarms.get(fixtureId) === warm) liveDetailWarms.delete(fixtureId);
         }
-      }
+      });
       logger.info(
         `[365Live] warmed lineups/stats/events for ${detailIds.length} live synthetic fixtures`,
       );
@@ -2534,6 +2796,98 @@ export async function sync365SyntheticLiveSnapshots(
   }
 
   return updated;
+}
+
+type SyntheticRefreshState = {
+  pendingGameIds: Set<number>;
+  fullScanPending: boolean;
+  favoriteScanPending: boolean;
+  inFlight: Promise<number> | null;
+};
+const syntheticRefreshByLanguage = new Map<string, SyntheticRefreshState>();
+
+export function getSyntheticLiveRefreshCoordinatorState(
+  language?: string | null,
+): { pendingGameIds: number[]; fullScanPending: boolean; favoriteScanPending: boolean; inFlight: boolean } {
+  const resolved = resolveScores365AppLanguage(language ?? null);
+  const state = syntheticRefreshByLanguage.get(resolved);
+  return {
+    pendingGameIds: state ? [...state.pendingGameIds] : [],
+    fullScanPending: state?.fullScanPending ?? false,
+    favoriteScanPending: state?.favoriteScanPending ?? false,
+    inFlight: state?.inFlight != null,
+  };
+}
+
+/**
+ * Coalesce refreshes per language. IDs arriving during an active run are
+ * unioned and drained by that same promise instead of being silently dropped.
+ */
+export function sync365SyntheticLiveSnapshots(
+  options?: SyntheticLiveRefreshOptions,
+): Promise<number> {
+  const language = resolveScores365AppLanguage(options?.language ?? null);
+  let state = syntheticRefreshByLanguage.get(language);
+  if (!state) {
+    state = {
+      pendingGameIds: new Set<number>(),
+      fullScanPending: false,
+      favoriteScanPending: false,
+      inFlight: null,
+    };
+    syntheticRefreshByLanguage.set(language, state);
+  }
+  if (options?.gameIds?.length) {
+    for (const id of options.gameIds) {
+      if (Number.isFinite(id) && id > 0) state.pendingGameIds.add(id);
+    }
+  } else if (options?.favoritedOnly) {
+    state.favoriteScanPending = true;
+  } else {
+    state.fullScanPending = true;
+  }
+  if (state.inFlight) return state.inFlight;
+
+  const currentState = state;
+  const running = withSyncLeaderLease(
+    `365-synthetic-live:${language}`,
+    async ({ signal }) => {
+      let total = 0;
+      for (;;) {
+        signal.throwIfAborted();
+        const queuedGameIds = [...currentState.pendingGameIds];
+        currentState.pendingGameIds.clear();
+        const gameIds = queuedGameIds.slice(0, SYNTHETIC_LIVE_BATCH);
+        for (const id of queuedGameIds.slice(SYNTHETIC_LIVE_BATCH)) {
+          currentState.pendingGameIds.add(id);
+        }
+        const fullScan = currentState.fullScanPending;
+        currentState.fullScanPending = false;
+        const favoritedOnly = !fullScan && currentState.favoriteScanPending;
+        currentState.favoriteScanPending = false;
+        if (gameIds.length && fullScan) currentState.fullScanPending = true;
+        if (gameIds.length && favoritedOnly) currentState.favoriteScanPending = true;
+
+        if (!gameIds.length && !fullScan && !favoritedOnly) break;
+        total += await sync365SyntheticLiveSnapshotsAsLeader(
+          {
+            language,
+            ...(gameIds.length ? { gameIds } : {}),
+            ...(!gameIds.length && favoritedOnly ? { favoritedOnly: true } : {}),
+          },
+          signal,
+        );
+      }
+      return total;
+    },
+    { ttlSec: 60 },
+  )
+    .then((result) => result.value ?? 0)
+    .finally(() => {
+      if (currentState.inFlight === running) currentState.inFlight = null;
+    });
+  currentState.inFlight = running;
+  return running;
 }
 
 const SCORES365_LMT_WIDGET_BASE = 'https://lmtsrcf.365scores.com/api/SportRadarLMT/GetWidget';
@@ -2650,6 +3004,46 @@ export async function getScores365LmtWidgetForFixtureId(
   fixtureId: number,
   options?: { language?: string | null; force?: boolean },
 ): Promise<Scores365LmtWidgetInfo | null> {
+  const durable = await prisma.cachedFixture.findUnique({
+    where: { fixtureId },
+    select: { fullData: true },
+  });
+  const fullData = durable?.fullData as {
+    _scores365GameId?: unknown;
+    _lmt?: {
+      partnerId?: unknown;
+      provider?: string | null;
+      widgetType?: string;
+      widgetRatio?: number | null;
+    };
+    teams?: { home?: { name?: string }; away?: { name?: string } };
+    fixture?: { status?: { long?: string } };
+  } | null;
+  const persistedGameId = readPersistedScores365GameId(fullData);
+  const persistedPartnerId = fullData?._lmt?.partnerId;
+  if (
+    persistedGameId &&
+    persistedPartnerId != null &&
+    String(persistedPartnerId).trim()
+  ) {
+    const langId = resolveScores365LangId(options?.language);
+    const partnerId = String(persistedPartnerId).trim();
+    return {
+      gameId: persistedGameId,
+      fixtureId,
+      partnerId,
+      langId,
+      sportTypeId: 1,
+      widgetUrl: buildScores365LmtWidgetUrl(partnerId, langId, 1),
+      widgetType: fullData?._lmt?.widgetType ?? 'LMT',
+      widgetRatio: fullData?._lmt?.widgetRatio ?? null,
+      provider: fullData?._lmt?.provider ?? null,
+      homeName: fullData?.teams?.home?.name ?? null,
+      awayName: fullData?.teams?.away?.name ?? null,
+      statusText: fullData?.fixture?.status?.long ?? null,
+    };
+  }
+
   const gameId =
     (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
   if (!gameId) return null;

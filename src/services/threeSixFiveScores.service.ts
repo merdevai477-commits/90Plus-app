@@ -4,6 +4,7 @@
  * Controllers must not call this directly; use football-data-cache.service wrappers.
  */
 
+import type { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { redisCacheService } from './redis-cache.service';
@@ -24,7 +25,12 @@ import {
   classifyScores365MatchStatus,
 } from './scores365-experiment.service';
 import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
-import { calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
+import {
+  calendarDateFromKickoff,
+  calendarTodayKey,
+  offsetCalendarDateKey,
+} from '../utils/calendar-day-bounds.util';
+import { scores365RateLimitMapMaxEntries } from '../config/football-reliability-rollout.config';
 
 const BASE_URL = 'https://webws.365scores.com';
 
@@ -368,6 +374,21 @@ interface CompetitionMeta {
 }
 type CompetitionMetaMap = Map<number, CompetitionMeta>;
 
+export function setBoundedMapEntry<K, V>(
+  map: Map<K, V>,
+  key: K,
+  value: V,
+  maxEntries: number,
+): void {
+  if (map.has(key)) map.delete(key);
+  while (map.size >= maxEntries) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
+  }
+  map.set(key, value);
+}
+
 interface GamePayload {
   game?: Scores365Game;
 }
@@ -417,6 +438,40 @@ const LIVE_GAME_MIN_INTERVAL_MS = 3_000;
 const LIVE_POLL_INTERVAL_MS = 4_000;
 const LIVE_SUBSCRIPTION_TTL_MS = 45_000;
 const FINISHED_UPSERTED_KEY_PREFIX = '365:finished-upserted:';
+const FINISHED_MARKER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const CACHED_FIXTURE_PERSIST_SELECT = {
+  id: true,
+  fixtureId: true,
+  leagueId: true,
+  leagueName: true,
+  leagueLogo: true,
+  leagueCountry: true,
+  leagueSeason: true,
+  leagueRound: true,
+  homeTeamId: true,
+  homeTeamName: true,
+  homeTeamLogo: true,
+  awayTeamId: true,
+  awayTeamName: true,
+  awayTeamLogo: true,
+  homeScore: true,
+  awayScore: true,
+  homeHalftimeScore: true,
+  awayHalftimeScore: true,
+  matchDate: true,
+  matchTimestamp: true,
+  status: true,
+  statusLong: true,
+  elapsed: true,
+  venue: true,
+  referee: true,
+  fullData: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.CachedFixtureSelect;
+type CachedFixturePersistenceRow = Prisma.CachedFixtureGetPayload<{
+  select: typeof CACHED_FIXTURE_PERSIST_SELECT;
+}>;
 const TRACKED_COMPETITIONS_KEY = '365:tracked_competition_ids';
 const TRACKED_COMPETITIONS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const COMPETITIONS_CATALOG_CACHE_KEY = '365:competitions_catalog';
@@ -454,6 +509,11 @@ function fixturesSyncBatchSize(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 15;
 }
 
+function fixturesHotPageCap(): number {
+  const raw = parseInt(process.env.SCORES365_FIXTURES_HOT_PAGE_CAP || '6', 10);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 12) : 6;
+}
+
 function trackedCompetitionStoreLimit(): number {
   const raw = parseInt(process.env.SCORES365_TRACKED_COMPETITIONS_LIMIT || '2000', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : 2000;
@@ -463,11 +523,50 @@ function useOnlyMajorGames(): boolean {
   return process.env.SCORES365_ONLY_MAJOR_GAMES === 'true';
 }
 
+export function selectCompetitionFixturesBatch(
+  allIds: number[],
+  priorityIds: number[],
+  batchSize: number,
+  cursor: number,
+): { ids: number[]; nextCursor: number; priorityCount: number } {
+  if (!allIds.length || batchSize <= 0) {
+    return { ids: [], nextCursor: 0, priorityCount: 0 };
+  }
+  const allSet = new Set(allIds);
+  const prioritySlice = priorityIds
+    .filter((id) => allSet.has(id))
+    .slice(0, Math.max(0, batchSize - 1));
+  const prioritySet = new Set(prioritySlice);
+  const remainingSlots = Math.max(0, batchSize - prioritySlice.length);
+  const roundRobin: number[] = [];
+  let scanned = 0;
+  for (let i = 0; i < allIds.length && roundRobin.length < remainingSlots; i++) {
+    const id = allIds[(cursor + i) % allIds.length];
+    scanned = i + 1;
+    if (!prioritySet.has(id)) roundRobin.push(id);
+  }
+  return {
+    ids: [...prioritySlice, ...roundRobin],
+    // Advance past every catalog entry inspected, including hot entries that
+    // were skipped because they already occupied a priority slot.
+    nextCursor: (cursor + Math.max(scanned, 1)) % allIds.length,
+    priorityCount: prioritySlice.length,
+  };
+}
+
 class ThreeSixFiveScoresService {
   private lastUpstreamFetch = new Map<string, number>();
   private inFlight = new Map<string, Promise<unknown>>();
   private liveSubscriptions = new Map<number, { expiresAt: number }>();
   private livePollTimer: ReturnType<typeof setInterval> | null = null;
+
+  getInProcessCacheSizes(): { lastUpstreamFetch: number; inFlight: number; liveSubscriptions: number } {
+    return {
+      lastUpstreamFetch: this.lastUpstreamFetch.size,
+      inFlight: this.inFlight.size,
+      liveSubscriptions: this.liveSubscriptions.size,
+    };
+  }
 
   isEnabled(): boolean {
     return isScores365ExperimentEnabled();
@@ -475,7 +574,12 @@ class ThreeSixFiveScoresService {
 
   /** Extend live-view subscription (ref-count via TTL refresh from cache wrappers). */
   touchLiveGameSubscription(gameId: number): void {
-    this.liveSubscriptions.set(gameId, { expiresAt: Date.now() + LIVE_SUBSCRIPTION_TTL_MS });
+    setBoundedMapEntry(
+      this.liveSubscriptions,
+      gameId,
+      { expiresAt: Date.now() + LIVE_SUBSCRIPTION_TTL_MS },
+      500,
+    );
     this.ensureLivePollLoop();
   }
 
@@ -738,25 +842,12 @@ class ThreeSixFiveScoresService {
     const allIds = await this.loadAllCompetitionIds();
     if (!allIds.length) return { batchSize: 0, fixtures: 0, cursor: 0, total: 0 };
 
-    const allSet = new Set(allIds);
-    const priorityIds = (await this.loadCompetitionIdsWithMatchesNearToday()).filter((id) =>
-      allSet.has(id),
-    );
-    const prioritySlice = priorityIds.slice(0, batchSize);
-    const remainingSlots = Math.max(0, batchSize - prioritySlice.length);
-    const prioritySet = new Set(prioritySlice);
-
     const cursor =
       (await redisCacheService.get<number>(FIXTURES_SYNC_CURSOR_KEY)) ?? 0;
-    const roundRobin: number[] = [];
-    if (remainingSlots > 0) {
-      for (let i = 0; i < allIds.length && roundRobin.length < remainingSlots; i++) {
-        const id = allIds[(cursor + i) % allIds.length];
-        if (!prioritySet.has(id)) roundRobin.push(id);
-      }
-    }
-    const slice = [...prioritySlice, ...roundRobin];
-    const nextCursor = (cursor + Math.max(remainingSlots, 1)) % allIds.length;
+    const priorityIds = await this.loadCompetitionIdsWithMatchesNearToday();
+    const selection = selectCompetitionFixturesBatch(allIds, priorityIds, batchSize, cursor);
+    const slice = selection.ids;
+    const nextCursor = selection.nextCursor;
 
     let fixtures = 0;
     for (let i = 0; i < slice.length; i += SUPPLEMENT_COMPETITION_BATCH) {
@@ -771,7 +862,7 @@ class ThreeSixFiveScoresService {
 
     if (fixtures > 0) {
       logger.info(
-        `[365Scores] fixtures batch synced ${fixtures} fixtures for ${slice.length}/${allIds.length} competitions (priority=${prioritySlice.length}, cursor ${cursor}→${nextCursor})`,
+        `[365Scores] fixtures batch synced ${fixtures} fixtures for ${slice.length}/${allIds.length} competitions (priority=${selection.priorityCount}, cursor ${cursor}→${nextCursor})`,
       );
     }
 
@@ -913,7 +1004,7 @@ class ThreeSixFiveScoresService {
       );
 
       const memberCount = payload?.members?.length ?? 0;
-      logger.info(
+      logger.debug(
         `[365Scores] getLineupsWithNames(${gameId}): received ${memberCount} member records from athletes/lineups (homeIds=${homeIds.size}, awayIds=${awayIds.size})`,
       );
 
@@ -947,7 +1038,7 @@ class ThreeSixFiveScoresService {
       // Per-side completeness audit.
       const homePlayers = players.filter((p) => p.side === 'home');
       const awayPlayers = players.filter((p) => p.side === 'away');
-      logger.info(
+      logger.debug(
         `[365Scores] getLineupsWithNames(${gameId}): resolved home=${homePlayers.length}/${homeIds.size} away=${awayPlayers.length}/${awayIds.size} (confirmed=${lineupsConfirmed})`,
       );
 
@@ -988,19 +1079,23 @@ class ThreeSixFiveScoresService {
   async getStandings(
     competitionId: number = getScores365CompetitionId(),
     language?: string | null,
+    options?: { force?: boolean },
   ): Promise<ThreeSixFiveResult<ThreeSixFiveStandingRow[]>> {
     if (!this.isEnabled()) return { data: null, source: null };
 
     try {
       const langId = resolveScores365LangId(language);
       const cacheKey = `365:standings:${competitionId}:${langId}`;
-      const cached = await redisCacheService.get<ThreeSixFiveStandingRow[]>(cacheKey);
-      if (cached) return { data: cached, source: '365scores' };
+      if (!options?.force) {
+        const cached = await redisCacheService.get<ThreeSixFiveStandingRow[]>(cacheKey);
+        if (cached) return { data: cached, source: '365scores' };
+      }
 
       const payload = await this.fetchJson<StandingsPayload>(
         `/web/standings/?${this.commonParams(langId)}&competitions=${competitionId}`,
-        `standings:${competitionId}`,
+        `standings:${competitionId}:${langId}`,
         300_000,
+        options?.force === true,
       );
       if (!payload?.standings?.length) return { data: null, source: null };
 
@@ -1934,9 +2029,14 @@ class ThreeSixFiveScoresService {
   private async fetchAllFixtures(competitionId: number, langId: number): Promise<Scores365Game[]> {
     const seen = new Set<number>();
     const all: Scores365Game[] = [];
+    const today = calendarTodayKey();
+    const minDate = offsetCalendarDateKey(today, -2);
+    const maxDate = offsetCalendarDateKey(today, 45);
+    const pageCap = fixturesHotPageCap();
     const add = (games?: Scores365Game[]) => {
       for (const g of games ?? []) {
-        if (!seen.has(g.id)) {
+        const date = calendarDateFromKickoff(g.startTime);
+        if (date && date >= minDate && date <= maxDate && !seen.has(g.id)) {
           seen.add(g.id);
           all.push(g);
         }
@@ -1953,7 +2053,7 @@ class ThreeSixFiveScoresService {
     add(first?.games);
 
     let prev = first?.paging?.previousPage;
-    for (let step = 0; prev && step < 40; step++) {
+    for (let step = 0; prev && step < pageCap; step++) {
       const normalized = this.rewritePagingPath(prev, langId);
       const url = normalized.startsWith('http') ? normalized : `${BASE_URL}${normalized}`;
       const page = await this.fetchJson<FixturesPayload>(
@@ -1969,7 +2069,7 @@ class ThreeSixFiveScoresService {
     }
 
     let next = first?.paging?.nextPage;
-    for (let step = 0; next && step < 40; step++) {
+    for (let step = 0; next && step < pageCap; step++) {
       const normalized = this.rewritePagingPath(next, langId);
       const url = normalized.startsWith('http') ? normalized : `${BASE_URL}${normalized}`;
       const page = await this.fetchJson<FixturesPayload>(
@@ -2046,7 +2146,12 @@ class ThreeSixFiveScoresService {
         return null;
       }
 
-      this.lastUpstreamFetch.set(rateKey, Date.now());
+      setBoundedMapEntry(
+        this.lastUpstreamFetch,
+        rateKey,
+        Date.now(),
+        scores365RateLimitMapMaxEntries(),
+      );
       const parsed = JSON.parse(text) as T;
       // Log response size for diagnostics (helps catch truncated payloads).
       const itemCount = Array.isArray(parsed)
@@ -2067,24 +2172,41 @@ class ThreeSixFiveScoresService {
   private async persistFinishedFixtures(items: ThreeSixFiveFixtureItem[]): Promise<void> {
     const leagueId = parseInt(process.env.WORLD_CUP_LEAGUE_ID || '1', 10);
     const season = parseInt(process.env.WORLD_CUP_SEASON || '2026', 10);
-    const dbRows = await prisma.cachedFixture.findMany({
-      where: { leagueId, leagueSeason: season },
-      orderBy: { matchDate: 'asc' },
+    const gameIds = [...new Set(items.map((item) => item.gameId))];
+    const exactRows = await prisma.cachedFixture.findMany({
+      where: { fixtureId: { in: gameIds } },
+      select: CACHED_FIXTURE_PERSIST_SELECT,
     });
+    const exactByFixtureId = new Map(exactRows.map((row) => [row.fixtureId, row]));
+    const needsAlignment = items.some((item) => !exactByFixtureId.has(item.gameId));
+    const alignmentRows = needsAlignment
+      ? await prisma.cachedFixture.findMany({
+          where: { leagueId, leagueSeason: season },
+          orderBy: { matchDate: 'asc' },
+          select: CACHED_FIXTURE_PERSIST_SELECT,
+        })
+      : [];
+    const dbRows = [...exactRows, ...alignmentRows.filter((row) => !exactByFixtureId.has(row.fixtureId))];
+    const finishedItems = items.filter((item) => item.phase === 'finished');
+    const finishedKeys = finishedItems.map(
+      (item) => `${FINISHED_UPSERTED_KEY_PREFIX}${item.gameId}`,
+    );
+    const finishedMarkers = await redisCacheService.getMany<boolean>(finishedKeys);
+    const finishedMarkerByGameId = new Map(
+      finishedItems.map((item, index) => [item.gameId, finishedMarkers[index] === true]),
+    );
 
     const toUpsert: FixtureFromAPI[] = [];
+    const markersToSet: string[] = [];
 
     for (const item of items) {
       // Finished fixtures are immutable — upsert once, then skip on later ticks.
       // Upcoming/live fixtures change (score, status, lineups) — refresh every tick.
       const isFinished = item.phase === 'finished';
       const upsertedKey = `${FINISHED_UPSERTED_KEY_PREFIX}${item.gameId}`;
-      if (isFinished) {
-        const already = await redisCacheService.get<boolean>(upsertedKey);
-        if (already) continue;
-      }
+      if (isFinished && finishedMarkerByGameId.get(item.gameId)) continue;
 
-      const dbRow = this.resolveDbRow(item.raw, dbRows);
+      const dbRow = exactByFixtureId.get(item.gameId) ?? this.resolveDbRow(item.raw, dbRows);
       const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
       // Use the 365 gameId as a synthetic fixtureId when API-Football has no row.
       const fixtureId = dbRow?.fixtureId ?? item.gameId;
@@ -2096,15 +2218,20 @@ class ThreeSixFiveScoresService {
       if (mapped) {
         toUpsert.push(mapped);
         registerScores365FixtureMapping(fixtureId, item.gameId);
-        if (isFinished) {
-          await redisCacheService.set(upsertedKey, true, 30 * 24 * 60 * 60 * 1000);
-        }
+        if (isFinished) markersToSet.push(upsertedKey);
       }
     }
 
     if (toUpsert.length > 0) {
       const count = await matchCacheService.upsertFixtures(toUpsert);
-      logger.info(`[365Scores] upserted ${count} WC fixtures to DB (all phases)`);
+      if (count === toUpsert.length) {
+        await redisCacheService.setMany(
+          markersToSet.map((key) => ({ key, value: true, ttlMs: FINISHED_MARKER_TTL_MS })),
+        );
+      } else {
+        logger.warn('[365Scores] skipped finished markers after partial fixture persistence');
+      }
+      logger.debug(`[365Scores] upserted ${count} WC fixtures to DB (all phases)`);
     }
   }
 
@@ -2218,18 +2345,19 @@ class ThreeSixFiveScoresService {
   private async loadCachedFixturesPaged(
     gte: Date,
     lte: Date,
-  ): Promise<Awaited<ReturnType<typeof prisma.cachedFixture.findMany>>> {
+  ): Promise<CachedFixturePersistenceRow[]> {
     const PAGE = Math.max(
       200,
       Math.min(2000, parseInt(process.env.ALLSCORES_DB_PAGE_SIZE || '1000', 10) || 1000),
     );
-    const out: Awaited<ReturnType<typeof prisma.cachedFixture.findMany>> = [];
+    const out: CachedFixturePersistenceRow[] = [];
     let cursorId: string | undefined;
 
     for (;;) {
       const page = await prisma.cachedFixture.findMany({
         where: { matchDate: { gte, lte } },
         orderBy: [{ matchDate: 'asc' }, { id: 'asc' }],
+        select: CACHED_FIXTURE_PERSIST_SELECT,
         take: PAGE,
         ...(cursorId ? { skip: 1, cursor: { id: cursorId } } : {}),
       });
@@ -2254,10 +2382,23 @@ class ThreeSixFiveScoresService {
     if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) return;
 
     const WINDOW_MS = 3 * 60 * 60 * 1000;
-    const dbRows = await this.loadCachedFixturesPaged(
-      new Date(dayStart.getTime() - WINDOW_MS),
-      new Date(dayEnd.getTime() + WINDOW_MS),
-    );
+    const gameIds = [...new Set(items.map((item) => item.gameId))];
+    const exactRows = await prisma.cachedFixture.findMany({
+      where: { fixtureId: { in: gameIds } },
+      select: CACHED_FIXTURE_PERSIST_SELECT,
+    });
+    const exactByFixtureId = new Map(exactRows.map((row) => [row.fixtureId, row]));
+    const needsAlignment = items.some((item) => !exactByFixtureId.has(item.gameId));
+    const alignmentRows = needsAlignment
+      ? await this.loadCachedFixturesPaged(
+          new Date(dayStart.getTime() - WINDOW_MS),
+          new Date(dayEnd.getTime() + WINDOW_MS),
+        )
+      : [];
+    const dbRows = [
+      ...exactRows,
+      ...alignmentRows.filter((row) => !exactByFixtureId.has(row.fixtureId)),
+    ];
 
     if (competitionMeta) {
       await this.reconcileSyntheticLeagueMeta(dbRows, competitionMeta);
@@ -2265,23 +2406,30 @@ class ThreeSixFiveScoresService {
 
     const toUpsert: FixtureFromAPI[] = [];
     const competitions = new Set<number>();
+    const finishedItems = items.filter((item) => item.phase === 'finished');
+    const finishedKeys = finishedItems.map(
+      (item) => `${FINISHED_UPSERTED_KEY_PREFIX}${item.gameId}`,
+    );
+    const markerValues = await redisCacheService.getMany<boolean>(finishedKeys);
+    const finishedMarkerByGameId = new Map(
+      finishedItems.map((item, index) => [item.gameId, markerValues[index] === true]),
+    );
+    const markersToSet: string[] = [];
 
     for (const item of items) {
       const isFinished = item.phase === 'finished';
       const upsertedKey = `${FINISHED_UPSERTED_KEY_PREFIX}${item.gameId}`;
-      if (isFinished) {
-        const already = await redisCacheService.get<boolean>(upsertedKey);
-        if (already) {
-          const candidateRow = this.resolveDbRow(item.raw, dbRows);
+      if (isFinished && finishedMarkerByGameId.get(item.gameId)) {
+          const candidateRow =
+            exactByFixtureId.get(item.gameId) ?? this.resolveDbRow(item.raw, dbRows);
           const stillLiveInDb =
             !!candidateRow &&
             candidateRow.leagueId >= SCORES365_LEAGUE_ID_OFFSET &&
             LIVE_STATUSES.includes(candidateRow.status);
           if (!stillLiveInDb) continue;
-        }
       }
 
-      const dbRow = this.resolveDbRow(item.raw, dbRows);
+      const dbRow = exactByFixtureId.get(item.gameId) ?? this.resolveDbRow(item.raw, dbRows);
 
       let base: FixtureFromAPI | null;
       let fixtureId: number;
@@ -2322,14 +2470,19 @@ class ThreeSixFiveScoresService {
         registerScores365FixtureMapping(fixtureId, item.gameId);
         const compId = item.competitionId ?? item.raw.competitionId;
         if (compId) competitions.add(compId);
-        if (isFinished) {
-          await redisCacheService.set(upsertedKey, true, 30 * 24 * 60 * 60 * 1000);
-        }
+        if (isFinished) markersToSet.push(upsertedKey);
       }
     }
 
     if (toUpsert.length > 0) {
       const count = await matchCacheService.upsertFixtures(toUpsert);
+      if (count === toUpsert.length) {
+        await redisCacheService.setMany(
+          markersToSet.map((key) => ({ key, value: true, ttlMs: FINISHED_MARKER_TTL_MS })),
+        );
+      } else {
+        logger.warn('[OtherLeagues-365] skipped finished markers after partial fixture persistence');
+      }
       logger.info(
         `[OtherLeagues-365] upserted ${count} fixtures across ${competitions.size} competitions (day=${day})`,
       );
@@ -2376,7 +2529,7 @@ class ThreeSixFiveScoresService {
    * a healthy DB and cheap on a drifted one.
    */
   private async reconcileSyntheticLeagueMeta(
-    dbRows: Awaited<ReturnType<typeof prisma.cachedFixture.findMany>>,
+    dbRows: CachedFixturePersistenceRow[],
     competitionMeta: CompetitionMetaMap,
   ): Promise<void> {
     let fixed = 0;
@@ -2430,7 +2583,7 @@ class ThreeSixFiveScoresService {
 
   private resolveDbRow(
     game: Scores365Game,
-    dbRows: Awaited<ReturnType<typeof prisma.cachedFixture.findMany>>,
+    dbRows: CachedFixturePersistenceRow[],
   ) {
     const gameMs = game.startTime ? new Date(game.startTime).getTime() : NaN;
     if (Number.isNaN(gameMs)) return null;

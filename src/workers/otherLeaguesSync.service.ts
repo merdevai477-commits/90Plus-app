@@ -8,6 +8,7 @@
  *
  * Config (env):
  *   OTHER_LEAGUES_SYNC_ENABLED   — enable/disable (default: true)
+ *   OTHER_LEAGUES_API_FOOTBALL_JOBS_ENABLED — legacy duplicate API jobs (default: false)
  *   OTHER_LEAGUES_SYNC_CRON      — cron expression (default: every 5 min)
  *   OTHER_LEAGUES_LIVE_CRON      — cron for live-match refresh (default: every 2 min)
  *   OTHER_LEAGUES_ALLSCORES_CRON — cron for 365 /allscores/ calendar sync (default: daily 05:00)
@@ -18,12 +19,14 @@ import cron from 'node-cron';
 import { logger } from '../utils/logger';
 import { shouldSkipHeavyJob } from '../utils/memory-guard.util';
 import { isWorldCupOnlyMode } from '../config/world-cup-only-mode.config';
+import { areLegacyOtherLeagueApiJobsEnabled } from '../config/football-sync-ownership.config';
 import { isStartupSyncDisabled } from '../config/startup-sync.config';
 import { footballDataCacheService } from '../services/football-data-cache.service';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 import { startupJobQueue } from '../services/startup-job-queue.service';
 import { isScores365ExperimentEnabled, sync365SyntheticLiveSnapshots } from '../services/scores365-experiment.service';
-import { getRedisClient } from '../lib/redis';
+import { withSyncLeaderLease } from '../services/football-sync-leader.service';
+import { readLiveFixturesList } from '../services/live-fixture-cache.service';
 import {
   calendarTodayKey,
   offsetCalendarDateKey,
@@ -32,7 +35,7 @@ import {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const WORKER = 'OtherLeagues-Sync';
-const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
 
 /** Master kill-switch shared by both data paths. */
 function isWorkerEnabled(): boolean {
@@ -41,13 +44,14 @@ function isWorkerEnabled(): boolean {
 }
 
 /**
- * API-Football-based calendar/live ticks. Silent in WC-only mode (the WC worker
- * + 365 cover everything) and useless while the API-Football account is down.
+ * Legacy API-Football calendar/live ticks. Disabled by default because the
+ * dedicated calendar/live services own those feeds; explicit opt-in is retained
+ * only as a rollback switch.
  */
-function isApiFootballSyncEnabled(): boolean {
+export function isApiFootballSyncEnabled(): boolean {
   if (!isWorkerEnabled()) return false;
   if (isWorldCupOnlyMode()) return false;
-  return true;
+  return areLegacyOtherLeagueApiJobsEnabled();
 }
 
 /**
@@ -63,6 +67,7 @@ function isAllScoresEnabled(): boolean {
 // ─── State ────────────────────────────────────────────────────────────────────
 
 const isRunning = { calendar: false, live: false, allScores: false, scores365Live: false, catalog: false, fixturesBatch: false };
+let scores365FavoriteHotTimer: ReturnType<typeof setInterval> | null = null;
 
 /** App-calendar YYYY-MM-DD offset by `days` from today (Cairo by default). */
 function dateKeyOffset(days: number): string {
@@ -105,18 +110,7 @@ async function runLiveRefreshTick(): Promise<void> {
   isRunning.live = true;
 
   try {
-    const redis = getRedisClient();
-    if (!redis) return;
-
-    const raw = await redis.get('football:live_matches');
-    if (!raw) return;
-
-    let liveFixtures: any[];
-    try {
-      liveFixtures = JSON.parse(raw) as any[];
-    } catch {
-      return;
-    }
+    const liveFixtures = await readLiveFixturesList();
     if (!Array.isArray(liveFixtures) || liveFixtures.length === 0) return;
 
     const liveIds = liveFixtures
@@ -168,19 +162,26 @@ async function runAllScoresSyncTick(): Promise<void> {
   isRunning.allScores = true;
 
   try {
-    // ~5 calendar days: yesterday → today+3 (was 16 days — OOM driver).
-    const start = dateKeyOffset(-1);
-    const end = dateKeyOffset(3);
-    const res = await threeSixFiveScoresService.getAllScores(start, end, 'en');
-    const items = res.data ?? [];
-    const competitions = new Set<number>();
-    for (const item of items) {
-      if (item.competitionId) competitions.add(item.competitionId);
+    const lease = await withSyncLeaderLease('365-allscores', async ({ signal }) => {
+      signal.throwIfAborted();
+      // ~5 calendar days: yesterday → today+3 (was 16 days — OOM driver).
+      const start = dateKeyOffset(-1);
+      const end = dateKeyOffset(3);
+      const res = await threeSixFiveScoresService.getAllScores(start, end, 'en');
+      signal.throwIfAborted();
+      const items = res.data ?? [];
+      const competitions = new Set<number>();
+      for (const item of items) {
+        if (item.competitionId) competitions.add(item.competitionId);
+      }
+      logger.info(
+        `[OtherLeagues-365] ${items.length} fixtures across ${competitions.size} competitions synced for ${start}..${end}`,
+        { worker: 'other-leagues-sync', start, end, fixtures: items.length, competitions: competitions.size },
+      );
+    }, { ttlSec: 120 });
+    if (!lease.acquired) {
+      logger.debug(`[${WORKER}][allscores] distributed lease busy — skipping`);
     }
-    logger.info(
-      `[OtherLeagues-365] ${items.length} fixtures across ${competitions.size} competitions synced for ${start}..${end}`,
-      { worker: 'other-leagues-sync', start, end, fixtures: items.length, competitions: competitions.size },
-    );
   } catch (err: unknown) {
     logger.error(`[${WORKER}][allscores] tick fatal (recovered):`, (err as Error)?.message);
   } finally {
@@ -229,11 +230,18 @@ async function runCompetitionsCatalogSyncTick(force = false): Promise<void> {
   isRunning.catalog = true;
 
   try {
-    const result = await threeSixFiveScoresService.syncCompetitionsCatalog('en', { force });
-    logger.info(
-      `[${WORKER}][365catalog] ${result.competitions} competitions (${result.leaguesUpserted} upserted)`,
-      { worker: 'other-leagues-sync', ...result },
-    );
+    const lease = await withSyncLeaderLease('365-catalog', async ({ signal }) => {
+      signal.throwIfAborted();
+      const result = await threeSixFiveScoresService.syncCompetitionsCatalog('en', { force });
+      signal.throwIfAborted();
+      logger.info(
+        `[${WORKER}][365catalog] ${result.competitions} competitions (${result.leaguesUpserted} upserted)`,
+        { worker: 'other-leagues-sync', ...result },
+      );
+    }, { ttlSec: 300 });
+    if (!lease.acquired) {
+      logger.debug(`[${WORKER}][365catalog] distributed lease busy — skipping`);
+    }
   } catch (err: unknown) {
     logger.error(`[${WORKER}][365catalog] tick fatal (recovered):`, (err as Error)?.message);
   } finally {
@@ -253,12 +261,19 @@ async function runCompetitionFixturesBatchTick(): Promise<void> {
   isRunning.fixturesBatch = true;
 
   try {
-    const result = await threeSixFiveScoresService.syncCompetitionFixturesBatch('en');
-    if (result.fixtures > 0) {
-      logger.info(
-        `[${WORKER}][365fixtures] synced ${result.fixtures} fixtures (${result.batchSize}/${result.total} comps, cursor=${result.cursor})`,
-        { worker: 'other-leagues-sync', ...result },
-      );
+    const lease = await withSyncLeaderLease('365-fixtures-batch', async ({ signal }) => {
+      signal.throwIfAborted();
+      const result = await threeSixFiveScoresService.syncCompetitionFixturesBatch('en');
+      signal.throwIfAborted();
+      if (result.fixtures > 0) {
+        logger.info(
+          `[${WORKER}][365fixtures] synced ${result.fixtures} fixtures (${result.batchSize}/${result.total} comps, cursor=${result.cursor})`,
+          { worker: 'other-leagues-sync', ...result },
+        );
+      }
+    }, { ttlSec: 180 });
+    if (!lease.acquired) {
+      logger.debug(`[${WORKER}][365fixtures] distributed lease busy — skipping`);
     }
   } catch (err: unknown) {
     logger.error(`[${WORKER}][365fixtures] tick fatal (recovered):`, (err as Error)?.message);
@@ -285,18 +300,18 @@ export function startOtherLeaguesSyncWorker(): void {
 
   if (!apiFootballEnabled && !allScoresEnabled) {
     logger.info(
-      `[${WORKER}] idle — API-Football sync off (WORLD_CUP_ONLY_MODE) and 365 allscores off (SCORES365_EXPERIMENT_ENABLED not set)`,
+      `[${WORKER}] idle — legacy API-Football jobs off and 365 allscores off (SCORES365_EXPERIMENT_ENABLED not set)`,
     );
     return;
   }
 
-  const calendarCron = process.env.OTHER_LEAGUES_SYNC_CRON?.trim() || '*/5 * * * *';
-  const liveCron = process.env.OTHER_LEAGUES_LIVE_CRON?.trim() || '*/2 * * * *';
-  // Default once daily 05:00 — set OTHER_LEAGUES_ALLSCORES_CRON on Railway if needed.
-  const allScoresCron = process.env.OTHER_LEAGUES_ALLSCORES_CRON?.trim() || '0 5 * * *';
-  const scores365LiveCron = process.env.OTHER_LEAGUES_365_LIVE_CRON?.trim() || '*/2 * * * *';
-  const catalogCron = process.env.OTHER_LEAGUES_365_CATALOG_CRON?.trim() || '0 4 * * *';
-  const fixturesBatchCron = process.env.OTHER_LEAGUES_365_FIXTURES_CRON?.trim() || '*/5 * * * *';
+  const calendarCron = process.env.OTHER_LEAGUES_SYNC_CRON?.trim() || '1-59/5 * * * *';
+  const liveCron = process.env.OTHER_LEAGUES_LIVE_CRON?.trim() || '2-59/5 * * * *';
+  // Default once daily 05:11 — set OTHER_LEAGUES_ALLSCORES_CRON on Railway if needed.
+  const allScoresCron = process.env.OTHER_LEAGUES_ALLSCORES_CRON?.trim() || '11 5 * * *';
+  const scores365LiveCron = process.env.OTHER_LEAGUES_365_LIVE_CRON?.trim() || '1-59/2 * * * *';
+  const catalogCron = process.env.OTHER_LEAGUES_365_CATALOG_CRON?.trim() || '17 4 * * *';
+  const fixturesBatchCron = process.env.OTHER_LEAGUES_365_FIXTURES_CRON?.trim() || '3-59/5 * * * *';
 
   // API-Football calendar/live ticks (skip entirely in WC-only mode).
   if (apiFootballEnabled) {
@@ -323,6 +338,23 @@ export function startOtherLeaguesSyncWorker(): void {
     cron.schedule(fixturesBatchCron, () => {
       void runCompetitionFixturesBatchTick();
     });
+    // Favorited synthetic live fixtures retain the 5s event/push cadence.
+    // The broader non-favorite catalog refresh remains on its conservative cron.
+    if (!scores365FavoriteHotTimer) {
+      const hotIntervalMs = Math.max(
+        5_000,
+        parseInt(process.env.SCORES365_FAVORITE_LIVE_SYNC_MS || '5000', 10) || 5_000,
+      );
+      scores365FavoriteHotTimer = setInterval(() => {
+        void sync365SyntheticLiveSnapshots({
+          language: 'en',
+          favoritedOnly: true,
+        }).catch((err) =>
+          logger.warn(`[${WORKER}][365hot] favorite refresh failed:`, err?.message),
+        );
+      }, hotIntervalMs);
+      scores365FavoriteHotTimer.unref?.();
+    }
     // Boot-time force syncs (catalog / allscores / 365live / fixtures) — gated.
     // With STARTUP_SYNC_DISABLED=true these are skipped; crons above still run.
     if (isStartupSyncDisabled()) {

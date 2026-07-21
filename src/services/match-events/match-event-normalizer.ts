@@ -8,7 +8,7 @@ import {
 } from '../../utils/match-event-key.util';
 import type { MatchEventKind, NormalizedMatchEvent, FixtureSnapshot } from './match-event.types';
 
-export const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE']);
+export const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
 export const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
 /** Pre-kickoff / not-started statuses (API sometimes stalls here while score advances). */
 export const NS_LIKE_STATUSES = new Set(['NS', 'TBD']);

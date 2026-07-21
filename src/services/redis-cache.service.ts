@@ -75,6 +75,45 @@ class RedisCacheService {
   }
 
   /**
+   * Get several cache entries with one Redis round trip.
+   * Falls back to the bounded in-memory cache when Redis is unavailable.
+   */
+  async getMany<T>(keys: string[]): Promise<Array<T | null>> {
+    if (!keys.length) return [];
+
+    if (isRedisConnected()) {
+      try {
+        const redis = getRedisClient();
+        if (redis) {
+          const values = await redis.mget(...keys);
+          const now = Date.now();
+          return values.map((value, index) => {
+            if (!value) return null;
+            try {
+              const entry = JSON.parse(value) as CacheEntry<T>;
+              if (now - entry.timestamp < entry.ttl) return entry.data;
+              void redis.del(keys[index]);
+            } catch {
+              // Treat malformed cache entries as misses.
+            }
+            return null;
+          });
+        }
+      } catch (error) {
+        logger.warn('Redis mget error:', error);
+      }
+    }
+
+    const now = Date.now();
+    return keys.map((key) => {
+      const entry = this.memoryCache.get(key) as CacheEntry<T> | undefined;
+      if (entry && now - entry.timestamp < entry.ttl) return entry.data;
+      if (entry) this.memoryCache.delete(key);
+      return null;
+    });
+  }
+
+  /**
    * Set value in cache
    */
   async set<T>(key: string, value: T, ttlMs: number): Promise<void> {
@@ -106,6 +145,35 @@ class RedisCacheService {
   }
 
   /**
+   * Set several entries through one Redis pipeline.
+   */
+  async setMany<T>(entries: Array<{ key: string; value: T; ttlMs: number }>): Promise<void> {
+    if (!entries.length) return;
+
+    const timestamp = Date.now();
+    if (isRedisConnected()) {
+      try {
+        const redis = getRedisClient();
+        if (redis) {
+          const pipeline = redis.pipeline();
+          for (const { key, value, ttlMs } of entries) {
+            const entry: CacheEntry<T> = { data: value, timestamp, ttl: ttlMs };
+            pipeline.setex(key, Math.ceil(ttlMs / 1000), JSON.stringify(entry));
+          }
+          await pipeline.exec();
+          return;
+        }
+      } catch (error) {
+        logger.warn('Redis pipeline set error:', error);
+      }
+    }
+
+    for (const { key, value, ttlMs } of entries) {
+      this.putMemoryFallback(key, { data: value, timestamp, ttl: ttlMs });
+    }
+  }
+
+  /**
    * Delete value from cache
    */
   async del(key: string): Promise<void> {
@@ -134,10 +202,26 @@ class RedisCacheService {
       try {
         const redis = getRedisClient();
         if (redis) {
-          const keys = await redis.keys(pattern);
-          if (keys.length > 0) {
-            await redis.del(...keys);
-            logger.debug(`📦 Redis cache DEL pattern: ${pattern} (${keys.length} keys)`);
+          let cursor = '0';
+          let deleted = 0;
+          do {
+            const [nextCursor, keys] = await redis.scan(
+              cursor,
+              'MATCH',
+              pattern,
+              'COUNT',
+              200,
+            );
+            cursor = nextCursor;
+            if (keys.length > 0) {
+              const pipeline = redis.pipeline();
+              for (const key of keys) pipeline.del(key);
+              await pipeline.exec();
+              deleted += keys.length;
+            }
+          } while (cursor !== '0');
+          if (deleted > 0) {
+            logger.debug(`📦 Redis cache DEL pattern: ${pattern} (${deleted} keys)`);
           }
         }
       } catch (error) {
@@ -146,8 +230,10 @@ class RedisCacheService {
     }
 
     // Delete from memory cache
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+    const matcher = new RegExp(`^${escaped}$`);
     for (const key of this.memoryCache.keys()) {
-      if (key.includes(pattern.replace('*', ''))) {
+      if (matcher.test(key)) {
         this.memoryCache.delete(key);
       }
     }

@@ -11,6 +11,7 @@ import {
   isWorldCupOnlyMode,
   logSkippingNonWorldCup,
 } from '../config/world-cup-only-mode.config';
+import { writeLiveFixturesSnapshot } from './live-fixture-cache.service';
 
 // Major leagues that need frequent updates
 const MAJOR_LEAGUES = {
@@ -99,20 +100,8 @@ class FootballBackgroundService {
   private async updateLiveMatches(): Promise<void> {
     try {
       const liveMatches = await footballService.getLiveFixtures();
-      
-      if (liveMatches.length > 0) {
-        const redis = getRedisClient();
-        if (redis) {
-          // Cache live matches with 30 second TTL
-          await redis.setex(
-            'football:live_matches',
-            30,
-            JSON.stringify(liveMatches)
-          );
-          
-          logger.debug(`📡 Updated ${liveMatches.length} live matches`);
-        }
-      }
+      await writeLiveFixturesSnapshot(liveMatches);
+      logger.debug(`📡 Updated ${liveMatches.length} live matches`);
     } catch (error) {
       logger.warn('Failed to update live matches:', error);
     }

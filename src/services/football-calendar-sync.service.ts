@@ -10,7 +10,7 @@
 import { logger } from '../utils/logger';
 import { footballDataCacheService } from './football-data-cache.service';
 import { isFootballQuotaExhausted } from './football.service';
-import { tryAcquireSyncLeader } from './football-sync-leader.service';
+import { withSyncLeaderLease } from './football-sync-leader.service';
 import {
     isWorldCupOnlyMode,
     logWorldCupOnlyModeStartup,
@@ -40,6 +40,8 @@ class FootballCalendarSyncService {
     private todayInterval: NodeJS.Timeout | null = null;
     private prefetchInterval: NodeJS.Timeout | null = null;
     private running = false;
+    private backfillRunning = false;
+    private syncingDates = new Set<string>();
 
     start(): void {
         if (!process.env.FOOTBALL_API_KEY) {
@@ -94,23 +96,32 @@ class FootballCalendarSyncService {
             logger.debug('[CalendarSync] World Cup backfill skipped — quota exhausted');
             return;
         }
-
-        const isLeader = await tryAcquireSyncLeader('calendar-sync');
-        if (!isLeader) {
-            logger.debug('[CalendarSync] World Cup backfill skipped — not sync leader');
+        if (this.backfillRunning) {
+            logger.debug('[CalendarSync] World Cup backfill skipped — already running locally');
             return;
         }
+        this.backfillRunning = true;
+        try {
+            const lease = await withSyncLeaderLease('calendar-backfill', async ({ signal }) => {
+                signal.throwIfAborted();
+                const count = await footballDataCacheService.backfillWorldCupFixtures();
+                signal.throwIfAborted();
+                logger.info(`[CalendarSync] World Cup backfill: ${count} fixtures seeded`);
 
-        const count = await footballDataCacheService.backfillWorldCupFixtures();
-        logger.info(`[CalendarSync] World Cup backfill: ${count} fixtures seeded`);
-
-        if (count > 0) {
-            try {
-                const { runBulkFixtureSyncTick } = await import('../workers/worldCupSync.service');
-                await runBulkFixtureSyncTick();
-            } catch (err) {
-                logger.warn('[CalendarSync] post-backfill 365 bulk sync failed:', err);
+                if (count > 0) {
+                    try {
+                        const { runBulkFixtureSyncTick } = await import('../workers/worldCupSync.service');
+                        await runBulkFixtureSyncTick();
+                    } catch (err) {
+                        logger.warn('[CalendarSync] post-backfill 365 bulk sync failed:', err);
+                    }
+                }
+            }, { ttlSec: 300 });
+            if (!lease.acquired) {
+                logger.debug('[CalendarSync] World Cup backfill skipped — lease busy');
             }
+        } finally {
+            this.backfillRunning = false;
         }
     }
 
@@ -144,20 +155,30 @@ class FootballCalendarSyncService {
             logger.debug(`[CalendarSync] Skipping ${dateString} — quota exhausted`);
             return 0;
         }
-
-        const isLeader = await tryAcquireSyncLeader('calendar-sync');
-        if (!isLeader) {
-            logger.debug(`[CalendarSync] Skipping ${dateString} — not sync leader`);
+        if (this.syncingDates.has(dateString)) {
+            logger.debug(`[CalendarSync] Skipping ${dateString} — already running locally`);
             return 0;
         }
-
-        const count = await footballDataCacheService.syncCalendarDateFromApi(dateString);
-        if (count > 0) {
-            logger.info(`[CalendarSync] ${dateString}: ${count} fixtures synced (1 API call)`);
-        } else {
-            logger.debug(`[CalendarSync] ${dateString}: no fixtures or quota skip`);
+        this.syncingDates.add(dateString);
+        try {
+            const lease = await withSyncLeaderLease('calendar-sync', async ({ signal }) => {
+                signal.throwIfAborted();
+                const count = await footballDataCacheService.syncCalendarDateFromApi(dateString);
+                signal.throwIfAborted();
+                if (count > 0) {
+                    logger.info(`[CalendarSync] ${dateString}: ${count} fixtures synced (1 API call)`);
+                } else {
+                    logger.debug(`[CalendarSync] ${dateString}: no fixtures or quota skip`);
+                }
+                return count;
+            }, { ttlSec: 90 });
+            if (!lease.acquired) {
+                logger.debug(`[CalendarSync] Skipping ${dateString} — lease busy`);
+            }
+            return lease.value ?? 0;
+        } finally {
+            this.syncingDates.delete(dateString);
         }
-        return count;
     }
 }
 

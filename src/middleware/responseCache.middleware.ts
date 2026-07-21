@@ -10,12 +10,26 @@ import crypto from 'crypto';
 import { redisCacheService } from '../services/redis-cache.service';
 import { logger } from '../utils/logger';
 import { shouldHonorFreshCacheBypass } from '../utils/cache-bypass.util';
+import { resolveAppLanguage } from '../utils/app-language.util';
 
 interface CacheEntry {
     data: any;
     etag: string;
     timestamp: number;
     ttl: number;
+}
+
+export function buildResponseCacheKey(req: Request, sharedCache = false): string {
+    const joined = `${req.baseUrl || ''}${req.path || ''}`.split('?')[0] || '/';
+    const path = joined.startsWith('/') ? joined : `/${joined}`;
+    const query = JSON.stringify(req.query);
+    if (sharedCache) {
+        // Public football payloads are localized from headers as well as query
+        // params, so language must be part of the cross-user cache identity.
+        return `${path}:${query}:lang=${resolveAppLanguage(req)}:shared`;
+    }
+    const userId = (req as any).auth?.userId || 'anonymous';
+    return `${path}:${query}:${userId}`;
 }
 
 class ResponseCache {
@@ -45,17 +59,8 @@ class ResponseCache {
      * serves ALL users (correct for public/shared endpoints like football
      * match listings that are identical regardless of auth).
      */
-    private getCachePath(req: Request): string {
-        const joined = `${req.baseUrl || ''}${req.path || ''}`.split('?')[0] || '/';
-        return joined.startsWith('/') ? joined : `/${joined}`;
-    }
-
     private getCacheKey(req: Request, sharedCache = false): string {
-        const path = this.getCachePath(req);
-        const query = JSON.stringify(req.query);
-        if (sharedCache) return `${path}:${query}:shared`;
-        const userId = (req as any).auth?.userId || 'anonymous';
-        return `${path}:${query}:${userId}`;
+        return buildResponseCacheKey(req, sharedCache);
     }
 
     /**
@@ -239,10 +244,11 @@ class ResponseCache {
 
 const responseCache = new ResponseCache();
 
-// Clean expired entries every 5 minutes
-setInterval(() => {
+// Clean expired entries every 5 minutes without keeping CLI/test processes alive.
+const responseCacheCleanupTimer = setInterval(() => {
     responseCache.clean();
 }, 5 * 60 * 1000);
+responseCacheCleanupTimer.unref?.();
 
 /**
  * Response caching middleware

@@ -20,6 +20,12 @@ export function isMatchIngestorLockEnabled(): boolean {
 }
 
 const INSTANCE_ID = process.env.INSTANCE_ID ?? randomUUID();
+const RELEASE_SCRIPT = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+end
+return 0
+`;
 
 export interface IngestorLockHandle {
     release: () => Promise<void>;
@@ -44,15 +50,15 @@ export async function acquireIngestorLock(
     }
 
     const key = lockKey(fixtureId);
+    const token = `${INSTANCE_ID}:${randomUUID()}`;
     try {
-        const result = await redis.set(key, INSTANCE_ID, 'EX', ttlSec, 'NX');
+        const result = await redis.set(key, token, 'EX', ttlSec, 'NX');
         if (result !== 'OK') return null;
 
         return {
             release: async () => {
                 try {
-                    const current = await redis.get(key);
-                    if (current === INSTANCE_ID) await redis.del(key);
+                    await redis.eval(RELEASE_SCRIPT, 1, key, token);
                 } catch (err: any) {
                     logger.debug('[MatchIngestorLock] release failed:', err?.message);
                 }

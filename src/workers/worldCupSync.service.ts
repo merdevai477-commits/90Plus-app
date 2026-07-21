@@ -20,11 +20,13 @@ import {
   ensureScores365GameMapping,
   getScores365ExperimentConfig,
   getScores365CompetitionId,
+  persistScores365FixtureMetadata,
   registerScores365FixtureMapping,
   resolveDbFixtureFor365Game,
   loadWorldCupDbFixtures,
 } from '../services/scores365-experiment.service';
 import { footballDataCacheService } from '../services/football-data-cache.service';
+import { withSyncLeaderLease } from '../services/football-sync-leader.service';
 import { startupJobQueue } from '../services/startup-job-queue.service';
 import { hasLineupData } from '../utils/lineups-fallback';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
@@ -59,6 +61,19 @@ const recentGameIds = new Set<number>();
 
 export async function runBulkFixtureSyncTick(): Promise<void> {
   if (!isEnabled()) return;
+  const lease = await withSyncLeaderLease(
+    'wc-bulk-fixtures',
+    ({ signal }) => runBulkFixtureSyncLocally(signal),
+    { ttlSec: 180 },
+  );
+  if (!lease.acquired) {
+    logger.debug(`[${WORKER}][bulk] distributed lease busy — skipping`);
+  }
+}
+
+async function runBulkFixtureSyncLocally(signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (!isEnabled()) return;
   if (shouldSkipHeavyJob('wc-bulk-fixtures')) return;
   if (isRunning.bulk) {
     logger.debug(`[${WORKER}][bulk] previous tick still running — skipping`);
@@ -69,16 +84,22 @@ export async function runBulkFixtureSyncTick(): Promise<void> {
   try {
     const cfg = getScores365ExperimentConfig();
     const result = await threeSixFiveScoresService.getFixtures(getScores365CompetitionId(), 'en');
+    signal?.throwIfAborted();
     const items = result.data;
-    
+
     if (!items || !items.length) {
       logger.debug(`[${WORKER}][bulk] no WC fixtures returned from getFixtures`);
       return;
     }
 
     const dbRows = await loadWorldCupDbFixtures(cfg.leagueId, cfg.season);
+    signal?.throwIfAborted();
 
     let mappedCount = 0;
+    const durableMappings: Array<{
+      fixtureId: number;
+      game: Parameters<typeof persistScores365FixtureMetadata>[0][number]['game'];
+    }> = [];
     const newLive = new Set<number>();
     const newRecent = new Set<number>();
 
@@ -86,6 +107,7 @@ export async function runBulkFixtureSyncTick(): Promise<void> {
       const row = resolveDbFixtureFor365Game(item.raw as any, dbRows);
       if (row) {
         registerScores365FixtureMapping(row.fixtureId, item.gameId);
+        durableMappings.push({ fixtureId: row.fixtureId, game: item.raw as any });
         mappedCount++;
       }
 
@@ -94,7 +116,7 @@ export async function runBulkFixtureSyncTick(): Promise<void> {
       } else if (item.phase === 'finished') {
         const statusText = (item.raw.shortStatusText ?? item.raw.statusText ?? '').toUpperCase();
         if (statusText === 'FT') {
-            newRecent.add(item.gameId);
+          newRecent.add(item.gameId);
         }
       }
     }
@@ -105,10 +127,13 @@ export async function runBulkFixtureSyncTick(): Promise<void> {
     recentGameIds.clear();
     for (const id of newRecent) recentGameIds.add(id);
 
+    const metadataUpdated = await persistScores365FixtureMetadata(durableMappings);
+    signal?.throwIfAborted();
+
     const upcomingCount = items.length - newLive.size - newRecent.size; // approximate
 
     logger.info(
-      `[WC-BulkSync] ${mappedCount}/${items.length} fixtures mapped, ${newLive.size} live, ${upcomingCount} upcoming`
+      `[WC-BulkSync] ${mappedCount}/${items.length} fixtures mapped (${metadataUpdated} metadata rows updated), ${newLive.size} live, ${upcomingCount} upcoming`,
     );
   } catch (err: unknown) {
     logger.error(`[${WORKER}][bulk] tick fatal:`, (err as Error)?.message);
@@ -121,6 +146,19 @@ export async function runBulkFixtureSyncTick(): Promise<void> {
 
 async function runStandingsSyncTick(): Promise<void> {
   if (!isEnabled()) return;
+  const lease = await withSyncLeaderLease(
+    'wc-standings',
+    ({ signal }) => runStandingsSyncLocally(signal),
+    { ttlSec: 120 },
+  );
+  if (!lease.acquired) {
+    logger.debug(`[${WORKER}][standings] distributed lease busy — skipping`);
+  }
+}
+
+async function runStandingsSyncLocally(signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (!isEnabled()) return;
   if (shouldSkipHeavyJob('wc-standings')) return;
   if (isRunning.standings) {
     logger.debug(`[${WORKER}][standings] previous tick still running — skipping`);
@@ -130,6 +168,7 @@ async function runStandingsSyncTick(): Promise<void> {
 
   try {
     const count = await footballDataCacheService.syncWorldCupStandingsFrom365('en');
+    signal?.throwIfAborted();
     if (count > 0) {
       logger.debug(`[${WORKER}][standings] synced ${count} WC group rows`, {
         worker: 'worldcup-sync',
@@ -147,6 +186,19 @@ async function runStandingsSyncTick(): Promise<void> {
 
 async function runLineupSyncTick(): Promise<void> {
   if (!isEnabled()) return;
+  const lease = await withSyncLeaderLease(
+    'wc-lineups',
+    ({ signal }) => runLineupSyncLocally(signal),
+    { ttlSec: 120 },
+  );
+  if (!lease.acquired) {
+    logger.debug(`[${WORKER}][lineups] distributed lease busy — skipping`);
+  }
+}
+
+async function runLineupSyncLocally(signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (!isEnabled()) return;
   if (isRunning.lineups) {
     logger.debug(`[${WORKER}][lineups] previous tick still running — skipping`);
     return;
@@ -162,6 +214,7 @@ async function runLineupSyncTick(): Promise<void> {
     logger.info(`[${WORKER}][lineups] tick: ${liveOrRecent.length} live/recent games`);
 
     for (const gameId of liveOrRecent) {
+      signal?.throwIfAborted();
       try {
         const fixtureId = await resolveFixtureIdForGame(gameId, cfg);
         if (!fixtureId) continue;
@@ -183,7 +236,14 @@ async function runLineupSyncTick(): Promise<void> {
         if (incomplete || (confirmed && (startersHome < 11 || startersAway < 11))) {
           logger.warn(
             `[${WORKER}][lineups] ⚠️ fixture=${fixtureId} game=${gameId}: incomplete confirmed lineup after retry (home=${startersHome}, away=${startersAway})`,
-            { worker: 'worldcup-sync', fixtureId, gameId, startersHome, startersAway, ts: new Date().toISOString() },
+            {
+              worker: 'worldcup-sync',
+              fixtureId,
+              gameId,
+              startersHome,
+              startersAway,
+              ts: new Date().toISOString(),
+            },
           );
         } else if (hasLineupData(lineups)) {
           logger.info(
@@ -206,6 +266,17 @@ async function runLineupSyncTick(): Promise<void> {
 
 async function runStatsSyncTick(): Promise<void> {
   if (!isEnabled()) return;
+  const lease = await withSyncLeaderLease('wc-stats', ({ signal }) => runStatsSyncLocally(signal), {
+    ttlSec: 90,
+  });
+  if (!lease.acquired) {
+    logger.debug(`[${WORKER}][stats] distributed lease busy — skipping`);
+  }
+}
+
+async function runStatsSyncLocally(signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (!isEnabled()) return;
   if (isRunning.stats) {
     logger.debug(`[${WORKER}][stats] previous tick still running — skipping`);
     return;
@@ -221,6 +292,7 @@ async function runStatsSyncTick(): Promise<void> {
     logger.info(`[${WORKER}][stats] tick: ${liveGamesList.length} live WC fixtures`);
 
     for (const gameId of liveGamesList) {
+      signal?.throwIfAborted();
       try {
         const fixtureId = await resolveFixtureIdForGame(gameId, cfg);
         if (!fixtureId) continue;
@@ -285,7 +357,9 @@ async function resolveFixtureIdForGame(
  */
 export function startWorldCupSyncWorker(): void {
   if (!isEnabled()) {
-    logger.info(`[${WORKER}] disabled (SCORES365_EXPERIMENT_ENABLED=false or WC_SYNC_ENABLED=false)`);
+    logger.info(
+      `[${WORKER}] disabled (SCORES365_EXPERIMENT_ENABLED=false or WC_SYNC_ENABLED=false)`,
+    );
     return;
   }
 
@@ -293,11 +367,11 @@ export function startWorldCupSyncWorker(): void {
   const sMs = statsSyncMs();
 
   // Mapping sync: cron-based (every 5 minutes)
-  cron.schedule('*/5 * * * *', () => {
+  cron.schedule(process.env.WC_BULK_SYNC_CRON?.trim() || '4-59/5 * * * *', () => {
     void runBulkFixtureSyncTick();
   });
 
-  cron.schedule('*/10 * * * *', () => {
+  cron.schedule(process.env.WC_STANDINGS_SYNC_CRON?.trim() || '7-59/10 * * * *', () => {
     void runStandingsSyncTick();
   });
 
@@ -345,7 +419,13 @@ export function startWorldCupSyncWorker(): void {
  * Stop both timers (for graceful shutdown or tests).
  */
 export function stopWorldCupSyncWorker(): void {
-  if (lineupTimer) { clearInterval(lineupTimer); lineupTimer = null; }
-  if (statsTimer)  { clearInterval(statsTimer);  statsTimer  = null; }
+  if (lineupTimer) {
+    clearInterval(lineupTimer);
+    lineupTimer = null;
+  }
+  if (statsTimer) {
+    clearInterval(statsTimer);
+    statsTimer = null;
+  }
   logger.info(`[${WORKER}] stopped`);
 }

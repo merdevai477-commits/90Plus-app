@@ -69,6 +69,10 @@ export interface CreateNotificationParams {
     channelId?: string; // Android notification channel
     /** When true, persist inbox + WebSocket only — no Expo push. */
     skipPush?: boolean;
+    /** Stable key used to reuse the inbox row across delivery retries. */
+    idempotencyKey?: string;
+    /** Return null when Expo was attempted but every device send failed. */
+    requirePushSuccess?: boolean;
 }
 
 /**
@@ -136,7 +140,20 @@ export class NotificationService {
      */
     static async createNotification(params: CreateNotificationParams) {
         try {
-            const { userId, title, message, type, data, actor, pushToken, threadId, channelId, skipPush } = params;
+            const {
+                userId,
+                title,
+                message,
+                type,
+                data,
+                actor,
+                pushToken,
+                threadId,
+                channelId,
+                skipPush,
+                idempotencyKey,
+                requirePushSuccess,
+            } = params;
 
             // Ensure actor info is included in data
             const notificationData = {
@@ -150,15 +167,21 @@ export class NotificationService {
             };
 
             // 1. Save to database
-            const notification = await prisma.notification.create({
-                data: {
+            const notificationDataForDb = {
                     userId,
                     title,
                     message,
                     type: type as any,
                     data: notificationData,
-                },
-            });
+                    ...(idempotencyKey ? { idempotencyKey } : {}),
+            };
+            const notification = idempotencyKey
+                ? await (prisma.notification as any).upsert({
+                    where: { idempotencyKey },
+                    create: notificationDataForDb,
+                    update: {},
+                })
+                : await prisma.notification.create({ data: notificationDataForDb as any });
 
             // 2. Send via WebSocket for real-time UI update
             WebSocketService.sendToUser(userId, 'notification', {
@@ -218,6 +241,7 @@ export class NotificationService {
                             notificationId: notification.id,
                             devices: pushTokens.length,
                         });
+                        if (requirePushSuccess) return null;
                     }
                 } else if (pushSkipReason) {
                     logger.info('[Push] skipped', {

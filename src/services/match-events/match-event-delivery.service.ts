@@ -1,4 +1,5 @@
 import prisma from '../../lib/prisma';
+import { randomUUID } from 'crypto';
 import { PredictionResolverService } from '../prediction-resolver.service';
 import {
     isBaselinedGoal,
@@ -112,18 +113,102 @@ export async function updateSubscriptionFlags(
 export async function isDeliveryRecorded(subscriptionId: string, eventKey: string): Promise<boolean> {
     const row = await prisma.matchEventDelivery.findUnique({
         where: { subscriptionId_eventKey: { subscriptionId, eventKey } },
-        select: { id: true },
+        select: { status: true } as any,
     });
-    return row != null;
+    return (row as any)?.status === 'SENT';
 }
 
-export async function recordMatchEventDelivery(
+export type MatchEventDeliveryClaim = {
+    subscriptionId: string;
+    eventKey: string;
+    token: string;
+};
+
+const DELIVERY_CLAIM_MS = 2 * 60 * 1000;
+
+/**
+ * Atomically reserve a delivery attempt. SENT rows are immutable; abandoned
+ * PROCESSING rows become retryable after the short claim deadline.
+ */
+export async function claimMatchEventDelivery(
     subscriptionId: string,
     eventKey: string,
     fixtureId: number,
+): Promise<MatchEventDeliveryClaim | null> {
+    const token = randomUUID();
+    const now = new Date();
+    const processingUntil = new Date(now.getTime() + DELIVERY_CLAIM_MS);
+
+    try {
+        await (prisma.matchEventDelivery as any).create({
+            data: {
+                subscriptionId,
+                eventKey,
+                fixtureId,
+                status: 'PROCESSING',
+                processingToken: token,
+                processingUntil,
+            },
+        });
+        return { subscriptionId, eventKey, token };
+    } catch (err: any) {
+        if (err?.code !== 'P2002') throw err;
+    }
+
+    const claimed = await (prisma.matchEventDelivery as any).updateMany({
+        where: {
+            subscriptionId,
+            eventKey,
+            status: { not: 'SENT' },
+            OR: [
+                { status: 'PENDING' },
+                { processingUntil: null },
+                { processingUntil: { lt: now } },
+            ],
+        },
+        data: {
+            status: 'PROCESSING',
+            processingToken: token,
+            processingUntil,
+        },
+    });
+    return claimed.count === 1 ? { subscriptionId, eventKey, token } : null;
+}
+
+export async function completeMatchEventDelivery(
+    claim: MatchEventDeliveryClaim,
+): Promise<boolean> {
+    const completed = await (prisma.matchEventDelivery as any).updateMany({
+        where: {
+            subscriptionId: claim.subscriptionId,
+            eventKey: claim.eventKey,
+            status: 'PROCESSING',
+            processingToken: claim.token,
+        },
+        data: {
+            status: 'SENT',
+            deliveredAt: new Date(),
+            processingToken: null,
+            processingUntil: null,
+        },
+    });
+    return completed.count === 1;
+}
+
+export async function releaseMatchEventDeliveryClaim(
+    claim: MatchEventDeliveryClaim,
 ): Promise<void> {
-    await prisma.matchEventDelivery.createMany({
-        data: [{ subscriptionId, eventKey, fixtureId }],
-        skipDuplicates: true,
+    await (prisma.matchEventDelivery as any).updateMany({
+        where: {
+            subscriptionId: claim.subscriptionId,
+            eventKey: claim.eventKey,
+            status: 'PROCESSING',
+            processingToken: claim.token,
+        },
+        data: {
+            status: 'PENDING',
+            processingToken: null,
+            processingUntil: null,
+        },
     });
 }

@@ -5,7 +5,6 @@
 
 import prisma from '../../lib/prisma';
 import { logger } from '../../utils/logger';
-import { claimNotifyIdempotency } from '../notify.service';
 import { renderPushTemplate, getUserLanguage, localizeMatchVarDetail } from '../push-templates.service';
 import { NotificationService } from '../notification.service';
 import type { MatchEventPushJob } from '../../queues/match-event-push.queue';
@@ -13,16 +12,13 @@ import {
     shouldDeliverToSubscription,
     isPrefAllowed,
     updateSubscriptionFlags,
-    isDeliveryRecorded,
-    recordMatchEventDelivery,
+    claimMatchEventDelivery,
+    completeMatchEventDelivery,
+    releaseMatchEventDeliveryClaim,
 } from './match-event-delivery.service';
 
 export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<void> {
-    const { subscriptionId, userId, event, fixtureId, idempotencyKey } = job;
-
-    if (await isDeliveryRecorded(subscriptionId, event.eventKey)) {
-        return;
-    }
+    const { subscriptionId, userId, event, fixtureId } = job;
 
     const sub = await prisma.favoriteMatch.findUnique({
         where: { id: subscriptionId },
@@ -43,14 +39,6 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
 
     if (!(await isPrefAllowed(userId, event.prefKey))) {
         return;
-    }
-
-    if (idempotencyKey) {
-        const fresh = await claimNotifyIdempotency(idempotencyKey);
-        if (!fresh) {
-            logger.debug('[MatchEventPush] idempotency duplicate', { userId, eventKey: event.eventKey });
-            return;
-        }
     }
 
     const lang = await getUserLanguage(userId);
@@ -77,19 +65,40 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
         throw new Error(`missing push copy for event ${event.eventKey}`);
     }
 
-    await NotificationService.createNotification({
-        userId,
-        title,
-        message,
-        type: job.notificationType,
-        channelId: 'match-updates',
-        data: {
-            type: String(job.notificationType),
-            priority: 'high',
-            ...job.data,
-        },
-    });
+    const claim = await claimMatchEventDelivery(subscriptionId, event.eventKey, fixtureId);
+    if (!claim) {
+        logger.debug('[MatchEventPush] delivery already sent or in progress', {
+            userId,
+            eventKey: event.eventKey,
+        });
+        return;
+    }
 
-    await recordMatchEventDelivery(subscriptionId, event.eventKey, fixtureId);
+    try {
+        const notification = await NotificationService.createNotification({
+            userId,
+            title,
+            message,
+            type: job.notificationType,
+            channelId: 'match-updates',
+            idempotencyKey: job.idempotencyKey,
+            requirePushSuccess: true,
+            data: {
+                type: String(job.notificationType),
+                priority: 'high',
+                ...job.data,
+            },
+        });
+        if (!notification) {
+            throw new Error(`notification delivery failed for event ${event.eventKey}`);
+        }
+        if (!(await completeMatchEventDelivery(claim))) {
+            throw new Error(`delivery claim lost for event ${event.eventKey}`);
+        }
+    } catch (err) {
+        await releaseMatchEventDeliveryClaim(claim);
+        throw err;
+    }
+
     await updateSubscriptionFlags(sub, event);
 }

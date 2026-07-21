@@ -42,6 +42,17 @@ export function calendarDayBounds(
   };
 }
 
+/** Inclusive UTC instants for a local/calendar date range. */
+export function calendarDateRangeBounds(
+  fromDateString: string,
+  toDateString: string,
+  timezone = DEFAULT_CALENDAR_TZ,
+): { start: Date; end: Date } {
+  const { start } = calendarDayBounds(fromDateString, timezone);
+  const { end } = calendarDayBounds(toDateString, timezone);
+  return { start, end };
+}
+
 export function getAppCalendarTimezone(): string {
   return DEFAULT_CALENDAR_TZ;
 }
