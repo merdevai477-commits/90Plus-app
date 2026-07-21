@@ -54,7 +54,7 @@ const DEFAULT_OPTIONS: ImagePickerOptions = {
 export const useImagePicker = (): UseImagePickerReturn => {
   const { language } = useLanguage();
   const isRTL = language === 'ar';
-  const { requestCameraPermission, requestLibraryPermission } = usePhotoPermission();
+  const { requestCameraPermission } = usePhotoPermission();
 
   const [isLoading, setIsLoading] = useState(false);
 
@@ -161,9 +161,6 @@ export const useImagePicker = (): UseImagePickerReturn => {
         setIsLoading(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-        const hasPermission = await requestLibraryPermission();
-        if (!hasPermission) return null;
-
         const finalOptions = { ...DEFAULT_OPTIONS, ...getOptionsForType(options.type), ...options };
 
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -204,7 +201,7 @@ export const useImagePicker = (): UseImagePickerReturn => {
         setIsLoading(false);
       }
     },
-    [requestLibraryPermission, isRTL]
+    [isRTL]
   );
 
   // Pick from camera

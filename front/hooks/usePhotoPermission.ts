@@ -12,7 +12,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Platform, Alert, Linking, AppState, AppStateStatus } from 'react-native';
+import { Alert, Linking, AppState, AppStateStatus } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -28,13 +28,36 @@ export interface PhotoPermissionState {
 export interface UsePhotoPermissionReturn {
   permissionState: PhotoPermissionState;
   requestCameraPermission: () => Promise<boolean>;
-  requestLibraryPermission: () => Promise<boolean>;
   openSettings: () => void;
   checkPermissions: () => Promise<void>;
 }
 
+const mapPermissionStatus = (
+  status: ImagePicker.PermissionStatus,
+  canAskAgain?: boolean,
+): PermissionStatus => {
+  switch (status) {
+    case ImagePicker.PermissionStatus.GRANTED:
+      return 'granted';
+    case ImagePicker.PermissionStatus.DENIED:
+      return canAskAgain === false ? 'blocked' : 'denied';
+    case ImagePicker.PermissionStatus.UNDETERMINED:
+      return 'undetermined';
+    default:
+      return 'denied';
+  }
+};
+
+const mapLibraryPermissionStatus = (
+  permission: ImagePicker.MediaLibraryPermissionResponse,
+): PermissionStatus => {
+  if (permission.accessPrivileges === 'limited') return 'limited';
+  if (permission.accessPrivileges === 'all') return 'granted';
+  return mapPermissionStatus(permission.status, permission.canAskAgain);
+};
+
 export const usePhotoPermission = (): UsePhotoPermissionReturn => {
-  const { language, t } = useLanguage();
+  const { language } = useLanguage();
   const isRTL = language === 'ar';
 
   const [permissionState, setPermissionState] = useState<PhotoPermissionState>({
@@ -54,8 +77,8 @@ export const usePhotoPermission = (): UsePhotoPermissionReturn => {
       ]);
 
       setPermissionState({
-        camera: mapPermissionStatus(cameraStatus.status),
-        library: mapPermissionStatus(libraryStatus.status),
+        camera: mapPermissionStatus(cameraStatus.status, cameraStatus.canAskAgain),
+        library: mapLibraryPermissionStatus(libraryStatus),
         isLoading: false,
       });
     } catch (error) {
@@ -64,20 +87,6 @@ export const usePhotoPermission = (): UsePhotoPermissionReturn => {
     }
   }, []);
 
-  // Map expo permission status to our status
-  const mapPermissionStatus = (status: ImagePicker.PermissionStatus): PermissionStatus => {
-    switch (status) {
-      case ImagePicker.PermissionStatus.GRANTED:
-        return 'granted';
-      case ImagePicker.PermissionStatus.DENIED:
-        return 'denied';
-      case ImagePicker.PermissionStatus.UNDETERMINED:
-        return 'undetermined';
-      default:
-        return 'denied';
-    }
-  };
-
   // Request camera permission
   const requestCameraPermission = useCallback(async (): Promise<boolean> => {
     try {
@@ -85,7 +94,7 @@ export const usePhotoPermission = (): UsePhotoPermissionReturn => {
 
       const { status, canAskAgain } = await ImagePicker.requestCameraPermissionsAsync();
 
-      const newStatus = mapPermissionStatus(status);
+      const newStatus = mapPermissionStatus(status, canAskAgain);
       setPermissionState(prev => ({ ...prev, camera: newStatus }));
 
       if (status === ImagePicker.PermissionStatus.GRANTED) {
@@ -101,33 +110,6 @@ export const usePhotoPermission = (): UsePhotoPermissionReturn => {
       return false;
     } catch (error) {
       console.error('Error requesting camera permission:', error);
-      return false;
-    }
-  }, [isRTL]);
-
-  // Request library permission
-  const requestLibraryPermission = useCallback(async (): Promise<boolean> => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-      const { status, canAskAgain } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      const newStatus = mapPermissionStatus(status);
-      setPermissionState(prev => ({ ...prev, library: newStatus }));
-
-      if (status === ImagePicker.PermissionStatus.GRANTED) {
-        return true;
-      }
-
-      // Permission denied
-      if (!canAskAgain || status === ImagePicker.PermissionStatus.DENIED) {
-        showPermissionDeniedAlert('library');
-        return false;
-      }
-
-      return false;
-    } catch (error) {
-      console.error('Error requesting library permission:', error);
       return false;
     }
   }, [isRTL]);
@@ -211,7 +193,6 @@ export const usePhotoPermission = (): UsePhotoPermissionReturn => {
   return {
     permissionState,
     requestCameraPermission,
-    requestLibraryPermission,
     openSettings,
     checkPermissions,
   };

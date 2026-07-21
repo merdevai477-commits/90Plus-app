@@ -55,7 +55,7 @@ export default function ReelUploadModal({
     const [isPickingVideo, setIsPickingVideo] = useState(false);
     const [uploadStage, setUploadStage] = useState<'idle' | 'preparing' | 'uploading' | 'done'>('idle');
     const uploadProgress = useSharedValue(0);
-    const { permissionState, requestLibraryPermission } = usePhotoPermission();
+    const { permissionState } = usePhotoPermission();
 
     // Draft system
     const { draft, saveDraft, clearDraft, hasDraft, isOnline } = useReelDraft();
@@ -142,8 +142,6 @@ export default function ReelUploadModal({
             }
             return;
         }
-        const hasPermission = await requestLibraryPermission();
-        if (!hasPermission) return;
         if (permissionState.library === 'limited') {
             toastManager.showInfo(
                 t.reels.uploadLimitedAccess,

@@ -357,7 +357,7 @@ function ProfileScreen() {
     resetReelUploadUi,
   } = useVideos();
   const { t, language } = useTranslation();
-  const { requestLibraryPermission, requestCameraPermission } = usePhotoPermission();
+  const { requestCameraPermission } = usePhotoPermission();
 
   // Optimization: Prevent guest access - redirect to auth
   useEffect(() => {
@@ -1001,9 +1001,6 @@ function ProfileScreen() {
       return;
     }
 
-    const hasLibrary = await requestLibraryPermission();
-    if (!hasLibrary) return;
-
     // UX Fix 2: Cross-platform action sheet
     showImageSourceSheet(
       {
@@ -1170,8 +1167,6 @@ function ProfileScreen() {
   };
 
   const _pickAvatarFromGallery = async () => {
-    const hasLibrary = await requestLibraryPermission();
-    if (!hasLibrary) return;
     isPickerActiveRef.current = true;
     try {
       const result = await ImagePicker.launchImageLibraryAsync({

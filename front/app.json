@@ -18,7 +18,7 @@
         "applinks:clerk.90plus.pro"
       ],
       "usesAppleSignIn": true,
-      "buildNumber": "130",
+      "buildNumber": "131",
       "requireFullScreen": false,
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -52,10 +52,8 @@
         "UIBackgroundModes": [
           "remote-notification"
         ],
-        "NSCameraUsageDescription": "تطبيق 90Plus يحتاج للوصول إلى الكاميرا لالتقاط صور وفيديوهات لملفك الشخصي، ومشاركته لحظاتك الكروية.",
-        "NSMicrophoneUsageDescription": "نحتاج صلاحية المايكروفون لتسجيل الصوت أثناء تصوير الفيديوهات والتعليقات الخاصة بك.",
+        "NSCameraUsageDescription": "تطبيق 90Plus يحتاج للوصول إلى الكاميرا لالتقاط صور ملفك الشخصي وصور مجموعات التوقعات.",
         "NSPhotoLibraryUsageDescription": "نحتاج الوصول لمكتبة الصور لاختيار صور الغلاف والبروفايل الخاصة بك ومقاطع الفيديو.",
-        "NSPhotoLibraryAddUsageDescription": "تطبيق 90Plus يحتاج الإذن لحفظ وتنزيل بعض الفيديوهات والصور الكروية في هاتفك.",
         "NSUserNotificationsUsageDescription": "نرسل لك إشعارات بأهم الأحداث والمباريات وأهداف فريقك المفضل.",
         "ITSAppUsesNonExemptEncryption": false,
         "NSFaceIDUsageDescription": "يستخدم تطبيق 90Plus Face ID لحماية بيانات تسجيل الدخول الخاصة بك بشكل آمن.",
@@ -75,7 +73,7 @@
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 111,
+      "versionCode": 112,
       "softwareKeyboardLayoutMode": "pan",
       "intentFilters": [
         {
@@ -145,14 +143,15 @@
         "android.permission.VIBRATE",
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.CAMERA",
-        "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -171,14 +170,16 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow 90Plus to access your microphone for recording videos."
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ],
       [
         "expo-image-picker",
         {
           "photosPermission": "نحتاج الوصول للصور لاختيار صور الغلاف والبروفايل.",
-          "cameraPermission": "يُرجى السماح بالوصول للكاميرا لالتقاط فيديوهاتك الرياضية."
+          "cameraPermission": "يُرجى السماح بالوصول للكاميرا لالتقاط صور ملفك الشخصي ومجموعات التوقعات.",
+          "microphonePermission": false
         }
       ],
       [
