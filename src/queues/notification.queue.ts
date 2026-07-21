@@ -16,6 +16,7 @@ export type NotificationJob =
         title: string;
         message: string;
         data?: any;
+        idempotencyKey?: string;
       };
     }
   | {
@@ -26,6 +27,7 @@ export type NotificationJob =
         title: string;
         message: string;
         data?: any;
+        idempotencyKey?: string;
       };
     }
   | {
@@ -67,7 +69,7 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
         });
         return;
       }
-      await NotificationService.createSocialNotification({
+      const notification = await NotificationService.createSocialNotification({
         userId: payload.userId,
         actorId: payload.actorId,
         title: payload.title,
@@ -78,7 +80,12 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
           ...payload.data,
         },
         skipPush: Boolean(payload.data?.__skipPush),
+        idempotencyKey: payload.idempotencyKey,
+        requirePushSuccess: true,
       });
+      if (!notification) {
+        throw new Error(`social notification delivery failed for ${payload.type}`);
+      }
       return;
     }
 
@@ -91,7 +98,7 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
         });
         return;
       }
-      await NotificationService.createNotification({
+      const notification = await NotificationService.createNotification({
         userId: payload.userId,
         title: payload.title,
         message: payload.message,
@@ -101,7 +108,12 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
           ...payload.data,
         },
         skipPush: Boolean(payload.data?.__skipPush),
+        idempotencyKey: payload.idempotencyKey,
+        requirePushSuccess: true,
       });
+      if (!notification) {
+        throw new Error(`generic notification delivery failed for ${payload.type}`);
+      }
       return;
     }
 
@@ -136,6 +148,8 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
             type: payload.type,
             data: { type: payload.type, ...payload.data },
             skipPush: Boolean(payload.data?.__skipPush),
+            idempotencyKey: payload.idempotencyKey,
+            requirePushSuccess: true,
           });
         } else if (data.kind === 'SOCIAL') {
           const { payload } = data;
@@ -149,6 +163,8 @@ export function getNotificationQueue(): Queue<NotificationJob> | null {
             type: payload.type,
             data: { type: payload.type, ...payload.data },
             skipPush: Boolean(payload.data?.__skipPush),
+            idempotencyKey: payload.idempotencyKey,
+            requirePushSuccess: true,
           });
         }
       } catch (fallbackErr) {
@@ -250,6 +266,7 @@ export async function enqueueSocialNotification(params: {
   title: string;
   message: string;
   data?: any;
+  idempotencyKey?: string;
 }): Promise<void> {
   const q = getNotificationQueue();
   if (!q) {
@@ -286,6 +303,7 @@ export async function enqueueNotification(params: {
   title: string;
   message: string;
   data?: any;
+  idempotencyKey?: string;
 }): Promise<void> {
   const q = getNotificationQueue();
   if (!q) {
@@ -317,6 +335,8 @@ export async function enqueueNotification(params: {
         ...params,
         data: { type: params.type, ...params.data },
         skipPush: Boolean(params.data?.__skipPush),
+        idempotencyKey: params.idempotencyKey,
+        requirePushSuccess: true,
       });
     }
   }

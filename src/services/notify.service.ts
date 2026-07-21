@@ -309,6 +309,7 @@ export async function notifyUser(params: NotifyUserParams): Promise<{ delivered:
             ...data,
             ...(skipPush ? { __skipPush: true } : {}),
         },
+        idempotencyKey,
     };
 
     if (actor) {

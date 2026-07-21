@@ -345,8 +345,13 @@ export class PushNotificationService {
             }
 
             if (allReceiptIds.length > 0) {
-                await storeReceiptIds(allReceiptIds, allReceiptTokenMap);
-                await scheduleReceiptCheck(allReceiptIds);
+                // Receipt persistence/verification is follow-up work. A
+                // degraded Redis connection must never delay a push whose
+                // Expo ticket has already been accepted.
+                void (async () => {
+                    await storeReceiptIds(allReceiptIds, allReceiptTokenMap);
+                    await scheduleReceiptCheck(allReceiptIds);
+                })();
             }
 
             return true;
@@ -413,8 +418,10 @@ export class PushNotificationService {
         }
 
         if (allReceiptIds.length > 0) {
-            await storeReceiptIds(allReceiptIds, allReceiptTokenMap);
-            await scheduleReceiptCheck(allReceiptIds);
+            void (async () => {
+                await storeReceiptIds(allReceiptIds, allReceiptTokenMap);
+                await scheduleReceiptCheck(allReceiptIds);
+            })();
         }
 
         return { success, failed };

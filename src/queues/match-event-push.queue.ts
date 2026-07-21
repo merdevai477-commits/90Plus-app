@@ -56,7 +56,22 @@ export async function enqueueMatchEventPush(payload: MatchEventPushJob): Promise
         await processMatchEventPushJob(payload);
     } catch (err: any) {
         logger.warn('[MatchEventPush] immediate delivery failed:', err?.message);
-        throw err;
+        const retryQueue = getMatchEventPushQueue();
+        if (!retryQueue) {
+            throw err;
+        }
+
+        await retryQueue.add(payload, {
+            attempts: 6,
+            backoff: { type: 'exponential', delay: 2_000 },
+            removeOnComplete: true,
+            removeOnFail: 1_000,
+        });
+        logger.info('[MatchEventPush] queued failed immediate delivery for retry', {
+            fixtureId: payload.fixtureId,
+            eventKey: payload.event.eventKey,
+            subscriptionId: payload.subscriptionId,
+        });
     }
 }
 

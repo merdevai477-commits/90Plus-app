@@ -6,8 +6,10 @@ import {
     shouldDeliverToSubscription,
 } from './match-event-delivery.service';
 import type { NormalizedMatchEvent } from './match-event.types';
-import { processMatchEventPushJob } from './match-event-push.processor';
-import type { MatchEventPushJob } from '../../queues/match-event-push.queue';
+import {
+    enqueueMatchEventPush,
+    type MatchEventPushJob,
+} from '../../queues/match-event-push.queue';
 
 type SubscriptionRow = Awaited<ReturnType<typeof loadActiveSubscriptions>>[number];
 
@@ -96,7 +98,7 @@ export async function fanOutMatchEvent(event: NormalizedMatchEvent): Promise<num
     if (payloads.length === 0) return 0;
 
     const results = await Promise.allSettled(
-        payloads.map((payload) => processMatchEventPushJob(payload)),
+        payloads.map((payload) => enqueueMatchEventPush(payload)),
     );
 
     for (const result of results) {

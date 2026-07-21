@@ -114,6 +114,8 @@ export async function subscribeWithBaseline(input: SubscribeBaselineInput): Prom
                 subscriptionId: subscription.id,
                 eventKey: e.eventKey,
                 fixtureId: e.fixtureId,
+                status: 'SENT',
+                deliveredAt: subscribedAt,
             })),
             skipDuplicates: true,
         });
@@ -149,7 +151,9 @@ export async function notifyMatchFavoriteConfirmation(params: {
         bodyKey: 'matchFavoriteBody',
         vars: { home: homeTeam, away: awayTeam },
         bypassPreferences: true,
-        idempotencyKey: `match-favorite:${userId}:${fixtureId}`,
+        // v2 bypasses stale Redis claims created while the production
+        // notification schema was missing during the reliability rollout.
+        idempotencyKey: `match-favorite:v2:${userId}:${fixtureId}`,
         data: {
             type: 'MATCH_FAVORITE',
             matchId: String(fixtureId),

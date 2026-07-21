@@ -272,6 +272,8 @@ export class NotificationService {
         data?: any;
         pushToken?: string | null;
         skipPush?: boolean;
+        idempotencyKey?: string;
+        requirePushSuccess?: boolean;
     }) {
         try {
             // Fetch actor info
