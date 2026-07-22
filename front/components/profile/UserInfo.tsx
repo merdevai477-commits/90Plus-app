@@ -102,14 +102,14 @@ const UserInfo = memo(function UserInfo({
             </LinearGradient>
           )}
 
+          {isVerified && (
+            <View style={styles.badgeWrap}>
+              <VerifiedBadge size={22} />
+            </View>
+          )}
           {isDeveloper && (
             <View style={styles.badgeWrap}>
               <DeveloperBadge size={22} />
-            </View>
-          )}
-          {isVerified && !isDeveloper && (
-            <View style={styles.badgeWrap}>
-              <VerifiedBadge size={22} />
             </View>
           )}
 
