@@ -1049,6 +1049,96 @@ router.post('/send-test-push', async (req: Request, res: Response): Promise<void
 });
 
 /**
+ * POST /api/admin/verify-user
+ * Grant verification + developer badges (x-internal-key = CLERK_SECRET_KEY).
+ * Body: { clerkUserId?: string, username?: string, developer?: boolean }
+ */
+router.post('/verify-user', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const internalKey = req.headers['x-internal-key'] as string;
+        const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+
+        if (!internalKey || !clerkSecretKey || internalKey !== clerkSecretKey) {
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
+            return;
+        }
+
+        const clerkUserId =
+            typeof req.body?.clerkUserId === 'string' ? req.body.clerkUserId.trim() : '';
+        const username =
+            typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+        const grantDeveloper = req.body?.developer !== false;
+
+        if (!clerkUserId && !username) {
+            sendError(req, res, ErrorCode.VALIDATION, 'username or clerkUserId is required');
+            return;
+        }
+
+        const user = await prisma.user.findFirst({
+            where: clerkUserId ? { clerkUserId } : { username },
+            select: {
+                id: true,
+                username: true,
+                displayName: true,
+                clerkUserId: true,
+                isVerified: true,
+                isDeveloper: true,
+            },
+        });
+
+        if (!user) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
+            return;
+        }
+
+        const updated = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                isVerified: true,
+                ...(grantDeveloper ? { isDeveloper: true } : {}),
+            },
+            select: {
+                id: true,
+                username: true,
+                displayName: true,
+                clerkUserId: true,
+                isVerified: true,
+                isDeveloper: true,
+            },
+        });
+
+        try {
+            await NotificationService.createNotification({
+                userId: user.id,
+                title: 'تم توثيق حسابك',
+                message: grantDeveloper
+                    ? 'تم توثيق حسابك ومنحك صلاحيات المطور'
+                    : 'تم توثيق حسابك',
+                type: 'GENERAL',
+                data: { action: 'VERIFIED', developer: grantDeveloper },
+            });
+        } catch (notifyError) {
+            logger.warn('verify-user notification failed:', notifyError);
+        }
+
+        logger.info(
+            `User ${updated.username} verified via internal key (developer=${updated.isDeveloper})`,
+        );
+
+        res.json({
+            status: 'SUCCESS',
+            message: grantDeveloper
+                ? 'تم توثيق المستخدم ومنحه صلاحيات المطور بنجاح'
+                : 'تم توثيق المستخدم بنجاح',
+            data: updated,
+        });
+    } catch (error: any) {
+        logger.error('Internal verify-user error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+});
+
+/**
  * GET /api/admin/uploads/stats  (Fix 12)
  * Upload analytics for last 7 days
  */
