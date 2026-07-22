@@ -7,7 +7,6 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import {
   isWorldCupHistoricalOnlyMode,
-  isWorldCupOnlyMode,
 } from '../config/world-cup-only-mode.config';
 import { matchCacheService } from './match-cache.service';
 import type { FixtureFromAPI } from './match-cache.service';
@@ -202,15 +201,13 @@ export function isScores365ExperimentEnabled(): boolean {
 }
 
 /**
- * Temporary backend hotfix for store builds that still call /fixtures/:id/* directly.
- * ON by default while WORLD_CUP_ONLY_MODE + SCORES365 are enabled.
- * Set WC_STORE_HOTFIX=false after the next store release.
+ * Emergency-only hotfix: force fresh 365 lineups/events/stats (bypass caches).
+ * Defaults OFF. Requires an explicit opt-in value (`emergency`) so leftover
+ * WC_STORE_HOTFIX=true from the store-launch era does not keep bypassing caches.
  */
 export function is365StoreDetailsHotfix(): boolean {
-  const raw = process.env.WC_STORE_HOTFIX?.trim();
-  if (raw === 'false' || raw === '0') return false;
-  if (raw === 'true' || raw === '1') return true;
-  return isScores365ExperimentEnabled() && isWorldCupOnlyMode();
+  const raw = process.env.WC_STORE_HOTFIX?.trim()?.toLowerCase();
+  return raw === 'emergency';
 }
 
 let storeHotfixLogged = false;
@@ -218,7 +215,7 @@ export function log365StoreHotfixStartup(): void {
   if (!is365StoreDetailsHotfix() || storeHotfixLogged) return;
   storeHotfixLogged = true;
   logger.info(
-    '[Scores365] WC store hotfix ON — 365 lineups/events/stats bypass stale caches for legacy app clients',
+    '[Scores365] WC store hotfix ON (WC_STORE_HOTFIX=emergency) - forcing fresh 365 details',
   );
 }
 

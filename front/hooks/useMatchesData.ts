@@ -90,8 +90,9 @@ const getCacheTTL = (dateString: string): number => {
   if (isPast) {
     return 60 * 60 * 1000; // 60 minutes for past matches
   } else if (isToday) {
-    // Live scores also arrive via WebSocket; 3s memory TTL keeps polling fallback fresh.
-    return 3 * 1000;
+    // Live scores arrive via WebSocket + live feed merge; keep calendar memory
+    // aligned with LIVE_FIXTURE_CALENDAR_POLL_MS so we don't re-download ~200KB every 3s.
+    return 8 * 1000;
   } else {
     return 30 * 60 * 1000; // 30 minutes for future matches
   }
@@ -105,10 +106,9 @@ const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
 };
 
 // ✅ Throttle background refresh - track last background fetch per date.
-// 6s aligns with the 8s UI poll while preventing duplicate concurrent fetches
-// when the user switches dates rapidly. Backend `/fixtures` for today is
-// shared-cached for 8s, so this won't multiply API quota usage.
-const BACKGROUND_REFRESH_THROTTLE = 4 * 1000; // 4 seconds
+// Align with 8s calendar poll / shared backend cache to avoid duplicate
+// ~200KB downloads when the user switches dates rapidly.
+const BACKGROUND_REFRESH_THROTTLE = 8 * 1000;
 
 /**
  * Merge today's date-indexed calendar with the global live feed.
@@ -444,7 +444,7 @@ export const useMatchesData = (
                   prefetchMatchAssets(merged);
                   evictOldestIfNeeded(memoryCache);
                   memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
-                  return cacheService.set(cacheKey, merged, 3 * 1000);
+                  return cacheService.set(cacheKey, merged, 8 * 1000);
                 })
                 .catch(() => setIsDataStale(true));
             } else {
@@ -484,7 +484,7 @@ export const useMatchesData = (
                   prefetchMatchAssets(merged);
                   evictOldestIfNeeded(memoryCache);
                   memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
-                  return cacheService.set(cacheKey, merged, 3 * 1000);
+                  return cacheService.set(cacheKey, merged, 8 * 1000);
                 })
                 .catch(() => setIsDataStale(true));
             } else {
@@ -620,7 +620,7 @@ export const useMatchesData = (
 
       // Today: short TTL so the disk cache doesn't override fresh polls.
       // Future: 3 days. Past dates handled by the foreground fetch.
-      const cacheTTL = isTodayFlag ? 3 * 1000 : 3 * 24 * 60 * 60 * 1000;
+      const cacheTTL = isTodayFlag ? 8 * 1000 : 3 * 24 * 60 * 60 * 1000;
       const cacheKey = getMatchesCacheKey(dateStr);
       evictOldestIfNeeded(memoryCache);
       memoryCache.set(dateStr, { data: fetchedMatches, timestamp: Date.now() });

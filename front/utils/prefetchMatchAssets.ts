@@ -39,21 +39,39 @@ export function prefetchImageUrls(urls: Array<string | null | undefined>, cap = 
   }
 }
 
-/** Prefetch team/league logos + fast country flags after matches load. */
+/** Prefetch team/league logos + fast country flags after matches load.
+ * Prefer logos from the first matches (usually on-screen) and batch so we
+ * don't saturate the network fighting visible Image renders. */
 export function prefetchMatchAssets(matches: Match[]): void {
   if (matches.length === 0) return;
 
-  const urls = new Set<string>();
-  for (const m of matches) {
-    if (m.homeTeam?.logo) urls.add(m.homeTeam.logo);
-    if (m.awayTeam?.logo) urls.add(m.awayTeam.logo);
-    if (m.league?.logo) urls.add(m.league.logo);
-    const flagUri = getCountryFlagUri(m.league?.country ?? '', m.league?.countryFlag);
-    if (flagUri) urls.add(flagUri);
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  const push = (url?: string | null) => {
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    urls.push(url);
+  };
+
+  // First ~24 fixtures ≈ early FlashList viewport + a little ahead.
+  for (const m of matches.slice(0, 24)) {
+    push(m.homeTeam?.logo);
+    push(m.awayTeam?.logo);
+    push(m.league?.logo);
+    push(getCountryFlagUri(m.league?.country ?? '', m.league?.countryFlag));
   }
 
-  const list = Array.from(urls).slice(0, 180);
-  if (list.length > 0) {
-    Image.prefetch(list, 'memory-disk').catch(() => {});
-  }
+  const list = urls.slice(0, 64);
+  if (list.length === 0) return;
+
+  const batchSize = 8;
+  void (async () => {
+    for (let i = 0; i < list.length; i += batchSize) {
+      const batch = list.slice(i, i + batchSize);
+      await Image.prefetch(batch, 'memory-disk').catch(() => {});
+      if (i + batchSize < list.length) {
+        await new Promise<void>((r) => setTimeout(r, 50));
+      }
+    }
+  })();
 }

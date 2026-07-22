@@ -1508,8 +1508,19 @@ export const ApiFootballService = {
       }
       return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`);
     } catch (error) {
+      // Do not retry aborted/cancelled requests with fresh=1 — that caused
+      // duplicate upstream hits and Railway 499 noise when screens remount.
+      const msg = error instanceof Error ? error.message.toLowerCase() : '';
+      if (
+        msg.includes('abort') ||
+        msg.includes('cancel') ||
+        msg.includes('timed out') ||
+        msg.includes('network request failed')
+      ) {
+        return [];
+      }
       try {
-        return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`, {}, { fresh: true });
+        return await fetchFromProxy<FixtureEvent[]>(`/cached/fixture/${fixtureId}/events`);
       } catch {
         return [];
       }

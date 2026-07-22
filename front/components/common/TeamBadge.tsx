@@ -16,6 +16,11 @@ export default function TeamBadge({
   logo
 }: TeamBadgeProps) {
   const [imageError, setImageError] = useState(false);
+
+  // Reset error state when the logo URL changes (FlashList recycling).
+  React.useEffect(() => {
+    setImageError(false);
+  }, [logo]);
   
   const initials = name
     .split(' ')

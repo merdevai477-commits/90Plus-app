@@ -11,7 +11,7 @@ import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
-import { getScores365GameIdForFixture, ensureScores365GameMapping, is365StoreDetailsHotfix, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId } from '../services/scores365-experiment.service';
+import { getScores365GameIdForFixture, ensureScores365GameMapping, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId } from '../services/scores365-experiment.service';
 import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
 import { buildScores365LmtEmbedHtml } from '../utils/scores365-lmt-html';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
@@ -66,10 +66,9 @@ function filterCachedFixturesByQuery(fixtures: any[], query: Request['query']): 
   });
 }
 
-/** fresh=1 query param, or WC store hotfix (legacy app compatibility). */
+/** Explicit client cache-bypass only (`fresh=1`). WC_STORE_HOTFIX forces refresh inside 365 cache helpers when enabled for incidents. */
 function wantsFreshMatchDetails(req: Request): boolean {
   return (
-    is365StoreDetailsHotfix() ||
     req.query.fresh === '1' ||
     req.query.fresh === 'true' ||
     req.query.forceRefresh === '1'
