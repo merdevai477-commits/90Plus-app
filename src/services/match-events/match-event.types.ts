@@ -3,7 +3,7 @@ import type { NotificationType } from '../notification.service';
 
 /**
  * Match events that may trigger push + inbox notifications.
- * Yellow cards, halftime, lineups, etc. are intentionally excluded.
+ * Yellow cards, substitutions, lineups, etc. are intentionally excluded.
  */
 export const MATCH_PUSH_EVENT_KINDS = [
     'goal_home',
@@ -12,7 +12,8 @@ export const MATCH_PUSH_EVENT_KINDS = [
     'kickoff',
     'card_red',
     'var',
-    'substitution',
+    'halftime',
+    'second_half_start',
     'fulltime',
 ] as const;
 
@@ -22,9 +23,9 @@ export type MatchNotificationPrefKey =
     | 'matchGoals'
     | 'matchStart'
     | 'matchEnd'
+    | 'matchHalftime'
     | 'matchCards'
-    | 'matchVar'
-    | 'matchSubs';
+    | 'matchVar';
 
 export interface NormalizedMatchEvent {
     fixtureId: number;

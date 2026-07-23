@@ -55,17 +55,7 @@ function classifyApiEvent(event: ApiFootballEvent): {
             prefKey: 'matchVar',
         };
     }
-    // API-Football uses "subst"; some feeds use "Substitution".
-    const typeLower = (event.type || '').toLowerCase();
-    if (typeLower === 'subst' || typeLower === 'substitution') {
-        return {
-            kind: 'substitution',
-            notificationType: NotificationType.MATCH_UPDATE,
-            titleKey: 'matchSubstitutionTitle',
-            bodyKey: 'matchSubstitutionBody',
-            prefKey: 'matchSubs',
-        };
-    }
+    // Substitutions intentionally never push (goals / cards / VAR / status only).
     return null;
 }
 
@@ -86,15 +76,8 @@ export function normalizeApiEvents(
         const teamId = event.team?.id ?? null;
         const playerId = event.player?.id ?? null;
 
-        // API-Football / 365: player = IN, assist = OUT on substitutions.
-        const playerIn =
-            classified.kind === 'substitution'
-                ? event.player?.name || ''
-                : event.assist?.name || event.player?.name || '';
-        const playerOut =
-            classified.kind === 'substitution'
-                ? event.assist?.name || ''
-                : event.player?.name || '';
+        const playerIn = event.assist?.name || event.player?.name || '';
+        const playerOut = event.player?.name || '';
         const playerName = event.player?.name || event.assist?.name || '';
 
         const eventKey = buildMatchEventKey(fixtureId, {
@@ -325,6 +308,70 @@ export function diffStatusEvents(
                 meta,
             ),
         );
+    }
+
+    // End of first half / break between halves.
+    if (last !== 'HT' && currentStatus === 'HT') {
+        out.push({
+            fixtureId,
+            eventKey: buildStatusEventKey(fixtureId, 'halftime', 'HT'),
+            eventType: 'halftime',
+            minute: 45,
+            extraMinute: null,
+            teamId: null,
+            playerId: null,
+            detectedAt: now,
+            payload: { status: currentStatus, ...scores },
+            templateVars: {
+                home: meta.homeTeam,
+                away: meta.awayTeam,
+                homeScore: scores.homeScore,
+                awayScore: scores.awayScore,
+            },
+            notificationType: NotificationType.MATCH_HALFTIME,
+            titleKey: 'halftimeTitle',
+            bodyKey: 'halftimeBody',
+            prefKey: 'matchHalftime',
+            data: {
+                type: 'MATCH_HALFTIME',
+                homeScore: scores.homeScore,
+                awayScore: scores.awayScore,
+                homeTeam: meta.homeTeam,
+                awayTeam: meta.awayTeam,
+            },
+        });
+    }
+
+    // Start of second half.
+    if (last === 'HT' && currentStatus === '2H') {
+        out.push({
+            fixtureId,
+            eventKey: buildStatusEventKey(fixtureId, 'second_half_start', '2H'),
+            eventType: 'second_half_start',
+            minute: 46,
+            extraMinute: null,
+            teamId: null,
+            playerId: null,
+            detectedAt: now,
+            payload: { status: currentStatus, ...scores },
+            templateVars: {
+                home: meta.homeTeam,
+                away: meta.awayTeam,
+                homeScore: scores.homeScore,
+                awayScore: scores.awayScore,
+            },
+            notificationType: NotificationType.MATCH_UPDATE,
+            titleKey: 'matchSecondHalfTitle',
+            bodyKey: 'matchSecondHalfBody',
+            prefKey: 'matchHalftime',
+            data: {
+                type: 'MATCH_SECOND_HALF',
+                homeScore: scores.homeScore,
+                awayScore: scores.awayScore,
+                homeTeam: meta.homeTeam,
+                awayTeam: meta.awayTeam,
+            },
+        });
     }
 
     if (!FINISHED_STATUSES.has(last) && FINISHED_STATUSES.has(currentStatus)) {

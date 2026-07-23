@@ -33,20 +33,20 @@ function legacyEvent(eventType: string): NormalizedMatchEvent {
 }
 
 describe('isPushNotifiableMatchEvent', () => {
-    it('allows goals, cancelled goals, kickoff, red card, VAR, substitutions, and fulltime', () => {
+    it('allows goals, cancelled goals, kickoff, red card, VAR, HT/2H, and fulltime', () => {
         expect(isPushNotifiableMatchEvent(baseEvent('goal_home'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('goal_away'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('goal_cancelled'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('kickoff'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('card_red'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('var'))).toBe(true);
-        expect(isPushNotifiableMatchEvent(baseEvent('substitution'))).toBe(true);
+        expect(isPushNotifiableMatchEvent(baseEvent('halftime'))).toBe(true);
+        expect(isPushNotifiableMatchEvent(baseEvent('second_half_start'))).toBe(true);
         expect(isPushNotifiableMatchEvent(baseEvent('fulltime'))).toBe(true);
     });
 
-    it('blocks legacy / non-push event kinds', () => {
-        expect(isPushNotifiableMatchEvent(legacyEvent('halftime'))).toBe(false);
-        expect(isPushNotifiableMatchEvent(legacyEvent('second_half_start'))).toBe(false);
+    it('blocks substitutions and non-push event kinds', () => {
+        expect(isPushNotifiableMatchEvent(legacyEvent('substitution'))).toBe(false);
         expect(isPushNotifiableMatchEvent(legacyEvent('card_yellow'))).toBe(false);
         expect(isPushNotifiableMatchEvent(legacyEvent('penalty'))).toBe(false);
         expect(isPushNotifiableMatchEvent(legacyEvent('lineup'))).toBe(false);
@@ -79,9 +79,18 @@ describe('diffStatusEvents', () => {
         expect(fromStatus[0].eventKey).toBe(fromScore[0].eventKey);
     });
 
-    it('does not emit halftime or second-half events', () => {
-        expect(diffStatusEvents(99, '1H', 'HT', scores, meta)).toHaveLength(0);
-        expect(diffStatusEvents(99, 'HT', '2H', scores, meta)).toHaveLength(0);
+    it('emits halftime when status moves from 1H to HT', () => {
+        const events = diffStatusEvents(99, '1H', 'HT', scores, meta);
+        expect(events).toHaveLength(1);
+        expect(events[0].eventType).toBe('halftime');
+        expect(events[0].prefKey).toBe('matchHalftime');
+    });
+
+    it('emits second-half start when status moves from HT to 2H', () => {
+        const events = diffStatusEvents(99, 'HT', '2H', scores, meta);
+        expect(events).toHaveLength(1);
+        expect(events[0].eventType).toBe('second_half_start');
+        expect(events[0].titleKey).toBe('matchSecondHalfTitle');
     });
 
     it('emits fulltime when status moves to FT', () => {
@@ -92,7 +101,7 @@ describe('diffStatusEvents', () => {
 });
 
 describe('normalizeApiEvents substitutions', () => {
-    it('emits substitution with player in and out names', () => {
+    it('does not emit substitutions for push classification', () => {
         const events = normalizeApiEvents(
             55,
             [
@@ -108,11 +117,7 @@ describe('normalizeApiEvents substitutions', () => {
             { homeTeam: 'Home FC', awayTeam: 'Away FC' },
         );
 
-        expect(events).toHaveLength(1);
-        expect(events[0].eventType).toBe('substitution');
-        expect(events[0].templateVars.playerIn).toBe('Player In');
-        expect(events[0].templateVars.playerOut).toBe('Player Out');
-        expect(events[0].prefKey).toBe('matchSubs');
+        expect(events).toHaveLength(0);
     });
 });
 
@@ -179,5 +184,6 @@ describe('push language helpers', () => {
             }),
         ).toContain('الأهلي');
         expect(renderPushTemplate('goalTitle', 'en')).toContain('Goal');
+        expect(renderPushTemplate('matchSoonTitle', 'ar', { minutes: 30 })).toContain('30');
     });
 });

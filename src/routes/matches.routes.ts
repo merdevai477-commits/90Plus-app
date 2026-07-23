@@ -155,6 +155,13 @@ router.delete('/favorite/:matchId', requireAuth, async (req: Request, res: Respo
             },
         });
 
+        try {
+            const { cancelMatchStartReminder } = await import('../queues/match-start-reminder.queue');
+            await cancelMatchStartReminder(user.id, apiMatchId);
+        } catch (err) {
+            logger.warn('[matches/favorite] failed to cancel reminders:', err);
+        }
+
         res.json({
             status: 'SUCCESS',
             message: 'Match removed from favorites',

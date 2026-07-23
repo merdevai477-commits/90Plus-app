@@ -30,6 +30,8 @@ const DEFAULT_LANGUAGE: SupportedLanguage = 'en';
 export type PushTemplateKey =
     | 'matchStartTitle'
     | 'matchStartBody'
+    | 'matchSoonTitle'
+    | 'matchSoonBody'
     | 'goalTitle'
     | 'goalBody'
     | 'goalScoreBody'
@@ -203,6 +205,8 @@ type TemplateMap = Record<PushTemplateKey, string>;
 const en: TemplateMap = {
     matchStartTitle: '⚽ Match started',
     matchStartBody: '{home} vs {away} — the match has started',
+    matchSoonTitle: '⏰ Match in {minutes} minutes',
+    matchSoonBody: '{home} vs {away} kicks off soon',
     goalTitle: '⚽ Goal!',
     goalBody: "{player} scores for {team} ({minute}')",
     goalScoreBody: '{scorer} — {home} {homeScore}-{awayScore} {away}',
@@ -376,6 +380,8 @@ const en: TemplateMap = {
 const ar: TemplateMap = {
     matchStartTitle: '⚽ بدأت المباراة',
     matchStartBody: '{home} ضد {away} — المباراة بدأت الآن',
+    matchSoonTitle: '⏰ المباراة بعد {minutes} دقيقة',
+    matchSoonBody: '{home} ضد {away} — تذكير قبل البداية',
     goalTitle: '⚽ هدف!',
     goalBody: '{player} يسجل لـ{team} في الدقيقة {minute}',
     goalScoreBody: '{scorer} — {home} {homeScore}-{awayScore} {away}',

@@ -1,13 +1,15 @@
 /**
  * Match Start Reminder Queue
  *
- * Fires a push notification at the moment a subscribed match kicks off.
- * Each subscription schedules ONE delayed Bull job (jobId = userId:fixtureId)
- * with a stable ID so re-subscribing overwrites the old schedule and
- * unsubscribing removes it cleanly.
+ * Schedules:
+ * 1) Pre-match reminder 30 minutes before kickoff
+ * 2) Kickoff push at match start
+ *
+ * Each subscription schedules delayed Bull jobs with stable IDs so
+ * re-subscribing overwrites the old schedule and unsubscribing removes them.
  *
  * Status-based kickoff from the live ingestor remains a fallback; `notifiedStart`
- * prevents duplicate pushes if both paths fire.
+ * prevents duplicate kickoff pushes if both paths fire.
  */
 
 import Bull, { Queue, Job } from 'bull';
@@ -25,6 +27,8 @@ export interface MatchStartReminderJob {
     matchDate: string; // ISO
 }
 
+const PRE_MATCH_REMINDER_MS = 30 * 60 * 1000;
+
 let queue: Queue<MatchStartReminderJob> | null = null;
 
 /**
@@ -33,6 +37,10 @@ let queue: Queue<MatchStartReminderJob> | null = null;
  */
 export function matchStartJobId(userId: string, fixtureId: number): string {
     return `match-start:${userId}:${fixtureId}`;
+}
+
+export function matchSoonJobId(userId: string, fixtureId: number): string {
+    return `match-soon:${userId}:${fixtureId}`;
 }
 
 export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | null {
@@ -49,12 +57,10 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
     });
 
     queue.process(async (job: Job<MatchStartReminderJob>) => {
-        const { userId, fixtureId, homeTeam, awayTeam } = job.data;
+        const { userId, fixtureId, homeTeam, awayTeam, matchDate } = job.data;
+        const isSoonReminder = String(job.id || '').startsWith('match-soon:');
 
         try {
-            // Read the latest subscription + consent at send time. The
-            // subscription may have been removed after the job was scheduled,
-            // in which case we silently skip.
             const [subscription, user] = await Promise.all([
                 prisma.favoriteMatch.findUnique({
                     where: { userId_apiMatchId: { userId, apiMatchId: fixtureId } },
@@ -64,6 +70,7 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
                         homeTeamLogo: true,
                         awayTeamLogo: true,
                         leagueName: true,
+                        lastStatus: true,
                     },
                 }),
                 prisma.user.findUnique({
@@ -74,10 +81,6 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
 
             if (!subscription) {
                 logger.debug(`[match-start] subscription removed for ${userId}/${fixtureId} — skipping`);
-                return;
-            }
-            if (subscription.notifiedStart) {
-                logger.debug(`[match-start] already notified for ${userId}/${fixtureId}`);
                 return;
             }
             if (!user?.pushNotificationsConsent) {
@@ -91,19 +94,77 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
                 return;
             }
 
-            // Pass null so createNotification fans out to every registered device.
+            const extras = {
+                homeTeamLogo: subscription.homeTeamLogo || '',
+                awayTeamLogo: subscription.awayTeamLogo || '',
+                leagueName: subscription.leagueName || '',
+                matchDate: subscription.matchDate,
+            };
+
+            if (isSoonReminder) {
+                const kickoffMs = new Date(matchDate).getTime();
+                const remainingMs = kickoffMs - Date.now();
+                // Skip if kickoff already passed or match already live/finished.
+                if (
+                    remainingMs <= 0 ||
+                    subscription.notifiedStart ||
+                    ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'FT', 'AET', 'PEN'].includes(
+                        String(subscription.lastStatus || ''),
+                    )
+                ) {
+                    logger.debug(`[match-soon] skip stale reminder for ${userId}/${fixtureId}`);
+                    return;
+                }
+
+                const recent = await prisma.notification.findMany({
+                    where: {
+                        userId,
+                        createdAt: { gte: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+                    },
+                    select: { data: true },
+                    take: 40,
+                    orderBy: { createdAt: 'desc' },
+                });
+                const alreadyForFixture = recent.some((row) => {
+                    const data = (row.data || {}) as Record<string, unknown>;
+                    return (
+                        data.type === 'MATCH_SOON' &&
+                        String(data.fixtureId || data.matchId || '') === String(fixtureId)
+                    );
+                });
+                if (alreadyForFixture) {
+                    logger.debug(`[match-soon] already sent for ${userId}/${fixtureId}`);
+                    return;
+                }
+
+                const minutes = Math.max(1, Math.round(remainingMs / 60000));
+                await NotificationService.createMatchSoonNotification(
+                    userId,
+                    null,
+                    homeTeam,
+                    awayTeam,
+                    fixtureId,
+                    minutes,
+                    extras,
+                );
+                logger.info(
+                    `[match-soon] ✅ notified ${userId} for fixture ${fixtureId} (~${minutes}m, ${tokens.length} device(s))`,
+                );
+                return;
+            }
+
+            if (subscription.notifiedStart) {
+                logger.debug(`[match-start] already notified for ${userId}/${fixtureId}`);
+                return;
+            }
+
             await NotificationService.createMatchStartNotification(
                 userId,
                 null,
                 homeTeam,
                 awayTeam,
                 fixtureId,
-                {
-                    homeTeamLogo: subscription.homeTeamLogo || '',
-                    awayTeamLogo: subscription.awayTeamLogo || '',
-                    leagueName: subscription.leagueName || '',
-                    matchDate: subscription.matchDate,
-                },
+                extras,
             );
 
             await prisma.favoriteMatch.update({
@@ -114,7 +175,7 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
             logger.info(`[match-start] ✅ notified ${userId} for fixture ${fixtureId} (${tokens.length} device(s))`);
         } catch (err: any) {
             logger.error(`[match-start] job failed for ${userId}/${fixtureId}:`, err?.message);
-            throw err; // let Bull retry
+            throw err;
         }
     });
 
@@ -125,34 +186,12 @@ export function getMatchStartReminderQueue(): Queue<MatchStartReminderJob> | nul
     return queue;
 }
 
-/**
- * Schedule a push that fires at kickoff (`matchDate`).
- * Past kickoffs are skipped — status/score ingest remains the fallback.
- */
-export async function scheduleMatchStartReminder(
+async function upsertDelayedJob(
+    q: Queue<MatchStartReminderJob>,
+    jobId: string,
     data: MatchStartReminderJob,
+    delay: number,
 ): Promise<void> {
-    const q = getMatchStartReminderQueue();
-    if (!q) {
-        logger.debug(`[match-start] queue unavailable — skip schedule for ${data.userId}/${data.fixtureId}`);
-        return;
-    }
-
-    const kickoffMs = new Date(data.matchDate).getTime();
-    if (!Number.isFinite(kickoffMs)) {
-        logger.warn(`[match-start] invalid matchDate for ${data.userId}/${data.fixtureId}`);
-        return;
-    }
-
-    const delay = kickoffMs - Date.now();
-    if (delay <= 0) {
-        logger.debug(
-            `[match-start] kickoff already passed for ${data.userId}/${data.fixtureId} — skip schedule`,
-        );
-        return;
-    }
-
-    const jobId = matchStartJobId(data.userId, data.fixtureId);
     try {
         const existing = await q.getJob(jobId);
         if (existing) {
@@ -170,26 +209,72 @@ export async function scheduleMatchStartReminder(
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
     });
-
-    logger.info(
-        `[match-start] scheduled ${jobId} in ${Math.round(delay / 1000)}s (kickoff ${data.matchDate})`,
-    );
 }
 
 /**
- * Cancel a scheduled reminder (unsubscribe path).
+ * Schedule kickoff push + 30-minute pre-match reminder.
+ * Past times are skipped — live status ingest remains the kickoff fallback.
+ */
+export async function scheduleMatchStartReminder(
+    data: MatchStartReminderJob,
+): Promise<void> {
+    const q = getMatchStartReminderQueue();
+    if (!q) {
+        logger.debug(`[match-start] queue unavailable — skip schedule for ${data.userId}/${data.fixtureId}`);
+        return;
+    }
+
+    const kickoffMs = new Date(data.matchDate).getTime();
+    if (!Number.isFinite(kickoffMs)) {
+        logger.warn(`[match-start] invalid matchDate for ${data.userId}/${data.fixtureId}`);
+        return;
+    }
+
+    const kickoffDelay = kickoffMs - Date.now();
+    if (kickoffDelay > 0) {
+        const jobId = matchStartJobId(data.userId, data.fixtureId);
+        await upsertDelayedJob(q, jobId, data, kickoffDelay);
+        logger.info(
+            `[match-start] scheduled ${jobId} in ${Math.round(kickoffDelay / 1000)}s (kickoff ${data.matchDate})`,
+        );
+    } else {
+        logger.debug(
+            `[match-start] kickoff already passed for ${data.userId}/${data.fixtureId} — skip kickoff schedule`,
+        );
+    }
+
+    const soonDelay = kickoffMs - PRE_MATCH_REMINDER_MS - Date.now();
+    if (soonDelay > 0) {
+        const soonId = matchSoonJobId(data.userId, data.fixtureId);
+        await upsertDelayedJob(q, soonId, data, soonDelay);
+        logger.info(
+            `[match-soon] scheduled ${soonId} in ${Math.round(soonDelay / 1000)}s (T-30m for ${data.matchDate})`,
+        );
+    } else if (kickoffDelay > 0) {
+        // Inside the final 30 minutes — send soon reminder ASAP once.
+        const soonId = matchSoonJobId(data.userId, data.fixtureId);
+        await upsertDelayedJob(q, soonId, data, 1_000);
+        logger.info(
+            `[match-soon] scheduled ${soonId} immediately (already inside T-30m window)`,
+        );
+    }
+}
+
+/**
+ * Cancel scheduled kickoff + soon reminders (unsubscribe path).
  */
 export async function cancelMatchStartReminder(userId: string, fixtureId: number): Promise<void> {
     const q = getMatchStartReminderQueue();
     if (!q) return;
-    const jobId = matchStartJobId(userId, fixtureId);
-    try {
-        const existing = await q.getJob(jobId);
-        if (existing) {
-            await existing.remove();
-            logger.debug(`[match-start] cancelled job ${jobId}`);
+    for (const jobId of [matchStartJobId(userId, fixtureId), matchSoonJobId(userId, fixtureId)]) {
+        try {
+            const existing = await q.getJob(jobId);
+            if (existing) {
+                await existing.remove();
+                logger.debug(`[match-start] cancelled job ${jobId}`);
+            }
+        } catch (err) {
+            logger.debug('[match-start] cancel failed:', err);
         }
-    } catch (err) {
-        logger.debug('[match-start] cancel failed:', err);
     }
 }

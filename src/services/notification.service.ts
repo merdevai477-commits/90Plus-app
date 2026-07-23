@@ -422,6 +422,63 @@ export class NotificationService {
     }
 
     /**
+     * Pre-match reminder (default: 30 minutes before kickoff).
+     */
+    static async createMatchSoonNotification(
+        userId: string,
+        pushToken: string | null,
+        homeTeam: string,
+        awayTeam: string,
+        matchId: number,
+        minutesUntilKickoff: number = 30,
+        extras?: {
+            homeTeamLogo?: string | null;
+            awayTeamLogo?: string | null;
+            leagueName?: string | null;
+            matchDate?: Date | string | null;
+        }
+    ) {
+        const prefs = await getUserPreferences(userId);
+        if (prefs && !prefs.matchStart) return null;
+
+        const lang = await getUserLanguage(userId);
+        const minutes = Math.max(1, Math.round(minutesUntilKickoff));
+        const title = renderPushTemplate('matchSoonTitle', lang, { minutes });
+        const message = renderPushTemplate('matchSoonBody', lang, {
+            home: homeTeam,
+            away: awayTeam,
+            minutes,
+        });
+
+        return this.createNotification({
+            userId,
+            pushToken,
+            title,
+            message,
+            type: NotificationType.MATCH_UPDATE,
+            channelId: 'match-updates',
+            data: {
+                type: 'MATCH_SOON',
+                matchId: String(matchId),
+                fixtureId: String(matchId),
+                minutesUntilKickoff: minutes,
+                homeTeam,
+                awayTeam,
+                homeTeamLogo: extras?.homeTeamLogo ?? '',
+                awayTeamLogo: extras?.awayTeamLogo ?? '',
+                leagueName: extras?.leagueName ?? '',
+                matchDate: extras?.matchDate
+                    ? (extras.matchDate instanceof Date
+                        ? extras.matchDate.toISOString().split('T')[0]
+                        : String(extras.matchDate))
+                    : '',
+                screen: '/(tabs)/match-details',
+                priority: 'high',
+            }
+        });
+    }
+
+    /**
      * Create halthtime notification
      */
     static async createHalftimeNotification(
