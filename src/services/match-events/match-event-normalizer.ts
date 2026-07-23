@@ -331,7 +331,8 @@ export function diffStatusEvents(
             notificationType: NotificationType.MATCH_HALFTIME,
             titleKey: 'halftimeTitle',
             bodyKey: 'halftimeBody',
-            prefKey: 'matchHalftime',
+            // Always on for followed matches — not a separate user toggle.
+            prefKey: null,
             data: {
                 type: 'MATCH_HALFTIME',
                 homeScore: scores.homeScore,
@@ -363,7 +364,8 @@ export function diffStatusEvents(
             notificationType: NotificationType.MATCH_UPDATE,
             titleKey: 'matchSecondHalfTitle',
             bodyKey: 'matchSecondHalfBody',
-            prefKey: 'matchHalftime',
+            // Always on for followed matches — not a separate user toggle.
+            prefKey: null,
             data: {
                 type: 'MATCH_SECOND_HALF',
                 homeScore: scores.homeScore,

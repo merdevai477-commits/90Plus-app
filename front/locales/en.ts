@@ -1178,8 +1178,6 @@ export const en = {
     prefMatchStartSub: 'Kickoff + reminder 30 minutes before',
     prefMatchEnd: 'Match End',
     prefMatchEndSub: 'Final result',
-    prefMatchHalftime: 'Half-time',
-    prefMatchHalftimeSub: 'End of first half and start of second half',
     prefHalftime: 'Half Time',
     prefHalftimeSub: 'First half result and second half kickoff',
     prefLeague: 'League Matches',

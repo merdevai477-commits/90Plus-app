@@ -1269,8 +1269,6 @@ export const ar = {
     prefMatchStartSub: 'صافرة البداية + تذكير قبلها بنصف ساعة',
     prefMatchEnd: 'نهاية المباراة',
     prefMatchEndSub: 'النتيجة النهائية',
-    prefMatchHalftime: 'استراحة الشوطين',
-    prefMatchHalftimeSub: 'نهاية الشوط الأول وبداية الشوط الثاني',
     prefHalftime: 'نهاية الشوط الأول',
     prefHalftimeSub: 'نهاية الشوط الأول وبداية الشوط الثاني',
     prefLeague: 'مباريات الدوريات',

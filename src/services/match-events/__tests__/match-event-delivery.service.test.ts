@@ -83,7 +83,7 @@ describe('diffStatusEvents', () => {
         const events = diffStatusEvents(99, '1H', 'HT', scores, meta);
         expect(events).toHaveLength(1);
         expect(events[0].eventType).toBe('halftime');
-        expect(events[0].prefKey).toBe('matchHalftime');
+        expect(events[0].prefKey).toBeNull();
     });
 
     it('emits second-half start when status moves from HT to 2H', () => {
@@ -91,6 +91,7 @@ describe('diffStatusEvents', () => {
         expect(events).toHaveLength(1);
         expect(events[0].eventType).toBe('second_half_start');
         expect(events[0].titleKey).toBe('matchSecondHalfTitle');
+        expect(events[0].prefKey).toBeNull();
     });
 
     it('emits fulltime when status moves to FT', () => {

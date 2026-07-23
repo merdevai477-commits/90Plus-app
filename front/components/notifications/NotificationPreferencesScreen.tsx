@@ -227,8 +227,6 @@ export default function NotificationPreferencesScreen() {
                         <View style={styles.divider} />
                         <SwitchRow label={t.notifications.prefMatchVar} subtitle={t.notifications.prefMatchVarSub} value={current.matchVar} field="matchVar" onToggle={handleToggle} loading={loadingField === 'matchVar'} />
                         <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefMatchHalftime} subtitle={t.notifications.prefMatchHalftimeSub} value={current.matchHalftime} field="matchHalftime" onToggle={handleToggle} loading={loadingField === 'matchHalftime'} />
-                        <View style={styles.divider} />
                         <SwitchRow label={t.notifications.prefMatchEnd} subtitle={t.notifications.prefMatchEndSub} value={current.matchEnd} field="matchEnd" onToggle={handleToggle} loading={loadingField === 'matchEnd'} />
                     </View>
                 </View>

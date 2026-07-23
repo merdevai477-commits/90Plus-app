@@ -23,7 +23,6 @@ export type MatchNotificationPrefKey =
     | 'matchGoals'
     | 'matchStart'
     | 'matchEnd'
-    | 'matchHalftime'
     | 'matchCards'
     | 'matchVar';
 
@@ -41,7 +40,7 @@ export interface NormalizedMatchEvent {
     notificationType: NotificationType;
     titleKey: PushTemplateKey;
     bodyKey: PushTemplateKey;
-    prefKey: MatchNotificationPrefKey;
+    prefKey: MatchNotificationPrefKey | null;
     data: Record<string, unknown>;
 }
 
