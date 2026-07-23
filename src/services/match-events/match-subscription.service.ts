@@ -4,10 +4,13 @@ import { logger } from '../../utils/logger';
 import {
     parseFixtureSnapshot,
     LIVE_STATUSES,
+    FINISHED_STATUSES,
     getCachedFixtureState,
+    setCachedFixtureState,
 } from './match-event-normalizer';
 import type { FixtureSnapshot } from './match-event.types';
 import { addSubscriberToIndex } from './match-subscriber-index.adapter';
+import { MatchEventIngestor } from './match-event-ingestor.service';
 
 export interface SubscribeBaselineInput {
     userId: string;
@@ -37,10 +40,23 @@ export async function fetchFixtureSnapshot(fixtureId: number): Promise<FixtureSn
     }
 }
 
+function isMatchAlreadyStarted(status: string): boolean {
+    return (
+        LIVE_STATUSES.has(status) ||
+        FINISHED_STATUSES.has(status) ||
+        ['HT', '2H', 'ET', 'BT', 'P'].includes(status)
+    );
+}
+
 /**
  * Upsert FavoriteMatch with subscription anchor + baseline scores.
- * Marks all existing MatchEvent rows for this fixture as delivered for this subscription
- * so mid-match follows never replay historical events.
+ *
+ * Mid-match follows must NOT replay historical goals/cards/VAR/HT:
+ * 1) Snapshot current score/status into process cache (blocks scoreboard catch-up diffs)
+ * 2) Persist current event feed without fan-out
+ * 3) Create subscription
+ * 4) Seed delivery ledger as SENT for every known event
+ * 5) Only then add Redis subscriber index
  */
 export async function subscribeWithBaseline(input: SubscribeBaselineInput): Promise<SubscribeBaselineResult> {
     const subscribedAt = new Date();
@@ -55,8 +71,27 @@ export async function subscribeWithBaseline(input: SubscribeBaselineInput): Prom
             latestEventKey: null,
         };
 
-    const alreadyStarted =
-        snapshot.isLive || ['HT', '2H', 'ET', 'BT', 'P'].includes(snapshot.status);
+    // Prevent scoreboard catch-up (0-0 → current) from looking like brand-new goals.
+    setCachedFixtureState(snapshot);
+
+    // Persist historical feed rows BEFORE this user becomes a fan-out target.
+    try {
+        await MatchEventIngestor.ingestFixture(
+            input.fixtureId,
+            { homeTeam: input.homeTeam, awayTeam: input.awayTeam },
+            { forceRefreshEvents: true, forceApiRefresh: false },
+        );
+        // Keep cache pinned to subscribe snapshot (ingest may overwrite with same values).
+        setCachedFixtureState(snapshot);
+    } catch (err: any) {
+        logger.warn(
+            `[MatchSubscription] pre-subscribe ingest ${input.fixtureId} failed:`,
+            err?.message,
+        );
+    }
+
+    const alreadyStarted = isMatchAlreadyStarted(snapshot.status);
+    const alreadyFinished = FINISHED_STATUSES.has(snapshot.status);
 
     const subscription = await prisma.favoriteMatch.upsert({
         where: {
@@ -79,7 +114,7 @@ export async function subscribeWithBaseline(input: SubscribeBaselineInput): Prom
             lastAwayScore: snapshot.awayScore,
             lastStatus: snapshot.status,
             notifiedStart: alreadyStarted,
-            notifiedEnd: false,
+            notifiedEnd: alreadyFinished,
         },
         update: {
             matchDate: input.matchDate,
@@ -96,12 +131,12 @@ export async function subscribeWithBaseline(input: SubscribeBaselineInput): Prom
             lastAwayScore: snapshot.awayScore,
             lastStatus: snapshot.status,
             notifiedStart: alreadyStarted,
-            notifiedEnd: false,
+            notifiedEnd: alreadyFinished,
             lastDeliveredEventKey: null,
         },
     });
 
-    // Seed delivery ledger: all events that already happened before subscribe are "delivered" silently.
+    // Seed delivery ledger: everything already known at subscribe is silent.
     const existingEvents = await prisma.matchEvent.findMany({
         where: { fixtureId: input.fixtureId },
         select: { eventKey: true, fixtureId: true },
@@ -128,6 +163,12 @@ export async function subscribeWithBaseline(input: SubscribeBaselineInput): Prom
     }
 
     await addSubscriberToIndex(input.fixtureId, subscription.id);
+
+    logger.info(
+        `[MatchSubscription] subscribed user=${input.userId} fixture=${input.fixtureId} ` +
+            `score=${snapshot.homeScore}-${snapshot.awayScore} status=${snapshot.status} ` +
+            `seeded=${existingEvents.length} events`,
+    );
 
     return { subscriptionId: subscription.id, snapshot };
 }
@@ -192,7 +233,33 @@ export function isBaselinedGoal(
     return false;
 }
 
-/** Subscription minute filter for API events with explicit minute (cards/subs). */
+/**
+ * Status phases for suppressing obsolete kickoff/HT/2H/FT on mid-match follow.
+ * Higher number = later in the match.
+ */
+export function statusPhase(status: string | null | undefined): number {
+    const s = status || 'NS';
+    if (FINISHED_STATUSES.has(s) || s === 'CANC' || s === 'ABD' || s === 'AWD' || s === 'WO') return 50;
+    if (s === '2H' || s === 'ET' || s === 'BT' || s === 'P') return 30;
+    if (s === 'HT') return 20;
+    if (s === '1H' || s === 'LIVE' || s === 'INT' || s === 'SUSP') return 10;
+    return 0;
+}
+
+/** True when this status event is already in the past relative to baselineStatus. */
+export function isStatusEventObsolete(
+    baselineStatus: string | null | undefined,
+    eventType: string,
+): boolean {
+    const phase = statusPhase(baselineStatus);
+    if (eventType === 'kickoff') return phase >= 10;
+    if (eventType === 'halftime') return phase >= 20;
+    if (eventType === 'second_half_start') return phase >= 30;
+    if (eventType === 'fulltime') return phase >= 50;
+    return false;
+}
+
+/** Subscription minute filter for API events with explicit minute (cards/VAR). */
 export function isEventBeforeSubscribeMinute(
     sub: { subscribedAt: Date; matchDate: Date },
     eventMinute: number,
@@ -205,4 +272,34 @@ export function isEventBeforeSubscribeMinute(
     );
     if (subscribedMinute <= 0) return false;
     return eventMinute <= subscribedMinute;
+}
+
+/**
+ * Catch-up burst right after mid-match follow: historical API rows get detectedAt=now.
+ * Drop timed events that land within a short window after subscribe when the match
+ * was already underway (seed + baseline cover the real history).
+ */
+export function isCatchUpReplayEvent(
+    sub: {
+        subscribedAt: Date;
+        baselineStatus: string | null;
+        matchDate: Date;
+    },
+    event: { detectedAt: Date; minute: number | null },
+): boolean {
+    if (!isMatchAlreadyStarted(sub.baselineStatus || 'NS')) return false;
+    const msSinceSub = event.detectedAt.getTime() - sub.subscribedAt.getTime();
+    if (msSinceSub < 0 || msSinceSub > 20_000) return false;
+
+    if (event.minute != null && event.minute > 0) {
+        if (isEventBeforeSubscribeMinute(sub, event.minute)) return true;
+        // Bad/missing kickoff clock mid-match: still treat immediate timed replays as historical.
+        const kickoffMs = new Date(sub.matchDate).getTime();
+        const subscribedMinute = Number.isFinite(kickoffMs)
+            ? Math.floor((sub.subscribedAt.getTime() - kickoffMs) / 60_000)
+            : 0;
+        if (subscribedMinute <= 0) return true;
+    }
+
+    return false;
 }

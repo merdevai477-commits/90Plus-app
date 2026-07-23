@@ -4,6 +4,8 @@ import { PredictionResolverService } from '../prediction-resolver.service';
 import {
     isBaselinedGoal,
     isEventBeforeSubscribeMinute,
+    isStatusEventObsolete,
+    isCatchUpReplayEvent,
 } from './match-subscription.service';
 import type { MatchEventKind, NormalizedMatchEvent } from './match-event.types';
 import { MATCH_PUSH_EVENT_KINDS } from './match-event.types';
@@ -28,6 +30,7 @@ export type SubscriptionRow = {
     leagueName: string | null;
     baselineHomeScore: number | null;
     baselineAwayScore: number | null;
+    baselineStatus: string | null;
     notifiedStart: boolean;
     notifiedEnd: boolean;
 };
@@ -38,14 +41,21 @@ export function shouldDeliverToSubscription(
 ): boolean {
     if (event.detectedAt < sub.subscribedAt) return false;
 
+    if (isStatusEventObsolete(sub.baselineStatus, event.eventType)) {
+        return false;
+    }
+
     if (event.eventType === 'goal_home' || event.eventType === 'goal_away') {
         return !isBaselinedGoal(sub, event);
     }
 
-    // Score drops after subscribe are always relevant (VAR / disallowed goals).
+    // Score drops after subscribe are live; block only immediate catch-up replays.
     if (event.eventType === 'goal_cancelled') {
+        if (isCatchUpReplayEvent(sub, event)) return false;
         return true;
     }
+
+    if (isCatchUpReplayEvent(sub, event)) return false;
 
     if (event.minute != null && event.minute > 0) {
         if (isEventBeforeSubscribeMinute(sub, event.minute)) return false;
