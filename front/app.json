@@ -20,6 +20,9 @@
       "usesAppleSignIn": true,
       "buildNumber": "131",
       "requireFullScreen": false,
+      "entitlements": {
+        "com.apple.developer.usernotifications.time-sensitive": true
+      },
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
           {
@@ -73,7 +76,7 @@
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 112,
+      "versionCode": 113,
       "softwareKeyboardLayoutMode": "pan",
       "intentFilters": [
         {

@@ -178,6 +178,8 @@ export interface PushNotificationPayload {
     threadId?: string;
     silent?: boolean;
     channelId?: string;
+    /** iOS UNNotificationInterruptionLevel — Expo uses hyphenated values. */
+    interruptionLevel?: 'active' | 'critical' | 'passive' | 'time-sensitive';
 }
 
 function resolvePushChannelId(
@@ -206,6 +208,24 @@ function resolvePushChannelId(
         return 'social-v2';
     }
     return 'default';
+}
+
+/** Live match alerts should break through iOS Focus / Scheduled Summary when allowed. */
+function resolveInterruptionLevel(
+    payload: PushNotificationPayload,
+    channelId: string,
+): 'active' | 'time-sensitive' {
+    if (payload.interruptionLevel === 'time-sensitive' || payload.interruptionLevel === 'active') {
+        return payload.interruptionLevel;
+    }
+    const type = typeof payload.data?.type === 'string' ? payload.data.type : '';
+    const isMatch =
+        channelId.startsWith('match-updates') ||
+        type.includes('MATCH') ||
+        type === 'MATCH_SOON' ||
+        type === 'MATCH_GOAL_CANCELLED' ||
+        type === 'MATCH_SECOND_HALF';
+    return isMatch ? 'time-sensitive' : 'active';
 }
 
 async function scheduleReceiptCheck(receiptIds: string[]): Promise<void> {
@@ -291,6 +311,7 @@ export class PushNotificationService {
                 };
             } else {
                 const channelId = resolvePushChannelId(payload.data, payload.channelId);
+                const interruptionLevel = resolveInterruptionLevel(payload, channelId);
                 message = {
                     to: payload.to,
                     sound: payload.sound || 'default',
@@ -298,8 +319,10 @@ export class PushNotificationService {
                     body: payload.body,
                     data: payload.data || {},
                     badge: payload.badge,
+                    // high = APNs priority 10 (immediate). normal can be batched ~tens of seconds on iOS.
                     priority: 'high',
                     channelId,
+                    interruptionLevel,
                     ...(payload.threadId ? { threadId: payload.threadId } : {}),
                 };
             }
@@ -372,6 +395,7 @@ export class PushNotificationService {
                 continue;
             }
 
+            const channelId = resolvePushChannelId(payload.data, payload.channelId);
             messages.push({
                 to: payload.to,
                 sound: payload.sound || 'default',
@@ -380,7 +404,8 @@ export class PushNotificationService {
                 data: payload.data || {},
                 badge: payload.badge,
                 priority: 'high',
-                channelId: resolvePushChannelId(payload.data, payload.channelId),
+                channelId,
+                interruptionLevel: resolveInterruptionLevel(payload, channelId),
             });
         }
 
