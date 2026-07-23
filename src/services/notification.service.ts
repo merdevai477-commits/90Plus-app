@@ -69,6 +69,11 @@ export interface CreateNotificationParams {
     channelId?: string; // Android notification channel
     /** When true, persist inbox + WebSocket only — no Expo push. */
     skipPush?: boolean;
+    /**
+     * Send Expo push before waiting on inbox DB write.
+     * Cuts perceived latency on iOS/Android when Postgres is slow.
+     */
+    pushFirst?: boolean;
     /** Stable key used to reuse the inbox row across delivery retries. */
     idempotencyKey?: string;
     /** Return null when Expo was attempted but every device send failed. */
@@ -151,6 +156,7 @@ export class NotificationService {
                 threadId,
                 channelId,
                 skipPush,
+                pushFirst,
                 idempotencyKey,
                 requirePushSuccess,
             } = params;
@@ -165,6 +171,106 @@ export class NotificationService {
                     actorAvatar: actor.avatar || null,
                 } : {}),
             };
+
+            const resolvedChannelId = resolveChannelId(type, channelId);
+
+            const resolveTokens = async (): Promise<{ tokens: string[]; skipReason: string | null }> => {
+                if (pushToken) return { tokens: [pushToken], skipReason: null };
+                try {
+                    const user = await prisma.user.findUnique({
+                        where: { id: userId },
+                        select: { pushNotificationsConsent: true },
+                    });
+                    if (!user?.pushNotificationsConsent) {
+                        return { tokens: [], skipReason: 'consent_false' };
+                    }
+                    const { getUserPushTokens } = await import('./user-push-devices.service');
+                    const tokens = await getUserPushTokens(userId);
+                    return {
+                        tokens,
+                        skipReason: tokens.length === 0 ? 'no_token' : null,
+                    };
+                } catch (err) {
+                    logger.warn('Failed to resolve push tokens for user:', { userId, err });
+                    return { tokens: [], skipReason: 'token_lookup_failed' };
+                }
+            };
+
+            const sendExpo = async (
+                tokens: string[],
+                notificationId?: string,
+            ): Promise<boolean> => {
+                if (tokens.length === 0) return false;
+                const results = await Promise.all(
+                    tokens.map((to) =>
+                        PushNotificationService.sendNotification({
+                            to,
+                            title,
+                            body: message,
+                            // Do not thread-group live match alerts — iOS can coalesce/delay them.
+                            ...(threadId && !String(type).includes('MATCH')
+                                ? { threadId }
+                                : {}),
+                            channelId: resolvedChannelId,
+                            interruptionLevel: String(type).includes('MATCH')
+                                ? 'time-sensitive'
+                                : undefined,
+                            data: {
+                                type: String(type),
+                                ...notificationData,
+                                ...(notificationId ? { notificationId } : {}),
+                                priority: 'high',
+                            },
+                        }),
+                    ),
+                );
+                return results.some((sent) => sent);
+            };
+
+            // Fast path: Expo first (match live alerts), then inbox — reduces iOS wait when DB lags.
+            if (!skipPush && pushFirst) {
+                const { tokens, skipReason } = await resolveTokens();
+                if (tokens.length > 0) {
+                    const sent = await sendExpo(tokens);
+                    if (!sent && requirePushSuccess) {
+                        logger.warn('[Push] Expo pushFirst failed for all devices', {
+                            userId,
+                            type: String(type),
+                            devices: tokens.length,
+                        });
+                        return null;
+                    }
+                } else if (skipReason) {
+                    logger.info('[Push] skipped', {
+                        userId,
+                        type: String(type),
+                        reason: skipReason,
+                    });
+                    if (requirePushSuccess) return null;
+                }
+
+                const notificationDataForDb = {
+                    userId,
+                    title,
+                    message,
+                    type: type as any,
+                    data: notificationData,
+                    ...(idempotencyKey ? { idempotencyKey } : {}),
+                };
+                const notification = idempotencyKey
+                    ? await (prisma.notification as any).upsert({
+                        where: { idempotencyKey },
+                        create: notificationDataForDb,
+                        update: {},
+                    })
+                    : await prisma.notification.create({ data: notificationDataForDb as any });
+
+                WebSocketService.sendToUser(userId, 'notification', {
+                    ...notification,
+                    data: notificationData,
+                });
+                return notification;
+            }
 
             // 1. Save to database
             const notificationDataForDb = {
@@ -191,50 +297,11 @@ export class NotificationService {
 
             // 3. Send push notification to ALL registered devices (Android + iOS).
             if (!skipPush) {
-                let pushTokens: string[] = [];
-                let pushSkipReason: string | null = null;
-
-                if (pushToken) {
-                    pushTokens = [pushToken];
-                } else {
-                    try {
-                        const user = await prisma.user.findUnique({
-                            where: { id: userId },
-                            select: { pushNotificationsConsent: true },
-                        });
-                        if (!user?.pushNotificationsConsent) {
-                            pushSkipReason = 'consent_false';
-                        } else {
-                            const { getUserPushTokens } = await import('./user-push-devices.service');
-                            pushTokens = await getUserPushTokens(userId);
-                            if (pushTokens.length === 0) {
-                                pushSkipReason = 'no_token';
-                            }
-                        }
-                    } catch (err) {
-                        pushSkipReason = 'token_lookup_failed';
-                        logger.warn('Failed to resolve push tokens for user:', { userId, err });
-                    }
-                }
+                const { tokens: pushTokens, skipReason: pushSkipReason } = await resolveTokens();
 
                 if (pushTokens.length > 0) {
-                    const results = await Promise.all(
-                        pushTokens.map((to) =>
-                            PushNotificationService.sendNotification({
-                                to,
-                                title,
-                                body: message,
-                                ...(threadId ? { threadId } : {}),
-                                channelId: resolveChannelId(type, channelId),
-                                data: {
-                                    type: String(type),
-                                    ...notificationData,
-                                    notificationId: notification.id,
-                                },
-                            }),
-                        ),
-                    );
-                    if (results.every((sent) => !sent)) {
+                    const sent = await sendExpo(pushTokens, notification.id);
+                    if (!sent) {
                         logger.warn('[Push] Expo send returned false for all devices', {
                             userId,
                             type: String(type),
@@ -344,6 +411,7 @@ export class NotificationService {
             message,
             type: NotificationType.MATCH_GOAL,
             channelId: 'match-updates',
+            pushFirst: true,
             data: {
                 type: 'MATCH_GOAL',
                 matchId: String(matchId),
@@ -401,6 +469,7 @@ export class NotificationService {
             message,
             type: NotificationType.MATCH_START,
             channelId: 'match-updates',
+            pushFirst: true,
             data: {
                 type: 'MATCH_START',
                 matchId: String(matchId),
@@ -457,6 +526,7 @@ export class NotificationService {
             message,
             type: NotificationType.MATCH_UPDATE,
             channelId: 'match-updates',
+            pushFirst: true,
             data: {
                 type: 'MATCH_SOON',
                 matchId: String(matchId),
@@ -515,6 +585,7 @@ export class NotificationService {
             message,
             type: NotificationType.MATCH_UPDATE,
             channelId: 'match-updates',
+            pushFirst: true,
             data: {
                 type: 'MATCH_HALFTIME',
                 matchId: String(matchId),
@@ -574,6 +645,7 @@ export class NotificationService {
             message,
             type: NotificationType.MATCH_UPDATE,
             channelId: 'match-updates',
+            pushFirst: true,
             data: {
                 type: 'MATCH_END',
                 matchId: String(matchId),

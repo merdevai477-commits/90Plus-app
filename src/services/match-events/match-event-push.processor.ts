@@ -83,6 +83,8 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
             channelId: 'match-updates',
             idempotencyKey: job.idempotencyKey,
             requirePushSuccess: true,
+            // Push before inbox write — middle-ground latency cut without an iOS store build.
+            pushFirst: true,
             data: {
                 type: String(job.notificationType),
                 priority: 'high',
