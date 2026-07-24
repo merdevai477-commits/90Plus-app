@@ -148,7 +148,7 @@ function initOpenRouterProviders(): ProviderConfig[] {
         'https://openrouter.ai/api/v1';
     const client = buildOpenRouterClient(apiKey, baseURL);
 
-    // FAST model: free Qwen 80B — strong Arabic/English/dialect chat on OpenRouter.
+    // FAST model: Qwen3.6 Flash — fast multilingual chat via OpenRouter.
     const FAST: ProviderConfig = {
         name: 'fast',
         apiKey,
@@ -156,7 +156,7 @@ function initOpenRouterProviders(): ProviderConfig[] {
         model:
             process.env.AI_MODEL ??
             process.env.OPENROUTER_CHAT_MODEL ??
-            'qwen/qwen3-next-80b-a3b-instruct:free',
+            'qwen/qwen3.6-flash',
         client,
     };
 
@@ -171,18 +171,18 @@ function initOpenRouterProviders(): ProviderConfig[] {
             process.env.OPENROUTER_GEMINI_FLASH_MODEL ??
             process.env.OPENROUTER_CHAT_MODEL ??
             process.env.AI_MODEL ??
-            'qwen/qwen3-next-80b-a3b-instruct:free',
+            'qwen/qwen3.6-flash',
         client,
     };
 
-    // FALLBACK: alternate free model when primary is rate-limited upstream.
+    // FALLBACK: alternate model when primary is rate-limited upstream.
     const FALLBACK: ProviderConfig = {
         name: 'fallback',
         apiKey,
         baseURL,
         model:
             process.env.OPENROUTER_CHAT_FALLBACK_MODEL ??
-            'google/gemma-4-26b-a4b-it:free',
+            'qwen/qwen3.6-flash',
         client,
     };
 
@@ -857,9 +857,19 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             if (firstTokenSent || clientClosed) break;
 
             try {
+                // Qwen3.6 Flash (and similar) default to heavy thinking tokens.
+                // Disable for chat so replies stay fast/cheap; OpenRouter ignores
+                // unknown params on non-reasoning models.
+                const openRouterExtras =
+                    provider.name === 'fast' ||
+                    provider.name === 'complex' ||
+                    provider.name === 'fallback'
+                        ? { reasoning: { effort: 'none' as const } }
+                        : {};
                 const stream = await provider.client.chat.completions.create({
                     model: provider.model,
                     ...requestBody,
+                    ...openRouterExtras,
                 });
                 usedProvider = provider;
                 for await (const chunk of stream) {
