@@ -45,7 +45,7 @@ function buildAIClient(): AICheckinClient | null {
     if (!apiKey) return null;
     const baseURL =
         process.env.AI_BASE_URL ?? process.env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
-    const model = process.env.AI_MODEL ?? process.env.OPENROUTER_CHAT_MODEL ?? 'qwen/qwen3.6-flash';
+    const model = process.env.AI_MODEL ?? process.env.OPENROUTER_CHAT_MODEL ?? 'qwen/qwen3.5-flash-02-23';
     const client = new OpenAI({
         apiKey,
         baseURL,

@@ -148,7 +148,7 @@ function initOpenRouterProviders(): ProviderConfig[] {
         'https://openrouter.ai/api/v1';
     const client = buildOpenRouterClient(apiKey, baseURL);
 
-    // FAST model: Qwen3.6 Flash — fast multilingual chat via OpenRouter.
+    // FAST model: Qwen3.5 Flash — cheaper multilingual chat via OpenRouter.
     const FAST: ProviderConfig = {
         name: 'fast',
         apiKey,
@@ -156,7 +156,7 @@ function initOpenRouterProviders(): ProviderConfig[] {
         model:
             process.env.AI_MODEL ??
             process.env.OPENROUTER_CHAT_MODEL ??
-            'qwen/qwen3.6-flash',
+            'qwen/qwen3.5-flash-02-23',
         client,
     };
 
@@ -171,7 +171,7 @@ function initOpenRouterProviders(): ProviderConfig[] {
             process.env.OPENROUTER_GEMINI_FLASH_MODEL ??
             process.env.OPENROUTER_CHAT_MODEL ??
             process.env.AI_MODEL ??
-            'qwen/qwen3.6-flash',
+            'qwen/qwen3.5-flash-02-23',
         client,
     };
 
@@ -182,7 +182,7 @@ function initOpenRouterProviders(): ProviderConfig[] {
         baseURL,
         model:
             process.env.OPENROUTER_CHAT_FALLBACK_MODEL ??
-            'qwen/qwen3.6-flash',
+            'qwen/qwen3.5-flash-02-23',
         client,
     };
 
