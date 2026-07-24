@@ -36,7 +36,7 @@ export const LIVE_FIXTURE_SWEEP_MS = 60_000;
 export const LIVE_FIXTURE_CALENDAR_POLL_MS = 8_000;
 
 export const LIVE_STATUS_SHORTS = new Set([
-  '1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT',
+  '1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP',
 ]);
 
 export const FINISHED_STATUS_SHORTS = new Set([

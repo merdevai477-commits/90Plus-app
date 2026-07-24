@@ -22,7 +22,9 @@ export const mapFixtureStatus = (
   statusShort: string,
   elapsed?: number | null,
 ): 'live' | 'upcoming' | 'finished' => {
-  const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+  // Keep aligned with backend LIVE_STATUSES / is365Live (INT + SUSP stay "live"
+  // so the client keeps polling until play resumes or the match ends).
+  const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'];
   const finishedStatuses = ['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO'];
 
   // Stale 365 rows: impossible stoppage → treat as finished.
@@ -53,7 +55,7 @@ export const formatLocalDateKey = (date: Date): string => {
 
 export const getLocalTodayKey = (): string => formatLocalDateKey(new Date());
 
-const LIVE_STATUS_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+const LIVE_STATUS_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
 
 /** Estimate elapsed minute from period start when API minute is missing. */
 export const estimateElapsedFromPeriodStart = (

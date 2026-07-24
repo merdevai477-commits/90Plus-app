@@ -28,6 +28,21 @@ describe('classifyScores365MatchStatus', () => {
     expect(result.short).toBe('NS');
   });
 
+  it('keeps statusGroup 3 live even when scores are still -1', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '1st Half',
+        shortStatusText: '1st Half',
+        gameTime: 12,
+        homeCompetitor: { id: 1, name: 'H', score: -1 },
+        awayCompetitor: { id: 2, name: 'A', score: -1 },
+      }),
+    );
+    expect(result.short).toBe('1H');
+    expect(result.elapsed).toBe(12);
+  });
+
   it('does not treat high stale gameTime alone as 2H live', () => {
     const result = classifyScores365MatchStatus(
       game({ statusGroup: 4, statusText: '', shortStatusText: '', gameTime: 125 }),

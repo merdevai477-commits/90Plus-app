@@ -78,7 +78,7 @@ export const formatMatchMinute = (
  * Check if match is live
  */
 export const isMatchLive = (status: string): boolean => {
-  const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE'];
+  const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'];
   return liveStatuses.includes(status);
 };
 

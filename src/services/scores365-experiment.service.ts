@@ -1107,11 +1107,14 @@ export function classifyScores365MatchStatus(
     return withExtra('SUSP', 'Match Suspended', minute, stoppageFromDisplay);
   }
 
-  if (homeRaw === -1 || awayRaw === -1) {
+  // 365 statusGroup: 2 = scheduled, 3 = live, 4 = finished (verified on allscores).
+  // Score placeholders of -1 are common right at kickoff / before the first
+  // event. Only treat them as NS when the game is not already marked live —
+  // otherwise statusGroup 3 never reaches the LIVE/1H/2H branches below.
+  if ((homeRaw === -1 || awayRaw === -1) && statusGroup !== 3) {
     return withExtra('NS', 'Not Started', null);
   }
 
-  // 365 statusGroup: 2 = scheduled, 3 = live, 4 = finished (verified on allscores).
   if (statusGroup === 2) {
     return withExtra('NS', 'Not Started', null);
   }

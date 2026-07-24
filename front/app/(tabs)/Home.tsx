@@ -64,7 +64,7 @@ import {
     getClerkBearerToken,
 } from '../../utils/clerkAuthToken';
 
-const LIVE_STATUS_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT']);
+const LIVE_STATUS_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
 const FINISHED_STATUS_SHORTS = new Set(['FT', 'AET', 'PEN']);
 
 /** Map API/live snapshot status → home MatchList badge (never infer FT from 0-0). */

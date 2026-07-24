@@ -1334,7 +1334,10 @@ export default function MatchesHubScreenV2() {
 
   // Country → League hierarchy after filtering. Drops empty leagues and
   // empty countries so the accordion list only renders sections with data.
-  // World Cup + International comps live on their dedicated tabs — not in All.
+  // World Cup stays on its dedicated tab / pin. Other international comps
+  // normally live on the International tab — but Live (and All when a league
+  // has live action) must still surface them so "مباشر" is not empty while
+  // Club Friendlies / ASEAN / UCL / etc. are in play.
   const filteredCountryGroups = useMemo<CountryGroup[]>(() => {
     return countryGroups
       .map(cg => {
@@ -1344,14 +1347,19 @@ export default function MatchesHubScreenV2() {
             if (l.matches.length === 0) return false;
             if (l.leagueId === worldCupLeagueId) return false;
             const sample = l.matches[0]?.league;
-            return !isInternationalCompetition(sample ?? { id: l.leagueId, name: l.leagueName }, {
-              excludeLeagueId: worldCupLeagueId,
-            });
+            const isIntl = isInternationalCompetition(
+              sample ?? { id: l.leagueId, name: l.leagueName },
+              { excludeLeagueId: worldCupLeagueId },
+            );
+            if (!isIntl) return true;
+            if (filter === 'Live') return true;
+            if (filter === 'All' && l.matches.some((m) => m.status === 'live')) return true;
+            return false;
           });
         return { ...cg, leagues };
       })
       .filter(cg => cg.leagues.length > 0);
-  }, [countryGroups, matchPassesFilter, worldCupLeagueId]);
+  }, [countryGroups, matchPassesFilter, worldCupLeagueId, filter]);
 
   const worldCupLeagueGroups = useMemo<LeagueGroup[]>(() => {
     if (worldCupMatches.length === 0) return [];
