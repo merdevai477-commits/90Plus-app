@@ -59,12 +59,12 @@ export function formatFixtureForClient(fixture: any) {
 
 export async function ensureDailyRound(dateString = localDateKey()) {
   const existing = await prisma.groupRound.findUnique({ where: { date: dateString } });
-  if (existing) return existing;
-
   const { TEMP_FREEZE_GROUP_PREDICTION_MATCHES } = await import(
     '../config/temp-surface-freeze.config'
   );
+
   if (TEMP_FREEZE_GROUP_PREDICTION_MATCHES) {
+    if (existing) return existing;
     logger.warn(`[GroupRound] TEMP freeze — creating empty round for ${dateString}`);
     return prisma.groupRound.create({
       data: {
@@ -83,6 +83,28 @@ export async function ensureDailyRound(dateString = localDateKey()) {
 
   if (matchIds.length === 0) {
     logger.warn(`[GroupRound] No upcoming fixtures for ${dateString}`);
+  }
+
+  // Rounds created during the temp freeze (or a failed pick) keep empty matchIds.
+  // Backfill OPEN empty rounds once freeze is lifted so groups show fixtures again.
+  if (existing) {
+    const currentIds = Array.isArray(existing.matchIds)
+      ? (existing.matchIds as unknown[]).filter((id): id is number => typeof id === 'number')
+      : [];
+    if (
+      currentIds.length === 0 &&
+      matchIds.length > 0 &&
+      existing.status === 'OPEN'
+    ) {
+      logger.info(
+        `[GroupRound] Backfilling empty round ${dateString} with ${matchIds.length} matches`,
+      );
+      return prisma.groupRound.update({
+        where: { id: existing.id },
+        data: { matchIds },
+      });
+    }
+    return existing;
   }
 
   return prisma.groupRound.create({
