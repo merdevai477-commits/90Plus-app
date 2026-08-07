@@ -275,15 +275,6 @@ if (PROVIDERS.length === 0) {
  * OpenRouter: complex football → Gemini/Qwen chain.
  */
 function providersForRequest(useComplex: boolean): ProviderConfig[] {
-    if (GEMINI_PROVIDERS.length > 0) {
-        const chain: ProviderConfig[] = [];
-        if (GEMINI_PRIMARY) chain.push(GEMINI_PRIMARY);
-        if (GEMINI_FALLBACK) chain.push(GEMINI_FALLBACK);
-        return chain.length > 0 ? chain : GEMINI_PROVIDERS;
-    }
-
-    if (BEDROCK_PROVIDERS.length > 0) return BEDROCK_PROVIDERS;
-
     const chain: ProviderConfig[] = [];
     const seen = new Set<string>();
 
@@ -292,6 +283,15 @@ function providersForRequest(useComplex: boolean): ProviderConfig[] {
         seen.add(p.model);
         chain.push(p);
     };
+
+    // Prefer Gemini when configured, but always keep OpenRouter as backup so a
+    // dead Gemini key does not hard-fail chat when OpenRouter still works.
+    if (GEMINI_PROVIDERS.length > 0) {
+        if (GEMINI_PRIMARY) push(GEMINI_PRIMARY);
+        if (GEMINI_FALLBACK) push(GEMINI_FALLBACK);
+    } else if (BEDROCK_PROVIDERS.length > 0) {
+        for (const p of BEDROCK_PROVIDERS) push(p);
+    }
 
     if (useComplex) {
         push(OR_COMPLEX);
@@ -514,19 +514,19 @@ function computeMaxTokens(
     messageLength: number,
     opts?: { playerData?: boolean },
 ): number {
-    const cap = Number(process.env.CHAT_MAX_OUTPUT_TOKENS ?? 8192);
-    const playerFloor = Number(process.env.CHAT_PLAYER_MAX_OUTPUT_TOKENS ?? 4096);
+    const cap = Number(process.env.CHAT_MAX_OUTPUT_TOKENS ?? 1200);
+    const playerFloor = Number(process.env.CHAT_PLAYER_MAX_OUTPUT_TOKENS ?? 900);
     const base: Record<LengthMode, number> = {
-        short: 900,
-        medium: 1800,
-        detailed: 4096,
+        short: 500,
+        medium: 800,
+        detailed: 1000,
     };
-    const bonus = Math.min(800, Math.floor(messageLength / 8));
+    const bonus = Math.min(200, Math.floor(messageLength / 20));
     let total = base[mode] + bonus;
     if (opts?.playerData) {
         total = Math.max(total, playerFloor);
     }
-    return Math.min(total, Number.isFinite(cap) && cap > 0 ? cap : 8192);
+    return Math.min(total, Number.isFinite(cap) && cap > 0 ? cap : 1200);
 }
 
 // ─── GET /chat/limit ─────────────────────────────────────────────────────────

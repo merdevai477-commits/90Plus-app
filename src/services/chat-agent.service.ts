@@ -18,6 +18,34 @@ import {
 } from './chat-agent-tools.service';
 
 const MAX_STEPS = 5;
+const AGENT_STREAM_MAX_TOKENS = 900;
+const AGENT_FINAL_MAX_TOKENS = 700;
+
+function isCreditBudgetError(err: unknown): boolean {
+  const msg = String((err as Error)?.message ?? err ?? '');
+  return /\b402\b/.test(msg) || /requires more credits|can only afford/i.test(msg);
+}
+
+async function createAgentCompletion(
+  client: OpenAI,
+  body: Record<string, unknown>,
+): Promise<any> {
+  try {
+    return await client.chat.completions.create(body as any);
+  } catch (err) {
+    if (!isCreditBudgetError(err)) throw err;
+    const current = Number(body.max_tokens ?? AGENT_STREAM_MAX_TOKENS);
+    const reduced = Math.max(256, Math.min(current, 512));
+    if (reduced >= current) throw err;
+    logger.warn(
+      `[chat-agent] OpenRouter credit budget hit — retrying with max_tokens=${reduced}`,
+    );
+    return await client.chat.completions.create({
+      ...body,
+      max_tokens: reduced,
+    } as any);
+  }
+}
 
 const TOOL_USAGE_PREAMBLE = `
 أدوات البيانات (مهم جدًا):
@@ -166,16 +194,16 @@ export async function runFootballAgent(
     }>;
 
     try {
-      stream = (await client.chat.completions.create({
+      stream = (await createAgentCompletion(client, {
         model,
         messages,
         tools: AGENT_TOOLS,
         tool_choice: step === 0 ? 'auto' : 'auto',
         temperature: 0.35,
-        max_tokens: 2048,
+        max_tokens: AGENT_STREAM_MAX_TOKENS,
         stream: true,
         reasoning: { effort: 'none' },
-      } as any)) as unknown as typeof stream;
+      })) as unknown as typeof stream;
     } catch (err) {
       logger.error(
         `[chat-agent] OpenRouter create failed step=${step}:`,
@@ -240,14 +268,14 @@ export async function runFootballAgent(
       // After tools: prefer a non-streaming final answer (more reliable than SSE).
       if (step < MAX_STEPS - 1) {
         try {
-          const final = await client.chat.completions.create({
+          const final = await createAgentCompletion(client, {
             model,
             messages,
             temperature: 0.35,
-            max_tokens: 1200,
+            max_tokens: AGENT_FINAL_MAX_TOKENS,
             stream: false,
             reasoning: { effort: 'none' },
-          } as any);
+          });
           const answer =
             final.choices?.[0]?.message?.content?.trim() ??
             '';
