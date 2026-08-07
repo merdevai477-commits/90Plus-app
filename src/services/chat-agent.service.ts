@@ -48,20 +48,29 @@ async function createAgentCompletion(
 }
 
 const TOOL_USAGE_PREAMBLE = `
-أدوات البيانات (مهم جدًا):
-- أي معلومة وقتية (نادي لاعب حالي، سن، إحصائيات الموسم، مباريات، نتيجة، دقيقة، تشكيل، أحداث، ألقاب) لازم تجيبها من الأدوات قبل ما ترد.
-- لو السؤال عن لاعب → search_player. لو ألقاب/كاس عالم/بطولات → get_player_career (مهم).
-- لو مباريات النهاردة عمومًا → get_today_matches. لو دوري معيّن (مصري/بريمير…) → get_today_matches مع league.
-- لو لايف دلوقتي → get_live_matches.
-- لو سؤال عن ماتش معين بالاسم → resolve_match أولًا عشان تجيب fixtureId، بعدين get_match_details و/أو get_match_lineup.
-- لو الترتيب → get_standings. لو الهدافين → get_top_scorers. لو فريق → get_team_info.
-- ممكن تنادي أكتر من أداة في نفس الخطوة.
-- للألقاب: استخدم الأرقام من الأداة فقط (fifaWorldCup / apiFootballWorldCup). لو المصدر يقول 1 متقولش 2.
-- ماتخمنش أرقام من ذاكرتك. لو الأداة رجّعت خطأ أو فاضي، قول إن البيانات مش متاحة دلوقتي.
-- لو السؤال واسع جدًا: ادّي 1–2 معلومة أساسية فقط، بعدين اسأل المستخدم عايز يتابع في إيه.
+قواعد البيانات (صارمة — زي بروفايل اللاعب في التطبيق):
+- أي سؤال عن لاعب/نادي/مباراة/ألقاب/إحصائيات = لازم أداة أولًا. متجاوبش من ذاكرتك أبدًا.
+- لاعب (نادي حالي، سيزون، أهداف، ألقاب، فين بيلعب) → search_player أولًا (بروفايل 365 كامل). للألقاب زوّد get_player_career.
+- فريق + ألقاب أفريقيا/بطولات → get_team_info إجباري. استخدم cafChampionsLeagueWins / answerHint فقط.
+- مباريات النهاردة → get_today_matches (+ league لو اتحدد). لايف → get_live_matches.
+- ماتش بالاسم → resolve_match ثم get_match_details.
+- اعتمد على quickFacts و seasonStats و answerHint من نتيجة الأداة. لو seasonStats موجودة متقولش "مفيش بيانات".
+- أرقام الألقاب من الأداة فقط (fifaWorldCup / championsLeague / cafChampionsLeagueWins). لو العدد 1 متقولش 2.
+- متخترعش سنة البطولة أو المنتخب إلا لو موجودة صراحة في apiFootballWorldCup.wins.
+- رد مختصر باللهجة المصرية، واقعي زي ريل تايم، من غير جداول طويلة إلا لو المستخدم طلب تفاصيل.
 - ماتذكرش أسماء الأدوات أو API للمستخدم.
 `.trim();
 
+function shouldRequireTools(message: string): boolean {
+  const m = message.trim();
+  if (m.length < 2) return false;
+  if (/^(hi|hello|hey|اهلا|أهلا|السلام|سلام|ازيك|عامل ايه|صباح|مساء)[\s!.,؟?]*$/i.test(m)) {
+    return false;
+  }
+  return /(كام|عدد|فين|أين|اين|يلعب|سيزون|موسم|بيانات|احصائ|إحصائ|كاس|كأس|شامبيونز|افريق|أفريق|اهلي|أهلي|مبار|ماتش|لايف|مباشر|اليوم|النهاردة|اهداف|أهداف|صنع|تروفي|ألقاب|القاب|نادي|دوري|where|how many|season|trophy|champions|live|today|goals|assists|club)/i.test(
+    m,
+  );
+}
 export interface AgentHistoryItem {
   role: 'user' | 'assistant';
   content: string;
@@ -198,8 +207,9 @@ export async function runFootballAgent(
         model,
         messages,
         tools: AGENT_TOOLS,
-        tool_choice: step === 0 ? 'auto' : 'auto',
-        temperature: 0.35,
+        tool_choice:
+          step === 0 && shouldRequireTools(params.userMessage) ? 'required' : 'auto',
+        temperature: 0.2,
         max_tokens: AGENT_STREAM_MAX_TOKENS,
         stream: true,
         reasoning: { effort: 'none' },
@@ -271,7 +281,7 @@ export async function runFootballAgent(
           const final = await createAgentCompletion(client, {
             model,
             messages,
-            temperature: 0.35,
+            temperature: 0.2,
             max_tokens: AGENT_FINAL_MAX_TOKENS,
             stream: false,
             reasoning: { effort: 'none' },

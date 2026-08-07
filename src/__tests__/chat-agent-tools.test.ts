@@ -126,10 +126,11 @@ describe('chat-agent-tools', () => {
       { language: 'ar' },
     );
     const parsed = JSON.parse(raw);
-    expect(parsed.source).toBe('365scores');
+    expect(parsed.source).toBe('365scores_profile');
     expect(parsed.athleteId).toBe(42);
     expect(parsed.club).toBe('Real Madrid');
     expect(parsed.fifaWorldCup).toEqual([]);
+    expect(parsed.quickFacts?.currentClub).toBe('Real Madrid');
   });
 
   test('get_today_matches returns ranked compact fixtures', async () => {

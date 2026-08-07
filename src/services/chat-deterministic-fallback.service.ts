@@ -16,17 +16,22 @@ function pickPlayerName(msg: string): string | null {
 function formatPlayerCareer(data: any, q: string): string | null {
   if (!data || data.error) return null;
   const name = data.name ?? data.resolvedAs ?? 'اللاعب';
-  const club = data.club ? ` وبينادي ${data.club}` : '';
+  const club = data.club ?? data.quickFacts?.currentClub ?? null;
+  const clubSuffix = club ? ` مع ${club}` : '';
 
   if (/شامبيونز|ابطال اوروبا|أبطال أوروبا|champions/i.test(q)) {
-    const n = data.championsLeague?.[0]?.count ?? data.championsLeague?.length ?? null;
+    const n =
+      data.quickFacts?.championsLeagueTitles ??
+      data.championsLeague?.[0]?.count ??
+      null;
     if (n != null && Number(n) >= 0) return `${name} معاه ${n} شامبيونز ليج.`;
   }
   if (/كاس عالم|كأس العالم|world\s*cup/i.test(q)) {
     const n =
+      data.quickFacts?.worldCupTitles ??
       data.apiFootballWorldCup?.count ??
       data.fifaWorldCup?.[0]?.count ??
-      (Array.isArray(data.fifaWorldCup) ? data.fifaWorldCup.reduce((s: number, t: any) => s + (t.count ?? 0), 0) : null);
+      null;
     if (n != null) {
       if (Number(n) === 0) return `${name} معندوش كاس عالم لحد دلوقتي (حسب البيانات المتاحة).`;
       return `${name} معاه ${n} كاس عالم.`;
@@ -35,11 +40,15 @@ function formatPlayerCareer(data: any, q: string): string | null {
   if (/سيزون|موسم|احصائ|إحصائ|بيانات/i.test(q)) {
     const s = data.seasonStats;
     if (s) {
-      return `${name} في آخر موسم (${s.label ?? '—'}): ${s.goals ?? 0} هدف و${s.assists ?? 0} صناعة في ${s.appearances ?? '—'} مباراة${club}.`;
+      return `${name} في آخر موسم (${s.label ?? '—'}): ${s.goals ?? 0} هدف و${s.assists ?? 0} صناعة في ${s.appearances ?? '—'} مباراة${clubSuffix}.`;
     }
+    if (data.quickFacts?.latestSeasonLine) {
+      return `${name} — ${data.quickFacts.latestSeasonLine}${clubSuffix}.`;
+    }
+    if (data.answerHint) return `${name}: ${data.answerHint}`;
   }
   if (/يلعب|نادي|فين|أين|اين|حاليا|حالياً/i.test(q) && club) {
-    return `${name} بيلعب دلوقتي مع ${data.club}.`;
+    return `${name} بيلعب دلوقتي مع ${club}.`;
   }
   return null;
 }
