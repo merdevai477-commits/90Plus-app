@@ -358,10 +358,16 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
     if (player) {
       const info = player.info as any;
       const career = player.career as any;
+      const season = career?.currentSeason ?? career?.seasons?.[0] ?? null;
+      const seasonTeam =
+        Array.isArray(season?.competitions) && season.competitions.length
+          ? String(season.competitions[0]?.teamName ?? '').replace(/^نادي\s*\(?|\)?$/g, '').trim() || null
+          : null;
       const club =
-        career?.profile?.clubName ??
-        info?.clubName ??
-        player.clubName ??
+        seasonTeam ||
+        career?.profile?.clubName ||
+        info?.clubName ||
+        player.clubName ||
         null;
       const trophySummary = summarizeTrophies(career?.trophies ?? []);
       const apiFb = await enrichApiFootballTrophies(name, player.athleteId);
@@ -372,10 +378,11 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
         athleteId: player.athleteId,
         name: player.name || player.shortName,
         club,
+        clubRaw: career?.profile?.clubName ?? player.clubName ?? null,
         nationality: info?.nationalityName ?? info?.nationality ?? null,
         age: info?.age ?? null,
         position: info?.positionName ?? info?.position ?? null,
-        seasonStats: career?.currentSeason ?? career?.seasons?.[0] ?? null,
+        seasonStats: season,
         currentSeasonHighlights: (career?.currentSeasonHighlights ?? []).slice(0, 6),
         ...trophySummary,
         apiFootballWorldCup: apiFb
@@ -384,7 +391,7 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
               wins: apiFb.fifaWorldCupWins,
             }
           : null,
-        note: 'Use fifaWorldCup / championsLeague / cafChampions from trophies. Prefer currentSeasonHighlights for latest season stats.',
+        note: 'Use fifaWorldCup / championsLeague / cafChampions from trophies. Prefer seasonStats/currentSeasonHighlights for latest season. Prefer `club` over clubRaw.',
       };
     }
   } catch (err) {
@@ -419,15 +426,18 @@ async function toolTodayMatches(args: Record<string, unknown> = {}) {
   if (league) {
     pool = fixtures.filter((f: any) => f?.league?.id === league.id);
     if (!pool.length) {
-      const needle = league.label.toLowerCase();
       pool = fixtures.filter((f: any) => {
         const name = String(f?.league?.name ?? '').toLowerCase();
         const country = String(f?.league?.country ?? '').toLowerCase();
-        return (
-          name.includes(needle.split(' ')[0] ?? needle) ||
-          country.includes('bolivia') ||
-          (league.id === 344 && /bolivia|boliv/i.test(`${name} ${country}`))
-        );
+        const blob = `${name} ${country}`;
+        // Prefer country/label tokens — never match a generic first word like "Division".
+        if (league.id === 344) return /bolivia|boliv|بوليفي/i.test(blob);
+        if (league.id === 12) return /caf|africa|أفريق|افريق/i.test(blob);
+        const tokens = league.label
+          .toLowerCase()
+          .split(/[\s\-–,]+/)
+          .filter((t) => t.length >= 4 && !/^(division|league|profesional|professional)$/i.test(t));
+        return tokens.some((t) => blob.includes(t));
       });
     }
   } else if (leagueText) {
@@ -613,10 +623,46 @@ async function toolTeamInfo(args: Record<string, unknown>) {
   if (!teamName) return { error: 'team_name required' };
   const dossier = await fetchTeamDossierContext(teamName, { allowSearch: true });
   if (!dossier) return { error: 'team_not_found', teamName };
+
+  let trophies: Array<{ league?: string; country?: string; season?: string; place?: string }> = [];
+  let cafChampionsWins: typeof trophies = [];
+  try {
+    trophies = (await footballDataCacheService.getTeamTrophies(dossier.apiTeamId)) ?? [];
+    cafChampionsWins = trophies.filter(
+      (t) =>
+        /caf\s*champions|أبطال\s*أفريقيا|ابطال\s*افريقيا|african\s*champions/i.test(
+          String(t.league ?? ''),
+        ) && /winner|بطل|champion/i.test(String(t.place ?? '')),
+    );
+  } catch (err) {
+    logger.warn('[chat-agent] team trophies failed:', (err as Error)?.message);
+  }
+
+  // Curated fallback when API-Football trophies are unavailable (e.g. suspended).
+  const CURATED_CAF_CL: Record<number, { wins: number; note: string }> = {
+    1015: {
+      wins: 12,
+      note: 'Al Ahly record CAF Champions League titles (through 2024). 2025 Pyramids, 2026 Sundowns.',
+    },
+    1016: {
+      wins: 5,
+      note: 'Zamalek CAF Champions League titles (through 2002).',
+    },
+  };
+  const curated = CURATED_CAF_CL[dossier.apiTeamId];
+  const cafCount = cafChampionsWins.length > 0 ? cafChampionsWins.length : curated?.wins ?? null;
+
   return {
     teamId: dossier.apiTeamId,
     source: dossier.source,
     summary: dossier.block,
+    cafChampionsLeagueWins: cafCount,
+    cafChampionsLeagueSeasons: cafChampionsWins.map((t) => t.season).filter(Boolean).slice(0, 20),
+    cafSource: cafChampionsWins.length > 0 ? 'api-football' : curated ? 'curated' : null,
+    note:
+      cafCount != null
+        ? `For African Champions League titles use cafChampionsLeagueWins (${cafChampionsWins.length > 0 ? 'API winners' : curated?.note}).`
+        : 'CAF title count unavailable — do not invent a number.',
   };
 }
 
