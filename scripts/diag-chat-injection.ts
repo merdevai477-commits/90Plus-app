@@ -4,6 +4,7 @@
  *
  * Usage: npx tsx scripts/diag-chat-injection.ts
  */
+/// <reference types="node" />
 import 'dotenv/config';
 import { createClerkClient } from '@clerk/backend';
 
