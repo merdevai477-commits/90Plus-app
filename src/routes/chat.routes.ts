@@ -82,6 +82,7 @@ import {
     isChatAgentConfigured,
     runFootballAgent,
 } from '../services/chat-agent.service';
+import { tryDeterministicFootballReply } from '../services/chat-deterministic-fallback.service';
 
 // Data-backed factual answers stay valid for a few hours; live data is excluded
 // from caching upstream (see FootballChatContext.cacheable).
@@ -830,6 +831,44 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     `[chat] agent path failed — falling back to legacy: ${err?.message ?? err}`,
                 );
             }
+
+            // If the agent is configured but produced nothing (credits/keys),
+            // try a deterministic tools reply before the legacy LLM path.
+            try {
+                const deterministic = await tryDeterministicFootballReply(
+                    trimmedMessage,
+                    messageLanguage,
+                );
+                if (deterministic?.text && !clientClosed) {
+                    sendToken(deterministic.text);
+                    await appendMessage(
+                        userId,
+                        targetConversation.id,
+                        'assistant',
+                        deterministic.text,
+                        'deterministic-tools',
+                    );
+                    const conversationTitle = await maybeAutoTitleConversation(
+                        userId,
+                        targetConversation.id,
+                        trimmedMessage,
+                    );
+                    sendDone({
+                        remaining: await getRemaining(userId, tz),
+                        limit: DAILY_LIMIT,
+                        resetAt: await getResetTimeForUser(userId),
+                        usedModel: 'deterministic-tools',
+                        usedProvider: 'tools',
+                        toolsUsed: deterministic.toolsUsed,
+                        ...(conversationTitle ? { conversationTitle } : {}),
+                    });
+                    return;
+                }
+            } catch (err: any) {
+                logger.warn(
+                    `[chat] post-agent deterministic fallback failed: ${err?.message ?? err}`,
+                );
+            }
         }
 
         // ─── Build prompt (legacy pre-fetch path) ────────────────────────────
@@ -1000,6 +1039,45 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
         if (!firstTokenSent || !usedProvider) {
             logger.error('[chat] all providers failed:', providerErrors.join(' | '));
+
+            // Last-resort: answer from football tools without an LLM so chat
+            // still works when Gemini/OpenRouter keys or credits are down.
+            try {
+                const deterministic = await tryDeterministicFootballReply(
+                    trimmedMessage,
+                    messageLanguage,
+                );
+                if (deterministic?.text && !clientClosed) {
+                    sendToken(deterministic.text);
+                    await appendMessage(
+                        userId,
+                        targetConversation.id,
+                        'assistant',
+                        deterministic.text,
+                        'deterministic-tools',
+                    );
+                    const conversationTitle = await maybeAutoTitleConversation(
+                        userId,
+                        targetConversation.id,
+                        trimmedMessage,
+                    );
+                    sendDone({
+                        remaining: await getRemaining(userId, tz),
+                        limit: DAILY_LIMIT,
+                        resetAt: await getResetTimeForUser(userId),
+                        usedModel: 'deterministic-tools',
+                        usedProvider: 'tools',
+                        toolsUsed: deterministic.toolsUsed,
+                        ...(conversationTitle ? { conversationTitle } : {}),
+                    });
+                    return;
+                }
+            } catch (err: any) {
+                logger.warn(
+                    `[chat] deterministic fallback failed: ${err?.message ?? err}`,
+                );
+            }
+
             if (!isResume) await decrementLimit(userId, tz);
             sendError('AI service error. Please try again.');
             return;
