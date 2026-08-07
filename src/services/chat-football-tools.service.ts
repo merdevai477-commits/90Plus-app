@@ -250,7 +250,8 @@ function detectStatType(message: string): PlayerStatType {
   return 'general';
 }
 
-function detectLeague(message: string): { id: number; label: string } | null {
+/** Resolve a league mention (AR/EN) to API-Football league id. */
+export function detectLeague(message: string): { id: number; label: string } | null {
   for (const entry of LEAGUE_ALIASES) {
     if (entry.pattern.test(message)) {
       return { id: entry.id, label: entry.label };

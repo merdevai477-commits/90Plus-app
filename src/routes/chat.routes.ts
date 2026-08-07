@@ -78,6 +78,10 @@ import {
     resolveGeminiChatModel,
     type GeminiChatStreamClient,
 } from '../services/gemini-chat.client';
+import {
+    isChatAgentConfigured,
+    runFootballAgent,
+} from '../services/chat-agent.service';
 
 // Data-backed factual answers stay valid for a few hours; live data is excluded
 // from caching upstream (see FootballChatContext.cacheable).
@@ -762,7 +766,70 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             }
         }
 
-        // ─── Build prompt ────────────────────────────────────────────────────
+        // ─── Tool-calling agent (OpenRouter Qwen) — preferred path ───────────
+        // Bypasses the generic answer cache so temporal questions never get
+        // stale hallucinated tables. Falls through to legacy on failure.
+        if (!isResume && !sanitizedSuffix && isChatAgentConfigured() && !clientClosed) {
+            const category = detectCategory(trimmedMessage);
+            const lengthMode = detectLengthMode(trimmedMessage);
+            const agentSystemPrompt = [
+                buildLanguageLockPrompt(messageLanguage),
+                buildSystemPrompt(category, lengthMode),
+            ]
+                .filter(Boolean)
+                .join('\n\n');
+
+            const historyForAgent = buildHistoryWindow(
+                Array.isArray(history) ? history : [],
+            );
+
+            try {
+                const abort = new AbortController();
+                req.on('close', () => abort.abort());
+
+                const agentResult = await runFootballAgent({
+                    systemPrompt: agentSystemPrompt,
+                    history: historyForAgent,
+                    userMessage: trimmedMessage,
+                    language: messageLanguage,
+                    onToken: (token) => {
+                        if (!clientClosed) sendToken(token);
+                    },
+                    signal: abort.signal,
+                });
+
+                if (agentResult.fullText.trim().length > 0 && !clientClosed) {
+                    await appendMessage(
+                        userId,
+                        targetConversation.id,
+                        'assistant',
+                        agentResult.fullText,
+                        agentResult.usedModel,
+                    );
+                    const conversationTitle = await maybeAutoTitleConversation(
+                        userId,
+                        targetConversation.id,
+                        trimmedMessage,
+                    );
+                    sendDone({
+                        remaining: await getRemaining(userId, tz),
+                        limit: DAILY_LIMIT,
+                        resetAt: await getResetTimeForUser(userId),
+                        usedModel: agentResult.usedModel,
+                        usedProvider: 'agent',
+                        toolsUsed: agentResult.toolsUsed,
+                        ...(conversationTitle ? { conversationTitle } : {}),
+                    });
+                    return;
+                }
+            } catch (err: any) {
+                logger.warn(
+                    `[chat] agent path failed — falling back to legacy: ${err?.message ?? err}`,
+                );
+            }
+        }
+
+        // ─── Build prompt (legacy pre-fetch path) ────────────────────────────
         const category = detectCategory(trimmedMessage);
         let lengthMode = detectLengthMode(trimmedMessage);
 
