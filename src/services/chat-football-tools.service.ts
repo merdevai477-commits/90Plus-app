@@ -60,9 +60,11 @@ const LEAGUE_ALIASES: Array<{ pattern: RegExp; id: number; label: string }> = [
   { pattern: /serie\s*a|الدوري\s*الإيطالي|الايطالي/i, id: 135, label: 'Serie A' },
   { pattern: /bundesliga|الدوري\s*الألماني|الالماني/i, id: 78, label: 'Bundesliga' },
   { pattern: /ligue\s*1|الدوري\s*الفرنسي/i, id: 61, label: 'Ligue 1' },
-  { pattern: /champions\s*league|دوري\s*الأبطال|ابطال\s*اوروبا/i, id: 2, label: 'UEFA Champions League' },
+  { pattern: /champions\s*league|دوري\s*الأبطال|ابطال\s*اوروبا|شامبيونز/i, id: 2, label: 'UEFA Champions League' },
   { pattern: /saudi\s*pro|الدوري\s*السعودي|روشن/i, id: 307, label: 'Saudi Pro League' },
   { pattern: /egyptian\s*premier|الدوري\s*المصري/i, id: 233, label: 'Egyptian Premier League' },
+  { pattern: /bolivia|بوليفي|البوليفي/i, id: 344, label: 'Division Profesional - Bolivia' },
+  { pattern: /caf\s*champions|دوري\s*أبطال\s*أفريقيا|ابطال\s*افريقيا|أبطال\s*أفريقيا/i, id: 12, label: 'CAF Champions League' },
 ];
 
 const UCL_LEAGUE_ID = 2;

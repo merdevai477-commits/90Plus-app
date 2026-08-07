@@ -399,14 +399,30 @@ async function toolTodayMatches(args: Record<string, unknown> = {}) {
   if (league) {
     pool = fixtures.filter((f: any) => f?.league?.id === league.id);
     if (!pool.length) {
-      // Soft match on league name when id mapping misses
       const needle = league.label.toLowerCase();
-      pool = fixtures.filter((f: any) =>
-        String(f?.league?.name ?? '')
-          .toLowerCase()
-          .includes(needle.split(' ')[0] ?? needle),
-      );
+      pool = fixtures.filter((f: any) => {
+        const name = String(f?.league?.name ?? '').toLowerCase();
+        const country = String(f?.league?.country ?? '').toLowerCase();
+        return (
+          name.includes(needle.split(' ')[0] ?? needle) ||
+          country.includes('bolivia') ||
+          (league.id === 344 && /bolivia|boliv/i.test(`${name} ${country}`))
+        );
+      });
     }
+  } else if (leagueText) {
+    // Free-text fallback when league isn't in the alias table
+    const needle = leagueText.toLowerCase();
+    pool = fixtures.filter((f: any) => {
+      const name = String(f?.league?.name ?? '').toLowerCase();
+      const country = String(f?.league?.country ?? '').toLowerCase();
+      return (
+        name.includes(needle) ||
+        country.includes(needle) ||
+        (/بوليفي|bolivia/i.test(leagueText) && /bolivia|boliv/i.test(`${name} ${country}`)) ||
+        (/افريق|أفريق|africa|caf/i.test(leagueText) && /caf|africa|أفريق/i.test(`${name} ${country}`))
+      );
+    });
   }
 
   const top = [...pool]
