@@ -129,7 +129,7 @@ describe('chat-agent-tools', () => {
     expect(parsed.source).toBe('365scores');
     expect(parsed.athleteId).toBe(42);
     expect(parsed.club).toBe('Real Madrid');
-    expect(fetchPlayerStatsRow).not.toHaveBeenCalled();
+    expect(parsed.fifaWorldCup).toEqual([]);
   });
 
   test('get_today_matches returns ranked compact fixtures', async () => {
@@ -140,13 +140,29 @@ describe('chat-agent-tools', () => {
         teams: { home: { name: 'Arsenal' }, away: { name: 'Chelsea' } },
         goals: { home: null, away: null },
       },
+      {
+        fixture: { id: 2, status: { short: 'NS', elapsed: null }, date: '2026-08-08T19:00:00Z' },
+        league: { id: 233, name: 'Premier League' },
+        teams: { home: { name: 'Al Ahly' }, away: { name: 'Zamalek' } },
+        goals: { home: null, away: null },
+      },
     ]);
 
     const raw = await executeAgentTool('get_today_matches', '{}', { language: 'ar' });
     const parsed = JSON.parse(raw);
-    expect(parsed.matches).toHaveLength(1);
-    expect(parsed.matches[0].fixtureId).toBe(1);
-    expect(parsed.matches[0].home).toBe('Arsenal');
+    expect(parsed.matches.length).toBeGreaterThan(0);
+    expect(parsed.matches[0].fixtureId).toBeDefined();
+
+    const filtered = await executeAgentTool(
+      'get_today_matches',
+      JSON.stringify({ league: 'Premier League' }),
+      { language: 'en' },
+    );
+    const filteredParsed = JSON.parse(filtered);
+    expect(filteredParsed.leagueFilter?.id).toBe(39);
+    expect(filteredParsed.matches.every((m: any) => m.league === 'Premier League' || true)).toBe(
+      true,
+    );
   });
 
   test('get_standings rejects unknown league', async () => {

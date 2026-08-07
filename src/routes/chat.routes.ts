@@ -725,10 +725,13 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 : '';
 
         const cacheLang = messageLanguage;
+        const agentEnabled = !isResume && !sanitizedSuffix && isChatAgentConfigured();
         const playerInfoQuery =
-            !isResume && !sanitizedSuffix ? detectPlayerInfoQuery(trimmedMessage) : null;
+            !agentEnabled && !isResume && !sanitizedSuffix
+                ? detectPlayerInfoQuery(trimmedMessage)
+                : null;
 
-        // ─── player_info cache (by player name — instant, no API / no LLM) ───
+        // ─── player_info cache (skipped when tool agent is on — avoids stale answers)
         if (playerInfoQuery && !clientClosed) {
             const playerCached = await resolvePlayerInfoAnswer({
                 ...playerInfoQuery,
@@ -769,7 +772,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
         // ─── Tool-calling agent (OpenRouter Qwen) — preferred path ───────────
         // Bypasses the generic answer cache so temporal questions never get
         // stale hallucinated tables. Falls through to legacy on failure.
-        if (!isResume && !sanitizedSuffix && isChatAgentConfigured() && !clientClosed) {
+        if (agentEnabled && !clientClosed) {
             const category = detectCategory(trimmedMessage);
             const lengthMode = detectLengthMode(trimmedMessage);
             const agentSystemPrompt = [
