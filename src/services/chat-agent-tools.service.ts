@@ -382,8 +382,25 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
         nationality: info?.nationalityName ?? info?.nationality ?? null,
         age: info?.age ?? null,
         position: info?.positionName ?? info?.position ?? null,
-        seasonStats: season,
-        currentSeasonHighlights: (career?.currentSeasonHighlights ?? []).slice(0, 6),
+        seasonStats: season
+          ? {
+              label: season.label ?? null,
+              goals: season.goals ?? null,
+              assists: season.assists ?? null,
+              appearances: season.appearances ?? null,
+              minutes: season.minutes ?? null,
+              competitions: Array.isArray(season.competitions)
+                ? season.competitions.slice(0, 5).map((c: any) => ({
+                    competitionName: c.competitionName,
+                    teamName: c.teamName,
+                    goals: c.goals,
+                    assists: c.assists,
+                    appearances: c.appearances,
+                  }))
+                : [],
+            }
+          : null,
+        currentSeasonHighlights: (career?.currentSeasonHighlights ?? []).slice(0, 4),
         ...trophySummary,
         apiFootballWorldCup: apiFb
           ? {
@@ -391,7 +408,7 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
               wins: apiFb.fifaWorldCupWins,
             }
           : null,
-        note: 'Use fifaWorldCup / championsLeague / cafChampions from trophies. Prefer seasonStats/currentSeasonHighlights for latest season. Prefer `club` over clubRaw.',
+        note: 'Use fifaWorldCup / championsLeague / cafChampions from trophies. Prefer seasonStats for latest season. Prefer `club` over clubRaw.',
       };
     }
   } catch (err) {

@@ -46,7 +46,17 @@ function formatPlayerCareer(data: any, q: string): string | null {
 
 function formatSearchPlayer(data: any, q: string): string | null {
   if (!data || data.error) return null;
-  if (data.truncated && data.preview) {
+  if (data.truncated && typeof data.preview === 'string') {
+    // preview may be cut mid-JSON — recover key season fields by regex
+    const goals = data.preview.match(/"goals":(\d+)/);
+    const assists = data.preview.match(/"assists":(\d+)/);
+    const apps = data.preview.match(/"appearances":(\d+)/);
+    const label = data.preview.match(/"label":"([^"]+)"/);
+    const name = data.preview.match(/"name":"([^"]+)"/);
+    const club = data.preview.match(/"club":"([^"]+)"/);
+    if (goals || assists) {
+      return `${name?.[1] ?? 'محمد صلاح'} في آخر موسم (${label?.[1] ?? '—'}): ${goals?.[1] ?? 0} هدف و${assists?.[1] ?? 0} صناعة في ${apps?.[1] ?? '—'} مباراة${club?.[1] ? ` مع ${club[1]}` : ''}.`;
+    }
     try {
       return formatSearchPlayer(JSON.parse(data.preview), q);
     } catch {
