@@ -18,8 +18,10 @@ import {
   fetchPlayerStatsRow,
   fetchPlayerUclCareerDossier,
 } from './chat-football-tools.service';
+import { resolvePlayerName } from './player-name-resolver.service';
 import { ensureScores365GameMapping } from './scores365-experiment.service';
 import { threeSixFiveScoresService } from './threeSixFiveScores.service';
+
 
 const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'P', 'LIVE', 'BT', 'INT', 'SUSP']);
 
@@ -293,11 +295,18 @@ function summarizeTrophies(trophies: Array<{ name?: string; displayName?: string
     name: t.displayName ?? t.name ?? '—',
     count: t.count ?? 1,
   }));
-  const worldCup = list.filter((t) =>
-    /fifa\s*world\s*cup|^world\s*cup|كأس\s*العالم/i.test(t.name) &&
-    !/club|u20|u-20|تحت|youth/i.test(t.name),
+  const fifaWorldCup = list.filter(
+    (t) =>
+      /fifa\s*world\s*cup|^world\s*cup|كأس\s*العالم/i.test(t.name) &&
+      !/club|u20|u-20|تحت|youth|أندية|انديه/i.test(t.name),
   );
-  return { trophies: list.slice(0, 20), fifaWorldCup: worldCup };
+  const championsLeague = list.filter((t) =>
+    /uefa\s*champions|دوري\s*أبطال\s*اوروبا|دوري\s*ابطال\s*اوروبا|شامبيونز/i.test(t.name),
+  );
+  const cafChampions = list.filter((t) =>
+    /caf\s*champions|أبطال\s*أفريقيا|ابطال\s*افريقيا|دوري\s*أبطال\s*أفريقيا/i.test(t.name),
+  );
+  return { trophies: list.slice(0, 20), fifaWorldCup, championsLeague, cafChampions };
 }
 
 async function enrichApiFootballTrophies(playerName: string, existingAthleteId?: number) {
@@ -333,8 +342,11 @@ async function enrichApiFootballTrophies(playerName: string, existingAthleteId?:
 }
 
 async function toolSearchPlayer(args: Record<string, unknown>, language: MessageLanguage) {
-  const name = String(args.player_name ?? '').trim();
-  if (name.length < 2) return { error: 'player_name required' };
+  const rawName = String(args.player_name ?? '').trim();
+  if (rawName.length < 2) return { error: 'player_name required' };
+
+  const resolved = await resolvePlayerName(rawName);
+  const name = resolved?.english ?? rawName;
 
   try {
     const from365 = await footballDataCacheService.lookup365Player(name, language, {
@@ -346,17 +358,25 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
     if (player) {
       const info = player.info as any;
       const career = player.career as any;
+      const club =
+        career?.profile?.clubName ??
+        info?.clubName ??
+        player.clubName ??
+        null;
       const trophySummary = summarizeTrophies(career?.trophies ?? []);
       const apiFb = await enrichApiFootballTrophies(name, player.athleteId);
       return {
         source: '365scores',
+        query: rawName,
+        resolvedAs: name,
         athleteId: player.athleteId,
         name: player.name || player.shortName,
-        club: player.clubName ?? info?.clubName ?? null,
+        club,
         nationality: info?.nationalityName ?? info?.nationality ?? null,
         age: info?.age ?? null,
         position: info?.positionName ?? info?.position ?? null,
         seasonStats: career?.currentSeason ?? career?.seasons?.[0] ?? null,
+        currentSeasonHighlights: (career?.currentSeasonHighlights ?? []).slice(0, 6),
         ...trophySummary,
         apiFootballWorldCup: apiFb
           ? {
@@ -364,7 +384,7 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
               wins: apiFb.fifaWorldCupWins,
             }
           : null,
-        note: 'Use fifaWorldCup / apiFootballWorldCup for World Cup title questions. Prefer season-level wins when present.',
+        note: 'Use fifaWorldCup / championsLeague / cafChampions from trophies. Prefer currentSeasonHighlights for latest season stats.',
       };
     }
   } catch (err) {
@@ -372,12 +392,12 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
   }
 
   const row = await fetchPlayerStatsRow(name);
-  if (!row) return { error: 'player_not_found', query: name };
-  const apiFb = row.apiPlayerId
-    ? await enrichApiFootballTrophies(name)
-    : null;
+  if (!row) return { error: 'player_not_found', query: rawName, resolvedAs: name };
+  const apiFb = row.apiPlayerId ? await enrichApiFootballTrophies(name) : null;
   return {
     source: 'api-football',
+    query: rawName,
+    resolvedAs: name,
     apiPlayerId: row.apiPlayerId ?? null,
     summary: row.aiResponse,
     aliases: row.aliases ?? [],
@@ -601,8 +621,10 @@ async function toolTeamInfo(args: Record<string, unknown>) {
 }
 
 async function toolPlayerCareer(args: Record<string, unknown>, language: MessageLanguage) {
-  const name = String(args.player_name ?? '').trim();
-  if (!name) return { error: 'player_name required' };
+  const rawName = String(args.player_name ?? '').trim();
+  if (!rawName) return { error: 'player_name required' };
+  const resolved = await resolvePlayerName(rawName);
+  const name = resolved?.english ?? rawName;
 
   const from365 = await footballDataCacheService.lookup365Player(name, language, {
     limit: 1,
@@ -611,27 +633,29 @@ async function toolPlayerCareer(args: Record<string, unknown>, language: Message
   const player = from365.data?.players?.[0];
   const trophySummary = player
     ? summarizeTrophies(((player.career as any)?.trophies ?? []) as any[])
-    : { trophies: [], fifaWorldCup: [] };
+    : { trophies: [], fifaWorldCup: [], championsLeague: [], cafChampions: [] };
   const apiFb = await enrichApiFootballTrophies(name, player?.athleteId);
 
   const dossier = await fetchPlayerUclCareerDossier(name, language);
 
   if (!player && !dossier && !apiFb) {
-    return { error: 'player_not_found', query: name };
+    return { error: 'player_not_found', query: rawName, resolvedAs: name };
   }
 
   return {
     source: player ? '365scores+api' : dossier ? 'ucl_dossier' : 'api-football',
+    query: rawName,
+    resolvedAs: name,
     athleteId: player?.athleteId ?? null,
     name: player?.name ?? name,
-    club: player?.clubName ?? null,
+    club: (player?.career as any)?.profile?.clubName ?? player?.clubName ?? null,
     ...trophySummary,
     apiFootballWorldCup: apiFb
       ? { count: apiFb.fifaWorldCupCount, wins: apiFb.fifaWorldCupWins }
       : null,
     uclSummary: dossier ?? null,
     guidance:
-      'For FIFA World Cup titles: prefer apiFootballWorldCup.wins (season+place) when present; else fifaWorldCup count from 365. Do NOT invent extra titles.',
+      'For FIFA World Cup: prefer apiFootballWorldCup.wins when present; else fifaWorldCup. For UCL use championsLeague count / uclSummary. For African titles use cafChampions. Do NOT invent extra titles.',
   };
 }
 

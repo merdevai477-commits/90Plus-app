@@ -139,6 +139,25 @@ const TEAM_ALIASES: TeamAlias[] = [
     apiTeamId: 492,
     aliases: ['نابولي', 'napoli'],
   },
+  {
+    englishName: 'Al Ahly',
+    apiTeamId: 1015,
+    aliases: [
+      'الأهلي',
+      'الاهلي',
+      'اهلي',
+      'الأهلي المصري',
+      'الاهلي المصري',
+      'al ahly',
+      'al-ahly',
+      'ahly',
+    ],
+  },
+  {
+    englishName: 'Zamalek',
+    apiTeamId: 1016,
+    aliases: ['الزمالك', 'زمالك', 'zamalek'],
+  },
 ];
 
 interface NormalizedTeamAlias {
