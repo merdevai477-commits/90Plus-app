@@ -192,7 +192,7 @@ export function buildGroundingSystemMessage(facts: GroundedFacts): string | null
     '- لو العدد 0 قول إنه لسه ماكسبها من غير ما تخترع رقم.',
     '- ممنوع منعًا باتًا تضيف من ذاكرتك سنة بطولة، اسم منتخب، اسم نادي، أو اسم بطولة/نسخة مش موجودة في الحقائق فوق.',
     '- اذكر النادي الحالي للاعب زي ما هو فوق بالظبط، ومتقولش نادي تاني من ذاكرتك.',
-    '- رد مختصر وواقعي زي ريل تايم، من غير سرد تاريخي أو تخمين.',
+    '- رد بأسلوب صاحب كروي محترف: ابدأ بالإجابة و**بولد** للرقم/النادي المهم، وخليك مختصر وواقعي زي ريل تايم من غير سرد تاريخي أو تخمين. تقدر تستخدم جدول Markdown مضغوط لو البيانات كتيرة.',
   ].join('\n');
 }
 
@@ -231,8 +231,8 @@ export function buildGroundedFactReply(
     if (t?.cafChampionsLeagueWins != null) {
       const name = t.teamName ?? (en ? 'The team' : 'الفريق');
       return en
-        ? `${name} has ${t.cafChampionsLeagueWins} CAF Champions League titles.`
-        : `${name} معاه ${t.cafChampionsLeagueWins} لقب دوري أبطال أفريقيا.`;
+        ? `**${name}** has **${t.cafChampionsLeagueWins}** CAF Champions League titles.`
+        : `**${name}** معاه **${t.cafChampionsLeagueWins}** لقب دوري أبطال أفريقيا.`;
     }
   }
 
@@ -250,12 +250,12 @@ export function buildGroundedFactReply(
     const n = p.championsLeagueTitles;
     if (en) {
       return n === 0
-        ? `${name} hasn't won the Champions League yet${clubTail}.`
-        : `${name} has ${n} Champions League title${n === 1 ? '' : 's'}${clubTail}.`;
+        ? `**${name}** hasn't won the Champions League yet${clubTail}.`
+        : `**${name}** has **${n}** Champions League title${n === 1 ? '' : 's'}${clubTail}.`;
     }
     return n === 0
-      ? `${name} لسه ماكسبش دوري أبطال أوروبا${clubTail}.`
-      : `${name} معاه ${n} دوري أبطال أوروبا${clubTail}.`;
+      ? `**${name}** لسه ماكسبش دوري أبطال أوروبا${clubTail}.`
+      : `**${name}** معاه **${n}** دوري أبطال أوروبا${clubTail}.`;
   }
 
   // World Cup count / yes-no (Yamal, Messi).
@@ -263,21 +263,21 @@ export function buildGroundedFactReply(
     const n = p.worldCupTitles;
     if (en) {
       return n === 0
-        ? `${name} hasn't won a World Cup (per available data).`
-        : `${name} has ${n} World Cup title${n === 1 ? '' : 's'}.`;
+        ? `**${name}** hasn't won a World Cup (per available data).`
+        : `**${name}** has **${n}** World Cup title${n === 1 ? '' : 's'}.`;
     }
     return n === 0
-      ? `${name} لسه معندوش كاس عالم (حسب البيانات المتاحة).`
+      ? `**${name}** لسه معندوش كاس عالم (حسب البيانات المتاحة).`
       : n === 1
-        ? `${name} معاه كاس عالم واحد.`
-        : `${name} معاه ${n} كاس عالم.`;
+        ? `**${name}** معاه كاس عالم واحد.`
+        : `**${name}** معاه **${n}** كاس عالم.`;
   }
 
   // Current club (Dembele → PSG).
   if (isClub && p.currentClub) {
     return en
-      ? `${name} currently plays for ${p.currentClub}.`
-      : `${name} بيلعب دلوقتي مع ${p.currentClub}.`;
+      ? `**${name}** currently plays for **${p.currentClub}**.`
+      : `**${name}** بيلعب دلوقتي مع **${p.currentClub}**.`;
   }
 
   return null;

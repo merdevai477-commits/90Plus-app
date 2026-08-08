@@ -13,18 +13,44 @@ function pickPlayerName(msg: string): string | null {
   return m?.[1]?.trim() ?? null;
 }
 
+/** Ambiguous/low-confidence tool result → ask a short "قصدك ...؟" instead of guessing. */
+function formatClarification(data: any): string | null {
+  if (!data) return null;
+  const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+  if (data.status === 'need_clarification' || (data.error && suggestions.length)) {
+    if (!suggestions.length) return null;
+    const names = suggestions
+      .map((s: any) => (s.club ? `**${s.name}** (${s.club})` : `**${s.name}**`))
+      .join(' ولا ');
+    return `مش متأكد تقصد مين بالظبط 🤔 — قصدك ${names}؟`;
+  }
+  return null;
+}
+
 function formatPlayerCareer(data: any, q: string): string | null {
-  if (!data || data.error) return null;
+  if (!data) return null;
+  const clarify = formatClarification(data);
+  if (clarify) return clarify;
+  if (data.error) return null;
   const name = data.name ?? data.resolvedAs ?? 'اللاعب';
   const club = data.club ?? data.quickFacts?.currentClub ?? null;
-  const clubSuffix = club ? ` مع ${club}` : '';
+  const clubSuffix = club ? ` مع **${club}**` : '';
 
+  // World Cup GOALS (distinct from titles) — needs "أهداف/goals" + world cup.
+  if (
+    /كاس عالم|كأس العالم|world\s*cup|مونديال/i.test(q) &&
+    /اهداف|أهداف|جاب|سجل|goals?|scored/i.test(q) &&
+    data.worldCupGoals &&
+    data.worldCupGoals.total != null
+  ) {
+    return `**${name}** سجّل **${data.worldCupGoals.total}** هدف في كأس العالم${clubSuffix}.`;
+  }
   if (/شامبيونز|ابطال اوروبا|أبطال أوروبا|champions/i.test(q)) {
     const n =
       data.quickFacts?.championsLeagueTitles ??
       data.championsLeague?.[0]?.count ??
       null;
-    if (n != null && Number(n) >= 0) return `${name} معاه ${n} شامبيونز ليج.`;
+    if (n != null && Number(n) >= 0) return `**${name}** معاه **${n}** شامبيونز ليج.`;
   }
   if (/كاس عالم|كأس العالم|world\s*cup/i.test(q)) {
     const n =
@@ -33,28 +59,31 @@ function formatPlayerCareer(data: any, q: string): string | null {
       data.fifaWorldCup?.[0]?.count ??
       null;
     if (n != null) {
-      if (Number(n) === 0) return `${name} معندوش كاس عالم لحد دلوقتي (حسب البيانات المتاحة).`;
-      return `${name} معاه ${n} كاس عالم.`;
+      if (Number(n) === 0) return `**${name}** معندوش كاس عالم لحد دلوقتي (حسب البيانات المتاحة).`;
+      return `**${name}** معاه **${n}** كاس عالم.`;
     }
   }
   if (/سيزون|موسم|احصائ|إحصائ|بيانات/i.test(q)) {
     const s = data.seasonStats;
     if (s) {
-      return `${name} في آخر موسم (${s.label ?? '—'}): ${s.goals ?? 0} هدف و${s.assists ?? 0} صناعة في ${s.appearances ?? '—'} مباراة${clubSuffix}.`;
+      return `**${name}** في آخر موسم (${s.label ?? '—'}): **${s.goals ?? 0}** هدف و**${s.assists ?? 0}** صناعة في ${s.appearances ?? '—'} مباراة${clubSuffix}.`;
     }
     if (data.quickFacts?.latestSeasonLine) {
-      return `${name} — ${data.quickFacts.latestSeasonLine}${clubSuffix}.`;
+      return `**${name}** — ${data.quickFacts.latestSeasonLine}${clubSuffix}.`;
     }
-    if (data.answerHint) return `${name}: ${data.answerHint}`;
+    if (data.answerHint) return `**${name}**: ${data.answerHint}`;
   }
   if (/يلعب|نادي|فين|أين|اين|حاليا|حالياً/i.test(q) && club) {
-    return `${name} بيلعب دلوقتي مع ${club}.`;
+    return `**${name}** بيلعب دلوقتي مع **${club}**.`;
   }
   return null;
 }
 
 function formatSearchPlayer(data: any, q: string): string | null {
-  if (!data || data.error) return null;
+  if (!data) return null;
+  const clarify = formatClarification(data);
+  if (clarify) return clarify;
+  if (data.error) return null;
   if (data.truncated && typeof data.preview === 'string') {
     // preview may be cut mid-JSON — recover key season fields by regex
     const goals = data.preview.match(/"goals":(\d+)/);
@@ -75,16 +104,63 @@ function formatSearchPlayer(data: any, q: string): string | null {
   return formatPlayerCareer(data, q);
 }
 
-function formatTeam(data: any): string | null {
+function formatTeam(data: any, q?: string): string | null {
   if (!data || data.error) return null;
+  const team = data.teamName ?? 'الفريق';
+  if (q && /مدرب|مدير فني|coach|manager/i.test(q) && data.coach) {
+    return `مدرب **${team}** الحالي هو **${data.coach}**.`;
+  }
   if (data.cafChampionsLeagueWins != null) {
-    return `الأهلي معاه ${data.cafChampionsLeagueWins} لقب دوري أبطال أفريقيا.`;
+    return `**${team}** معاه **${data.cafChampionsLeagueWins}** لقب دوري أبطال أفريقيا.`;
+  }
+  if (data.coach) {
+    return `مدرب **${team}** الحالي هو **${data.coach}**.`;
   }
   return null;
 }
 
 function formatToday(data: any): string | null {
   if (!data) return null;
+  const live = Array.isArray(data.live) ? data.live : [];
+  const finished = Array.isArray(data.finished) ? data.finished : [];
+  const upcoming = Array.isArray(data.upcoming) ? data.upcoming : [];
+  const grouped = live.length || finished.length || upcoming.length;
+
+  if (grouped) {
+    const sections: string[] = [];
+    if (live.length) {
+      sections.push(
+        '🔴 لايف دلوقتي:\n' +
+          live
+            .slice(0, 6)
+            .map(
+              (m: any) =>
+                `• ${m.home} ضد ${m.away}: **${m.score?.home ?? 0}-${m.score?.away ?? 0}** (دقيقة ${m.minute ?? '—'})`,
+            )
+            .join('\n'),
+      );
+    }
+    if (finished.length) {
+      sections.push(
+        '✅ خلصت:\n' +
+          finished
+            .slice(0, 6)
+            .map((m: any) => `• ${m.home} ضد ${m.away}: **${m.score?.home ?? 0}-${m.score?.away ?? 0}**`)
+            .join('\n'),
+      );
+    }
+    if (upcoming.length) {
+      sections.push(
+        '⏳ جاية:\n' +
+          upcoming
+            .slice(0, 6)
+            .map((m: any) => `• ${m.home} ضد ${m.away}`)
+            .join('\n'),
+      );
+    }
+    if (sections.length) return sections.join('\n\n');
+  }
+
   const matches = Array.isArray(data.matches) ? data.matches : [];
   if (!matches.length) {
     return data.note ?? 'مفيش مباريات مطابقة للدوري ده النهاردة.';
@@ -92,10 +168,10 @@ function formatToday(data: any): string | null {
   const lines = matches.slice(0, 6).map((m: any, i: number) => {
     const score =
       m.score?.home != null && m.score?.away != null
-        ? `${m.score.home}-${m.score.away}`
+        ? `**${m.score.home}-${m.score.away}**`
         : 'لسه';
-    const live = m.minute != null ? ` (دقيقة ${m.minute}, ${m.status})` : ` (${m.status})`;
-    return `${i + 1}) ${m.home} ضد ${m.away}: ${score}${live}`;
+    const live2 = m.minute != null ? ` (دقيقة ${m.minute}, ${m.status})` : ` (${m.status})`;
+    return `${i + 1}) ${m.home} ضد ${m.away}: ${score}${live2}`;
   });
   return `مباريات النهاردة:\n${lines.join('\n')}`;
 }
@@ -112,7 +188,7 @@ function formatLive(data: any): string | null {
       m.score?.home != null && m.score?.away != null
         ? `${m.score.home}-${m.score.away}`
         : '?-?';
-    return `• ${m.home} ضد ${m.away}: ${score} — دقيقة ${m.minute ?? '—'} (${m.league ?? ''})`;
+    return `• ${m.home} ضد ${m.away}: **${score}** — دقيقة ${m.minute ?? '—'} (${m.league ?? ''})`;
   });
   return `فيه ماتشات لايف دلوقتي:\n${lines.join('\n')}`;
 }
@@ -153,9 +229,9 @@ export async function tryDeterministicFootballReply(
       if (text) return { text, toolsUsed };
     }
 
-    if (/اهلي|أهلي|ahly/i.test(q) && /افريق|أفريق|africa|caf/i.test(q)) {
+    if (/اهلي|أهلي|ahly/i.test(q) && /افريق|أفريق|africa|caf|مدرب|coach/i.test(q)) {
       const data = await run('get_team_info', { team_name: 'الأهلي' });
-      const text = formatTeam(data);
+      const text = formatTeam(data, q);
       if (text) return { text, toolsUsed };
     }
 

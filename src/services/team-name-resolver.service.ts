@@ -20,6 +20,7 @@ import {
   transliterateArabicToLatin,
   containsArabicScript,
   scoreEntityNameMatch,
+  foldArabic,
 } from './quiz-name-match.util';
 
 export interface ResolvedTeam {
@@ -160,6 +161,67 @@ const TEAM_ALIASES: TeamAlias[] = [
   },
 ];
 
+/**
+ * Arabic → English country names for national teams. API-Football stores the
+ * national side under the country's English name (e.g. "Egypt"), so mapping the
+ * Arabic query to English lets the normal team search resolve it — no fragile
+ * hardcoded team ids. Keys are stored Arabic-folded for typo tolerance.
+ */
+const NATIONAL_TEAM_COUNTRIES: Array<[string, string]> = [
+  ['مصر', 'Egypt'],
+  ['السعوديه', 'Saudi Arabia'],
+  ['المغرب', 'Morocco'],
+  ['الجزائر', 'Algeria'],
+  ['تونس', 'Tunisia'],
+  ['العراق', 'Iraq'],
+  ['الاردن', 'Jordan'],
+  ['قطر', 'Qatar'],
+  ['الامارات', 'United Arab Emirates'],
+  ['الارجنتين', 'Argentina'],
+  ['البرازيل', 'Brazil'],
+  ['فرنسا', 'France'],
+  ['اسبانيا', 'Spain'],
+  ['البرتغال', 'Portugal'],
+  ['المانيا', 'Germany'],
+  ['انجلترا', 'England'],
+  ['ايطاليا', 'Italy'],
+  ['هولندا', 'Netherlands'],
+  ['بلجيكا', 'Belgium'],
+  ['كرواتيا', 'Croatia'],
+  ['الاوروجواي', 'Uruguay'],
+  ['المكسيك', 'Mexico'],
+  ['امريكا', 'USA'],
+  ['نيجيريا', 'Nigeria'],
+  ['السنغال', 'Senegal'],
+  ['اليابان', 'Japan'],
+];
+
+const NATIONAL_TEAM_WORD_RE = /منتخب|المنتخب|national\s*team|\bnational\b|\bnt\b/gi;
+
+/**
+ * If the query is a national team (has a "منتخب/national team" marker or is an
+ * exact country name), return the English country name to search by. Returns
+ * null for club queries so the normal path handles them.
+ */
+export function resolveNationalTeamEnglishName(rawName: string): string | null {
+  const raw = rawName?.trim();
+  if (!raw) return null;
+  const hasNtWord = NATIONAL_TEAM_WORD_RE.test(raw);
+  NATIONAL_TEAM_WORD_RE.lastIndex = 0;
+  const cleaned = raw.replace(NATIONAL_TEAM_WORD_RE, ' ').replace(/\s+/g, ' ').trim();
+  NATIONAL_TEAM_WORD_RE.lastIndex = 0;
+  const norm = normalizeName(foldArabic(cleaned));
+  if (!norm) return null;
+
+  for (const [arabic, english] of NATIONAL_TEAM_COUNTRIES) {
+    const arNorm = normalizeName(foldArabic(arabic));
+    const enNorm = normalizeName(english);
+    if (norm === arNorm || norm === enNorm) return english; // exact country name
+    if (hasNtWord && (norm.includes(arNorm) || norm.includes(enNorm))) return english;
+  }
+  return null;
+}
+
 interface NormalizedTeamAlias {
   englishName: string;
   apiTeamId: number;
@@ -238,12 +300,16 @@ export async function resolveTeamId(
     return null;
   }
 
-  // 2. API search. Transliterate Arabic first so Arabic-only names still get a
-  //    Latin query. Only search when the term is >=3 latin chars — this guards
-  //    the API's isValidSearch (Arabic/short terms would 0-result anyway).
-  const searchTerm = containsArabicScript(trimmed)
-    ? transliterateArabicToLatin(trimmed)
-    : trimmed;
+  // 2. API search. National teams first: map "منتخب مصر"/"مصر" → "Egypt" so the
+  //    search hits the country's national side (API stores it under the English
+  //    country name) instead of transliterating to gibberish.
+  const nationalTeam = resolveNationalTeamEnglishName(trimmed);
+  //    Otherwise transliterate Arabic so Arabic-only names still get a Latin
+  //    query. Only search when the term is >=3 latin chars — this guards the
+  //    API's isValidSearch (Arabic/short terms would 0-result anyway).
+  const searchTerm =
+    nationalTeam ??
+    (containsArabicScript(trimmed) ? transliterateArabicToLatin(trimmed) : trimmed);
 
   if (searchTerm.replace(/[^a-z0-9]/gi, '').length < 3) {
     logger.info(`[TeamResolve] "${trimmed}" -> unresolved (search term too short)`);
@@ -258,10 +324,16 @@ export async function resolveTeamId(
     for (const row of results ?? []) {
       const team = row?.team;
       if (!team?.id) continue;
-      const score = Math.max(
+      let score = Math.max(
         scoreEntityNameMatch(searchTerm, team.name ?? ''),
         scoreEntityNameMatch(trimmed, team.name ?? ''),
       );
+      // For national-team queries, prefer the actual national side over any
+      // club that happens to share the country name.
+      if (nationalTeam) {
+        if (team.national === true) score += 0.15;
+        else score -= 0.2;
+      }
       if (score > bestScore) {
         bestScore = score;
         best = team;

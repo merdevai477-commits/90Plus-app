@@ -12,6 +12,7 @@ const BASE =
   'https://90plus-app-production-1808.up.railway.app/api';
 
 const QUERIES = [
+  // Core grounding regression cases (numbers / club / live).
   'حكيمي معاه كام شامبيونز ليج؟',
   'يامال معاه كاس عالم ولا لا؟',
   'بيانات اخر سيزون لمحمد صلاح',
@@ -20,6 +21,14 @@ const QUERIES = [
   'مباريات اليوم في الدوري البوليفي؟',
   'اين يلعب ديبوريم حاليا؟',
   'في ماتش لايف دلوقتي؟ لو فيه قولّي النتيجة والدقيقة',
+  // New accuracy/polish cases (medium-fame, typo, coach, WC goals, league, upcoming).
+  'حمزة عبد الكريم بيلعب فين؟',
+  'إمام عاشور بيلعب فين وبيلعب مع مين؟',
+  'محمد صلاحح جاب كام اهداف الموسم ده؟', // deliberate typo
+  'مين مدرب منتخب مصر؟',
+  'أهداف إمام عاشور في كأس العالم كام؟',
+  'اعرضلي مباريات الدوري المصري النهاردة اللي لعبت واللي جاية',
+  'أهم المباريات الجاية في دوري أبطال أوروبا؟',
 ];
 
 // Reproduce EXACTLY what the mobile app sends. The app attaches a profile

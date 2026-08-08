@@ -17,13 +17,23 @@ import {
   detectLeague,
   fetchPlayerStatsRow,
   fetchPlayerUclCareerDossier,
+  fetchPlayerWorldCupGoals,
 } from './chat-football-tools.service';
 import { resolvePlayerName } from './player-name-resolver.service';
 import { ensureScores365GameMapping } from './scores365-experiment.service';
 import { threeSixFiveScoresService } from './threeSixFiveScores.service';
+import {
+  containsArabicScript,
+  foldArabic,
+  normalizeName,
+  scoreEntityNameMatch,
+  scorePlayerMatch,
+  transliterateArabicToLatin,
+} from './quiz-name-match.util';
 
 
 const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'P', 'LIVE', 'BT', 'INT', 'SUSP']);
+const FINISHED_STATUSES = new Set(['FT', 'AET', 'PEN']);
 
 const HIGHLIGHT_LEAGUE_SCORE: Record<number, number> = {
   2: 100,
@@ -62,7 +72,7 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'get_today_matches',
       description:
-        'List football matches scheduled for today (kickoff, status, score). Optionally filter by league name (e.g. Egyptian Premier League, Premier League, الدوري المصري). Use for "مباريات النهاردة" or league-specific today questions.',
+        "Football matches grouped by status. when='today' (default) returns today's fixtures split into live (with minute), finished (with score), and upcoming (with kickoff). when='upcoming' returns the most important fixtures over the next few days. Optionally filter by league (e.g. الدوري المصري, Premier League). Use for \"مباريات النهاردة\", \"اي اللي لعب/جاي في الدوري\", or \"أهم المباريات الجاية\".",
       parameters: {
         type: 'object',
         properties: {
@@ -70,6 +80,12 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
             type: 'string',
             description:
               'Optional league filter in Arabic or English (e.g. الدوري المصري, Premier League, البريمير ليج, الدوري البوليفي)',
+          },
+          when: {
+            type: 'string',
+            enum: ['today', 'upcoming'],
+            description:
+              "'today' (default) for today's matches grouped by status; 'upcoming' for the most important matches in the next few days.",
           },
         },
       },
@@ -170,7 +186,7 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'get_team_info',
       description:
-        'Team dossier + African/continental titles. REQUIRED for club trophy questions (e.g. الأهلي كام أفريقيا). Returns cafChampionsLeagueWins — use that number only, never invent.',
+        'Team/national-team dossier: current head COACH (مدرب), recent form, league position, and African/continental titles. REQUIRED for club trophy questions (e.g. الأهلي كام أفريقيا) AND for coach questions (e.g. مين مدرب منتخب مصر). Works for clubs and national teams (منتخب مصر = Egypt). Returns coach + cafChampionsLeagueWins — use those values only, never invent.',
       parameters: {
         type: 'object',
         properties: {
@@ -185,7 +201,7 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'get_player_career',
       description:
-        'Full 365Scores player career profile: trophies (World Cup / UCL / CAF), recent seasons, clubs. ALWAYS use for "كام كاس عالم" / titles / ألقاب / career history. Prefer numbers from this tool over memory.',
+        'Full 365Scores player career profile: trophies (World Cup / UCL / CAF), World Cup GOALS (worldCupGoals), recent seasons, clubs. ALWAYS use for "كام كاس عالم" / أهداف في كأس العالم / titles / ألقاب / career history. Prefer numbers from this tool over memory.',
       parameters: {
         type: 'object',
         properties: {
@@ -336,6 +352,46 @@ function buildSeasonStats(season: any | null) {
   };
 }
 
+const WORLD_CUP_COMP_RE = /(fifa\s*)?world\s*cup|كأس\s*العالم|كاس\s*العالم|مونديال/i;
+const WORLD_CUP_EXCLUDE_RE =
+  /club|أندية|انديه|u-?\d|تحت\s*\d|youth|شباب|ناشئ|qualif|تصفيات|women|سيدات|beach|شاطئ|futsal|صالات|intercontinental/i;
+
+/**
+ * Sum a player's FIFA World Cup goals from the 365 career competition rows
+ * (across all seasons). Excludes qualifiers, youth, club, women, beach/futsal.
+ * Returns null when no genuine World Cup row is present (never invents).
+ */
+function aggregateWorldCup365(seasons: any[]): {
+  source: string;
+  total: number;
+  apps: number;
+  editions: Array<{ season: string | null; team: string | null; goals: number; apps: number }>;
+} | null {
+  const editions: Array<{ season: string | null; team: string | null; goals: number; apps: number }> = [];
+  for (const s of seasons ?? []) {
+    for (const c of s?.competitions ?? []) {
+      const name = String(c?.competitionName ?? '');
+      if (!WORLD_CUP_COMP_RE.test(name) || WORLD_CUP_EXCLUDE_RE.test(name)) continue;
+      const goals = Number(c?.goals ?? 0) || 0;
+      const apps = Number(c?.appearances ?? 0) || 0;
+      if (goals === 0 && apps === 0) continue;
+      editions.push({
+        season: s?.label ?? s?.seasonKey ?? null,
+        team: cleanClubName(c?.teamName),
+        goals,
+        apps,
+      });
+    }
+  }
+  if (!editions.length) return null;
+  return {
+    source: '365scores',
+    total: editions.reduce((a, e) => a + e.goals, 0),
+    apps: editions.reduce((a, e) => a + e.apps, 0),
+    editions,
+  };
+}
+
 /**
  * Same 365 profile/career bundle the in-app player profile uses.
  * Profile-first payload so the agent answers from live data, not memory.
@@ -352,6 +408,7 @@ function build365ProfilePayload(
   const seasons: any[] = Array.isArray(career?.seasons) ? career.seasons : [];
   const season = seasons[0] ?? null;
   const seasonStats = buildSeasonStats(season);
+  const worldCupGoals = aggregateWorldCup365(seasons);
   const club =
     seasonStats?.competitions?.[0]?.teamName ||
     cleanClubName(profile.clubName) ||
@@ -424,12 +481,13 @@ function build365ProfilePayload(
     apiFootballWorldCup: opts?.apiFb
       ? { count: opts.apiFb.fifaWorldCupCount, wins: opts.apiFb.fifaWorldCupWins }
       : null,
+    worldCupGoals,
     nextGame,
     answerHint: seasonStats
       ? `Latest season ${seasonStats.label}: ${seasonStats.goals} goals, ${seasonStats.assists} assists, ${seasonStats.appearances} apps at ${club ?? '—'}.`
       : `Current club: ${club ?? 'unknown'}.`,
     answerRules:
-      'STRICT: Use ONLY the numbers/club in this payload (quickFacts / seasonStats / trophies). The current club is `club` / quickFacts.currentClub — state it EXACTLY as written and never name an old or remembered club. Trophy counts come only from quickFacts.worldCupTitles / quickFacts.championsLeagueTitles (if a count is 1 say 1, if 0 say 0). If worldCupTitles>=1 the player HAS won it — never say "hasn\'t won" or reason from his age. NEVER add a World Cup/Champions League year, national team, club, or tournament edition that is not explicitly listed here (only apiFootballWorldCup.wins may contain years). Do NOT add historical narrative. Do NOT say data is missing when seasonStats or quickFacts.latestSeasonLine is present.',
+      'STRICT: Use ONLY the numbers/club in this payload (quickFacts / seasonStats / trophies). The current club is `club` / quickFacts.currentClub — state it EXACTLY as written and never name an old or remembered club. Trophy counts come only from quickFacts.worldCupTitles / quickFacts.championsLeagueTitles (if a count is 1 say 1, if 0 say 0). If worldCupTitles>=1 the player HAS won it — never say "hasn\'t won" or reason from his age. For World Cup GOALS use worldCupGoals.total ONLY; if worldCupGoals is null say you have no confirmed World Cup goal data for this player (do NOT guess a number). NEVER add a World Cup/Champions League year, national team, club, or tournament edition that is not explicitly listed here (only apiFootballWorldCup.wins may contain years). Do NOT add historical narrative. Do NOT say data is missing when seasonStats or quickFacts.latestSeasonLine is present.',
   };
 }
 
@@ -484,35 +542,178 @@ async function enrichApiFootballTrophies(playerName: string, existingAthleteId?:
   }
 }
 
+interface PlayerCandidate {
+  athleteId: number;
+  name: string;
+  shortName?: string;
+  clubName?: string | null;
+}
+
+interface Best365Resolution {
+  best: PlayerCandidate | null;
+  bestScore: number;
+  /** High confidence — answer directly from this player. */
+  confident: boolean;
+  /** Medium confidence with rivals — ask the user to confirm ("قصدك ...؟"). */
+  ambiguous: boolean;
+  /** Top few real 365 hits for a "did you mean" prompt (never invented). */
+  suggestions: Array<{ athleteId: number; name: string; club: string | null }>;
+}
+
+/** Fold Arabic orthographic variants so 365 search matches typos/spelling. */
+const normalizeArabicQuery = foldArabic;
+
+const PLAYER_CONFIDENT_SCORE = 0.82;
+const PLAYER_AMBIGUOUS_SCORE = 0.5;
+
+/**
+ * Resolve the best 365Scores athlete for a (possibly misspelled / medium-fame /
+ * Arabic) name. Unlike the old `limit: 1` behavior, this normalizes the query,
+ * pulls several candidates, and re-ranks them with the shared fuzzy matcher so
+ * the correct player at rank 2+ is not dropped. Returns confidence + real
+ * suggestions for a "did you mean" clarification.
+ */
+async function resolveBest365Player(
+  rawName: string,
+  language: MessageLanguage,
+): Promise<Best365Resolution> {
+  const empty: Best365Resolution = {
+    best: null,
+    bestScore: 0,
+    confident: false,
+    ambiguous: false,
+    suggestions: [],
+  };
+
+  const mapping = await resolvePlayerName(rawName);
+  const canonical =
+    mapping?.english && mapping.resolvedBy && mapping.resolvedBy !== 'raw'
+      ? mapping.english
+      : null;
+  const normalized = normalizeArabicQuery(rawName);
+  const translit = containsArabicScript(rawName) ? transliterateArabicToLatin(rawName) : null;
+
+  // Try the strongest queries first; stop at the first that yields hits.
+  const queries = Array.from(
+    new Set([canonical, normalized, rawName, translit].filter((q): q is string => !!q && q.length >= 2)),
+  );
+
+  let athletes: PlayerCandidate[] = [];
+  for (const q of queries) {
+    try {
+      const search = await threeSixFiveScoresService.searchAthletes(q, language);
+      if (search.data?.length) {
+        athletes = search.data as PlayerCandidate[];
+        break;
+      }
+    } catch (err) {
+      logger.warn('[chat-agent] searchAthletes failed:', (err as Error)?.message);
+    }
+  }
+  if (!athletes.length) return empty;
+
+  const targetNames = Array.from(
+    new Set(
+      [normalizeName(normalized), normalizeName(rawName), canonical ? normalizeName(canonical) : '']
+        .filter(Boolean),
+    ),
+  );
+
+  const scored = athletes
+    .map((a) => {
+      let score = scorePlayerMatch(rawName, targetNames, { name: a.name, lastname: a.shortName });
+      score = Math.max(score, scoreEntityNameMatch(rawName, a.name));
+      score = Math.max(score, scoreEntityNameMatch(normalized, a.name));
+      if (canonical) score = Math.max(score, scoreEntityNameMatch(canonical, a.name));
+      if (a.shortName) score = Math.max(score, scoreEntityNameMatch(normalized, a.shortName));
+      return { a, score };
+    })
+    .sort((x, y) => y.score - x.score);
+
+  const best = scored[0];
+  const gap = best.score - (scored[1]?.score ?? 0);
+  const confident =
+    best.score >= PLAYER_CONFIDENT_SCORE ||
+    (best.score >= 0.6 && (scored.length === 1 || gap >= 0.2));
+  const ambiguous = !confident && best.score >= PLAYER_AMBIGUOUS_SCORE;
+
+  const suggestions = scored
+    .filter((s) => s.score >= 0.4)
+    .slice(0, 3)
+    .map((s) => ({ athleteId: s.a.athleteId, name: s.a.name, club: s.a.clubName ?? null }));
+
+  return { best: best.a, bestScore: best.score, confident, ambiguous, suggestions };
+}
+
+function buildSuggestionHint(
+  suggestions: Array<{ name: string; club: string | null }>,
+  language: MessageLanguage,
+): string {
+  const names = suggestions
+    .map((s) => (s.club ? `${s.name} (${s.club})` : s.name))
+    .join(language === 'en' ? ' or ' : ' ولا ');
+  return language === 'en'
+    ? `Not sure who is meant. Ask the user to confirm: did you mean ${names}? Do NOT invent a player or stats.`
+    : `مش متأكد تقصد مين بالظبط. اسأل المستخدم للتأكيد: قصدك ${names}؟ وممنوع تخترع لاعب أو أرقام.`;
+}
+
 async function toolSearchPlayer(args: Record<string, unknown>, language: MessageLanguage) {
   const rawName = String(args.player_name ?? '').trim();
   if (rawName.length < 2) return { error: 'player_name required' };
 
-  const resolved = await resolvePlayerName(rawName);
-  const name = resolved?.english ?? rawName;
+  const resolution = await resolveBest365Player(rawName, language);
 
-  try {
-    const from365 = await footballDataCacheService.lookup365Player(name, language, {
-      limit: 1,
-      includeInfo: true,
-      includeCareer: true,
-    });
-    const player = from365.data?.players?.[0];
-    if (player) {
-      const apiFb = await enrichApiFootballTrophies(name, player.athleteId);
-      return build365ProfilePayload(player, rawName, name, { includeApiFbWc: true, apiFb });
+  if (resolution.confident && resolution.best) {
+    try {
+      const from365 = await footballDataCacheService.lookup365Player(resolution.best.name, language, {
+        athleteId: resolution.best.athleteId,
+        includeInfo: true,
+        includeCareer: true,
+      });
+      const player = from365.data?.players?.[0];
+      if (player) {
+        const apiFb = await enrichApiFootballTrophies(resolution.best.name, player.athleteId);
+        return build365ProfilePayload(player, rawName, resolution.best.name, {
+          includeApiFbWc: true,
+          apiFb,
+        });
+      }
+    } catch (err) {
+      logger.warn('[chat-agent] search_player 365 failed:', (err as Error)?.message);
     }
-  } catch (err) {
-    logger.warn('[chat-agent] search_player 365 failed:', (err as Error)?.message);
   }
 
-  const row = await fetchPlayerStatsRow(name);
-  if (!row) return { error: 'player_not_found', query: rawName, resolvedAs: name };
-  const apiFb = row.apiPlayerId ? await enrichApiFootballTrophies(name) : null;
+  // Medium confidence with rivals → let the agent confirm instead of guessing.
+  if (resolution.ambiguous && resolution.suggestions.length) {
+    return {
+      status: 'need_clarification',
+      query: rawName,
+      suggestions: resolution.suggestions,
+      answerHint: buildSuggestionHint(resolution.suggestions, language),
+    };
+  }
+
+  // Low/no 365 match → API-Football fallback (handles its own transliteration).
+  const fallbackName = resolution.best?.name ?? (normalizeArabicQuery(rawName) || rawName);
+  const row = await fetchPlayerStatsRow(fallbackName);
+  if (!row) {
+    return {
+      error: 'player_not_found',
+      query: rawName,
+      resolvedAs: fallbackName,
+      suggestions: resolution.suggestions,
+      answerHint: resolution.suggestions.length
+        ? buildSuggestionHint(resolution.suggestions, language)
+        : language === 'en'
+          ? 'No reliable match found. Ask the user for the full name or the club, and do NOT invent data.'
+          : 'مفيش نتيجة موثوقة. اطلب من المستخدم الاسم الكامل أو النادي، وممنوع تخترع بيانات.',
+    };
+  }
+  const apiFb = row.apiPlayerId ? await enrichApiFootballTrophies(fallbackName) : null;
   return {
     source: 'api-football',
     query: rawName,
-    resolvedAs: name,
+    resolvedAs: fallbackName,
     apiPlayerId: row.apiPlayerId ?? null,
     summary: row.aiResponse,
     aliases: row.aliases ?? [],
@@ -522,36 +723,32 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
   };
 }
 
-async function toolTodayMatches(args: Record<string, unknown> = {}) {
-  const date = localDateKey();
-  const fixtures = await footballDataCacheService.getMatchesByDate(date);
-  if (!fixtures.length) return { date, matches: [], note: 'No fixtures scheduled today' };
-
-  const leagueText = String(args.league ?? '').trim();
-  const league = leagueText ? detectLeague(leagueText) : null;
-
-  let pool = fixtures;
+/** Filter a day's fixtures down to a league (id first, then name/country tokens). */
+function filterFixturesByLeague(
+  fixtures: any[],
+  league: { id: number; label: string } | null,
+  leagueText: string,
+): any[] {
   if (league) {
-    pool = fixtures.filter((f: any) => f?.league?.id === league.id);
-    if (!pool.length) {
-      pool = fixtures.filter((f: any) => {
-        const name = String(f?.league?.name ?? '').toLowerCase();
-        const country = String(f?.league?.country ?? '').toLowerCase();
-        const blob = `${name} ${country}`;
-        // Prefer country/label tokens — never match a generic first word like "Division".
-        if (league.id === 344) return /bolivia|boliv|بوليفي/i.test(blob);
-        if (league.id === 12) return /caf|africa|أفريق|افريق/i.test(blob);
-        const tokens = league.label
-          .toLowerCase()
-          .split(/[\s\-–,]+/)
-          .filter((t) => t.length >= 4 && !/^(division|league|profesional|professional)$/i.test(t));
-        return tokens.some((t) => blob.includes(t));
-      });
-    }
-  } else if (leagueText) {
-    // Free-text fallback when league isn't in the alias table
+    const byId = fixtures.filter((f: any) => f?.league?.id === league.id);
+    if (byId.length) return byId;
+    return fixtures.filter((f: any) => {
+      const name = String(f?.league?.name ?? '').toLowerCase();
+      const country = String(f?.league?.country ?? '').toLowerCase();
+      const blob = `${name} ${country}`;
+      // Prefer country/label tokens — never match a generic first word like "Division".
+      if (league.id === 344) return /bolivia|boliv|بوليفي/i.test(blob);
+      if (league.id === 12) return /caf|africa|أفريق|افريق/i.test(blob);
+      const tokens = league.label
+        .toLowerCase()
+        .split(/[\s\-–,]+/)
+        .filter((t) => t.length >= 4 && !/^(division|league|profesional|professional)$/i.test(t));
+      return tokens.some((t) => blob.includes(t));
+    });
+  }
+  if (leagueText) {
     const needle = leagueText.toLowerCase();
-    pool = fixtures.filter((f: any) => {
+    return fixtures.filter((f: any) => {
       const name = String(f?.league?.name ?? '').toLowerCase();
       const country = String(f?.league?.country ?? '').toLowerCase();
       return (
@@ -562,25 +759,146 @@ async function toolTodayMatches(args: Record<string, unknown> = {}) {
       );
     });
   }
+  return fixtures;
+}
 
-  const top = [...pool]
+/** Bucket fixtures (importance-ranked) into live / finished / upcoming, capped. */
+function groupFixturesByStatus(fixtures: any[], perBucket = 15) {
+  const ranked = [...fixtures]
     .map((f) => ({ f, score: scoreFixtureImportance(f) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, league ? 20 : 12)
+    .sort((a, b) => b.score - a.score);
+
+  const live: any[] = [];
+  const finished: any[] = [];
+  const upcoming: any[] = [];
+  for (const { f } of ranked) {
+    const cf = compactFixture(f);
+    const st = String(cf.status ?? '');
+    if (LIVE_STATUSES.has(st)) {
+      if (live.length < perBucket) live.push(cf);
+    } else if (FINISHED_STATUSES.has(st)) {
+      if (finished.length < perBucket) finished.push(cf);
+    } else if (upcoming.length < perBucket) {
+      upcoming.push(cf);
+    }
+  }
+  // Show today's upcoming in kickoff order (nicer "later today" list).
+  upcoming.sort((a, b) => String(a.kickoff ?? '').localeCompare(String(b.kickoff ?? '')));
+  return { live, finished, upcoming };
+}
+
+function buildMatchesAnswerHint(grouped: {
+  live: any[];
+  finished: any[];
+  upcoming: any[];
+}): string {
+  return (
+    `Render a friendly reply: first any LIVE matches (bold minute + score), then FINISHED (final score), ` +
+    `then UPCOMING (kickoff time). Use a compact Markdown table when there are 3+ rows. ` +
+    `live=${grouped.live.length}, finished=${grouped.finished.length}, upcoming=${grouped.upcoming.length}. ` +
+    `Use ONLY these fixtures/scores/minutes — never invent a match, score, or time.`
+  );
+}
+
+function addDaysToDateKey(dateKey: string, days: number): string {
+  const [y, m, d] = dateKey.split('-').map((n) => parseInt(n, 10));
+  const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+/** Most important fixtures over the next few days (ranked, optionally league-filtered). */
+async function toolUpcomingMatches(
+  league: { id: number; label: string } | null,
+  leagueText: string,
+) {
+  const today = localDateKey();
+  const HORIZON_DAYS = league ? 10 : 4;
+  const collected: any[] = [];
+  for (let i = 0; i <= HORIZON_DAYS; i += 1) {
+    const dateKey = addDaysToDateKey(today, i);
+    let dayFixtures: any[] = [];
+    try {
+      dayFixtures = await footballDataCacheService.getMatchesByDate(dateKey);
+    } catch (err) {
+      logger.warn('[chat-agent] upcoming getMatchesByDate failed:', (err as Error)?.message);
+      continue;
+    }
+    const pool = filterFixturesByLeague(dayFixtures, league, leagueText);
+    for (const f of pool) {
+      const st = String(f?.fixture?.status?.short ?? '');
+      // Only genuinely upcoming (not yet started / not finished).
+      if (LIVE_STATUSES.has(st) || FINISHED_STATUSES.has(st)) continue;
+      collected.push(f);
+    }
+    if (!league && collected.length >= 40) break;
+  }
+
+  const top = collected
+    .map((f) => ({ f, score: scoreFixtureImportance(f) }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return String(a.f?.fixture?.date ?? '').localeCompare(String(b.f?.fixture?.date ?? ''));
+    })
+    .slice(0, league ? 15 : 12)
     .map((r) => compactFixture(r.f));
 
   return {
+    when: 'upcoming' as const,
+    from: today,
+    horizonDays: HORIZON_DAYS,
+    leagueFilter: league ? { id: league.id, label: league.label, query: leagueText } : null,
+    count: top.length,
+    matches: top,
+    upcoming: top,
+    answerHint:
+      `These are the most important UPCOMING fixtures (next ${HORIZON_DAYS} days), ranked by importance then kickoff. ` +
+      `Lead with the biggest one, list the rest as short bullets or a compact table with kickoff times. ` +
+      `Use ONLY these fixtures/times — never invent a match or date.`,
+    note: top.length
+      ? undefined
+      : league
+        ? `No upcoming fixtures found for ${league.label} in the next ${HORIZON_DAYS} days.`
+        : 'No upcoming fixtures found.',
+  };
+}
+
+async function toolTodayMatches(args: Record<string, unknown> = {}) {
+  const leagueText = String(args.league ?? '').trim();
+  const league = leagueText ? detectLeague(leagueText) : null;
+  const when = String(args.when ?? 'today').toLowerCase() === 'upcoming' ? 'upcoming' : 'today';
+
+  if (when === 'upcoming') {
+    return toolUpcomingMatches(league, leagueText);
+  }
+
+  const date = localDateKey();
+  const fixtures = await footballDataCacheService.getMatchesByDate(date);
+  if (!fixtures.length) {
+    return { date, when, matches: [], live: [], finished: [], upcoming: [], note: 'No fixtures scheduled today' };
+  }
+
+  const pool = filterFixturesByLeague(fixtures, league, leagueText);
+  const grouped = groupFixturesByStatus(pool, league ? 20 : 12);
+  const matches = [...grouped.live, ...grouped.upcoming, ...grouped.finished];
+
+  return {
     date,
+    when,
     leagueFilter: league ? { id: league.id, label: league.label, query: leagueText } : null,
     totalToday: fixtures.length,
     matchedInLeague: league ? pool.length : undefined,
-    matches: top,
+    live: grouped.live,
+    finished: grouped.finished,
+    upcoming: grouped.upcoming,
+    matches,
+    answerHint: buildMatchesAnswerHint(grouped),
     note: league
       ? pool.length
-        ? `Showing ${top.length} of ${pool.length} matches in ${league.label} today.`
+        ? `Showing ${matches.length} of ${pool.length} matches in ${league.label} today (live ${grouped.live.length} / finished ${grouped.finished.length} / upcoming ${grouped.upcoming.length}).`
         : `No matches found for ${league.label} today.`
-      : fixtures.length > top.length
-        ? `Showing top ${top.length} of ${fixtures.length}. User can open Matches tab for the rest.`
+      : fixtures.length > matches.length
+        ? `Showing top ${matches.length} of ${fixtures.length}. User can open Matches tab for the rest.`
         : undefined,
   };
 }
@@ -760,22 +1078,30 @@ async function toolTeamInfo(args: Record<string, unknown>) {
   const curated = CURATED_CAF_CL[dossier.apiTeamId];
   const cafCount = cafChampionsWins.length > 0 ? cafChampionsWins.length : curated?.wins ?? null;
 
+  const coachName = dossier.coach?.name ?? null;
+
   return {
     teamId: dossier.apiTeamId,
     teamName: teamName,
     source: dossier.source,
     summary: dossier.block,
+    coach: coachName,
+    coachNationality: dossier.coach?.nationality ?? null,
     cafChampionsLeagueWins: cafCount,
     cafChampionsLeagueSeasons: cafChampionsWins.map((t) => t.season).filter(Boolean).slice(0, 20),
     cafSource: cafChampionsWins.length > 0 ? 'api-football' : curated ? 'curated' : null,
-    quickFacts:
+    quickFacts: {
+      ...(cafCount != null ? { cafChampionsLeagueWins: cafCount } : {}),
+      ...(coachName ? { coach: coachName } : {}),
+    },
+    answerHint: [
+      coachName
+        ? `The current head coach is exactly "${coachName}" — use this name; do not name a former or remembered coach.`
+        : 'Head coach unavailable — say it is unavailable; do not invent a name.',
       cafCount != null
-        ? { cafChampionsLeagueWins: cafCount }
-        : null,
-    answerHint:
-      cafCount != null
-        ? `MUST answer African Champions League titles as exactly ${cafCount}. Do not invent another number.`
-        : 'CAF title count unavailable — say data is unavailable; do not invent.',
+        ? `African Champions League titles = exactly ${cafCount}. Do not invent another number.`
+        : 'CAF title count unavailable — do not invent a number.',
+    ].join(' '),
     note:
       cafCount != null
         ? `For African Champions League titles use cafChampionsLeagueWins=${cafCount} (${cafChampionsWins.length > 0 ? 'API winners' : curated?.note}).`
@@ -786,20 +1112,47 @@ async function toolTeamInfo(args: Record<string, unknown>) {
 async function toolPlayerCareer(args: Record<string, unknown>, language: MessageLanguage) {
   const rawName = String(args.player_name ?? '').trim();
   if (!rawName) return { error: 'player_name required' };
-  const resolved = await resolvePlayerName(rawName);
-  const name = resolved?.english ?? rawName;
 
-  const from365 = await footballDataCacheService.lookup365Player(name, language, {
-    limit: 1,
-    includeInfo: true,
-    includeCareer: true,
-  });
+  const resolution = await resolveBest365Player(rawName, language);
+
+  // Medium confidence with rivals → confirm before answering trophies/career.
+  if (!resolution.confident && resolution.ambiguous && resolution.suggestions.length) {
+    return {
+      status: 'need_clarification',
+      query: rawName,
+      suggestions: resolution.suggestions,
+      answerHint: buildSuggestionHint(resolution.suggestions, language),
+    };
+  }
+
+  const name = resolution.best?.name ?? (normalizeArabicQuery(rawName) || rawName);
+
+  const from365 =
+    resolution.confident && resolution.best
+      ? await footballDataCacheService.lookup365Player(name, language, {
+          athleteId: resolution.best.athleteId,
+          includeInfo: true,
+          includeCareer: true,
+        })
+      : await footballDataCacheService.lookup365Player(name, language, {
+          limit: 1,
+          includeInfo: true,
+          includeCareer: true,
+        });
   const player = from365.data?.players?.[0];
   const apiFb = await enrichApiFootballTrophies(name, player?.athleteId);
   const dossier = await fetchPlayerUclCareerDossier(name, language);
 
   if (!player && !dossier && !apiFb) {
-    return { error: 'player_not_found', query: rawName, resolvedAs: name };
+    return {
+      error: 'player_not_found',
+      query: rawName,
+      resolvedAs: name,
+      suggestions: resolution.suggestions,
+      answerHint: resolution.suggestions.length
+        ? buildSuggestionHint(resolution.suggestions, language)
+        : undefined,
+    };
   }
 
   if (player) {
@@ -807,11 +1160,17 @@ async function toolPlayerCareer(args: Record<string, unknown>, language: Message
       includeApiFbWc: true,
       apiFb,
     });
+    // World Cup goals: prefer 365 aggregation; fall back to API-Football editions.
+    let worldCupGoals = profile.worldCupGoals as unknown;
+    if (!worldCupGoals) {
+      worldCupGoals = (await fetchPlayerWorldCupGoals(name)) ?? null;
+    }
     return {
       ...profile,
+      worldCupGoals,
       uclSummary: dossier ?? null,
       guidance:
-        'Authoritative 365 profile+career (same as app player profile). For FIFA World Cup prefer apiFootballWorldCup.wins when present else fifaWorldCup/quickFacts.worldCupTitles. For UCL use championsLeague/quickFacts.championsLeagueTitles. State the current club exactly as `club`/quickFacts.currentClub. If a trophy count is >=1 the player HAS won it (never say "hasn\'t won" or reason from age); if 1 say 1. NEVER invent or add title years, national teams, clubs, or tournament editions that are not explicitly present here.',
+        'Authoritative 365 profile+career (same as app player profile). For FIFA World Cup TITLES prefer apiFootballWorldCup.wins when present else fifaWorldCup/quickFacts.worldCupTitles. For World Cup GOALS use worldCupGoals.total ONLY (null = no confirmed data; do NOT guess). For UCL use championsLeague/quickFacts.championsLeagueTitles. State the current club exactly as `club`/quickFacts.currentClub. If a trophy count is >=1 the player HAS won it (never say "hasn\'t won" or reason from age); if 1 say 1. NEVER invent or add title years, national teams, clubs, or tournament editions that are not explicitly present here.',
     };
   }
 

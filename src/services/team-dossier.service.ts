@@ -27,6 +27,8 @@ export interface TeamDossierResult {
   block: string;
   source: TeamDossierSource;
   apiTeamId: number;
+  /** Current head coach (from API-Football), when available. */
+  coach?: { name: string; nationality?: string | null } | null;
 }
 
 const TEAM_DOSSIER_TTL_MS = 3 * 60 * 60_000; // ~3h
@@ -168,6 +170,7 @@ export async function fetchTeamDossierContext(
   }
 
   // ── 4. Head coach (source: api) ──────────────────────────────────────────
+  let coachInfo: { name: string; nationality?: string | null } | null = null;
   try {
     const coaches = await footballService.getTeamCoaches(teamId);
     const current = (coaches ?? []).find((c: any) =>
@@ -176,6 +179,7 @@ export async function fetchTeamDossierContext(
     const coach = current ?? (coaches ?? [])[0];
     if (coach?.name) {
       usedApi = true;
+      coachInfo = { name: coach.name, nationality: coach.nationality ?? null };
       lines.push(`source: api | Head coach: ${coach.name}`);
     } else {
       lines.push('source: unavailable | Head coach: not available');
@@ -197,7 +201,7 @@ export async function fetchTeamDossierContext(
     'NOTE: Use ONLY the figures above. Items marked "unavailable" have no verified data — do not invent them.',
   ].join('\n');
 
-  const result: TeamDossierResult = { block, source, apiTeamId: teamId };
+  const result: TeamDossierResult = { block, source, apiTeamId: teamId, coach: coachInfo };
   // Only persist dossiers that actually carry data (don't cache empty shells).
   if (source !== 'unavailable') {
     await redisCacheService.set(redisKey, result, TEAM_DOSSIER_TTL_MS);
