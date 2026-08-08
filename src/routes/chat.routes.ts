@@ -48,6 +48,7 @@ import {
     decrementLimit,
     getResetTimeForUser,
     getDailyMessageLimit,
+    isChatUnlimitedUser,
     toConversationDTO,
     migrateLegacyFileStore,
 } from '../services/chat.service';
@@ -535,11 +536,13 @@ router.get('/chat/limit', async (req: Request, res: Response): Promise<void> => 
     const userId = getUserId(req);
     const tz = getTimezone(req);
     try {
+        const unlimited = isChatUnlimitedUser(userId);
         const remaining = await getRemaining(userId, tz);
         res.json({
             remaining,
-            used: DAILY_LIMIT - remaining,
+            used: unlimited ? 0 : DAILY_LIMIT - remaining,
             limit: DAILY_LIMIT,
+            unlimited,
             resetAt: await getResetTimeForUser(userId),
             timezone: tz,
         });
