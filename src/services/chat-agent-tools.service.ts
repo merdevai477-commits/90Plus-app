@@ -429,7 +429,7 @@ function build365ProfilePayload(
       ? `Latest season ${seasonStats.label}: ${seasonStats.goals} goals, ${seasonStats.assists} assists, ${seasonStats.appearances} apps at ${club ?? '—'}.`
       : `Current club: ${club ?? 'unknown'}.`,
     answerRules:
-      'Use ONLY numbers in this payload (quickFacts / seasonStats / trophies). Prefer club over clubRaw. Do NOT invent World Cup years/teams unless listed in apiFootballWorldCup.wins. Do NOT say data is missing when seasonStats or quickFacts.latestSeasonLine is present.',
+      'STRICT: Use ONLY the numbers/club in this payload (quickFacts / seasonStats / trophies). The current club is `club` / quickFacts.currentClub — state it EXACTLY as written and never name an old or remembered club. Trophy counts come only from quickFacts.worldCupTitles / quickFacts.championsLeagueTitles (if a count is 1 say 1, if 0 say 0). If worldCupTitles>=1 the player HAS won it — never say "hasn\'t won" or reason from his age. NEVER add a World Cup/Champions League year, national team, club, or tournament edition that is not explicitly listed here (only apiFootballWorldCup.wins may contain years). Do NOT add historical narrative. Do NOT say data is missing when seasonStats or quickFacts.latestSeasonLine is present.',
   };
 }
 
@@ -811,7 +811,7 @@ async function toolPlayerCareer(args: Record<string, unknown>, language: Message
       ...profile,
       uclSummary: dossier ?? null,
       guidance:
-        'Authoritative 365 profile+career (same as app player profile). For FIFA World Cup prefer apiFootballWorldCup.wins when present else fifaWorldCup/quickFacts.worldCupTitles. For UCL use championsLeague/quickFacts.championsLeagueTitles. Never invent title years or nations.',
+        'Authoritative 365 profile+career (same as app player profile). For FIFA World Cup prefer apiFootballWorldCup.wins when present else fifaWorldCup/quickFacts.worldCupTitles. For UCL use championsLeague/quickFacts.championsLeagueTitles. State the current club exactly as `club`/quickFacts.currentClub. If a trophy count is >=1 the player HAS won it (never say "hasn\'t won" or reason from age); if 1 say 1. NEVER invent or add title years, national teams, clubs, or tournament editions that are not explicitly present here.',
     };
   }
 

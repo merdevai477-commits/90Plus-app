@@ -16,6 +16,11 @@ import {
   isChatAgentConfigured,
   resolveAgentModel,
 } from './chat-agent-tools.service';
+import {
+  buildGroundedFactReply,
+  buildGroundingSystemMessage,
+  extractGroundedFacts,
+} from './chat-grounding.service';
 
 const MAX_STEPS = 5;
 const AGENT_STREAM_MAX_TOKENS = 900;
@@ -55,8 +60,14 @@ const TOOL_USAGE_PREAMBLE = `
 - مباريات النهاردة → get_today_matches (+ league لو اتحدد). لايف → get_live_matches.
 - ماتش بالاسم → resolve_match ثم get_match_details.
 - اعتمد على quickFacts و seasonStats و answerHint من نتيجة الأداة. لو seasonStats موجودة متقولش "مفيش بيانات".
-- أرقام الألقاب من الأداة فقط (fifaWorldCup / championsLeague / cafChampionsLeagueWins). لو العدد 1 متقولش 2.
-- متخترعش سنة البطولة أو المنتخب إلا لو موجودة صراحة في apiFootballWorldCup.wins.
+
+قاعدة الالتزام بالأرقام (أهم قاعدة — مخالفتها = رد غلط):
+- الرقم اللي في الأداة هو الحقيقة الوحيدة. أرقام الألقاب من (quickFacts.worldCupTitles / quickFacts.championsLeagueTitles / cafChampionsLeagueWins) بس. لو العدد 1 قول 1، ولو 0 قول 0 — ممنوع تزوّد ولا تقلّل.
+- لو عدد كاس العالم = 1 يبقى اللاعب فاز بكاس عالم فعلًا. ممنوع تقول "ماكسبش" أو "لسه صغير" أو تعكس الرقم اللي في الأداة بناءً على ذاكرتك أو سن اللاعب.
+- ممنوع منعًا باتًا تضيف من ذاكرتك: سنة بطولة، اسم منتخب، اسم نادي، أو نسخة/إصدار بطولة — إلا لو مكتوبة صراحة في نتيجة الأداة (مثال: apiFootballWorldCup.wins). متقولش "كأس العالم 2022" لو السنة مش موجودة في الأداة.
+- نادي اللاعب الحالي: استخدم قيمة club / quickFacts.currentClub من الأداة بالظبط (مثال: حكيمي = باريس سان جيرمان). ممنوع تذكر نادي قديم أو نادي من ذاكرتك.
+- ممنوع أي سرد تاريخي أو تعليق زيادة حوالين البطولة — جاوب على السؤال بالرقم/النادي وبس.
+
 - رد مختصر باللهجة المصرية، واقعي زي ريل تايم، من غير جداول طويلة إلا لو المستخدم طلب تفاصيل.
 - ماتذكرش أسماء الأدوات أو API للمستخدم.
 `.trim();
@@ -274,6 +285,28 @@ export async function runFootballAgent(
       );
       lastToolPayloads = results.map((r) => r.content);
       messages.push(...results);
+
+      // ─── Strict grounding ────────────────────────────────────────────────
+      // The model fetches correct data but embellishes/contradicts it from
+      // memory (invented WC years, wrong current club, "hasn't won" narratives).
+      // Pin it to the tool numbers/club and, for high-risk single-fact
+      // questions, answer deterministically so it can never contradict them.
+      const groundedFacts = extractGroundedFacts(lastToolPayloads);
+      const groundingMsg = buildGroundingSystemMessage(groundedFacts);
+      if (groundingMsg) {
+        messages.push({ role: 'system', content: groundingMsg });
+      }
+
+      const groundedReply = buildGroundedFactReply(
+        params.userMessage,
+        groundedFacts,
+        params.language,
+      );
+      if (groundedReply) {
+        fullText = groundedReply;
+        params.onToken(groundedReply);
+        return { fullText, usedModel: model, toolsUsed };
+      }
 
       // After tools: prefer a non-streaming final answer (more reliable than SSE).
       if (step < MAX_STEPS - 1) {
