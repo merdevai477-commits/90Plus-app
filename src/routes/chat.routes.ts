@@ -729,7 +729,13 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 : '';
 
         const cacheLang = messageLanguage;
-        const agentEnabled = !isResume && !sanitizedSuffix && isChatAgentConfigured();
+        // The grounded tool agent must run even when the client sends a
+        // personalization suffix (profile block). Previously any suffix forced
+        // the legacy prefetch+LLM path, which has none of the 365 grounding —
+        // so real users with a completed profile always got stale answers even
+        // though the suffix-less test battery passed. The suffix is merged into
+        // the agent system prompt below instead of disabling the agent.
+        const agentEnabled = !isResume && isChatAgentConfigured();
         const playerInfoQuery =
             !agentEnabled && !isResume && !sanitizedSuffix
                 ? detectPlayerInfoQuery(trimmedMessage)
@@ -782,6 +788,9 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             const agentSystemPrompt = [
                 buildLanguageLockPrompt(messageLanguage),
                 buildSystemPrompt(category, lengthMode),
+                // Preserve profile personalization inside the grounded path.
+                // The agent's tool data still overrides anything here for facts.
+                sanitizedSuffix,
             ]
                 .filter(Boolean)
                 .join('\n\n');
