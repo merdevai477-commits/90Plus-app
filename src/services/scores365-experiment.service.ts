@@ -17,6 +17,12 @@ import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-sta
 import { calendarTodayKey, calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
 import { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
 import { withSyncLeaderLease } from './football-sync-leader.service';
+import {
+  SCORES365_LEAGUE_ID_OFFSET,
+  scores365CompetitionToLeagueId,
+} from '../utils/scores365-league-id.util';
+
+export { SCORES365_LEAGUE_ID_OFFSET, scores365CompetitionToLeagueId };
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
 const SCORES365_FIXTURES_BASE = 'https://webws.365scores.com/web/games/fixtures/';
@@ -1271,12 +1277,8 @@ function build365CompetitorLogo(competitorId?: number): string {
  * for non-WC leagues. Keeps 365's ID space from colliding with API-Football
  * leagueIds (which are well below this offset) while staying internally
  * consistent for calendar grouping and per-league endpoints.
+ * (Implementation: ../utils/scores365-league-id.util.ts — re-exported at module top.)
  */
-export const SCORES365_LEAGUE_ID_OFFSET = 7_000_000;
-
-export function scores365CompetitionToLeagueId(competitionId: number): number {
-  return SCORES365_LEAGUE_ID_OFFSET + competitionId;
-}
 
 /** Optional league overrides for non-WC synthetic fixtures (defaults to WC). */
 export interface SynthesizeBaseOverrides {

@@ -233,6 +233,7 @@ import notificationRoutes from './routes/notification.routes';
 import matchesRoutes from './routes/matches.routes';
 import dailySpinRoutes from './routes/daily-spin.routes';
 import footballRoutes from './routes/football.routes';
+import knowledgeExportRoutes from './routes/knowledge-export.routes';
 import predictionsRoutes from './routes/predictions.routes';
 import predictionGroupsRoutes from './routes/prediction-groups.routes';
 import coinsRoutes from './routes/coins.routes';
@@ -413,6 +414,8 @@ app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 app.use(`${API_PREFIX}/matches`, matchesRoutes);
 app.use(`${API_PREFIX}/daily-spin`, dailySpinRoutes);
 app.use(`${API_PREFIX}/football`, footballRoutes);
+// INTERNAL ONLY — Football Knowledge Factory season-aware export (API key auth)
+app.use(`${API_PREFIX}/internal/football/knowledge`, knowledgeExportRoutes);
 app.use(`${API_PREFIX}/news`, newsRoutes);
 app.use(`${API_PREFIX}/i18n`, i18nRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);

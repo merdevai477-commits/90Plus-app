@@ -48,6 +48,8 @@ const PUBLIC_ROUTES = [
 const AUTH_MIDDLEWARE = [
   'requireAuth',
   'optionalAuth',
+  'requireKnowledgeExportAuth',
+  'requireAdmin',
 ];
 
 // Middleware that provides ownership verification
