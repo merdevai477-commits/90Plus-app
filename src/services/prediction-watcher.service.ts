@@ -76,18 +76,31 @@ export class PredictionWatcherService {
         logger.info('🔍 Checking unresolved predictions...');
 
         try {
-            // Get all unique match IDs that have unresolved predictions
+            // Get all unique match IDs that have unresolved predictions.
+            // group_predictions may not exist yet on environments where the
+            // prediction-groups migration hasn't been applied — degrade to an
+            // empty list instead of crashing the whole watcher cycle every run.
             const [unresolvedPredictions, unresolvedGroupPredictions] = await Promise.all([
                 (prisma as any).prediction.findMany({
                     where: { isCorrect: null },
                     select: { apiMatchId: true },
                     distinct: ['apiMatchId'],
                 }),
-                prisma.groupPrediction.findMany({
-                    where: { isCorrect: null },
-                    select: { apiMatchId: true },
-                    distinct: ['apiMatchId'],
-                }),
+                prisma.groupPrediction
+                    .findMany({
+                        where: { isCorrect: null },
+                        select: { apiMatchId: true },
+                        distinct: ['apiMatchId'],
+                    })
+                    .catch((err: any) => {
+                        if (err?.code === 'P2021') {
+                            logger.warn(
+                                '⚠️ group_predictions table missing — run `npx prisma migrate deploy` (skipping group predictions this cycle)',
+                            );
+                            return [];
+                        }
+                        throw err;
+                    }),
             ]);
 
             const matchIdSet = new Set<number>([

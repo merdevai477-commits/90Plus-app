@@ -44,7 +44,8 @@ import { configureAudioVideo } from "../utils/videoConfig";
 import { ClerkProvider } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
-import { parseReelIdFromUrl, parseProfileUsernameFromUrl, parseGroupCodeFromUrl } from '../constants/shareLinks';
+import { parseReelIdFromUrl, parseProfileUsernameFromUrl, parseGroupCodeFromUrl, parseReferralCodeFromUrl } from '../constants/shareLinks';
+import { capturePendingReferral } from '../utils/pendingReferral';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from "../src/i18n";
@@ -293,9 +294,36 @@ function RootLayoutNav() {
       <Stack.Screen name="player-career" options={{ headerShown: false }} />
       <Stack.Screen name="team-profile" options={{ headerShown: false }} />
       <Stack.Screen name="prediction-groups" options={{ headerShown: false }} />
+      {/*
+       * SHARE & WIN — front/app/share-win/
+       *   index.tsx       → the Figma screen (node 109:470)
+       *   leaderboard.tsx → full weekly ranking
+       * Reachable from the Rank tab and from referral deep links
+       * (https://90plus.pro/invite/<code> and ninetyplus://invite/<code>).
+       */}
+      <Stack.Screen name="share-win/index" options={{ headerShown: false }} />
+      <Stack.Screen name="share-win/leaderboard" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="world-cup-news" options={{ headerShown: false }} />
       <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />
+      {/*
+       * QUIZ MODE ROUTE — front/app/quiz/[mode].tsx
+       *
+       * Without this entry expo-router falls back to the default Stack header,
+       * which renders a white bar titled "quiz/[mode]" above every quiz screen.
+       * The quiz screens draw their own header (ModeHeader in
+       * components/Quiz/QuestionsModeScreen.tsx), so the native one is hidden.
+       *
+       * CUSTOMIZE: transition animation, gesture and background colour below.
+       */}
+      <Stack.Screen
+        name="quiz/[mode]"
+        options={{
+          headerShown: false,
+          animation: 'slide_from_right',
+          contentStyle: { backgroundColor: '#030303' },
+        }}
+      />
       <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       <Stack.Screen name="push-diagnostics" options={{ title: 'Push Diagnostics' }} />
       <Stack.Screen name="+not-found" options={{ headerShown: false }} />
@@ -446,6 +474,26 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
         } catch (e) {
           logger.warn('[PreloadInitializer] Early profile sync error:', e);
         }
+
+        /*
+         * Share & Win referral attribution.
+         *
+         * Runs immediately AFTER syncUserWithBackend, so the backend account
+         * exists before we claim — that ordering is what makes "attribute only
+         * on successful registration" true. Cancelled or abandoned sign-ups
+         * never reach this point, so they never create a participant.
+         *
+         * Safe to run on every launch: the device short-circuits once claimed,
+         * and the backend enforces one referrer per user regardless.
+         */
+        if (!cancelled) {
+          try {
+            const { redeemPendingReferral } = await import('../hooks/useShareWin');
+            await redeemPendingReferral(getTokenRef.current);
+          } catch (e) {
+            logger.warn('[PreloadInitializer] Referral claim failed (non-critical):', e);
+          }
+        }
       }
 
       if (cancelled) return;
@@ -576,6 +624,20 @@ function RootLayout() {
           params: { username },
         });
       };
+
+      /*
+       * Share & Win referral. Parked before anything else so the code survives
+       * a fresh install → store → onboarding → registration journey; it is
+       * redeemed once, after the account exists. Attribution is decided by the
+       * backend, never here.
+       */
+      const referralCode = parseReferralCodeFromUrl(url);
+      if (referralCode) {
+        void capturePendingReferral(referralCode).then(() => {
+          router.push('/share-win');
+        });
+        return;
+      }
 
       const profileUsername = parseProfileUsernameFromUrl(url);
       if (profileUsername) {

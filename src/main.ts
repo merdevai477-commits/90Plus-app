@@ -246,6 +246,7 @@ import gdprRoutes from './routes/gdpr.routes';
 import chatRoutes from './routes/chat.routes';
 import xpRoutes from './routes/xp.routes';
 import quizRoutes from './routes/quiz.routes';
+import shareWinRoutes from './routes/share-win.routes';
 import authRoutes from './routes/auth.routes';
 import debugRoutes from './routes/debug.routes';
 import i18nRoutes from './routes/i18n.routes';
@@ -427,6 +428,7 @@ app.use(`${API_PREFIX}`, chatRoutes); // AI chat: /chat/limit, /chat/stream, /co
 app.use(`${API_PREFIX}/xp`, xpRoutes); // XP system: /xp/me, /xp/users/:userId, /xp/me/history, /xp/curve
 app.use(`${API_PREFIX}/quiz`, lenientShellQuizLimiter);
 app.use(`${API_PREFIX}/quiz`, quizRoutes);
+app.use(`${API_PREFIX}/share-win`, shareWinRoutes); // Share & Win: referrals, weekly cycles, leaderboard
 
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
@@ -846,10 +848,19 @@ async function startServer() {
                     ensureDailyPacksForToday().catch((err) =>
                         logger.error('Quiz pack warmup failed:', err),
                     );
+                    const { regenerateDailyQuestionsChallenges } = await import(
+                        './services/questions-challenges.service'
+                    );
+                    regenerateDailyQuestionsChallenges().catch((err) =>
+                        logger.error('Questions challenges warmup failed:', err),
+                    );
                     cron.schedule('0 0 * * *', () => {
                         logger.info('⏰ Cron: Generating daily quiz packs (ar + en)...');
                         ensureDailyPacksForToday().catch((err) =>
                             logger.error('Daily quiz pack cron error:', err),
+                        );
+                        regenerateDailyQuestionsChallenges().catch((err) =>
+                            logger.error('Daily questions challenges cron error:', err),
                         );
                     });
                     logger.info('✅ Daily quiz pack cron scheduled (00:00 UTC)');
@@ -858,6 +869,21 @@ async function startServer() {
                         './services/world-cup-news-cron.service'
                     );
                     startWorldCupNewsRefreshCron();
+
+                    // ✅ Share & Win — archive finished weekly cycles with their final
+                    // ranks. Rollover is also lazy on every read/write, so this only
+                    // makes it prompt for weeks with no traffic.
+                    const { closeDueCycles, ensureCurrentCycle } = await import(
+                        './services/share-win.service'
+                    );
+                    const runShareWinRollover = () => {
+                        ensureCurrentCycle()
+                            .then(() => closeDueCycles())
+                            .catch((err) => logger.error('Share & Win cycle rollover error:', err));
+                    };
+                    runShareWinRollover();
+                    setInterval(runShareWinRollover, 15 * 60 * 1000).unref?.();
+                    logger.info('✅ Share & Win weekly cycle rollover scheduled (every 15m)');
 
                     if (isFreePlan) {
                         logger.warn('⚠️ FOOTBALL_API_PLAN is free/undefined — heavy watchers (league preloader, preload, etc.) disabled to preserve quota. Match + prediction watchers still run with circuit-breaker protection.');

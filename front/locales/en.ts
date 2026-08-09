@@ -779,6 +779,11 @@ export const en = {
     secondsUnit: 's',
     xpBonus: '+{amount} XP',
     backToRank: 'Back to rank',
+    /**
+     * The Football Quiz is entered from the Questions hub, so leaving it —
+     * via the header arrow or the "finished for today" CTA — returns there.
+     */
+    backToQuestions: 'Back to questions',
     // QuizPopup (interstitial CTA shown after a delay on screens that
     // pull the user toward the daily quiz).
     popupTitle: 'Daily Quiz',
@@ -803,6 +808,82 @@ export const en = {
     hours: 'hours',
     minutes: 'minutes',
     great: 'Awesome!',
+  },
+
+  /** Share & Win (Figma node 109:470) */
+  shareWin: {
+    // Hero
+    titleHighlight: 'Share',
+    titleRest: ' & Win',
+    subtitle: 'Share the app with your friends and win great prizes!',
+    perShareLead: 'Every share = ',
+    perSharePoints: 'points',
+    perShareXp: 'XP',
+
+    // Lucky wheel card
+    wheelTitle: 'Lucky Wheel',
+    wheelSubtitle: 'Spin the wheel and win XP',
+    wheelCta: 'Spin now',
+    wheelNote: 'One spin per day only',
+
+    // Weekly ranking
+    weeklyTitle: 'Weekly Ranking',
+    weeklyEndsIn: 'Ends in:',
+    unitDays: 'Days',
+    unitHours: 'Hours',
+    unitMinutes: 'Minutes',
+    unitSeconds: 'Seconds',
+    viewFullRanking: 'View full ranking',
+    leaderboardEmpty: 'No ranking yet — be the first to share!',
+    leaderboardCompetitors: '{count} competing this week',
+    leaderboardEnd: 'You have reached the end',
+    close: 'Close',
+
+    // Weekly prizes
+    prizesTitle: 'Weekly Prizes',
+    prizesSubtitleLine1: 'A new prize every week!',
+    prizesSubtitleLine2: ' Share now to be the winner',
+
+    // Share card
+    shareCardTitle: 'Share now & win',
+    shareCardSubtitle: 'Copy your link and share it with your friends',
+    channelFacebook: 'Facebook',
+    channelInstagram: 'Instagram',
+    channelWhatsapp: 'WhatsApp',
+    channelSnapchat: 'Snapchat',
+    referralHintLead: 'Every friend who signs up with your link earns you ',
+    referralHintXp: 'XP',
+    linkCopied: 'Link copied',
+    linkCopiedDetail: 'Share it with your friends and earn points',
+    copyFailed: 'Could not copy the link',
+    shareFailed: 'Could not record the share — we will retry later',
+
+    // Stats bar
+    statsInvitedFriends: 'Friends invited',
+    statsFriendsValue: '{count} friends',
+    statsCurrentPoints: 'Your points',
+    statsRankThisWeek: 'Your rank this week',
+    statsShares: 'Your shares',
+
+    // Last winner
+    lastWinnerTitle: 'Latest winner',
+    lastWinnerViewStory: 'View story',
+    lastWinnerNone: 'No winner crowned yet — week one is still running',
+    timeAgoHours: '{count}h ago',
+    timeAgoDays: '{count}d ago',
+    timeAgoNow: 'Just now',
+
+    // States
+    loading: 'Loading Share & Win…',
+    errorTitle: 'Could not load Share & Win',
+    errorBody: 'Check your connection and try again',
+    retry: 'Try again',
+    spinWonTitle: 'You won {amount} XP!',
+    spinWonDetail: 'The reward has been added to your balance',
+    spinWonOfflineDetail:
+      "Couldn't reach the server — this is a preview, try again later to confirm your reward",
+    spinCooldownTitle: "You've already spun today",
+    spinCooldownDetail: 'Come back in {hours}h {minutes}m for your next spin',
   },
 
   coinsInfo: {

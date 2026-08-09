@@ -39,6 +39,13 @@ export interface QuizApiQuestion {
   penaltyApplied?: boolean;
   hintUsed?: boolean;
   hint?: string | null;
+  /**
+   * True when the question came from the bundled bank in
+   * data/footballQuizFallback.ts rather than the API. QuizHubScreen grades
+   * these on-device and never POSTs them, which keeps the API contract
+   * untouched — the same convention `QuestionModeQuestion.isStatic` uses.
+   */
+  isStatic?: boolean;
 }
 
 export interface QuizDailyStats {
@@ -64,6 +71,8 @@ export interface QuizDailyPayload {
   xp: number;
   level: number;
   stats: QuizDailyStats;
+  /** True for a pack built from the bundled bank; never written to the cache. */
+  isStatic?: boolean;
 }
 
 export interface QuizTimeoutResponse {

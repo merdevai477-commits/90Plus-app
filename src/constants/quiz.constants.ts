@@ -9,6 +9,13 @@ export const QUIZ_DIFFICULTY_COUNTS = {
 /** Minimum AI confidence (0–100) to accept a generated question. */
 export const QUIZ_MIN_CONFIDENCE = 90;
 
+/**
+ * Questions-hub round length: how many real questions one mode serves per day.
+ * The AI is asked for exactly this many per mode and a short round is rejected
+ * rather than padded — see questions-challenges.ai-generator.service.ts.
+ */
+export const ROUND_QUESTION_COUNT = 6;
+
 /** Minimum entity pool sizes before calling the AI. */
 export const QUIZ_DATASET_MIN_PLAYERS = 12;
 export const QUIZ_DATASET_MIN_CLUBS = 8;

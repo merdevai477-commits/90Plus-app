@@ -20,7 +20,6 @@ import {
   type QuizApiLanguage,
   type QuizDailyPayload,
 } from '../services/quizApi.service';
-
 const DATE_ROLLOVER_MS = 30_000;
 
 function isPackPreparingError(err: unknown): boolean {
@@ -106,7 +105,7 @@ async function fetchDailyWithAuthRetry(
   }
 }
 
-async function fetchAndCacheDaily(
+async function fetchLiveDaily(
   getToken: GetTokenFn,
   lang: QuizApiLanguage,
   expectedDateKey: string,
@@ -129,6 +128,21 @@ async function fetchAndCacheDaily(
   await cacheDailyQuiz(lang, data);
   prefetchQuizImages(data.questions, data.currentIndex ?? 0);
   return data;
+}
+
+async function fetchAndCacheDaily(
+  getToken: GetTokenFn,
+  lang: QuizApiLanguage,
+  expectedDateKey: string,
+): Promise<QuizDailyPayload> {
+  /*
+   * No canned-pack fallback. A failure here surfaces to the query, which shows
+   * the screen's existing error/retry state — the same rule
+   * `useQuestionModeSession` applies to the other six modes. Serving authored
+   * questions about invented players/clubs/stats is worse than showing a retry,
+   * and it silently mixes fake football content into a real-data experience.
+   */
+  return fetchLiveDaily(getToken, lang, expectedDateKey);
 }
 
 export { dailyQuizQueryKey } from '../utils/quizDateKey';
@@ -171,6 +185,8 @@ export function useDailyQuiz(lang: QuizApiLanguage) {
     enabled: Boolean(lang) && isLoaded === true && isSignedIn === true,
     staleTime: 60 * 1000,
     gcTime: 30 * 60 * 1000,
+    // Every pack is a real server pack now, so refetching is always safe —
+    // progress lives on the server and comes back with it.
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,

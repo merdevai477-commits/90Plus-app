@@ -17,6 +17,9 @@ model User {
   avatar                        String?
   avatarStoragePath             String?
   bio                           String?
+  /// Share & Win referral identity. Nullable so existing rows stay valid —
+  /// generated lazily the first time a user opens Share & Win.
+  referralCode                  String?                  @unique
   coins                         Int                      @default(0)
   level                         Int                      @default(1)
   xp                            Int                      @default(0)
@@ -135,12 +138,17 @@ model User {
   bansIssued                    UserBan[]                @relation("BanIssuer")
   bans                          UserBan?                 @relation("UserBans")
   dailyQuizSessions             UserDailyQuizSession[]
+  questionChallenges            UserQuestionChallenge[]
   quizAnswers                   UserQuizAnswer[]
   quizState                     UserQuizState?
   warningsIssued                UserWarning[]            @relation("WarningIssuer")
   warnings                      UserWarning[]            @relation("UserWarnings")
   xpDailyCaps                   XpDailyCap[]             @relation("UserXpDailyCaps")
   xpTransactions                XpTransaction[]          @relation("UserXpTransactions")
+  shareWinShareEvents           ShareWinShareEvent[]
+  shareWinStandings             ShareWinStanding[]
+  shareWinReferralsMade         ShareWinReferral[]       @relation("ShareWinReferrer")
+  shareWinReferralReceived      ShareWinReferral?        @relation("ShareWinReferred")
 
   @@index([email])
   @@index([username])
@@ -508,6 +516,67 @@ model UserDailyQuizSession {
   @@index([userId])
   @@index([packDate])
   @@map("user_daily_quiz_sessions")
+}
+
+/// Daily AI/manual challenges for Questions feature modes.
+model DailyQuestionChallenge {
+  id                     String                  @id @default(uuid())
+  type                   DailyChallengeType
+  language               String                  @db.VarChar(5)
+  title                  String
+  description            String
+  image                  String
+  icon                   String
+  difficulty             Difficulty
+  xpReward               Int
+  refreshDate            DateTime                @db.Date
+  refreshTime            String                  @default("00:00")
+  status                 DailyChallengeStatus    @default(DRAFT)
+  streakContribution     Boolean                 @default(true)
+  leaderboardEligibility Boolean                 @default(true)
+  content                Json
+  answer                 Json
+  metadata               Json                    @default("{}")
+  contentHash            String                  @db.VarChar(64)
+  source                 String                  @default("AI") @db.VarChar(16)
+  publishedAt            DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  userChallenges         UserQuestionChallenge[]
+
+  @@unique([refreshDate, type, language])
+  @@index([refreshDate, language])
+  @@index([status])
+  @@index([leaderboardEligibility])
+  @@index([contentHash])
+  @@map("daily_question_challenges")
+}
+
+/// User progress for each daily Questions challenge.
+model UserQuestionChallenge {
+  id                   String                 @id @default(uuid())
+  userId               String
+  challengeId          String
+  completed            Boolean                @default(false)
+  score                Int                    @default(0)
+  elapsedTime          Int                    @default(0)
+  xpEarned             Int                    @default(0)
+  attempts             Int                    @default(0)
+  completionPercentage Int                    @default(0)
+  unlocked             Boolean                @default(true)
+  hintUsed             Boolean                @default(false)
+  answeredPayload      Json                   @default("{}")
+  completedAt          DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  challenge            DailyQuestionChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, challengeId])
+  @@index([userId, updatedAt])
+  @@index([challengeId])
+  @@index([completed])
+  @@map("user_question_challenges")
 }
 
 model CoinTransaction {
@@ -1270,6 +1339,100 @@ model GroupPrediction {
   @@map("group_predictions")
 }
 
+/// ─── Share & Win ────────────────────────────────────────────────────────────
+/// Weekly referral competition. Every cycle keeps its own standings so past
+/// weeks are never overwritten and historical winners stay queryable.
+
+model ShareWinCycle {
+  id        String              @id @default(uuid())
+  /// ISO week key ("2026-W32") — deterministic, so concurrent rollovers
+  /// collide on the unique index instead of creating duplicate weeks.
+  weekKey   String              @unique
+  startAt   DateTime
+  endAt     DateTime
+  status    ShareWinCycleStatus @default(ACTIVE)
+  /// Prize line-up rendered on the Share & Win screen for this week.
+  prizes    Json?
+  closedAt  DateTime?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  shareEvents ShareWinShareEvent[]
+  referrals   ShareWinReferral[]
+  standings   ShareWinStanding[]
+
+  @@index([status, startAt])
+  @@index([endAt])
+  @@map("share_win_cycles")
+}
+
+/// Append-only audit trail behind ShareWinStanding.shareCount.
+model ShareWinShareEvent {
+  id        String        @id @default(uuid())
+  userId    String
+  cycleId   String
+  /// Where the share was sent (whatsapp / facebook / instagram / snapchat /
+  /// system share sheet / copy-link).
+  channel   String        @default("system")
+  createdAt DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycle     ShareWinCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([cycleId, userId])
+  @@map("share_win_share_events")
+}
+
+/// referrer → referred attribution. `referredUserId` is UNIQUE, so a user can
+/// only ever be attributed once — the DB, not app logic, blocks duplicates and
+/// registration races.
+model ShareWinReferral {
+  id             String                 @id @default(uuid())
+  referrerId     String
+  referredUserId String                 @unique
+  referralCode   String
+  cycleId        String
+  status         ShareWinReferralStatus @default(CONVERTED)
+  convertedAt    DateTime               @default(now())
+  createdAt      DateTime               @default(now())
+  referrer       User                   @relation("ShareWinReferrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred       User                   @relation("ShareWinReferred", fields: [referredUserId], references: [id], onDelete: Cascade)
+  cycle          ShareWinCycle          @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@index([referrerId, cycleId])
+  @@index([cycleId])
+  @@index([referralCode])
+  @@map("share_win_referrals")
+}
+
+/// Per-user, per-cycle aggregate. Ranking reads this single indexed table
+/// instead of re-aggregating events, and closed cycles keep `finalRank`
+/// forever so "who won week N" stays answerable.
+model ShareWinStanding {
+  id               String        @id @default(uuid())
+  cycleId          String
+  userId           String
+  shareCount       Int           @default(0)
+  participantCount Int           @default(0)
+  score            Int           @default(0)
+  /// When this user first scored in the cycle — the deterministic tie-breaker
+  /// ("whoever reached the score first ranks higher").
+  firstScoredAt    DateTime?
+  lastScoredAt     DateTime?
+  /// Stamped once when the cycle closes; null while the cycle is live.
+  finalRank        Int?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  cycle            ShareWinCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, userId])
+  @@index([cycleId, participantCount(sort: Desc), score(sort: Desc)])
+  @@index([cycleId, finalRank])
+  @@index([userId])
+  @@map("share_win_standings")
+}
+
 model PlayerVote {
   id        String   @id @default(uuid())
   voterId   String
@@ -1870,6 +2033,23 @@ enum DisplayMode {
   BLUR_REVEAL
 }
 
+enum DailyChallengeType {
+  GUESS_PLAYER
+  FOOTBALL_BINGO
+  FOOTBALL_GRID
+  PLAYER_CONNECTIONS
+  GUESS_CLUB
+  TRANSFER_PUZZLE
+  TOP10_CHALLENGE
+  FOOTBALL_QUIZ
+}
+
+enum DailyChallengeStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum CoinTransactionType {
   QUIZ_REWARD
   DAILY_LOGIN
@@ -2112,6 +2292,7 @@ enum XpActionType {
   PREDICTION_WINNER
   QUIZ_ANSWER_CORRECT
   QUIZ_COMPLETED_HIGH
+  REFERRAL_CONVERSION
   DAILY_LOGIN
   ADMIN_ADJUSTMENT
   STREAK_FREEZE_USED
@@ -2147,4 +2328,14 @@ enum GroupRoundStatus {
 enum GroupPredictionMode {
   WINNER
   EXACT
+}
+
+enum ShareWinCycleStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum ShareWinReferralStatus {
+  CONVERTED
+  REVOKED
 }

@@ -1,169 +1,113 @@
 /**
- * QuizHeader — Fixed liquid-glass bar aligned like Rank (back | 90 PLUS | coins).
+ * QuizHeader — the Football Quiz screen's top bar (Figma node 238:374).
+ *
+ * It is the SAME header every other game mode uses, so the chrome itself lives
+ * in ./gameChrome.tsx and this file only positions it and wires up the screen's
+ * own actions. Anything visual (title type, XP badge, back arrow) is changed
+ * there, once, for all seven modes.
+ *
+ * OFFSET: Figma places the bar at y 95 on an artboard whose first 62pt are the
+ * status bar, so on device it sits `insets.top + 33` down — NOT `insets.top +
+ * 95`, which double-counts the status bar and pushed the whole screen down.
+ *
+ * JUDGMENT CALL: Figma's top bar has no language-toggle affordance, but the
+ * screen has real, ongoing quiz-language-switch functionality
+ * (`toggleQuizLanguage` — separate from the one-time QuizLanguagePopup). It is
+ * exposed as a small pill inside the header's trailing slot so the feature
+ * isn't lost, without altering the Figma back/title/XP row itself.
  */
 
-import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-} from 'react-native';
-import { BlurView, type BlurTint } from 'expo-blur';
-import { ChevronLeft, Zap } from 'lucide-react-native';
-import { router } from 'expo-router';
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
+import React, { useMemo } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { goBackToQuestionsHub } from './quizNavigation';
 import { useCoins } from '../../contexts/CoinsContext';
 import { useTranslation } from '../../src/i18n';
-import { glassProps } from '../../constants/ui';
-
-const ACCENT = '#A855F7';
-const SIDE_SLOT_W = 88;
-const blurTint: BlurTint = 'dark';
+import { getAppFont } from '../../utils/fontSetup';
+import { useDesignScale } from '../../utils/responsive';
+import type { QuizApiLanguage } from '../../services/quizApi.service';
+import { GAME_COLOR, GAME_LAYOUT, GameScreenHeader } from './gameChrome';
 
 interface QuizHeaderProps {
   topInset: number;
+  quizLang?: QuizApiLanguage;
+  onToggleLanguage?: () => void;
+  /**
+   * `true` (default) floats the bar over the screen — what the terminal states
+   * (sign-in, error, "finished for today") want, since they centre a single
+   * block of copy underneath it.
+   *
+   * `false` renders it IN FLOW with no positioning and no gutters of its own,
+   * so it can sit as the first child inside a screen's ScrollView and scroll
+   * with the content — exactly how every other question mode places its header
+   * (see QuestionsModeScreen). The scroll container supplies the top inset and
+   * the 22pt column, the same way it does there.
+   */
+  pinned?: boolean;
 }
 
-function QuizHeaderInner({ topInset }: QuizHeaderProps) {
+function createStyles(scale: number, fontScale: number, language: string) {
+  const s = (v: number) => Math.round(v * scale);
+  const f = (v: number) => Math.round(v * fontScale);
+
+  return StyleSheet.create({
+    wrap: {
+      position: 'absolute',
+      left: s(GAME_LAYOUT.gutter),
+      right: s(GAME_LAYOUT.gutter),
+      zIndex: 22,
+    },
+    langPill: {
+      marginRight: s(8),
+      paddingHorizontal: s(8),
+      paddingVertical: s(4),
+      borderRadius: s(8),
+      borderWidth: 1,
+      borderColor: GAME_COLOR.rowBorder,
+    },
+    langPillText: {
+      fontFamily: getAppFont(700, language),
+      fontSize: f(11),
+      color: GAME_COLOR.accent,
+    },
+  });
+}
+
+function QuizHeaderInner({ topInset, quizLang, onToggleLanguage, pinned = true }: QuizHeaderProps) {
   const { coins, loading } = useCoins();
-  const { t } = useTranslation();
-  const display = loading ? '—' : String(coins);
+  const { t, language } = useTranslation();
+  const { scale, fontScale, s } = useDesignScale();
 
-  const shellStyle = [styles.shell, { paddingTop: topInset + 10 }];
-
-  const content = (
-    <View style={styles.row}>
-      <View style={styles.sideSlot}>
-        <TouchableOpacity
-          onPress={() => router.push('/(tabs)/rank')}
-          style={styles.glassChip}
-          activeOpacity={0.75}
-          accessibilityLabel={t.quiz.backToRank}
-        >
-          <ChevronLeft
-            size={20}
-            color="#FFFFFF"
-            strokeWidth={2.5}
-          />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.centerSlot}>
-        <View style={styles.logoPillSmall}>
-          <Text style={styles.logo90Small}>90</Text>
-          <View style={styles.plusChipSmall}>
-            <Text style={styles.logoPlusSmall}>PLUS</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.sideSlot, styles.sideSlotEnd]}>
-        <View
-          style={styles.glassChip}
-          accessibilityRole="text"
-          accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
-        >
-          <Zap size={13} color={ACCENT} fill={ACCENT} />
-          <Text style={styles.coinTxt}>{display}</Text>
-        </View>
-      </View>
-    </View>
+  const styles = useMemo(
+    () => createStyles(scale, fontScale, language),
+    [scale, fontScale, language],
   );
-
-  if (isLiquidGlassSupported) {
-    return (
-      <LiquidGlassView {...glassProps.header} style={shellStyle}>
-        {content}
-      </LiquidGlassView>
-    );
-  }
 
   return (
-    <BlurView intensity={15} tint={blurTint} style={shellStyle}>
-      {content}
-    </BlurView>
+    <View style={pinned ? [styles.wrap, { top: topInset + s(GAME_LAYOUT.contentTop) }] : undefined}>
+      <GameScreenHeader
+        title={t.quiz.footballQuiz}
+        onBack={goBackToQuestionsHub}
+        xp={loading ? '—' : coins}
+        backAccessibilityLabel={t.quiz.backToQuestions}
+        trailing={
+          onToggleLanguage ? (
+            <TouchableOpacity
+              onPress={onToggleLanguage}
+              activeOpacity={0.7}
+              style={styles.langPill}
+              accessibilityRole="button"
+              accessibilityLabel={quizLang === 'ar' ? t.quiz.langArabic : t.quiz.langEnglish}
+            >
+              <Text style={styles.langPillText}>
+                {quizLang === 'ar' ? t.quiz.langArabic : t.quiz.langEnglish}
+              </Text>
+            </TouchableOpacity>
+          ) : null
+        }
+      />
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  shell: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: 'transparent',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    minHeight: 44,
-  },
-  sideSlot: {
-    width: SIDE_SLOT_W,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  sideSlotEnd: {
-    alignItems: 'flex-end',
-  },
-  centerSlot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glassChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 40,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    gap: 5,
-  },
-  logoPillSmall: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    gap: 5,
-  },
-  logo90Small: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-  plusChipSmall: {
-    backgroundColor: ACCENT,
-    borderRadius: 5,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  logoPlusSmall: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-  },
-  coinTxt: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-});
 
 export const QuizHeader = React.memo(QuizHeaderInner);

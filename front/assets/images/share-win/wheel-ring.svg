@@ -1,0 +1,14 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="359" height="359" viewBox="0 0 359 359" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Ellipse 14">
+<mask id="path-1-inside-1_0_175" fill="white">
+<path d="M359 179.5C359 278.635 278.635 359 179.5 359C80.3649 359 0 278.635 0 179.5C0 80.3649 80.3649 0 179.5 0C278.635 0 359 80.3649 359 179.5ZM9.25938 179.5C9.25938 273.521 85.4787 349.741 179.5 349.741C273.521 349.741 349.741 273.521 349.741 179.5C349.741 85.4787 273.521 9.25938 179.5 9.25938C85.4787 9.25938 9.25938 85.4787 9.25938 179.5Z"/>
+</mask>
+<path d="M359 179.5C359 278.635 278.635 359 179.5 359C80.3649 359 0 278.635 0 179.5C0 80.3649 80.3649 0 179.5 0C278.635 0 359 80.3649 359 179.5ZM9.25938 179.5C9.25938 273.521 85.4787 349.741 179.5 349.741C273.521 349.741 349.741 273.521 349.741 179.5C349.741 85.4787 273.521 9.25938 179.5 9.25938C85.4787 9.25938 9.25938 85.4787 9.25938 179.5Z" fill="url(#paint0_linear_0_175)" stroke="#C08CF2" stroke-width="3" mask="url(#path-1-inside-1_0_175)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_175" x1="179.5" y1="0" x2="179.5" y2="359" gradientUnits="userSpaceOnUse">
+<stop stop-color="#6010AC"/>
+<stop offset="1" stop-color="#3E0574"/>
+</linearGradient>
+</defs>
+</svg>

@@ -1,6 +1,6 @@
-import QuizHubScreen from '../../components/Quiz/QuizHubScreen';
+import QuestionsHubScreen from '../../components/Quiz/QuestionsHubScreen';
 
-/** Quiz data loading is handled by `useDailyQuiz` inside QuizHubScreen (single fetch path). */
+/** Questions Hub is the quiz tab entry; daily football quiz is available as a dedicated mode route. */
 export default function QuizTabScreen() {
-  return <QuizHubScreen />;
+  return <QuestionsHubScreen />;
 }
