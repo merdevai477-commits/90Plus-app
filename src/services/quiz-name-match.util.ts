@@ -61,6 +61,24 @@ export function normalizeName(name: string): string {
     .replace(/[^a-z0-9\u0600-\u06FF]/g, '');
 }
 
+/**
+ * Fold Arabic orthographic variants so spelling differences and light typos
+ * match: strip tashkeel/tatweel, unify alef/hamza forms, ta-marbuta, and
+ * alef-maqsura, collapse whitespace. Keeps real letters and single spaces.
+ */
+export function foldArabic(text: string): string {
+  return text
+    .replace(/[\u064B-\u0652\u0670]/g, '')
+    .replace(/\u0640/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function editDistance(s1: string, s2: string): number {
   const a = s1.toLowerCase();
   const b = s2.toLowerCase();

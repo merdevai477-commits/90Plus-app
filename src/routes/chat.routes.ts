@@ -48,6 +48,7 @@ import {
     decrementLimit,
     getResetTimeForUser,
     getDailyMessageLimit,
+    isChatUnlimitedUser,
     toConversationDTO,
     migrateLegacyFileStore,
 } from '../services/chat.service';
@@ -78,6 +79,11 @@ import {
     resolveGeminiChatModel,
     type GeminiChatStreamClient,
 } from '../services/gemini-chat.client';
+import {
+    isChatAgentConfigured,
+    runFootballAgent,
+} from '../services/chat-agent.service';
+import { tryDeterministicFootballReply } from '../services/chat-deterministic-fallback.service';
 
 // Data-backed factual answers stay valid for a few hours; live data is excluded
 // from caching upstream (see FootballChatContext.cacheable).
@@ -271,15 +277,6 @@ if (PROVIDERS.length === 0) {
  * OpenRouter: complex football → Gemini/Qwen chain.
  */
 function providersForRequest(useComplex: boolean): ProviderConfig[] {
-    if (GEMINI_PROVIDERS.length > 0) {
-        const chain: ProviderConfig[] = [];
-        if (GEMINI_PRIMARY) chain.push(GEMINI_PRIMARY);
-        if (GEMINI_FALLBACK) chain.push(GEMINI_FALLBACK);
-        return chain.length > 0 ? chain : GEMINI_PROVIDERS;
-    }
-
-    if (BEDROCK_PROVIDERS.length > 0) return BEDROCK_PROVIDERS;
-
     const chain: ProviderConfig[] = [];
     const seen = new Set<string>();
 
@@ -288,6 +285,15 @@ function providersForRequest(useComplex: boolean): ProviderConfig[] {
         seen.add(p.model);
         chain.push(p);
     };
+
+    // Prefer Gemini when configured, but always keep OpenRouter as backup so a
+    // dead Gemini key does not hard-fail chat when OpenRouter still works.
+    if (GEMINI_PROVIDERS.length > 0) {
+        if (GEMINI_PRIMARY) push(GEMINI_PRIMARY);
+        if (GEMINI_FALLBACK) push(GEMINI_FALLBACK);
+    } else if (BEDROCK_PROVIDERS.length > 0) {
+        for (const p of BEDROCK_PROVIDERS) push(p);
+    }
 
     if (useComplex) {
         push(OR_COMPLEX);
@@ -380,12 +386,24 @@ const CORE_BEHAVIOR_PROMPT = `
 - لا تذكر اسم المطور إلا إذا المستخدم سأل بشكل مباشر.
 - في هذه الحالات فقط عرّف نفسك: "أنا 90Plus agent، مطور بواسطة mr.dev ai."
 
-أسلوب الرد:
-- أجب بنفس لغة المستخدم (عربية/إنجليزية).
-- طابق لهجة المستخدم بدون مبالغة.
-- لو المستخدم عايز رد سريع: ادي المختصر المفيد.
-- لو محتاج شرح: كن منظم وواضح.
-- تجنب الحشو.
+الشخصية والأسلوب (صاحب كروي محترف):
+- انت صاحب بيفهم كورة صح — ودود ومحترم ومباشر، من غير حشو ولا مقدمات طويلة.
+- ابدأ دايمًا بالإجابة المباشرة في أول سطر، و**بولد** للرقم/النادي/الاسم المهم.
+- بعد كده لو مفيد: ٢–٤ نقط قصيرة، أو جدول Markdown مضغوط للبيانات المتعددة (مباريات، إحصائيات، ترتيب، مقارنات).
+- ردودك قصيرة وقوية ومنظمة إلا لو المستخدم طلب تفاصيل أكتر.
+- أجب بنفس لغة المستخدم؛ لو عربي رد باللهجة المصرية العامية إلا لو كتب بلهجة/لغة تانية فطابقها.
+- استخدم إيموجي كورة باعتدال لما يناسب (⚽🟨🟥) من غير إفراط.
+- الشكل الحلو ماينفعش يغيّر أي رقم/نادي — الدقة أهم من الأسلوب، والأرقام من البيانات المرفقة بس.
+
+قاعدة المعلومات الوقتية (صارمة جدًا):
+- معرفتك المدرّبة قديمة وممكن تكون غلط: نادي اللاعب الحالي، سنه، إصابته، حالة انتقاله، إحصائيات الموسم، مواعيد ونتائج المباريات، الدقيقة الحالية، التشكيل، والأحداث (جون/كارت/تبديل) — كل ده وقتي.
+- أي معلومة وقتية لازم تيجي من بلوك بيانات مرفق في رسالة النظام. لو مفيش بلوك مرفق للسؤال الوقتي، قول إنك مش عندك تحديث لحظي دلوقتي — من غير ما تخمّن من الذاكرة.
+- ممنوع نهائيًا "غالبًا" أو "على حد علمي" أو أي تخمين في نتيجة، دقيقة مباراة، سن لاعب، أو ناديه الحالي.
+- بيانات اللايف بتتغير كل لحظة: ماتعيدش استخدام نتيجة/دقيقة قديمة ظهرت قبل كده في نفس المحادثة كأنها لسه صح.
+
+إمتى ترد من غير بيانات (للسرعة):
+- قواعد اللعبة العامة (التسلل، مدة الشوط) والتاريخ الثابت القديم (مين كسب مونديال 2018) → جاوب مباشرة، دي معلومة ثابتة مش هتتغير.
+- الكلام العام عن التطبيق أو أسئلة مالهاش علاقة بلاعب/مباراة بعينها → رد عادي.
 
 اكتمال الرد:
 - أكمل إجابتك دائماً حتى النهاية — لا تقطع الرد في منتصف جملة أو فكرة.
@@ -416,11 +434,19 @@ const CORE_BEHAVIOR_PROMPT = `
 بيانات كرة القدم الحية:
 - عندما يُرفق بلوك "LIVE FOOTBALL DATA" أو "LIVE FOOTBALL API DATA" أو "TEAM DOSSIER" في رسالة النظام، استخدمه كمصدر وحيد للأرقام والإحصائيات.
 - قاعدة صارمة: أي رقم (أهداف، صناعة، مباريات، تقييم، بطولات، ترتيب) يجب أن يأتي حصراً من سطر مُعلّم بـ "source: api" أو "source: cache". ممنوع منعاً تاماً اختراع أو تخمين أي رقم.
-- إذا كان السطر مُعلّماً بـ "source: unavailable" أو ظهر بلوك "NO-VERIFIED-DATA GUARD"، فلا تذكر أي أرقام إطلاقاً — قل بوضوح: "لا توجد بيانات موثقة حالياً" وقدّم فقط معلومات وصفية عامة بدون أرقام.
+- إذا كان السطر مُعلّماً بـ "source: unavailable" أو ظهر بلوك "NO-VERIFIED-DATA GUARD"، فلا تذكر أي أرقام إطلاقاً — قل بوضوح: "مفيش بيانات موثقة دلوقتي" وقدّم فقط معلومات وصفية عامة بدون أرقام.
 - إن لم يُرفق أي بلوك بيانات أصلاً، لا تخترع إحصائيات؛ تحدث بشكل وصفي عام أو وضّح أن البيانات غير متاحة.
 - لا تخترع أهدافاً أو بطولات أو أندية أو مدربين — إذا لم تتوفر البيانات، قل ذلك بوضوح.
 - للاعبين والفرق والترتيب: استخدم الجداول Markdown عند عرض أكثر من 3 حقول.
 - عند سؤال عن مباريات اليوم: اذكر فقط أهم المباريات المرفقة في السياق (لا تسرد كل المباريات). في نهاية الرد وجّه المستخدم لصفحة المباريات في تطبيق 90Plus لو عايز يشوف باقي المباريات.
+
+الفولباك (لما البيانات تفشل أو تكون فاضية):
+- لو الداتا رجعت فاضية أو فشلت: قول إن المعلومة مش متاحة دلوقتي وجرّب تاني بعد شوية — من غير ما تملا الفراغ بتخمين من الذاكرة.
+- لو اسم اللاعب غامض وفيه أكتر من احتمال: اختار الأشهر واستخدمه، أو اسأل بسرعة "قصدك مين؟" مع 2-3 خيارات.
+
+ممنوعات:
+- ماتذكرش كلمة "tool" أو "API" أو "endpoint" للمستخدم — رد طبيعي وكأنك عارف من نفسك.
+- ماتقولش "على حد علمي" أو "غالبًا" في أي معلومة وقتية (نتيجة، دقيقة، سن، نادي حالي).
 
 السلامة:
 - إذا احتوت الرسالة سبابًا، ارفض المتابعة باحترام.
@@ -492,19 +518,19 @@ function computeMaxTokens(
     messageLength: number,
     opts?: { playerData?: boolean },
 ): number {
-    const cap = Number(process.env.CHAT_MAX_OUTPUT_TOKENS ?? 8192);
-    const playerFloor = Number(process.env.CHAT_PLAYER_MAX_OUTPUT_TOKENS ?? 4096);
+    const cap = Number(process.env.CHAT_MAX_OUTPUT_TOKENS ?? 1200);
+    const playerFloor = Number(process.env.CHAT_PLAYER_MAX_OUTPUT_TOKENS ?? 900);
     const base: Record<LengthMode, number> = {
-        short: 900,
-        medium: 1800,
-        detailed: 4096,
+        short: 500,
+        medium: 800,
+        detailed: 1000,
     };
-    const bonus = Math.min(800, Math.floor(messageLength / 8));
+    const bonus = Math.min(200, Math.floor(messageLength / 20));
     let total = base[mode] + bonus;
     if (opts?.playerData) {
         total = Math.max(total, playerFloor);
     }
-    return Math.min(total, Number.isFinite(cap) && cap > 0 ? cap : 8192);
+    return Math.min(total, Number.isFinite(cap) && cap > 0 ? cap : 1200);
 }
 
 // ─── GET /chat/limit ─────────────────────────────────────────────────────────
@@ -512,11 +538,13 @@ router.get('/chat/limit', async (req: Request, res: Response): Promise<void> => 
     const userId = getUserId(req);
     const tz = getTimezone(req);
     try {
+        const unlimited = isChatUnlimitedUser(userId);
         const remaining = await getRemaining(userId, tz);
         res.json({
             remaining,
-            used: DAILY_LIMIT - remaining,
+            used: unlimited ? 0 : DAILY_LIMIT - remaining,
             limit: DAILY_LIMIT,
+            unlimited,
             resetAt: await getResetTimeForUser(userId),
             timezone: tz,
         });
@@ -703,10 +731,19 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 : '';
 
         const cacheLang = messageLanguage;
+        // The grounded tool agent must run even when the client sends a
+        // personalization suffix (profile block). Previously any suffix forced
+        // the legacy prefetch+LLM path, which has none of the 365 grounding —
+        // so real users with a completed profile always got stale answers even
+        // though the suffix-less test battery passed. The suffix is merged into
+        // the agent system prompt below instead of disabling the agent.
+        const agentEnabled = !isResume && isChatAgentConfigured();
         const playerInfoQuery =
-            !isResume && !sanitizedSuffix ? detectPlayerInfoQuery(trimmedMessage) : null;
+            !agentEnabled && !isResume && !sanitizedSuffix
+                ? detectPlayerInfoQuery(trimmedMessage)
+                : null;
 
-        // ─── player_info cache (by player name — instant, no API / no LLM) ───
+        // ─── player_info cache (skipped when tool agent is on — avoids stale answers)
         if (playerInfoQuery && !clientClosed) {
             const playerCached = await resolvePlayerInfoAnswer({
                 ...playerInfoQuery,
@@ -744,7 +781,111 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             }
         }
 
-        // ─── Build prompt ────────────────────────────────────────────────────
+        // ─── Tool-calling agent (OpenRouter Qwen) — preferred path ───────────
+        // Bypasses the generic answer cache so temporal questions never get
+        // stale hallucinated tables. Falls through to legacy on failure.
+        if (agentEnabled && !clientClosed) {
+            const category = detectCategory(trimmedMessage);
+            const lengthMode = detectLengthMode(trimmedMessage);
+            const agentSystemPrompt = [
+                buildLanguageLockPrompt(messageLanguage),
+                buildSystemPrompt(category, lengthMode),
+                // Preserve profile personalization inside the grounded path.
+                // The agent's tool data still overrides anything here for facts.
+                sanitizedSuffix,
+            ]
+                .filter(Boolean)
+                .join('\n\n');
+
+            const historyForAgent = buildHistoryWindow(
+                Array.isArray(history) ? history : [],
+            );
+
+            try {
+                const abort = new AbortController();
+                req.on('close', () => abort.abort());
+
+                const agentResult = await runFootballAgent({
+                    systemPrompt: agentSystemPrompt,
+                    history: historyForAgent,
+                    userMessage: trimmedMessage,
+                    language: messageLanguage,
+                    onToken: (token) => {
+                        if (!clientClosed) sendToken(token);
+                    },
+                    signal: abort.signal,
+                });
+
+                if (agentResult.fullText.trim().length > 0 && !clientClosed) {
+                    await appendMessage(
+                        userId,
+                        targetConversation.id,
+                        'assistant',
+                        agentResult.fullText,
+                        agentResult.usedModel,
+                    );
+                    const conversationTitle = await maybeAutoTitleConversation(
+                        userId,
+                        targetConversation.id,
+                        trimmedMessage,
+                    );
+                    sendDone({
+                        remaining: await getRemaining(userId, tz),
+                        limit: DAILY_LIMIT,
+                        resetAt: await getResetTimeForUser(userId),
+                        usedModel: agentResult.usedModel,
+                        usedProvider: 'agent',
+                        toolsUsed: agentResult.toolsUsed,
+                        ...(conversationTitle ? { conversationTitle } : {}),
+                    });
+                    return;
+                }
+            } catch (err: any) {
+                logger.warn(
+                    `[chat] agent path failed — falling back to legacy: ${err?.message ?? err}`,
+                );
+            }
+
+            // If the agent is configured but produced nothing (credits/keys),
+            // try a deterministic tools reply before the legacy LLM path.
+            try {
+                const deterministic = await tryDeterministicFootballReply(
+                    trimmedMessage,
+                    messageLanguage,
+                );
+                if (deterministic?.text && !clientClosed) {
+                    sendToken(deterministic.text);
+                    await appendMessage(
+                        userId,
+                        targetConversation.id,
+                        'assistant',
+                        deterministic.text,
+                        'deterministic-tools',
+                    );
+                    const conversationTitle = await maybeAutoTitleConversation(
+                        userId,
+                        targetConversation.id,
+                        trimmedMessage,
+                    );
+                    sendDone({
+                        remaining: await getRemaining(userId, tz),
+                        limit: DAILY_LIMIT,
+                        resetAt: await getResetTimeForUser(userId),
+                        usedModel: 'deterministic-tools',
+                        usedProvider: 'tools',
+                        toolsUsed: deterministic.toolsUsed,
+                        ...(conversationTitle ? { conversationTitle } : {}),
+                    });
+                    return;
+                }
+            } catch (err: any) {
+                logger.warn(
+                    `[chat] post-agent deterministic fallback failed: ${err?.message ?? err}`,
+                );
+            }
+        }
+
+        // ─── Build prompt (legacy pre-fetch path) ────────────────────────────
         const category = detectCategory(trimmedMessage);
         let lengthMode = detectLengthMode(trimmedMessage);
 
@@ -912,6 +1053,45 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
         if (!firstTokenSent || !usedProvider) {
             logger.error('[chat] all providers failed:', providerErrors.join(' | '));
+
+            // Last-resort: answer from football tools without an LLM so chat
+            // still works when Gemini/OpenRouter keys or credits are down.
+            try {
+                const deterministic = await tryDeterministicFootballReply(
+                    trimmedMessage,
+                    messageLanguage,
+                );
+                if (deterministic?.text && !clientClosed) {
+                    sendToken(deterministic.text);
+                    await appendMessage(
+                        userId,
+                        targetConversation.id,
+                        'assistant',
+                        deterministic.text,
+                        'deterministic-tools',
+                    );
+                    const conversationTitle = await maybeAutoTitleConversation(
+                        userId,
+                        targetConversation.id,
+                        trimmedMessage,
+                    );
+                    sendDone({
+                        remaining: await getRemaining(userId, tz),
+                        limit: DAILY_LIMIT,
+                        resetAt: await getResetTimeForUser(userId),
+                        usedModel: 'deterministic-tools',
+                        usedProvider: 'tools',
+                        toolsUsed: deterministic.toolsUsed,
+                        ...(conversationTitle ? { conversationTitle } : {}),
+                    });
+                    return;
+                }
+            } catch (err: any) {
+                logger.warn(
+                    `[chat] deterministic fallback failed: ${err?.message ?? err}`,
+                );
+            }
+
             if (!isResume) await decrementLimit(userId, tz);
             sendError('AI service error. Please try again.');
             return;

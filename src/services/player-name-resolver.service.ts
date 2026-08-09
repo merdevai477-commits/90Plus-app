@@ -139,6 +139,22 @@ export const COMMON_PLAYER_MAPPINGS: SeedMapping[] = [
     apiPlayerId: 386828,
   },
   {
+    arabicName: 'عثمان ديمبيلي',
+    englishName: 'Ousmane Dembélé',
+    aliases: [
+      'ديمبيلي',
+      'ديمبلي',
+      'ديبوريم',
+      'ديمبوريم',
+      'عثمان ديمبلي',
+      'Dembele',
+      'Dembélé',
+      'Ousmane Dembele',
+      'Ousmane Dembélé',
+    ],
+    apiPlayerId: 2207,
+  },
+  {
     arabicName: 'روبرت ليفاندوفسكي',
     englishName: 'Robert Lewandowski',
     aliases: ['ليفاندوفسكي', 'ليفاندوسكي', 'ليفا', 'Lewandowski', 'Robert Lewandowski'],

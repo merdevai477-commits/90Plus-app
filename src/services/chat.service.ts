@@ -48,6 +48,30 @@ export interface ConversationWithLast {
 const DAILY_LIMIT = Number(process.env.CHAT_DAILY_MESSAGE_LIMIT ?? 10);
 const ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/** Clerk user ids with unlimited AI chat (comma/space separated). */
+function parseUnlimitedChatUserIds(): Set<string> {
+  const raw = process.env.CHAT_UNLIMITED_USER_IDS ?? '';
+  return new Set(
+    raw
+      .split(/[,;\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+  );
+}
+
+let unlimitedUserIdsCache: Set<string> | null = null;
+
+export function isChatUnlimitedUser(userId: string): boolean {
+  if (!userId) return false;
+  if (!unlimitedUserIdsCache) unlimitedUserIdsCache = parseUnlimitedChatUserIds();
+  return unlimitedUserIdsCache.has(userId);
+}
+
+/** Test helper — clears cached unlimited-user set after env changes. */
+export function resetChatUnlimitedUserCache(): void {
+  unlimitedUserIdsCache = null;
+}
+
 export function getDailyMessageLimit(): number {
   return DAILY_LIMIT;
 }
@@ -269,6 +293,7 @@ export async function countMessages(conversationId: string): Promise<number> {
 // ─── Daily limit (timezone-aware) ────────────────────────────────────────────
 
 export async function getRemaining(userId: string, _timezone: string): Promise<number> {
+  if (isChatUnlimitedUser(userId)) return DAILY_LIMIT;
   const row = await prisma.chatLimit.findUnique({ where: { userId } });
   if (!row || isRollingWindowExpired(row.date)) return DAILY_LIMIT;
   return Math.max(0, DAILY_LIMIT - row.count);
@@ -276,6 +301,7 @@ export async function getRemaining(userId: string, _timezone: string): Promise<n
 
 /** Atomic increment. Resets the rolling 24h window when expired. */
 export async function incrementLimit(userId: string, _timezone: string): Promise<void> {
+  if (isChatUnlimitedUser(userId)) return;
   const nowIso = new Date().toISOString();
   const row = await prisma.chatLimit.findUnique({ where: { userId } });
 
@@ -295,6 +321,7 @@ export async function incrementLimit(userId: string, _timezone: string): Promise
 }
 
 export async function decrementLimit(userId: string, _timezone: string): Promise<void> {
+  if (isChatUnlimitedUser(userId)) return;
   const row = await prisma.chatLimit.findUnique({ where: { userId } });
   if (!row || isRollingWindowExpired(row.date) || row.count <= 0) return;
   await prisma.chatLimit.update({

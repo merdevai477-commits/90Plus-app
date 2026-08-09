@@ -60,12 +60,16 @@ const LEAGUE_ALIASES: Array<{ pattern: RegExp; id: number; label: string }> = [
   { pattern: /serie\s*a|الدوري\s*الإيطالي|الايطالي/i, id: 135, label: 'Serie A' },
   { pattern: /bundesliga|الدوري\s*الألماني|الالماني/i, id: 78, label: 'Bundesliga' },
   { pattern: /ligue\s*1|الدوري\s*الفرنسي/i, id: 61, label: 'Ligue 1' },
-  { pattern: /champions\s*league|دوري\s*الأبطال|ابطال\s*اوروبا/i, id: 2, label: 'UEFA Champions League' },
+  { pattern: /champions\s*league|دوري\s*الأبطال|ابطال\s*اوروبا|شامبيونز/i, id: 2, label: 'UEFA Champions League' },
   { pattern: /saudi\s*pro|الدوري\s*السعودي|روشن/i, id: 307, label: 'Saudi Pro League' },
   { pattern: /egyptian\s*premier|الدوري\s*المصري/i, id: 233, label: 'Egyptian Premier League' },
+  { pattern: /bolivia|بوليفي|البوليفي/i, id: 344, label: 'Division Profesional - Bolivia' },
+  { pattern: /caf\s*champions|دوري\s*أبطال\s*أفريقيا|ابطال\s*افريقيا|أبطال\s*أفريقيا/i, id: 12, label: 'CAF Champions League' },
+  { pattern: /world\s*cup|كأس\s*العالم|كاس\s*العالم|مونديال/i, id: 1, label: 'FIFA World Cup' },
 ];
 
 const UCL_LEAGUE_ID = 2;
+export const WORLD_CUP_LEAGUE_ID = 1;
 
 function isPlayerQuery(message: string): boolean {
   return /player|لاعب|إحصائيات|احصائيات|أهداف|اهداف|goals?|assists?|stats?|trophies|جوائز|ألقاب|القاب|أبطال|ابطال|بطولات|titles?|who\s+is|من\s+هو|مين\s+هو|جاب|فاز|كسب/i.test(
@@ -250,7 +254,8 @@ function detectStatType(message: string): PlayerStatType {
   return 'general';
 }
 
-function detectLeague(message: string): { id: number; label: string } | null {
+/** Resolve a league mention (AR/EN) to API-Football league id. */
+export function detectLeague(message: string): { id: number; label: string } | null {
   for (const entry of LEAGUE_ALIASES) {
     if (entry.pattern.test(message)) {
       return { id: entry.id, label: entry.label };
@@ -906,6 +911,50 @@ async function fetchPlayerUclCareerContextCached(
     60 * 60_000,
     () => fetchPlayerUclCareerDossier(rawName, language),
   );
+}
+
+const WORLD_CUP_EDITIONS = [2022, 2018, 2014, 2010, 2006];
+
+/**
+ * FIFA World Cup goals for a player, summed across editions via API-Football.
+ * Fallback for when the 365 career feed has no World Cup competition row.
+ * Grounded: only counts editions the API actually reports.
+ */
+export async function fetchPlayerWorldCupGoals(rawName: string): Promise<{
+  source: 'api-football';
+  total: number;
+  apps: number;
+  editions: Array<{ year: number; goals: number; apps: number; team: string | null }>;
+} | null> {
+  if (!footballService.isConfigured()) return null;
+  try {
+    const player = await resolvePlayerApiId(rawName);
+    if (!player) return null;
+    const editions: Array<{ year: number; goals: number; apps: number; team: string | null }> = [];
+    for (const year of WORLD_CUP_EDITIONS) {
+      const row = await footballService.getPlayerStatisticsInLeague(
+        player.apiPlayerId,
+        WORLD_CUP_LEAGUE_ID,
+        year,
+      );
+      const st = row?.statistics;
+      if (!st) continue;
+      const goals = Number(st.goals?.total ?? 0) || 0;
+      const apps = Number(st.games?.appearences ?? st.games?.appearances ?? 0) || 0;
+      if (goals === 0 && apps === 0) continue;
+      editions.push({ year, goals, apps, team: st.team?.name ?? null });
+    }
+    if (!editions.length) return null;
+    return {
+      source: 'api-football',
+      total: editions.reduce((a, e) => a + e.goals, 0),
+      apps: editions.reduce((a, e) => a + e.apps, 0),
+      editions,
+    };
+  } catch (err) {
+    logger.warn('[ChatFootball] World Cup goals lookup failed:', err);
+    return null;
+  }
 }
 
 async function fetchLiveMatchesContext(): Promise<string | null> {
