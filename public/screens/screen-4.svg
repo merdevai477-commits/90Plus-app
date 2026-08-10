@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 866" role="img" aria-label="90Plus - Reels">
+  <defs>
+    <clipPath id="clip4"><rect width="400" height="866" rx="46"/></clipPath>
+    <linearGradient id="bg4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a0a1c"/>
+      <stop offset="0.5" stop-color="#1a0730"/>
+      <stop offset="1" stop-color="#05010d"/>
+    </linearGradient>
+    <linearGradient id="acc4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ec4899"/>
+      <stop offset="1" stop-color="#f472b6"/>
+    </linearGradient>
+    <radialGradient id="glow4" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#ec4899" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ec4899" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g clip-path="url(#clip4)">
+    <rect width="400" height="866" fill="url(#bg4)"/>
+    <rect width="400" height="866" fill="url(#glow4)"/>
+    <text x="30" y="52" fill="#fff" font-family="Arial, sans-serif" font-size="15" font-weight="700">9:41</text>
+    <rect x="336" y="42" width="18" height="12" rx="3" fill="#fff" opacity="0.5"/>
+    <rect x="360" y="40" width="26" height="14" rx="3" fill="#fff" opacity="0.85"/>
+
+    <rect x="24" y="74" width="78" height="4" rx="2" fill="#fff" opacity="0.85"/>
+    <rect x="110" y="74" width="78" height="4" rx="2" fill="#fff" opacity="0.4"/>
+    <rect x="196" y="74" width="78" height="4" rx="2" fill="#fff" opacity="0.25"/>
+    <rect x="282" y="74" width="94" height="4" rx="2" fill="#fff" opacity="0.25"/>
+
+    <text x="30" y="118" fill="#fff" font-family="Arial, sans-serif" font-size="26" font-weight="800">Reels</text>
+
+    <circle cx="200" cy="420" r="50" fill="#fff" fill-opacity="0.12"/>
+    <path d="M186 396 L186 444 L226 420 Z" fill="#fff" fill-opacity="0.9"/>
+
+    <circle cx="352" cy="470" r="22" fill="#fff" fill-opacity="0.12"/>
+    <path d="M352 462 c-6 -8 -18 -2 -12 6 c3 4 12 10 12 10 s9 -6 12 -10 c6 -8 -6 -14 -12 -6 z" fill="#f472b6"/>
+    <text x="352" y="512" fill="#fff" font-family="Arial, sans-serif" font-size="12" font-weight="700" text-anchor="middle">2.4k</text>
+
+    <circle cx="352" cy="556" r="22" fill="#fff" fill-opacity="0.12"/>
+    <path d="M342 550 h20 v12 h-12 l-8 6 z" fill="#fff" fill-opacity="0.85"/>
+    <text x="352" y="596" fill="#fff" font-family="Arial, sans-serif" font-size="12" font-weight="700" text-anchor="middle">318</text>
+
+    <circle cx="352" cy="640" r="22" fill="#fff" fill-opacity="0.12"/>
+    <path d="M344 640 l16 -8 v16 z" fill="#fff" fill-opacity="0.85"/>
+
+    <circle cx="52" cy="712" r="20" fill="url(#acc4)"/>
+    <rect x="84" y="702" width="140" height="16" rx="8" fill="#fff" fill-opacity="0.6"/>
+    <rect x="230" y="704" width="60" height="24" rx="12" fill="#ec4899" fill-opacity="0.3" stroke="#f472b6" stroke-opacity="0.5"/>
+    <rect x="24" y="742" width="300" height="14" rx="7" fill="#fff" fill-opacity="0.28"/>
+    <rect x="24" y="764" width="220" height="14" rx="7" fill="#fff" fill-opacity="0.18"/>
+
+    <rect x="24" y="798" width="352" height="54" rx="20" fill="#000" fill-opacity="0.35"/>
+    <circle cx="72" cy="825" r="7" fill="#fff" opacity="0.28"/>
+    <circle cx="144" cy="825" r="7" fill="#fff" opacity="0.28"/>
+    <circle cx="216" cy="825" r="7" fill="#fff" opacity="0.28"/>
+    <circle cx="288" cy="825" r="8" fill="url(#acc4)"/>
+    <circle cx="352" cy="825" r="7" fill="#fff" opacity="0.28"/>
+  </g>
+</svg>
