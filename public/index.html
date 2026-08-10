@@ -486,31 +486,80 @@
 
       .fan-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-      .fan-controls { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 20px; position: relative; z-index: 5; }
+      .fan-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        margin-top: 22px;
+        position: relative;
+        z-index: 5;
+        direction: ltr;
+      }
 
       .fan-arrow {
-        width: 46px; height: 46px;
-        display: grid; place-items: center;
-        border-radius: 50%;
-        color: var(--muted);
-        background: var(--glass);
-        border: 1px solid var(--glass-border);
+        width: 48px;
+        height: 48px;
+        display: grid;
+        place-items: center;
+        border-radius: 16px;
+        color: rgba(255, 255, 255, 0.85);
+        background: linear-gradient(145deg, rgba(255,255,255,0.1), rgba(255,255,255,0.03));
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.18),
+          0 10px 28px rgba(0, 0, 0, 0.35);
         backdrop-filter: blur(16px);
         -webkit-backdrop-filter: blur(16px);
         cursor: pointer;
-        transition: color 0.25s, border-color 0.25s, transform 0.25s;
+        transition: color 0.25s, border-color 0.25s, transform 0.25s, box-shadow 0.25s, background 0.25s;
+        -webkit-tap-highlight-color: transparent;
       }
 
       @media (hover: hover) {
-        .fan-arrow:hover { color: var(--ink); border-color: var(--purple-soft); transform: translateY(-2px); }
+        .fan-arrow:hover {
+          color: #fff;
+          border-color: rgba(167, 139, 250, 0.55);
+          background: linear-gradient(145deg, rgba(124,58,237,0.35), rgba(255,255,255,0.06));
+          transform: translateY(-2px);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.28),
+            0 14px 34px rgba(124, 58, 237, 0.28);
+        }
       }
 
-      .fan-arrow svg { width: 20px; height: 20px; }
+      .fan-arrow:active { transform: translateY(0) scale(0.96); }
 
-      .fan-dots { display: flex; align-items: center; gap: 8px; }
+      .fan-arrow svg { width: 18px; height: 18px; display: block; }
 
-      .fan-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.16); transition: all 0.3s; }
-      .fan-dot.active { background: var(--purple-soft); transform: scale(1.35); box-shadow: 0 0 10px rgba(167,139,250,0.6); }
+      .fan-dots {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 48px;
+        padding: 0 16px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      .fan-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.18);
+        transition: all 0.3s;
+      }
+
+      .fan-dot.active {
+        width: 22px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--purple-soft), var(--gold));
+        box-shadow: 0 0 12px rgba(167,139,250,0.55);
+        transform: none;
+      }
 
       /* ===== Features ===== */
       .features {
@@ -848,11 +897,15 @@
           <div class="fan-layout" id="fanLayout"></div>
           <div class="fan-controls">
             <button class="fan-arrow" id="fanPrev" type="button" aria-label="السابق">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M14.5 5.5L8 12l6.5 6.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
             </button>
             <div class="fan-dots" id="fanDots"></div>
             <button class="fan-arrow" id="fanNext" type="button" aria-label="التالي">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M9.5 5.5L16 12l-6.5 6.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
             </button>
           </div>
         </div>
