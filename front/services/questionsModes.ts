@@ -117,9 +117,21 @@ export interface QuestionModeCatalogItem {
   icon: string;
 }
 
+/**
+ * The eight modes, in the order Figma node 1:2 lays them out, with the two-part
+ * name each hub card shows: the English name on top, the Arabic name beneath.
+ * This is the hub's ONLY source of card copy — see
+ * components/Quiz/QuestionsHubScreen/data.ts → mergeQuestionModes().
+ *
+ * Two deliberate departures from the Figma text:
+ *   • 'guess-club' reads "خمن النادي" (guess the CLUB). Figma repeats
+ *     "خمن اللاعب" (guess the player) there, which is a copy slip in the file.
+ *   • Arabic spellings are the app's, e.g. "بنجو" matches Figma's own spelling
+ *     on node 8:36 and fits the 87pt column the horizontal card gives it.
+ */
 export const QUESTION_MODE_CATALOG: QuestionModeCatalogItem[] = [
   { id: 'guess-player', title: 'Guess The Player', subtitle: 'خمن اللاعب', icon: 'user' },
-  { id: 'football-bingo', title: 'Football Bingo', subtitle: 'بينجو كرة القدم', icon: 'grid-3x3' },
+  { id: 'football-bingo', title: 'Football Bingo', subtitle: 'بنجو كرة القدم', icon: 'grid-3x3' },
   { id: 'football-grid', title: 'Football Grid', subtitle: 'شبكة كرة القدم', icon: 'table' },
   { id: 'player-connections', title: 'Player connections', subtitle: 'ربط اللاعبين', icon: 'git-branch' },
   { id: 'guess-club', title: 'Guess The Club', subtitle: 'خمن النادي', icon: 'shield' },
@@ -135,6 +147,8 @@ export interface QuestionModeSession {
   totalQuestions: number;
   timeLimitSec: number;
   questions: QuestionModeQuestion[];
+  /** True when the server already has this round fully answered. */
+  completed: boolean;
 }
 
 /**
@@ -148,6 +162,16 @@ export interface QuestionCrowdStats {
   available: boolean;
   sampleSize: number;
   percentages: Record<string, number>;
+}
+
+/**
+ * "50:50" result — exactly two option ids to keep visible: the real correct
+ * option plus one real wrong option, both resolved server-side.
+ */
+export interface QuestionFiftyFiftyResult {
+  challengeId: string;
+  questionId: string;
+  keepIds: string[];
 }
 
 export interface SubmitQuestionModeAnswerResult {
@@ -239,6 +263,8 @@ interface QuestionModeSessionResponse {
     completed: boolean;
     score: number;
     elapsedTime: number;
+    /** Server-authoritative position in the round — see createSession below. */
+    currentQuestionIndex?: number;
   };
 }
 
@@ -483,23 +509,65 @@ export const QuestionsModesService = {
     if (res.status === 401) {
       throw new Error('AUTH_REQUIRED');
     }
-    if (res.status === 404) {
-      throw new Error('MODE_NOT_FOUND');
-    }
     if (!res.ok || json.status !== 'SUCCESS' || !json.data) {
+      // Prefer the backend's own stable reason code over the bare HTTP status —
+      // an error body carries `{ error, message, details: { reason } }`.
+      const body = json as unknown as {
+        details?: { reason?: string };
+        error?: string;
+        message?: string;
+      };
+      const reason = body?.details?.reason;
+      if (reason) {
+        throw new Error(reason);
+      }
+      if (res.status === 503) {
+        throw new Error('QUESTION_GENERATION_UNAVAILABLE');
+      }
+      if (res.status === 404) {
+        throw new Error('QUESTIONS_CHALLENGE_NOT_FOUND');
+      }
       throw new Error(`API_ERROR_${res.status}`);
     }
 
     const questions = mapSessionToRound(json.data);
 
+    /*
+     * A 200 that carries no questions is a backend contract violation, not an
+     * empty round. Naming it here is what turns the old mystery
+     * SESSION_LOAD_FAILED into something diagnosable — the server is supposed
+     * to fail the request outright (QUESTIONS_CHALLENGE_EMPTY) rather than
+     * report success with nothing to play.
+     */
+    if (questions.length === 0) {
+      throw new Error('QUESTIONS_CHALLENGE_EMPTY');
+    }
+
+    /*
+     * RESUME FROM THE SERVER'S OWN POSITION.
+     *
+     * The session is server-authoritative (UserQuestionChallenge.answeredPayload
+     * tracks exactly which question is "current" and which are already
+     * answered). Hardcoding 0 here used to restart every re-entered round from
+     * question 1 while the server had already moved past it — the resulting
+     * answer submission named a question the server considered stale
+     * (QUESTIONS_SESSION_WRONG_QUESTION / QUESTIONS_SESSION_ALREADY_ANSWERED),
+     * which the API reports as 409. Reading the server's own index keeps both
+     * sides pointed at the same question on every load, including re-entry.
+     */
+    const rawIndex =
+      typeof json.data.currentQuestionIndex === 'number' ? json.data.currentQuestionIndex : 0;
+    const currentIndex = Math.min(Math.max(rawIndex, 0), Math.max(questions.length - 1, 0));
+
     return {
       sessionId: json.data.challengeId,
       mode: makeModeSummary(json.data, questions.length),
-      currentIndex: 0,
+      currentIndex,
       // The round is however many real questions the API published today.
       totalQuestions: questions.length,
       timeLimitSec: typeof json.data.content?.timer === 'number' ? json.data.content.timer : 20,
       questions,
+      completed: json.data.completed === true,
     };
   },
 
@@ -526,15 +594,19 @@ export const QuestionsModesService = {
       }),
     });
 
-    const json = await safeJsonParse<{ status: string; data?: SubmitQuestionModeAnswerResult }>(res, {
-      status: 'ERROR',
-    });
+    const json = await safeJsonParse<{
+      status: string;
+      data?: SubmitQuestionModeAnswerResult;
+      details?: { reason?: string };
+    }>(res, { status: 'ERROR' });
 
     if (res.status === 401) {
       throw new Error('AUTH_REQUIRED');
     }
     if (!res.ok || json.status !== 'SUCCESS' || !json.data) {
-      throw new Error(`API_ERROR_${res.status}`);
+      // Prefer the backend's stable reason (e.g. QUESTIONS_SESSION_ALREADY_ANSWERED)
+      // over the bare HTTP status — see createSession above for the same pattern.
+      throw new Error(json.details?.reason ?? `API_ERROR_${res.status}`);
     }
 
     return json.data;
@@ -570,6 +642,32 @@ export const QuestionsModesService = {
     });
 
     if (!res.ok || json.status !== 'SUCCESS' || !json.data) return unavailable;
+    return json.data;
+  },
+
+  /**
+   * 50:50. Returns exactly the two option ids to keep — the real correct one
+   * plus one real wrong one, resolved server-side from the round's stored
+   * answer. `null` means the lifeline genuinely has nothing to resolve (e.g. a
+   * board-based question with no flat options) — never guessed on the client.
+   */
+  async getFiftyFifty(
+    token: string,
+    modeId: Exclude<QuestionModeId, 'football-quiz'>,
+    params: { challengeId: string; questionId: string; language: Language },
+  ): Promise<QuestionFiftyFiftyResult | null> {
+    const query = new URLSearchParams({
+      challengeId: params.challengeId,
+      questionId: params.questionId,
+      language: normalizeLanguage(params.language),
+    }).toString();
+
+    const res = await authFetch(`/quiz/questions/modes/${modeId}/fifty-fifty?${query}`, token);
+    const json = await safeJsonParse<{ status: string; data?: QuestionFiftyFiftyResult }>(res, {
+      status: 'ERROR',
+    });
+
+    if (!res.ok || json.status !== 'SUCCESS' || !json.data) return null;
     return json.data;
   },
 

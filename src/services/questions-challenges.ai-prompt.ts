@@ -84,7 +84,9 @@ Grade each question honestly; a mixed round is expected.
 Return ONLY valid JSON, no markdown, no commentary.
 Return EXACTLY ${ROUND_QUESTION_COUNT} questions in "questions", each on a DIFFERENT subject entity,
 or {"questions":[],"status":"INSUFFICIENT_DATA"} if the candidates cannot support a full honest round.
-Never return a partial round and never repeat a subject entity within the round.`;
+Never return a partial round and never repeat a subject entity within the round.
+Repeating the same heading across questions is fine where the picture is the question (a crest or a
+portrait); what must differ every time is the entity being asked about.`;
 }
 
 /** Per-mode response schema + authoring guidance. */

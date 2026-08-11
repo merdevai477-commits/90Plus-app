@@ -3,11 +3,18 @@
   "compilerOptions": {
     "noImplicitReturns": false,
     "strict": false,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    // TypeScript 6 rejects the root config's `baseUrl` / `moduleResolution:
+    // node10` outright, which made every script here fail to start. Silence the
+    // deprecation for scripts only; the root config is untouched.
+    "ignoreDeprecations": "6.0",
+    "customConditions": null
   },
   "include": [
     "scripts/test-mux-upload.ts",
     "scripts/test-mux-direct.ts",
+    "scripts/verify-share-win.ts",
+    "scripts/seed-share-win.ts",
     "src/lib/prisma.ts"
   ],
   "exclude": [

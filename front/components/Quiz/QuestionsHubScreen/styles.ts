@@ -107,10 +107,15 @@ export const HUB_SCREEN_GRADIENT: [string, string, string] = ['#05010D', '#09031
 
 /**
  * "+50 XP" text on each challenge card. Applied through MaskedView.
- * Figma: horizontal sweep, right → left.
+ * Figma node 30:321 —
+ * linear-gradient(260.05deg, #2B077E 15.387%, #5A2AC6 52.174%, #B395F9 85.98%).
+ * 260deg is an almost-horizontal sweep running right → left with a slight
+ * downward tilt; converted to the unit box LinearGradient wants below.
  */
 export const XP_GRADIENT: [string, string, string] = ['#2B077E', '#5A2AC6', '#B395F9'];
 export const XP_GRADIENT_LOCATIONS: [number, number, number] = [0.1539, 0.5217, 0.8598];
+export const XP_GRADIENT_START = { x: 0.99, y: 0.41 };
+export const XP_GRADIENT_END = { x: 0.01, y: 0.59 };
 
 /**
  * Big "XP" word inside the hero. Figma node 6:14 —
@@ -522,11 +527,20 @@ function createStyles(scale: number, fontScale: number, language: string) {
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
+      // Figma `shrink-0` — the artwork keeps its box whatever the copy does.
+      flexShrink: 0,
     },
-    /** Figma Frame 8 — 87pt copy column beside the artwork, gap 8. */
+    /**
+     * Figma Frame 8 — 87pt copy column beside the artwork, gap 8.
+     * Figma's own frame overflows its 194pt card by 2pt (10+81+8+87+10 = 196),
+     * so the column is allowed to shrink those last 2pt rather than push the
+     * XP line past the card's `overflow: hidden` edge.
+     */
     horizontalTextCol: {
       width: s(87),
       gap: s(8),
+      flexShrink: 1,
+      minWidth: 0,
     },
     /** Figma Frame 27:302 — full-width copy block under the artwork, gap 8. */
     verticalTextBlock: {
@@ -534,36 +548,62 @@ function createStyles(scale: number, fontScale: number, language: string) {
       gap: s(8),
     },
 
-    /* Card typography — Figma Frame 7 / Frame 33. */
+    /* Card typography — Figma Frame 7 / Frame 33.
+     * Figma draws the card copy in Inter Semi Bold (600) / Medium (500) — NOT
+     * Bold. 700 made the titles and the XP line noticeably heavier than the
+     * design. */
     title: {
-      fontFamily: font(700),
+      fontFamily: font(600),
       fontSize: f(14),
       lineHeight: f(17),
       color: HUB_COLOR.textPrimary,
       textAlign: 'left',
     },
+    /**
+     * The card's second line is always the mode's ARABIC name (see
+     * ../data.ts → mergeQuestionModes), so it is pinned to the Arabic face
+     * rather than following the UI language — Inter carries no Arabic glyphs
+     * and would fall through to a system font.
+     */
     subtitle: {
-      fontFamily: font(500),
+      fontFamily: getAppFont(500, 'ar'),
       fontSize: f(12),
       lineHeight: f(15),
       color: HUB_COLOR.textMuted,
       textAlign: 'left',
+      // Figma marks the row `whitespace-nowrap`: the subtitle gives way before
+      // the XP does, so a long name never pushes the reward off the card.
+      flexShrink: 1,
+      minWidth: 0,
     },
     /** Figma Frame 8:34 — 4pt between the horizontal card's title and subtitle. */
     horizontalTitleGroup: { gap: s(4) },
-    /** Figma Frame 27:309 — subtitle and XP side by side, gap 8. */
+    /**
+     * Figma Frame 27:309 / 30:319 — subtitle and XP side by side, gap 8,
+     * `items-start`: the two runs are 15pt and 18pt tall and Figma aligns their
+     * TOPS (both at y = 0), not their centres.
+     */
     horizontalSubXpRow: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'flex-start',
       gap: s(8),
     },
     horizontalSubXpRowRtl: { flexDirection: 'row-reverse' },
     xpText: {
-      fontFamily: font(700),
+      fontFamily: font(600),
       fontSize: f(15),
       lineHeight: f(18),
       color: XP_GRADIENT[0],
+    },
+    /**
+     * MaskedView box for the XP line. Figma node 30:321 is `shrink-0`: the
+     * reward is the one thing on the card that must never be clipped, so it
+     * holds its measured width and the subtitle ellipsises instead.
+     */
+    xpMask: {
+      flexShrink: 0,
+      flexGrow: 0,
     },
     xpTextHidden: { opacity: 0 },
   });

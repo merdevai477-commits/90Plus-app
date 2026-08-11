@@ -27,6 +27,7 @@ import { getApiUrl } from '../config/api.config';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { getClerkBearerToken } from '../utils/clerkAuthToken';
 import { logger } from '../utils/logger';
+import { useCoins } from '../contexts/CoinsContext';
 
 export interface SpinPrize {
   coins: number;
@@ -54,6 +55,7 @@ export interface SpinOutcome {
 export type SpinAttempt =
   | { status: 'ok'; outcome: SpinOutcome }
   | { status: 'cooldown'; timeRemaining: { hours: number; minutes: number } }
+  | { status: 'error'; message: string }
   /** A spin is already in flight — the caller should no-op, not animate again. */
   | { status: 'locked' };
 
@@ -100,6 +102,7 @@ export function useDailySpin() {
   /** Ref, not state — the guard must be correct within a single tick. */
   const spinLock = useRef(false);
   const prizesRef = useRef(FALLBACK_PRIZES);
+  const { applyCoinsBalance, refreshCoins } = useCoins();
 
   const loadStatus = useCallback(async () => {
     if (!isSignedIn) return;
@@ -120,16 +123,18 @@ export function useDailySpin() {
         Array.isArray(data.prizes) && data.prizes.length > 0 ? data.prizes : FALLBACK_PRIZES;
       prizesRef.current = prizes;
 
+      const currentCoins = data.currentCoins ?? 0;
+      applyCoinsBalance(currentCoins);
       setStatus({
         canSpin: !!data.canSpin,
         timeRemaining: data.timeRemaining ?? { hours: 0, minutes: 0 },
-        currentCoins: data.currentCoins ?? 0,
+        currentCoins,
         prizes,
       });
     } catch (error) {
       logger.debug('[DailySpin] status failed:', error);
     }
-  }, [isSignedIn]);
+  }, [applyCoinsBalance, isSignedIn]);
 
   useEffect(() => {
     void loadStatus();
@@ -167,13 +172,18 @@ export function useDailySpin() {
     try {
       const token = await getClerkBearerToken(getTokenRef.current);
       if (!token) {
-        logger.debug('[DailySpin] No auth token — falling back to an offline spin');
-        return { status: 'ok', outcome: offlineOutcome() };
+        logger.debug('[DailySpin] No auth token — spin rejected');
+        return { status: 'error', message: 'Not authenticated' };
       }
 
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
       const res = await fetchWithTimeout(`${getApiUrl()}/daily-spin/spin`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'x-user-timezone': timezone,
+        },
       });
 
       if (!res.ok) {
@@ -181,7 +191,16 @@ export function useDailySpin() {
         if (res.status === 429) {
           try {
             const body = await res.json();
-            const timeRemaining = body?.timeRemaining ?? body?.error?.timeRemaining;
+            /*
+             * sendError() puts structured context under `details` and uses
+             * `error` for the E-code string — so the old `body.timeRemaining ??
+             * body.error.timeRemaining` read could never match, and every real
+             * cooldown fell through to the generic "Spin request failed (429)".
+             * `details` is the actual contract; the other two are kept only so
+             * an older backend still parses.
+             */
+            const timeRemaining =
+              body?.details?.timeRemaining ?? body?.timeRemaining ?? body?.error?.timeRemaining;
             if (timeRemaining) {
               return { status: 'cooldown', timeRemaining };
             }
@@ -189,34 +208,53 @@ export function useDailySpin() {
             /* fall through to offline fallback below */
           }
         }
-        logger.debug(`[DailySpin] spin request failed (${res.status}) — offline fallback`);
-        return { status: 'ok', outcome: offlineOutcome() };
+        logger.debug(`[DailySpin] spin request failed (${res.status})`);
+        return { status: 'error', message: `Spin request failed (${res.status})` };
       }
 
       const json = await res.json();
       const prize = json?.data?.prize;
       if (!prize || typeof prize.prizeIndex !== 'number') {
-        logger.debug('[DailySpin] spin response malformed — offline fallback');
-        return { status: 'ok', outcome: offlineOutcome() };
+        logger.debug('[DailySpin] spin response malformed');
+        return { status: 'error', message: 'Spin response was invalid' };
       }
+
+      const newBalance = typeof json?.data?.newBalance === 'number' ? json.data.newBalance : 0;
+      const nextOutcome: SpinOutcome = {
+        prizeIndex: prize.prizeIndex,
+        coins: prize.coins ?? 0,
+        label: String(prize.label ?? prize.coins ?? ''),
+        newBalance,
+        source: 'server',
+      };
+
+      if (typeof newBalance === 'number') {
+        applyCoinsBalance(newBalance);
+        void refreshCoins();
+      }
+
+      setStatus((prev) =>
+        prev
+          ? {
+              ...prev,
+              canSpin: false,
+              currentCoins: newBalance,
+              timeRemaining: { hours: 0, minutes: 0 },
+            }
+          : prev,
+      );
 
       return {
         status: 'ok',
-        outcome: {
-          prizeIndex: prize.prizeIndex,
-          coins: prize.coins ?? 0,
-          label: String(prize.label ?? prize.coins ?? ''),
-          newBalance: json?.data?.newBalance ?? 0,
-          source: 'server',
-        },
+        outcome: nextOutcome,
       };
     } catch (error) {
-      logger.debug('[DailySpin] spin threw — offline fallback:', error);
-      return { status: 'ok', outcome: offlineOutcome() };
+      logger.debug('[DailySpin] spin threw:', error);
+      return { status: 'error', message: 'Unable to reach the server' };
     } finally {
       spinLock.current = false;
     }
-  }, [offlineOutcome]);
+  }, [applyCoinsBalance, offlineOutcome, refreshCoins]);
 
   /** Called by the wheel once its animation has fully settled. */
   const finishSpin = useCallback(() => {

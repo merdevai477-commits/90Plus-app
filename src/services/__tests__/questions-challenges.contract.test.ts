@@ -87,9 +87,9 @@ jest.mock('../quiz-365-player.service', () => ({
 }));
 
 const mockCallQuestionsAiJson = jest.fn();
-jest.mock('../questions-challenges.ai-client', () => ({
-  callQuestionsAiJson: (...args: unknown[]) => mockCallQuestionsAiJson(...args),
-  isQuestionsAiConfigured: () => true,
+jest.mock('../questions-challenges.agent.service', () => ({
+  runQuestionsAgent: (...args: unknown[]) => mockCallQuestionsAiJson(...args),
+  isQuestionsAgentAvailable: () => true,
 }));
 
 import { buildAiQuestionChallenges } from '../questions-challenges.ai-generator.service';

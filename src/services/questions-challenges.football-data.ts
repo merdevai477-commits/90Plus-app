@@ -32,6 +32,10 @@ import { footballDataCacheService } from './football-data-cache.service';
 import { translateFootballNames } from './football-translation.service';
 import { resolve365QuizPlayerImage } from './quiz-365-player.service';
 import { buildQuizEntityDataset } from './quiz-entity-dataset.service';
+import {
+  buildDerivedTransferCandidates,
+  buildDerivedRankingCandidates,
+} from './questions-challenges.derived-football';
 import { logger } from '../utils/logger';
 import { ROUND_QUESTION_COUNT } from '../constants/quiz.constants';
 import type { QuizLanguage } from '../types/quiz.types';
@@ -64,8 +68,47 @@ const RANKING_LEAGUES: Array<{ id: number; en: string; ar: string }> = [
  * pools too thin for that and the day fails for lack of candidates rather than
  * for lack of data.
  */
-const QUESTIONS_SLICE_PLAYER_COUNT = 60;
-const QUESTIONS_SLICE_CLUB_COUNT = 40;
+/**
+ * How many squad members to look portraits up for when building one teammate
+ * group. Only four are used; the extras absorb players 365Scores has no
+ * portrait for (reserves, academy call-ups) so one miss cannot cost the whole
+ * team. Bounded because every entry is a lookup — the results are cached and
+ * shared with the player pool, so the real cost is well under this.
+ */
+const PORTRAIT_SAMPLE_SIZE = 12;
+/*
+ * 60 players is one contiguous window over a squad-ordered list, so it covered
+ * only ~3 clubs — and Player Connections needs one DISTINCT club per question,
+ * i.e. ROUND_QUESTION_COUNT of them. The day could never hold more than three
+ * connection questions no matter how well portraits resolved. Sized to span
+ * enough squads for a full round; the pools that sample players independently
+ * are still capped by PROBE_LIMIT, and portrait lookups are cached and shared
+ * across pools, so this widens coverage rather than multiplying upstream calls.
+ */
+const QUESTIONS_SLICE_PLAYER_COUNT = 360;
+/*
+ * Football Bingo asks for three clubs from one country and is capped at
+ * MAX_BINGO_CARDS_PER_COUNTRY cards per country, so a full round needs several
+ * countries that each contribute at least three clubs. A 40-club window yielded
+ * four such countries with exactly three clubs each — every card would have had
+ * to repeat the same trio, so the mode could never fill a round. Clubs come
+ * from the database with their crests already resolved, so widening this costs
+ * no upstream calls.
+ */
+const QUESTIONS_SLICE_CLUB_COUNT = 260;
+
+/**
+ * Escape hatch for the derived (persisted-career) fallback below.
+ *
+ * ON by default — an API-Football outage should not cost two modes. Tests that
+ * assert what the PRIMARY path does with bad upstream rows ("drops transfer
+ * rows with no crest", "refuses a tied ranking") set this, because otherwise
+ * the fallback legitimately refills the pool those assertions expect to be
+ * empty and the property under test becomes unobservable.
+ */
+function isDerivedFallbackDisabled(): boolean {
+  return process.env.QUESTIONS_DISABLE_DERIVED_FALLBACK?.trim().toLowerCase() === 'true';
+}
 
 /** How many entities each pool tries to fill. One per question, plus slack. */
 const POOL_TARGET = ROUND_QUESTION_COUNT;
@@ -154,12 +197,15 @@ export interface QuestionsFootballCandidates {
 
 /* ────────────────────────── small helpers ────────────────────────── */
 
-/** A usable remote image URL, or null. Never invents or substitutes one. */
-export function imageUrlOrNull(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return /^https?:\/\//i.test(trimmed) ? trimmed : null;
-}
+/**
+ * A usable remote image URL, or null. Never invents or substitutes one.
+ *
+ * Deliberately THE SAME predicate the round contract validates images with, so
+ * a URL this layer accepted onto a candidate can never be rejected later by the
+ * publish/session gate (questions-challenges.round-contract.ts).
+ */
+export { remoteImageUrlOrNull as imageUrlOrNull } from './questions-challenges.round-contract';
+import { remoteImageUrlOrNull as imageUrlOrNull } from './questions-challenges.round-contract';
 
 export function seededRng(seedStr: string): () => number {
   let h = 1779033703 ^ seedStr.length;
@@ -374,20 +420,51 @@ async function buildTeammateGroups(
     byTeam.set(player.teamId, arr);
   }
 
+  const withFour = [...byTeam.entries()].filter(([, players]) => players.length >= 4);
   const eligible = shuffle(
-    [...byTeam.entries()].filter(([teamId, players]) => players.length >= 4 && clubByTeamId.has(teamId)),
+    withFour.filter(([teamId]) => clubByTeamId.has(teamId)),
     rng,
   ).slice(0, POOL_TARGET * 2);
 
+  /*
+   * Player Connections silently produced zero groups with no way to tell which
+   * of its three gates closed. Each one fails for a completely different
+   * reason — too few squad-mates in the day's slice, the club missing from the
+   * candidate pool, or portraits that would not resolve — so an empty pool was
+   * indistinguishable from an outage. Say which.
+   */
+  let portraitFailures = 0;
   const groups: TeammateGroup[] = [];
   for (const [teamId, teammates] of eligible) {
     if (groups.length >= POOL_TARGET) break;
 
-    const four = shuffle(teammates, rng).slice(0, 4);
-    const photos = await mapLimit(four, LOOKUP_CONCURRENCY, (player) => resolvePhoto(player));
-    // All four portraits must be real: a "what connects them" question with a
-    // blank circle in it is not answerable.
-    if (photos.some((url) => !url)) continue;
+    /*
+     * Resolve portraits across a WIDER set than the four we need, then keep the
+     * four that actually have one.
+     *
+     * This used to shuffle the squad, take exactly four, and drop the whole team
+     * if any one of them had no portrait — so a 25-man squad with 20 usable
+     * photos was thrown away because a reserve keeper landed in the sample. With
+     * only ~3 teams in a day's slice that rejected every group, and Player
+     * Connections published nothing at all. Squad members are interchangeable
+     * here (the question is "what connects them", not "which four"), so widening
+     * the sample changes yield, not truthfulness: every player still comes from
+     * the real squad and still needs a real portrait.
+     */
+    const sample = shuffle(teammates, rng).slice(0, PORTRAIT_SAMPLE_SIZE);
+    const sampled = await mapLimit(sample, LOOKUP_CONCURRENCY, async (player) => ({
+      player,
+      photoUrl: await resolvePhoto(player),
+    }));
+    const usable = sampled.filter(
+      (entry): entry is { player: QuizDatasetPlayer; photoUrl: string } => Boolean(entry.photoUrl),
+    );
+    if (usable.length < 4) {
+      portraitFailures += 1;
+      continue;
+    }
+    const four = usable.slice(0, 4).map((entry) => entry.player);
+    const photos = usable.slice(0, 4).map((entry) => entry.photoUrl);
 
     const club = clubByTeamId.get(teamId)!;
     groups.push({
@@ -406,6 +483,16 @@ async function buildTeammateGroups(
         jerseyNumber: player.jerseyNumber,
         photoUrl: photos[idx]!,
       })),
+    });
+  }
+
+  if (groups.length === 0) {
+    logger.warn('[QuestionsChallenges:Data] no teammate groups — naming the gate that closed', {
+      slicePlayers: slice.players.length,
+      distinctTeamsInSlice: byTeam.size,
+      teamsWithAtLeast4: withFour.length,
+      teamsAlsoInClubPool: eligible.length,
+      groupsRejectedForPortraits: portraitFailures,
     });
   }
 
@@ -545,12 +632,45 @@ export async function buildQuestionsFootballCandidates(
   const resolvePhoto = createPhotoResolver();
 
   const clubs = toClubCandidates(slice);
-  const [players, teammateGroups, transfers, rankings] = await Promise.all([
+  const [players, teammateGroups, primaryTransfers, primaryRankings] = await Promise.all([
     buildPlayerCandidates(slice, rng, resolvePhoto),
     buildTeammateGroups(slice, clubs, rng, resolvePhoto),
     buildTransferCandidates(slice, rng),
     buildRankingCandidates(language),
   ]);
+
+  /*
+   * Transfers and scorer rankings are the only two pools that come exclusively
+   * from API-Football. When that account is unavailable both arrive empty and
+   * Transfer Puzzle / Top 10 cannot be authored — so fall back to the same
+   * facts already persisted in cached_365_player_career rather than losing the
+   * modes. Derived candidates are used ONLY to fill an empty pool: a live
+   * provider response always wins.
+   */
+  let transfers = primaryTransfers;
+  let rankings = primaryRankings;
+  if (!isDerivedFallbackDisabled() && (transfers.length === 0 || rankings.length === 0)) {
+    const [derivedTransfers, derivedRankings] = await Promise.all([
+      transfers.length === 0
+        ? buildDerivedTransferCandidates(POOL_TARGET * 2).catch((err) => {
+            logger.warn('[QuestionsChallenges:Data] derived transfer fallback failed', {
+              error: err instanceof Error ? err.message : String(err),
+            });
+            return [] as TransferCandidate[];
+          })
+        : Promise.resolve(transfers),
+      rankings.length === 0
+        ? buildDerivedRankingCandidates(language, POOL_TARGET * 2).catch((err) => {
+            logger.warn('[QuestionsChallenges:Data] derived ranking fallback failed', {
+              error: err instanceof Error ? err.message : String(err),
+            });
+            return [] as RankingCandidate[];
+          })
+        : Promise.resolve(rankings),
+    ]);
+    transfers = derivedTransfers;
+    rankings = derivedRankings;
+  }
 
   const clubsByCountry: Record<string, ClubCandidate[]> = {};
   for (const club of clubs) {

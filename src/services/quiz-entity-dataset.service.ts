@@ -158,6 +158,54 @@ export async function buildQuizEntityDataset(): Promise<QuizDatasetBuildResult> 
     });
   }
 
+  /*
+   * Second local source: CachedPlayer.
+   *
+   * These are real player records already persisted by the player/search caches
+   * and 365Scores lineups — same upstream identities as a squad snapshot, but
+   * they cost no extra API-Football quota to read. Squad snapshots stay
+   * authoritative (they carry the club relationship and shirt number); this only
+   * tops the pool up so a thin TeamPlayer table does not block generation on its
+   * own. Nothing is invented: a row without a club is skipped.
+   */
+  if (players.length < QUIZ_DATASET_MIN_PLAYERS) {
+    const cachedPlayers = await prisma.cachedPlayer.findMany({
+      where: { teamId: { not: null } },
+      select: {
+        playerId: true,
+        name: true,
+        position: true,
+        teamId: true,
+        teamName: true,
+        nationality: true,
+        age: true,
+        birthDate: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 300,
+    });
+
+    for (const row of cachedPlayers) {
+      if (!row.name?.trim() || row.teamId == null || seenPlayerIds.has(row.playerId)) continue;
+      const teamName = row.teamName?.trim() || cachedByTeamId.get(row.teamId)?.name;
+      if (!teamName) continue;
+      seenPlayerIds.add(row.playerId);
+
+      players.push({
+        id: `player:${row.playerId}`,
+        name: row.name.trim(),
+        apiPlayerId: row.playerId,
+        position: row.position?.trim() || 'Unknown',
+        teamId: row.teamId,
+        teamName,
+        country: cachedByTeamId.get(row.teamId)?.country ?? undefined,
+        nationality: row.nationality ?? undefined,
+        age: row.age ?? undefined,
+        birthdate: row.birthDate ?? undefined,
+      });
+    }
+  }
+
   if (players.length < QUIZ_DATASET_MIN_PLAYERS) {
     const fallbackRows = await prisma.playerInfo.findMany({
       where: { apiPlayerId: { not: null }, teamId: { not: null } },

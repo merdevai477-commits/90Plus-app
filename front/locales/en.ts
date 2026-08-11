@@ -824,6 +824,8 @@ export const en = {
     wheelTitle: 'Lucky Wheel',
     wheelSubtitle: 'Spin the wheel and win XP',
     wheelCta: 'Spin now',
+    wheelDisabledCta: 'Already spun',
+    wheelSpinningCta: 'Spinning...',
     wheelNote: 'One spin per day only',
 
     // Weekly ranking

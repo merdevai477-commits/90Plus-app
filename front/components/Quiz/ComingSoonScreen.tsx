@@ -24,11 +24,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
-import { useCoins } from '../../contexts/CoinsContext';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
 import { useDesignScale } from '../../utils/responsive';
 import { GAME_COLOR, GAME_LAYOUT, GameScreenHeader } from './gameChrome';
+import { GlobalQuizStats } from './GlobalQuizStats';
 
 function createStyles(scale: number, fontScale: number, language: string) {
   const s = (v: number) => Math.round(v * scale);
@@ -94,7 +94,6 @@ export default function ComingSoonScreen({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { language } = useTranslation();
-  const { coins } = useCoins();
   const { scale, fontScale, s } = useDesignScale();
 
   const styles = useMemo(
@@ -112,7 +111,7 @@ export default function ComingSoonScreen({
       <GameScreenHeader
         title={headerTitle}
         onBack={() => router.back()}
-        xp={coins}
+        stats={<GlobalQuizStats />}
         backAccessibilityLabel={language === 'ar' ? 'رجوع' : 'Back'}
       />
 

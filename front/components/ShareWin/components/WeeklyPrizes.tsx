@@ -22,6 +22,7 @@ import type { ShareWinPrize } from '../../../services/shareWin.service';
 import { SW_ASSET } from '../assets';
 import { prizeCopy, prizeImageSource } from '../data';
 import { SW_GRADIENT, useShareWinStyles } from '../styles';
+import { getCarouselPageCount } from './carouselPagination';
 
 interface WeeklyPrizesProps {
   prizes: ShareWinPrize[];
@@ -36,11 +37,14 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const cardStride = useRef(s(127) + s(12));
   cardStride.current = s(127) + s(12);
+  const pageCount = getCarouselPageCount(prizes.length);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = Math.abs(event.nativeEvent.contentOffset.x);
-    setActiveIndex(Math.round(offset / cardStride.current));
-  }, []);
+    const activeGiftIndex = Math.round(offset / cardStride.current);
+    const nextPageIndex = Math.floor(activeGiftIndex / 3);
+    setActiveIndex(Math.min(nextPageIndex, Math.max(pageCount - 1, 0)));
+  }, [pageCount]);
 
   if (prizes.length === 0) return null;
 
@@ -112,14 +116,10 @@ const WeeklyPrizes = memo(function WeeklyPrizes({ prizes }: WeeklyPrizesProps) {
         </ScrollView>
 
         <View style={sw.dotsRow}>
-          {prizes.map((prize, index) => (
-            <View key={`dot-${prize.id}`} style={sw.dot}>
+          {Array.from({ length: pageCount }, (_, index) => (
+            <View key={`dot-${index}`} style={sw.dot}>
               <LinearGradient
-                colors={
-                  (index === activeIndex
-                    ? SW_GRADIENT.dotActive
-                    : SW_GRADIENT.dotIdle)
-                }
+                colors={index === activeIndex ? SW_GRADIENT.dotActive : SW_GRADIENT.dotIdle}
                 start={{ x: 0.5, y: 0 }}
                 end={{ x: 0.5, y: 1 }}
                 style={{ flex: 1 }}

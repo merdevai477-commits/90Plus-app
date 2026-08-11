@@ -43,13 +43,13 @@ jest.mock('../quiz-365-player.service', () => ({
   resolve365QuizPlayerImage: (...args: unknown[]) => mockResolve365QuizPlayerImage(...args),
 }));
 
-/* ── the AI itself ── */
+/* ── the existing football agent (the ONLY AI Questions may use) ── */
 
 const mockCallQuestionsAiJson = jest.fn();
 const mockIsQuestionsAiConfigured = jest.fn<boolean, []>();
-jest.mock('../questions-challenges.ai-client', () => ({
-  callQuestionsAiJson: (...args: unknown[]) => mockCallQuestionsAiJson(...args),
-  isQuestionsAiConfigured: () => mockIsQuestionsAiConfigured(),
+jest.mock('../questions-challenges.agent.service', () => ({
+  runQuestionsAgent: (...args: unknown[]) => mockCallQuestionsAiJson(...args),
+  isQuestionsAgentAvailable: () => mockIsQuestionsAiConfigured(),
 }));
 
 import {
@@ -61,6 +61,7 @@ import {
 } from '../questions-challenges.ai-generator.service';
 import { buildQuestionsSystemPrompt, buildQuestionsUserPrompt } from '../questions-challenges.ai-prompt';
 import { buildQuestionsFootballCandidates } from '../questions-challenges.football-data';
+import { logger } from '../../utils/logger';
 import type { GeneratedQuestionChallenge, QuestionChallengeQuestion } from '../../types/questions-challenges.types';
 
 /* ────────────────────────── fixtures ────────────────────────── */
@@ -305,7 +306,7 @@ describe('questions-challenges AI generator', () => {
   /* ────────────── the AI request ────────────── */
 
   describe('AI request', () => {
-    test('is sent once per playable mode, never to the chat pipeline', async () => {
+    test('goes to the existing agent once per playable mode', async () => {
       wireAi(goodReplyFor, candidatesRef);
       const result = await buildAiQuestionChallenges('en', '2026-06-10');
 
@@ -606,7 +607,15 @@ describe('questions-challenges AI generator', () => {
   /* ────────────── refusals ────────────── */
 
   describe('a model that gets it wrong', () => {
-    /** Breaks one field of one mode's reply and expects the whole day to fail. */
+    /**
+     * Breaks one field of one mode's reply and expects THAT MODE to be refused.
+     *
+     * A refused mode is left out of the day — never padded, never patched up
+     * with a substitute question, and never published. The other modes, whose
+     * replies were fine, are still built: discarding a finished valid round
+     * because a different mode failed is what left the hub with nothing to
+     * serve and 502'd guess-player.
+     */
     async function expectRejected(mode: string, mutate: (questions: any[], candidates: any) => void) {
       wireAi((replyMode, candidates) => {
         const reply = goodReplyFor(replyMode, candidates) as { questions: any[] };
@@ -615,7 +624,13 @@ describe('questions-challenges AI generator', () => {
       }, candidatesRef);
 
       const result = await buildAiQuestionChallenges('en', '2026-06-10');
-      expect(result).toBeNull();
+      const built = (result ?? []).map((round) => round.mode);
+      expect(built).not.toContain(mode);
+      // Every round that WAS built is a real, complete one.
+      for (const round of result ?? []) {
+        expect(round.content.questions).toHaveLength(ROUND_QUESTION_COUNT);
+        expect(validateRoundIntegrity(round)).toBe(true);
+      }
     }
 
     test('rejects a player who is not in the candidates (a hallucinated name)', async () => {
@@ -805,11 +820,18 @@ describe('questions-challenges AI generator', () => {
       await expect(buildAiQuestionChallenges('en', '2026-06-10')).resolves.toBeNull();
     });
 
-    test('returns null when no player photo can be resolved', async () => {
+    test('drops every portrait-bearing mode when no player photo can be resolved', async () => {
       mockResolve365QuizPlayerImage.mockResolvedValue(null);
       candidatesRef.current = await buildQuestionsFootballCandidates('en', '2026-06-10');
       wireAi(goodReplyFor, candidatesRef);
-      await expect(buildAiQuestionChallenges('en', '2026-06-10')).resolves.toBeNull();
+
+      const result = await buildAiQuestionChallenges('en', '2026-06-10');
+      const built = (result ?? []).map((round) => round.mode);
+
+      // A question that would draw a blank frame is not authored at all.
+      expect(built).not.toContain('guess-player');
+      expect(built).not.toContain('player-connections');
+      expect(built).not.toContain('football-grid');
     });
 
     test('drops a photo whose 365 match is too weak to trust', async () => {
@@ -824,15 +846,43 @@ describe('questions-challenges AI generator', () => {
       expect(candidates!.players).toHaveLength(0);
     });
 
-    test('survives a football API outage without throwing', async () => {
-      mockGetTransfers.mockRejectedValue(new Error('ECONNRESET'));
-      mockGetTopScorers.mockRejectedValue(new Error('ECONNRESET'));
+    /**
+     * API-FOOTBALL QUOTA EXHAUSTED, DATABASE FINE.
+     *
+     * Transfer chains and scorer tables come from API-Football and are simply
+     * not available while it is rate-limited. Everything else — players, clubs,
+     * crests, portraits — comes from the entity dataset and 365Scores, which are
+     * database/cache reads. The modes that can be authored from those ARE
+     * authored: a quota pause must not take the whole hub down, and no extra
+     * upstream request is made to try to rescue the ones that cannot.
+     */
+    test('keeps building from cached entities when API-Football is unavailable', async () => {
+      mockGetTransfers.mockRejectedValue(
+        new Error('Too many requests. Your rate limit is 10 requests per minute.'),
+      );
+      mockGetTopScorers.mockRejectedValue(
+        new Error('Too many requests. Your rate limit is 10 requests per minute.'),
+      );
       candidatesRef.current = await buildQuestionsFootballCandidates('en', '2026-06-10');
       expect(candidatesRef.current.transfers).toHaveLength(0);
       expect(candidatesRef.current.rankings).toHaveLength(0);
+      // The database-backed pools are untouched by the outage.
+      expect(candidatesRef.current.players.length).toBeGreaterThan(0);
+      expect(candidatesRef.current.clubs.length).toBeGreaterThan(0);
 
       wireAi(goodReplyFor, candidatesRef);
-      await expect(buildAiQuestionChallenges('en', '2026-06-10')).resolves.toBeNull();
+      const result = await buildAiQuestionChallenges('en', '2026-06-10');
+      const built = (result ?? []).map((round) => round.mode);
+
+      expect(built).toContain('guess-player');
+      expect(built).toContain('guess-club');
+      // The two modes that genuinely need API-Football are the only ones
+      // missing, and they are missing rather than faked.
+      expect(built).not.toContain('transfer-puzzle');
+      expect(built).not.toContain('top10-challenge');
+      for (const round of result ?? []) {
+        expect(validateRoundIntegrity(round)).toBe(true);
+      }
     });
 
     test('refuses a ranking whose top three are tied — no single right order', async () => {
@@ -1003,5 +1053,160 @@ describe('validateQuestionIntegrity', () => {
       ],
     });
     expect(validateQuestionIntegrity('player-connections', question)).toBe(false);
+  });
+});
+
+
+/* ────────────── why a round was rejected ────────────── */
+
+/**
+ * THE `accepted === needed` REJECTION.
+ *
+ * Production logged `returned: 6, accepted: 6, needed: 6` and then failed the
+ * whole day, with nothing to say why. Two separate defects sat behind that line,
+ * and both are pinned here:
+ *
+ *  1. Round validation refused any round whose six questions shared a prompt.
+ *     In guess-club the crest IS the question, so "Which club is this?" on all
+ *     six is correct authoring — six DIFFERENT clubs, one heading. Duplicate
+ *     detection now keys on the subject entity, which is both stricter (the same
+ *     club can never be asked twice) and free of that false positive.
+ *  2. The rejection log carried counts only. It now carries `reason` and the
+ *     exact `validationErrors`.
+ */
+describe('round rejection reporting', () => {
+  const candidatesRef: { current: any } = { current: null };
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    mockIsQuestionsAiConfigured.mockReturnValue(true);
+    mockIsConfigured.mockReturnValue(true);
+    mockBuildQuizEntityDataset.mockResolvedValue({ ok: true, dataset: buildDataset() });
+    mockGetTransfers.mockImplementation(async ({ player }: { player: number }) => transferRows(player));
+    mockGetTopScorers.mockResolvedValue(topScorers());
+    mockResolve365QuizPlayerImage.mockImplementation(async ({ entityName }: { entityName: string }) => ({
+      athleteId: 1,
+      name: entityName,
+      clubName: null,
+      imageUrl: `https://365.example.com/${encodeURIComponent(entityName)}.png`,
+      score: 0.95,
+    }));
+    mockTranslateFootballNames.mockImplementation(async (texts: string[]) => {
+      const out: Record<string, string> = {};
+      for (const text of texts) out[text] = text;
+      return out;
+    });
+    candidatesRef.current = await buildQuestionsFootballCandidates('en', '2026-06-10');
+    warnSpy = jest.spyOn(logger, 'warn').mockImplementation((() => undefined) as never);
+  });
+
+  afterEach(() => warnSpy.mockRestore());
+
+  /** Every `[QuestionsAI] round rejected` payload logged during a run. */
+  function rejections(mode?: string): any[] {
+    return warnSpy.mock.calls
+      .filter((call) => String(call[0]).includes('round rejected'))
+      .map((call) => call[1] as any)
+      .filter((entry) => !mode || entry?.mode === mode);
+  }
+
+  test('accepts a full guess-club round whose six questions share one heading', async () => {
+    wireAi((mode, candidates) => {
+      const reply = goodReplyFor(mode, candidates) as { questions: any[] };
+      if (mode === 'guess-club') {
+        // Exactly what the model returns in production: one honest heading over
+        // six different crests.
+        for (const question of reply.questions) question.prompt = 'Which club does this crest belong to?';
+      }
+      return reply;
+    }, candidatesRef);
+
+    const result = await buildAiQuestionChallenges('en', '2026-06-10');
+
+    expect(result).not.toBeNull();
+    const guessClub = result!.find((round) => round.mode === 'guess-club')!;
+    expect(guessClub.content.questions).toHaveLength(ROUND_QUESTION_COUNT);
+    // Six different subjects is what actually matters, and it holds.
+    const subjects = guessClub.content.questions!.map((question) => question.entity!.id);
+    expect(new Set(subjects).size).toBe(ROUND_QUESTION_COUNT);
+    expect(rejections('guess-club')).toHaveLength(0);
+  });
+
+  test('every rejection carries a reason and the validation errors behind it', async () => {
+    wireAi((mode, candidates) => {
+      const reply = goodReplyFor(mode, candidates) as { questions: any[] };
+      if (mode === 'guess-player') reply.questions[2].targetPlayerId = 'player:404404';
+      return reply;
+    }, candidatesRef);
+
+    await buildAiQuestionChallenges('en', '2026-06-10');
+
+    const logged = rejections();
+    expect(logged.length).toBeGreaterThan(0);
+    for (const entry of logged) {
+      expect(typeof entry.reason).toBe('string');
+      expect(entry.reason.length).toBeGreaterThan(0);
+      expect(Array.isArray(entry.validationErrors)).toBe(true);
+      expect(entry.validationErrors.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('names the exact entity that was not a candidate', async () => {
+    wireAi((mode, candidates) => {
+      const reply = goodReplyFor(mode, candidates) as { questions: any[] };
+      if (mode === 'guess-player') reply.questions[2].targetPlayerId = 'player:404404';
+      return reply;
+    }, candidatesRef);
+
+    const result = await buildAiQuestionChallenges('en', '2026-06-10');
+
+    expect((result ?? []).map((round) => round.mode)).not.toContain('guess-player');
+    const logged = rejections('guess-player');
+    expect(logged.length).toBeGreaterThan(0);
+    expect(logged[0].reason).toBe(`NOT_ENOUGH_VALID_QUESTIONS:5/${ROUND_QUESTION_COUNT}`);
+    expect(logged[0].validationErrors.join(' ')).toContain('TARGET_PLAYER_NOT_A_CANDIDATE:player:404404');
+  });
+
+  test('names a distractor that is not a candidate', async () => {
+    wireAi((mode, candidates) => {
+      const reply = goodReplyFor(mode, candidates) as { questions: any[] };
+      if (mode === 'guess-club') reply.questions[0].distractorClubIds[1] = 'team:999999';
+      return reply;
+    }, candidatesRef);
+
+    await buildAiQuestionChallenges('en', '2026-06-10');
+
+    const logged = rejections('guess-club');
+    expect(logged.length).toBeGreaterThan(0);
+    expect(logged[0].validationErrors.join(' ')).toContain('DISTRACTOR_CLUB_NOT_A_CANDIDATE:team:999999');
+  });
+
+  test('still refuses a round that asks about the same subject twice', async () => {
+    wireAi((mode, candidates) => {
+      const reply = goodReplyFor(mode, candidates) as { questions: any[] };
+      if (mode === 'guess-club') reply.questions[3].targetClubId = reply.questions[0].targetClubId;
+      return reply;
+    }, candidatesRef);
+
+    const result = await buildAiQuestionChallenges('en', '2026-06-10');
+
+    expect((result ?? []).map((round) => round.mode)).not.toContain('guess-club');
+    const logged = rejections('guess-club');
+    expect(logged[0].validationErrors.join(' ')).toContain('SUBJECT_ALREADY_USED');
+  });
+
+  test('reports a confidence-floor rejection with the confidence it actually saw', async () => {
+    wireAi((mode, candidates) => {
+      const reply = goodReplyFor(mode, candidates) as { questions: any[] };
+      if (mode === 'guess-player') reply.questions[1].confidence = 41;
+      return reply;
+    }, candidatesRef);
+
+    await buildAiQuestionChallenges('en', '2026-06-10');
+
+    const logged = rejections('guess-player');
+    expect(logged[0].validationErrors.join(' ')).toContain('CONFIDENCE_BELOW_');
+    expect(logged[0].validationErrors.join(' ')).toContain('got=41');
   });
 });

@@ -192,12 +192,27 @@ export interface QuestionChallengeMetadata {
    * layer. This is the only source new rows are written with; see
    * questions-challenges.ai-generator.service.ts.
    *
+   * 'DETERMINISTIC' — composed with no model at all, from the same verified
+   * candidate payload an AI round is built from: real squads, real crests, real
+   * portraits, answers taken from the data rather than written. Used when no AI
+   * provider can answer. Distinct from 'FOOTBALL_DATA' on purpose — see below.
+   *
    * 'FOOTBALL_DATA' / 'STATIC_FALLBACK' are legacy values still present on rows
    * written by earlier builds — kept in the union so those rows deserialize.
+   * They denote CANNED authored content (stock prompts over stock images) and
+   * stay permanently unservable via isCannedLegacySource(). A deterministic
+   * round is not canned, which is why it needed its own value rather than
+   * reusing this one or weakening that guard.
    */
-  source: 'AI' | 'MANUAL' | 'FOOTBALL_DATA' | 'STATIC_FALLBACK';
+  source: 'AI' | 'MANUAL' | 'DETERMINISTIC' | 'FOOTBALL_DATA' | 'STATIC_FALLBACK';
   /** Model that authored the round, for observability. */
   model?: string;
+  /**
+   * Agent tools the model actually called while writing the round (search_player,
+   * get_top_scorers, …). Proof, on the row itself, that the round came through
+   * the football agent rather than the model's memory.
+   */
+  agentTools?: string[];
 }
 
 export interface DailyQuestionChallengeDto {
@@ -248,11 +263,32 @@ export interface QuestionChallengeSessionDto {
   streakContribution: boolean;
   leaderboardEligibility: boolean;
   content: QuestionChallengeContent;
+  /** @deprecated Server no longer exposes correct answers on session load. */
   answer?: QuestionChallengeAnswer;
   attempts: number;
   completed: boolean;
   score: number;
   elapsedTime: number;
+  /** Game-flow session state — server authoritative. */
+  status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+  /** 1-based index of the question the player may answer now. */
+  currentQuestion?: number;
+  totalQuestions?: number;
+  /** Current question payload without the graded answer. */
+  question?: Omit<QuestionChallengeQuestion, 'answer'>;
+  questionStartedAt?: string;
+  questionExpiresAt?: string;
+  serverNow?: string;
+  timeLimitSec?: number;
+  /** 0-based index — mirrors `currentQuestion - 1` while in progress. */
+  currentQuestionIndex?: number;
+  finalResult?: {
+    totalQuestions: number;
+    correctAnswers: number;
+    wrongAnswers: number;
+    expiredQuestions: number;
+    totalScore: number;
+  };
 }
 
 /**
@@ -270,12 +306,25 @@ export interface QuestionCrowdStats {
   percentages: Record<string, number>;
 }
 
+/**
+ * "50:50" — which two option ids should remain visible: the real correct
+ * option plus exactly one real wrong option, both resolved server-side from
+ * the round's stored answer. The client never sees the full answer key and
+ * never picks the survivor itself.
+ */
+export interface QuestionFiftyFiftyResult {
+  challengeId: string;
+  questionId: string;
+  keepIds: string[];
+}
+
 export interface QuestionChallengeSubmitResult {
   challengeId: string;
   questionId: string;
   isCorrect: boolean;
   completionPercentage: number;
   completed: boolean;
+  /** Final aggregate score — populated only when the round is complete. */
   score: number;
   attempts: number;
   elapsedTime: number;
@@ -287,6 +336,10 @@ export interface QuestionChallengeSubmitResult {
   longestStreak: number;
   answer: QuestionChallengeAnswer;
   hint?: string | null;
+  timeExpired?: boolean;
+  pointsEarned?: number;
+  finalResult?: QuestionChallengeSessionDto['finalResult'];
+  idempotent?: boolean;
 }
 
 export interface QuestionChallengeLeaderboardRow {

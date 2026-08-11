@@ -33,7 +33,13 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import { QuestionsModeArt } from '../../QuestionsModeArt';
 import type { Challenge } from '../data';
 import type { QuestionModeId } from '../../../../services/questionsModes';
-import { useQuestionsHubStyles, XP_GRADIENT, XP_GRADIENT_LOCATIONS } from '../styles';
+import {
+  useQuestionsHubStyles,
+  XP_GRADIENT,
+  XP_GRADIENT_END,
+  XP_GRADIENT_LOCATIONS,
+  XP_GRADIENT_START,
+} from '../styles';
 
 /** How much the card dims while pressed. */
 const ACTIVE_OPACITY = 0.84;
@@ -79,19 +85,34 @@ const CHALLENGE_LAYOUT: Record<QuestionModeId, ChallengeLayoutConfig> = {
   'football-quiz': { paddingHorizontal: 22, image: { width: 65, height: 64 } },
 };
 
-/** "+50 XP" rendered as gradient-filled text (RN take on background-clip: text). */
+/**
+ * "+50 XP" rendered as gradient-filled text (RN take on background-clip: text).
+ *
+ * `numberOfLines={1}` on both the mask and the measuring copy keeps the box one
+ * line tall, and `card.xpMask` marks it non-shrinking so a long subtitle beside
+ * it can never squeeze the reward down to "+1…" or out past the card edge.
+ */
 function XpGradientText({ style, children }: { style: object; children: string }) {
   const { card } = useQuestionsHubStyles();
 
   return (
-    <MaskedView maskElement={<Text style={style}>{children}</Text>}>
+    <MaskedView
+      style={card.xpMask}
+      maskElement={
+        <Text style={style} numberOfLines={1}>
+          {children}
+        </Text>
+      }
+    >
       <LinearGradient
         colors={XP_GRADIENT}
         locations={XP_GRADIENT_LOCATIONS}
-        start={{ x: 1, y: 0 }}
-        end={{ x: 0, y: 0.05 }}
+        start={XP_GRADIENT_START}
+        end={XP_GRADIENT_END}
       >
-        <Text style={[style, card.xpTextHidden]}>{children}</Text>
+        <Text style={[style, card.xpTextHidden]} numberOfLines={1}>
+          {children}
+        </Text>
       </LinearGradient>
     </MaskedView>
   );
@@ -162,7 +183,9 @@ function ChallengeCard({ challenge }: { challenge: Challenge }) {
         <>
           {art}
           <View style={card.verticalTextBlock}>
-            <Text style={card.title} numberOfLines={2}>
+            {/* Figma Frame 7 on the tall cards is a single 17pt line — wrapping
+                to two would push the XP row past the card's fixed 149pt box. */}
+            <Text style={card.title} numberOfLines={1}>
               {challenge.title}
             </Text>
             <View style={[card.horizontalSubXpRow, isRtl && card.horizontalSubXpRowRtl]}>
@@ -170,8 +193,8 @@ function ChallengeCard({ challenge }: { challenge: Challenge }) {
                 {challenge.subtitle}
               </Text>
               {challenge.xpReward > 0 ? (
-              <XpGradientText style={card.xpText}>{`+${challenge.xpReward} XP`}</XpGradientText>
-            ) : null}
+                <XpGradientText style={card.xpText}>{`+${challenge.xpReward} XP`}</XpGradientText>
+              ) : null}
             </View>
           </View>
         </>

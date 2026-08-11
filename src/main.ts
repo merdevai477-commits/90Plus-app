@@ -851,7 +851,24 @@ async function startServer() {
                     const { regenerateDailyQuestionsChallenges } = await import(
                         './services/questions-challenges.service'
                     );
-                    regenerateDailyQuestionsChallenges().catch((err) =>
+                    const { ensureQuizEntityDataset } = await import(
+                        './services/quiz-team-roster-sync.service'
+                    );
+
+                    /*
+                     * Questions rounds are authored over the football entity pool, so the
+                     * pool has to exist BEFORE generation runs. Nothing used to refresh it:
+                     * the cron regenerated rounds against an empty TeamPlayer table, every
+                     * mode failed to generate, and old rows were recycled forward instead.
+                     *
+                     * ensureQuizEntityDataset is a no-op (and costs no API quota) whenever
+                     * the pool is already healthy.
+                     */
+                    const warmQuestions = async () => {
+                        await ensureQuizEntityDataset();
+                        await regenerateDailyQuestionsChallenges();
+                    };
+                    warmQuestions().catch((err) =>
                         logger.error('Questions challenges warmup failed:', err),
                     );
                     cron.schedule('0 0 * * *', () => {
@@ -859,7 +876,10 @@ async function startServer() {
                         ensureDailyPacksForToday().catch((err) =>
                             logger.error('Daily quiz pack cron error:', err),
                         );
-                        regenerateDailyQuestionsChallenges().catch((err) =>
+                        // Runs at 00:00 UTC — the same moment the API-Football daily
+                        // quota resets, so a pool starved by yesterday's quota refills
+                        // before the day's rounds are authored.
+                        warmQuestions().catch((err) =>
                             logger.error('Daily questions challenges cron error:', err),
                         );
                     });

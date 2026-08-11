@@ -175,6 +175,16 @@ export function chunkItems<T>(items: T[], columns: number): T[][] {
  * the questions it actually published today; a plausible-looking stand-in on
  * the card would be a promise the round doesn't keep. `ChallengeCard` renders
  * no XP line for a zero.
+ *
+ * NAME AND SUB-NAME ARE ALWAYS APP COPY, never the API's.
+ * Figma node 1:2 gives every card the same two-part name: the mode's English
+ * name on top, its Arabic name beneath — "Football Grid" / "شبكة كرة القدم" —
+ * and that pair is exactly QUESTION_MODE_CATALOG. The API's `subtitle` is its
+ * `description` field, a full sentence ("Guess the player from the clues and
+ * photo"); rendering that here replaced the Arabic sub-name with an ellipsised
+ * sentence and squeezed the "+60 XP" reward off the card entirely. The API
+ * still owns everything that is actually live: xpReward, previewImage,
+ * completion state, difficulty.
  */
 export function mergeQuestionModes(data?: QuestionModeSummary[]): QuestionModeSummary[] {
   const liveById = new Map((data ?? []).map((item) => [item.id, item]));
@@ -182,7 +192,9 @@ export function mergeQuestionModes(data?: QuestionModeSummary[]): QuestionModeSu
   return QUESTION_MODE_CATALOG.map((catalogItem) => {
     const live = liveById.get(catalogItem.id);
 
-    if (live) return live;
+    if (live) {
+      return { ...live, title: catalogItem.title, subtitle: catalogItem.subtitle };
+    }
 
     return {
       id: catalogItem.id,

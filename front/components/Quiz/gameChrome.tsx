@@ -476,18 +476,21 @@ export function GameScreenHeader({
   title,
   onBack,
   xp,
+  stats,
   backAccessibilityLabel = 'Back',
   trailing,
 }: {
   title: string;
   onBack: () => void;
-  xp: number | string;
+  xp?: number | string;
+  stats?: React.ReactNode;
   backAccessibilityLabel?: string;
   trailing?: React.ReactNode;
 }) {
   const { styles, metrics } = useGameChromeStyles();
-  const xpLabel = typeof xp === 'number' ? xp.toLocaleString() : xp;
-  const xpPulse = usePulse(xpLabel);
+  const fallbackXp = xp ?? '—';
+  const xpLabel = typeof fallbackXp === 'number' ? fallbackXp.toLocaleString() : fallbackXp;
+  const xpPulse = usePulse(String(xpLabel));
 
   /**
    * The title is centred on the column and inset by the XP cluster on both
@@ -534,12 +537,18 @@ export function GameScreenHeader({
       {/* One quiet beat when the balance changes — see usePulse in ./gameMotion. */}
       <Animated.View style={[styles.xpCluster, xpPulse]} onLayout={handleXpLayout}>
         {trailing}
-        <View style={styles.xpBadge}>
-          <GameGradientText value="XP" style={styles.xpBadgeText} />
-        </View>
-        <View style={styles.xpPill}>
-          <GameGradientText value={xpLabel} style={styles.xpPillText} />
-        </View>
+        {stats ? (
+          stats
+        ) : (
+          <>
+            <View style={styles.xpBadge}>
+              <GameGradientText value="XP" style={styles.xpBadgeText} />
+            </View>
+            <View style={styles.xpPill}>
+              <GameGradientText value={xpLabel} style={styles.xpPillText} />
+            </View>
+          </>
+        )}
       </Animated.View>
     </View>
   );

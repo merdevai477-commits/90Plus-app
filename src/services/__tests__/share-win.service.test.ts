@@ -93,10 +93,15 @@ describe('referral codes', () => {
 // ─── Scoring ────────────────────────────────────────────────────────────────
 
 describe('scoring', () => {
-  test('score is participants × 50 + shares × 10', () => {
+  test('score is participants × 3 and share-only actions add zero', () => {
     expect(computeScore(0, 0)).toBe(0);
     expect(computeScore(20, 100)).toBe(20 * SCORE_PER_PARTICIPANT + 100 * SCORE_PER_SHARE);
-    expect(computeScore(20, 100)).toBe(2000);
+    expect(computeScore(20, 100)).toBe(60);
+  });
+
+  test('share-only events do not earn leaderboard points', () => {
+    expect(computeScore(0, 1)).toBe(0);
+    expect(computeScore(1, 1)).toBe(SCORE_PER_PARTICIPANT);
   });
 
   test('a brand-new user scores zero rather than undefined', () => {

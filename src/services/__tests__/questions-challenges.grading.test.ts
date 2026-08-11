@@ -9,7 +9,12 @@
  */
 
 import { ROUND_QUESTION_COUNT } from '../../constants/quiz.constants';
-import type { QuestionChallengeQuestion } from '../../types/questions-challenges.types';
+import type {
+  QuestionChallengeMode,
+  QuestionChallengeQuestion,
+} from '../../types/questions-challenges.types';
+
+import { validRound } from '../../test-utils/questions-rounds';
 
 /* ── in-memory database ── */
 
@@ -59,6 +64,10 @@ function matches(row: any, where: any): boolean {
     }
     if (value && typeof value === 'object' && 'gt' in (value as any)) {
       if (!((row[key] ?? 0) > (value as any).gt)) return false;
+      continue;
+    }
+    if (value && typeof value === 'object' && 'in' in (value as any)) {
+      if (!((value as any).in).includes(row[key])) return false;
       continue;
     }
     if (row[key] !== value) return false;
@@ -204,29 +213,50 @@ function seedDatabase() {
   const byQuestionId: Record<string, unknown> = {};
   for (const entry of questions) byQuestionId[entry.id] = entry.answer;
 
-  // Eight published rows so ensureDailyChallenges short-circuits instead of
-  // trying to generate.
-  const modes = [
-    'GUESS_PLAYER',
-    'GUESS_CLUB',
-    'FOOTBALL_BINGO',
-    'FOOTBALL_GRID',
-    'PLAYER_CONNECTIONS',
-    'TRANSFER_PUZZLE',
-    'TOP10_CHALLENGE',
-    'FOOTBALL_QUIZ',
+  /*
+   * Eight published rows so ensureDailyChallenges short-circuits instead of
+   * trying to generate. Each row carries a round that is valid FOR ITS OWN
+   * MODE — the day is only considered ready when every row would survive the
+   * session contract, so a bingo row full of guess-player questions is (rightly)
+   * archived rather than counted.
+   */
+  const modes: Array<[string, QuestionChallengeMode]> = [
+    ['GUESS_PLAYER', 'guess-player'],
+    ['GUESS_CLUB', 'guess-club'],
+    ['FOOTBALL_BINGO', 'football-bingo'],
+    ['FOOTBALL_GRID', 'football-grid'],
+    ['PLAYER_CONNECTIONS', 'player-connections'],
+    ['TRANSFER_PUZZLE', 'transfer-puzzle'],
+    ['TOP10_CHALLENGE', 'top10-challenge'],
+    ['FOOTBALL_QUIZ', 'football-quiz'],
   ];
-  db.challenges = modes.map((type, index) => ({
-    id: type === 'GUESS_PLAYER' ? CHALLENGE_ID : `challenge-${index}`,
-    type,
-    language: 'en',
-    refreshDate,
-    status: 'PUBLISHED',
-    xpReward: questions.reduce((total, entry) => total + entry.xpReward, 0),
-    streakContribution: true,
-    content: { title: 't', description: 'd', prompt: questions[0]!.prompt, questions },
-    answer: { ...questions[0]!.answer, byQuestionId },
-  }));
+  db.challenges = modes.map(([type, mode], index) => {
+    if (type === 'GUESS_PLAYER') {
+      return {
+        id: CHALLENGE_ID,
+        type,
+        language: 'en',
+        refreshDate,
+        status: 'PUBLISHED',
+        xpReward: questions.reduce((total, entry) => total + entry.xpReward, 0),
+        streakContribution: true,
+        content: { title: 't', description: 'd', prompt: questions[0]!.prompt, questions },
+        answer: { ...questions[0]!.answer, byQuestionId },
+      };
+    }
+    const round = validRound(mode);
+    return {
+      id: `challenge-${index}`,
+      type,
+      language: 'en',
+      refreshDate,
+      status: 'PUBLISHED',
+      xpReward: round.questions.reduce((total, entry) => total + entry.xpReward, 0),
+      streakContribution: true,
+      content: round.content,
+      answer: round.answer,
+    };
+  });
 }
 
 async function answer(questionId: string, selectedIds: string[], user = 'u1') {
@@ -301,6 +331,22 @@ describe('per-question grading', () => {
     await answer('q1', ['b']);
 
     expect(db.progress[0]!.score).toBe(1);
+  });
+
+  test('treats a stale retry for an already-answered earlier question as idempotent', async () => {
+    await answer('q1', ['a']);
+    await answer('q2', ['a']);
+
+    const retry = await submitQuestionsChallengeAnswer(
+      'u1',
+      'guess-player',
+      { challengeId: CHALLENGE_ID, questionId: 'q1', selectedIds: ['a'], elapsedTime: 1, language: 'en' },
+      'UTC',
+    );
+
+    expect(retry.idempotent).toBe(true);
+    expect(retry.questionId).toBe('q1');
+    expect(retry.isCorrect).toBe(true);
   });
 });
 

@@ -21,12 +21,12 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { goBackToQuestionsHub } from './quizNavigation';
-import { useCoins } from '../../contexts/CoinsContext';
 import { useTranslation } from '../../src/i18n';
 import { getAppFont } from '../../utils/fontSetup';
 import { useDesignScale } from '../../utils/responsive';
 import type { QuizApiLanguage } from '../../services/quizApi.service';
 import { GAME_COLOR, GAME_LAYOUT, GameScreenHeader } from './gameChrome';
+import { GlobalQuizStats } from './GlobalQuizStats';
 
 interface QuizHeaderProps {
   topInset: number;
@@ -74,7 +74,6 @@ function createStyles(scale: number, fontScale: number, language: string) {
 }
 
 function QuizHeaderInner({ topInset, quizLang, onToggleLanguage, pinned = true }: QuizHeaderProps) {
-  const { coins, loading } = useCoins();
   const { t, language } = useTranslation();
   const { scale, fontScale, s } = useDesignScale();
 
@@ -88,7 +87,7 @@ function QuizHeaderInner({ topInset, quizLang, onToggleLanguage, pinned = true }
       <GameScreenHeader
         title={t.quiz.footballQuiz}
         onBack={goBackToQuestionsHub}
-        xp={loading ? '—' : coins}
+        stats={<GlobalQuizStats />}
         backAccessibilityLabel={t.quiz.backToQuestions}
         trailing={
           onToggleLanguage ? (

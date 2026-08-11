@@ -95,6 +95,8 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
   const pointerTilt = useSharedValue(0);
   /** Hub press feedback. */
   const hubScale = useSharedValue(1);
+  /** Prevents rapid taps from launching more than one wheel animation. */
+  const spinGuardRef = useRef(false);
 
   const mounted = useRef(true);
   useEffect(
@@ -123,6 +125,7 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
   const settleComplete = useCallback(
     (outcome: SpinOutcome) => {
       if (!mounted.current) return;
+      spinGuardRef.current = false;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       finishSpin();
       onSpinSettled?.(outcome);
@@ -141,6 +144,7 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
    * aside — this is only reached for a genuine early-out before launch). */
   const stopIdle = useCallback(() => {
     if (!mounted.current) return;
+    spinGuardRef.current = false;
     cancelAnimation(rotation);
     cancelAnimation(pointerTilt);
     pointerTilt.value = withTiming(0, { duration: 200 });
@@ -162,8 +166,8 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
   );
 
   const handleSpin = useCallback(async () => {
-    // The hook holds the authoritative lock; this is the cheap early-out.
-    if (isSpinning || !canSpin) return;
+    if (spinGuardRef.current || isSpinning || !canSpin) return;
+    spinGuardRef.current = true;
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -202,9 +206,17 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
     const attempt = await spin();
 
     if (!mounted.current) return;
-    if (attempt.status === 'locked') return; // a real spin is already in flight
+    if (attempt.status === 'locked') {
+      spinGuardRef.current = false;
+      return;
+    }
     if (attempt.status === 'cooldown') {
       stopForCooldown(attempt.timeRemaining);
+      return;
+    }
+    if (attempt.status === 'error') {
+      stopIdle();
+      toastManager.showError('Spin failed', attempt.message || 'The reward could not be saved. Please try again.');
       return;
     }
 
@@ -277,6 +289,11 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
   );
 
   const spinDisabled = isSpinning || !canSpin;
+  const spinLabel = isSpinning
+    ? copy.wheelSpinningCta ?? copy.wheelCta
+    : spinDisabled
+      ? copy.wheelDisabledCta ?? copy.wheelCta
+      : copy.wheelCta;
 
   return (
     <View style={[sw.card, sw.wheelCard]}>
@@ -351,26 +368,31 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
         </Animated.View>
 
         {/* Centre hub — bezel + gradient face. Also stationary. */}
-        <View style={sw.wheelHubOuter} pointerEvents="none" />
-        <Animated.View style={[sw.wheelHubInner, hubStyle]}>
+        <View
+          style={[sw.wheelHubOuter, spinDisabled && sw.wheelHubOuterDisabled]}
+          pointerEvents="none"
+        />
+        <Animated.View
+          style={[sw.wheelHubInner, spinDisabled && sw.wheelHubInnerDisabled, hubStyle]}
+        >
           <LinearGradient
-            colors={SW_GRADIENT.wheelButton}
+            colors={spinDisabled ? SW_GRADIENT.wheelButtonDisabled : SW_GRADIENT.wheelButton}
             locations={SW_GRADIENT.wheelButtonLocations}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
-            style={sw.wheelHubFill}
+            style={[sw.wheelHubFill, spinDisabled && sw.wheelHubFillDisabled]}
           />
           <Pressable
             onPress={() => void handleSpin()}
             disabled={spinDisabled}
-            style={sw.wheelHubPressable}
+            style={[sw.wheelHubPressable, spinDisabled && sw.wheelHubPressableDisabled]}
             accessibilityRole="button"
             accessibilityState={{ disabled: spinDisabled, busy: isSpinning }}
-            accessibilityLabel={copy.wheelCta}
+            accessibilityLabel={spinLabel}
             hitSlop={8}
           >
             <Text style={[sw.wheelHubLabel, spinDisabled && sw.wheelHubLabelDisabled]}>
-              {copy.wheelCta}
+              {spinLabel}
             </Text>
           </Pressable>
         </Animated.View>

@@ -911,6 +911,8 @@ export const ar = {
     wheelTitle: 'عجلة الحظ',
     wheelSubtitle: 'لف العجلة واربح نقاط xp',
     wheelCta: 'لف الان',
+    wheelDisabledCta: 'لفيت اليوم',
+    wheelSpinningCta: 'جاري اللف...',
     wheelNote: 'لفة واحدة يوميًا فقط',
 
     // الترتيب الأسبوعي

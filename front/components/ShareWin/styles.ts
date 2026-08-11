@@ -108,6 +108,8 @@ export const SW_GRADIENT = {
   tile: ['#080613', '#030009'] as const,
   /** Wheel centre button: 179.72deg #b772f8 → #6309b9 51.6% → #1d0336. */
   wheelButton: ['#B772F8', '#6309B9', '#1D0336'] as const,
+  /** Disabled wheel button keeps the same value range but reads as inactive. */
+  wheelButtonDisabled: ['#655C75', '#3A3346', '#1B1724'] as const,
   wheelButtonLocations: [0.0024, 0.5164, 0.9976] as const,
   /** Active carousel dot. */
   dotActive: ['#7419CC', '#3A0C66'] as const,
@@ -435,6 +437,10 @@ function buildStyles(scale: DesignScale, language: string) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    wheelHubOuterDisabled: {
+      opacity: 0.52,
+      borderColor: 'rgba(120, 117, 128, 0.72)',
+    },
     wheelHubInner: {
       position: 'absolute',
       left: s(WHEEL_GEOMETRY.hubInner.left),
@@ -448,6 +454,10 @@ function buildStyles(scale: DesignScale, language: string) {
       justifyContent: 'center',
       overflow: 'hidden',
     },
+    wheelHubInnerDisabled: {
+      opacity: 0.58,
+      borderColor: 'rgba(182, 177, 193, 0.55)',
+    },
     /** Gradient face of the hub, behind the pressable label. */
     wheelHubFill: {
       position: 'absolute',
@@ -456,12 +466,18 @@ function buildStyles(scale: DesignScale, language: string) {
       top: 0,
       bottom: 0,
     },
+    wheelHubFillDisabled: {
+      opacity: 0.82,
+    },
     /** Fills the hub so the whole disc is the tap target, not just the text. */
     wheelHubPressable: {
       width: '100%',
       height: '100%',
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    wheelHubPressableDisabled: {
+      opacity: 0.9,
     },
     wheelHubLabel: {
       fontFamily: font(700),
@@ -471,7 +487,8 @@ function buildStyles(scale: DesignScale, language: string) {
     },
     /** Spinning, or already spun today. */
     wheelHubLabelDisabled: {
-      opacity: 0.65,
+      color: 'rgba(224, 220, 231, 0.65)',
+      opacity: 0.78,
     },
     wheelFooter: {
       flexDirection: 'row',

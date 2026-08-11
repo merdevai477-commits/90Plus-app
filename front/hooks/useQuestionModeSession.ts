@@ -59,6 +59,9 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
     getTokenRef.current = getToken;
   }, [getToken]);
 
+  /** Synchronous double-tap guard for submitAnswer — see there for why. */
+  const submittingRef = useRef(false);
+
   const [session, setSession] = useState<QuestionModeSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,13 +134,28 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
         }
         apiSession = await QuestionsModesService.createSession(token, modeId, language);
       } catch (err: unknown) {
-        // Surfaced, never papered over with canned football content.
+        // Surfaced, never papered over with canned football content. The
+        // message is the backend's own stable reason where it sent one
+        // (QUESTIONS_CHALLENGE_EMPTY, MODE_NOT_FOUND, AUTH_REQUIRED…), so the
+        // screen never shows an unexplained generic failure.
         failure = err instanceof Error ? err.message : 'SESSION_LOAD_FAILED';
       }
 
       if (!mounted) return;
 
       const questions = apiSession?.questions ?? [];
+
+      if (__DEV__) {
+        // Never logs the token or any header — mode/counts/ids only.
+        console.log('[QuestionMode] session', {
+          mode: modeId,
+          language,
+          ok: Boolean(apiSession),
+          questionCount: questions.length,
+          firstQuestionId: questions[0]?.id ?? null,
+          failure,
+        });
+      }
 
       if (!apiSession || questions.length === 0) {
         setError(failure ?? 'SESSION_LOAD_FAILED');
@@ -149,12 +167,18 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
       setSession({
         sessionId: apiSession.sessionId,
         mode: apiSession.mode,
-        currentIndex: 0,
+        // The server's own position, not a hardcoded 0 — see createSession in
+        // questionsModes.ts. Re-entering mid-round must resume where the
+        // server left off, or an answer for a question it already closed
+        // reads back as a session conflict (409).
+        currentIndex: apiSession.currentIndex,
         // Drives the progress card's segment count — never hardcoded.
         totalQuestions: questions.length,
         timeLimitSec: apiSession.timeLimitSec,
         questions,
+        completed: apiSession.completed,
       });
+      setCompleted(apiSession.completed);
       setLoading(false);
     })();
 
@@ -182,7 +206,12 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
   }, [currentQuestion, revealed]);
 
   const submitAnswer = useCallback(() => {
-    if (!currentQuestion || revealed || !session) return;
+    // Guards against a double-tap firing two concurrent submissions:
+    // `revealed` only flips true after the network call resolves, so without
+    // this a second tap in that window would read the same `false` state and
+    // send a second POST for the same question/answer.
+    if (!currentQuestion || revealed || !session || submittingRef.current) return;
+    submittingRef.current = true;
 
     void (async () => {
       try {
@@ -228,7 +257,23 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
         }
         setXpEarned((x) => x + result.totalXpAwarded);
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'SUBMIT_FAILED');
+        const reason = err instanceof Error ? err.message : 'SUBMIT_FAILED';
+
+        // Expected session-state races (double submit, a retried request that
+        // actually landed, resuming after the timer elapsed) — the session
+        // already moved on server-side, so just unblock the UI instead of
+        // showing the raw reason code as a fatal error.
+        if (reason.startsWith('QUESTIONS_SESSION_')) {
+          if (__DEV__) {
+            console.log('[QuestionMode] submitAnswer conflict — revealing without a score change', reason);
+          }
+          setRevealed(true);
+          return;
+        }
+
+        setError(reason);
+      } finally {
+        submittingRef.current = false;
       }
     })();
   }, [currentQuestion, language, modeId, revealed, selected, session]);
@@ -293,8 +338,15 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
 
   /**
    * ELIMINATE WRONG ANSWERS — the "50:50" lifeline. Hides options until only
-   * the correct one and exactly one wrong one remain visible; which wrong
-   * option survives is picked at random each time, same as a real 50:50.
+   * the correct one and exactly one wrong one remain visible.
+   *
+   * The client is never told the round's answer key up front (the session the
+   * question came from strips it — see sanitizeQuestionForClient), so which
+   * option is correct has to be resolved server-side: GET
+   * /quiz/questions/modes/:mode/fifty-fifty returns exactly the two option ids
+   * to keep, computed from the round's real stored answer. Nothing here
+   * guesses, and the eliminated set can never include the actual correct
+   * option purely by chance.
    *
    * Only meaningful for a question with a flat `options` list (mcq /
    * connections / transfer / guess-club's card grid) — a board-based question
@@ -304,24 +356,37 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
    * Returns whether anything was actually eliminated, so the caller only
    * spends a use when the row of options genuinely shrank.
    */
-  const eliminateWrongAnswers = useCallback((): boolean => {
-    if (!currentQuestion || revealed) return false;
+  const eliminateWrongAnswers = useCallback(async (): Promise<boolean> => {
+    if (!currentQuestion || revealed || !session) return false;
     const options = currentQuestion.options;
     if (!options || options.length <= 2) return false;
+    if (eliminatedIds.length > 0) return false; // already used this question
 
-    const correctSet = new Set(currentQuestion.correctAnswers);
-    const wrongIds = options.map((option) => option.id).filter((id) => !correctSet.has(id));
-    const remainingWrong = wrongIds.filter((id) => !eliminatedIds.includes(id));
-    if (remainingWrong.length <= 1) return false;
+    try {
+      const token = await getClerkBearerToken(getTokenRef.current);
+      if (!token) return false;
 
-    const survivor = remainingWrong[Math.floor(Math.random() * remainingWrong.length)];
-    const toEliminate = remainingWrong.filter((id) => id !== survivor);
+      const result = await QuestionsModesService.getFiftyFifty(token, modeId, {
+        challengeId: session.sessionId,
+        questionId: currentQuestion.id,
+        language,
+      });
+      if (!result || result.keepIds.length !== 2) return false;
 
-    setEliminatedIds((prev) => [...prev, ...toEliminate]);
-    // A selection that just got hidden can't stay "selected" underneath it.
-    setSelected((prev) => prev.filter((id) => !toEliminate.includes(id)));
-    return true;
-  }, [currentQuestion, eliminatedIds, revealed]);
+      const keepSet = new Set(result.keepIds);
+      const toEliminate = options.map((option) => option.id).filter((id) => !keepSet.has(id));
+      if (toEliminate.length === 0) return false;
+
+      setEliminatedIds((prev) => [...prev, ...toEliminate]);
+      // A selection that just got hidden can't stay "selected" underneath it.
+      setSelected((prev) => prev.filter((id) => !toEliminate.includes(id)));
+      return true;
+    } catch {
+      // A failed lookup spends no use — never falls back to a random pick.
+      return false;
+    }
+  }, [currentQuestion, eliminatedIds, language, modeId, revealed, session]);
+
 
   /**
    * ASK THE CROWD — reveals, next to each still-visible option, the share of

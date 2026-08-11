@@ -303,7 +303,16 @@ class FootballService {
     return null;
   }
 
-  private async setCachedData(key: string, data: any, ttl: number): Promise<void> {
+  /**
+   * @param shadow  Whether this payload may also become the stale shadow — the
+   *   "last known good" copy served when upstream fails. Only real upstream
+   *   successes qualify. The failure paths below (429, daily quota, suspended
+   *   account) cache an empty array purely to damp a request storm; writing
+   *   that `[]` into the shadow as well made the next failure serve it back as
+   *   though it were data, so a suspended account produced silent empty pools
+   *   (transfers/rankings = 0) instead of an upstream failure anyone could see.
+   */
+  private async setCachedData(key: string, data: any, ttl: number, shadow = true): Promise<void> {
     try {
       // Save to Redis with TTL
       if (this.useRedis) {
@@ -314,11 +323,13 @@ class FootballService {
             Math.floor(ttl / 1000),
             JSON.stringify(data)
           );
-          await redis.setex(
-            `football:stale:${key}`,
-            Math.floor(CACHE_TTL.STALE_SHADOW / 1000),
-            JSON.stringify(data)
-          );
+          if (shadow) {
+            await redis.setex(
+              `football:stale:${key}`,
+              Math.floor(CACHE_TTL.STALE_SHADOW / 1000),
+              JSON.stringify(data)
+            );
+          }
           logger.debug('💾 Saved to Redis cache:', key);
         } else {
           this.useRedis = false;
@@ -462,7 +473,7 @@ class FootballService {
         footballMetrics.recordStaleFallback(cacheKey);
         return stale as T;
       }
-      await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+      await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
       return [] as T;
     }
 
@@ -473,7 +484,7 @@ class FootballService {
           footballMetrics.recordStaleFallback(cacheKey);
           return stale as T;
         }
-        await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+        await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
         return [] as T;
       }
       const fixtureAllowed = await assertWorldCupFixtureApiAllowed(endpoint, params);
@@ -483,7 +494,7 @@ class FootballService {
           footballMetrics.recordStaleFallback(cacheKey);
           return stale as T;
         }
-        await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+        await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
         return [] as T;
       }
     }
@@ -522,7 +533,7 @@ class FootballService {
             footballMetrics.recordStaleFallback(cacheKey);
             return stale as T;
           }
-          await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+          await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
           return [] as T;
         }
 
@@ -555,7 +566,7 @@ class FootballService {
             footballMetrics.recordStaleFallback(cacheKey);
             return stale as T;
           }
-          await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+          await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
           return [] as T;
         }
 
@@ -573,7 +584,7 @@ class FootballService {
             footballMetrics.recordStaleFallback(cacheKey);
             return stale as T;
           }
-          await this.setCachedData(cacheKey, [], 5 * 60 * 1000);
+          await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
           return [] as T;
         }
 
@@ -1058,6 +1069,35 @@ class FootballService {
    */
   async getTeamSquad(teamId: number): Promise<any[]> {
     return this.fetchFromApi<any[]>('/players/squads', { team: teamId });
+  }
+
+  /**
+   * Squad fetch that says WHY it came back empty.
+   *
+   * `getTeamSquad()` returns `[]` for two unrelated situations: the club really
+   * has no squad rows upstream, and we were never allowed to ask (quota
+   * exhausted / account suspended — the breaker short-circuits and caches `[]`).
+   * Callers that write to the database need to tell those apart: the first means
+   * "nothing to store for this club", the second means "stop the whole run".
+   *
+   * The call is always issued, even with the breaker already open: fetchFromApi
+   * serves its cache before it consults the breaker, so a squad cached within the
+   * last 7 days still comes back for free. Only an EMPTY result with the breaker
+   * open is a quota artefact — that is the one combination the short-circuit can
+   * produce, and it also catches a run burning its last request (quota fine going
+   * in, the response trips the breaker).
+   */
+  async getTeamSquadResult(
+    teamId: number,
+  ): Promise<{ status: 'success' | 'unavailable'; players: any[] }> {
+    const rows = await this.getTeamSquad(teamId);
+    const players = Array.isArray(rows?.[0]?.players) ? rows[0].players : [];
+
+    if (players.length === 0 && isQuotaExhausted()) {
+      return { status: 'unavailable', players: [] };
+    }
+
+    return { status: 'success', players };
   }
 
   /**

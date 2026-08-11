@@ -17,8 +17,6 @@ import {
   logFallbackUsage,
   remapPackQuestionsForDate,
 } from './quiz-fallback.service';
-// TEMPORARY — see quiz-static-fallback.service.ts header. Remove once Gemini is confirmed reliable.
-import { buildStaticFallbackQuizPack } from './quiz-static-fallback.service';
 import {
   trackQuizAnswerMetric,
   trackQuizHintMetric,
@@ -411,21 +409,10 @@ async function generatePackWithFallback(
 
     const fallback = await loadMostRecentValidPack(language, packDate);
     if (!fallback) {
-      // TEMPORARY: no AI, no history (e.g. brand-new environment or first-ever
-      // day Gemini went down) — use a static placeholder pack so the daily
-      // quiz is never completely unplayable. See quiz-static-fallback.service.ts.
       logger.error(
-        `[QuizDaily] No recycled fallback pack available for ${language} — using STATIC fallback pack (temporary)`,
+        `[QuizDaily] No recycled fallback pack available for ${dateStr}/${language}; AI generation unavailable`,
       );
-      const staticPack = buildStaticFallbackQuizPack(language, dateStr);
-      await savePack(packDate, language, staticPack, expiresAt, {
-        generatorModel: 'static-fallback',
-        generatorVersion: 'static-fallback',
-        promptVersion: 'static-fallback',
-        datasetVersion: 'static-fallback',
-        isFallback: true,
-      });
-      return staticPack;
+      throw new Error('QUIZ_DAILY_GENERATION_UNAVAILABLE');
     }
 
     const remapped = remapPackQuestionsForDate(fallback.questions, dateStr, language);

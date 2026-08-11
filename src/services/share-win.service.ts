@@ -26,10 +26,10 @@ import { awardXp, XP_VALUES } from './xp.service';
 
 // ─── Scoring ────────────────────────────────────────────────────────────────
 
-/** XP a converted friend is worth. Mirrors XP_VALUES.REFERRAL_CONVERSION. */
-export const SCORE_PER_PARTICIPANT = 50;
-/** XP a single share is worth. Mirrors the existing APP_SHARE reward. */
-export const SCORE_PER_SHARE = 10;
+/** Each successful referral conversion is worth +3 weekly points. */
+export const SCORE_PER_PARTICIPANT = 3;
+/** Share-only actions do not contribute to the weekly leaderboard. */
+export const SCORE_PER_SHARE = 0;
 
 /**
  * The one place Share & Win score is defined. Both the live standings and the

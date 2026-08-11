@@ -9,8 +9,30 @@ import { awardXp } from './xp.service';
 import { getOrCreateDailyPack } from './quiz-daily.service';
 import { todayPackDate, packDateYmd } from './quiz-generator.service';
 import { buildAiQuestionChallenges } from './questions-challenges.ai-generator.service';
+import { seededRng } from './questions-challenges.football-data';
+import {
+  challengeQuestions,
+  summarizeErrors,
+  validateRoundContract,
+  validateStoredRound,
+  type RoundValidation,
+} from './questions-challenges.round-contract';
 import type { AiQuestionsMode } from './questions-challenges.ai-prompt';
-import { ROUND_QUESTION_COUNT } from '../constants/quiz.constants';
+import {
+  advanceExpiredQuestions,
+  applyAnswerToSession,
+  buildSessionView,
+  buildSubmitResultBase,
+  deriveProgressFields,
+  ensureSessionStarted,
+  getCurrentQuestionId,
+  parseSessionProgress,
+  QuestionsSessionError,
+  rejectClientScoreFields,
+  sessionProgressToJson,
+  type QuestionAnswerRecord,
+} from './questions-challenges.session.service';
+import { ROUND_QUESTION_COUNT, QUIZ_QUESTION_TIME_LIMIT_SEC } from '../constants/quiz.constants';
 import type { QuizDifficulty, QuizLanguage, StoredQuizQuestion } from '../types/quiz.types';
 import type {
   DailyQuestionChallengeDto,
@@ -23,6 +45,7 @@ import type {
   QuestionChallengeSessionDto,
   QuestionChallengeSubmitResult,
   QuestionCrowdStats,
+  QuestionFiftyFiftyResult,
   QuestionsModesSummary,
 } from '../types/questions-challenges.types';
 
@@ -30,6 +53,8 @@ const db = prisma as any;
 
 const QUESTIONS_CHALLENGE_CACHE_TTL = 25 * 60 * 60 * 1000;
 const QUESTIONS_CHALLENGE_PROGRESS_CACHE_TTL = 2 * 60 * 1000;
+/** How long a day that failed to generate waits before it is attempted again. */
+const QUESTIONS_CHALLENGE_RETRY_COOLDOWN_MS = 10 * 60 * 1000;
 const DEFAULT_REFRESH_TIME = '00:00';
 const LOOKBACK_DAYS = 7;
 
@@ -39,6 +64,28 @@ const LOOKBACK_DAYS = 7;
  * the lifeline reports itself unavailable instead of inventing a distribution.
  */
 const CROWD_MIN_SAMPLE = 5;
+
+/** Modes published per day/language — the 7 playable ones plus Football Quiz. */
+const EXPECTED_MODES_PER_DAY = 8;
+
+/**
+ * THE ONE definition of a playable round, shared with the AI generator — see
+ * questions-challenges.round-contract.ts.
+ *
+ * Everything on this file's write and read paths (counting a day as generated,
+ * recycling a previous day, publishing, and serving a session) validates a row
+ * with `validateStoredRound`, i.e. the exact rules a freshly generated AI round
+ * had to satisfy. Before that, this file only asked "is `content.questions`
+ * non-empty?", which is why a `source: 'STATIC_FALLBACK'` row carrying
+ * { hint, title, prompt, options, imageUrl, description, playerFacts } and no
+ * `questions` array could stay published on today's date and fail every
+ * guess-player session with a 502.
+ */
+function roundVerdict(row: { type?: string; content: unknown; answer?: unknown; source?: unknown }): RoundValidation {
+  const mode = row.type ? modeFromDbType(row.type) : null;
+  if (!mode) return { ok: false, errors: [`UNKNOWN_MODE_TYPE:${String(row.type)}`], questionCount: 0 };
+  return validateStoredRound({ mode, content: row.content, answer: row.answer, source: row.source });
+}
 
 const MODE_TO_DB_TYPE: Record<QuestionChallengeMode, string> = {
   'guess-player': 'GUESS_PLAYER',
@@ -81,6 +128,62 @@ const MODE_TITLE: Record<QuestionChallengeMode, { en: string; ar: string }> = {
   'football-quiz': { en: 'Football Quiz', ar: 'أسئلة كرة القدم' },
 };
 
+const SUPPORTED_QUESTION_MODES = Object.keys(MODE_TO_DB_TYPE) as QuestionChallengeMode[];
+
+type QuestionsGenerationErrorDetails = {
+  mode?: QuestionChallengeMode;
+  language: QuizLanguage;
+  refreshDate: string;
+  generationBatch: string;
+  provider: string;
+  reason: string;
+  message: string;
+  stack?: string;
+};
+
+function questionGenerationUnavailable(details: QuestionsGenerationErrorDetails): Error & { details: QuestionsGenerationErrorDetails } {
+  const err = new Error('QUESTION_GENERATION_UNAVAILABLE') as Error & {
+    details: QuestionsGenerationErrorDetails;
+  };
+  err.details = details;
+  return err;
+}
+
+/**
+ * "The round is being written right now" — a different fact from "this round
+ * cannot be produced". Since generation moved off the request path, the first
+ * caller of a starved day gets an answer while the work is still running, and
+ * reporting that as UNAVAILABLE tells the app to show a dead end for something
+ * that is seconds away. Carries retryAfterSeconds so the client can poll
+ * instead of guessing.
+ */
+function questionGenerationInProgress(
+  details: QuestionsGenerationErrorDetails & { retryAfterSeconds: number },
+): Error & { details: QuestionsGenerationErrorDetails & { retryAfterSeconds: number } } {
+  const err = new Error('QUESTION_GENERATION_IN_PROGRESS') as Error & {
+    details: QuestionsGenerationErrorDetails & { retryAfterSeconds: number };
+  };
+  err.details = details;
+  return err;
+}
+
+/** True while this process has a detached generation run open for the day. */
+function isGenerationInFlight(language: QuizLanguage, refreshDateYmd: string): boolean {
+  return backgroundGenerationInFlight.has(`${refreshDateYmd}:${language}`);
+}
+
+/**
+ * The provider these errors should name. Was hardcoded to 'openrouter', which
+ * became wrong once provider order started following QUIZ_AI_PROVIDER — a
+ * Gemini-first deployment was reporting OpenRouter as the failing provider.
+ */
+function preferredQuizProviderName(): string {
+  const provider = (process.env.QUIZ_AI_PROVIDER ?? process.env.AI_QUIZ_PROVIDER ?? 'gemini')
+    .trim()
+    .toLowerCase();
+  return provider === 'openrouter' ? 'openrouter' : 'gemini';
+}
+
 function normalizeLanguage(language?: string): QuizLanguage {
   return language === 'en' ? 'en' : 'ar';
 }
@@ -99,6 +202,22 @@ function challengeCacheKey(refreshDate: string, language: QuizLanguage): string 
 
 function challengeGenLockKey(refreshDateYmd: string, language: QuizLanguage): string {
   return `quiz:questions:gen-lock:${refreshDateYmd}:${language}`;
+}
+
+function legacyChallengeGenFailureKey(refreshDateYmd: string, language: QuizLanguage): string {
+  return `quiz:questions:gen-failed:${refreshDateYmd}:${language}`;
+}
+
+/**
+ * Marks "today could not be generated", so a starved day is retried on a timer
+ * instead of on every incoming session request.
+ */
+function challengeGenFailureKey(
+  refreshDateYmd: string,
+  language: QuizLanguage,
+  mode: QuestionChallengeMode,
+): string {
+  return `quiz:questions:gen-failed:${refreshDateYmd}:${language}:${mode}`;
 }
 
 /**
@@ -158,6 +277,78 @@ function challengeHash(payload: unknown): string {
   return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
+function buildQuestionFingerprint(mode: QuestionChallengeMode, question: QuestionChallengeQuestion): string {
+  const prompt = String(question?.prompt ?? '').trim().toLowerCase();
+  const options = Array.isArray(question?.options)
+    ? question.options
+        .map((option) => `${String(option?.id ?? '').trim().toLowerCase()}:${String(option?.label ?? '').trim().toLowerCase()}`)
+        .sort()
+        .join('|')
+    : '';
+  const answerIds = [
+    ...(Array.isArray(question?.answer?.correctIds) ? question.answer.correctIds : []),
+    ...(Array.isArray(question?.answer?.orderedIds) ? question.answer.orderedIds : []),
+  ]
+    .map((value) => String(value).trim().toLowerCase())
+    .sort();
+  const entityId = typeof question?.entity?.id === 'string' ? question.entity.id.trim().toLowerCase() : '';
+  const transferId = typeof (question as any)?.transferId === 'string' ? (question as any).transferId.trim().toLowerCase() : '';
+  const rankingId = typeof (question as any)?.rankingId === 'string' ? (question as any).rankingId.trim().toLowerCase() : '';
+  const evidence = Array.isArray(question?.evidence)
+    ? question.evidence
+        .map((entry: any) => `${String(entry?.label ?? '').trim().toLowerCase()}:${String(entry?.value ?? '').trim().toLowerCase()}`)
+        .sort()
+        .join('|')
+    : '';
+
+  const raw = JSON.stringify({
+    mode,
+    prompt,
+    options,
+    answerIds,
+    entityId,
+    transferId,
+    rankingId,
+    evidence,
+  });
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
+async function existingQuestionFingerprints(language: QuizLanguage): Promise<Set<string>> {
+  const rows = await db.dailyQuestionChallenge.findMany({
+    where: { language, status: 'PUBLISHED' as any },
+    select: { type: true, content: true },
+  });
+
+  const fingerprints = new Set<string>();
+  for (const row of rows as Array<{ type: string; content: any }>) {
+    const mode = modeFromDbType(row.type);
+    if (!mode) continue;
+    for (const question of challengeQuestions(row.content)) {
+      fingerprints.add(buildQuestionFingerprint(mode, question));
+    }
+  }
+  return fingerprints;
+}
+
+function rejectedDuplicateQuestionFingerprints(
+  mode: QuestionChallengeMode,
+  questions: QuestionChallengeQuestion[],
+  existing: Set<string>,
+  batchSeen: Set<string> = new Set<string>(),
+): string[] {
+  const duplicates: string[] = [];
+  for (const question of questions) {
+    const fingerprint = buildQuestionFingerprint(mode, question);
+    if (existing.has(fingerprint) || batchSeen.has(fingerprint)) {
+      duplicates.push(fingerprint);
+      continue;
+    }
+    batchSeen.add(fingerprint);
+  }
+  return duplicates;
+}
+
 function normalizeOptionId(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -173,6 +364,26 @@ function normalizedSet(values: string[] | undefined): Set<string> {
   return set;
 }
 
+function pointsForRecord(
+  mode: QuestionChallengeMode,
+  record: QuestionAnswerRecord,
+): number {
+  if (record.status === 'expired') return 0;
+  return record.pointsEarned;
+}
+
+function evaluatePointsForMode(
+  mode: QuestionChallengeMode,
+  questions: QuestionChallengeQuestion[],
+): (questionId: string, record: QuestionAnswerRecord) => number {
+  return (questionId, record) => {
+    if (record.status === 'expired') return 0;
+    const question = questions.find((entry) => entry.id === questionId);
+    if (!question) return record.isCorrect ? 1 : 0;
+    const evaluation = evaluateChallengeAnswer(mode, record.selectedIds, question.answer);
+    return evaluation.score;
+  };
+}
 function evaluateChallengeAnswer(
   mode: QuestionChallengeMode,
   submittedIds: string[],
@@ -247,7 +458,9 @@ async function buildFootballQuizChallenge(
 ): Promise<GeneratedQuestionChallenge> {
   const pack = (await getOrCreateDailyPack(language, packDate, timezone)) as StoredQuizQuestion[];
   const source = pack.slice(0, ROUND_QUESTION_COUNT);
-  if (source.length === 0) {
+  // A round is ROUND_QUESTION_COUNT questions in every mode. A short pack is not
+  // a short round — it is no round, and the card is simply not published today.
+  if (source.length < ROUND_QUESTION_COUNT) {
     throw new Error('QUESTIONS_CHALLENGE_QUIZ_PACK_UNAVAILABLE');
   }
   // The daily-quiz pipeline keeps a canned pack of its own as a last resort
@@ -312,7 +525,7 @@ async function buildFootballQuizChallenge(
       imageUrl: first.imageUrl,
       hint: first.hint,
       options: first.options,
-      timer: 20,
+      timer: QUIZ_QUESTION_TIME_LIMIT_SEC,
     } as GeneratedQuestionChallenge['content'],
     answer: { ...first.answer, byQuestionId },
     metadata: {
@@ -395,15 +608,80 @@ function challengeCompletionState(unlocked: boolean, completed: boolean): 'locke
   return 'available';
 }
 
+/**
+ * THE PUBLISH GATE.
+ *
+ * Nothing reaches `status: PUBLISHED` without passing the canonical round
+ * contract first — the same rules the AI generator accepted it under and the
+ * same rules the session endpoint will re-check when it serves it. A round that
+ * fails is logged with its reasons and dropped; it is never written as a
+ * published row that the app will then fail to play.
+ *
+ * Returns the modes that were actually published.
+ */
 async function persistChallenges(
   language: QuizLanguage,
   refreshDate: Date,
   payload: GeneratedQuestionChallengesPayload,
   footballQuizChallenge: GeneratedQuestionChallenge | null,
-): Promise<void> {
-  const rows = footballQuizChallenge
+): Promise<QuestionChallengeMode[]> {
+  const candidates = footballQuizChallenge
     ? [...payload.challenges, footballQuizChallenge]
     : [...payload.challenges];
+
+  const rows: GeneratedQuestionChallenge[] = [];
+  const existingFingerprints = await existingQuestionFingerprints(language);
+  const batchSeenFingerprints = new Set<string>();
+
+  for (const challenge of candidates) {
+    const questions = challengeQuestions(challenge.content);
+    const duplicateFingerprints = rejectedDuplicateQuestionFingerprints(
+      challenge.mode,
+      questions,
+      existingFingerprints,
+      batchSeenFingerprints,
+    );
+
+    if (duplicateFingerprints.length > 0) {
+      logger.warn('[QuestionsChallenges] round rejected before publish due to duplicate questions', {
+        mode: challenge.mode,
+        language,
+        duplicateCount: duplicateFingerprints.length,
+      });
+      continue;
+    }
+
+    const verdict = validateRoundContract({
+      mode: challenge.mode,
+      questions,
+      answer: challenge.answer,
+    });
+    if (verdict.ok) {
+      rows.push(challenge);
+      for (const question of questions) {
+        existingFingerprints.add(buildQuestionFingerprint(challenge.mode, question));
+        batchSeenFingerprints.add(buildQuestionFingerprint(challenge.mode, question));
+      }
+      continue;
+    }
+    // `source` is 'AI' for everything generated today; anything else reaching
+    // this point is a fallback tier, and a fallback that cannot produce a valid
+    // session round must never be published.
+    const label =
+      challenge.metadata.source === 'AI'
+        ? '[QuestionsChallenges] round rejected before publish'
+        : '[QuestionsChallenges] fallback rejected';
+    logger.error(label, {
+      mode: challenge.mode,
+      language,
+      source: challenge.metadata.source,
+      reason: 'ROUND_CONTRACT_VIOLATION',
+      questionCount: verdict.questionCount,
+      validationErrors: summarizeErrors(verdict.errors),
+    });
+  }
+
+  if (!rows.length) return [];
 
   await db.$transaction(async (tx: any) => {
     for (const challenge of rows) {
@@ -460,6 +738,17 @@ async function persistChallenges(
       });
     }
   });
+
+  for (const challenge of rows) {
+    logger.info('[QuestionsChallenges] published round', {
+      mode: challenge.mode,
+      language,
+      source: challenge.metadata.source,
+      questionCount: challengeQuestions(challenge.content).length,
+    });
+  }
+
+  return rows.map((challenge) => challenge.mode);
 }
 
 async function generateAndPersistDailyChallenges(
@@ -484,10 +773,42 @@ async function generateAndPersistDailyChallenges(
     });
   }
 
-  const payload = await generateDailyQuestionsModesPayload(language, refreshDateYmd, avoidPromptsByMode);
+  let payload: GeneratedQuestionChallengesPayload;
+  try {
+    payload = await generateDailyQuestionsModesPayload(language, refreshDateYmd, avoidPromptsByMode);
+  } catch (err) {
+    /*
+     * The seven AI modes could not be authored today (usually a starved entity
+     * pool). The isolation above was only ever one-way: a bad daily pack must
+     * not sink the AI modes — but a failed AI batch was silently discarding a
+     * Football Quiz round that had ALREADY been built successfully, because
+     * persistChallenges below was never reached.
+     *
+     * A mode that was built is published. Failing one mode must not un-build
+     * another. Nothing invented is published here: this is the same AI round
+     * that would have been stored had the batch succeeded.
+     */
+    if (footballQuizChallenge) {
+      await persistChallenges(
+        language,
+        refreshDate,
+        { language, refreshDate: refreshDateYmd, refreshTime: DEFAULT_REFRESH_TIME, challenges: [] },
+        footballQuizChallenge,
+      );
+      await redisCacheService.del(challengeCacheKey(refreshDateYmd, language));
+      logger.warn('[QuestionsChallenges] AI modes failed — published Football Quiz alone', {
+        language,
+        refreshDate: refreshDateYmd,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    throw err;
+  }
 
   await persistChallenges(language, refreshDate, payload, footballQuizChallenge);
   await redisCacheService.del(challengeCacheKey(refreshDateYmd, language));
+  // The day generated — drop any back-off left from an earlier failed attempt.
+  await clearGenerationFailureKeys(refreshDateYmd, language);
   logger.info('[QuestionsChallenges] daily challenges generated', {
     language,
     refreshDate: refreshDateYmd,
@@ -516,7 +837,10 @@ async function recycleMostRecentChallenges(
       refreshDate: { gte: since, lt: refreshDate },
     },
     orderBy: { refreshDate: 'desc' },
-    take: 8,
+    // The whole window, not one day's worth: a mode missing today may have last
+    // been authored several days ago, and each mode is taken from its own most
+    // recent real round.
+    take: EXPECTED_MODES_PER_DAY * LOOKBACK_DAYS,
     select: {
       type: true,
       title: true,
@@ -534,10 +858,58 @@ async function recycleMostRecentChallenges(
     },
   });
 
-  if (!previous.length) return false;
+  /*
+   * Only a round that would pass the publish gate today may be recycled — the
+   * fallback tier is held to the SAME contract as fresh AI content. Without
+   * this the oldest canned/legacy rows got copied on to every new day forever:
+   * never playable, so generation was attempted, failed, recycled them again —
+   * the loop that produced SESSION_LOAD_FAILED on every mode for days on end.
+   */
+  /*
+   * Recycling FILLS GAPS; it never overwrites a mode that is already playable
+   * today. A fresh AI round must not be replaced by an older one just because
+   * some other mode of the same day failed.
+   */
+  const alreadyPlayable = new Set(
+    (await loadPublishedRows(language, refreshDate)).filter((row) => roundVerdict(row).ok).map((row) => row.type),
+  );
+
+  const recyclable: Array<any> = [];
+  const seenTypes = new Set<string>();
+  for (const row of previous as Array<any>) {
+    if (alreadyPlayable.has(row.type)) continue;
+    // `previous` spans several days, newest first — take each mode once.
+    if (seenTypes.has(row.type)) continue;
+
+    const verdict = roundVerdict(row);
+    if (verdict.ok) {
+      seenTypes.add(row.type);
+      recyclable.push(row);
+      continue;
+    }
+    logger.warn('[QuestionsChallenges] fallback rejected', {
+      mode: modeFromDbType(row.type) ?? row.type,
+      language,
+      source: row.source ?? 'unknown',
+      reason: 'RECYCLE_CANDIDATE_FAILS_ROUND_CONTRACT',
+      validationErrors: summarizeErrors(verdict.errors),
+    });
+  }
+
+  if (!recyclable.length) {
+    if (alreadyPlayable.size < EXPECTED_MODES_PER_DAY) {
+      logger.error('[QuestionsChallenges] nothing recyclable — previous days hold no real rounds', {
+        language,
+        refreshDate: packDateYmd(refreshDate, timezone),
+        inspected: previous.length,
+        alreadyPlayableToday: alreadyPlayable.size,
+      });
+    }
+    return false;
+  }
 
   await db.$transaction(async (tx: any) => {
-    for (const row of previous as Array<any>) {
+    for (const row of recyclable as Array<any>) {
       const contentHash = challengeHash(row.content);
       await tx.dailyQuestionChallenge.upsert({
         where: {
@@ -568,42 +940,375 @@ async function recycleMostRecentChallenges(
           source: row.source ?? 'AI',
           publishedAt: new Date(),
         },
+        /*
+         * The update branch MUST overwrite the content too. It used to flip
+         * `status` alone, so when today already held a row for this mode — the
+         * unplayable STATIC_FALLBACK one — recycling "succeeded" while leaving
+         * that broken round in place, and the session kept failing.
+         */
         update: {
           status: 'PUBLISHED' as any,
+          title: row.title,
+          description: row.description,
+          image: row.image,
+          icon: row.icon,
+          difficulty: row.difficulty,
+          xpReward: row.xpReward,
+          refreshTime: row.refreshTime || DEFAULT_REFRESH_TIME,
+          streakContribution: row.streakContribution,
+          leaderboardEligibility: row.leaderboardEligibility,
+          content: row.content as unknown as Prisma.InputJsonValue,
+          answer: row.answer as unknown as Prisma.InputJsonValue,
+          metadata: { source: row.source ?? 'AI', isFallback: true } as unknown as Prisma.InputJsonValue,
+          contentHash,
+          source: row.source ?? 'AI',
+          publishedAt: new Date(),
         },
       });
     }
   });
 
+  for (const row of recyclable) {
+    logger.info('[QuestionsChallenges] published round', {
+      mode: modeFromDbType(row.type) ?? row.type,
+      language,
+      source: `RECYCLED:${row.source ?? 'AI'}`,
+      questionCount: challengeQuestions(row.content).length,
+    });
+  }
+
   logger.warn('[QuestionsChallenges] Recycled previous day challenges as fallback', {
     language,
     refreshDate: packDateYmd(refreshDate, timezone),
-    count: previous.length,
+    count: recyclable.length,
   });
 
   return true;
+}
+
+async function recycleMostRecentChallengeForMode(
+  mode: QuestionChallengeMode,
+  language: QuizLanguage,
+  refreshDate: Date,
+  timezone: string,
+): Promise<boolean> {
+  const type = dbTypeFromMode(mode);
+  const refreshDateYmd = packDateYmd(refreshDate, timezone);
+  const since = new Date(refreshDate);
+  since.setDate(since.getDate() - LOOKBACK_DAYS);
+
+  const existing = await loadPublishedRows(language, refreshDate);
+  const unplayable = existing.filter((row) => row.type === type && !roundVerdict(row).ok);
+  if (unplayable.length > 0) {
+    await archiveUnplayableRows(language, refreshDateYmd, unplayable);
+  }
+
+  const candidate = (await db.dailyQuestionChallenge.findMany({
+    where: {
+      language,
+      type,
+      status: 'PUBLISHED' as any,
+      refreshDate: { gte: since, lt: refreshDate },
+    },
+    orderBy: { refreshDate: 'desc' },
+    take: LOOKBACK_DAYS,
+    select: {
+      type: true,
+      title: true,
+      description: true,
+      image: true,
+      icon: true,
+      difficulty: true,
+      xpReward: true,
+      refreshTime: true,
+      streakContribution: true,
+      leaderboardEligibility: true,
+      content: true,
+      answer: true,
+      source: true,
+    },
+  }) as Array<any>).find((row) => roundVerdict(row).ok);
+
+  if (!candidate) {
+    logger.warn('[QuestionsChallenges] no recyclable round for missing mode', {
+      mode,
+      language,
+      refreshDate: refreshDateYmd,
+    });
+    return false;
+  }
+
+  const contentHash = challengeHash(candidate.content);
+  await db.dailyQuestionChallenge.upsert({
+    where: {
+      refreshDate_type_language: {
+        refreshDate,
+        type,
+        language,
+      },
+    },
+    create: {
+      refreshDate,
+      language,
+      type,
+      status: 'PUBLISHED' as any,
+      title: candidate.title,
+      description: candidate.description,
+      image: candidate.image,
+      icon: candidate.icon,
+      difficulty: candidate.difficulty,
+      xpReward: candidate.xpReward,
+      refreshTime: candidate.refreshTime || DEFAULT_REFRESH_TIME,
+      streakContribution: candidate.streakContribution,
+      leaderboardEligibility: candidate.leaderboardEligibility,
+      content: candidate.content as unknown as Prisma.InputJsonValue,
+      answer: candidate.answer as unknown as Prisma.InputJsonValue,
+      metadata: { source: candidate.source ?? 'AI', isFallback: true } as unknown as Prisma.InputJsonValue,
+      contentHash,
+      source: candidate.source ?? 'AI',
+      publishedAt: new Date(),
+    },
+    update: {
+      status: 'PUBLISHED' as any,
+      title: candidate.title,
+      description: candidate.description,
+      image: candidate.image,
+      icon: candidate.icon,
+      difficulty: candidate.difficulty,
+      xpReward: candidate.xpReward,
+      refreshTime: candidate.refreshTime || DEFAULT_REFRESH_TIME,
+      streakContribution: candidate.streakContribution,
+      leaderboardEligibility: candidate.leaderboardEligibility,
+      content: candidate.content as unknown as Prisma.InputJsonValue,
+      answer: candidate.answer as unknown as Prisma.InputJsonValue,
+      metadata: { source: candidate.source ?? 'AI', isFallback: true } as unknown as Prisma.InputJsonValue,
+      contentHash,
+      source: candidate.source ?? 'AI',
+      publishedAt: new Date(),
+    },
+  });
+
+  logger.warn('[QuestionsChallenges] recycled latest playable round for missing mode', {
+    mode,
+    language,
+    refreshDate: refreshDateYmd,
+    source: candidate.source ?? 'AI',
+    questionCount: challengeQuestions(candidate.content).length,
+  });
+  return true;
+}
+
+/**
+ * Un-publishes rows that cannot be served, so a broken round can neither block
+ * regeneration nor be handed to the app.
+ *
+ * This is what finally clears the production state: the guess-player row for
+ * today was `source: 'STATIC_FALLBACK'` with no `questions`, PUBLISHED, and
+ * therefore found by every session query. Archiving it means the mode reports a
+ * clean "not published yet" while the day regenerates, instead of a 502 on a
+ * round that will never be playable.
+ */
+async function archiveUnplayableRows(
+  language: QuizLanguage,
+  refreshDateYmd: string,
+  rows: Array<{ id: string; type: string; content: unknown; answer?: unknown; source: unknown }>,
+): Promise<void> {
+  for (const row of rows) {
+    const verdict = roundVerdict(row);
+    if (verdict.ok) continue;
+    await db.dailyQuestionChallenge.update({
+      where: { id: row.id },
+      data: { status: 'ARCHIVED' as any },
+    });
+    logger.warn('[QuestionsChallenges] archived unplayable published round', {
+      mode: modeFromDbType(row.type) ?? row.type,
+      language,
+      refreshDate: refreshDateYmd,
+      challengeId: row.id,
+      source: row.source ?? 'unknown',
+      questionCount: verdict.questionCount,
+      validationErrors: summarizeErrors(verdict.errors),
+    });
+  }
+}
+
+/** Today's published rows for a language, with everything validation needs. */
+async function loadPublishedRows(
+  language: QuizLanguage,
+  refreshDate: Date,
+): Promise<Array<{ id: string; type: string; content: unknown; answer: unknown; source: unknown }>> {
+  return (await db.dailyQuestionChallenge.findMany({
+    where: { refreshDate, language, status: 'PUBLISHED' as any },
+    select: { id: true, type: true, content: true, answer: true, source: true },
+  })) as Array<{ id: string; type: string; content: unknown; answer: unknown; source: unknown }>;
+}
+
+function playableModesFromRows(
+  rows: Array<{ type: string; content: unknown; answer: unknown; source: unknown }>,
+): Set<QuestionChallengeMode> {
+  const out = new Set<QuestionChallengeMode>();
+  for (const row of rows) {
+    if (!roundVerdict(row).ok) continue;
+    const mode = modeFromDbType(row.type);
+    if (mode) out.add(mode);
+  }
+  return out;
+}
+
+async function clearGenerationFailureKeys(refreshDateYmd: string, language: QuizLanguage): Promise<void> {
+  await redisCacheService.del(legacyChallengeGenFailureKey(refreshDateYmd, language));
+  await Promise.all(
+    SUPPORTED_QUESTION_MODES.map((mode) =>
+      redisCacheService.del(challengeGenFailureKey(refreshDateYmd, language, mode)),
+    ),
+  );
+}
+
+async function markGenerationFailureKeys(
+  refreshDateYmd: string,
+  language: QuizLanguage,
+  playableModes: Set<QuestionChallengeMode>,
+  ttlMs: number,
+): Promise<QuestionChallengeMode[]> {
+  const missingModes = SUPPORTED_QUESTION_MODES.filter((mode) => !playableModes.has(mode));
+  await redisCacheService.set(legacyChallengeGenFailureKey(refreshDateYmd, language), true, ttlMs);
+  await Promise.all(
+    SUPPORTED_QUESTION_MODES.map((mode) =>
+      playableModes.has(mode)
+        ? redisCacheService.del(challengeGenFailureKey(refreshDateYmd, language, mode))
+        : redisCacheService.set(challengeGenFailureKey(refreshDateYmd, language, mode), true, ttlMs),
+    ),
+  );
+  return missingModes;
+}
+
+/**
+ * Days whose generation is already running in this process, so a burst of
+ * session requests for the same day triggers one background run rather than
+ * one per request. The Redis lock in withChallengeGenLock already serializes
+ * across processes; this only avoids piling up promises inside this one.
+ */
+const backgroundGenerationInFlight = new Set<string>();
+
+/**
+ * Starts (at most one) generation run for a day and returns immediately.
+ *
+ * Generation is minutes of AI and football work. It belongs to the cron and to
+ * this detached runner — never to the request the user is waiting on.
+ */
+function triggerBackgroundGeneration(
+  language: QuizLanguage,
+  refreshDate: Date,
+  timezone: string,
+  refreshDateYmd: string,
+): void {
+  const key = `${refreshDateYmd}:${language}`;
+  if (backgroundGenerationInFlight.has(key)) return;
+  backgroundGenerationInFlight.add(key);
+
+  logger.info('[QuestionsChallenges] generation needed — running it in the background', {
+    language,
+    refreshDate: refreshDateYmd,
+  });
+
+  // Same full path the cron runs; the omitted requestedMode means "author the
+  // whole day", which is what a starved day actually needs.
+  void ensureDailyChallenges(language, refreshDate, timezone)
+    .catch((err) =>
+      logger.error('[QuestionsChallenges] background generation failed', {
+        language,
+        refreshDate: refreshDateYmd,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    )
+    .finally(() => backgroundGenerationInFlight.delete(key));
 }
 
 async function ensureDailyChallenges(
   language: QuizLanguage,
   refreshDate: Date,
   timezone: string,
+  requestedMode?: QuestionChallengeMode,
+  options?: {
+    /**
+     * Set by user-facing request paths. Every cheap check below still runs
+     * inline (they are DB/Redis reads and can resolve the request outright);
+     * only the expensive generation is detached, so the caller gets a fast,
+     * explicit "not ready" instead of holding the socket open for the whole
+     * AI retry ladder.
+     */
+    background?: boolean;
+  },
 ): Promise<void> {
   const refreshDateYmd = packDateYmd(refreshDate, timezone);
   const cacheKey = challengeCacheKey(refreshDateYmd, language);
   const cachedReady = await redisCacheService.get<boolean>(cacheKey);
   if (cachedReady) return;
+  const generationBatch = `${refreshDateYmd}:${language}:${Date.now()}`;
 
-  const existing = await db.dailyQuestionChallenge.count({
-    where: {
-      refreshDate,
-      language,
-      status: 'PUBLISHED' as any,
-    },
-  });
+  const existingRows = await loadPublishedRows(language, refreshDate);
+  const playableModes = playableModesFromRows(existingRows);
 
-  if (existing >= 8) {
+  if (playableModes.size >= EXPECTED_MODES_PER_DAY) {
     await redisCacheService.set(cacheKey, true, QUESTIONS_CHALLENGE_CACHE_TTL);
+    await clearGenerationFailureKeys(refreshDateYmd, language);
+    return;
+  }
+
+  if (requestedMode && playableModes.has(requestedMode)) {
+    return;
+  }
+
+  const legacyFailureActive = await redisCacheService.get<boolean>(
+    legacyChallengeGenFailureKey(refreshDateYmd, language),
+  );
+  const modeFailureActive = requestedMode
+    ? await redisCacheService.get<boolean>(
+        challengeGenFailureKey(refreshDateYmd, language, requestedMode),
+      )
+    : false;
+
+  if (legacyFailureActive || modeFailureActive) {
+    if (requestedMode && !playableModes.has(requestedMode)) {
+      throw questionGenerationUnavailable({
+        mode: requestedMode,
+        language,
+        refreshDate: refreshDateYmd,
+        generationBatch,
+        provider: 'openrouter',
+        reason: 'GENERATION_BACKOFF_ACTIVE',
+        message: 'Generation backoff is active for this mode',
+      });
+    }
+    return;
+  }
+
+  const unplayable = existingRows.filter((row) => !roundVerdict(row).ok);
+  if (unplayable.length > 0) {
+    logger.warn('[QuestionsChallenges] published rows are not playable rounds — regenerating', {
+      language,
+      refreshDate: refreshDateYmd,
+      rows: existingRows.length,
+      playable: playableModes.size,
+      unplayable: unplayable.map(
+        (row) => `${row.type}:${summarizeErrors(roundVerdict(row).errors, 1)[0] ?? 'INVALID'}`,
+      ),
+    });
+    // Take them out of circulation before anything can serve or recycle them.
+    await archiveUnplayableRows(language, refreshDateYmd, unplayable);
+  }
+
+  /*
+   * Everything above is cheap (Redis + DB reads, and archiving rows that must
+   * not be served). Everything below authors rounds: football lookups, the AI
+   * agent, its retry ladder. A user-facing GET must not wait for that — with a
+   * dead provider it held the request open for ~77s and then still answered
+   * 503. Detach it and let the caller fall through to its own fast, explicit
+   * "no playable round" answer; the round appears on a later request once the
+   * background run finishes.
+   */
+  if (options?.background) {
+    triggerBackgroundGeneration(language, refreshDate, timezone, refreshDateYmd);
     return;
   }
 
@@ -613,39 +1318,91 @@ async function ensureDailyChallenges(
   await withChallengeGenLock(lockKey, 180_000, async () => {
     // Re-check inside the lock — another request may have finished generating
     // while we were waiting.
-    const doubleCheck = await db.dailyQuestionChallenge.count({
-      where: { refreshDate, language, status: 'PUBLISHED' as any },
-    });
-    if (doubleCheck >= 8) {
+    const doubleCheckRows = await loadPublishedRows(language, refreshDate);
+    const doubleCheckModes = playableModesFromRows(doubleCheckRows);
+    if (doubleCheckModes.size >= EXPECTED_MODES_PER_DAY) {
       await redisCacheService.set(cacheKey, true, QUESTIONS_CHALLENGE_CACHE_TTL);
+      await clearGenerationFailureKeys(refreshDateYmd, language);
       return;
     }
 
+    let generationError: unknown = null;
     try {
       await generateAndPersistDailyChallenges(language, refreshDate, timezone);
     } catch (err) {
-      // Never leave every mode's session request stuck on a hard failure —
-      // recycle the most recent valid day's challenges instead.
+      generationError = err;
       logger.error('[QuestionsChallenges] Daily generation failed, attempting recycled fallback', {
         language,
         refreshDate: refreshDateYmd,
+        generationBatch,
+        provider: 'openrouter',
         error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
       });
-
-      const recycled = await recycleMostRecentChallenges(language, refreshDate, timezone);
-      if (!recycled) {
-        // No AI and no real day to recycle. The modes stay unpublished and the
-        // app shows its existing error/retry state — inventing placeholder
-        // players, clubs and answers to fill the grid is worse than that.
-        logger.error('[QuestionsChallenges] No AI round and no history to recycle — modes unavailable today', {
-          language,
-          refreshDate: refreshDateYmd,
-        });
-        return;
-      }
     }
 
-    await redisCacheService.set(cacheKey, true, QUESTIONS_CHALLENGE_CACHE_TTL);
+    /*
+     * Fill whatever is still missing from the most recent REAL day.
+     *
+     * This runs after a partial success too, not only after a hard failure: the
+     * generator now publishes the modes it could author instead of discarding
+     * the day, so "guess-club found no honest round" leaves one gap to fill
+     * rather than eight. Recycling never overwrites a mode that is already
+     * playable today, and never publishes a round that fails the contract — so
+     * a mode with no real history simply stays unpublished, and the app shows
+     * its retry state rather than invented players, clubs and answers.
+     */
+    const afterGenerationRows = await loadPublishedRows(language, refreshDate);
+    const afterGenerationModes = playableModesFromRows(afterGenerationRows);
+    if (afterGenerationModes.size < EXPECTED_MODES_PER_DAY) {
+      await recycleMostRecentChallenges(language, refreshDate, timezone);
+    }
+
+    /*
+     * Whether the day is ready is decided by what is ACTUALLY playable now, not
+     * by which branch above ran. A day that came out short backs off, so it
+     * costs one attempt per cooldown instead of one AI batch per session
+     * request — the difference between a 29s 502 and an immediate one.
+     */
+    const finalRows = await loadPublishedRows(language, refreshDate);
+    const finalPlayableModes = playableModesFromRows(finalRows);
+    if (finalPlayableModes.size >= EXPECTED_MODES_PER_DAY) {
+      await redisCacheService.set(cacheKey, true, QUESTIONS_CHALLENGE_CACHE_TTL);
+      await clearGenerationFailureKeys(refreshDateYmd, language);
+      return;
+    }
+
+    const missingModes = await markGenerationFailureKeys(
+      refreshDateYmd,
+      language,
+      finalPlayableModes,
+      QUESTIONS_CHALLENGE_RETRY_COOLDOWN_MS,
+    );
+    logger.warn('[QuestionsChallenges] day is short of playable modes — backing off before the next attempt', {
+      language,
+      refreshDate: refreshDateYmd,
+      generationBatch,
+      provider: 'openrouter',
+      playable: finalPlayableModes.size,
+      expected: EXPECTED_MODES_PER_DAY,
+      missingModes,
+      generationError: generationError instanceof Error ? generationError.message : null,
+      retryInMs: QUESTIONS_CHALLENGE_RETRY_COOLDOWN_MS,
+    });
+
+    if (requestedMode && !finalPlayableModes.has(requestedMode)) {
+      const cause = generationError instanceof Error ? generationError : null;
+      throw questionGenerationUnavailable({
+        mode: requestedMode,
+        language,
+        refreshDate: refreshDateYmd,
+        generationBatch,
+        provider: 'openrouter',
+        reason: 'MODE_ROUND_NOT_PLAYABLE_AFTER_GENERATION',
+        message: cause?.message ?? 'Requested mode round is unavailable after generation attempt',
+        stack: cause?.stack,
+      });
+    }
   });
 }
 
@@ -797,12 +1554,28 @@ async function buildQuestionsSummary(
   userId: string,
   challenges: Array<{ id: string; xpReward: number }>,
 ): Promise<QuestionsModesSummary> {
+  const challengeIds = challenges.map((challenge) => challenge.id);
+  if (challengeIds.length === 0) {
+    return {
+      answeredCount: 0,
+      xpEarnedTotal: 0,
+      xpAvailableToday: 0,
+    };
+  }
+
   const [answeredCount, earned] = await Promise.all([
     db.userQuestionChallenge.count({
-      where: { userId, attempts: { gt: 0 } },
+      where: {
+        userId,
+        challengeId: { in: challengeIds },
+        attempts: { gt: 0 },
+      },
     }),
     db.userQuestionChallenge.aggregate({
-      where: { userId },
+      where: {
+        userId,
+        challengeId: { in: challengeIds },
+      },
       _sum: { xpEarned: true },
     }),
   ]);
@@ -824,7 +1597,10 @@ export async function getQuestionsModesForUser(
   const refreshDate = todayPackDate(timezone);
   const refreshDateYmd = packDateYmd(refreshDate, timezone);
 
-  await ensureDailyChallenges(language, refreshDate, timezone);
+  // The Questions hub is the entry screen — the very first request of the
+  // session. It lists whatever is playable now and must never block on
+  // authoring the day.
+  await ensureDailyChallenges(language, refreshDate, timezone, undefined, { background: true });
 
   const cacheKey = challengeProgressCacheKey(user.id, refreshDateYmd, language);
   const cached = await redisCacheService.get<{
@@ -877,19 +1653,13 @@ export async function getQuestionsModesForUser(
   return result;
 }
 
-export async function getQuestionsChallengeSession(
-  clerkUserId: string,
+/** Today's published row for one mode, with everything the session needs. */
+async function findPublishedChallenge(
   mode: QuestionChallengeMode,
-  languageInput: string | undefined,
-  timezone: string,
-): Promise<QuestionChallengeSessionDto> {
-  const user = await ensureBackendUser(clerkUserId);
-  const language = normalizeLanguage(languageInput);
-  const refreshDate = todayPackDate(timezone);
-
-  await ensureDailyChallenges(language, refreshDate, timezone);
-
-  const challenge = await db.dailyQuestionChallenge.findFirst({
+  language: QuizLanguage,
+  refreshDate: Date,
+): Promise<any> {
+  return db.dailyQuestionChallenge.findFirst({
     where: {
       refreshDate,
       language,
@@ -907,18 +1677,138 @@ export async function getQuestionsChallengeSession(
       xpReward: true,
       refreshDate: true,
       refreshTime: true,
+      source: true,
       streakContribution: true,
       leaderboardEligibility: true,
       content: true,
       answer: true,
     },
   });
+}
 
-  if (!challenge) {
-    throw new Error('QUESTIONS_CHALLENGE_NOT_FOUND');
+export async function getQuestionsChallengeSession(
+  clerkUserId: string,
+  mode: QuestionChallengeMode,
+  languageInput: string | undefined,
+  timezone: string,
+): Promise<QuestionChallengeSessionDto> {
+  const user = await ensureBackendUser(clerkUserId);
+  const language = normalizeLanguage(languageInput);
+  const refreshDate = todayPackDate(timezone);
+
+  /*
+   * FAST PATH — a valid published round is served as-is.
+   *
+   * `ensureDailyChallenges` is a generation path: it can call the AI agent and
+   * the football layer, which is minutes of work. Running it before every
+   * lookup meant a mode whose round was already sitting in the database still
+   * paid for the day's other broken modes on every single request. The round
+   * itself is the authority: if it satisfies the contract, nothing needs
+   * generating and no upstream call is made.
+   */
+  let challenge = await findPublishedChallenge(mode, language, refreshDate);
+  let verdict = challenge
+    ? validateStoredRound({ mode, content: challenge.content, answer: challenge.answer, source: challenge.source })
+    : null;
+
+  if (!challenge || !verdict?.ok) {
+    if (challenge && verdict) {
+      // Published but unplayable. Name the exact reasons, then take the row out
+      // of circulation so it can neither be served nor recycled forward.
+      logger.error('[QuestionsChallenges] published round fails the round contract', {
+        mode,
+        language,
+        challengeId: challenge.id,
+        refreshDate: packDateYmd(challenge.refreshDate, timezone),
+        source: challenge.source ?? 'unknown',
+        questionCount: verdict.questionCount,
+        contentKeys: Object.keys((challenge.content ?? {}) as Record<string, unknown>),
+        validationErrors: summarizeErrors(verdict.errors),
+      });
+      await archiveUnplayableRows(language, packDateYmd(refreshDate, timezone), [challenge]);
+    }
+
+    // background: this is the request the user is waiting on — it may trigger
+    // generation but must never wait for it.
+    await ensureDailyChallenges(language, refreshDate, timezone, mode, { background: true });
+
+    challenge = await findPublishedChallenge(mode, language, refreshDate);
+    verdict = challenge
+      ? validateStoredRound({ mode, content: challenge.content, answer: challenge.answer, source: challenge.source })
+      : null;
+
+    if ((!challenge || !verdict?.ok) && (await recycleMostRecentChallengeForMode(mode, language, refreshDate, timezone))) {
+      challenge = await findPublishedChallenge(mode, language, refreshDate);
+      verdict = challenge
+        ? validateStoredRound({ mode, content: challenge.content, answer: challenge.answer, source: challenge.source })
+        : null;
+    }
   }
 
-  const progress = await db.userQuestionChallenge.findUnique({
+  if (!challenge) {
+    const refreshDateYmd = packDateYmd(refreshDate, timezone);
+    const base = {
+      mode,
+      language,
+      refreshDate: refreshDateYmd,
+      generationBatch: `${refreshDateYmd}:${language}:session`,
+      provider: preferredQuizProviderName(),
+    };
+
+    // Generation is actually running — say so, rather than reporting a dead end.
+    if (isGenerationInFlight(language, refreshDateYmd)) {
+      throw questionGenerationInProgress({
+        ...base,
+        reason: 'GENERATION_IN_PROGRESS',
+        message: 'Today\'s round is being prepared',
+        retryAfterSeconds: 5,
+      });
+    }
+
+    throw questionGenerationUnavailable({
+      ...base,
+      reason: 'MODE_ROUND_MISSING',
+      message: 'No playable round exists for the requested mode',
+    });
+  }
+
+  /*
+   * A round that cannot be played is a failure, not a session. Returning it as
+   * a 200 is exactly what produced SESSION_LOAD_FAILED on the device: the app
+   * received `status: SUCCESS` with `content` holding no `questions`, mapped it
+   * to an empty round, and had no error to report beyond the generic one.
+   *
+   * Surfacing it here gives the client a real, actionable code. There is no
+   * canned-content path behind this by design — the app shows its retry state
+   * rather than invented players, clubs or stats.
+   */
+  if (!verdict?.ok) {
+    logger.error('[QuestionsChallenges] published round is not playable', {
+      mode,
+      language,
+      challengeId: challenge.id,
+      refreshDate: packDateYmd(challenge.refreshDate, timezone),
+      source: challenge.source ?? 'unknown',
+      questionCount: verdict?.questionCount ?? 0,
+      contentKeys: Object.keys((challenge.content ?? {}) as Record<string, unknown>),
+      validationErrors: summarizeErrors(verdict?.errors ?? ['UNVALIDATED']),
+    });
+    throw new Error('QUESTIONS_CHALLENGE_EMPTY');
+  }
+
+  logger.info('[QuestionsChallenges] session served', {
+    mode,
+    language,
+    challengeId: challenge.id,
+    questionCount: challengeQuestions(challenge.content).length,
+    source: (challenge as { source?: unknown }).source ?? 'unknown',
+  });
+
+  const questions = challengeQuestions(challenge.content);
+  const evaluatePoints = evaluatePointsForMode(mode, questions);
+  const now = new Date();
+
+  let progressRow = await db.userQuestionChallenge.findUnique({
     where: {
       userId_challengeId: {
         userId: user.id,
@@ -932,38 +1822,88 @@ export async function getQuestionsChallengeSession(
       elapsedTime: true,
       completionPercentage: true,
       unlocked: true,
+      answeredPayload: true,
     },
   });
 
-  return {
-    challengeId: challenge.id,
-    type: mode,
-    title: challenge.title,
-    description: challenge.description,
-    image: challenge.image,
-    icon: challenge.icon,
-    difficulty: challenge.difficulty,
-    xpReward: challenge.xpReward,
-    refreshDate: packDateYmd(challenge.refreshDate, timezone),
-    refreshTime: challenge.refreshTime,
-    completionState: challengeCompletionState(progress?.unlocked ?? true, progress?.completed ?? false),
-    completionPercentage: progress?.completionPercentage ?? 0,
-    unlockState: progress?.unlocked ?? true,
-    streakContribution: challenge.streakContribution,
-    leaderboardEligibility: challenge.leaderboardEligibility,
-    content: challenge.content as unknown as QuestionChallengeSessionDto['content'],
-    answer: challenge.answer as unknown as QuestionChallengeAnswer,
-    attempts: progress?.attempts ?? 0,
-    completed: progress?.completed ?? false,
-    score: progress?.score ?? 0,
-    elapsedTime: progress?.elapsedTime ?? 0,
-  };
-}
+  let sessionProgress = parseSessionProgress(progressRow?.answeredPayload);
+  ensureSessionStarted(sessionProgress, questions, now);
+  const expiredAdvanced = advanceExpiredQuestions(sessionProgress, questions, now, evaluatePoints);
 
-/** The round's questions as stored on a challenge row. */
-function challengeQuestions(content: unknown): QuestionChallengeQuestion[] {
-  const questions = (content as { questions?: unknown } | null)?.questions;
-  return Array.isArray(questions) ? (questions as QuestionChallengeQuestion[]) : [];
+  const derived = deriveProgressFields(sessionProgress, questions, evaluatePoints);
+
+  if (expiredAdvanced || sessionProgress.sessionStatus === 'IN_PROGRESS') {
+    const persistedProgressRow = await db.userQuestionChallenge.upsert({
+      where: {
+        userId_challengeId: {
+          userId: user.id,
+          challengeId: challenge.id,
+        },
+      },
+      create: {
+        userId: user.id,
+        challengeId: challenge.id,
+        completed: derived.completed,
+        score: derived.score,
+        elapsedTime: progressRow?.elapsedTime ?? 0,
+        xpEarned: 0,
+        attempts: progressRow?.attempts ?? 0,
+        completionPercentage: derived.completionPercentage,
+        unlocked: true,
+        answeredPayload: sessionProgressToJson(sessionProgress),
+        completedAt: derived.completed ? now : null,
+      },
+      update: {
+        completed: derived.completed,
+        score: derived.score,
+        completionPercentage: derived.completionPercentage,
+        answeredPayload: sessionProgressToJson(sessionProgress),
+        completedAt: derived.completed ? now : progressRow?.completedAt ?? null,
+      },
+      select: {
+        attempts: true,
+        completed: true,
+        score: true,
+        elapsedTime: true,
+        completionPercentage: true,
+        unlocked: true,
+        answeredPayload: true,
+      },
+    });
+    if (persistedProgressRow) {
+      progressRow = persistedProgressRow;
+      sessionProgress = parseSessionProgress(persistedProgressRow.answeredPayload);
+    }
+  }
+
+  return buildSessionView({
+    mode,
+    challenge: {
+      id: challenge.id,
+      title: challenge.title,
+      description: challenge.description,
+      image: challenge.image,
+      icon: challenge.icon,
+      difficulty: challenge.difficulty,
+      xpReward: challenge.xpReward,
+      refreshDate: packDateYmd(challenge.refreshDate, timezone),
+      refreshTime: challenge.refreshTime,
+      streakContribution: challenge.streakContribution,
+      leaderboardEligibility: challenge.leaderboardEligibility,
+      content: challenge.content as QuestionChallengeSessionDto['content'],
+    },
+    questions,
+    progress: sessionProgress,
+    progressMeta: {
+      attempts: progressRow?.attempts ?? 0,
+      completed: derived.completed,
+      score: derived.score,
+      elapsedTime: progressRow?.elapsedTime ?? 0,
+      completionPercentage: derived.completionPercentage,
+      unlocked: progressRow?.unlocked ?? true,
+    },
+    now,
+  });
 }
 
 /** What a user has answered so far this round, keyed by question id. */
@@ -975,17 +1915,15 @@ interface AnsweredQuestionRecord {
 }
 
 function readAnsweredRecords(payload: unknown): Record<string, AnsweredQuestionRecord> {
-  const raw = (payload as { byQuestionId?: unknown } | null)?.byQuestionId;
-  if (!raw || typeof raw !== 'object') return {};
+  const session = parseSessionProgress(payload);
   const out: Record<string, AnsweredQuestionRecord> = {};
-  for (const [questionId, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (!value || typeof value !== 'object') continue;
-    const record = value as Record<string, unknown>;
+  for (const [questionId, record] of Object.entries(session.byQuestionId)) {
+    if (record.status !== 'answered') continue;
     out[questionId] = {
-      selectedIds: Array.isArray(record.selectedIds) ? record.selectedIds.map(String) : [],
-      isCorrect: Boolean(record.isCorrect),
-      completionPercentage: Number(record.completionPercentage) || 0,
-      attempts: Number(record.attempts) || 0,
+      selectedIds: record.selectedIds,
+      isCorrect: record.isCorrect,
+      completionPercentage: record.completionPercentage,
+      attempts: record.attempts,
     };
   }
   return out;
@@ -1014,19 +1952,23 @@ export async function submitQuestionsChallengeAnswer(
   mode: QuestionChallengeMode,
   payload: {
     challengeId: string;
-    /** Which question of the round. Defaults to the first for legacy clients. */
+    /** Which question of the round — must match the server's current question. */
     questionId?: string;
     selectedIds: string[];
     elapsedTime: number;
     language?: string;
+    score?: unknown;
+    totalScore?: unknown;
+    correctAnswers?: unknown;
+    finalScore?: unknown;
   },
   timezone: string,
 ): Promise<QuestionChallengeSubmitResult> {
+  rejectClientScoreFields(payload as Record<string, unknown>);
+
   const user = await ensureBackendUser(clerkUserId);
   const language = normalizeLanguage(payload.language);
   const refreshDate = todayPackDate(timezone);
-
-  await ensureDailyChallenges(language, refreshDate, timezone);
 
   const challenge = await db.dailyQuestionChallenge.findFirst({
     where: {
@@ -1051,132 +1993,180 @@ export async function submitQuestionsChallengeAnswer(
 
   const roundAnswer = challenge.answer as unknown as QuestionChallengeAnswer;
   const questions = challengeQuestions(challenge.content);
-  const totalQuestions = Math.max(questions.length, 1);
-
-  const questionId = payload.questionId?.trim() || questions[0]?.id || 'q1';
-  const question = questions.find((entry) => entry.id === questionId) ?? null;
-  const answer = resolveQuestionAnswer(questions, roundAnswer, questionId);
-  if (!answer) {
-    throw new Error('QUESTIONS_CHALLENGE_QUESTION_NOT_FOUND');
+  const verdict = validateStoredRound({
+    mode,
+    content: challenge.content,
+    answer: challenge.answer,
+  });
+  if (!verdict.ok || questions.length !== ROUND_QUESTION_COUNT) {
+    throw new Error('QUESTIONS_CHALLENGE_EMPTY');
   }
 
-  const evaluation = evaluateChallengeAnswer(mode, payload.selectedIds, answer);
-  // A question is worth what its own difficulty earns; the round's xpReward is
-  // the sum of those, so it can never drift from what is actually awarded.
+  const totalQuestions = questions.length;
+  const now = new Date();
+  const evaluatePoints = evaluatePointsForMode(mode, questions);
+
+  let txResult: {
+    outcome: ReturnType<typeof applyAnswerToSession>;
+    wasCompletedBefore: boolean;
+    alreadyCreditedQuestion: boolean;
+    updated: {
+      attempts: number;
+      completed: boolean;
+      score: number;
+      elapsedTime: number;
+      completionPercentage: number;
+      xpEarned: number;
+    };
+    answer: QuestionChallengeAnswer;
+    questionId: string;
+    question: QuestionChallengeQuestion | null;
+  };
+
+  try {
+    txResult = await db.$transaction(async (tx: any) => {
+      const existing = await tx.userQuestionChallenge.findUnique({
+        where: {
+          userId_challengeId: {
+            userId: user.id,
+            challengeId: challenge.id,
+          },
+        },
+        select: {
+          attempts: true,
+          completed: true,
+          completionPercentage: true,
+          xpEarned: true,
+          elapsedTime: true,
+          answeredPayload: true,
+        },
+      });
+
+      const sessionProgress = parseSessionProgress(existing?.answeredPayload);
+      ensureSessionStarted(sessionProgress, questions, now);
+      advanceExpiredQuestions(sessionProgress, questions, now, evaluatePoints);
+
+      const resolvedQuestionId =
+        payload.questionId?.trim() ||
+        getCurrentQuestionId(sessionProgress, questions) ||
+        questions[0]?.id ||
+        'q1';
+      const question = questions.find((entry) => entry.id === resolvedQuestionId) ?? null;
+      const priorRecord = sessionProgress.byQuestionId[resolvedQuestionId];
+
+      const outcome = applyAnswerToSession({
+        mode,
+        questions,
+        roundAnswer,
+        questionId: resolvedQuestionId,
+        selectedIds: payload.selectedIds,
+        now,
+        progress: sessionProgress,
+        evaluate: (submittedIds, answer) => evaluateChallengeAnswer(mode, submittedIds, answer),
+        resolveAnswer: (qid) => resolveQuestionAnswer(questions, roundAnswer, qid),
+        evaluatePoints,
+      });
+
+      const derived = deriveProgressFields(sessionProgress, questions, evaluatePoints);
+      const attempts = outcome.idempotent
+        ? (existing?.attempts ?? 0)
+        : (existing?.attempts ?? 0) + 1;
+      const alreadyCreditedQuestion =
+        priorRecord?.status === 'answered' && priorRecord.isCorrect;
+
+      const updated = await tx.userQuestionChallenge.upsert({
+        where: {
+          userId_challengeId: {
+            userId: user.id,
+            challengeId: challenge.id,
+          },
+        },
+        create: {
+          userId: user.id,
+          challengeId: challenge.id,
+          completed: derived.completed,
+          score: derived.score,
+          elapsedTime: Math.max(payload.elapsedTime, 0),
+          xpEarned: 0,
+          attempts,
+          completionPercentage: derived.completionPercentage,
+          unlocked: true,
+          answeredPayload: sessionProgressToJson(sessionProgress),
+          completedAt: derived.completed ? now : null,
+        },
+        update: {
+          completed: derived.completed,
+          score: derived.score,
+          elapsedTime: Math.max(payload.elapsedTime, 0),
+          attempts,
+          completionPercentage: derived.completionPercentage,
+          answeredPayload: sessionProgressToJson(sessionProgress),
+          completedAt: derived.completed ? now : null,
+        },
+        select: {
+          attempts: true,
+          completed: true,
+          score: true,
+          elapsedTime: true,
+          completionPercentage: true,
+          xpEarned: true,
+        },
+      });
+
+      const gradedAnswer = resolveQuestionAnswer(questions, roundAnswer, resolvedQuestionId);
+      if (!gradedAnswer) {
+        throw new Error('QUESTIONS_CHALLENGE_QUESTION_NOT_FOUND');
+      }
+
+      return {
+        outcome,
+        wasCompletedBefore: existing?.completed ?? false,
+        alreadyCreditedQuestion,
+        updated,
+        answer: gradedAnswer,
+        questionId: resolvedQuestionId,
+        question,
+      };
+    });
+  } catch (err) {
+    if (err instanceof QuestionsSessionError) {
+      throw new Error(err.code);
+    }
+    throw err;
+  }
+
+  const {
+    outcome,
+    wasCompletedBefore,
+    alreadyCreditedQuestion,
+    updated,
+    answer,
+    questionId,
+    question,
+  } = txResult;
   const questionXp = question?.xpReward ?? Math.round(challenge.xpReward / totalQuestions);
 
-  const txResult = await db.$transaction(async (tx: any) => {
-    const existing = await tx.userQuestionChallenge.findUnique({
-      where: {
-        userId_challengeId: {
-          userId: user.id,
-          challengeId: challenge.id,
-        },
-      },
-      select: {
-        attempts: true,
-        completed: true,
-        completionPercentage: true,
-        xpEarned: true,
-        answeredPayload: true,
-      },
-    });
-
-    const records = readAnsweredRecords(existing?.answeredPayload);
-    const previous = records[questionId];
-    records[questionId] = {
-      selectedIds: payload.selectedIds,
-      // Re-answering never downgrades a question that was already right.
-      isCorrect: previous?.isCorrect || evaluation.isCorrect,
-      completionPercentage: Math.max(previous?.completionPercentage ?? 0, evaluation.completionPercentage),
-      attempts: (previous?.attempts ?? 0) + 1,
-    };
-
-    const answeredIds = Object.keys(records);
-    const correctCount = answeredIds.filter((id) => records[id]!.isCorrect).length;
-    const answeredCount = Math.min(answeredIds.length, totalQuestions);
-    const completed = answeredCount >= totalQuestions;
-    const completionPercentage = Math.round((answeredCount / totalQuestions) * 100);
-    const attempts = (existing?.attempts ?? 0) + 1;
-
-    const answeredPayload = {
-      byQuestionId: records,
-      // Flat mirror of the latest submission, kept for the legacy shape.
-      selectedIds: payload.selectedIds,
-    } as unknown as Prisma.InputJsonValue;
-
-    const updated = await tx.userQuestionChallenge.upsert({
-      where: {
-        userId_challengeId: {
-          userId: user.id,
-          challengeId: challenge.id,
-        },
-      },
-      create: {
-        userId: user.id,
-        challengeId: challenge.id,
-        completed,
-        score: correctCount,
-        elapsedTime: Math.max(payload.elapsedTime, 0),
-        xpEarned: 0,
-        attempts,
-        completionPercentage,
-        unlocked: true,
-        answeredPayload,
-        completedAt: completed ? new Date() : null,
-      },
-      update: {
-        completed,
-        score: correctCount,
-        elapsedTime: Math.max(payload.elapsedTime, 0),
-        attempts,
-        completionPercentage,
-        answeredPayload,
-        completedAt: completed ? new Date() : null,
-      },
-      select: {
-        attempts: true,
-        completed: true,
-        score: true,
-        elapsedTime: true,
-        completionPercentage: true,
-        xpEarned: true,
-      },
-    });
-
-    return {
-      wasCompletedBefore: existing?.completed ?? false,
-      alreadyCreditedQuestion: previous?.isCorrect ?? false,
-      questionAttempts: records[questionId]!.attempts,
-      updated,
-    };
-  });
-
-  // Partial-credit modes (bingo, top 10) pay out proportionally; a single-answer
-  // mode is 100 or 0. A question already answered correctly pays nothing again.
-  const baseXp = txResult.alreadyCreditedQuestion
-    ? 0
-    : Math.round((questionXp * evaluation.completionPercentage) / 100);
+  const baseXp = outcome.idempotent || alreadyCreditedQuestion || !outcome.isCorrect ? 0 : questionXp;
   const streak = await resolveStreak(user.id);
   const streakBonus =
-    challenge.streakContribution && baseXp > 0 ? Math.round(baseXp * Math.min(streak.current, 7) * 0.05) : 0;
+    challenge.streakContribution && baseXp > 0
+      ? Math.round(baseXp * Math.min(streak.current, 7) * 0.05)
+      : 0;
 
-  const completionBonus = !txResult.wasCompletedBefore && txResult.updated.completed ? 10 : 0;
+  const completionBonus = !wasCompletedBefore && updated.completed ? 10 : 0;
   const dailyBonus =
-    !txResult.wasCompletedBefore && txResult.updated.completed
+    !wasCompletedBefore && updated.completed
       ? await computeDailyCompletionBonus(user.id, refreshDate, timezone)
       : 0;
   const totalXpAwarded = Math.max(baseXp + streakBonus + completionBonus, 0);
 
   let xpEarned = 0;
-  if (totalXpAwarded > 0) {
+  if (totalXpAwarded > 0 && !outcome.idempotent) {
     const xpResult = await awardXp({
       userId: user.id,
       action: 'QUIZ_ANSWER_CORRECT',
       amount: totalXpAwarded,
-      // Per question, per attempt — replaying one question can't re-award the
-      // whole round, and two questions in the same round don't collide.
-      idempotencyKey: `questions.${challenge.id}.${questionId}.${txResult.questionAttempts}`,
+      idempotencyKey: `questions.${challenge.id}.${questionId}.${outcome.questionAttempts}`,
       timezone,
     });
     xpEarned = xpResult.awarded;
@@ -1214,25 +2204,30 @@ export async function submitQuestionsChallengeAnswer(
 
   await redisCacheService.del(challengeProgressCacheKey(user.id, packDateYmd(refreshDate, timezone), language));
 
-  return {
-    challengeId: challenge.id,
+  const base = buildSubmitResultBase(
+    challenge.id,
     questionId,
-    isCorrect: evaluation.isCorrect,
-    completionPercentage: txResult.updated.completionPercentage,
-    completed: txResult.updated.completed,
-    score: txResult.updated.score,
-    attempts: txResult.updated.attempts,
-    elapsedTime: txResult.updated.elapsedTime,
+    outcome,
+    answer,
+    question?.hint ?? (challenge.content as any)?.hint ?? null,
+  );
+
+  return {
+    ...base,
+    attempts: updated.attempts,
+    elapsedTime: updated.elapsedTime,
     xpEarned: xpEarned + dailyBonus,
     bonusXp: completionBonus,
     streakBonus,
     totalXpAwarded: xpEarned + dailyBonus,
     currentStreak: streak.current,
     longestStreak: streak.longest,
-    answer,
-    hint: question?.hint ?? (challenge.content as any)?.hint ?? null,
+    idempotent: outcome.idempotent,
+    finalResult: outcome.progress.finalResult,
   };
 }
+
+/** Legacy helper removed — current question is resolved inside submit transaction. */
 
 /**
  * ASK THE CROWD — the real distribution of what other players picked on one
@@ -1305,6 +2300,74 @@ export async function getQuestionCrowdStats(
   }
 
   return { challengeId: challenge.id, questionId, available: true, sampleSize, percentages };
+}
+
+/**
+ * "50:50" — resolves which two options should stay visible: the real correct
+ * option (from the round's stored answer) plus exactly one real wrong option,
+ * picked deterministically per user/question so repeated taps on the same
+ * question can't reroll a different survivor. The correct answer is NEVER
+ * exposed on its own — the client only learns "keep these two ids", exactly
+ * the same guessing odds a real 50:50 leaves behind — and the round's stored
+ * answer is never modified, so grading is unaffected.
+ *
+ * Only meaningful for a single-correct-answer, flat-option question (the mcq
+ * shape every mode except bingo/grid/top10 uses); anything else is reported
+ * unavailable rather than guessing at a board-based "wrong answer".
+ */
+export async function getQuestionFiftyFifty(
+  clerkUserId: string,
+  mode: QuestionChallengeMode,
+  params: { challengeId: string; questionId?: string; language?: string },
+  timezone: string,
+): Promise<QuestionFiftyFiftyResult> {
+  const user = await ensureBackendUser(clerkUserId);
+  const language = normalizeLanguage(params.language);
+  const refreshDate = todayPackDate(timezone);
+
+  const challenge = await db.dailyQuestionChallenge.findFirst({
+    where: {
+      id: params.challengeId,
+      type: dbTypeFromMode(mode) as any,
+      language,
+      refreshDate,
+      status: 'PUBLISHED' as any,
+    },
+    select: { id: true, content: true },
+  });
+
+  if (!challenge) {
+    throw new Error('QUESTIONS_CHALLENGE_NOT_FOUND');
+  }
+
+  const questions = challengeQuestions(challenge.content);
+  const questionId = params.questionId?.trim() || questions[0]?.id || 'q1';
+  const question = questions.find((entry) => entry.id === questionId);
+  if (!question) {
+    throw new Error('QUESTIONS_CHALLENGE_QUESTION_NOT_FOUND');
+  }
+
+  const options = question.options ?? [];
+  const correctSet = normalizedSet(question.answer?.correctIds);
+  const correctOptionIds = options
+    .map((option) => option.id)
+    .filter((id) => correctSet.has(normalizeOptionId(id)));
+  const wrongOptionIds = options
+    .map((option) => option.id)
+    .filter((id) => !correctSet.has(normalizeOptionId(id)));
+
+  if (correctOptionIds.length !== 1 || wrongOptionIds.length < 1) {
+    throw new Error('QUESTIONS_CHALLENGE_FIFTY_FIFTY_UNAVAILABLE');
+  }
+
+  const rng = seededRng(`${challenge.id}:${questionId}:${user.id}:fifty-fifty`);
+  const survivor = wrongOptionIds[Math.floor(rng() * wrongOptionIds.length)]!;
+
+  return {
+    challengeId: challenge.id,
+    questionId,
+    keepIds: [correctOptionIds[0]!, survivor],
+  };
 }
 
 export async function useQuestionsChallengeHint(
@@ -1540,6 +2603,25 @@ export async function getQuestionsChallengeHistory(
     .filter((row: any) => Boolean(row));
 }
 
+/**
+ * Drop the "today failed to generate" back-off for a day/language.
+ *
+ * Called after anything that changes the inputs generation depends on — most
+ * importantly a roster reseed. Without this a successful seed would still wait
+ * out the remaining cooldown before the modes could recover.
+ */
+export async function clearQuestionsGenerationBackoff(
+  timezone = 'UTC',
+  refreshDate?: Date,
+): Promise<void> {
+  const date = refreshDate ?? todayPackDate(timezone);
+  const ymd = packDateYmd(date, timezone);
+  for (const language of ['ar', 'en'] as QuizLanguage[]) {
+    await clearGenerationFailureKeys(ymd, language);
+    await redisCacheService.del(challengeCacheKey(ymd, language));
+  }
+}
+
 export async function regenerateDailyQuestionsChallenges(options?: {
   language?: QuizLanguage;
   timezone?: string;
@@ -1560,14 +2642,26 @@ export async function regenerateDailyQuestionsChallenges(options?: {
         refreshDate: packDateYmd(refreshDate, timezone),
         error: err instanceof Error ? err.message : String(err),
       });
+    }
+
+    // Gap-fill from the most recent real day — after a partial success too, and
+    // never over a mode that is already playable today.
+    const playable = (await loadPublishedRows(language, refreshDate)).filter((row) => roundVerdict(row).ok);
+    if (playable.length < EXPECTED_MODES_PER_DAY) {
       const recycled = await recycleMostRecentChallenges(language, refreshDate, timezone);
       if (!recycled) {
-        logger.error('[QuestionsChallenges] regenerate: no AI round and no history to recycle', {
+        logger.warn('[QuestionsChallenges] regenerate: day is short of playable modes', {
           language,
           refreshDate: packDateYmd(refreshDate, timezone),
+          playable: playable.length,
+          expected: EXPECTED_MODES_PER_DAY,
         });
       }
     }
+    // An operator/cron regeneration is never subject to the failure back-off —
+    // it calls generateAndPersistDailyChallenges directly — and clears it so the
+    // next session request re-evaluates immediately.
     await redisCacheService.del(challengeCacheKey(packDateYmd(refreshDate, timezone), language));
+    await clearGenerationFailureKeys(packDateYmd(refreshDate, timezone), language);
   }
 }

@@ -70,7 +70,6 @@ import {
   Trophy,
 } from 'lucide-react-native';
 
-import { useCoins } from '../../contexts/CoinsContext';
 import { useQuestionModeSession } from '../../hooks/useQuestionModeSession';
 import { useTranslation, type Language } from '../../src/i18n';
 import { useLanguageStore } from '../../src/i18n/store';
@@ -96,6 +95,7 @@ import {
   GameScreenHeader,
   SECTION_RULE_GRADIENT,
 } from './gameChrome';
+import { GlobalQuizStats } from './GlobalQuizStats';
 import {
   QUIZ_FIGMA_ACTION_GRAD_END,
   QUIZ_FIGMA_ACTION_GRAD_START,
@@ -526,9 +526,11 @@ function EvidenceSection({
 function QuestionHeroMedia({
   uri,
   accessibilityLabel,
+  contentFit = 'cover',
 }: {
   uri?: string;
   accessibilityLabel?: string;
+  contentFit?: 'cover' | 'contain';
 }) {
   const { styles } = useQuizModeStyles();
   const [failed, setFailed] = useState(false);
@@ -546,7 +548,7 @@ function QuestionHeroMedia({
       <Image
         source={{ uri }}
         style={styles.mediaImage}
-        contentFit="cover"
+        contentFit={contentFit}
         transition={MOTION.duration.image}
         cachePolicy="memory-disk"
         accessibilityLabel={accessibilityLabel}
@@ -566,11 +568,41 @@ function primaryLabelFor(revealed: boolean, language: Language): string {
 /* Screen                                                                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Backend reason code → something a player can act on.
+ *
+ * These four states are genuinely different and must not collapse into one
+ * message: the round is on its way, the round could not be built today, the
+ * session dropped, or something else broke.
+ */
+function describeSessionFailure(reason: string | null, language: 'ar' | 'en'): string {
+  const ar = language === 'ar';
+  switch (reason) {
+    case 'GENERATION_IN_PROGRESS':
+      return ar
+        ? 'يتم تجهيز تحدي اليوم الآن. حاول مرة أخرى بعد لحظات.'
+        : "Today's challenge is being prepared. Try again in a moment.";
+    case 'QUESTION_GENERATION_UNAVAILABLE':
+    case 'MODE_ROUND_MISSING':
+    case 'GENERATION_BACKOFF_ACTIVE':
+    case 'QUESTIONS_CHALLENGE_EMPTY':
+      return ar
+        ? 'تحدي اليوم لهذا الوضع غير متاح. جرّب وضعًا آخر أو عد لاحقًا.'
+        : "Today's challenge isn't available for this mode yet. Try another mode or check back later.";
+    case 'AUTH_REQUIRED':
+      return ar ? 'يجب تسجيل الدخول لبدء التحدي.' : 'Please sign in to play.';
+    case 'QUESTIONS_CHALLENGE_NOT_FOUND':
+    case 'MODE_NOT_FOUND':
+      return ar ? 'هذا الوضع غير متاح حاليًا.' : 'This mode is not available right now.';
+    default:
+      return ar ? 'تعذر تحميل التحدي' : 'Unable to load challenge';
+  }
+}
+
 export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { language } = useTranslation();
-  const { coins } = useCoins();
   const { styles, metrics } = useQuizModeStyles();
 
   const {
@@ -720,9 +752,11 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
         accessibilityLabel: language === 'ar' ? 'احذف إجابتين خاطئتين' : 'Remove wrong answers',
         onPress: () => {
           if (fiftyUses === 0 || revealed || !canEliminate) return;
-          if (eliminateWrongAnswers()) {
-            setFiftyUses((remaining) => remaining - 1);
-          }
+          // Server-resolved (see eliminateWrongAnswers) — a use is only spent
+          // once it actually confirms two ids to keep.
+          void eliminateWrongAnswers().then((didEliminate) => {
+            if (didEliminate) setFiftyUses((remaining) => remaining - 1);
+          });
         },
       },
       {
@@ -786,11 +820,15 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
   }
 
   if (error || !session || !currentQuestion) {
-    const message = error
-      ? error
-      : language === 'ar'
-        ? 'تعذر تحميل التحدي'
-        : 'Unable to load challenge';
+    /*
+     * `error` is the backend's stable reason CODE, which was being rendered
+     * straight into the card — players were shown literal strings like
+     * "QUESTION_GENERATION_UNAVAILABLE". Codes stay the transport contract;
+     * this maps the ones we know to something a person can act on, and each
+     * state says a different, true thing. Anything unmapped still falls back
+     * to the generic line rather than leaking a code.
+     */
+    const message = describeSessionFailure(error, language);
 
     return renderTerminalState(
       <View style={styles.stateCard}>
@@ -924,7 +962,7 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
         <GameScreenHeader
           title={headerTitle}
           onBack={() => router.back()}
-          xp={coins}
+          stats={<GlobalQuizStats />}
           backAccessibilityLabel={language === 'ar' ? 'رجوع' : 'Back'}
         />
 
@@ -947,6 +985,7 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
           <QuestionHeroMedia
             uri={heroImageUrl}
             accessibilityLabel={currentQuestion.prompt || currentQuestion.title}
+            contentFit={modeId === 'guess-club' ? 'contain' : 'cover'}
           />
 
           {showEvidence ? <EvidenceSection evidence={evidence} language={language} /> : null}
