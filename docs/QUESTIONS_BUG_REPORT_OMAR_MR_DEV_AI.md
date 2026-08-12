@@ -1,211 +1,190 @@
-# Questions System — Bug & Product Gap Report
+# تقرير مراجعة نظام الأسئلة (Questions)
 
-**To:** Omar  
-**From / Reviewed by:** Mr.dev ai  
-**Date:** 2026-08-12  
-**Scope:** Post-merge review of the new Questions hub (AI modes + UX) after production deploy  
-**Overall verdict:** UI quality and load speed are strong; AI grounding/contract is excellent (no hallucination of entities). The issues below are mostly **UX wiring / product-spec mismatches**, not AI quality.
-
----
-
-## Positive notes (for context)
-
-- Hub UI and mode chrome feel polished and load quickly.
-- AI pipeline (IDs-only + football data grounding + round contract) is strict and correct — do **not** loosen that layer while fixing gameplay UX.
-- Keep the “no canned fallback on the client” stance.
+**إلى:** عمر  
+**من / مراجعة واعتماد:** Mr.dev ai  
+**التاريخ:** 12 أغسطس 2026  
+**الموضوع:** ملاحظات ما بعد دمج فيتشر الأسئلة واختبارها على السيرفر والتطبيق  
 
 ---
 
-## Issue list
+## مقدمة
 
-### 1) 50:50 removes 3 options instead of 2
+بعد مراجعة السلوك الفعلي في التطبيق ومطابقته بالكود، تم رصد مجموعة مشاكل تؤثر على تجربة اللعب والاقتصاد داخل نظام الأسئلة.  
+الواجهة العامة وسرعة التحميل وصرامة توليد الأسئلة بالذكاء الاصطناعي جيدة جداً ولا يُنصح بإضعاف طبقة التحقق من الحقائق والكيانات أثناء إصلاح مشاكل اللعب.
 
-| | |
-|---|---|
-| **Severity** | High (breaks lifeline fairness) |
-| **Expected** | Hide **2** wrong answers; leave **correct + 1 wrong** (2 visible) |
-| **Actual** | Player sees only **1** option left (3 removed) |
-
-**Root cause (code):**
-
-Two paths exist; both can leave a single survivor:
-
-1. **Questions modes** — `front/hooks/useQuestionModeSession.ts` → `eliminateWrongAnswers()`  
-   - Calls `GET .../fifty-fifty`, then eliminates every option id **not** in `keepIds`.  
-   - It only checks `keepIds.length === 2`; it does **not** verify that **both** ids exist in the rendered `options`.  
-   - If one `keepId` fails to match (case / id drift), **3** options are hidden → 1 left.
-
-2. **Backend fifty-fifty** — `src/services/questions-challenges.service.ts` → `getQuestionFiftyFifty()`  
-   - Reads `question.answer?.correctIds` only.  
-   - Grading uses `resolveQuestionAnswer()` (question answer → `byQuestionId` → legacy). Fifty-fifty does **not** use that helper — inconsistent answer resolution.  
-   - Option ids are lowercase letters `a|b|c|d` (`OPTION_LETTERS` in AI generator). Any mismatch with client ids causes the frontend mismatch above.
-
-3. **Football Quiz path** — `front/components/Quiz/QuizHubScreen.tsx` → `handleEliminateWrongAnswers()`  
-   - Client-side: treats every option whose `key !== correctKey` as wrong, keeps one random wrong, eliminates the rest.  
-   - If `correctKey` does not match any `option.key`, **all 4** are treated as wrong → eliminates **3**, leaves **1** (may not even be the correct one).
-
-**Fix direction:**
-
-- Always resolve answer via the same helper as grading (`resolveQuestionAnswer`).  
-- Backend: return `keepIds` that are guaranteed members of `options[].id`.  
-- Frontend: assert `keepIds.every(id => options.some(o => o.id === id))` and that exactly **2** options remain after filter; otherwise abort and spend no use.  
-- Football Quiz: if `correctKey` not in option keys, fail the lifeline (no-op) instead of eliminating 3.
+هذا التقرير موجّه لعمر لتنفيذ الإصلاحات حسب الأولوية المذكورة في النهاية.
 
 ---
 
-### 2) Middle “friends / users” lifeline should be removed
+## الملاحظات الإيجابية (للسياق)
 
-| | |
-|---|---|
-| **Severity** | Medium (product / design) |
-| **Expected** | No “ask a friend” / friends help control |
-| **Actual** | Middle hexagon uses the **users** glyph (`Ask the crowd`) |
-
-**Root cause (code):**
-
-- Lifeline row is hard-coded as three items in `front/components/Quiz/QuestionsModeScreen.tsx` (`lifelines` useMemo): `fifty` → `crowd` (glyph `users`) → `change`.  
-- Glyph comes from `front/components/Quiz/QuestionLifelines.tsx` (`GLYPH_USERS`).  
-- There is **no** “ask friend” feature; the middle control is crowd stats. Visually it reads as friends and should be dropped from the shipping design unless crowd is explicitly product-approved.
-
-**Fix direction:**
-
-- Remove the middle lifeline from Questions mode ActionBar (and Football Quiz if mirrored).  
-- Keep layout balanced with two lifelines (50:50 + change), or replace only if a real friend-help API is planned later.
+1. شكل واجهة الـ Hub وشاشات الألعاب ممتاز ويقترب من المنتج النهائي.  
+2. سرعة التحميل جيدة ومناسبة للاختبار على الإيموليتر.  
+3. حكم الـ AI صارم ويمنع اختراع لاعبين أو صور عشوائية — وهذا يجب الحفاظ عليه.
 
 ---
 
-### 3) Header XP / coins + deduct coins on wrong answer
+## المشكلة (1): زر 50:50 يحذف 3 اختيارات بدل 2
 
-| | |
-|---|---|
-| **Severity** | High (economy / trust) |
-| **Expected** | Header shows **real account** XP & coins; wrong answer **deducts coins** |
-| **Actual** | Header already binds real balances; wrong answers do **not** touch coins |
+### الوصف
+المفروض بعد استخدام مساعدة 50:50 يبقى ظاهر أمام اللاعب اختياران فقط: الإجابة الصحيحة + إجابة خاطئة واحدة.  
+الملاحظ حالياً أن ثلاثة اختيارات تختفي ويبقى اختيار واحد فقط، وهذا يكسر عدالة المساعدة ويفسد معنى 50:50.
 
-**Root cause (code):**
+### مكان المشكلة برمجياً
+- مسار أسئلة الـ Hub الجديد:  
+  `front/hooks/useQuestionModeSession.ts` داخل دالة حذف الإجابات الخاطئة، حيث يتم إخفاء كل خيار غير موجود في قائمة «الإبقاء» القادمة من السيرفر، دون التأكد أن القائمة فعلاً تطابق خيارين موجودين على الشاشة.
+- خدمة السيرفر لنفس المساعدة:  
+  `src/services/questions-challenges.service.ts` داخل دالة fifty-fifty، وتعتمد على قراءة مفتاح الإجابة بطريقة قد تختلف عن طريقة التقييم الرسمية للإجابة.
+- مسار كويز كرة القدم اليومي (إن ظهر نفس العطل هناك):  
+  `front/components/Quiz/QuizHubScreen.tsx` حيث يتم اختيار الخاطئ المتبقي عشوائياً على الجهاز؛ لو مفتاح الإجابة الصحيحة غير متطابق مع مفاتيح الخيارات يُعامل النظام كل الخيارات كخاطئة فيحذف ثلاثة ويبقي واحداً.
 
-- Display is correct: `front/components/Quiz/GlobalQuizStats.tsx` uses `useCoins()` + `useXp()` (live account).  
-- Economy on submit: `submitQuestionsChallengeAnswer` in `questions-challenges.service.ts` awards XP **only when correct** (`QUIZ_ANSWER_CORRECT`).  
-- There is **no** coin debit / `CoinTransaction` on incorrect answers for Questions modes.  
-- So this is a **missing product rule**, not a display bug — unless a specific screen is showing round-local counters instead of `GlobalQuizStats` (verify per mode chrome).
-
-**Fix direction:**
-
-- Confirm product: amount to deduct, floor at 0?, refund rules, idempotency key per question attempt.  
-- Implement server-side coin debit on wrong/expired answers (never trust the client).  
-- Refresh CoinsContext after submit so the header updates immediately.
+### اقتراح الحل (كلامي)
+وحّد مصدر معرفة «الإجابة الصحيحة» بين التقييم ومساعدة 50:50 على السيرفر، بحيث ترجع دائماً معرّفين موجودين فعلياً ضمن خيارات السؤال.  
+على التطبيق: قبل إخفاء أي خيار، تأكد أن نتيجة السيرفر تبقي بالضبط خيارين ظاهرين؛ لو الناتج غير ذلك ألغِ العملية ولا تخصم استخدام المساعدة.  
+لا تعتمد على تخمين عشوائي في الواجهة بدون تطابق مضمون مع الإجابة الصحيحة.
 
 ---
 
-### 4) Football Bingo — only 1 club selectable; confirm button still present
+## المشكلة (2): الزر الأوسط (شكل الأصدقاء) يجب إلغاؤه من التصميم
 
-| | |
-|---|---|
-| **Severity** | High (mode unplayable as designed) |
-| **Expected** | Select **exactly 3** clubs; **no confirm**; auto-advance when 3 are chosen |
-| **Actual** | User can only select **1** cell; must press Confirm |
+### الوصف
+في شريط المساعدات أسفل السؤال يوجد ثلاثة أزرار سداسية. الزر الأوسط بأيقونة أشخاص يُفهم كأنه «طلب مساعدة من صديق»، بينما لا يوجد في المنتج حالياً نظام مساعدة من صديق. المطلوب إزالته من التصميم المعروض للاعب.
 
-**Root cause (code):** — clear wiring bug
+### مكان المشكلة برمجياً
+- تعريف شريط المساعدات وترتيب الأزرار الثلاثة:  
+  `front/components/Quiz/QuestionsModeScreen.tsx`  
+  الزر الأوسط معرّف كمساعدة «اسأل الجمهور» بأيقونة المستخدمين.
+- رسم الأيقونة نفسها:  
+  `front/components/Quiz/QuestionLifelines.tsx`
 
-1. Session sanitization strips answers before the client sees them:  
-   `sanitizeQuestionForClient()` in `questions-challenges.session.service.ts` removes `answer`.  
-2. Client mapper sets `correctAnswers` from `answer.correctIds` (`front/services/questionsModes.ts` → `mapRoundQuestion`). After sanitize this is **[]**.  
-3. Selection cap in `useQuestionModeSession.ts` → `toggleSelection()`:
-
-```ts
-const maxSelectable = Math.max(currentQuestion.correctAnswers.length, 1);
-// → Math.max(0, 1) === 1  for bingo
-```
-
-4. Bingo still uses the shared ActionBar confirm (`QuestionsModeScreen` → `onPrimary={submitAnswer}`). There is no “when `selected.length === 3` auto-submit” path.
-
-**Fix direction:**
-
-- Do **not** expose correct cell ids to the client. Instead send a non-secret `selectionCount: 3` (or mode rule) on the session DTO.  
-- Cap bingo selection at 3 from that rule.  
-- On reaching 3 selections, auto-call submit and advance (hide confirm for bingo).  
-- Optional: highlight selected cells; only reveal correct/wrong after server grades.
+### اقتراح الحل (كلامي)
+احذف الزر الأوسط من شريط المساعدات في شاشات الأسئلة الجديدة (وإن وُجد نفس الترتيب في الكويز اليومي فوحّد السلوك).  
+اترك مساعدتين فقط بما يناسب المنتج الحالي: 50:50 وتغيير السؤال، مع إعادة توازن المسافات بصرياً حتى لا يبدو الشريط ناقصاً أو مكسوراً.  
+أي فكرة «اسأل صديق» تؤجَّل إلى مرحلة لاحقة إذا تقرر بناؤها فعلياً بواجهة وAPI واضحين.
 
 ---
 
-### 5) Football Grid — product/design mismatch (not a small bug)
+## المشكلة (3): عرض النقاط والكوينز + خصم الكوينز عند الإجابة الخاطئة
 
-| | |
-|---|---|
-| **Severity** | High (spec vs implementation) |
-| **Expected (product)** | 9 cells; horizontal = trophies/awards; vertical = clubs / national teams; place players into a relationship grid; green halo if correct cell, reject if wrong; **no confirm**; goal = fill the relationship table |
-| **Actual (code)** | One named player per question; axes are **clubs × nationalities**; single correct cell; **10** questions/round (`ROUND_QUESTION_COUNT`); confirm required; no green-halo placement loop |
+### الوصف
+المطلوب أن الأرقام الظاهرة أعلى الشاشة تكون رصيد الحساب الحقيقي (نقاط/XP وكوينز)، وعند الإجابة الخاطئة يُخصم من كوينز المستخدم.  
+حالياً العرض مربوط بالحساب الحقيقي، لكن الخصم عند الغلط غير مطبّق في منطق الإجابة.
 
-**Root cause (code):**
+### مكان المشكلة برمجياً
+- عرض الرصيد في الهيدر:  
+  `front/components/Quiz/GlobalQuizStats.tsx`  
+  يقرأ من سياق الكوينز وسياق الـ XP للحساب — هذا الجزء سليم من حيث المصدر.
+- منطق تقديم الإجابة ومنح المكافأة:  
+  `src/services/questions-challenges.service.ts` داخل مسار إرسال إجابة السؤال  
+  يمنح XP عند الصحة فقط، ولا يوجد خصم كوينز عند الخطأ أو انتهاء الوقت.
 
-- Prompt & builder: `questions-challenges.ai-prompt.ts` + `buildFootballGrid()` — “tap the one cell where this player’s club meets nationality”.  
-- UI: `ConstraintGridBoard` + shared confirm flow.  
-- Round size is global `ROUND_QUESTION_COUNT = 10`, not 9.
-
-This is a **redesign of mode contract + AI schema + UI**, not a one-line fix.
-
-**Fix direction (spec for Omar):**
-
-1. New round shape: one board of 9 cells (or 9 placements in one session), axes = trophies × clubs/nations as product defines.  
-2. Server validates each placement; return `{ accepted: true }` + green halo, or reject without placing.  
-3. Remove confirm; advance/complete when board is filled or lives exhausted.  
-4. Update AI prompt + round-contract + tests accordingly.  
-5. Keep entity/image grounding rules unchanged.
+### اقتراح الحل (كلامي)
+ثبّت قاعدة المنتج أولاً: كم يُخصم لكل إجابة غلط؟ هل يوجد حد أدنى للصفر؟ هل الخطأ المتكرر على نفس السؤال يخصم مرة واحدة فقط؟  
+ثم نفّذ الخصم على السيرفر فقط (لا تعتمد على التطبيق)، مع مفتاح منع التكرار حتى لا يُخصم مرتين لنفس المحاولة.  
+بعد نجاح العملية أعد تحديث رصيد الكوينز في الواجهة فوراً حتى يرى اللاعب الرقم يتغير في الهيدر.  
+الإبقاء على عرض الرصيد الحقيقي كما هو؛ التركيز على إضافة قاعدة الخصم الناقصة.
 
 ---
 
-### 7) Top 10 Challenge — free-text top 10 with fuzzy matching
+## المشكلة (4): بينجو — اختيار نادي واحد بدل ثلاثة، ووجود زر تأكيد غير مطلوب
 
-| | |
-|---|---|
-| **Severity** | High (feature incomplete + wrong interaction model) |
-| **Expected** | 10 text slots; user types names for a year (e.g. Top 10 of 2010); fuzzy spelling tolerance |
-| **Actual** | Route is **Coming Soon** (`front/app/quiz/[mode].tsx` → `UNRELEASED_MODES`). AI generator currently **skips** publishing top10 (removed from daily `MODES` until UI ships). Existing board sketch (`TopTenSelector`) is **tap-to-select ranked scorers**, not free-text inputs |
+### الوصف
+في وضع Football Bingo المطلوب اختيار ثلاثة أندية تحقق الهدف، وبمجرد اكتمال الثلاثة ينتقل السؤال التالي مباشرة دون زر «تأكيد الإجابة».  
+حالياً النظام يسمح باختيار خلية واحدة فقط، وما زال يطلب التأكيد يدوياً.
 
-**Root cause:**
+### مكان المشكلة برمجياً
+- إزالة مفتاح الإجابة قبل إرسال الجلسة للتطبيق (حماية من الغش):  
+  `src/services/questions-challenges.session.service.ts` دالة تنظيف السؤال للعميل.
+- تحويل بيانات الجلسة لشكل الشاشة:  
+  `front/services/questionsModes.ts` حيث تُملأ قائمة الإجابات الصحيحة من الحقل الذي أُزيل أعلاه فتصبح فارغة.
+- حد أقصى للاختيار المتعدد:  
+  `front/hooks/useQuestionModeSession.ts` داخل تبديل الاختيار  
+  عندما تكون قائمة الإجابات الصحيحة فارغة يصبح الحد الأقصى للاختيار = 1.
+- زر التأكيد المشترك لكل الأوضاع:  
+  `front/components/Quiz/QuestionsModeScreen.tsx`  
+  لا يوجد مسار «أرسل تلقائياً عند اكتمال 3 اختيارات» خاص بالبينجو.
 
-- Product spec ≠ current implementation.  
-- No fuzzy match layer (e.g. normalized names / Levenshtein / alias table) in Questions grading today.  
-- Ordering scorer lists from live tables ≠ “Top 10 players of year YYYY” authoring.
-
-**Fix direction:**
-
-1. Re-enable mode in AI `MODES` only after UI ships.  
-2. New question shape: `{ year, category, acceptedAnswers[10] }` with canonical names + aliases.  
-3. UI: 10 `TextInput` rows; submit when all filled or per-row check.  
-4. Grading: normalize Arabic/English, fuzzy threshold, order-sensitive vs bag-of-names (product decision).  
-5. Images optional after reveal.
-
----
-
-## Priority order recommended for Omar
-
-1. **Bingo selection cap + auto-submit** (clear bug, high impact)  
-2. **50:50 leave exactly 2 options** (fairness)  
-3. **Remove middle users lifeline** (quick design win)  
-4. **Wrong-answer coin debit** (economy — needs product numbers)  
-5. **Football Grid redesign** (larger epic)  
-6. **Top 10 free-text + fuzzy** (larger epic; currently Coming Soon)
+### اقتراح الحل (كلامي)
+لا تُرجع للإيموليتر إجابات صحيحة مخفية لكشف الغش، لكن أرسل معه معلومة غير سرية مثل: «عدد الاختيارات المطلوبة = 3».  
+اجعل حد الاختيار في البينجو مبنياً على هذه القاعدة الثابتة، لا على مفاتيح الإجابة.  
+عند وصول الاختيار إلى ثلاثة: أرسل الإجابة للسيرفر تلقائياً وانتقل للسؤال التالي، وأخفِ زر التأكيد في هذا الوضع فقط.  
+بعد رد السيرفر يمكن إظهار صح/غلط بشكل واضح ثم المتابعة.
 
 ---
 
-## File map (quick)
+## المشكلة (5): شبكة كرة القدم — السلوك الحالي لا يطابق المطلوب منتجياً
 
-| Area | Files |
-|------|--------|
-| 50:50 client | `front/hooks/useQuestionModeSession.ts`, `front/components/Quiz/QuizHubScreen.tsx` |
-| 50:50 server | `src/services/questions-challenges.service.ts` (`getQuestionFiftyFifty`) |
-| Lifelines UI | `front/components/Quiz/QuestionsModeScreen.tsx`, `QuestionLifelines.tsx` |
-| Coins/XP header | `front/components/Quiz/GlobalQuizStats.tsx` |
-| Answer economy | `src/services/questions-challenges.service.ts` (`submitQuestionsChallengeAnswer`) |
-| Bingo select cap | `useQuestionModeSession.ts` `toggleSelection` + `sanitizeQuestionForClient` |
-| Grid / Top10 | `questions-challenges.ai-prompt.ts`, `QuestionsModeBoards.tsx`, `front/app/quiz/[mode].tsx` |
+### الوصف
+المطلوب في هذا الوضع:
+- عدد الأسئلة/الخانات مرتبط بـ 9 مكعبات.  
+- المحور الأفقي جوائز، والمحور الرأسي أندية أو منتخبات.  
+- هدف اللعبة بناء شبكة علاقات (لاعبين مع أندية/جوائز).  
+- بدون زر تأكيد: إن وُضع اللاعب في مكان صحيح تظهر هالة خضراء، وإن كان المكان خطأ لا يُقبل الوضع.
+
+ما هو منفّذ حالياً مختلف: سؤال عن لاعب محدد، ومحاور أندية × جنسيات، واختيار خلية واحدة مع زر تأكيد، وعدد أسئلة الجولة العام 10 وليس 9.
+
+### مكان المشكلة برمجياً
+- عقد السؤال وتعليمات الـ AI لهذا الوضع:  
+  `src/services/questions-challenges.ai-prompt.ts` و`src/services/questions-challenges.ai-generator.service.ts`  
+  مبنيان على فكرة «خلية واحدة صحيحة للاعب في شبكة نادي/جنسية».
+- واجهة اللوحة:  
+  `front/components/Quiz/QuestionsModeBoards.tsx` مكوّن الشبكة.  
+- تدفق التأكيد العام:  
+  `front/components/Quiz/QuestionsModeScreen.tsx`  
+- حجم الجولة العام:  
+  `src/constants/quiz.constants.ts` (`ROUND_QUESTION_COUNT = 10`)
+
+### اقتراح الحل (كلامي)
+هذا ليس تعديلاً صغيراً؛ يحتاج إعادة تعريف منتج للوضع ثم تنفيذ متدرّج:
+1. اتفق على شكل اللوحة النهائي (محاور الجوائز والأندية/المنتخبات، وما الذي يُسحب على الخلية).  
+2. صمّم جولة من 9 خانات أو ملء لوحة واحدة من 9 مواضع، مع تحقق فوري من السيرفر لكل وضع.  
+3. عند الصحة: ثبّت اللاعب وأظهر هالة خضراء؛ عند الخطأ: ارفض الوضع دون تثبيته.  
+4. أزل زر التأكيد من هذا الوضع.  
+5. حدّث برومبت الـ AI وعقد التحقق والاختبارات ليتوافقوا مع الشكل الجديد، مع الإبقاء على قاعدة «الكيانات والصور من الداتا الحقيقية فقط».
 
 ---
 
-## Sign-off
+## المشكلة (7): توب 10 — خانات كتابة مع تقريب إملائي لسنة محددة
 
-Reviewed and filed by **Mr.dev ai** for **Omar**.  
-Please confirm product numbers for coin deduction and Grid/Top10 specs before implementation so we don’t thrash the AI contract twice.
+### الوصف
+المطلوب: عشر خانات يكتب فيها المستخدم أسماء توب 10 لاعبين لسنة معيّنة (مثال: توب 10 لسنة 2010)، مع نظام تقريب للأخطاء الإملائية.  
+الوضع الحالي: الشاشة Coming Soon، والتوليد اليومي لهذا الوضع متوقف حتى تجهز الواجهة، والنموذج القديم في الكود أقرب لاختيار من قائمة هدّافين وليس إدخال نص حر.
 
-**— Mr.dev ai**
+### مكان المشكلة برمجياً
+- إغلاق الواجهة كـ Coming Soon:  
+  `front/app/quiz/[mode].tsx`  
+- إيقاف التوليد اليومي لهذا الوضع عمداً:  
+  `src/services/questions-challenges.ai-generator.service.ts` قائمة الأوضاع اليومية.  
+- المكوّن الحالي للاختيار من قائمة:  
+  `front/components/Quiz/QuestionsModeBoards.tsx` (`TopTenSelector`)  
+- لا يوجد حالياً في تقييم أسئلة الـ Hub طبقة تقريب إملائي لأسماء اللاعبين المكتوبة يدوياً.
+
+### اقتراح الحل (كلامي)
+1. افتح الواجهة بعشر خانات إدخال نص مرتبة من 1 إلى 10، مع عنوان السنة/الفئة واضحاً.  
+2. على السيرفر خزّن قائمة الأسماء المعتمدة + أسماء بديلة شائعة لكل مركز.  
+3. عند التصحيح: طبّع النص (عربي/إنجليزي)، قارن بتقريب إملائي مقبول، واحسب صح/غلط حسب قرار المنتج (هل الترتيب إلزامي أم يكفي وجود الاسم ضمن العشرة؟).  
+4. أعد تفعيل التوليد اليومي لهذا الوضع فقط بعد استقرار الواجهة والعقد.  
+5. أبقِ صور اللاعبين اختيارية بعد الكشف حتى لا تُكشف الإجابة مبكراً.
+
+---
+
+## ترتيب الأولوية المقترح للتنفيذ
+
+1. **بينجو** — عطل واضح ويمنع اللعب كما هو مصمم.  
+2. **50:50** — يؤثر على عدالة المساعدة فوراً.  
+3. **إزالة الزر الأوسط** — تعديل سريع على التصميم.  
+4. **خصم الكوينز عند الغلط** — يحتاج أرقام منتج واضحة ثم تنفيذ سيرفر.  
+5. **إعادة تصميم شبكة كرة القدم** — مهمة أكبر.  
+6. **توب 10 بالنص والتقريب** — مهمة أكبر (الوضع أصلاً غير مفتوح للاعبين).
+
+---
+
+## خاتمة
+
+التقرير جاهز كمرجع تنفيذ لعمر.  
+يُرجى تأكيد قاعدتي المنتج قبل التنفيذ الكبير:
+- قيمة خصم الكوينز عند الإجابة الخاطئة.  
+- الشكل النهائي لشبكة كرة القدم وتوب 10 (خصوصاً هل ترتيب الأسماء إلزامي).
+
+**مراجعة واعتماد التقرير:** Mr.dev ai  
+**موجّه إلى:** عمر
