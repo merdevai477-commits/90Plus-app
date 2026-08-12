@@ -84,3 +84,16 @@ front/assets/images/*.png
 !front/assets/images/5st.png
 !front/assets/images/6st.png
 !front/assets/images/7st.png
+# Questions hub card / hero artwork
+!front/assets/images/questions-frame.png
+!front/assets/images/guess-club.png
+!front/assets/images/player-connection.png
+!front/assets/images/top-challenge.png
+!front/assets/images/football-quiz.png
+!front/assets/images/guess-player.jpg
+!front/assets/images/transfer-puzzle.jpg
+!front/assets/images/football-grid.jpg
+
+# Local scratch / design dumps — never ship these
+.asset-backup/
+scripts/__tmp*

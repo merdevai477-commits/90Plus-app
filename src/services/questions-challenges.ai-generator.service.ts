@@ -94,6 +94,11 @@ function isFootballDataFallbackEnabled(): boolean {
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
 }
 
+/**
+ * Modes the daily AI pipeline publishes. `top10-challenge` stays out until the
+ * front board ships (route still shows Coming Soon) so we don't burn AI quota
+ * on rounds nobody can play.
+ */
 const MODES: AiQuestionsMode[] = [
   'guess-player',
   'guess-club',
@@ -101,7 +106,6 @@ const MODES: AiQuestionsMode[] = [
   'football-grid',
   'player-connections',
   'transfer-puzzle',
-  'top10-challenge',
 ];
 
 const MODE_ICON: Record<AiQuestionsMode, string> = {
@@ -291,7 +295,12 @@ interface QuestionBuildContext {
  * round at "however many countries this dataset happens to cover", which fails
  * a whole day over a thin country spread rather than over missing data.
  */
-const MAX_BINGO_CARDS_PER_COUNTRY = 2;
+/**
+ * Cap how often one country can be the bingo objective in a single round.
+ * Scaled to ROUND_QUESTION_COUNT so a full round stays achievable with ~3
+ * well-stocked countries (the usual top-league footprint in the candidate pool).
+ */
+const MAX_BINGO_CARDS_PER_COUNTRY = Math.max(2, Math.ceil(ROUND_QUESTION_COUNT / 3));
 
 function baseQuestion(
   raw: RawQuestion,

@@ -133,7 +133,7 @@ function ChallengeCard({ challenge }: { challenge: Challenge }) {
   const resolvedImage =
     isRemoteSource && imageFailed
       ? challenge.fallbackImageSource
-      : challenge.imageSource ?? challenge.fallbackImageSource;
+      : (challenge.imageSource ?? challenge.fallbackImageSource);
 
   /* Scale the raw Figma overrides to device units. */
   const cardPadding: ViewStyle = { paddingHorizontal: s(layout.paddingHorizontal) };

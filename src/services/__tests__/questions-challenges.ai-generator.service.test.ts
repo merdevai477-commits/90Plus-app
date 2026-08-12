@@ -69,8 +69,9 @@ import type { GeneratedQuestionChallenge, QuestionChallengeQuestion } from '../.
 const COUNTRIES = ['England', 'Spain', 'Italy'];
 
 function buildDataset(): QuizEntityDataset {
-  // 12 clubs per country so bingo always has 3 from one and 6 from elsewhere.
-  const clubs = Array.from({ length: 36 }, (_, i) => ({
+  // Sized for ROUND_QUESTION_COUNT (10): guess-club needs ≥50 clubs; bingo needs
+  // ≥12 clubs per country; connections needs ≥10 teammate groups.
+  const clubs = Array.from({ length: 60 }, (_, i) => ({
     id: `team:${500 + i}`,
     name: `Club ${i}`,
     apiTeamId: 500 + i,
@@ -79,9 +80,9 @@ function buildDataset(): QuizEntityDataset {
     logoUrl: `https://crests.example.com/${i}.png`,
   }));
 
-  // 8 clubs with 4 team-mates each — enough teammate groups for a full round.
+  // 12 clubs with 4 team-mates each — enough teammate groups for a full round.
   const players = [];
-  for (let team = 0; team < 8; team += 1) {
+  for (let team = 0; team < 12; team += 1) {
     for (let slot = 0; slot < 4; slot += 1) {
       const index = team * 4 + slot;
       players.push({
@@ -132,7 +133,7 @@ function transferRows(playerId: number) {
 }
 
 function topScorers() {
-  return Array.from({ length: 6 }, (_, i) => ({
+  return Array.from({ length: 12 }, (_, i) => ({
     player: { name: `Scorer ${i}`, photo: `https://players.example.com/${i}.png` },
     statistics: [{ goals: { total: 30 - i * 2 } }],
   }));
@@ -406,7 +407,7 @@ describe('questions-challenges AI generator', () => {
       expect(rounds.map((round) => round.mode).sort()).toEqual([...AI_QUESTION_MODES].sort());
     });
 
-    test('gives every mode exactly six real questions', () => {
+    test('gives every mode exactly ROUND_QUESTION_COUNT real questions', () => {
       for (const round of rounds) {
         expect(round.content.questions).toHaveLength(ROUND_QUESTION_COUNT);
         expect(validateRoundIntegrity(round)).toBe(true);
@@ -534,23 +535,13 @@ describe('questions-challenges AI generator', () => {
         expect(question.options!.every((option) => isRemote(option.imageUrl))).toBe(true);
       }
 
-      const top10 = rounds.find((entry) => entry.mode === 'top10-challenge')!;
-      for (const question of top10.content.questions!) {
-        expect(question.options!.every((option) => isRemote(option.imageUrl))).toBe(true);
-      }
+      // top10-challenge is intentionally not in AI_QUESTION_MODES until the front board ships.
+      expect(rounds.find((entry) => entry.mode === 'top10-challenge')).toBeUndefined();
     });
 
-    test('top 10 keeps the real goal order, not one the model picked', () => {
-      const round = rounds.find((entry) => entry.mode === 'top10-challenge')!;
-      for (const question of round.content.questions!) {
-        expect(question.answer.orderedIds).toEqual(['1', '2', '3']);
-        expect(question.orderedAnswers!.map((item) => item.label)).toEqual(
-          candidatesRef.current.rankings
-            .find((ranking: any) => `league:${ranking.leagueId}` === question.entity!.id)!
-            .rows.slice(0, 3)
-            .map((row: any) => row.name),
-        );
-      }
+    test('top 10 stays out of the daily AI publish set until the UI board ships', () => {
+      expect(AI_QUESTION_MODES).not.toContain('top10-challenge');
+      expect(rounds.map((round) => round.mode)).not.toContain('top10-challenge');
     });
 
     test('XP is the sum of what the questions are worth, by difficulty', () => {
@@ -1164,7 +1155,7 @@ describe('round rejection reporting', () => {
     expect((result ?? []).map((round) => round.mode)).not.toContain('guess-player');
     const logged = rejections('guess-player');
     expect(logged.length).toBeGreaterThan(0);
-    expect(logged[0].reason).toBe(`NOT_ENOUGH_VALID_QUESTIONS:5/${ROUND_QUESTION_COUNT}`);
+    expect(logged[0].reason).toBe(`NOT_ENOUGH_VALID_QUESTIONS:${ROUND_QUESTION_COUNT - 1}/${ROUND_QUESTION_COUNT}`);
     expect(logged[0].validationErrors.join(' ')).toContain('TARGET_PLAYER_NOT_A_CANDIDATE:player:404404');
   });
 

@@ -138,7 +138,7 @@ Each question object:
 - "objective": the instruction shown above the card, in ${langLabel(language)}
 - "prompt": may repeat the objective
 - "hint"
-Vary the country across the round: no country may be the answer to more than two cards, and no two
+Vary the country across the round: no country may be the answer to more than ${Math.max(2, Math.ceil(ROUND_QUESTION_COUNT / 3))} cards, and no two
 cards may name the same three clubs.`;
 
     case 'football-grid':

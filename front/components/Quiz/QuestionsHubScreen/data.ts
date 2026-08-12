@@ -45,10 +45,13 @@ export const MAX_CONTENT_WIDTH = 720;
  *
  * CUSTOMIZE: point a mode at a different file in front/assets/images/.
  */
-export const MODE_LOCAL_IMAGE: Record<QuestionModeId, number> = {
+/**
+ * Bundled card art per mode. Modes without a still (e.g. football-bingo until
+ * design exports one) omit an entry and ChallengeCard falls back to vector art.
+ */
+export const MODE_LOCAL_IMAGE: Partial<Record<QuestionModeId, number>> = {
   'guess-player': require('../../../assets/images/guess-player.jpg'),
-  'football-bingo': require('../../../assets/images/football-bingo.png'),
-  'football-grid': require('../../../assets/images/football-grid.png'),
+  'football-grid': require('../../../assets/images/football-grid.jpg'),
   'player-connections': require('../../../assets/images/player-connection.png'),
   'guess-club': require('../../../assets/images/guess-club.png'),
   'transfer-puzzle': require('../../../assets/images/transfer-puzzle.jpg'),
@@ -65,7 +68,7 @@ export interface Challenge {
   xpReward: number;
   imageSource?: { uri: string } | number;
   /** Bundled asset used if `imageSource` is a remote URI that fails to load. */
-  fallbackImageSource: number;
+  fallbackImageSource?: number;
   layout: ChallengeLayout;
   onPress: () => void;
 }
