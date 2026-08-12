@@ -44,7 +44,9 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
             return;
         }
 
-        // Check if already favorited
+        // Check if already favorited. A watcher-owned auto-subscription
+        // (autoSubscribed = true) is not a user-facing favorite, so a manual
+        // favorite is allowed to "claim" it rather than being rejected.
         const existing = await prisma.favoriteMatch.findUnique({
             where: {
                 userId_apiMatchId: {
@@ -52,9 +54,10 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
                     apiMatchId,
                 },
             },
+            select: { autoSubscribed: true },
         });
 
-        if (existing) {
+        if (existing && existing.autoSubscribed === false) {
             sendError(req, res, ErrorCode.VALIDATION, 'Match already in favorites');
             return;
         }
@@ -78,6 +81,12 @@ router.post('/favorite/:matchId', requireAuth, async (req: Request, res: Respons
             awayTeamLogo: awayTeamLogo ?? null,
             leagueName: leagueName ?? null,
         });
+
+        // Explicit user favorite always wins over a watcher auto-subscription.
+        await prisma.favoriteMatch.update({
+            where: { userId_apiMatchId: { userId: user.id, apiMatchId } },
+            data: { autoSubscribed: false },
+        }).catch(() => { /* non-fatal */ });
 
         try {
             const { scheduleMatchStartReminder } = await import('../queues/match-start-reminder.queue');
@@ -196,9 +205,9 @@ router.get('/favorites', requireAuth, async (req: Request, res: Response): Promi
             return;
         }
 
-        // Get favorites
+        // Get favorites (exclude watcher-owned auto-subscriptions from followed teams)
         const favorites = await prisma.favoriteMatch.findMany({
-            where: { userId: user.id },
+            where: { userId: user.id, autoSubscribed: false },
             orderBy: { matchDate: 'asc' },
         });
 
@@ -257,11 +266,13 @@ router.get('/favorite/:matchId/check', requireAuth, async (req: Request, res: Re
                     apiMatchId,
                 },
             },
+            select: { autoSubscribed: true },
         });
 
+        // Watcher-owned auto-subscriptions are not user-facing favorites.
         res.json({
             status: 'SUCCESS',
-            data: { isFavorite: !!favorite },
+            data: { isFavorite: !!favorite && favorite.autoSubscribed === false },
         });
     } catch (error: any) {
         logger.error('Check favorite error:', error);

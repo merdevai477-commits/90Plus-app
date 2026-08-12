@@ -384,6 +384,94 @@ export const ar = {
     capacity: 'متفرج',
     squadList: 'قائمة الفريق',
     noSquadData: 'لا توجد بيانات للفريق حالياً',
+
+    // Header / states
+    founded: 'التأسيس',
+    follow: 'متابعة',
+    following: 'تتابعه',
+    loading: 'جاري تحميل الفريق…',
+    loadFailed: 'تعذّر تحميل بيانات هذا الفريق',
+    invalidTeamId: 'فريق غير صالح',
+    retry: 'إعادة المحاولة',
+
+    // Tabs
+    tabs: {
+      overview: 'نظرة عامة',
+      matches: 'المباريات',
+      squad: 'التشكيلة',
+      details: 'التفاصيل',
+    },
+
+    // Quick info
+    quickInfo: 'معلومات سريعة',
+    trophies: 'البطولات',
+    squadSize: 'اللاعبون',
+    coach: 'المدرب',
+    country: 'الدولة',
+
+    // Overview sections
+    nextMatch: 'المباراة القادمة',
+    recentMatches: 'آخر المباريات',
+    seasonStats: 'إحصائيات الموسم',
+    topTrophies: 'أبرز البطولات',
+    injuries: 'الإصابات',
+    viewAll: 'عرض الكل',
+    venue: 'الملعب',
+
+    // Statistics
+    played: 'لعب',
+    wins: 'فوز',
+    draws: 'تعادل',
+    losses: 'خسارة',
+    goalsFor: 'أهداف له',
+    goalsAgainst: 'أهداف عليه',
+    goalDiff: 'فارق الأهداف',
+    winRate: 'نسبة الفوز',
+    avgGoals: 'متوسط الأهداف',
+    cleanSheets: 'شباك نظيفة',
+    form: 'الأداء الأخير',
+    competition: 'البطولة',
+
+    // Matches tab filters
+    filterAll: 'الكل',
+    filterLive: 'مباشر',
+    filterUpcoming: 'قادمة',
+    filterFinished: 'منتهية',
+    allCompetitions: 'كل البطولات',
+
+    // Squad groups
+    goalkeepers: 'حراس المرمى',
+    defenders: 'المدافعون',
+    midfielders: 'لاعبو الوسط',
+    forwards: 'المهاجمون',
+    age: 'العمر',
+    number: 'الرقم',
+
+    // Details
+    clubInformation: 'معلومات النادي',
+    fullName: 'الاسم الكامل',
+    shortName: 'الاسم المختصر',
+    nickname: 'اللقب',
+    city: 'المدينة',
+    address: 'العنوان',
+    nationalTeam: 'منتخب وطني',
+    coachInformation: 'المدرب',
+    nationality: 'الجنسية',
+    joined: 'انضم في',
+    titles: 'الألقاب',
+    seasons: 'المواسم',
+    winner: 'بطل',
+    runnerUp: 'وصيف',
+
+    // Empty states
+    noUpcoming: 'لا توجد مباريات قادمة',
+    noRecent: 'لا توجد مباريات سابقة',
+    noStats: 'الإحصائيات غير متاحة',
+    noTrophies: 'لا توجد بطولات مسجلة',
+    noInjuries: 'لا توجد إصابات حالياً',
+    noMatches: 'لا توجد مباريات',
+    noCoach: 'لا توجد معلومات عن المدرب',
+    noDetails: 'لا توجد تفاصيل متاحة',
   },
 
   filters: {

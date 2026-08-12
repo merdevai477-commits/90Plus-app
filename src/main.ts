@@ -231,6 +231,7 @@ import reelsRoutes from './routes/reels.routes';
 import uploadRoutes from './routes/upload.routes';
 import notificationRoutes from './routes/notification.routes';
 import matchesRoutes from './routes/matches.routes';
+import teamsRoutes from './routes/teams.routes';
 import dailySpinRoutes from './routes/daily-spin.routes';
 import footballRoutes from './routes/football.routes';
 import knowledgeExportRoutes from './routes/knowledge-export.routes';
@@ -263,6 +264,7 @@ import {
 // Import services
 import { MatchWatcherService } from './services/match-watcher.service';
 import { LeagueMatchWatcherService } from './services/league-match-watcher.service';
+import { FollowedTeamWatcherService } from './services/followed-team-watcher.service';
 import { PredictionWatcherService } from './services/prediction-watcher.service';
 
 // Import rate limiters
@@ -413,6 +415,7 @@ app.use(`${API_PREFIX}/reels`, reelsRoutes);
 app.use(`${API_PREFIX}/upload`, uploadRoutes);
 app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 app.use(`${API_PREFIX}/matches`, matchesRoutes);
+app.use(`${API_PREFIX}/teams`, teamsRoutes);
 app.use(`${API_PREFIX}/daily-spin`, dailySpinRoutes);
 app.use(`${API_PREFIX}/football`, footballRoutes);
 // INTERNAL ONLY — Football Knowledge Factory season-aware export (API key auth)
@@ -813,6 +816,11 @@ async function startServer() {
                     MatchWatcherService.start();
                     PredictionWatcherService.start();
 
+                    // Followed-team match alerts (kickoff + same-day upcoming).
+                    // Reuses the subscription/reminder/ingestor pipeline and
+                    // short-circuits on quota exhaustion, so it is safe on free plan.
+                    FollowedTeamWatcherService.start();
+
                     const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
                     liveFixtureSyncService.start();
 
@@ -1143,6 +1151,7 @@ process.on('SIGINT', async () => {
     MatchWatcherService.stop();
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
     LeagueMatchWatcherService.stop(); // ✅ Stop league match watcher
+    FollowedTeamWatcherService.stop(); // ✅ Stop followed-team watcher
     try {
         const { closeMatchEventPushQueue } = await import('./queues/match-event-push.queue');
         await closeMatchEventPushQueue();
@@ -1166,6 +1175,7 @@ process.on('SIGTERM', async () => {
     MatchWatcherService.stop();
     PredictionWatcherService.stop(); // ✅ Stop prediction watcher
     LeagueMatchWatcherService.stop();
+    FollowedTeamWatcherService.stop(); // ✅ Stop followed-team watcher
     try {
         const { closeMatchEventPushQueue } = await import('./queues/match-event-push.queue');
         await closeMatchEventPushQueue();

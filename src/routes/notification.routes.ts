@@ -465,9 +465,11 @@ router.get('/match-subscriptions', requireAuth, async (req: Request, res: Respon
         }
 
         // Only return future or live matches — past ones are noise for the UI.
+        // Exclude watcher-owned auto-subscriptions (followed teams) so the bell
+        // only reflects matches the user explicitly subscribed to.
         const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000); // 3h back to cover live matches
         const rows = await prisma.favoriteMatch.findMany({
-            where: { userId: user.id, matchDate: { gte: cutoff } },
+            where: { userId: user.id, matchDate: { gte: cutoff }, autoSubscribed: false },
             select: { apiMatchId: true },
             take: 500,
         });

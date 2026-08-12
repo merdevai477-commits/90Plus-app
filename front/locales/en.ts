@@ -279,6 +279,94 @@ export const en = {
     capacity: 'capacity',
     squadList: 'Squad List',
     noSquadData: 'No squad data available',
+
+    // Header / states
+    founded: 'Founded',
+    follow: 'Follow',
+    following: 'Following',
+    loading: 'Loading team…',
+    loadFailed: 'Could not load this team',
+    invalidTeamId: 'Invalid team',
+    retry: 'Retry',
+
+    // Tabs
+    tabs: {
+      overview: 'Overview',
+      matches: 'Matches',
+      squad: 'Squad',
+      details: 'Details',
+    },
+
+    // Quick info
+    quickInfo: 'Quick Info',
+    trophies: 'Trophies',
+    squadSize: 'Squad',
+    coach: 'Coach',
+    country: 'Country',
+
+    // Overview sections
+    nextMatch: 'Next Match',
+    recentMatches: 'Recent Matches',
+    seasonStats: 'Season Statistics',
+    topTrophies: 'Top Trophies',
+    injuries: 'Injuries',
+    viewAll: 'View all',
+    venue: 'Venue',
+
+    // Statistics
+    played: 'Played',
+    wins: 'Wins',
+    draws: 'Draws',
+    losses: 'Losses',
+    goalsFor: 'Goals For',
+    goalsAgainst: 'Goals Against',
+    goalDiff: 'Goal Diff',
+    winRate: 'Win Rate',
+    avgGoals: 'Avg Goals',
+    cleanSheets: 'Clean Sheets',
+    form: 'Form',
+    competition: 'Competition',
+
+    // Matches tab filters
+    filterAll: 'All',
+    filterLive: 'Live',
+    filterUpcoming: 'Upcoming',
+    filterFinished: 'Finished',
+    allCompetitions: 'All Competitions',
+
+    // Squad groups
+    goalkeepers: 'Goalkeepers',
+    defenders: 'Defenders',
+    midfielders: 'Midfielders',
+    forwards: 'Forwards',
+    age: 'Age',
+    number: 'No.',
+
+    // Details
+    clubInformation: 'Club Information',
+    fullName: 'Full Name',
+    shortName: 'Short Name',
+    nickname: 'Nickname',
+    city: 'City',
+    address: 'Address',
+    nationalTeam: 'National Team',
+    coachInformation: 'Coach',
+    nationality: 'Nationality',
+    joined: 'Joined',
+    titles: 'Titles',
+    seasons: 'Seasons',
+    winner: 'Winner',
+    runnerUp: 'Runner-up',
+
+    // Empty states
+    noUpcoming: 'No upcoming matches',
+    noRecent: 'No recent matches',
+    noStats: 'Statistics are not available',
+    noTrophies: 'No trophies recorded',
+    noInjuries: 'No current injuries',
+    noMatches: 'No matches found',
+    noCoach: 'No coach information',
+    noDetails: 'No details available',
   },
 
   filters: {

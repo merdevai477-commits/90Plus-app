@@ -2693,3 +2693,97 @@ export class DailySpinService {
         }
     }
 }
+
+// ============================================
+// TEAMS SERVICE (Follow clubs / national teams)
+// ============================================
+
+export interface FollowedTeam {
+    id: string;
+    apiTeamId: number;
+    teamName: string;
+    teamLogo?: string | null;
+    country?: string | null;
+}
+
+export class TeamsService {
+    /** Follow a club / national team. */
+    static async follow(
+        token: string,
+        teamId: number,
+        teamData: { teamName?: string; teamLogo?: string | null; country?: string | null } = {},
+    ): Promise<{ success: boolean; error?: string }> {
+        try {
+            const response = await fetch(`${API_URL}/teams/favorite/${teamId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(teamData),
+            });
+            const data = await response.json();
+            if (data.status === 'SUCCESS') return { success: true };
+            return { success: false, error: data.message };
+        } catch (error: any) {
+            console.error('Follow team error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /** Unfollow a club / national team. */
+    static async unfollow(token: string, teamId: number): Promise<{ success: boolean; error?: string }> {
+        try {
+            const response = await fetch(`${API_URL}/teams/favorite/${teamId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            const data = await response.json();
+            if (data.status === 'SUCCESS') return { success: true };
+            return { success: false, error: data.message };
+        } catch (error: any) {
+            console.error('Unfollow team error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /** List followed teams. */
+    static async getFollowed(token: string): Promise<FollowedTeam[]> {
+        try {
+            const response = await fetch(`${API_URL}/teams/favorites`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            const data = await response.json();
+            if (data.status === 'SUCCESS') return data.data.favorites || [];
+            return [];
+        } catch (error) {
+            console.error('Get followed teams error:', error);
+            return [];
+        }
+    }
+
+    /** Check whether a team is followed. */
+    static async isFollowing(token: string, teamId: number): Promise<boolean> {
+        try {
+            const response = await fetch(`${API_URL}/teams/favorite/${teamId}/check`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            const data = await response.json();
+            return data.data?.isFavorite || false;
+        } catch (error) {
+            console.error('Check followed team error:', error);
+            return false;
+        }
+    }
+}
