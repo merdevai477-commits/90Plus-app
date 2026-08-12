@@ -4,15 +4,43 @@
         var animate = hasGSAP && !reduce;
 
         var SCREENS = [
-          { imgUrl: "/screens/screen-1.svg", alt: "ظ†طھط§ط¦ط¬ ظ…ط¨ط§ط´ط±ط©" },
-          { imgUrl: "/screens/screen-2.svg", alt: "ظƒظˆظٹط²ط§طھ ظٹظˆظ…ظٹط©" },
-          { imgUrl: "/screens/screen-3.svg", alt: "طھظ†ط¨ط¤ط§طھ" },
-          { imgUrl: "/screens/screen-4.svg", alt: "ط±ظٹظ„ط²" },
-          { imgUrl: "/screens/screen-5.svg", alt: "ط§ظ„ظ…ط³ط§ط¹ط¯ ط§ظ„ط°ظƒظٹ" },
-          { imgUrl: "/screens/screen-6.svg", alt: "ط§ظ„طھط±طھظٹط¨" },
-          { imgUrl: "/screens/screen-7.svg", alt: "ط§ظ„ط£ط®ط¨ط§ط±" },
-          { imgUrl: "/screens/screen-8.svg", alt: "ط§ظ„ظ…ظ„ظپ ط§ظ„ط´ط®طµظٹ" }
+          { imgUrl: "/screens/screen-1.svg", alt: "نتائج مباشرة" },
+          { imgUrl: "/screens/screen-2.svg", alt: "كويزات يومية" },
+          { imgUrl: "/screens/screen-3.svg", alt: "تنبؤات" },
+          { imgUrl: "/screens/screen-4.svg", alt: "ريلز" },
+          { imgUrl: "/screens/screen-5.svg", alt: "المساعد الذكي" },
+          { imgUrl: "/screens/screen-6.svg", alt: "الترتيب" },
+          { imgUrl: "/screens/screen-7.svg", alt: "الأخبار" },
+          { imgUrl: "/screens/screen-8.svg", alt: "الملف الشخصي" }
         ];
+
+        /* ---------- Store buttons: reliable App Store open on iOS ---------- */
+        (function () {
+          var APPLE_WEB = "https://apps.apple.com/app/id6758296989";
+          var APPLE_NATIVE = "itms-apps://apps.apple.com/app/id6758296989";
+          var ua = navigator.userAgent || "";
+          var isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+          document.querySelectorAll('a[data-store="apple"]').forEach(function (a) {
+            a.setAttribute("href", APPLE_WEB);
+            a.addEventListener("click", function (e) {
+              // Force navigation onto the <a> itself (avoids iOS nested-tap bugs)
+              e.preventDefault();
+              if (isIOS) {
+                var started = Date.now();
+                // Native App Store scheme first; HTTPS only if still on this page
+                window.location.href = APPLE_NATIVE;
+                setTimeout(function () {
+                  if (document.visibilityState === "visible" && Date.now() - started < 1800) {
+                    window.location.href = APPLE_WEB;
+                  }
+                }, 700);
+              } else {
+                window.location.assign(APPLE_WEB);
+              }
+            }, { passive: false });
+          });
+        })();
 
         /* ---------- Scroll reveal ---------- */
         if (hasGSAP && window.ScrollTrigger && !reduce) {
