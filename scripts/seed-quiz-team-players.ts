@@ -4,6 +4,7 @@
  * Usage:
  *   npm run seed:quiz-rosters
  *   npx ts-node scripts/seed-quiz-team-players.ts --limit=30
+ *   npx ts-node scripts/seed-quiz-team-players.ts --force   # ignore the 30-day TTL
  */
 
 import 'dotenv/config';
@@ -21,13 +22,35 @@ function parseLimit(): number {
 
 async function main() {
   const limit = parseLimit();
-  console.log(`Seeding quiz rosters from up to ${limit} CachedTeam row(s)...`);
+  const force = process.argv.includes('--force');
+  console.log(
+    `Seeding quiz rosters from up to ${limit} CachedTeam row(s)${force ? ' (forced — ignoring 30-day TTL)' : ''}...`,
+  );
 
-  const { synced, total } = await syncQuizRostersFromCachedTeams(limit);
+  const { synced, fresh, empty, total, quotaBlocked } = await syncQuizRostersFromCachedTeams(
+    limit,
+    { force },
+  );
   const teamPlayerCount = await prisma.teamPlayer.count();
+
+  // A reseed changes what generation can build from, so the "today failed"
+  // back-off must not outlive it.
+  const { clearQuestionsGenerationBackoff } = await import(
+    '../src/services/questions-challenges.service'
+  );
+  await clearQuestionsGenerationBackoff();
+
   const dataset = await buildQuizEntityDataset();
 
-  console.log(`Teams processed: ${synced}/${total}`);
+  if (quotaBlocked) {
+    console.warn(
+      'API-Football is unavailable (daily quota exhausted or account suspended) — ' +
+        'the run stopped early. Rerun after the quota resets (00:00 UTC).',
+    );
+  }
+  console.log(`Teams that gained players: ${synced}/${total}`);
+  console.log(`Teams still inside the 30-day roster TTL (no API call): ${fresh}`);
+  console.log(`Teams the API reported with no squad: ${empty}`);
   console.log(`TeamPlayer rows: ${teamPlayerCount}`);
   if (dataset.ok) {
     console.log(

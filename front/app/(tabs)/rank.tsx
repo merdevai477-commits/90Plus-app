@@ -236,10 +236,13 @@ export default function RankScreen() {
       } else if (id === '4') {
         router.push('/(tabs)/reels' as never);
       } else if (id === '2') {
-        void handleShareApp();
+        // "شارك واربح" now opens the full Share & Win screen (Figma 109:470).
+        // The 10 XP / 24h app-share reward it used to fire directly is still
+        // claimed there, after a share actually goes out.
+        router.push('/share-win' as never);
       }
     },
-    [router, handleShareApp, appLanguage, queryClient, getToken],
+    [router, appLanguage, queryClient, getToken],
   );
 
   const onRefresh = useCallback(async () => {

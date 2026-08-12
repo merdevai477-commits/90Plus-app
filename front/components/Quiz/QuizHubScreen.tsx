@@ -4,13 +4,13 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Animated,
+  ScrollView,
   StyleSheet,
   Text,
-  ActivityIndicator,
   TouchableOpacity,
-  Alert,
-  ScrollView,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +19,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 
 import { useTranslation } from '../../src/i18n';
-import { useLanguageStore } from '../../src/i18n/store';
 import { useCoins } from '../../contexts/CoinsContext';
 import { useXp } from '../../contexts/XpContext';
 import { toastManager } from '../../services/toastManager';
@@ -29,32 +28,39 @@ import {
   type QuizApiOptionKey,
   type QuizDailyPayload,
 } from '../../services/quizApi.service';
-import { SCREEN_PADDING_H } from '../../constants/tokens';
 import {
   type OptionKey,
+  QUIZ_AUTO_ADVANCE_ENABLED,
   QUIZ_SESSION_TOTAL,
   QUIZ_SCREEN_BG,
-  QUIZ_CARD_BORDER,
-  QUIZ_CHIP_BG,
   QUIZ_RADIUS_SM,
   QUIZ_COIN_COST,
   QUIZ_TIME_LIMIT_SEC,
   ACCENT_SOFT,
 } from './quiz.constants';
 
+import { GameLoadingState, GAME_LAYOUT } from './gameChrome';
+import { useQuestionEntrance } from './gameMotion';
+import { goBackToQuestionsHub } from './quizNavigation';
+import { useDesignScale } from '../../utils/responsive';
 import { QuizBackground } from './QuizBackground';
 import { QuizHeader } from './QuizHeader';
 import { QuizProgressCard } from './QuizProgressCard';
 import { QuizCard } from './QuizCard';
 import { QuizFooterActions } from './QuizFooterActions';
-import { QuizLanguagePopup } from './QuizLanguagePopup';
 import { QuizScorePopup } from './QuizScorePopup';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { prefetchQuizImages, useDailyQuiz, dailyQuizQueryKey, cacheDailyQuiz } from '../../hooks/useDailyQuiz';
 
 type AnswerPhase = 'idle' | 'submitting' | 'revealed';
 
 const AUTO_NEXT_MS = 3000;
+
+/**
+ * Max uses per round for each of the three lifelines — matches
+ * `LIFELINE_USES_PER_ROUND` in QuestionsModeScreen.tsx, which the six other
+ * modes use for the exact same three actions (Figma badge 385:378 draws "2").
+ */
+const LIFELINE_USES_PER_ROUND = 2;
 
 function isAllQuestionsTerminal(questions: QuizDailyPayload['questions']): boolean {
   return (
@@ -101,16 +107,25 @@ function patchDailyStats(
 
 export default function QuizHubScreen() {
   const insets = useSafeAreaInsets();
+  const designScale = useDesignScale();
   const router = useRouter();
-  const { t } = useTranslation();
-  const appLanguage = useLanguageStore((s) => s.language);
+  const { t, language: appLanguage } = useTranslation();
   const { getToken, isSignedIn } = useAuth();
-  const { refreshCoins, coins, loading: coinsLoading, applyCoinsBalance } = useCoins();
+  const { refreshCoins, coins, applyCoinsBalance } = useCoins();
   const { handleXpEvents, applyXpSnapshot, refresh: refreshXp } = useXp();
 
-  const [quizLang, setQuizLang] = useState<QuizApiLanguage>(
-    appLanguage === 'en' ? 'en' : 'ar',
-  );
+  /**
+   * QUIZ LANGUAGE = APP LANGUAGE.
+   *
+   * The other six question modes read it straight off the app locale
+   * (`useQuestionModeSession(modeId, language)` in QuestionsModeScreen), and
+   * Football Quiz now does the same. It used to keep its OWN language in
+   * AsyncStorage (`quiz_language`, set by a one-time popup), so a device whose
+   * app was English could still be served an Arabic pack forever — a
+   * configuration no other mode had, and the reason the questions came up in
+   * the wrong language.
+   */
+  const quizLang: QuizApiLanguage = appLanguage === 'en' ? 'en' : 'ar';
 
   const queryClient = useQueryClient();
 
@@ -144,6 +159,20 @@ export default function QuizHubScreen() {
   const [hintUsed, setHintUsed] = useState(false);
   const [hintText, setHintText] = useState<string | null>(null);
   const [revealedImageUrl, setRevealedImageUrl] = useState<string | null>(null);
+  /** Option keys hidden by "Remove Wrong Answers" this question. */
+  const [eliminatedKeys, setEliminatedKeys] = useState<OptionKey[]>([]);
+  /** Whether "Ask the Crowd" percentages are showing this question. */
+  const [showStats, setShowStats] = useState(false);
+
+  /**
+   * Remaining lifeline uses — ROUND totals, not per-question (never reset by
+   * the per-question effect below), exactly like `fiftyUses` / `changeUses` /
+   * `statsUses` in QuestionsModeScreen.tsx, the same three lifelines this
+   * screen mirrors.
+   */
+  const [eliminateUses, setEliminateUses] = useState(LIFELINE_USES_PER_ROUND);
+  const [statsUses, setStatsUses] = useState(LIFELINE_USES_PER_ROUND);
+  const [changeUses, setChangeUses] = useState(LIFELINE_USES_PER_ROUND);
 
   const [scorePopupVisible, setScorePopupVisible] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
@@ -248,32 +277,20 @@ export default function QuizHubScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    const loadQuizLanguage = async () => {
-      try {
-        const storedLang = await AsyncStorage.getItem('quiz_language');
-        if (storedLang === 'ar' || storedLang === 'en') {
-          setQuizLang(storedLang);
-        } else {
-          setQuizLang(appLanguage === 'en' ? 'en' : 'ar');
-        }
-      } catch {
-        setQuizLang(appLanguage === 'en' ? 'en' : 'ar');
-      }
-    };
-    loadQuizLanguage();
-  }, [appLanguage]);
-
   useEffect(() => () => clearAutoNextTimer(), [clearAutoNextTimer]);
 
   useEffect(() => {
-    if (dailyData?.packDate && dailyData.questions?.length) {
+    // A bundled fallback pack is never persisted — the cache must only ever
+    // hold a real pack, so tomorrow's launch doesn't replay dummy questions.
+    if (dailyData?.packDate && dailyData.questions?.length && !dailyData.isStatic) {
       void cacheDailyQuiz(quizLang, dailyData);
     }
   }, [dailyData, quizLang]);
 
   useEffect(() => {
-    if (isSignedIn) {
+    // Never re-pull a bundled pack: there is no server progress to re-sync and
+    // rebuilding it would restart the round (see keepBundledPack in useDailyQuiz).
+    if (isSignedIn && !dailyData?.isStatic) {
       void refetch();
     }
   }, [isSignedIn, quizLang, quizDateKey]);
@@ -291,15 +308,6 @@ export default function QuizHubScreen() {
   const resetTimeoutAttempt = useCallback(() => {
     unlockQuestionTimer();
   }, [unlockQuestionTimer]);
-
-  const handleLanguageSelect = async (lang: 'ar' | 'en') => {
-    setQuizLang(lang);
-    try {
-      await AsyncStorage.setItem('quiz_language', lang);
-    } catch {
-      // ignore
-    }
-  };
 
   useEffect(() => {
     if (!isDailyCompleted || !dailyData?.expiresAt) {
@@ -331,6 +339,8 @@ export default function QuizHubScreen() {
   }, [currentIndex, questions]);
 
   const currentQuestion = currentIndex >= 0 ? questions[currentIndex] : undefined;
+  /** Shared question transition — replays whenever the question changes. */
+  const questionEntrance = useQuestionEntrance(currentQuestion?.id);
   const totalQuestions = questions.length || QUIZ_SESSION_TOTAL;
   const questionNumber =
     currentIndex >= 0 ? currentIndex + 1 : Math.min(rawCurrentIndex + 1, totalQuestions);
@@ -351,6 +361,8 @@ export default function QuizHubScreen() {
     setRevealedImageUrl(null);
     setHintUsed(currentQuestion.hintUsed ?? false);
     setHintText(null);
+    setEliminatedKeys([]);
+    setShowStats(false);
     questionStartedAt.current = Date.now();
     void getToken().then((t) => {
       tokenRef.current = t ?? null;
@@ -440,6 +452,12 @@ export default function QuizHubScreen() {
   goNextQuestionRef.current = goNextQuestion;
 
   const scheduleAutoNext = useCallback(() => {
+    // Timed progression is off: the player advances with the "Next" button.
+    // See QUIZ_AUTO_ADVANCE_ENABLED in ./quiz.constants.
+    if (!QUIZ_AUTO_ADVANCE_ENABLED) {
+      clearAutoNextTimer();
+      return;
+    }
     scheduleQuestionAutoNext(
       clearAutoNextTimer,
       autoNextTimerRef,
@@ -447,10 +465,96 @@ export default function QuizHubScreen() {
     );
   }, [clearAutoNextTimer]);
 
+  /**
+   * BUNDLED QUESTION GRADING.
+   *
+   * A question from data/footballQuizFallback.ts carries its own answer key, so
+   * it is graded here and never POSTed — /quiz/answer only knows about real
+   * daily packs, and sending it a bundled id would 404. Everything downstream
+   * (reveal, toast, auto-next, completion popup) runs through exactly the same
+   * state the live path sets, so the screen keeps ONE rendering flow.
+   *
+   * Coins and XP are deliberately untouched: no server round-trip happened, so
+   * pretending a balance changed would desync the real one.
+   */
+  const gradeStaticAnswer = useCallback(
+    (question: QuizDailyPayload['questions'][number], key: OptionKey) => {
+      clearAutoNextTimer();
+
+      const answeredCorrectly = question.correctKey === key;
+      const nextIndex = currentIndex + 1;
+      const completedNow = nextIndex >= questions.length;
+
+      nextIndexRef.current = nextIndex;
+      pendingSelectedKeyRef.current = null;
+      submitRetryCountRef.current = 0;
+      timeoutCalledRef.current = question.id;
+      answerLockedRef.current = true;
+      setAnswerLocked(true);
+      setSelected(key);
+      setIsCorrect(answeredCorrectly);
+      setCorrectKey((question.correctKey as OptionKey) ?? null);
+      if (question.imageUrl) {
+        setRevealedImageUrl(question.imageUrl);
+      }
+      setAnswerPhaseSync('revealed');
+
+      queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
+        if (!oldData) return oldData;
+        const newQuestions = [...oldData.questions];
+        newQuestions[currentIndex] = {
+          ...newQuestions[currentIndex],
+          status: 'answered',
+          isCorrect: answeredCorrectly,
+          selectedKey: key,
+        };
+        return {
+          ...oldData,
+          questions: newQuestions,
+          stats: patchDailyStats(oldData.stats, {
+            correct: oldData.stats.correct + (answeredCorrectly ? 1 : 0),
+            answered: oldData.stats.answered + 1,
+            completed: completedNow,
+          }),
+        };
+      });
+
+      /*
+       * NO correct/incorrect toast here. The other question modes give no
+       * per-answer popup at all — the ONLY feedback is the row itself turning
+       * green/red with a check or × (GameAnswerOption, shared by every mode
+       * including this one). A toast on top of that was a Football-Quiz-only
+       * addition; removed so the feedback is identical everywhere.
+       */
+
+      if (completedNow) {
+        showCompletionPopup();
+      } else {
+        scheduleAutoNext();
+      }
+    },
+    [
+      clearAutoNextTimer,
+      currentIndex,
+      questions.length,
+      queryClient,
+      quizQueryKey,
+      scheduleAutoNext,
+      setAnswerPhaseSync,
+      showCompletionPopup,
+    ],
+  );
+
   const submitSelectedAnswer = useCallback(
     async (key: OptionKey, opts?: { fromRetry?: boolean }) => {
       if (!currentQuestion) return;
       if (answerPhaseRef.current === 'revealed') return;
+
+      /* ── Bundled question: graded on-device, no network ─────────────── */
+      if (currentQuestion.isStatic) {
+        gradeStaticAnswer(currentQuestion, key);
+        return;
+      }
 
       if (!opts?.fromRetry) {
         if (answerPhaseRef.current === 'submitting') return;
@@ -544,24 +648,11 @@ export default function QuizHubScreen() {
           };
         });
 
-        if (d.isCorrect) {
-          const xpAmount =
-            d.xpEvents?.reduce((sum, e) => sum + e.amount, 0) ??
-            d.xpAwarded ??
-            2;
-          toastManager.showSuccess(
-            t.quiz.excellent,
-            t.quiz.xpBonus.replace('{amount}', String(xpAmount)),
-            { position: 'top', duration: 2800 },
-          );
-        } else {
-          const deducted = d.coinsDeducted ?? QUIZ_COIN_COST;
-          toastManager.showWarning(
-            t.quiz.wrong,
-            t.quiz.wrongCoinsDeducted.replace('{amount}', String(deducted)),
-            { position: 'top', duration: 2800 },
-          );
-        }
+        /*
+         * NO correct/incorrect toast here — see the identical note in
+         * gradeStaticAnswer above. The row itself (green/red, check/×) is the
+         * only feedback, matching every other question mode.
+         */
 
         if (d.completed) {
           clearAutoNextTimer();
@@ -586,6 +677,7 @@ export default function QuizHubScreen() {
     },
     [
       currentQuestion,
+      gradeStaticAnswer,
       clearAutoNextTimer,
       getToken,
       quizLang,
@@ -622,14 +714,43 @@ export default function QuizHubScreen() {
     t.quiz.loadFailed,
   ]);
 
+  /*
+   * TAP ONLY SELECTS — it never submits.
+   *
+   * This used to call `submitSelectedAnswer(key)` directly, so a single tap
+   * graded the question immediately: no chance to change your mind, no
+   * explicit confirm, and the "Confirm Answer" button on the action bar was
+   * dead — by the time it could render, the phase was already 'revealed'.
+   *
+   * Every other question mode splits this into two steps (`toggleSelection`
+   * then a separate `submitAnswer` in useQuestionModeSession), and Football
+   * Quiz now follows the same shape: tapping a row just updates `selected`,
+   * which QuizCard already renders as the picked option. Nothing is graded,
+   * no network call happens, and the row stays interactive — tapping a
+   * different option simply reassigns `selected`, satisfying "select A, change
+   * to B, change to C" before anything is ever submitted.
+   */
   const handleSelectOption = useCallback(
     (key: OptionKey) => {
-      void submitSelectedAnswer(key);
+      if (answerPhaseRef.current !== 'idle') return;
+      setSelected(key);
     },
-    [submitSelectedAnswer],
+    [],
   );
 
+  /** Fired only by the "Confirm Answer" button — the single place grading starts. */
+  const handleSubmitAnswer = useCallback(() => {
+    if (!selected) return;
+    if (answerPhaseRef.current !== 'idle') return;
+    void submitSelectedAnswer(selected);
+  }, [selected, submitSelectedAnswer]);
+
   const handleTimeout = useCallback(async () => {
+    // Hard stop: with timed progression off nothing may reveal or select an
+    // answer on the player's behalf. The countdown that used to call this is
+    // already inert (`timerActive` below), and this guard makes sure no other
+    // caller can reintroduce a self-answering screen.
+    if (!QUIZ_AUTO_ADVANCE_ENABLED) return;
     if (!currentQuestion) return;
     if (answerLockedRef.current || pendingSelectedKeyRef.current) return;
     if (answerPhaseRef.current !== 'idle') return;
@@ -638,6 +759,49 @@ export default function QuizHubScreen() {
     answerLockedRef.current = true;
     setAnswerLocked(true);
     setAnswerPhaseSync('submitting');
+
+    /* ── Bundled question: reveal locally, no penalty, no network ────── */
+    if (currentQuestion.isStatic) {
+      const nextIndex = currentIndex + 1;
+      const completedNow = nextIndex >= questions.length;
+      nextIndexRef.current = nextIndex;
+      setIsCorrect(false);
+      setCorrectKey((currentQuestion.correctKey as OptionKey) ?? null);
+      setSelected((currentQuestion.correctKey as OptionKey) ?? null);
+      if (currentQuestion.imageUrl) {
+        setRevealedImageUrl(currentQuestion.imageUrl);
+      }
+      setAnswerPhaseSync('revealed');
+
+      queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
+        if (!oldData) return oldData;
+        const newQuestions = [...oldData.questions];
+        newQuestions[currentIndex] = {
+          ...newQuestions[currentIndex],
+          status: 'timed_out',
+          isCorrect: false,
+          penaltyApplied: false,
+        };
+        return {
+          ...oldData,
+          questions: newQuestions,
+          stats: patchDailyStats(oldData.stats, {
+            timedOut: oldData.stats.timedOut + 1,
+            completed: completedNow,
+          }),
+        };
+      });
+
+      toastManager.showWarning(t.quiz.wrong, t.quiz.timesUpNoCoinsDeducted);
+
+      if (completedNow) {
+        clearAutoNextTimer();
+        showCompletionPopup();
+      } else {
+        scheduleAutoNext();
+      }
+      return;
+    }
 
     try {
       const token = tokenRef.current ?? (await getToken());
@@ -724,6 +888,7 @@ export default function QuizHubScreen() {
     quizLang,
     queryClient,
     currentIndex,
+    questions.length,
     patchCacheCoins,
     applyCoinsBalance,
     t.quiz,
@@ -735,100 +900,116 @@ export default function QuizHubScreen() {
     setAnswerPhaseSync,
   ]);
 
-  const handleSkip = useCallback(async () => {
-    if (!currentQuestion || answerPhase === 'revealed') return;
-    clearAutoNextTimer();
-    if (coins < QUIZ_COIN_COST) {
-      toastManager.showWarning(t.quiz.notEnoughCoins, t.quiz.notEnoughCoinsMessage);
-      return;
-    }
-    patchCacheCoins(coins - QUIZ_COIN_COST);
-    applyCoinsBalance(coins - QUIZ_COIN_COST);
+  /**
+   * CHANGE QUESTION — the "reload" lifeline, matching `changeQuestion()` in
+   * useQuestionModeSession.ts (the hook the other six modes share).
+   *
+   * This used to be `handleSkip`: it advanced `currentIndex`, marked the slot
+   * `status: 'skipped'`, deducted coins and — for the live daily question —
+   * called the real `/quiz/skip` endpoint. That is a DIFFERENT feature
+   * (skip-and-advance) from what the "reload" icon and its 2-use badge are
+   * actually for everywhere else in the app: swapping the CURRENT question for
+   * a different one, in place, so the player can still answer it.
+   *
+   * A replacement has to be another REAL question. The daily pack the server
+   * builds IS the whole round, so every real question it produced for today is
+   * already scheduled in it — there is no spare one to swap in. The bundled
+   * bank that used to back this lifeline was canned football content and has
+   * been removed.
+   *
+   * Returns whether a swap actually happened, so the caller only spends one of
+   * the 2 uses on a real swap. Left in place so the lifeline starts working
+   * again automatically if the pack ever carries spare questions.
+   */
+  const handleChangeQuestion = useCallback((): boolean => {
+    if (!currentQuestion || answerPhase !== 'idle') return false;
 
-    const optimisticNext = currentIndex + 1;
-    const completedNow = optimisticNext >= questions.length;
+    const replacement = questions.find(
+      (question, index) => index !== currentIndex && question.status === 'pending',
+    );
+    if (!replacement) return false;
+
     queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
       if (!oldData) return oldData;
       const newQuestions = [...oldData.questions];
-      newQuestions[currentIndex] = {
-        ...newQuestions[currentIndex],
-        status: 'skipped',
-      };
-      return {
-        ...oldData,
-        questions: newQuestions,
-        currentIndex: completedNow ? oldData.currentIndex : optimisticNext,
-      };
+      newQuestions[currentIndex] = replacement;
+      return { ...oldData, questions: newQuestions };
     });
+    setSelected(null);
+    setHintUsed(false);
+    setHintText(null);
+    setEliminatedKeys([]);
+    setShowStats(false);
+    return true;
+  }, [answerPhase, currentIndex, currentQuestion, questions, queryClient, quizQueryKey]);
 
-    if (completedNow) {
-      showCompletionPopup();
-    }
+  /**
+   * REMOVE WRONG ANSWERS — the "50:50" lifeline. Hides options until only the
+   * correct one and exactly one wrong one remain; which wrong option survives
+   * is picked at random, same rule `eliminateWrongAnswers` uses in
+   * useQuestionModeSession.ts for the other six modes.
+   */
+  const handleEliminateWrongAnswers = useCallback((): boolean => {
+    if (!currentQuestion || answerPhase !== 'idle') return false;
+    const options = currentQuestion.options;
+    if (options.length <= 2) return false;
 
-    try {
-      const token = tokenRef.current ?? (await getToken());
-      if (!token) return;
-      tokenRef.current = token;
-      const res = await QuizApiService.skipQuestion(token, {
-        questionId: currentQuestion.id,
-        language: quizLang,
-      });
-      if (res?.status !== 'SUCCESS') {
-        void refreshCoins();
-        void refetch();
-        toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
-        return;
-      }
+    const wrongKeys = options
+      .map((option) => option.key)
+      .filter((key) => key !== currentQuestion.correctKey);
+    const remainingWrong = wrongKeys.filter((key) => !eliminatedKeys.includes(key));
+    if (remainingWrong.length <= 1) return false;
 
-      const d = res.data as {
-        currentIndex: number;
-        completed?: boolean;
-        stats?: QuizDailyPayload['stats'];
-        coins?: number;
-      };
-      nextIndexRef.current = d.currentIndex;
-      if (typeof d.coins === 'number') {
-        patchCacheCoins(d.coins);
-        applyCoinsBalance(d.coins);
-      }
+    const survivor = remainingWrong[Math.floor(Math.random() * remainingWrong.length)];
+    const toEliminate = remainingWrong.filter((key) => key !== survivor);
 
-      queryClient.setQueryData<QuizDailyPayload>(quizQueryKey, (oldData) => {
-        if (!oldData) return oldData;
-        return {
-          ...oldData,
-          stats: patchDailyStats(oldData.stats, d.stats),
-          currentIndex: d.currentIndex ?? oldData.currentIndex,
-        };
-      });
+    setEliminatedKeys((prev) => [...prev, ...toEliminate]);
+    // A pick that just got hidden can't stay selected underneath it.
+    setSelected((prev) => (prev && toEliminate.includes(prev) ? null : prev));
+    return true;
+  }, [answerPhase, currentQuestion, eliminatedKeys]);
 
-      if (d.completed) {
-        showCompletionPopup(d.stats);
-      }
-    } catch {
-      void refreshCoins();
-      void refetch();
-      toastManager.showError(t.quiz.actionFailed, t.quiz.loadFailed);
-    }
-  }, [
-    currentQuestion,
-    answerPhase,
-    clearAutoNextTimer,
-    coins,
-    applyCoinsBalance,
-    patchCacheCoins,
-    getToken,
-    quizLang,
-    queryClient,
-    currentIndex,
-    questions.length,
-    t.quiz,
-    showCompletionPopup,
-    refreshCoins,
-    refetch,
-  ]);
+  /**
+   * ASK THE CROWD — reveals a percentage next to each still-visible option.
+   *
+   * Disabled: this needs REAL "how many players picked each option" counts and
+   * nothing records per-option selections yet. The fixed table that used to
+   * stand in for them was invented data shown to the player as fact, and it
+   * always spiked on the correct answer, quietly giving it away. Returning
+   * false leaves the use unspent; the hexagon renders locked via
+   * `crowdStatsAvailable` below.
+   */
+  const crowdStatsAvailable = false;
 
+  const handleRevealStats = useCallback((): boolean => {
+    if (!crowdStatsAvailable) return false;
+    if (!currentQuestion || answerPhase !== 'idle' || showStats) return false;
+    if (currentQuestion.options.length === 0) return false;
+    setShowStats(true);
+    return true;
+  }, [answerPhase, currentQuestion, showStats]);
+
+  /**
+   * Left fully defined but no longer wired to a hexagon: there are only three
+   * lifeline slots, and this task repoints "50:50" at `handleEliminateWrongAnswers`
+   * instead (matching the six other modes' own hint→eliminate change in
+   * useQuestionModeSession.ts). Kept intact rather than deleted since it is a
+   * real, working, backend-integrated feature (`/quiz/hint`, real coin spend)
+   * that nothing here was asked to remove — only to stop triggering from the
+   * action bar. `hintText`/`hintUsed` stay defined for the same reason.
+   */
   const handleHint = useCallback(async () => {
     if (!currentQuestion || hintUsed || answerPhase === 'revealed') return;
+
+    /* ── Bundled question: its hint text ships with it, no coins spent ─ */
+    if (currentQuestion.isStatic) {
+      if (!currentQuestion.hint) return;
+      setHintUsed(true);
+      setHintText(currentQuestion.hint);
+      toastManager.showSuccess(t.quiz.useHint, currentQuestion.hint);
+      return;
+    }
+
     if (coins < QUIZ_COIN_COST) {
       toastManager.showWarning(t.quiz.notEnoughCoins, t.quiz.notEnoughCoinsMessage);
       return;
@@ -901,54 +1082,38 @@ export default function QuizHubScreen() {
     t.quiz,
   ]);
 
-  const applyQuizLanguage = useCallback(
-    async (next: QuizApiLanguage) => {
-      setQuizLang(next);
-      try {
-        await AsyncStorage.setItem('quiz_language', next);
-      } catch {
-        // ignore
-      }
-    },
-    [],
-  );
-
-  const toggleQuizLanguage = () => {
-    const next: QuizApiLanguage = quizLang === 'ar' ? 'en' : 'ar';
-    const hasProgress =
-      dailyData?.stats?.answered !== undefined && dailyData.stats.answered > 0;
-
-    if (hasProgress && answerPhase !== 'revealed') {
-      Alert.alert(t.quiz.switchLangConfirmTitle, t.quiz.switchLangConfirmMessage, [
-        { text: t.common.cancel, style: 'cancel' },
-        {
-          text: t.quiz.switchQuizLang,
-          onPress: () => {
-            void applyQuizLanguage(next);
-          },
-        },
-      ]);
-      return;
-    }
-    void applyQuizLanguage(next);
-  };
-
   const progress = questionNumber / Math.max(totalQuestions, QUIZ_SESSION_TOTAL);
 
   const difficultyText = t.quiz[difficultyLocaleKey(currentQuestion?.difficulty ?? 'MEDIUM')];
 
+  // Hides options a 50:50 has removed — same "don't render it at all" rule
+  // `visibleChoices` applies in QuestionsModeScreen.tsx.
   const cardOptions = useMemo(
     () =>
       currentQuestion
-        ? currentQuestion.options.map((o) => ({
-            key: o.key as OptionKey,
-            text: o.text,
-          }))
+        ? currentQuestion.options
+            .filter((o) => !eliminatedKeys.includes(o.key as OptionKey))
+            .map((o) => ({
+              key: o.key as OptionKey,
+              text: o.text,
+            }))
         : [],
-    [currentQuestion?.id, currentQuestion?.options],
+    [currentQuestion?.id, currentQuestion?.options, eliminatedKeys],
   );
 
-  const HEADER_H = insets.top + 10 + 44 + 12;
+  /**
+   * "Ask the crowd" percentages. Undefined until a real per-option
+   * distribution is recorded and served — see `handleRevealStats` above.
+   */
+  const statPercentByKey = undefined;
+
+  /**
+   * The offset the scroll starts at — Figma's y 95 less the 62pt status bar,
+   * on top of the real safe area. Identical to QuestionsModeScreen, which is
+   * what makes the two screens scroll the same way, and it doubles as the
+   * loading state's offset.
+   */
+  const contentTopInset = insets.top + designScale.s(GAME_LAYOUT.contentTop);
   const errorMessage =
     error instanceof Error ? error.message : error ? String(error) : '';
   const isPackPreparing =
@@ -988,14 +1153,19 @@ export default function QuizHubScreen() {
   }
 
   if (isPackPreparing || (loadingQuestions && !dailyData)) {
+    /*
+     * EXACTLY the loading state every other question mode shows: the shared
+     * spinner on the game background, nothing else. Football Quiz used to draw
+     * its own screen here — quiz background, header, a soft-accent spinner and
+     * a "Loading questions…" caption — which is why entering it felt different
+     * from entering Guess The Player or Football Grid.
+     *
+     * The one addition is the escape hatch: if the backend has been generating
+     * the pack for 45s, a retry appears BELOW the spinner so the screen can
+     * never hang forever. It is a recovery affordance, not a second loading UI.
+     */
     return (
-      <View style={[styles.root, styles.centered]}>
-        <QuizBackground />
-        <QuizHeader topInset={insets.top} />
-        <ActivityIndicator size="large" color={ACCENT_SOFT} />
-        <Text style={styles.loadingText}>
-          {isPackPreparing ? t.quiz.packPreparing : t.quiz.loadingQuestions}
-        </Text>
+      <GameLoadingState topInset={contentTopInset}>
         {isPackPreparing && packPreparingTooLong ? (
           <TouchableOpacity
             style={styles.retryButton}
@@ -1013,7 +1183,7 @@ export default function QuizHubScreen() {
             )}
           </TouchableOpacity>
         ) : null}
-      </View>
+      </GameLoadingState>
     );
   }
 
@@ -1101,10 +1271,10 @@ export default function QuizHubScreen() {
         ) : null}
         <TouchableOpacity
           style={styles.retryButton}
-          onPress={() => router.push('/(tabs)/rank' as never)}
+          onPress={goBackToQuestionsHub}
           activeOpacity={0.85}
         >
-          <Text style={styles.retryButtonText}>{t.quiz.backToRank}</Text>
+          <Text style={styles.retryButtonText}>{t.quiz.backToQuestions}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -1112,14 +1282,8 @@ export default function QuizHubScreen() {
 
   if (!currentQuestion) {
     if (loadingQuestions || isFetching) {
-      return (
-        <View style={[styles.root, styles.centered]}>
-          <QuizBackground />
-          <QuizHeader topInset={insets.top} />
-          <ActivityIndicator size="large" color={ACCENT_SOFT} />
-          <Text style={styles.loadingText}>{t.quiz.loadingQuestions}</Text>
-        </View>
-      );
+      // Same shared spinner as above and as every other mode.
+      return <GameLoadingState topInset={contentTopInset} />;
     }
 
     const allDone =
@@ -1141,10 +1305,10 @@ export default function QuizHubScreen() {
           ) : null}
           <TouchableOpacity
             style={styles.retryButton}
-            onPress={() => router.push('/(tabs)/rank' as never)}
+            onPress={goBackToQuestionsHub}
             activeOpacity={0.85}
           >
-            <Text style={styles.retryButtonText}>{t.quiz.backToRank}</Text>
+            <Text style={styles.retryButtonText}>{t.quiz.backToQuestions}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -1182,23 +1346,39 @@ export default function QuizHubScreen() {
   return (
     <View style={styles.root}>
       <QuizBackground />
-      <QuizHeader topInset={insets.top} />
 
+      {/*
+        SCROLL STRUCTURE — identical to every other question mode.
+
+        The header and the "Question X of Y" counter are the first two children
+        INSIDE the scroll, so they scroll away with the content exactly as they
+        do on QuestionsModeScreen. Nothing on this screen is pinned or sticky
+        except the action bar, which is pinned on every mode. The scroll
+        container owns the top inset and the 22pt column, so the header and the
+        counter carry no positioning of their own (`pinned={false}`).
+
+        No language pill: the pack follows the app language, like every other
+        question mode. See `quizLang` at the top of this component.
+      */}
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: HEADER_H + 4,
-            paddingHorizontal: SCREEN_PADDING_H,
-            paddingBottom: Math.max(insets.bottom, 16) + 28,
+            paddingTop: contentTopInset,
+            // 22pt gutters → the Figma 404pt content column, scaled per device.
+            paddingHorizontal: designScale.s(GAME_LAYOUT.gutter),
+            paddingBottom:
+              designScale.s(GAME_LAYOUT.actionBarHeight) + insets.bottom + designScale.s(24),
           },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
       >
+        <QuizHeader topInset={insets.top} pinned={false} />
+
         <QuizProgressCard
           current={questionNumber}
           total={Math.max(totalQuestions, QUIZ_SESSION_TOTAL)}
@@ -1206,60 +1386,83 @@ export default function QuizHubScreen() {
           questionLabel={t.quiz.questionNumber}
           timerKey={currentQuestion.id}
           timerRetryEpoch={timerRetryEpoch}
-          timerActive={answerPhase === 'idle' && !answerLocked}
+          timerActive={QUIZ_AUTO_ADVANCE_ENABLED && answerPhase === 'idle' && !answerLocked}
           timeLimitSec={QUIZ_TIME_LIMIT_SEC}
           onTimeUp={handleTimeout}
+          topInset={insets.top}
+          pinned={false}
         />
 
-        <View style={styles.badgeRow}>
-          <View style={styles.chip}>
-            <Ionicons name="football" size={14} color="#C084FC" />
-            <Text style={styles.chipTextPurple}>{t.quiz.footballQuiz}</Text>
-          </View>
-          <TouchableOpacity style={styles.chip} onPress={toggleQuizLanguage} activeOpacity={0.85}>
-            <Ionicons name="language" size={14} color="#C084FC" />
-            <Text style={styles.chipTextPurple}>
-              {quizLang === 'ar' ? t.quiz.langArabic : t.quiz.langEnglish}
-            </Text>
-          </TouchableOpacity>
-          <View style={styles.chip}>
-            <Text style={styles.chipTextPurple}>{difficultyText}</Text>
-          </View>
-        </View>
-
-        <QuizCard
-          question={currentQuestion.question}
-          questionType={currentQuestion.type ?? 'normal'}
-          imageUrl={resolvedImageUrl}
-          revealImageUrl={revealedImageUrl}
-          imageLayout={currentQuestion.imageLayout ?? 'square'}
-          options={cardOptions}
-          selectedKey={selected}
-          onSelectOption={handleSelectOption}
-          onUseHint={handleHint}
-          hintUsed={hintUsed}
-          hintText={hintText}
-          answerRevealed={answerPhase === 'revealed'}
-          isCorrect={isCorrect}
-          correctKey={correctKey}
-          disableOptions={answerLocked || answerPhase !== 'idle'}
-          isSubmitting={answerPhase === 'submitting'}
-        />
-
-        <QuizFooterActions
-          onSkip={handleSkip}
-          onNext={goNextQuestion}
-          skipDisabled={
-            coinsLoading ||
-            coins < QUIZ_COIN_COST ||
-            answerPhase === 'revealed'
-          }
-          nextDisabled={!canGoNext}
-          answerRevealed={answerPhase === 'revealed'}
-          isCorrect={isCorrect}
-        />
+        {/*
+          The question block fades and rises 8pt on every new question — the
+          shared transition from ./gameMotion, the same one the other modes use.
+          Opacity + translate only, so the layout underneath never moves.
+        */}
+        <Animated.View
+          style={[
+            // Figma 238:374 leaves 28pt between the progress card and the
+            // artwork (card at y 308, progress card ends at y 280).
+            { marginTop: designScale.s(28) },
+            questionEntrance,
+          ]}
+        >
+          <QuizCard
+            question={currentQuestion.question}
+            questionType={currentQuestion.type ?? 'normal'}
+            imageUrl={resolvedImageUrl}
+            revealImageUrl={revealedImageUrl}
+            // Passed through as-is: a live question that doesn't declare a
+            // layout keeps the photo treatment (`cover`) it has always had.
+            imageLayout={currentQuestion.imageLayout}
+            options={cardOptions}
+            selectedKey={selected}
+            onSelectOption={handleSelectOption}
+            hintText={hintText}
+            answerRevealed={answerPhase === 'revealed'}
+            isCorrect={isCorrect}
+            correctKey={correctKey}
+            disableOptions={answerLocked || answerPhase !== 'idle'}
+            isSubmitting={answerPhase === 'submitting'}
+            statPercentByKey={statPercentByKey}
+          />
+        </Animated.View>
       </ScrollView>
-      <QuizLanguagePopup onSelectLanguage={handleLanguageSelect} />
+
+      <QuizFooterActions
+        onEliminate={() => {
+          if (eliminateUses === 0 || answerPhase !== 'idle') return;
+          if (handleEliminateWrongAnswers()) {
+            setEliminateUses((remaining) => remaining - 1);
+          }
+        }}
+        eliminateUses={eliminateUses}
+        onShowStats={() => {
+          if (statsUses === 0 || answerPhase !== 'idle') return;
+          if (handleRevealStats()) {
+            setStatsUses((remaining) => remaining - 1);
+          }
+        }}
+        // 0 renders the hexagon locked — see `crowdStatsAvailable`.
+        statsUses={crowdStatsAvailable ? statsUses : 0}
+        onChangeQuestion={() => {
+          if (changeUses === 0 || answerPhase !== 'idle') return;
+          if (handleChangeQuestion()) {
+            setChangeUses((remaining) => remaining - 1);
+          }
+        }}
+        changeQuestionUses={changeUses}
+        onNext={goNextQuestion}
+        onSubmit={handleSubmitAnswer}
+        // Before reveal, the primary button is "Confirm Answer" and needs a
+        // selection to press; after reveal it is "Next Question".
+        submitDisabled={!selected || answerPhase !== 'idle'}
+        nextDisabled={!canGoNext}
+        answerRevealed={answerPhase === 'revealed'}
+        isCorrect={isCorrect}
+        bottomInset={insets.bottom}
+        quizLang={quizLang}
+      />
+
       <QuizScorePopup
         visible={scorePopupVisible}
         score={finalScore}
@@ -1331,29 +1534,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     marginTop: 12,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: QUIZ_RADIUS_SM,
-    borderWidth: 1,
-    borderColor: QUIZ_CARD_BORDER,
-    backgroundColor: QUIZ_CHIP_BG,
-  },
-  chipTextPurple: {
-    color: '#C084FC',
-    fontSize: 12,
-    fontWeight: '700',
   },
 });

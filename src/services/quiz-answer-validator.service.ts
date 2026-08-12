@@ -92,6 +92,84 @@ function optionEntityCategory(type: QuizQuestionType, bindingKind?: string): 'pl
   return 'club';
 }
 
+function entityPoolForCategory(
+  slice: QuizEntitySlice,
+  category: 'player' | 'club' | 'stadium',
+): Array<{ id: string; name: string }> {
+  if (category === 'player') return slice.players;
+  if (category === 'stadium') return slice.stadiums;
+  return slice.clubs;
+}
+
+/**
+ * The AI occasionally hallucinates distractors outside the supplied dataset
+ * (real football entities not in today's narrow slice, or junk like a raw
+ * position label / number) despite explicit prompt instructions. Rejecting
+ * the whole question for one bad distractor tanks yield to 0/N on tight
+ * slices. Instead, substitute unresolvable distractor text with an unused
+ * same-category dataset entity (matching position for players when
+ * possible) before falling back to outright rejection.
+ */
+function repairUnresolvedDistractors(
+  q: StoredQuizQuestion,
+  slice: QuizEntitySlice,
+  packContext: QuizPackValidationContext,
+  bindingKind?: string,
+): StoredQuizQuestion | null {
+  const category = optionEntityCategory(q.type, bindingKind);
+  const usedIds = new Set<string>();
+
+  // Seed with whatever already resolves so replacements don't collide.
+  for (const opt of q.options) {
+    const id = resolveOptionEntityId(slice, opt.text, q.type, bindingKind);
+    if (id) usedIds.add(id);
+  }
+
+  const correctOpt = q.options.find((o) => o.key === q.correctKey);
+  const correctPlayer =
+    category === 'player' && correctOpt
+      ? slice.players.find((p) => scoreEntityNameMatch(correctOpt.text, p.name) >= 0.78)
+      : undefined;
+
+  const pool = entityPoolForCategory(slice, category);
+  const playerPool = category === 'player' ? slice.players : null;
+  let changed = false;
+
+  const repairedOptions = q.options.map((opt) => {
+    // Never touch the correct answer's own option — only genuine distractors
+    // get substituted. If the correct answer itself doesn't resolve, that's
+    // a real rejection (handled by the caller's post-repair re-validation).
+    if (opt.key === q.correctKey) return opt;
+
+    // Anything that doesn't resolve gets replaced — whether a hallucinated
+    // out-of-dataset name or junk like a bare position label/number
+    // (INVALID_OPTION_TEXT also never resolves via resolveOptionEntityId).
+    const resolved = resolveOptionEntityId(slice, opt.text, q.type, bindingKind);
+    if (resolved) return opt;
+
+    // Prefer same-position candidates for players, otherwise any unused entity.
+    const candidates: Array<{ id: string; name: string }> =
+      playerPool && correctPlayer
+        ? [...playerPool.filter((p) => p.position === correctPlayer.position), ...pool]
+        : pool;
+
+    const replacement = candidates.find(
+      (e) => !usedIds.has(e.id) && !packContext.distractorEntityIds.has(e.id) && !packContext.correctAnswerEntityIds.has(e.id),
+    );
+
+    if (!replacement) return opt;
+
+    usedIds.add(replacement.id);
+    changed = true;
+    return { ...opt, text: replacement.name };
+  });
+
+  if (!changed) return q;
+
+  logger.info(`[QuizValidate] Repaired ${q.id}: substituted unresolvable distractor(s) with dataset entities`);
+  return { ...q, options: repairedOptions };
+}
+
 function resolveOptionEntityId(slice: QuizEntitySlice, text: string, type: QuizQuestionType, bindingKind?: string): string | null {
   const nationId = resolveNationIdInSlice(slice, text);
   if (nationId) return nationId;
@@ -146,6 +224,33 @@ export function hasWeakGuessPlayerClue(q: StoredQuizQuestion, playerName: string
   return false;
 }
 
+/**
+ * Attempts to resolve every option to a dataset entity, returning the
+ * resolved id list or null (with a rejection log) on first unrepairable
+ * failure. Shared by validateQuestionAgainstDataset's first pass and its
+ * repaired-retry pass.
+ */
+function resolveAllOptionIds(
+  q: StoredQuizQuestion,
+  slice: QuizEntitySlice,
+  bindingKind?: string,
+): string[] | null {
+  const optionIds: string[] = [];
+  for (const opt of q.options) {
+    if (INVALID_OPTION_TEXT.test(opt.text.trim())) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: invalid option text "${opt.text}"`);
+      return null;
+    }
+    const id = resolveOptionEntityId(slice, opt.text, q.type, bindingKind);
+    if (!id) {
+      logger.info(`[QuizValidate] Rejected ${q.id}: distractor "${opt.text}" not in dataset`);
+      return null;
+    }
+    optionIds.push(id);
+  }
+  return optionIds;
+}
+
 export function validateQuestionAgainstDataset(
   q: StoredQuizQuestion,
   slice: QuizEntitySlice,
@@ -159,18 +264,18 @@ export function validateQuestionAgainstDataset(
 
   const bindingKind = q.imageBinding?.kind;
 
-  const optionIds: string[] = [];
-  for (const opt of q.options) {
-    if (INVALID_OPTION_TEXT.test(opt.text.trim())) {
-      logger.info(`[QuizValidate] Rejected ${q.id}: invalid option text "${opt.text}"`);
-      return null;
-    }
-    const id = resolveOptionEntityId(slice, opt.text, q.type, bindingKind);
-    if (!id) {
-      logger.info(`[QuizValidate] Rejected ${q.id}: distractor "${opt.text}" not in dataset`);
-      return null;
-    }
-    optionIds.push(id);
+  let optionIds = resolveAllOptionIds(q, slice, bindingKind);
+  if (!optionIds) {
+    // One or more distractors don't resolve to a dataset entity (hallucinated
+    // name, or junk like a bare position label/number). Try substituting the
+    // unresolvable option(s) with unused same-category dataset entities
+    // before giving up on the whole question.
+    const repaired = repairUnresolvedDistractors(q, slice, packContext, bindingKind);
+    if (!repaired) return null;
+    const repairedIds = resolveAllOptionIds(repaired, slice, bindingKind);
+    if (!repairedIds) return null;
+    q = repaired;
+    optionIds = repairedIds;
   }
 
   const uniqueOptions = new Set(optionIds);

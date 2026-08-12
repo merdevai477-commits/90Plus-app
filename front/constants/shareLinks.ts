@@ -138,6 +138,68 @@ export function parseProfileUsernameFromUrl(url: string): string | null {
   return null;
 }
 
+/* ── Share & Win referrals ─────────────────────────────────────────────── */
+
+/** Codes are 6 chars from an unambiguous alphabet — must match the backend. */
+const REFERRAL_CODE_PATTERN = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
+
+export function normalizeReferralCode(code: string): string {
+  return String(code ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+export function isValidReferralCode(code: string): boolean {
+  return REFERRAL_CODE_PATTERN.test(normalizeReferralCode(code));
+}
+
+/** HTTPS invite link — Android App Links / iOS Universal Links open the app. */
+export function buildReferralShareUrl(code: string): string {
+  return `${SHARE_BASE_URL}/invite/${normalizeReferralCode(code)}`;
+}
+
+export function buildReferralDeepLink(code: string): string {
+  return `ninetyplus://invite/${normalizeReferralCode(code)}`;
+}
+
+/** Parse an invite code from the custom scheme or an https invite/ref URL. */
+export function parseReferralCodeFromUrl(url: string): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+
+  const custom = trimmed.match(/ninetyplus:\/\/(?:invite|ref)\/([A-Za-z0-9]+)/i);
+  if (custom?.[1]) {
+    const code = normalizeReferralCode(custom[1]);
+    return isValidReferralCode(code) ? code : null;
+  }
+
+  const https = trimmed.match(/\/(?:invite|ref)\/([A-Za-z0-9]+)/i);
+  if (https?.[1]) {
+    const code = normalizeReferralCode(https[1]);
+    return isValidReferralCode(code) ? code : null;
+  }
+
+  return null;
+}
+
+/**
+ * Invite message for `Share.share`. The link is the referral URL — the whole
+ * point of Share & Win — rather than the plain store listing.
+ */
+export function buildReferralSharePayload(
+  code: string,
+  lang: 'ar' | 'en',
+): { message: string; title: string } {
+  const link = buildReferralShareUrl(code);
+  const message =
+    lang === 'ar'
+      ? `انضم إليّ في 90Plus — أفضل تطبيق لكرة القدم! سجّل من رابطي واربح معي جوائز الأسبوع 🎁\n${link}`
+      : `Join me on 90Plus — the ultimate football app! Sign up with my link and help me win this week's prize 🎁\n${link}`;
+
+  return { message, title: '90Plus' };
+}
+
 export function buildGroupJoinShareUrl(code: string): string {
   const normalized = code.trim().toUpperCase();
   return `${SHARE_BASE_URL}/groups/join/${normalized}`;

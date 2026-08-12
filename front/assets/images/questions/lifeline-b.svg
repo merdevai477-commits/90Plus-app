@@ -1,0 +1,18 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="69" height="69" viewBox="0 0 69 69" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Group 4">
+<path id="Polygon 1" d="M33 2.02051C33.9282 1.48468 35.0718 1.48468 36 2.02051L61.8779 16.9609C62.8061 17.4968 63.3779 18.4878 63.3779 19.5596V49.4404C63.3779 50.5122 62.8061 51.5032 61.8779 52.0391L36 66.9795C35.0718 67.5153 33.9282 67.5153 33 66.9795L7.12207 52.0391C6.19387 51.5032 5.62207 50.5122 5.62207 49.4404V19.5596C5.62207 18.4878 6.19387 17.4968 7.12207 16.9609L33 2.02051Z" fill="#0A0213" stroke="url(#paint0_linear_0_8)" stroke-width="2"/>
+<g id="ci:arrows-reload-01">
+<path id="Vector" d="M32.75 37.4992L26 34.6867L27.125 43.1242M26.6559 29.6276C27.2868 28.0666 28.3429 26.7138 29.7042 25.7231C31.0655 24.7324 32.6775 24.1434 34.3568 24.023C36.0362 23.9027 37.7156 24.2558 39.2043 25.0423C40.693 25.8288 41.9312 27.0171 42.7783 28.4722M43.3453 36.3708C42.7145 37.9321 41.6584 39.2851 40.2969 40.2761C38.9355 41.267 37.3234 41.8562 35.6438 41.9765C32.75 41.9765 31.3949 41.2735 30.7958 40.9569C29.3069 40.1702 26.8649 36.2765 26.0179 34.8212" stroke="url(#paint1_linear_0_8)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_8" x1="35" y1="-4" x2="34.5" y2="69" gradientUnits="userSpaceOnUse">
+<stop stop-color="#633291"/>
+<stop offset="1" stop-color="#0B0221"/>
+</linearGradient>
+<linearGradient id="paint1_linear_0_8" x1="35.0006" y1="22.8742" x2="35.0006" y2="43.1242" gradientUnits="userSpaceOnUse">
+<stop stop-color="#A855F7"/>
+<stop offset="1" stop-color="#5A1B95"/>
+</linearGradient>
+</defs>
+</svg>

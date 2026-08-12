@@ -872,6 +872,7 @@ export const ar = {
     secondsUnit: 'ث',
     xpBonus: '+{amount} XP',
     backToRank: 'العودة للترتيب',
+    backToQuestions: 'العودة للأسئلة',
     // QuizPopup
     popupTitle: 'الكويز اليومي',
     popupSubtitle: 'سؤال جديد بانتظارك. أجب صح واكسب عملات.',
@@ -894,6 +895,85 @@ export const ar = {
     hours: 'ساعات',
     minutes: 'دقائق',
     great: 'رائع!',
+  },
+
+  /** شارك واربح — Share & Win (Figma node 109:470) */
+  shareWin: {
+    // Hero
+    titleHighlight: 'شارك',
+    titleRest: ' واربح',
+    subtitle: 'شارك التطبيق مع أصدقائك واربح جوائز رائعة!',
+    perShareLead: 'كل مشاركة = ',
+    perSharePoints: 'نقاط',
+    perShareXp: 'XP',
+
+    // بطاقة عجلة الحظ
+    wheelTitle: 'عجلة الحظ',
+    wheelSubtitle: 'لف العجلة واربح نقاط xp',
+    wheelCta: 'لف الان',
+    wheelDisabledCta: 'لفيت اليوم',
+    wheelSpinningCta: 'جاري اللف...',
+    wheelNote: 'لفة واحدة يوميًا فقط',
+
+    // الترتيب الأسبوعي
+    weeklyTitle: 'الترتيب الأسبوعي',
+    weeklyEndsIn: 'ينتهي بعد:',
+    unitDays: 'أيام',
+    unitHours: 'ساعات',
+    unitMinutes: 'دقائق',
+    unitSeconds: 'ثواني',
+    viewFullRanking: 'عرض الترتيب الكامل',
+    leaderboardEmpty: 'لا يوجد ترتيب بعد — كن أول المشاركين!',
+    leaderboardCompetitors: '{count} مشارك هذا الأسبوع',
+    leaderboardEnd: 'وصلت لنهاية الترتيب',
+    close: 'إغلاق',
+
+    // الجوائز الأسبوعية
+    prizesTitle: 'الجوائز الأسبوعية',
+    prizesSubtitleLine1: 'جائزة جديدة كل أسبوع!',
+    prizesSubtitleLine2: ' شارك الان لتكون أنت الفائز',
+
+    // بطاقة المشاركة
+    shareCardTitle: 'شارك الان واربح',
+    shareCardSubtitle: 'انسخ رابطك و شاركه مع أصدقائك',
+    channelFacebook: 'فيسبوك',
+    channelInstagram: 'إنستغرام',
+    channelWhatsapp: 'واتساب',
+    channelSnapchat: 'سناب شات',
+    referralHintLead: 'كل صديق يسجل من رابطك يمنحك ',
+    referralHintXp: 'XP',
+    linkCopied: 'تم نسخ الرابط',
+    linkCopiedDetail: 'شاركه مع أصدقائك واربح نقاط',
+    copyFailed: 'تعذّر نسخ الرابط',
+    shareFailed: 'تعذّر تسجيل المشاركة — سنحاول لاحقاً',
+
+    // شريط الإحصائيات
+    statsInvitedFriends: 'أصدقاؤك المدعوون',
+    statsFriendsValue: '{count} صديق',
+    statsCurrentPoints: 'نقاطك الحالية',
+    statsRankThisWeek: 'ترتيبك هذا الأسبوع',
+    statsShares: 'مشاركاتك',
+
+    // آخر فائز
+    lastWinnerTitle: 'آخر فائز',
+    lastWinnerViewStory: 'عرض القصة',
+    lastWinnerNone: 'لم يُتوّج فائز بعد — الأسبوع الأول لم ينتهِ',
+    timeAgoHours: 'منذ {count} ساعة',
+    timeAgoDays: 'منذ {count} يوم',
+    timeAgoNow: 'الآن',
+
+    // الحالات
+    loading: 'جاري تحميل شارك واربح…',
+    errorTitle: 'تعذّر تحميل شارك واربح',
+    errorBody: 'تحقق من اتصالك بالإنترنت وحاول مرة أخرى',
+    retry: 'إعادة المحاولة',
+
+    // نتيجة اللف
+    spinWonTitle: 'مبروك! ربحت {amount} XP',
+    spinWonDetail: 'تمت إضافة الجائزة لرصيدك',
+    spinWonOfflineDetail: 'تعذّر الوصول للخادم — هذه معاينة، أعد المحاولة لاحقًا لتأكيد الجائزة',
+    spinCooldownTitle: 'لفة اليوم مستخدمة بالفعل',
+    spinCooldownDetail: 'عد بعد {hours} ساعة و {minutes} دقيقة للفة القادمة',
   },
 
   coinsInfo: {

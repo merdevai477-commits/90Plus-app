@@ -12,6 +12,7 @@ import { ErrorCode, sendError } from '../constants/errors';
 import { notifyUser } from '../services/notify.service';
 import type { QuizLanguage } from '../types/quiz.types';
 import type { QuizAnalyticsFilters } from '../services/quiz-analytics.service';
+import { regenerateDailyQuestionsChallenges } from '../services/questions-challenges.service';
 
 const router = Router();
 
@@ -1215,6 +1216,177 @@ router.get('/quiz/analytics', requireAdmin, async (req: Request, res: Response):
     } catch (error: unknown) {
         logger.error('Quiz analytics error:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Failed to load quiz analytics');
+    }
+});
+
+/**
+ * GET /api/admin/quiz/questions/challenges
+ */
+router.get('/quiz/questions/challenges', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const language = typeof req.query.language === 'string' ? req.query.language : undefined;
+        const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+        const refreshDateRaw = typeof req.query.refreshDate === 'string' ? req.query.refreshDate : undefined;
+        const refreshDate = refreshDateRaw ? new Date(`${refreshDateRaw}T00:00:00.000Z`) : undefined;
+        const take = Math.min(Math.max(parseInt(String(req.query.limit ?? '100'), 10) || 100, 1), 200);
+
+        const rows = await prisma.dailyQuestionChallenge.findMany({
+            where: {
+                ...(language ? { language } : {}),
+                ...(status ? { status: status as any } : {}),
+                ...(refreshDate ? { refreshDate } : {}),
+            },
+            orderBy: [{ refreshDate: 'desc' }, { type: 'asc' }],
+            take,
+        });
+
+        res.json({ status: 'SUCCESS', data: { rows } });
+    } catch (error: unknown) {
+        logger.error('Admin questions challenges listing error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load questions challenges');
+    }
+});
+
+/**
+ * POST /api/admin/quiz/questions/generate
+ * Body: { language?: ar|en, refreshDate?: YYYY-MM-DD, timezone?: string }
+ */
+router.post('/quiz/questions/generate', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const languageRaw = typeof req.body?.language === 'string' ? req.body.language : undefined;
+        const language = languageRaw === 'en' || languageRaw === 'ar' ? (languageRaw as QuizLanguage) : undefined;
+        const timezone = typeof req.body?.timezone === 'string' ? req.body.timezone : 'UTC';
+        const refreshDateRaw = typeof req.body?.refreshDate === 'string' ? req.body.refreshDate : undefined;
+        const refreshDate = refreshDateRaw ? new Date(`${refreshDateRaw}T00:00:00.000Z`) : undefined;
+
+        await regenerateDailyQuestionsChallenges({ language, timezone, refreshDate });
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                language: language ?? 'ar+en',
+                refreshDate: refreshDateRaw ?? 'today',
+                timezone,
+            },
+        });
+    } catch (error: unknown) {
+        logger.error('Admin questions generation error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to generate questions challenges');
+    }
+});
+
+/**
+ * PATCH /api/admin/quiz/questions/challenges/:id
+ */
+router.patch('/quiz/questions/challenges/:id', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const {
+            title,
+            description,
+            image,
+            icon,
+            difficulty,
+            xpReward,
+            refreshTime,
+            content,
+            answer,
+            metadata,
+            streakContribution,
+            leaderboardEligibility,
+        } = req.body ?? {};
+
+        const data: Record<string, unknown> = {};
+        if (typeof title === 'string') data.title = title;
+        if (typeof description === 'string') data.description = description;
+        if (typeof image === 'string') data.image = image;
+        if (typeof icon === 'string') data.icon = icon;
+        if (typeof difficulty === 'string') data.difficulty = difficulty;
+        if (typeof xpReward === 'number' && Number.isFinite(xpReward)) data.xpReward = Math.max(0, Math.round(xpReward));
+        if (typeof refreshTime === 'string') data.refreshTime = refreshTime;
+        if (content && typeof content === 'object') data.content = content;
+        if (answer && typeof answer === 'object') data.answer = answer;
+        if (metadata && typeof metadata === 'object') data.metadata = metadata;
+        if (typeof streakContribution === 'boolean') data.streakContribution = streakContribution;
+        if (typeof leaderboardEligibility === 'boolean') data.leaderboardEligibility = leaderboardEligibility;
+
+        if (Object.keys(data).length === 0) {
+            sendError(req, res, ErrorCode.VALIDATION, 'No update fields provided');
+            return;
+        }
+
+        const updated = await prisma.dailyQuestionChallenge.update({
+            where: { id },
+            data: data as any,
+        });
+
+        res.json({ status: 'SUCCESS', data: { challenge: updated } });
+    } catch (error: any) {
+        if (error?.code === 'P2025') {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Challenge not found');
+            return;
+        }
+        logger.error('Admin questions update error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to update questions challenge');
+    }
+});
+
+/**
+ * POST /api/admin/quiz/questions/challenges/:id/publish
+ */
+router.post('/quiz/questions/challenges/:id/publish', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const published = await prisma.dailyQuestionChallenge.update({
+            where: { id },
+            data: {
+                status: 'PUBLISHED' as any,
+                publishedAt: new Date(),
+            },
+        });
+
+        res.json({ status: 'SUCCESS', data: { challenge: published } });
+    } catch (error: any) {
+        if (error?.code === 'P2025') {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Challenge not found');
+            return;
+        }
+        logger.error('Admin questions publish error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to publish questions challenge');
+    }
+});
+
+/**
+ * GET /api/admin/quiz/questions/statistics
+ */
+router.get('/quiz/questions/statistics', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const refreshDateRaw = typeof req.query.refreshDate === 'string' ? req.query.refreshDate : undefined;
+        const refreshDate = refreshDateRaw ? new Date(`${refreshDateRaw}T00:00:00.000Z`) : undefined;
+
+        const [challenges, userProgress] = await Promise.all([
+            prisma.dailyQuestionChallenge.groupBy({
+                by: ['type', 'status'],
+                where: refreshDate ? { refreshDate } : {},
+                _count: { _all: true },
+            }),
+            prisma.userQuestionChallenge.groupBy({
+                by: ['completed'],
+                _count: { _all: true },
+                _avg: { completionPercentage: true, xpEarned: true, attempts: true },
+            }),
+        ]);
+
+        res.json({
+            status: 'SUCCESS',
+            data: {
+                challenges,
+                userProgress,
+            },
+        });
+    } catch (error: unknown) {
+        logger.error('Admin questions statistics error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load questions challenge statistics');
     }
 });
 

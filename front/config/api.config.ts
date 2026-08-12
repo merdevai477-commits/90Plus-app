@@ -204,6 +204,44 @@ function getNgrokUrl(): string | null {
 }
 
 /**
+ * The host this app's JS bundle was served from — i.e. the Metro dev server,
+ * e.g. `"192.168.1.11"`. Returns null on a production build or when Expo does
+ * not expose it.
+ *
+ * This is the ONE host a running dev client is guaranteed to be able to reach:
+ * if it could not, there would be no bundle and no app.
+ */
+function getDevServerHost(): string | null {
+  const candidates: unknown[] = [
+    Constants.expoConfig?.hostUri,
+    (Constants as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig?.debuggerHost,
+    (Constants as { manifest2?: { extra?: { expoGo?: { debuggerHost?: string } } } }).manifest2
+      ?.extra?.expoGo?.debuggerHost,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string' || candidate.length === 0) continue;
+    // "exp://192.168.1.11:8081" / "192.168.1.11:8081" → "192.168.1.11"
+    const host = candidate.replace(/^\w+:\/\//, '').split('/')[0].split(':')[0];
+    if (host && host !== 'localhost' && host !== '127.0.0.1') return host;
+  }
+
+  return null;
+}
+
+/** Loopback or RFC-1918 LAN address — the kind of host that goes stale. */
+function isLocalHostname(host: string): boolean {
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '10.0.2.2' || // Android emulator alias for the host machine
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  );
+}
+
+/**
  * Get the base API URL
  * Requirement 5.1: Retrieve URL from central configuration
  */
@@ -211,22 +249,55 @@ export function getApiUrl(): string {
   const config = getAPIConfig();
 
   // For mobile in development without ngrok, use local IP
+  let baseUrl = config.baseUrl;
   if (
     __DEV__ &&
     Platform.OS !== 'web' &&
     !getNgrokUrl() &&
-    config.baseUrl.includes('localhost')
+    baseUrl.includes('localhost')
   ) {
     // Use apiUrl from app.json if available, otherwise fallback
     const extraApiUrl = Constants.expoConfig?.extra?.apiUrl;
     if (extraApiUrl) {
-      return extraApiUrl;
+      baseUrl = extraApiUrl;
+    } else {
+      const LOCAL_IP = Constants.expoConfig?.extra?.localIp || 'localhost';
+      baseUrl = `http://${LOCAL_IP}:3000/api`;
     }
-    const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.1.6';
-    return `http://${LOCAL_IP}:3000/api`;
   }
 
-  return config.baseUrl;
+  /**
+   * DEV SELF-HEAL — repoint a loopback/LAN API host at the machine that is
+   * actually serving the bundle.
+   *
+   * A hand-written `EXPO_PUBLIC_API_URL=http://192.168.1.x:3000/api` silently
+   * breaks every request the moment DHCP hands the dev machine a different
+   * address, and the symptom is indistinguishable from a dead backend: every
+   * screen that fetches shows its generic "check your connection" state while
+   * requests hang until the TCP connect times out. Deriving the host from
+   * `Constants.expoConfig.hostUri` removes that whole failure mode, because
+   * the dev server and the API run on the same machine.
+   *
+   * Scope is deliberately narrow — production builds have `__DEV__ === false`,
+   * and any https/public host is left exactly as configured. Only the hostname
+   * is swapped; the port and path from the configured URL are preserved.
+   */
+  if (__DEV__ && Platform.OS !== 'web' && baseUrl.startsWith('http://')) {
+    const devHost = getDevServerHost();
+    if (devHost) {
+      const withoutScheme = baseUrl.slice('http://'.length);
+      const slashIndex = withoutScheme.indexOf('/');
+      const authority = slashIndex === -1 ? withoutScheme : withoutScheme.slice(0, slashIndex);
+      const path = slashIndex === -1 ? '' : withoutScheme.slice(slashIndex);
+      const [host, port] = authority.split(':');
+
+      if (host && isLocalHostname(host) && host !== devHost) {
+        baseUrl = `http://${devHost}${port ? `:${port}` : ''}${path}`;
+      }
+    }
+  }
+
+  return baseUrl;
 }
 
 /**

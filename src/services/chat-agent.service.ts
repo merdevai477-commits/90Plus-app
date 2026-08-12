@@ -111,6 +111,11 @@ export interface RunFootballAgentResult {
   toolsUsed: string[];
 }
 
+/**
+ * The agent's OpenRouter client. Exported (as createAgentOpenAIClient) so other
+ * agent surfaces — the Questions round builder — reuse these exact credentials,
+ * base URL and headers instead of resolving their own. Behaviour unchanged.
+ */
 function buildClient(): OpenAI | null {
   const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.AI_API_KEY ?? '';
   if (!apiKey) return null;
@@ -381,3 +386,4 @@ export async function runFootballAgent(
 }
 
 export { isChatAgentConfigured, resolveAgentModel };
+export { buildClient as createAgentOpenAIClient };

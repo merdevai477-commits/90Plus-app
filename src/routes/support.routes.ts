@@ -8,6 +8,7 @@ import {
     buildProfileLandingPage,
     buildReelLandingPage,
     buildGroupJoinLandingPage,
+    buildReferralLandingPage,
 } from '../utils/share-landing-pages';
 import { resolvePublicFile } from '../utils/public-path.util';
 
@@ -77,6 +78,24 @@ router.get('/groups/join/:code', (req: Request, res: Response): void => {
 
     res.type('html').send(buildGroupJoinLandingPage(raw));
 });
+
+/**
+ * GET /invite/:code  (alias: /ref/:code)
+ * Share & Win referral link — app installed → open with the code; otherwise →
+ * store, and the code is picked up on first launch.
+ */
+function handleReferralLanding(req: Request, res: Response): void {
+    const raw = ensureString(req.params.code).trim().toUpperCase();
+    if (!/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(raw)) {
+        res.status(404).type('html').send('<!DOCTYPE html><html><body><p>Invite not found</p></body></html>');
+        return;
+    }
+
+    res.type('html').send(buildReferralLandingPage(raw));
+}
+
+router.get('/invite/:code', handleReferralLanding);
+router.get('/ref/:code', handleReferralLanding);
 
 function ensureString(param: string | string[] | undefined): string {
     if (Array.isArray(param)) return param[0];

@@ -36,6 +36,7 @@
     "test:chat-hakimi": "ts-node scripts/test-chat-hakimi.ts",
     "test:player-info-cache": "ts-node scripts/test-player-info-cache.ts",
     "verify:quiz-system": "ts-node scripts/verify-quiz-system.ts",
+    "verify:question-modes": "ts-node --transpile-only scripts/verify-question-modes.ts",
     "verify:quiz-system:full": "ts-node scripts/verify-quiz-system.ts --with-metrics-write",
     "seed:quiz-rosters": "ts-node scripts/seed-quiz-team-players.ts",
     "regenerate:quiz-packs": "ts-node scripts/regenerate-quiz-packs.ts",

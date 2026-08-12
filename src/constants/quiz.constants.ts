@@ -18,3 +18,9 @@ export const QUIZ_DATASET_MIN_STADIUMS = 4;
 export const QUIZ_SLICE_PLAYER_COUNT = 28;
 export const QUIZ_SLICE_CLUB_COUNT = 14;
 export const QUIZ_SLICE_STADIUM_COUNT = 10;
+/** Questions per Questions-mode round — shared across generator, contract, session. */
+export const ROUND_QUESTION_COUNT = 10;
+/** Alias used in session/game-flow docs and APIs. */
+export const QUIZ_QUESTION_COUNT = ROUND_QUESTION_COUNT;
+/** Server-authoritative per-question timer (seconds). */
+export const QUIZ_QUESTION_TIME_LIMIT_SEC = 30;

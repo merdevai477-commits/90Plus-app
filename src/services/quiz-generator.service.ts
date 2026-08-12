@@ -8,6 +8,7 @@ import OpenAI from 'openai';
 import { fromZonedTime } from 'date-fns-tz';
 import { logger } from '../utils/logger';
 import { sanitizeTimezone, todayInTimezone } from '../utils/chat-timezone';
+import { stripMarkdownFences, tryParseJson } from '../utils/ai-json';
 import type {
   QuizDifficulty,
   QuizLanguage,
@@ -183,75 +184,6 @@ function normalizeType(raw: string): QuizQuestionType {
 
 function hashQuestion(q: string): string {
   return q.toLowerCase().replace(/[^a-z0-9\u0600-\u06FF]/g, '');
-}
-
-function stripMarkdownFences(text: string): string {
-  // Strip a leading ```json / ``` fence and a trailing ``` fence even when the
-  // model wraps the block in prose or emits multiple fenced sections.
-  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const body = fenceMatch ? fenceMatch[1] : text;
-  return body
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```\s*$/i, '')
-    .trim();
-}
-
-function repairJsonText(jsonText: string): string {
-  return jsonText
-    .replace(/[\u201C\u201D]/g, '"')
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/,\s*([}\]])/g, '$1');
-}
-
-/**
- * Extract the first balanced JSON object/array from a string that may contain
- * surrounding prose ("Here is your quiz: { ... }"). Respects string literals
- * and escapes so braces inside text don't break the scan.
- */
-function extractBalancedJson(text: string): string | null {
-  const startObj = text.indexOf('{');
-  const startArr = text.indexOf('[');
-  const candidates = [startObj, startArr].filter((n) => n >= 0);
-  if (!candidates.length) return null;
-  const start = Math.min(...candidates);
-  const open = text[start];
-  const close = open === '{' ? '}' : ']';
-
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < text.length; i += 1) {
-    const ch = text[i];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (ch === '\\') escaped = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') inString = true;
-    else if (ch === open) depth += 1;
-    else if (ch === close) {
-      depth -= 1;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-  return null;
-}
-
-function tryParseJson(text: string): unknown | null {
-  try {
-    return JSON.parse(repairJsonText(text));
-  } catch {
-    const balanced = extractBalancedJson(text);
-    if (balanced && balanced !== text) {
-      try {
-        return JSON.parse(repairJsonText(balanced));
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
 }
 
 /** Parse AI JSON; propagate INSUFFICIENT_DATA without salvaging partial packs. */

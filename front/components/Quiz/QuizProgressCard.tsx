@@ -1,34 +1,32 @@
 /**
- * QuizProgressCard — Question counter, progress bar, isolated countdown timer.
+ * QuizProgressCard — the Football Quiz screen's "Question X of Y" card
+ * (Figma node 238:374).
+ *
+ * The card itself is the shared one from ./gameChrome.tsx, so it is pixel-
+ * identical to every other game mode. This wrapper adds the two things that are
+ * specific to this screen: absolute positioning under the header, and the
+ * silent question countdown.
+ *
+ * JUDGMENT CALL: Figma shows no visible countdown digit anywhere on this screen.
+ * The underlying countdown/timeout functionality (`handleTimeout` via
+ * `onTimeUp`) is still required by QuizHubScreen's business logic, so the timer
+ * keeps running internally here — it is just not rendered.
  */
 
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
-import {
-  ACCENT_SOFT,
-  NEON_PURPLE,
-  QUIZ_COUNT_PURPLE,
-  QUIZ_CARD_BG,
-  QUIZ_CARD_BORDER,
-  QUIZ_RADIUS_LG,
-  QUIZ_TRACK_BG,
-} from './quiz.constants';
+import { useDesignScale } from '../../utils/responsive';
+import { GAME_LAYOUT, GameProgressCard } from './gameChrome';
 
 interface QuizProgressCardProps {
   current: number;
   total: number;
-  progress: number;
-  questionLabel: string;
+  /** Unused visually (Figma has no progress bar) — retained for prop-compat. */
+  progress?: number;
+  /** Unused: the shared card builds its own bilingual label. */
+  questionLabel?: string;
   /** Changes when the active question changes — resets the timer. */
   timerKey: string;
   /** Bumped when a timeout submit fails so the countdown can fire again. */
@@ -36,35 +34,38 @@ interface QuizProgressCardProps {
   timerActive: boolean;
   timeLimitSec: number;
   onTimeUp: () => void;
+  /** Safe-area top inset; the card is placed relative to it when pinned. */
+  topInset: number;
+  /**
+   * `true` (default) keeps the historical absolute placement under the header.
+   * `false` renders the card IN FLOW directly beneath an in-flow QuizHeader,
+   * inside the screen's ScrollView, so it scrolls with the content like every
+   * other mode's counter. The shared card already carries the 52pt Figma gap
+   * (`headerToProgress`) in its own `marginTop`, so the rhythm is identical.
+   */
+  pinned?: boolean;
 }
 
 function QuizProgressCardInner({
   current,
   total,
-  progress,
-  questionLabel,
   timerKey,
   timerRetryEpoch = 0,
   timerActive,
   timeLimitSec,
   onTimeUp,
+  topInset,
+  pinned = true,
 }: QuizProgressCardProps) {
-  const { t } = useTranslation();
-  const barWidth = useSharedValue(0);
-  const [seconds, setSeconds] = React.useState(timeLimitSec);
+  const { language } = useTranslation();
+  const { s } = useDesignScale();
+  const secondsRef = useRef(timeLimitSec);
   const onTimeUpRef = useRef(onTimeUp);
   const firedRef = useRef(false);
   onTimeUpRef.current = onTimeUp;
 
   useEffect(() => {
-    barWidth.value = withTiming(progress, {
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [progress, barWidth]);
-
-  useEffect(() => {
-    setSeconds(timeLimitSec);
+    secondsRef.current = timeLimitSec;
     firedRef.current = false;
   }, [timerKey, timeLimitSec]);
 
@@ -75,56 +76,31 @@ function QuizProgressCardInner({
   useEffect(() => {
     if (!timerActive) return;
     const interval = setInterval(() => {
-      setSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
+      secondsRef.current = secondsRef.current <= 1 ? 0 : secondsRef.current - 1;
+      if (secondsRef.current === 0 && !firedRef.current) {
+        firedRef.current = true;
+        onTimeUpRef.current();
+      }
     }, 1000);
     return () => clearInterval(interval);
   }, [timerKey, timerActive]);
 
-  useEffect(() => {
-    if (!timerActive || seconds !== 0 || firedRef.current) return;
-    firedRef.current = true;
-    onTimeUpRef.current();
-  }, [seconds, timerActive]);
-
-  const barStyle = useAnimatedStyle(() => ({
-    width: `${barWidth.value * 100}%` as `${number}%`,
-  }));
+  /**
+   * Header top + header height. The shared card contributes the 52pt gap to the
+   * header itself (`headerToProgress`), so it is not added again here.
+   */
+  const placement = useMemo(
+    () => ({
+      top: topInset + s(GAME_LAYOUT.contentTop) + s(GAME_LAYOUT.headerHeight),
+      left: s(GAME_LAYOUT.gutter),
+      right: s(GAME_LAYOUT.gutter),
+    }),
+    [topInset, s],
+  );
 
   return (
-    <View style={styles.wrap}>
-      <View style={styles.card}>
-        <View style={styles.leftCol}>
-          <Text style={styles.questionLabel}>{questionLabel}</Text>
-          <View style={styles.countRow}>
-            <Text style={styles.countCurrent}>{current}</Text>
-            <Text style={styles.countRest}>
-              {' '}
-              {t.quiz.of} {total}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.midCol}>
-          <View style={styles.barTrack}>
-            <Animated.View style={[styles.barFillWrap, barStyle]}>
-              <LinearGradient
-                colors={[NEON_PURPLE, ACCENT_SOFT, '#7C3AED']}
-                style={styles.barFill}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-              />
-            </Animated.View>
-          </View>
-        </View>
-
-        <View style={styles.rightCol}>
-          <MaterialCommunityIcons name="timer-outline" size={26} color={ACCENT_SOFT} />
-          <Text style={styles.timerTxt}>
-            {seconds}
-            {t.quiz.secondsUnit}
-          </Text>
-        </View>
-      </View>
+    <View style={pinned ? [styles.wrap, placement] : undefined}>
+      <GameProgressCard current={current} total={total} language={language} />
     </View>
   );
 }
@@ -133,77 +109,7 @@ export const QuizProgressCard = React.memo(QuizProgressCardInner);
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 10,
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: QUIZ_CARD_BG,
-    borderRadius: QUIZ_RADIUS_LG,
-    borderWidth: 1,
-    borderColor: QUIZ_CARD_BORDER,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  leftCol: {
-    minWidth: 76,
-    marginEnd: 12,
-  },
-  questionLabel: {
-    color: 'rgba(255,255,255,0.42)',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  countRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 2,
-  },
-  countCurrent: {
-    color: QUIZ_COUNT_PURPLE,
-    fontSize: 24,
-    fontWeight: '800',
-    lineHeight: 28,
-  },
-  countRest: {
-    color: 'rgba(255,255,255,0.48)',
-    fontSize: 17,
-    fontWeight: '600',
-    lineHeight: 24,
-  },
-  midCol: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingVertical: 4,
-  },
-  barTrack: {
-    height: 10,
-    backgroundColor: QUIZ_TRACK_BG,
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
-  barFillWrap: {
-    height: '100%',
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
-  barFill: {
-    flex: 1,
-    borderRadius: 999,
-  },
-  rightCol: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginStart: 14,
-    paddingStart: 14,
-    borderStartWidth: 1,
-    borderStartColor: 'rgba(255,255,255,0.1)',
-  },
-  timerTxt: {
-    color: ACCENT_SOFT,
-    fontSize: 20,
-    fontWeight: '800',
-    fontVariant: ['tabular-nums'],
+    position: 'absolute',
+    zIndex: 21,
   },
 });

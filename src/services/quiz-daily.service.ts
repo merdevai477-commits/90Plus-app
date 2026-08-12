@@ -409,8 +409,10 @@ async function generatePackWithFallback(
 
     const fallback = await loadMostRecentValidPack(language, packDate);
     if (!fallback) {
-      logger.error(`[QuizDaily] No fallback pack available for ${language}`);
-      throw err;
+      logger.error(
+        `[QuizDaily] No recycled fallback pack available for ${dateStr}/${language}; AI generation unavailable`,
+      );
+      throw new Error('QUIZ_DAILY_GENERATION_UNAVAILABLE');
     }
 
     const remapped = remapPackQuestionsForDate(fallback.questions, dateStr, language);

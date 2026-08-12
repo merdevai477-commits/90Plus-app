@@ -53,6 +53,8 @@ export const XP_VALUES: Record<XpActionType, number> = {
   QUIZ_COMPLETED_HIGH: 20,
   DAILY_LOGIN: 5, // base; actual value comes from LOGIN_STREAK_TABLE
   APP_SHARE: 10,
+  REFERRAL_CONVERSION: 50, // Share & Win — a referred friend completed registration
+
   ADMIN_ADJUSTMENT: 0,
   STREAK_FREEZE_USED: 0,
 };

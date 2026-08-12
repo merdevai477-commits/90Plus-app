@@ -73,14 +73,21 @@ const CompCard: React.FC<CompCardProps> = ({
         <Text style={s.compSub} numberOfLines={2}>
           {sub}
         </Text>
-        {rewardHint ? (
-          <Text style={s.rewardHint} numberOfLines={2}>
-            {rewardHint}
-          </Text>
-        ) : null}
+        {/* Reserved unconditionally — only the "Share & Earn" card actually
+            has a reward hint, but every card must claim the same vertical
+            space for it or that one card alone grows taller than the rest. */}
+        <View style={s.rewardHintSlot}>
+          {rewardHint ? (
+            <Text style={s.rewardHint} numberOfLines={2}>
+              {rewardHint}
+            </Text>
+          ) : null}
+        </View>
         <View style={s.livePill}>
           <Play size={12} color={ACCENT} fill={ACCENT} />
-          <Text style={s.liveTxt}>{cta}</Text>
+          <Text style={s.liveTxt} numberOfLines={1}>
+            {cta}
+          </Text>
         </View>
       </CardWrapper>
     </Pressable>
@@ -99,6 +106,10 @@ const s = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.12)',
     alignItems: 'center',
     overflow: 'hidden',
+    // Every card now claims identical vertical space for every element
+    // (icon, 2-line title, 2-line subtitle, reward-hint slot, button), so
+    // this height falls out of that content rather than needing to be a
+    // guessed fixed number — all cards in the carousel end up equal.
     minHeight: 245,
   },
   compIconArea: {
@@ -136,17 +147,23 @@ const s = StyleSheet.create({
     marginBottom: 8,
     minHeight: 32,
   },
+  /** Fixed-height slot so cards without a hint match cards that have one. */
+  rewardHintSlot: {
+    minHeight: 26,
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
   rewardHint: {
     color: '#C084FC',
     fontSize: 10,
     fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 10,
     paddingHorizontal: 4,
   },
   livePill: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(0, 0, 0, 1)',
     paddingHorizontal: 14,
     paddingVertical: 7,
@@ -154,6 +171,10 @@ const s = StyleSheet.create({
     gap: 6,
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 1)',
+    // Same pill width across every card regardless of label length ("Test
+    // Now" vs "Share Now" vs longer Arabic strings) — content can still grow
+    // past it, but short labels no longer look like different-sized buttons.
+    minWidth: 116,
   },
   liveTxt: { color: ACCENT, fontWeight: '800', fontSize: 12 },
 });

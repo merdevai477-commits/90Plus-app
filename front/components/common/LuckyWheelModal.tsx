@@ -66,7 +66,7 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
   const SPIN_DURATION_MS = 4000;
   
   const { getToken } = useAuth();
-  const { coins: currentCoins, addCoins } = useCoins();
+  const { coins: currentCoins, applyCoinsBalance, refreshCoins } = useCoins();
 
   // جلب حالة العجلة
   const fetchStatus = useCallback(async () => {
@@ -171,12 +171,6 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
       setIsSpinning(false);
       void fetchStatus();
 
-      try {
-        await addCoins(prize.coins);
-      } catch (e) {
-        console.error('Add coins error:', e);
-      }
-
       setTimeout(() => {
         setShowResult(true);
         Animated.spring(resultScaleAnim, {
@@ -239,6 +233,11 @@ export default function LuckyWheelModal({ visible, onClose, onCoinsWon }: LuckyW
           typeof prizeIndex === 'number' && prizeIndex >= 0 && prizeIndex < PRIZES.length
             ? prizeIndex
             : 0;
+        const newBalance = typeof data.data?.newBalance === 'number'
+          ? data.data.newBalance
+          : currentCoins + (PRIZES[idx]?.coins ?? 0);
+        applyCoinsBalance(newBalance);
+        void refreshCoins();
         runSpinAnimation(spinValueRef.current, idx, PRIZES[idx]);
         return;
       }

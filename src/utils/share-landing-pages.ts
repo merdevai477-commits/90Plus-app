@@ -214,6 +214,21 @@ export function buildProfileLandingPage(username: string): string {
   });
 }
 
+/** Share & Win referral invite — carries the code into the app on first open. */
+export function buildReferralLandingPage(code: string): string {
+  const normalized = code.trim().toUpperCase();
+  return buildSmartLandingPage({
+    title: '90Plus — دعوة صديق',
+    ogTitle: '90Plus — شارك واربح',
+    ogDescription: 'سجّل في 90Plus من هذا الرابط وساعد صديقك على الفوز بالجائزة الأسبوعية',
+    ogUrl: shareUrl(`/invite/${normalized}`),
+    loadingText: 'جاري فتح الدعوة في التطبيق…',
+    downloadText: 'حمّل 90Plus وانضم عبر دعوة صديقك',
+    deepPath: `invite/${normalized}`,
+    customSchemeUrl: `ninetyplus://invite/${normalized}`,
+  });
+}
+
 export function buildGroupJoinLandingPage(code: string): string {
   const normalized = code.trim().toUpperCase();
   return buildSmartLandingPage({

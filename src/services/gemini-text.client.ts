@@ -145,6 +145,34 @@ export async function generateGeminiText(
       if (!content.trim()) {
         throw new Error(`Gemini ${model} returned empty content`);
       }
+
+      /*
+       * A truncated answer is NOT a usable answer. Gemini 3 models spend part of
+       * the same maxOutputTokens budget on reasoning (`thoughtsTokenCount`), so
+       * a round that asks for a long JSON array can stop mid-structure and still
+       * arrive as HTTP 200 with plenty of non-empty text — valid JSON prefix,
+       * no closing brackets. Returning it made callers report the useless
+       * "returned no usable JSON" with a preview that looks perfectly fine.
+       * Detect it here, where the reason is actually known, and treat it like
+       * any other retryable failure so the fallback model gets a turn.
+       */
+      const finishReason = (payload as { candidates?: Array<{ finishReason?: string }> })
+        ?.candidates?.[0]?.finishReason;
+      if (finishReason === 'MAX_TOKENS') {
+        const usage = (payload as { usageMetadata?: Record<string, number> })?.usageMetadata;
+        const err = new Error(
+          `Gemini ${model} hit MAX_TOKENS — output truncated ` +
+            `(maxOutputTokens=${params.maxOutputTokens ?? 12_000}, ` +
+            `thoughts=${usage?.thoughtsTokenCount ?? '?'}, ` +
+            `candidates=${usage?.candidatesTokenCount ?? '?'})`,
+        );
+        if (hasFallback) {
+          lastErr = err;
+          continue;
+        }
+        throw err;
+      }
+
       return { content, model };
     } catch (err: unknown) {
       // AbortError (timeout) and network failures also fall through to the

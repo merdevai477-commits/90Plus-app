@@ -21,7 +21,7 @@
 import cron from 'node-cron';
 import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { footballService } from './../services/football.service';
+import { footballService, isFootballQuotaExhausted } from './../services/football.service';
 import {
   fetchPlayerApiContext,
   hashApiContext,
@@ -29,7 +29,10 @@ import {
   type PlayerInfoQueryType,
 } from '../services/player-info-cache.service';
 import { pLimit } from './concurrency.util';
-import { syncTeamRoster } from '../services/quiz-team-roster-sync.service';
+import {
+  syncTeamRoster,
+  syncQuizRostersFromCachedTeams,
+} from '../services/quiz-team-roster-sync.service';
 
 const CONCURRENCY = 3;
 const WEEKLY_TTL_MS = 7 * 24 * 60 * 60_000;
@@ -266,6 +269,9 @@ async function runMonthlyRefresh(): Promise<void> {
 async function resolvePlayerTeam(
   apiPlayerId: number,
 ): Promise<{ apiTeamId: number; teamName: string } | null> {
+  // One request per cached player — worth nothing once the breaker is open, and
+  // it would only cache empty statistics under the real key.
+  if (isFootballQuotaExhausted()) return null;
   try {
     const rows = await footballService.getPlayerStatistics(apiPlayerId, currentSeason());
     const stats = rows?.[0]?.statistics ?? [];
@@ -279,12 +285,36 @@ async function resolvePlayerTeam(
 
 /** Discover the distinct teams referenced by cached players, then sync each. */
 async function syncTeamRosters(): Promise<void> {
+  /*
+   * Baseline: sync squads for the cached clubs we already know about.
+   *
+   * The PlayerInfo-driven discovery below cannot bootstrap the pool on its own.
+   * PlayerInfo is the chat answer cache — it only gains rows when a user asks
+   * about a player — so on a fresh database it is empty, which yielded zero
+   * teams, zero rosters and therefore zero players for the quiz dataset to ever
+   * be built from. CachedTeam is populated by the ordinary football data cache,
+   * so it breaks that circular dependency. Every club inside its 30-day TTL is
+   * skipped without an API call.
+   */
+  try {
+    const summary = await syncQuizRostersFromCachedTeams();
+    logger.info(
+      `[Worker][monthly] cached-club rosters — ${summary.synced} synced, ${summary.fresh} fresh, ${summary.empty} empty of ${summary.total}` +
+        (summary.quotaBlocked ? ' (stopped: upstream unavailable)' : ''),
+    );
+    if (summary.quotaBlocked) return;
+  } catch (err) {
+    logger.warn('[Worker][monthly] ⚠️ cached-club roster sync failed —', shortErr(err));
+  }
+
   try {
     const players = await prisma.playerInfo.findMany({
       where: { apiPlayerId: { not: null } },
       select: { apiPlayerId: true },
       distinct: ['apiPlayerId'],
     });
+
+    if (players.length === 0) return;
 
     const teamMap = new Map<number, string>();
     const limit = pLimit(CONCURRENCY);
@@ -306,8 +336,8 @@ async function syncTeamRosters(): Promise<void> {
     await Promise.all(
       Array.from(teamMap.entries()).map(([apiTeamId, teamName]) =>
         teamLimit(async () => {
-          const id = await syncTeamRoster(apiTeamId, teamName);
-          if (id) synced += 1;
+          const result = await syncTeamRoster(apiTeamId, teamName);
+          if (result.status === 'synced') synced += 1;
         }),
       ),
     );
