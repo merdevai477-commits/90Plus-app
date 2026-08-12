@@ -21,24 +21,53 @@
           var ua = navigator.userAgent || "";
           var isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
-          document.querySelectorAll('a[data-store="apple"]').forEach(function (a) {
+          function appleLinks() {
+            return document.querySelectorAll(
+              'a[data-store="apple"], .hero-copy a.store-badge.primary, a.store-badge.primary[href*="apps.apple.com"], a.glass-btn.primary[href*="apps.apple.com"]'
+            );
+          }
+
+          function openAppleStore() {
+            if (isIOS) {
+              var started = Date.now();
+              window.location.href = APPLE_NATIVE;
+              setTimeout(function () {
+                if (document.visibilityState === "visible" && Date.now() - started < 1800) {
+                  window.location.href = APPLE_WEB;
+                }
+              }, 700);
+            } else {
+              window.location.assign(APPLE_WEB);
+            }
+          }
+
+          appleLinks().forEach(function (a) {
             a.setAttribute("href", APPLE_WEB);
-            a.addEventListener("click", function (e) {
-              // Force navigation onto the <a> itself (avoids iOS nested-tap bugs)
-              e.preventDefault();
-              if (isIOS) {
-                var started = Date.now();
-                // Native App Store scheme first; HTTPS only if still on this page
-                window.location.href = APPLE_NATIVE;
-                setTimeout(function () {
-                  if (document.visibilityState === "visible" && Date.now() - started < 1800) {
-                    window.location.href = APPLE_WEB;
-                  }
-                }, 700);
-              } else {
-                window.location.assign(APPLE_WEB);
+            a.setAttribute("data-store", "apple");
+
+            // Avoid double-binding if script runs twice
+            if (a.getAttribute("data-apple-bound") === "1") return;
+            a.setAttribute("data-apple-bound", "1");
+
+            var lastOpen = 0;
+            function onActivate(e) {
+              if (e) {
+                e.preventDefault();
+                e.stopPropagation();
               }
-            }, { passive: false });
+              var now = Date.now();
+              if (now - lastOpen < 900) return;
+              lastOpen = now;
+              openAppleStore();
+            }
+
+            if (isIOS) {
+              a.addEventListener("touchend", onActivate, { passive: false });
+              // Still catch trackpad/mouse on iPadOS
+              a.addEventListener("click", onActivate, { passive: false });
+            } else {
+              a.addEventListener("click", onActivate, { passive: false });
+            }
           });
         })();
 

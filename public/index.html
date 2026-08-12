@@ -201,7 +201,19 @@
         }
       }
 
-      .hero-copy { width: 100%; min-width: 0; }
+      .hero-copy {
+        width: 100%;
+        min-width: 0;
+        position: relative;
+        z-index: 20;
+        isolation: isolate;
+        transform: none !important;
+      }
+
+      .hero-copy .store-row {
+        position: relative;
+        z-index: 30;
+      }
 
       .eyebrow {
         display: inline-flex;
@@ -818,7 +830,7 @@
 
     <main class="page">
       <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy reveal">
+        <div class="hero-copy">
           <div class="eyebrow">
             <span class="dot" aria-hidden="true"></span>
             متاح على App Store و Google Play
