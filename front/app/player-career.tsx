@@ -149,6 +149,12 @@ export default function PlayerCareerScreen() {
         (athleteId ? buildScores365AthletePhotoUrl(athleteId, 80) : undefined);
     const avatarUri = with365ImageSize(photoUri, 80) ?? photoUri;
 
+    useEffect(() => {
+        if (avatarUri) {
+            ExpoImage.prefetch(avatarUri).catch(() => undefined);
+        }
+    }, [avatarUri]);
+
     const animateSeasonLayout = () => {
         if (Platform.OS === 'ios') {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
+import { with365ImageSize } from '../../utils/scores365AthletePhoto';
 
 interface CachedAthletePhotoProps {
   uri?: string | null;
@@ -21,7 +22,10 @@ export default function CachedAthletePhoto({
   React.useEffect(() => {
     setFailed(false);
   }, [uri]);
-  const showImage = !!uri && !failed;
+  const displayUri = uri
+    ? with365ImageSize(uri, size <= 48 ? 64 : size <= 96 ? 80 : 128) ?? uri
+    : undefined;
+  const showImage = !!displayUri && !failed;
 
   const inner = (
     <View
@@ -33,13 +37,12 @@ export default function CachedAthletePhoto({
     >
       {showImage ? (
         <Image
-          source={{ uri }}
+          source={{ uri: displayUri }}
           style={{ width: size, height: size, borderRadius: size / 2 }}
           contentFit="cover"
           cachePolicy="memory-disk"
-          recyclingKey={String(recyclingKey ?? uri)}
-          placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-          transition={120}
+          recyclingKey={String(recyclingKey ?? displayUri)}
+          transition={0}
           onError={() => setFailed(true)}
         />
       ) : (

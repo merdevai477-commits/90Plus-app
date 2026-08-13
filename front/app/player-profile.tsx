@@ -35,7 +35,7 @@ import {
   teamLogoUrl,
   type PlayerStatRow,
 } from '../utils/playerStatsAggregate';
-import { toFullscreenPhotoUrl } from '../utils/scores365AthletePhoto';
+import { toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
 
 // Cache key prefix for player data
 const PLAYER_CACHE_PREFIX = 'player_cache_';
@@ -320,6 +320,7 @@ function PlayerHeroPhoto({
     }, [playerId, photo]);
 
     const uri = candidates[uriIndex] ?? '';
+    const displayUri = with365ImageSize(uri, 80) ?? uri;
     const [viewerOpen, setViewerOpen] = useState(false);
     const viewerUrl = toFullscreenPhotoUrl(uri) ?? uri;
 
@@ -338,12 +339,13 @@ function PlayerHeroPhoto({
                 accessibilityRole="imagebutton"
             >
                 <ExpoImage
-                    source={{ uri }}
+                    source={{ uri: displayUri }}
                     style={heroPhotoStyles.image}
                     contentFit="cover"
                     cachePolicy="memory-disk"
                     recyclingKey={`player-${playerId}-${uriIndex}`}
-                    transition={200}
+                    priority="high"
+                    transition={0}
                     onError={() => {
                         if (uriIndex + 1 < candidates.length) {
                             setUriIndex((i) => i + 1);

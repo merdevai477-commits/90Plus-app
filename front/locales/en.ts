@@ -3172,6 +3172,10 @@ export const en = {
     matchLineupBody: '{home} vs {away} — lineups are out',
     matchFavoriteTitle: '🔔 Match followed',
     matchFavoriteBody: '{home} vs {away} — you will get goals and key events',
+    followedClubTitle: '🔔 Club notifications enabled',
+    followedClubBody: 'Notifications for "{name}" are on. You will always receive this team\'s alerts.',
+    followedNationalTeamTitle: '🔔 National team notifications enabled',
+    followedNationalTeamBody: 'Notifications for "{name}" are on. You will always receive this team\'s alerts.',
   },
 };
 

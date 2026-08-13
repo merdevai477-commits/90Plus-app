@@ -173,6 +173,8 @@ export default function TeamProfileScreen() {
             name: info?.name ?? nameParam ?? null,
             logo: info?.logo ?? params.logo ?? null,
             country,
+            isNationalTeam,
+            language,
         });
     };
 
@@ -208,6 +210,19 @@ export default function TeamProfileScreen() {
                 photo: photo ?? '',
                 teamName: info?.name ?? nameParam ?? '',
                 teamId: String(competitorId),
+            },
+        } as any);
+    };
+
+    const handleOpenTeam = (teamId: number, name: string, logo: string | null) => {
+        if (!teamId || teamId === competitorId) return;
+        trigger('light');
+        router.push({
+            pathname: '/team-profile' as any,
+            params: {
+                id: String(teamId),
+                name,
+                logo: logo ?? '',
             },
         } as any);
     };
@@ -363,6 +378,7 @@ export default function TeamProfileScreen() {
                         competitions={standingsComps}
                         language={language}
                         t={t}
+                        onOpenTeam={handleOpenTeam}
                     />
                 ) : null}
                 </ScrollView>
@@ -380,7 +396,7 @@ export default function TeamProfileScreen() {
                                 <Text style={styles.modalRowText}>{c.name}</Text>
                             </TouchableOpacity>
                         ))}
-                    </View>
+                </View>
                 </TouchableOpacity>
             </Modal>
         </View>

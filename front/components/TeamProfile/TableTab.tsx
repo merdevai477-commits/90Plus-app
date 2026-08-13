@@ -12,6 +12,7 @@ import type { Language } from '../../src/i18n/types';
 import type { TranslationKeys } from '../../src/i18n/utils';
 import type { Competitor365Competition, Standing365Row } from '../../services/apiFootball';
 import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
+import { with365ImageSize } from '../../utils/scores365AthletePhoto';
 import { useCompetitorStandings } from '../../hooks/useTeamProfile';
 import TeamBadge from '../common/TeamBadge';
 import { Card, EmptyState } from './shared';
@@ -21,19 +22,27 @@ interface TableTabProps {
     competitions: Competitor365Competition[];
     language: Language;
     t: TranslationKeys;
+    onOpenTeam?: (teamId: number, name: string, logo: string | null) => void;
 }
 
 function StandingsRow({
     row,
     highlight,
     language,
+    onPress,
 }: {
     row: Standing365Row;
     highlight: boolean;
     language: Language;
+    onPress?: () => void;
 }) {
     return (
-        <View style={[styles.row, highlight && styles.rowHighlight]}>
+        <TouchableOpacity
+            style={[styles.row, highlight && styles.rowHighlight]}
+            onPress={onPress}
+            disabled={!onPress}
+            activeOpacity={onPress ? 0.75 : 1}
+        >
             <Text style={[styles.cellPos, highlight && styles.cellHighlight]}>{row.position}</Text>
             <View style={styles.teamCell}>
                 <TeamBadge name={row.teamName} logo={row.teamLogo} size={22} color="transparent" />
@@ -58,11 +67,11 @@ function StandingsRow({
                 {row.goalsFor - row.goalsAgainst}
             </Text>
             <Text style={[styles.cellPts, highlight && styles.cellHighlight]}>{row.points}</Text>
-        </View>
+        </TouchableOpacity>
     );
 }
 
-export default function TableTab({ competitorId, competitions, language, t }: TableTabProps) {
+export default function TableTab({ competitorId, competitions, language, t, onOpenTeam }: TableTabProps) {
     const [selected, setSelected] = useState<number | null>(competitions[0]?.id ?? null);
     const competitionId = selected ?? competitions[0]?.id ?? null;
 
@@ -108,7 +117,14 @@ export default function TableTab({ competitorId, competitions, language, t }: Ta
                                 onPress={() => setSelected(c.id)}
                             >
                                 {c.logo ? (
-                                    <Image source={{ uri: c.logo }} style={styles.compLogo} contentFit="contain" />
+                                    <Image
+                                        source={{ uri: with365ImageSize(c.logo, 48) ?? c.logo }}
+                                        style={styles.compLogo}
+                                        contentFit="contain"
+                                        cachePolicy="memory-disk"
+                                        recyclingKey={c.logo}
+                                        transition={0}
+                                    />
                                 ) : null}
                                 <Text
                                     style={[styles.compText, active && styles.compTextActive]}
@@ -148,6 +164,11 @@ export default function TableTab({ competitorId, competitions, language, t }: Ta
                                 row={row}
                                 highlight={row.teamId === competitorId}
                                 language={language}
+                                onPress={
+                                    row.teamId > 0 && row.teamId !== competitorId
+                                        ? () => onOpenTeam?.(row.teamId, row.teamName, row.teamLogo || null)
+                                        : undefined
+                                }
                             />
                         ))}
                     </Card>

@@ -120,6 +120,19 @@ export function usePushNotifications(): PushNotificationState {
                 } else {
                     r.push('/(tabs)/matches');
                 }
+            } else if (type === 'TEAM_FOLLOWED') {
+                const teamId = data.teamId || data.entityId;
+                if (teamId) {
+                    r.push({
+                        pathname: '/team-profile' as any,
+                        params: {
+                            id: String(teamId),
+                            name: data.teamName ?? '',
+                        },
+                    } as any);
+                } else {
+                    r.push('/(tabs)/matches');
+                }
             } else if (type === 'FOLLOW') {
                 const username = data.actorUsername || data.followerUsername || data.username;
                 if (username) {

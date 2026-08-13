@@ -198,7 +198,11 @@ export type PushTemplateKey =
     | 'matchLineupTitle'
     | 'matchLineupBody'
     | 'matchFavoriteTitle'
-    | 'matchFavoriteBody';
+    | 'matchFavoriteBody'
+    | 'followedClubTitle'
+    | 'followedClubBody'
+    | 'followedNationalTeamTitle'
+    | 'followedNationalTeamBody';
 
 type TemplateMap = Record<PushTemplateKey, string>;
 
@@ -374,6 +378,10 @@ const en: TemplateMap = {
     matchLineupBody: '{home} vs {away} — lineups are out',
     matchFavoriteTitle: '🔔 Match followed',
     matchFavoriteBody: '{home} vs {away} — you will get goals and key events',
+    followedClubTitle: '🔔 Club notifications enabled',
+    followedClubBody: 'Notifications for "{name}" are on. You will always receive this team\'s alerts.',
+    followedNationalTeamTitle: '🔔 National team notifications enabled',
+    followedNationalTeamBody: 'Notifications for "{name}" are on. You will always receive this team\'s alerts.',
 };
 
 
@@ -549,6 +557,10 @@ const ar: TemplateMap = {
     matchLineupBody: '{home} ضد {away} — ظهرت التشكيلات',
     matchFavoriteTitle: '🔔 تم تمييز المباراة',
     matchFavoriteBody: '{home} ضد {away} — سنخبرك بالأهداف والأحداث المهمة',
+    followedClubTitle: '🔔 تم تفعيل إشعارات النادي',
+    followedClubBody: 'تم تفعيل إشعارات نادي "{name}". ستتلقى إشعارات الفريق دائماً.',
+    followedNationalTeamTitle: '🔔 تم تفعيل إشعارات المنتخب',
+    followedNationalTeamBody: 'تم تفعيل إشعارات منتخب "{name}". ستتلقى إشعارات الفريق دائماً.',
 };
 
 const TEMPLATES: Record<SupportedLanguage, TemplateMap> = { en, ar };

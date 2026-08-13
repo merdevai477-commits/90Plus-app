@@ -18,6 +18,8 @@ export interface FollowTeamInput {
     name?: string | null;
     logo?: string | null;
     country?: string | null;
+    isNationalTeam?: boolean;
+    language?: 'ar' | 'en';
 }
 
 interface UseFavoriteTeamResult {
@@ -92,6 +94,8 @@ export const useFavoriteTeam = (): UseFavoriteTeamResult => {
                               teamName: team.name ?? undefined,
                               teamLogo: team.logo ?? undefined,
                               country: team.country ?? undefined,
+                              isNationalTeam: team.isNationalTeam,
+                              language: team.language,
                           });
                     if (!result.success) {
                         throw new Error(result.error || 'follow_request_failed');

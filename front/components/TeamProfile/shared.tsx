@@ -18,6 +18,7 @@ import {
 import type { Language } from '../../src/i18n/types';
 import type { Fixture } from '../../services/apiFootball';
 import TeamBadge from '../common/TeamBadge';
+import { with365ImageSize } from '../../utils/scores365AthletePhoto';
 import LeagueIcon from '../common/LeagueIcon';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
@@ -317,12 +318,13 @@ export function MatchRow({
 
 export function RemoteLogo({ uri, size = 24 }: { uri?: string | null; size?: number }) {
     if (!uri) return null;
+    const sized = with365ImageSize(uri, size <= 32 ? 64 : 128) ?? uri;
     return (
         <Image
-            source={{ uri }}
+            source={{ uri: sized }}
             style={{ width: size, height: size }}
             contentFit="contain"
-            transition={150}
+            transition={0}
             cachePolicy="memory-disk"
         />
     );

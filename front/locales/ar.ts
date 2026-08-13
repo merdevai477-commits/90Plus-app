@@ -3099,6 +3099,10 @@ export const ar = {
     matchLineupBody: '{home} ضد {away} — ظهرت التشكيلات',
     matchFavoriteTitle: '🔔 تم تمييز المباراة',
     matchFavoriteBody: '{home} ضد {away} — سنخبرك بالأهداف والأحداث المهمة',
+    followedClubTitle: '🔔 تم تفعيل إشعارات النادي',
+    followedClubBody: 'تم تفعيل إشعارات نادي "{name}". ستتلقى إشعارات الفريق دائماً.',
+    followedNationalTeamTitle: '🔔 تم تفعيل إشعارات المنتخب',
+    followedNationalTeamBody: 'تم تفعيل إشعارات منتخب "{name}". ستتلقى إشعارات الفريق دائماً.',
   },
 };
 

@@ -3,6 +3,8 @@ import prisma from '../lib/prisma';
 import { requireAuth } from '../middleware/clerk.middleware';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
+import { notifyUser } from '../services/notify.service';
+import { NotificationType } from '../services/notification.service';
 
 const router = Router();
 
@@ -19,7 +21,7 @@ router.post('/favorite/:teamId', requireAuth, async (req: Request, res: Response
     try {
         const clerkUserId = req.auth?.userId;
         const apiTeamId = parseTeamId(req.params.teamId);
-        const { teamName, teamLogo, country } = req.body ?? {};
+        const { teamName, teamLogo, country, isNationalTeam, language } = req.body ?? {};
 
         if (!clerkUserId) {
             sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
@@ -41,12 +43,20 @@ router.post('/favorite/:teamId', requireAuth, async (req: Request, res: Response
             return;
         }
 
+        const existed = await prisma.favoriteTeam.findUnique({
+            where: { userId_apiTeamId: { userId: user.id, apiTeamId } },
+            select: { id: true },
+        });
+
+        const resolvedName =
+            typeof teamName === 'string' && teamName.length > 0 ? teamName : `Team ${apiTeamId}`;
+
         const favorite = await prisma.favoriteTeam.upsert({
             where: { userId_apiTeamId: { userId: user.id, apiTeamId } },
             create: {
                 userId: user.id,
                 apiTeamId,
-                teamName: typeof teamName === 'string' && teamName.length > 0 ? teamName : `Team ${apiTeamId}`,
+                teamName: resolvedName,
                 teamLogo: typeof teamLogo === 'string' ? teamLogo : null,
                 country: typeof country === 'string' ? country : null,
             },
@@ -57,6 +67,28 @@ router.post('/favorite/:teamId', requireAuth, async (req: Request, res: Response
             },
             select: { id: true, apiTeamId: true },
         });
+
+        if (!existed) {
+            const national = isNationalTeam === true;
+            notifyUser({
+                userId: user.id,
+                type: NotificationType.GENERAL,
+                titleKey: national ? 'followedNationalTeamTitle' : 'followedClubTitle',
+                bodyKey: national ? 'followedNationalTeamBody' : 'followedClubBody',
+                vars: { name: resolvedName },
+                language: typeof language === 'string' ? language : undefined,
+                data: {
+                    type: 'TEAM_FOLLOWED',
+                    teamId: String(apiTeamId),
+                    entityId: String(apiTeamId),
+                    screen: '/team-profile',
+                    teamName: resolvedName,
+                    isNationalTeam: national,
+                },
+            }).catch((err) =>
+                logger.warn('[teams/favorite] follow confirmation push failed (non-fatal):', err?.message ?? err),
+            );
+        }
 
         // Best-effort: immediately subscribe the user to this team's same-day
         // fixtures (kickoff + upcoming) so notifications don't wait for the

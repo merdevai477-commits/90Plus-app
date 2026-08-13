@@ -2711,7 +2711,13 @@ export class TeamsService {
     static async follow(
         token: string,
         teamId: number,
-        teamData: { teamName?: string; teamLogo?: string | null; country?: string | null } = {},
+        teamData: {
+            teamName?: string;
+            teamLogo?: string | null;
+            country?: string | null;
+            isNationalTeam?: boolean;
+            language?: 'ar' | 'en';
+        } = {},
     ): Promise<{ success: boolean; error?: string }> {
         try {
             const response = await fetch(`${API_URL}/teams/favorite/${teamId}`, {

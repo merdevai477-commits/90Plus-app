@@ -27,6 +27,7 @@ import { logger } from '../utils/logger';
 import { getRedisClient } from '../lib/redis';
 import {
     getUserLanguage,
+    normalizeSupportedLanguage,
     renderPushTemplate,
     type PushTemplateKey,
     type SupportedLanguage,
@@ -142,6 +143,8 @@ export interface NotifyUserParams {
     actor?: NotificationActor;
     /** Skip push entirely — still creates inbox row + WebSocket emit. */
     skipPush?: boolean;
+    /** Override stored language (e.g. follow confirmation using the live app locale). */
+    language?: SupportedLanguage | string;
 }
 
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
@@ -262,6 +265,7 @@ export async function notifyUser(params: NotifyUserParams): Promise<{ delivered:
         bypassPreferences,
         actor,
         skipPush,
+        language: languageOverride,
     } = params;
 
     if (!userId) {
@@ -285,7 +289,9 @@ export async function notifyUser(params: NotifyUserParams): Promise<{ delivered:
         }
     }
 
-    const language = await getUserLanguage(userId);
+    const language = languageOverride
+        ? normalizeSupportedLanguage(languageOverride)
+        : await getUserLanguage(userId);
     const resolvedTitle = pickRendered(language, titleKey, title, vars);
     const resolvedBody = pickRendered(language, bodyKey, message, vars);
 

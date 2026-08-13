@@ -2,8 +2,8 @@
   "expo": {
     "name": "90Plus",
     "slug": "90plus",
-    "version": "1.0.4",
-    "runtimeVersion": "1.0.4",
+    "version": "1.1.0",
+    "runtimeVersion": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/90Plus.png",
     "scheme": "ninetyplus",
@@ -18,7 +18,7 @@
         "applinks:clerk.90plus.pro"
       ],
       "usesAppleSignIn": true,
-      "buildNumber": "131",
+      "buildNumber": "133",
       "requireFullScreen": false,
       "entitlements": {
         "com.apple.developer.usernotifications.time-sensitive": true
@@ -76,7 +76,7 @@
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 113,
+      "versionCode": 114,
       "softwareKeyboardLayoutMode": "pan",
       "intentFilters": [
         {
