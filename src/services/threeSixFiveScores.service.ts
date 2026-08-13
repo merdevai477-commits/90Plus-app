@@ -44,6 +44,19 @@ function buildLeagueLogoUrl(competitionId: number, imageVersion: number | null):
   return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2/v${imageVersion}/Competitions/${competitionId}`;
 }
 
+/**
+ * 365Scores competitor (club / national team) logo URL.
+ * Verified pattern: `<transforms>/v<imageVersion>/Competitors/<competitorId>`.
+ * imageVersion defaults to a low value when the payload omits it (still resolves).
+ */
+function buildCompetitorLogoUrl(
+  competitorId: number,
+  imageVersion?: number | null,
+): string {
+  const v = imageVersion ?? 1;
+  return `https://imagecache.365scores.com/image/upload/f_png,w_128,h_128,c_limit,q_auto:eco,dpr_2/v${v}/Competitors/${competitorId}`;
+}
+
 const HEADERS: Record<string, string> = {
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
@@ -179,6 +192,105 @@ export interface ThreeSixFiveSearchAthlete {
   sportId: number | null;
   imageVersion: number | null;
   imageUrl: string | null;
+}
+
+// ─── Competitor (club / national team) profile shapes ───────────────────────
+
+/** A competition the competitor participates in (for standings/stats tabs). */
+export interface ThreeSixFiveCompetitorCompetition {
+  id: number;
+  name: string;
+  countryId: number | null;
+  country: string | null;
+  logo: string | null;
+  hasStandings: boolean;
+  hasStats: boolean;
+  hasTransfers: boolean;
+}
+
+/** Club or national-team header/info block (type 1 = club, 2 = national team). */
+export interface ThreeSixFiveCompetitorInfo {
+  competitorId: number;
+  sportId: number;
+  type: number;
+  name: string;
+  longName: string | null;
+  symbolicName: string | null;
+  nameForURL: string | null;
+  countryId: number | null;
+  country: string | null;
+  logo: string | null;
+  color: string | null;
+  awayColor: string | null;
+  mainCompetitionId: number | null;
+  hasSquad: boolean;
+  hasTransfers: boolean;
+  isNationalTeam: boolean;
+  competitions: ThreeSixFiveCompetitorCompetition[];
+}
+
+/** Grouped matches for a competitor's Matches tab. */
+export interface ThreeSixFiveCompetitorMatches {
+  live: FixtureFromAPI[];
+  upcoming: FixtureFromAPI[];
+  finished: FixtureFromAPI[];
+}
+
+export interface ThreeSixFiveCompetitorTransfer {
+  athleteId: number;
+  athleteName: string;
+  athletePhoto: string | null;
+  positionName: string | null;
+  isArrival: boolean;
+  price: string | null;
+  date: string | null;
+  clubId: number | null;
+  clubName: string | null;
+  clubLogo: string | null;
+}
+
+export interface ThreeSixFiveCompetitorTransfers {
+  in: ThreeSixFiveCompetitorTransfer[];
+  out: ThreeSixFiveCompetitorTransfer[];
+}
+
+export interface ThreeSixFiveStatLeaderRow {
+  rank: number;
+  athleteId: number;
+  name: string;
+  photo: string | null;
+  value: string;
+  competitorId: number | null;
+  leftClub: boolean;
+}
+
+export interface ThreeSixFiveStatLeaderboard {
+  key: number;
+  name: string;
+  rows: ThreeSixFiveStatLeaderRow[];
+}
+
+export interface ThreeSixFiveCompetitorStats {
+  competitionId: number;
+  leaderboards: ThreeSixFiveStatLeaderboard[];
+}
+
+/** A competitor match in combined search results (club or national team). */
+export interface ThreeSixFiveSearchCompetitor {
+  competitorId: number;
+  name: string;
+  type: number;
+  countryId: number | null;
+  country: string | null;
+  logo: string | null;
+  isNationalTeam: boolean;
+}
+
+/** Combined text-search results: clubs, national teams, players. */
+export interface ThreeSixFiveSearchResults {
+  clubs: ThreeSixFiveSearchCompetitor[];
+  nationalTeams: ThreeSixFiveSearchCompetitor[];
+  players: ThreeSixFiveSearchAthlete[];
 }
 
 export interface ThreeSixFivePlayerLookupEntry {
@@ -363,6 +475,124 @@ interface AllScoresPayload {
 interface CompetitionsCatalogPayload {
   competitions?: Scores365CompetitionMeta[];
   countries?: Scores365CountryMeta[];
+}
+
+/** Rich competition metadata from /web/competitors/ (superset of the catalog shape). */
+interface CompetitorCompetitionMeta {
+  id: number;
+  countryId?: number;
+  sportId?: number;
+  name?: string;
+  hasStandings?: boolean;
+  hasStats?: boolean;
+  hasTransfers?: boolean;
+  nameForURL?: string;
+  currentSeasonNum?: number;
+  imageVersion?: number;
+  isActive?: boolean;
+}
+
+interface CompetitorInfoEntry {
+  id: number;
+  countryId?: number;
+  sportId?: number;
+  name?: string;
+  longName?: string;
+  symbolicName?: string;
+  nameForURL?: string;
+  type?: number;
+  imageVersion?: number;
+  color?: string;
+  awayColor?: string;
+  mainCompetitionId?: number;
+  hasSquad?: boolean;
+  hasTransfers?: boolean;
+  competitions?: number[];
+}
+
+interface CompetitorInfoPayload {
+  competitors?: CompetitorInfoEntry[];
+  countries?: Scores365CountryMeta[];
+  competitions?: CompetitorCompetitionMeta[];
+}
+
+interface TransfersPayload {
+  transfers?: Array<{
+    id: number;
+    type?: number;
+    origin?: number;
+    target?: number;
+    time?: string;
+    price?: string;
+    athleteId?: number;
+    statusName?: string;
+    positionId?: number;
+    ImageVersion?: number;
+    isArrival?: boolean;
+    isDeparture?: boolean;
+  }>;
+  athletes?: Array<{
+    id: number;
+    name?: string;
+    shortName?: string;
+    clubId?: number;
+    clubName?: string;
+    nationalityId?: number;
+    imageVersion?: number;
+  }>;
+  competitors?: Array<{
+    id: number;
+    name?: string;
+    imageVersion?: number;
+    type?: number;
+  }>;
+}
+
+interface StatsPayload {
+  stats?: {
+    athletesStats?: Array<{
+      id: number;
+      name?: string;
+      competitionId?: number;
+      rows?: Array<{
+        position: number;
+        secondaryStatName?: string;
+        entity?: {
+          id: number;
+          name?: string;
+          shortName?: string;
+          competitorId?: number;
+          positionName?: string;
+          isLeftClub?: boolean;
+          imageVersion?: number;
+        };
+        stats?: Array<{ typeId: number; value: string }>;
+      }>;
+    }>;
+  };
+}
+
+interface SearchAllPayload {
+  countries?: Scores365CountryMeta[];
+  competitors?: Array<{
+    id: number;
+    countryId?: number;
+    sportId?: number;
+    name?: string;
+    type?: number;
+    imageVersion?: number;
+    hideOnSearch?: boolean;
+  }>;
+  athletes?: Array<{
+    id: number;
+    name?: string;
+    shortName?: string;
+    clubId?: number;
+    clubName?: string;
+    nationalityId?: number;
+    sportId?: number;
+    imageVersion?: number;
+  }>;
 }
 
 /** competitionId → resolved league metadata (for synthetic non-WC fixtures + league cache). */
@@ -1301,6 +1531,525 @@ class ThreeSixFiveScoresService {
 
     await redisCacheService.set(cacheKey, athletes, 300_000);
     return athletes;
+  }
+
+  // ─── 5c. Competitor (club / national team) profile ───────────────────────
+
+  /**
+   * Club / national-team header + the competitions it plays in.
+   * Cached 6h in Redis and mirrored to Postgres (Cached365Competitor) for durability.
+   */
+  async getCompetitorInfo(
+    competitorId: number,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorInfo>> {
+    if (!Number.isFinite(competitorId) || competitorId <= 0) {
+      return { data: null, source: null };
+    }
+    try {
+      const langId = resolveScores365LangId(language);
+      const cacheKey = `365:competitor:${competitorId}:info:${langId}`;
+      const cached = await redisCacheService.get<ThreeSixFiveCompetitorInfo>(cacheKey);
+      if (cached) return { data: cached, source: '365scores' };
+
+      const payload = await this.fetchJson<CompetitorInfoPayload>(
+        `/web/competitors/?${this.commonParams(langId)}&competitors=${competitorId}`,
+        `competitor-info:${competitorId}`,
+        3_600_000,
+      );
+      const c =
+        payload?.competitors?.find((x) => x.id === competitorId) ?? payload?.competitors?.[0];
+      if (!c?.id) return { data: null, source: null };
+
+      const countriesById = new Map<number, string>();
+      for (const country of payload?.countries ?? []) {
+        if (country.id != null && country.name) countriesById.set(country.id, country.name);
+      }
+      const competitionsById = new Map<number, CompetitorCompetitionMeta>();
+      for (const comp of payload?.competitions ?? []) {
+        if (comp.id != null) competitionsById.set(comp.id, comp);
+      }
+
+      const competitions: ThreeSixFiveCompetitorCompetition[] = (c.competitions ?? [])
+        .map((id) => {
+          const meta = competitionsById.get(id);
+          if (!meta?.name) return null;
+          return {
+            id,
+            name: meta.name,
+            countryId: meta.countryId ?? null,
+            country:
+              meta.countryId != null ? (countriesById.get(meta.countryId) ?? null) : null,
+            logo: buildLeagueLogoUrl(id, meta.imageVersion ?? null),
+            hasStandings: meta.hasStandings === true,
+            hasStats: meta.hasStats === true,
+            hasTransfers: meta.hasTransfers === true,
+          } satisfies ThreeSixFiveCompetitorCompetition;
+        })
+        .filter((x): x is ThreeSixFiveCompetitorCompetition => x !== null);
+
+      const info: ThreeSixFiveCompetitorInfo = {
+        competitorId: c.id,
+        sportId: c.sportId ?? 1,
+        type: c.type ?? 1,
+        name: c.name ?? '—',
+        longName: c.longName ?? null,
+        symbolicName: c.symbolicName ?? null,
+        nameForURL: c.nameForURL ?? null,
+        countryId: c.countryId ?? null,
+        country: c.countryId != null ? (countriesById.get(c.countryId) ?? null) : null,
+        logo: buildCompetitorLogoUrl(c.id, c.imageVersion),
+        color: c.color ?? null,
+        awayColor: c.awayColor ?? null,
+        mainCompetitionId: c.mainCompetitionId ?? null,
+        hasSquad: c.hasSquad === true,
+        hasTransfers: c.hasTransfers === true,
+        isNationalTeam: (c.type ?? 1) === 2,
+        competitions,
+      };
+
+      await redisCacheService.set(cacheKey, info, 3_600_000);
+      void this.persistCompetitorInfo(info, langId);
+      return { data: info, source: '365scores' };
+    } catch (err: unknown) {
+      logger.error(
+        `[365Scores] getCompetitorInfo(${competitorId}) failed:`,
+        (err as Error)?.message,
+      );
+      return { data: null, source: null };
+    }
+  }
+
+  private async persistCompetitorInfo(
+    info: ThreeSixFiveCompetitorInfo,
+    langId: number,
+  ): Promise<void> {
+    try {
+      const row = {
+        sportId: info.sportId,
+        type: info.type,
+        name: info.name,
+        longName: info.longName,
+        symbolicName: info.symbolicName,
+        nameForURL: info.nameForURL,
+        countryId: info.countryId,
+        country: info.country,
+        logo: info.logo,
+        mainCompetitionId: info.mainCompetitionId,
+        isNationalTeam: info.isNationalTeam,
+        langId,
+        fullData: info as unknown as Prisma.InputJsonValue,
+      };
+      await prisma.cached365Competitor.upsert({
+        where: { competitorId: info.competitorId },
+        create: { competitorId: info.competitorId, ...row },
+        update: row,
+      });
+    } catch (err: unknown) {
+      logger.debug(
+        `[365Scores] persistCompetitorInfo(${info.competitorId}) failed:`,
+        (err as Error)?.message,
+      );
+    }
+  }
+
+  /**
+   * Live / upcoming / finished matches for a competitor across all competitions.
+   * Fixtures are synthesized into the app Fixture shape and persisted to CachedFixture
+   * (Postgres) in the background so calendar/detail screens stay consistent.
+   */
+  async getCompetitorMatches(
+    competitorId: number,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorMatches>> {
+    if (!Number.isFinite(competitorId) || competitorId <= 0) {
+      return { data: null, source: null };
+    }
+    try {
+      const langId = resolveScores365LangId(language);
+      const cacheKey = `365:competitor:${competitorId}:matches:${langId}`;
+      const cached = await redisCacheService.get<ThreeSixFiveCompetitorMatches>(cacheKey);
+      if (cached) return { data: cached, source: '365scores' };
+
+      const { games, competitionMeta } = await this.fetchCompetitorGames(competitorId, langId);
+      if (!games.length) return { data: null, source: null };
+
+      const live: FixtureFromAPI[] = [];
+      const upcoming: FixtureFromAPI[] = [];
+      const finished: FixtureFromAPI[] = [];
+      for (const game of games) {
+        const fixture = this.buildCompetitorFixture(game, competitionMeta);
+        const phase = this.classifyPhase(game);
+        if (phase === 'live') live.push(fixture);
+        else if (phase === 'upcoming') upcoming.push(fixture);
+        else finished.push(fixture);
+      }
+
+      const asc = (a: FixtureFromAPI, b: FixtureFromAPI) =>
+        new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime();
+      live.sort(asc);
+      upcoming.sort(asc);
+      finished.sort((a, b) => asc(b, a)); // most recent first
+
+      const result: ThreeSixFiveCompetitorMatches = { live, upcoming, finished };
+
+      // Durable persistence via the shared allscores path (writes CachedFixture rows).
+      void this.persistAllScoresFixtures(
+        games.map((g) => this.toFixtureItem(g)),
+        competitionMeta,
+      );
+
+      const ttlMs = live.length > 0 ? 60_000 : 300_000;
+      await redisCacheService.set(cacheKey, result, ttlMs);
+      return { data: result, source: '365scores' };
+    } catch (err: unknown) {
+      logger.error(
+        `[365Scores] getCompetitorMatches(${competitorId}) failed:`,
+        (err as Error)?.message,
+      );
+      return { data: null, source: null };
+    }
+  }
+
+  private buildCompetitorFixture(
+    game: Scores365Game,
+    competitionMeta: CompetitionMetaMap,
+  ): FixtureFromAPI {
+    const compId = game.competitionId;
+    const meta = compId != null ? competitionMeta.get(compId) : undefined;
+    const kickoff = game.startTime ? new Date(game.startTime) : new Date();
+    const season = Number.isNaN(kickoff.getTime())
+      ? new Date().getUTCFullYear()
+      : kickoff.getUTCFullYear();
+    return synthesizeBaseFrom365Game(
+      game as Parameters<typeof synthesizeBaseFrom365Game>[0],
+      game.id,
+      {
+        leagueId: compId != null ? scores365CompetitionToLeagueId(compId) : undefined,
+        season,
+        leagueName: meta?.name ?? game.competitionDisplayName,
+        country: meta?.country,
+        leagueLogo: meta?.logo,
+      },
+    );
+  }
+
+  private async fetchCompetitorGames(
+    competitorId: number,
+    langId: number,
+  ): Promise<{ games: Scores365Game[]; competitionMeta: CompetitionMetaMap }> {
+    const seen = new Set<number>();
+    const games: Scores365Game[] = [];
+    const competitionMeta: CompetitionMetaMap = new Map();
+
+    const mergeMeta = (
+      payload: { competitions?: Scores365CompetitionMeta[]; countries?: Scores365CountryMeta[] } | null,
+    ) => {
+      if (!payload) return;
+      const countriesById = new Map<number, string>();
+      for (const country of payload.countries ?? []) {
+        if (country.id != null && country.name) countriesById.set(country.id, country.name);
+      }
+      for (const [id, meta] of this.buildCompetitionMetaFromCatalog(
+        payload.competitions ?? [],
+        countriesById,
+      )) {
+        if (!competitionMeta.has(id)) competitionMeta.set(id, meta);
+      }
+    };
+
+    const add = (list?: Scores365Game[]) => {
+      for (const g of list ?? []) {
+        if (g?.id != null && !seen.has(g.id)) {
+          seen.add(g.id);
+          games.push(g);
+        }
+      }
+    };
+
+    const pageCap = fixturesHotPageCap();
+
+    const firstPath = `/web/games/fixtures/?${this.commonParams(langId)}&competitors=${competitorId}&showOdds=true`;
+    const first = await this.fetchJson<FixturesPayload & CompetitionsCatalogPayload>(
+      firstPath,
+      `competitor-fixtures:${competitorId}`,
+      0,
+      true,
+    );
+    add(first?.games);
+    mergeMeta(first ?? null);
+
+    let prev = first?.paging?.previousPage;
+    for (let step = 0; prev && step < pageCap; step++) {
+      const normalized = this.rewritePagingPath(prev, langId);
+      const page = await this.fetchJson<FixturesPayload & CompetitionsCatalogPayload>(
+        normalized,
+        `competitor-fixtures:${competitorId}`,
+        0,
+        true,
+      );
+      const before = games.length;
+      add(page?.games);
+      mergeMeta(page ?? null);
+      if (games.length === before && !page?.games?.length) break;
+      prev = page?.paging?.previousPage;
+    }
+
+    let next = first?.paging?.nextPage;
+    for (let step = 0; next && step < pageCap; step++) {
+      const normalized = this.rewritePagingPath(next, langId);
+      const page = await this.fetchJson<FixturesPayload & CompetitionsCatalogPayload>(
+        normalized,
+        `competitor-fixtures:${competitorId}`,
+        0,
+        true,
+      );
+      const before = games.length;
+      add(page?.games);
+      mergeMeta(page ?? null);
+      if (games.length === before && !page?.games?.length) break;
+      next = page?.paging?.nextPage;
+    }
+
+    // Today / live snapshot for this competitor (allscores includes in-play scores).
+    const allscores = await this.fetchJson<AllScoresPayload>(
+      `/web/games/allscores/?${this.commonParams(langId)}&competitors=${competitorId}`,
+      `competitor-allscores:${competitorId}`,
+      60_000,
+    );
+    add(allscores?.games);
+    mergeMeta(allscores ?? null);
+
+    return { games, competitionMeta };
+  }
+
+  /** Incoming / outgoing transfers for a competitor. Cached 1h in Redis. */
+  async getCompetitorTransfers(
+    competitorId: number,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorTransfers>> {
+    if (!Number.isFinite(competitorId) || competitorId <= 0) {
+      return { data: null, source: null };
+    }
+    try {
+      const langId = resolveScores365LangId(language);
+      const cacheKey = `365:competitor:${competitorId}:transfers:${langId}`;
+      const cached = await redisCacheService.get<ThreeSixFiveCompetitorTransfers>(cacheKey);
+      if (cached) return { data: cached, source: '365scores' };
+
+      const payload = await this.fetchJson<TransfersPayload>(
+        `/web/transfers/?${this.commonParams(langId)}&competitors=${competitorId}`,
+        `competitor-transfers:${competitorId}`,
+        3_600_000,
+      );
+      if (!payload?.transfers?.length) {
+        const empty: ThreeSixFiveCompetitorTransfers = { in: [], out: [] };
+        await redisCacheService.set(cacheKey, empty, 3_600_000);
+        return { data: empty, source: '365scores' };
+      }
+
+      const athletesById = new Map(
+        (payload.athletes ?? []).map((a) => [a.id, a] as const),
+      );
+      const competitorsById = new Map(
+        (payload.competitors ?? []).map((c) => [c.id, c] as const),
+      );
+
+      const map = (t: NonNullable<TransfersPayload['transfers']>[number]) => {
+        const athlete = t.athleteId != null ? athletesById.get(t.athleteId) : undefined;
+        // Arrival → the "other" club is the origin; departure → the target.
+        const otherClubId = t.isArrival ? t.origin : t.target;
+        const club = otherClubId != null ? competitorsById.get(otherClubId) : undefined;
+        return {
+          athleteId: t.athleteId ?? 0,
+          athleteName: athlete?.name ?? '—',
+          athletePhoto:
+            t.athleteId != null
+              ? buildScores365AthletePhotoUrl(
+                  t.athleteId,
+                  athlete?.imageVersion ?? t.ImageVersion ?? 68,
+                )
+              : null,
+          positionName: null,
+          isArrival: t.isArrival === true,
+          price: t.price && t.price !== '-' ? t.price : null,
+          date: t.time ?? null,
+          clubId: otherClubId ?? null,
+          clubName: club?.name ?? athlete?.clubName ?? null,
+          clubLogo:
+            otherClubId != null ? buildCompetitorLogoUrl(otherClubId, club?.imageVersion) : null,
+        } satisfies ThreeSixFiveCompetitorTransfer;
+      };
+
+      const byDateDesc = (a: ThreeSixFiveCompetitorTransfer, b: ThreeSixFiveCompetitorTransfer) =>
+        new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime();
+
+      const result: ThreeSixFiveCompetitorTransfers = {
+        in: payload.transfers.filter((t) => t.isArrival).map(map).sort(byDateDesc),
+        out: payload.transfers.filter((t) => !t.isArrival).map(map).sort(byDateDesc),
+      };
+
+      await redisCacheService.set(cacheKey, result, 3_600_000);
+      return { data: result, source: '365scores' };
+    } catch (err: unknown) {
+      logger.error(
+        `[365Scores] getCompetitorTransfers(${competitorId}) failed:`,
+        (err as Error)?.message,
+      );
+      return { data: null, source: null };
+    }
+  }
+
+  /**
+   * Competition-scoped player leaderboards (goals, assists, …) for a competitor.
+   * 365 returns club players ranked within the competition (incl. recently-left,
+   * flagged via `leftClub`). Cached 10m in Redis.
+   */
+  async getCompetitorStats(
+    competitorId: number,
+    competitionId: number,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorStats>> {
+    if (
+      !Number.isFinite(competitorId) ||
+      competitorId <= 0 ||
+      !Number.isFinite(competitionId) ||
+      competitionId <= 0
+    ) {
+      return { data: null, source: null };
+    }
+    try {
+      const langId = resolveScores365LangId(language);
+      const cacheKey = `365:competitor:${competitorId}:stats:${competitionId}:${langId}`;
+      const cached = await redisCacheService.get<ThreeSixFiveCompetitorStats>(cacheKey);
+      if (cached) return { data: cached, source: '365scores' };
+
+      const payload = await this.fetchJson<StatsPayload>(
+        `/web/stats/?${this.commonParams(langId)}&competitors=${competitorId}&competitions=${competitionId}`,
+        `competitor-stats:${competitorId}:${competitionId}`,
+        600_000,
+      );
+      const boards = payload?.stats?.athletesStats ?? [];
+      if (!boards.length) return { data: null, source: null };
+
+      const leaderboards: ThreeSixFiveStatLeaderboard[] = boards
+        .slice(0, 6)
+        .map((board) => ({
+          key: board.id,
+          name: board.name ?? '—',
+          rows: (board.rows ?? [])
+            .slice(0, 10)
+            .map((r) => ({
+              rank: r.position,
+              athleteId: r.entity?.id ?? 0,
+              name: r.entity?.name ?? '—',
+              photo: r.entity?.id
+                ? buildScores365AthletePhotoUrl(r.entity.id, r.entity.imageVersion ?? 68)
+                : null,
+              value: r.stats?.[0]?.value ?? '',
+              competitorId: r.entity?.competitorId ?? null,
+              leftClub: r.entity?.isLeftClub === true,
+            }))
+            .filter((row) => row.athleteId > 0),
+        }))
+        .filter((board) => board.rows.length > 0);
+
+      const result: ThreeSixFiveCompetitorStats = { competitionId, leaderboards };
+      await redisCacheService.set(cacheKey, result, 600_000);
+      return { data: result, source: '365scores' };
+    } catch (err: unknown) {
+      logger.error(
+        `[365Scores] getCompetitorStats(${competitorId}, ${competitionId}) failed:`,
+        (err as Error)?.message,
+      );
+      return { data: null, source: null };
+    }
+  }
+
+  // ─── 5d. Combined entity search (clubs / national teams / players) ────────
+
+  /**
+   * Text search across clubs, national teams and players (football only).
+   * Tries the query-appropriate language first, then the alternate language so
+   * an Arabic query still resolves English-only names (and vice-versa).
+   */
+  async searchEntities(
+    query: string,
+    language?: string | null,
+  ): Promise<ThreeSixFiveResult<ThreeSixFiveSearchResults>> {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      return { data: { clubs: [], nationalTeams: [], players: [] }, source: '365scores' };
+    }
+
+    try {
+      const primaryLangId = resolveScores365SearchLangId(trimmed, language);
+      const arLangId = parseInt(process.env.SCORES365_LANG_ID_AR || '27', 10);
+      const enLangId = parseInt(process.env.SCORES365_LANG_ID_EN || '1', 10);
+      const fallbackLangId = primaryLangId === arLangId ? enLangId : arLangId;
+
+      let results = await this.fetchSearchEntities(trimmed, primaryLangId);
+      const empty =
+        !results.clubs.length && !results.nationalTeams.length && !results.players.length;
+      if (empty && fallbackLangId !== primaryLangId) {
+        results = await this.fetchSearchEntities(trimmed, fallbackLangId);
+      }
+
+      return { data: results, source: '365scores' };
+    } catch (err: unknown) {
+      logger.error('[365Scores] searchEntities failed:', (err as Error)?.message);
+      return { data: null, source: null };
+    }
+  }
+
+  private async fetchSearchEntities(
+    query: string,
+    langId: number,
+  ): Promise<ThreeSixFiveSearchResults> {
+    const cacheKey = `365:searchall:${langId}:${query.toLowerCase()}`;
+    const cached = await redisCacheService.get<ThreeSixFiveSearchResults>(cacheKey);
+    if (cached) return cached;
+
+    const path = `/web/search/?${this.commonParams(langId)}&query=${encodeURIComponent(query)}`;
+    const payload = await this.fetchJson<SearchAllPayload>(path, `searchall:${langId}:${query}`, 60_000);
+
+    const countriesById = new Map<number, string>();
+    for (const country of payload?.countries ?? []) {
+      if (country.id != null && country.name) countriesById.set(country.id, country.name);
+    }
+
+    const competitors = (payload?.competitors ?? []).filter(
+      (c) => (c.sportId == null || c.sportId === 1) && c.hideOnSearch !== true,
+    );
+    const toCompetitor = (c: NonNullable<SearchAllPayload['competitors']>[number]) => ({
+      competitorId: c.id,
+      name: c.name ?? '—',
+      type: c.type ?? 1,
+      countryId: c.countryId ?? null,
+      country: c.countryId != null ? (countriesById.get(c.countryId) ?? null) : null,
+      logo: buildCompetitorLogoUrl(c.id, c.imageVersion),
+      isNationalTeam: c.type === 2,
+    });
+
+    const clubs = competitors.filter((c) => (c.type ?? 1) === 1).map(toCompetitor);
+    const nationalTeams = competitors.filter((c) => c.type === 2).map(toCompetitor);
+    const players: ThreeSixFiveSearchAthlete[] = (payload?.athletes ?? [])
+      .filter((a) => a.sportId == null || a.sportId === 1)
+      .map((a) => ({
+        athleteId: a.id,
+        name: a.name ?? '—',
+        shortName: a.shortName ?? a.name ?? '—',
+        clubName: a.clubName ?? null,
+        clubId: a.clubId ?? null,
+        nationalityId: a.nationalityId ?? null,
+        sportId: a.sportId ?? null,
+        imageVersion: a.imageVersion ?? null,
+        imageUrl: buildScores365AthletePhotoUrl(a.id, a.imageVersion ?? 68),
+      }));
+
+    const results: ThreeSixFiveSearchResults = { clubs, nationalTeams, players };
+    await redisCacheService.set(cacheKey, results, 300_000);
+    return results;
   }
 
   // ─── 6. Player match report ──────────────────────────────────────────────

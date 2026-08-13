@@ -208,8 +208,33 @@ router.get(
 // GET /api/football/cached/365/search?q= — discover 365 athleteId by player name
 router.get('/cached/365/search', SHARED_CACHE_5MIN, FootballController.search365Athletes);
 
+// GET /api/football/cached/365/search/all?q= — combined clubs + national teams + players
+router.get('/cached/365/search/all', SHARED_CACHE_5MIN, FootballController.searchFootballEntities);
+
 // GET /api/football/cached/365/player/lookup?q= — search + profile + career bundle
 router.get('/cached/365/player/lookup', SHARED_CACHE_5MIN, FootballController.lookup365Player);
+
+// 365Scores competitor (club / national team) profile — primary data source.
+router.get(
+  '/cached/365/competitor/:id',
+  SHARED_CACHE_1H,
+  FootballController.getCached365CompetitorInfo,
+);
+router.get(
+  '/cached/365/competitor/:id/matches',
+  SHARED_CACHE_5MIN,
+  FootballController.getCached365CompetitorMatches,
+);
+router.get(
+  '/cached/365/competitor/:id/transfers',
+  SHARED_CACHE_1H,
+  FootballController.getCached365CompetitorTransfers,
+);
+router.get(
+  '/cached/365/competitor/:id/stats',
+  SHARED_CACHE_5MIN,
+  FootballController.getCached365CompetitorStats,
+);
 
 // GET /api/football/cached/fixture/:id/lineups - Get lineups (permanent for finished, short for empty/live)
 // 5min route cache lets the inner cache logic (which tracks empty vs full

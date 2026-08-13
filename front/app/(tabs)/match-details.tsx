@@ -991,6 +991,22 @@ const MatchDetailsScreen = () => {
     [router, fixture?.league?.season, fixtureId, is365Fixture, resolveLineupPlayerPhoto],
   );
 
+  // Open a team's 365 profile from the match header. For 365 fixtures the team
+  // id already is a 365 competitorId; for API-Football fixtures we pass only the
+  // name so the profile resolves the competitor by name.
+  const openTeamProfile = useCallback(
+    (side: 'home' | 'away') => {
+      const team = side === 'home' ? fixture?.teams?.home : fixture?.teams?.away;
+      if (!team || (!team.id && !team.name)) return;
+      const navParams: Record<string, string> = {};
+      if (is365Fixture && team.id) navParams.id = String(team.id);
+      if (team.name) navParams.name = team.name;
+      if (team.logo) navParams.logo = team.logo;
+      router.push({ pathname: '/team-profile' as any, params: navParams } as any);
+    },
+    [router, fixture?.teams?.home, fixture?.teams?.away, is365Fixture],
+  );
+
   const parseFormation = (formation: string | null): number[] => {
     if (!formation) return [];
     return formation.split('-').map(Number).filter(n => !isNaN(n));
@@ -2025,6 +2041,8 @@ const MatchDetailsScreen = () => {
       liveLabel={getLocalizedMatchStatus('LIVE', language)}
       vsLabel={t.matchDetails.vs}
       penaltiesShortLabel={getLocalizedMatchStatus('PEN', language)}
+      onPressHomeTeam={() => openTeamProfile('home')}
+      onPressAwayTeam={() => openTeamProfile('away')}
     />
   );
 

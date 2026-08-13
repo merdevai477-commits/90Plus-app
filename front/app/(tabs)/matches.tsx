@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { Bell, ChevronDown, Calendar, Ticket, X, ChevronLeft, ChevronRight, CalendarCheck2, Lock } from 'lucide-react-native';
+import { Bell, ChevronDown, Calendar, Search, X, ChevronLeft, ChevronRight, CalendarCheck2, Lock } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
@@ -976,7 +976,6 @@ export default function MatchesHubScreenV2() {
   const [filter, setFilter] = useState<MatchFilter>(initialFilter);
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarViewDate, setCalendarViewDate] = useState<Date>(() => startOfLocalDay());
-  const [showTicketsInfo, setShowTicketsInfo] = useState(false);
   const [showMatchesInfo, setShowMatchesInfo] = useState(false);
   const [showWorldCupLocked, setShowWorldCupLocked] = useState(false);
   const worldCupEnabled = useAppFeaturesStore((s) => s.worldCupEnabled);
@@ -1963,33 +1962,21 @@ export default function MatchesHubScreenV2() {
     [selectedDate, calendarViewDate],
   );
 
-  const headerRight = useMemo(() => {
-    const isEmpty = ticketsRemaining <= 0;
-    const iconColor = isEmpty ? '#1a1a1a' : '#d8b4fe';
-    const iconShadowColor = isEmpty ? 'transparent' : '#a855f7';
-    const gradientColors = isEmpty
-      ? (['rgba(0,0,0,0.45)', 'rgba(0,0,0,0.0)'] as const)
-      : (['rgba(168,85,247,0.15)', 'transparent'] as const);
-
-    return (
-      <TouchableOpacity activeOpacity={0.7} onPress={() => setShowTicketsInfo(true)}>
-        <View style={styles.ticketsOuter}>
-          <View style={styles.ticketsInner}>
-            {isLiquidGlassSupported ? (
-              <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(255,255,255,0.00)', effect: 'clear' } as any)} />
-            ) : (
-              <BlurView intensity={0} tint="light" style={StyleSheet.absoluteFill} />
-            )}
-            <LinearGradient colors={gradientColors} style={StyleSheet.absoluteFill} />
-            <View style={{ shadowColor: iconShadowColor, shadowOffset: { width: 0, height: 0 }, shadowOpacity: isEmpty ? 0 : 0.8, shadowRadius: 8, elevation: isEmpty ? 0 : 4 }}>
-              <Ticket size={18} color={iconColor} />
-            </View>
-            <Text style={[styles.ticketsTxt, isEmpty && styles.ticketsTxtEmpty]}>{ticketsRemaining}</Text>
-          </View>
-        </View>
+  const headerRight = useMemo(
+    () => (
+      <TouchableOpacity
+        activeOpacity={0.75}
+        onPress={() => router.push('/search' as any)}
+        accessibilityRole="button"
+        accessibilityLabel={t('searchScreen.title')}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        style={styles.searchBtn}
+      >
+        <Search size={20} color="#e9d5ff" />
       </TouchableOpacity>
-    );
-  }, [ticketsRemaining]);
+    ),
+    [router, t],
+  );
 
   const FloatingHeader = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 
@@ -2304,41 +2291,6 @@ export default function MatchesHubScreenV2() {
         </View>
       </Modal>
 
-      {/* Tickets Info Modal */}
-      <Modal visible={showTicketsInfo} transparent animationType="fade">
-        <View style={[styles.modalOverlay, Platform.OS === 'android' && { backgroundColor: 'rgba(0,0,0,0.85)' }]}>
-          <BlurView intensity={Platform.OS === 'ios' ? 30 : 100} tint="dark" style={StyleSheet.absoluteFill} />
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setShowTicketsInfo(false)} activeOpacity={1} />
-          <View style={styles.ticketsInfoModalOuter}>
-            <View style={styles.ticketsInfoModalInner}>
-              {isLiquidGlassSupported ? (
-                <LiquidGlassView {...({ style: StyleSheet.absoluteFill, tint: 'rgba(15,5,25,0.99)', effect: 'regular' } as any)} />
-              ) : (
-                <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
-              )}
-              <LinearGradient colors={['rgba(168,85,247,0.15)', 'rgba(0,0,0,0.5)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
-              <View style={styles.infoIconWrap}>
-                <View style={{ shadowColor: '#a855f7', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 10, elevation: 6 }}>
-                  <Ticket size={32} color="#d8b4fe" />
-                </View>
-              </View>
-              <Text style={styles.infoTitle}>{t('matches.tickets.sheetTitle')}</Text>
-              <View style={styles.infoRow}>
-                <View style={styles.infoDot} />
-                <Text style={styles.infoText}>{t('matches.tickets.rule1')}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <View style={styles.infoDot} />
-                <Text style={styles.infoText}>{t('matches.tickets.rule2')}</Text>
-              </View>
-              <TouchableOpacity style={styles.infoBtn} onPress={() => setShowTicketsInfo(false)} activeOpacity={0.8}>
-                <LinearGradient colors={['#a855f7', '#7e22ce']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                <Text style={styles.infoBtnTxt}>{t('matches.tickets.gotIt')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -2360,6 +2312,16 @@ const styles = StyleSheet.create({
   plusChipSmall: { backgroundColor: PURPLE_PRIMARY, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
   logoPlusSmall: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
   headerTitleTxt: { flexShrink: 0, color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
+  searchBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: 'rgba(168,85,247,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   listHeader: { marginBottom: 4 },
   pinnedWcWrap: { marginBottom: 10 },
   staleBanner: {

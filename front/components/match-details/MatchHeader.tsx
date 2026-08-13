@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -56,6 +56,9 @@ interface MatchHeaderProps {
   vsLabel?: string;
   liveLabel?: string;
   penaltiesShortLabel?: string;
+  /** Tapping a team (logo + name) opens its 365 profile when provided. */
+  onPressHomeTeam?: () => void;
+  onPressAwayTeam?: () => void;
 }
 
 const LIVE_STATUSES = ['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
@@ -121,6 +124,8 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   vsLabel = 'VS',
   liveLabel = 'LIVE',
   penaltiesShortLabel = 'Pens',
+  onPressHomeTeam,
+  onPressAwayTeam,
 }) => {
   const short = statusShort || '';
   const isHalftime = short === 'HT';
@@ -246,12 +251,18 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
         </View>
 
         <View style={styles.teamsRow}>
-          <View style={styles.teamCol}>
+          <TouchableOpacity
+            style={styles.teamCol}
+            onPress={onPressHomeTeam}
+            disabled={!onPressHomeTeam}
+            activeOpacity={0.7}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
             <TeamLogo name={homeTeam} uri={homeLogo} />
             <Text style={styles.teamName} numberOfLines={1}>
               {homeTeam}
             </Text>
-          </View>
+          </TouchableOpacity>
 
           <View style={styles.scoreArea}>
             {isUpcoming ? (
@@ -310,12 +321,18 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
             )}
           </View>
 
-          <View style={styles.teamCol}>
+          <TouchableOpacity
+            style={styles.teamCol}
+            onPress={onPressAwayTeam}
+            disabled={!onPressAwayTeam}
+            activeOpacity={0.7}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
             <TeamLogo name={awayTeam} uri={awayLogo} />
             <Text style={styles.teamName} numberOfLines={1}>
               {awayTeam}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
     </View>

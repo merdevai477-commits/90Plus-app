@@ -75,6 +75,11 @@ import {
     type ThreeSixFiveResult,
     type ThreeSixFiveStandingRow,
     type ThreeSixFiveFixtureItem,
+    type ThreeSixFiveCompetitorInfo,
+    type ThreeSixFiveCompetitorMatches,
+    type ThreeSixFiveCompetitorTransfers,
+    type ThreeSixFiveCompetitorStats,
+    type ThreeSixFiveSearchResults,
 } from './threeSixFiveScores.service';
 import { redisCacheService } from './redis-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
@@ -3123,6 +3128,46 @@ class FootballDataCacheService {
             return { data: null, source: null };
         }
         return threeSixFiveScoresService.getHeadToHeadForm(gameId, language);
+    }
+
+    // ─── 365 competitor (club / national team) profile wrappers ───────────────
+    // These are a PRIMARY data source (not gated on the WC experiment): the
+    // service layer owns Redis + Postgres caching; controllers call through here.
+
+    async getCached365CompetitorInfo(
+        competitorId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorInfo>> {
+        return threeSixFiveScoresService.getCompetitorInfo(competitorId, language);
+    }
+
+    async getCached365CompetitorMatches(
+        competitorId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorMatches>> {
+        return threeSixFiveScoresService.getCompetitorMatches(competitorId, language);
+    }
+
+    async getCached365CompetitorTransfers(
+        competitorId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorTransfers>> {
+        return threeSixFiveScoresService.getCompetitorTransfers(competitorId, language);
+    }
+
+    async getCached365CompetitorStats(
+        competitorId: number,
+        competitionId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorStats>> {
+        return threeSixFiveScoresService.getCompetitorStats(competitorId, competitionId, language);
+    }
+
+    async searchFootballEntities(
+        query: string,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveSearchResults>> {
+        return threeSixFiveScoresService.searchEntities(query, language);
     }
 
     async getCached365PlayerMatchReport(

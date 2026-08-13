@@ -2840,6 +2840,213 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/365/search/all?q= — combined clubs + national teams + players.
+   */
+  static async searchFootballEntities(req: Request, res: Response): Promise<void> {
+    try {
+      const query = (req.query.q as string)?.trim();
+      if (!query || query.length < 2) {
+        res.status(400).json({ status: 'ERROR', message: 'Query must be at least 2 characters' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.searchFootballEntities(query, language);
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores search unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      const { clubs, nationalTeams, players } = result.data;
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: {
+          query,
+          count: clubs.length + nationalTeams.length + players.length,
+        },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/competitor/:id — club/national-team header + competitions.
+   */
+  static async getCached365CompetitorInfo(req: Request, res: Response): Promise<void> {
+    try {
+      const competitorId = parseInt(ensureString(req.params.id));
+      if (isNaN(competitorId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid competitor ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365CompetitorInfo(
+        competitorId,
+        language,
+      );
+      if (!result.data) {
+        res.status(404).json({
+          status: 'ERROR',
+          message: '365Scores competitor not found',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { competitorId },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/competitor/:id/matches — live/upcoming/finished.
+   */
+  static async getCached365CompetitorMatches(req: Request, res: Response): Promise<void> {
+    try {
+      const competitorId = parseInt(ensureString(req.params.id));
+      if (isNaN(competitorId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid competitor ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365CompetitorMatches(
+        competitorId,
+        language,
+      );
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores competitor matches unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      const { live, upcoming, finished } = result.data;
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: {
+          competitorId,
+          live: live.length,
+          upcoming: upcoming.length,
+          finished: finished.length,
+        },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/competitor/:id/transfers — incoming/outgoing.
+   */
+  static async getCached365CompetitorTransfers(req: Request, res: Response): Promise<void> {
+    try {
+      const competitorId = parseInt(ensureString(req.params.id));
+      if (isNaN(competitorId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid competitor ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365CompetitorTransfers(
+        competitorId,
+        language,
+      );
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores competitor transfers unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: {
+          competitorId,
+          in: result.data.in.length,
+          out: result.data.out.length,
+        },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/competitor/:id/stats?competitionId= — player leaderboards.
+   * When competitionId is omitted, the competitor's main competition is used.
+   */
+  static async getCached365CompetitorStats(req: Request, res: Response): Promise<void> {
+    try {
+      const competitorId = parseInt(ensureString(req.params.id));
+      if (isNaN(competitorId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid competitor ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const rawCompetition = req.query.competitionId ?? req.query.competitions;
+      const parsedCompetition =
+        typeof rawCompetition === 'string' ? parseInt(rawCompetition.trim(), 10) : NaN;
+      let competitionId = Number.isFinite(parsedCompetition) ? parsedCompetition : undefined;
+
+      if (competitionId == null) {
+        const info = await footballDataCacheService.getCached365CompetitorInfo(
+          competitorId,
+          language,
+        );
+        competitionId =
+          info.data?.mainCompetitionId ??
+          info.data?.competitions.find((c) => c.hasStats)?.id ??
+          info.data?.competitions[0]?.id;
+      }
+
+      if (competitionId == null) {
+        res.status(400).json({
+          status: 'ERROR',
+          message: 'No competition available for stats',
+        });
+        return;
+      }
+
+      const result = await footballDataCacheService.getCached365CompetitorStats(
+        competitorId,
+        competitionId,
+        language,
+      );
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores competitor stats unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { competitorId, competitionId },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/cached/365/player/:athleteId/info — basic profile + next game (365Scores).
    */
   static async getCached365PlayerInfo(req: Request, res: Response): Promise<void> {

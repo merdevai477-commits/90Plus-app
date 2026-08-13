@@ -3,8 +3,7 @@
  * safe to call from render paths.
  */
 
-import type { Fixture, Trophy } from '../../services/apiFootball';
-import type { SquadPlayer } from '../../hooks/useTeamProfile';
+import type { Fixture } from '../../services/apiFootball';
 import {
     LIVE_STATUS_SHORTS,
     FINISHED_STATUS_SHORTS,
@@ -21,98 +20,6 @@ export function getMatchPhase(shortStatus: string | null | undefined): MatchPhas
 
 export function isLiveStatus(shortStatus: string | null | undefined): boolean {
     return getMatchPhase(shortStatus) === 'live';
-}
-
-// ─── Trophies ────────────────────────────────────────────────────────────────
-
-export interface AggregatedTrophy {
-    leagueId: number;
-    name: string;
-    country: string;
-    logo: string | null;
-    titles: number;
-    seasons: string[];
-}
-
-const WINNER_PLACES = new Set(['winner', '1st', 'champion', 'champions']);
-
-export function isWinnerPlace(place: string | null | undefined): boolean {
-    return WINNER_PLACES.has((place ?? '').trim().toLowerCase());
-}
-
-/**
- * Collapse the raw trophy list (one row per season) into per-competition title
- * counts, keeping only competitions actually won. Sorted by title count desc.
- */
-export function aggregateTrophies(trophies: Trophy[] | undefined | null): AggregatedTrophy[] {
-    if (!Array.isArray(trophies) || trophies.length === 0) return [];
-
-    const byLeague = new Map<string, AggregatedTrophy>();
-    for (const trophy of trophies) {
-        if (!isWinnerPlace(trophy.place)) continue;
-        const league = trophy.league;
-        if (!league?.name) continue;
-        const key = league.id != null ? `id:${league.id}` : `name:${league.name.toLowerCase()}`;
-        const existing = byLeague.get(key);
-        if (existing) {
-            existing.titles += 1;
-            if (trophy.season) existing.seasons.push(String(trophy.season));
-        } else {
-            byLeague.set(key, {
-                leagueId: league.id ?? 0,
-                name: league.name,
-                country: league.country ?? '',
-                logo: league.logo ?? null,
-                titles: 1,
-                seasons: trophy.season ? [String(trophy.season)] : [],
-            });
-        }
-    }
-
-    return [...byLeague.values()].sort((a, b) => b.titles - a.titles);
-}
-
-// ─── Squad grouping ──────────────────────────────────────────────────────────
-
-export type PositionGroupKey = 'Goalkeeper' | 'Defender' | 'Midfielder' | 'Attacker';
-
-export const POSITION_GROUP_ORDER: PositionGroupKey[] = [
-    'Goalkeeper',
-    'Defender',
-    'Midfielder',
-    'Attacker',
-];
-
-export function groupSquadByPosition(
-    players: SquadPlayer[] | undefined | null,
-): Record<PositionGroupKey, SquadPlayer[]> {
-    const groups: Record<PositionGroupKey, SquadPlayer[]> = {
-        Goalkeeper: [],
-        Defender: [],
-        Midfielder: [],
-        Attacker: [],
-    };
-    if (!Array.isArray(players)) return groups;
-
-    for (const player of players) {
-        const pos = (player.position ?? '').toLowerCase();
-        if (pos.startsWith('goal')) groups.Goalkeeper.push(player);
-        else if (pos.startsWith('def')) groups.Defender.push(player);
-        else if (pos.startsWith('mid')) groups.Midfielder.push(player);
-        else if (pos.startsWith('att') || pos.startsWith('for') || pos.startsWith('str')) {
-            groups.Attacker.push(player);
-        } else groups.Midfielder.push(player); // unknown → keep visible
-    }
-
-    // Sort each group by shirt number (nulls last).
-    for (const key of POSITION_GROUP_ORDER) {
-        groups[key].sort((a, b) => {
-            const an = a.number ?? 999;
-            const bn = b.number ?? 999;
-            return an - bn;
-        });
-    }
-    return groups;
 }
 
 // ─── Competitions from fixtures ──────────────────────────────────────────────
@@ -168,49 +75,7 @@ export interface NormalizedTeamStats {
     form: string[]; // e.g. ['W','D','L']
 }
 
-function toInt(value: unknown): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? Math.trunc(n) : 0;
-}
-
-/** Normalize the API-Football team statistics payload. Returns null if empty. */
-export function normalizeApiStatistics(stats: any): NormalizedTeamStats | null {
-    if (!stats || typeof stats !== 'object') return null;
-    const fixtures = stats.fixtures;
-    const goals = stats.goals;
-    if (!fixtures && !goals) return null;
-
-    const played = toInt(fixtures?.played?.total);
-    const wins = toInt(fixtures?.wins?.total);
-    const draws = toInt(fixtures?.draws?.total);
-    const losses = toInt(fixtures?.loses?.total);
-    const goalsFor = toInt(goals?.for?.total?.total);
-    const goalsAgainst = toInt(goals?.against?.total?.total);
-    const cleanSheets =
-        stats.clean_sheet?.total != null ? toInt(stats.clean_sheet.total) : null;
-
-    const formStr = typeof stats.form === 'string' ? stats.form : '';
-    const form = formStr.slice(-6).split('').filter(Boolean);
-
-    const winRate = played > 0 ? Math.round((wins / played) * 100) : 0;
-
-    return {
-        played,
-        wins,
-        draws,
-        losses,
-        goalsFor,
-        goalsAgainst,
-        goalDiff: goalsFor - goalsAgainst,
-        cleanSheets,
-        winRate,
-        avgGoalsFor: played > 0 ? Math.round((goalsFor / played) * 10) / 10 : 0,
-        avgGoalsAgainst: played > 0 ? Math.round((goalsAgainst / played) * 10) / 10 : 0,
-        form,
-    };
-}
-
-/** Fallback stats derived from finished fixtures when the stats endpoint is empty. */
+/** Season stats derived directly from finished 365 fixtures. */
 export function computeStatsFromFixtures(
     finished: Fixture[],
     teamId: number,

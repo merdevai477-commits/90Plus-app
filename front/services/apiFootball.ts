@@ -751,6 +751,129 @@ export interface Coach {
   }>;
 }
 
+// ─── 365Scores competitor (club / national team) profile + search ────────────
+
+export interface Competitor365Competition {
+  id: number;
+  name: string;
+  countryId: number | null;
+  country: string | null;
+  logo: string | null;
+  hasStandings: boolean;
+  hasStats: boolean;
+  hasTransfers: boolean;
+}
+
+export interface Competitor365Info {
+  competitorId: number;
+  sportId: number;
+  type: number; // 1 = club, 2 = national team
+  name: string;
+  longName: string | null;
+  symbolicName: string | null;
+  nameForURL: string | null;
+  countryId: number | null;
+  country: string | null;
+  logo: string | null;
+  color: string | null;
+  awayColor: string | null;
+  mainCompetitionId: number | null;
+  hasSquad: boolean;
+  hasTransfers: boolean;
+  isNationalTeam: boolean;
+  competitions: Competitor365Competition[];
+}
+
+export interface Competitor365Matches {
+  live: Fixture[];
+  upcoming: Fixture[];
+  finished: Fixture[];
+}
+
+export interface Competitor365Transfer {
+  athleteId: number;
+  athleteName: string;
+  athletePhoto: string | null;
+  positionName: string | null;
+  isArrival: boolean;
+  price: string | null;
+  date: string | null;
+  clubId: number | null;
+  clubName: string | null;
+  clubLogo: string | null;
+}
+
+export interface Competitor365Transfers {
+  in: Competitor365Transfer[];
+  out: Competitor365Transfer[];
+}
+
+export interface Stat365LeaderRow {
+  rank: number;
+  athleteId: number;
+  name: string;
+  photo: string | null;
+  value: string;
+  competitorId: number | null;
+  leftClub: boolean;
+}
+
+export interface Stat365Leaderboard {
+  key: number;
+  name: string;
+  rows: Stat365LeaderRow[];
+}
+
+export interface Competitor365Stats {
+  competitionId: number;
+  leaderboards: Stat365Leaderboard[];
+}
+
+export interface Standing365Row {
+  groupNum: number;
+  groupName: string | null;
+  position: number;
+  teamId: number;
+  teamName: string;
+  teamLogo: string;
+  gamePlayed: number;
+  gamesWon: number;
+  gamesEven: number;
+  gamesLost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  ratio: number;
+  points: number;
+}
+
+export interface SearchCompetitor365 {
+  competitorId: number;
+  name: string;
+  type: number;
+  countryId: number | null;
+  country: string | null;
+  logo: string | null;
+  isNationalTeam: boolean;
+}
+
+export interface SearchAthlete365 {
+  athleteId: number;
+  name: string;
+  shortName: string;
+  clubName: string | null;
+  clubId: number | null;
+  nationalityId: number | null;
+  sportId: number | null;
+  imageVersion: number | null;
+  imageUrl: string | null;
+}
+
+export interface FootballSearchResults {
+  clubs: SearchCompetitor365[];
+  nationalTeams: SearchCompetitor365[];
+  players: SearchAthlete365[];
+}
+
 export interface Venue {
   id: number;
   name: string;
@@ -2324,6 +2447,119 @@ export const ApiFootballService = {
       console.error('Error fetching team matches:', error);
       return { live: [], upcoming: [], finished: [], team: null };
     }
+  },
+
+  // ============================================
+  // 365Scores competitor (club / national team) profile + search
+  // Backed by Redis + Postgres on the server; language is auto-propagated.
+  // ============================================
+
+  /** Club / national-team header + participating competitions. */
+  async getCompetitor365Info(competitorId: number): Promise<Competitor365Info | null> {
+    if (!competitorId || competitorId <= 0) return null;
+    try {
+      const res = await fetchFromProxy<Competitor365Info>(`/cached/365/competitor/${competitorId}`);
+      return res && typeof (res as any).competitorId === 'number' ? res : null;
+    } catch (error) {
+      console.error('Error fetching 365 competitor info:', error);
+      return null;
+    }
+  },
+
+  /** Live / upcoming / finished matches for a competitor. */
+  async getCompetitor365Matches(competitorId: number): Promise<Competitor365Matches> {
+    const empty: Competitor365Matches = { live: [], upcoming: [], finished: [] };
+    if (!competitorId || competitorId <= 0) return empty;
+    try {
+      const res = await fetchFromProxy<Competitor365Matches>(
+        `/cached/365/competitor/${competitorId}/matches`,
+      );
+      return res && Array.isArray((res as any).finished) ? res : empty;
+    } catch (error) {
+      console.error('Error fetching 365 competitor matches:', error);
+      return empty;
+    }
+  },
+
+  /** Incoming / outgoing transfers for a competitor (clubs). */
+  async getCompetitor365Transfers(competitorId: number): Promise<Competitor365Transfers> {
+    const empty: Competitor365Transfers = { in: [], out: [] };
+    if (!competitorId || competitorId <= 0) return empty;
+    try {
+      const res = await fetchFromProxy<Competitor365Transfers>(
+        `/cached/365/competitor/${competitorId}/transfers`,
+      );
+      return res && Array.isArray((res as any).in) ? res : empty;
+    } catch (error) {
+      console.error('Error fetching 365 competitor transfers:', error);
+      return empty;
+    }
+  },
+
+  /** Player leaderboards (goals, assists, …) for a competitor's competition. */
+  async getCompetitor365Stats(
+    competitorId: number,
+    competitionId?: number,
+  ): Promise<Competitor365Stats | null> {
+    if (!competitorId || competitorId <= 0) return null;
+    try {
+      const params = competitionId ? { competitionId } : {};
+      const res = await fetchFromProxy<Competitor365Stats>(
+        `/cached/365/competitor/${competitorId}/stats`,
+        params,
+      );
+      return res && Array.isArray((res as any).leaderboards) ? res : null;
+    } catch (error) {
+      console.error('Error fetching 365 competitor stats:', error);
+      return null;
+    }
+  },
+
+  /** League table for a 365 competition (used by the profile Table tab). */
+  async getCompetitor365Standings(competitionId: number): Promise<Standing365Row[]> {
+    if (!competitionId || competitionId <= 0) return [];
+    try {
+      const res = await fetchFromProxy<Standing365Row[]>(`/cached/365/standings`, {
+        competitions: competitionId,
+      });
+      return Array.isArray(res) ? res : [];
+    } catch (error) {
+      console.error('Error fetching 365 standings:', error);
+      return [];
+    }
+  },
+
+  /** Combined text search across clubs, national teams and players. */
+  async searchFootball365(query: string): Promise<FootballSearchResults> {
+    const empty: FootballSearchResults = { clubs: [], nationalTeams: [], players: [] };
+    const q = (query ?? '').trim();
+    if (q.length < 2) return empty;
+    try {
+      const res = await fetchFromProxy<FootballSearchResults>(`/cached/365/search/all`, { q });
+      return res && Array.isArray((res as any).clubs) ? res : empty;
+    } catch (error) {
+      console.error('Error searching 365 entities:', error);
+      return empty;
+    }
+  },
+
+  /**
+   * Resolve a 365 competitor by name (used when navigating from API-Football
+   * contexts where only a team name is known). Prefers an exact case-insensitive
+   * name match, else the most popular result.
+   */
+  async resolveCompetitor365ByName(name: string): Promise<SearchCompetitor365 | null> {
+    const q = (name ?? '').trim();
+    if (q.length < 2) return null;
+    const results = await this.searchFootball365(q);
+    const all = [...results.clubs, ...results.nationalTeams];
+    if (all.length === 0) return null;
+    const lower = q.toLowerCase();
+    return (
+      all.find((c) => c.name.trim().toLowerCase() === lower) ??
+      all.find((c) => c.name.trim().toLowerCase().includes(lower)) ??
+      all[0]
+    );
   },
 
   /**

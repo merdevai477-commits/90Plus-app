@@ -1,9 +1,10 @@
 /**
  * Follow / unfollow clubs & national teams.
  *
- * Offline-first (TeamFavoritesStorage) with optimistic UI and rollback, backed
- * by the dedicated FavoriteTeam API (TeamsService) when the user is signed in.
- * Mirrors useFavoriteMatches but adds a `pending` flag for the Follow button.
+ * IDs stored here are 365Scores competitorIds (same integer column on
+ * FavoriteTeam.apiTeamId). Offline-first (TeamFavoritesStorage) with optimistic
+ * UI and rollback, backed by the dedicated FavoriteTeam API (TeamsService)
+ * when the user is signed in.
  */
 
 import { useState, useEffect, useCallback } from 'react';

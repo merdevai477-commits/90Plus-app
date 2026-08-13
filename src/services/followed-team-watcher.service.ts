@@ -1,8 +1,8 @@
 /**
  * Followed Team Watcher Service
  *
- * When a user follows a club / national team (FavoriteTeam), they should be
- * notified about that team's matches that:
+ * When a user follows a club / national team (FavoriteTeam.apiTeamId = 365
+ * competitorId), they should be notified about that team's matches that:
  *   - have already STARTED (kickoff), or
  *   - are UPCOMING but only when kickoff is on the SAME calendar day.
  *
@@ -22,7 +22,6 @@
 
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { footballService, isFootballQuotaExhausted } from './football.service';
 import {
     isWorldCupOnlyMode,
     logSkippingNonWorldCup,
@@ -33,6 +32,8 @@ import {
     scheduleMatchStartReminder,
     cancelMatchStartReminder,
 } from '../queues/match-start-reminder.queue';
+import { threeSixFiveScoresService } from './threeSixFiveScores.service';
+import { calendarDateFromKickoff, calendarTodayKey } from '../utils/calendar-day-bounds.util';
 
 interface ApiFixture {
     fixture?: { id?: number; date?: string; status?: { short?: string } };
@@ -44,10 +45,6 @@ interface ApiFixture {
 }
 
 const IN_PROGRESS_EXTRA_STATUSES = ['HT', '2H', 'ET', 'BT', 'P', 'INT', 'SUSP'];
-
-function todayDateString(): string {
-    return new Date().toISOString().split('T')[0];
-}
 
 function isFinished(status: string): boolean {
     return FINISHED_STATUSES.has(status) || ['CANC', 'ABD', 'AWD', 'WO', 'PST'].includes(status);
@@ -103,11 +100,6 @@ export class FollowedTeamWatcherService {
             logger.debug('[FollowedTeamWatcher] pass already in progress — skipping');
             return;
         }
-        if (isFootballQuotaExhausted()) {
-            logger.debug('[FollowedTeamWatcher] skipping — API-Football quota exhausted');
-            return;
-        }
-
         this.isRunning = true;
         try {
             // Only users who can actually receive a push.
@@ -170,7 +162,6 @@ export class FollowedTeamWatcherService {
             if (!user?.pushNotificationsConsent || !user.expoPushToken) {
                 return; // will be picked up later once push is enabled
             }
-            if (isFootballQuotaExhausted()) return;
 
             const fixtures = await this.getTodaysFixtures(apiTeamId);
             for (const fixture of fixtures) {
@@ -217,11 +208,19 @@ export class FollowedTeamWatcherService {
         }
     }
 
-    /** Fetch a team's fixtures kicking off today (same calendar day). */
-    private static async getTodaysFixtures(apiTeamId: number): Promise<ApiFixture[]> {
-        const date = todayDateString();
-        const fixtures = await footballService.getFixtures({ team: apiTeamId, date });
-        return Array.isArray(fixtures) ? (fixtures as ApiFixture[]) : [];
+    /**
+     * Same-calendar-day fixtures for a 365 competitor (live + upcoming).
+     * `apiTeamId` on FavoriteTeam now stores the 365 competitorId.
+     */
+    private static async getTodaysFixtures(competitorId: number): Promise<ApiFixture[]> {
+        const today = calendarTodayKey();
+        const result = await threeSixFiveScoresService.getCompetitorMatches(competitorId, 'en');
+        const live = result.data?.live ?? [];
+        const upcoming = result.data?.upcoming ?? [];
+        return [...live, ...upcoming].filter((fx) => {
+            const day = calendarDateFromKickoff(fx.fixture?.date);
+            return day === today;
+        }) as ApiFixture[];
     }
 
     /**

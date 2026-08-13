@@ -1,22 +1,23 @@
 /**
  * Horizontal, scrollable tab bar with the 90Plus purple underline active state.
+ * The visible tabs are supplied by the parent so clubs and national teams can
+ * show a different set (e.g. national teams hide Transfers).
  */
 
 import React from 'react';
 import { StyleSheet, ScrollView, TouchableOpacity, Text, View } from 'react-native';
 import { Colors, Spacing, FontSize, FontWeight } from '../../constants/theme';
 
-export type TeamTabKey = 'overview' | 'matches' | 'squad' | 'details';
+export type TeamTabKey = 'overview' | 'matches' | 'transfers' | 'table';
 
 interface TeamTabsProps {
     active: TeamTabKey;
     onChange: (key: TeamTabKey) => void;
     labels: Record<TeamTabKey, string>;
+    tabs: TeamTabKey[];
 }
 
-const ORDER: TeamTabKey[] = ['overview', 'matches', 'squad', 'details'];
-
-export default function TeamTabs({ active, onChange, labels }: TeamTabsProps) {
+export default function TeamTabs({ active, onChange, labels, tabs }: TeamTabsProps) {
     return (
         <View style={styles.wrapper}>
             <ScrollView
@@ -24,7 +25,7 @@ export default function TeamTabs({ active, onChange, labels }: TeamTabsProps) {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.scroll}
             >
-                {ORDER.map((key) => {
+                {tabs.map((key) => {
                     const isActive = key === active;
                     return (
                         <TouchableOpacity
@@ -78,4 +79,4 @@ const styles = StyleSheet.create({
     underlineActive: {
         backgroundColor: Colors.purplePrimary,
     },
-}); 
+});

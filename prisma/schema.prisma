@@ -1169,6 +1169,33 @@ model Cached365PlayerCareer {
   @@map("cached_365_player_career")
 }
 
+/// 365Scores competitor (club or national team) profile snapshot.
+/// competitorId is the 365 competitor id; type 1 = club, 2 = national team.
+model Cached365Competitor {
+  id                String   @id @default(uuid())
+  competitorId      Int      @unique
+  sportId           Int      @default(1)
+  type              Int      @default(1)
+  name              String
+  longName          String?
+  symbolicName      String?
+  nameForURL        String?
+  countryId         Int?
+  country           String?
+  logo              String?
+  mainCompetitionId Int?
+  isNationalTeam    Boolean  @default(false)
+  langId            Int      @default(1)
+  fullData          Json
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([name])
+  @@index([country])
+  @@index([updatedAt])
+  @@map("cached_365_competitors")
+}
+
 model CachedTeam {
   id            String   @id @default(uuid())
   teamId        Int      @unique

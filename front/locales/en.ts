@@ -293,6 +293,8 @@ export const en = {
     tabs: {
       overview: 'Overview',
       matches: 'Matches',
+      transfers: 'Transfers',
+      table: 'Table',
       squad: 'Squad',
       details: 'Details',
     },
@@ -303,6 +305,28 @@ export const en = {
     squadSize: 'Squad',
     coach: 'Coach',
     country: 'Country',
+    competitions: 'Competitions',
+
+    // Transfers
+    transfersIn: 'Arrivals',
+    transfersOut: 'Departures',
+    noTransfers: 'No transfers available',
+
+    // Top scorers
+    topScorers: 'Top Scorers',
+    noScorers: 'No player stats available',
+    leftClub: 'Left the club',
+
+    // Standings / table
+    noStandings: 'No table available',
+    colPos: '#',
+    colTeam: 'Team',
+    colPlayed: 'P',
+    colWon: 'W',
+    colDrawn: 'D',
+    colLost: 'L',
+    colGoalDiff: 'GD',
+    colPoints: 'Pts',
 
     // Overview sections
     nextMatch: 'Next Match',
@@ -2982,6 +3006,16 @@ export const en = {
     searching: 'Searching...',
     errorTitle: 'Search failed',
     errorSub: 'Please try again',
+    // Football search (clubs / national teams / players)
+    title: 'Search',
+    footballPlaceholder: 'Search clubs, national teams, players',
+    sectionClubs: 'Clubs',
+    sectionNationalTeams: 'National Teams',
+    sectionPlayers: 'Players',
+    clearAll: 'Clear all',
+    startTitle: 'Search football',
+    startSub: 'Find clubs, national teams and players',
+    minCharsSub: 'Type at least 2 characters',
   },
 
   // ── Push notifications — extended templates ──────────────────────────

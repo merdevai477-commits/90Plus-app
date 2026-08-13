@@ -398,6 +398,8 @@ export const ar = {
     tabs: {
       overview: 'نظرة عامة',
       matches: 'المباريات',
+      transfers: 'الانتقالات',
+      table: 'الترتيب',
       squad: 'التشكيلة',
       details: 'التفاصيل',
     },
@@ -408,6 +410,28 @@ export const ar = {
     squadSize: 'اللاعبون',
     coach: 'المدرب',
     country: 'الدولة',
+    competitions: 'البطولات',
+
+    // Transfers
+    transfersIn: 'الوافدون',
+    transfersOut: 'المغادرون',
+    noTransfers: 'لا توجد انتقالات متاحة',
+
+    // Top scorers
+    topScorers: 'الهدافون',
+    noScorers: 'لا توجد إحصائيات للاعبين',
+    leftClub: 'غادر النادي',
+
+    // Standings / table
+    noStandings: 'لا يوجد ترتيب متاح',
+    colPos: '#',
+    colTeam: 'الفريق',
+    colPlayed: 'ل',
+    colWon: 'ف',
+    colDrawn: 'ت',
+    colLost: 'خ',
+    colGoalDiff: 'الفارق',
+    colPoints: 'نقاط',
 
     // Overview sections
     nextMatch: 'المباراة القادمة',
@@ -2909,6 +2933,16 @@ export const ar = {
     searching: 'جاري البحث...',
     errorTitle: 'فشل البحث',
     errorSub: 'حاول مرة أخرى',
+    // بحث كرة القدم (أندية / منتخبات / لاعبون)
+    title: 'بحث',
+    footballPlaceholder: 'ابحث عن أندية، منتخبات، لاعبين',
+    sectionClubs: 'الأندية',
+    sectionNationalTeams: 'المنتخبات',
+    sectionPlayers: 'اللاعبون',
+    clearAll: 'مسح الكل',
+    startTitle: 'ابحث في كرة القدم',
+    startSub: 'اعثر على الأندية والمنتخبات واللاعبين',
+    minCharsSub: 'اكتب حرفين على الأقل',
   },
 
   // ── قوالب الإشعارات الفورية ────────────────────────────────────────

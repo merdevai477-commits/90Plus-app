@@ -1,46 +1,47 @@
 /**
- * Club / Team Profile (90Plus, Phantom Dark)
+ * Club / National-team Profile (90Plus, Phantom Dark) — 365Scores powered.
  *
- * Fully dynamic profile driven by React Query hooks over ApiFootballService.
- * Composes a modular header + quick stats + tabbed content (Overview / Matches /
- * Squad / Details) and wires the real Follow feature (dedicated backend).
+ * Fully dynamic profile driven by React Query hooks over ApiFootballService's
+ * 365 competitor endpoints (cached in Redis + Postgres). Composes a modular
+ * header + quick stats + tabbed content (Overview / Matches / Transfers / Table)
+ * and wires the real Follow feature.
  *
- * Works for both clubs and national teams (same /teams id). Route params:
- *   { id: string; name?: string; logo?: string }
+ * Route params: { id?: string; name?: string; logo?: string }
+ *   - `id`   → 365 competitorId (preferred).
+ *   - `name` → resolved to a competitorId when `id` is missing (e.g. navigation
+ *              from an API-Football context that only knows the team name).
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView, StatusBar } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQuery } from '@tanstack/react-query';
 
 import { Colors, Spacing } from '../constants/theme';
 import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName, getCountryDisplayName } from '../utils/i18nHelpers';
-import { getFootballSeasonYear, playerPhotoUrl } from '../utils/playerStatsAggregate';
+import { getFootballSeasonYear } from '../utils/playerStatsAggregate';
 import { useHaptic } from '../hooks/useHaptic';
 import { ErrorDisplay } from '../components/common/ErrorDisplay';
+import ApiFootballService from '../services/apiFootball';
 
 import {
-    useTeamInfo,
-    useTeamMatches,
-    useTeamSquad,
-    useTeamTrophies,
-    useTeamInjuries,
-    useTeamCoaches,
-    SquadPlayer,
+    useCompetitorInfo,
+    useCompetitorMatches,
+    useCompetitorTransfers,
+    useCompetitorStats,
 } from '../hooks/useTeamProfile';
 import { useFavoriteTeam } from '../hooks/useFavoriteTeam';
 
 import TeamHeader from '../components/TeamProfile/TeamHeader';
-import TeamQuickStats from '../components/TeamProfile/TeamQuickStats';
+import TeamQuickStats, { type QuickStat } from '../components/TeamProfile/TeamQuickStats';
 import TeamTabs, { TeamTabKey } from '../components/TeamProfile/TeamTabs';
 import TeamProfileSkeleton from '../components/TeamProfile/TeamProfileSkeleton';
 import OverviewTab from '../components/TeamProfile/OverviewTab';
 import MatchesTab from '../components/TeamProfile/MatchesTab';
-import SquadTab from '../components/TeamProfile/SquadTab';
-import DetailsTab from '../components/TeamProfile/DetailsTab';
-import { aggregateTrophies } from '../components/TeamProfile/utils';
+import TransfersTab from '../components/TeamProfile/TransfersTab';
+import TableTab from '../components/TeamProfile/TableTab';
 
 interface TeamParams {
     id?: string;
@@ -55,35 +56,100 @@ export default function TeamProfileScreen() {
     const { t, language } = useTranslation();
     const { trigger } = useHaptic();
 
-    const teamId = parseInt(params.id ?? '0', 10);
-    const validId = Number.isFinite(teamId) && teamId > 0;
+    const rawId = parseInt(params.id ?? '0', 10);
+    const hasDirectId = Number.isFinite(rawId) && rawId > 0;
+    const nameParam = (params.name ?? '').trim();
+
+    // Resolve competitorId from a team name when no numeric id was provided.
+    const resolveQ = useQuery({
+        queryKey: ['competitor365-resolve', nameParam.toLowerCase()],
+        queryFn: () => ApiFootballService.resolveCompetitor365ByName(nameParam),
+        enabled: !hasDirectId && nameParam.length >= 2,
+        staleTime: 30 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    const competitorId = hasDirectId ? rawId : resolveQ.data?.competitorId ?? 0;
+    const validId = competitorId > 0;
 
     const [activeTab, setActiveTab] = useState<TeamTabKey>('overview');
 
     // ── Data (React Query dedupes; all cached server-side) ────────────────────
-    const infoQ = useTeamInfo(teamId, validId);
-    const matchesQ = useTeamMatches(teamId, 30, validId);
-    const squadQ = useTeamSquad(teamId, validId);
-    const trophiesQ = useTeamTrophies(teamId, validId);
-    const injuriesQ = useTeamInjuries(teamId, validId);
-    const coachesQ = useTeamCoaches(teamId, validId);
+    const infoQ = useCompetitorInfo(competitorId, validId);
+    const matchesQ = useCompetitorMatches(competitorId, validId);
+    const info = infoQ.data ?? null;
+    const isNationalTeam = info?.type === 2;
+
+    const statsCompetitionId =
+        info?.mainCompetitionId ??
+        info?.competitions.find((c) => c.hasStats)?.id ??
+        info?.competitions[0]?.id ??
+        null;
+
+    const standingsComps = useMemo(
+        () => info?.competitions.filter((c) => c.hasStandings) ?? [],
+        [info],
+    );
+
+    const showTransfers = !!info?.hasTransfers && !isNationalTeam;
+    const showTable = standingsComps.length > 0;
+
+    const tabs = useMemo<TeamTabKey[]>(() => {
+        const list: TeamTabKey[] = ['overview', 'matches'];
+        if (showTransfers) list.push('transfers');
+        if (showTable) list.push('table');
+        return list;
+    }, [showTransfers, showTable]);
+
+    // Keep the active tab valid when the tab set changes (e.g. national teams).
+    useEffect(() => {
+        if (!tabs.includes(activeTab)) setActiveTab('overview');
+    }, [tabs, activeTab]);
+
+    const statsQ = useCompetitorStats(
+        competitorId,
+        statsCompetitionId,
+        validId && !!statsCompetitionId,
+    );
+    const transfersQ = useCompetitorTransfers(competitorId, validId && showTransfers);
 
     // ── Follow ─────────────────────────────────────────────────────────────────
     const { isFollowing, toggleFollow, pending: followPending } = useFavoriteTeam();
 
-    const teamInfo = infoQ.data ?? null;
-    const teamName = getTeamDisplayName(teamInfo?.team?.name ?? params.name, language);
-    const country = teamInfo?.team?.country ?? null;
+    const teamName = getTeamDisplayName(info?.name ?? nameParam, language);
+    const country = info?.country ?? null;
 
-    const quickStats = useMemo(() => {
-        const trophyTitles = aggregateTrophies(trophiesQ.data).reduce((sum, tr) => sum + tr.titles, 0);
-        return {
-            trophies: trophyTitles,
-            squadSize: squadQ.data?.length ?? 0,
-            coachName: coachesQ.data && coachesQ.data.length > 0 ? coachesQ.data[0].name : null,
-            country: country ? getCountryDisplayName(country, language) : null,
-        };
-    }, [trophiesQ.data, squadQ.data, coachesQ.data, country, language]);
+    const quickStats = useMemo<QuickStat[]>(() => {
+        const chips: QuickStat[] = [];
+        if (country) {
+            chips.push({
+                key: 'country',
+                icon: 'flag',
+                value: getCountryDisplayName(country, language),
+                label: t.teamProfile.country,
+            });
+        }
+        const playedCount = matchesQ.data?.finished.length ?? 0;
+        if (playedCount > 0) {
+            chips.push({
+                key: 'played',
+                icon: 'football',
+                value: playedCount,
+                label: t.teamProfile.played,
+            });
+        }
+        if (info && info.competitions.length > 0) {
+            chips.push({
+                key: 'competitions',
+                icon: 'trophy',
+                value: info.competitions.length,
+                label: t.teamProfile.competitions,
+                tint: Colors.gold,
+            });
+        }
+        return chips;
+    }, [country, language, matchesQ.data, info, t]);
 
     // ── Handlers ─────────────────────────────────────────────────────────────
     const handleBack = () => {
@@ -94,9 +160,9 @@ export default function TeamProfileScreen() {
     const handleToggleFollow = () => {
         trigger('medium');
         toggleFollow({
-            id: teamId,
-            name: teamInfo?.team?.name ?? params.name ?? null,
-            logo: teamInfo?.team?.logo ?? params.logo ?? null,
+            id: competitorId,
+            name: info?.name ?? nameParam ?? null,
+            logo: info?.logo ?? params.logo ?? null,
             country,
         });
     };
@@ -109,24 +175,27 @@ export default function TeamProfileScreen() {
         } as any);
     };
 
-    const handleOpenPlayer = (player: SquadPlayer) => {
+    const handleOpenPlayer = (athleteId: number, name: string, photo: string | null) => {
+        if (!athleteId) return;
         trigger('light');
         router.push({
             pathname: '/player-profile',
             params: {
-                id: String(player.id),
-                name: player.name,
-                photo: playerPhotoUrl(player.id, player.photo),
-                teamName: teamInfo?.team?.name ?? '',
-                teamLogo: teamInfo?.team?.logo ?? '',
-                teamId: teamInfo?.team?.id ? String(teamInfo.team.id) : String(teamId),
+                id: String(athleteId),
+                name,
+                photo: photo ?? '',
+                teamName: info?.name ?? '',
+                teamLogo: info?.logo ?? '',
+                teamId: String(competitorId),
                 season: String(getFootballSeasonYear()),
             },
         } as any);
     };
 
     // ── States ───────────────────────────────────────────────────────────────
-    if (!validId) {
+    const resolving = !hasDirectId && resolveQ.isLoading;
+
+    if (!validId && !resolving) {
         return (
             <View style={styles.container}>
                 <StatusBar barStyle="light-content" />
@@ -142,7 +211,7 @@ export default function TeamProfileScreen() {
         );
     }
 
-    if (infoQ.isLoading) {
+    if (resolving || infoQ.isLoading) {
         return (
             <View style={styles.container}>
                 <StatusBar barStyle="light-content" />
@@ -151,7 +220,7 @@ export default function TeamProfileScreen() {
         );
     }
 
-    if (infoQ.isError || !teamInfo?.team) {
+    if (infoQ.isError || !info) {
         return (
             <View style={styles.container}>
                 <StatusBar barStyle="light-content" />
@@ -170,8 +239,8 @@ export default function TeamProfileScreen() {
     const tabLabels: Record<TeamTabKey, string> = {
         overview: t.teamProfile.tabs.overview,
         matches: t.teamProfile.tabs.matches,
-        squad: t.teamProfile.tabs.squad,
-        details: t.teamProfile.tabs.details,
+        transfers: t.teamProfile.tabs.transfers,
+        table: t.teamProfile.tabs.table,
     };
 
     return (
@@ -182,46 +251,43 @@ export default function TeamProfileScreen() {
                 t={t}
                 language={language}
                 name={teamName}
-                logo={teamInfo.team.logo}
+                logo={info.logo}
                 country={country}
-                founded={teamInfo.team.founded}
-                stadium={teamInfo.venue?.name}
-                isFollowing={isFollowing(teamId)}
+                founded={null}
+                stadium={null}
+                isFollowing={isFollowing(competitorId)}
                 followPending={followPending}
                 onToggleFollow={handleToggleFollow}
                 onBack={handleBack}
                 topInset={insets.top}
             />
 
-            <View style={styles.quickStats}>
-                <TeamQuickStats
-                    t={t}
-                    trophies={quickStats.trophies}
-                    squadSize={quickStats.squadSize}
-                    coachName={quickStats.coachName}
-                    country={quickStats.country}
-                />
-            </View>
+            {quickStats.length > 0 ? (
+                <View style={styles.quickStats}>
+                    <TeamQuickStats stats={quickStats} />
+                </View>
+            ) : null}
 
-            <TeamTabs active={activeTab} onChange={setActiveTab} labels={tabLabels} />
+            <TeamTabs active={activeTab} onChange={setActiveTab} labels={tabLabels} tabs={tabs} />
 
             <ScrollView
                 style={styles.content}
-                contentContainerStyle={[styles.contentInner, { paddingBottom: insets.bottom + Spacing['4xl'] }]}
+                contentContainerStyle={[
+                    styles.contentInner,
+                    { paddingBottom: insets.bottom + Spacing['4xl'] },
+                ]}
                 showsVerticalScrollIndicator={false}
             >
                 {activeTab === 'overview' ? (
                     <OverviewTab
-                        teamId={teamId}
-                        teamInfo={teamInfo}
+                        competitorId={competitorId}
                         matches={matchesQ.data}
-                        trophies={trophiesQ.data}
-                        injuries={injuriesQ.data}
+                        stats={statsQ.data}
                         language={language}
                         t={t}
                         onOpenMatches={() => setActiveTab('matches')}
-                        onOpenDetails={() => setActiveTab('details')}
                         onOpenMatch={handleOpenMatch}
+                        onOpenPlayer={handleOpenPlayer}
                     />
                 ) : null}
 
@@ -234,22 +300,14 @@ export default function TeamProfileScreen() {
                     />
                 ) : null}
 
-                {activeTab === 'squad' ? (
-                    <SquadTab
-                        squad={squadQ.data}
-                        injuries={injuriesQ.data}
-                        t={t}
-                        onOpenPlayer={handleOpenPlayer}
-                    />
+                {activeTab === 'transfers' ? (
+                    <TransfersTab transfers={transfersQ.data} t={t} />
                 ) : null}
 
-                {activeTab === 'details' ? (
-                    <DetailsTab
-                        teamId={teamId}
-                        teamInfo={teamInfo}
-                        coaches={coachesQ.data}
-                        trophies={trophiesQ.data}
-                        injuries={injuriesQ.data}
+                {activeTab === 'table' ? (
+                    <TableTab
+                        competitorId={competitorId}
+                        competitions={standingsComps}
                         language={language}
                         t={t}
                     />
