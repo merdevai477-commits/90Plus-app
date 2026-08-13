@@ -795,7 +795,7 @@ export default function NotificationsScreen() {
                                 },
                             });
                         } else {
-                            router.push({ pathname: '/(tabs)/matches', params: { filter: 'Predictions' } });
+                            router.push('/(tabs)/matches');
                         }
                         break;
                     default:

@@ -11,7 +11,6 @@ import { useAuth } from '@clerk/clerk-expo';
 import { FlashList } from '@shopify/flash-list';
 import { TEXT_PRIMARY, PURPLE_PRIMARY, LIVE_RED } from '../../constants/tokens';
 import { APP_BG } from '../../constants/ui';
-import { TEMP_FREEZE_PREDICTIONS_TAB_MATCHES } from '../../constants/tempSurfaceFreeze';
 import { useMatchesData } from '../../hooks/useMatchesData';
 import { PredictionsService, PredictionApiError } from '../../services/predictions.service';
 import { toastManager } from '../../services/toastManager';
@@ -117,7 +116,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ITEM_SEPARATOR_8 = () => <View style={{ height: 8 }} />;
 const ITEM_SEPARATOR_10 = () => <View style={{ height: 10 }} />;
 
-const FILTERS = ['All', 'Live', 'Upcoming', 'International', 'WorldCup', 'Finished', 'Predictions'] as const;
+const FILTERS = ['All', 'Live', 'Upcoming', 'International', 'WorldCup', 'Finished'] as const;
 type MatchFilter = (typeof FILTERS)[number];
 
 /** Local midnight — calendar/filter sync uses device timezone. */
@@ -152,7 +151,6 @@ const FILTER_LABEL_KEYS: Record<(typeof FILTERS)[number], string> = {
   International: 'matches.tabs.international',
   WorldCup: 'matches.tabs.worldCup',
   Finished: 'matches.tabs.finished',
-  Predictions: 'matches.tabs.predictions',
 };
 
 // Map API match status to display status
@@ -725,7 +723,7 @@ function LeagueAllMatchesModal({
     ({ item }: { item: Fixture }) => (
       <MatchRow
         fixture={item}
-        showPreds={filter === 'Predictions'}
+        showPreds={false}
         onPredict={onPredict}
         submittingId={submittingId}
         predictedMatches={predictedMatches}
@@ -924,7 +922,7 @@ const LeagueCard = memo(function LeagueCard({
               <MatchRow
                 key={fixture.id ?? `f-${i}`}
                 fixture={fixture}
-                showPreds={filter === 'Predictions'}
+                showPreds={false}
                 onPredict={onPredict}
                 submittingId={submittingId}
                 predictedMatches={predictedMatches}
@@ -972,7 +970,11 @@ export default function MatchesHubScreenV2() {
   useScreenFont();
   useMatchEventsMonitor();
   const params = useLocalSearchParams();
-  const initialFilter = (params.filter as MatchFilter) || 'All';
+  const paramFilter = Array.isArray(params.filter) ? params.filter[0] : params.filter;
+  const initialFilter: MatchFilter =
+    paramFilter && (FILTERS as readonly string[]).includes(paramFilter)
+      ? (paramFilter as MatchFilter)
+      : 'All';
   const [filter, setFilter] = useState<MatchFilter>(initialFilter);
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarViewDate, setCalendarViewDate] = useState<Date>(() => startOfLocalDay());
@@ -1047,15 +1049,7 @@ export default function MatchesHubScreenV2() {
   const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
   // Always fetch date-scoped WC when the feature is on so the WorldCup chip
   // can appear/hide from match availability (not only when that tab is open).
-  const wcFetchEnabled =
-    worldCupEnabled &&
-    (filter === 'WorldCup' ||
-      filter === 'International' ||
-      filter === 'All' ||
-      filter === 'Live' ||
-      filter === 'Upcoming' ||
-      filter === 'Finished' ||
-      filter === 'Predictions');
+  const wcFetchEnabled = !!worldCupEnabled;
   // World Cup tab is date-scoped so empty days (and post-final) hide the chip.
   // Live/Upcoming still use tournament-wide phases for their own lists.
   const wcPhaseMode =
@@ -1274,15 +1268,6 @@ export default function MatchesHubScreenV2() {
     if (filter === 'Upcoming') {
       return allGroups.map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.status === 'UPCOMING') })).filter(g => g.fixtures.length > 0);
     }
-    if (filter === 'Predictions') {
-      if (TEMP_FREEZE_PREDICTIONS_TAB_MATCHES) return [];
-      return allGroups.map(g => ({
-        ...g,
-        fixtures: g.fixtures.filter(f =>
-          f.status === 'UPCOMING' || (f.status === 'FT' && predictedMatches[f.id]),
-        ),
-      })).filter(g => g.fixtures.length > 0);
-    }
     if (filter === 'Finished') {
       return allGroups.map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.status === 'FT') })).filter(g => g.fixtures.length > 0);
     }
@@ -1292,7 +1277,7 @@ export default function MatchesHubScreenV2() {
         .filter(g => g.fixtures.length > 0);
     }
     return allGroups;
-  }, [groupedMatches, filter, predictedMatches]);
+  }, [groupedMatches, filter]);
 
   // Filter helper applied to a Match list. Mirrors the per-fixture predicates
   // used in the legacy `groups` memo so both views stay perfectly in sync.
@@ -1302,33 +1287,22 @@ export default function MatchesHubScreenV2() {
       if (filter === 'Upcoming') {
         return m.status !== 'live' && m.status !== 'finished';
       }
-      if (filter === 'Predictions') {
-        if (TEMP_FREEZE_PREDICTIONS_TAB_MATCHES) return false;
-        if (m.status === 'live') return false;
-        if (m.status === 'finished') return Boolean(predictedMatches[m.id]);
-        return true;
-      }
       if (filter === 'Finished') return m.status === 'finished';
       if (filter === 'All') return m.status !== 'finished';
       return true;
     },
-    [filter, predictedMatches],
+    [filter],
   );
 
   const fixturePassesFilter = useCallback(
     (f: Fixture): boolean => {
       if (filter === 'Live') return f.live;
       if (filter === 'Upcoming') return f.status === 'UPCOMING';
-      if (filter === 'Predictions') {
-        if (f.status === 'UPCOMING') return true;
-        if (f.status === 'FT') return Boolean(predictedMatches[f.id]);
-        return false;
-      }
       if (filter === 'Finished') return f.status === 'FT';
       if (filter === 'All') return f.status !== 'FT';
       return true;
     },
-    [filter, predictedMatches],
+    [filter],
   );
 
   // Country → League hierarchy after filtering. Drops empty leagues and
@@ -1416,7 +1390,7 @@ export default function MatchesHubScreenV2() {
     return stageEntries.map((e) => e.group);
   }, [worldCupMatches]);
 
-  /** Pinned at top on All/Live/Upcoming/Finished/Predictions — filtered by active tab. */
+  /** Pinned at top on All/Live/Upcoming/Finished — filtered by active tab. */
   const pinnedWorldCupGroup = useMemo((): LeagueGroup | null => {
     if (
       filter === 'WorldCup' ||
@@ -1811,7 +1785,7 @@ export default function MatchesHubScreenV2() {
       return (
         <MatchRow
           fixture={fixture}
-          showPreds={filter === 'Predictions'}
+          showPreds={false}
           onPredict={handlePredict}
           submittingId={submittingId}
           predictedMatches={predictedMatches}
@@ -2147,20 +2121,8 @@ export default function MatchesHubScreenV2() {
         gotItLabel={t('matchesInfo.gotIt')}
       />
       {/* FlashList — virtualized, JS-thread friendly, no nested scroll.
-          Predictions / WorldCup / default (All/Live/Upcoming/Finished) modes. */}
-      {filter === 'Predictions' ? (
-        <FlashList
-          data={filteredCountryGroups}
-          keyExtractor={cg => cg.country}
-          renderItem={renderCountryAccordion}
-          drawDistance={250}
-          ItemSeparatorComponent={ITEM_SEPARATOR_8}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={listHeaderWithPinnedWc}
-          ListEmptyComponent={listEmptyNode}
-        />
-      ) : filter === 'WorldCup' ? (
+          WorldCup / International / default (All/Live/Upcoming/Finished) modes. */}
+      {filter === 'WorldCup' ? (
         <FlashList
           data={worldCupLeagueGroups}
           keyExtractor={g => g.id}
