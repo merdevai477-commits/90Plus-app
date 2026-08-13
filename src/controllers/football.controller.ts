@@ -2859,14 +2859,19 @@ export class FootballController {
         });
         return;
       }
-      const { clubs, nationalTeams, players } = result.data;
+      const { clubs, nationalTeams, players, coaches, competitions } = result.data;
       res.json({
         status: 'SUCCESS',
         source: result.source,
         response: result.data,
         _meta: {
           query,
-          count: clubs.length + nationalTeams.length + players.length,
+          count:
+            (clubs?.length ?? 0) +
+            (nationalTeams?.length ?? 0) +
+            (players?.length ?? 0) +
+            (coaches?.length ?? 0) +
+            (competitions?.length ?? 0),
         },
       });
     } catch (error) {
@@ -3268,6 +3273,101 @@ export class FootballController {
       res.json({
         status: 'SUCCESS',
         response: popular,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/athlete/:id — coach or player fullDetails profile.
+   */
+  static async getCached365AthleteProfile(req: Request, res: Response): Promise<void> {
+    try {
+      const athleteId = parseInt(ensureString(req.params.id));
+      if (isNaN(athleteId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid athlete ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365AthleteProfile(athleteId, language);
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores athlete profile unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { athleteId },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/competition/:id — competition header for profile screen.
+   */
+  static async getCached365CompetitionProfile(req: Request, res: Response): Promise<void> {
+    try {
+      const competitionId = parseInt(ensureString(req.params.id));
+      if (isNaN(competitionId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid competition ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365CompetitionProfile(
+        competitionId,
+        language,
+      );
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores competition profile unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { competitionId },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/cached/365/transfers?competitions=7,11,552 — 365 competition transfers.
+   */
+  static async getCached365CompetitionTransfers(req: Request, res: Response): Promise<void> {
+    try {
+      const raw = String(req.query.competitions ?? '').trim();
+      const parsed = raw
+        ? raw.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isFinite(n) && n > 0)
+        : [552, 649, 7, 11, 17, 25, 35];
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365CompetitionTransfers(parsed, language);
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores transfers unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { competitions: parsed, groups: result.data.length },
       });
     } catch (error) {
       FootballController.handleError(res, error);

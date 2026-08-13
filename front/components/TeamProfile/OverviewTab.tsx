@@ -47,6 +47,7 @@ interface OverviewTabProps {
     onOpenMatches: () => void;
     onOpenMatch: (fixtureId: number) => void;
     onOpenPlayer: (athleteId: number, name: string, photo: string | null) => void;
+    onOpenCoach?: (athleteId: number, name: string, photo: string | null) => void;
 }
 
 // ─── Featured (live or next) match card ─────────────────────────────────────────
@@ -290,6 +291,7 @@ export default function OverviewTab({
     onOpenMatches,
     onOpenMatch,
     onOpenPlayer,
+    onOpenCoach,
 }: OverviewTabProps) {
     const live = matches?.live ?? [];
     const upcoming = matches?.upcoming ?? [];
@@ -308,6 +310,10 @@ export default function OverviewTab({
     return (
         <View style={styles.container}>
             {coach ? (
+                <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => onOpenCoach?.(coach.athleteId, coach.name, coach.imageUrl)}
+                >
                 <Card>
                     <View style={styles.coachRow}>
                         <CachedAthletePhoto
@@ -347,6 +353,7 @@ export default function OverviewTab({
                         </View>
                     ) : null}
                 </Card>
+                </TouchableOpacity>
             ) : null}
 
             {/* Featured / Next match */}

@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import ApiFootballService from '../services/apiFootball';
+import ApiFootballService, { type Player365Career, type Player365Transfer } from '../services/apiFootball';
 import { ProfileTheme } from '../constants/ProfileTheme';
 import { logger } from '../utils/logger';
 import PlayerAvatar from '../components/common/PlayerAvatar';
@@ -589,6 +589,7 @@ export default function PlayerProfileScreen() {
     const [error, setError] = useState<string | null>(null);
     const [loadingTransfers, setLoadingTransfers] = useState(false);
     const [matchReport365, setMatchReport365] = useState<MatchReport365 | null>(null);
+    const [career365, setCareer365] = useState<Player365Career | null>(null);
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
@@ -699,6 +700,25 @@ export default function PlayerProfileScreen() {
                                     s.games.position,
                             },
                         })),
+                    };
+                });
+            }
+            const career = await ApiFootballService.get365PlayerCareer(report.athleteId, language);
+            if (career) {
+                setCareer365(career);
+                setPlayer((prev) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        player: {
+                            ...prev.player,
+                            birth: {
+                                ...prev.player.birth,
+                                date: career.profile.dateOfBirth || prev.player.birth?.date,
+                            },
+                            height: career.profile.height || prev.player.height,
+                            nationality: career.profile.nationality || prev.player.nationality,
+                        },
                     };
                 });
             }
@@ -1222,6 +1242,32 @@ export default function PlayerProfileScreen() {
                             )}
                         </View>
                     </View>
+                    )}
+
+                    {/* Transfers — 365 career payload, never API-Football getTransfers */}
+                    {is365Source && (career365?.profile.transfers?.length ?? 0) > 0 && (
+                        <View style={styles.infoSection}>
+                            <Text style={styles.sectionTitle}>{pp.transfers}</Text>
+                            <View style={styles.transfersContainer}>
+                                {career365!.profile.transfers!.map((tr: Player365Transfer, index: number) => (
+                                    <View key={`${tr.competitorId}-${tr.date}-${index}`} style={styles.transferCard}>
+                                        <View style={styles.transferItem}>
+                                            <View style={styles.transferDateContainer}>
+                                                <Text style={styles.transferDate}>
+                                                    {tr.date ? String(tr.date).slice(0, 10) : 'N/A'}
+                                                </Text>
+                                                <Text style={styles.transferType}>
+                                                    {tr.transferTitle || tr.price || ''}
+                                                </Text>
+                                            </View>
+                                            <Text style={styles.transferTeamName} numberOfLines={1}>
+                                                {tr.competitorName || '—'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                ))}
+                            </View>
+                        </View>
                     )}
 
                     {/* Transfers — API-Football only */}

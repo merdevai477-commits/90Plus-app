@@ -46,6 +46,22 @@ describe('football-search-index', () => {
     expect(expandSearchQueries('فيني').boostedEntityIds.has(48298)).toBe(true);
   });
 
+  it('maps صلاح / رونالدو / هالاند and Egypt NT / الهلال to 365 IDs', () => {
+    expect(expandSearchQueries('صلاح').boostedEntityIds.has(1439)).toBe(true);
+    expect(expandSearchQueries('محمد صلاح').boostedEntityIds.has(1439)).toBe(true);
+    expect(expandSearchQueries('رونالدو').boostedEntityIds.has(817)).toBe(true);
+    expect(expandSearchQueries('هالاند').boostedEntityIds.has(65760)).toBe(true);
+    expect(expandSearchQueries('منتخب مصر').boostedEntityIds.has(5100)).toBe(true);
+    expect(expandSearchQueries('الهلال').boostedEntityIds.has(5457)).toBe(true);
+    expect(expandSearchQueries('ريال مدريد').boostedEntityIds.has(131)).toBe(true);
+  });
+
+  it('maps عموتة to coach 51976 and الدوري المصري to competition 552', () => {
+    expect(expandSearchQueries('عموتة').boostedEntityIds.has(51976)).toBe(true);
+    expect(expandSearchQueries('الدوري المصري').boostedEntityIds.has(552)).toBe(true);
+    expect(expandSearchQueries('champions league').boostedEntityIds.has(572)).toBe(true);
+  });
+
   it('treats ميسي as a player-oriented boost', () => {
     expect(isPlayerOrientedBoost(expandSearchQueries('ميسي').boostedEntityIds)).toBe(true);
     expect(isPlayerOrientedBoost(expandSearchQueries('الأهلي').boostedEntityIds)).toBe(false);

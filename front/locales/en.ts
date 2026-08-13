@@ -307,6 +307,9 @@ export const en = {
     coach: 'Coach',
     country: 'Country',
     competitions: 'Competitions',
+    currentCompetitions: 'Current competitions',
+    yearsOld: 'yrs',
+    height: 'Height',
 
     // Transfers
     transfersIn: 'Arrivals',
@@ -645,6 +648,27 @@ export const en = {
     currentSeason: 'Current Season',
     detailedStats: 'Detailed Statistics',
     trophies: 'Trophies',
+    dateOfBirth: 'Date of birth',
+    height: 'Height',
+    personalInfo: 'Personal info',
+    transfers: 'Transfers',
+  },
+
+  coachProfile: {
+    title: 'Coach',
+    loading: 'Loading coach…',
+    noData: 'Coach profile unavailable',
+    contract: 'Contract until',
+    trophies: 'Honours',
+    team: 'Club',
+  },
+
+  competitionProfile: {
+    title: 'Competition',
+    loading: 'Loading competition…',
+    noData: 'Competition unavailable',
+    table: 'Table',
+    noTable: 'Standings are not available',
   },
 
   offlineQueue: {
@@ -3010,13 +3034,15 @@ export const en = {
     errorSub: 'Please try again',
     // Football search (clubs / national teams / players)
     title: 'Search',
-    footballPlaceholder: 'Search clubs, national teams, players',
+    footballPlaceholder: 'Search clubs, players, coaches, competitions',
     sectionClubs: 'Clubs',
     sectionNationalTeams: 'National Teams',
     sectionPlayers: 'Players',
+    sectionCoaches: 'Coaches',
+    sectionCompetitions: 'Competitions',
     clearAll: 'Clear all',
     startTitle: 'Search football',
-    startSub: 'Find clubs, national teams and players',
+    startSub: 'Find clubs, national teams, players, coaches and competitions',
     minCharsSub: 'Type at least 2 characters',
   },
 

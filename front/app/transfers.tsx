@@ -19,8 +19,8 @@ import { useDebouncedCallback } from 'use-debounce';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Network from 'expo-network';
 import * as Haptics from 'expo-haptics';
-import ApiFootballService, { Transfer, TransfersByLeague, MAJOR_LEAGUES } from '../services/apiFootball';
-import { getFootballSeasonYear, playerPhotoUrl } from '../utils/playerStatsAggregate';
+import ApiFootballService, { Transfer, TransfersByLeague, type Competition365Transfers } from '../services/apiFootball';
+import { pushPlayerCareer } from '../utils/openPlayerProfile';
 import { useTranslation } from '../src/i18n';
 import { getLeagueDisplayName } from '../utils/i18nHelpers';
 import { TransferCardSkeleton } from '../components/Transfers/TransferCardSkeleton';
@@ -31,11 +31,54 @@ import { TransferDetailsModal } from '../components/Transfers/TransferDetailsMod
 // Example: Import user action tracker for Sentry breadcrumbs
 // import { useUserActionTracker } from '../utils/userActionTracker';
 
-const TRANSFERS_STORAGE_KEY = 'cached_transfers';
+const TRANSFERS_STORAGE_KEY = 'cached_transfers_365_v1';
 const TRANSFERS_TIMESTAMP_KEY = 'cached_transfers_timestamp';
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 type SortOption = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'value-desc' | 'value-asc' | 'age-asc' | 'age-desc';
+
+function map365TransferGroups(groups: Competition365Transfers[]): TransfersByLeague[] {
+  return groups.map((g) => ({
+    leagueId: g.competitionId,
+    leagueName: g.competitionName,
+    leagueLogo: g.competitionLogo ?? undefined,
+    transfers: g.transfers.map((t) => ({
+      player: {
+        id: t.athleteId,
+        name: t.athleteName,
+        photo: t.athletePhoto ?? '',
+      },
+      update: t.date ?? '',
+      league: {
+        id: g.competitionId,
+        name: g.competitionName,
+        logo: g.competitionLogo ?? '',
+      },
+      transfers: [
+        {
+          date: t.date ?? '',
+          type: t.typeName || t.price || 'Transfer',
+          teams: {
+            out: t.fromClubId
+              ? {
+                  id: t.fromClubId,
+                  name: t.fromClubName ?? '',
+                  logo: t.fromClubLogo ?? '',
+                }
+              : null,
+            in: t.toClubId
+              ? {
+                  id: t.toClubId,
+                  name: t.toClubName ?? '',
+                  logo: t.toClubLogo ?? '',
+                }
+              : null,
+          },
+        },
+      ],
+    })),
+  }));
+}
 
 // Memoized Transfer Card Component
 const TransferCard = React.memo(({ 
@@ -204,18 +247,6 @@ export default function TransfersScreen() {
     300
   );
 
-  // Calculate date range (last year)
-  const getDateRange = useCallback(() => {
-    const now = new Date();
-    const oneYearAgo = new Date(now);
-    oneYearAgo.setFullYear(now.getFullYear() - 1);
-    
-    return {
-      from: oneYearAgo.toISOString().split('T')[0],
-      to: now.toISOString().split('T')[0],
-    };
-  }, []);
-
   // Load transfers from AsyncStorage
   const loadTransfersFromStorage = useCallback(async (): Promise<boolean> => {
     try {
@@ -306,10 +337,8 @@ export default function TransfersScreen() {
         }
       }
 
-      const dateRange = getDateRange();
-      const data = await ApiFootballService.getTransfersByLeagues({
-        dateRange,
-      });
+      const groups = await ApiFootballService.get365TransfersByCompetitions();
+      const data = map365TransferGroups(groups);
 
       console.log('📦 Loaded transfers data:', {
         leaguesCount: data?.length || 0,
@@ -355,7 +384,7 @@ export default function TransfersScreen() {
       setLoading(false);
       loadingRef.current = false;
     }
-  }, [getDateRange, checkNetworkStatus, loadTransfersFromStorage, saveTransfersToStorage]);
+  }, [checkNetworkStatus, loadTransfersFromStorage, saveTransfersToStorage]);
 
   // Load favorites from storage
   useEffect(() => {
@@ -382,19 +411,14 @@ export default function TransfersScreen() {
       ? transfer.transfers[transfer.transfers.length - 1]
       : null;
     const currentTeam = latestTransfer?.teams.in;
-
-    router.push({
-      pathname: '/player-profile' as any,
-      params: {
-        id: transfer.player.id.toString(),
-        name: transfer.player.name,
-        photo: playerPhotoUrl(transfer.player.id, transfer.player.photo),
-        teamName: currentTeam?.name || '',
-        teamLogo: currentTeam?.logo || '',
-        teamId: currentTeam?.id ? String(currentTeam.id) : '',
-        season: String(getFootballSeasonYear()),
-      },
-    } as any);
+    pushPlayerCareer(router, {
+      athleteId: transfer.player.id,
+      name: transfer.player.name,
+      photo: transfer.player.photo,
+      teamName: currentTeam?.name,
+      teamLogo: currentTeam?.logo,
+      teamId: currentTeam?.id,
+    });
   }, [router]);
 
   const handleTeamPress = useCallback((teamId: number) => {

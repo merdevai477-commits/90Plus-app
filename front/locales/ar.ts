@@ -412,6 +412,9 @@ export const ar = {
     coach: 'المدرب',
     country: 'الدولة',
     competitions: 'البطولات',
+    currentCompetitions: 'البطولات الحالية',
+    yearsOld: 'سنة',
+    height: 'الطول',
 
     // Transfers
     transfersIn: 'الوافدون',
@@ -870,6 +873,27 @@ export const ar = {
     currentSeason: 'الموسم الحالي',
     detailedStats: 'إحصائيات تفصيلية',
     trophies: 'الألقاب',
+    dateOfBirth: 'تاريخ الميلاد',
+    height: 'الطول',
+    personalInfo: 'معلومات شخصية',
+    transfers: 'الانتقالات',
+  },
+
+  coachProfile: {
+    title: 'المدرب',
+    loading: 'جاري تحميل المدرب…',
+    noData: 'تعذّر تحميل ملف المدرب',
+    contract: 'العقد حتى',
+    trophies: 'الألقاب',
+    team: 'النادي',
+  },
+
+  competitionProfile: {
+    title: 'البطولة',
+    loading: 'جاري تحميل البطولة…',
+    noData: 'تعذّر تحميل البطولة',
+    table: 'الترتيب',
+    noTable: 'جدول الترتيب غير متاح',
   },
 
   predictions: {
@@ -2937,13 +2961,15 @@ export const ar = {
     errorSub: 'حاول مرة أخرى',
     // بحث كرة القدم (أندية / منتخبات / لاعبون)
     title: 'بحث',
-    footballPlaceholder: 'ابحث عن أندية، منتخبات، لاعبين',
+    footballPlaceholder: 'ابحث عن أندية، لاعبين، مدربين، بطولات',
     sectionClubs: 'الأندية',
     sectionNationalTeams: 'المنتخبات',
     sectionPlayers: 'اللاعبون',
+    sectionCoaches: 'المدربون',
+    sectionCompetitions: 'البطولات',
     clearAll: 'مسح الكل',
     startTitle: 'ابحث في كرة القدم',
-    startSub: 'اعثر على الأندية والمنتخبات واللاعبين',
+    startSub: 'اعثر على الأندية والمنتخبات واللاعبين والمدربين والبطولات',
     minCharsSub: 'اكتب حرفين على الأقل',
   },
 

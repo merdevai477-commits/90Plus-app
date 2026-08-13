@@ -292,6 +292,8 @@ function RootLayoutNav() {
       <Stack.Screen name="user" options={{ headerShown: false }} />
       <Stack.Screen name="player-profile" options={{ headerShown: false }} />
       <Stack.Screen name="player-career" options={{ headerShown: false }} />
+      <Stack.Screen name="coach-profile" options={{ headerShown: false }} />
+      <Stack.Screen name="competition-profile" options={{ headerShown: false }} />
       <Stack.Screen name="team-profile" options={{ headerShown: false }} />
       <Stack.Screen name="search" options={{ headerShown: false }} />
       <Stack.Screen name="prediction-groups" options={{ headerShown: false }} />

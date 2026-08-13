@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Radius, FontSize, FontWeight } from '../../constants/theme';
 
@@ -15,6 +15,7 @@ export interface QuickStat {
     value: string | number;
     label: string;
     tint?: string;
+    onPress?: () => void;
 }
 
 interface TeamQuickStatsProps {
@@ -22,8 +23,8 @@ interface TeamQuickStatsProps {
 }
 
 function StatChip({ stat }: { stat: QuickStat }) {
-    return (
-        <View style={styles.chip}>
+    const inner = (
+        <>
             <Ionicons name={stat.icon} size={18} color={stat.tint ?? Colors.purpleSoft} />
             <Text style={styles.value} numberOfLines={1}>
                 {stat.value}
@@ -31,8 +32,16 @@ function StatChip({ stat }: { stat: QuickStat }) {
             <Text style={styles.label} numberOfLines={1}>
                 {stat.label}
             </Text>
-        </View>
+        </>
     );
+    if (stat.onPress) {
+        return (
+            <TouchableOpacity style={styles.chip} onPress={stat.onPress} activeOpacity={0.8}>
+                {inner}
+            </TouchableOpacity>
+        );
+    }
+    return <View style={styles.chip}>{inner}</View>;
 }
 
 export default function TeamQuickStats({ stats }: TeamQuickStatsProps) {

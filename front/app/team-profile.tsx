@@ -13,12 +13,12 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, StyleSheet, ScrollView, StatusBar } from 'react-native';
+import { View, StyleSheet, ScrollView, StatusBar, Modal, TouchableOpacity, Text } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 
-import { Colors, Spacing } from '../constants/theme';
+import { Colors, Spacing, FontSize } from '../constants/theme';
 import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName, getCountryDisplayName } from '../utils/i18nHelpers';
 import { useHaptic } from '../hooks/useHaptic';
@@ -77,6 +77,7 @@ export default function TeamProfileScreen() {
     const validId = competitorId > 0;
 
     const [activeTab, setActiveTab] = useState<TeamTabKey>('overview');
+    const [compsOpen, setCompsOpen] = useState(false);
 
     // ── Data (React Query dedupes; all cached server-side) ────────────────────
     const infoQ = useCompetitorInfo(competitorId, validId);
@@ -153,6 +154,7 @@ export default function TeamProfileScreen() {
                 value: info.competitions.length,
                 label: t.teamProfile.competitions,
                 tint: Colors.gold,
+                onPress: () => setCompsOpen(true),
             });
         }
         return chips;
@@ -193,6 +195,30 @@ export default function TeamProfileScreen() {
             teamLogo: info?.logo ?? params.logo,
             teamId: competitorId,
         });
+    };
+
+    const handleOpenCoach = (athleteId: number, name: string, photo: string | null) => {
+        if (!athleteId) return;
+        trigger('light');
+        router.push({
+            pathname: '/coach-profile' as any,
+            params: {
+                id: String(athleteId),
+                name,
+                photo: photo ?? '',
+                teamName: info?.name ?? nameParam ?? '',
+                teamId: String(competitorId),
+            },
+        } as any);
+    };
+
+    const handleOpenCompetition = (competitionId: number, name: string, logo: string | null) => {
+        trigger('light');
+        setCompsOpen(false);
+        router.push({
+            pathname: '/competition-profile' as any,
+            params: { id: String(competitionId), name, logo: logo ?? '' },
+        } as any);
     };
 
     // ── States ───────────────────────────────────────────────────────────────
@@ -258,8 +284,8 @@ export default function TeamProfileScreen() {
                 competitorId={competitorId}
                 logo={info.logo}
                 country={country}
-                founded={null}
-                stadium={null}
+                founded={info.founded ?? null}
+                stadium={info.stadium ?? null}
                 isFollowing={isFollowing(competitorId)}
                 followPending={followPending}
                 onToggleFollow={handleToggleFollow}
@@ -295,6 +321,7 @@ export default function TeamProfileScreen() {
                         onOpenMatches={() => setActiveTab('matches')}
                         onOpenMatch={handleOpenMatch}
                         onOpenPlayer={handleOpenPlayer}
+                        onOpenCoach={handleOpenCoach}
                     />
                 ) : null}
 
@@ -339,6 +366,23 @@ export default function TeamProfileScreen() {
                     />
                 ) : null}
                 </ScrollView>
+
+            <Modal visible={compsOpen} transparent animationType="fade" onRequestClose={() => setCompsOpen(false)}>
+                <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setCompsOpen(false)}>
+                    <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>{t.teamProfile.currentCompetitions}</Text>
+                        {(info?.competitions ?? []).map((c) => (
+                            <TouchableOpacity
+                                key={c.id}
+                                style={styles.modalRow}
+                                onPress={() => handleOpenCompetition(c.id, c.name, c.logo)}
+                            >
+                                <Text style={styles.modalRowText}>{c.name}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </View>
     );
 }
@@ -357,5 +401,34 @@ const styles = StyleSheet.create({
     },
     contentInner: {
         paddingTop: Spacing.xs,
+    },
+    modalBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        justifyContent: 'center',
+        padding: Spacing.xl,
+    },
+    modalCard: {
+        backgroundColor: Colors.bgBase,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: Colors.borderSubtle,
+        padding: Spacing.base,
+        gap: Spacing.xs,
+    },
+    modalTitle: {
+        color: Colors.textPrimary,
+        fontSize: FontSize['2xl'],
+        fontWeight: '700',
+        marginBottom: Spacing.sm,
+    },
+    modalRow: {
+        paddingVertical: Spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.borderSubtle,
+    },
+    modalRowText: {
+        color: Colors.textPrimary,
+        fontSize: FontSize.xl,
     },
 });

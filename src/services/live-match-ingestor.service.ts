@@ -12,6 +12,7 @@
  */
 
 import prisma from '../lib/prisma';
+import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { WebSocketService } from './websocket.service';
 import { logger } from '../utils/logger';
 import { MatchEventIngestor } from './match-events/match-event-ingestor.service';
@@ -278,7 +279,9 @@ export class LiveMatchIngestorService {
             await Promise.all(
                 batch.map(([fixtureId, meta]) => {
                     const status = statusByFixture.get(fixtureId) ?? meta.lastStatus;
-                    const forceApiRefresh = shouldForceApiRefresh(meta.matchDate, status, now);
+                    const native365 = isNative365FixtureId(fixtureId);
+                    const forceApiRefresh =
+                        !native365 && shouldForceApiRefresh(meta.matchDate, status, now);
                     return this.processFixture(
                         fixtureId,
                         { homeTeam: meta.homeTeam, awayTeam: meta.awayTeam },

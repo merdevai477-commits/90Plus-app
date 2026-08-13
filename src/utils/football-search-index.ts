@@ -6,7 +6,7 @@
  * Names and aliases are a presentation/search layer only — never rewrite IDs.
  */
 
-export type FootballSearchEntityType = 'club' | 'national' | 'player';
+export type FootballSearchEntityType = 'club' | 'national' | 'player' | 'coach' | 'competition';
 
 export interface FootballSearchAliasRecord {
   /** 365Scores competitorId (club/NT) or athleteId (player). */
@@ -94,10 +94,196 @@ export const FOOTBALL_SEARCH_INDEX: FootballSearchAliasRecord[] = [
     ],
   },
   {
+    entityId: 22143,
+    type: 'club',
+    canonicalName: 'Pyramids',
+    aliases: ['pyramids', 'pyramids fc', 'بيراميدز', 'نادي بيراميدز'],
+  },
+  {
+    entityId: 8303,
+    type: 'club',
+    canonicalName: 'Al Masry',
+    aliases: ['al masry', 'el masry', 'المصري', 'المصري البورسعيدي', 'نادي المصري'],
+  },
+  {
+    entityId: 8299,
+    type: 'club',
+    canonicalName: 'Ismaily',
+    aliases: ['ismaily', 'ismaily sc', 'الإسماعيلي', 'الاسماعيلي', 'نادي الإسماعيلي'],
+  },
+  {
+    entityId: 8300,
+    type: 'club',
+    canonicalName: 'ENPPI',
+    aliases: ['enppi', 'enppi sc', 'إنبي', 'انبي'],
+  },
+  {
+    entityId: 50882,
+    type: 'club',
+    canonicalName: 'Ceramica Cleopatra',
+    aliases: ['ceramica', 'ceramica cleopatra', 'سيراميكا', 'سيراميكا كليوباترا'],
+  },
+  {
     entityId: 8946,
     type: 'club',
     canonicalName: 'Al Ahli',
     aliases: ['al ahli', 'al-ahli', 'ahli jeddah', 'الأهلي السعودي', 'الاهلي السعودي'],
+  },
+  {
+    entityId: 5457,
+    type: 'club',
+    canonicalName: 'Al Hilal Riyadh',
+    aliases: ['al hilal', 'al-hilal', 'hilal', 'الهلال', 'الهلال السعودي', 'نادي الهلال'],
+  },
+  {
+    entityId: 7549,
+    type: 'club',
+    canonicalName: 'Al Nassr FC Riyadh',
+    aliases: ['al nassr', 'al-nassr', 'nassr', 'النصر', 'النصر السعودي', 'نادي النصر'],
+  },
+  {
+    entityId: 8593,
+    type: 'club',
+    canonicalName: 'Ittihad Jeddah',
+    aliases: ['al ittihad', 'ittihad jeddah', 'al-ittihad', 'الاتحاد', 'الاتحاد السعودي', 'نادي الاتحاد'],
+  },
+  {
+    entityId: 8945,
+    type: 'club',
+    canonicalName: 'Al Shabab Riyadh',
+    aliases: ['al shabab', 'al-shabab', 'الشباب', 'الشباب السعودي'],
+  },
+  {
+    entityId: 8943,
+    type: 'club',
+    canonicalName: 'Al Ettifaq',
+    aliases: ['al ettifaq', 'ettifaq', 'الاتفاق', 'نادي الاتفاق'],
+  },
+  {
+    entityId: 9976,
+    type: 'club',
+    canonicalName: 'Al Wehda Mecca',
+    aliases: ['al wehda', 'al-wehda', 'الوحدة', 'الوحدة السعودي'],
+  },
+  {
+    entityId: 131,
+    type: 'club',
+    canonicalName: 'Real Madrid',
+    aliases: ['real madrid', 'ريال مدريد', 'ريال', 'الريال'],
+  },
+  {
+    entityId: 132,
+    type: 'club',
+    canonicalName: 'FC Barcelona',
+    aliases: ['barcelona', 'fc barcelona', 'barca', 'برشلونة', 'برشلونه', 'البرسا', 'برسا'],
+  },
+  {
+    entityId: 134,
+    type: 'club',
+    canonicalName: 'Atletico Madrid',
+    aliases: ['atletico madrid', 'atletico', 'اتلتيكو مدريد', 'أتلتيكو مدريد', 'اتلتيكو'],
+  },
+  {
+    entityId: 480,
+    type: 'club',
+    canonicalName: 'PSG',
+    aliases: ['psg', 'paris saint germain', 'paris sg', 'باريس سان جيرمان', 'سان جيرمان'],
+  },
+  {
+    entityId: 110,
+    type: 'club',
+    canonicalName: 'Manchester City',
+    aliases: ['manchester city', 'man city', 'مانشستر سيتي', 'مان سيتي', 'السيتي'],
+  },
+  {
+    entityId: 105,
+    type: 'club',
+    canonicalName: 'Manchester United',
+    aliases: ['manchester united', 'man united', 'man utd', 'مانشستر يونايتد', 'مان يونايتد'],
+  },
+  {
+    entityId: 108,
+    type: 'club',
+    canonicalName: 'Liverpool',
+    aliases: ['liverpool', 'ليفربول'],
+  },
+  {
+    entityId: 104,
+    type: 'club',
+    canonicalName: 'Arsenal',
+    aliases: ['arsenal', 'ارسنال', 'أرسنال', 'الارسنال'],
+  },
+  {
+    entityId: 106,
+    type: 'club',
+    canonicalName: 'Chelsea',
+    aliases: ['chelsea', 'تشيلسي', 'تشلسي'],
+  },
+  {
+    entityId: 114,
+    type: 'club',
+    canonicalName: 'Tottenham',
+    aliases: ['tottenham', 'spurs', 'توتنهام', 'توتنهم'],
+  },
+  {
+    entityId: 331,
+    type: 'club',
+    canonicalName: 'Bayern Munich',
+    aliases: ['bayern munich', 'bayern', 'بايرن ميونخ', 'بايرن', 'البايرن'],
+  },
+  {
+    entityId: 341,
+    type: 'club',
+    canonicalName: 'Borussia Dortmund',
+    aliases: ['borussia dortmund', 'dortmund', 'بوروسيا دورتموند', 'دورتموند'],
+  },
+  {
+    entityId: 226,
+    type: 'club',
+    canonicalName: 'Juventus',
+    aliases: ['juventus', 'يوفنتوس', 'اليوفي'],
+  },
+  {
+    entityId: 224,
+    type: 'club',
+    canonicalName: 'Inter Milan',
+    aliases: ['inter milan', 'inter', 'انتر ميلان', 'إنتر', 'الانتر'],
+  },
+  {
+    entityId: 227,
+    type: 'club',
+    canonicalName: 'AC Milan',
+    aliases: ['ac milan', 'milan', 'ميلان', 'اي سي ميلان'],
+  },
+  {
+    entityId: 234,
+    type: 'club',
+    canonicalName: 'Napoli',
+    aliases: ['napoli', 'نابولي'],
+  },
+  {
+    entityId: 887,
+    type: 'club',
+    canonicalName: 'FC Porto',
+    aliases: ['porto', 'fc porto', 'بورتو'],
+  },
+  {
+    entityId: 888,
+    type: 'club',
+    canonicalName: 'Benfica',
+    aliases: ['benfica', 'بنفيكا'],
+  },
+  {
+    entityId: 5100,
+    type: 'national',
+    canonicalName: 'Egypt',
+    aliases: ['egypt', 'egypt nt', 'منتخب مصر', 'مصر', 'الفراعنة'],
+  },
+  {
+    entityId: 5093,
+    type: 'national',
+    canonicalName: 'Morocco',
+    aliases: ['morocco', 'morocco nt', 'منتخب المغرب', 'المغرب', 'أسود الأطلس', 'اسود الاطلس'],
   },
   {
     entityId: 874,
@@ -134,6 +320,108 @@ export const FOOTBALL_SEARCH_INDEX: FootballSearchAliasRecord[] = [
       'فينيسيوس',
       'فينيسيوس جونيور',
     ],
+  },
+  {
+    entityId: 1439,
+    type: 'player',
+    canonicalName: 'Mohamed Salah',
+    aliases: ['salah', 'mohamed salah', 'mo salah', 'صلاح', 'محمد صلاح'],
+  },
+  {
+    entityId: 817,
+    type: 'player',
+    canonicalName: 'Cristiano Ronaldo',
+    aliases: ['ronaldo', 'cristiano ronaldo', 'cr7', 'رونالدو', 'كريستيانو', 'كريستيانو رونالدو'],
+  },
+  {
+    entityId: 65760,
+    type: 'player',
+    canonicalName: 'Erling Haaland',
+    aliases: ['haaland', 'erling haaland', 'هالاند', 'إيرلينج هالاند', 'ايرلينج هالاند'],
+  },
+  {
+    entityId: 51976,
+    type: 'coach',
+    canonicalName: 'Hussein Ammouta',
+    aliases: ['ammouta', 'hussein ammouta', 'عموتة', 'حسين عموتة', 'لحسين عموتة'],
+  },
+  {
+    entityId: 552,
+    type: 'competition',
+    canonicalName: 'Egyptian Premier League',
+    aliases: [
+      'egyptian premier league',
+      'egypt premier league',
+      'الدوري المصري',
+      'الدوري المصري الممتاز',
+      'دوري المصري',
+    ],
+  },
+  {
+    entityId: 649,
+    type: 'competition',
+    canonicalName: 'Saudi League',
+    aliases: ['saudi pro league', 'saudi league', 'الدوري السعودي', 'دوري روشن', 'روشن'],
+  },
+  {
+    entityId: 7,
+    type: 'competition',
+    canonicalName: 'Premier League',
+    aliases: ['premier league', 'epl', 'الدوري الإنجليزي', 'الدوري الانجليزي', 'البريميرليج'],
+  },
+  {
+    entityId: 11,
+    type: 'competition',
+    canonicalName: 'LaLiga',
+    aliases: ['laliga', 'la liga', 'الدوري الإسباني', 'الدوري الاسباني'],
+  },
+  {
+    entityId: 17,
+    type: 'competition',
+    canonicalName: 'Serie A',
+    aliases: ['serie a', 'الدوري الإيطالي', 'الدوري الايطالي'],
+  },
+  {
+    entityId: 25,
+    type: 'competition',
+    canonicalName: 'Bundesliga',
+    aliases: ['bundesliga', 'الدوري الألماني', 'الدوري الالماني'],
+  },
+  {
+    entityId: 35,
+    type: 'competition',
+    canonicalName: 'Ligue 1',
+    aliases: ['ligue 1', 'الدوري الفرنسي'],
+  },
+  {
+    entityId: 572,
+    type: 'competition',
+    canonicalName: 'UEFA Champions League',
+    aliases: ['champions league', 'ucl', 'دوري أبطال أوروبا', 'دوري ابطال اوروبا', 'الأبطال'],
+  },
+  {
+    entityId: 573,
+    type: 'competition',
+    canonicalName: 'UEFA Europa League',
+    aliases: ['europa league', 'uel', 'الدوري الأوروبي', 'يوروبا ليغ'],
+  },
+  {
+    entityId: 624,
+    type: 'competition',
+    canonicalName: 'CAF Champions League',
+    aliases: ['caf champions league', 'دوري أبطال أفريقيا', 'دوري ابطال افريقيا'],
+  },
+  {
+    entityId: 167,
+    type: 'competition',
+    canonicalName: 'Africa Cup of Nations',
+    aliases: ['afcon', 'africa cup', 'كأس أمم أفريقيا', 'كاس امم افريقيا', 'الأمم الأفريقية'],
+  },
+  {
+    entityId: 5930,
+    type: 'competition',
+    canonicalName: 'FIFA World Cup',
+    aliases: ['world cup', 'fifa world cup', 'كأس العالم', 'كاس العالم'],
   },
 ];
 
@@ -316,14 +604,26 @@ export const DEFAULT_ARABIC_COUNTRY_ID = 131;
 
 export function isPlayerOrientedBoost(boosted: Set<number>): boolean {
   if (boosted.size === 0) return false;
-  let player = false;
+  let person = false;
   let club = false;
   for (const rec of FOOTBALL_SEARCH_INDEX) {
     if (!boosted.has(rec.entityId)) continue;
-    if (rec.type === 'player') player = true;
-    else club = true;
+    if (rec.type === 'player' || rec.type === 'coach') person = true;
+    else if (rec.type === 'club' || rec.type === 'national') club = true;
   }
-  return player && !club;
+  return person && !club;
+}
+
+const COACH_ENTITY_IDS = new Set(
+  FOOTBALL_SEARCH_INDEX.filter((r) => r.type === 'coach').map((r) => r.entityId),
+);
+
+export function isIndexedCoachId(entityId: number): boolean {
+  return COACH_ENTITY_IDS.has(entityId);
+}
+
+export function competitionIndexRecords(): FootballSearchAliasRecord[] {
+  return FOOTBALL_SEARCH_INDEX.filter((r) => r.type === 'competition');
 }
 
 export interface RankableSearchCompetitor {
@@ -367,6 +667,21 @@ export function scoreAthlete(
 ): number {
   const nameScore = scoreSearchName(queryNorm, item.name, [item.shortName, item.clubName]);
   return nameScore + entityBoost(item.athleteId, boosted);
+}
+
+export interface RankableSearchCompetition {
+  competitionId: number;
+  name: string;
+  country?: string | null;
+}
+
+export function scoreCompetition(
+  item: RankableSearchCompetition,
+  queryNorm: string,
+  boosted: Set<number>,
+): number {
+  const nameScore = scoreSearchName(queryNorm, item.name, [item.country]);
+  return nameScore + entityBoost(item.competitionId, boosted);
 }
 
 export function rankByScore<T>(items: T[], scoreOf: (item: T) => number): T[] {

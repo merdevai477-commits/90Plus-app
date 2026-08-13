@@ -87,6 +87,9 @@ export class MatchEventIngestor {
         try {
             const preferFresh = options?.forceRefreshEvents === true || options?.forceApiRefresh === true;
             const native365 = isNative365FixtureId(fixtureId);
+            logger.info(
+                `[MatchEventIngestor] fixture=${fixtureId} source=${native365 ? '365' : 'api-football'}`,
+            );
             let snapshot: FixtureSnapshot | null = null;
 
             if (options?.forceApiRefresh && !native365 && !isFootballQuotaExhausted()) {

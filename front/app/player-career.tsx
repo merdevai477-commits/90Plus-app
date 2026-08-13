@@ -269,6 +269,51 @@ export default function PlayerCareerScreen() {
                         />
                     </View>
 
+                    {(profile.dateOfBirth || profile.height || (profile.transfers?.length ?? 0) > 0) ? (
+                        <>
+                            <View style={styles.sectionLabelRow}>
+                                <View style={styles.sectionAccent} />
+                                <Text style={styles.sectionLabel}>{pc.personalInfo}</Text>
+                            </View>
+                            <View style={styles.identityRow}>
+                                {profile.dateOfBirth ? (
+                                    <IdentityCard
+                                        icon="calendar-outline"
+                                        label={pc.dateOfBirth}
+                                        value={profile.dateOfBirth}
+                                    />
+                                ) : null}
+                                {profile.height ? (
+                                    <>
+                                        {profile.dateOfBirth ? <View style={styles.identityDivider} /> : null}
+                                        <IdentityCard
+                                            icon="resize-outline"
+                                            label={pc.height}
+                                            value={profile.height}
+                                        />
+                                    </>
+                                ) : null}
+                            </View>
+                            {(profile.transfers?.length ?? 0) > 0 ? (
+                                <View style={styles.transferList}>
+                                    <Text style={styles.sectionLabel}>{pc.transfers}</Text>
+                                    {profile.transfers!.slice(0, 8).map((tr, idx) => (
+                                        <View key={`${tr.competitorId}-${tr.date}-${idx}`} style={styles.transferRow}>
+                                            <Text style={styles.transferClub} numberOfLines={1}>
+                                                {tr.competitorName || '—'}
+                                            </Text>
+                                            <Text style={styles.transferMeta} numberOfLines={1}>
+                                                {[tr.date?.slice(0, 10), tr.transferTitle, tr.price]
+                                                    .filter(Boolean)
+                                                    .join(' · ')}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            ) : null}
+                        </>
+                    ) : null}
+
                     {/* Current season — rich stats from 365 highlightStats */}
                     {(career.currentSeasonHighlights?.length ?? 0) > 0 && activeHighlight && (
                         <>
@@ -875,4 +920,15 @@ const styles = StyleSheet.create({
     },
     detailValue: { color: '#fff', fontSize: 16, fontWeight: '800' },
     detailLabel: { color: ProfileTheme.colors.textTertiary, fontSize: 11, marginTop: 4 },
+    transferList: { marginTop: 12, gap: 8 },
+    transferRow: {
+        backgroundColor: ProfileTheme.colors.glass,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: ProfileTheme.colors.borderSoft,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+    },
+    transferClub: { color: '#fff', fontSize: 14, fontWeight: '700' },
+    transferMeta: { color: ProfileTheme.colors.textTertiary, fontSize: 12, marginTop: 2 },
 });

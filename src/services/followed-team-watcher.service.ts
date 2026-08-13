@@ -130,6 +130,9 @@ export class FollowedTeamWatcherService {
             for (const [apiTeamId, userIds] of teamToUsers) {
                 try {
                     const fixtures = await this.getTodaysFixtures(apiTeamId);
+                    logger.info(
+                        `[FollowedTeamWatcher] competitor=${apiTeamId} source=365 fixtures=${fixtures.length}`,
+                    );
                     for (const fixture of fixtures) {
                         for (const userId of userIds) {
                             await this.subscribeFixtureForUser(userId, fixture);

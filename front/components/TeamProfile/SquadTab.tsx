@@ -66,6 +66,17 @@ function PlayerCard({
           {player.position}
         </Text>
       ) : null}
+      {player.age || player.nationality || player.height ? (
+        <Text style={styles.meta} numberOfLines={2}>
+          {[
+            player.age != null ? `${player.age}` : null,
+            player.height,
+            player.nationality,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </Text>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -203,6 +214,11 @@ const styles = StyleSheet.create({
   },
   position: {
     color: Colors.textMuted,
+    fontSize: FontSize.sm,
+    textAlign: 'center',
+  },
+  meta: {
+    color: Colors.textSecondary,
     fontSize: FontSize.sm,
     textAlign: 'center',
   },

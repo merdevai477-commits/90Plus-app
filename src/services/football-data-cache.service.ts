@@ -83,6 +83,9 @@ import {
     type ThreeSixFiveCompetitorSquad,
     type ThreeSixFiveSearchResults,
     type ThreeSixFiveCoach,
+    type ThreeSixFiveAthleteProfile,
+    type ThreeSixFiveCompetitionProfile,
+    type ThreeSixFiveCompetitionTransfers,
 } from './threeSixFiveScores.service';
 import { redisCacheService } from './redis-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
@@ -1999,6 +2002,9 @@ class FootballDataCacheService {
                 this.setBoundedCache(this.eventsCache, fixtureId, cacheEntry);
                 await redisCacheService.set(`events:${fixtureId}`, cacheEntry, ttl);
             }
+            logger.debug(
+                `[365Events] fixture=${fixtureId} source=365 count=${events.length}`,
+            );
             return events;
         }
 
@@ -3185,6 +3191,27 @@ class FootballDataCacheService {
         language?: string | null,
     ): Promise<ThreeSixFiveResult<ThreeSixFiveSearchResults>> {
         return threeSixFiveScoresService.searchEntities(query, language);
+    }
+
+    async getCached365AthleteProfile(
+        athleteId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveAthleteProfile>> {
+        return threeSixFiveScoresService.getAthleteProfile(athleteId, language);
+    }
+
+    async getCached365CompetitionProfile(
+        competitionId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitionProfile>> {
+        return threeSixFiveScoresService.getCompetitionProfile(competitionId, language);
+    }
+
+    async getCached365CompetitionTransfers(
+        competitionIds: number[],
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitionTransfers[]>> {
+        return threeSixFiveScoresService.getTransfersByCompetitions(competitionIds, language);
     }
 
     async getCached365PlayerMatchReport(

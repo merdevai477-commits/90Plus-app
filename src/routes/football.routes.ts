@@ -211,6 +211,22 @@ router.get('/cached/365/search', SHARED_CACHE_5MIN, FootballController.search365
 // GET /api/football/cached/365/search/all?q= — combined clubs + national teams + players
 router.get('/cached/365/search/all', SHARED_CACHE_5MIN, FootballController.searchFootballEntities);
 
+router.get(
+  '/cached/365/athlete/:id',
+  SHARED_CACHE_1H,
+  FootballController.getCached365AthleteProfile,
+);
+router.get(
+  '/cached/365/competition/:id',
+  SHARED_CACHE_1H,
+  FootballController.getCached365CompetitionProfile,
+);
+router.get(
+  '/cached/365/transfers',
+  SHARED_CACHE_1H,
+  FootballController.getCached365CompetitionTransfers,
+);
+
 // GET /api/football/cached/365/player/lookup?q= — search + profile + career bundle
 router.get('/cached/365/player/lookup', SHARED_CACHE_5MIN, FootballController.lookup365Player);
 

@@ -1,14 +1,6 @@
 /**
- * ClubPickerModal
- *
- * Lets the user pick a club from real API-Football data, organised by
- * country. Top 5 clubs per country are returned by the backend and
- * persisted in `cached_teams`, refreshed at most once every 7 days.
- *
- * The picker is country-first: the user picks a country tab, the modal
- * fetches the top 5 for that country, and shows real logos. Selection
- * returns the canonical TopClub shape so the profile screen can save
- * `clubLogo` (logo URL) and `favoriteTeam` (team name) to the backend.
+ * ClubPickerModal — 365Scores clubs (search + country standings).
+ * Profile still saves name + logo only; no ID migration.
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -63,6 +55,27 @@ const COUNTRY_LABELS_AR: Record<string, string> = {
     mexico: 'المكسيك',
 };
 
+const COUNTRY_365_COMPETITION: Record<string, number> = {
+    england: 7,
+    spain: 11,
+    italy: 17,
+    germany: 25,
+    france: 35,
+    netherlands: 0,
+    portugal: 0,
+    belgium: 0,
+    turkey: 0,
+    saudi: 649,
+    egypt: 552,
+    morocco: 0,
+    algeria: 0,
+    tunisia: 0,
+    brazil: 0,
+    argentina: 0,
+    usa: 104,
+    mexico: 0,
+};
+
 const DEFAULT_COUNTRY_ORDER = [
     'england',
     'spain',
@@ -93,6 +106,8 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
     const [clubsByCountry, setClubsByCountry] = useState<Record<string, TopClub[]>>({});
     const [loadingCountry, setLoadingCountry] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [searchHits, setSearchHits] = useState<TopClub[] | null>(null);
+    const [searching, setSearching] = useState(false);
     const clubsByCountryRef = useRef(clubsByCountry);
     const fetchInFlightRef = useRef<string | null>(null);
     clubsByCountryRef.current = clubsByCountry;
@@ -105,21 +120,21 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
         setLoadingCountry(countryKey);
         setError(null);
         try {
-            const apiCountry = countryKey === 'saudi' ? 'Saudi-Arabia' :
-                countryKey === 'usa' ? 'USA' :
-                // Capitalise first letter; backend lookup is case-insensitive
-                countryKey.charAt(0).toUpperCase() + countryKey.slice(1);
-
-            const clubs = await ApiFootballService.getTopClubsByCountry(apiCountry);
-
-            const mapped: TopClub[] = clubs.map((c) => ({
-                id: c.teamId,
-                teamId: c.teamId,
-                name: c.name,
-                nameAr: c.name, // backend returns localised name when available
-                logo: c.logo,
+            const competitionId = COUNTRY_365_COMPETITION[countryKey];
+            if (!competitionId) {
+                setClubsByCountry((prev) => ({ ...prev, [countryKey]: [] }));
+                setError('لا توجد أندية لهذا البلد.');
+                return;
+            }
+            const rows = await ApiFootballService.getCompetitor365Standings(competitionId);
+            const mapped: TopClub[] = rows.map((r) => ({
+                id: r.teamId,
+                teamId: r.teamId,
+                name: r.teamName,
+                nameAr: r.teamName,
+                logo: r.teamLogo,
                 league: COUNTRY_LABELS_AR[countryKey] ?? countryKey,
-                country: c.country ?? apiCountry,
+                country: countryKey,
             }));
 
             setClubsByCountry((prev) => ({ ...prev, [countryKey]: mapped }));
@@ -149,15 +164,47 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
         }
     }, [visible, selectedCountry, fetchCountryClubs]);
 
+    useEffect(() => {
+        const q = search.trim();
+        if (q.length < 2) {
+            setSearchHits(null);
+            return;
+        }
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            setSearching(true);
+            try {
+                const res = await ApiFootballService.searchFootball365(q);
+                if (cancelled) return;
+                setSearchHits(
+                    res.clubs.map((c) => ({
+                        id: c.competitorId,
+                        teamId: c.competitorId,
+                        name: c.name,
+                        nameAr: c.name,
+                        logo: c.logo,
+                        league: c.country ?? '',
+                        country: c.country ?? '',
+                    })),
+                );
+            } catch (err: any) {
+                logger.error('[ClubPickerModal] 365 search failed', err?.message);
+                if (!cancelled) setSearchHits([]);
+            } finally {
+                if (!cancelled) setSearching(false);
+            }
+        }, 280);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [search]);
+
     // Filtered list for the active country + search
     const filteredClubs = useMemo(() => {
-        const list = clubsByCountry[selectedCountry] ?? [];
-        if (!search.trim()) return list;
-        const q = search.trim().toLowerCase();
-        return list.filter((c) =>
-            c.name.toLowerCase().includes(q) || c.nameAr.includes(search),
-        );
-    }, [clubsByCountry, selectedCountry, search]);
+        if (searchHits) return searchHits;
+        return clubsByCountry[selectedCountry] ?? [];
+    }, [clubsByCountry, selectedCountry, searchHits]);
 
     const renderClubItem = ({ item }: { item: TopClub }) => {
         const isSelected = String(selectedClubId ?? '') === String(item.id);
@@ -251,7 +298,7 @@ export default function ClubPickerModal({ visible, onClose, onSelect, selectedCl
                         />
                     </View>
 
-                    {loadingCountry === selectedCountry ? (
+                    {loadingCountry === selectedCountry || searching ? (
                         <View style={styles.loadingContainer}>
                             <ActivityIndicator size="large" color="#22c55e" />
                             <Text style={styles.loadingText}>جاري تحميل الأندية...</Text>

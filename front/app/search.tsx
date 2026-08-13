@@ -30,6 +30,7 @@ import ApiFootballService, {
     type FootballSearchResults,
     type SearchCompetitor365,
     type SearchAthlete365,
+    type SearchCompetition365,
 } from '../services/apiFootball';
 import { RecentSearchStorage } from '../src/storage/recentSearch.storage';
 import TeamBadge from '../components/common/TeamBadge';
@@ -135,7 +136,9 @@ export default function FootballSearchScreen() {
     const total =
         (results?.clubs.length ?? 0) +
         (results?.nationalTeams.length ?? 0) +
-        (results?.players.length ?? 0);
+        (results?.players.length ?? 0) +
+        (results?.coaches.length ?? 0) +
+        (results?.competitions.length ?? 0);
 
     useEffect(() => {
         if (!results) return;
@@ -143,6 +146,8 @@ export default function FootballSearchScreen() {
             ...results.clubs.slice(0, 6).map((c) => c.logo),
             ...results.nationalTeams.slice(0, 3).map((c) => c.logo),
             ...results.players.slice(0, 6).map((p) => p.imageUrl),
+            ...(results.coaches ?? []).slice(0, 3).map((p) => p.imageUrl),
+            ...(results.competitions ?? []).slice(0, 4).map((c) => c.logo),
         ].filter((u): u is string => !!u);
         urls.forEach((uri) => {
             void Image.prefetch(uri);
@@ -183,6 +188,35 @@ export default function FootballSearchScreen() {
             teamName: item.clubName,
             teamId: item.clubId,
         });
+    };
+
+    const openCoach = (item: SearchAthlete365) => {
+        trigger('light');
+        void remember(query.trim() || item.name);
+        router.push({
+            pathname: '/coach-profile' as any,
+            params: {
+                id: String(item.athleteId),
+                name: item.name,
+                photo: item.imageUrl ?? '',
+                teamName: item.clubName ?? '',
+                teamId: item.clubId != null ? String(item.clubId) : '',
+            },
+        } as any);
+    };
+
+    const openCompetition = (item: SearchCompetition365) => {
+        trigger('light');
+        void remember(query.trim() || item.name);
+        router.push({
+            pathname: '/competition-profile' as any,
+            params: {
+                id: String(item.competitionId),
+                name: item.name,
+                logo: item.logo ?? '',
+                country: item.country ?? '',
+            },
+        } as any);
     };
 
     const applyRecent = (q: string) => {
@@ -345,6 +379,35 @@ export default function FootballSearchScreen() {
                         <SectionHeader title={t.searchScreen.sectionPlayers} count={results.players.length} />
                         {results.players.map((p) => (
                             <PlayerRow key={`p-${p.athleteId}`} item={p} onPress={() => openPlayer(p)} />
+                        ))}
+
+                        <SectionHeader
+                            title={t.searchScreen.sectionCoaches}
+                            count={(results.coaches ?? []).length}
+                        />
+                        {(results.coaches ?? []).map((p) => (
+                            <PlayerRow key={`coach-${p.athleteId}`} item={p} onPress={() => openCoach(p)} />
+                        ))}
+
+                        <SectionHeader
+                            title={t.searchScreen.sectionCompetitions}
+                            count={(results.competitions ?? []).length}
+                        />
+                        {(results.competitions ?? []).map((c) => (
+                            <CompetitorRow
+                                key={`comp-${c.competitionId}`}
+                                item={{
+                                    competitorId: c.competitionId,
+                                    name: c.name,
+                                    type: 0,
+                                    countryId: null,
+                                    country: c.country,
+                                    logo: c.logo,
+                                    isNationalTeam: false,
+                                }}
+                                language={language}
+                                onPress={() => openCompetition(c)}
+                            />
                         ))}
                     </>
                 ) : null}
