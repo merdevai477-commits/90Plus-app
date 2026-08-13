@@ -847,16 +847,28 @@ export interface Competitor365Squad {
   groups: Record<SquadPositionGroup, Squad365Player[]>;
 }
 
+export interface Competitor365CoachTrophy {
+  competitionId: number;
+  name: string;
+  displayName?: string;
+  count: number;
+  categoryName?: string;
+}
+
 export interface Competitor365Coach {
   athleteId: number;
   teamId: number;
   teamName: string;
   name: string;
+  shortName?: string;
   nationality?: string;
   bio?: string;
+  age?: number | null;
+  contractUntil?: string | null;
   imageUrl: string | null;
   imageVersion?: number | null;
   role: 'head_coach' | 'assistant_coach';
+  trophies?: Competitor365CoachTrophy[];
 }
 
 export interface Standing365Row {

@@ -312,7 +312,7 @@ export default function OverviewTab({
                     <View style={styles.coachRow}>
                         <CachedAthletePhoto
                             uri={coach.imageUrl}
-                            size={48}
+                            size={56}
                             recyclingKey={coach.athleteId}
                         />
                         <View style={styles.coachInfo}>
@@ -320,13 +320,32 @@ export default function OverviewTab({
                             <Text style={styles.coachName} numberOfLines={1}>
                                 {coach.name}
                             </Text>
-                            {coach.nationality ? (
+                            {coach.nationality || coach.age ? (
                                 <Text style={styles.coachMeta} numberOfLines={1}>
-                                    {coach.nationality}
+                                    {[coach.nationality, coach.age != null ? String(coach.age) : null]
+                                        .filter(Boolean)
+                                        .join(' · ')}
                                 </Text>
                             ) : null}
                         </View>
                     </View>
+                    {coach.bio ? (
+                        <Text style={styles.coachBio} numberOfLines={3}>
+                            {coach.bio}
+                        </Text>
+                    ) : null}
+                    {coach.trophies && coach.trophies.length > 0 ? (
+                        <View style={styles.coachTrophies}>
+                            {coach.trophies.slice(0, 4).map((trophy) => (
+                                <View key={`${trophy.competitionId}-${trophy.name}`} style={styles.trophyChip}>
+                                    <Text style={styles.trophyChipText} numberOfLines={1}>
+                                        {trophy.displayName || trophy.name}
+                                        {trophy.count > 1 ? ` ×${trophy.count}` : ''}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
+                    ) : null}
                 </Card>
             ) : null}
 
@@ -420,6 +439,29 @@ const styles = StyleSheet.create({
     coachMeta: {
         color: Colors.textSecondary,
         fontSize: FontSize.sm,
+    },
+    coachBio: {
+        color: Colors.textSecondary,
+        fontSize: FontSize.sm,
+        lineHeight: 18,
+        marginTop: Spacing.sm,
+    },
+    coachTrophies: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: Spacing.xs,
+        marginTop: Spacing.sm,
+    },
+    trophyChip: {
+        backgroundColor: Colors.white08,
+        borderRadius: Radius.full,
+        paddingHorizontal: Spacing.sm,
+        paddingVertical: 4,
+        maxWidth: '100%',
+    },
+    trophyChipText: {
+        color: Colors.textSecondary,
+        fontSize: FontSize.xs,
     },
     section: {
         gap: Spacing.sm,
