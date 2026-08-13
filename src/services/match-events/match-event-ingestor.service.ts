@@ -2,6 +2,8 @@ import prisma from '../../lib/prisma';
 import { footballService, isFootballQuotaExhausted } from '../football.service';
 import { footballDataCacheService } from '../football-data-cache.service';
 import { logger } from '../../utils/logger';
+import { isNative365FixtureId } from '../../utils/native-365-fixture-id';
+import { getScores365ExperimentFixture } from '../scores365-experiment.service';
 import { acquireIngestorLock } from './match-ingestor-lock.adapter';
 import { appendMatchEventsToStream } from './match-event-stream.adapter';
 import {
@@ -84,9 +86,10 @@ export class MatchEventIngestor {
 
         try {
             const preferFresh = options?.forceRefreshEvents === true || options?.forceApiRefresh === true;
+            const native365 = isNative365FixtureId(fixtureId);
             let snapshot: FixtureSnapshot | null = null;
 
-            if (options?.forceApiRefresh && !isFootballQuotaExhausted()) {
+            if (options?.forceApiRefresh && !native365 && !isFootballQuotaExhausted()) {
                 const fixtureRow = await footballService.getFixtureById(fixtureId, { source: 'job' });
                 if (fixtureRow) {
                     snapshot = parseFixtureSnapshot(fixtureId, fixtureRow);
@@ -97,6 +100,11 @@ export class MatchEventIngestor {
                 const cachedLive = await readFixtureSnapshotFromCache(fixtureId, { preferFresh });
                 if (cachedLive) {
                     snapshot = parseFixtureSnapshot(fixtureId, cachedLive);
+                } else if (native365) {
+                    const from365 = await getScores365ExperimentFixture(fixtureId);
+                    if (from365) {
+                        snapshot = parseFixtureSnapshot(fixtureId, from365);
+                    }
                 } else if (!isFootballQuotaExhausted()) {
                     const fixtureRow = await footballService.getFixtureById(fixtureId, { source: 'job' });
                     if (fixtureRow) {

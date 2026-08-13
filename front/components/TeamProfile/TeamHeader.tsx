@@ -37,6 +37,7 @@ interface TeamHeaderProps {
     onToggleFollow: () => void;
     onBack: () => void;
     topInset?: number;
+    coachName?: string | null;
 }
 
 function MetaItem({ icon, text }: { icon: any; text: string }) {
@@ -64,6 +65,7 @@ export default function TeamHeader({
     onToggleFollow,
     onBack,
     topInset,
+    coachName,
 }: TeamHeaderProps) {
     const displayName = getTeamDisplayName(name, language, competitorId);
     const countryLabel = country ? getCountryDisplayName(country, language) : '';
@@ -136,6 +138,7 @@ export default function TeamHeader({
             <View style={styles.metaRow}>
                 {founded ? <MetaItem icon="calendar-outline" text={`${t.teamProfile.founded} ${founded}`} /> : null}
                 {stadium ? <MetaItem icon="business-outline" text={stadium} /> : null}
+                {coachName ? <MetaItem icon="person-outline" text={`${t.teamProfile.coach}: ${coachName}`} /> : null}
             </View>
         </LinearGradient>
     );

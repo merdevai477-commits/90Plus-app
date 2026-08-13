@@ -1,6 +1,9 @@
 import prisma from '../../lib/prisma';
 import { footballService } from '../football.service';
 import { logger } from '../../utils/logger';
+import { matchCacheService } from '../match-cache.service';
+import { isNative365FixtureId } from '../../utils/native-365-fixture-id';
+import { getScores365ExperimentFixture } from '../scores365-experiment.service';
 import {
     parseFixtureSnapshot,
     LIVE_STATUSES,
@@ -28,9 +31,25 @@ export interface SubscribeBaselineResult {
     snapshot: FixtureSnapshot;
 }
 
-/** Fetch current fixture state from API-Football (for immediate baseline on subscribe). */
+/** Fetch current fixture state. Native 365 gameIds never hit API-Football. */
 export async function fetchFixtureSnapshot(fixtureId: number): Promise<FixtureSnapshot | null> {
     try {
+        const cached = getCachedFixtureState(fixtureId);
+        if (cached) return cached;
+
+        if (isNative365FixtureId(fixtureId)) {
+            const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
+            if (dbRow) {
+                return parseFixtureSnapshot(fixtureId, matchCacheService.convertDbMatchToApiFormat(dbRow));
+            }
+            const from365 = await getScores365ExperimentFixture(fixtureId);
+            if (from365) return parseFixtureSnapshot(fixtureId, from365);
+            logger.warn(
+                `[MatchSubscription] 365 snapshot missing for ${fixtureId} — no API-Football fallback`,
+            );
+            return null;
+        }
+
         const data = await footballService.fetchFromApi<any[]>('/fixtures', { id: fixtureId });
         if (!data?.length) return null;
         return parseFixtureSnapshot(fixtureId, data[0]);

@@ -279,6 +279,7 @@ export const en = {
     capacity: 'capacity',
     squadList: 'Squad List',
     noSquadData: 'No squad data available',
+    squadLoadFailed: 'Could not load the squad. Try again.',
 
     // Header / states
     founded: 'Founded',

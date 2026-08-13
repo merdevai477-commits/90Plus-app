@@ -237,8 +237,13 @@ router.get(
 );
 router.get(
   '/cached/365/competitor/:id/squad',
-  SHARED_CACHE_1H,
+  SHARED_CACHE_60S,
   FootballController.getCached365CompetitorSquad,
+);
+router.get(
+  '/cached/365/competitor/:id/coach',
+  SHARED_CACHE_5MIN,
+  FootballController.getCached365CompetitorCoach,
 );
 
 // GET /api/football/cached/fixture/:id/lineups - Get lineups (permanent for finished, short for empty/live)

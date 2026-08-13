@@ -384,6 +384,7 @@ export const ar = {
     capacity: 'متفرج',
     squadList: 'قائمة الفريق',
     noSquadData: 'لا توجد بيانات للفريق حالياً',
+    squadLoadFailed: 'تعذّر تحميل التشكيلة. حاول مرة أخرى.',
 
     // Header / states
     founded: 'التأسيس',

@@ -15,7 +15,7 @@ import {
 } from '../../constants/theme';
 import type { Language } from '../../src/i18n/types';
 import type { TranslationKeys } from '../../src/i18n/utils';
-import type { Fixture, Competitor365Stats, Stat365LeaderRow } from '../../services/apiFootball';
+import type { Fixture, Competitor365Stats, Competitor365Coach, Stat365LeaderRow } from '../../services/apiFootball';
 import type { TeamMatches } from '../../hooks/useTeamProfile';
 import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 import { useRegisterLiveFixtures } from '../../hooks/useLiveFixture';
@@ -41,6 +41,7 @@ interface OverviewTabProps {
     competitorId: number;
     matches: TeamMatches | undefined;
     stats: Competitor365Stats | null | undefined;
+    coach?: Competitor365Coach | null;
     language: Language;
     t: TranslationKeys;
     onOpenMatches: () => void;
@@ -283,6 +284,7 @@ export default function OverviewTab({
     competitorId,
     matches,
     stats,
+    coach,
     language,
     t,
     onOpenMatches,
@@ -305,6 +307,29 @@ export default function OverviewTab({
 
     return (
         <View style={styles.container}>
+            {coach ? (
+                <Card>
+                    <View style={styles.coachRow}>
+                        <CachedAthletePhoto
+                            uri={coach.imageUrl}
+                            size={48}
+                            recyclingKey={coach.athleteId}
+                        />
+                        <View style={styles.coachInfo}>
+                            <Text style={styles.coachLabel}>{t.teamProfile.coachInformation}</Text>
+                            <Text style={styles.coachName} numberOfLines={1}>
+                                {coach.name}
+                            </Text>
+                            {coach.nationality ? (
+                                <Text style={styles.coachMeta} numberOfLines={1}>
+                                    {coach.nationality}
+                                </Text>
+                            ) : null}
+                        </View>
+                    </View>
+                </Card>
+            ) : null}
+
             {/* Featured / Next match */}
             <View style={styles.section}>
                 <Text style={styles.blockTitle}>
@@ -372,6 +397,29 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.base,
         paddingTop: Spacing.base,
         gap: Spacing.lg,
+    },
+    coachRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.md,
+    },
+    coachInfo: {
+        flex: 1,
+        gap: 2,
+    },
+    coachLabel: {
+        color: Colors.textMuted,
+        fontSize: FontSize.sm,
+        fontWeight: FontWeight.semibold,
+    },
+    coachName: {
+        color: Colors.textPrimary,
+        fontSize: FontSize.xl,
+        fontWeight: FontWeight.bold,
+    },
+    coachMeta: {
+        color: Colors.textSecondary,
+        fontSize: FontSize.sm,
     },
     section: {
         gap: Spacing.sm,

@@ -14,6 +14,8 @@ import { Card, EmptyState, SectionTitle } from './shared';
 interface SquadTabProps {
   squad: Competitor365Squad | null | undefined;
   loading?: boolean;
+  error?: boolean;
+  onRetry?: () => void;
   t: TranslationKeys;
   onOpenPlayer: (player: Squad365Player) => void;
 }
@@ -68,11 +70,33 @@ function PlayerCard({
   );
 }
 
-export default function SquadTab({ squad, loading, t, onOpenPlayer }: SquadTabProps) {
+export default function SquadTab({
+  squad,
+  loading,
+  error,
+  onRetry,
+  t,
+  onOpenPlayer,
+}: SquadTabProps) {
   if (loading && !squad) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={Colors.purpleSoft} />
+      </View>
+    );
+  }
+
+  if (error && !squad) {
+    return (
+      <View style={styles.container}>
+        <Card>
+          <EmptyState text={t.teamProfile.squadLoadFailed} icon="cloud-offline-outline" />
+          {onRetry ? (
+            <TouchableOpacity style={styles.retryBtn} onPress={onRetry} activeOpacity={0.8}>
+              <Text style={styles.retryText}>{t.teamProfile.retry}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </Card>
       </View>
     );
   }
@@ -121,6 +145,19 @@ const styles = StyleSheet.create({
   loading: {
     paddingVertical: Spacing['5xl'],
     alignItems: 'center',
+  },
+  retryBtn: {
+    marginTop: Spacing.md,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.purplePrimary,
+  },
+  retryText: {
+    color: Colors.white,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
   },
   section: {
     gap: Spacing.md,

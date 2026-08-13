@@ -58,6 +58,7 @@ import {
     resolveScores365LangId,
     SCORES365_LEAGUE_ID_OFFSET,
 } from './scores365-experiment.service';
+import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 
 /** 365 player career rows are refreshed once a week (stats change slowly). */
 const CAREER_DB_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -81,6 +82,7 @@ import {
     type ThreeSixFiveCompetitorStats,
     type ThreeSixFiveCompetitorSquad,
     type ThreeSixFiveSearchResults,
+    type ThreeSixFiveCoach,
 } from './threeSixFiveScores.service';
 import { redisCacheService } from './redis-cache.service';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
@@ -1977,9 +1979,9 @@ class FootballDataCacheService {
             return Array.isArray(fullData?.events) ? fullData.events : [];
         }
 
-        // 365Scores experiment — single shared upstream fetch; never API-Football quota.
+        // 365Scores — single shared upstream fetch; never API-Football quota.
         await ensureScores365GameMapping(fixtureId);
-        if (isScores365ExperimentFixture(fixtureId)) {
+        if (isScores365ExperimentFixture(fixtureId) || isNative365FixtureId(fixtureId)) {
             let events = await getScores365ExperimentEvents(fixtureId, forceRefresh, language);
             if (!events.length) {
                 events = await getScores365ExperimentEvents(fixtureId, true, language);
@@ -3169,6 +3171,13 @@ class FootballDataCacheService {
         language?: string | null,
     ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorSquad>> {
         return threeSixFiveScoresService.getCompetitorSquad(competitorId, language);
+    }
+
+    async getCached365CompetitorCoach(
+        competitorId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveCoach>> {
+        return threeSixFiveScoresService.getCompetitorCoach(competitorId, language);
     }
 
     async searchFootballEntities(

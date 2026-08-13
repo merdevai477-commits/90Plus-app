@@ -847,6 +847,18 @@ export interface Competitor365Squad {
   groups: Record<SquadPositionGroup, Squad365Player[]>;
 }
 
+export interface Competitor365Coach {
+  athleteId: number;
+  teamId: number;
+  teamName: string;
+  name: string;
+  nationality?: string;
+  bio?: string;
+  imageUrl: string | null;
+  imageVersion?: number | null;
+  role: 'head_coach' | 'assistant_coach';
+}
+
 export interface Standing365Row {
   groupNum: number;
   groupName: string | null;
@@ -2539,13 +2551,22 @@ export const ApiFootballService = {
   /** Current squad for a 365 competitor (by competitorId). */
   async getCompetitor365Squad(competitorId: number): Promise<Competitor365Squad | null> {
     if (!competitorId || competitorId <= 0) return null;
+    const res = await fetchFromProxy<Competitor365Squad>(
+      `/cached/365/competitor/${competitorId}/squad`,
+    );
+    return res && Array.isArray((res as any).players) ? res : null;
+  },
+
+  /** Head/assistant coach from the latest 365 lineup (by competitorId). */
+  async getCompetitor365Coach(competitorId: number): Promise<Competitor365Coach | null> {
+    if (!competitorId || competitorId <= 0) return null;
     try {
-      const res = await fetchFromProxy<Competitor365Squad>(
-        `/cached/365/competitor/${competitorId}/squad`,
+      const res = await fetchFromProxy<Competitor365Coach | null>(
+        `/cached/365/competitor/${competitorId}/coach`,
       );
-      return res && Array.isArray((res as any).players) ? res : null;
+      return res && typeof (res as any).athleteId === 'number' ? res : null;
     } catch (error) {
-      console.error('Error fetching 365 competitor squad:', error);
+      console.error('Error fetching 365 competitor coach:', error);
       return null;
     }
   },

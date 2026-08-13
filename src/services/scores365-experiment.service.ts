@@ -15,6 +15,7 @@ import { buildScores365AthletePhotoUrl, buildScores365CoachPhotoUrl } from '../u
 import { findCoachInLineup } from './coach-lookup.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import { calendarTodayKey, calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
+import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
 import { withSyncLeaderLease } from './football-sync-leader.service';
 import {
@@ -426,8 +427,13 @@ export async function resolveApiFixtureIdFor365GameId(gameId: number): Promise<n
 export function getScores365GameIdForFixture(fixtureId: number): number | null {
   const cfg = getScores365ExperimentConfig();
   if (fixtureId === cfg.fixtureId) return cfg.gameId;
-  return fixtureToGameId.get(fixtureId) ?? null;
+  const mapped = fixtureToGameId.get(fixtureId);
+  if (mapped) return mapped;
+  if (isNative365FixtureId(fixtureId)) return fixtureId;
+  return null;
 }
+
+export { isNative365FixtureId } from '../utils/native-365-fixture-id';
 
 export function isScores365ExperimentFixture(fixtureId: number): boolean {
   if (!isScores365ExperimentEnabled()) return false;
@@ -538,6 +544,10 @@ async function tryMapFixtureViaDayAllScores(
 export async function ensureScores365GameMapping(fixtureId: number): Promise<number | null> {
   const existing = getScores365GameIdForFixture(fixtureId);
   if (existing) return existing;
+  if (isNative365FixtureId(fixtureId)) {
+    registerScores365FixtureMapping(fixtureId, fixtureId);
+    return fixtureId;
+  }
   if (!isScores365ExperimentEnabled()) return null;
 
   logger.debug(`[Scores365] fixtureId=${fixtureId} not yet in map — checking if on-demand refresh is warranted`);
@@ -807,7 +817,7 @@ export async function fetchScores365GameById(
   gameId: number,
   options?: { force?: boolean; language?: string | null },
 ): Promise<Scores365Game | null> {
-  if (!isScores365ExperimentEnabled()) return null;
+  if (!isScores365ExperimentEnabled() && !isNative365FixtureId(gameId)) return null;
 
   const langId = resolveScores365LangId(options?.language);
   const ttlMs = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '3000', 10) || 3_000);

@@ -32,6 +32,7 @@ import {
     useCompetitorTransfers,
     useCompetitorStats,
     useCompetitorSquad,
+    useCompetitorCoach,
 } from '../hooks/useTeamProfile';
 import { useFavoriteTeam } from '../hooks/useFavoriteTeam';
 
@@ -118,6 +119,7 @@ export default function TeamProfileScreen() {
     );
     const transfersQ = useCompetitorTransfers(competitorId, validId && showTransfers);
     const squadQ = useCompetitorSquad(competitorId, validId && showSquad && activeTab === 'squad');
+    const coachQ = useCompetitorCoach(competitorId, validId);
 
     // ── Follow ─────────────────────────────────────────────────────────────────
     const { isFollowing, toggleFollow, pending: followPending } = useFavoriteTeam();
@@ -208,8 +210,8 @@ export default function TeamProfileScreen() {
                     retryText={t.teamProfile.retry}
                     onRetry={handleBack}
                 />
-            </View>
-        );
+        </View>
+    );
     }
 
     if (resolving || infoQ.isLoading) {
@@ -263,6 +265,7 @@ export default function TeamProfileScreen() {
                 onToggleFollow={handleToggleFollow}
                 onBack={handleBack}
                 topInset={insets.top}
+                coachName={coachQ.data?.name ?? null}
             />
 
             {quickStats.length > 0 ? (
@@ -286,6 +289,7 @@ export default function TeamProfileScreen() {
                         competitorId={competitorId}
                         matches={matchesQ.data}
                         stats={statsQ.data}
+                        coach={coachQ.data}
                         language={language}
                         t={t}
                         onOpenMatches={() => setActiveTab('matches')}
@@ -307,6 +311,8 @@ export default function TeamProfileScreen() {
                     <SquadTab
                         squad={squadQ.data}
                         loading={squadQ.isLoading}
+                        error={squadQ.isError}
+                        onRetry={() => squadQ.refetch()}
                         t={t}
                         onOpenPlayer={(player) =>
                             handleOpenPlayer(player.athleteId, player.name, player.photo)
@@ -332,7 +338,7 @@ export default function TeamProfileScreen() {
                         t={t}
                     />
                 ) : null}
-            </ScrollView>
+                </ScrollView>
         </View>
     );
 }
