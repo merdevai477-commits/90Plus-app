@@ -14,7 +14,7 @@
 
 import type { Language } from '../src/i18n/types';
 import { translations } from '../src/i18n/utils';
-import { teamArabicNames } from '../data/teamArabicNames';
+import { teamArabicNames, getCompetitorDisplayName } from '../data/teamArabicNames';
 import {
   AMBIGUOUS_LEAGUE_NAMES,
   LEAGUE_BY_ID,
@@ -71,10 +71,14 @@ function lookupArabicLabel(originalName: string): string | null {
 export function getTeamDisplayName(
   originalName: string | null | undefined,
   language: Language,
+  competitorId?: number | null,
 ): string {
   const fallback = translations[language]?.common?.unknown
     ?? translations.en.common.unknown
     ?? 'Unknown';
+
+  const byId = getCompetitorDisplayName(competitorId, language === 'ar' ? 'ar' : 'en');
+  if (byId) return byId;
 
   const name = (originalName ?? '').trim();
   if (!name) return fallback;

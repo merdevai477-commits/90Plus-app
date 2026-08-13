@@ -363,6 +363,7 @@ export const en = {
     defenders: 'Defenders',
     midfielders: 'Midfielders',
     forwards: 'Forwards',
+    otherPlayers: 'Other',
     age: 'Age',
     number: 'No.',
 

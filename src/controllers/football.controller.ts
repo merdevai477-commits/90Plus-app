@@ -3047,6 +3047,43 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/365/competitor/:id/squad — current players by competitor ID.
+   */
+  static async getCached365CompetitorSquad(req: Request, res: Response): Promise<void> {
+    try {
+      const competitorId = parseInt(ensureString(req.params.id));
+      if (isNaN(competitorId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid competitor ID' });
+        return;
+      }
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365CompetitorSquad(
+        competitorId,
+        language,
+      );
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores competitor squad unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: {
+          competitorId,
+          count: result.data.players.length,
+        },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/cached/365/player/:athleteId/info — basic profile + next game (365Scores).
    */
   static async getCached365PlayerInfo(req: Request, res: Response): Promise<void> {

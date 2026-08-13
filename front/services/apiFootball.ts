@@ -829,6 +829,24 @@ export interface Competitor365Stats {
   leaderboards: Stat365Leaderboard[];
 }
 
+export type SquadPositionGroup = 'goalkeeper' | 'defender' | 'midfielder' | 'forward' | 'other';
+
+export interface Squad365Player {
+  athleteId: number;
+  name: string;
+  shortName: string;
+  position: string | null;
+  positionGroup: SquadPositionGroup;
+  jerseyNumber: number | null;
+  photo: string | null;
+}
+
+export interface Competitor365Squad {
+  competitorId: number;
+  players: Squad365Player[];
+  groups: Record<SquadPositionGroup, Squad365Player[]>;
+}
+
 export interface Standing365Row {
   groupNum: number;
   groupName: string | null;
@@ -854,6 +872,9 @@ export interface SearchCompetitor365 {
   country: string | null;
   logo: string | null;
   isNationalTeam: boolean;
+  popularityRank?: number | null;
+  longName?: string | null;
+  symbolicName?: string | null;
 }
 
 export interface SearchAthlete365 {
@@ -2515,6 +2536,20 @@ export const ApiFootballService = {
     }
   },
 
+  /** Current squad for a 365 competitor (by competitorId). */
+  async getCompetitor365Squad(competitorId: number): Promise<Competitor365Squad | null> {
+    if (!competitorId || competitorId <= 0) return null;
+    try {
+      const res = await fetchFromProxy<Competitor365Squad>(
+        `/cached/365/competitor/${competitorId}/squad`,
+      );
+      return res && Array.isArray((res as any).players) ? res : null;
+    } catch (error) {
+      console.error('Error fetching 365 competitor squad:', error);
+      return null;
+    }
+  },
+
   /** League table for a 365 competition (used by the profile Table tab). */
   async getCompetitor365Standings(competitionId: number): Promise<Standing365Row[]> {
     if (!competitionId || competitionId <= 0) return [];
@@ -2544,22 +2579,14 @@ export const ApiFootballService = {
   },
 
   /**
-   * Resolve a 365 competitor by name (used when navigating from API-Football
-   * contexts where only a team name is known). Prefers an exact case-insensitive
-   * name match, else the most popular result.
+   * Resolve a 365 competitor by name. Relies on ranked search (entity ID +
+   * aliases). Never uses substring matching — that mixed Al Ahly with National Bank.
    */
   async resolveCompetitor365ByName(name: string): Promise<SearchCompetitor365 | null> {
     const q = (name ?? '').trim();
     if (q.length < 2) return null;
     const results = await this.searchFootball365(q);
-    const all = [...results.clubs, ...results.nationalTeams];
-    if (all.length === 0) return null;
-    const lower = q.toLowerCase();
-    return (
-      all.find((c) => c.name.trim().toLowerCase() === lower) ??
-      all.find((c) => c.name.trim().toLowerCase().includes(lower)) ??
-      all[0]
-    );
+    return results.clubs[0] ?? results.nationalTeams[0] ?? null;
   },
 
   /**

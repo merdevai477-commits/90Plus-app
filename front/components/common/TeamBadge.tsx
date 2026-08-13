@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
+import { with365ImageSize } from '../../utils/scores365AthletePhoto';
 
 interface TeamBadgeProps {
   name: string;
@@ -32,6 +33,9 @@ export default function TeamBadge({
   // Show logo if available and no error
   const shouldShowLogo = logo && !imageError && logo.trim() !== '';
   const isTransparent = color === 'transparent';
+  const sizedLogo = shouldShowLogo
+    ? with365ImageSize(logo, size <= 48 ? 64 : 128) ?? logo
+    : undefined;
 
   return (
     <View style={[
@@ -46,11 +50,12 @@ export default function TeamBadge({
     ]}>
       {shouldShowLogo ? (
         <Image
-          source={{ uri: logo }}
+          source={{ uri: sizedLogo }}
           style={[styles.logo, { width: size * 0.95, height: size * 0.95 }]}
           contentFit="contain"
           transition={0}
           cachePolicy="memory-disk"
+          recyclingKey={sizedLogo}
           placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
           onError={() => setImageError(true)}
         />

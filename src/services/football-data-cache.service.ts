@@ -79,6 +79,7 @@ import {
     type ThreeSixFiveCompetitorMatches,
     type ThreeSixFiveCompetitorTransfers,
     type ThreeSixFiveCompetitorStats,
+    type ThreeSixFiveCompetitorSquad,
     type ThreeSixFiveSearchResults,
 } from './threeSixFiveScores.service';
 import { redisCacheService } from './redis-cache.service';
@@ -3161,6 +3162,13 @@ class FootballDataCacheService {
         language?: string | null,
     ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorStats>> {
         return threeSixFiveScoresService.getCompetitorStats(competitorId, competitionId, language);
+    }
+
+    async getCached365CompetitorSquad(
+        competitorId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorSquad>> {
+        return threeSixFiveScoresService.getCompetitorSquad(competitorId, language);
     }
 
     async searchFootballEntities(

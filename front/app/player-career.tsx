@@ -144,7 +144,7 @@ export default function PlayerCareerScreen() {
     const photoUri =
         career?.profile.imageUrl ||
         params.photo ||
-        (athleteId ? buildScores365AthletePhotoUrl(athleteId, 80) : undefined);
+        (athleteId ? buildScores365AthletePhotoUrl(athleteId, 250) : undefined);
 
     const togglePicker = () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -224,6 +224,8 @@ export default function PlayerCareerScreen() {
                                         source={{ uri: photoUri }}
                                         style={styles.avatar}
                                         contentFit="cover"
+                                        cachePolicy="memory-disk"
+                                        recyclingKey={photoUri}
                                         transition={200}
                                     />
                                 ) : (
@@ -294,6 +296,8 @@ export default function PlayerCareerScreen() {
                                                     source={{ uri: h.competitionLogo }}
                                                     style={styles.compTabLogo}
                                                     contentFit="contain"
+                                                    cachePolicy="memory-disk"
+                                                    recyclingKey={h.competitionLogo}
                                                 />
                                             ) : (
                                                 <Ionicons

@@ -5,7 +5,6 @@
 
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import {
     Colors,
@@ -22,6 +21,7 @@ import { getTeamDisplayName, getLeagueDisplayName } from '../../utils/i18nHelper
 import { useRegisterLiveFixtures } from '../../hooks/useLiveFixture';
 import TeamBadge from '../common/TeamBadge';
 import LeagueIcon from '../common/LeagueIcon';
+import CachedAthletePhoto from '../common/CachedAthletePhoto';
 import {
     Card,
     SectionTitle,
@@ -259,12 +259,7 @@ function TopScorers({
                     onPress={() => onOpenPlayer(row.athleteId, row.name, row.photo)}
                 >
                     <Text style={styles.scorerRank}>{idx + 1}</Text>
-                    <Image
-                        source={{ uri: row.photo ?? undefined }}
-                        style={styles.scorerPhoto}
-                        contentFit="cover"
-                        transition={150}
-                    />
+                    <CachedAthletePhoto uri={row.photo} size={36} recyclingKey={row.athleteId} />
                     <View style={styles.scorerInfo}>
                         <Text style={styles.scorerName} numberOfLines={1}>
                             {row.name}

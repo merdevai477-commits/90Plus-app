@@ -8,7 +8,7 @@ import React from 'react';
 import { StyleSheet, ScrollView, TouchableOpacity, Text, View } from 'react-native';
 import { Colors, Spacing, FontSize, FontWeight } from '../../constants/theme';
 
-export type TeamTabKey = 'overview' | 'matches' | 'transfers' | 'table';
+export type TeamTabKey = 'overview' | 'matches' | 'transfers' | 'table' | 'squad';
 
 interface TeamTabsProps {
     active: TeamTabKey;

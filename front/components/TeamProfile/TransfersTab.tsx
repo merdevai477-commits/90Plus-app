@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
+import CachedAthletePhoto from '../common/CachedAthletePhoto';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Radius, FontSize, FontWeight } from '../../constants/theme';
 import type { TranslationKeys } from '../../src/i18n/utils';
@@ -17,6 +18,7 @@ type Direction = 'in' | 'out';
 interface TransfersTabProps {
     transfers: Competitor365Transfers | undefined;
     t: TranslationKeys;
+    onOpenPlayer?: (item: Competitor365Transfer) => void;
 }
 
 function formatDate(iso: string | null): string {
@@ -26,16 +28,19 @@ function formatDate(iso: string | null): string {
     return d.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function TransferRow({ item, direction }: { item: Competitor365Transfer; direction: Direction }) {
+function TransferRow({
+    item,
+    direction,
+    onPress,
+}: {
+    item: Competitor365Transfer;
+    direction: Direction;
+    onPress?: () => void;
+}) {
     const isIn = direction === 'in';
     return (
-        <View style={styles.row}>
-            <Image
-                source={{ uri: item.athletePhoto ?? undefined }}
-                style={styles.playerPhoto}
-                contentFit="cover"
-                transition={150}
-            />
+        <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={onPress ? 0.8 : 1} disabled={!onPress}>
+            <CachedAthletePhoto uri={item.athletePhoto} size={40} recyclingKey={item.athleteId} />
             <View style={styles.rowInfo}>
                 <Text style={styles.playerName} numberOfLines={1}>
                     {item.athleteName}
@@ -47,7 +52,13 @@ function TransferRow({ item, direction }: { item: Competitor365Transfer; directi
                         color={isIn ? Colors.success : Colors.error}
                     />
                     {item.clubLogo ? (
-                        <Image source={{ uri: item.clubLogo }} style={styles.clubLogo} contentFit="contain" />
+                        <Image
+                            source={{ uri: item.clubLogo }}
+                            style={styles.clubLogo}
+                            contentFit="contain"
+                            cachePolicy="memory-disk"
+                            recyclingKey={item.clubLogo}
+                        />
                     ) : null}
                     <Text style={styles.clubName} numberOfLines={1}>
                         {item.clubName ?? '—'}
@@ -58,11 +69,11 @@ function TransferRow({ item, direction }: { item: Competitor365Transfer; directi
                 {item.price ? <Text style={styles.price}>{item.price}</Text> : null}
                 <Text style={styles.date}>{formatDate(item.date)}</Text>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 }
 
-export default function TransfersTab({ transfers, t }: TransfersTabProps) {
+export default function TransfersTab({ transfers, t, onOpenPlayer }: TransfersTabProps) {
     const arrivals = transfers?.in ?? [];
     const departures = transfers?.out ?? [];
     const [direction, setDirection] = useState<Direction>('in');
@@ -112,7 +123,12 @@ export default function TransfersTab({ transfers, t }: TransfersTabProps) {
                 {list.length > 0 ? (
                     <Card>
                         {list.map((item, idx) => (
-                            <TransferRow key={`${item.athleteId}-${idx}`} item={item} direction={direction} />
+                            <TransferRow
+                                key={`${item.athleteId}-${idx}`}
+                                item={item}
+                                direction={direction}
+                                onPress={onOpenPlayer ? () => onOpenPlayer(item) : undefined}
+                            />
                         ))}
                     </Card>
                 ) : (

@@ -13,6 +13,7 @@ import ApiFootballService, {
     type Competitor365Matches,
     type Competitor365Transfers,
     type Competitor365Stats,
+    type Competitor365Squad,
     type Standing365Row,
 } from '../services/apiFootball';
 
@@ -90,6 +91,18 @@ export function useCompetitorStandings(
         enabled: enabled && !!competitionId && competitionId > 0,
         staleTime: FIVE_MIN,
         gcTime: FIVE_MIN * 4,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+}
+
+export function useCompetitorSquad(competitorId: number, enabled = true) {
+    return useQuery<Competitor365Squad | null, Error>({
+        queryKey: competitorKey(competitorId, 'squad'),
+        queryFn: () => ApiFootballService.getCompetitor365Squad(competitorId),
+        enabled: enabled && competitorId > 0,
+        staleTime: FIVE_MIN * 6,
+        gcTime: FIVE_MIN * 12,
         retry: 1,
         refetchOnWindowFocus: false,
     });

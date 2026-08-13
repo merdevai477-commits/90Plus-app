@@ -29,3 +29,13 @@ export function buildScores365CoachPhotoUrl(
 export function isScores365ImageUrl(url?: string | null): boolean {
   return !!url && url.includes('imagecache.365scores.com');
 }
+
+/** Rewrite Cloudinary w/h on a 365 image URL so list rows don't fetch header-size assets. */
+export function with365ImageSize(
+  url: string | null | undefined,
+  size: number,
+): string | undefined {
+  if (!url) return undefined;
+  if (!url.includes('imagecache.365scores.com')) return url;
+  return url.replace(/w_\d+,h_\d+/, `w_${size},h_${size}`);
+}

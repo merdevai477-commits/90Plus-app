@@ -27,6 +27,7 @@ interface TeamHeaderProps {
     t: TranslationKeys;
     language: Language;
     name: string;
+    competitorId?: number | null;
     logo?: string | null;
     country?: string | null;
     founded?: number | null;
@@ -53,6 +54,7 @@ export default function TeamHeader({
     t,
     language,
     name,
+    competitorId,
     logo,
     country,
     founded,
@@ -63,7 +65,7 @@ export default function TeamHeader({
     onBack,
     topInset,
 }: TeamHeaderProps) {
-    const displayName = getTeamDisplayName(name, language);
+    const displayName = getTeamDisplayName(name, language, competitorId);
     const countryLabel = country ? getCountryDisplayName(country, language) : '';
     const flagUri = country ? getCountryFlagUri(country, null, 40) : null;
     const flagEmoji = country ? getCountryFlagEmoji(country) : '';

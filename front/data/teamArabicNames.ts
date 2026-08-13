@@ -343,3 +343,27 @@ export const teamArabicNames: Record<string, string> = {
   'DFB Pokal': 'كأس ألمانيا',
   'Coupe de France': 'كأس فرنسا',
 };
+
+/**
+ * Presentation names keyed by 365Scores competitorId.
+ * IDs are the source of truth — this never resolves search or navigation.
+ */
+export const TEAM_DISPLAY_BY_COMPETITOR_ID: Record<
+  number,
+  { ar: string; en: string }
+> = {
+  8200: { ar: 'الأهلي المصري', en: 'Al Ahly SC' },
+  8201: { ar: 'الزمالك', en: 'Zamalek SC' },
+  50527: { ar: 'البنك الأهلي', en: 'National Bank' },
+  8946: { ar: 'الأهلي السعودي', en: 'Al Ahli' },
+};
+
+export function getCompetitorDisplayName(
+  competitorId: number | null | undefined,
+  language: 'ar' | 'en',
+): string | null {
+  if (competitorId == null || competitorId <= 0) return null;
+  const row = TEAM_DISPLAY_BY_COMPETITOR_ID[competitorId];
+  if (!row) return null;
+  return language === 'ar' ? row.ar : row.en;
+}

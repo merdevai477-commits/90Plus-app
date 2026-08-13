@@ -25,7 +25,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Radius, FontSize, FontWeight } from '../constants/theme';
 import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName } from '../utils/i18nHelpers';
-import { getFootballSeasonYear } from '../utils/playerStatsAggregate';
 import { useHaptic } from '../hooks/useHaptic';
 import ApiFootballService, {
     type FootballSearchResults,
@@ -34,6 +33,8 @@ import ApiFootballService, {
 } from '../services/apiFootball';
 import { RecentSearchStorage } from '../src/storage/recentSearch.storage';
 import TeamBadge from '../components/common/TeamBadge';
+import CachedAthletePhoto from '../components/common/CachedAthletePhoto';
+import { pushPlayerCareer } from '../utils/openPlayerProfile';
 
 const DEBOUNCE_MS = 280;
 
@@ -70,7 +71,7 @@ function CompetitorRow({
             <TeamBadge name={item.name} logo={item.logo ?? undefined} size={40} color="transparent" />
             <View style={styles.rowInfo}>
                 <Text style={styles.rowTitle} numberOfLines={1}>
-                    {getTeamDisplayName(item.name, language)}
+                    {getTeamDisplayName(item.name, language, item.competitorId)}
                 </Text>
                 {item.country ? (
                     <Text style={styles.rowSub} numberOfLines={1}>
@@ -86,18 +87,7 @@ function CompetitorRow({
 function PlayerRow({ item, onPress }: { item: SearchAthlete365; onPress: () => void }) {
     return (
         <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.75}>
-            {item.imageUrl ? (
-                <Image
-                    source={{ uri: item.imageUrl }}
-                    style={styles.playerPhoto}
-                    contentFit="cover"
-                    transition={150}
-                />
-            ) : (
-                <View style={styles.playerPhotoFallback}>
-                    <Ionicons name="person" size={18} color={Colors.purpleSoft} />
-                </View>
-            )}
+            <CachedAthletePhoto uri={item.imageUrl} size={40} recyclingKey={item.athleteId} />
             <View style={styles.rowInfo}>
                 <Text style={styles.rowTitle} numberOfLines={1}>
                     {item.name}
@@ -147,6 +137,18 @@ export default function FootballSearchScreen() {
         (results?.nationalTeams.length ?? 0) +
         (results?.players.length ?? 0);
 
+    useEffect(() => {
+        if (!results) return;
+        const urls = [
+            ...results.clubs.slice(0, 6).map((c) => c.logo),
+            ...results.nationalTeams.slice(0, 3).map((c) => c.logo),
+            ...results.players.slice(0, 6).map((p) => p.imageUrl),
+        ].filter((u): u is string => !!u);
+        urls.forEach((uri) => {
+            void Image.prefetch(uri);
+        });
+    }, [results]);
+
     const remember = useCallback(async (q: string) => {
         const next = await RecentSearchStorage.addRecent(q);
         setRecent(next);
@@ -174,19 +176,13 @@ export default function FootballSearchScreen() {
     const openPlayer = (item: SearchAthlete365) => {
         trigger('light');
         void remember(query.trim() || item.name);
-        router.push({
-            pathname: '/player-profile' as any,
-            params: {
-                id: String(item.athleteId),
-                athleteId: String(item.athleteId),
-                name: item.name,
-                photo: item.imageUrl ?? '',
-                teamName: item.clubName ?? '',
-                teamId: item.clubId ? String(item.clubId) : '',
-                season: String(getFootballSeasonYear()),
-                dataSource: '365',
-            },
-        } as any);
+        pushPlayerCareer(router, {
+            athleteId: item.athleteId,
+            name: item.name,
+            photo: item.imageUrl,
+            teamName: item.clubName,
+            teamId: item.clubId,
+        });
     };
 
     const applyRecent = (q: string) => {

@@ -3,7 +3,7 @@
  *
  * Fully dynamic profile driven by React Query hooks over ApiFootballService's
  * 365 competitor endpoints (cached in Redis + Postgres). Composes a modular
- * header + quick stats + tabbed content (Overview / Matches / Transfers / Table)
+ * header + quick stats + tabbed content (Overview / Matches / Squad / Transfers / Table)
  * and wires the real Follow feature.
  *
  * Route params: { id?: string; name?: string; logo?: string }
@@ -21,16 +21,17 @@ import { useQuery } from '@tanstack/react-query';
 import { Colors, Spacing } from '../constants/theme';
 import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName, getCountryDisplayName } from '../utils/i18nHelpers';
-import { getFootballSeasonYear } from '../utils/playerStatsAggregate';
 import { useHaptic } from '../hooks/useHaptic';
 import { ErrorDisplay } from '../components/common/ErrorDisplay';
 import ApiFootballService from '../services/apiFootball';
+import { pushPlayerCareer } from '../utils/openPlayerProfile';
 
 import {
     useCompetitorInfo,
     useCompetitorMatches,
     useCompetitorTransfers,
     useCompetitorStats,
+    useCompetitorSquad,
 } from '../hooks/useTeamProfile';
 import { useFavoriteTeam } from '../hooks/useFavoriteTeam';
 
@@ -42,6 +43,7 @@ import OverviewTab from '../components/TeamProfile/OverviewTab';
 import MatchesTab from '../components/TeamProfile/MatchesTab';
 import TransfersTab from '../components/TeamProfile/TransfersTab';
 import TableTab from '../components/TeamProfile/TableTab';
+import SquadTab from '../components/TeamProfile/SquadTab';
 
 interface TeamParams {
     id?: string;
@@ -94,13 +96,15 @@ export default function TeamProfileScreen() {
 
     const showTransfers = !!info?.hasTransfers && !isNationalTeam;
     const showTable = standingsComps.length > 0;
+    const showSquad = true;
 
     const tabs = useMemo<TeamTabKey[]>(() => {
         const list: TeamTabKey[] = ['overview', 'matches'];
+        if (showSquad) list.push('squad');
         if (showTransfers) list.push('transfers');
         if (showTable) list.push('table');
         return list;
-    }, [showTransfers, showTable]);
+    }, [showSquad, showTransfers, showTable]);
 
     // Keep the active tab valid when the tab set changes (e.g. national teams).
     useEffect(() => {
@@ -113,11 +117,12 @@ export default function TeamProfileScreen() {
         validId && !!statsCompetitionId,
     );
     const transfersQ = useCompetitorTransfers(competitorId, validId && showTransfers);
+    const squadQ = useCompetitorSquad(competitorId, validId && showSquad && activeTab === 'squad');
 
     // ── Follow ─────────────────────────────────────────────────────────────────
     const { isFollowing, toggleFollow, pending: followPending } = useFavoriteTeam();
 
-    const teamName = getTeamDisplayName(info?.name ?? nameParam, language);
+    const teamName = getTeamDisplayName(info?.name ?? nameParam, language, competitorId);
     const country = info?.country ?? null;
 
     const quickStats = useMemo<QuickStat[]>(() => {
@@ -178,18 +183,14 @@ export default function TeamProfileScreen() {
     const handleOpenPlayer = (athleteId: number, name: string, photo: string | null) => {
         if (!athleteId) return;
         trigger('light');
-        router.push({
-            pathname: '/player-profile',
-            params: {
-                id: String(athleteId),
-                name,
-                photo: photo ?? '',
-                teamName: info?.name ?? '',
-                teamLogo: info?.logo ?? '',
-                teamId: String(competitorId),
-                season: String(getFootballSeasonYear()),
-            },
-        } as any);
+        pushPlayerCareer(router, {
+            athleteId,
+            name,
+            photo,
+            teamName: info?.name ?? nameParam,
+            teamLogo: info?.logo ?? params.logo,
+            teamId: competitorId,
+        });
     };
 
     // ── States ───────────────────────────────────────────────────────────────
@@ -241,6 +242,7 @@ export default function TeamProfileScreen() {
         matches: t.teamProfile.tabs.matches,
         transfers: t.teamProfile.tabs.transfers,
         table: t.teamProfile.tabs.table,
+        squad: t.teamProfile.tabs.squad,
     };
 
     return (
@@ -251,6 +253,7 @@ export default function TeamProfileScreen() {
                 t={t}
                 language={language}
                 name={teamName}
+                competitorId={competitorId}
                 logo={info.logo}
                 country={country}
                 founded={null}
@@ -300,8 +303,25 @@ export default function TeamProfileScreen() {
                     />
                 ) : null}
 
+                {activeTab === 'squad' ? (
+                    <SquadTab
+                        squad={squadQ.data}
+                        loading={squadQ.isLoading}
+                        t={t}
+                        onOpenPlayer={(player) =>
+                            handleOpenPlayer(player.athleteId, player.name, player.photo)
+                        }
+                    />
+                ) : null}
+
                 {activeTab === 'transfers' ? (
-                    <TransfersTab transfers={transfersQ.data} t={t} />
+                    <TransfersTab
+                        transfers={transfersQ.data}
+                        t={t}
+                        onOpenPlayer={(item) =>
+                            handleOpenPlayer(item.athleteId, item.athleteName, item.athletePhoto)
+                        }
+                    />
                 ) : null}
 
                 {activeTab === 'table' ? (

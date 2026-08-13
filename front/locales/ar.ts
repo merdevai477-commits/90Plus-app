@@ -468,6 +468,7 @@ export const ar = {
     defenders: 'المدافعون',
     midfielders: 'لاعبو الوسط',
     forwards: 'المهاجمون',
+    otherPlayers: 'أخرى',
     age: 'العمر',
     number: 'الرقم',
 
