@@ -24,7 +24,7 @@ import ApiFootballService, {
     type Player365CareerSeason,
 } from '../services/apiFootball';
 import { ProfileTheme } from '../constants/ProfileTheme';
-import { buildScores365AthletePhotoUrl, toFullscreenPhotoUrl } from '../utils/scores365AthletePhoto';
+import { buildScores365AthletePhotoUrl, toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
 import ImageViewerModal from '../components/common/ImageViewerModal';
 import { fetch365PlayerCareerClient } from '../utils/scores365PlayerCareerClient';
 import { useTranslation } from '../src/i18n';
@@ -146,15 +146,22 @@ export default function PlayerCareerScreen() {
     const photoUri =
         career?.profile.imageUrl ||
         params.photo ||
-        (athleteId ? buildScores365AthletePhotoUrl(athleteId, 250) : undefined);
+        (athleteId ? buildScores365AthletePhotoUrl(athleteId, 80) : undefined);
+    const avatarUri = with365ImageSize(photoUri, 80) ?? photoUri;
+
+    const animateSeasonLayout = () => {
+        if (Platform.OS === 'ios') {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        }
+    };
 
     const togglePicker = () => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        animateSeasonLayout();
         setSeasonPickerOpen((o) => !o);
     };
 
     const pickSeason = (key: string) => {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        animateSeasonLayout();
         setSelectedSeasonKey(key);
         setSeasonPickerOpen(false);
     };
@@ -228,12 +235,13 @@ export default function PlayerCareerScreen() {
                                         accessibilityRole="imagebutton"
                                     >
                                         <ExpoImage
-                                            source={{ uri: photoUri }}
+                                            source={{ uri: avatarUri }}
                                             style={styles.avatar}
                                             contentFit="cover"
                                             cachePolicy="memory-disk"
-                                            recyclingKey={photoUri}
-                                            transition={200}
+                                            recyclingKey={avatarUri}
+                                            priority="high"
+                                            transition={0}
                                         />
                                     </TouchableOpacity>
                                 ) : (
@@ -351,6 +359,8 @@ export default function PlayerCareerScreen() {
                                                     contentFit="contain"
                                                     cachePolicy="memory-disk"
                                                     recyclingKey={h.competitionLogo}
+                                                    priority="low"
+                                                    transition={0}
                                                 />
                                             ) : (
                                                 <Ionicons
@@ -482,7 +492,15 @@ export default function PlayerCareerScreen() {
                                 <View key={`${c.competitionId ?? c.competitionName}-${idx}`} style={styles.compCard}>
                                     <View style={styles.compHeader}>
                                         {c.competitionLogo ? (
-                                            <ExpoImage source={{ uri: c.competitionLogo }} style={styles.compLogo} contentFit="contain" />
+                                            <ExpoImage
+                                                source={{ uri: c.competitionLogo }}
+                                                style={styles.compLogo}
+                                                contentFit="contain"
+                                                cachePolicy="memory-disk"
+                                                recyclingKey={c.competitionLogo}
+                                                priority="low"
+                                                transition={0}
+                                            />
                                         ) : (
                                             <View style={styles.compLogoFallback}>
                                                 <Ionicons name="trophy-outline" size={14} color={ProfileTheme.colors.textTertiary} />

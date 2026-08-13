@@ -3440,7 +3440,7 @@ class ThreeSixFiveScoresService {
   ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
     try {
       const langId = resolveScores365LangId(language);
-      const cacheKey = `365:player-career:v5:${athleteId}:${langId}`;
+      const cacheKey = `365:player-career:v6:${athleteId}:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFivePlayerCareer>(cacheKey);
       if (cached?.seasons?.length) return { data: cached, source: '365scores' };
 
@@ -3517,6 +3517,7 @@ class ThreeSixFiveScoresService {
   async invalidatePlayerCareerCache(athleteId: number, langId?: number): Promise<void> {
     const langs = langId != null ? [langId] : [1, 27];
     for (const lid of langs) {
+      await redisCacheService.del(`365:player-career:v5:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v4:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v3:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:${athleteId}:${lid}`);
@@ -3806,7 +3807,7 @@ class ThreeSixFiveScoresService {
       age: this.num365(raw?.age),
       dateOfBirth: this.parse365DateOfBirth(raw),
       height: this.parse365Height(raw),
-      imageUrl: buildScores365AthletePhotoUrl(athleteId, 250),
+      imageUrl: buildScores365AthletePhotoUrl(athleteId, 80),
       transfers: this.parse365AthleteTransfers(raw, competitorNames),
     };
   }
