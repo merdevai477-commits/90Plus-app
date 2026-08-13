@@ -76,7 +76,9 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
   // not the absolute lifetime XP — so the label matches the bar.
   const level = levelProp ?? xpCtx.level ?? profile?.level ?? 1;
   const xpInLevel = xpInLevelProp ?? xpCtx.xpInLevel ?? 0;
-  const xpForNextLevel = Math.max(1, xpSpanProp ?? xpCtx.xpForNextLevel ?? 290);
+  // A level is 100 XP wide (backend xp.service.ts). The context value wins
+  // whenever it is loaded; this is only the pre-load default.
+  const xpForNextLevel = Math.max(1, xpSpanProp ?? xpCtx.xpForNextLevel ?? 100);
 
   const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
   const resolvedName: string =

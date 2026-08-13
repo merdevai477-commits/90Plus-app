@@ -29,6 +29,7 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import type { QuizLanguage } from '../types/quiz.types';
 import type { RankingCandidate, TransferCandidate } from './questions-challenges.football-data';
+import { TOP10_SLOT_COUNT } from '../constants/questions-modes.config';
 import { remoteImageUrlOrNull as imageUrlOrNull } from './questions-challenges.round-contract';
 
 /** 365Scores labels club rows as "Club (Name)" / "نادي (Name)". */
@@ -246,7 +247,7 @@ export async function buildDerivedRankingCandidates(
   for (const [key, group] of ordered) {
     if (out.length >= limit) break;
     if (seenCompetitions.has(group.competitionId)) continue;
-    const ranked = [...group.byPlayer.values()].sort((a, b) => b.goals - a.goals).slice(0, 6);
+    const ranked = [...group.byPlayer.values()].sort((a, b) => b.goals - a.goals).slice(0, TOP10_SLOT_COUNT);
     if (ranked.length < 3) continue;
     if (ranked[0]!.goals === ranked[1]!.goals || ranked[1]!.goals === ranked[2]!.goals) continue;
 

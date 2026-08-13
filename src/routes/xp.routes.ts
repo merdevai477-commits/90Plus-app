@@ -34,8 +34,14 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
     const nextLevelXp = xpForLevel(level + 1);
     const currentLevelXp = xpForLevel(level);
     const xpToNext = nextLevelXp - xp;
+    /*
+     * Clamped at BOTH ends. Level 1 is the floor for a new account, so a user
+     * can hold less XP than level 1's own threshold (0 XP < 100) — without the
+     * lower clamp the bar reported a negative percentage on exactly the
+     * accounts most likely to look at it.
+     */
     const progressPct = nextLevelXp > currentLevelXp
-      ? Math.min(100, Math.round(((xp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100))
+      ? Math.max(0, Math.min(100, Math.round(((xp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100)))
       : 100;
 
     // Rest period: inactive for 14+ days

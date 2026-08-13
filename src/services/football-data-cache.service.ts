@@ -3140,11 +3140,18 @@ class FootballDataCacheService {
         return result;
     }
 
-    /** Drop cached career (Redis + Postgres) so the next view pulls fresh 365 data. */
-    async invalidate365PlayerCareer(athleteId: number, language?: string | null): Promise<void> {
-        const langId = resolveScores365LangId(language);
+    /**
+     * Drop cached career (Redis + Postgres) so the next view pulls fresh 365 data.
+     *
+     * Every language is invalidated, not just the caller's: this runs when the
+     * player actually played — a new appearance, goals, maybe a trophy — and
+     * that is equally true of the Arabic and the English payload. Passing a
+     * langId here would have cleared one tier for one language and the table
+     * for all of them.
+     */
+    async invalidate365PlayerCareer(athleteId: number, _language?: string | null): Promise<void> {
         try {
-            await threeSixFiveScoresService.invalidatePlayerCareerCache(athleteId, langId);
+            await threeSixFiveScoresService.invalidatePlayerCareerCache(athleteId);
         } catch (err: any) {
             logger.warn(`[365Career] Redis invalidate ${athleteId} failed:`, err?.message);
         }
@@ -3184,9 +3191,14 @@ class FootballDataCacheService {
         const langId = resolveScores365LangId(language);
 
         // 1. Postgres — serve a fresh row immediately; refresh stale rows in background.
+        //    Keyed by (athleteId, langId): the row holds provider labels in one
+        //    language, so the other language's row is a different row, not a
+        //    miss to be overwritten.
         try {
-            const dbRow = await prisma.cached365PlayerCareer.findUnique({ where: { athleteId } });
-            if (dbRow?.data && dbRow.langId === langId) {
+            const dbRow = await prisma.cached365PlayerCareer.findUnique({
+                where: { athleteId_langId: { athleteId, langId } },
+            });
+            if (dbRow?.data) {
                 const age = Date.now() - dbRow.updatedAt.getTime();
                 const data = dbRow.data as unknown as ThreeSixFivePlayerCareer;
                 const hasNewShape = Array.isArray(data.currentSeasonHighlights);
@@ -3210,15 +3222,26 @@ class FootballDataCacheService {
         return this.refresh365PlayerCareer(athleteId, language, langId);
     }
 
-    private async refresh365PlayerCareer(
+    /**
+     * Fetch one athlete's career from 365 IN A GIVEN LANGUAGE and persist it.
+     *
+     * `langId` is passed through to the provider rather than re-derived from
+     * `language`, so the row's `langId` column always describes the payload
+     * actually stored. Public so a cache warmer can fill a language the app's
+     * own traffic has not visited — see scripts/warm-365-career-cache.ts.
+     */
+    async refresh365PlayerCareer(
         athleteId: number,
         language: string | null | undefined,
         langId: number,
     ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
-        const result = await threeSixFiveScoresService.getPlayerCareer(athleteId, language);
+        const result = await threeSixFiveScoresService.getPlayerCareer(athleteId, language, { langId });
         if (!result.data?.seasons?.length) {
             try {
-                await prisma.cached365PlayerCareer.deleteMany({ where: { athleteId } });
+                // Language-scoped: an empty English fetch must not delete the
+                // Arabic row (or the reverse), which is a different payload
+                // from a different upstream call.
+                await prisma.cached365PlayerCareer.deleteMany({ where: { athleteId, langId } });
             } catch {
                 /* ignore purge errors */
             }
@@ -3227,7 +3250,7 @@ class FootballDataCacheService {
 
         try {
             await prisma.cached365PlayerCareer.upsert({
-                where: { athleteId },
+                where: { athleteId_langId: { athleteId, langId } },
                 update: {
                     name: result.data.profile.name,
                     photo: result.data.profile.imageUrl ?? null,

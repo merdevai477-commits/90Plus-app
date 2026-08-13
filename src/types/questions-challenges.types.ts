@@ -66,12 +66,18 @@ export interface QuestionChallengeQuestion {
   /** football-bingo */
   bingoBoard?: Array<Array<{ id: string; label?: string; imageUrl?: string; kind?: 'club' | 'player' | 'country' | 'stadium' }>>;
   objectives?: string[];
-  /** football-grid */
+  /**
+   * football-grid — the shared 3×3 board, repeated on every question of the
+   * round so the app can draw the whole board while answering one cell.
+   * `rows` are clubs / national teams, `columns` are awards.
+   */
   rows?: string[];
   columns?: string[];
   rowImages?: Array<string | undefined>;
   columnImages?: Array<string | undefined>;
   validationRules?: string[];
+  /** football-grid: which cell of that board THIS question fills. */
+  gridCell?: { row: number; column: number };
   /** player-connections */
   players?: Array<{ id: string; name: string; imageUrl?: string }>;
   relationships?: string[];
@@ -84,9 +90,43 @@ export interface QuestionChallengeQuestion {
   orderedAnswers?: Array<{ id: string; label: string; imageUrl?: string }>;
   acceptedAnswers?: string[];
   scoring?: { exact: number; partial: number };
+  /**
+   * top10-challenge (text entry). Non-secret framing for the ten inputs: what
+   * the list is OF and how many slots it has. The names themselves stay in
+   * `answer` — the client never receives them before grading.
+   */
+  top10?: {
+    slots: number;
+    /** "Premier League", "FIFA World Cup" … — the list's subject. */
+    categoryLabel: string;
+    /** "2010", "2024/25" … — the year the list belongs to. */
+    seasonLabel?: string;
+  };
   /** The graded answer for THIS question. */
   answer: QuestionChallengeAnswer;
 }
+
+/**
+ * WHAT A QUESTION EXPECTS FROM THE PLAYER — counts only, never identities.
+ *
+ * Sent to the client so it can cap selection, know when an answer is complete
+ * and auto-submit a board placement. Carrying "three cells" leaks nothing:
+ * every bingo card takes three, and which three stays server-side.
+ */
+export type QuestionSelectionMode = 'single' | 'multiple' | 'text';
+
+export interface QuestionSelectionRules {
+  selectionMode: QuestionSelectionMode;
+  requiredSelections: number;
+  maxSelections: number;
+  /** Submit as soon as `requiredSelections` is reached — no confirm button. */
+  autoSubmit: boolean;
+}
+
+/** A question as the client receives it: no answer key, plus selection rules. */
+export type SanitizedQuestion = Omit<QuestionChallengeQuestion, 'answer'> & {
+  selection: QuestionSelectionRules;
+};
 
 export interface ChallengeContentBase {
   title: string;
@@ -167,11 +207,29 @@ export type QuestionChallengeContent =
   | Top10ChallengeContent
   | FootballQuizContent;
 
+/** One slot of a Top 10 answer key: the real name and what else counts as it. */
+export interface Top10AnswerSlot {
+  /** 1-based position in the real ranking. */
+  rank: number;
+  /** The player's name as the data records it — what the reveal shows. */
+  canonical: string;
+  /**
+   * Other spellings that count as this player: short names, the surname on its
+   * own, the localized name. Taken from stored records, never invented.
+   */
+  aliases: string[];
+  imageUrl?: string;
+  /** The number behind the ranking (goals), for the reveal. */
+  value?: number;
+}
+
 export interface QuestionChallengeAnswer {
   correctIds?: string[];
   acceptedIds?: string[];
   orderedIds?: string[];
   freeTextAnswers?: string[];
+  /** top10-challenge — the ten real names, in rank order. Never sent to a client. */
+  orderedAnswers?: Top10AnswerSlot[];
   /**
    * Per-question answers for a multi-question round, keyed by
    * `QuestionChallengeQuestion.id`. The flat fields above stay populated with
@@ -275,7 +333,7 @@ export interface QuestionChallengeSessionDto {
   currentQuestion?: number;
   totalQuestions?: number;
   /** Current question payload without the graded answer. */
-  question?: Omit<QuestionChallengeQuestion, 'answer'>;
+  question?: SanitizedQuestion;
   questionStartedAt?: string;
   questionExpiresAt?: string;
   serverNow?: string;
@@ -289,6 +347,21 @@ export interface QuestionChallengeSessionDto {
     expiredQuestions: number;
     totalScore: number;
   };
+  /**
+   * FOOTBALL GRID — the cells this player has already filled, `r{row}-c{col}`
+   * → the player they placed there.
+   *
+   * The board is drawn from the round, but WHICH cells are already won is per
+   * user, and the app cannot hold it: leaving the screen (or a reload, or the
+   * app being backgrounded) drops the component state, and the board came back
+   * empty even though the server had every placement. It is sent on session
+   * load so a reopened board redraws exactly as it was left.
+   *
+   * Only ACCEPTED placements appear here. A refused one leaves its cell empty
+   * on the board, so replaying it would say nothing the player has not already
+   * been told, and no unanswered cell is ever described.
+   */
+  gridPlacements?: Record<string, { label: string; imageUrl?: string }>;
 }
 
 /**
@@ -340,6 +413,19 @@ export interface QuestionChallengeSubmitResult {
   pointsEarned?: number;
   finalResult?: QuestionChallengeSessionDto['finalResult'];
   idempotent?: boolean;
+  /**
+   * top10-challenge — per slot, whether the server matched what was typed
+   * there. Sent only with the graded result, so the reveal can mark each row
+   * without the app ever holding the answer key beforehand.
+   */
+  slotResults?: boolean[];
+  /** Authoritative XP total and level after this answer was graded. */
+  xp?: number;
+  level?: number;
+  /** Authoritative coin balance after this answer was graded. */
+  coins?: number;
+  /** Coins the wrong-answer penalty actually took (0 when none was charged). */
+  coinsDeducted?: number;
 }
 
 export interface QuestionChallengeLeaderboardRow {

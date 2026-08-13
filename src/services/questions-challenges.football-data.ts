@@ -38,6 +38,7 @@ import {
 } from './questions-challenges.derived-football';
 import { logger } from '../utils/logger';
 import { ROUND_QUESTION_COUNT } from '../constants/quiz.constants';
+import { TOP10_SLOT_COUNT } from '../constants/questions-modes.config';
 import type { QuizLanguage } from '../types/quiz.types';
 import type { QuizEntityDataset, QuizDatasetPlayer, QuizEntitySlice } from '../types/quiz-entity.types';
 
@@ -207,19 +208,9 @@ export interface QuestionsFootballCandidates {
 export { remoteImageUrlOrNull as imageUrlOrNull } from './questions-challenges.round-contract';
 import { remoteImageUrlOrNull as imageUrlOrNull } from './questions-challenges.round-contract';
 
-export function seededRng(seedStr: string): () => number {
-  let h = 1779033703 ^ seedStr.length;
-  for (let i = 0; i < seedStr.length; i += 1) {
-    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  return function next(): number {
-    h = Math.imul(h ^ (h >>> 16), 2246822507);
-    h = Math.imul(h ^ (h >>> 13), 3266489909);
-    h ^= h >>> 16;
-    return (h >>> 0) / 4294967296;
-  };
-}
+/** Re-exported from utils so existing callers keep importing it from here. */
+export { seededRng } from '../utils/seeded-rng';
+import { seededRng } from '../utils/seeded-rng';
 
 export function shuffle<T>(items: T[], rng: () => number): T[] {
   const out = [...items];
@@ -575,7 +566,8 @@ async function buildRankingCandidates(language: QuizLanguage): Promise<RankingCa
             goals: Number(row?.statistics?.[0]?.goals?.total ?? 0),
           }))
           .filter((row: { name: string; photoUrl: string | null }) => Boolean(row.name) && Boolean(row.photoUrl))
-          .slice(0, 6)
+          // Top 10 needs ten names; the old cap of six could never fill a list.
+          .slice(0, TOP10_SLOT_COUNT)
           .map((row: { name: string; photoUrl: string | null; goals: number }) => ({
             name: row.name,
             photoUrl: row.photoUrl!,

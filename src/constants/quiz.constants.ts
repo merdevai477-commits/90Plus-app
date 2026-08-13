@@ -24,3 +24,15 @@ export const ROUND_QUESTION_COUNT = 10;
 export const QUIZ_QUESTION_COUNT = ROUND_QUESTION_COUNT;
 /** Server-authoritative per-question timer (seconds). */
 export const QUIZ_QUESTION_TIME_LIMIT_SEC = 30;
+
+/**
+ * THE QUIZ COIN PRICE — what one wrong answer costs, and what a hint or a skip
+ * costs in the daily quiz. One number for the whole quiz economy: the Daily
+ * Football Quiz and the Questions modes charge exactly the same thing for
+ * exactly the same mistake.
+ *
+ * It lives here, next to the other shared quiz rules, rather than inside
+ * quiz-daily.service.ts, so reading the price never means importing (or
+ * mocking) that whole service.
+ */
+export const QUIZ_COIN_COST = 10;

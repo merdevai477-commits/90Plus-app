@@ -108,14 +108,10 @@ const getSpacing = (base: number) => {
 };
 
 /**
- * XP required to go from currentLevel to currentLevel+1.
- * Mirrors backend xp.service.ts formula.
+ * XP a user must hold to BE `level` — 100 XP per level, mirroring backend
+ * xp.service.ts `xpForLevel`. A level is therefore 100 XP wide.
  */
-const xpForLevel = (level: number): number => {
-  if (level <= 1) return 0;
-  if (level === 2) return 290;
-  return 40 + 125 * level * (level - 1);
-};
+const xpForLevel = (level: number): number => Math.max(level, 1) * 100;
 const getXpForNextLevel = (currentLevel: number): number => {
   return xpForLevel(currentLevel + 1) - xpForLevel(currentLevel);
 };

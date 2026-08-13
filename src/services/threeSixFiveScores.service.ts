@@ -1506,9 +1506,17 @@ class ThreeSixFiveScoresService {
   async getPlayerCareer(
     athleteId: number,
     language?: string | null,
+    options?: { langId?: number },
   ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
     try {
-      const langId = resolveScores365LangId(language);
+      /*
+       * An explicit langId wins over the app-language mapping. Without it a
+       * caller cannot ask for a specific language at all: SCORES365_FORCE_ENGLISH
+       * rewrites every request to English inside resolveScores365LangId, which
+       * is right for a viewer (one language for the whole session) and wrong for
+       * anything that has to fill a per-language cache.
+       */
+      const langId = options?.langId ?? resolveScores365LangId(language);
       const cacheKey = `365:player-career:v4:${athleteId}:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFivePlayerCareer>(cacheKey);
       if (cached?.seasons?.length) return { data: cached, source: '365scores' };

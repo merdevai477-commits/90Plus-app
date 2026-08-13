@@ -49,7 +49,17 @@ const db = {
   challenges: [] as ChallengeRow[],
   progress: [] as ProgressRow[],
   streak: { current: 0, longest: 0 },
+  /** Coin balance per user id — the wrong-answer penalty is charged here. */
+  coins: new Map<string, number>(),
+  coinTransactions: [] as Array<{ userId: string; amount: number; type: string; description: string }>,
 };
+
+const STARTING_COINS = 100;
+
+function coinsOf(userId: string): number {
+  if (!db.coins.has(userId)) db.coins.set(userId, STARTING_COINS);
+  return db.coins.get(userId)!;
+}
 
 function matches(row: any, where: any): boolean {
   for (const [key, value] of Object.entries(where ?? {})) {
@@ -75,8 +85,22 @@ function matches(row: any, where: any): boolean {
   return true;
 }
 
+/**
+ * Transactions run ONE AT A TIME here, the way Postgres serialises them once
+ * the service takes the user row's lock (`SELECT … FOR UPDATE`). Without this
+ * the mock would interleave two concurrent submissions at their first await —
+ * something the real database does not do — and a test could not tell a
+ * genuine double-charge from an artefact of the fake.
+ */
+let txQueue: Promise<unknown> = Promise.resolve();
+
 const prismaMock: any = {
-  $transaction: async (fn: any) => fn(prismaMock),
+  $queryRawUnsafe: async () => [],
+  $transaction: async (fn: any) => {
+    const run = txQueue.then(() => fn(prismaMock));
+    txQueue = run.catch(() => undefined);
+    return run;
+  },
   dailyQuestionChallenge: {
     count: async ({ where }: any) => db.challenges.filter((row) => matches(row, where)).length,
     findFirst: async ({ where }: any) => db.challenges.find((row) => matches(row, where)) ?? null,
@@ -131,7 +155,24 @@ const prismaMock: any = {
     },
   },
   loginStreak: { findUnique: async () => db.streak },
-  user: { findMany: async () => [] },
+  user: {
+    findMany: async () => [],
+    findUnique: async ({ where }: any) => ({ id: where.id, coins: coinsOf(where.id) }),
+    update: async ({ where, data }: any) => {
+      const next =
+        data.coins && typeof data.coins === 'object' && 'decrement' in data.coins
+          ? coinsOf(where.id) - data.coins.decrement
+          : data.coins;
+      db.coins.set(where.id, next);
+      return { id: where.id, coins: next };
+    },
+  },
+  coinTransaction: {
+    create: async ({ data }: any) => {
+      db.coinTransactions.push(data);
+      return data;
+    },
+  },
 };
 
 jest.mock('../../lib/prisma', () => ({ __esModule: true, default: prismaMock }));
@@ -146,7 +187,18 @@ const mockAwardXp = jest.fn(async ({ amount, idempotencyKey }: any) => {
   awardedKeys.push(idempotencyKey);
   return { awarded: amount };
 });
-jest.mock('../xp.service', () => ({ awardXp: (...args: unknown[]) => (mockAwardXp as any)(...args) }));
+/** The wrong-answer charge — the mirror of awardXp, same ledger. */
+const penalizedKeys: string[] = [];
+const mockPenalizeXp = jest.fn(async ({ amount, idempotencyKey }: any) => {
+  if (penalizedKeys.includes(idempotencyKey)) return { awarded: 0 };
+  penalizedKeys.push(idempotencyKey);
+  return { awarded: -amount };
+});
+jest.mock('../xp.service', () => ({
+  awardXp: (...args: unknown[]) => (mockAwardXp as any)(...args),
+  penalizeXp: (...args: unknown[]) => (mockPenalizeXp as any)(...args),
+  XP_VALUES: { QUIZ_ANSWER_CORRECT: 1, QUIZ_ANSWER_WRONG: 1 },
+}));
 
 jest.mock('../redis-cache.service', () => ({
   redisCacheService: {
@@ -169,6 +221,7 @@ import {
   submitQuestionsChallengeAnswer,
 } from '../questions-challenges.service';
 import { todayPackDate } from '../quiz-generator.service';
+import { QUIZ_COIN_COST } from '../../constants/quiz.constants';
 
 /* ── fixtures ── */
 
@@ -206,7 +259,10 @@ function seedDatabase() {
   db.challenges = [];
   db.progress = [];
   db.streak = { current: 0, longest: 0 };
+  db.coins = new Map<string, number>();
+  db.coinTransactions = [];
   awardedKeys.length = 0;
+  penalizedKeys.length = 0;
 
   const refreshDate = todayPackDate('UTC');
   const questions = Array.from({ length: ROUND_QUESTION_COUNT }, (_, i) => question(i));
@@ -356,30 +412,43 @@ describe('XP', () => {
     seedDatabase();
   });
 
-  test("pays the question's own difficulty value, not a flat number", async () => {
-    // q1 is EASY (10), q2 MEDIUM (15), q3 HARD (20).
+  test('pays exactly 1 XP for a correct answer, whatever its difficulty', async () => {
+    // q1 is EASY, q2 MEDIUM, q3 HARD — the price is the same.
     await answer('q1', ['a']);
-    expect(mockAwardXp.mock.calls[0]![0].amount).toBe(10);
-
     await answer('q2', ['a']);
-    expect(mockAwardXp.mock.calls[1]![0].amount).toBe(15);
-
     await answer('q3', ['a']);
-    expect(mockAwardXp.mock.calls[2]![0].amount).toBe(20);
+
+    for (const call of mockAwardXp.mock.calls) {
+      expect(call[0].amount).toBe(1);
+      expect(call[0].action).toBe('QUIZ_ANSWER_CORRECT');
+    }
   });
 
-  test('pays nothing for a wrong answer', async () => {
+  test('charges exactly 1 XP for a wrong answer', async () => {
     const result = await answer('q1', ['b']);
-    expect(result.totalXpAwarded).toBe(0);
+
     expect(mockAwardXp).not.toHaveBeenCalled();
+    expect(mockPenalizeXp).toHaveBeenCalledTimes(1);
+    expect(mockPenalizeXp.mock.calls[0]![0].amount).toBe(1);
+    expect(mockPenalizeXp.mock.calls[0]![0].action).toBe('QUIZ_ANSWER_WRONG');
+    expect(result.totalXpAwarded).toBe(-1);
   });
 
   test('does not pay twice for the same question', async () => {
     const first = await answer('q1', ['a']);
     const second = await answer('q1', ['a']);
 
-    expect(first.totalXpAwarded).toBeGreaterThan(0);
+    expect(first.totalXpAwarded).toBe(1);
     expect(second.totalXpAwarded).toBe(0);
+  });
+
+  test('does not charge twice for the same wrong question', async () => {
+    const first = await answer('q1', ['b']);
+    const second = await answer('q1', ['c']);
+
+    expect(first.totalXpAwarded).toBe(-1);
+    expect(second.totalXpAwarded).toBe(0);
+    expect(mockPenalizeXp).toHaveBeenCalledTimes(1);
   });
 
   test('keys idempotency per question, so two questions do not collide', async () => {
@@ -387,28 +456,117 @@ describe('XP', () => {
     await answer('q2', ['a']);
 
     const keys = mockAwardXp.mock.calls.map((call) => call[0].idempotencyKey);
-    expect(keys[0]).toContain('.q1.');
-    expect(keys[1]).toContain('.q2.');
+    expect(keys[0]).toContain('.q1');
+    expect(keys[1]).toContain('.q2');
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  test('adds a completion bonus once, when the last question lands', async () => {
-    for (let i = 1; i < ROUND_QUESTION_COUNT; i += 1) {
-      const partial = await answer(`q${i}`, ['a']);
-      expect(partial.bonusXp).toBe(0);
+  test('a round pays its questions and nothing else — no completion bonus', async () => {
+    for (let i = 1; i <= ROUND_QUESTION_COUNT; i += 1) {
+      const step = await answer(`q${i}`, ['a']);
+      expect(step.bonusXp).toBe(0);
+      expect(step.totalXpAwarded).toBe(1);
     }
-    const last = await answer(`q${ROUND_QUESTION_COUNT}`, ['a']);
-    expect(last.bonusXp).toBe(10);
 
-    // Answering again does not re-award it.
-    const again = await answer('q1', ['b']);
-    expect(again.bonusXp).toBe(0);
+    // Ten correct answers, ten XP. Nothing extra for finishing.
+    expect(db.progress[0]!.xpEarned).toBe(ROUND_QUESTION_COUNT);
   });
 
-  test('applies the streak multiplier to the question value', async () => {
+  test('a streak does not multiply what a question is worth', async () => {
     db.streak = { current: 4, longest: 9 };
-    const result = await answer('q3', ['a']); // HARD → 20
-    expect(result.streakBonus).toBe(Math.round(20 * 4 * 0.05));
+    const result = await answer('q3', ['a']);
+
+    expect(result.streakBonus).toBe(0);
+    expect(result.totalXpAwarded).toBe(1);
+  });
+});
+
+/**
+ * COINS — a wrong answer costs QUIZ_COIN_COST, the same thing the Daily
+ * Football Quiz has always charged. The server owns the number, the balance and
+ * the once-per-question rule; the app only displays what comes back.
+ */
+describe('the wrong-answer coin penalty', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    seedDatabase();
+  });
+
+  test('charges QUIZ_COIN_COST for a wrong answer and reports the new balance', async () => {
+    const result = await answer('q1', ['b']);
+
+    expect(result.coinsDeducted).toBe(QUIZ_COIN_COST);
+    expect(result.coins).toBe(STARTING_COINS - QUIZ_COIN_COST);
+    expect(db.coins.get('user-u1')).toBe(STARTING_COINS - QUIZ_COIN_COST);
+  });
+
+  test('charges nothing for a correct answer', async () => {
+    const result = await answer('q1', ['a']);
+
+    expect(result.coinsDeducted).toBe(0);
+    expect(result.coins).toBe(STARTING_COINS);
+    expect(db.coinTransactions).toHaveLength(0);
+  });
+
+  test('writes one SPEND transaction naming the question it charged for', async () => {
+    await answer('q2', ['c']);
+
+    expect(db.coinTransactions).toHaveLength(1);
+    expect(db.coinTransactions[0]).toMatchObject({
+      userId: 'user-u1',
+      amount: -QUIZ_COIN_COST,
+      type: 'SPEND',
+    });
+    expect(db.coinTransactions[0]!.description).toContain('q2');
+  });
+
+  test('charges ONCE however many times the same wrong answer is resubmitted', async () => {
+    await answer('q1', ['b']);
+    const retry = await answer('q1', ['b']);
+    const retryAgain = await answer('q1', ['d']);
+
+    expect(retry.idempotent).toBe(true);
+    expect(retry.coinsDeducted).toBe(0);
+    expect(retryAgain.coinsDeducted).toBe(0);
+    expect(db.coins.get('user-u1')).toBe(STARTING_COINS - QUIZ_COIN_COST);
+    expect(db.coinTransactions).toHaveLength(1);
+  });
+
+  test('two concurrent submissions of the same wrong answer charge once', async () => {
+    const [first, second] = await Promise.all([answer('q1', ['b']), answer('q1', ['b'])]);
+
+    const charged = [first, second].filter((result) => (result.coinsDeducted ?? 0) > 0);
+    expect(charged).toHaveLength(1);
+    expect(db.coins.get('user-u1')).toBe(STARTING_COINS - QUIZ_COIN_COST);
+  });
+
+  test('never drives the balance below zero', async () => {
+    db.coins.set('user-u1', 4);
+
+    const result = await answer('q1', ['b']);
+
+    expect(result.coinsDeducted).toBe(4);
+    expect(result.coins).toBe(0);
+    expect(db.coins.get('user-u1')).toBe(0);
+  });
+
+  test('charges nothing at all when the balance is already zero', async () => {
+    db.coins.set('user-u1', 0);
+
+    const result = await answer('q1', ['b']);
+
+    expect(result.coinsDeducted).toBe(0);
+    expect(result.coins).toBe(0);
+    expect(db.coinTransactions).toHaveLength(0);
+  });
+
+  test('charges once per wrong question, not once per round', async () => {
+    await answer('q1', ['b']);
+    await answer('q2', ['b']);
+    await answer('q3', ['a']); // correct — free
+
+    expect(db.coins.get('user-u1')).toBe(STARTING_COINS - QUIZ_COIN_COST * 2);
+    expect(db.coinTransactions).toHaveLength(2);
   });
 });
 

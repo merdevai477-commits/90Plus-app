@@ -6,11 +6,11 @@
  * The non-list answer surfaces used by QuestionsModeScreen.tsx:
  *
  *   BingoBoard              3×3 tappable grid            Figma 233:224
- *   ConstraintGridBoard     club × country "+" grid      Figma 233:249
+ *   ConstraintGridBoard     awards × clubs 3×3 board     Figma 233:249
  *   ConnectionsPlayersGrid  2×2 player photo cards       Figma 233:274
  *   ClubAnswerGrid          2×2 crest answer cards       Figma 233:299
  *   TransferPath            player → player → ?          Figma 238:324
- *   TopTenSelector          numbered pick list           Figma 238:349
+ *   TopTenInputs            ten numbered name inputs     Figma 238:349
  *
  * All measurements are RAW FIGMA UNITS converted at render time by
  * `useDesignScale()`, and every fixed dimension is expressed as a ratio of the
@@ -31,7 +31,7 @@
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Check, CircleDot, Flag, LandPlot, Plus, Shield, User } from 'lucide-react-native';
@@ -298,6 +298,29 @@ function createStyles(scale: number, fontScale: number, language: string) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    /**
+     * A cell the server accepted a player into. Green ring + wash, the same
+     * "correct" colour every other mode reveals with, and it never reverts.
+     */
+    gridCellFilled: {
+      borderColor: GAME_COLOR.correct,
+      backgroundColor: 'rgba(34,197,94,0.12)',
+    },
+    gridPlacement: { alignItems: 'center', justifyContent: 'center', gap: s(4), paddingHorizontal: s(4) },
+    gridPlacementImage: {
+      width: s(34),
+      height: s(34),
+      borderRadius: s(17),
+      borderWidth: 1,
+      borderColor: GAME_COLOR.correct,
+    },
+    gridPlacementText: {
+      fontFamily: font(600),
+      fontSize: f(9),
+      lineHeight: f(11),
+      color: GAME_COLOR.textPrimary,
+      textAlign: 'center',
+    },
     /** The dashed outline drawn inside an empty cell — Figma node 289:373. */
     gridCellDashed: {
       position: 'absolute',
@@ -524,6 +547,20 @@ function createStyles(scale: number, fontScale: number, language: string) {
       lineHeight: f(21),
       color: GAME_COLOR.textPrimary,
       textAlign: isRtl ? 'right' : 'left',
+    },
+    /**
+     * The typed name. Same type ramp and alignment as `topRowText`, so a row
+     * being filled in and a row showing its answer read as the same row —
+     * only the caret differs.
+     */
+    topInput: {
+      flex: 1,
+      fontFamily: font(500),
+      fontSize: f(16),
+      lineHeight: f(21),
+      color: GAME_COLOR.textPrimary,
+      textAlign: isRtl ? 'right' : 'left',
+      paddingVertical: s(8),
     },
     pickDot: {
       width: s(20),
@@ -915,30 +952,35 @@ export function BingoBoard({
 }
 
 /**
- * Column headers (club crest + name) × row headers (country flag + name) with
- * tappable "+" intersections — Figma 233:249.
+ * FOOTBALL GRID — the 3×3 board, drawn once and filled a cell at a time.
  *
- * Cell ids are `${rowIndex}-${columnIndex}`; the static bank relies on that
- * format (see data/questionModes/footballGrid.ts).
+ * Columns are AWARDS, rows are CLUBS / NATIONAL TEAMS, and a cell is filled by
+ * a player who satisfies both. The board is not tappable: the round walks the
+ * cells, the highlighted one is the cell being answered now, and a cell only
+ * shows a player once the SERVER accepted that placement (`placements`) —
+ * a refused placement leaves the cell empty and flashes `rejectedCell`.
  */
 export function ConstraintGridBoard({
   rowHeaders,
   colHeaders,
   rowImages,
   colImages,
-  selected,
-  onToggle,
-  disabled = false,
+  placements,
+  activeCell,
+  rejectedCell,
 }: {
   rowHeaders: string[];
   colHeaders: string[];
-  /** Flag/crest per row header, resolved by the caller. */
+  /** Crest per row header (club / national team), resolved by the caller. */
   rowImages?: (string | undefined)[];
-  /** Crest per column header, resolved by the caller. */
+  /** Artwork per award column, when the provider has one. */
   colImages?: (string | undefined)[];
-  selected: string[];
-  onToggle: (id: string) => void;
-  disabled?: boolean;
+  /** `r{row}-c{col}` → the player fixed there by a correct placement. */
+  placements: Record<string, { label: string; imageUrl?: string }>;
+  /** The cell the current question is asking for. */
+  activeCell?: { row: number; column: number };
+  /** The cell whose last placement the server refused. */
+  rejectedCell?: string | null;
 }) {
   const { styles, metrics } = useBoardStyles();
 
@@ -1021,43 +1063,59 @@ export function ConstraintGridBoard({
 
           <View style={styles.gridCells}>
             {colHeaders.map((col, colIdx) => {
-              const id = `${rowIdx}-${colIdx}`;
-              const isOn = selected.includes(id);
+              const id = `r${rowIdx}-c${colIdx}`;
+              const placed = placements[id];
+              const isActive = activeCell?.row === rowIdx && activeCell?.column === colIdx;
+              const isRejected = rejectedCell === id;
+
               return (
-                <GamePressable
+                <View
                   key={id}
                   style={styles.gridCellOuter}
-                  onPress={() => onToggle(id)}
-                  disabled={disabled}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isOn, disabled }}
-                  accessibilityLabel={`${row} · ${col}`}
+                  accessibilityRole="image"
+                  accessibilityLabel={
+                    placed ? `${row} · ${col}: ${placed.label}` : `${row} · ${col}`
+                  }
                 >
                   <Surface
                     style={[
                       styles.gridCell,
-                      isOn && styles.cellSelected,
-                      disabled && styles.cellDisabled,
+                      // Filled = accepted by the server, and it stays.
+                      placed && styles.gridCellFilled,
+                      isActive && !placed && styles.cellSelected,
+                      isRejected && !placed && styles.cellWrong,
                     ]}
                   >
-                    {isOn ? (
-                      <Check
-                        size={metrics.s(BOARD_SIZE.gridPlusIcon)}
-                        color={GAME_COLOR.accent}
-                        strokeWidth={2.4}
-                      />
+                    {placed ? (
+                      <View style={styles.gridPlacement}>
+                        {placed.imageUrl ? (
+                          <Image
+                            source={{ uri: placed.imageUrl }}
+                            style={styles.gridPlacementImage}
+                            contentFit="cover"
+                            contentPosition="top center"
+                            transition={140}
+                            cachePolicy="memory-disk"
+                          />
+                        ) : (
+                          <User size={metrics.s(22)} color={GAME_COLOR.correct} strokeWidth={1.8} />
+                        )}
+                        <Text style={styles.gridPlacementText} numberOfLines={2}>
+                          {placed.label}
+                        </Text>
+                      </View>
                     ) : (
                       <>
                         <View style={styles.gridCellDashed} pointerEvents="none" />
                         <Plus
                           size={metrics.s(BOARD_SIZE.gridPlusIcon)}
-                          color={GAME_COLOR.accent}
+                          color={isActive ? GAME_COLOR.accent : GAME_COLOR.textMuted}
                           strokeWidth={2}
                         />
                       </>
                     )}
                   </Surface>
-                </GamePressable>
+                </View>
               );
             })}
           </View>
@@ -1285,49 +1343,81 @@ export function TransferPath({
   );
 }
 
-/** Numbered pick list. Selection cap is enforced by useQuestionModeSession. */
-export function TopTenSelector({
-  items,
-  selected,
-  onToggle,
+/**
+ * TOP 10 — ten numbered text inputs, one per rank.
+ *
+ * The player types names; nothing on the device knows the answer. After the
+ * list is submitted the server says which slots it matched (`results`) and
+ * what the real names were (`reveal`), and each row shows that.
+ */
+export function TopTenInputs({
+  slots,
+  entries,
+  onChangeEntry,
+  results,
+  reveal,
   disabled = false,
+  placeholder,
 }: {
-  items: { id: string; label: string; imageUrl?: string }[];
-  selected: string[];
-  onToggle: (id: string) => void;
+  slots: number;
+  entries: string[];
+  onChangeEntry: (index: number, value: string) => void;
+  /** Per slot, whether the server matched it. Empty before grading. */
+  results?: boolean[];
+  /** The real names, sent only with the graded result. */
+  reveal?: Array<{ rank: number; canonical: string; imageUrl?: string; value?: number }>;
   disabled?: boolean;
+  placeholder: string;
 }) {
   const { styles, metrics } = useBoardStyles();
+  const graded = Array.isArray(results) && results.length > 0;
 
   return (
     <View style={styles.topList}>
-      {items.map((item, idx) => {
-        const isOn = selected.includes(item.id);
+      {Array.from({ length: slots }, (_, index) => {
+        const isHit = graded ? results![index] === true : undefined;
+        const realName = reveal?.find((slot) => slot.rank === index + 1)?.canonical;
+
         return (
-          <GamePressable
-            key={item.id}
-            onPress={() => onToggle(item.id)}
-            disabled={disabled}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isOn, disabled }}
-            accessibilityLabel={item.label}
+          <Surface
+            key={`top-${index}`}
+            style={[
+              styles.topRow,
+              isHit === true && styles.cellCorrect,
+              isHit === false && styles.cellWrong,
+            ]}
           >
-            <Surface
-              style={[styles.topRow, isOn && styles.cellSelected, disabled && styles.cellDisabled]}
-            >
-              <View style={styles.topIndexCircle}>
-                <Text style={styles.topIndexText}>{idx + 1}</Text>
-              </View>
+            <View style={styles.topIndexCircle}>
+              <Text style={styles.topIndexText}>{index + 1}</Text>
+            </View>
+
+            {graded ? (
               <Text style={styles.topRowText} numberOfLines={2}>
-                {item.label}
+                {realName ?? entries[index] ?? ''}
               </Text>
-              <View style={[styles.pickDot, isOn && styles.pickDotActive]}>
-                {isOn ? (
+            ) : (
+              <TextInput
+                style={styles.topInput}
+                value={entries[index] ?? ''}
+                onChangeText={(value) => onChangeEntry(index, value)}
+                editable={!disabled}
+                placeholder={placeholder}
+                placeholderTextColor={GAME_COLOR.textMuted}
+                autoCorrect={false}
+                autoCapitalize="words"
+                returnKeyType="next"
+                accessibilityLabel={`${index + 1}`}
+              />
+            )}
+
+            {graded ? (
+              <View style={[styles.pickDot, isHit === true && styles.pickDotActive]}>
+                {isHit === true ? (
                   <Check size={metrics.s(12)} color={GAME_COLOR.textPrimary} strokeWidth={3} />
                 ) : null}
               </View>
-            </Surface>
-          </GamePressable>
+            ) : null}
+          </Surface>
         );
       })}
     </View>

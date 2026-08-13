@@ -15,7 +15,32 @@ import { awardXp } from './xp.service';
 import { clearResponseCache } from '../middleware/responseCache.middleware';
 
 const CORRECT_PREDICTION_REWARD = 10; // coins for correct prediction
-const CORRECT_PREDICTION_XP_ACTION = 'PREDICTION_WINNER'; // XP action key (10 XP per correct prediction)
+
+/**
+ * XP for a settled prediction — ONE of these, never both:
+ *
+ *   called the result .................. PREDICTION_WINNER  (+2 XP)
+ *   called the exact scoreline ......... PREDICTION_EXACT   (+5 XP)
+ *
+ * An exact score is worth 5 IN TOTAL. The amounts live in xp.service.ts
+ * (XP_VALUES) so King of Predictions and its group mode price the same thing
+ * the same way.
+ *
+ * Every prediction row records the scoreline the user picked
+ * (predictedHomeScore / predictedAwayScore); this used to award WINNER
+ * unconditionally, so calling a 3-1 exactly paid the same as calling "home
+ * win" — the exact-score reward existed in the XP table and was never
+ * reachable from here.
+ */
+function predictionXpAction(
+    prediction: { predictedHomeScore: number | null; predictedAwayScore: number | null },
+    homeScore: number,
+    awayScore: number,
+): 'PREDICTION_EXACT' | 'PREDICTION_WINNER' {
+    const calledExactScore =
+        prediction.predictedHomeScore === homeScore && prediction.predictedAwayScore === awayScore;
+    return calledExactScore ? 'PREDICTION_EXACT' : 'PREDICTION_WINNER';
+}
 
 export class PredictionResolverService {
 
@@ -112,7 +137,7 @@ export class PredictionResolverService {
                     try {
                         await awardXp({
                             userId: prediction.userId,
-                            action: CORRECT_PREDICTION_XP_ACTION,
+                            action: predictionXpAction(prediction, homeScore, awayScore),
                             dailyCap: 5,
                             timezone: 'UTC',
                             idempotencyKey: `prediction:${prediction.id}`,

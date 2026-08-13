@@ -1,15 +1,19 @@
 /**
  * =============================================================================
- * QUESTION LIFELINES — the three hexagon power-ups above the confirm button
+ * QUESTION LIFELINES — the hexagon power-ups above the confirm button
  * =============================================================================
  *
  * A 1:1 port of Figma component "Frame 174" (node 385:378 / 385:380), the
  * action bar that replaced the old "Need a hint?" row on every question screen.
  *
- *   ┌ 69 ┐   76   ┌ 69 ┐   76   ┌ 69 ┐
- *   │50:50│       │  ⟳  │       │ 👥 │      ← hexagon, fill #0A0213,
- *   └──▣──┘       └──▣──┘       └──▣──┘        2pt stroke #633291 → #0B0221
+ *   ┌ 69 ┐        130        ┌ 69 ┐
+ *   │50:50│                  │  ⟳  │       ← hexagon, fill #0A0213,
+ *   └──▣──┘                  └──▣──┘         2pt stroke #633291 → #0B0221
  *      ▲ badge pill, bottom-anchored
+ *
+ * The product ships TWO lifelines — 50:50 and Change Question. Figma's third
+ * hexagon was "ask a friend / the crowd", a feature 90Plus does not have; it is
+ * not rendered anywhere, and the row spaces itself for whatever it is given.
  *
  * Two badge variants exist in Figma:
  *   Default  (385:378) — 25 × 25 circle, 12pt, the REMAINING USE COUNT
@@ -43,6 +47,16 @@ import { useLanguageStore } from '../../src/i18n/store';
 export const LIFELINE_SIZE = 69;
 /** Space between two hexagons. Figma node 385:376 — gap 76. */
 export const LIFELINE_GAP = 76;
+/**
+ * Gap when only TWO hexagons are shown.
+ *
+ * Figma's 76 was measured for a three-hexagon row (3×69 + 2×76 ≈ the full
+ * content column). Dropping the middle hexagon and keeping 76 leaves a narrow
+ * pair adrift in the centre with an obvious hole where the third used to be.
+ * A wider gap gives the pair a span in the same proportion to the bar, so two
+ * lifelines read as the intended layout rather than a broken three.
+ */
+export const LIFELINE_GAP_PAIR = 130;
 
 const HEX_FILL = '#0A0213';
 /** Hexagon stroke, top → bottom (Figma paint0_linear). */
@@ -208,9 +222,10 @@ function LifelineButton({ lifeline }: { lifeline: Lifeline }) {
 
 function QuestionLifelines({ lifelines }: { lifelines: Lifeline[] }) {
   const { s } = useDesignScale();
+  const gap = lifelines.length === 2 ? LIFELINE_GAP_PAIR : LIFELINE_GAP;
 
   return (
-    <View style={[styles.row, { gap: s(LIFELINE_GAP) }]}>
+    <View style={[styles.row, { gap: s(gap) }]}>
       {lifelines.map((lifeline) => (
         <LifelineButton key={lifeline.id} lifeline={lifeline} />
       ))}

@@ -134,42 +134,55 @@ describe('mapSessionToRound', () => {
     ]);
   });
 
-  test('maps the ordered answer for a ranking question', () => {
+  test('maps a Top 10 question as ten empty slots and no answer', () => {
     const [mapped] = mapSessionToRound(
       session('top10-challenge', [
+        // A live Top 10 question carries its framing and NOTHING else: the
+        // base fixture's mcq answer is dropped on purpose here.
         question({
-          options: [
-            { id: '1', label: 'Scorer A', imageUrl: 'https://p/1.png' },
-            { id: '2', label: 'Scorer B', imageUrl: 'https://p/2.png' },
-            { id: '3', label: 'Scorer C', imageUrl: 'https://p/3.png' },
-          ],
-          answer: { orderedIds: ['1', '2', '3'] },
+          answer: undefined,
+          options: undefined,
+          top10: { slots: 10, categoryLabel: 'the Premier League', seasonLabel: '2010' },
         }),
       ]),
     );
 
     expect(mapped!.type).toBe('top10');
-    expect(mapped!.correctAnswers).toEqual(['1', '2', '3']);
-    expect(mapped!.rankingItems!.every((item) => item.imageUrl?.startsWith('https://'))).toBe(true);
+    expect(mapped!.top10).toEqual({
+      slots: 10,
+      categoryLabel: 'the Premier League',
+      seasonLabel: '2010',
+    });
+    // The names are the answer — a live question must arrive without them.
+    expect(mapped!.correctAnswers).toEqual([]);
   });
 
-  test('keeps the grid axes and their crests aligned', () => {
+  test('keeps the grid board, its crests and the cell being asked for', () => {
     const [mapped] = mapSessionToRound(
       session('football-grid', [
         question({
           rows: ['Liverpool', 'Arsenal', 'Chelsea'],
-          columns: ['Egypt', 'England', 'Brazil'],
+          columns: ['Champions League', 'Premier League', 'World Cup'],
           rowImages: ['https://crest/40.png', 'https://crest/42.png', 'https://crest/49.png'],
-          columnImages: [undefined, undefined, undefined],
-          answer: { correctIds: ['r0-c0'] },
+          gridCell: { row: 1, column: 2 },
+          options: [
+            { id: 'a', label: 'Player A', imageUrl: 'https://p/1.png' },
+            { id: 'b', label: 'Player B', imageUrl: 'https://p/2.png' },
+            { id: 'c', label: 'Player C', imageUrl: 'https://p/3.png' },
+            { id: 'd', label: 'Player D', imageUrl: 'https://p/4.png' },
+          ],
         }),
       ]),
     );
 
     expect(mapped!.type).toBe('grid');
     expect(mapped!.rowHeaders).toEqual(['Liverpool', 'Arsenal', 'Chelsea']);
+    expect(mapped!.colHeaders).toEqual(['Champions League', 'Premier League', 'World Cup']);
     expect(mapped!.rowHeaderImages).toHaveLength(3);
-    expect(mapped!.correctAnswers).toEqual(['r0-c0']);
+    expect(mapped!.gridCell).toEqual({ row: 1, column: 2 });
+    // Four real players to place, each with a portrait.
+    expect(mapped!.options).toHaveLength(4);
+    expect(mapped!.options!.every((option) => option.imageUrl?.startsWith('https://'))).toBe(true);
   });
 
   test('keeps every bingo cell crest', () => {

@@ -14,9 +14,17 @@ import { NotificationType } from './notification.service';
 
 // ─── XP Values Map ──────────────────────────────────────────────────────────
 
+/**
+ * King of Predictions — the same two values for a solo and a group prediction.
+ * An exact score is worth 5 IN TOTAL, not 2 + 5: the resolver awards ONE of
+ * these actions per settled prediction, never both.
+ */
+const PREDICTION_XP_WINNER = 2;
+const PREDICTION_XP_EXACT = 5;
+
 const GROUP_PREDICTION_XP_VALUES = {
-  GROUP_PREDICTION_WINNER: 2,
-  GROUP_PREDICTION_EXACT: 5,
+  GROUP_PREDICTION_WINNER: PREDICTION_XP_WINNER,
+  GROUP_PREDICTION_EXACT: PREDICTION_XP_EXACT,
 } satisfies Record<'GROUP_PREDICTION_WINNER' | 'GROUP_PREDICTION_EXACT', number>;
 
 export const XP_VALUES: Record<XpActionType, number> = {
@@ -46,13 +54,23 @@ export const XP_VALUES: Record<XpActionType, number> = {
   REEL_RECEIVED_COMMENT: 3,
   REEL_RECEIVED_SHARE: 5,
   RECEIVED_FOLLOW: 5,
-  PREDICTION_EXACT: 30,
-  PREDICTION_WINNER: 10,
+  PREDICTION_EXACT: PREDICTION_XP_EXACT,
+  PREDICTION_WINNER: PREDICTION_XP_WINNER,
   ...GROUP_PREDICTION_XP_VALUES,
-  QUIZ_ANSWER_CORRECT: 2,
-  QUIZ_COMPLETED_HIGH: 20,
+  /** One question answered correctly. A wrong one costs the same, see QUIZ_ANSWER_WRONG. */
+  QUIZ_ANSWER_CORRECT: 1,
+  QUIZ_ANSWER_WRONG: 1,
+  /**
+   * RETIRED. The "finished a quiz with ≥80%" bonus is no longer awarded: a
+   * question is worth ±1 XP and nothing else (quiz-daily.service.ts). The
+   * action stays in the enum so the rows it already wrote still read back, and
+   * the value is 0 so awardXp would refuse it as invalid if anything ever
+   * called it again.
+   */
+  QUIZ_COMPLETED_HIGH: 0,
   DAILY_LOGIN: 5, // base; actual value comes from LOGIN_STREAK_TABLE
-  APP_SHARE: 10,
+  /** One valid share of the app. */
+  APP_SHARE: 1,
   REFERRAL_CONVERSION: 50, // Share & Win — a referred friend completed registration
 
   ADMIN_ADJUSTMENT: 0,
@@ -80,44 +98,46 @@ export function getLoginStreakXp(day: number): number {
 // ─── Level Curve ────────────────────────────────────────────────────────────
 
 /**
- * Cumulative XP required to reach a given level.
- * xpRequired(1) = 0
- * xpRequired(2) = 290
- * xpRequired(N) = 40 + 125 × N × (N-1)   for N >= 3
+ * THE LEVEL CURVE — one hundred XP per level.
  *
- * Derived from: delta(N→N+1) = 250×N for N >= 2, with delta(1→2) = 290.
+ *   Level 1 ....... 100 XP
+ *   Level 2 ....... 200 XP
+ *   Level 3 ....... 300 XP
+ *   …
+ *   Level 100 ... 10 000 XP
+ *
+ * i.e. the XP a user must hold to BE level N is `N × 100`, and a level is
+ * therefore 100 XP wide. This replaced a quadratic curve
+ * (`40 + 125·N·(N−1)`, level 2 at 290 XP) that no longer matches the product.
+ *
+ * A brand-new account holds 0 XP and is level 1: `LEVEL_ONE` is the floor,
+ * not a threshold anybody has to reach.
  */
+export const XP_PER_LEVEL = 100;
+const LEVEL_ONE = 1;
+
+/** XP a user must hold to be `level`. */
 export function xpForLevel(level: number): number {
-  if (level <= 1) return 0;
-  if (level === 2) return 290;
-  return 40 + 125 * level * (level - 1);
+  return Math.max(level, LEVEL_ONE) * XP_PER_LEVEL;
 }
 
 /**
- * XP needed to go from currentLevel to currentLevel+1.
+ * XP needed to go from currentLevel to currentLevel+1 — one level's width.
  */
 export function xpForNextLevel(currentLevel: number): number {
   return xpForLevel(currentLevel + 1) - xpForLevel(currentLevel);
 }
 
 /**
- * Compute level from total XP using binary search.
- * Pure function — no DB access.
+ * Level for an XP total. Pure — no DB access.
+ *
+ * Every consumer (profile, header, leaderboards, the app) must derive the
+ * level through THIS function; a second formula anywhere else is how a user
+ * ends up being two different levels on two screens.
  */
 export function levelFromXp(xp: number): number {
-  if (xp < 290) return 1;
-  let lo = 2;
-  let hi = 200;
-  while (lo <= hi) {
-    const mid = Math.floor((lo + hi) / 2);
-    const required = xpForLevel(mid);
-    if (required <= xp) {
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  return hi;
+  if (!Number.isFinite(xp) || xp <= 0) return LEVEL_ONE;
+  return Math.max(LEVEL_ONE, Math.floor(xp / XP_PER_LEVEL));
 }
 
 /**
@@ -312,6 +332,118 @@ export async function awardXp(input: AwardXpInput): Promise<AwardXpResult> {
   }
 }
 
+// ─── Take XP away (wrong answers) ───────────────────────────────────────────
+
+/**
+ * Charge a user XP — the mirror of `awardXp`, through the SAME ledger.
+ *
+ * Used for the wrong-answer penalty, which the product prices at 1 XP. It is
+ * one transaction: the negative `xp_transactions` row and the balance change
+ * commit together, so a balance can never move without its history line (or
+ * the other way round).
+ *
+ * Two rules the callers depend on:
+ *  • IDEMPOTENT. `idempotencyKey` is unique per (user, key), so a double tap,
+ *    a retried request or a resubmitted answer charges once. A repeat returns
+ *    the current balance with `awarded: 0`.
+ *  • NEVER NEGATIVE. The charge is clamped to what the user actually holds, so
+ *    XP has a floor of zero and the level derived from it stays valid.
+ */
+export async function penalizeXp(input: {
+  userId: string;
+  action: XpActionType;
+  amount?: number;
+  idempotencyKey: string;
+  metadata?: Record<string, unknown>;
+}): Promise<AwardXpResult> {
+  const { userId, action, idempotencyKey, metadata } = input;
+  const requested = Math.abs(input.amount ?? XP_VALUES[action]);
+
+  if (!Number.isFinite(requested) || requested <= 0) {
+    return { awarded: 0, newXp: 0, newLevel: 1, leveledUp: false, previousLevel: 1, reason: 'invalid' };
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.xpTransaction.findUnique({
+        where: { userId_idempotencyKey: { userId, idempotencyKey } },
+      });
+      const current = await tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { xp: true, level: true },
+      });
+
+      if (existing) {
+        return {
+          awarded: 0,
+          newXp: current.xp,
+          newLevel: current.level,
+          leveledUp: false,
+          previousLevel: current.level,
+          reason: 'duplicate' as const,
+        };
+      }
+
+      // Never below zero: the charge is what the user can actually pay.
+      const charged = Math.min(current.xp, requested);
+      const newXp = current.xp - charged;
+      const newLevel = levelFromXp(newXp);
+
+      await tx.xpTransaction.create({
+        data: {
+          userId,
+          action,
+          amount: -charged,
+          idempotencyKey,
+          metadata: metadata ? (metadata as Prisma.InputJsonValue) : undefined,
+        },
+      });
+
+      await tx.user.update({
+        where: { id: userId },
+        data: { xp: newXp, level: newLevel, lastActiveAt: new Date() },
+      });
+
+      return {
+        awarded: -charged,
+        newXp,
+        newLevel,
+        leveledUp: false,
+        previousLevel: current.level,
+        reason: 'ok' as const,
+      };
+    });
+
+    if (result.awarded !== 0) {
+      logger.info('XP charged', { userId, action, amount: result.awarded, newXp: result.newXp });
+      pushXpUpdate(userId, {
+        xp: result.newXp,
+        level: result.newLevel,
+        xpGained: result.awarded,
+        action,
+        leveledUp: false,
+      });
+    }
+
+    return result;
+  } catch (error: any) {
+    // Lost the idempotency race — somebody else charged for this exact action.
+    if (error.code === 'P2002') {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { xp: true, level: true } });
+      return {
+        awarded: 0,
+        newXp: user?.xp ?? 0,
+        newLevel: user?.level ?? 1,
+        leveledUp: false,
+        previousLevel: user?.level ?? 1,
+        reason: 'duplicate',
+      };
+    }
+    logger.error('penalizeXp failed', { error: error.message, userId, action, idempotencyKey });
+    throw error;
+  }
+}
+
 // ─── Revert XP (for match cancellation) ─────────────────────────────────────
 
 export async function revertXp(input: {
@@ -476,7 +608,7 @@ export async function grantStreakFreeze(userId: string, amount: number): Promise
   return { newTotal: user.streakFreezes };
 }
 
-// ─── App Share Reward (10 XP / 24h) ─────────────────────────────────────────
+// ─── App Share Reward (XP_VALUES.APP_SHARE per 24h) ─────────────────────────
 
 const APP_SHARE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
@@ -528,12 +660,21 @@ export async function awardAppShare(userId: string, timezone: string): Promise<A
     };
   }
 
+  /*
+   * The key names the COOLDOWN WINDOW, not the moment of the request.
+   *
+   * It used to be `app-share:${userId}:${Date.now()}` — a value that differs on
+   * every call, which meant the idempotency table could never recognise a
+   * repeat: two taps, or a retried request whose response was lost, both
+   * passed the eligibility read above and both paid out. Keyed by the day the
+   * share belongs to, the second one is a duplicate and awards nothing.
+   */
   return awardXp({
     userId,
     action: 'APP_SHARE',
     amount: XP_VALUES.APP_SHARE,
     timezone,
-    idempotencyKey: `app-share:${userId}:${Date.now()}`,
+    idempotencyKey: `app-share:${userId}:${getUserToday(timezone)}`,
     metadata: { source: 'app_share' },
   });
 }

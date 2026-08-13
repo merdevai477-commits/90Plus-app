@@ -226,6 +226,30 @@ export const QuizApiService = {
     return safeJsonParse(res, { status: 'ERROR', data: null });
   },
 
+  /**
+   * 50:50 — the two option keys to keep, resolved by the server from the real
+   * answer key. `null` means the lifeline could not be resolved (offline, or a
+   * question the server will not halve); the caller then spends no use and
+   * changes nothing on screen. The correct key is never sent on its own, and
+   * the app never picks the survivor itself.
+   */
+  async fiftyFifty(
+    token: string,
+    params: { questionId: string; language: QuizApiLanguage },
+  ): Promise<{ questionId: string; keepKeys: QuizApiOptionKey[] } | null> {
+    const query = new URLSearchParams({
+      questionId: params.questionId,
+      language: params.language,
+    }).toString();
+    const res = await authFetch(`/quiz/fifty-fifty?${query}`, token);
+    const json = await safeJsonParse<{
+      status: string;
+      data?: { questionId: string; keepKeys: QuizApiOptionKey[] };
+    }>(res, { status: 'ERROR' });
+    if (!res.ok || json.status !== 'SUCCESS' || !json.data) return null;
+    return json.data;
+  },
+
   async submitTimeout(
     token: string,
     body: { questionId: string; language: QuizApiLanguage },

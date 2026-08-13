@@ -16,9 +16,7 @@
  *   CARD HEIGHT / RADIUS / BORDER ..... ../styles.ts → card.horizontalCard,
  *                                       card.verticalCard, HUB_RADIUS.card
  *   CARD BACKGROUND ................... ../styles.ts → HUB_COLOR.cardBg
- *   TITLE / SUBTITLE / XP TYPE ........ ../styles.ts → card.title / .subtitle /
- *                                       .xpText
- *   XP GRADIENT ....................... ../styles.ts → XP_GRADIENT
+ *   TITLE / SUBTITLE TYPE ............. ../styles.ts → card.title / .subtitle
  *   PRESS FEEDBACK .................... ACTIVE_OPACITY below
  *   ARTWORK SOURCE .................... ../data.ts → MODE_LOCAL_IMAGE
  * =============================================================================
@@ -27,19 +25,11 @@
 import React, { memo, useState } from 'react';
 import { I18nManager, Text, TouchableOpacity, View, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import MaskedView from '@react-native-masked-view/masked-view';
 
 import { QuestionsModeArt } from '../../QuestionsModeArt';
 import type { Challenge } from '../data';
 import type { QuestionModeId } from '../../../../services/questionsModes';
-import {
-  useQuestionsHubStyles,
-  XP_GRADIENT,
-  XP_GRADIENT_END,
-  XP_GRADIENT_LOCATIONS,
-  XP_GRADIENT_START,
-} from '../styles';
+import { useQuestionsHubStyles } from '../styles';
 
 /** How much the card dims while pressed. */
 const ACTIVE_OPACITY = 0.84;
@@ -85,38 +75,13 @@ const CHALLENGE_LAYOUT: Record<QuestionModeId, ChallengeLayoutConfig> = {
   'football-quiz': { paddingHorizontal: 22, image: { width: 65, height: 64 } },
 };
 
-/**
- * "+50 XP" rendered as gradient-filled text (RN take on background-clip: text).
- *
- * `numberOfLines={1}` on both the mask and the measuring copy keeps the box one
- * line tall, and `card.xpMask` marks it non-shrinking so a long subtitle beside
- * it can never squeeze the reward down to "+1…" or out past the card edge.
+/*
+ * A card used to print "+140 XP" here, from the round's advertised xpReward —
+ * a number that came from the old per-question XP table and matched nothing a
+ * player could earn. A Questions answer is worth ±1 XP; a per-mode "reward"
+ * label is not a real quantity, so the card shows the game and its subtitle
+ * and no number at all. (The gradient-text helper went with it.)
  */
-function XpGradientText({ style, children }: { style: object; children: string }) {
-  const { card } = useQuestionsHubStyles();
-
-  return (
-    <MaskedView
-      style={card.xpMask}
-      maskElement={
-        <Text style={style} numberOfLines={1}>
-          {children}
-        </Text>
-      }
-    >
-      <LinearGradient
-        colors={XP_GRADIENT}
-        locations={XP_GRADIENT_LOCATIONS}
-        start={XP_GRADIENT_START}
-        end={XP_GRADIENT_END}
-      >
-        <Text style={[style, card.xpTextHidden]} numberOfLines={1}>
-          {children}
-        </Text>
-      </LinearGradient>
-    </MaskedView>
-  );
-}
 
 function ChallengeCard({ challenge }: { challenge: Challenge }) {
   const { card, metrics } = useQuestionsHubStyles();
@@ -161,7 +126,7 @@ function ChallengeCard({ challenge }: { challenge: Challenge }) {
       accessibilityLabel={challenge.title}
     >
       {isHorizontal ? (
-        /* ── Horizontal: artwork | (title / subtitle) / XP ───────────────── */
+        /* ── Horizontal: artwork | title / subtitle ──────────────────────── */
         <>
           <View style={card.horizontalArt}>{art}</View>
           <View style={card.horizontalTextCol}>
@@ -173,9 +138,6 @@ function ChallengeCard({ challenge }: { challenge: Challenge }) {
                 {challenge.subtitle}
               </Text>
             </View>
-            {challenge.xpReward > 0 ? (
-              <XpGradientText style={card.xpText}>{`+${challenge.xpReward} XP`}</XpGradientText>
-            ) : null}
           </View>
         </>
       ) : (
@@ -192,9 +154,6 @@ function ChallengeCard({ challenge }: { challenge: Challenge }) {
               <Text style={card.subtitle} numberOfLines={1}>
                 {challenge.subtitle}
               </Text>
-              {challenge.xpReward > 0 ? (
-                <XpGradientText style={card.xpText}>{`+${challenge.xpReward} XP`}</XpGradientText>
-              ) : null}
             </View>
           </View>
         </>

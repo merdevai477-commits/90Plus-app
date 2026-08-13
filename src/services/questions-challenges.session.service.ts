@@ -10,16 +10,15 @@
  */
 
 import { Prisma } from '@prisma/client';
-import {
-  QUIZ_QUESTION_COUNT,
-  QUIZ_QUESTION_TIME_LIMIT_SEC,
-} from '../constants/quiz.constants';
+import { questionTimeLimitSec } from '../constants/questions-modes.config';
 import type {
   QuestionChallengeAnswer,
   QuestionChallengeMode,
   QuestionChallengeQuestion,
   QuestionChallengeSessionDto,
   QuestionChallengeSubmitResult,
+  QuestionSelectionRules,
+  SanitizedQuestion,
 } from '../types/questions-challenges.types';
 
 export type QuestionsGameSessionStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
@@ -64,7 +63,10 @@ export class QuestionsSessionError extends Error {
   }
 }
 
-const TIMER_MS = QUIZ_QUESTION_TIME_LIMIT_SEC * 1000;
+/** Per-question timer, in ms. Mode-specific — see questions-modes.config.ts. */
+function timerMs(mode: QuestionChallengeMode): number {
+  return questionTimeLimitSec(mode) * 1000;
+}
 
 const CLIENT_SCORE_KEYS = ['score', 'totalScore', 'correctAnswers', 'finalScore'] as const;
 
@@ -190,12 +192,64 @@ function isSessionCompleted(progress: QuestionsSessionProgress): boolean {
   return progress.sessionStatus === 'COMPLETED';
 }
 
+/**
+ * HOW MANY THINGS THIS QUESTION EXPECTS — and nothing about WHICH ones.
+ *
+ * The client has to know that Football Bingo takes three cells and a
+ * multiple-choice question takes one, or it cannot cap selection or know when
+ * an answer is complete. It must NOT learn the answer to work that out: the
+ * board's answer key stays server-side, and only the COUNT crosses the wire.
+ * A count is not a hint — every bingo card takes exactly three cells.
+ *
+ * Before this existed the app derived its cap from `correctAnswers`, which the
+ * session strips, so bingo capped at one cell and could never be completed.
+ */
+export function selectionRulesForQuestion(
+  mode: QuestionChallengeMode,
+  question: QuestionChallengeQuestion,
+): QuestionSelectionRules {
+  if (mode === 'football-bingo') {
+    // Contract-enforced at 3 (round-contract: ANSWER_CELL_COUNT_NOT_3); read off
+    // the stored answer's LENGTH so the rule can never drift from the grader.
+    const required = question.answer?.correctIds?.length || 3;
+    return {
+      selectionMode: 'multiple',
+      requiredSelections: required,
+      maxSelections: required,
+      autoSubmit: true,
+    };
+  }
+
+  if (mode === 'top10-challenge') {
+    const required = question.top10?.slots ?? question.answer?.orderedIds?.length ?? 10;
+    return {
+      selectionMode: 'text',
+      requiredSelections: required,
+      maxSelections: required,
+      autoSubmit: false,
+    };
+  }
+
+  /*
+   * Everything else — including Football Grid, where one cell is answered with
+   * one player — is a single pick. Grid auto-submits so the placement is
+   * validated the moment it is made (no confirm step).
+   */
+  return {
+    selectionMode: 'single',
+    requiredSelections: 1,
+    maxSelections: 1,
+    autoSubmit: mode === 'football-grid',
+  };
+}
+
 /** Remove grading secrets before sending a question to the client. */
 export function sanitizeQuestionForClient(
+  mode: QuestionChallengeMode,
   question: QuestionChallengeQuestion,
-): Omit<QuestionChallengeQuestion, 'answer'> {
+): SanitizedQuestion {
   const { answer: _answer, ...rest } = question;
-  return rest;
+  return { ...rest, selection: selectionRulesForQuestion(mode, question) };
 }
 
 export function computeFinalResult(
@@ -232,9 +286,13 @@ export function computeFinalResult(
   };
 }
 
-function startTimerForIndex(progress: QuestionsSessionProgress, now: Date): void {
+function startTimerForIndex(
+  mode: QuestionChallengeMode,
+  progress: QuestionsSessionProgress,
+  now: Date,
+): void {
   progress.questionStartedAt = now.toISOString();
-  progress.questionExpiresAt = new Date(now.getTime() + TIMER_MS).toISOString();
+  progress.questionExpiresAt = new Date(now.getTime() + timerMs(mode)).toISOString();
 }
 
 function markQuestionExpired(
@@ -262,6 +320,7 @@ function markQuestionExpired(
  * grading so reconnect after 20s lands on the next question with a fresh timer.
  */
 export function advanceExpiredQuestions(
+  mode: QuestionChallengeMode,
   progress: QuestionsSessionProgress,
   questions: QuestionChallengeQuestion[],
   now: Date,
@@ -295,7 +354,7 @@ export function advanceExpiredQuestions(
 
     if (!progress.questionExpiresAt) {
       progress.sessionStatus = 'IN_PROGRESS';
-      startTimerForIndex(progress, now);
+      startTimerForIndex(mode, progress, now);
       changed = true;
       break;
     }
@@ -320,7 +379,7 @@ export function advanceExpiredQuestions(
     }
 
     progress.currentQuestionIndex += 1;
-    startTimerForIndex(progress, now);
+    startTimerForIndex(mode, progress, now);
     changed = true;
   }
 
@@ -329,6 +388,7 @@ export function advanceExpiredQuestions(
 
 /** Begin or resume an in-progress session, starting the timer when needed. */
 export function ensureSessionStarted(
+  mode: QuestionChallengeMode,
   progress: QuestionsSessionProgress,
   questions: QuestionChallengeQuestion[],
   now: Date,
@@ -340,7 +400,7 @@ export function ensureSessionStarted(
     progress.sessionStatus = 'IN_PROGRESS';
   }
 
-  advanceExpiredQuestions(progress, questions, now);
+  advanceExpiredQuestions(mode, progress, questions, now);
 
   if (isSessionCompleted(progress)) return;
 
@@ -355,12 +415,12 @@ export function ensureSessionStarted(
 
   const record = progress.byQuestionId[current.id];
   if (isQuestionClosed(record)) {
-    advanceExpiredQuestions(progress, questions, now);
+    advanceExpiredQuestions(mode, progress, questions, now);
     return;
   }
 
   if (!progress.questionStartedAt || !progress.questionExpiresAt) {
-    startTimerForIndex(progress, now);
+    startTimerForIndex(mode, progress, now);
   }
 }
 
@@ -373,11 +433,20 @@ export function getCurrentQuestionId(
   return current?.id ?? null;
 }
 
-export function currentQuestionNumber(progress: QuestionsSessionProgress): number {
+/**
+ * 1-based position in the round. Bounded by the round's OWN length rather than
+ * the shared question count — Football Grid's round is nine cells and Top 10's
+ * is one list, so a global constant would report "10 of 9" on the last cell.
+ */
+export function currentQuestionNumber(
+  progress: QuestionsSessionProgress,
+  totalQuestions: number,
+): number {
+  const total = Math.max(totalQuestions, 1);
   if (isSessionCompleted(progress)) {
-    return QUIZ_QUESTION_COUNT;
+    return total;
   }
-  return Math.min(progress.currentQuestionIndex + 1, QUIZ_QUESTION_COUNT);
+  return Math.min(progress.currentQuestionIndex + 1, total);
 }
 
 export interface BuildSessionViewParams {
@@ -410,17 +479,51 @@ export interface BuildSessionViewParams {
 }
 
 /** Build the mobile-facing session payload (no correct answers exposed). */
+/**
+ * FOOTBALL GRID — rebuild the board's filled cells from this player's own
+ * settled answers, so a reopened round redraws what they already placed.
+ *
+ * Reads the accepted placements only, and resolves each one to the option the
+ * player actually chose. Nothing about an unanswered cell is described.
+ */
+function gridPlacementsFor(
+  mode: QuestionChallengeMode,
+  questions: QuestionChallengeQuestion[],
+  progress: QuestionsSessionProgress,
+): Record<string, { label: string; imageUrl?: string }> | undefined {
+  if (mode !== 'football-grid') return undefined;
+
+  const placements: Record<string, { label: string; imageUrl?: string }> = {};
+  for (const question of questions) {
+    const cell = question.gridCell;
+    const record = progress.byQuestionId[question.id];
+    if (!cell || !record || record.status !== 'answered' || !record.isCorrect) continue;
+
+    const chosenId = record.selectedIds[0];
+    const option = question.options?.find((entry) => entry.id === chosenId);
+    if (!option) continue;
+
+    placements[`r${cell.row}-c${cell.column}`] = {
+      label: option.label,
+      ...(option.imageUrl ? { imageUrl: option.imageUrl } : {}),
+    };
+  }
+  return placements;
+}
+
 export function buildSessionView(params: BuildSessionViewParams): QuestionChallengeSessionDto {
-  const { challenge, questions, progress, progressMeta, now } = params;
+  const { mode, challenge, questions, progress, progressMeta, now } = params;
   const currentIndex = progress.currentQuestionIndex;
   const current = questionAtIndex(questions, currentIndex);
-  const sanitizedQuestions = questions.map(sanitizeQuestionForClient);
+  const sanitizedQuestions = questions.map((question) => sanitizeQuestionForClient(mode, question));
+  const timeLimitSec = questionTimeLimitSec(mode);
+  const gridPlacements = gridPlacementsFor(mode, questions, progress);
 
   const content = {
     ...(challenge.content as unknown as Record<string, unknown>),
     questions: sanitizedQuestions,
-    timer: QUIZ_QUESTION_TIME_LIMIT_SEC,
-  } as QuestionChallengeSessionDto['content'];
+    timer: timeLimitSec,
+  } as unknown as QuestionChallengeSessionDto['content'];
 
   return {
     challengeId: challenge.id,
@@ -448,15 +551,16 @@ export function buildSessionView(params: BuildSessionViewParams): QuestionChalle
     score: progressMeta.completed ? progressMeta.score : 0,
     elapsedTime: progressMeta.elapsedTime,
     status: progress.sessionStatus,
-    currentQuestion: currentQuestionNumber(progress),
+    currentQuestion: currentQuestionNumber(progress, questions.length),
     totalQuestions: questions.length,
-    question: current ? sanitizeQuestionForClient(current) : undefined,
+    question: current ? sanitizeQuestionForClient(mode, current) : undefined,
     questionStartedAt: progress.questionStartedAt ?? undefined,
     questionExpiresAt: progress.questionExpiresAt ?? undefined,
     serverNow: now.toISOString(),
-    timeLimitSec: QUIZ_QUESTION_TIME_LIMIT_SEC,
+    timeLimitSec,
     currentQuestionIndex: currentIndex,
     finalResult: progress.finalResult,
+    ...(gridPlacements ? { gridPlacements } : {}),
   };
 }
 
@@ -493,7 +597,7 @@ export interface SubmitAnswerOutcome {
  * idempotency, and completion detection.
  */
 export function applyAnswerToSession(ctx: SubmitAnswerContext): SubmitAnswerOutcome {
-  const { questions, questionId, selectedIds, now, progress } = ctx;
+  const { mode, questions, questionId, selectedIds, now, progress } = ctx;
 
   const existing = progress.byQuestionId[questionId];
   if (isSessionCompleted(progress) && (existing?.status === 'answered' || existing?.status === 'expired')) {
@@ -514,8 +618,8 @@ export function applyAnswerToSession(ctx: SubmitAnswerContext): SubmitAnswerOutc
     throw new QuestionsSessionError('Session already completed', 'QUESTIONS_SESSION_COMPLETED');
   }
 
-  ensureSessionStarted(progress, questions, now);
-  advanceExpiredQuestions(progress, questions, now);
+  ensureSessionStarted(mode, progress, questions, now);
+  advanceExpiredQuestions(mode, progress, questions, now);
 
   if (isSessionCompleted(progress)) {
     throw new QuestionsSessionError('Session already completed', 'QUESTIONS_SESSION_COMPLETED');
@@ -562,7 +666,7 @@ export function applyAnswerToSession(ctx: SubmitAnswerContext): SubmitAnswerOutc
       progress.questionExpiresAt = null;
     } else {
       progress.currentQuestionIndex += 1;
-      startTimerForIndex(progress, now);
+      startTimerForIndex(mode, progress, now);
     }
     throw new QuestionsSessionError(
       'Question time limit exceeded',
@@ -607,7 +711,7 @@ export function applyAnswerToSession(ctx: SubmitAnswerContext): SubmitAnswerOutc
     progress.finalResult = computeFinalResult(progress, questions, ctx.evaluatePoints);
   } else {
     progress.currentQuestionIndex = nextUnansweredQuestionIndex(progress, questions);
-    startTimerForIndex(progress, now);
+    startTimerForIndex(mode, progress, now);
   }
 
   return {

@@ -11,14 +11,11 @@ import { useTranslation } from '../../src/i18n';
  * Modes that are routed but not finished yet. They keep their card on the hub
  * and their navigation, and land on the shared Coming Soon screen instead of a
  * half-built board. Delete a key here the moment its mode ships.
+ *
+ * Empty right now: Top 10 was the last one, and it ships with its ten typed
+ * inputs, its server-side name matching and its own daily round.
  */
-const UNRELEASED_MODES = {
-  'top10-challenge': {
-    en: 'Top 10 Challenge',
-    ar: 'تحدي أفضل 10',
-    artwork: require('../../assets/images/top-challenge.png'),
-  },
-} as const;
+const UNRELEASED_MODES: Record<string, { en: string; ar: string; artwork: number }> = {};
 
 export default function QuizModeRouteScreen() {
   const params = useLocalSearchParams<{ mode?: string }>();
@@ -29,7 +26,7 @@ export default function QuizModeRouteScreen() {
     return <QuizHubScreen />;
   }
 
-  const unreleased = UNRELEASED_MODES[mode as keyof typeof UNRELEASED_MODES];
+  const unreleased = UNRELEASED_MODES[mode];
   if (unreleased) {
     return (
       <ComingSoonScreen

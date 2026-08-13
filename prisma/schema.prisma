@@ -1130,9 +1130,16 @@ model CachedPlayer {
   @@map("cached_players")
 }
 
+/// One 365Scores career payload per athlete PER LANGUAGE.
+///
+/// `athleteId` used to be unique on its own, which made the row single-tenant:
+/// 365 returns names, club labels and trophy labels in the requested language,
+/// so an Arabic view of a player overwrote the English row and vice versa. The
+/// two languages evicted each other forever, and any feature that reads career
+/// rows in one language (Football Grid) starved. The key is the pair.
 model Cached365PlayerCareer {
   id          String   @id @default(uuid())
-  athleteId   Int      @unique
+  athleteId   Int
   name        String
   photo       String?
   position    String?
@@ -1143,6 +1150,8 @@ model Cached365PlayerCareer {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@unique([athleteId, langId])
+  @@index([langId])
   @@map("cached_365_player_career")
 }
 
@@ -2291,6 +2300,8 @@ enum XpActionType {
   PREDICTION_EXACT
   PREDICTION_WINNER
   QUIZ_ANSWER_CORRECT
+  /// A question answered wrongly — recorded as a NEGATIVE xp_transactions row.
+  QUIZ_ANSWER_WRONG
   QUIZ_COMPLETED_HIGH
   REFERRAL_CONVERSION
   DAILY_LOGIN

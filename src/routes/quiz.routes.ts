@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
 import {
   getDailyQuizForUser,
+  getDailyQuizFiftyFifty,
   submitQuizAnswer,
   skipQuizQuestion,
   useQuizHint,
@@ -209,6 +210,49 @@ router.post('/skip', requireAuth, async (req: Request, res: Response): Promise<v
     }
     logger.error('[Quiz] POST /skip error', err);
     sendError(req, res, ErrorCode.INTERNAL, 'Failed to skip question');
+  }
+});
+
+/**
+ * GET /api/quiz/fifty-fifty?questionId=&language=ar|en
+ *
+ * The two option keys that survive a 50:50 on a daily-quiz question: the real
+ * correct one plus one real wrong one, both resolved server-side. The client
+ * never receives the answer key of a pending question, so it cannot — and must
+ * not — work this out itself.
+ */
+router.get('/fifty-fifty', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) {
+      sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
+      return;
+    }
+
+    const questionId = String(req.query.questionId ?? '').trim();
+    if (!questionId) {
+      sendError(req, res, ErrorCode.VALIDATION, 'questionId required');
+      return;
+    }
+
+    const data = await getDailyQuizFiftyFifty(
+      clerkUserId,
+      questionId,
+      getTimezone(req),
+      req.query.language as string | undefined,
+    );
+    res.json({ status: 'SUCCESS', data });
+  } catch (err: any) {
+    if (err?.message === 'QUESTION_NOT_FOUND') {
+      sendError(req, res, ErrorCode.NOT_FOUND, 'Question not found');
+      return;
+    }
+    if (err?.message === 'QUIZ_FIFTY_FIFTY_UNAVAILABLE') {
+      sendError(req, res, ErrorCode.VALIDATION, '50:50 is not available for this question');
+      return;
+    }
+    logger.error('[Quiz] GET /fifty-fifty error', err);
+    sendError(req, res, ErrorCode.INTERNAL, 'Failed to resolve 50:50');
   }
 });
 
