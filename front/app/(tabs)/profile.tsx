@@ -317,6 +317,9 @@ const completionStyles = StyleSheet.create({
   },
 });
 
+const DEFAULT_COVER_IMAGE =
+  'https://images.unsplash.com/photo-1522778119026-d647f0565c6a?q=80&w=2070&auto=format&fit=crop';
+
 function ProfileScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
@@ -514,6 +517,7 @@ function ProfileScreen() {
   const [isEditProfileModalVisible, setIsEditProfileModalVisible] = useState(false);
   const [isUploadModalVisible, setIsUploadModalVisible] = useState(false);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
+  const [viewerImageUrl, setViewerImageUrl] = useState('');
   const [isVideoPlayerVisible, setIsVideoPlayerVisible] = useState(false);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
   const [selectedReelId, setSelectedReelId] = useState<string | null>(null);
@@ -963,6 +967,7 @@ function ProfileScreen() {
 
     const handlePress = (buttonIndex: number) => {
       if (buttonIndex === 0) {
+        setViewerImageUrl(coverImage || DEFAULT_COVER_IMAGE);
         setIsImageViewerVisible(true);
       } else if (buttonIndex === 1) {
         handleCoverUpload();
@@ -985,7 +990,7 @@ function ProfileScreen() {
         ]
       );
     }
-  }, [t]);
+  }, [t, coverImage]);
 
   const handleCoverUpload = async () => {
     if (!userData) {
@@ -1136,6 +1141,43 @@ function ProfileScreen() {
       setAndroidSheetVisible,
       setAndroidSheetOptions,
     );
+  };
+
+  const handleAvatarPress = () => {
+    const avatarUrl = localImage || userData?.avatar;
+    if (!avatarUrl) {
+      handleImageUpload();
+      return;
+    }
+
+    const options = [t.profile.viewImage, t.profile.changeImage, t.profile.cancel];
+    const cancelButtonIndex = 2;
+
+    const handlePress = (buttonIndex: number) => {
+      if (buttonIndex === 0) {
+        setViewerImageUrl(avatarUrl);
+        setIsImageViewerVisible(true);
+      } else if (buttonIndex === 1) {
+        handleImageUpload();
+      }
+    };
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options, cancelButtonIndex },
+        handlePress
+      );
+    } else {
+      Alert.alert(
+        t.profile.avatarImageTitle,
+        t.profile.whatToDo,
+        [
+          { text: t.profile.viewImage, onPress: () => handlePress(0) },
+          { text: t.profile.changeImage, onPress: () => handlePress(1) },
+          { text: t.profile.cancel, style: 'cancel' },
+        ]
+      );
+    }
   };
 
   // UX Fix 5: Remove avatar
@@ -1747,6 +1789,7 @@ function ProfileScreen() {
             cardType="gold"
             scale={0.60}
             onImageUpload={handleImageUpload}
+            onImagePress={handleAvatarPress}
             uploadedImage={localImage || userData?.avatar || null}
             countryFlag={displayCountryFlag}
             onCountryPress={() => setIsCountryModalVisible(true)}
@@ -2429,7 +2472,7 @@ function ProfileScreen() {
 
       <ImageViewerModal
         visible={isImageViewerVisible}
-        imageUrl={coverImage || 'https://images.unsplash.com/photo-1522778119026-d647f0565c6a?q=80&w=2070&auto=format&fit=crop'}
+        imageUrl={viewerImageUrl}
         onClose={() => setIsImageViewerVisible(false)}
       />
 

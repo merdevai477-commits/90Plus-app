@@ -24,7 +24,8 @@ import ApiFootballService, {
     type Player365CareerSeason,
 } from '../services/apiFootball';
 import { ProfileTheme } from '../constants/ProfileTheme';
-import { buildScores365AthletePhotoUrl } from '../utils/scores365AthletePhoto';
+import { buildScores365AthletePhotoUrl, toFullscreenPhotoUrl } from '../utils/scores365AthletePhoto';
+import ImageViewerModal from '../components/common/ImageViewerModal';
 import { fetch365PlayerCareerClient } from '../utils/scores365PlayerCareerClient';
 import { useTranslation } from '../src/i18n';
 import { logger } from '../utils/logger';
@@ -73,6 +74,7 @@ export default function PlayerCareerScreen() {
     const [selectedSeasonKey, setSelectedSeasonKey] = useState<string | null>(null);
     const [seasonPickerOpen, setSeasonPickerOpen] = useState(false);
     const [highlightCompId, setHighlightCompId] = useState<number | null>(null);
+    const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -220,14 +222,20 @@ export default function PlayerCareerScreen() {
                         >
                             <View style={styles.avatarInner}>
                                 {photoUri ? (
-                                    <ExpoImage
-                                        source={{ uri: photoUri }}
-                                        style={styles.avatar}
-                                        contentFit="cover"
-                                        cachePolicy="memory-disk"
-                                        recyclingKey={photoUri}
-                                        transition={200}
-                                    />
+                                    <TouchableOpacity
+                                        onPress={() => setPhotoViewerOpen(true)}
+                                        activeOpacity={0.85}
+                                        accessibilityRole="imagebutton"
+                                    >
+                                        <ExpoImage
+                                            source={{ uri: photoUri }}
+                                            style={styles.avatar}
+                                            contentFit="cover"
+                                            cachePolicy="memory-disk"
+                                            recyclingKey={photoUri}
+                                            transition={200}
+                                        />
+                                    </TouchableOpacity>
                                 ) : (
                                     <Ionicons name="person" size={40} color={ProfileTheme.colors.textTertiary} />
                                 )}
@@ -503,6 +511,11 @@ export default function PlayerCareerScreen() {
                     )}
                 </View>
             </ScrollView>
+            <ImageViewerModal
+                visible={photoViewerOpen && !!photoUri}
+                imageUrl={toFullscreenPhotoUrl(photoUri) || photoUri || ''}
+                onClose={() => setPhotoViewerOpen(false)}
+            />
         </View>
     );
 }

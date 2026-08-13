@@ -16,7 +16,7 @@ export function buildScores365AthletePhotoUrl(
 /** 365Scores coach headshot (Athletes path — not NationalTeam). */
 export function buildScores365CoachPhotoUrl(
   coachAthleteId: number,
-  size: 68 | 80 = 80,
+  size: 68 | 80 | 250 = 80,
   imageVersion?: number | null,
 ): string {
   const versionSegment =
@@ -41,4 +41,11 @@ export function with365ImageSize(
   if (!url) return undefined;
   if (!url.includes('imagecache.365scores.com')) return url;
   return url.replace(/w_\d+,h_\d+/, `w_${size},h_${size}`);
+}
+
+/** Larger asset for fullscreen photo viewer (365 URLs only; others pass through). */
+export function toFullscreenPhotoUrl(url?: string | null, size = 512): string | undefined {
+  const trimmed = url?.trim();
+  if (!trimmed) return undefined;
+  return with365ImageSize(trimmed, size) ?? trimmed;
 }

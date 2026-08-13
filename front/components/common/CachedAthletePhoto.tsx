@@ -1,19 +1,21 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Radius } from '../../constants/theme';
+import { Colors } from '../../constants/theme';
 
 interface CachedAthletePhotoProps {
   uri?: string | null;
   size?: number;
   recyclingKey?: string | number;
+  onPress?: () => void;
 }
 
 export default function CachedAthletePhoto({
   uri,
   size = 40,
   recyclingKey,
+  onPress,
 }: CachedAthletePhotoProps) {
   const [failed, setFailed] = useState(false);
   React.useEffect(() => {
@@ -21,7 +23,7 @@ export default function CachedAthletePhoto({
   }, [uri]);
   const showImage = !!uri && !failed;
 
-  return (
+  const inner = (
     <View
       style={[
         styles.wrap,
@@ -45,6 +47,16 @@ export default function CachedAthletePhoto({
       )}
     </View>
   );
+
+  if (onPress && showImage) {
+    return (
+      <TouchableOpacity onPress={onPress} activeOpacity={0.85} accessibilityRole="imagebutton">
+        {inner}
+      </TouchableOpacity>
+    );
+  }
+
+  return inner;
 }
 
 const styles = StyleSheet.create({

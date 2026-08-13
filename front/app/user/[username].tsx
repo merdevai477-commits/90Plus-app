@@ -26,6 +26,7 @@ import { XpInfoModal } from '../../components/common/XpInfoModal';
 
 import ProfileHeader from '../../components/profile/ProfileHeader';
 import ProfileCard from '../../components/profile/ProfileCard';
+import ImageViewerModal from '../../components/common/ImageViewerModal';
 import StatsRow from '../../components/profile/StatsRow';
 import VideoGrid from '../../components/profile/VideoGrid';
 import UserInfo from '../../components/profile/UserInfo';
@@ -238,6 +239,8 @@ function UserProfileScreen() {
   const [isBlockModalVisible, setIsBlockModalVisible] = useState(false);
   const [isFollowersModalVisible, setIsFollowersModalVisible] = useState(false);
   const [followersModalTab, setFollowersModalTab] = useState<'followers' | 'following'>('followers');
+  const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
+  const [viewerImageUrl, setViewerImageUrl] = useState('');
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('videos');
 
@@ -606,6 +609,12 @@ function UserProfileScreen() {
     setIsFollowersModalVisible(true);
   };
 
+  const openPhotoViewer = (url?: string | null) => {
+    if (!url) return;
+    setViewerImageUrl(url);
+    setPhotoViewerOpen(true);
+  };
+
   return (
     <View style={s.container}>
       <StatusBar barStyle="light-content" />
@@ -717,6 +726,7 @@ function UserProfileScreen() {
         {/* Cover */}
         <ProfileHeader
           coverImage={user.coverImage ? { uri: user.coverImage } : undefined}
+          onPress={user.coverImage ? () => openPhotoViewer(user.coverImage) : undefined}
         />
 
         {blockedMe ? (
@@ -734,6 +744,7 @@ function UserProfileScreen() {
             cardType="gold"
             scale={0.60}
             uploadedImage={user.avatar || null}
+            onImagePress={user.avatar ? () => openPhotoViewer(user.avatar) : undefined}
             countryFlag={user.countryFlag || '🌍'}
             position={user.position || 'ST'}
             age={user.age?.toString()}
@@ -944,6 +955,11 @@ function UserProfileScreen() {
           username={user.username}
         />
       ) : null}
+      <ImageViewerModal
+        visible={photoViewerOpen}
+        imageUrl={viewerImageUrl}
+        onClose={() => setPhotoViewerOpen(false)}
+      />
     </View>
   );
 }

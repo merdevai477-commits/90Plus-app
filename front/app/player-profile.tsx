@@ -19,6 +19,7 @@ import ApiFootballService, { type Player365Career, type Player365Transfer } from
 import { ProfileTheme } from '../constants/ProfileTheme';
 import { logger } from '../utils/logger';
 import PlayerAvatar from '../components/common/PlayerAvatar';
+import ImageViewerModal from '../components/common/ImageViewerModal';
 import TeamBadge from '../components/common/TeamBadge';
 import { useTranslation } from '../src/i18n';
 import type { Language } from '../src/i18n';
@@ -34,6 +35,7 @@ import {
   teamLogoUrl,
   type PlayerStatRow,
 } from '../utils/playerStatsAggregate';
+import { toFullscreenPhotoUrl } from '../utils/scores365AthletePhoto';
 
 // Cache key prefix for player data
 const PLAYER_CACHE_PREFIX = 'player_cache_';
@@ -318,6 +320,8 @@ function PlayerHeroPhoto({
     }, [playerId, photo]);
 
     const uri = candidates[uriIndex] ?? '';
+    const [viewerOpen, setViewerOpen] = useState(false);
+    const viewerUrl = toFullscreenPhotoUrl(uri) ?? uri;
 
     if (!uri || uriIndex >= candidates.length) {
         return (
@@ -326,23 +330,35 @@ function PlayerHeroPhoto({
     }
 
     return (
-        <View style={heroPhotoStyles.circle}>
-            <ExpoImage
-                source={{ uri }}
-                style={heroPhotoStyles.image}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                recyclingKey={`player-${playerId}-${uriIndex}`}
-                transition={200}
-                onError={() => {
-                    if (uriIndex + 1 < candidates.length) {
-                        setUriIndex((i) => i + 1);
-                    } else {
-                        setUriIndex(candidates.length);
-                    }
-                }}
+        <>
+            <TouchableOpacity
+                style={heroPhotoStyles.circle}
+                onPress={() => setViewerOpen(true)}
+                activeOpacity={0.85}
+                accessibilityRole="imagebutton"
+            >
+                <ExpoImage
+                    source={{ uri }}
+                    style={heroPhotoStyles.image}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    recyclingKey={`player-${playerId}-${uriIndex}`}
+                    transition={200}
+                    onError={() => {
+                        if (uriIndex + 1 < candidates.length) {
+                            setUriIndex((i) => i + 1);
+                        } else {
+                            setUriIndex(candidates.length);
+                        }
+                    }}
+                />
+            </TouchableOpacity>
+            <ImageViewerModal
+                visible={viewerOpen}
+                imageUrl={viewerUrl}
+                onClose={() => setViewerOpen(false)}
             />
-        </View>
+        </>
     );
 }
 

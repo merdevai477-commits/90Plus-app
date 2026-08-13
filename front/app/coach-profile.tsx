@@ -2,7 +2,7 @@
  * Coach profile (365Scores `/web/athletes/?fullDetails=true`).
  */
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -20,6 +20,8 @@ import { Colors, Spacing, Radius, FontSize, FontWeight } from '../constants/them
 import { useTranslation } from '../src/i18n';
 import ApiFootballService from '../services/apiFootball';
 import CachedAthletePhoto from '../components/common/CachedAthletePhoto';
+import ImageViewerModal from '../components/common/ImageViewerModal';
+import { buildScores365CoachPhotoUrl, toFullscreenPhotoUrl } from '../utils/scores365AthletePhoto';
 
 export default function CoachProfileScreen() {
     const router = useRouter();
@@ -48,6 +50,16 @@ export default function CoachProfileScreen() {
     const name = profile?.name || params.name || '—';
     const teamName = profile?.teamName || params.teamName || null;
     const teamId = profile?.teamId ?? (params.teamId ? parseInt(params.teamId, 10) : null);
+    const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
+    const photoUri = profile?.imageUrl || params.photo || undefined;
+    const viewerUrl = useMemo(() => {
+        return (
+            toFullscreenPhotoUrl(photoUri) ||
+            (athleteId > 0
+                ? buildScores365CoachPhotoUrl(athleteId, 250, profile?.imageVersion)
+                : undefined)
+        );
+    }, [photoUri, athleteId, profile?.imageVersion]);
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -73,9 +85,10 @@ export default function CoachProfileScreen() {
                 <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
                     <View style={styles.hero}>
                         <CachedAthletePhoto
-                            uri={profile?.imageUrl || params.photo}
+                            uri={photoUri}
                             size={88}
                             recyclingKey={athleteId}
+                            onPress={viewerUrl ? () => setPhotoViewerOpen(true) : undefined}
                         />
                         <Text style={styles.name}>{name}</Text>
                         {profile?.nationality || profile?.age ? (
@@ -134,6 +147,11 @@ export default function CoachProfileScreen() {
                     ) : null}
                 </ScrollView>
             )}
+            <ImageViewerModal
+                visible={photoViewerOpen && !!viewerUrl}
+                imageUrl={viewerUrl || ''}
+                onClose={() => setPhotoViewerOpen(false)}
+            />
         </View>
     );
 }

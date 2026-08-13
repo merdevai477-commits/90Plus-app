@@ -54,6 +54,8 @@ export interface ProfileCardProps {
   cardType?: 'gold' | 'icon' | 'toty';
   scale?: number;
   onImageUpload?: () => void;
+  /** Tap on the player photo. Falls back to onImageUpload when omitted. */
+  onImagePress?: () => void;
   uploadedImage?: string | null;
   countryFlag?: string | null;
   onCountryPress?: () => void;
@@ -112,6 +114,7 @@ const ProfileCard = memo(function ProfileCard({
   playerImage,
   scale = 0.66,
   onImageUpload,
+  onImagePress,
   uploadedImage,
   countryFlag,
   onCountryPress,
@@ -445,11 +448,13 @@ const ProfileCard = memo(function ProfileCard({
           </View>
         </View>
 
-        {/* ── Image upload tap area ─────────────────────────────────── */}
+        {/* ── Image upload / preview tap area ───────────────────────── */}
         <TouchableOpacity
           style={[s.quadrantContainer, { top: 18 * scale, left: 158 * scale,
             width: 152 * scale, height: 268 * scale }]}
-          onPress={onImageUpload} activeOpacity={0.85}>
+          onPress={onImagePress ?? onImageUpload} activeOpacity={0.85}
+          accessibilityRole="imagebutton"
+        >
           {!uploadedImage && (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
               <View style={[s.plusH, { width: 14 * scale, height: 2 * scale, backgroundColor: ACCENT_STAT }]} />
