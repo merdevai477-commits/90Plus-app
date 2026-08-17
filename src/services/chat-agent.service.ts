@@ -22,9 +22,9 @@ import {
   extractGroundedFacts,
 } from './chat-grounding.service';
 
-const MAX_STEPS = 5;
-const AGENT_STREAM_MAX_TOKENS = 1000;
-const AGENT_FINAL_MAX_TOKENS = 900;
+const MAX_STEPS = 3;
+const AGENT_STREAM_MAX_TOKENS = 480;
+const AGENT_FINAL_MAX_TOKENS = 420;
 
 function isCreditBudgetError(err: unknown): boolean {
   const msg = String((err as Error)?.message ?? err ?? '');
@@ -55,7 +55,7 @@ async function createAgentCompletion(
 const TOOL_USAGE_PREAMBLE = `
 قواعد البيانات (صارمة — زي بروفايل اللاعب في التطبيق):
 - أي سؤال عن لاعب/نادي/مباراة/ألقاب/إحصائيات = لازم أداة أولًا. متجاوبش من ذاكرتك أبدًا.
-- اسم مش متأكد إنه لاعب ولا نادي ولا دوري ولا مدرب → search_football أولًا (نفس سيرش التطبيق، بيرجّع ID + تفاصيل). لو رجّعت quickFacts أو source جاوب منها على طول ومتستدعيش أداة تانية.
+- اسم مش متأكد إنه لاعب ولا نادي ولا دوري ولا مدرب → search_football أولًا. لو رجّعت quickFacts أو source جاوب منها على طول — أداة واحدة بس في الدور، ومتستدعيش search_player بعد ما السيرش رجّع بروفايل.
 - لاعب (نادي حالي، سيزون، أهداف، ألقاب، فين بيلعب) → search_player لو الاسم واضح، أو search_football لو الاسم غامض/فيه غلطة. للألقاب زوّد get_player_career. لو معاك athlete_id من السيرش مرّره.
 - أهداف لاعب في بطولة محددة (كأس العالم / دوري الأبطال) → get_player_career. استخدم worldCupGoals.total للـWorld Cup و uclSummary للأبطال. لو worldCupGoals = null قول إن مفيش بيانات كأس عالم مؤكدة للاعب ده — ممنوع تخمّن رقم.
 - فريق + ألقاب أفريقيا/بطولات → get_team_info أو تفاصيل search_football للنادي. استخدم cafChampionsLeagueWins / answerHint فقط.
@@ -82,6 +82,80 @@ const TOOL_USAGE_PREAMBLE = `
 - الدقة أهم حاجة: الأسلوب الحلو ماينفعش يغيّر أي رقم/نادي — الأرقام والنوادي من الأداة بس.
 - ماتذكرش أسماء الأدوات أو API للمستخدم.
 `.trim();
+
+function skipEntityPrefetch(message: string): boolean {
+  const m = message.trim();
+  if (m.length < 2) return true;
+  if (/^(hi|hello|hey|اهلا|أهلا|السلام|سلام|ازيك|عامل ايه|صباح|مساء)[\s!.,؟?]*$/i.test(m)) {
+    return true;
+  }
+  return /(?:مباريات|ماتشات|matches)\s*(?:النهاردة|اليوم|today)\s*$/i.test(m)
+    || /^(?:لايف|مباشر|live)\s*(?:دلوقتي)?\s*$/i.test(m)
+    || /مين بيلعب دلوقتي|اي اللي لعب/i.test(m);
+}
+
+/** Pull the likely player/club/league name out of a question so 365 search isn't handed the whole sentence. */
+function extractSearchQuery(message: string): string | null {
+  let s = message.replace(/[؟?!,.،]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (s.length < 2) return null;
+  const stripped = s
+    .replace(
+      /مين(?:\s+هو|\s+هي)?|من هو|من هي|who(?:'s| is)?|كام|عدد|فين(?:\s+بيلعب)?|بيلعب\s+فين|where(?:\s+does)?|how many|ايه|إيه|ترتيب|جدول/gi,
+      ' ',
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+  const q = stripped.length >= 2 ? stripped : s;
+  if (/^(مباريات|ماتشات|matches|النهاردة|اليوم|today|لايف|مباشر|live)$/i.test(q)) return null;
+  return q;
+}
+
+function formatPrefetchClarification(parsed: any, language: MessageLanguage): string | null {
+  if (!parsed || parsed.status !== 'need_clarification') return null;
+  const hits = parsed.hits ?? {};
+  const names: string[] = [];
+  for (const c of hits.clubs ?? []) names.push(c.name);
+  for (const c of hits.nationalTeams ?? []) names.push(c.name);
+  for (const p of hits.players ?? []) names.push(p.club ? `${p.name} (${p.club})` : p.name);
+  for (const p of hits.coaches ?? []) names.push(p.name);
+  for (const c of hits.competitions ?? []) names.push(c.name);
+  if (!names.length && Array.isArray(parsed.suggestions)) {
+    for (const s of parsed.suggestions) names.push(s.club ? `${s.name} (${s.club})` : s.name);
+  }
+  if (!names.length) return null;
+  const listed = names.slice(0, 4).map((n) => `**${n}**`).join(language === 'en' ? ' or ' : ' ولا ');
+  return language === 'en'
+    ? `Not sure who you mean — did you mean ${listed}?`
+    : `مش متأكد تقصد مين بالظبط — قصدك ${listed}؟`;
+}
+
+async function streamFinalAnswer(
+  client: OpenAI,
+  model: string,
+  messages: ChatCompletionMessageParam[],
+  onToken: (token: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  const stream = (await createAgentCompletion(client, {
+    model,
+    messages,
+    temperature: 0.2,
+    max_tokens: AGENT_FINAL_MAX_TOKENS,
+    stream: true,
+    reasoning: { effort: 'none' },
+  })) as AsyncIterable<{
+    choices: Array<{ delta?: { content?: string | null } }>;
+  }>;
+  let full = '';
+  for await (const chunk of stream) {
+    if (signal?.aborted) break;
+    const token = chunk.choices[0]?.delta?.content ?? '';
+    if (!token) continue;
+    full += token;
+    onToken(token);
+  }
+  return full.trim();
+}
 
 function shouldRequireTools(message: string): boolean {
   const m = message.trim();
@@ -206,6 +280,93 @@ export async function runFootballAgent(
     { role: 'user', content: params.userMessage },
   ];
 
+  const startedAt = Date.now();
+  const prefetchQuery =
+    !skipEntityPrefetch(params.userMessage) && shouldRequireTools(params.userMessage)
+      ? extractSearchQuery(params.userMessage)
+      : null;
+  if (prefetchQuery) {
+    const tPrefetch = Date.now();
+    try {
+      const payload = await executeAgentTool(
+        'search_football',
+        JSON.stringify({ query: prefetchQuery }),
+        { language: params.language, userMessage: params.userMessage },
+      );
+      toolsUsed.push('search_football');
+      logger.info(
+        `[chat-agent] prefetch search_football q="${prefetchQuery}" ${Date.now() - tPrefetch}ms`,
+      );
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(payload);
+      } catch {
+        parsed = null;
+      }
+      const clarify = formatPrefetchClarification(parsed, params.language);
+      if (clarify) {
+        fullText = clarify;
+        params.onToken(clarify);
+        logger.info(`[chat-agent] prefetch clarify ${Date.now() - startedAt}ms`);
+        return { fullText, usedModel: model, toolsUsed };
+      }
+      if (parsed && !parsed.error && (parsed.status === 'ok' || parsed.source || parsed.quickFacts)) {
+        lastToolPayloads = [payload];
+        messages.push({
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: 'prefetch_search_football',
+              type: 'function',
+              function: {
+                name: 'search_football',
+                arguments: JSON.stringify({ query: prefetchQuery }),
+              },
+            },
+          ],
+        });
+        messages.push({
+          role: 'tool',
+          tool_call_id: 'prefetch_search_football',
+          content: payload,
+        });
+        const groundedFacts = extractGroundedFacts(lastToolPayloads);
+        const groundingMsg = buildGroundingSystemMessage(groundedFacts);
+        if (groundingMsg) {
+          messages.push({ role: 'system', content: groundingMsg });
+        }
+        const groundedReply = buildGroundedFactReply(
+          params.userMessage,
+          groundedFacts,
+          params.language,
+        );
+        if (groundedReply) {
+          fullText = groundedReply;
+          params.onToken(groundedReply);
+          logger.info(`[chat-agent] prefetch grounded ${Date.now() - startedAt}ms`);
+          return { fullText, usedModel: model, toolsUsed };
+        }
+        fullText = await streamFinalAnswer(
+          client,
+          model,
+          messages,
+          params.onToken,
+          params.signal,
+        );
+        logger.info(
+          `[chat-agent] prefetch+stream total=${Date.now() - startedAt}ms chars=${fullText.length}`,
+        );
+        if (fullText) return { fullText, usedModel: model, toolsUsed };
+      }
+    } catch (err) {
+      logger.warn(
+        `[chat-agent] prefetch failed, falling through to tool loop:`,
+        (err as Error)?.message ?? err,
+      );
+    }
+  }
+
   for (let step = 0; step < MAX_STEPS; step++) {
     if (params.signal?.aborted) break;
 
@@ -234,6 +395,7 @@ export async function runFootballAgent(
         model,
         messages,
         tools: AGENT_TOOLS,
+        parallel_tool_calls: false,
         tool_choice:
           step === 0 && shouldRequireTools(params.userMessage) ? 'required' : 'auto',
         temperature: 0.2,
@@ -289,9 +451,12 @@ export async function runFootballAgent(
           const name = fn.name;
           toolsUsed.push(name);
           logger.info(`[chat-agent] tool call: ${name}`);
+          const tTool = Date.now();
           const content = await executeAgentTool(name, fn.arguments, {
             language: params.language,
+            userMessage: params.userMessage,
           });
+          logger.info(`[chat-agent] tool ${name} ${Date.now() - tTool}ms`);
           return {
             role: 'tool' as const,
             tool_call_id: tc.id,
@@ -324,30 +489,25 @@ export async function runFootballAgent(
         return { fullText, usedModel: model, toolsUsed };
       }
 
-      // After tools: prefer a non-streaming final answer (more reliable than SSE).
+      // After tools: stream the final answer so the user sees tokens immediately.
       if (step < MAX_STEPS - 1) {
         try {
-          const final = await createAgentCompletion(client, {
+          const answer = await streamFinalAnswer(
+            client,
             model,
             messages,
-            temperature: 0.2,
-            max_tokens: AGENT_FINAL_MAX_TOKENS,
-            stream: false,
-            reasoning: { effort: 'none' },
-          });
-          const answer =
-            final.choices?.[0]?.message?.content?.trim() ??
-            '';
+            params.onToken,
+            params.signal,
+          );
           if (answer) {
             fullText = answer;
-            params.onToken(answer);
+            logger.info(`[chat-agent] streamed final ${Date.now() - startedAt}ms`);
             return { fullText, usedModel: model, toolsUsed };
           }
-          // If empty, continue the loop for another streaming attempt.
-          logger.warn('[chat-agent] non-stream final answer empty — retrying loop');
+          logger.warn('[chat-agent] streamed final answer empty — retrying loop');
         } catch (err) {
           logger.warn(
-            '[chat-agent] non-stream final failed, continuing loop:',
+            '[chat-agent] streamed final failed, continuing loop:',
             (err as Error)?.message ?? err,
           );
         }

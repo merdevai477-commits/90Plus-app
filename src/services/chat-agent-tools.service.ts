@@ -737,11 +737,22 @@ function buildSuggestionHint(
     : `مش متأكد تقصد مين بالظبط. اسأل المستخدم للتأكيد: قصدك ${names}؟ وممنوع تخترع لاعب أو أرقام.`;
 }
 
+function wantsTrophyEnrichment(q: string): boolean {
+  return /كاس|كأس|ألقاب|القاب|افريق|أفريق|شامبيونز|مونديال|trophy|world\s*cup|caf|ucl|champions|titles?/i.test(
+    q,
+  );
+}
+
+function wantsMatchContext(q: string): boolean {
+  return /مبار|ماتش|لعب|جاي|القادم|لايف|مباشر|fixture|match|next\s*game/i.test(q);
+}
+
 async function load365PlayerProfile(
   athleteId: number,
   query: string,
   resolvedAs: string,
   language: MessageLanguage,
+  userMessage?: string,
 ) {
   const from365 = await footballDataCacheService.lookup365Player(resolvedAs || query, language, {
     athleteId,
@@ -750,19 +761,34 @@ async function load365PlayerProfile(
   });
   const player = from365.data?.players?.[0];
   if (!player) return null;
-  const apiFb = await enrichApiFootballTrophies(player.name || resolvedAs, player.athleteId ?? athleteId);
+  // API-Football trophy lookup is a slow extra hop — only when the user asked
+  // about titles. 365 career already has club + season stats.
+  const hint = `${userMessage ?? ''} ${query}`;
+  const apiFb = wantsTrophyEnrichment(hint)
+    ? await enrichApiFootballTrophies(player.name || resolvedAs, player.athleteId ?? athleteId)
+    : null;
   return build365ProfilePayload(player, query, player.name || resolvedAs, {
-    includeApiFbWc: true,
+    includeApiFbWc: !!apiFb,
     apiFb,
   });
 }
 
-async function toolSearchPlayer(args: Record<string, unknown>, language: MessageLanguage) {
+async function toolSearchPlayer(
+  args: Record<string, unknown>,
+  language: MessageLanguage,
+  userMessage?: string,
+) {
   const rawName = String(args.player_name ?? '').trim();
   const athleteId = Number(args.athlete_id);
   if (Number.isFinite(athleteId) && athleteId > 0) {
     try {
-      const profile = await load365PlayerProfile(athleteId, rawName || String(athleteId), rawName, language);
+      const profile = await load365PlayerProfile(
+        athleteId,
+        rawName || String(athleteId),
+        rawName,
+        language,
+        userMessage,
+      );
       if (profile) return profile;
     } catch (err) {
       logger.warn('[chat-agent] search_player by athlete_id failed:', (err as Error)?.message);
@@ -779,6 +805,7 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
         rawName,
         resolution.best.name,
         language,
+        userMessage,
       );
       if (profile) return profile;
     } catch (err) {
@@ -1006,9 +1033,11 @@ async function hydrateFootballSearchHit(
   hit: FootballSearchHit,
   query: string,
   language: MessageLanguage,
+  userMessage?: string,
 ): Promise<Record<string, unknown> | null> {
+  const hint = `${userMessage ?? ''} ${query}`;
   if (hit.type === 'player') {
-    return load365PlayerProfile(hit.id, query, hit.name, language);
+    return load365PlayerProfile(hit.id, query, hit.name, language, userMessage);
   }
   if (hit.type === 'coach') {
     const profile = await footballDataCacheService.getCached365AthleteProfile(hit.id, language);
@@ -1037,6 +1066,8 @@ async function hydrateFootballSearchHit(
     };
   }
   if (hit.type === 'club' || hit.type === 'national_team') {
+    const needMatches = wantsMatchContext(hint);
+    const needDossier = wantsTrophyEnrichment(hint);
     const [infoRes, coachRes, matchesRes, dossier] = await Promise.all([
       Promise.resolve(footballDataCacheService.getCached365CompetitorInfo(hit.id, language)).catch(
         () => ({ data: null }),
@@ -1044,10 +1075,14 @@ async function hydrateFootballSearchHit(
       Promise.resolve(footballDataCacheService.getCached365CompetitorCoach(hit.id, language)).catch(
         () => ({ data: null }),
       ),
-      Promise.resolve(footballDataCacheService.getCached365CompetitorMatches(hit.id, language)).catch(
-        () => ({ data: null }),
-      ),
-      Promise.resolve(fetchTeamDossierContext(hit.name, { allowSearch: true })).catch(() => null),
+      needMatches
+        ? Promise.resolve(footballDataCacheService.getCached365CompetitorMatches(hit.id, language)).catch(
+            () => ({ data: null }),
+          )
+        : Promise.resolve({ data: null }),
+      needDossier
+        ? Promise.resolve(fetchTeamDossierContext(hit.name, { allowSearch: true })).catch(() => null)
+        : Promise.resolve(null),
     ]);
     const info = infoRes?.data;
     const coach = coachRes?.data;
@@ -1133,7 +1168,11 @@ async function hydrateFootballSearchHit(
   };
 }
 
-async function toolSearchFootball(args: Record<string, unknown>, language: MessageLanguage) {
+async function toolSearchFootball(
+  args: Record<string, unknown>,
+  language: MessageLanguage,
+  userMessage?: string,
+) {
   const query = String(args.query ?? args.q ?? args.name ?? '').trim();
   if (query.length < 2) return { error: 'query required' };
 
@@ -1174,7 +1213,7 @@ async function toolSearchFootball(args: Record<string, unknown>, language: Messa
 
   let details: Record<string, unknown> | null = null;
   try {
-    details = await hydrateFootballSearchHit(best, query, language);
+    details = await hydrateFootballSearchHit(best, query, language, userMessage);
   } catch (err) {
     logger.warn('[chat-agent] search_football hydrate failed:', (err as Error)?.message);
   }
@@ -1559,7 +1598,11 @@ async function toolTopScorers(args: Record<string, unknown>) {
   };
 }
 
-async function toolTeamInfo(args: Record<string, unknown>, language: MessageLanguage) {
+async function toolTeamInfo(
+  args: Record<string, unknown>,
+  language: MessageLanguage,
+  userMessage?: string,
+) {
   const teamName = String(args.team_name ?? '').trim();
   if (!teamName) return { error: 'team_name required' };
   const dossier = await fetchTeamDossierContext(teamName, { allowSearch: true });
@@ -1573,7 +1616,7 @@ async function toolTeamInfo(args: Record<string, unknown>, language: MessageLang
         firstHitOfType(data, 'club') ??
         firstHitOfType(data, 'national_team');
       if (hit) {
-        const hydrated = await hydrateFootballSearchHit(hit, teamName, language);
+        const hydrated = await hydrateFootballSearchHit(hit, teamName, language, userMessage);
         if (hydrated) return { status: 'ok', best: hit, ...hydrated };
       }
     } catch (err) {
@@ -1780,7 +1823,7 @@ async function toolHeadToHead(args: Record<string, unknown>, language: MessageLa
 export async function executeAgentTool(
   name: string,
   argsJson: string,
-  opts: { language: MessageLanguage },
+  opts: { language: MessageLanguage; userMessage?: string },
 ): Promise<string> {
   let args: Record<string, unknown> = {};
   try {
@@ -1793,10 +1836,10 @@ export async function executeAgentTool(
     let result: unknown;
     switch (name) {
       case 'search_football':
-        result = await toolSearchFootball(args, opts.language);
+        result = await toolSearchFootball(args, opts.language, opts.userMessage);
         break;
       case 'search_player':
-        result = await toolSearchPlayer(args, opts.language);
+        result = await toolSearchPlayer(args, opts.language, opts.userMessage);
         break;
       case 'get_today_matches':
         result = await toolTodayMatches(args);
@@ -1820,7 +1863,7 @@ export async function executeAgentTool(
         result = await toolTopScorers(args);
         break;
       case 'get_team_info':
-        result = await toolTeamInfo(args, opts.language);
+        result = await toolTeamInfo(args, opts.language, opts.userMessage);
         break;
       case 'get_player_career':
         result = await toolPlayerCareer(args, opts.language);
