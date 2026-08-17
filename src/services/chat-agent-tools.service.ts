@@ -41,6 +41,7 @@ import {
   isPlayerOrientedBoost,
   normalizeSearchText,
   scoreSearchName,
+  stripSearchStopwords,
 } from '../utils/football-search-index';
 
 
@@ -232,8 +233,42 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
         type: 'object',
         properties: {
           team_name: { type: 'string' },
+          competitor_id: {
+            type: 'number',
+            description: 'Optional 365Scores competitorId from search_football',
+          },
         },
         required: ['team_name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_team_squad',
+      description:
+        'Current squad/roster for a club or national team (same 365 data as the in-app team sheet): players grouped by position, jersey numbers. Use for "تشكيلة", "مين في الفريق", "اللاعبين". Pass competitor_id from search_football when you have it, or team_name (e.g. الأهلي المصري).',
+      parameters: {
+        type: 'object',
+        properties: {
+          team_name: { type: 'string' },
+          competitor_id: { type: 'number', description: '365Scores competitorId' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_team_scorers',
+      description:
+        'Team goal/assist leaders in their current competition (365 club stats). Use for "هداف الفريق", "مين هداف الأهلي", "صنّاع اللعب". Pass competitor_id when known.',
+      parameters: {
+        type: 'object',
+        properties: {
+          team_name: { type: 'string' },
+          competitor_id: { type: 'number' },
+        },
       },
     },
   },
@@ -865,6 +900,57 @@ interface FootballSearchHit {
 
 const SEARCH_NAME_EXACT = 780;
 
+/** Same short name, different countries — ask instead of guessing (أهلي مصر vs أهلي جدة). */
+const SHARED_CLUB_FAMILIES: Array<{
+  match: RegExp;
+  members: Array<{ entityId: number; labelAr: string; labelEn: string; countryHint: RegExp }>;
+}> = [
+  {
+    match: /^(ال)?أ?اهلي$|^al[-\s]?ahl[yi]$/i,
+    members: [
+      {
+        entityId: 8200,
+        labelAr: 'الأهلي المصري',
+        labelEn: 'Al Ahly (Egypt)',
+        countryHint: /مصر|مصري|egypt/i,
+      },
+      {
+        entityId: 8946,
+        labelAr: 'الأهلي السعودي',
+        labelEn: 'Al Ahli (Saudi)',
+        countryHint: /سعود|جدة|jeddah|saudi/i,
+      },
+    ],
+  },
+];
+
+function clubLabel(club: { name: string; country?: string | null }, language: MessageLanguage): string {
+  const country = String(club.country ?? '');
+  if (/egypt|مصر/i.test(country)) {
+    return language === 'en' ? `${club.name} (Egypt)` : `${club.name} المصري`;
+  }
+  if (/saudi|سعود/i.test(country)) {
+    return language === 'en' ? `${club.name} (Saudi)` : `${club.name} السعودي`;
+  }
+  if (country) return language === 'en' ? `${club.name} (${country})` : `${club.name} (${country})`;
+  return club.name;
+}
+
+function detectSharedClubFamily(query: string) {
+  if (/بنك|bank/i.test(query)) return null;
+  const core = stripSearchStopwords(normalizeSearchText(query)).split(/\s+/)[0] ?? '';
+  return SHARED_CLUB_FAMILIES.find(
+    (f) => f.match.test(query.trim()) || f.match.test(core),
+  );
+}
+
+function countryHintPicksFamilyMember(
+  query: string,
+  family: (typeof SHARED_CLUB_FAMILIES)[number],
+) {
+  return family.members.find((m) => m.countryHint.test(query)) ?? null;
+}
+
 function emptySearchBuckets(): ThreeSixFiveSearchResults {
   return { clubs: [], nationalTeams: [], players: [], coaches: [], competitions: [] };
 }
@@ -1178,6 +1264,50 @@ async function toolSearchFootball(
 
   const requested = parseEntityTypeHint(args.entity_type);
   const typeHint = requested === 'auto' ? inferEntityTypeHint(query) : requested;
+  const family = detectSharedClubFamily(query);
+  const hinted = family ? countryHintPicksFamilyMember(`${userMessage ?? ''} ${query}`, family) : null;
+
+  if (family && !hinted) {
+    const suggestions = familyClubSuggestions(family, language);
+    return {
+      status: 'need_clarification',
+      reason: 'same_name_clubs',
+      query,
+      suggestions,
+      hits: emptySearchBuckets(),
+      answerHint:
+        language === 'en'
+          ? `Ask which club: ${suggestions.map((s) => s.label).join(' or ')}. Do not pick one.`
+          : `اسأل المستخدم: قصدك ${suggestions.map((s) => s.label).join(' ولا ')}؟ وممنوع تختار نيابة عنه.`,
+    };
+  }
+
+  if (hinted) {
+    const forced: FootballSearchHit = {
+      type: 'club',
+      id: hinted.entityId,
+      name: language === 'en' ? hinted.labelEn : hinted.labelAr,
+      country: null,
+    };
+    let details: Record<string, unknown> | null = null;
+    try {
+      details = await hydrateFootballSearchHit(forced, query, language, userMessage);
+    } catch (err) {
+      logger.warn('[chat-agent] search_football family hydrate failed:', (err as Error)?.message);
+    }
+    return {
+      status: 'ok',
+      query,
+      best: forced,
+      hits: compactSearchHits(emptySearchBuckets()),
+      ...(details ?? {}),
+      answerHint:
+        (details as { answerHint?: string } | null)?.answerHint ??
+        (language === 'en'
+          ? 'Answer from best + details only. Do not invent stats.'
+          : 'جاوب من best و details بس. ممنوع تخترع أرقام.'),
+    };
+  }
 
   let data: ThreeSixFiveSearchResults = emptySearchBuckets();
   try {
@@ -1189,6 +1319,7 @@ async function toolSearchFootball(
   }
 
   const hits = compactSearchHits(data);
+
   if (!searchHitCount(hits)) {
     return {
       error: 'not_found',
@@ -1684,6 +1815,194 @@ async function toolTeamInfo(
   };
 }
 
+function familyClubSuggestions(
+  family: (typeof SHARED_CLUB_FAMILIES)[number],
+  language: MessageLanguage,
+) {
+  return family.members.map((m) => ({
+    competitorId: m.entityId,
+    name: language === 'en' ? m.labelEn : m.labelAr,
+    country: null,
+    label: language === 'en' ? m.labelEn : m.labelAr,
+  }));
+}
+
+async function resolveCompetitorForTool(
+  args: Record<string, unknown>,
+  language: MessageLanguage,
+): Promise<
+  | { error: string; teamName?: string }
+  | {
+      status: 'need_clarification';
+      query: string;
+      suggestions: ReturnType<typeof familyClubSuggestions>;
+      answerHint: string;
+    }
+  | { competitorId: number; teamName: string; info: any }
+> {
+  const competitorIdArg = Number(args.competitor_id);
+  const teamName = String(args.team_name ?? args.query ?? '').trim();
+  if (Number.isFinite(competitorIdArg) && competitorIdArg > 0) {
+    const infoRes = await Promise.resolve(
+      footballDataCacheService.getCached365CompetitorInfo(competitorIdArg, language),
+    ).catch(() => ({ data: null }));
+    return {
+      competitorId: competitorIdArg,
+      teamName: infoRes?.data?.name ?? teamName,
+      info: infoRes?.data ?? null,
+    };
+  }
+  if (teamName.length < 2) return { error: 'team_name or competitor_id required' };
+
+  const family = detectSharedClubFamily(teamName);
+  const hinted = family ? countryHintPicksFamilyMember(teamName, family) : null;
+  if (family && !hinted) {
+    const suggestions = familyClubSuggestions(family, language);
+    return {
+      status: 'need_clarification',
+      query: teamName,
+      suggestions,
+      answerHint:
+        language === 'en'
+          ? `Ask which club: ${suggestions.map((s) => s.label).join(' or ')}.`
+          : `اسأل المستخدم: قصدك ${suggestions.map((s) => s.label).join(' ولا ')}؟`,
+    };
+  }
+
+  let competitorId = hinted?.entityId ?? 0;
+  let resolvedName = hinted ? (language === 'en' ? hinted.labelEn : hinted.labelAr) : teamName;
+  if (!competitorId) {
+    try {
+      const search = await threeSixFiveScoresService.searchEntities(teamName, language);
+      const data = search.data ?? emptySearchBuckets();
+      const hit =
+        pickBestSearchHit(teamName, data, 'club') ??
+        firstHitOfType(data, 'club') ??
+        firstHitOfType(data, 'national_team');
+      if (!hit) return { error: 'team_not_found', teamName };
+      competitorId = hit.id;
+      resolvedName = hit.name;
+    } catch (err) {
+      logger.warn('[chat-agent] resolveCompetitor search failed:', (err as Error)?.message);
+      return { error: 'team_not_found', teamName };
+    }
+  }
+
+  const infoRes = await Promise.resolve(
+    footballDataCacheService.getCached365CompetitorInfo(competitorId, language),
+  ).catch(() => ({ data: null }));
+  return {
+    competitorId,
+    teamName: infoRes?.data?.name ?? resolvedName,
+    info: infoRes?.data ?? null,
+  };
+}
+
+function compactSquadPlayer(p: {
+  athleteId: number;
+  name: string;
+  position: string | null;
+  jerseyNumber: number | null;
+  age?: number | null;
+}) {
+  return {
+    athleteId: p.athleteId,
+    name: p.name,
+    position: p.position,
+    jersey: p.jerseyNumber,
+    age: p.age ?? null,
+  };
+}
+
+async function toolTeamSquad(args: Record<string, unknown>, language: MessageLanguage) {
+  const resolved = await resolveCompetitorForTool(args, language);
+  if ('error' in resolved) return resolved;
+  if ('status' in resolved) return resolved;
+
+  const squadRes = await Promise.resolve(
+    footballDataCacheService.getCached365CompetitorSquad(resolved.competitorId, language),
+  ).catch(() => ({ data: null }));
+  const squad = squadRes?.data;
+  if (!squad?.players?.length) {
+    return { error: 'squad_unavailable', ...resolved };
+  }
+
+  const take = (group: 'goalkeeper' | 'defender' | 'midfielder' | 'forward') =>
+    (squad.groups?.[group] ?? []).slice(0, 8).map(compactSquadPlayer);
+
+  return {
+    source: '365scores_squad',
+    competitorId: resolved.competitorId,
+    teamName: resolved.teamName,
+    playerCount: squad.players.length,
+    goalkeepers: take('goalkeeper'),
+    defenders: take('defender'),
+    midfielders: take('midfielder'),
+    forwards: take('forward'),
+    answerHint:
+      language === 'en'
+        ? `List only these squad players for ${resolved.teamName}. Do not invent names.`
+        : `اعرض لاعبين ${resolved.teamName} دول بس. ممنوع تخترع أسماء.`,
+  };
+}
+
+async function toolTeamScorers(args: Record<string, unknown>, language: MessageLanguage) {
+  const resolved = await resolveCompetitorForTool(args, language);
+  if ('error' in resolved) return resolved;
+  if ('status' in resolved) return resolved;
+
+  const competitionId =
+    resolved.info?.mainCompetitionId ?? resolved.info?.competitions?.[0]?.id ?? null;
+  if (!competitionId) {
+    return { error: 'competition_unavailable', ...resolved };
+  }
+
+  const statsRes = await Promise.resolve(
+    footballDataCacheService.getCached365CompetitorStats(
+      resolved.competitorId,
+      competitionId,
+      language,
+    ),
+  ).catch(() => ({ data: null }));
+  const boards = statsRes?.data?.leaderboards ?? [];
+  const pickBoard = (re: RegExp) =>
+    boards.find((b: { name?: string }) => re.test(String(b.name ?? ''))) ?? null;
+
+  const goalsBoard = pickBoard(/goal|هداف|أهداف|اهداف|scor/i);
+  const assistsBoard = pickBoard(/assist|صناع|تمرير/i);
+
+  const mapRows = (board: { rows?: Array<any> } | null) =>
+    (board?.rows ?? [])
+      .filter((r) => !r.leftClub)
+      .slice(0, 8)
+      .map((r: any) => ({
+        rank: r.rank,
+        athleteId: r.athleteId,
+        name: r.name,
+        value: r.value,
+        position: r.positionName ?? null,
+      }));
+
+  const topScorers = mapRows(goalsBoard);
+  if (!topScorers.length) {
+    return { error: 'scorers_unavailable', competitorId: resolved.competitorId, teamName: resolved.teamName };
+  }
+
+  return {
+    source: '365scores_team_stats',
+    competitorId: resolved.competitorId,
+    teamName: resolved.teamName,
+    competitionId,
+    competitionName: resolved.info?.competitions?.find((c: any) => c.id === competitionId)?.name ?? null,
+    topScorers,
+    topAssists: mapRows(assistsBoard),
+    answerHint:
+      language === 'en'
+        ? `The top scorer is exactly row 1 of topScorers. Use only these values.`
+        : `هدّاف الفريق هو أول صف في topScorers. استخدم الأرقام دي بس.`,
+  };
+}
+
 async function toolPlayerCareer(args: Record<string, unknown>, language: MessageLanguage) {
   const rawName = String(args.player_name ?? '').trim();
   const athleteIdArg = Number(args.athlete_id);
@@ -1864,6 +2183,12 @@ export async function executeAgentTool(
         break;
       case 'get_team_info':
         result = await toolTeamInfo(args, opts.language, opts.userMessage);
+        break;
+      case 'get_team_squad':
+        result = await toolTeamSquad(args, opts.language);
+        break;
+      case 'get_team_scorers':
+        result = await toolTeamScorers(args, opts.language);
         break;
       case 'get_player_career':
         result = await toolPlayerCareer(args, opts.language);

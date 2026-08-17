@@ -17,6 +17,8 @@ jest.mock('../services/football-data-cache.service', () => ({
     getCached365CompetitorCoach: jest.fn(),
     getCached365CompetitorMatches: jest.fn(),
     getCached365AthleteProfile: jest.fn(),
+    getCached365CompetitorSquad: jest.fn(),
+    getCached365CompetitorStats: jest.fn(),
   },
 }));
 
@@ -100,6 +102,8 @@ describe('chat-agent-tools', () => {
         'get_player_match_report',
         'get_standings',
         'get_team_info',
+        'get_team_scorers',
+        'get_team_squad',
         'get_today_matches',
         'get_top_scorers',
         'resolve_match',
@@ -297,13 +301,39 @@ describe('chat-agent-tools', () => {
     expect(parsed.hits.players[0].athleteId).toBe(7);
   });
 
-  test('search_football picks Al Ahly from the ranked app index', async () => {
+  test('search_football asks which Al Ahly when the query is bare الأهلي', async () => {
     (threeSixFiveScoresService.searchEntities as jest.Mock).mockResolvedValue({
       data: {
         clubs: [
           { competitorId: 50527, name: 'National Bank', country: 'Egypt', isNationalTeam: false },
           { competitorId: 8200, name: 'Al Ahly SC', country: 'Egypt', isNationalTeam: false },
+          { competitorId: 8946, name: 'Al Ahli', country: 'Saudi Arabia', isNationalTeam: false },
         ],
+        nationalTeams: [],
+        players: [],
+        coaches: [],
+        competitions: [],
+      },
+      source: '365scores',
+    });
+
+    const raw = await executeAgentTool(
+      'search_football',
+      JSON.stringify({ query: 'الأهلي' }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.status).toBe('need_clarification');
+    expect(parsed.reason).toBe('same_name_clubs');
+    const labels = (parsed.suggestions ?? []).map((s: { label: string }) => s.label);
+    expect(labels).toEqual(expect.arrayContaining(['الأهلي المصري', 'الأهلي السعودي']));
+    expect(footballDataCacheService.getCached365CompetitorCoach).not.toHaveBeenCalled();
+  });
+
+  test('search_football hydrates Egyptian Al Ahly when the user says الأهلي المصري', async () => {
+    (threeSixFiveScoresService.searchEntities as jest.Mock).mockResolvedValue({
+      data: {
+        clubs: [{ competitorId: 8200, name: 'Al Ahly SC', country: 'Egypt', isNationalTeam: false }],
         nationalTeams: [],
         players: [],
         coaches: [],
@@ -317,13 +347,10 @@ describe('chat-agent-tools', () => {
     (footballDataCacheService.getCached365CompetitorCoach as jest.Mock).mockResolvedValue({
       data: { athleteId: 1, name: 'Houssine Ammouta', teamName: 'Al Ahly SC', role: 'head_coach' },
     });
-    (footballDataCacheService.getCached365CompetitorMatches as jest.Mock).mockResolvedValue({
-      data: { live: [], upcoming: [], finished: [] },
-    });
 
     const raw = await executeAgentTool(
       'search_football',
-      JSON.stringify({ query: 'الأهلي' }),
+      JSON.stringify({ query: 'الأهلي المصري' }),
       { language: 'ar' },
     );
     const parsed = JSON.parse(raw);
@@ -387,5 +414,73 @@ describe('chat-agent-tools', () => {
       'ar',
       expect.objectContaining({ athleteId: 99 }),
     );
+  });
+
+  test('get_team_squad returns grouped 365 players', async () => {
+    (footballDataCacheService.getCached365CompetitorInfo as jest.Mock).mockResolvedValue({
+      data: { competitorId: 8200, name: 'Al Ahly SC', mainCompetitionId: 572, competitions: [] },
+    });
+    (footballDataCacheService.getCached365CompetitorSquad as jest.Mock).mockResolvedValue({
+      data: {
+        competitorId: 8200,
+        players: [
+          { athleteId: 1, name: 'El Shenawy', position: 'GK', jerseyNumber: 1, age: 35 },
+          { athleteId: 2, name: 'Emam Ashour', position: 'MF', jerseyNumber: 22, age: 26 },
+        ],
+        groups: {
+          goalkeeper: [{ athleteId: 1, name: 'El Shenawy', position: 'GK', jerseyNumber: 1, age: 35 }],
+          defender: [],
+          midfielder: [{ athleteId: 2, name: 'Emam Ashour', position: 'MF', jerseyNumber: 22, age: 26 }],
+          forward: [],
+          other: [],
+        },
+      },
+    });
+
+    const raw = await executeAgentTool(
+      'get_team_squad',
+      JSON.stringify({ competitor_id: 8200, team_name: 'الأهلي المصري' }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.source).toBe('365scores_squad');
+    expect(parsed.goalkeepers[0].name).toBe('El Shenawy');
+    expect(parsed.midfielders[0].name).toBe('Emam Ashour');
+  });
+
+  test('get_team_scorers returns the goals leaderboard', async () => {
+    (footballDataCacheService.getCached365CompetitorInfo as jest.Mock).mockResolvedValue({
+      data: {
+        competitorId: 8200,
+        name: 'Al Ahly SC',
+        mainCompetitionId: 572,
+        competitions: [{ id: 572, name: 'Egyptian Premier League' }],
+      },
+    });
+    (footballDataCacheService.getCached365CompetitorStats as jest.Mock).mockResolvedValue({
+      data: {
+        competitionId: 572,
+        leaderboards: [
+          {
+            key: 1,
+            name: 'Goals',
+            rows: [
+              { rank: 1, athleteId: 10, name: 'Wessam Abou Ali', value: '14', leftClub: false },
+              { rank: 2, athleteId: 11, name: 'Emam Ashour', value: '8', leftClub: false },
+            ],
+          },
+        ],
+      },
+    });
+
+    const raw = await executeAgentTool(
+      'get_team_scorers',
+      JSON.stringify({ competitor_id: 8200 }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.source).toBe('365scores_team_stats');
+    expect(parsed.topScorers[0].name).toBe('Wessam Abou Ali');
+    expect(parsed.topScorers[0].value).toBe('14');
   });
 });

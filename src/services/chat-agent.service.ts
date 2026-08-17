@@ -60,6 +60,9 @@ const TOOL_USAGE_PREAMBLE = `
 - أهداف لاعب في بطولة محددة (كأس العالم / دوري الأبطال) → get_player_career. استخدم worldCupGoals.total للـWorld Cup و uclSummary للأبطال. لو worldCupGoals = null قول إن مفيش بيانات كأس عالم مؤكدة للاعب ده — ممنوع تخمّن رقم.
 - فريق + ألقاب أفريقيا/بطولات → get_team_info أو تفاصيل search_football للنادي. استخدم cafChampionsLeagueWins / answerHint فقط.
 - مدرب فريق أو منتخب (مين المدرب/المدير الفني، مدرب منتخب مصر) → search_football للنادي أو get_team_info، واستخدم حقل coach زي ما هو. منتخب مصر = Egypt.
+- تشكيلة / لاعبين الفريق / مين في الفريق → get_team_squad (team_name أو competitor_id من السيرش).
+- هداف الفريق / صنّاع اللعب → get_team_scorers. لو المستخدم قال «الفريق» من غير اسم، استخدم النادي اللي اتحدد في الشات قبل كده (مثلاً الأهلي المصري).
+- اسم قصير مشترك زي «الأهلي» من غير مصري/سعودي: لو الأداة رجّعت need_clarification اسأل «قصدك الأهلي المصري ولا الأهلي السعودي؟» واستنى الرد. بعد ما يحدد، اعتبره النادي ده لباقي الأسئلة.
 - مباريات النهاردة → get_today_matches (بترجع live/finished/upcoming). مباريات دوري معيّن (اي اللي انتهى/لايف/جاي) → get_today_matches مع league. أهم المباريات الجاية → get_today_matches مع when="upcoming". لايف دلوقتي بس → get_live_matches.
 - ماتش نادي معيّن (لعب امتى/الجاية/بيلعب دلوقتي) → resolve_match باسم النادي، وبعدها get_match_details لو محتاج تفاصيل.
 - ترتيب دوري أو بطولة مش من الأبطال المشهورين → search_football (competition) أو get_standings.
@@ -112,21 +115,93 @@ function extractSearchQuery(message: string): string | null {
 
 function formatPrefetchClarification(parsed: any, language: MessageLanguage): string | null {
   if (!parsed || parsed.status !== 'need_clarification') return null;
-  const hits = parsed.hits ?? {};
   const names: string[] = [];
-  for (const c of hits.clubs ?? []) names.push(c.name);
-  for (const c of hits.nationalTeams ?? []) names.push(c.name);
-  for (const p of hits.players ?? []) names.push(p.club ? `${p.name} (${p.club})` : p.name);
-  for (const p of hits.coaches ?? []) names.push(p.name);
-  for (const c of hits.competitions ?? []) names.push(c.name);
-  if (!names.length && Array.isArray(parsed.suggestions)) {
-    for (const s of parsed.suggestions) names.push(s.club ? `${s.name} (${s.club})` : s.name);
+  if (Array.isArray(parsed.suggestions) && parsed.suggestions.length) {
+    for (const s of parsed.suggestions) {
+      names.push(s.label || (s.country ? `${s.name} (${s.country})` : s.name));
+    }
+  } else {
+    const hits = parsed.hits ?? {};
+    for (const c of hits.clubs ?? []) names.push(c.country ? `${c.name} (${c.country})` : c.name);
+    for (const c of hits.nationalTeams ?? []) names.push(c.name);
+    for (const p of hits.players ?? []) names.push(p.club ? `${p.name} (${p.club})` : p.name);
+    for (const p of hits.coaches ?? []) names.push(p.name);
+    for (const c of hits.competitions ?? []) names.push(c.name);
   }
   if (!names.length) return null;
   const listed = names.slice(0, 4).map((n) => `**${n}**`).join(language === 'en' ? ' or ' : ' ولا ');
   return language === 'en'
-    ? `Not sure who you mean — did you mean ${listed}?`
-    : `مش متأكد تقصد مين بالظبط — قصدك ${listed}؟`;
+    ? `Which club did you mean — ${listed}?`
+    : `قصدك أنهي؟ ${listed}؟`;
+}
+
+function isTeamFollowUp(message: string): boolean {
+  return /هداف|هدافين|تشكيلة|قائمة|اللاعبين|لاعبين(?:\s+ال?فريق)?|سكواد|squad|scorer|roster|line[- ]?up|نجوم ال?فريق|مين في الفريق/i.test(
+    message,
+  );
+}
+
+function looksLikeClubName(message: string): boolean {
+  return /أهلي|اهلي|زمالك|ريال|برشلون|ليفربول|سيتي|ارسنال|أرسنال|بيراميدز|المصري|نصر|هلال|اتحاد|يوفنتوس|بايرن|تشيلسي|فريق|نادي|منتخب/i.test(
+    message,
+  );
+}
+
+function extractFocusTeamFromHistory(
+  history: Array<{ role: string; content: string }>,
+  currentMessage: string,
+): string | null {
+  if (looksLikeClubName(currentMessage) && !isTeamFollowUp(currentMessage)) {
+    return extractSearchQuery(currentMessage);
+  }
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    if (msg.role === 'user' && looksLikeClubName(msg.content) && !isTeamFollowUp(msg.content)) {
+      return extractSearchQuery(msg.content) ?? msg.content.trim();
+    }
+    if (msg.role === 'assistant') {
+      const labels = [...msg.content.matchAll(/\*\*([^*]+(?:المصري|السعودي|مصر|سعود)[^*]*)\*\*/g)];
+      if (labels.length) return labels[0][1];
+      const bold = [...msg.content.matchAll(/\*\*([^*]{3,40})\*\*/g)].map((m) => m[1]);
+      const club = bold.find((b) => looksLikeClubName(b));
+      if (club) return club;
+    }
+  }
+  return null;
+}
+
+function formatSquadReply(parsed: any, language: MessageLanguage): string | null {
+  if (!parsed || parsed.error || parsed.status === 'need_clarification') return null;
+  const team = parsed.teamName ?? (language === 'en' ? 'The team' : 'الفريق');
+  const line = (title: string, rows: Array<{ name?: string; jersey?: number | null }>) => {
+    if (!rows?.length) return '';
+    const names = rows
+      .slice(0, 8)
+      .map((p) => (p.jersey ? `${p.name} (${p.jersey})` : p.name))
+      .join(language === 'en' ? ', ' : '، ');
+    return `- ${title}: ${names}`;
+  };
+  const parts = [
+    language === 'en' ? `**${team}** squad:` : `تشكيلة **${team}**:`,
+    line(language === 'en' ? 'GK' : 'حراسة', parsed.goalkeepers),
+    line(language === 'en' ? 'DEF' : 'دفاع', parsed.defenders),
+    line(language === 'en' ? 'MID' : 'وسط', parsed.midfielders),
+    line(language === 'en' ? 'FWD' : 'هجوم', parsed.forwards),
+  ].filter(Boolean);
+  return parts.length > 1 ? parts.join('\n') : null;
+}
+
+function formatScorersReply(parsed: any, language: MessageLanguage): string | null {
+  if (!parsed || parsed.error || parsed.status === 'need_clarification') return null;
+  const top = Array.isArray(parsed.topScorers) ? parsed.topScorers : [];
+  if (!top.length) return null;
+  const team = parsed.teamName ?? (language === 'en' ? 'The team' : 'الفريق');
+  const first = top[0];
+  const rest = top.slice(1, 5).map((r: any) => `${r.name} (${r.value})`).join(language === 'en' ? ', ' : '، ');
+  if (language === 'en') {
+    return `**${team}** top scorer is **${first.name}** with **${first.value}** goals.${rest ? ` Then: ${rest}.` : ''}`;
+  }
+  return `هدّاف **${team}** هو **${first.name}** بـ **${first.value}** هدف.${rest ? ` وراه: ${rest}.` : ''}`;
 }
 
 async function streamFinalAnswer(
@@ -163,7 +238,7 @@ function shouldRequireTools(message: string): boolean {
   if (/^(hi|hello|hey|اهلا|أهلا|السلام|سلام|ازيك|عامل ايه|صباح|مساء)[\s!.,؟?]*$/i.test(m)) {
     return false;
   }
-  return /(مين|كام|عدد|فين|أين|اين|يلعب|سيزون|موسم|بيانات|احصائ|إحصائ|كاس|كأس|شامبيونز|افريق|أفريق|اهلي|أهلي|مبار|ماتش|لايف|مباشر|اليوم|النهاردة|الجايه|الجاية|القادمة|القادمه|اهداف|أهداف|صنع|تروفي|ألقاب|القاب|نادي|دوري|مدرب|مدير فني|منتخب|ترتيب|جدول|coach|manager|where|how many|season|trophy|champions|live|today|upcoming|next|goals|assists|club)/i.test(
+  return /(مين|كام|عدد|فين|أين|اين|يلعب|سيزون|موسم|بيانات|احصائ|إحصائ|كاس|كأس|شامبيونز|افريق|أفريق|اهلي|أهلي|مبار|ماتش|لايف|مباشر|اليوم|النهاردة|الجايه|الجاية|القادمة|القادمه|اهداف|أهداف|صنع|تروفي|ألقاب|القاب|نادي|دوري|مدرب|مدير فني|منتخب|ترتيب|جدول|هداف|تشكيلة|قائمة|لاعبين|coach|manager|where|how many|season|trophy|champions|live|today|upcoming|next|goals|assists|club|squad|scorer)/i.test(
     m,
   );
 }
@@ -281,21 +356,49 @@ export async function runFootballAgent(
   ];
 
   const startedAt = Date.now();
+  const focusTeam = extractFocusTeamFromHistory(params.history, params.userMessage);
+  if (focusTeam) {
+    messages[0] = {
+      role: 'system',
+      content:
+        `${String(messages[0].content)}\n\n` +
+        (params.language === 'en'
+          ? `Conversation focus club: ${focusTeam}. If the user says "the team" / scorers / squad, they mean this club.`
+          : `النادي الحالي في الشات: ${focusTeam}. لو المستخدم قال الفريق / الهداف / التشكيلة / اللاعبين فالمقصود النادي ده.`),
+    };
+  }
+
+  const followUp = isTeamFollowUp(params.userMessage);
   const prefetchQuery =
-    !skipEntityPrefetch(params.userMessage) && shouldRequireTools(params.userMessage)
-      ? extractSearchQuery(params.userMessage)
+    followUp
+      ? focusTeam
+      : !skipEntityPrefetch(params.userMessage) && shouldRequireTools(params.userMessage)
+        ? extractSearchQuery(params.userMessage)
+        : null;
+  const prefetchTool = followUp
+    ? /هداف|scorer|goals?|assist|صناع/i.test(params.userMessage)
+      ? 'get_team_scorers'
+      : /مدرب|coach|مدير فني/i.test(params.userMessage)
+        ? 'get_team_info'
+        : 'get_team_squad'
+    : prefetchQuery
+      ? 'search_football'
       : null;
-  if (prefetchQuery) {
+
+  if (prefetchQuery && prefetchTool) {
     const tPrefetch = Date.now();
     try {
-      const payload = await executeAgentTool(
-        'search_football',
-        JSON.stringify({ query: prefetchQuery }),
-        { language: params.language, userMessage: params.userMessage },
-      );
-      toolsUsed.push('search_football');
+      const args =
+        prefetchTool === 'search_football'
+          ? { query: prefetchQuery }
+          : { team_name: prefetchQuery };
+      const payload = await executeAgentTool(prefetchTool, JSON.stringify(args), {
+        language: params.language,
+        userMessage: params.userMessage,
+      });
+      toolsUsed.push(prefetchTool);
       logger.info(
-        `[chat-agent] prefetch search_football q="${prefetchQuery}" ${Date.now() - tPrefetch}ms`,
+        `[chat-agent] prefetch ${prefetchTool} q="${prefetchQuery}" ${Date.now() - tPrefetch}ms`,
       );
       let parsed: any = null;
       try {
@@ -310,6 +413,20 @@ export async function runFootballAgent(
         logger.info(`[chat-agent] prefetch clarify ${Date.now() - startedAt}ms`);
         return { fullText, usedModel: model, toolsUsed };
       }
+      const scored = formatScorersReply(parsed, params.language);
+      if (scored && prefetchTool === 'get_team_scorers') {
+        fullText = scored;
+        params.onToken(scored);
+        logger.info(`[chat-agent] prefetch scorers ${Date.now() - startedAt}ms`);
+        return { fullText, usedModel: model, toolsUsed };
+      }
+      const squad = formatSquadReply(parsed, params.language);
+      if (squad && prefetchTool === 'get_team_squad') {
+        fullText = squad;
+        params.onToken(squad);
+        logger.info(`[chat-agent] prefetch squad ${Date.now() - startedAt}ms`);
+        return { fullText, usedModel: model, toolsUsed };
+      }
       if (parsed && !parsed.error && (parsed.status === 'ok' || parsed.source || parsed.quickFacts)) {
         lastToolPayloads = [payload];
         messages.push({
@@ -317,18 +434,18 @@ export async function runFootballAgent(
           content: null,
           tool_calls: [
             {
-              id: 'prefetch_search_football',
+              id: `prefetch_${prefetchTool}`,
               type: 'function',
               function: {
-                name: 'search_football',
-                arguments: JSON.stringify({ query: prefetchQuery }),
+                name: prefetchTool,
+                arguments: JSON.stringify(args),
               },
             },
           ],
         });
         messages.push({
           role: 'tool',
-          tool_call_id: 'prefetch_search_football',
+          tool_call_id: `prefetch_${prefetchTool}`,
           content: payload,
         });
         const groundedFacts = extractGroundedFacts(lastToolPayloads);
