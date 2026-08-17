@@ -275,6 +275,27 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_team_match',
+      description:
+        'Last finished (default), live, or next match for a club — score, events/goals, lineups, key stats. Use for "تفاصيل الماتش اللي خلص", "آخر مباراة", "النتيجة", "مين سجل". Pass competitor_id or team_name from the chat focus club. Optional opponent name.',
+      parameters: {
+        type: 'object',
+        properties: {
+          team_name: { type: 'string' },
+          competitor_id: { type: 'number' },
+          when: {
+            type: 'string',
+            enum: ['last_finished', 'live', 'next'],
+            description: "'last_finished' (default) for the most recent completed match.",
+          },
+          opponent: { type: 'string', description: 'Optional opponent name to pick a specific match' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_player_career',
       description:
         'Full 365Scores player career profile: trophies (World Cup / UCL / CAF), World Cup GOALS (worldCupGoals), recent seasons, clubs. ALWAYS use for "كام كاس عالم" / أهداف في كأس العالم / titles / ألقاب / career history. Prefer numbers from this tool over memory. Pass athlete_id from search_football when you have it.',
@@ -2003,6 +2024,115 @@ async function toolTeamScorers(args: Record<string, unknown>, language: MessageL
   };
 }
 
+function compactMatchDetailEvents(events: any[]) {
+  const mapped = (events ?? []).map((e) => ({
+    minute: e?.time?.elapsed ?? null,
+    type: e?.type ?? null,
+    detail: e?.detail ?? null,
+    team: e?.team?.name ?? null,
+    player: e?.player?.name ?? null,
+    assist: e?.assist?.name ?? null,
+  }));
+  const isGoal = (e: { type?: string | null; detail?: string | null }) => {
+    const t = String(e.type ?? '');
+    const d = String(e.detail ?? '');
+    if (/missed/i.test(d)) return false;
+    return /goal/i.test(t) || /goal/i.test(d);
+  };
+  const goals = mapped.filter(isGoal);
+  const rest = mapped.filter((e) => !isGoal(e)).slice(-8);
+  return [...goals.slice(0, 12), ...rest].slice(0, 18);
+}
+
+function pickTeamFixture(
+  pack: { live?: any[]; upcoming?: any[]; finished?: any[] } | null,
+  when: 'last_finished' | 'live' | 'next',
+  opponent?: string,
+) {
+  const pool =
+    when === 'live'
+      ? pack?.live ?? []
+      : when === 'next'
+        ? pack?.upcoming ?? []
+        : pack?.finished ?? [];
+  if (!pool.length) return null;
+  if (opponent) {
+    const hit = pool.find((f) => {
+      const h = f?.teams?.home?.name ?? '';
+      const a = f?.teams?.away?.name ?? '';
+      return teamNamesMatch(h, opponent) || teamNamesMatch(a, opponent);
+    });
+    if (hit) return hit;
+  }
+  return pool[0] ?? null;
+}
+
+async function toolTeamMatch(args: Record<string, unknown>, language: MessageLanguage) {
+  const resolved = await resolveCompetitorForTool(args, language);
+  if ('error' in resolved) return resolved;
+  if ('status' in resolved) return resolved;
+
+  const whenRaw = String(args.when ?? 'last_finished').toLowerCase();
+  const when: 'last_finished' | 'live' | 'next' =
+    whenRaw === 'live' || whenRaw === 'next' ? whenRaw : 'last_finished';
+  const opponent = String(args.opponent ?? '').trim();
+
+  const matchesRes = await Promise.resolve(
+    footballDataCacheService.getCached365CompetitorMatches(resolved.competitorId, language),
+  ).catch(() => ({ data: null }));
+  const picked = pickTeamFixture(matchesRes?.data ?? null, when, opponent || undefined);
+  if (!picked) {
+    return {
+      error: 'match_not_found',
+      competitorId: resolved.competitorId,
+      teamName: resolved.teamName,
+      when,
+    };
+  }
+
+  const match = compactFixture(picked);
+  const fixtureId = Number(match.fixtureId);
+  let details: Record<string, unknown> = {};
+  if (Number.isFinite(fixtureId) && fixtureId > 0) {
+    try {
+      const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId, {
+        language,
+        forceRefresh: when === 'live',
+      });
+      if (bundle?.fixture) {
+        details = {
+          match: compactFixture(bundle.fixture),
+          events: compactMatchDetailEvents(bundle.events),
+          lineups: compactLineups(bundle.lineups),
+          lineupsAvailable: bundle.lineupsAvailable ?? false,
+          stats: (bundle.statistics ?? []).slice(0, 2).map((s: any) => ({
+            team: s?.team?.name,
+            statistics: (s?.statistics ?? []).slice(0, 8),
+          })),
+        };
+      }
+    } catch (err) {
+      logger.warn('[chat-agent] get_team_match details failed:', (err as Error)?.message);
+    }
+  }
+
+  return {
+    source: '365scores_team_match',
+    competitorId: resolved.competitorId,
+    teamName: resolved.teamName,
+    when,
+    match: (details.match as ReturnType<typeof compactFixture> | undefined) ?? match,
+    events: details.events ?? [],
+    lineups: details.lineups ?? [],
+    lineupsAvailable: details.lineupsAvailable ?? false,
+    stats: details.stats ?? [],
+    answerHint:
+      language === 'en'
+        ? `Report ONLY this match score/events/lineups. Do not invent goals or a different fixture.`
+        : `جاوب عن هذه المباراة فقط: النتيجة والأحداث والتشكيل. ممنوع تخترع أهداف أو ماتش تاني.`,
+  };
+}
+
 async function toolPlayerCareer(args: Record<string, unknown>, language: MessageLanguage) {
   const rawName = String(args.player_name ?? '').trim();
   const athleteIdArg = Number(args.athlete_id);
@@ -2189,6 +2319,9 @@ export async function executeAgentTool(
         break;
       case 'get_team_scorers':
         result = await toolTeamScorers(args, opts.language);
+        break;
+      case 'get_team_match':
+        result = await toolTeamMatch(args, opts.language);
         break;
       case 'get_player_career':
         result = await toolPlayerCareer(args, opts.language);

@@ -62,9 +62,10 @@ const TOOL_USAGE_PREAMBLE = `
 - مدرب فريق أو منتخب (مين المدرب/المدير الفني، مدرب منتخب مصر) → search_football للنادي أو get_team_info، واستخدم حقل coach زي ما هو. منتخب مصر = Egypt.
 - تشكيلة / لاعبين الفريق / مين في الفريق → get_team_squad (team_name أو competitor_id من السيرش).
 - هداف الفريق / صنّاع اللعب → get_team_scorers. لو المستخدم قال «الفريق» من غير اسم، استخدم النادي اللي اتحدد في الشات قبل كده (مثلاً الأهلي المصري).
+- تفاصيل مباراة انتهت / آخر ماتش / اللي خلص / مين سجل في الماتش / نتيجة آخر مباراة للفريق → get_team_match (when=last_finished). استخدم النادي الحالي في الشات. جاوب بالنتيجة والأهداف والتشكيل من الأداة بس.
 - اسم قصير مشترك زي «الأهلي» من غير مصري/سعودي: لو الأداة رجّعت need_clarification اسأل «قصدك الأهلي المصري ولا الأهلي السعودي؟» واستنى الرد. بعد ما يحدد، اعتبره النادي ده لباقي الأسئلة.
 - مباريات النهاردة → get_today_matches (بترجع live/finished/upcoming). مباريات دوري معيّن (اي اللي انتهى/لايف/جاي) → get_today_matches مع league. أهم المباريات الجاية → get_today_matches مع when="upcoming". لايف دلوقتي بس → get_live_matches.
-- ماتش نادي معيّن (لعب امتى/الجاية/بيلعب دلوقتي) → resolve_match باسم النادي، وبعدها get_match_details لو محتاج تفاصيل.
+- ماتش نادي معيّن (لعب امتى/الجاية/بيلعب دلوقتي) → get_team_match أو resolve_match باسم النادي، وبعدها get_match_details لو محتاج تفاصيل أكتر.
 - ترتيب دوري أو بطولة مش من الأبطال المشهورين → search_football (competition) أو get_standings.
 - في المباريات: قدّم اللايف الأول (الدقيقة + النتيجة)، بعدين اللي خلص (النتيجة النهائية)، بعدين الجاي (معاد البداية). استخدم جدول لو فيه 3 صفوف أو أكتر.
 - اعتمد على quickFacts و seasonStats و answerHint من نتيجة الأداة. لو seasonStats موجودة متقولش "مفيش بيانات".
@@ -141,22 +142,43 @@ function isTeamFollowUp(message: string): boolean {
   );
 }
 
+/** Last finished / match details about the conversation's focus club — not today's slate. */
+function isLastMatchFollowUp(message: string): boolean {
+  if (/(?:مباريات|ماتشات|matches)\s*(?:النهاردة|اليوم|today)/i.test(message)) return false;
+  return (
+    /آخر\s*(?:مباراة|ماتش)|المباراة الأخيرة|last\s+match/i.test(message) ||
+    /(?:الماتش|المباراة).{0,24}(?:خلص|انتهى|انتهت)/i.test(message) ||
+    /(?:اللي|اللى)\s+(?:خلص|انتهى|انتهت)/i.test(message) ||
+    /تفاصيل\s*(?:ال)?(?:مباراة|ماتش|match)/i.test(message) ||
+    /مباراة\s+انتهت/i.test(message) ||
+    /أحداث\s*(?:ال)?(?:مباراة|ماتش)/i.test(message) ||
+    /مين\s+سجل/i.test(message) ||
+    /تشكيل(?:ة)?\s*(?:ال)?(?:مباراة|ماتش)/i.test(message) ||
+    /finished\s+match|match\s+details/i.test(message) ||
+    /(?:نتيجة|تفاصيل).{0,16}(?:الماتش|المباراة|مباراة)/i.test(message)
+  );
+}
+
 function looksLikeClubName(message: string): boolean {
   return /أهلي|اهلي|زمالك|ريال|برشلون|ليفربول|سيتي|ارسنال|أرسنال|بيراميدز|المصري|نصر|هلال|اتحاد|يوفنتوس|بايرن|تشيلسي|فريق|نادي|منتخب/i.test(
     message,
   );
 }
 
+function isClubFollowUp(message: string): boolean {
+  return isTeamFollowUp(message) || isLastMatchFollowUp(message);
+}
+
 function extractFocusTeamFromHistory(
   history: Array<{ role: string; content: string }>,
   currentMessage: string,
 ): string | null {
-  if (looksLikeClubName(currentMessage) && !isTeamFollowUp(currentMessage)) {
+  if (looksLikeClubName(currentMessage) && !isClubFollowUp(currentMessage)) {
     return extractSearchQuery(currentMessage);
   }
   for (let i = history.length - 1; i >= 0; i--) {
     const msg = history[i];
-    if (msg.role === 'user' && looksLikeClubName(msg.content) && !isTeamFollowUp(msg.content)) {
+    if (msg.role === 'user' && looksLikeClubName(msg.content) && !isClubFollowUp(msg.content)) {
       return extractSearchQuery(msg.content) ?? msg.content.trim();
     }
     if (msg.role === 'assistant') {
@@ -202,6 +224,68 @@ function formatScorersReply(parsed: any, language: MessageLanguage): string | nu
     return `**${team}** top scorer is **${first.name}** with **${first.value}** goals.${rest ? ` Then: ${rest}.` : ''}`;
   }
   return `هدّاف **${team}** هو **${first.name}** بـ **${first.value}** هدف.${rest ? ` وراه: ${rest}.` : ''}`;
+}
+
+function formatTeamMatchReply(parsed: any, language: MessageLanguage): string | null {
+  if (!parsed || parsed.error || parsed.status === 'need_clarification') return null;
+  const match = parsed.match;
+  if (!match?.home || !match?.away) return null;
+  const hs = match.score?.home;
+  const as = match.score?.away;
+  const score = hs != null && as != null ? `${hs}–${as}` : language === 'en' ? 'TBD' : 'لسه';
+  const league = match.league ? ` · ${match.league}` : '';
+  const header =
+    language === 'en'
+      ? `**${match.home} ${score} ${match.away}**${league}`
+      : `**${match.home} ${score} ${match.away}**${league}`;
+
+  const events = Array.isArray(parsed.events) ? parsed.events : [];
+  const goals = events.filter((e: any) => {
+    const t = String(e.type ?? '');
+    const d = String(e.detail ?? '');
+    if (/missed/i.test(d)) return false;
+    return /goal/i.test(t) || /goal/i.test(d);
+  });
+  const goalBits = goals.map((e: any) => {
+    const min = e.minute != null ? `${e.minute}'` : '';
+    const own = /own/i.test(String(e.detail ?? ''))
+      ? language === 'en'
+        ? ' OG'
+        : ' (عكس)'
+      : '';
+    const pen =
+      /penalty/i.test(String(e.detail ?? '')) && !/own/i.test(String(e.detail ?? ''))
+        ? language === 'en'
+          ? ' pen'
+          : ' (جزاء)'
+        : '';
+    return `${e.player ?? '?'}${own}${pen} ${min}`.trim();
+  });
+  const goalLine = goalBits.length
+    ? language === 'en'
+      ? `Goals: ${goalBits.join(', ')}`
+      : `الأهداف: ${goalBits.join('، ')}`
+    : '';
+
+  const team = String(parsed.teamName ?? '');
+  const lineups = Array.isArray(parsed.lineups) ? parsed.lineups : [];
+  const ours =
+    (team
+      ? lineups.find((l: any) =>
+          String(l?.team ?? '')
+            .toLowerCase()
+            .includes(team.toLowerCase().slice(0, 6)),
+        )
+      : null) ?? lineups[0];
+  const xi = Array.isArray(ours?.startXI) ? ours.startXI.filter(Boolean).slice(0, 11) : [];
+  const xiLine =
+    xi.length >= 7
+      ? language === 'en'
+        ? `${ours?.team ?? 'XI'} (${ours?.formation ?? 'XI'}): ${xi.join(', ')}`
+        : `${ours?.team ?? 'التشكيلة'} (${ours?.formation ?? 'XI'}): ${xi.join('، ')}`
+      : '';
+
+  return [header, goalLine && `- ${goalLine}`, xiLine && `- ${xiLine}`].filter(Boolean).join('\n');
 }
 
 async function streamFinalAnswer(
@@ -363,12 +447,13 @@ export async function runFootballAgent(
       content:
         `${String(messages[0].content)}\n\n` +
         (params.language === 'en'
-          ? `Conversation focus club: ${focusTeam}. If the user says "the team" / scorers / squad, they mean this club.`
-          : `النادي الحالي في الشات: ${focusTeam}. لو المستخدم قال الفريق / الهداف / التشكيلة / اللاعبين فالمقصود النادي ده.`),
+          ? `Conversation focus club: ${focusTeam}. If the user says "the team" / scorers / squad / last match, they mean this club.`
+          : `النادي الحالي في الشات: ${focusTeam}. لو المستخدم قال الفريق / الهداف / التشكيلة / اللاعبين / تفاصيل الماتش اللي خلص فالمقصود النادي ده.`),
     };
   }
 
-  const followUp = isTeamFollowUp(params.userMessage);
+  const matchFollowUp = isLastMatchFollowUp(params.userMessage);
+  const followUp = isTeamFollowUp(params.userMessage) || matchFollowUp;
   const prefetchQuery =
     followUp
       ? focusTeam
@@ -376,11 +461,13 @@ export async function runFootballAgent(
         ? extractSearchQuery(params.userMessage)
         : null;
   const prefetchTool = followUp
-    ? /هداف|scorer|goals?|assist|صناع/i.test(params.userMessage)
-      ? 'get_team_scorers'
-      : /مدرب|coach|مدير فني/i.test(params.userMessage)
-        ? 'get_team_info'
-        : 'get_team_squad'
+    ? matchFollowUp
+      ? 'get_team_match'
+      : /هداف|scorer|goals?|assist|صناع/i.test(params.userMessage)
+        ? 'get_team_scorers'
+        : /مدرب|coach|مدير فني/i.test(params.userMessage)
+          ? 'get_team_info'
+          : 'get_team_squad'
     : prefetchQuery
       ? 'search_football'
       : null;
@@ -425,6 +512,13 @@ export async function runFootballAgent(
         fullText = squad;
         params.onToken(squad);
         logger.info(`[chat-agent] prefetch squad ${Date.now() - startedAt}ms`);
+        return { fullText, usedModel: model, toolsUsed };
+      }
+      const lastMatch = formatTeamMatchReply(parsed, params.language);
+      if (lastMatch && prefetchTool === 'get_team_match') {
+        fullText = lastMatch;
+        params.onToken(lastMatch);
+        logger.info(`[chat-agent] prefetch team-match ${Date.now() - startedAt}ms`);
         return { fullText, usedModel: model, toolsUsed };
       }
       if (parsed && !parsed.error && (parsed.status === 'ok' || parsed.source || parsed.quickFacts)) {

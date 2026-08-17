@@ -102,6 +102,7 @@ describe('chat-agent-tools', () => {
         'get_player_match_report',
         'get_standings',
         'get_team_info',
+        'get_team_match',
         'get_team_scorers',
         'get_team_squad',
         'get_today_matches',
@@ -482,5 +483,111 @@ describe('chat-agent-tools', () => {
     expect(parsed.source).toBe('365scores_team_stats');
     expect(parsed.topScorers[0].name).toBe('Wessam Abou Ali');
     expect(parsed.topScorers[0].value).toBe('14');
+  });
+
+  test('get_team_match returns last finished fixture details', async () => {
+    const finished = {
+      fixture: { id: 555, date: '2026-05-01T19:00:00Z', status: { short: 'FT', elapsed: 90 } },
+      league: { name: 'Egyptian Premier League' },
+      teams: { home: { name: 'Al Ahly SC' }, away: { name: 'Zamalek' } },
+      goals: { home: 2, away: 1 },
+    };
+    (footballDataCacheService.getCached365CompetitorInfo as jest.Mock).mockResolvedValue({
+      data: { competitorId: 8200, name: 'Al Ahly SC', mainCompetitionId: 572, competitions: [] },
+    });
+    (footballDataCacheService.getCached365CompetitorMatches as jest.Mock).mockResolvedValue({
+      data: { live: [], upcoming: [], finished: [finished] },
+    });
+    (footballDataCacheService.getFixtureDetailsBundle as jest.Mock).mockResolvedValue({
+      fixture: finished,
+      events: [
+        {
+          time: { elapsed: 23 },
+          type: 'Goal',
+          detail: 'Normal Goal',
+          team: { name: 'Al Ahly SC' },
+          player: { name: 'Wessam Abou Ali' },
+        },
+        {
+          time: { elapsed: 71 },
+          type: 'Goal',
+          detail: 'Normal Goal',
+          team: { name: 'Zamalek' },
+          player: { name: 'Shikabala' },
+        },
+      ],
+      lineups: [
+        {
+          team: { name: 'Al Ahly SC' },
+          formation: '4-3-3',
+          startXI: [
+            { player: { name: 'El Shenawy' } },
+            { player: { name: 'Rabia' } },
+            { player: { name: 'Meteb' } },
+            { player: { name: 'Ashour' } },
+            { player: { name: 'Attia' } },
+            { player: { name: 'Dieng' } },
+            { player: { name: 'Kamal' } },
+            { player: { name: 'Tau' } },
+            { player: { name: 'Afsha' } },
+            { player: { name: 'Abou Ali' } },
+            { player: { name: 'Sherif' } },
+          ],
+          substitutes: [],
+        },
+      ],
+      statistics: [],
+      lineupsAvailable: true,
+    });
+
+    const raw = await executeAgentTool(
+      'get_team_match',
+      JSON.stringify({ competitor_id: 8200 }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.source).toBe('365scores_team_match');
+    expect(parsed.match.home).toBe('Al Ahly SC');
+    expect(parsed.match.score).toEqual({ home: 2, away: 1 });
+    expect(parsed.events[0].player).toBe('Wessam Abou Ali');
+    expect(parsed.lineups[0].startXI).toContain('El Shenawy');
+    expect(footballDataCacheService.getFixtureDetailsBundle).toHaveBeenCalledWith(
+      555,
+      expect.objectContaining({ forceRefresh: false }),
+    );
+  });
+
+  test('get_team_match still returns the score when details fail', async () => {
+    (footballDataCacheService.getCached365CompetitorInfo as jest.Mock).mockResolvedValue({
+      data: { competitorId: 8200, name: 'Al Ahly SC' },
+    });
+    (footballDataCacheService.getCached365CompetitorMatches as jest.Mock).mockResolvedValue({
+      data: {
+        live: [],
+        upcoming: [],
+        finished: [
+          {
+            fixture: { id: 777, date: '2026-04-20T19:00:00Z', status: { short: 'FT' } },
+            league: { name: 'Egyptian Premier League' },
+            teams: { home: { name: 'Pyramids' }, away: { name: 'Al Ahly SC' } },
+            goals: { home: 0, away: 1 },
+          },
+        ],
+      },
+    });
+    (footballDataCacheService.getFixtureDetailsBundle as jest.Mock).mockRejectedValue(
+      new Error('details down'),
+    );
+
+    const raw = await executeAgentTool(
+      'get_team_match',
+      JSON.stringify({ competitor_id: 8200 }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.source).toBe('365scores_team_match');
+    expect(parsed.match.away).toBe('Al Ahly SC');
+    expect(parsed.match.score).toEqual({ home: 0, away: 1 });
+    expect(parsed.events).toEqual([]);
   });
 });
