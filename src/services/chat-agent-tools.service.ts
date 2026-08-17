@@ -21,7 +21,13 @@ import {
 } from './chat-football-tools.service';
 import { resolvePlayerName } from './player-name-resolver.service';
 import { ensureScores365GameMapping } from './scores365-experiment.service';
-import { threeSixFiveScoresService } from './threeSixFiveScores.service';
+import {
+  threeSixFiveScoresService,
+  type ThreeSixFiveSearchAthlete,
+  type ThreeSixFiveSearchCompetition,
+  type ThreeSixFiveSearchCompetitor,
+  type ThreeSixFiveSearchResults,
+} from './threeSixFiveScores.service';
 import {
   containsArabicScript,
   foldArabic,
@@ -30,6 +36,12 @@ import {
   scorePlayerMatch,
   transliterateArabicToLatin,
 } from './quiz-name-match.util';
+import {
+  expandSearchQueries,
+  isPlayerOrientedBoost,
+  normalizeSearchText,
+  scoreSearchName,
+} from '../utils/football-search-index';
 
 
 const LIVE_STATUSES = new Set(['1H', '2H', 'HT', 'ET', 'P', 'LIVE', 'BT', 'INT', 'SUSP']);
@@ -52,15 +64,43 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'search_football',
+      description:
+        'PRIMARY entity resolver — the same ranked 365Scores search as the in-app football search. Finds clubs, national teams, players, coaches, and competitions from Arabic or English names (typos/aliases OK). When confident, hydrates the best match with profile/team/league facts so you can answer immediately. Use FIRST when the name could be a club vs player vs league vs coach, for any team/coach/competition, or when search_player/get_team_info/get_standings fail. If this returns details/quickFacts, answer from them and do NOT call another lookup.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Name or fragment as the user said it (e.g. الأهلي, ميسي, عموتا, الدوري المصري)',
+          },
+          entity_type: {
+            type: 'string',
+            enum: ['auto', 'player', 'club', 'national_team', 'coach', 'competition'],
+            description:
+              "Optional hint. 'auto' (default) uses ranked search. Pass 'club' for teams, 'player' for athletes, 'competition' for leagues/cups, 'coach' for a named coach.",
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'search_player',
       description:
-        'PRIMARY player lookup via 365Scores profile (same data as the in-app player profile/career). Returns current club, age, jersey, latest season stats by competition, highlights, recent seasons, and trophy counts. ALWAYS call this first for any player question (club, season stats, where he plays, goals/assists).',
+        'Player profile via 365Scores (same data as the in-app player profile). Returns current club, age, jersey, latest season stats, and trophy counts. Use for clear player questions. Prefer athlete_id from search_football when you already resolved the player.',
       parameters: {
         type: 'object',
         properties: {
           player_name: {
             type: 'string',
             description: 'Player name as the user said it (e.g. مبابي, Mohamed Salah, ديبوريم)',
+          },
+          athlete_id: {
+            type: 'number',
+            description: 'Optional 365Scores athleteId from search_football — skips name search',
           },
         },
         required: ['player_name'],
@@ -152,7 +192,8 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'get_standings',
-      description: 'Get league table / standings (top rows). Pass league name in Arabic or English.',
+      description:
+        'Get league table / standings (top rows). Pass league name in Arabic or English. Works for well-known leagues and for names found via in-app 365 search.',
       parameters: {
         type: 'object',
         properties: {
@@ -186,7 +227,7 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'get_team_info',
       description:
-        'Team/national-team dossier: current head COACH (مدرب), recent form, league position, and African/continental titles. REQUIRED for club trophy questions (e.g. الأهلي كام أفريقيا) AND for coach questions (e.g. مين مدرب منتخب مصر). Works for clubs and national teams (منتخب مصر = Egypt). Returns coach + cafChampionsLeagueWins — use those values only, never invent.',
+        'Team/national-team dossier: current head COACH (مدرب), recent form, league position, and African/continental titles. Use for CAF trophy counts and when search_football did not hydrate a club. Works for clubs and national teams (منتخب مصر = Egypt). Returns coach + cafChampionsLeagueWins — use those values only, never invent.',
       parameters: {
         type: 'object',
         properties: {
@@ -201,11 +242,15 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'get_player_career',
       description:
-        'Full 365Scores player career profile: trophies (World Cup / UCL / CAF), World Cup GOALS (worldCupGoals), recent seasons, clubs. ALWAYS use for "كام كاس عالم" / أهداف في كأس العالم / titles / ألقاب / career history. Prefer numbers from this tool over memory.',
+        'Full 365Scores player career profile: trophies (World Cup / UCL / CAF), World Cup GOALS (worldCupGoals), recent seasons, clubs. ALWAYS use for "كام كاس عالم" / أهداف في كأس العالم / titles / ألقاب / career history. Prefer numbers from this tool over memory. Pass athlete_id from search_football when you have it.',
       parameters: {
         type: 'object',
         properties: {
           player_name: { type: 'string' },
+          athlete_id: {
+            type: 'number',
+            description: 'Optional 365Scores athleteId from search_football — skips name search',
+          },
         },
         required: ['player_name'],
       },
@@ -610,16 +655,55 @@ async function resolveBest365Player(
       logger.warn('[chat-agent] searchAthletes failed:', (err as Error)?.message);
     }
   }
-  if (!athletes.length) return empty;
 
+  let scored = rankPlayerCandidates(rawName, normalized, canonical, athletes);
+  let best = scored[0];
+  let confident = isConfidentPlayerScore(scored);
+
+  // App-ranked entity search as a fallback when athlete search is empty/weak.
+  if (!confident && rawName.length >= 2) {
+    try {
+      const all = await threeSixFiveScoresService.searchEntities(rawName, language);
+      const extra = (all.data?.players ?? []) as PlayerCandidate[];
+      if (extra.length) {
+        const byId = new Map<number, PlayerCandidate>();
+        for (const a of [...athletes, ...extra]) {
+          if (a?.athleteId) byId.set(a.athleteId, a);
+        }
+        athletes = [...byId.values()];
+        scored = rankPlayerCandidates(rawName, normalized, canonical, athletes);
+        best = scored[0];
+        confident = isConfidentPlayerScore(scored);
+      }
+    } catch (err) {
+      logger.warn('[chat-agent] searchEntities player fallback failed:', (err as Error)?.message);
+    }
+  }
+  if (!best) return empty;
+
+  const ambiguous = !confident && best.score >= PLAYER_AMBIGUOUS_SCORE;
+
+  const suggestions = scored
+    .filter((s) => s.score >= 0.4)
+    .slice(0, 3)
+    .map((s) => ({ athleteId: s.a.athleteId, name: s.a.name, club: s.a.clubName ?? null }));
+
+  return { best: best.a, bestScore: best.score, confident, ambiguous, suggestions };
+}
+
+function rankPlayerCandidates(
+  rawName: string,
+  normalized: string,
+  canonical: string | null,
+  athletes: PlayerCandidate[],
+) {
   const targetNames = Array.from(
     new Set(
       [normalizeName(normalized), normalizeName(rawName), canonical ? normalizeName(canonical) : '']
         .filter(Boolean),
     ),
   );
-
-  const scored = athletes
+  return athletes
     .map((a) => {
       let score = scorePlayerMatch(rawName, targetNames, { name: a.name, lastname: a.shortName });
       score = Math.max(score, scoreEntityNameMatch(rawName, a.name));
@@ -629,20 +713,16 @@ async function resolveBest365Player(
       return { a, score };
     })
     .sort((x, y) => y.score - x.score);
+}
 
+function isConfidentPlayerScore(scored: Array<{ score: number }>): boolean {
   const best = scored[0];
+  if (!best) return false;
   const gap = best.score - (scored[1]?.score ?? 0);
-  const confident =
+  return (
     best.score >= PLAYER_CONFIDENT_SCORE ||
-    (best.score >= 0.6 && (scored.length === 1 || gap >= 0.2));
-  const ambiguous = !confident && best.score >= PLAYER_AMBIGUOUS_SCORE;
-
-  const suggestions = scored
-    .filter((s) => s.score >= 0.4)
-    .slice(0, 3)
-    .map((s) => ({ athleteId: s.a.athleteId, name: s.a.name, club: s.a.clubName ?? null }));
-
-  return { best: best.a, bestScore: best.score, confident, ambiguous, suggestions };
+    (best.score >= 0.6 && (scored.length === 1 || gap >= 0.2))
+  );
 }
 
 function buildSuggestionHint(
@@ -657,27 +737,50 @@ function buildSuggestionHint(
     : `مش متأكد تقصد مين بالظبط. اسأل المستخدم للتأكيد: قصدك ${names}؟ وممنوع تخترع لاعب أو أرقام.`;
 }
 
+async function load365PlayerProfile(
+  athleteId: number,
+  query: string,
+  resolvedAs: string,
+  language: MessageLanguage,
+) {
+  const from365 = await footballDataCacheService.lookup365Player(resolvedAs || query, language, {
+    athleteId,
+    includeInfo: true,
+    includeCareer: true,
+  });
+  const player = from365.data?.players?.[0];
+  if (!player) return null;
+  const apiFb = await enrichApiFootballTrophies(player.name || resolvedAs, player.athleteId ?? athleteId);
+  return build365ProfilePayload(player, query, player.name || resolvedAs, {
+    includeApiFbWc: true,
+    apiFb,
+  });
+}
+
 async function toolSearchPlayer(args: Record<string, unknown>, language: MessageLanguage) {
   const rawName = String(args.player_name ?? '').trim();
+  const athleteId = Number(args.athlete_id);
+  if (Number.isFinite(athleteId) && athleteId > 0) {
+    try {
+      const profile = await load365PlayerProfile(athleteId, rawName || String(athleteId), rawName, language);
+      if (profile) return profile;
+    } catch (err) {
+      logger.warn('[chat-agent] search_player by athlete_id failed:', (err as Error)?.message);
+    }
+  }
   if (rawName.length < 2) return { error: 'player_name required' };
 
   const resolution = await resolveBest365Player(rawName, language);
 
   if (resolution.confident && resolution.best) {
     try {
-      const from365 = await footballDataCacheService.lookup365Player(resolution.best.name, language, {
-        athleteId: resolution.best.athleteId,
-        includeInfo: true,
-        includeCareer: true,
-      });
-      const player = from365.data?.players?.[0];
-      if (player) {
-        const apiFb = await enrichApiFootballTrophies(resolution.best.name, player.athleteId);
-        return build365ProfilePayload(player, rawName, resolution.best.name, {
-          includeApiFbWc: true,
-          apiFb,
-        });
-      }
+      const profile = await load365PlayerProfile(
+        resolution.best.athleteId,
+        rawName,
+        resolution.best.name,
+        language,
+      );
+      if (profile) return profile;
     } catch (err) {
       logger.warn('[chat-agent] search_player 365 failed:', (err as Error)?.message);
     }
@@ -720,6 +823,383 @@ async function toolSearchPlayer(args: Record<string, unknown>, language: Message
     apiFootballWorldCup: apiFb
       ? { count: apiFb.fifaWorldCupCount, wins: apiFb.fifaWorldCupWins }
       : null,
+  };
+}
+
+type SearchHitKind = 'player' | 'club' | 'national_team' | 'coach' | 'competition';
+
+interface FootballSearchHit {
+  type: SearchHitKind;
+  id: number;
+  name: string;
+  club?: string | null;
+  country?: string | null;
+}
+
+const SEARCH_NAME_EXACT = 780;
+
+function emptySearchBuckets(): ThreeSixFiveSearchResults {
+  return { clubs: [], nationalTeams: [], players: [], coaches: [], competitions: [] };
+}
+
+function compactSearchHits(data: ThreeSixFiveSearchResults, limit = 4) {
+  const club = (c: ThreeSixFiveSearchCompetitor) => ({
+    competitorId: c.competitorId,
+    name: c.name,
+    country: c.country ?? null,
+    isNationalTeam: !!c.isNationalTeam,
+  });
+  const athlete = (a: ThreeSixFiveSearchAthlete) => ({
+    athleteId: a.athleteId,
+    name: a.name,
+    club: a.clubName ?? null,
+  });
+  const competition = (c: ThreeSixFiveSearchCompetition) => ({
+    competitionId: c.competitionId,
+    name: c.name,
+    country: c.country ?? null,
+  });
+  return {
+    clubs: (data.clubs ?? []).slice(0, limit).map(club),
+    nationalTeams: (data.nationalTeams ?? []).slice(0, limit).map(club),
+    players: (data.players ?? []).slice(0, limit).map(athlete),
+    coaches: (data.coaches ?? []).slice(0, limit).map(athlete),
+    competitions: (data.competitions ?? []).slice(0, limit).map(competition),
+  };
+}
+
+function searchHitCount(hits: ReturnType<typeof compactSearchHits>): number {
+  return (
+    hits.clubs.length +
+    hits.nationalTeams.length +
+    hits.players.length +
+    hits.coaches.length +
+    hits.competitions.length
+  );
+}
+
+function parseEntityTypeHint(raw: unknown): SearchHitKind | 'auto' {
+  const v = String(raw ?? 'auto').trim().toLowerCase().replace(/-/g, '_');
+  if (v === 'player' || v === 'club' || v === 'national_team' || v === 'coach' || v === 'competition') {
+    return v;
+  }
+  return 'auto';
+}
+
+function inferEntityTypeHint(query: string): SearchHitKind | 'auto' {
+  if (/\b(دوري|كأس|كاس|بطولة|جدول|ترتيب|league|cup|standings)\b/i.test(query)) return 'competition';
+  if (/\b(منتخب|national\s*team)\b/i.test(query)) return 'national_team';
+  if (
+    /\b(مدرب|مدير\s*فني|coach|manager)\b/i.test(query) &&
+    /\b(أهلي|اهلي|زمالك|مصر|نادي|فريق|منتخب|ريال|برشلون)\b/i.test(query)
+  ) {
+    return 'club';
+  }
+  if (/\b(مدرب|مدير\s*فني|coach|manager)\b/i.test(query) && !/\b(مين|من هو|who)\b/i.test(query)) {
+    return 'coach';
+  }
+  if (/\b(نادي|club)\b/i.test(query)) return 'club';
+  return 'auto';
+}
+
+function flattenSearchHits(data: ThreeSixFiveSearchResults): FootballSearchHit[] {
+  return [
+    ...(data.clubs ?? []).map((c) => ({
+      type: 'club' as const,
+      id: c.competitorId,
+      name: c.name,
+      country: c.country ?? null,
+    })),
+    ...(data.nationalTeams ?? []).map((c) => ({
+      type: 'national_team' as const,
+      id: c.competitorId,
+      name: c.name,
+      country: c.country ?? null,
+    })),
+    ...(data.players ?? []).map((a) => ({
+      type: 'player' as const,
+      id: a.athleteId,
+      name: a.name,
+      club: a.clubName ?? null,
+    })),
+    ...(data.coaches ?? []).map((a) => ({
+      type: 'coach' as const,
+      id: a.athleteId,
+      name: a.name,
+      club: a.clubName ?? null,
+    })),
+    ...(data.competitions ?? []).map((c) => ({
+      type: 'competition' as const,
+      id: c.competitionId,
+      name: c.name,
+      country: c.country ?? null,
+    })),
+  ];
+}
+
+function firstHitOfType(data: ThreeSixFiveSearchResults, type: SearchHitKind): FootballSearchHit | null {
+  return flattenSearchHits(data).find((h) => h.type === type) ?? null;
+}
+
+function pickBestSearchHit(
+  query: string,
+  data: ThreeSixFiveSearchResults,
+  typeHint: SearchHitKind | 'auto',
+): FootballSearchHit | null {
+  if (typeHint !== 'auto') return firstHitOfType(data, typeHint);
+
+  const expansion = expandSearchQueries(query);
+  const all = flattenSearchHits(data);
+  if (!all.length) return null;
+
+  const boostedHits = all.filter((h) => expansion.boostedEntityIds.has(h.id));
+  if (boostedHits.length === 1) return boostedHits[0];
+  if (isPlayerOrientedBoost(expansion.boostedEntityIds)) {
+    return firstHitOfType(data, 'player') ?? firstHitOfType(data, 'coach');
+  }
+  if (boostedHits[0]) return boostedHits[0];
+
+  const populated = (['club', 'national_team', 'player', 'coach', 'competition'] as SearchHitKind[]).filter(
+    (t) => firstHitOfType(data, t),
+  );
+  if (populated.length === 1) return firstHitOfType(data, populated[0]);
+
+  const queryNorm = normalizeSearchText(query);
+  const scored = all
+    .map((hit) => ({ hit, score: scoreSearchName(queryNorm, hit.name, [hit.club, hit.country]) }))
+    .sort((a, b) => b.score - a.score);
+  const top = scored[0];
+  if (!top) return null;
+  const runner = scored[1];
+  if (
+    top.score >= SEARCH_NAME_EXACT &&
+    (!runner || top.score - runner.score >= 80 || top.hit.type === runner.hit.type)
+  ) {
+    return top.hit;
+  }
+  return null;
+}
+
+function buildSearchClarificationHint(
+  hits: ReturnType<typeof compactSearchHits>,
+  language: MessageLanguage,
+): string {
+  const labels: string[] = [];
+  const push = (label: string, names: string[]) => {
+    if (names.length) labels.push(`${label}: ${names.join(language === 'en' ? ', ' : '، ')}`);
+  };
+  push(language === 'en' ? 'clubs' : 'أندية', hits.clubs.map((c) => c.name));
+  push(language === 'en' ? 'national teams' : 'منتخبات', hits.nationalTeams.map((c) => c.name));
+  push(
+    language === 'en' ? 'players' : 'لاعبين',
+    hits.players.map((p) => (p.club ? `${p.name} (${p.club})` : p.name)),
+  );
+  push(language === 'en' ? 'coaches' : 'مدربين', hits.coaches.map((p) => p.name));
+  push(language === 'en' ? 'competitions' : 'بطولات', hits.competitions.map((c) => c.name));
+  const listed = labels.join(language === 'en' ? ' | ' : ' | ');
+  return language === 'en'
+    ? `Not sure which entity is meant. Ask the user to confirm. Options: ${listed}. Do NOT invent facts.`
+    : `مش متأكد تقصد إيه بالظبط. اسأل المستخدم للتأكيد. الاختيارات: ${listed}. وممنوع تخترع بيانات.`;
+}
+
+async function hydrateFootballSearchHit(
+  hit: FootballSearchHit,
+  query: string,
+  language: MessageLanguage,
+): Promise<Record<string, unknown> | null> {
+  if (hit.type === 'player') {
+    return load365PlayerProfile(hit.id, query, hit.name, language);
+  }
+  if (hit.type === 'coach') {
+    const profile = await footballDataCacheService.getCached365AthleteProfile(hit.id, language);
+    const coach = profile?.data;
+    if (!coach) return null;
+    return {
+      source: '365scores_coach',
+      athleteId: coach.athleteId,
+      name: coach.name,
+      teamName: coach.teamName ?? null,
+      nationality: coach.nationality ?? null,
+      age: coach.age ?? null,
+      role: coach.role,
+      trophies: (coach.trophies ?? []).slice(0, 8).map((t: any) => ({
+        name: t?.name ?? t?.competitionName ?? null,
+        season: t?.season ?? null,
+      })),
+      quickFacts: {
+        currentClub: coach.teamName ?? null,
+        coach: coach.name,
+      },
+      answerHint:
+        language === 'en'
+          ? `This is coach ${coach.name} (${coach.teamName ?? 'team unknown'}). Use only these fields.`
+          : `ده المدرب ${coach.name} (${coach.teamName ?? 'الفريق مش متاح'}). استخدم الحقول دي بس.`,
+    };
+  }
+  if (hit.type === 'club' || hit.type === 'national_team') {
+    const [infoRes, coachRes, matchesRes, dossier] = await Promise.all([
+      Promise.resolve(footballDataCacheService.getCached365CompetitorInfo(hit.id, language)).catch(
+        () => ({ data: null }),
+      ),
+      Promise.resolve(footballDataCacheService.getCached365CompetitorCoach(hit.id, language)).catch(
+        () => ({ data: null }),
+      ),
+      Promise.resolve(footballDataCacheService.getCached365CompetitorMatches(hit.id, language)).catch(
+        () => ({ data: null }),
+      ),
+      Promise.resolve(fetchTeamDossierContext(hit.name, { allowSearch: true })).catch(() => null),
+    ]);
+    const info = infoRes?.data;
+    const coach = coachRes?.data;
+    const matches = matchesRes?.data;
+    const coachName = coach?.name ?? dossier?.coach?.name ?? null;
+
+    let cafCount: number | null = null;
+    if (dossier?.apiTeamId) {
+      try {
+        const trophies = (await footballDataCacheService.getTeamTrophies(dossier.apiTeamId)) ?? [];
+        const cafWins = trophies.filter(
+          (t: { league?: string; place?: string }) =>
+            /caf\s*champions|أبطال\s*أفريقيا|ابطال\s*افريقيا|african\s*champions/i.test(
+              String(t.league ?? ''),
+            ) && /winner|بطل|champion/i.test(String(t.place ?? '')),
+        );
+        if (cafWins.length) cafCount = cafWins.length;
+      } catch {
+        cafCount = null;
+      }
+      const CURATED_CAF_CL: Record<number, number> = { 1015: 12, 1016: 5 };
+      if (cafCount == null && CURATED_CAF_CL[dossier.apiTeamId] != null) {
+        cafCount = CURATED_CAF_CL[dossier.apiTeamId];
+      }
+    }
+
+    return {
+      source: '365scores_team',
+      competitorId: hit.id,
+      teamId: dossier?.apiTeamId ?? null,
+      teamName: info?.name ?? hit.name,
+      country: info?.country ?? hit.country ?? null,
+      isNationalTeam: hit.type === 'national_team' || !!info?.isNationalTeam,
+      founded: info?.founded ?? null,
+      stadium: info?.stadium ?? null,
+      competitions: (info?.competitions ?? []).slice(0, 6).map((c: { id: number; name: string }) => ({
+        id: c.id,
+        name: c.name,
+      })),
+      coach: coachName,
+      coachNationality: coach?.nationality ?? dossier?.coach?.nationality ?? null,
+      cafChampionsLeagueWins: cafCount,
+      recentMatches: {
+        live: (matches?.live ?? []).slice(0, 2).map(compactFixture),
+        upcoming: (matches?.upcoming ?? []).slice(0, 3).map(compactFixture),
+        finished: (matches?.finished ?? []).slice(0, 3).map(compactFixture),
+      },
+      quickFacts: {
+        ...(coachName ? { coach: coachName } : {}),
+        ...(cafCount != null ? { cafChampionsLeagueWins: cafCount } : {}),
+      },
+      answerHint: [
+        coachName
+          ? `The current head coach is exactly "${coachName}" — do not name a former coach.`
+          : 'Head coach unavailable — do not invent a name.',
+        cafCount != null
+          ? `African Champions League titles = exactly ${cafCount}.`
+          : 'CAF title count unavailable from this payload — do not invent a number.',
+      ].join(' '),
+    };
+  }
+
+  const standings = await Promise.resolve(
+    footballDataCacheService.getStandingsParsedFrom365(hit.id, language),
+  ).catch(() => ({ flat: [] as any[] }));
+  const top = (standings.flat ?? []).slice(0, 10).map((row: any, i: number) => ({
+    rank: row.rank ?? i + 1,
+    team: row.team?.name ?? null,
+    played: row.all?.played ?? null,
+    points: row.points ?? null,
+    gd: row.goalsDiff ?? null,
+  }));
+  return {
+    source: '365scores_competition',
+    competitionId: hit.id,
+    league: hit.name,
+    country: hit.country ?? null,
+    standings: top,
+    answerHint:
+      language === 'en'
+        ? 'Use only these standings/competition fields. Do not invent a table.'
+        : 'استخدم جدول الترتيب ده بس. ممنوع تخترع ترتيب.',
+  };
+}
+
+async function toolSearchFootball(args: Record<string, unknown>, language: MessageLanguage) {
+  const query = String(args.query ?? args.q ?? args.name ?? '').trim();
+  if (query.length < 2) return { error: 'query required' };
+
+  const requested = parseEntityTypeHint(args.entity_type);
+  const typeHint = requested === 'auto' ? inferEntityTypeHint(query) : requested;
+
+  let data: ThreeSixFiveSearchResults = emptySearchBuckets();
+  try {
+    const search = await threeSixFiveScoresService.searchEntities(query, language);
+    data = search.data ?? emptySearchBuckets();
+  } catch (err) {
+    logger.warn('[chat-agent] search_football failed:', (err as Error)?.message);
+    return { error: 'search_failed', query };
+  }
+
+  const hits = compactSearchHits(data);
+  if (!searchHitCount(hits)) {
+    return {
+      error: 'not_found',
+      query,
+      hits,
+      answerHint:
+        language === 'en'
+          ? 'No football entity matched. Ask for the full name or club, and do NOT invent data.'
+          : 'مفيش نتيجة. اطلب الاسم الكامل أو النادي، وممنوع تخترع بيانات.',
+    };
+  }
+
+  const best = pickBestSearchHit(query, data, typeHint);
+  if (!best) {
+    return {
+      status: 'need_clarification',
+      query,
+      hits,
+      answerHint: buildSearchClarificationHint(hits, language),
+    };
+  }
+
+  let details: Record<string, unknown> | null = null;
+  try {
+    details = await hydrateFootballSearchHit(best, query, language);
+  } catch (err) {
+    logger.warn('[chat-agent] search_football hydrate failed:', (err as Error)?.message);
+  }
+
+  return {
+    status: 'ok',
+    query,
+    best,
+    hits,
+    ...(details ?? {}),
+    next:
+      details == null
+        ? best.type === 'player'
+          ? { tool: 'search_player', athlete_id: best.id, player_name: best.name }
+          : best.type === 'club' || best.type === 'national_team'
+            ? { tool: 'get_team_info', team_name: best.name }
+            : best.type === 'competition'
+              ? { tool: 'get_standings', league: best.name }
+              : null
+        : null,
+    answerHint:
+      (details as { answerHint?: string } | null)?.answerHint ??
+      (language === 'en'
+        ? 'Answer from best + details only. Do not invent stats.'
+        : 'جاوب من best و details بس. ممنوع تخترع أرقام.'),
   };
 }
 
@@ -930,7 +1410,17 @@ async function toolResolveMatch(args: Record<string, unknown>) {
   const query = teamName || homeTeam || awayTeam;
   if (!query) return { error: 'team_name or home/away required' };
 
-  const resolved = await resolveTeamId(query, { allowSearch: true });
+  let resolved = await resolveTeamId(query, { allowSearch: true });
+  if (!resolved) {
+    try {
+      const search = await threeSixFiveScoresService.searchEntities(query, 'en');
+      const resolvedName =
+        search.data?.clubs?.[0]?.name ?? search.data?.nationalTeams?.[0]?.name ?? null;
+      if (resolvedName) resolved = await resolveTeamId(resolvedName, { allowSearch: true });
+    } catch (err) {
+      logger.warn('[chat-agent] resolve_match search fallback failed:', (err as Error)?.message);
+    }
+  }
   if (!resolved) return { error: 'team_not_found', query };
 
   const pack = await footballDataCacheService.getTeamMatches(resolved.apiTeamId, 8);
@@ -1004,21 +1494,46 @@ async function toolMatchLineup(args: Record<string, unknown>, language: MessageL
   return { fixtureId, lineups: compactLineups(lineups) };
 }
 
-async function toolStandings(args: Record<string, unknown>) {
-  const leagueText = String(args.league ?? '').trim();
-  if (!leagueText) return { error: 'league required' };
-  const league = detectLeague(leagueText);
-  if (!league) return { error: 'league_not_recognized', league: leagueText };
-  const season = Number(args.season) || resolveFootballSeason();
-  const { flat } = await footballDataCacheService.getStandingsParsed(league.id, season);
-  const top = (flat ?? []).slice(0, 10).map((row: any, i: number) => ({
+function compactStandingRows(flat: any[] | undefined) {
+  return (flat ?? []).slice(0, 10).map((row: any, i: number) => ({
     rank: row.rank ?? i + 1,
     team: row.team?.name ?? null,
     played: row.all?.played ?? null,
     points: row.points ?? null,
     gd: row.goalsDiff ?? null,
   }));
-  return { league: league.label, season, standings: top };
+}
+
+async function toolStandings(args: Record<string, unknown>, language: MessageLanguage) {
+  const leagueText = String(args.league ?? '').trim();
+  if (!leagueText) return { error: 'league required' };
+  const league = detectLeague(leagueText);
+  const season = Number(args.season) || resolveFootballSeason();
+  if (league) {
+    const { flat } = await footballDataCacheService.getStandingsParsed(league.id, season);
+    return { league: league.label, season, standings: compactStandingRows(flat) };
+  }
+
+  try {
+    const search = await threeSixFiveScoresService.searchEntities(leagueText, language);
+    const hit = firstHitOfType(search.data ?? emptySearchBuckets(), 'competition');
+    if (hit) {
+      const parsed = await footballDataCacheService.getStandingsParsedFrom365(hit.id, language);
+      const standings = compactStandingRows(parsed?.flat);
+      if (standings.length) {
+        return {
+          league: hit.name,
+          competitionId: hit.id,
+          source: '365search',
+          season,
+          standings,
+        };
+      }
+    }
+  } catch (err) {
+    logger.warn('[chat-agent] standings search fallback failed:', (err as Error)?.message);
+  }
+  return { error: 'league_not_recognized', league: leagueText };
 }
 
 async function toolTopScorers(args: Record<string, unknown>) {
@@ -1044,11 +1559,28 @@ async function toolTopScorers(args: Record<string, unknown>) {
   };
 }
 
-async function toolTeamInfo(args: Record<string, unknown>) {
+async function toolTeamInfo(args: Record<string, unknown>, language: MessageLanguage) {
   const teamName = String(args.team_name ?? '').trim();
   if (!teamName) return { error: 'team_name required' };
   const dossier = await fetchTeamDossierContext(teamName, { allowSearch: true });
-  if (!dossier) return { error: 'team_not_found', teamName };
+  if (!dossier) {
+    try {
+      const search = await threeSixFiveScoresService.searchEntities(teamName, language);
+      const data = search.data ?? emptySearchBuckets();
+      const hint = inferEntityTypeHint(teamName);
+      const hit =
+        pickBestSearchHit(teamName, data, hint === 'national_team' ? 'national_team' : 'club') ??
+        firstHitOfType(data, 'club') ??
+        firstHitOfType(data, 'national_team');
+      if (hit) {
+        const hydrated = await hydrateFootballSearchHit(hit, teamName, language);
+        if (hydrated) return { status: 'ok', best: hit, ...hydrated };
+      }
+    } catch (err) {
+      logger.warn('[chat-agent] get_team_info search fallback failed:', (err as Error)?.message);
+    }
+    return { error: 'team_not_found', teamName };
+  }
 
   let trophies: Array<{ league?: string; country?: string; season?: string; place?: string }> = [];
   let cafChampionsWins: typeof trophies = [];
@@ -1111,6 +1643,35 @@ async function toolTeamInfo(args: Record<string, unknown>) {
 
 async function toolPlayerCareer(args: Record<string, unknown>, language: MessageLanguage) {
   const rawName = String(args.player_name ?? '').trim();
+  const athleteIdArg = Number(args.athlete_id);
+  if (Number.isFinite(athleteIdArg) && athleteIdArg > 0) {
+    const from365 = await footballDataCacheService.lookup365Player(rawName || String(athleteIdArg), language, {
+      athleteId: athleteIdArg,
+      includeInfo: true,
+      includeCareer: true,
+    });
+    const player = from365.data?.players?.[0];
+    if (player) {
+      const name = player.name || rawName;
+      const apiFb = await enrichApiFootballTrophies(name, player.athleteId);
+      const dossier = await fetchPlayerUclCareerDossier(name, language);
+      const profile = build365ProfilePayload(player, rawName, name, {
+        includeApiFbWc: true,
+        apiFb,
+      });
+      let worldCupGoals = profile.worldCupGoals as unknown;
+      if (!worldCupGoals) {
+        worldCupGoals = (await fetchPlayerWorldCupGoals(name)) ?? null;
+      }
+      return {
+        ...profile,
+        worldCupGoals,
+        uclSummary: dossier ?? null,
+        guidance:
+          'Authoritative 365 profile+career (same as app player profile). For FIFA World Cup TITLES prefer apiFootballWorldCup.wins when present else fifaWorldCup/quickFacts.worldCupTitles. For World Cup GOALS use worldCupGoals.total ONLY (null = no confirmed data; do NOT guess). For UCL use championsLeague/quickFacts.championsLeagueTitles. State the current club exactly as `club`/quickFacts.currentClub. If a trophy count is >=1 the player HAS won it (never say "hasn\'t won" or reason from age); if 1 say 1. NEVER invent or add title years, national teams, clubs, or tournament editions that are not explicitly present here.',
+      };
+    }
+  }
   if (!rawName) return { error: 'player_name required' };
 
   const resolution = await resolveBest365Player(rawName, language);
@@ -1231,6 +1792,9 @@ export async function executeAgentTool(
   try {
     let result: unknown;
     switch (name) {
+      case 'search_football':
+        result = await toolSearchFootball(args, opts.language);
+        break;
       case 'search_player':
         result = await toolSearchPlayer(args, opts.language);
         break;
@@ -1250,13 +1814,13 @@ export async function executeAgentTool(
         result = await toolMatchLineup(args, opts.language);
         break;
       case 'get_standings':
-        result = await toolStandings(args);
+        result = await toolStandings(args, opts.language);
         break;
       case 'get_top_scorers':
         result = await toolTopScorers(args);
         break;
       case 'get_team_info':
-        result = await toolTeamInfo(args);
+        result = await toolTeamInfo(args, opts.language);
         break;
       case 'get_player_career':
         result = await toolPlayerCareer(args, opts.language);

@@ -9,8 +9,14 @@ jest.mock('../services/football-data-cache.service', () => ({
     getFixtureDetailsBundle: jest.fn(),
     getMatchLineups: jest.fn(),
     getStandingsParsed: jest.fn(),
+    getStandingsParsedFrom365: jest.fn(),
     getTopScorers: jest.fn(),
     getTeamMatches: jest.fn(),
+    getTeamTrophies: jest.fn(),
+    getCached365CompetitorInfo: jest.fn(),
+    getCached365CompetitorCoach: jest.fn(),
+    getCached365CompetitorMatches: jest.fn(),
+    getCached365AthleteProfile: jest.fn(),
   },
 }));
 
@@ -22,6 +28,7 @@ jest.mock('../services/chat-football-tools.service', () => ({
   ),
   fetchPlayerStatsRow: jest.fn(),
   fetchPlayerUclCareerDossier: jest.fn(),
+  fetchPlayerWorldCupGoals: jest.fn(),
 }));
 
 jest.mock('../services/live-fixture-cache.service', () => ({
@@ -44,7 +51,16 @@ jest.mock('../services/threeSixFiveScores.service', () => ({
   threeSixFiveScoresService: {
     getPlayerMatchReport: jest.fn(),
     getHeadToHeadForm: jest.fn(),
+    searchAthletes: jest.fn(async () => ({ data: [], source: '365scores' })),
+    searchEntities: jest.fn(async () => ({
+      data: { clubs: [], nationalTeams: [], players: [], coaches: [], competitions: [] },
+      source: '365scores',
+    })),
   },
+}));
+
+jest.mock('../services/player-name-resolver.service', () => ({
+  resolvePlayerName: jest.fn(async () => null),
 }));
 
 jest.mock('../services/football.service', () => ({
@@ -56,6 +72,7 @@ jest.mock('../services/football.service', () => ({
 
 import { footballDataCacheService } from '../services/football-data-cache.service';
 import { fetchPlayerStatsRow } from '../services/chat-football-tools.service';
+import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 import {
   AGENT_TOOLS,
   executeAgentTool,
@@ -86,6 +103,7 @@ describe('chat-agent-tools', () => {
         'get_today_matches',
         'get_top_scorers',
         'resolve_match',
+        'search_football',
         'search_player',
       ].sort(),
     );
@@ -104,6 +122,17 @@ describe('chat-agent-tools', () => {
   });
 
   test('search_player uses 365 lookup when available', async () => {
+    (threeSixFiveScoresService.searchAthletes as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          athleteId: 42,
+          name: 'مبابي',
+          shortName: 'Mbappé',
+          clubName: 'Real Madrid',
+        },
+      ],
+      source: '365scores',
+    });
     (footballDataCacheService.lookup365Player as jest.Mock).mockResolvedValue({
       data: {
         players: [
@@ -197,5 +226,166 @@ describe('chat-agent-tools', () => {
       process.env.OPENROUTER_API_KEY = prevKey;
       process.env.AI_API_KEY = prevAi;
     }
+  });
+
+  test('search_football hydrates a unique player hit', async () => {
+    (threeSixFiveScoresService.searchEntities as jest.Mock).mockResolvedValue({
+      data: {
+        clubs: [],
+        nationalTeams: [],
+        coaches: [],
+        competitions: [],
+        players: [
+          {
+            athleteId: 42,
+            name: 'Kylian Mbappé',
+            shortName: 'Mbappé',
+            clubName: 'Real Madrid',
+          },
+        ],
+      },
+      source: '365scores',
+    });
+    (footballDataCacheService.lookup365Player as jest.Mock).mockResolvedValue({
+      data: {
+        players: [
+          {
+            athleteId: 42,
+            name: 'Kylian Mbappé',
+            clubName: 'Real Madrid',
+            info: { age: 26 },
+            career: { trophies: [] },
+          },
+        ],
+      },
+    });
+
+    const raw = await executeAgentTool(
+      'search_football',
+      JSON.stringify({ query: 'مبابي', entity_type: 'player' }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.status).toBe('ok');
+    expect(parsed.best).toMatchObject({ type: 'player', id: 42 });
+    expect(parsed.source).toBe('365scores_profile');
+    expect(parsed.club).toBe('Real Madrid');
+  });
+
+  test('search_football asks for clarification when types mix and none dominate', async () => {
+    (threeSixFiveScoresService.searchEntities as jest.Mock).mockResolvedValue({
+      data: {
+        clubs: [{ competitorId: 99, name: 'Some Club FC', country: 'X', isNationalTeam: false }],
+        nationalTeams: [],
+        players: [
+          { athleteId: 7, name: 'Some Player', shortName: 'SP', clubName: 'Y' },
+        ],
+        coaches: [],
+        competitions: [{ competitionId: 5, name: 'Some League', country: 'X' }],
+      },
+      source: '365scores',
+    });
+
+    const raw = await executeAgentTool(
+      'search_football',
+      JSON.stringify({ query: 'xyzabc' }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.status).toBe('need_clarification');
+    expect(parsed.hits.clubs[0].competitorId).toBe(99);
+    expect(parsed.hits.players[0].athleteId).toBe(7);
+  });
+
+  test('search_football picks Al Ahly from the ranked app index', async () => {
+    (threeSixFiveScoresService.searchEntities as jest.Mock).mockResolvedValue({
+      data: {
+        clubs: [
+          { competitorId: 50527, name: 'National Bank', country: 'Egypt', isNationalTeam: false },
+          { competitorId: 8200, name: 'Al Ahly SC', country: 'Egypt', isNationalTeam: false },
+        ],
+        nationalTeams: [],
+        players: [],
+        coaches: [],
+        competitions: [],
+      },
+      source: '365scores',
+    });
+    (footballDataCacheService.getCached365CompetitorInfo as jest.Mock).mockResolvedValue({
+      data: { competitorId: 8200, name: 'Al Ahly SC', country: 'Egypt', isNationalTeam: false, competitions: [] },
+    });
+    (footballDataCacheService.getCached365CompetitorCoach as jest.Mock).mockResolvedValue({
+      data: { athleteId: 1, name: 'Houssine Ammouta', teamName: 'Al Ahly SC', role: 'head_coach' },
+    });
+    (footballDataCacheService.getCached365CompetitorMatches as jest.Mock).mockResolvedValue({
+      data: { live: [], upcoming: [], finished: [] },
+    });
+
+    const raw = await executeAgentTool(
+      'search_football',
+      JSON.stringify({ query: 'الأهلي' }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.status).toBe('ok');
+    expect(parsed.best).toMatchObject({ type: 'club', id: 8200 });
+    expect(parsed.coach).toBe('Houssine Ammouta');
+  });
+
+  test('get_standings falls back to 365 competition search', async () => {
+    (threeSixFiveScoresService.searchEntities as jest.Mock).mockResolvedValue({
+      data: {
+        clubs: [],
+        nationalTeams: [],
+        players: [],
+        coaches: [],
+        competitions: [{ competitionId: 572, name: 'Liga Profesional de Bolivia', country: 'Bolivia' }],
+      },
+      source: '365scores',
+    });
+    (footballDataCacheService.getStandingsParsedFrom365 as jest.Mock).mockResolvedValue({
+      flat: [{ rank: 1, team: { name: 'Bolivar' }, all: { played: 10 }, points: 24, goalsDiff: 12 }],
+      groups: [],
+    });
+
+    const raw = await executeAgentTool(
+      'get_standings',
+      JSON.stringify({ league: 'بعض الدوري الغريب جدا' }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.source).toBe('365search');
+    expect(parsed.standings[0].team).toBe('Bolivar');
+  });
+
+  test('search_player accepts athlete_id and skips name search', async () => {
+    (footballDataCacheService.lookup365Player as jest.Mock).mockResolvedValue({
+      data: {
+        players: [
+          {
+            athleteId: 99,
+            name: 'Mohamed Salah',
+            clubName: 'Liverpool',
+            info: {},
+            career: { trophies: [] },
+          },
+        ],
+      },
+    });
+
+    const raw = await executeAgentTool(
+      'search_player',
+      JSON.stringify({ player_name: 'صلاح', athlete_id: 99 }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.athleteId).toBe(99);
+    expect(threeSixFiveScoresService.searchAthletes).not.toHaveBeenCalled();
+    expect(footballDataCacheService.lookup365Player).toHaveBeenCalledWith(
+      'صلاح',
+      'ar',
+      expect.objectContaining({ athleteId: 99 }),
+    );
   });
 });
