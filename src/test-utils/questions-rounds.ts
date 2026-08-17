@@ -9,7 +9,12 @@
  * fixture can never quietly drift into a shape production would refuse.
  */
 
-import { ROUND_QUESTION_COUNT } from '../constants/quiz.constants';
+import {
+  FOOTBALL_GRID_COLUMNS,
+  FOOTBALL_GRID_ROWS,
+  roundQuestionCount,
+  TOP10_SLOT_COUNT,
+} from '../constants/questions-modes.config';
 import type {
   QuestionChallengeAnswer,
   QuestionChallengeMode,
@@ -77,17 +82,30 @@ export function validQuestion(mode: QuestionChallengeMode, index: number): Quest
       };
     }
 
-    case 'football-grid':
+    /*
+     * One CELL of the shared 3×3 board: awards across, clubs/national teams
+     * down, four real players to place. `index` walks the nine cells in the
+     * same order the generator emits them.
+     */
+    case 'football-grid': {
+      const row = Math.floor(index / FOOTBALL_GRID_COLUMNS) % FOOTBALL_GRID_ROWS;
+      const column = index % FOOTBALL_GRID_COLUMNS;
       return {
         ...base,
-        entity: { kind: 'player', id: `player:${index}`, name: `Player ${index}` },
-        rows: ['Club A', 'Club B', 'Club C'],
-        columns: ['England', 'Spain', 'Italy'],
-        rowImages: [CREST(index), CREST(index + 50), CREST(index + 100)],
-        columnImages: [undefined, undefined, undefined],
-        validationRules: [base.prompt],
-        answer: { correctIds: ['r1-c2'] },
+        prompt: `Pick a player who played for Club ${row} and won Award ${column}`,
+        rows: ['Club 0', 'Club 1', 'Club 2'],
+        columns: ['Award 0', 'Award 1', 'Award 2'],
+        rowImages: [CREST(1), CREST(2), CREST(3)],
+        gridCell: { row, column },
+        validationRules: [`Club ${row} × Award ${column}`],
+        options: ['a', 'b', 'c', 'd'].map((id, slot) => ({
+          id,
+          label: `Grid Player ${index}-${slot}`,
+          imageUrl: PORTRAIT(index * 10 + slot),
+        })),
+        answer: { correctIds: ['a'] },
       };
+    }
 
     case 'player-connections':
       return {
@@ -118,22 +136,26 @@ export function validQuestion(mode: QuestionChallengeMode, index: number): Quest
         answer: { correctIds: ['a'] },
       };
 
-    case 'top10-challenge': {
-      const options = Array.from({ length: 5 }, (_, slot) => ({
-        id: String(slot + 1),
-        label: `Scorer ${index}-${slot}`,
-        imageUrl: PORTRAIT(index * 20 + slot),
-      }));
+    /* Ten typed slots. The names live in the answer and never reach a client. */
+    case 'top10-challenge':
       return {
         ...base,
         entity: { kind: 'league', id: `league:${index}`, name: `League ${index}` },
-        options,
-        orderedAnswers: options.slice(0, 3),
-        acceptedAnswers: ['1', '2', '3'],
-        scoring: { exact: 10, partial: 5 },
-        answer: { orderedIds: ['1', '2', '3'] },
+        top10: {
+          slots: TOP10_SLOT_COUNT,
+          categoryLabel: `League ${index}`,
+          seasonLabel: String(2010 + index),
+        },
+        answer: {
+          orderedAnswers: Array.from({ length: TOP10_SLOT_COUNT }, (_, slot) => ({
+            rank: slot + 1,
+            canonical: `Scorer ${index}-${slot}`,
+            aliases: [`Scorer ${index}-${slot}`],
+            imageUrl: PORTRAIT(index * 20 + slot),
+            value: 30 - slot,
+          })),
+        },
       };
-    }
 
     case 'football-quiz':
       return {
@@ -148,10 +170,16 @@ export function validQuestion(mode: QuestionChallengeMode, index: number): Quest
   }
 }
 
-/** A full contract-valid round: `content` + the round-level `answer` map. */
+/**
+ * A full contract-valid round: `content` + the round-level `answer` map.
+ *
+ * The round's LENGTH is the mode's own — nine cells for Football Grid, one list
+ * for Top 10, ROUND_QUESTION_COUNT everywhere else — so a fixture can never be
+ * a shape the publish gate would refuse.
+ */
 export function validRound(
   mode: QuestionChallengeMode,
-  count = ROUND_QUESTION_COUNT,
+  count = roundQuestionCount(mode),
 ): { content: Record<string, unknown>; answer: QuestionChallengeAnswer; questions: QuestionChallengeQuestion[] } {
   const questions = Array.from({ length: count }, (_, index) => validQuestion(mode, index));
   const byQuestionId: NonNullable<QuestionChallengeAnswer['byQuestionId']> = {};

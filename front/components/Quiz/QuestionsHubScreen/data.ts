@@ -88,7 +88,7 @@ export interface QuestionsHubCopy {
   heroSubtitle: string;
   sectionTitle: string;
   answeredLabel: string;
-  totalXpLabel: string;
+  questionsXpLabel: string;
 }
 
 export interface QuestionsHubLayout {
@@ -117,7 +117,15 @@ export function getQuestionsHubCopy(language: Language): QuestionsHubCopy {
       : 'Answer questions and challenge your friends!',
     sectionTitle: isArabic ? 'اختر نوع التحدي' : 'Choose Challenge Type',
     answeredLabel: isArabic ? 'الأسئلة المجاب عنها' : 'Answered',
-    totalXpLabel: isArabic ? 'النقاط الكلية' : 'Total XP',
+    /*
+     * "XP from Questions", NOT "Total XP".
+     *
+     * This number is the XP this user earned IN THE QUESTIONS MODES; the stat
+     * beside it is the account's whole XP balance. Labelling the smaller one
+     * "Total XP" put two different quantities side by side under names that
+     * promised they were the same, which is why the two never matched.
+     */
+    questionsXpLabel: isArabic ? 'نقاط الأسئلة' : 'Questions XP',
   };
 }
 
@@ -262,6 +270,7 @@ export function buildSummaryStats(args: {
   const show = (value: number | null) => (value === null ? '—' : value.toLocaleString());
 
   return [
+    // The account's authoritative XP balance, from the XP service.
     { id: 'xp', label: 'XP', value: xp.toLocaleString() },
     {
       id: 'answered',
@@ -269,11 +278,12 @@ export function buildSummaryStats(args: {
       value: show(answeredCount),
       compactLabel: copy.answeredLabel,
     },
+    // …and how much of that came from playing Questions.
     {
-      id: 'total-xp',
-      label: copy.totalXpLabel,
+      id: 'questions-xp',
+      label: copy.questionsXpLabel,
       value: show(xpEarnedTotal),
-      compactLabel: copy.totalXpLabel,
+      compactLabel: copy.questionsXpLabel,
     },
   ];
 }

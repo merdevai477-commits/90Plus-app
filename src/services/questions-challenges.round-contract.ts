@@ -32,7 +32,12 @@
  * rejected" with nothing to act on.
  */
 
-import { ROUND_QUESTION_COUNT } from '../constants/quiz.constants';
+import {
+  FOOTBALL_GRID_COLUMNS,
+  FOOTBALL_GRID_ROWS,
+  roundQuestionCount,
+  TOP10_SLOT_COUNT,
+} from '../constants/questions-modes.config';
 import type {
   QuestionChallengeAnswer,
   QuestionChallengeMode,
@@ -213,36 +218,74 @@ export function validateQuestionContract(
       break;
     }
 
+    /*
+     * FOOTBALL GRID — one 3×3 board (awards across the top, clubs/national
+     * teams down the side) played ONE CELL PER QUESTION. Every question carries
+     * the whole board so the app can draw it, names the cell it is asking for,
+     * and offers real players to place there. The answer is a PLAYER, not a
+     * cell coordinate: the board is fixed and the player is what the user
+     * chooses.
+     */
     case 'football-grid': {
-      if (question.rows?.length !== 3 || question.columns?.length !== 3) {
-        errors.push(`${prefix}:GRID_NOT_3X3`);
+      if (
+        question.rows?.length !== FOOTBALL_GRID_ROWS ||
+        question.columns?.length !== FOOTBALL_GRID_COLUMNS
+      ) {
+        errors.push(`${prefix}:GRID_NOT_${FOOTBALL_GRID_ROWS}X${FOOTBALL_GRID_COLUMNS}`);
       }
       const rowImages = question.rowImages;
-      if (!Array.isArray(rowImages) || rowImages.length !== 3 || !rowImages.every(isRemoteImage)) {
+      if (
+        !Array.isArray(rowImages) ||
+        rowImages.length !== FOOTBALL_GRID_ROWS ||
+        !rowImages.every(isRemoteImage)
+      ) {
         errors.push(`${prefix}:ROW_IMAGE_MISSING`);
       }
-      const correctId = answer.correctIds?.[0];
-      if (!correctId) errors.push(`${prefix}:ANSWER_EMPTY`);
-      else if (!/^r[0-2]-c[0-2]$/.test(correctId)) errors.push(`${prefix}:ANSWER_CELL_OUT_OF_RANGE`);
+      const cell = question.gridCell;
+      if (
+        !cell ||
+        !Number.isInteger(cell.row) ||
+        !Number.isInteger(cell.column) ||
+        cell.row < 0 ||
+        cell.row >= FOOTBALL_GRID_ROWS ||
+        cell.column < 0 ||
+        cell.column >= FOOTBALL_GRID_COLUMNS
+      ) {
+        errors.push(`${prefix}:GRID_CELL_OUT_OF_RANGE`);
+      }
+      // Each candidate is a real player, shown with their real portrait.
+      errors.push(...checkMcqOptions(prefix, question.options, answer.correctIds, 4, true));
+      if ((answer.correctIds ?? []).length !== 1) errors.push(`${prefix}:ANSWER_NOT_ONE_PLAYER`);
       break;
     }
 
+    /*
+     * TOP 10 — ten TYPED names for one real ranking (competition + season).
+     * The client is sent the framing only: how many slots, what the list is of,
+     * and which year. The names live in `answer.orderedAnswers` and never leave
+     * the server before grading — an options array here would BE the answer.
+     */
     case 'top10-challenge': {
-      const options = question.options;
-      if (!Array.isArray(options) || options.length < 3) {
-        errors.push(`${prefix}:RANKED_OPTION_COUNT_BELOW_3`);
+      const meta = question.top10;
+      if (!meta || meta.slots !== TOP10_SLOT_COUNT) {
+        errors.push(`${prefix}:TOP10_SLOT_COUNT_NOT_${TOP10_SLOT_COUNT}`);
+      }
+      if (!meta?.categoryLabel?.trim()) errors.push(`${prefix}:TOP10_CATEGORY_MISSING`);
+      if (!meta?.seasonLabel?.trim()) errors.push(`${prefix}:TOP10_SEASON_MISSING`);
+
+      const ranked = answer.orderedAnswers ?? [];
+      if (ranked.length !== TOP10_SLOT_COUNT) {
+        errors.push(`${prefix}:TOP10_ANSWER_COUNT_NOT_${TOP10_SLOT_COUNT}`);
         break;
       }
-      const ids = options.map((option) => option.id);
-      if (ids.some((id) => !id)) errors.push(`${prefix}:OPTION_ID_MISSING`);
-      else if (!allUnique(ids)) errors.push(`${prefix}:OPTION_ID_DUPLICATE`);
-      if (!options.every((option) => isRemoteImage(option.imageUrl))) {
-        errors.push(`${prefix}:OPTION_IMAGE_MISSING`);
+      const canonicals = ranked.map((entry) => (entry.canonical ?? '').trim().toLowerCase());
+      if (canonicals.some((name) => !name)) errors.push(`${prefix}:TOP10_ANSWER_NAME_MISSING`);
+      else if (!allUnique(canonicals)) errors.push(`${prefix}:TOP10_ANSWER_NAME_DUPLICATE`);
+      // The reveal shows each player's real portrait; a slot without one would
+      // have to render an empty frame.
+      if (!ranked.every((entry) => isRemoteImage(entry.imageUrl))) {
+        errors.push(`${prefix}:TOP10_ANSWER_IMAGE_MISSING`);
       }
-      const orderedIds = answer.orderedIds ?? [];
-      if (orderedIds.length !== 3) errors.push(`${prefix}:ORDERED_ANSWER_COUNT_NOT_3`);
-      else if (!allUnique(orderedIds)) errors.push(`${prefix}:ORDERED_ANSWER_DUPLICATE`);
-      else if (!orderedIds.every((id) => ids.includes(id))) errors.push(`${prefix}:ORDERED_ANSWER_NOT_AN_OPTION`);
       break;
     }
 
@@ -310,8 +353,9 @@ export function validateRoundContract(params: {
   if (!questions.length) {
     return { ok: false, errors: ['ROUND_HAS_NO_QUESTIONS'], questionCount: 0 };
   }
-  if (expectFullRound && questions.length !== ROUND_QUESTION_COUNT) {
-    errors.push(`ROUND_QUESTION_COUNT_NOT_${ROUND_QUESTION_COUNT}:got=${questions.length}`);
+  const expectedCount = roundQuestionCount(mode);
+  if (expectFullRound && questions.length !== expectedCount) {
+    errors.push(`ROUND_QUESTION_COUNT_NOT_${expectedCount}:got=${questions.length}`);
   }
 
   const ids = questions.map((question) => question.id);

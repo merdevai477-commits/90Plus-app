@@ -24,6 +24,8 @@
  */
 
 import { validRound } from '../../test-utils/questions-rounds';
+import { ROUND_QUESTION_COUNT } from '../../constants/quiz.constants';
+import { roundQuestionCount } from '../../constants/questions-modes.config';
 
 /* ── in-memory database ── */
 
@@ -111,13 +113,26 @@ const prismaMock: any = {
   user: { findMany: async () => [] },
 };
 
+/*
+ * Football Grid reads stored career rows directly; this suite has none, so the
+ * mode publishes nothing here (its own board is covered in
+ * questions-challenges.data-modes.test.ts). The raw query has to EXIST though —
+ * a missing one would throw, and the point of several tests below is that one
+ * mode's failure never takes the day down with it.
+ */
+(prismaMock as any).$queryRawUnsafe = async () => [];
+
 jest.mock('../../lib/prisma', () => ({ __esModule: true, default: prismaMock }));
 
 jest.mock('../../utils/ensureBackendUser', () => ({
   ensureBackendUser: async (clerkUserId: string) => ({ id: `user-${clerkUserId}` }),
 }));
 
-jest.mock('../xp.service', () => ({ awardXp: async () => ({ awarded: 0 }) }));
+jest.mock('../xp.service', () => ({
+  awardXp: async () => ({ awarded: 0 }),
+  penalizeXp: async () => ({ awarded: 0 }),
+  XP_VALUES: { QUIZ_ANSWER_CORRECT: 1, QUIZ_ANSWER_WRONG: 1 },
+}));
 
 jest.mock('../redis-cache.service', () => ({
   redisCacheService: {
@@ -129,7 +144,7 @@ jest.mock('../redis-cache.service', () => ({
 
 /** Today's AI daily pack — present by default, so Football Quiz can be built. */
 const mockDailyPack = jest.fn(async () =>
-  Array.from({ length: 6 }, (_, i) => ({
+  Array.from({ length: ROUND_QUESTION_COUNT }, (_, i) => ({
     id: `pack-q${i + 1}`,
     difficulty: 'MEDIUM' as const,
     question: `Which country hosted the ${2000 + i} World Cup?`,
@@ -234,6 +249,22 @@ function legacyFlatRow(): ChallengeRow {
   });
 }
 
+/**
+ * The session never waits for generation — it starts it and returns a "not
+ * ready" error immediately (that is the whole point of the background path).
+ * Tests that assert what generation PUBLISHED therefore have to wait for that
+ * detached run; otherwise they race it and see an empty `upserted`.
+ */
+async function flushBackgroundGeneration(
+  until: () => boolean = () => true,
+  ticks = 50,
+): Promise<void> {
+  for (let i = 0; i < ticks; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+    if (until()) return;
+  }
+}
+
 beforeEach(() => {
   db.challenges = [];
   upserted.length = 0;
@@ -249,7 +280,7 @@ describe('a round is what the contract says it is', () => {
     const session = await getQuestionsChallengeSession('clerk-1', 'guess-player', 'en', TZ);
 
     expect(session.challengeId).toBe('challenge-1');
-    expect((session.content as any).questions).toHaveLength(6);
+    expect((session.content as any).questions).toHaveLength(ROUND_QUESTION_COUNT);
   });
 
   it('refuses to serve a legacy flat row as a successful session', async () => {
@@ -292,9 +323,18 @@ describe('a round is what the contract says it is', () => {
   it('still reports a genuinely missing mode as not-found, not empty', async () => {
     db.challenges = [];
 
-    await expect(getQuestionsChallengeSession('clerk-1', 'guess-player', 'en', TZ)).rejects.toThrow(
-      'QUESTIONS_CHALLENGE_NOT_FOUND',
-    );
+    /*
+     * A day with nothing published is reported as a day with nothing
+     * published — a named, actionable reason — and never as a round that
+     * happens to be empty. Which of the two "no round" reasons comes back
+     * depends on whether generation was just started for this day.
+     */
+    await expect(
+      getQuestionsChallengeSession('clerk-1', 'guess-player', 'en', TZ),
+    ).rejects.toThrow(/QUESTION_GENERATION_(UNAVAILABLE|IN_PROGRESS)/);
+    await expect(
+      getQuestionsChallengeSession('clerk-1', 'guess-player', 'en', TZ),
+    ).rejects.not.toThrow('QUESTIONS_CHALLENGE_EMPTY');
   });
 
   it('serves every mode of a valid published day', async () => {
@@ -302,7 +342,9 @@ describe('a round is what the contract says it is', () => {
 
     for (const [, mode] of ALL_MODES) {
       const session = await getQuestionsChallengeSession('clerk-1', mode, 'en', TZ);
-      expect((session.content as any).questions.length).toBe(6);
+      // Each mode's round is its OWN length — nine cells for Football Grid,
+      // one list for Top 10, ROUND_QUESTION_COUNT everywhere else.
+      expect((session.content as any).questions.length).toBe(roundQuestionCount(mode));
       expect(session.type).toBe(mode);
     }
   });
@@ -314,7 +356,7 @@ describe('a valid published round costs nothing to serve', () => {
 
     const session = await getQuestionsChallengeSession('clerk-1', 'guess-player', 'en', TZ);
 
-    expect((session.content as any).questions).toHaveLength(6);
+    expect((session.content as any).questions).toHaveLength(ROUND_QUESTION_COUNT);
     // The round in the database is the authority — nothing upstream is touched.
     expect(mockBuildAiQuestionChallenges).not.toHaveBeenCalled();
     expect(mockDailyPack).not.toHaveBeenCalled();
@@ -369,10 +411,11 @@ describe('stale legacy rows no longer suppress AI generation', () => {
     db.challenges = [];
 
     await expect(getQuestionsChallengeSession('clerk-1', 'guess-player', 'en', TZ)).rejects.toThrow();
+    await flushBackgroundGeneration(() => upserted.some((entry) => entry.type === 'FOOTBALL_QUIZ'));
 
     const footballQuiz = upserted.find((entry) => entry.type === 'FOOTBALL_QUIZ');
     expect(footballQuiz).toBeDefined();
-    expect(footballQuiz!.content.questions.length).toBe(6);
+    expect(footballQuiz!.content.questions.length).toBe(ROUND_QUESTION_COUNT);
     // Its questions are the AI pack's, never an authored bank.
     expect(footballQuiz!.source).toBe('AI');
   });
@@ -387,7 +430,7 @@ describe('stale legacy rows no longer suppress AI generation', () => {
   });
 
   it('does not publish a short Football Quiz round rather than a full one', async () => {
-    // Four pack questions is not a six-question round; the card is skipped.
+    // Four pack questions is not a full round; the card is skipped.
     mockDailyPack.mockImplementationOnce(async () =>
       Array.from({ length: 4 }, (_, i) => ({
         id: `pack-q${i + 1}`,
@@ -444,9 +487,14 @@ describe('a mode that fails never takes a mode that succeeded down with it', () 
     mockBuildAiQuestionChallenges.mockResolvedValue([aiChallenge('guess-player')] as any);
     db.challenges = [];
 
+    // Generation is detached: the first request reports "not ready" rather than
+    // holding the socket open for it (see triggerBackgroundGeneration).
+    await expect(getQuestionsChallengeSession('clerk-1', 'guess-player', 'en', TZ)).rejects.toThrow();
+    await flushBackgroundGeneration(() => upserted.some((entry) => entry.type === 'GUESS_PLAYER'));
+
     const session = await getQuestionsChallengeSession('clerk-1', 'guess-player', 'en', TZ);
 
-    expect((session.content as any).questions).toHaveLength(6);
+    expect((session.content as any).questions).toHaveLength(ROUND_QUESTION_COUNT);
     expect(upserted.some((entry) => entry.type === 'GUESS_PLAYER')).toBe(true);
     // The mode that failed is absent, not padded out.
     expect(upserted.some((entry) => entry.type === 'GUESS_CLUB')).toBe(false);
@@ -476,7 +524,7 @@ describe('the fallback tier is held to the same contract', () => {
 
     const session = await getQuestionsChallengeSession('clerk-1', 'guess-player', 'en', TZ);
 
-    expect((session.content as any).questions).toHaveLength(6);
+    expect((session.content as any).questions).toHaveLength(ROUND_QUESTION_COUNT);
     expect(session.refreshDate).toBe(
       `${REFRESH_DATE.getUTCFullYear()}-${String(REFRESH_DATE.getUTCMonth() + 1).padStart(2, '0')}-${String(
         REFRESH_DATE.getUTCDate(),
@@ -506,7 +554,7 @@ describe('the fallback tier is held to the same contract', () => {
 
     // The recycle update branch used to flip `status` alone, leaving the broken
     // content in place — the session then failed on a "successful" recycle.
-    expect((session.content as any).questions).toHaveLength(6);
+    expect((session.content as any).questions).toHaveLength(ROUND_QUESTION_COUNT);
     expect(session.content).not.toHaveProperty('playerFacts');
   });
 

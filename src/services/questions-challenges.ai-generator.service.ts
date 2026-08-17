@@ -51,7 +51,18 @@
  */
 
 import { logger } from '../utils/logger';
+import { XP_VALUES } from './xp.service';
 import { QUIZ_MIN_CONFIDENCE, ROUND_QUESTION_COUNT } from '../constants/quiz.constants';
+import {
+  FOOTBALL_GRID_COLUMNS,
+  FOOTBALL_GRID_ROWS,
+  roundQuestionCount,
+  TOP10_SLOT_COUNT,
+} from '../constants/questions-modes.config';
+import {
+  buildFootballGridBoard,
+  type GridPlayerCandidate,
+} from './questions-challenges.grid-data';
 import type { QuizDifficulty, QuizLanguage } from '../types/quiz.types';
 import type {
   GeneratedQuestionChallenge,
@@ -59,6 +70,7 @@ import type {
   QuestionChallengeEvidence,
   QuestionChallengeOption,
   QuestionChallengeQuestion,
+  Top10AnswerSlot,
 } from '../types/questions-challenges.types';
 import {
   buildQuestionsFootballCandidates,
@@ -83,8 +95,14 @@ import {
 
 const OPTION_LETTERS = ['a', 'b', 'c', 'd'] as const;
 
-/** XP a single question is worth, by the difficulty the AI graded it. */
-const DIFFICULTY_XP: Record<QuizDifficulty, number> = { EASY: 10, MEDIUM: 15, HARD: 20 };
+/**
+ * XP one question is worth. The product prices every Questions answer the
+ * same: 1 XP for a correct one (and −1 for a wrong one, charged by the
+ * grader). Difficulty still grades the question — it just no longer prices it,
+ * because a 10/15/20 table is what made a round advertise "+140 XP" while the
+ * player could only ever earn one point per answer.
+ */
+const QUESTION_XP = XP_VALUES.QUIZ_ANSWER_CORRECT;
 
 /** AI calls per mode before the day's generation is declared failed. */
 const MODE_ATTEMPTS = 2;
@@ -95,9 +113,12 @@ function isFootballDataFallbackEnabled(): boolean {
 }
 
 /**
- * Modes the daily AI pipeline publishes. `top10-challenge` stays out until the
- * front board ships (route still shows Coming Soon) so we don't burn AI quota
- * on rounds nobody can play.
+ * Modes the daily pipeline publishes.
+ *
+ * `top10-challenge` is back in the list: the mode is implemented end to end
+ * (typed answers, server-side name matching, its own board) so a published
+ * round is now a round somebody can play. It costs no AI quota — like
+ * `football-grid`, it is composed from stored football data.
  */
 const MODES: AiQuestionsMode[] = [
   'guess-player',
@@ -106,7 +127,19 @@ const MODES: AiQuestionsMode[] = [
   'football-grid',
   'player-connections',
   'transfer-puzzle',
+  'top10-challenge',
 ];
+
+/**
+ * Football Grid needs NEITHER the model NOR the candidate pool: its board is
+ * read straight out of `cached_365_player_career` in `buildModeRound`.
+ *
+ * It is called out here because the batch below used to refuse to build ANY
+ * mode when the AI provider was unconfigured or the candidate lookup came back
+ * empty — which silently made the one mode that never asks the model
+ * unpublishable for reasons that have nothing to do with it.
+ */
+const NEEDS_NEITHER_AGENT_NOR_CANDIDATES: AiQuestionsMode = 'football-grid';
 
 const MODE_ICON: Record<AiQuestionsMode, string> = {
   'guess-player': 'user',
@@ -318,7 +351,7 @@ function baseQuestion(
   return {
     id: `q${index + 1}`,
     difficulty,
-    xpReward: DIFFICULTY_XP[difficulty],
+    xpReward: QUESTION_XP,
     prompt,
     ...(hint ? { hint } : {}),
   };
@@ -478,60 +511,135 @@ function buildFootballBingo(raw: RawQuestion, ctx: QuestionBuildContext, index: 
   };
 }
 
-function buildFootballGrid(raw: RawQuestion, ctx: QuestionBuildContext, index: number): BuildResult {
-  const base = baseQuestion(raw, index);
-  if (isRejection(base)) return base;
+/**
+ * FOOTBALL GRID — one 3×3 board, played a cell at a time.
+ *
+ * There is no model in this path. The board (awards × clubs/national teams)
+ * and every player who can legally fill a cell come out of the stored
+ * 365Scores career+trophy records — see questions-challenges.grid-data.ts.
+ * Asking a model to invent "who won what with whom" is exactly the kind of
+ * claim it cannot be trusted with, and it is not needed: the relationship is
+ * recorded, so it is read rather than written.
+ *
+ * The round is FOOTBALL_GRID_CELL_COUNT questions, one per cell, each carrying
+ * the whole board plus four real players to choose between.
+ */
+async function buildFootballGridRound(
+  language: QuizLanguage,
+  refreshDateYmd: string,
+): Promise<GeneratedQuestionChallenge | null> {
+  const board = await buildFootballGridBoard(language, refreshDateYmd);
+  if (!board) return null;
 
-  const targetId = asString(raw.targetPlayerId);
-  const target = ctx.playersById.get(targetId);
-  if (!target) return `TARGET_PLAYER_NOT_A_CANDIDATE:${targetId || 'missing'}`;
-  if (!target.nationality) return `TARGET_PLAYER_HAS_NO_NATIONALITY:${target.id}`;
-  if (ctx.usedSubjects.has(target.id)) return `SUBJECT_ALREADY_USED:${target.id}`;
-  const targetClub = ctx.clubByTeamId.get(target.teamId);
-  if (!targetClub) return `TARGET_PLAYERS_CLUB_NOT_A_CANDIDATE:team=${target.teamId}`;
+  const rng = seededRng(`${refreshDateYmd}:${language}:football-grid:cells`);
+  const rowLabels = board.rows.map((row) => row.label);
+  const columnLabels = board.columns.map((column) => column.label);
+  const rowImages = board.rows.map((row) => row.imageUrl);
 
-  const otherClubIds = asStringArray(raw.otherClubIds);
-  if (otherClubIds.length !== 2) return `OTHER_CLUB_COUNT_NOT_2:got=${otherClubIds.length}`;
-  if (!allUnique(otherClubIds)) return 'OTHER_CLUB_DUPLICATE';
-  if (otherClubIds.includes(targetClub.id)) return 'OTHER_CLUB_IS_THE_TARGETS_OWN_CLUB';
-  const otherClubs = otherClubIds.map((id) => ctx.clubsById.get(id));
-  const unknownClub = otherClubIds.find((id) => !ctx.clubsById.has(id));
-  if (unknownClub) return `OTHER_CLUB_NOT_A_CANDIDATE:${unknownClub}`;
+  const questions: QuestionChallengeQuestion[] = [];
 
-  const knownNationalities = new Set(
-    ctx.candidates.players.map((player) => player.nationality).filter((value): value is string => Boolean(value)),
+  for (let row = 0; row < FOOTBALL_GRID_ROWS; row += 1) {
+    for (let column = 0; column < FOOTBALL_GRID_COLUMNS; column += 1) {
+      const index = questions.length;
+      const cellKey = `r${row}-c${column}`;
+      const cellPlayers = board.cells.get(cellKey) ?? [];
+      if (!cellPlayers.length) return null;
+
+      /*
+       * The board already worked out which player each cell should answer to,
+       * spreading the nine answers across as many different players as the data
+       * allows (buildFootballGridBoard → assignDistinctAnswers). Choosing here
+       * instead — "any cell player not used yet" — is a greedy pass that hands
+       * an early cell the only player a later one had.
+       */
+      const correct = board.answers.get(cellKey) ?? cellPlayers[0]!;
+
+      const rowRef = board.rows[row]!.refId;
+      const columnRef = board.columns[column]!.refId;
+      const fillsCell = (player: GridPlayerCandidate): boolean =>
+        player.teamIds.has(rowRef) && player.awardIds.has(columnRef);
+
+      /*
+       * Distractors are REAL players who do not fill this cell. Near misses
+       * first — someone who played for the club but never won the award, or won
+       * the award elsewhere — so the choice is a football question rather than
+       * "spot the famous name".
+       */
+      const wrong = board.players.filter((player) => player.id !== correct.id && !fillsCell(player));
+      const nearMiss = wrong.filter(
+        (player) => player.teamIds.has(rowRef) || player.awardIds.has(columnRef),
+      );
+      const others = wrong.filter(
+        (player) => !player.teamIds.has(rowRef) && !player.awardIds.has(columnRef),
+      );
+
+      const takenLabels = new Set([correct.name.trim().toLowerCase()]);
+      const distractors: GridPlayerCandidate[] = [];
+      for (const player of [...shuffle(nearMiss, rng), ...shuffle(others, rng)]) {
+        const key = player.name.trim().toLowerCase();
+        if (takenLabels.has(key)) continue;
+        takenLabels.add(key);
+        distractors.push(player);
+        if (distractors.length === 3) break;
+      }
+      if (distractors.length < 3) return null;
+
+      const built = buildOptions(
+        [
+          { label: correct.name, imageUrl: correct.imageUrl, isCorrect: true },
+          ...distractors.map((player) => ({
+            label: player.name,
+            imageUrl: player.imageUrl,
+            isCorrect: false,
+          })),
+        ],
+        rng,
+      );
+      if (typeof built === 'string') return null;
+
+      const difficulty = difficultyForIndex(index);
+      const rowLabel = rowLabels[row]!;
+      const columnLabel = columnLabels[column]!;
+
+      questions.push({
+        id: `q${index + 1}`,
+        difficulty,
+        xpReward: QUESTION_XP,
+        // Fixed product copy over two real labels — it states no football fact
+        // of its own beyond the cell the board already draws.
+        prompt:
+          language === 'ar'
+            ? `اختر لاعبًا لعب لـ${rowLabel} وفاز بـ${columnLabel}`
+            : `Pick a player who played for ${rowLabel} and won ${columnLabel}`,
+        rows: rowLabels,
+        columns: columnLabels,
+        rowImages,
+        gridCell: { row, column },
+        validationRules: [`${rowLabel} × ${columnLabel}`],
+        options: built.options,
+        answer: { correctIds: built.correctIds },
+      });
+    }
+  }
+
+  const challenge = assembleChallenge(
+    'football-grid',
+    language,
+    questions,
+    'football-data-pipeline',
+    [],
+    'DETERMINISTIC',
   );
-  const otherNationalities = asStringArray(raw.otherNationalities);
-  if (otherNationalities.length !== 2) return `OTHER_NATIONALITY_COUNT_NOT_2:got=${otherNationalities.length}`;
-  if (!allUnique(otherNationalities)) return 'OTHER_NATIONALITY_DUPLICATE';
-  if (otherNationalities.includes(target.nationality)) return 'OTHER_NATIONALITY_IS_THE_TARGETS';
-  const inventedNationality = otherNationalities.find((value) => !knownNationalities.has(value));
-  if (inventedNationality) return `NATIONALITY_NOT_IN_CANDIDATES:${inventedNationality}`;
-
-  const rowClubs = shuffle([targetClub, ...otherClubs.map((club) => club!)], ctx.rng);
-  const columns = shuffle([target.nationality, ...otherNationalities], ctx.rng);
-  const rowIndex = rowClubs.findIndex((club) => club.id === targetClub.id);
-  const colIndex = columns.indexOf(target.nationality);
-  if (rowIndex < 0 || colIndex < 0) return 'ANSWER_CELL_LOST_IN_SHUFFLE';
-
-  ctx.usedSubjects.add(target.id);
-  return {
-    ...base,
-    entity: { kind: 'player', id: target.id, name: target.name, imageUrl: target.photoUrl },
-    rows: rowClubs.map((club) => localized(ctx.candidates, club.name)),
-    columns,
-    rowImages: rowClubs.map((club) => club.logoUrl),
-    /*
-     * Columns are nationalities and carry no crest, so this used to be
-     * `columns.map(() => undefined)` — an array of `undefined`, which Prisma
-     * refuses to write into a JSON column ("Invalid value ... provided
-     * undefined"). Every grid round was built correctly and then died at the
-     * upsert, so the mode looked like a generation failure. The field is
-     * optional; omit it rather than storing a row of holes.
-     */
-    validationRules: [base.prompt],
-    answer: { correctIds: [`r${rowIndex}-c${colIndex}`] },
-  };
+  const verdict = validateGeneratedRound(challenge);
+  if (!verdict.ok) {
+    logger.warn('[QuestionsGrid] board failed the round contract', {
+      language,
+      refreshDateYmd,
+      errors: summarizeErrors(verdict.errors, 8),
+    });
+    return null;
+  }
+  return challenge;
 }
 
 function buildPlayerConnections(raw: RawQuestion, ctx: QuestionBuildContext, index: number): BuildResult {
@@ -650,45 +758,141 @@ function buildTransferPuzzle(raw: RawQuestion, ctx: QuestionBuildContext, index:
   };
 }
 
-function buildTop10(raw: RawQuestion, ctx: QuestionBuildContext, index: number): BuildResult {
-  const base = baseQuestion(raw, index);
-  if (isRejection(base)) return base;
-
-  const rankingId = asString(raw.rankingId);
-  const ranking = ctx.candidates.rankings.find((entry) => entry.id === rankingId);
-  if (!ranking) return `RANKING_NOT_A_CANDIDATE:${rankingId || 'missing'}`;
-  if (ctx.usedSubjects.has(ranking.id)) return `SUBJECT_ALREADY_USED:${ranking.id}`;
-
-  // The order is the real goal ranking, not anything the model chose.
-  const items = ranking.rows.map((row, rowIndex) => ({
-    id: String(rowIndex + 1),
-    label: localized(ctx.candidates, row.name),
-    imageUrl: row.photoUrl,
-  }));
-  if (items.length < 3) return `RANKING_HAS_FEWER_THAN_3_ROWS:got=${items.length}`;
-  const orderedTop3 = items.slice(0, 3);
-
-  ctx.usedSubjects.add(ranking.id);
-  return {
-    ...base,
-    entity: { kind: 'league', id: `league:${ranking.leagueId}`, name: ranking.leagueLabel },
-    options: items,
-    orderedAnswers: orderedTop3,
-    acceptedAnswers: orderedTop3.map((item) => item.id),
-    scoring: { exact: 10, partial: 5 },
-    answer: { orderedIds: orderedTop3.map((item) => item.id) },
-  };
+/**
+ * Spellings that count as one recorded name.
+ *
+ * DERIVED, never invented: the name as the provider records it, the localized
+ * form the round is written in, and the surname on its own — which is how
+ * people actually type a player. A surname shared by two players in the SAME
+ * list is dropped by the caller, so an alias can never make one slot match
+ * another player's answer.
+ */
+function nameAliases(sourceName: string, localizedName: string): string[] {
+  const forms = new Set<string>([sourceName, localizedName]);
+  for (const name of [sourceName, localizedName]) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length > 1) {
+      const surname = parts[parts.length - 1]!;
+      if (surname.length >= 3) forms.add(surname);
+    }
+  }
+  return [...forms].map((form) => form.trim()).filter(Boolean);
 }
 
-const BUILDERS: Record<AiQuestionsMode, (raw: RawQuestion, ctx: QuestionBuildContext, index: number) => BuildResult> = {
+/**
+ * TOP 10 — one real ranking, ten typed names.
+ *
+ * The ranking IS the answer and it comes from recorded goal totals
+ * (questions-challenges.football-data.ts → real top-scorer tables, or the same
+ * numbers already persisted in the career cache). The model authors nothing
+ * here: a list of the ten best scorers is not a sentence to write, and a model
+ * writing it is a model inventing a ranking.
+ *
+ * The round is ONE question — a Top 10 is a whole game in itself, not one of
+ * ten. See roundQuestionCount('top10-challenge') in questions-modes.config.ts.
+ */
+function buildTop10Round(
+  language: QuizLanguage,
+  candidates: QuestionsFootballCandidates,
+  refreshDateYmd: string,
+): GeneratedQuestionChallenge | null {
+  const usable = candidates.rankings.filter((ranking) => ranking.rows.length >= TOP10_SLOT_COUNT);
+  if (!usable.length) return null;
+
+  const rng = seededRng(`${refreshDateYmd}:${language}:top10-challenge`);
+  const ranking = shuffle(usable, rng)[0]!;
+  const rows = ranking.rows.slice(0, TOP10_SLOT_COUNT);
+
+  const slots: Top10AnswerSlot[] = rows.map((row, index) => ({
+    rank: index + 1,
+    canonical: localized(candidates, row.name),
+    aliases: nameAliases(row.name, localized(candidates, row.name)),
+    imageUrl: row.photoUrl,
+    value: row.goals,
+  }));
+
+  /*
+   * Two players in one list can share a surname ("Hernández", "Silva"). That
+   * alias would then name two different slots, so it is removed from both —
+   * the full names still match, nothing else is lost, and no answer can be
+   * credited to the wrong player.
+   */
+  const aliasCounts = new Map<string, number>();
+  for (const slot of slots) {
+    for (const alias of new Set(slot.aliases.map((form) => form.toLowerCase()))) {
+      aliasCounts.set(alias, (aliasCounts.get(alias) ?? 0) + 1);
+    }
+  }
+  for (const slot of slots) {
+    slot.aliases = slot.aliases.filter((alias) => (aliasCounts.get(alias.toLowerCase()) ?? 0) < 2);
+  }
+
+  const seasonLabel = String(ranking.season);
+  const question: QuestionChallengeQuestion = {
+    id: 'q1',
+    difficulty: 'HARD',
+    xpReward: QUESTION_XP,
+    prompt:
+      language === 'ar'
+        ? `اكتب أفضل ${TOP10_SLOT_COUNT} هدافين في ${ranking.leagueLabel} موسم ${seasonLabel}`
+        : `Name the top ${TOP10_SLOT_COUNT} scorers in ${ranking.leagueLabel}, ${seasonLabel}`,
+    entity: { kind: 'league', id: `league:${ranking.leagueId}`, name: ranking.leagueLabel },
+    top10: {
+      slots: TOP10_SLOT_COUNT,
+      categoryLabel: ranking.leagueLabel,
+      seasonLabel,
+    },
+    answer: { orderedAnswers: slots },
+  };
+
+  const challenge = assembleChallenge(
+    'top10-challenge',
+    language,
+    [question],
+    'football-data-pipeline',
+    [],
+    'DETERMINISTIC',
+  );
+  const verdict = validateGeneratedRound(challenge);
+  if (!verdict.ok) {
+    logger.warn('[QuestionsTop10] ranking failed the round contract', {
+      language,
+      refreshDateYmd,
+      errors: summarizeErrors(verdict.errors, 8),
+    });
+    return null;
+  }
+  return challenge;
+}
+
+/**
+ * The modes a MODEL writes questions for. Football Grid and Top 10 are absent
+ * on purpose: their content is a recorded relationship (who won what, who
+ * played where, who scored most) rather than a question to author, so both are
+ * composed straight from stored football data — see `buildFootballGridRound`
+ * and `buildTop10Round`.
+ */
+const BUILDERS: Record<
+  Exclude<AiQuestionsMode, 'football-grid' | 'top10-challenge'>,
+  (raw: RawQuestion, ctx: QuestionBuildContext, index: number) => BuildResult
+> = {
   'guess-player': buildGuessPlayer,
   'guess-club': buildGuessClub,
   'football-bingo': buildFootballBingo,
-  'football-grid': buildFootballGrid,
   'player-connections': buildPlayerConnections,
   'transfer-puzzle': buildTransferPuzzle,
-  'top10-challenge': buildTop10,
 };
+
+/** Modes composed from stored data, with no model in the path. */
+const DATA_ONLY_MODES: AiQuestionsMode[] = ['football-grid', 'top10-challenge'];
+
+function isDataOnlyMode(mode: AiQuestionsMode): boolean {
+  return DATA_ONLY_MODES.includes(mode);
+}
+
+function questionBuilderFor(mode: AiQuestionsMode) {
+  return (BUILDERS as Record<string, typeof buildGuessPlayer | undefined>)[mode];
+}
 
 /* ────────────────────────── integrity ────────────────────────── */
 
@@ -716,7 +920,9 @@ export function validateRoundIntegrity(challenge: GeneratedQuestionChallenge): b
 /** The same check, reporting WHY — this is what the rejection log line carries. */
 export function validateGeneratedRound(challenge: GeneratedQuestionChallenge): { ok: boolean; errors: string[] } {
   const mode = challenge.mode as AiQuestionsMode;
-  if (!BUILDERS[mode]) return { ok: false, errors: [`UNKNOWN_MODE:${challenge.mode}`] };
+  if (!questionBuilderFor(mode) && !isDataOnlyMode(mode)) {
+    return { ok: false, errors: [`UNKNOWN_MODE:${challenge.mode}`] };
+  }
   const result = validateRoundContract({
     mode,
     questions: challenge.content.questions ?? [],
@@ -746,9 +952,13 @@ function assembleChallenge(
     byQuestionId[question.id] = question.answer;
   }
 
-  // Round difficulty is the hardest question in it; XP is the sum of what the
-  // questions are actually worth, so the hub card and `xpAvailableToday` stay
-  // derived from real content rather than a table.
+  /*
+   * Round difficulty is the hardest question in it. The round's XP is the sum
+   * of what its questions are worth — with 1 XP per correct answer that is
+   * simply "how many questions are in it", i.e. the most XP this round can pay
+   * out. It is a real ceiling rather than a table, which is what
+   * `xpAvailableToday` reports on the hub.
+   */
   const difficulty: QuizDifficulty = questions.some((q) => q.difficulty === 'HARD')
     ? 'HARD'
     : questions.some((q) => q.difficulty === 'MEDIUM')
@@ -945,32 +1155,6 @@ function buildTransferPuzzleDataRaw(
 }
 
 /**
- * Top 10, composed without a model.
- *
- * The ranking IS the answer: order comes from recorded goal totals on the
- * candidate, and the builder rebuilds it from those rows regardless of anything
- * stated here. Only the question sentence is authored.
- */
-function buildTop10DataRaw(
-  language: QuizLanguage,
-  candidates: QuestionsFootballCandidates,
-  rng: () => number,
-): RawQuestion[] {
-  const rankings = shuffle(candidates.rankings, rng);
-  if (rankings.length < ROUND_QUESTION_COUNT) return [];
-
-  return rankings.slice(0, ROUND_QUESTION_COUNT).map((ranking, index) => ({
-    prompt:
-      language === 'ar'
-        ? `رتّب أفضل الهدافين في ${ranking.leagueLabel} موسم ${ranking.season}`
-        : `Rank the top scorers in ${ranking.leagueLabel}, ${ranking.season}`,
-    confidence: 96,
-    difficulty: difficultyForIndex(index),
-    rankingId: ranking.id,
-  }));
-}
-
-/**
  * Football Bingo, composed without a model.
  *
  * The card is "three of these nine clubs are from <country>". Country and
@@ -1027,63 +1211,6 @@ function buildFootballBingoDataRaw(
     });
   }
   return out;
-}
-
-/**
- * Football Grid, composed without a model.
- *
- * The grid asks which cell matches one player's club AND nationality — both
- * recorded on the candidate. The two decoy clubs and two decoy nationalities
- * are drawn from other candidates, so every axis label is a real club or a
- * nationality some real player in the pool actually holds.
- */
-function buildFootballGridDataRaw(
-  language: QuizLanguage,
-  candidates: QuestionsFootballCandidates,
-  rng: () => number,
-): RawQuestion[] {
-  const clubByTeamId = new Map(candidates.clubs.map((club) => [club.apiTeamId, club]));
-  const eligible = shuffle(
-    candidates.players.filter((player) => player.nationality && clubByTeamId.has(player.teamId)),
-    rng,
-  );
-  const nationalities = [
-    ...new Set(
-      candidates.players
-        .map((player) => player.nationality)
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ];
-  if (eligible.length < ROUND_QUESTION_COUNT || nationalities.length < 3) return [];
-
-  const out: RawQuestion[] = [];
-  for (const target of eligible) {
-    if (out.length >= ROUND_QUESTION_COUNT) break;
-    const targetClub = clubByTeamId.get(target.teamId)!;
-
-    const otherClubs = shuffle(
-      candidates.clubs.filter((club) => club.id !== targetClub.id),
-      rng,
-    ).slice(0, 2);
-    const otherNationalities = shuffle(
-      nationalities.filter((value) => value !== target.nationality),
-      rng,
-    ).slice(0, 2);
-    if (otherClubs.length !== 2 || otherNationalities.length !== 2) continue;
-
-    out.push({
-      prompt:
-        language === 'ar'
-          ? `أين يقع ${target.name} في الشبكة؟`
-          : `Where does ${target.name} belong on the grid?`,
-      confidence: 96,
-      difficulty: difficultyForIndex(out.length),
-      targetPlayerId: target.id,
-      otherClubIds: otherClubs.map((club) => club.id),
-      otherNationalities,
-    });
-  }
-  return out.length >= ROUND_QUESTION_COUNT ? out : [];
 }
 
 /**
@@ -1146,6 +1273,11 @@ function buildRoundFromFootballData(
   refreshDateYmd: string,
   candidates: QuestionsFootballCandidates,
 ): GeneratedQuestionChallenge | null {
+  /*
+   * Football Grid and Top 10 are absent: they are not "the AI round, composed
+   * without the AI" — they have no AI round at all and are built by
+   * `buildFootballGridRound` / `buildTop10Round` directly.
+   */
   const DETERMINISTIC_RAW: Partial<
     Record<AiQuestionsMode, (l: QuizLanguage, c: QuestionsFootballCandidates, r: () => number) => RawQuestion[]>
   > = {
@@ -1153,9 +1285,7 @@ function buildRoundFromFootballData(
     'guess-club': buildGuessClubDataRaw,
     'player-connections': buildPlayerConnectionsDataRaw,
     'football-bingo': buildFootballBingoDataRaw,
-    'football-grid': buildFootballGridDataRaw,
     'transfer-puzzle': buildTransferPuzzleDataRaw,
-    'top10-challenge': buildTop10DataRaw,
   };
 
   const compose = DETERMINISTIC_RAW[mode];
@@ -1179,7 +1309,8 @@ function buildRoundFromFootballData(
     countryUsage: new Map<string, number>(),
   };
 
-  const build = BUILDERS[mode];
+  const build = questionBuilderFor(mode);
+  if (!build) return null;
   const accepted: QuestionChallengeQuestion[] = [];
   /** Why each composed question was refused — this path used to fail silently. */
   const refusals: string[] = [];
@@ -1244,9 +1375,28 @@ async function buildModeRound(
   mode: AiQuestionsMode,
   language: QuizLanguage,
   refreshDateYmd: string,
-  candidates: QuestionsFootballCandidates,
+  /** Null only when every requested mode is data-only and none of them read it. */
+  candidates: QuestionsFootballCandidates | null,
   avoidPrompts: string[],
 ): Promise<GeneratedQuestionChallenge | null> {
+  /*
+   * DATA-ONLY MODES. Football Grid's board is a set of recorded
+   * player↔club↔trophy relationships and Top 10 is a recorded scorer ranking.
+   * Neither has anything for a model to author, and asking one to produce them
+   * would be asking it to state football facts from memory — so these two are
+   * composed from stored data and never reach the agent at all.
+   */
+  if (mode === 'football-grid') {
+    return buildFootballGridRound(language, refreshDateYmd);
+  }
+  // Every other mode reads the candidate pool; it is only absent on a
+  // Football-Grid-only build, which returned above.
+  if (!candidates) return null;
+  if (mode === 'top10-challenge') {
+    return buildTop10Round(language, candidates, refreshDateYmd);
+  }
+
+  const expectedCount = roundQuestionCount(mode);
   const system = buildQuestionsSystemPrompt(language);
 
   for (let attempt = 1; attempt <= MODE_ATTEMPTS; attempt += 1) {
@@ -1295,13 +1445,14 @@ async function buildModeRound(
       countryUsage: new Map<string, number>(),
     };
 
-    const build = BUILDERS[mode];
+    const build = questionBuilderFor(mode);
+    if (!build) return null;
     const accepted: QuestionChallengeQuestion[] = [];
     /** Why each refused question was refused — one entry per dropped item. */
     const questionErrors: string[] = [];
 
     for (const [rawIndex, item] of raw.entries()) {
-      if (accepted.length >= ROUND_QUESTION_COUNT) break;
+      if (accepted.length >= expectedCount) break;
       const position = rawIndex + 1;
       const built = build(item, ctx, accepted.length);
       if (isRejection(built)) {
@@ -1317,7 +1468,7 @@ async function buildModeRound(
     }
 
     let roundErrors: string[] = [];
-    if (accepted.length === ROUND_QUESTION_COUNT) {
+    if (accepted.length === expectedCount) {
       const challenge = assembleChallenge(mode, language, accepted, result.model, result.toolsUsed);
       const verdict = validateGeneratedRound(challenge);
       if (verdict.ok) return challenge;
@@ -1333,8 +1484,8 @@ async function buildModeRound(
      * one that dies on a whole-round rule.
      */
     const reason =
-      accepted.length < ROUND_QUESTION_COUNT
-        ? `NOT_ENOUGH_VALID_QUESTIONS:${accepted.length}/${ROUND_QUESTION_COUNT}`
+      accepted.length < expectedCount
+        ? `NOT_ENOUGH_VALID_QUESTIONS:${accepted.length}/${expectedCount}`
         : 'ROUND_LEVEL_VALIDATION_FAILED';
 
     logger.warn('[QuestionsAI] round rejected, retrying', {
@@ -1344,7 +1495,7 @@ async function buildModeRound(
       attempt,
       returned: raw.length,
       accepted: accepted.length,
-      needed: ROUND_QUESTION_COUNT,
+      needed: expectedCount,
       reason,
       validationErrors: summarizeErrors([...roundErrors, ...questionErrors], 12),
     });
@@ -1385,27 +1536,61 @@ async function buildModeRound(
 export async function buildAiQuestionChallenges(
   language: QuizLanguage,
   refreshDateYmd: string,
-  options?: { avoidPromptsByMode?: Partial<Record<AiQuestionsMode, string[]>> },
+  options?: {
+    avoidPromptsByMode?: Partial<Record<AiQuestionsMode, string[]>>;
+    /** Build only these modes. Defaults to the whole day. */
+    modes?: AiQuestionsMode[];
+  },
 ): Promise<GeneratedQuestionChallenge[] | null> {
-  if (!isQuestionsAgentAvailable()) {
+  const requested = options?.modes?.length
+    ? MODES.filter((mode) => options.modes!.includes(mode))
+    : MODES;
+  if (!requested.length) return null;
+
+  /*
+   * These two preconditions belong to the modes that actually use them. Checked
+   * for the whole batch, they took Football Grid down with them even though its
+   * board comes from the database and no model or candidate pool is involved.
+   */
+  const gridOnly = requested.every((mode) => mode === NEEDS_NEITHER_AGENT_NOR_CANDIDATES);
+
+  if (!gridOnly && !isQuestionsAgentAvailable()) {
     logger.warn('[QuestionsAI] no quiz AI provider configured — cannot generate a round');
     return null;
   }
 
-  const candidates = await buildQuestionsFootballCandidates(language, refreshDateYmd);
-  if (!candidates) return null;
+  const candidates = gridOnly ? null : await buildQuestionsFootballCandidates(language, refreshDateYmd);
+  if (!gridOnly && !candidates) return null;
 
   const out: GeneratedQuestionChallenge[] = [];
   const failed: AiQuestionsMode[] = [];
 
-  for (const mode of MODES) {
-    const challenge = await buildModeRound(
-      mode,
-      language,
-      refreshDateYmd,
-      candidates,
-      options?.avoidPromptsByMode?.[mode] ?? [],
-    );
+  for (const mode of requested) {
+    /*
+     * PER-MODE, NOT ALL-OR-NOTHING — including when a builder THROWS.
+     *
+     * A mode can fail in ways that are not "returned null": an upstream lookup
+     * that rejects, a database read that is unavailable. Letting that escape
+     * would abandon the whole day's generation and discard the rounds already
+     * built, which is exactly the failure this function exists to prevent.
+     */
+    let challenge: GeneratedQuestionChallenge | null = null;
+    try {
+      challenge = await buildModeRound(
+        mode,
+        language,
+        refreshDateYmd,
+        candidates,
+        options?.avoidPromptsByMode?.[mode] ?? [],
+      );
+    } catch (err) {
+      logger.error('[QuestionsAI] mode threw while building — skipping it', {
+        mode,
+        language,
+        refreshDateYmd,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     if (!challenge) {
       failed.push(mode);
       logger.warn('[QuestionsAI] mode produced no usable round — skipping it', {
@@ -1443,5 +1628,12 @@ export async function buildAiQuestionChallenges(
   return out;
 }
 
-/** Exposed for tests. */
+/** Every mode the daily pipeline publishes. Exposed for tests. */
 export const AI_QUESTION_MODES = MODES;
+
+/**
+ * The modes a MODEL is actually asked to write. Football Grid and Top 10 are
+ * published too, but composed from stored data — no agent call. Exposed for
+ * tests so "one AI request per authored mode" stays checkable.
+ */
+export const AI_AUTHORED_MODES = MODES.filter((mode) => !isDataOnlyMode(mode));

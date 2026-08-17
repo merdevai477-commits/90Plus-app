@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import { redisCacheService } from './redis-cache.service';
 import { getRedisClient, isRedisConnected } from '../lib/redis';
 import { ensureBackendUser } from '../utils/ensureBackendUser';
-import { awardXp } from './xp.service';
+import { awardXp, penalizeXp, XP_VALUES } from './xp.service';
 import { getOrCreateDailyPack } from './quiz-daily.service';
 import { todayPackDate, packDateYmd } from './quiz-generator.service';
 import { buildAiQuestionChallenges } from './questions-challenges.ai-generator.service';
@@ -32,7 +32,30 @@ import {
   sessionProgressToJson,
   type QuestionAnswerRecord,
 } from './questions-challenges.session.service';
-import { ROUND_QUESTION_COUNT, QUIZ_QUESTION_TIME_LIMIT_SEC } from '../constants/quiz.constants';
+import {
+  QUIZ_COIN_COST,
+  QUIZ_QUESTION_TIME_LIMIT_SEC,
+  ROUND_QUESTION_COUNT,
+} from '../constants/quiz.constants';
+import { roundQuestionCount, top10EvaluationStrategy } from '../constants/questions-modes.config';
+import { gradeTop10Entries } from './questions-challenges.top10';
+
+/**
+ * What a wrong answer costs, in coins.
+ *
+ * NOT a new business rule: this is the app's existing quiz economy value
+ * (`QUIZ_COIN_COST`, what the Daily Football Quiz has always charged for a
+ * wrong answer, a skip or a hint). Aliased here so the Questions modes are
+ * visibly charging the SAME thing rather than a number of their own.
+ */
+const WRONG_ANSWER_COIN_PENALTY = QUIZ_COIN_COST;
+
+/**
+ * XP for ONE Questions answer. The product rule, in full:
+ * a correct answer is worth 1 XP and a wrong one costs 1 XP.
+ */
+const QUESTION_XP_CORRECT = XP_VALUES.QUIZ_ANSWER_CORRECT;
+const QUESTION_XP_WRONG = XP_VALUES.QUIZ_ANSWER_WRONG;
 import type { QuizDifficulty, QuizLanguage, StoredQuizQuestion } from '../types/quiz.types';
 import type {
   DailyQuestionChallengeDto,
@@ -392,7 +415,27 @@ function evaluateChallengeAnswer(
   const selected = normalizedSet(submittedIds);
   const correct = normalizedSet(answer.correctIds);
 
+  /*
+   * TOP 10 — the submission is ten TYPED NAMES, not ids, so it is graded by
+   * matching each one against the real ranking's names and recorded aliases
+   * (questions-challenges.top10.ts). The client never sees those names: it
+   * sends what the player typed and is told how many were right.
+   *
+   * Whether a name has to be in the RIGHT SLOT is a product rule, read from
+   * `top10EvaluationStrategy()` rather than decided here.
+   */
   if (mode === 'top10-challenge') {
+    const slots = answer.orderedAnswers ?? [];
+    if (slots.length) {
+      const grade = gradeTop10Entries(submittedIds, slots, top10EvaluationStrategy());
+      return {
+        isCorrect: grade.isPerfect,
+        completionPercentage: Math.round((grade.correctCount / slots.length) * 100),
+        score: grade.correctCount,
+      };
+    }
+
+    // Legacy rows (ranked ids, drag-to-order) still grade the way they were written.
     const ordered = (answer.orderedIds ?? []).map(normalizeOptionId).filter(Boolean);
     const submitted = submittedIds.map(normalizeOptionId).filter(Boolean);
     const max = Math.max(ordered.length, 1);
@@ -408,7 +451,13 @@ function evaluateChallengeAnswer(
     };
   }
 
-  if (mode === 'football-grid' || mode === 'football-bingo') {
+  /*
+   * FOOTBALL GRID is one player per cell now — a single-answer question, graded
+   * by the same all-or-nothing rule as every other single-answer mode below.
+   * It used to be graded here, alongside bingo's three cells, because its
+   * answer was a CELL id; it no longer is.
+   */
+  if (mode === 'football-bingo') {
     const matched = [...selected].filter((id) => correct.has(id)).length;
     const total = Math.max(correct.size, 1);
     const completionPercentage = Math.round((matched / total) * 100);
@@ -1503,47 +1552,11 @@ async function resolveStreak(userId: string): Promise<{ current: number; longest
   };
 }
 
-async function computeDailyCompletionBonus(
-  userId: string,
-  refreshDate: Date,
-  timezone: string,
-): Promise<number> {
-  const challenges = await db.dailyQuestionChallenge.findMany({
-    where: {
-      refreshDate,
-      streakContribution: true,
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  if (!challenges.length) return 0;
-
-  const completedCount = await db.userQuestionChallenge.count({
-    where: {
-      userId,
-      challengeId: {
-        in: (challenges as Array<{ id: string }>).map((challenge: { id: string }) => challenge.id),
-      },
-      completed: true,
-    },
-  });
-
-  if (completedCount < challenges.length) return 0;
-
-  const dateKey = packDateYmd(refreshDate, timezone);
-  const idempotencyKey = `questions.daily-complete.${dateKey}`;
-  const bonus = await awardXp({
-    userId,
-    action: 'QUIZ_COMPLETED_HIGH',
-    amount: 25,
-    idempotencyKey,
-    timezone,
-  });
-
-  return bonus.awarded;
-}
+/*
+ * The 25 XP "you finished every mode today" bonus was removed with the rest of
+ * the Questions XP extras: the product prices a Questions answer at ±1 XP and
+ * nothing else, so a bonus here would make a day's XP unexplainable again.
+ */
 
 /**
  * Real counters for the Questions hub stats strip. Both come from the user's
@@ -1827,8 +1840,8 @@ export async function getQuestionsChallengeSession(
   });
 
   let sessionProgress = parseSessionProgress(progressRow?.answeredPayload);
-  ensureSessionStarted(sessionProgress, questions, now);
-  const expiredAdvanced = advanceExpiredQuestions(sessionProgress, questions, now, evaluatePoints);
+  ensureSessionStarted(mode, sessionProgress, questions, now);
+  const expiredAdvanced = advanceExpiredQuestions(mode, sessionProgress, questions, now, evaluatePoints);
 
   const derived = deriveProgressFields(sessionProgress, questions, evaluatePoints);
 
@@ -1998,17 +2011,15 @@ export async function submitQuestionsChallengeAnswer(
     content: challenge.content,
     answer: challenge.answer,
   });
-  if (!verdict.ok || questions.length !== ROUND_QUESTION_COUNT) {
+  if (!verdict.ok || questions.length !== roundQuestionCount(mode)) {
     throw new Error('QUESTIONS_CHALLENGE_EMPTY');
   }
 
-  const totalQuestions = questions.length;
   const now = new Date();
   const evaluatePoints = evaluatePointsForMode(mode, questions);
 
   let txResult: {
     outcome: ReturnType<typeof applyAnswerToSession>;
-    wasCompletedBefore: boolean;
     alreadyCreditedQuestion: boolean;
     updated: {
       attempts: number;
@@ -2021,10 +2032,29 @@ export async function submitQuestionsChallengeAnswer(
     answer: QuestionChallengeAnswer;
     questionId: string;
     question: QuestionChallengeQuestion | null;
+    /** Authoritative coin balance after this answer — see the penalty below. */
+    coins: number;
+    coinsDeducted: number;
   };
 
   try {
     txResult = await db.$transaction(async (tx: any) => {
+      /*
+       * SERIALIZE THIS USER'S SUBMISSIONS.
+       *
+       * Everything below reads the session, decides whether the question is
+       * already closed, and only then writes progress, XP and the coin
+       * penalty. Two requests for the same question that arrive together (a
+       * double tap, a client retry that raced its own response) would
+       * otherwise both read "not answered yet" and both charge — a lost
+       * update, and the player pays twice for one mistake.
+       *
+       * Taking the user row's lock first makes the second request wait for the
+       * first to commit; it then reads the answered state and returns the
+       * idempotent result. Cheap: one row, held for the length of one answer.
+       */
+      await tx.$queryRawUnsafe('SELECT id FROM users WHERE id = $1 FOR UPDATE', user.id);
+
       const existing = await tx.userQuestionChallenge.findUnique({
         where: {
           userId_challengeId: {
@@ -2043,8 +2073,8 @@ export async function submitQuestionsChallengeAnswer(
       });
 
       const sessionProgress = parseSessionProgress(existing?.answeredPayload);
-      ensureSessionStarted(sessionProgress, questions, now);
-      advanceExpiredQuestions(sessionProgress, questions, now, evaluatePoints);
+      ensureSessionStarted(mode, sessionProgress, questions, now);
+      advanceExpiredQuestions(mode, sessionProgress, questions, now, evaluatePoints);
 
       const resolvedQuestionId =
         payload.questionId?.trim() ||
@@ -2118,14 +2148,66 @@ export async function submitQuestionsChallengeAnswer(
         throw new Error('QUESTIONS_CHALLENGE_QUESTION_NOT_FOUND');
       }
 
+      /*
+       * WRONG ANSWER → COIN PENALTY.
+       *
+       * The rule is the app's existing quiz economy, not a new one: the Daily
+       * Football Quiz already charges QUIZ_COIN_COST for a wrong answer
+       * (quiz-daily.service.ts → `quiz_wrong:<questionId>`), clamps the charge
+       * to the balance so coins never go negative, and applies nothing at all
+       * on a timeout. Questions modes now do exactly the same thing, so one
+       * wrong answer costs the same wherever it is given.
+       *
+       * IDEMPOTENCY: only a submission that actually CLOSED the question
+       * charges. `outcome.idempotent` is true for a retry/double-tap of a
+       * question already answered, so a replayed request re-reads the balance
+       * and deducts nothing. A time-expired question never reaches here — it
+       * throws QUESTIONS_SESSION_TIME_EXPIRED above.
+       */
+      const chargePenalty = !outcome.idempotent && !outcome.isCorrect && !outcome.timeExpired;
+      let coinsAfter = 0;
+      let coinsDeducted = 0;
+
+      if (chargePenalty) {
+        const account = await tx.user.findUnique({
+          where: { id: user.id },
+          select: { coins: true },
+        });
+        const balance = account?.coins ?? 0;
+        coinsDeducted = Math.min(balance, WRONG_ANSWER_COIN_PENALTY);
+        coinsAfter = balance - coinsDeducted;
+
+        if (coinsDeducted > 0) {
+          await tx.user.update({
+            where: { id: user.id },
+            data: { coins: coinsAfter },
+          });
+          await tx.coinTransaction.create({
+            data: {
+              userId: user.id,
+              amount: -coinsDeducted,
+              type: 'SPEND',
+              description: `questions_wrong:${challenge.id}:${resolvedQuestionId}`,
+            },
+          });
+        }
+      } else {
+        const account = await tx.user.findUnique({
+          where: { id: user.id },
+          select: { coins: true },
+        });
+        coinsAfter = account?.coins ?? 0;
+      }
+
       return {
         outcome,
-        wasCompletedBefore: existing?.completed ?? false,
         alreadyCreditedQuestion,
         updated,
         answer: gradedAnswer,
         questionId: resolvedQuestionId,
         question,
+        coins: coinsAfter,
+        coinsDeducted,
       };
     });
   } catch (err) {
@@ -2137,69 +2219,72 @@ export async function submitQuestionsChallengeAnswer(
 
   const {
     outcome,
-    wasCompletedBefore,
     alreadyCreditedQuestion,
     updated,
     answer,
     questionId,
     question,
+    coins,
+    coinsDeducted,
   } = txResult;
-  const questionXp = question?.xpReward ?? Math.round(challenge.xpReward / totalQuestions);
-
-  const baseXp = outcome.idempotent || alreadyCreditedQuestion || !outcome.isCorrect ? 0 : questionXp;
+  /*
+   * XP FOR ONE QUESTION — the product's whole rule for this mode:
+   *
+   *     right → +1 XP        wrong → −1 XP
+   *
+   * and nothing else. There is no difficulty multiplier, no streak
+   * multiplier, no completion bonus and no "all modes today" bonus: those made
+   * a round worth ~140 XP, which is where the hub's arbitrary "+140 XP" card
+   * label came from and why one question could never be reasoned about.
+   *
+   * ONE ATTEMPT, ONE MOVEMENT. Both directions carry an idempotency key built
+   * from the question itself (not the attempt counter), so a double tap, a
+   * retry, a re-mount or a resubmitted answer moves XP exactly once — and a
+   * question that was already answered correctly can never be re-credited by
+   * answering it again.
+   */
+  const alreadySettled = outcome.idempotent || alreadyCreditedQuestion;
   const streak = await resolveStreak(user.id);
-  const streakBonus =
-    challenge.streakContribution && baseXp > 0
-      ? Math.round(baseXp * Math.min(streak.current, 7) * 0.05)
-      : 0;
-
-  const completionBonus = !wasCompletedBefore && updated.completed ? 10 : 0;
-  const dailyBonus =
-    !wasCompletedBefore && updated.completed
-      ? await computeDailyCompletionBonus(user.id, refreshDate, timezone)
-      : 0;
-  const totalXpAwarded = Math.max(baseXp + streakBonus + completionBonus, 0);
+  const xpIdempotencyKey = `questions.${challenge.id}.${questionId}`;
 
   let xpEarned = 0;
-  if (totalXpAwarded > 0 && !outcome.idempotent) {
-    const xpResult = await awardXp({
-      userId: user.id,
-      action: 'QUIZ_ANSWER_CORRECT',
-      amount: totalXpAwarded,
-      idempotencyKey: `questions.${challenge.id}.${questionId}.${outcome.questionAttempts}`,
-      timezone,
-    });
+  /** The user's XP AFTER this answer — what the header shows. */
+  let xpSnapshot: { xp: number; level: number } | null = null;
+  if (!alreadySettled && !outcome.timeExpired) {
+    const xpResult = outcome.isCorrect
+      ? await awardXp({
+          userId: user.id,
+          action: 'QUIZ_ANSWER_CORRECT',
+          amount: QUESTION_XP_CORRECT,
+          idempotencyKey: xpIdempotencyKey,
+          timezone,
+          metadata: { challengeId: challenge.id, questionId, mode },
+        })
+      : await penalizeXp({
+          userId: user.id,
+          action: 'QUIZ_ANSWER_WRONG',
+          amount: QUESTION_XP_WRONG,
+          idempotencyKey: xpIdempotencyKey,
+          metadata: { challengeId: challenge.id, questionId, mode },
+        });
     xpEarned = xpResult.awarded;
+    xpSnapshot = { xp: xpResult.newXp, level: xpResult.newLevel };
 
-    await db.userQuestionChallenge.update({
-      where: {
-        userId_challengeId: {
-          userId: user.id,
-          challengeId: challenge.id,
+    if (xpEarned !== 0) {
+      await db.userQuestionChallenge.update({
+        where: {
+          userId_challengeId: {
+            userId: user.id,
+            challengeId: challenge.id,
+          },
         },
-      },
-      data: {
-        xpEarned: {
-          increment: xpEarned,
+        data: {
+          xpEarned: {
+            increment: xpEarned,
+          },
         },
-      },
-    });
-  }
-
-  if (dailyBonus > 0) {
-    await db.userQuestionChallenge.update({
-      where: {
-        userId_challengeId: {
-          userId: user.id,
-          challengeId: challenge.id,
-        },
-      },
-      data: {
-        xpEarned: {
-          increment: dailyBonus,
-        },
-      },
-    });
+      });
+    }
   }
 
   await redisCacheService.del(challengeProgressCacheKey(user.id, packDateYmd(refreshDate, timezone), language));
@@ -2216,14 +2301,39 @@ export async function submitQuestionsChallengeAnswer(
     ...base,
     attempts: updated.attempts,
     elapsedTime: updated.elapsedTime,
-    xpEarned: xpEarned + dailyBonus,
-    bonusXp: completionBonus,
-    streakBonus,
-    totalXpAwarded: xpEarned + dailyBonus,
+    // What this answer actually moved: +1, −1, or 0 when nothing changed
+    // hands (a replay, or a question that had already been settled).
+    xpEarned,
+    bonusXp: 0,
+    streakBonus: 0,
+    totalXpAwarded: xpEarned,
     currentStreak: streak.current,
     longestStreak: streak.longest,
+    // The account's XP after this answer, so the header can show the real
+    // number instead of waiting for the next poll.
+    ...(xpSnapshot ? { xp: xpSnapshot.xp, level: xpSnapshot.level } : {}),
     idempotent: outcome.idempotent,
     finalResult: outcome.progress.finalResult,
+    /*
+     * TOP 10 — which of the ten typed names matched, recomputed from the
+     * SUBMITTED entries and the stored ranking. Only ever sent with a graded
+     * answer, so the reveal can tick each row without the app having held the
+     * names beforehand.
+     */
+    ...(mode === 'top10-challenge' && answer.orderedAnswers?.length
+      ? {
+          slotResults: gradeTop10Entries(
+            outcome.record.selectedIds,
+            answer.orderedAnswers,
+            top10EvaluationStrategy(),
+          ).hits,
+        }
+      : {}),
+    // Authoritative balance AFTER this answer. The app shows this number
+    // rather than subtracting the penalty itself — the client is never the
+    // source of a balance.
+    coins,
+    coinsDeducted,
   };
 }
 
@@ -2333,7 +2443,7 @@ export async function getQuestionFiftyFifty(
       refreshDate,
       status: 'PUBLISHED' as any,
     },
-    select: { id: true, content: true },
+    select: { id: true, content: true, answer: true },
   });
 
   if (!challenge) {
@@ -2348,15 +2458,32 @@ export async function getQuestionFiftyFifty(
   }
 
   const options = question.options ?? [];
-  const correctSet = normalizedSet(question.answer?.correctIds);
-  const correctOptionIds = options
-    .map((option) => option.id)
-    .filter((id) => correctSet.has(normalizeOptionId(id)));
-  const wrongOptionIds = options
-    .map((option) => option.id)
-    .filter((id) => !correctSet.has(normalizeOptionId(id)));
+  const optionIds = options.map((option) => option.id);
+  /*
+   * The answer key is resolved the SAME way the grader resolves it
+   * (`resolveQuestionAnswer` → normalizedSet(correctIds)), so "which option is
+   * correct" can never mean one thing here and another at grading time.
+   */
+  const answer = resolveQuestionAnswer(
+    questions,
+    (challenge.answer ?? {}) as QuestionChallengeAnswer,
+    questionId,
+  );
+  const correctSet = normalizedSet(answer?.correctIds);
+  const correctOptionIds = optionIds.filter((id) => correctSet.has(normalizeOptionId(id)));
+  const wrongOptionIds = optionIds.filter((id) => !correctSet.has(normalizeOptionId(id)));
 
-  if (correctOptionIds.length !== 1 || wrongOptionIds.length < 1) {
+  /*
+   * Refuse rather than half-eliminate. A question whose options do not hold
+   * exactly one correct id — or whose ids are not unique — cannot be halved
+   * into "the answer + one wrong answer", and returning anything else would
+   * hide three options and leave one, which is the bug this guard exists for.
+   */
+  if (
+    correctOptionIds.length !== 1 ||
+    wrongOptionIds.length < 1 ||
+    new Set(optionIds).size !== optionIds.length
+  ) {
     throw new Error('QUESTIONS_CHALLENGE_FIFTY_FIFTY_UNAVAILABLE');
   }
 
@@ -2620,6 +2747,77 @@ export async function clearQuestionsGenerationBackoff(
     await clearGenerationFailureKeys(ymd, language);
     await redisCacheService.del(challengeCacheKey(ymd, language));
   }
+}
+
+/**
+ * Build and publish TODAY'S FOOTBALL GRID round, and nothing else.
+ *
+ * Football Grid is the one mode composed purely from stored provider data, so
+ * it can be (re)published on its own in seconds without touching the AI batch —
+ * and without rewriting the other seven modes' rounds underneath players who
+ * are part-way through them, which a full-day regenerate would do.
+ *
+ * This is a real generation, not a shortcut: it goes through the same builder
+ * the daily job uses and the same publish gate (`persistChallenges`), so a
+ * board that fails the round contract is refused here exactly as it would be
+ * at 00:00. It exists so the mode can be produced on demand in development and
+ * recovered by an operator in production — see scripts/publish-football-grid.ts.
+ *
+ * Returns true when a round is published.
+ */
+export async function publishFootballGridRound(options?: {
+  language?: QuizLanguage;
+  timezone?: string;
+  refreshDate?: Date;
+}): Promise<boolean> {
+  const timezone = options?.timezone ?? 'UTC';
+  const refreshDate = options?.refreshDate ?? todayPackDate(timezone);
+  const refreshDateYmd = packDateYmd(refreshDate, timezone);
+  const languages = options?.language ? [options.language] : (['ar', 'en'] as QuizLanguage[]);
+
+  let publishedAny = false;
+
+  for (const language of languages) {
+    const built = await buildAiQuestionChallenges(language, refreshDateYmd, {
+      modes: ['football-grid'],
+    });
+    const round = built?.find((challenge) => challenge.mode === 'football-grid') ?? null;
+
+    if (!round) {
+      logger.error('[QuestionsChallenges] Football Grid could not be built', {
+        language,
+        refreshDate: refreshDateYmd,
+      });
+      continue;
+    }
+
+    const published = await persistChallenges(
+      language,
+      refreshDate,
+      { language, refreshDate: refreshDateYmd, refreshTime: DEFAULT_REFRESH_TIME, challenges: [round] },
+      null,
+    );
+
+    if (!published.includes('football-grid')) {
+      logger.error('[QuestionsChallenges] Football Grid was built but refused at the publish gate', {
+        language,
+        refreshDate: refreshDateYmd,
+      });
+      continue;
+    }
+
+    publishedAny = true;
+    // The day's readiness flag and any back-off are now stale — the mode that
+    // was missing is published, so let the next session request re-evaluate.
+    await redisCacheService.del(challengeCacheKey(refreshDateYmd, language));
+    await clearGenerationFailureKeys(refreshDateYmd, language);
+    logger.info('[QuestionsChallenges] Football Grid published', {
+      language,
+      refreshDate: refreshDateYmd,
+    });
+  }
+
+  return publishedAny;
 }
 
 export async function regenerateDailyQuestionsChallenges(options?: {

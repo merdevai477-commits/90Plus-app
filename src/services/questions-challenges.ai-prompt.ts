@@ -141,21 +141,6 @@ Each question object:
 Vary the country across the round: no country may be the answer to more than ${Math.max(2, Math.ceil(ROUND_QUESTION_COUNT / 3))} cards, and no two
 cards may name the same three clubs.`;
 
-    case 'football-grid':
-      return `## MODE: FOOTBALL GRID
-Clubs down one axis, nationalities across the other. The player taps the one cell where the named
-player's real club meets his real nationality.
-
-Each question object:
-- "id": "q1".."q${ROUND_QUESTION_COUNT}"
-- "difficulty", "confidence"
-- "targetPlayerId": id from CANDIDATES.players — must have a "nationality" and a club in CANDIDATES.clubs
-- "otherClubIds": exactly 2 club ids that are NOT the target's club
-- "otherNationalities": exactly 2 nationality strings that appear in CANDIDATES.players and are NOT the
-  target's nationality. Copy them exactly as they are spelled in CANDIDATES.
-- "prompt": names the player and asks which cell he belongs in
-- "hint"`;
-
     case 'player-connections':
       return `## MODE: PLAYER CONNECTIONS
 Four portraits, and four statements about what links them. Exactly one is true.
@@ -185,18 +170,13 @@ Each question object:
 - "prompt": asks where the player moved next
 - "hint"`;
 
-    case 'top10-challenge':
-      return `## MODE: TOP 10 CHALLENGE
-Real scorer rankings. The player orders the top three.
-
-Each question object:
-- "id": "q1".."q${ROUND_QUESTION_COUNT}"
-- "difficulty", "confidence"
-- "rankingId": id from CANDIDATES.rankings — use a different ranking for every question
-- "prompt": asks the player to rank the top three scorers of that competition and season
-- "hint"
-The ordering itself is NOT yours to choose: the backend takes it from the real goal totals.`;
-
+    /*
+     * football-grid and top10-challenge are NOT authored by a model. Their
+     * content is a recorded relationship — who won what, who played where, who
+     * scored most — so both rounds are composed straight from stored football
+     * data (questions-challenges.ai-generator.service.ts → buildFootballGridRound
+     * / buildTop10Round) and this module is never asked for a prompt for them.
+     */
     default:
       return '';
   }
@@ -241,8 +221,6 @@ function candidatePayload(
           ]),
         ),
       };
-    case 'football-grid':
-      return { players, clubs };
     case 'player-connections':
       return {
         teammateGroups: candidates.teammateGroups.map((g) => ({
@@ -262,15 +240,6 @@ function candidatePayload(
           finalStep: { club: t.finalStep.clubName, year: t.finalStep.year },
         })),
         clubs,
-      };
-    case 'top10-challenge':
-      return {
-        rankings: candidates.rankings.map((r) => ({
-          id: r.id,
-          competition: r.leagueLabel,
-          season: r.season,
-          topScorers: r.rows.map((row, index) => ({ rank: index + 1, name: row.name, goals: row.goals })),
-        })),
       };
     default:
       return {};

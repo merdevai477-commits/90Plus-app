@@ -62,8 +62,18 @@ function inspectQuestion(mode: QuestionChallengeMode, raw: any): string[] {
       if (!Array.isArray(raw?.bingoBoard) || raw.bingoBoard.length === 0) problems.push('no bingoBoard');
       break;
     case 'football-grid':
-      if (!Array.isArray(raw?.rows) || raw.rows.length === 0) problems.push('no grid rows');
-      if (!Array.isArray(raw?.columns) || raw.columns.length === 0) problems.push('no grid columns');
+      // One cell of the shared 3×3 board, with the players offered for it.
+      if (!Array.isArray(raw?.rows) || raw.rows.length !== 3) problems.push('grid rows are not 3');
+      if (!Array.isArray(raw?.columns) || raw.columns.length !== 3) problems.push('grid columns are not 3');
+      if (!Array.isArray(raw?.rowImages) || raw.rowImages.length !== 3) problems.push('no row crests');
+      if (!raw?.gridCell || typeof raw.gridCell.row !== 'number') problems.push('no gridCell');
+      if (!Array.isArray(raw?.options) || raw.options.length === 0) problems.push('no players to place');
+      break;
+    case 'top10-challenge':
+      // Ten typed slots. The names are the answer and must NOT be here.
+      if (!raw?.top10?.slots) problems.push('no top10 framing');
+      if (!raw?.top10?.categoryLabel) problems.push('no top10 category');
+      if (Array.isArray(raw?.options) && raw.options.length > 0) problems.push('top10 must not ship options');
       break;
     case 'player-connections':
       if (!Array.isArray(raw?.players) || raw.players.length === 0) problems.push('no players');
@@ -100,7 +110,9 @@ async function checkStoredAnswers(challengeId: string): Promise<string[]> {
     const stored = q?.answer ?? byQuestionId[q?.id];
     const gradable =
       (Array.isArray(stored?.correctIds) && stored.correctIds.length > 0) ||
-      (Array.isArray(stored?.orderedIds) && stored.orderedIds.length > 0);
+      (Array.isArray(stored?.orderedIds) && stored.orderedIds.length > 0) ||
+      // Top 10 grades typed names against the recorded ranking.
+      (Array.isArray(stored?.orderedAnswers) && stored.orderedAnswers.length > 0);
     if (!gradable) problems.push(`q${i + 1}: stored round has no gradable answer`);
   });
   return problems;

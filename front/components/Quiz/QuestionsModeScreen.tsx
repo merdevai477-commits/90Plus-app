@@ -80,7 +80,7 @@ import {
   ClubAnswerGrid,
   ConnectionsPlayersGrid,
   ConstraintGridBoard,
-  TopTenSelector,
+  TopTenInputs,
   TransferPath,
 } from './QuestionsModeBoards';
 import { GameAnswerOption, GameAnswerOptionList } from './GameAnswerOption';
@@ -113,7 +113,6 @@ type PlayableModeId =
 /** Stable empty arrays so an absent board doesn't rebuild its renderer's props. */
 const EMPTY_CONNECTION_PLAYERS: { id: string; name: string; imageUrl?: string }[] = [];
 const EMPTY_TRANSFER_CHAIN: { id: string; label: string; imageUrl?: string; unknown?: boolean }[] = [];
-const EMPTY_ANSWER_STATS: Record<string, number> = {};
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * VERTICAL RHYTHM — the gaps between the screen's blocks, in Figma units.
@@ -261,6 +260,15 @@ function createStyles(scale: number, fontScale: number, language: string) {
 
     /* ── ANSWER SURFACE OFFSETS ───────────────────────────────────────── */
     boardBlock: { marginTop: s(SECTION_GAP.board) },
+    /** "Premier League · 2010" above the ten Top 10 inputs. */
+    top10Caption: {
+      fontFamily: font(600),
+      fontSize: f(14),
+      lineHeight: f(18),
+      color: GAME_COLOR.accent,
+      textAlign: 'center',
+      marginBottom: s(12),
+    },
     optionsAfterEvidence: { marginTop: s(SECTION_GAP.optionsAfterEvidence) },
     cardsAfterEvidence: { marginTop: s(SECTION_GAP.cardsAfterEvidence) },
     optionsAfterBoard: { marginTop: s(SECTION_GAP.optionsAfterBoard) },
@@ -618,20 +626,26 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
     xpEarned,
     lastAnswerCorrect,
     eliminatedIds,
-    showStats,
-    answerStats,
+    gridPlacements,
+    rejectedCell,
+    textEntries,
+    textResults,
+    top10Reveal,
+    setTextEntry,
+    submitTextEntries,
     toggleSelection,
     submitAnswer,
     nextQuestion,
     changeQuestion,
     eliminateWrongAnswers,
-    revealAnswerStats,
     /*
-     * `useHint`/`usedHint` (the hook's original reveal-a-clue lifeline) are no
-     * longer wired into the action bar — "50:50" is now Remove Wrong Answers
-     * and there is no fourth hexagon to put a hint reveal in. Left defined in
-     * the hook rather than deleted: `usedHint` still drives the hint banner
-     * below, and nothing here should rip out working, unrelated grading logic.
+     * `useHint`/`usedHint` (the hook's original reveal-a-clue lifeline) and
+     * `revealAnswerStats` ("ask the crowd") are not wired into the action bar.
+     * The product has exactly two lifelines — 50:50 and Change Question — so
+     * there is no hexagon left for either. Both stay defined in the hook, and
+     * the crowd endpoint stays live on the backend: `usedHint` still drives the
+     * hint banner below, and nothing here should rip out working, unrelated
+     * grading or API logic.
      */
   } = useQuestionModeSession(modeId, language);
 
@@ -640,11 +654,9 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
   const questionEntrance = useQuestionEntrance(currentQuestion?.id);
   const [actionBarHeight, setActionBarHeight] = useState(0);
 
-  // Remaining uses for the three lifelines, for the whole round.
+  // Remaining uses for the two lifelines, for the whole round.
   /** "50:50" — eliminate wrong answers. See `eliminateWrongAnswers`. */
   const [fiftyUses, setFiftyUses] = useState(LIFELINE_USES_PER_ROUND);
-  /** "Ask the crowd" — reveal answer percentages. See `revealAnswerStats`. */
-  const [statsUses, setStatsUses] = useState(LIFELINE_USES_PER_ROUND);
   /** Remaining Change Question uses this round — capped at 2, see `changeQuestion`. */
   const [changeUses, setChangeUses] = useState(LIFELINE_USES_PER_ROUND);
 
@@ -681,14 +693,6 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
     [eliminatedIds, letteredChoices],
   );
 
-  /**
-   * "Ask the crowd" percentages — the real split the API counted from other
-   * players' submissions for THIS question. Empty until the lifeline is used
-   * and the API reports a distribution; `GameAnswerOption` renders no
-   * percentage for an option missing from this map.
-   */
-  const statPercentById = showStats ? answerStats : EMPTY_ANSWER_STATS;
-
   const connectionPlayers = currentQuestion?.connectionPlayers ?? EMPTY_CONNECTION_PLAYERS;
 
   const transferChain = currentQuestion?.transferChain ?? EMPTY_TRANSFER_CHAIN;
@@ -707,8 +711,9 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
   const contentTopInset = insets.top + metrics.s(GAME_LAYOUT.contentTop);
 
   /**
-   * The three hexagon lifelines — Figma Frame 174, in the order the design
-   * draws them: 50:50, ask the crowd, reload.
+   * The lifelines — Figma Frame 174. The design drew three hexagons; the
+   * middle one was "ask the crowd / ask a friend", which 90Plus does not have
+   * as a product, so the bar ships the two that exist: 50:50 and reload.
    *
    * The "reload" lifeline is CHANGE QUESTION, not skip/next — see
    * `changeQuestion` in useQuestionModeSession.ts. It used to call
@@ -728,16 +733,6 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
    */
   const optionCount = currentQuestion?.options?.length ?? 0;
   const canEliminate = optionCount > 2;
-  /**
-   * "Ask the crowd" needs REAL "how many players picked each option" counts.
-   * Those are recorded per question and served by
-   * GET /quiz/questions/modes/:mode/crowd, which reports `available: false`
-   * while too few people have answered. The tap therefore always goes to the
-   * API: if there is no real distribution the hook returns false, no use is
-   * spent and no percentages appear — nothing is ever invented here, and the
-   * correct answer is given no weight of its own.
-   */
-  const canShowStats = optionCount > 0;
 
   const lifelines = useMemo<Lifeline[]>(
     () => [
@@ -760,23 +755,6 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
         },
       },
       {
-        // "Ask the crowd" — reveal a percentage next to each option. See
-        // `revealAnswerStats` in useQuestionModeSession.ts.
-        id: 'crowd',
-        glyph: 'users',
-        badgeKind: 'count',
-        badgeLabel: String(statsUses),
-        disabled: statsUses === 0 || revealed || showStats || !canShowStats,
-        accessibilityLabel: language === 'ar' ? 'اسأل الجمهور' : 'Ask the crowd',
-        onPress: () => {
-          if (statsUses === 0 || revealed || showStats || !canShowStats) return;
-          // A use is only spent when the API actually had a real split to show.
-          void revealAnswerStats().then((shown) => {
-            if (shown) setStatsUses((remaining) => remaining - 1);
-          });
-        },
-      },
-      {
         id: 'change',
         glyph: 'reload',
         badgeKind: 'count',
@@ -793,16 +771,12 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
     ],
     [
       canEliminate,
-      canShowStats,
       changeQuestion,
       changeUses,
       eliminateWrongAnswers,
       fiftyUses,
       language,
-      revealAnswerStats,
       revealed,
-      showStats,
-      statsUses,
     ],
   );
 
@@ -864,7 +838,11 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
             ? `النتيجة ${score} من ${session.totalQuestions}`
             : `Score ${score} of ${session.totalQuestions}`}
         </Text>
-        <Text style={styles.stateBody}>{`+${xpEarned} XP`}</Text>
+        {/*
+          The round's NET XP: +1 per correct answer, −1 per wrong one, so it
+          can legitimately be negative and must not be printed as "+-2 XP".
+        */}
+        <Text style={styles.stateBody}>{`${xpEarned >= 0 ? '+' : '−'}${Math.abs(xpEarned)} XP`}</Text>
         <TouchableOpacity
           style={styles.stateAction}
           onPress={() => router.replace('/(tabs)/quiz')}
@@ -886,7 +864,17 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
     );
   }
 
-  const canSubmit = selected.length > 0;
+  /**
+   * Boards that grade themselves the moment the answer is complete — the
+   * server says so per question (`selection.autoSubmit`), the app never
+   * hardcodes which modes those are.
+   */
+  const autoSubmits = currentQuestion.selection.autoSubmit;
+  /** Top 10 is typed, not tapped: its answer is the ten input boxes. */
+  const isTextEntry = currentQuestion.selection.selectionMode === 'text';
+  const canSubmit = isTextEntry
+    ? textEntries.some((entry) => entry.trim().length > 0)
+    : selected.length > 0;
   const evidence = currentQuestion.evidence ?? [];
   const showEvidence = evidence.length > 0;
 
@@ -909,7 +897,11 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
     !useClubCardGrid &&
     (currentQuestion.type === 'mcq' ||
       currentQuestion.type === 'connections' ||
-      currentQuestion.type === 'transfer');
+      currentQuestion.type === 'transfer' ||
+      // Football Grid picks a PLAYER for the highlighted cell, from the same
+      // stacked rows every other mode answers with — the board above shows
+      // where that player would go.
+      currentQuestion.type === 'grid');
 
   const renderChoiceList = (spacing: object) => (
     // The shared answer stack — same 12pt rhythm and same rows as every other
@@ -921,23 +913,27 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
         const isSelected = selected.includes(option.id);
         const isCorrect = revealed && currentQuestion.correctAnswers.includes(option.id);
         const isWrong = revealed && isSelected && !isCorrect;
-        // Transfer Puzzle answers are clubs and show a crest instead of a
-        // letter badge — Figma 241:500.
-        const isTransfer = currentQuestion.type === 'transfer';
+        /*
+         * Transfer Puzzle answers are clubs and show a crest instead of a
+         * letter badge (Figma 241:500); Football Grid's answers are players
+         * and show their portrait the same way, because on a board mode the
+         * face IS how you recognise the answer.
+         */
+        const showsEntityImage =
+          currentQuestion.type === 'transfer' || currentQuestion.type === 'grid';
 
         return (
           <GameAnswerOption
             key={option.id}
             label={option.label}
             example={option.example}
-            letter={isTransfer ? undefined : option.letter}
+            letter={showsEntityImage ? undefined : option.letter}
             crestUrl={option.imageUrl}
-            showCrest={isTransfer}
+            showCrest={showsEntityImage}
             selected={isSelected}
             revealed={revealed}
             correct={isCorrect}
             wrong={isWrong}
-            statPercent={statPercentById[option.id]}
             onPress={() => toggleSelection(option.id)}
           />
         );
@@ -1001,6 +997,12 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
             </View>
           ) : null}
 
+          {/*
+            FOOTBALL GRID — the whole 3×3 board, drawn on every question of the
+            round because every question IS one of its cells. Cells fill in as
+            the server accepts placements; the current cell is highlighted and
+            the players to choose from are the option rows below.
+          */}
           {currentQuestion.type === 'grid' &&
           currentQuestion.rowHeaders &&
           currentQuestion.colHeaders ? (
@@ -1010,9 +1012,9 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
                 colHeaders={currentQuestion.colHeaders}
                 rowImages={gridRowImages}
                 colImages={gridColImages}
-                selected={selected}
-                onToggle={toggleSelection}
-                disabled={revealed}
+                placements={gridPlacements}
+                activeCell={currentQuestion.gridCell}
+                rejectedCell={rejectedCell}
               />
             </View>
           ) : null}
@@ -1029,13 +1031,26 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
             </View>
           ) : null}
 
-          {currentQuestion.type === 'top10' && currentQuestion.rankingItems ? (
+          {/*
+            TOP 10 — ten numbered inputs under the list's own heading. The
+            player types names; the server matches them (spelling tolerance
+            included) and only then are the real names shown.
+          */}
+          {currentQuestion.type === 'top10' && currentQuestion.top10 ? (
             <View style={styles.boardBlock}>
-              <TopTenSelector
-                items={currentQuestion.rankingItems}
-                selected={selected}
-                onToggle={toggleSelection}
+              <Text style={styles.top10Caption}>
+                {currentQuestion.top10.seasonLabel
+                  ? `${currentQuestion.top10.categoryLabel} · ${currentQuestion.top10.seasonLabel}`
+                  : currentQuestion.top10.categoryLabel}
+              </Text>
+              <TopTenInputs
+                slots={currentQuestion.top10.slots}
+                entries={textEntries}
+                onChangeEntry={setTextEntry}
+                results={textResults}
+                reveal={top10Reveal}
                 disabled={revealed}
+                placeholder={language === 'ar' ? 'اسم اللاعب' : 'Player name'}
               />
             </View>
           ) : null}
@@ -1048,7 +1063,6 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
                 revealed={revealed}
                 correctIds={currentQuestion.correctAnswers}
                 onToggle={toggleSelection}
-                statPercentById={statPercentById}
               />
             </View>
           ) : null}
@@ -1087,12 +1101,22 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
         </Animated.View>
       </ScrollView>
 
-      {/* Figma Frame 174 — the same pinned bar every game mode uses. */}
+      {/*
+        Figma Frame 174 — the same pinned bar every game mode uses.
+
+        On a board that answers itself (`selection.autoSubmit`: Football Bingo's
+        third cell, Football Grid's placement) there is nothing to confirm, so
+        the primary button is not drawn until the answer has been revealed and
+        it becomes "Next Question".
+      */}
       <GameActionBar
         lifelines={lifelines}
         primaryLabel={primaryLabelFor(revealed, language)}
-        onPrimary={revealed ? nextQuestion : submitAnswer}
+        onPrimary={
+          revealed ? nextQuestion : isTextEntry ? submitTextEntries : () => submitAnswer()
+        }
         primaryDisabled={!revealed && !canSubmit}
+        showPrimary={revealed || !autoSubmits}
         onLayout={handleActionBarLayout}
         bottomInset={insets.bottom}
       />

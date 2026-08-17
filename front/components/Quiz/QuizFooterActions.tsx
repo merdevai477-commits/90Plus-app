@@ -1,29 +1,29 @@
 /**
  * QuizFooterActions — the Football Quiz screen's pinned bottom bar.
  *
- * Figma draws the SAME bar (Frame 174) on all seven game artboards: three
- * hexagon lifelines over a full-width confirm button. This file draws no chrome
+ * Figma draws the SAME bar (Frame 174) on all seven game artboards: hexagon
+ * lifelines over a full-width confirm button. This file draws no chrome
  * of its own — it maps Football Quiz's actions onto the shared `GameActionBar`
  * in ./gameChrome.tsx, the exact component QuestionsModeScreen.tsx uses.
  *
- * WHAT MAPS ONTO WHAT — identical to the six other modes' three lifelines
+ * WHAT MAPS ONTO WHAT — identical to the six other modes' lifelines
  * (useQuestionModeSession.ts):
  *   50:50  → onEliminate()      hides options until only the correct one and
  *            one wrong one remain. See `handleEliminateWrongAnswers` in
  *            QuizHubScreen.tsx / `eliminateWrongAnswers()` in the shared hook.
- *   crowd  → onShowStats()      reveals a percentage next to each option
- *            (computeAnswerStats). See `handleRevealStats` /
- *            `revealAnswerStats()`.
  *   reload → onChangeQuestion() swaps the current question for a different
  *            one — NOT skip-and-advance. See `handleChangeQuestion` /
  *            `changeQuestion()`.
  *
- * All three are 'count' badges (remaining uses out of 2), no coin cost —
+ * Figma's third (middle) hexagon was "ask the crowd / ask a friend". 90Plus has
+ * no such feature, so it is not rendered here or on any other mode's bar.
+ *
+ * Both are 'count' badges (remaining uses out of 2), no coin cost —
  * matching every other mode exactly. Football Quiz used to spend coins on the
  * first two and show Figma's wide "cost" badge (node 384:340) instead of the
  * 25pt "remaining uses" circle (node 385:378) the other six modes use; that
  * was the one visible difference between this footer and theirs, and it is
- * gone now that all three actions are genuinely the same feature everywhere.
+ * gone now that both actions are genuinely the same feature everywhere.
  *
  * The old hint-reveal feature (`handleHint` in QuizHubScreen.tsx, which does
  * spend coins and call the real backend) is left fully defined but no longer
@@ -43,9 +43,6 @@ interface QuizFooterActionsProps {
   /** Hides options until only the correct one + one wrong one remain. */
   onEliminate: () => void;
   eliminateUses: number;
-  /** Reveals "% of players chose this" next to each option. */
-  onShowStats: () => void;
-  statsUses: number;
   /** Swaps the current question for a different one — never advances the round. */
   onChangeQuestion: () => void;
   /** Remaining Change Question uses this round (badge label + auto-disable at 0). */
@@ -66,8 +63,6 @@ interface QuizFooterActionsProps {
 function QuizFooterActionsInner({
   onEliminate,
   eliminateUses,
-  onShowStats,
-  statsUses,
   onChangeQuestion,
   changeQuestionUses,
   onNext,
@@ -92,15 +87,6 @@ function QuizFooterActionsInner({
         onPress: onEliminate,
       },
       {
-        id: 'crowd',
-        glyph: 'users',
-        badgeKind: 'count',
-        badgeLabel: String(statsUses),
-        disabled: statsUses === 0 || answerRevealed,
-        accessibilityLabel: quizLang === 'ar' ? 'اسأل الجمهور' : 'Ask the crowd',
-        onPress: onShowStats,
-      },
-      {
         id: 'change',
         glyph: 'reload',
         badgeKind: 'count',
@@ -110,16 +96,7 @@ function QuizFooterActionsInner({
         onPress: onChangeQuestion,
       },
     ],
-    [
-      answerRevealed,
-      changeQuestionUses,
-      eliminateUses,
-      onChangeQuestion,
-      onEliminate,
-      onShowStats,
-      quizLang,
-      statsUses,
-    ],
+    [answerRevealed, changeQuestionUses, eliminateUses, onChangeQuestion, onEliminate, quizLang],
   );
 
   const confirmAnswerLabel = quizLang === 'ar' ? 'تأكيد الإجابة' : 'Confirm Answer';

@@ -5,7 +5,7 @@
 import prisma from '../lib/prisma';
 import { Prisma } from '@prisma/client';
 import { logger } from '../utils/logger';
-import { awardXp, levelTitle } from './xp.service';
+import { awardXp, levelTitle, penalizeXp } from './xp.service';
 import { getRedisClient, isRedisConnected } from '../lib/redis';
 import { redisCacheService } from './redis-cache.service';
 import { generateDailyQuizPack, todayPackDate, packExpiresAt, packDateYmd } from './quiz-generator.service';
@@ -36,12 +36,18 @@ import type {
   SessionProgress,
   StoredQuizQuestion,
 } from '../types/quiz.types';
-import { QUIZ_PACK_SIZE } from '../constants/quiz.constants';
+import { QUIZ_COIN_COST, QUIZ_PACK_SIZE } from '../constants/quiz.constants';
+import { seededRng } from '../utils/seeded-rng';
 import { getQuizThemeCampaign, resolveQuizTheme } from '../constants/quiz-theme.config';
 import { ensureBackendUser } from '../utils/ensureBackendUser';
 
 export { QUIZ_PACK_SIZE } from '../constants/quiz.constants';
-export const QUIZ_COIN_COST = 10;
+/**
+ * The quiz coin price now lives in constants/quiz.constants.ts, so the
+ * Questions modes can charge the same number without importing this service.
+ * Re-exported here because callers have always read it from this module.
+ */
+export { QUIZ_COIN_COST } from '../constants/quiz.constants';
 export const QUIZ_TIME_LIMIT_SEC = 20;
 const PACK_CACHE_TTL = 25 * 60 * 60 * 1000;
 
@@ -843,6 +849,32 @@ export async function submitQuizAnswer(
     newTitle?: string;
   }> = [];
 
+  /*
+   * A WRONG ANSWER COSTS XP — the same ±1 the Questions modes use, so a
+   * mistake costs the same wherever it is made. The key names the question,
+   * so a double tap or a retried request charges once; the answer record above
+   * already makes a second submission idempotent, and this is the second lock.
+   */
+  if (!txResult.isCorrect && !txResult.hintOrSkip) {
+    const penalty = await penalizeXp({
+      userId: txResult.userId,
+      action: 'QUIZ_ANSWER_WRONG',
+      idempotencyKey: `quiz.wrong.${packDate}.${questionId}`,
+      metadata: { questionId, language },
+    });
+    if (penalty.awarded !== 0) {
+      xpAwarded = penalty.awarded;
+      newXp = penalty.newXp;
+      newLevel = penalty.newLevel;
+      xpEvents.push({
+        action: 'QUIZ_ANSWER_WRONG',
+        amount: penalty.awarded,
+        leveledUp: false,
+        newLevel: penalty.newLevel,
+      });
+    }
+  }
+
   if (txResult.isCorrect && !txResult.hintOrSkip) {
     const xpResult = await awardXp({
       userId: txResult.userId,
@@ -886,49 +918,22 @@ export async function submitQuizAnswer(
     }
   }
 
-  let completionBonusXp = 0;
-  if (txResult.completed && txResult.packSize > 0) {
-    const accuracy = txResult.stats.correct / txResult.packSize;
-    if (accuracy >= 0.8) {
-      const bonusResult = await awardXp({
-        userId: txResult.userId,
-        action: 'QUIZ_COMPLETED_HIGH',
-        idempotencyKey: `quiz.complete.${packDate}.${language}`,
-        timezone,
-      });
-      completionBonusXp = bonusResult.awarded;
-      newXp = bonusResult.newXp;
-      newLevel = bonusResult.newLevel;
-      if (completionBonusXp > 0) {
-        xpEvents.push({
-          action: 'QUIZ_COMPLETED_HIGH',
-          amount: completionBonusXp,
-          leveledUp: bonusResult.leveledUp,
-          newLevel: bonusResult.newLevel,
-          newTitle: bonusResult.leveledUp ? levelTitle(bonusResult.newLevel) : undefined,
-        });
-
-        // Persist the bonus into the session so stats.xpEarned reflects it after
-        // a reload (it isn't attached to any single question's xpAwarded).
-        await prisma.$transaction(async (tx) => {
-          const session = await tx.userDailyQuizSession.findUnique({
-            where: { id: txResult.sessionId },
-          });
-          if (!session) return;
-          const progress = parseProgress(session.progress);
-          progress.completionBonusXp = (progress.completionBonusXp ?? 0) + completionBonusXp;
-          const stats = countStats(progress, pack);
-          await tx.userDailyQuizSession.update({
-            where: { id: txResult.sessionId },
-            data: {
-              progress: progress as unknown as Prisma.InputJsonValue,
-              xpEarned: stats.xp,
-            },
-          });
-        });
-      }
-    }
-  }
+  /*
+   * NO COMPLETION BONUS.
+   *
+   * A quiz answered well used to pay +20 XP on top of the per-answer XP
+   * (QUIZ_COMPLETED_HIGH, "≥80% accuracy"). That line came from the same quiz
+   * XP table that priced a correct answer at 2 XP and an exact prediction at
+   * 30 — the table the current product rules replaced. Those rules price a
+   * question, and only a question: +1 right, −1 wrong. A 20 XP bonus is
+   * twenty correct answers for finishing one quiz, which is exactly the kind
+   * of number that made a day's XP impossible to explain.
+   *
+   * The action stays in the enum so the rows it already wrote still read back;
+   * nothing awards it any more. `completionBonusXp` remains in the response as
+   * a constant 0 so the app's shape is unchanged.
+   */
+  const completionBonusXp = 0;
 
   const sessionAfter = await prisma.userDailyQuizSession.findUnique({
     where: { id: txResult.sessionId },
@@ -972,6 +977,54 @@ export async function submitQuizAnswer(
     currentIndex: txResult.currentIndex,
     progress: txResult.progress,
   };
+}
+
+/**
+ * "50:50" FOR THE DAILY QUIZ — server-resolved, exactly like the Questions hub's
+ * (`getQuestionFiftyFifty`).
+ *
+ * WHY THIS EXISTS: the app used to compute the elimination itself, from
+ * `question.correctKey`. A pending question deliberately does NOT carry its
+ * correct key (`resolvePublicCorrectKey` returns undefined until the question is
+ * answered or timed out), so EVERY option looked wrong, three of the four were
+ * hidden and the one left standing was a random guess that could very well be
+ * wrong. That is the "50:50 removes three answers" bug, and it could also hide
+ * the correct answer outright.
+ *
+ * Returns the two keys to keep — the real correct one plus exactly one real
+ * wrong one — picked deterministically per user+question so re-tapping cannot
+ * reroll a different survivor. The client learns nothing beyond "these two
+ * remain", which is precisely what a 50:50 is.
+ */
+export async function getDailyQuizFiftyFifty(
+  clerkUserId: string,
+  questionId: string,
+  timezone: string,
+  languageInput?: string,
+): Promise<{ questionId: string; keepKeys: QuizOptionKey[] }> {
+  const language = normalizeLang(languageInput);
+  const packDate = todayPackDate(timezone);
+  const pack = await loadReadyDailyPack(language, packDate, timezone);
+  const question = pack?.length ? findQuestion(pack, questionId) : null;
+  if (!question) throw new Error('QUESTION_NOT_FOUND');
+
+  const user = await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true } });
+  if (!user) throw new Error('USER_NOT_FOUND');
+
+  const optionKeys = (question.options ?? []).map((option) => option.key as QuizOptionKey);
+  const correctKey = optionKeys.find((key) => key === question.correctKey);
+  const wrongKeys = optionKeys.filter((key) => key !== question.correctKey);
+
+  // A question whose stored answer is not one of its own options cannot be
+  // halved honestly — report it unavailable rather than guess a survivor.
+  if (!correctKey || wrongKeys.length < 1 || optionKeys.length < 3) {
+    throw new Error('QUIZ_FIFTY_FIFTY_UNAVAILABLE');
+  }
+
+  const rng = seededRng(`${packDate.toISOString()}:${language}:${questionId}:${user.id}:fifty-fifty`);
+  const survivor = wrongKeys[Math.floor(rng() * wrongKeys.length)]!;
+
+  return { questionId: question.id, keepKeys: [correctKey, survivor] };
 }
 
 export async function skipQuizQuestion(

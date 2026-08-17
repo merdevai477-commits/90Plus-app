@@ -568,6 +568,7 @@ export function GameActionBar({
   primaryLabel,
   onPrimary,
   primaryDisabled = false,
+  showPrimary = true,
   bottomInset,
   onLayout,
 }: {
@@ -575,6 +576,12 @@ export function GameActionBar({
   primaryLabel: string;
   onPrimary: () => void;
   primaryDisabled?: boolean;
+  /**
+   * False on a board that answers itself — Football Bingo submits on the third
+   * cell and Football Grid on the placement, so there is nothing left to
+   * "confirm". The button comes back once the answer is revealed, as "Next".
+   */
+  showPrimary?: boolean;
   bottomInset: number;
   onLayout?: (event: LayoutChangeEvent) => void;
 }) {
@@ -590,23 +597,25 @@ export function GameActionBar({
     >
       <QuestionLifelines lifelines={lifelines} />
 
-      <TouchableOpacity
-        style={[styles.primaryButton, primaryDisabled && styles.primaryButtonDisabled]}
-        onPress={onPrimary}
-        disabled={primaryDisabled}
-        activeOpacity={0.88}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: primaryDisabled }}
-      >
-        <LinearGradient
-          colors={[QUIZ_FIGMA_ACTION_GRAD_START, QUIZ_FIGMA_ACTION_GRAD_END]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.primaryButtonFill}
+      {showPrimary ? (
+        <TouchableOpacity
+          style={[styles.primaryButton, primaryDisabled && styles.primaryButtonDisabled]}
+          onPress={onPrimary}
+          disabled={primaryDisabled}
+          activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: primaryDisabled }}
         >
-          <Text style={styles.primaryButtonText}>{primaryLabel}</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+          <LinearGradient
+            colors={[QUIZ_FIGMA_ACTION_GRAD_START, QUIZ_FIGMA_ACTION_GRAD_END]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.primaryButtonFill}
+          >
+            <Text style={styles.primaryButtonText}>{primaryLabel}</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }

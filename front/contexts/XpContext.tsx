@@ -25,11 +25,11 @@ interface XpContextType {
   xpToNext: number;
   /** XP earned within the current level (xp - currentLevelXp). */
   xpInLevel: number;
-  /** XP span between currentLevel and currentLevel+1 (e.g. 290 for L1→L2). */
+  /** XP span between currentLevel and currentLevel+1 — 100, one level wide. */
   xpForNextLevel: number;
   /** Absolute XP threshold for current level. */
   currentLevelXp: number;
-  /** Absolute XP threshold for next level (e.g. 290 for L2). */
+  /** Absolute XP threshold for the next level (e.g. 200 for level 2). */
   nextLevelXp: number;
   progressPct: number;
   streak: { current: number; longest: number };
@@ -121,24 +121,28 @@ function levelTitle(level: number): string {
   return 'Rookie';
 }
 
-// Mirrors backend xp.service.ts xpForLevel — used as a fallback when the
-// /xp/me payload predates the currentLevelXp / nextLevelXp fields (older
-// deploys, cached responses). Pure function, no DB access.
+/**
+ * XP a user must hold to BE `level` — 100 XP per level (level 1 = 100,
+ * level 100 = 10 000), mirroring backend xp.service.ts `xpForLevel`.
+ *
+ * Only a FALLBACK: /xp/me sends currentLevelXp / nextLevelXp and those win.
+ * This exists for a cached or older payload that predates those fields.
+ */
+const XP_PER_LEVEL = 100;
+
 function clientXpForLevel(level: number): number {
-  if (level <= 1) return 0;
-  if (level === 2) return 290;
-  return 40 + 125 * level * (level - 1);
+  return Math.max(level, 1) * XP_PER_LEVEL;
 }
 
 export const XpProvider = ({ children }: { children: ReactNode }) => {
   const [xp, setXp] = useState(0);
   const [level, setLevel] = useState(1);
   const [title, setTitle] = useState('Rookie');
-  const [xpToNext, setXpToNext] = useState(290);
+  const [xpToNext, setXpToNext] = useState(XP_PER_LEVEL);
   const [xpInLevel, setXpInLevel] = useState(0);
-  const [xpForNextLevel, setXpForNextLevel] = useState(290);
+  const [xpForNextLevel, setXpForNextLevel] = useState(XP_PER_LEVEL);
   const [currentLevelXp, setCurrentLevelXp] = useState(0);
-  const [nextLevelXp, setNextLevelXp] = useState(290);
+  const [nextLevelXp, setNextLevelXp] = useState(XP_PER_LEVEL);
   const [progressPct, setProgressPct] = useState(0);
   const [streak, setStreak] = useState({ current: 0, longest: 0 });
   const [loading, setLoading] = useState(true);
@@ -286,11 +290,11 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
       setXp(0);
       setLevel(1);
       setTitle('Rookie');
-      setXpToNext(290);
+      setXpToNext(XP_PER_LEVEL);
       setXpInLevel(0);
-      setXpForNextLevel(290);
+      setXpForNextLevel(XP_PER_LEVEL);
       setCurrentLevelXp(0);
-      setNextLevelXp(290);
+      setNextLevelXp(XP_PER_LEVEL);
       setProgressPct(0);
       setStreak({ current: 0, longest: 0 });
       setLoading(false);
@@ -354,7 +358,7 @@ export const XpProvider = ({ children }: { children: ReactNode }) => {
         if (totalGain > 0 && !events.some((e) => e.leveledUp)) {
           setXp((prev) => prev + totalGain);
           setXpInLevel((inLevel) => {
-            const span = xpForNextLevelRef.current || 290;
+            const span = xpForNextLevelRef.current || XP_PER_LEVEL;
             const nextIn = inLevel + totalGain;
             setProgressPct(Math.min(100, Math.round((nextIn / span) * 100)));
             return nextIn;

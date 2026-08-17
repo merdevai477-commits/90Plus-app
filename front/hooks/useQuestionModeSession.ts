@@ -26,6 +26,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 
+import { useCoins } from '../contexts/CoinsContext';
+import { useXp } from '../contexts/XpContext';
 import type { Language } from '../src/i18n';
 import { getClerkBearerToken } from '../utils/clerkAuthToken';
 import {
@@ -51,6 +53,19 @@ export function isPlayableQuestionMode(mode: string): mode is PlayableModeId {
 
 export function useQuestionModeSession(modeId: PlayableModeId, language: Language) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  /**
+   * The header's coin pill reads this context. A wrong answer costs coins and
+   * the SERVER decides how many (see submitQuestionsChallengeAnswer), so the
+   * balance it returns is pushed straight in — nothing here subtracts a
+   * penalty of its own.
+   */
+  const { applyCoinsBalance } = useCoins();
+  /**
+   * The header's XP pill reads this context. A Questions answer moves XP by
+   * ±1 and the SERVER decides which, so the balance it returns is pushed
+   * straight in — the same way the daily quiz applies its own snapshot.
+   */
+  const { applyXpSnapshot } = useXp();
 
   // Clerk's getToken returns a NEW function reference on every render.
   // Using a ref prevents infinite re-fetch loops in useEffect/useCallback.
@@ -74,6 +89,27 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
   const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null);
   /** Option ids hidden by the "eliminate wrong answers" lifeline, this question. */
   const [eliminatedIds, setEliminatedIds] = useState<string[]>([]);
+  /**
+   * FOOTBALL GRID — players already fixed on the board, keyed `r{row}-c{col}`.
+   *
+   * A cell is filled only after the SERVER confirms the placement; a rejected
+   * one is never written here, so the board can only ever show placements that
+   * were graded correct. Kept for the whole round because every question of a
+   * grid round is a cell of the SAME board.
+   */
+  const [gridPlacements, setGridPlacements] = useState<
+    Record<string, { label: string; imageUrl?: string }>
+  >({});
+  /** The last placement the server refused, so the board can shake that cell. */
+  const [rejectedCell, setRejectedCell] = useState<string | null>(null);
+  /** TOP 10 — what the player has typed, one entry per slot. */
+  const [textEntries, setTextEntries] = useState<string[]>([]);
+  /** Per slot, whether the server matched it. Empty until the list is graded. */
+  const [textResults, setTextResults] = useState<boolean[]>([]);
+  /** The real Top 10, as returned WITH the graded result — never before it. */
+  const [top10Reveal, setTop10Reveal] = useState<
+    Array<{ rank: number; canonical: string; imageUrl?: string; value?: number }>
+  >([]);
   /** Whether the "ask the crowd" percentages are showing, this question. */
   const [showStats, setShowStats] = useState(false);
   /**
@@ -113,6 +149,11 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
     setShowStats(false);
     setAnswerStats({});
     setCrowdAvailable(false);
+    setGridPlacements({});
+    setRejectedCell(null);
+    setTextEntries([]);
+    setTextResults([]);
+    setTop10Reveal([]);
 
     void (async () => {
       if (isSignedIn !== true) {
@@ -178,6 +219,17 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
         questions,
         completed: apiSession.completed,
       });
+      /*
+       * FOOTBALL GRID — redraw the cells this player already won.
+       *
+       * The board is per-round but the filled cells are per-user, and this
+       * component's state does not survive leaving the screen. Without seeding
+       * from the server the player came back to a blank board part-way through
+       * a round the server still had every placement for.
+       */
+      if (apiSession.gridPlacements) {
+        setGridPlacements(apiSession.gridPlacements);
+      }
       setCompleted(apiSession.completed);
       setLoading(false);
     })();
@@ -187,30 +239,20 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
     };
   }, [isLoaded, isSignedIn, language, modeId]);
 
-  const toggleSelection = useCallback((id: string) => {
-    if (!currentQuestion || revealed) return;
-
-    setSelected((prev) => {
-      if (currentQuestion.type === 'mcq' || currentQuestion.type === 'connections' || currentQuestion.type === 'transfer') {
-        return [id];
-      }
-      if (prev.includes(id)) {
-        return prev.filter((x) => x !== id);
-      }
-      const maxSelectable = Math.max(currentQuestion.correctAnswers.length, 1);
-      if (prev.length >= maxSelectable) {
-        return prev;
-      }
-      return [...prev, id];
-    });
-  }, [currentQuestion, revealed]);
-
-  const submitAnswer = useCallback(() => {
+  /**
+   * Send ONE answer. `idsOverride` exists for the auto-submitting board modes:
+   * a selection made microseconds ago is not in `selected` yet (React state is
+   * async), so the caller hands over exactly the ids it just computed rather
+   * than submitting the previous, incomplete set.
+   */
+  const submitAnswer = useCallback((idsOverride?: string[]) => {
     // Guards against a double-tap firing two concurrent submissions:
     // `revealed` only flips true after the network call resolves, so without
     // this a second tap in that window would read the same `false` state and
     // send a second POST for the same question/answer.
     if (!currentQuestion || revealed || !session || submittingRef.current) return;
+    const selectedIds = idsOverride ?? selected;
+    if (selectedIds.length === 0) return;
     submittingRef.current = true;
 
     void (async () => {
@@ -225,7 +267,7 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
           // The round holds several questions on one challenge row — the API
           // needs to know which of them this answer is for.
           questionId: currentQuestion.id,
-          selectedIds: selected,
+          selectedIds,
           elapsedTime: 0,
           language,
         });
@@ -252,10 +294,49 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
           };
         });
 
+        /*
+         * FOOTBALL GRID — the placement is only fixed on the board once the
+         * SERVER says it belongs there. A refused placement leaves the cell
+         * empty and is flagged so the board can say so; nothing is drawn from
+         * a client-side judgement of the answer.
+         */
+        if (currentQuestion.gridCell) {
+          const cellKey = `r${currentQuestion.gridCell.row}-c${currentQuestion.gridCell.column}`;
+          const placed = currentQuestion.options?.find((option) => option.id === selectedIds[0]);
+          if (result.isCorrect && placed) {
+            setGridPlacements((prev) => ({
+              ...prev,
+              [cellKey]: { label: placed.label, imageUrl: placed.imageUrl },
+            }));
+            setRejectedCell(null);
+          } else {
+            setRejectedCell(cellKey);
+          }
+        }
+
+        // TOP 10 — which of the ten slots the server matched, and the real
+        // names. Both arrive only WITH the graded result.
+        if (Array.isArray(result.slotResults)) {
+          setTextResults(result.slotResults);
+        }
+        if (Array.isArray(result.answer.orderedAnswers)) {
+          setTop10Reveal(result.answer.orderedAnswers);
+        }
+
         if (result.isCorrect) {
           setScore((s) => s + 1);
         }
         setXpEarned((x) => x + result.totalXpAwarded);
+
+        // Authoritative balances from the grader — the header updates the
+        // moment an answer is graded, by the amounts the server actually
+        // moved, for both currencies.
+        if (typeof result.coins === 'number') {
+          applyCoinsBalance(result.coins);
+        }
+        if (typeof result.xp === 'number' && typeof result.level === 'number') {
+          applyXpSnapshot({ xp: result.xp, level: result.level });
+        }
       } catch (err: unknown) {
         const reason = err instanceof Error ? err.message : 'SUBMIT_FAILED';
 
@@ -276,7 +357,68 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
         submittingRef.current = false;
       }
     })();
-  }, [currentQuestion, language, modeId, revealed, selected, session]);
+  }, [applyCoinsBalance, applyXpSnapshot, currentQuestion, language, modeId, revealed, selected, session]);
+
+  /**
+   * SELECT / DESELECT one option or board cell.
+   *
+   * The cap and the "answer is now complete" moment both come from the
+   * server's own selection contract (`question.selection`) — never from
+   * `correctAnswers`, which a live session does not carry. Football Bingo
+   * therefore takes its three cells, and the third one submits the answer
+   * immediately: that mode has no confirm step (`autoSubmit`).
+   */
+  const toggleSelection = useCallback((id: string) => {
+    if (!currentQuestion || revealed || submittingRef.current) return;
+
+    const rules = currentQuestion.selection;
+    const isSingle = rules.selectionMode === 'single' || rules.maxSelections <= 1;
+
+    let next: string[];
+    if (isSingle) {
+      next = [id];
+    } else if (selected.includes(id)) {
+      next = selected.filter((entry) => entry !== id);
+    } else if (selected.length >= rules.maxSelections) {
+      // Cap reached — a fourth tap is ignored rather than replacing a pick.
+      return;
+    } else {
+      next = [...selected, id];
+    }
+
+    setSelected(next);
+
+    if (rules.autoSubmit && next.length === rules.requiredSelections) {
+      // Hand the ids over explicitly: `selected` has not re-rendered yet.
+      submitAnswer(next);
+    }
+  }, [currentQuestion, revealed, selected, submitAnswer]);
+
+  /**
+   * TOP 10 — type into one of the ten slots.
+   *
+   * Nothing is graded here: the names go to the server on submit and it says
+   * which ones matched (spelling tolerance included). The app has no copy of
+   * the answer to check against, by design.
+   */
+  const setTextEntry = useCallback((index: number, value: string) => {
+    if (revealed) return;
+    setTextEntries((prev) => {
+      const slots = currentQuestion?.top10?.slots ?? prev.length;
+      const next = Array.from({ length: Math.max(slots, prev.length) }, (_, i) => prev[i] ?? '');
+      next[index] = value;
+      return next;
+    });
+  }, [currentQuestion?.top10?.slots, revealed]);
+
+  /** Submit the ten typed names as this question's answer. */
+  const submitTextEntries = useCallback(() => {
+    const slots = currentQuestion?.top10?.slots ?? 0;
+    if (!slots) return;
+    const entries = Array.from({ length: slots }, (_, index) => textEntries[index]?.trim() ?? '');
+    if (entries.every((entry) => entry === '')) return;
+    submitAnswer(entries);
+  }, [currentQuestion?.top10?.slots, submitAnswer, textEntries]);
 
   const nextQuestion = useCallback(() => {
     if (!session) return;
@@ -294,6 +436,12 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
     setShowStats(false);
     setAnswerStats({});
     setCrowdAvailable(false);
+    // `gridPlacements` deliberately survives: the next question is the next
+    // CELL of the same board, and a placement the server accepted stays put.
+    setRejectedCell(null);
+    setTextEntries([]);
+    setTextResults([]);
+    setTop10Reveal([]);
   }, [session]);
 
   /**
@@ -371,11 +519,27 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
         questionId: currentQuestion.id,
         language,
       });
-      if (!result || result.keepIds.length !== 2) return false;
+      if (!result) return false;
+      // The answer that came back must be for the question actually on screen —
+      // a reply that raced a "change question" is not applied to the new one.
+      if (result.questionId && result.questionId !== currentQuestion.id) return false;
 
-      const keepSet = new Set(result.keepIds);
-      const toEliminate = options.map((option) => option.id).filter((id) => !keepSet.has(id));
+      const optionIds = options.map((option) => option.id);
+      /*
+       * THE INVARIANT: 50:50 leaves EXACTLY TWO options visible.
+       *
+       * Duplicates are collapsed and any id this question does not actually
+       * have is dropped BEFORE counting, so a malformed response (two copies of
+       * one id, an id from another question, a missing id) can never eliminate
+       * three options and leave one — it is refused whole, the board is left
+       * untouched and the caller spends no use.
+       */
+      const keepIds = [...new Set(result.keepIds ?? [])].filter((id) => optionIds.includes(id));
+      if (keepIds.length !== 2) return false;
+
+      const toEliminate = optionIds.filter((id) => !keepIds.includes(id));
       if (toEliminate.length === 0) return false;
+      if (optionIds.length - toEliminate.length !== 2) return false;
 
       setEliminatedIds((prev) => [...prev, ...toEliminate]);
       // A selection that just got hidden can't stay "selected" underneath it.
@@ -483,6 +647,13 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
     showStats,
     answerStats,
     crowdAvailable,
+    gridPlacements,
+    rejectedCell,
+    textEntries,
+    textResults,
+    top10Reveal,
+    setTextEntry,
+    submitTextEntries,
     toggleSelection,
     submitAnswer,
     nextQuestion,

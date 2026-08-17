@@ -161,17 +161,13 @@ export default function QuizHubScreen() {
   const [revealedImageUrl, setRevealedImageUrl] = useState<string | null>(null);
   /** Option keys hidden by "Remove Wrong Answers" this question. */
   const [eliminatedKeys, setEliminatedKeys] = useState<OptionKey[]>([]);
-  /** Whether "Ask the Crowd" percentages are showing this question. */
-  const [showStats, setShowStats] = useState(false);
 
   /**
    * Remaining lifeline uses — ROUND totals, not per-question (never reset by
-   * the per-question effect below), exactly like `fiftyUses` / `changeUses` /
-   * `statsUses` in QuestionsModeScreen.tsx, the same three lifelines this
-   * screen mirrors.
+   * the per-question effect below), exactly like `fiftyUses` / `changeUses`
+   * in QuestionsModeScreen.tsx, the same two lifelines this screen mirrors.
    */
   const [eliminateUses, setEliminateUses] = useState(LIFELINE_USES_PER_ROUND);
-  const [statsUses, setStatsUses] = useState(LIFELINE_USES_PER_ROUND);
   const [changeUses, setChangeUses] = useState(LIFELINE_USES_PER_ROUND);
 
   const [scorePopupVisible, setScorePopupVisible] = useState(false);
@@ -362,7 +358,6 @@ export default function QuizHubScreen() {
     setHintUsed(currentQuestion.hintUsed ?? false);
     setHintText(null);
     setEliminatedKeys([]);
-    setShowStats(false);
     questionStartedAt.current = Date.now();
     void getToken().then((t) => {
       tokenRef.current = t ?? null;
@@ -939,55 +934,60 @@ export default function QuizHubScreen() {
     setHintUsed(false);
     setHintText(null);
     setEliminatedKeys([]);
-    setShowStats(false);
     return true;
   }, [answerPhase, currentIndex, currentQuestion, questions, queryClient, quizQueryKey]);
 
   /**
-   * REMOVE WRONG ANSWERS — the "50:50" lifeline. Hides options until only the
-   * correct one and exactly one wrong one remain; which wrong option survives
-   * is picked at random, same rule `eliminateWrongAnswers` uses in
-   * useQuestionModeSession.ts for the other six modes.
+   * REMOVE WRONG ANSWERS — the "50:50" lifeline. Leaves exactly TWO options
+   * visible: the correct one and one wrong one.
+   *
+   * WHICH TWO IS THE SERVER'S DECISION (`GET /quiz/fifty-fifty`), for the same
+   * reason it is in the six other modes: a pending question does not carry its
+   * `correctKey` — the API hides it until the question is answered. Working the
+   * elimination out here treated all four options as wrong, hid THREE of them
+   * and left a survivor picked at random, which was usually not the correct
+   * answer. Nothing on the device guesses any more.
+   *
+   * Returns false — spending no use and changing nothing — unless the response
+   * genuinely leaves two of THIS question's options standing.
    */
-  const handleEliminateWrongAnswers = useCallback((): boolean => {
+  const handleEliminateWrongAnswers = useCallback(async (): Promise<boolean> => {
     if (!currentQuestion || answerPhase !== 'idle') return false;
     const options = currentQuestion.options;
     if (options.length <= 2) return false;
+    if (eliminatedKeys.length > 0) return false; // already used on this question
 
-    const wrongKeys = options
-      .map((option) => option.key)
-      .filter((key) => key !== currentQuestion.correctKey);
-    const remainingWrong = wrongKeys.filter((key) => !eliminatedKeys.includes(key));
-    if (remainingWrong.length <= 1) return false;
+    try {
+      const token = tokenRef.current ?? (await getToken());
+      if (!token) return false;
 
-    const survivor = remainingWrong[Math.floor(Math.random() * remainingWrong.length)];
-    const toEliminate = remainingWrong.filter((key) => key !== survivor);
+      const result = await QuizApiService.fiftyFifty(token, {
+        questionId: currentQuestion.id,
+        language: quizLang,
+      });
+      if (!result || result.questionId !== currentQuestion.id) return false;
 
-    setEliminatedKeys((prev) => [...prev, ...toEliminate]);
-    // A pick that just got hidden can't stay selected underneath it.
-    setSelected((prev) => (prev && toEliminate.includes(prev) ? null : prev));
-    return true;
-  }, [answerPhase, currentQuestion, eliminatedKeys]);
+      const optionKeys = options.map((option) => option.key as OptionKey);
+      const keep = [...new Set(result.keepKeys as OptionKey[])].filter((key) =>
+        optionKeys.includes(key),
+      );
+      // THE INVARIANT: a 50:50 leaves two. Anything else (a malformed body, a
+      // key this question does not have, a duplicate) is refused outright
+      // rather than applied half-way.
+      if (keep.length !== 2) return false;
 
-  /**
-   * ASK THE CROWD — reveals a percentage next to each still-visible option.
-   *
-   * Disabled: this needs REAL "how many players picked each option" counts and
-   * nothing records per-option selections yet. The fixed table that used to
-   * stand in for them was invented data shown to the player as fact, and it
-   * always spiked on the correct answer, quietly giving it away. Returning
-   * false leaves the use unspent; the hexagon renders locked via
-   * `crowdStatsAvailable` below.
-   */
-  const crowdStatsAvailable = false;
+      const toEliminate = optionKeys.filter((key) => !keep.includes(key));
+      if (toEliminate.length === 0) return false;
 
-  const handleRevealStats = useCallback((): boolean => {
-    if (!crowdStatsAvailable) return false;
-    if (!currentQuestion || answerPhase !== 'idle' || showStats) return false;
-    if (currentQuestion.options.length === 0) return false;
-    setShowStats(true);
-    return true;
-  }, [answerPhase, currentQuestion, showStats]);
+      setEliminatedKeys(toEliminate);
+      // A pick that just got hidden can't stay selected underneath it.
+      setSelected((prev) => (prev && toEliminate.includes(prev) ? null : prev));
+      return true;
+    } catch {
+      // A failed lookup spends no use — never falls back to a random pick.
+      return false;
+    }
+  }, [answerPhase, currentQuestion, eliminatedKeys, getToken, quizLang]);
 
   /**
    * Left fully defined but no longer wired to a hexagon: there are only three
@@ -1100,12 +1100,6 @@ export default function QuizHubScreen() {
         : [],
     [currentQuestion?.id, currentQuestion?.options, eliminatedKeys],
   );
-
-  /**
-   * "Ask the crowd" percentages. Undefined until a real per-option
-   * distribution is recorded and served — see `handleRevealStats` above.
-   */
-  const statPercentByKey = undefined;
 
   /**
    * The offset the scroll starts at — Figma's y 95 less the 62pt status bar,
@@ -1423,7 +1417,6 @@ export default function QuizHubScreen() {
             correctKey={correctKey}
             disableOptions={answerLocked || answerPhase !== 'idle'}
             isSubmitting={answerPhase === 'submitting'}
-            statPercentByKey={statPercentByKey}
           />
         </Animated.View>
       </ScrollView>
@@ -1431,19 +1424,13 @@ export default function QuizHubScreen() {
       <QuizFooterActions
         onEliminate={() => {
           if (eliminateUses === 0 || answerPhase !== 'idle') return;
-          if (handleEliminateWrongAnswers()) {
-            setEliminateUses((remaining) => remaining - 1);
-          }
+          // Server-resolved — a use is only spent once it actually confirms
+          // two option keys to keep.
+          void handleEliminateWrongAnswers().then((didEliminate) => {
+            if (didEliminate) setEliminateUses((remaining) => remaining - 1);
+          });
         }}
         eliminateUses={eliminateUses}
-        onShowStats={() => {
-          if (statsUses === 0 || answerPhase !== 'idle') return;
-          if (handleRevealStats()) {
-            setStatsUses((remaining) => remaining - 1);
-          }
-        }}
-        // 0 renders the hexagon locked — see `crowdStatsAvailable`.
-        statsUses={crowdStatsAvailable ? statsUses : 0}
         onChangeQuestion={() => {
           if (changeUses === 0 || answerPhase !== 'idle') return;
           if (handleChangeQuestion()) {

@@ -19,8 +19,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  *   COLOURS ................. HUB_COLOR (top of this file)
  *   RADII / BORDERS ......... HUB_RADIUS, HUB_COLOR.cardBorder
- *   GRADIENTS ............... HUB_SCREEN_GRADIENT, HERO_XP_GRADIENT,
- *                             XP_GRADIENT (card "+50 XP" text)
+ *   GRADIENTS ............... HUB_SCREEN_GRADIENT, HERO_XP_GRADIENT
  *   SCREEN BACKGROUND ....... `root` + `scroll`
  *   STREAK / COIN PILL ...... `streakBadge`, `streakPill`, `streakPillText`
  *   HERO IMAGE .............. `heroCard`, `heroCardImage`
@@ -30,7 +29,7 @@
  *   CARD GRID SPACING ....... `modeRow` (gap + gutters)
  *   CARD SIZE / SHAPE ....... card.card / card.horizontalCard /
  *                             card.verticalCard
- *   CARD TYPOGRAPHY ......... card.title / card.subtitle / card.xpText
+ *   CARD TYPOGRAPHY ......... card.title / card.subtitle
  *   STATS STRIP ............. `summaryStrip`, `summaryLabel`, `summaryValue`
  *   LEVEL / STAR BADGES ..... `levelSection`, `footerIconBadge`
  * =============================================================================
@@ -104,18 +103,6 @@ export const GRID_GAP = 16;
 
 /** Page backdrop, top → bottom. */
 export const HUB_SCREEN_GRADIENT: [string, string, string] = ['#05010D', '#090316', '#05010D'];
-
-/**
- * "+50 XP" text on each challenge card. Applied through MaskedView.
- * Figma node 30:321 —
- * linear-gradient(260.05deg, #2B077E 15.387%, #5A2AC6 52.174%, #B395F9 85.98%).
- * 260deg is an almost-horizontal sweep running right → left with a slight
- * downward tilt; converted to the unit box LinearGradient wants below.
- */
-export const XP_GRADIENT: [string, string, string] = ['#2B077E', '#5A2AC6', '#B395F9'];
-export const XP_GRADIENT_LOCATIONS: [number, number, number] = [0.1539, 0.5217, 0.8598];
-export const XP_GRADIENT_START = { x: 0.99, y: 0.41 };
-export const XP_GRADIENT_END = { x: 0.01, y: 0.59 };
 
 /**
  * Big "XP" word inside the hero. Figma node 6:14 —
@@ -590,22 +577,6 @@ function createStyles(scale: number, fontScale: number, language: string) {
       gap: s(8),
     },
     horizontalSubXpRowRtl: { flexDirection: 'row-reverse' },
-    xpText: {
-      fontFamily: font(600),
-      fontSize: f(15),
-      lineHeight: f(18),
-      color: XP_GRADIENT[0],
-    },
-    /**
-     * MaskedView box for the XP line. Figma node 30:321 is `shrink-0`: the
-     * reward is the one thing on the card that must never be clipped, so it
-     * holds its measured width and the subtitle ellipsises instead.
-     */
-    xpMask: {
-      flexShrink: 0,
-      flexGrow: 0,
-    },
-    xpTextHidden: { opacity: 0 },
   });
 
   return { hub, card };

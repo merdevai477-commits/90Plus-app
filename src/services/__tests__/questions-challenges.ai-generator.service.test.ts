@@ -9,6 +9,7 @@
 
 import type { QuizDatasetBuildResult, QuizEntityDataset } from '../../types/quiz-entity.types';
 import { ROUND_QUESTION_COUNT } from '../../constants/quiz.constants';
+import { roundQuestionCount } from '../../constants/questions-modes.config';
 
 /* ── real football data the AI is given (all mocked at the source) ── */
 
@@ -45,6 +46,18 @@ jest.mock('../quiz-365-player.service', () => ({
 
 /* ── the existing football agent (the ONLY AI Questions may use) ── */
 
+/*
+ * Football Grid reads stored career rows straight from the database. This suite
+ * is about what the MODEL is asked and what it is refused, so the store is
+ * empty here: the grid mode then publishes nothing, exactly as it does on a day
+ * with no data, and its own behaviour is covered in
+ * questions-challenges.data-modes.test.ts.
+ */
+jest.mock('../../lib/prisma', () => ({
+  __esModule: true,
+  default: { $queryRawUnsafe: async () => [] },
+}));
+
 const mockCallQuestionsAiJson = jest.fn();
 const mockIsQuestionsAiConfigured = jest.fn<boolean, []>();
 jest.mock('../questions-challenges.agent.service', () => ({
@@ -53,6 +66,7 @@ jest.mock('../questions-challenges.agent.service', () => ({
 }));
 
 import {
+  AI_AUTHORED_MODES,
   AI_QUESTION_MODES,
   buildAiQuestionChallenges,
   parseAiQuestionsPayload,
@@ -307,14 +321,18 @@ describe('questions-challenges AI generator', () => {
   /* ────────────── the AI request ────────────── */
 
   describe('AI request', () => {
-    test('goes to the existing agent once per playable mode', async () => {
+    test('goes to the existing agent once per AUTHORED mode, and not at all for the rest', async () => {
       wireAi(goodReplyFor, candidatesRef);
       const result = await buildAiQuestionChallenges('en', '2026-06-10');
 
       expect(result).not.toBeNull();
-      expect(mockCallQuestionsAiJson).toHaveBeenCalledTimes(AI_QUESTION_MODES.length);
+      expect(mockCallQuestionsAiJson).toHaveBeenCalledTimes(AI_AUTHORED_MODES.length);
       const labels = mockCallQuestionsAiJson.mock.calls.map((call) => call[0].label.split(':')[0]);
-      expect(labels.sort()).toEqual([...AI_QUESTION_MODES].sort());
+      expect(labels.sort()).toEqual([...AI_AUTHORED_MODES].sort());
+      // Football Grid and Top 10 are recorded relationships, not questions to
+      // write — no model is asked for them at all.
+      expect(labels).not.toContain('football-grid');
+      expect(labels).not.toContain('top10-challenge');
     });
 
     test('asks for exactly the round length and forbids inventing entities or images', () => {
@@ -340,7 +358,7 @@ describe('questions-challenges AI generator', () => {
     });
 
     test('never leaks a resolved image URL into the prompt', () => {
-      for (const mode of AI_QUESTION_MODES) {
+      for (const mode of AI_AUTHORED_MODES) {
         const user = buildQuestionsUserPrompt({
           mode,
           language: 'en',
@@ -403,13 +421,16 @@ describe('questions-challenges AI generator', () => {
       expect(rounds).not.toBeNull();
     });
 
-    test('builds every playable mode', () => {
-      expect(rounds.map((round) => round.mode).sort()).toEqual([...AI_QUESTION_MODES].sort());
+    test('builds every mode the model authors', () => {
+      const authored = rounds
+        .map((round) => round.mode)
+        .filter((mode) => (AI_AUTHORED_MODES as string[]).includes(mode));
+      expect(authored.sort()).toEqual([...AI_AUTHORED_MODES].sort());
     });
 
-    test('gives every mode exactly ROUND_QUESTION_COUNT real questions', () => {
+    test('gives every mode exactly its own round length in real questions', () => {
       for (const round of rounds) {
-        expect(round.content.questions).toHaveLength(ROUND_QUESTION_COUNT);
+        expect(round.content.questions).toHaveLength(roundQuestionCount(round.mode));
         expect(validateRoundIntegrity(round)).toBe(true);
       }
     });
@@ -425,10 +446,16 @@ describe('questions-challenges AI generator', () => {
       }
     });
 
-    test('is tagged as AI-authored, with the model recorded', () => {
+    test('every round says how it was made — the model, or the data', () => {
       for (const round of rounds) {
-        expect(round.metadata.source).toBe('AI');
-        expect(round.metadata.model).toBe('test-model');
+        if ((AI_AUTHORED_MODES as string[]).includes(round.mode)) {
+          expect(round.metadata.source).toBe('AI');
+          expect(round.metadata.model).toBe('test-model');
+        } else {
+          // Composed from stored football data, and labelled as such.
+          expect(round.metadata.source).toBe('DETERMINISTIC');
+          expect(round.metadata.model).toBe('football-data-pipeline');
+        }
       }
     });
 
@@ -513,12 +540,6 @@ describe('questions-challenges AI generator', () => {
         expect(cells.every((cell) => isRemote(cell.imageUrl) && cell.kind === 'club')).toBe(true);
       }
 
-      const grid = rounds.find((entry) => entry.mode === 'football-grid')!;
-      for (const question of grid.content.questions!) {
-        expect(question.rowImages).toHaveLength(3);
-        expect(question.rowImages!.every(isRemote)).toBe(true);
-      }
-
       const connections = rounds.find((entry) => entry.mode === 'player-connections')!;
       for (const question of connections.content.questions!) {
         expect(question.players).toHaveLength(4);
@@ -535,13 +556,15 @@ describe('questions-challenges AI generator', () => {
         expect(question.options!.every((option) => isRemote(option.imageUrl))).toBe(true);
       }
 
-      // top10-challenge is intentionally not in AI_QUESTION_MODES until the front board ships.
-      expect(rounds.find((entry) => entry.mode === 'top10-challenge')).toBeUndefined();
     });
 
-    test('top 10 stays out of the daily AI publish set until the UI board ships', () => {
-      expect(AI_QUESTION_MODES).not.toContain('top10-challenge');
-      expect(rounds.map((round) => round.mode)).not.toContain('top10-challenge');
+    test('publishes Top 10 and Football Grid without asking a model for them', () => {
+      // Both are in the publish set…
+      expect(AI_QUESTION_MODES).toContain('top10-challenge');
+      expect(AI_QUESTION_MODES).toContain('football-grid');
+      // …and neither is one of the modes a model authors.
+      expect(AI_AUTHORED_MODES).not.toContain('top10-challenge');
+      expect(AI_AUTHORED_MODES).not.toContain('football-grid');
     });
 
     test('XP is the sum of what the questions are worth, by difficulty', () => {
@@ -619,7 +642,7 @@ describe('questions-challenges AI generator', () => {
       expect(built).not.toContain(mode);
       // Every round that WAS built is a real, complete one.
       for (const round of result ?? []) {
-        expect(round.content.questions).toHaveLength(ROUND_QUESTION_COUNT);
+        expect(round.content.questions).toHaveLength(roundQuestionCount(round.mode));
         expect(validateRoundIntegrity(round)).toBe(true);
       }
     }
@@ -769,28 +792,42 @@ describe('questions-challenges AI generator', () => {
   /* ────────────── infrastructure failures ────────────── */
 
   describe('failures never become invented content', () => {
+    /*
+     * A model failure costs the modes the MODEL writes — and only those. Top 10
+     * is composed from stored data, so it still publishes; that is the point of
+     * keeping it off the agent, and it must not be mistaken for invented
+     * content, which is what every assertion below is really about.
+     */
+    async function expectNoAuthoredRound(): Promise<void> {
+      const result = await buildAiQuestionChallenges('en', '2026-06-10');
+      for (const round of result ?? []) {
+        expect(AI_AUTHORED_MODES as string[]).not.toContain(round.mode);
+        expect(round.metadata.source).toBe('DETERMINISTIC');
+      }
+    }
+
     test('returns null when no AI provider is configured', async () => {
       mockIsQuestionsAiConfigured.mockReturnValue(false);
       await expect(buildAiQuestionChallenges('en', '2026-06-10')).resolves.toBeNull();
       expect(mockCallQuestionsAiJson).not.toHaveBeenCalled();
     });
 
-    test('returns null when the AI is unreachable', async () => {
+    test('authors nothing when the AI is unreachable', async () => {
       mockCallQuestionsAiJson.mockResolvedValue(null);
-      await expect(buildAiQuestionChallenges('en', '2026-06-10')).resolves.toBeNull();
+      await expectNoAuthoredRound();
     });
 
-    test('returns null on an empty AI response', async () => {
+    test('authors nothing on an empty AI response', async () => {
       mockCallQuestionsAiJson.mockResolvedValue({ payload: { questions: [] }, model: 'm' });
-      await expect(buildAiQuestionChallenges('en', '2026-06-10')).resolves.toBeNull();
+      await expectNoAuthoredRound();
     });
 
-    test('returns null when the AI reports INSUFFICIENT_DATA', async () => {
+    test('authors nothing when the AI reports INSUFFICIENT_DATA', async () => {
       mockCallQuestionsAiJson.mockResolvedValue({
         payload: { questions: [], status: 'INSUFFICIENT_DATA' },
         model: 'm',
       });
-      await expect(buildAiQuestionChallenges('en', '2026-06-10')).resolves.toBeNull();
+      await expectNoAuthoredRound();
     });
 
     test('survives a malformed AI response without throwing', async () => {
@@ -798,7 +835,7 @@ describe('questions-challenges AI generator', () => {
         payload: { questions: [{ nonsense: true }, null, 'text'] as unknown[] },
         model: 'm',
       });
-      await expect(buildAiQuestionChallenges('en', '2026-06-10')).resolves.toBeNull();
+      await expectNoAuthoredRound();
     });
 
     test('returns null when the football entity dataset is too thin', async () => {

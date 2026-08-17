@@ -49,6 +49,24 @@ export interface QuestionEvidence {
   icon?: string;
 }
 
+/**
+ * WHAT THIS QUESTION EXPECTS FROM THE PLAYER — counts, never identities.
+ *
+ * Sent by the server on every question (`selectionRulesForQuestion` in
+ * src/services/questions-challenges.session.service.ts). The app used to infer
+ * its selection cap from `correctAnswers`, which the session deliberately
+ * strips — so Football Bingo, whose answer is three cells, capped at ONE and
+ * could never be completed. Knowing "three" leaks nothing: every bingo card
+ * takes three cells and WHICH three stays on the server.
+ */
+export interface QuestionSelectionRules {
+  selectionMode: 'single' | 'multiple' | 'text';
+  requiredSelections: number;
+  maxSelections: number;
+  /** Submit as soon as `requiredSelections` is reached — no confirm button. */
+  autoSubmit: boolean;
+}
+
 export interface QuestionModeQuestion {
   id: string;
   type: QuestionModeQuestionType;
@@ -77,10 +95,21 @@ export interface QuestionModeQuestion {
    */
   rowHeaderImages?: (string | undefined)[];
   colHeaderImages?: (string | undefined)[];
+  /**
+   * Football Grid: which cell of the shared board this question fills. The
+   * board itself (`rowHeaders` × `colHeaders`) is the same on all nine.
+   */
+  gridCell?: { row: number; column: number };
   connectionPlayers?: Array<{ id: string; name: string; imageUrl: string }>;
   transferChain?: Array<{ id: string; label: string; imageUrl?: string; unknown?: boolean }>;
-  rankingItems?: Array<{ id: string; label: string; imageUrl?: string }>;
+  /**
+   * Top 10: how the list is framed — how many slots, what it ranks and for
+   * which season. The names themselves stay on the server until grading.
+   */
+  top10?: { slots: number; categoryLabel: string; seasonLabel?: string };
   correctAnswers: string[];
+  /** Server-declared selection contract for this question. */
+  selection: QuestionSelectionRules;
   hint?: string;
   xpReward?: number;
   /** Evidence/clues shown in guess-club / guess-player mode. */
@@ -149,6 +178,12 @@ export interface QuestionModeSession {
   questions: QuestionModeQuestion[];
   /** True when the server already has this round fully answered. */
   completed: boolean;
+  /**
+   * FOOTBALL GRID — cells this player has already filled, `r{row}-c{col}` →
+   * the player placed there. Sent by the server so a board reopened part-way
+   * through redraws its won cells instead of coming back blank.
+   */
+  gridPlacements?: Record<string, { label: string; imageUrl?: string }>;
 }
 
 /**
@@ -188,8 +223,21 @@ export interface SubmitQuestionModeAnswerResult {
     correctIds?: string[];
     acceptedIds?: string[];
     orderedIds?: string[];
+    /** Top 10 reveal: the ten real names, sent only once the list is graded. */
+    orderedAnswers?: Array<{ rank: number; canonical: string; imageUrl?: string; value?: number }>;
   };
   hint?: string | null;
+  /** Top 10: per slot, whether the server matched what was typed there. */
+  slotResults?: boolean[];
+  /**
+   * The user's XP total, level and coin balance AFTER the server graded this
+   * answer. Authoritative: the app displays these numbers and never computes a
+   * balance of its own.
+   */
+  xp?: number;
+  level?: number;
+  coins?: number;
+  coinsDeducted?: number;
 }
 
 /**
@@ -265,6 +313,8 @@ interface QuestionModeSessionResponse {
     elapsedTime: number;
     /** Server-authoritative position in the round — see createSession below. */
     currentQuestionIndex?: number;
+    /** football-grid only — cells this player has already filled. */
+    gridPlacements?: Record<string, { label: string; imageUrl?: string }>;
   };
 }
 
@@ -347,6 +397,36 @@ function optionalImage(value: unknown): string | undefined {
 }
 
 /**
+ * The server's selection contract for one question, defensively parsed.
+ *
+ * An older backend that doesn't send `selection` falls back to a single pick —
+ * the behaviour every multiple-choice mode already had — rather than to a cap
+ * derived from the (stripped) answer key.
+ */
+function mapSelection(raw: unknown, mode: QuestionModeId): QuestionSelectionRules {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  const selectionMode =
+    row.selectionMode === 'multiple' || row.selectionMode === 'text' ? row.selectionMode : 'single';
+  const required = Number(row.requiredSelections);
+  const max = Number(row.maxSelections);
+  const requiredSelections = Number.isFinite(required) && required > 0 ? Math.floor(required) : 1;
+  const maxSelections =
+    Number.isFinite(max) && max > 0 ? Math.floor(max) : requiredSelections;
+
+  return {
+    selectionMode,
+    requiredSelections,
+    maxSelections: Math.max(maxSelections, requiredSelections),
+    autoSubmit:
+      typeof row.autoSubmit === 'boolean'
+        ? row.autoSubmit
+        : // Boards answer themselves the moment they are complete; a legacy
+          // payload for a board mode still behaves that way.
+          mode === 'football-bingo' || mode === 'football-grid',
+  };
+}
+
+/**
  * ONE question of a round → the shape the screen renders.
  *
  * Every image field is copied straight across from the server payload. The
@@ -373,6 +453,7 @@ function mapRoundQuestion(
     prompt: String(raw?.prompt ?? ''),
     imageUrl: optionalImage(raw?.imageUrl),
     correctAnswers: ordered.length > 0 ? ordered : correctIds,
+    selection: mapSelection(raw?.selection, mode),
     hint: typeof raw?.hint === 'string' ? raw.hint : undefined,
     xpReward: typeof raw?.xpReward === 'number' ? raw.xpReward : undefined,
     evidence: mapEvidence(raw?.evidence),
@@ -400,6 +481,14 @@ function mapRoundQuestion(
         colHeaders: Array.isArray(raw?.columns) ? raw.columns.map(String) : [],
         rowHeaderImages: Array.isArray(raw?.rowImages) ? raw.rowImages : undefined,
         colHeaderImages: Array.isArray(raw?.columnImages) ? raw.columnImages : undefined,
+        gridCell:
+          raw?.gridCell &&
+          Number.isInteger(raw.gridCell.row) &&
+          Number.isInteger(raw.gridCell.column)
+            ? { row: raw.gridCell.row, column: raw.gridCell.column }
+            : undefined,
+        // The players offered for THIS cell.
+        options: mapOptions(raw?.options),
       };
     case 'connections':
       return {
@@ -429,7 +518,15 @@ function mapRoundQuestion(
     case 'top10':
       return {
         ...base,
-        rankingItems: mapOptions(raw?.options),
+        top10:
+          raw?.top10 && typeof raw.top10 === 'object'
+            ? {
+                slots: Number(raw.top10.slots) > 0 ? Math.floor(Number(raw.top10.slots)) : 10,
+                categoryLabel: String(raw.top10.categoryLabel ?? ''),
+                seasonLabel:
+                  typeof raw.top10.seasonLabel === 'string' ? raw.top10.seasonLabel : undefined,
+              }
+            : undefined,
       };
     default:
       return {
@@ -568,6 +665,9 @@ export const QuestionsModesService = {
       timeLimitSec: typeof json.data.content?.timer === 'number' ? json.data.content.timer : 20,
       questions,
       completed: json.data.completed === true,
+      ...(json.data.gridPlacements && typeof json.data.gridPlacements === 'object'
+        ? { gridPlacements: json.data.gridPlacements }
+        : {}),
     };
   },
 
