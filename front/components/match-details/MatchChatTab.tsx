@@ -91,6 +91,7 @@ export function MatchChatTab({ fixtureId }: MatchChatTabProps): React.ReactEleme
   const listRef = useRef<FlashListRef<MatchChatUiMessage> | null>(null);
   const [draft, setDraft] = useState('');
   const [now, setNow] = useState(Date.now());
+  const nearBottomLatest = useRef(true);
 
   const {
     messages,
@@ -115,16 +116,20 @@ export function MatchChatTab({ fixtureId }: MatchChatTabProps): React.ReactEleme
   });
 
   useEffect(() => {
+    nearBottomLatest.current = nearBottom;
+  }, [nearBottom]);
+
+  useEffect(() => {
     if (!frozenUntil) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [frozenUntil]);
 
   useEffect(() => {
-    if (nearBottom && messages.length > 0) {
-      requestAnimationFrame(() => safeFlashListScrollToEnd(listRef.current, true));
-    }
-  }, [messages.length, nearBottom]);
+    if (!nearBottomLatest.current || messages.length === 0) return;
+    const id = requestAnimationFrame(() => safeFlashListScrollToEnd(listRef.current, false));
+    return () => cancelAnimationFrame(id);
+  }, [messages.length]);
 
   const frozenMs = frozenUntil ? Math.max(0, frozenUntil - now) : 0;
   const frozen = frozenMs > 0;

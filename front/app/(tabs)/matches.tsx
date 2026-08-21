@@ -984,8 +984,6 @@ export default function MatchesHubScreenV2() {
   const worldCupLocked = useAppFeaturesStore((s) => s.worldCupLocked);
   const worldCupLeagueId = useAppFeaturesStore((s) => s.leagueId);
   const unlockAtMs = useAppFeaturesStore((s) => s.unlockAtMs);
-  const featuresRevision = useAppFeaturesStore((s) => s.revision);
-  const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
   // selectedDate is the ground truth; the calendar grid derives everything
   // else from it (month length, highlighted cell, etc.).
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
@@ -1006,24 +1004,26 @@ export default function MatchesHubScreenV2() {
   }, [getToken]);
 
   useEffect(() => {
-    void hydrateFeatures(true);
+    void useAppFeaturesStore.getState().hydrate(true);
     // Poll for the server unlock flag. Far from kickoff we check every 30s; in
     // the final 2 minutes we tighten to 5s so the World Cup tab opens right on
     // time (server flag stays the single source of truth — no client/tab desync).
     let id: ReturnType<typeof setInterval> | null = null;
     const schedule = () => {
-      const left = getWorldCupTimeLeft(Date.now(), unlockAtMs);
+      const unlock = useAppFeaturesStore.getState().unlockAtMs;
+      const left = getWorldCupTimeLeft(Date.now(), unlock);
       const secondsLeft = left.days * 86400 + left.hours * 3600 + left.mins * 60 + left.secs;
       const tight = secondsLeft <= 120;
       const period = tight ? 5_000 : 30_000;
       if (id) clearInterval(id);
       id = setInterval(() => {
         const now = Date.now();
-        const remaining = getWorldCupTimeLeft(now, unlockAtMs);
+        const unlockMs = useAppFeaturesStore.getState().unlockAtMs;
+        const remaining = getWorldCupTimeLeft(now, unlockMs);
         const remSecs =
           remaining.days * 86400 + remaining.hours * 3600 + remaining.mins * 60 + remaining.secs;
-        if (remSecs <= 120 || now >= unlockAtMs) {
-          void hydrateFeatures(true);
+        if (remSecs <= 120 || now >= unlockMs) {
+          void useAppFeaturesStore.getState().hydrate(true);
         }
         // Re-arm at the tighter cadence once we enter the final 2 minutes.
         if (!tight && remSecs <= 120) schedule();
@@ -1033,7 +1033,7 @@ export default function MatchesHubScreenV2() {
     return () => {
       if (id) clearInterval(id);
     };
-  }, [hydrateFeatures, unlockAtMs]);
+  }, []);
 
   // Tickets (remaining predictions)
   const [ticketsRemaining, setTicketsRemaining] = useState<number>(10);

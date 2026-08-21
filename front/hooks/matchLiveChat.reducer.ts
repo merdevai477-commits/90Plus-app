@@ -64,11 +64,11 @@ function mergeById(base: MatchChatUiMessage[], incoming: MatchChatPublicMessage[
 export function matchChatReducer(state: MatchChatState, action: MatchChatAction): MatchChatState {
   switch (action.type) {
     case 'connecting':
-      return { ...state, connection: 'connecting' };
+      return state.connection === 'connecting' ? state : { ...state, connection: 'connecting' };
     case 'connected':
-      return { ...state, connection: 'connected' };
+      return state.connection === 'connected' ? state : { ...state, connection: 'connected' };
     case 'disconnected':
-      return { ...state, connection: 'disconnected' };
+      return state.connection === 'disconnected' ? state : { ...state, connection: 'disconnected' };
     case 'history': {
       const combined = mergeById([], [...action.messages, ...action.missed]);
       return { ...state, messages: combined, hasMore: action.hasMore, unseenCount: 0 };
@@ -103,22 +103,37 @@ export function matchChatReducer(state: MatchChatState, action: MatchChatAction)
     case 'deleted':
       return { ...state, messages: state.messages.filter((m) => m.id !== action.id) };
     case 'warned':
-      return { ...state, warning: true };
+      return state.warning ? state : { ...state, warning: true };
     case 'frozen':
-      return { ...state, frozenUntil: action.until };
+      return state.frozenUntil === action.until ? state : { ...state, frozenUntil: action.until };
     case 'unfrozen':
-      return { ...state, frozenUntil: null };
+      return state.frozenUntil == null ? state : { ...state, frozenUntil: null };
     case 'nearBottom':
+      if (state.nearBottom === action.value) {
+        return action.value && state.unseenCount !== 0 ? { ...state, unseenCount: 0 } : state;
+      }
       return {
         ...state,
         nearBottom: action.value,
         unseenCount: action.value ? 0 : state.unseenCount,
       };
     case 'clearUnseen':
-      return { ...state, unseenCount: 0, nearBottom: true };
+      return state.unseenCount === 0 && state.nearBottom
+        ? state
+        : { ...state, unseenCount: 0, nearBottom: true };
     case 'clearWarning':
-      return { ...state, warning: false };
+      return state.warning ? { ...state, warning: false } : state;
     case 'reset':
+      if (
+        state.connection === 'idle' &&
+        state.messages.length === 0 &&
+        !state.warning &&
+        state.frozenUntil == null &&
+        state.unseenCount === 0 &&
+        !state.hasMore
+      ) {
+        return state;
+      }
       return { ...initialMatchChatState };
     default:
       return state;

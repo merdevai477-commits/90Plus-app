@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { io, type Socket } from 'socket.io-client';
 import { useAuth } from '@clerk/clerk-expo';
 import { getWsUrl } from '../config/api.config';
-import { getClerkBearerToken } from '../utils/clerkAuthToken';
+import { getClerkBearerToken, type GetTokenFn } from '../utils/clerkAuthToken';
 import { fetchMatchChatHistory, reportMatchChatMessage } from '../services/matchChatApi';
 import { logger } from '../services/logger';
 import {
@@ -36,28 +36,38 @@ function clientMessageUuid(): string {
 }
 
 export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) {
-  const { getToken, isSignedIn, isLoaded, userId: clerkUserId } = useAuth();
+  const { getToken, isSignedIn, isLoaded } = useAuth();
   const [state, dispatch] = useReducer(matchChatReducer, initialMatchChatState);
   const [lastError, setLastError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const lastConfirmedIdRef = useRef<string | undefined>(undefined);
   const ownBackendIdRef = useRef<string | undefined>(undefined);
   const loadingOlderRef = useRef(false);
+  const nearBottomRef = useRef(true);
   const stateRef = useRef(state);
   stateRef.current = state;
+  nearBottomRef.current = state.nearBottom;
+
+  // Clerk returns a new getToken reference every render — never put it in effect deps.
+  const getTokenRef = useRef<GetTokenFn>(getToken);
+  getTokenRef.current = getToken;
 
   const signedIn = Boolean(isLoaded && isSignedIn);
 
   useEffect(() => {
     const last = [...state.messages].reverse().find((m) => !m.pending && !m.failed);
     lastConfirmedIdRef.current = last?.id;
-    const own = [...state.messages].reverse().find((m) => m.user && clerkUserId && m.pending);
-    if (own) ownBackendIdRef.current = own.user.id;
-  }, [state.messages, clerkUserId]);
+  }, [state.messages]);
 
   useEffect(() => {
     if (!enabled || !signedIn || !matchId) {
+      if (socketRef.current) {
+        socketRef.current.removeAllListeners();
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
       dispatch({ type: 'reset' });
+      setLastError(null);
       return;
     }
 
@@ -75,7 +85,7 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
       timeout: 12_000,
       forceNew: true,
       auth: (cb: (data: { token: string }) => void) => {
-        void getClerkBearerToken(getToken)
+        void getClerkBearerToken(getTokenRef.current)
           .then((token) => {
             if (!token) {
               logger.warn('[match-chat] No Clerk token for socket auth');
@@ -156,7 +166,10 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
     socket.on(MATCH_CHAT_EVENTS.frozen, (payload: MatchChatFrozenPayload) => {
       if (cancelled) return;
       const until = Date.parse(payload.frozenUntil);
-      dispatch({ type: 'frozen', until: Number.isFinite(until) ? until : Date.now() + (payload.remainingMs ?? 0) });
+      dispatch({
+        type: 'frozen',
+        until: Number.isFinite(until) ? until : Date.now() + (payload.remainingMs ?? 0),
+      });
     });
     socket.on(MATCH_CHAT_EVENTS.unfrozen, () => {
       if (cancelled) return;
@@ -165,12 +178,18 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
 
     return () => {
       cancelled = true;
-      socket.emit(MATCH_CHAT_EVENTS.leave, { matchId });
+      try {
+        socket.emit(MATCH_CHAT_EVENTS.leave, { matchId });
+      } catch {
+        // ignore
+      }
       socket.removeAllListeners();
       socket.disconnect();
-      socketRef.current = null;
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
     };
-  }, [enabled, signedIn, matchId, getToken]);
+  }, [enabled, signedIn, matchId]);
 
   const send = useCallback(
     (text: string) => {
@@ -205,12 +224,15 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
   );
 
   const loadOlder = useCallback(async () => {
-    if (loadingOlderRef.current || !state.hasMore || state.messages.length === 0) return;
+    if (loadingOlderRef.current || !stateRef.current.hasMore || stateRef.current.messages.length === 0) {
+      return;
+    }
     loadingOlderRef.current = true;
     try {
-      const token = await getClerkBearerToken(getToken);
+      const token = await getClerkBearerToken(getTokenRef.current);
       if (!token) return;
-      const oldest = state.messages[0];
+      const oldest = stateRef.current.messages[0];
+      if (!oldest) return;
       const page = await fetchMatchChatHistory(token, matchId, oldest.id);
       dispatch({ type: 'older', messages: page.messages, hasMore: page.hasMore });
     } catch {
@@ -218,9 +240,11 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
     } finally {
       loadingOlderRef.current = false;
     }
-  }, [getToken, matchId, state.hasMore, state.messages]);
+  }, [matchId]);
 
   const setNearBottom = useCallback((value: boolean) => {
+    if (nearBottomRef.current === value) return;
+    nearBottomRef.current = value;
     dispatch({ type: 'nearBottom', value });
   }, []);
 
@@ -232,14 +256,11 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
     dispatch({ type: 'clearWarning' });
   }, []);
 
-  const report = useCallback(
-    async (messageId: string, reason: MatchChatReportReason) => {
-      const token = await getClerkBearerToken(getToken);
-      if (!token) throw new Error('AUTH_REQUIRED');
-      await reportMatchChatMessage(token, messageId, reason);
-    },
-    [getToken],
-  );
+  const report = useCallback(async (messageId: string, reason: MatchChatReportReason) => {
+    const token = await getClerkBearerToken(getTokenRef.current);
+    if (!token) throw new Error('AUTH_REQUIRED');
+    await reportMatchChatMessage(token, messageId, reason);
+  }, []);
 
   const frozenRemainingMs = useMemo(() => {
     if (!state.frozenUntil) return 0;

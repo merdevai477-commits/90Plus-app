@@ -33,9 +33,26 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
         try {
           const data = await fetchAppFeatures();
           const busted = await applyFootballCacheEpoch(data.features.footballCacheEpoch);
-          if (busted) {
-            set((s) => ({ revision: s.revision + 1 }));
-          }
+          const wc = data.features.worldCupTab;
+          const next = {
+            worldCupEnabled: wc.enabled,
+            worldCupLocked: wc.locked,
+            worldCupCampaignMode: wc.campaignMode,
+            leagueId: wc.leagueId,
+            season: wc.season,
+            unlockAtMs: Date.parse(wc.unlockAt) || WC_2026_KICKOFF_MS,
+          };
+          const prev = get();
+          const changed =
+            busted ||
+            prev.worldCupEnabled !== next.worldCupEnabled ||
+            prev.worldCupLocked !== next.worldCupLocked ||
+            prev.worldCupCampaignMode !== next.worldCupCampaignMode ||
+            prev.leagueId !== next.leagueId ||
+            prev.season !== next.season ||
+            prev.unlockAtMs !== next.unlockAtMs;
+          if (!changed) return;
+          set((s) => ({ ...next, revision: s.revision + 1 }));
         } catch {
           // non-fatal background refresh
         }
@@ -49,19 +66,31 @@ export const useAppFeaturesStore = create<AppFeaturesState>((set, get) => ({
         const data = await fetchAppFeatures();
         await applyFootballCacheEpoch(data.features.footballCacheEpoch);
         const wc = data.features.worldCupTab;
-        set((s) => ({
+        const next = {
           worldCupEnabled: wc.enabled,
           worldCupLocked: wc.locked,
           worldCupCampaignMode: wc.campaignMode,
           leagueId: wc.leagueId,
           season: wc.season,
           unlockAtMs: Date.parse(wc.unlockAt) || WC_2026_KICKOFF_MS,
-          hydrated: true,
-          revision: s.revision + 1,
-        }));
+          hydrated: true as const,
+        };
+        const prev = get();
+        const changed =
+          !prev.hydrated ||
+          prev.worldCupEnabled !== next.worldCupEnabled ||
+          prev.worldCupLocked !== next.worldCupLocked ||
+          prev.worldCupCampaignMode !== next.worldCupCampaignMode ||
+          prev.leagueId !== next.leagueId ||
+          prev.season !== next.season ||
+          prev.unlockAtMs !== next.unlockAtMs;
+        if (!changed) return;
+        set((s) => ({ ...next, revision: s.revision + 1 }));
       } catch {
         const campaignFallback = Date.now() >= Date.parse('2026-06-10T00:00:00.000Z');
         if (campaignFallback) {
+          const prev = get();
+          if (prev.hydrated && prev.worldCupCampaignMode && !prev.worldCupLocked) return;
           set((s) => ({
             worldCupEnabled: true,
             worldCupLocked: false,

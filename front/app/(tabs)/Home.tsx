@@ -138,11 +138,10 @@ export default function HomeScreen() {
     const quizPreloadDone = useRef(false);
     const { likedIds, toggleLike } = useHomeLikes(user?.id);
     const worldCupCampaignMode = useAppFeaturesStore((s) => s.worldCupCampaignMode);
-    const hydrateFeatures = useAppFeaturesStore((s) => s.hydrate);
 
     useEffect(() => {
-        void hydrateFeatures(true);
-    }, [hydrateFeatures]);
+        void useAppFeaturesStore.getState().hydrate(true);
+    }, []);
 
     // Open lucky wheel from push notification deep link
     const params = useLocalSearchParams<{ openLuckyWheel?: string }>();
