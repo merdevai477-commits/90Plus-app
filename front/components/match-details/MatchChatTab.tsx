@@ -107,6 +107,7 @@ export function MatchChatTab({ fixtureId }: MatchChatTabProps): React.ReactEleme
     setNearBottom,
     clearUnseen,
     clearWarning,
+    clearLastError,
     report,
     ownUserId,
     maxLength,
@@ -114,6 +115,19 @@ export function MatchChatTab({ fixtureId }: MatchChatTabProps): React.ReactEleme
     matchId: fixtureId,
     enabled: fixtureId > 0,
   });
+
+  useEffect(() => {
+    if (!lastError || lastError === 'AUTH' || connection === 'disconnected') return;
+    const id = setTimeout(() => clearLastError(), 4500);
+    return () => clearTimeout(id);
+  }, [lastError, connection, clearLastError]);
+
+  const rejectBannerText =
+    lastError === 'RATE_LIMITED'
+      ? md.chatRateLimited
+      : lastError === 'MODERATION_BLOCKED'
+        ? md.chatModerationBlocked
+        : null;
 
   useEffect(() => {
     nearBottomLatest.current = nearBottom;
@@ -245,6 +259,11 @@ export function MatchChatTab({ fixtureId }: MatchChatTabProps): React.ReactEleme
       {warning ? (
         <TouchableOpacity style={styles.warnBanner} onPress={clearWarning}>
           <Text style={styles.warnText}>{md.chatWarning}</Text>
+        </TouchableOpacity>
+      ) : null}
+      {rejectBannerText && connection === 'connected' ? (
+        <TouchableOpacity style={styles.warnBanner} onPress={clearLastError}>
+          <Text style={styles.warnText}>{rejectBannerText}</Text>
         </TouchableOpacity>
       ) : null}
       {signedIn && connection === 'connecting' ? (

@@ -274,6 +274,9 @@ router.get('/cached/fixture/:id/statistics', SHARED_CACHE_3S, FootballController
 // GET /api/football/cached/fixture/:id/events - Get events (permanent for finished, short for empty/live)
 router.get('/cached/fixture/:id/events', SHARED_CACHE_3S, FootballController.getCachedEvents);
 
+// GET /api/football/cached/fixture/:id/momentum - Event-derived momentum series
+router.get('/cached/fixture/:id/momentum', SHARED_CACHE_3S, FootballController.getCachedMomentum);
+
 // GET /api/football/cached/fixture/:id/details - Full match details bundle (3s TTL for live)
 router.get('/cached/fixture/:id/details', SHARED_CACHE_3S, FootballController.getCachedFixtureDetails);
 

@@ -709,6 +709,8 @@ export const ar = {
     chatWarning: 'خلّي الكلام محترم. مخالفة تانية هتوقف المحادثة مؤقتاً.',
     chatFrozen: 'المحادثة متوقفة لـ {seconds} ثانية',
     chatFrozenPlaceholder: 'المحادثة متوقفة…',
+    chatRateLimited: 'هدّي شوية — بتبعت بسرعة زيادة.',
+    chatModerationBlocked: 'الرسالة اترفضت. خلّي الكلام محترم.',
     chatNewMessages: 'رسائل جديدة',
     chatReportTitle: 'الإبلاغ عن الرسالة',
     chatReportCancel: 'إلغاء',

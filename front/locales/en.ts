@@ -484,6 +484,8 @@ export const en = {
     chatWarning: 'Please keep it respectful. Another violation will pause your chat.',
     chatFrozen: 'Chat paused for {seconds}s',
     chatFrozenPlaceholder: 'Chat is paused…',
+    chatRateLimited: 'Slow down — you are sending too fast.',
+    chatModerationBlocked: 'Message blocked. Keep it respectful.',
     chatNewMessages: 'New messages',
     chatReportTitle: 'Report message',
     chatReportCancel: 'Cancel',

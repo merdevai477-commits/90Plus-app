@@ -154,6 +154,15 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
       if (payload.clientMessageId) {
         dispatch({ type: 'rejected', clientMessageId: payload.clientMessageId });
       }
+      if (payload.code === 'RATE_LIMITED') {
+        setLastError('RATE_LIMITED');
+      } else if (payload.code === 'MODERATION_BLOCKED') {
+        setLastError('MODERATION_BLOCKED');
+      } else if (payload.code === 'FROZEN') {
+        setLastError('FROZEN');
+      } else if (payload.code) {
+        setLastError(payload.code);
+      }
     });
     socket.on(MATCH_CHAT_EVENTS.deleted, (payload: { id: string; matchId: number }) => {
       if (cancelled || payload.matchId !== matchId) return;
@@ -256,6 +265,10 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
     dispatch({ type: 'clearWarning' });
   }, []);
 
+  const clearLastError = useCallback(() => {
+    setLastError(null);
+  }, []);
+
   const report = useCallback(async (messageId: string, reason: MatchChatReportReason) => {
     const token = await getClerkBearerToken(getTokenRef.current);
     if (!token) throw new Error('AUTH_REQUIRED');
@@ -277,6 +290,7 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
     setNearBottom,
     clearUnseen,
     clearWarning,
+    clearLastError,
     report,
     frozenRemainingMs,
     ownUserId: ownBackendIdRef.current,

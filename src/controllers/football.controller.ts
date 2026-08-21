@@ -2443,6 +2443,36 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/fixture/:id/momentum
+   * Synthetic match-momentum series from cached events (Redis TTL like events).
+   */
+  static async getCachedMomentum(req: Request, res: Response): Promise<void> {
+    try {
+      const fixtureId = parseInt(ensureString(req.params.id));
+
+      if (isNaN(fixtureId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
+        return;
+      }
+
+      const language = resolveAppLanguage(req);
+      const forceRefresh = wantsFreshMatchDetails(req);
+      const momentum = await footballDataCacheService.getMatchMomentum(fixtureId, {
+        language,
+        forceRefresh,
+      });
+
+      res.json({
+        status: 'SUCCESS',
+        results: momentum?.available ? 1 : 0,
+        response: momentum,
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/cached/fixture/:id/details
    * Bundle: fixture + lineups + statistics + events + venue (one round trip).
    */

@@ -491,6 +491,19 @@ export interface FixtureEvent {
   comments: string | null;
 }
 
+export type FixtureMomentumPayload = {
+  available: boolean;
+  duration: number;
+  series: Array<{ minute: number; home: number; away: number }>;
+  markers: Array<{
+    minute: number;
+    side: 'home' | 'away';
+    kind: string;
+    detail: string;
+    intensity?: number;
+  }>;
+};
+
 export interface Standing {
   rank: number;
   team: {
@@ -1772,6 +1785,27 @@ export const ApiFootballService = {
       } catch {
         return [];
       }
+    }
+  },
+
+  /**
+   * Cached synthetic momentum series for the events-tab chart.
+   */
+  async getFixtureMomentum(
+    fixtureId: number,
+    options?: { skipCache?: boolean },
+  ): Promise<FixtureMomentumPayload | null> {
+    try {
+      const payload = await fetchFromProxy<FixtureMomentumPayload>(
+        `/cached/fixture/${fixtureId}/momentum`,
+        {},
+        options?.skipCache ? { fresh: true } : {},
+      );
+      if (!payload || Array.isArray(payload) || typeof payload !== 'object') return null;
+      if (!('available' in payload)) return null;
+      return payload;
+    } catch {
+      return null;
     }
   },
 

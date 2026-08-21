@@ -88,6 +88,8 @@ import {
     type ThreeSixFiveCompetitionTransfers,
 } from './threeSixFiveScores.service';
 import { redisCacheService } from './redis-cache.service';
+import { buildMomentumPayload, type MomentumApiPayload } from './match-momentum.service';
+import { footballMomentumRedisKey } from '../utils/football-cache-keys.util';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import {
@@ -2085,6 +2087,69 @@ class FootballDataCacheService {
 
         // Wait for the API request to complete
         return await apiRequestPromise;
+    }
+
+    /**
+     * Synthetic 0–90 momentum series derived from cached events.
+     * Redis TTL matches events: live ~30s, finished ~6h, empty/short otherwise.
+     */
+    async getMatchMomentum(
+        fixtureId: number,
+        options?: { forceRefresh?: boolean; language?: string | null },
+    ): Promise<MomentumApiPayload> {
+        const redisKey = footballMomentumRedisKey(fixtureId);
+        const forceRefresh = options?.forceRefresh === true;
+
+        if (!forceRefresh) {
+            const cached = await redisCacheService.get<MomentumApiPayload>(redisKey);
+            if (cached && typeof cached === 'object' && 'available' in cached) {
+                return cached;
+            }
+        }
+
+        const dbMatch = await prisma.cachedFixture.findUnique({
+            where: { fixtureId },
+        });
+        const isFinished = !!dbMatch && ['FT', 'AET', 'PEN'].includes(dbMatch.status);
+        const isLiveStatus =
+            !!dbMatch &&
+            ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(dbMatch.status);
+
+        const events = await this.getMatchEvents(fixtureId, {
+            forceRefresh,
+            language: options?.language,
+        });
+
+        let fixture: any = null;
+        if (dbMatch) {
+            try {
+                fixture = matchCacheService.convertDbMatchToApiFormat(dbMatch);
+            } catch {
+                fixture = null;
+            }
+        }
+
+        const payload = buildMomentumPayload({
+            events: events ?? [],
+            homeTeamId: fixture?.teams?.home?.id ?? dbMatch?.homeTeamId ?? null,
+            awayTeamId: fixture?.teams?.away?.id ?? dbMatch?.awayTeamId ?? null,
+            homeGoals: fixture?.goals?.home ?? dbMatch?.homeScore ?? null,
+            awayGoals: fixture?.goals?.away ?? dbMatch?.awayScore ?? null,
+            matchElapsed: fixture?.fixture?.status?.elapsed ?? dbMatch?.elapsed ?? null,
+            finished: isFinished,
+        });
+
+        const isEmpty = !payload.available;
+        const ttl = isEmpty
+            ? isLiveStatus
+                ? this.TTL.LIVE_EVENT_INGEST
+                : this.TTL.EMPTY
+            : isFinished
+              ? this.TTL.FINISHED
+              : this.TTL.LIVE_MATCH;
+
+        await redisCacheService.set(redisKey, payload, ttl);
+        return payload;
     }
 
     /**
