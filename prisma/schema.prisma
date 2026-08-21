@@ -150,6 +150,8 @@ model User {
   shareWinStandings             ShareWinStanding[]
   shareWinReferralsMade         ShareWinReferral[]       @relation("ShareWinReferrer")
   shareWinReferralReceived      ShareWinReferral?        @relation("ShareWinReferred")
+  matchChatMessages             MatchChatMessage[]
+  matchChatReportsFiled         MatchChatReport[]        @relation("MatchChatReporter")
 
   @@index([email])
   @@index([username])
@@ -1890,6 +1892,45 @@ model ChatLimit {
   @@map("chat_limits")
 }
 
+model MatchChatMessage {
+  id                 String                    @id @default(uuid())
+  matchId            Int
+  userId             String
+  text               String
+  normalizedText     String
+  moderationStatus   MatchChatModerationStatus @default(CLEAN)
+  moderationCategory MatchChatModerationCategory @default(CLEAN)
+  moderationScore    Float                     @default(0)
+  moderationReason   String?
+  clientMessageId    String
+  createdAt          DateTime                  @default(now())
+  deletedAt          DateTime?
+  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports            MatchChatReport[]
+
+  @@unique([userId, clientMessageId])
+  @@index([matchId, createdAt])
+  @@index([matchId, id])
+  @@index([userId, createdAt])
+  @@map("match_chat_messages")
+}
+
+model MatchChatReport {
+  id         String                @id @default(uuid())
+  reporterId String
+  messageId  String
+  reason     MatchChatReportReason
+  details    String?
+  createdAt  DateTime              @default(now())
+  reporter   User                  @relation("MatchChatReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  message    MatchChatMessage      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([reporterId, messageId])
+  @@index([messageId])
+  @@index([reporterId, createdAt])
+  @@map("match_chat_reports")
+}
+
 model ChatAnswerCache {
   id           String   @id @default(uuid())
   questionHash String   @unique
@@ -2067,6 +2108,36 @@ enum UserRole {
   USER
   MODERATOR
   ADMIN
+}
+
+enum MatchChatModerationStatus {
+  CLEAN
+  WARNED
+  BLOCKED
+  DELETED
+}
+
+enum MatchChatModerationCategory {
+  CLEAN
+  INSULT
+  PROFANITY
+  HARASSMENT
+  THREAT
+  HATE
+  SEXUAL
+  SPAM
+  ADVERTISEMENT
+  SUSPICIOUS_LINK
+}
+
+enum MatchChatReportReason {
+  PROFANITY
+  ABUSE
+  HARASSMENT
+  SPAM
+  ADVERTISEMENT
+  SUSPICIOUS_LINK
+  OTHER
 }
 
 enum MatchStatus {

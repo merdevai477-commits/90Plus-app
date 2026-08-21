@@ -115,6 +115,8 @@
     "openai": "^6.37.0",
     "rate-limit-redis": "^4.3.1",
     "sharp": "^0.34.5",
+    "@clerk/backend": "^2.0.8",
+    "@socket.io/redis-adapter": "^8.3.0",
     "socket.io": "^4.8.1",
     "svix": "^1.82.0",
     "uuid": "^11.0.3",

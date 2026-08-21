@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { logger } from '../utils/logger';
+import { MatchChatGateway } from './match-chat/match-chat.gateway';
 
 /**
  * WebSocket Event Types
@@ -160,6 +161,7 @@ export class WebSocketService {
         });
 
         this.setupEventHandlers();
+        MatchChatGateway.attach(this.io);
         logger.info('✅ WebSocket server initialized');
 
         return this.io;
@@ -388,6 +390,9 @@ export class WebSocketService {
      */
     static shutdown(): void {
         if (this.io) {
+            void import('./match-chat/match-chat.adapter').then(({ closeRedisAdapter }) =>
+                closeRedisAdapter(),
+            );
             this.io.close();
             this.io = null;
             this.userSockets.clear();

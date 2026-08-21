@@ -22,9 +22,9 @@ import { collectUniqueStrings } from '../../utils/footballNamePrefetch';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { TeamToggle } from '../../components/match-details/TeamToggle';
-import { APP_BG } from '../../constants/ui';
-import {
-  BG_BASE,
+import { MatchDetailsTopBar } from '../../components/match-details/MatchDetailsTopBar';
+import { MatchChatTab } from '../../components/match-details/MatchChatTab';
+import { BG_BASE,
   GLASS_BORDER_SIDE,
   GLASS_BORDER_TOP,
   GLASS_CARD,
@@ -39,6 +39,7 @@ import {
 } from '../../constants/tokens';
 import { FootballField } from '../../components/match-details/FootballField';
 import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
+import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
 import { MatchLmtWebView } from '../../components/match-details/MatchLmtWebView';
 import { fetchFixtureLmt, type Scores365LmtInfo } from '../../services/lmt.service';
 import { applySubstitutionsToPitch } from '../../utils/lineupMatchState';
@@ -179,7 +180,7 @@ const MatchDetailsScreen = () => {
   const shimmerX = useShimmer();
   const translationsReady = Boolean(t?.matchDetails);
 
-  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'stadium'>('events');
+  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'chats'>('events');
 
   const [homeLastFixtures, setHomeLastFixtures] = useState<TeamFixture[]>([]);
   const [awayLastFixtures, setAwayLastFixtures] = useState<TeamFixture[]>([]);
@@ -192,7 +193,7 @@ const MatchDetailsScreen = () => {
   const [standingsSeasonUsed, setStandingsSeasonUsed] = useState<number | null>(null);
   const [standingsUnavailable, setStandingsUnavailable] = useState(false);
 
-  // Home/Away selector shared by Events, Lineups, Previous Results.
+  // Home/Away selector shared by Lineups and Previous Results.
   const [selectedTeamSide, setSelectedTeamSide] = useState<'home' | 'away'>('home');
   // Selected standings group index (World Cup groups A-G etc.).
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
@@ -219,6 +220,26 @@ const MatchDetailsScreen = () => {
   const homeTeamLogo = fixture?.teams?.home?.logo ?? '';
   const awayTeamLogo = fixture?.teams?.away?.logo ?? '';
   const leagueName = fixture?.league?.name ?? '';
+
+  const goalScorers = useMemo(() => {
+    const formatMinute = (elapsed?: number | null, extra?: number | null): string => {
+      if (elapsed == null) return '';
+      if (extra) return `${elapsed}+${extra}'`;
+      return `${elapsed}'`;
+    };
+    const homeId = fixture?.teams?.home?.id;
+    const awayId = fixture?.teams?.away?.id;
+    const toScorer = (e: FixtureEvent) => ({
+      name: e.player?.name ?? '',
+      minute: formatMinute(e.time?.elapsed, e.time?.extra),
+    });
+    const isGoal = (e: FixtureEvent) =>
+      e.type === 'Goal' && e.detail !== 'Missed Penalty';
+    return {
+      home: events.filter((e) => isGoal(e) && e.team?.id === homeId).map(toScorer),
+      away: events.filter((e) => isGoal(e) && e.team?.id === awayId).map(toScorer),
+    };
+  }, [events, fixture?.teams?.home?.id, fixture?.teams?.away?.id]);
 
   const is365Fixture = useMemo(() => {
     const leagueId = fixture?.league?.id ?? 0;
@@ -953,15 +974,22 @@ const MatchDetailsScreen = () => {
     return () => clearInterval(interval);
   }, [fixtureId, fixture?.fixture?.id, isLive, isFinishedMatch, loadLineupsIfNeeded, lineups]);
 
+  useEffect(() => {
+    if (activeTab !== 'lineups' || !fixture) return;
+    void loadVenueIfNeeded();
+  }, [activeTab, fixture?.fixture?.id, loadVenueIfNeeded]);
+
   // ── Tab change handler — triggers lazy load ───────────────────────────────
   const handleTabChange = useCallback((tab: string) => {
     setActiveTab(tab as any);
     switch (tab) {
-      case 'lineups':   loadLineupsIfNeeded(); break;
+      case 'lineups':
+        loadLineupsIfNeeded();
+        void loadVenueIfNeeded();
+        break;
       case 'stats':     loadStatsIfNeeded(); break;
       case 'form':      loadFormIfNeeded(); break;
       case 'standings': loadStandingsIfNeeded(); break;
-      case 'stadium':   loadVenueIfNeeded(); break;
     }
   }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded, loadVenueIfNeeded]);
 
@@ -1104,35 +1132,46 @@ const MatchDetailsScreen = () => {
       );
     }
 
-    const matchesSide = (event: FixtureEvent, side: 'home' | 'away') => {
-      const id = side === 'home' ? fixture?.teams?.home?.id : fixture?.teams?.away?.id;
-      const name = side === 'home' ? homeTeamName : awayTeamName;
-      if (id != null && event.team?.id != null) return event.team.id === id;
-      const en = (event.team?.name ?? '').toLowerCase();
-      const tn = name.toLowerCase();
-      return en.includes(tn) || tn.includes(en);
-    };
-    const filteredEvents = events.filter((e) => matchesSide(e, selectedTeamSide));
+    const matchClock = fixture?.fixture?.status?.elapsed ?? null;
+    const sortedEvents = [...events].sort((a, b) => {
+      const ea = a.time?.elapsed ?? 0;
+      const eb = b.time?.elapsed ?? 0;
+      if (ea !== eb) return ea - eb;
+      return (a.time?.extra ?? 0) - (b.time?.extra ?? 0);
+    });
 
     return (
       <ScrollView
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <TeamToggle
-          home={{ name: getTeamDisplayName(homeTeamName, language), logo: homeTeamLogo }}
-          away={{ name: getTeamDisplayName(awayTeamName, language), logo: awayTeamLogo }}
-          value={selectedTeamSide}
-          onChange={setSelectedTeamSide}
+        <MatchMomentumGraph
+          events={events}
+          fixtureId={fixtureId || fixture?.fixture?.id}
+          homeTeamId={fixture?.teams?.home?.id}
+          awayTeamId={fixture?.teams?.away?.id}
+          homeGoals={fixture?.goals?.home}
+          awayGoals={fixture?.goals?.away}
+          matchElapsed={matchClock}
+          finished={isFinishedMatch()}
+          homeTeam={{
+            name: getTeamDisplayName(homeTeamName, language),
+            logo: homeTeamLogo,
+          }}
+          awayTeam={{
+            name: getTeamDisplayName(awayTeamName, language),
+            logo: awayTeamLogo,
+          }}
         />
         <View style={styles.eventsContainer}>
           <Text style={styles.sectionTitle}>{t.matchDetails.matchEvents}</Text>
-          {filteredEvents.length === 0 ? (
+          {sortedEvents.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="football-outline" size={48} color="#333" />
               <Text style={styles.emptyStateText}>{t.matchDetails.noEvents}</Text>
             </View>
-          ) : filteredEvents.map((event, index) => {
+          ) : sortedEvents.map((event, index) => {
             const homeTeamId = fixture?.teams?.home?.id;
             const isHomeTeam = homeTeamId != null
               ? event.team.id === homeTeamId
@@ -1201,6 +1240,93 @@ const MatchDetailsScreen = () => {
   };
 
   // Render Lineups Tab
+  const renderMatchInfoCard = () => {
+    const venueData = venue || {
+      id: fixture?.fixture.venue?.id,
+      name: fixture?.fixture.venue?.name,
+      city: fixture?.fixture.venue?.city,
+      address: null as string | null,
+      country: null as string | null,
+      capacity: null as number | null,
+      surface: null as string | null,
+      image: null as string | null,
+    };
+    const stadiumName = venueData.name || fixture?.fixture.venue?.name;
+    const referee = fixture?.fixture?.referee;
+    const capacity = venueData.capacity;
+    const hasAny = Boolean(stadiumName || referee || capacity || venueData.city);
+
+    if (!hasAny && !venueLoading) return null;
+
+    const rows: Array<{
+      key: string;
+      label: string;
+      value: string;
+      icon: React.ComponentProps<typeof Ionicons>['name'];
+    }> = [];
+
+    if (stadiumName) {
+      rows.push({
+        key: 'stadium',
+        label: t.matchDetails.stadium || 'Stadium',
+        value: [stadiumName, venueData.city].filter(Boolean).join(' · '),
+        icon: 'business-outline',
+      });
+    }
+    if (capacity) {
+      rows.push({
+        key: 'attendance',
+        label: t.matchDetails.attendance || 'Attendance',
+        value: capacity.toLocaleString(),
+        icon: 'people-outline',
+      });
+    }
+    if (referee) {
+      rows.push({
+        key: 'referee',
+        label: t.matchDetails.referee || 'Referee',
+        value: referee,
+        icon: 'flag-outline',
+      });
+    }
+
+    if (rows.length === 0) {
+      if (venueLoading) {
+        return (
+          <View style={styles.matchInfoCard}>
+            <ActivityIndicator size="small" color="#A855F7" />
+          </View>
+        );
+      }
+      return null;
+    }
+
+    return (
+      <View style={styles.matchInfoCard}>
+        <Text style={styles.matchInfoTitle}>
+          {t.matchDetails.matchInfo || 'Match Information'}
+        </Text>
+        {rows.map((row, index) => (
+          <View
+            key={row.key}
+            style={[
+              styles.matchInfoRow,
+              index < rows.length - 1 && styles.matchInfoRowBorder,
+            ]}
+          >
+            <View style={styles.matchInfoValueWrap}>
+              <Ionicons name={row.icon} size={16} color="#a78bfa" />
+              <Text style={styles.matchInfoValue} numberOfLines={2}>
+                {row.value}
+              </Text>
+            </View>
+            <Text style={styles.matchInfoLabel}>{row.label}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   const renderLineups = () => {
     if (lineupsLoading && !hasLineupData(lineups)) {
       return <LineupsSkeleton shimmerX={shimmerX} />;
@@ -1263,6 +1389,7 @@ const MatchDetailsScreen = () => {
 
     return (
       <ScrollView
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -1395,6 +1522,8 @@ const MatchDetailsScreen = () => {
                     </View>
                   </View>
                 )}
+
+                {renderMatchInfoCard()}
               </View>
             );
           })}
@@ -1441,6 +1570,7 @@ const MatchDetailsScreen = () => {
 
     return (
       <ScrollView
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -1543,6 +1673,7 @@ const MatchDetailsScreen = () => {
 
     return (
       <ScrollView
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -1664,106 +1795,6 @@ const MatchDetailsScreen = () => {
     );
   };
 
-  const renderStadium = () => {
-    if (venueLoading) {
-      return <StatsSkeleton shimmerX={shimmerX} />;
-    }
-
-    if (!venue && !fixture?.fixture.venue) {
-      return (
-        <View style={styles.emptyState}>
-          <Ionicons name="business-outline" size={64} color="#333" />
-          <Text style={styles.emptyStateText}>{t.matchDetails.noStadiumInfo || 'No stadium information available'}</Text>
-        </View>
-      );
-    }
-
-    const venueData = venue || {
-      id: fixture?.fixture.venue?.id,
-      name: fixture?.fixture.venue?.name,
-      city: fixture?.fixture.venue?.city,
-      address: null,
-      country: null,
-      capacity: null,
-      surface: null,
-      image: null,
-    };
-
-    return (
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Hero card: image/map placeholder + pill + name + subtitle */}
-        <View style={styles.stadiumHeroCard}>
-          {venueData.image ? (
-            <Image source={{ uri: venueData.image }} style={styles.stadiumHeroImage} />
-          ) : (
-            <View style={styles.stadiumHeroPlaceholder} />
-          )}
-          <View style={styles.stadiumHeroBody}>
-            <View style={styles.stadiumPill}>
-              <Ionicons name="location" size={12} color={PURPLE_SOFT} />
-              <Text style={styles.stadiumPillText}>{t.matchDetails.stadium || 'Stadium'}</Text>
-            </View>
-            <Text style={styles.stadiumName}>{venueData.name || t.matchDetails.stadium || 'Stadium'}</Text>
-            {(venueData.city || venueData.country) && (
-              <Text style={styles.stadiumSubtitle}>
-                {[venueData.city, venueData.country].filter(Boolean).join(' • ')}
-              </Text>
-            )}
-          </View>
-        </View>
-
-        {/* Location card */}
-        {(venueData.city || venueData.country || venueData.address) && (
-          <View style={styles.stadiumInfoCard}>
-            <View style={styles.stadiumInfoIcon}>
-              <Ionicons name="location" size={18} color={PURPLE_SOFT} />
-            </View>
-            <Text style={styles.stadiumInfoText} numberOfLines={2}>
-              {venueData.address ||
-                [venueData.city, venueData.country].filter(Boolean).join(' • ')}
-            </Text>
-          </View>
-        )}
-
-        {/* League card */}
-        {!!leagueName && (
-          <View style={styles.stadiumInfoCard}>
-            <LeagueIcon
-              name={leagueName}
-              logo={fixture?.league?.logo}
-              leagueId={fixture?.league?.id}
-              size={36}
-            />
-            <Text style={styles.stadiumInfoText} numberOfLines={2}>
-              {getLeagueDisplayName(leagueName, language, fixture?.league?.id, fixture?.league?.country)}
-            </Text>
-          </View>
-        )}
-
-        {/* Capacity / surface */}
-        {(venueData.capacity || venueData.surface) && (
-          <View style={styles.stadiumContainer}>
-            {venueData.capacity && (
-              <View style={styles.stadiumDetail}>
-                <Ionicons name="people" size={16} color="#888" />
-                <Text style={styles.stadiumDetailText}>{t.matchDetails.capacity || 'Capacity'}: {venueData.capacity.toLocaleString()}</Text>
-              </View>
-            )}
-            {venueData.surface && (
-              <View style={styles.stadiumDetail}>
-                <Ionicons name="football" size={16} color="#888" />
-                <Text style={styles.stadiumDetailText}>{t.matchDetails.surface || 'Surface'}: {venueData.surface}</Text>
-              </View>
-            )}
-          </View>
-        )}
-      </ScrollView>
-    );
-  };
-
   const renderStandings = () => {
     const hasStandings = standingsGroups.length > 0;
     if (standingsLoading && !hasStandings) {
@@ -1863,6 +1894,7 @@ const MatchDetailsScreen = () => {
 
     return (
       <ScrollView
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
@@ -1964,18 +1996,13 @@ const MatchDetailsScreen = () => {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#0f0720" />
-        <View style={styles.customHeader}>
-          <TouchableOpacity
-            style={styles.backButtonRound}
-            onPress={() => router.push('/(tabs)/matches' as any)}
-            accessibilityRole="button"
-            accessibilityLabel={t.matchDetails.backToMatches}
-          >
-            <Ionicons name="chevron-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t.matchDetails.title}</Text>
-          <View style={{ width: 40 }} />
-        </View>
+        <MatchDetailsTopBar
+          title={t.matchDetails.navTitle || t.matchDetails.title}
+          backLabel={t.matchDetails.backToMatches}
+          notificationsLabel={t.matchDetails.notifications || 'Notifications'}
+          onBack={() => router.push('/(tabs)/matches' as any)}
+          onNotifications={() => router.push('/notifications' as any)}
+        />
         <View style={styles.errorContainer}>
           <Ionicons name="football-outline" size={64} color="#333" />
           <Text style={styles.errorText}>{t.matchDetails.matchUnavailable}</Text>
@@ -1989,12 +2016,12 @@ const MatchDetailsScreen = () => {
   }
 
   const baseTabs = [
-    { key: 'events', label: t.matchDetails.events, icon: 'football' as const },
-    { key: 'lineups', label: t.matchDetails.lineups, icon: 'people' as const },
+    { key: 'events', label: t.matchDetails.eventsShort || t.matchDetails.events, icon: 'football' as const },
     { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
+    { key: 'lineups', label: t.matchDetails.lineupsShort || t.matchDetails.lineups, icon: 'people' as const },
+    { key: 'chats', label: t.matchDetails.chats || 'Chats', icon: 'chatbubbles' as const },
     { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },
     { key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const },
-    { key: 'stadium', label: t.matchDetails.stadium || 'Stadium', icon: 'business' as const },
   ];
   const tabs = baseTabs.filter(
     (tab) => tab.key !== 'lineups' || hasLineupData(lineups),
@@ -2041,125 +2068,122 @@ const MatchDetailsScreen = () => {
       liveLabel={getLocalizedMatchStatus('LIVE', language)}
       vsLabel={t.matchDetails.vs}
       penaltiesShortLabel={getLocalizedMatchStatus('PEN', language)}
+      kickoffStatusLabel={t.matchDetails.kickoffStatus}
+      scorers={goalScorers}
       onPressHomeTeam={() => openTeamProfile('home')}
       onPressAwayTeam={() => openTeamProfile('away')}
     />
   );
 
-  const matchHero = showPitch ? (
-    <MatchLmtWebView
-      variant="hero"
-      widgetUrl={lmtInfo!.widgetUrl}
-      embedUrl={lmtInfo!.embedUrl}
-      aspectRatio={lmtInfo!.widgetRatio}
-      // DD branding: rewrite GetWidget HTML (pitchLogo / goalBannerImage / vlmtCourtBannerUrl).
-      // hideBrand=true → transparent pixel; false → 90PLUS-app (or brandLogoUrl).
-      hideBrand={
-        process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === 'true' ||
-        process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === '1'
-      }
-      brandLogoUrl={process.env.EXPO_PUBLIC_LMT_PITCH_LOGO_URL?.trim() || null}
-      coverBrand={false}
-      loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
-      unavailableLabel={t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
-      retryLabel={t.matchDetails.retry || t.common.retry}
-      expandLabel={t.matchDetails.trackingExpand || 'Wider view'}
-      collapseLabel={t.matchDetails.trackingCollapse || 'Close wider view'}
-    />
-  ) : (
-    scoreHeader
-  );
+  const lmtWidget = hasLmt ? (
+    <View
+      collapsable={false}
+      pointerEvents={showPitch ? 'auto' : 'none'}
+      style={showPitch ? undefined : styles.lmtHidden}
+    >
+      <MatchLmtWebView
+        variant="hero"
+        widgetUrl={lmtInfo!.widgetUrl}
+        embedUrl={lmtInfo!.embedUrl}
+        aspectRatio={lmtInfo!.widgetRatio}
+        hideBrand={
+          process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === 'true' ||
+          process.env.EXPO_PUBLIC_LMT_HIDE_PITCH_BRAND === '1'
+        }
+        brandLogoUrl={process.env.EXPO_PUBLIC_LMT_PITCH_LOGO_URL?.trim() || null}
+        coverBrand={false}
+        loadingLabel={t.matchDetails.trackingLoading || 'Loading live pitch…'}
+        unavailableLabel={t.matchDetails.trackingUnavailable || 'Live pitch tracking is not provided for this match.'}
+        retryLabel={t.matchDetails.retry || t.common.retry}
+        expandLabel={t.matchDetails.trackingExpand || 'Wider view'}
+        collapseLabel={t.matchDetails.trackingCollapse || 'Close wider view'}
+      />
+    </View>
+  ) : null;
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0f0720" />
+      <StatusBar barStyle="light-content" backgroundColor="#0c051a" />
 
-      {/* Custom Top Bar */}
-      <View style={styles.customHeader}>
-        <TouchableOpacity
-          style={styles.backButtonRound}
-          onPress={() => router.push('/(tabs)/matches' as any)}
-          accessibilityRole="button"
-          accessibilityLabel={t.matchDetails.backToMatches}
-        >
-          <Ionicons name="chevron-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t.matchDetails.title || 'Match Details'}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <MatchDetailsTopBar
+        title={t.matchDetails.navTitle || t.matchDetails.title || 'The Match'}
+        backLabel={t.matchDetails.backToMatches}
+        notificationsLabel={t.matchDetails.notifications || 'Notifications'}
+        onBack={() => router.push('/(tabs)/matches' as any)}
+        onNotifications={() => router.push('/notifications' as any)}
+      />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Pitch tracker or score card — user can switch when LMT is available */}
-        {matchHero}
+      {lmtWidget}
+      {!showPitch ? scoreHeader : null}
 
-        {hasLmt ? (
-          <View style={styles.heroViewToggleWrap}>
-            <View style={styles.heroViewToggle}>
-              <TouchableOpacity
-                style={[styles.heroViewToggleBtn, heroView === 'pitch' && styles.heroViewToggleBtnActive]}
-                onPress={() => setHeroView('pitch')}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityState={{ selected: heroView === 'pitch' }}
-                accessibilityLabel={t.matchDetails.viewPitch || 'Pitch'}
+      {hasLmt ? (
+        <View style={styles.heroViewToggleWrap}>
+          <View style={styles.heroViewToggle}>
+            <TouchableOpacity
+              style={[styles.heroViewToggleBtn, heroView === 'pitch' && styles.heroViewToggleBtnActive]}
+              onPress={() => setHeroView('pitch')}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityState={{ selected: heroView === 'pitch' }}
+              accessibilityLabel={t.matchDetails.viewPitch || 'Pitch'}
+            >
+              <Ionicons
+                name="football-outline"
+                size={14}
+                color={heroView === 'pitch' ? '#fff' : '#9ca3af'}
+              />
+              <Text
+                style={[
+                  styles.heroViewToggleText,
+                  heroView === 'pitch' && styles.heroViewToggleTextActive,
+                ]}
               >
-                <Ionicons
-                  name="football-outline"
-                  size={14}
-                  color={heroView === 'pitch' ? '#fff' : '#9ca3af'}
-                />
-                <Text
-                  style={[
-                    styles.heroViewToggleText,
-                    heroView === 'pitch' && styles.heroViewToggleTextActive,
-                  ]}
-                >
-                  {t.matchDetails.viewPitch || 'Pitch'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.heroViewToggleBtn, heroView === 'score' && styles.heroViewToggleBtnActive]}
-                onPress={() => setHeroView('score')}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityState={{ selected: heroView === 'score' }}
-                accessibilityLabel={t.matchDetails.viewScore || 'Score'}
+                {t.matchDetails.viewPitch || 'Pitch'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.heroViewToggleBtn, heroView === 'score' && styles.heroViewToggleBtnActive]}
+              onPress={() => setHeroView('score')}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityState={{ selected: heroView === 'score' }}
+              accessibilityLabel={t.matchDetails.viewScore || 'Score'}
+            >
+              <Ionicons
+                name="timer-outline"
+                size={14}
+                color={heroView === 'score' ? '#fff' : '#9ca3af'}
+              />
+              <Text
+                style={[
+                  styles.heroViewToggleText,
+                  heroView === 'score' && styles.heroViewToggleTextActive,
+                ]}
               >
-                <Ionicons
-                  name="timer-outline"
-                  size={14}
-                  color={heroView === 'score' ? '#fff' : '#9ca3af'}
-                />
-                <Text
-                  style={[
-                    styles.heroViewToggleText,
-                    heroView === 'score' && styles.heroViewToggleTextActive,
-                  ]}
-                >
-                  {t.matchDetails.viewScore || 'Score'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+                {t.matchDetails.viewScore || 'Score'}
+              </Text>
+            </TouchableOpacity>
           </View>
-        ) : null}
+        </View>
+      ) : null}
 
-        {/* Modern Tabs */}
-        <ModernTabs
-          tabs={tabs}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-        />
+      <ModernTabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+      />
 
-        {/* Content */}
+      {activeTab === 'chats' ? (
+        <MatchChatTab fixtureId={fixtureId} />
+      ) : (
         <View style={styles.content}>
           {activeTab === 'events' && renderEvents()}
           {activeTab === 'lineups' && renderLineups()}
           {activeTab === 'stats' && renderStatistics()}
           {activeTab === 'form' && renderForm()}
           {activeTab === 'standings' && renderStandings()}
-          {activeTab === 'stadium' && renderStadium()}
         </View>
-      </ScrollView>
+      )}
     </View>
   );
 };
@@ -2167,7 +2191,12 @@ const MatchDetailsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: APP_BG,
+    backgroundColor: '#0c051a',
+  },
+  lmtHidden: {
+    height: 0,
+    overflow: 'hidden',
+    opacity: 0,
   },
   customHeader: {
     paddingTop: 50,
@@ -2232,8 +2261,8 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   substitutesSection: {
-    paddingHorizontal: 20,
-    marginTop: 20,
+    paddingHorizontal: 4,
+    marginTop: 16,
   },
   substitutesList: {
     marginBottom: 24,
@@ -2426,9 +2455,57 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 20,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  matchInfoCard: {
+    marginTop: 20,
+    marginBottom: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(18, 12, 28, 0.98)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  matchInfoTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  matchInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    gap: 12,
+  },
+  matchInfoRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  matchInfoLabel: {
+    color: '#cfcfcf',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+    flexShrink: 0,
+  },
+  matchInfoValueWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  matchInfoValue: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    flexShrink: 1,
   },
   scrollContent: {
     paddingBottom: 20,
@@ -2478,13 +2555,17 @@ const styles = StyleSheet.create({
   teamLineupContainer: {
     backgroundColor: '#1a1a1a',
     borderRadius: 20,
-    padding: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 12,
     marginBottom: 16,
+    overflow: 'hidden',
   },
   teamHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
+    marginHorizontal: 4,
     gap: 12,
   },
   teamLogo: {

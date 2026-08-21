@@ -249,6 +249,7 @@ import chatRoutes from './routes/chat.routes';
 import xpRoutes from './routes/xp.routes';
 import quizRoutes from './routes/quiz.routes';
 import shareWinRoutes from './routes/share-win.routes';
+import matchChatRoutes from './routes/match-chat.routes';
 import authRoutes from './routes/auth.routes';
 import debugRoutes from './routes/debug.routes';
 import i18nRoutes from './routes/i18n.routes';
@@ -435,6 +436,7 @@ app.use(`${API_PREFIX}/xp`, xpRoutes); // XP system: /xp/me, /xp/users/:userId, 
 app.use(`${API_PREFIX}/quiz`, lenientShellQuizLimiter);
 app.use(`${API_PREFIX}/quiz`, quizRoutes);
 app.use(`${API_PREFIX}/share-win`, shareWinRoutes); // Share & Win: referrals, weekly cycles, leaderboard
+app.use(`${API_PREFIX}/match-chat`, matchChatRoutes);
 
 // Support and legal pages (without API prefix)
 app.use('/', supportRoutes);
