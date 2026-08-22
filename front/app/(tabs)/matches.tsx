@@ -347,7 +347,7 @@ const MatchRow = memo(function MatchRow({
   const inStoppage = isLiveStoppage(fixture.statusShort, fixture.elapsed, fixture.extra);
   const liveInPlay =
     !!fixture.live &&
-    ['1H', '2H', 'ET'].includes(shortUpper) &&
+    ['1H', '2H', 'ET', 'LIVE', 'INT'].includes(shortUpper) &&
     !inStoppage;
   useSecondTick(liveInPlay);
   const anchoredStart = useAnchoredPeriodStart(

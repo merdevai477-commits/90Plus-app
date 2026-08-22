@@ -173,6 +173,24 @@ export const resolveLiveMinuteLabel = (
 };
 
 /**
+ * Map provider status (+ elapsed) to the half the ticking clock should use.
+ * Scores365 often emits `LIVE` instead of `1H`/`2H` — treat it as a half
+ * so MM:SS keeps running instead of freezing on a static `35'` label.
+ */
+export const normalizeClockPeriod = (
+  statusShort: string | undefined | null,
+  elapsed?: number | null,
+): '1H' | '2H' | 'ET' | null => {
+  const short = (statusShort ?? '').trim();
+  if (short === '1H' || short === '2H' || short === 'ET') return short;
+  if (short !== 'LIVE' && short !== 'INT') return null;
+  if (elapsed == null || elapsed < 0) return '1H';
+  if (elapsed > 90) return 'ET';
+  if (elapsed > 45) return '2H';
+  return '1H';
+};
+
+/**
  * Wall-clock period start (unix seconds) implied by API elapsed for status.
  * Used when provider periods are missing (e.g. Scores365) so MM:SS can tick.
  */
@@ -181,10 +199,10 @@ export const synthesizePeriodStartSec = (
   elapsed: number,
   nowSec: number = Math.floor(Date.now() / 1000),
 ): number => {
-  const short = (statusShort ?? '').trim();
+  const period = normalizeClockPeriod(statusShort, elapsed) ?? (statusShort ?? '').trim();
   let intoPeriodMin = Math.max(0, Math.floor(elapsed));
-  if (short === '2H') intoPeriodMin = Math.max(0, Math.floor(elapsed) - 45);
-  else if (short === 'ET') intoPeriodMin = Math.max(0, Math.floor(elapsed) - 90);
+  if (period === '2H') intoPeriodMin = Math.max(0, Math.floor(elapsed) - 45);
+  else if (period === 'ET') intoPeriodMin = Math.max(0, Math.floor(elapsed) - 90);
   return nowSec - intoPeriodMin * 60;
 };
 
@@ -198,17 +216,23 @@ function normalizeUnixSec(ts: number): number {
  *
  * Does not synthesize from `elapsed` here — that would freeze at MM:00 on
  * every render. Callers must pass an anchored `startTimestamp`.
+ *
+ * Important: do NOT drop MM:SS when the local minute crosses 45/90 while the
+ * API elapsed is still behind — that used to snap the UI back to a frozen
+ * `35'` minute-only label mid first half.
  */
 export const resolveLiveSecondsLabel = (
   statusShort: string | undefined | null,
   elapsed: number | null | undefined,
   options?: { startTimestamp?: number; extra?: number | null },
 ): string | undefined => {
-  const short = (statusShort ?? '').trim();
-  if (short !== '1H' && short !== '2H' && short !== 'ET') return undefined;
+  const period = normalizeClockPeriod(statusShort, elapsed);
+  if (!period) return undefined;
 
   // Injury / stoppage time uses the minute-only `90+4'` label, not MM:SS.
-  if (isLiveStoppage(short, elapsed, options?.extra)) return undefined;
+  if (isLiveStoppage(statusShort, elapsed, options?.extra)) return undefined;
+  // Also treat stoppage using the normalized period (LIVE → 1H/2H).
+  if (isLiveStoppage(period, elapsed, options?.extra)) return undefined;
 
   if (options?.startTimestamp == null || !Number.isFinite(options.startTimestamp)) {
     return undefined;
@@ -216,16 +240,10 @@ export const resolveLiveSecondsLabel = (
 
   const now = Math.floor(Date.now() / 1000);
   const startSec = normalizeUnixSec(options.startTimestamp);
-  const offsetMin = short === '2H' ? 45 : short === 'ET' ? 90 : 0;
+  const offsetMin = period === '2H' ? 45 : period === 'ET' ? 90 : 0;
   const intoPeriod = Math.max(0, now - startSec);
   const totalSeconds = intoPeriod + offsetMin * 60;
   const minute = Math.floor(totalSeconds / 60);
-
-  // Let the minute-only label handle stoppage overflow (45+X / 90+X / 120+X).
-  if (short === '1H' && minute >= 45) return undefined;
-  if (short === '2H' && minute >= 90) return undefined;
-  if (short === 'ET' && minute >= 120) return undefined;
-
   const seconds = totalSeconds % 60;
   return `${minute}:${String(seconds).padStart(2, '0')}`;
 };
