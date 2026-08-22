@@ -35,8 +35,10 @@ interface MatchHeaderProps {
   time: string;
   /** ISO kickoff — preferred over `time` when available */
   fixtureDate?: string;
-  /** Period start timestamp (seconds) — fallback when API minute is missing. */
+  /** Period start timestamp (seconds) — real API periods only when known. */
   startTimestamp?: number;
+  /** Stable key for the ticking clock (fixture id) — survives Pitch/Score remounts. */
+  clockAnchorKey?: string | number;
   /** API-Football short status (1H, 2H, HT, FT, NS, ...). */
   statusShort?: string;
   /** Live elapsed minute from API. */
@@ -121,6 +123,7 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   elapsed,
   stoppage,
   startTimestamp,
+  clockAnchorKey,
   statusLabel,
   penaltyHome,
   penaltyAway,
@@ -167,9 +170,14 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   const clockActive = isLive && !isStoppage && !isHalftime;
   useSecondTick(clockActive);
 
-  // Prefer API periods; synthesize + re-anchor from elapsed when periods are null
-  // (Scores365) so MM:SS keeps ticking instead of jumping minute-only labels.
-  const anchoredStart = useAnchoredPeriodStart(short, elapsed, startTimestamp);
+  // Prefer API periods; otherwise synthesize once and keep ticking so minutes
+  // can advance between slow API elapsed updates (Scores365 has null periods).
+  const anchoredStart = useAnchoredPeriodStart(
+    clockAnchorKey,
+    short,
+    elapsed,
+    startTimestamp,
+  );
 
   // Computed every render (the second-tick forces a re-render) so the MM:SS
   // clock advances. Falls back to the minute-only label outside normal play.

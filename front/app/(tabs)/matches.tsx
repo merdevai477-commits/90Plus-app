@@ -37,6 +37,7 @@ import { getWorldCupTimeLeft, WC_2026_OFFICIAL_LOGO } from '../../constants/worl
 import type { ImageSource } from 'expo-image';
 import { resolveLiveMinuteLabel, resolveLiveSecondsLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
 import { useSecondTick } from '../../hooks/useSecondTick';
+import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import {
   getSharedLivePulse,
   subscribeSharedLivePulse,
@@ -349,9 +350,15 @@ const MatchRow = memo(function MatchRow({
     ['1H', '2H', 'ET'].includes(shortUpper) &&
     !inStoppage;
   useSecondTick(liveInPlay);
+  const anchoredStart = useAnchoredPeriodStart(
+    fixture.id,
+    fixture.statusShort,
+    fixture.elapsed,
+    fixture.startTimestamp,
+  );
   const liveClock = liveInPlay
     ? resolveLiveSecondsLabel(fixture.statusShort, fixture.elapsed, {
-        startTimestamp: fixture.startTimestamp,
+        startTimestamp: anchoredStart,
         extra: fixture.extra,
       })
     : undefined;
@@ -447,7 +454,7 @@ const MatchRow = memo(function MatchRow({
                   {liveClock ??
                     fixture.minute ??
                     resolveLiveMinuteLabel(fixture.statusShort, fixture.elapsed, {
-                      startTimestamp: fixture.startTimestamp,
+                      startTimestamp: anchoredStart,
                       extra: fixture.extra,
                     }) ??
                     fixture.statusShort ??
@@ -1204,7 +1211,8 @@ export default function MatchesHubScreenV2() {
     }
   }, [params.filter, worldCupEnabled, worldCupLocked]);
 
-  // Live tab always shows today's fixtures — snap calendar back when selected.
+  // Live tab always shows today's fixtures — snap calendar back when selected
+  // and kick a refresh so live rows appear without waiting on a stale day cache.
   const handleFilterPress = useCallback((f: (typeof FILTERS)[number]) => {
     if (f === 'WorldCup' && worldCupLocked && !worldCupEnabled) {
       setShowWorldCupLocked(true);
@@ -1212,9 +1220,10 @@ export default function MatchesHubScreenV2() {
     }
     if (f === 'Live') {
       setSelectedDate(startOfLocalDay());
+      void refetch();
     }
     setFilter(f);
-  }, [worldCupEnabled, worldCupLocked]);
+  }, [worldCupEnabled, worldCupLocked, refetch]);
 
   const handleCalendarDayPress = useCallback((day: number) => {
     const next = new Date(calendarViewDate);

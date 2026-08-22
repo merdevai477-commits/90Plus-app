@@ -141,10 +141,24 @@ function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Match[]): M
   return Array.from(map.values());
 }
 
-async function fetchTodayMatchesWithLiveFeed(date: Date): Promise<Match[]> {
+async function fetchTodayMatchesWithLiveFeed(
+  date: Date,
+  onLiveEarly?: (liveFeed: Match[]) => void,
+): Promise<Match[]> {
+  const byDatePromise = fetchMatchesByDate(date);
+  const livePromise = fetchLiveMatches();
+
+  // Paint live rows as soon as the live endpoint returns — don't wait for the
+  // full day calendar (often slower) so the Live tab feels instant.
+  void livePromise
+    .then((liveFeed) => {
+      if (liveFeed.length > 0) onLiveEarly?.(liveFeed);
+    })
+    .catch(() => {});
+
   const [byDate, liveFeed] = await Promise.all([
-    fetchMatchesByDate(date),
-    fetchLiveMatches(),
+    byDatePromise,
+    livePromise.catch(() => [] as Match[]),
   ]);
   return mergeTodayCalendarWithLiveFeed(byDate, liveFeed);
 }
@@ -437,7 +451,11 @@ export const useMatchesData = (
             
             // For today, always merge live feed immediately (calendar cache can lag).
             if (isToday) {
-              void fetchTodayMatchesWithLiveFeed(selectedDate)
+              void fetchTodayMatchesWithLiveFeed(selectedDate, (liveFeed) => {
+                setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+                setLoading(false);
+                setIsDataStale(false);
+              })
                 .then((merged) => {
                   setCalendarMatches(merged);
                   setIsDataStale(false);
@@ -477,7 +495,11 @@ export const useMatchesData = (
             
             // For today, always merge live feed immediately (calendar cache can lag).
             if (isToday) {
-              void fetchTodayMatchesWithLiveFeed(selectedDate)
+              void fetchTodayMatchesWithLiveFeed(selectedDate, (liveFeed) => {
+                setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+                setLoading(false);
+                setIsDataStale(false);
+              })
                 .then((merged) => {
                   setCalendarMatches(merged);
                   setIsDataStale(false);
@@ -501,7 +523,11 @@ export const useMatchesData = (
         let fetchedMatches: Match[];
 
         if (isToday) {
-          fetchedMatches = await fetchTodayMatchesWithLiveFeed(selectedDate);
+          fetchedMatches = await fetchTodayMatchesWithLiveFeed(selectedDate, (liveFeed) => {
+            setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+            setLoading(false);
+            setIsDataStale(false);
+          });
         } else if (!isPastDate) {
           // For future dates, just fetch scheduled matches
           fetchedMatches = await fetchMatchesByDate(selectedDate);
@@ -612,7 +638,10 @@ export const useMatchesData = (
       const date = dateFromLocalKey(dateStr);
       let fetchedMatches: Match[];
       fetchedMatches = isTodayFlag
-        ? await fetchTodayMatchesWithLiveFeed(date)
+        ? await fetchTodayMatchesWithLiveFeed(date, (liveFeed) => {
+            setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+            setIsDataStale(false);
+          })
         : await fetchMatchesByDate(date);
 
       setCalendarMatches(fetchedMatches);

@@ -193,15 +193,11 @@ function normalizeUnixSec(ts: number): number {
 }
 
 /**
- * Live "MM:SS" clock for in-play periods, computed locally from the period
- * start timestamp so the seconds tick smoothly between API updates.
+ * Live "MM:SS" clock for in-play periods, computed locally from a **stable**
+ * period start (from `useAnchoredPeriodStart` or real API `periods.*`).
  *
- * When `startTimestamp` is missing but `elapsed` is present, synthesizes a
- * period start so Scores365 (null periods) still gets a smooth clock.
- * When local minute drifts >2' from API elapsed, re-anchors to elapsed
- * instead of dropping to a minute-only label (avoids 54 → 60 jumps).
- *
- * Returns undefined when status is not normal in-play or stoppage applies.
+ * Does not synthesize from `elapsed` here — that would freeze at MM:00 on
+ * every render. Callers must pass an anchored `startTimestamp`.
  */
 export const resolveLiveSecondsLabel = (
   statusShort: string | undefined | null,
@@ -214,31 +210,16 @@ export const resolveLiveSecondsLabel = (
   // Injury / stoppage time uses the minute-only `90+4'` label, not MM:SS.
   if (isLiveStoppage(short, elapsed, options?.extra)) return undefined;
 
+  if (options?.startTimestamp == null || !Number.isFinite(options.startTimestamp)) {
+    return undefined;
+  }
+
   const now = Math.floor(Date.now() / 1000);
-  let startSec: number | undefined =
-    options?.startTimestamp != null
-      ? normalizeUnixSec(options.startTimestamp)
-      : undefined;
-
-  if (startSec == null) {
-    if (elapsed == null || elapsed < 0) return undefined;
-    startSec = synthesizePeriodStartSec(short, elapsed, now);
-  }
-
+  const startSec = normalizeUnixSec(options.startTimestamp);
   const offsetMin = short === '2H' ? 45 : short === 'ET' ? 90 : 0;
-  let intoPeriod = now - startSec;
-  if (intoPeriod < 0) intoPeriod = 0;
-
-  let totalSeconds = intoPeriod + offsetMin * 60;
-  let minute = Math.floor(totalSeconds / 60);
-
-  // Re-anchor when local clock disagrees with authoritative API minute.
-  if (elapsed != null && Math.abs(minute - elapsed) > 2) {
-    startSec = synthesizePeriodStartSec(short, elapsed, now);
-    intoPeriod = now - startSec;
-    totalSeconds = intoPeriod + offsetMin * 60;
-    minute = Math.floor(totalSeconds / 60);
-  }
+  const intoPeriod = Math.max(0, now - startSec);
+  const totalSeconds = intoPeriod + offsetMin * 60;
+  const minute = Math.floor(totalSeconds / 60);
 
   // Let the minute-only label handle stoppage overflow (45+X / 90+X / 120+X).
   if (short === '1H' && minute >= 45) return undefined;

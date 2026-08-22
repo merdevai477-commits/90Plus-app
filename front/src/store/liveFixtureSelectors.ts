@@ -1,7 +1,6 @@
 import type { Fixture } from '../../services/apiFootball';
 import {
   resolveLiveMinuteLabel,
-  synthesizePeriodStartSec,
 } from '../../components/Matches/leagueApiUtils';
 import type { LiveFixtureSnapshot } from './liveFixtureStore.types';
 
@@ -45,17 +44,15 @@ export function selectIsFinished(snapshot: LiveFixtureSnapshot): boolean {
 export function getPeriodStartTimestamp(fixture: Fixture): number | undefined {
   const short = fixture.fixture?.status?.short;
   if (!short) return undefined;
-  const fromApi =
-    short === '2H'
-      ? fixture.fixture.periods.second ?? undefined
-      : short === 'ET'
-        ? fixture.fixture.periods.second ?? fixture.fixture.periods.first ?? undefined
-        : fixture.fixture.periods.first ?? undefined;
-  if (fromApi != null) return fromApi;
-
-  // Scores365 and some feeds omit periods — synthesize so MM:SS can tick.
-  const elapsed = fixture.fixture?.status?.elapsed;
-  if (elapsed == null || elapsed < 0) return undefined;
-  if (short !== '1H' && short !== '2H' && short !== 'ET') return undefined;
-  return synthesizePeriodStartSec(short, elapsed);
+  // Only real provider period starts — never synthesize here (that would
+  // recompute with Date.now() every render and freeze the clock at MM:00).
+  if (short === '2H') return fixture.fixture.periods.second ?? undefined;
+  if (short === 'ET') {
+    return (
+      fixture.fixture.periods.second ??
+      fixture.fixture.periods.first ??
+      undefined
+    );
+  }
+  return fixture.fixture.periods.first ?? undefined;
 }

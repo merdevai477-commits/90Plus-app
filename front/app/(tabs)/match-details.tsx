@@ -2177,6 +2177,7 @@ const MatchDetailsScreen = () => {
       elapsed={fixture?.fixture?.status?.elapsed ?? undefined}
       stoppage={fixture?.fixture?.status?.extra ?? null}
       startTimestamp={fixture ? getPeriodStartTimestamp(fixture) : undefined}
+      clockAnchorKey={fixtureId || undefined}
       statusLabel={
         fixture?.fixture?.status?.short
           ? getLocalizedMatchStatus(fixture.fixture.status.short, language)
@@ -2238,7 +2239,15 @@ const MatchDetailsScreen = () => {
       />
 
       {lmtWidget}
-      {!showPitch ? scoreHeader : null}
+      {/* Keep score header mounted while on Pitch so the live clock anchor
+          does not reset when toggling Pitch ↔ Score. */}
+      <View
+        collapsable={false}
+        pointerEvents={showPitch ? 'none' : 'auto'}
+        style={showPitch ? styles.scoreHeaderHidden : undefined}
+      >
+        {scoreHeader}
+      </View>
 
       {hasLmt ? (
         <View style={styles.heroViewToggleWrap}>
@@ -2318,6 +2327,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#0c051a',
   },
   lmtHidden: {
+    height: 0,
+    overflow: 'hidden',
+    opacity: 0,
+  },
+  scoreHeaderHidden: {
     height: 0,
     overflow: 'hidden',
     opacity: 0,
