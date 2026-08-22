@@ -118,21 +118,10 @@ class FootballCalendarSyncService {
             const rows = await prisma.cachedFixture.findMany({
                 where: {
                     status: { in: ['NS', 'TBD', '1H', '2H', 'HT', 'LIVE', 'ET', 'BT', 'P', 'INT'] },
-                    OR: [
-                        {
-                            matchTimestamp: {
-                                gte: nowSec - 30 * 60,
-                                lte: nowSec + 25 * 60,
-                            },
-                        },
-                        {
-                            matchTimestamp: null,
-                            matchDate: {
-                                gte: new Date(Date.now() - 30 * 60 * 1000),
-                                lte: new Date(Date.now() + 25 * 60 * 1000),
-                            },
-                        },
-                    ],
+                    matchTimestamp: {
+                        gte: nowSec - 30 * 60,
+                        lte: nowSec + 25 * 60,
+                    },
                 },
                 select: { status: true, matchDate: true, matchTimestamp: true },
                 take: 40,

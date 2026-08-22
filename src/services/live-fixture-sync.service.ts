@@ -197,21 +197,10 @@ class LiveFixtureSyncService {
             const candidates = await prisma.cachedFixture.findMany({
                 where: {
                     status: { in: ['NS', 'TBD'] },
-                    OR: [
-                        {
-                            matchTimestamp: {
-                                gte: nowSec - windowAfter,
-                                lte: nowSec + windowBefore,
-                            },
-                        },
-                        {
-                            matchTimestamp: null,
-                            matchDate: {
-                                gte: new Date(Date.now() - windowAfter * 1000),
-                                lte: new Date(Date.now() + windowBefore * 1000),
-                            },
-                        },
-                    ],
+                    matchTimestamp: {
+                        gte: nowSec - windowAfter,
+                        lte: nowSec + windowBefore,
+                    },
                 },
                 select: { fixtureId: true, matchDate: true, matchTimestamp: true, status: true },
                 orderBy: { matchDate: 'asc' },
