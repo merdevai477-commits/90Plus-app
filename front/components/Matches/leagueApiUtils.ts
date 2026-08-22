@@ -173,14 +173,35 @@ export const resolveLiveMinuteLabel = (
 };
 
 /**
+ * Wall-clock period start (unix seconds) implied by API elapsed for status.
+ * Used when provider periods are missing (e.g. Scores365) so MM:SS can tick.
+ */
+export const synthesizePeriodStartSec = (
+  statusShort: string,
+  elapsed: number,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): number => {
+  const short = (statusShort ?? '').trim();
+  let intoPeriodMin = Math.max(0, Math.floor(elapsed));
+  if (short === '2H') intoPeriodMin = Math.max(0, Math.floor(elapsed) - 45);
+  else if (short === 'ET') intoPeriodMin = Math.max(0, Math.floor(elapsed) - 90);
+  return nowSec - intoPeriodMin * 60;
+};
+
+function normalizeUnixSec(ts: number): number {
+  return ts > 1_000_000_000_000 ? Math.floor(ts / 1000) : ts;
+}
+
+/**
  * Live "MM:SS" clock for in-play periods, computed locally from the period
  * start timestamp so the seconds tick smoothly between API updates.
  *
- * Returns undefined (caller falls back to the minute-only label) when:
- *  - the status is not normal in-play (HT/BT/P/stoppage), or
- *  - we have no reliable period start, or
- *  - the locally computed minute drifts more than 2' from the API elapsed
- *    (avoids showing a clock that disagrees with the authoritative minute).
+ * When `startTimestamp` is missing but `elapsed` is present, synthesizes a
+ * period start so Scores365 (null periods) still gets a smooth clock.
+ * When local minute drifts >2' from API elapsed, re-anchors to elapsed
+ * instead of dropping to a minute-only label (avoids 54 → 60 jumps).
+ *
+ * Returns undefined when status is not normal in-play or stoppage applies.
  */
 export const resolveLiveSecondsLabel = (
   statusShort: string | undefined | null,
@@ -193,24 +214,36 @@ export const resolveLiveSecondsLabel = (
   // Injury / stoppage time uses the minute-only `90+4'` label, not MM:SS.
   if (isLiveStoppage(short, elapsed, options?.extra)) return undefined;
 
-  const start = options?.startTimestamp;
-  if (!start) return undefined;
-  const startSec = start > 1_000_000_000_000 ? Math.floor(start / 1000) : start;
   const now = Math.floor(Date.now() / 1000);
-  const intoPeriod = now - startSec;
-  if (intoPeriod < 0) return undefined;
+  let startSec: number | undefined =
+    options?.startTimestamp != null
+      ? normalizeUnixSec(options.startTimestamp)
+      : undefined;
+
+  if (startSec == null) {
+    if (elapsed == null || elapsed < 0) return undefined;
+    startSec = synthesizePeriodStartSec(short, elapsed, now);
+  }
 
   const offsetMin = short === '2H' ? 45 : short === 'ET' ? 90 : 0;
-  const totalSeconds = intoPeriod + offsetMin * 60;
-  const minute = Math.floor(totalSeconds / 60);
+  let intoPeriod = now - startSec;
+  if (intoPeriod < 0) intoPeriod = 0;
+
+  let totalSeconds = intoPeriod + offsetMin * 60;
+  let minute = Math.floor(totalSeconds / 60);
+
+  // Re-anchor when local clock disagrees with authoritative API minute.
+  if (elapsed != null && Math.abs(minute - elapsed) > 2) {
+    startSec = synthesizePeriodStartSec(short, elapsed, now);
+    intoPeriod = now - startSec;
+    totalSeconds = intoPeriod + offsetMin * 60;
+    minute = Math.floor(totalSeconds / 60);
+  }
 
   // Let the minute-only label handle stoppage overflow (45+X / 90+X / 120+X).
   if (short === '1H' && minute >= 45) return undefined;
   if (short === '2H' && minute >= 90) return undefined;
   if (short === 'ET' && minute >= 120) return undefined;
-
-  // Guard against clock drift vs. the authoritative API minute.
-  if (elapsed != null && Math.abs(minute - elapsed) > 2) return undefined;
 
   const seconds = totalSeconds % 60;
   return `${minute}:${String(seconds).padStart(2, '0')}`;

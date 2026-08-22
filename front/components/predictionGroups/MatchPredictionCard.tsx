@@ -8,7 +8,6 @@
 
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
@@ -17,6 +16,7 @@ import { CrowdOddsStrip } from '../common/CrowdOddsStrip';
 import TeamBadge from '../common/TeamBadge';
 import { GlassCard, PressableScale } from './atoms';
 import type { PredictionMatch } from './data';
+import { ScoreKeypad } from './ScoreKeypad';
 import { PG, PG_GLOW_PURPLE, PG_RADII, usePGFonts } from './theme';
 
 type Mode = 'winner' | 'exact' | null;
@@ -61,61 +61,30 @@ export interface MatchPredictionCardProps {
   }) => void;
 }
 
-function Stepper({
+function ScoreBox({
   value,
-  onChange,
-  disabled,
   active,
   masked,
-  increaseLabel,
-  decreaseLabel,
+  onPress,
+  disabled,
 }: {
   value: number;
-  onChange: (n: number) => void;
-  disabled?: boolean;
   active?: boolean;
   masked?: boolean;
-  increaseLabel: string;
-  decreaseLabel: string;
+  onPress: () => void;
+  disabled?: boolean;
 }) {
   const { extra } = usePGFonts();
-  const bump = (delta: number) => {
-    const next = Math.max(0, Math.min(20, value + delta));
-    if (next !== value) {
-      onChange(next);
-      Haptics.selectionAsync().catch(() => {});
-    }
-  };
-  const arrow = disabled ? PG.textMuted : PG.purpleSoft;
   return (
-    <View style={[styles.spinner, disabled && styles.spinnerDisabled, active && styles.spinnerActive]}>
-      <Text style={[styles.spinnerNum, masked && styles.spinnerMasked, { fontFamily: extra }]}>
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.scoreBox, active && styles.scoreBoxActive, disabled && styles.scoreBoxDisabled]}
+    >
+      <Text style={[styles.scoreBoxNum, masked && styles.scoreBoxMasked, { fontFamily: extra }]}>
         {masked ? '—' : value}
       </Text>
-      <View style={styles.spinnerBtns}>
-        <Pressable
-          disabled={disabled}
-          onPress={() => bump(1)}
-          hitSlop={6}
-          style={styles.spinnerBtn}
-          accessibilityRole="button"
-          accessibilityLabel={increaseLabel}
-        >
-          <ChevronUp size={14} color={arrow} />
-        </Pressable>
-        <View style={styles.spinnerDivider} />
-        <Pressable
-          disabled={disabled}
-          onPress={() => bump(-1)}
-          hitSlop={6}
-          style={styles.spinnerBtn}
-          accessibilityRole="button"
-          accessibilityLabel={decreaseLabel}
-        >
-          <ChevronDown size={14} color={arrow} />
-        </Pressable>
-      </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -148,6 +117,8 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
   const [winner, setWinner] = useState<Winner>(() =>
     initialPrediction ? winnerFromPrediction(initialPrediction) : null,
   );
+
+  const [padSide, setPadSide] = useState<'home' | 'away' | null>(null);
 
   useEffect(() => {
     if (initialPrediction) {
@@ -292,6 +263,7 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
   };
 
   return (
+    <>
     <GlassCard style={styles.card}>
       <View style={styles.timeRow}>
         <Text style={[styles.time, { fontFamily: medium }]}>
@@ -372,24 +344,20 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
             <View style={styles.scoreInputCol}>
               <Text style={[styles.predictLabel, { fontFamily: medium }]}>{pg.predictScore}</Text>
               <View style={[styles.stepperRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-                <Stepper
+                <ScoreBox
                   value={home}
-                  onChange={setHomeScore}
+                  onPress={() => isEditable && setPadSide('home')}
                   disabled={!isEditable}
-                  active={exactMode}
+                  active={exactMode && padSide === 'home'}
                   masked={winnerMode}
-                  increaseLabel={pg.increase}
-                  decreaseLabel={pg.decrease}
                 />
                 <Text style={[styles.scoreDash, { fontFamily: extra }]}>-</Text>
-                <Stepper
+                <ScoreBox
                   value={away}
-                  onChange={setAwayScore}
+                  onPress={() => isEditable && setPadSide('away')}
                   disabled={!isEditable}
-                  active={exactMode}
+                  active={exactMode && padSide === 'away'}
                   masked={winnerMode}
-                  increaseLabel={pg.increase}
-                  decreaseLabel={pg.decrease}
                 />
               </View>
               <PressableScale
@@ -443,6 +411,22 @@ export const MatchPredictionCard = memo(function MatchPredictionCard({
         <Text style={[styles.lockedNote, { fontFamily: medium }]}>{pg.lockedFuture}</Text>
       )}
     </GlassCard>
+    <ScoreKeypad
+      visible={padSide != null && isEditable}
+      title={(padSide === 'away' ? pg.keypadAway : pg.keypadHome).replace(
+        '{team}',
+        padSide === 'away' ? match.away.name : match.home.name,
+      )}
+      value={padSide === 'away' ? away : home}
+      confirmLabel={pg.confirmScore}
+      onChange={(n) => (padSide === 'away' ? setAwayScore(n) : setHomeScore(n))}
+      onConfirm={() => {
+        if (padSide === 'home') setPadSide('away');
+        else setPadSide(null);
+      }}
+      onClose={() => setPadSide(null)}
+    />
+    </>
   );
 });
 
@@ -498,29 +482,28 @@ const styles = StyleSheet.create({
 
   predictLabel: { color: PG.textMuted, fontSize: 11 },
   stepperRow: { alignItems: 'center', gap: 10 },
-  spinner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingLeft: 12,
-    paddingRight: 6,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+  scoreBox: {
+    minWidth: 52,
+    height: 52,
+    paddingHorizontal: 12,
+    borderRadius: PG_RADII.md,
+    backgroundColor: PG.cardElevated,
     borderWidth: 1,
-    borderColor: 'rgba(159,90,251,0.28)',
+    borderColor: PG.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  spinnerActive: {
-    borderColor: PG.purpleLight,
-    backgroundColor: 'rgba(124,58,237,0.12)',
+  scoreBoxActive: {
+    borderColor: PG.primary,
+    backgroundColor: 'rgba(168,85,247,0.14)',
     ...PG_GLOW_PURPLE,
   },
-  spinnerDisabled: { borderColor: PG.borderSoft, backgroundColor: 'rgba(255,255,255,0.03)' },
-  spinnerNum: { color: PG.text, fontSize: 22, minWidth: 20, textAlign: 'center' },
-  spinnerMasked: { color: PG.textMuted, fontSize: 18 },
-  spinnerBtns: { alignItems: 'center' },
-  spinnerBtn: { paddingVertical: 1, paddingHorizontal: 2 },
-  spinnerDivider: { width: 14, height: 1, backgroundColor: 'rgba(255,255,255,0.12)' },
+  scoreBoxDisabled: {
+    borderColor: PG.borderSoft,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  scoreBoxNum: { color: PG.text, fontSize: 24, minWidth: 22, textAlign: 'center' },
+  scoreBoxMasked: { color: PG.textMuted, fontSize: 18 },
 
   drawBtn: {
     minWidth: 120,

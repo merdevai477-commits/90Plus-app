@@ -1,7 +1,6 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
@@ -33,119 +32,108 @@ interface VideoGridProps {
 }
 
 const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPress, onDeleteVideo, isDeleteMode }: VideoGridProps) {
-    const renderItem = useCallback(({ item, index }: { item: VideoItem; index: number }) => (
-        <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.itemContainer}
-            onPress={() => {
-                if (isDeleteMode) {
-                    onDeleteVideo(item.id);
-                } else {
-                    onVideoPress(item, index);
-                }
-            }}
-            onLongPress={() => onVideoLongPress(item)}
-        >
-            {isValidThumbnail(typeof item.thumbnail === 'string' ? item.thumbnail : null) ? (
-                <Image
-                    source={typeof item.thumbnail === 'string' ? { uri: item.thumbnail } : item.thumbnail}
-                    style={styles.thumbnail}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    recyclingKey={item.id}
-                />
-            ) : (
-                <View style={[styles.thumbnail, styles.placeholderContainer]}>
-                    <Ionicons name="videocam-outline" size={32} color="#666" />
-                    <Text style={styles.placeholderText}>No Preview</Text>
-                </View>
-            )}
-
-            {/* Overlay */}
-            <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.8)']}
-                style={styles.overlay}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 0, y: 1 }}
-            >
-                <View style={styles.statsRow}>
-                    <Ionicons name="play" size={10} color="#FFF" />
-                    <Text style={styles.statsText}>{item.views}</Text>
-                </View>
-                {/* Only show duration if it's a valid, known duration (Requirement 9.4) */}
-                {shouldShowDuration(item.duration) && (
-                    <Text style={styles.duration}>{item.duration}</Text>
-                )}
-            </LinearGradient>
-
-            {/* Uploading Overlay */}
-            {item.isUploading && (
-                <View style={styles.uploadingOverlay}>
-                    <View style={styles.uploadingContent}>
-                        <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
-                        <Text style={styles.uploadingText}>
-                            {item.uploadProgress !== undefined 
-                                ? `جاري الرفع ${Math.round(item.uploadProgress)}%`
-                                : 'جاري الرفع...'}
-                        </Text>
-                    </View>
-                    {item.uploadProgress !== undefined && (
-                        <View style={styles.progressBarContainer}>
-                            <View style={[styles.progressBar, { width: `${item.uploadProgress}%` }]} />
+    return (
+        <View style={styles.grid}>
+            {videos.map((item, index) => (
+                <TouchableOpacity
+                    key={item.id}
+                    activeOpacity={0.8}
+                    style={styles.itemContainer}
+                    onPress={() => {
+                        if (isDeleteMode) {
+                            onDeleteVideo(item.id);
+                        } else {
+                            onVideoPress(item, index);
+                        }
+                    }}
+                    onLongPress={() => onVideoLongPress(item)}
+                >
+                    {isValidThumbnail(typeof item.thumbnail === 'string' ? item.thumbnail : null) ? (
+                        <Image
+                            source={typeof item.thumbnail === 'string' ? { uri: item.thumbnail } : item.thumbnail}
+                            style={styles.thumbnail}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            recyclingKey={item.id}
+                        />
+                    ) : (
+                        <View style={[styles.thumbnail, styles.placeholderContainer]}>
+                            <Ionicons name="videocam-outline" size={32} color="#666" />
+                            <Text style={styles.placeholderText}>No Preview</Text>
                         </View>
                     )}
-                </View>
-            )}
 
-            {/* Processing Overlay — Mux is still encoding the video */}
-            {!item.isUploading && item.isProcessing && (
-                <View style={styles.uploadingOverlay}>
-                    <View style={styles.uploadingContent}>
-                        <ActivityIndicator size="small" color="#FFA500" />
-                        <Text style={styles.uploadingText}>جاري المعالجة...</Text>
-                    </View>
-                </View>
-            )}
+                    <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.8)']}
+                        style={styles.overlay}
+                        start={{ x: 0, y: 0.5 }}
+                        end={{ x: 0, y: 1 }}
+                    >
+                        <View style={styles.statsRow}>
+                            <Ionicons name="play" size={10} color="#FFF" />
+                            <Text style={styles.statsText}>{item.views}</Text>
+                        </View>
+                        {shouldShowDuration(item.duration) && (
+                            <Text style={styles.duration}>{item.duration}</Text>
+                        )}
+                    </LinearGradient>
 
-            {/* Failed Overlay — Mux processing failed */}
-            {!item.isUploading && item.isFailed && (
-                <View style={styles.failedOverlay}>
-                    <View style={styles.uploadingContent}>
-                        <Ionicons name="alert-circle" size={24} color="#FF4444" />
-                        <Text style={styles.failedText}>فشل المعالجة</Text>
-                        <Text style={styles.retryText}>اضغط لإعادة المحاولة</Text>
-                    </View>
-                </View>
-            )}
+                    {item.isUploading && (
+                        <View style={styles.uploadingOverlay}>
+                            <View style={styles.uploadingContent}>
+                                <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                                <Text style={styles.uploadingText}>
+                                    {item.uploadProgress !== undefined
+                                        ? `جاري الرفع ${Math.round(item.uploadProgress)}%`
+                                        : 'جاري الرفع...'}
+                                </Text>
+                            </View>
+                            {item.uploadProgress !== undefined && (
+                                <View style={styles.progressBarContainer}>
+                                    <View style={[styles.progressBar, { width: `${item.uploadProgress}%` }]} />
+                                </View>
+                            )}
+                        </View>
+                    )}
 
-            {/* Delete Overlay */}
-            {isDeleteMode && (
-                <View style={styles.deleteOverlay}>
-                    <View style={styles.trashCircle}>
-                        <Ionicons name="trash" size={20} color="#FFF" />
-                    </View>
-                </View>
-            )}
-        </TouchableOpacity>
-    ), [isDeleteMode, onVideoPress, onVideoLongPress, onDeleteVideo]);
+                    {!item.isUploading && item.isProcessing && (
+                        <View style={styles.uploadingOverlay}>
+                            <View style={styles.uploadingContent}>
+                                <ActivityIndicator size="small" color="#FFA500" />
+                                <Text style={styles.uploadingText}>جاري المعالجة...</Text>
+                            </View>
+                        </View>
+                    )}
 
-    const keyExtractor = useCallback((item: VideoItem) => item.id, []);
+                    {!item.isUploading && item.isFailed && (
+                        <View style={styles.failedOverlay}>
+                            <View style={styles.uploadingContent}>
+                                <Ionicons name="alert-circle" size={24} color="#FF4444" />
+                                <Text style={styles.failedText}>فشل المعالجة</Text>
+                                <Text style={styles.retryText}>اضغط لإعادة المحاولة</Text>
+                            </View>
+                        </View>
+                    )}
 
-    return (
-        <FlashList
-            data={videos}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            numColumns={COLUMN_COUNT}
-            scrollEnabled={false}
-            contentContainerStyle={styles.grid}
-        />
+                    {isDeleteMode && (
+                        <View style={styles.deleteOverlay}>
+                            <View style={styles.trashCircle}>
+                                <Ionicons name="trash" size={20} color="#FFF" />
+                            </View>
+                        </View>
+                    )}
+                </TouchableOpacity>
+            ))}
+        </View>
     );
 });
 
 const styles = StyleSheet.create({
     grid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
         paddingBottom: 100,
+        columnGap: SPACING,
     },
     itemContainer: {
         width: ITEM_SIZE,

@@ -1,5 +1,5 @@
 /**
- * Invite row — glass code pill + copy & invite icons beside it (reference layout).
+ * Invite row — Figma dark pill + copy & invite actions.
  */
 
 import * as Clipboard from 'expo-clipboard';
@@ -10,11 +10,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useToast } from '../../contexts/ToastContext';
 import { useTranslation } from '../../src/i18n';
-import { LiquidGlassSurface } from './LiquidGlassSurface';
-import { PG, usePGFonts } from './theme';
+import { PG, PG_RADII, usePGFonts } from './theme';
 
-const PILL_RADIUS = 24;
-const ROW_HEIGHT = 52;
+const ROW_HEIGHT = 56;
 const ICON_HIT = 44;
 
 export function LiquidGlassInviteCard({
@@ -45,24 +43,22 @@ export function LiquidGlassInviteCard({
 
   return (
     <View style={styles.row}>
-      <LiquidGlassSurface borderRadius={PILL_RADIUS} style={styles.codeIsland}>
-        <View style={styles.codeInner}>
-          <Text
-            style={[styles.label, { fontFamily: medium, textAlign }]}
-            allowFontScaling={false}
-          >
-            {common.inviteCode}
-          </Text>
-          <Text
-            style={[styles.code, { fontFamily: extra, textAlign }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            allowFontScaling={false}
-          >
-            {code}
-          </Text>
-        </View>
-      </LiquidGlassSurface>
+      <View style={styles.codeIsland}>
+        <Text
+          style={[styles.label, { fontFamily: medium, textAlign }]}
+          allowFontScaling={false}
+        >
+          {common.inviteCode}
+        </Text>
+        <Text
+          style={[styles.code, { fontFamily: extra, textAlign }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          allowFontScaling={false}
+        >
+          {code}
+        </Text>
+      </View>
 
       <View style={styles.iconActions}>
         <Pressable
@@ -72,7 +68,7 @@ export function LiquidGlassInviteCard({
           accessibilityRole="button"
           accessibilityLabel={common.copyCodeBtn}
         >
-          <Copy size={22} color={PG.primaryLight} strokeWidth={2} />
+          <Copy size={20} color={PG.primaryLight} strokeWidth={2} />
         </Pressable>
 
         <Pressable
@@ -83,7 +79,7 @@ export function LiquidGlassInviteCard({
           accessibilityLabel={common.inviteMember}
         >
           <View style={styles.inviteIcon}>
-            <User size={22} color={PG.primaryLight} strokeWidth={2} />
+            <User size={20} color={PG.primaryLight} strokeWidth={2} />
             <View style={styles.plusBadge}>
               <Plus size={10} color="#fff" strokeWidth={3} />
             </View>
@@ -104,12 +100,11 @@ const styles = StyleSheet.create({
   codeIsland: {
     flex: 1,
     minHeight: ROW_HEIGHT,
-    height: ROW_HEIGHT,
     minWidth: 0,
-  },
-  codeInner: {
-    flex: 1,
-    minHeight: ROW_HEIGHT,
+    borderRadius: PG_RADII.lg,
+    backgroundColor: PG.card,
+    borderWidth: 1,
+    borderColor: PG.border,
     paddingHorizontal: 16,
     justifyContent: 'center',
     gap: 2,
@@ -137,8 +132,12 @@ const styles = StyleSheet.create({
   iconBtn: {
     width: ICON_HIT,
     height: ICON_HIT,
+    borderRadius: ICON_HIT / 2,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: PG.card,
+    borderWidth: 1,
+    borderColor: PG.borderSoft,
   },
   iconPressed: {
     opacity: 0.75,

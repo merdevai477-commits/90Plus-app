@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Text, Pressable, Platform } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -17,6 +17,7 @@ import {
   chatSpacing,
 } from './chatTheme';
 import { chatScreenStyles as styles } from './chatScreen.styles';
+import { safeFlashListScrollToEnd } from './safeFlashListScroll';
 
 export type ChatMessageListProps = {
   listRef: React.RefObject<FlashListRef<Message> | null>;
@@ -76,6 +77,19 @@ export function ChatMessageList({
   keyboardVisible = false,
   listBottomInset = chatSpacing.listBottom,
 }: ChatMessageListProps) {
+  const mountedRef = useRef(true);
+  const contentSizeRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (contentSizeRafRef.current != null) {
+        cancelAnimationFrame(contentSizeRafRef.current);
+        contentSizeRafRef.current = null;
+      }
+    };
+  }, []);
   const listContentStyle = useMemo(
     () => ({
       paddingHorizontal: chatSpacing.listHorizontal,
@@ -142,8 +156,14 @@ export function ChatMessageList({
           // streaming — that fights the user when they scroll up or pan a
           // horizontal table mid-stream.
           if (!isNearBottomRef.current && !keyboardVisible) return;
-          requestAnimationFrame(() => {
-            listRef.current?.scrollToEnd({ animated: false });
+          if (!mountedRef.current || displayMessages.length === 0) return;
+          if (contentSizeRafRef.current != null) {
+            cancelAnimationFrame(contentSizeRafRef.current);
+          }
+          contentSizeRafRef.current = requestAnimationFrame(() => {
+            contentSizeRafRef.current = null;
+            if (!mountedRef.current) return;
+            safeFlashListScrollToEnd(listRef.current, false);
           });
         }}
         ListFooterComponent={

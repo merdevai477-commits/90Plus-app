@@ -13,6 +13,7 @@ import { useTranslation } from '../../src/i18n';
 import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
 import { GroupKingsBrandTitle } from './GroupKingsBrandTitle';
 import { LiquidGlassIconButton } from './LiquidGlassIconButton';
+import { PG } from './theme';
 
 const SIDE_SLOT = 44;
 const BAR_MIN_HEIGHT = 48;
@@ -98,12 +99,12 @@ const styles = StyleSheet.create({
     zIndex: 200,
     paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.04)',
-    backgroundColor: 'transparent',
+    borderBottomColor: PG.borderSoft,
+    backgroundColor: 'rgba(3,3,3,0.72)',
   },
   fallbackTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(4,2,8,0.12)',
+    backgroundColor: 'rgba(8,6,19,0.55)',
   },
   row: {
     alignItems: 'center',

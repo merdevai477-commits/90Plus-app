@@ -380,6 +380,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     init();
     return () => {
       mounted = false;
+      abortRef.current = true;
       abortXHR();
       if (typingTimerRef.current) {
         clearInterval(typingTimerRef.current);
@@ -424,9 +425,15 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   // ─── XHR abort ───────────────────────────────────────────────────────────
 
   const abortXHR = useCallback(() => {
-    if (xhrRef.current) {
-      xhrRef.current.abort();
-      xhrRef.current = null;
+    const xhr = xhrRef.current;
+    xhrRef.current = null;
+    if (!xhr) return;
+    try {
+      if (xhr.readyState > XMLHttpRequest.UNSENT) {
+        xhr.abort();
+      }
+    } catch {
+      // Native XHR abort can throw if the request was already reset.
     }
   }, []);
 
@@ -834,13 +841,31 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     let authRetried = false;
 
     const openStream = async (forceRefresh = false) => {
+      const headers = await getAuthHeaders({ forceRefresh });
+      if (abortRef.current) return;
+
       const xhr = new XMLHttpRequest();
       xhrRef.current = xhr;
 
-      xhr.open('POST', `${BACKEND_URL}/api/chat/stream`, true);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      const headers = await getAuthHeaders({ forceRefresh });
-      Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+      try {
+        xhr.open('POST', `${BACKEND_URL}/api/chat/stream`, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        for (const [k, v] of Object.entries(headers)) {
+          xhr.setRequestHeader(k, v);
+        }
+      } catch {
+        // Aborted or reset between open and headers — treat as cancel.
+        if (xhrRef.current === xhr) xhrRef.current = null;
+        return;
+      }
+
+      if (
+        abortRef.current ||
+        xhrRef.current !== xhr ||
+        xhr.readyState !== XMLHttpRequest.OPENED
+      ) {
+        return;
+      }
 
       xhr.onreadystatechange = () => {
       if (abortRef.current) return;
@@ -1025,7 +1050,11 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       xhr.onerror = handleDisconnect;
       xhr.ontimeout = handleDisconnect;
       xhr.timeout = 60_000;
-      xhr.send(body);
+      try {
+        xhr.send(body);
+      } catch {
+        if (xhrRef.current === xhr) xhrRef.current = null;
+      }
     };
 
     await openStream();
@@ -1043,8 +1072,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     const base = historyBase ?? messages;
 
     setError(null);
-    abortRef.current = false;
+    abortRef.current = true;
     abortXHR();
+    abortRef.current = false;
     partialTextRef.current = '';
     retryCountRef.current = 0;
     // Reset the streaming pipeline for the new message.
@@ -1161,8 +1191,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     const base = messages.slice(0, lastUserIdx);
 
     setError(null);
-    abortRef.current = false;
+    abortRef.current = true;
     abortXHR();
+    abortRef.current = false;
     partialTextRef.current = '';
     retryCountRef.current = 0;
     rawStreamBufferRef.current = '';

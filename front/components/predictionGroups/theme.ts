@@ -1,102 +1,85 @@
 /**
- * Design tokens for the "ملك التوقعات" (King of Predictions) prediction-groups
- * feature. Kept local to the feature so the visual language (deep purple-black
- * background, purple accent gradients, gold highlights, glassmorphism) can be
- * tuned independently while still leaning on the app-wide tokens where sensible.
+ * Design tokens for ملك التوقعات — aligned to Figma "Prediction feature"
+ * (90plus file, node 469:1388) and the shared 90Plus artboard language
+ * (Share & Win / Questions: #030303, #080613, purple CTAs).
  *
- * All numeric values are unitless (React Native density-independent pixels).
+ * Spacing/radii are RAW FIGMA-ish units; convert at render with `usePGScale()`.
  */
 
 import { useAppFont } from '../../utils/fontSetup';
+import { useDesignScale, type DesignScale } from '../../utils/responsive';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 export const PG = {
-  // Background — extra dark purple-black.
-  bgTop: '#0A0812',
-  bgBottom: '#020103',
-  bg: '#040208',
+  bgTop: '#080613',
+  bgBottom: '#030303',
+  bg: '#030303',
 
-  /** Reference accent purple (#8B5CF6). */
-  primary: '#8B5CF6',
-  primaryLight: '#A78BFA',
-  primaryDark: '#6D28D9',
+  primary: '#A855F7',
+  primaryLight: '#C084FC',
+  primaryDark: '#6B11D4',
   silver: '#C0C0C0',
   bronze: '#CD7F32',
-  card: 'rgba(255,255,255,0.06)',
-  cardElevated: 'rgba(255,255,255,0.10)',
+  card: '#080613',
+  cardElevated: '#0E0A1A',
 
-  // Primary purple accent (buttons, featured cards).
-  purple: '#7C3AED',
-  purpleLight: '#9F5AFB',
-  purpleSoft: '#A78BFA',
+  purple: '#6B11D4',
+  purpleLight: '#A855F7',
+  purpleSoft: '#C4B5FD',
 
-  // Gold — crown, medals, and the "you" row only.
   gold: '#F5B942',
   goldDeep: '#C98A16',
   goldSoft: 'rgba(245,185,66,0.14)',
 
-  // Glass surfaces.
-  glass: 'rgba(255,255,255,0.05)',
-  glassStrong: 'rgba(255,255,255,0.08)',
-  border: 'rgba(255,255,255,0.10)',
-  borderSoft: 'rgba(255,255,255,0.06)',
+  glass: 'rgba(8,6,19,0.94)',
+  glassStrong: 'rgba(14,10,26,0.96)',
+  border: 'rgba(223,192,252,0.39)',
+  borderSoft: 'rgba(223,192,252,0.18)',
 
-  // Text.
   text: '#FFFFFF',
-  textSecondary: 'rgba(255,255,255,0.72)',
+  textSecondary: '#BBBBBB',
   textMuted: 'rgba(255,255,255,0.42)',
 
-  // Semantic.
   win: '#22C55E',
   draw: '#F5B942',
   loss: '#EF4444',
-  /** Desaturated red-purple for loss stats — stays within the dark palette. */
   lossMuted: '#9B5678',
   lossMutedSoft: 'rgba(155,86,120,0.18)',
   info: '#60A5FA',
 
-  // Deep purple used in crest / ring accents.
-  purpleDeep: '#5B21B6',
-  purpleTint: 'rgba(124,58,237,0.22)',
-  memberAvatarBg: 'rgba(124,58,237,0.32)',
+  purpleDeep: '#3D0AB3',
+  purpleTint: 'rgba(168,85,247,0.22)',
+  memberAvatarBg: 'rgba(107,17,212,0.38)',
 
-  /** Rank-screen ProfileCard glass border — reused on group hero. */
-  heroGlassBorder: 'rgba(69, 5, 128, 0.25)',
+  heroGlassBorder: 'rgba(223,192,252,0.28)',
+  neon: '#7CFF3A',
+  neonSoft: 'rgba(124,255,58,0.28)',
+  borderBright: 'rgba(168,85,247,0.72)',
 } as const;
 
-// ─── Gradients (expo-linear-gradient color arrays) ─────────────────────────────
+// ─── Gradients ────────────────────────────────────────────────────────────────
 
 export const PG_GRADIENTS = {
-  /** Full screen background — top→bottom, barely perceptible. */
   screen: [PG.bgTop, PG.bgBottom] as const,
-  /** Subtle top vignette — kept very faint so the screen reads as flat dark. */
-  ambient: ['rgba(124,58,237,0.06)', 'transparent'] as const,
-  /** Primary purple CTA / featured card. */
-  purple: [PG.purple, PG.purpleLight] as const,
-  /** Translucent purple round card wash over the dark background. */
-  roundWash: ['rgba(124,58,237,0.22)', 'rgba(159,90,251,0.05)'] as const,
-  /** Gold badge fill (used for the SVG radial gradient stops). */
+  ambient: ['rgba(107,17,212,0.28)', 'transparent'] as const,
+  /** Figma primary CTA (Questions / Share & Win action). */
+  purple: ['#3D0AB3', '#190448'] as const,
+  purpleBright: [PG.primary, PG.primaryDark] as const,
+  roundWash: ['rgba(107,17,212,0.28)', 'rgba(168,85,247,0.06)'] as const,
   gold: ['#FCD98A', PG.gold, PG.goldDeep] as const,
-  /** Progress bar fill. */
-  progress: [PG.purpleLight, PG.purple] as const,
-  /** Group avatar ring — purple → gold. */
-  avatarRing: [PG.purpleLight, PG.gold] as const,
-  /** Accuracy donut stroke — purple → gold. */
-  accuracyRing: [PG.purple, PG.gold] as const,
+  progress: [PG.primary, PG.primaryDark] as const,
+  avatarRing: [PG.primary, PG.gold] as const,
+  accuracyRing: [PG.primary, PG.gold] as const,
 } as const;
-
-// ─── Radii ──────────────────────────────────────────────────────────────────
 
 export const PG_RADII = {
   sm: 10,
-  md: 14,
-  lg: 18,
-  xl: 22,
+  md: 16,
+  lg: 20,
+  xl: 25,
   pill: 999,
 } as const;
-
-// ─── Spacing ──────────────────────────────────────────────────────────────────
 
 export const PG_SPACING = {
   xs: 4,
@@ -107,27 +90,21 @@ export const PG_SPACING = {
   xxl: 24,
 } as const;
 
-// ─── Type scale (24 / 18 / 14 / 12) ────────────────────────────────────────────
-
 export const PG_TYPE = {
-  display: 24,
+  display: 26,
   title: 18,
   body: 14,
   caption: 12,
 } as const;
 
-// ─── Elevation / glow presets ───────────────────────────────────────────────
-
-/** Purple glow used behind the primary CTA / selected chips. */
 export const PG_GLOW_PURPLE = {
-  shadowColor: PG.purple,
+  shadowColor: PG.primary,
   shadowOffset: { width: 0, height: 6 },
-  shadowOpacity: 0.55,
+  shadowOpacity: 0.45,
   shadowRadius: 16,
   elevation: 8,
 } as const;
 
-/** Gold glow used for the "you" row and medal badges. */
 export const PG_GLOW_GOLD = {
   shadowColor: PG.gold,
   shadowOffset: { width: 0, height: 4 },
@@ -136,17 +113,15 @@ export const PG_GLOW_GOLD = {
   elevation: 6,
 } as const;
 
-// ─── Font weights (language-aware Cairo / Inter) ───────────────────────────────
-
-/**
- * Convenience hook that returns the feature's four font weights in one call so
- * components don't have to invoke `useAppFont` repeatedly. Numbers/scores use
- * `bold`/`extra`, labels use `regular`/`medium`.
- */
 export function usePGFonts() {
   const regular = useAppFont(400);
   const medium = useAppFont(600);
   const bold = useAppFont(700);
   const extra = useAppFont(800);
   return { regular, medium, bold, extra };
+}
+
+/** Figma artboard scale — same contract as Share & Win / Questions hub. */
+export function usePGScale(): DesignScale {
+  return useDesignScale();
 }

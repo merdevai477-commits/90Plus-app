@@ -1668,9 +1668,9 @@ const ReelsFeed: React.FC = () => {
           initialNumToRender={REEL_INITIAL_RENDER}
           maxToRenderPerBatch={REEL_MAX_BATCH}
           updateCellsBatchingPeriod={100} // Increased from 50 to 100ms for better batching
-          // Android: detach off-screen reel cells to cut memory growth on long
-          // sessions. iOS keeps them mounted (single AVPlayer model relies on it).
-          removeClippedSubviews={Platform.OS === 'android'}
+          // Keep off-screen reel cells mounted on Android — clipping VideoView
+          // during Fabric draw races with dispatchGetDisplayList NPEs.
+          removeClippedSubviews={false}
           onRefresh={handleRefresh}
           refreshing={isRefreshing}
           onEndReached={loadMoreReels}

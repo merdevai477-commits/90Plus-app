@@ -29,6 +29,7 @@ export interface PredictionMatch {
     awayPercent: number;
     totalVotes?: number;
   } | null;
+  apiMatchId?: number;
 }
 
 export interface GroupMember {

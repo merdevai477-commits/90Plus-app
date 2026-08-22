@@ -80,6 +80,7 @@ export const HomeHeader = React.memo(function HomeHeader({
             appState.current = next;
         });
         const interval = setInterval(() => {
+            if (AppState.currentState !== 'active') return;
             void fetchUnreadCount();
         }, 60_000);
         return () => {

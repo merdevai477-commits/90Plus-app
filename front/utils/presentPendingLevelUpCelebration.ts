@@ -1,4 +1,4 @@
-import { emitLevelUpCelebration } from '../contexts/XpContext';
+import { emitLevelUpCelebration } from './levelUpCelebration.events';
 import { consumePendingLevelUpCelebration } from './levelUpCelebration.storage';
 
 let modalVisible = false;

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  Linking,
   Modal,
   ActivityIndicator,
   Platform,
@@ -25,7 +24,7 @@ import {
   normalizeAuthEmail,
 } from '@/src/components/auth';
 import { useOAuthFlow } from '@/src/components/auth/useOAuthFlow';
-import { LEGAL_URLS } from '@/config/legal.config';
+import { LEGAL_URLS, openLegalUrl } from '@/config/legal.config';
 import {
   TEXT_PRIMARY,
   TEXT_MUTED,
@@ -548,14 +547,14 @@ const RegisterTermsConsent = memo(function RegisterTermsConsent({
             {tCommon.registerAgreementPrefix}{' '}
             <Text
               style={styles.termsLink}
-              onPress={() => Linking.openURL(LEGAL_URLS.terms)}
+              onPress={() => { void openLegalUrl(LEGAL_URLS.terms); }}
             >
               {tCommon.registerTermsLink}
             </Text>
             {isRTL ? ' و' : ' & '}
             <Text
               style={styles.termsLink}
-              onPress={() => Linking.openURL(LEGAL_URLS.privacy)}
+              onPress={() => { void openLegalUrl(LEGAL_URLS.privacy); }}
             >
               {tCommon.registerPrivacyLink}
             </Text>

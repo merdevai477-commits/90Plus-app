@@ -16,6 +16,7 @@ import {
   NUDGE_FLAG_PREFIX,
   SCROLL_NEAR_BOTTOM_THRESHOLD,
 } from '../components/chat/chatTheme';
+import { safeFlashListScrollToEnd } from '../components/chat/safeFlashListScroll';
 
 type ConnToast = { message: string; type: 'success' | 'error' | 'info' } | null;
 
@@ -64,6 +65,9 @@ export function useChatScreenState({
   const isNearBottomRef = useRef(true);
   const lastMessageCountRef = useRef(0);
   const prevOnlineRef = useRef<boolean | null>(null);
+  const mountedRef = useRef(true);
+  const scrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const scrollRafRef = useRef<number[]>([]);
 
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [editingMessage, setEditingMessage] = useState<{ id: string; text: string } | null>(null);
@@ -74,6 +78,22 @@ export function useChatScreenState({
 
   const hasMessages = messages.length > 1;
   const displayMessages = useMemo(() => messages.slice(1), [messages]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      scrollTimersRef.current.forEach(clearTimeout);
+      scrollTimersRef.current = [];
+      scrollRafRef.current.forEach((id) => cancelAnimationFrame(id));
+      scrollRafRef.current = [];
+    };
+  }, []);
+
+  const safeScrollToEnd = useCallback((animated: boolean) => {
+    if (!mountedRef.current) return;
+    safeFlashListScrollToEnd(listRef.current, animated);
+  }, []);
 
   const listContentStyle = useMemo(
     () => ({
@@ -131,9 +151,10 @@ export function useChatScreenState({
 
     if (newCount > prevCount) {
       if (isNearBottomRef.current) {
-        requestAnimationFrame(() => {
-          listRef.current?.scrollToEnd({ animated: false });
+        const raf = requestAnimationFrame(() => {
+          safeScrollToEnd(false);
         });
+        scrollRafRef.current.push(raf);
       } else {
         const added = messages.slice(prevCount, newCount);
         const aiAdded = added.filter((m) => m.role === 'ai').length;
@@ -141,7 +162,7 @@ export function useChatScreenState({
       }
     }
     lastMessageCountRef.current = newCount;
-  }, [messages.length, messages]);
+  }, [messages.length, messages, safeScrollToEnd]);
 
   useEffect(() => {
     if (!streamingMessageId) return;
@@ -152,11 +173,16 @@ export function useChatScreenState({
   useEffect(() => {
     if (!hasMessages) return;
     isNearBottomRef.current = true;
-    const scroll = () => listRef.current?.scrollToEnd({ animated: false });
-    requestAnimationFrame(scroll);
+    const scroll = () => safeScrollToEnd(false);
+    const raf = requestAnimationFrame(scroll);
+    scrollRafRef.current.push(raf);
     const t = setTimeout(scroll, 200);
-    return () => clearTimeout(t);
-  }, [hasMessages]);
+    scrollTimersRef.current.push(t);
+    return () => {
+      clearTimeout(t);
+      cancelAnimationFrame(raf);
+    };
+  }, [hasMessages, safeScrollToEnd]);
 
   const handleSend = useCallback(
     (textOverride?: string) => {
@@ -184,12 +210,14 @@ export function useChatScreenState({
       Keyboard.dismiss();
       isNearBottomRef.current = true;
       setUnreadCount(0);
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToEnd({ animated: true });
+      const raf = requestAnimationFrame(() => {
+        safeScrollToEnd(true);
       });
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150);
+      scrollRafRef.current.push(raf);
+      const t = setTimeout(() => safeScrollToEnd(true), 150);
+      scrollTimersRef.current.push(t);
     },
-    [editingMessage, inputValue, editMessage, sendMessage, setInputValue, isLoading, isOnline, tChat.offline],
+    [editingMessage, inputValue, editMessage, sendMessage, setInputValue, isLoading, isOnline, tChat.offline, safeScrollToEnd],
   );
 
   const handleStartEdit = useCallback(
@@ -228,8 +256,8 @@ export function useChatScreenState({
     Haptics.selectionAsync().catch(() => {});
     isNearBottomRef.current = true;
     setUnreadCount(0);
-    listRef.current?.scrollToEnd({ animated: false });
-  }, []);
+    safeScrollToEnd(false);
+  }, [safeScrollToEnd]);
 
   const handleOpenPanel = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
@@ -244,10 +272,11 @@ export function useChatScreenState({
   const scrollToEndAfterConversationChange = useCallback(() => {
     isNearBottomRef.current = true;
     setUnreadCount(0);
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: false });
+    const raf = requestAnimationFrame(() => {
+      safeScrollToEnd(false);
     });
-  }, []);
+    scrollRafRef.current.push(raf);
+  }, [safeScrollToEnd]);
 
   const renderMessageHandlers = useMemo(
     () => ({

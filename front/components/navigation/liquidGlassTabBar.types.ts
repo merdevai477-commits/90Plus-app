@@ -45,7 +45,7 @@ export interface LiquidGlassTabBarProps {
   profileAvatarUrl?: string | null;
   /** Safe-area bottom inset used to position the floating bar. */
   bottomInset?: number;
-  /** Narrow 3-slot bar (prediction groups, etc.). */
+  /** Narrow 2-slot bar (prediction groups, etc.). */
   compact?: boolean;
   /** Prefetch adjacent routes when a tab is pressed. */
   onTabPressIn?: (index: number) => void;

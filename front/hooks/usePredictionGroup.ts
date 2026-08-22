@@ -18,7 +18,10 @@ const EMPTY_GROUP_STATE: MyGroupState = {
   groupBan: null,
 };
 
-export type GroupNavKey = 'group' | 'round' | 'standings';
+/** Bottom compact nav: group home vs global groups leaderboard. */
+export type GroupNavKey = 'group' | 'standings';
+/** In-group cup segments, or pull-to-refresh targets. */
+export type GroupRefreshKey = GroupNavKey | 'hub' | 'matches' | 'members';
 
 export function usePredictionGroup() {
   const { getToken, isSignedIn } = useAuth();
@@ -155,19 +158,23 @@ export function usePredictionGroup() {
   );
 
   const refreshActiveTab = useCallback(
-    async (tab: GroupNavKey) => {
+    async (tab: GroupRefreshKey) => {
       const groupId = stateRef.current?.group?.id;
       setRefreshing(true);
       try {
-        if (tab === 'group') {
-          if (!groupId) return;
-          await refreshGroupData(groupId, { standingsOnly: true, force: true });
-        } else if (tab === 'round') {
-          if (!groupId) return;
-          await refreshGroupData(groupId, { roundOnly: true, force: true });
-        } else {
+        if (tab === 'standings' || tab === 'hub' || !groupId) {
           await refreshLeaderboard('all');
+          return;
         }
+        if (tab === 'members') {
+          await refreshGroupData(groupId, { standingsOnly: true, force: true });
+          return;
+        }
+        if (tab === 'matches') {
+          await refreshGroupData(groupId, { roundOnly: true, force: true });
+          return;
+        }
+        await refreshGroupData(groupId, { force: true });
       } finally {
         setRefreshing(false);
       }
@@ -181,9 +188,11 @@ export function usePredictionGroup() {
 
   useEffect(() => {
     if (state?.hasGroup && state.group?.id) {
-      void refreshGroupData(state.group.id, { standingsOnly: true }).catch(() => undefined);
+      void refreshGroupData(state.group.id).catch(() => undefined);
+    } else if (state && !state.hasGroup) {
+      void refreshLeaderboard('all').catch(() => undefined);
     }
-  }, [state?.hasGroup, state?.group?.id, refreshGroupData]);
+  }, [state?.hasGroup, state?.group?.id, refreshGroupData, refreshLeaderboard]);
 
   const createGroup = useCallback(
     async (name: string, avatarUrl?: string | null) => {

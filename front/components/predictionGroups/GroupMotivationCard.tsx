@@ -11,7 +11,6 @@ import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useTranslation } from '../../src/i18n';
 import type { GroupDailyInsight } from '../../services/predictionGroups.service';
 import { buildGroupMotivationText } from '../../utils/groupInsights';
-import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { PG, PG_RADII, PG_SPACING, PG_TYPE, usePGFonts } from './theme';
 
 export function GroupMotivationCard({
@@ -42,7 +41,7 @@ export function GroupMotivationCard({
 
   return (
     <View style={styles.wrap}>
-      <LiquidGlassSurface borderRadius={PG_RADII.lg} subtleShadow style={styles.card}>
+      <View style={styles.card}>
         <LinearGradient
           colors={gradient}
           start={{ x: 0, y: 0 }}
@@ -64,14 +63,20 @@ export function GroupMotivationCard({
             </View>
           ) : null}
         </View>
-      </LiquidGlassSurface>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 16, paddingTop: 12 },
-  card: { overflow: 'hidden' },
+  card: {
+    overflow: 'hidden',
+    borderRadius: PG_RADII.xl,
+    borderWidth: 1,
+    borderColor: PG.border,
+    backgroundColor: PG.card,
+  },
   inner: {
     alignItems: 'center',
     gap: PG_SPACING.md,

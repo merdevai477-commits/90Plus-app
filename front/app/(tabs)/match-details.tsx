@@ -12,6 +12,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent, Fixture } from '../../services/apiFootball';
@@ -24,6 +25,7 @@ import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { TeamToggle } from '../../components/match-details/TeamToggle';
 import { MatchDetailsTopBar } from '../../components/match-details/MatchDetailsTopBar';
 import { MatchChatTab } from '../../components/match-details/MatchChatTab';
+import CachedAthletePhoto from '../../components/common/CachedAthletePhoto';
 import { BG_BASE,
   GLASS_BORDER_SIDE,
   GLASS_BORDER_TOP,
@@ -65,8 +67,14 @@ import {
 import { hasLineupData, isAuthoritativeLineupData } from '../../utils/matchLineupsFallback';
 import { sortPlayersByGrid } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
-import { buildScores365CoachPhotoUrl } from '../../utils/scores365AthletePhoto';
+import {
+  buildScores365CoachPhotoUrl,
+  with365ImageSize,
+} from '../../utils/scores365AthletePhoto';
 import { prefetchImageUrls } from '../../utils/prefetchMatchAssets';
+import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
+import { MatchFavoritesStorage } from '../../src/storage/matchFavorites.storage';
+import { toastManager } from '../../services/toastManager';
 import {
   WC_LEAGUE_ID,
   SCORES365_LEAGUE_ID_OFFSET,
@@ -175,7 +183,8 @@ function resolveFormResult(
 const MatchDetailsScreen = () => {
   useScreenFont();
   const router = useRouter();
-  const { t, language } = useTranslation();
+  const { getToken } = useAuth();
+  const { t, language, translate } = useTranslation();
   const params = useLocalSearchParams() as unknown as MatchDetailsParams;
   const shimmerX = useShimmer();
   const translationsReady = Boolean(t?.matchDetails);
@@ -192,6 +201,8 @@ const MatchDetailsScreen = () => {
   const [standingsGroups, setStandingsGroups] = useState<StandingsGroup[]>([]);
   const [standingsSeasonUsed, setStandingsSeasonUsed] = useState<number | null>(null);
   const [standingsUnavailable, setStandingsUnavailable] = useState(false);
+  const [isMatchSubscribed, setIsMatchSubscribed] = useState(false);
+  const [matchSubLoading, setMatchSubLoading] = useState(false);
 
   // Home/Away selector shared by Lineups and Previous Results.
   const [selectedTeamSide, setSelectedTeamSide] = useState<'home' | 'away'>('home');
@@ -252,16 +263,26 @@ const MatchDetailsScreen = () => {
   }, [fixture]);
 
   const resolveLineupPlayerPhoto = useCallback(
-    (playerId: number, photo?: string | null) =>
-      playerPhotoUrl(playerId, photo, is365Fixture ? { source: '365' } : undefined),
+    (playerId: number, photo?: string | null) => {
+      const raw = playerPhotoUrl(
+        playerId,
+        photo,
+        is365Fixture ? { source: '365' } : undefined,
+      );
+      return with365ImageSize(raw, 64) ?? raw ?? '';
+    },
     [is365Fixture],
   );
 
   const resolveCoachPhoto = useCallback(
     (coachId: number | null | undefined, photo?: string | null) => {
-      if (photo?.trim()) return photo;
-      if (is365Fixture && coachId) return buildScores365CoachPhotoUrl(coachId, 80);
-      return '';
+      const raw = photo?.trim()
+        ? photo.trim()
+        : is365Fixture && coachId
+          ? buildScores365CoachPhotoUrl(coachId, 68)
+          : '';
+      if (!raw) return '';
+      return with365ImageSize(raw, 64) ?? raw;
     },
     [is365Fixture],
   );
@@ -330,6 +351,101 @@ const MatchDetailsScreen = () => {
       ? ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(short)
       : snapshot?.phase === 'finished';
   }, [fixture, snapshot?.phase]);
+
+  // Hydrate per-match push subscription (same source as Matches screen bell).
+  useEffect(() => {
+    if (!fixtureId) {
+      setIsMatchSubscribed(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        const ids = await MatchSubscriptionsService.listIds(token);
+        if (!cancelled) setIsMatchSubscribed(ids.has(fixtureId));
+      } catch {
+        // Keep default false — toggle can still attempt subscribe.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fixtureId, getToken]);
+
+  const handleToggleMatchNotifications = useCallback(async () => {
+    if (!fixtureId || matchSubLoading) return;
+    if (isFinishedMatch()) {
+      toastManager.showInfo(
+        translate('matches.bell.errorTitle') || t.matchDetails.notifications || 'Notifications',
+        translate('matches.bell.finishedDisabled') ||
+          'Notifications are unavailable for finished matches.',
+        { position: 'top', duration: 2000 },
+      );
+      return;
+    }
+
+    const subscribe = !isMatchSubscribed;
+    setMatchSubLoading(true);
+    setIsMatchSubscribed(subscribe);
+
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Not authenticated');
+
+      if (subscribe) {
+        await MatchSubscriptionsService.subscribe(token, {
+          fixtureId,
+          matchTime: fixture?.fixture?.date || new Date().toISOString(),
+          homeTeam: homeTeamName || 'Home',
+          awayTeam: awayTeamName || 'Away',
+          homeTeamLogo: homeTeamLogo || undefined,
+          awayTeamLogo: awayTeamLogo || undefined,
+          leagueName: leagueName || undefined,
+        });
+        await MatchFavoritesStorage.addFavorite(String(fixtureId));
+        toastManager.showSuccess(
+          translate('matches.bell.subscribedTitle') || 'Subscribed',
+          translate('matches.bell.subscribedMessage') ||
+            'You will get push alerts for this match.',
+          { position: 'top', duration: 2000 },
+        );
+      } else {
+        await MatchSubscriptionsService.unsubscribe(token, fixtureId);
+        await MatchFavoritesStorage.removeFavorite(String(fixtureId));
+        toastManager.showInfo(
+          translate('matches.bell.unsubscribedTitle') || 'Unsubscribed',
+          translate('matches.bell.unsubscribedMessage') || 'Match alerts turned off.',
+          { position: 'top', duration: 1800 },
+        );
+      }
+    } catch {
+      setIsMatchSubscribed(!subscribe);
+      toastManager.showError(
+        translate('matches.bell.errorTitle') || 'Error',
+        translate('matches.bell.errorMessage') ||
+          'Could not update match notifications.',
+        { position: 'top' },
+      );
+    } finally {
+      setMatchSubLoading(false);
+    }
+  }, [
+    fixtureId,
+    matchSubLoading,
+    isFinishedMatch,
+    isMatchSubscribed,
+    getToken,
+    fixture?.fixture?.date,
+    homeTeamName,
+    awayTeamName,
+    homeTeamLogo,
+    awayTeamLogo,
+    leagueName,
+    t,
+    translate,
+  ]);
 
   useEffect(() => {
     if (snapshot && loading) {
@@ -1436,18 +1552,23 @@ const MatchDetailsScreen = () => {
                     </Text>
                   </View>
                   <View style={styles.coachBlock}>
-                    {resolveCoachPhoto(lineup.coach?.id, lineup.coach?.photo) ? (
-                      <ExpoImage
-                        source={{ uri: resolveCoachPhoto(lineup.coach?.id, lineup.coach?.photo) }}
-                        style={styles.coachPhoto}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                      />
-                    ) : (
-                      <View style={styles.coachPhotoPlaceholder}>
-                        <Ionicons name="person" size={22} color="#888" />
-                      </View>
-                    )}
+                    {(() => {
+                      const coachUri = resolveCoachPhoto(
+                        lineup.coach?.id,
+                        lineup.coach?.photo,
+                      );
+                      return coachUri ? (
+                        <CachedAthletePhoto
+                          uri={coachUri}
+                          size={48}
+                          recyclingKey={lineup.coach?.id ?? coachUri}
+                        />
+                      ) : (
+                        <View style={styles.coachPhotoPlaceholder}>
+                          <Ionicons name="person" size={22} color="#888" />
+                        </View>
+                      );
+                    })()}
                     <Text style={styles.coachName} numberOfLines={2}>
                       {lineup.coach?.name || t.common.unknown}
                     </Text>
@@ -1495,13 +1616,10 @@ const MatchDetailsScreen = () => {
                             );
                           }}
                         >
-                          <ExpoImage
-                            source={{
-                              uri: resolveLineupPlayerPhoto(player.id, player.photo),
-                            }}
-                            style={{ width: 28, height: 28, borderRadius: 14 }}
-                            contentFit="cover"
-                            cachePolicy="memory-disk"
+                          <CachedAthletePhoto
+                            uri={resolveLineupPlayerPhoto(player.id, player.photo)}
+                            size={28}
+                            recyclingKey={player.id}
                           />
                           <Text style={styles.substituteNumber}>{player.number || '-'}</Text>
                           <View style={styles.substituteInfo}>
@@ -2001,7 +2119,10 @@ const MatchDetailsScreen = () => {
           backLabel={t.matchDetails.backToMatches}
           notificationsLabel={t.matchDetails.notifications || 'Notifications'}
           onBack={() => router.push('/(tabs)/matches' as any)}
-          onNotifications={() => router.push('/notifications' as any)}
+          onNotifications={handleToggleMatchNotifications}
+          isSubscribed={isMatchSubscribed}
+          notificationsDisabled={isFinishedMatch()}
+          notificationsLoading={matchSubLoading}
         />
         <View style={styles.errorContainer}>
           <Ionicons name="football-outline" size={64} color="#333" />
@@ -2110,7 +2231,10 @@ const MatchDetailsScreen = () => {
         backLabel={t.matchDetails.backToMatches}
         notificationsLabel={t.matchDetails.notifications || 'Notifications'}
         onBack={() => router.push('/(tabs)/matches' as any)}
-        onNotifications={() => router.push('/notifications' as any)}
+        onNotifications={handleToggleMatchNotifications}
+        isSubscribed={isMatchSubscribed}
+        notificationsDisabled={isFinishedMatch()}
+        notificationsLoading={matchSubLoading}
       />
 
       {lmtWidget}

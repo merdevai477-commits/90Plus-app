@@ -90,7 +90,7 @@ export function AnimatedTabs({ tabs, activeKey, onChange, isRTL }: AnimatedTabsP
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: PG.glass,
+    backgroundColor: PG.cardElevated,
     borderRadius: PG_RADII.md,
     borderWidth: 1,
     borderColor: PG.borderSoft,
@@ -105,6 +105,6 @@ const styles = StyleSheet.create({
     left: 0,
     height: 3,
     borderRadius: 3,
-    backgroundColor: PG.purpleLight,
+    backgroundColor: PG.primary,
   },
 });

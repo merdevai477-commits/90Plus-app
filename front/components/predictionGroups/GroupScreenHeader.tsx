@@ -286,9 +286,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(139,92,246,0.2)',
+    backgroundColor: PG.card,
     borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.35)',
+    borderColor: PG.border,
   },
   leaveChip: {
     alignItems: 'center',
@@ -296,9 +296,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: PG.card,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: PG.borderSoft,
   },
   leaveChipTxt: {
     fontSize: 11,

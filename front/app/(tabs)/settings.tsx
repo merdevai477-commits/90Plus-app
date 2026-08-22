@@ -42,7 +42,7 @@ import LanguagePickerModal from '../../components/common/LanguagePickerModal';
 import { useTranslation, getLanguageInfo, Language } from '../../src/i18n';
 import ImprovedAccountDeletionModal from '../../components/common/ImprovedAccountDeletionModal';
 import { AccountDeletionService } from '../../services/accountDeletionService';
-import { LEGAL_URLS } from '../../config/legal.config';
+import { LEGAL_URLS, openLegalUrl } from '../../config/legal.config';
 import { toastManager } from '../../services/toastManager';
 import { useScreenFont } from '../../utils/fontSetup';
 import { MainShell } from '../../components/shell/MainShell';
@@ -200,15 +200,15 @@ export default function SettingsScreen() {
   };
 
   const handleContactUs = () => {
-    Linking.openURL(LEGAL_URLS.support);
+    void openLegalUrl(LEGAL_URLS.support);
   };
 
   const handlePrivacyPolicy = () => {
-    Linking.openURL(LEGAL_URLS.privacy);
+    void openLegalUrl(LEGAL_URLS.privacy);
   };
 
   const handleTerms = () => {
-    Linking.openURL(LEGAL_URLS.terms);
+    void openLegalUrl(LEGAL_URLS.terms);
   };
 
   const handleManagePermissions = () => {

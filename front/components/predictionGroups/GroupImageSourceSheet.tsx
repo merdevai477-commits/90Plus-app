@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   },
   solidCard: {
     borderRadius: PG_RADII.xl,
-    backgroundColor: 'rgba(15,5,25,0.98)',
+    backgroundColor: PG.card,
     borderWidth: 1,
     borderColor: PG.heroGlassBorder,
     ...Platform.select({

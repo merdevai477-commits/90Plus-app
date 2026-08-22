@@ -49,8 +49,15 @@ import { VideoErrorBoundary } from './VideoErrorBoundary';
 import { logger } from '../../utils/logger';
 import { captureException } from '../../services/sentry.service';
 import { getApiUrl } from '../../config/api.config';
+import NetInfo from '@react-native-community/netinfo';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+function isTransientVideoError(msg: string): boolean {
+  return /unknownhost|unable to resolve host|network is unreachable|enetunreach|econnreset|econnrefused|enotfound|sslhandshake|javax\.net\.ssl|trust anchor|certificate|timed out|timeout|offline|no address associated|failed to connect|source error/i.test(
+    msg,
+  );
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -400,11 +407,14 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
         /^ph:\/\//i.test(activeVideoUrl) ||
         /^assets-library:\/\//i.test(activeVideoUrl) ||
         activeVideoUrl.startsWith('content://');
-      if (!isLocalUri) {
-        captureException(new Error(`Video load failed: ${msg}`), {
-          tags: { area: 'reels', component: 'UnifiedVideoPlayer' },
-          extra: { reelId: reel.id, urlPrefix: activeVideoUrl.substring(0, 80) },
-        });
+      if (!isLocalUri && !isTransientVideoError(msg)) {
+        void NetInfo.fetch().then((state) => {
+          if (state.isConnected === false || state.isInternetReachable === false) return;
+          captureException(new Error(`Video load failed: ${msg}`), {
+            tags: { area: 'reels', component: 'UnifiedVideoPlayer' },
+            extra: { reelId: reel.id, urlPrefix: activeVideoUrl.substring(0, 80) },
+          });
+        }).catch(() => {});
       }
     }
 

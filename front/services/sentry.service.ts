@@ -153,11 +153,16 @@ export function initSentry(): void {
       'Failed to fetch',
       'NetworkError',
       'Network Error',
+      'Unable to resolve host',
+      'UnknownHostException',
+      'SSLHandshakeException',
       
       // User cancellations (intentional actions)
       'AbortError',
       'User cancelled',
       'User canceled',
+      'Request has not been opened',
+      'Could not open URL',
       
       // Expected HTTP errors (handled by application)
       'Unauthorized',

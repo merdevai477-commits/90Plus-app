@@ -1,10 +1,10 @@
 import type { LiquidTabItem } from './liquidGlassTabBar.types';
 
 export const TAB_BAR_HEIGHT = 58;
-/** Compact floating bar (3 tabs). */
+/** Compact floating bar (2 tabs). */
 export const COMPACT_TAB_BAR_HEIGHT = 50;
-/** Wide enough for 3 Arabic labels (جروب / الجولة / الترتيب) without clipping. */
-export const COMPACT_TAB_BAR_WIDTH = 268;
+/** Wide enough for 2 Arabic labels (مجموعة / الترتيب) without clipping. */
+export const COMPACT_TAB_BAR_WIDTH = 216;
 export const TAB_BAR_HORIZONTAL_MARGIN = 12;
 export const TAB_BAR_PADDING_H = 4;
 

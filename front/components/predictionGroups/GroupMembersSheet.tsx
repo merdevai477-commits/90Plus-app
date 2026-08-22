@@ -161,6 +161,7 @@ const styles = StyleSheet.create({
     paddingTop: PG_SPACING.sm,
     paddingBottom: PG_SPACING.md,
     maxHeight: '82%',
+    backgroundColor: PG.card,
   },
   handle: {
     alignSelf: 'center',

@@ -335,11 +335,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: PG_SPACING.lg,
     paddingTop: PG_SPACING.sm,
     paddingBottom: PG_SPACING.lg,
-    backgroundColor: Platform.OS === 'android' ? 'rgba(4,2,8,0.98)' : undefined,
+    backgroundColor: Platform.OS === 'android' ? PG.card : undefined,
   },
   sheetTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(4,2,8,0.55)',
+    backgroundColor: 'rgba(8,6,19,0.55)',
   },
   handle: {
     alignSelf: 'center',

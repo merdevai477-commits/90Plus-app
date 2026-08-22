@@ -1,10 +1,10 @@
-import React, { useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, I18nManager } from 'react-native';
 
 interface Tab {
   key: string;
   label: string;
-  icon?: any; // Keeping icon prop optional but not using it for this design
+  icon?: any;
 }
 
 interface ModernTabsProps {
@@ -15,8 +15,6 @@ interface ModernTabsProps {
 
 export const ModernTabs: React.FC<ModernTabsProps> = ({ tabs, activeTab, onTabChange }) => {
   const scrollViewRef = useRef<ScrollView>(null);
-
-  // Auto-scroll to active tab logic could be added here if needed
 
   return (
     <View style={styles.container}>
@@ -32,16 +30,20 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({ tabs, activeTab, onTabCh
           return (
             <TouchableOpacity
               key={tab.key}
-              style={[styles.tab, isActive && styles.activeTab]}
+              style={styles.tab}
               onPress={() => onTabChange(tab.key)}
               activeOpacity={0.8}
               accessibilityRole="tab"
               accessibilityLabel={tab.label}
               accessibilityState={{ selected: isActive }}
             >
-              <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+              <Text
+                style={[styles.tabText, isActive && styles.activeTabText]}
+                numberOfLines={1}
+              >
                 {tab.label}
               </Text>
+              {isActive ? <View style={styles.underline} /> : <View style={styles.underlineSpacer} />}
             </TouchableOpacity>
           );
         })}
@@ -52,37 +54,48 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({ tabs, activeTab, onTabCh
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 12,
+    backgroundColor: '#0c051a',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#53198a',
+    paddingTop: 4,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingHorizontal: 12,
+    gap: 22,
+    alignItems: 'flex-end',
+    flexDirection: I18nManager.isRTL ? 'row-reverse' : 'row',
   },
   tab: {
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderRadius: 30, // Pill shape
-    backgroundColor: 'rgba(255, 255, 255, 0.08)', // Dark subtle background for inactive
-    borderWidth: 0,
-    minWidth: 80,
+    paddingTop: 6,
+    minWidth: 72,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  activeTab: {
-    backgroundColor: '#8b5cf6', // Indigo-purple active background
-    shadowColor: '#8b5cf6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    justifyContent: 'flex-end',
   },
   tabText: {
-    color: '#9ca3af',
-    fontSize: 14,
-    fontWeight: '500',
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '400',
+    paddingBottom: 10,
   },
   activeTabText: {
-    color: '#fff',
+    color: '#810af2',
     fontWeight: '700',
+    textShadowColor: '#5f2795',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  underline: {
+    width: '88%',
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: '#810af2',
+    shadowColor: '#810af2',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  underlineSpacer: {
+    height: 2,
   },
 });

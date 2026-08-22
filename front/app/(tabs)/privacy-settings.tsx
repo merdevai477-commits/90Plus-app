@@ -17,7 +17,6 @@ import {
   Switch,
   Alert,
   ActivityIndicator,
-  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@clerk/clerk-expo';
@@ -37,7 +36,7 @@ import {
 import { useTranslation } from '../../src/i18n';
 import { logger } from '../../services/logger';
 import { getApiEndpoint } from '../../config/api.config';
-import { LEGAL_URLS } from '../../config/legal.config';
+import { LEGAL_URLS, openLegalUrl } from '../../config/legal.config';
 import { captureException } from '../../services/sentry.service';
 import { router } from 'expo-router';
 import { MainShell } from '../../components/shell/MainShell';
@@ -249,11 +248,11 @@ export default function PrivacySettingsScreen() {
   };
 
   const openPrivacyPolicy = () => {
-    Linking.openURL(LEGAL_URLS.privacy);
+    void openLegalUrl(LEGAL_URLS.privacy);
   };
 
   const openTerms = () => {
-    Linking.openURL(LEGAL_URLS.terms);
+    void openLegalUrl(LEGAL_URLS.terms);
   };
 
   if (loading) {

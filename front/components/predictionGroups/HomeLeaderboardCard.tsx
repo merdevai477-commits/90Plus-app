@@ -3,7 +3,6 @@
  */
 
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { BarChart3, ChevronLeft } from 'lucide-react-native';
 import React, { useCallback, useState } from 'react';
 import { I18nManager, Platform, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
@@ -15,7 +14,6 @@ import { GroupMotivationCard } from './GroupMotivationCard';
 import { GroupStatsPopup } from './GroupStatsPopup';
 import type { GroupMember } from './data';
 import { HomeLeaderboardRow } from './HomeLeaderboardRow';
-import { LiquidGlassSurface } from './LiquidGlassSurface';
 import { PurpleTrophyIcon } from './PurpleTrophyIcon';
 import { PG, PG_RADII, usePGFonts } from './theme';
 
@@ -62,20 +60,6 @@ export function HomeLeaderboardCard({
     <GroupMotivationCard insight={dailyInsight} isRTL={isRTL} />
     <View style={[styles.wrap, shellGlow]}>
       <View style={styles.darkBase}>
-        <LinearGradient
-          colors={['rgba(4,3,8,0.99)', 'rgba(2,2,5,0.99)', 'rgba(8,5,14,0.98)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <LinearGradient
-          colors={['rgba(124,58,237,0.06)', 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-
         <View style={styles.content}>
           <View style={[styles.cardHeader, row]}>
             <View style={[styles.titleBlock, row]}>
@@ -105,11 +89,10 @@ export function HomeLeaderboardCard({
             />
           ))}
 
-          <LiquidGlassSurface
-            borderRadius={PG_RADII.lg}
-            style={styles.statsCtaShell}
+          <Pressable
             onPress={openStats}
             accessibilityLabel={lb.statsCta}
+            style={({ pressed }) => [styles.statsCtaShell, pressed && { opacity: 0.88 }]}
           >
             <View style={[styles.statsCta, row]}>
               <View style={[styles.statsCtaLeft, row]}>
@@ -122,7 +105,7 @@ export function HomeLeaderboardCard({
                 style={I18nManager.isRTL ? undefined : { transform: [{ rotate: '180deg' }] }}
               />
             </View>
-          </LiquidGlassSurface>
+          </Pressable>
         </View>
       </View>
 
@@ -149,10 +132,11 @@ export function HomeLeaderboardCard({
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 16, paddingTop: 12 },
   darkBase: {
-    borderRadius: 22,
+    borderRadius: PG_RADII.xl,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.18)',
+    borderColor: PG.border,
+    backgroundColor: PG.card,
   },
   content: { padding: 16 },
   cardHeader: {
@@ -171,6 +155,10 @@ const styles = StyleSheet.create({
   },
   statsCtaShell: {
     marginTop: 10,
+    borderRadius: PG_RADII.lg,
+    backgroundColor: PG.cardElevated,
+    borderWidth: 1,
+    borderColor: PG.borderSoft,
   },
   statsCta: {
     paddingHorizontal: 16,

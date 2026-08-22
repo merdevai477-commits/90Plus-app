@@ -1,28 +1,39 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Dimensions,
   TouchableOpacity,
-  ViewStyle,
-  TextStyle,
-  ImageStyle,
+  LayoutChangeEvent,
 } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import CachedAthletePhoto from '../common/CachedAthletePhoto';
+import {
+  FootballPitchSvg,
+  FOOTBALL_PITCH_ASPECT_VERTICAL,
+  pitchPercentToContainer,
+} from '../common/FootballPitchSvg';
 import {
   groupPlayersByGridLine,
   hasGridLayoutData,
   sortPlayersByGrid,
 } from '../../utils/lineupGrid';
-
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { ratingBadgeColor } from '../../utils/lineupMatchState';
 
-const { width } = Dimensions.get('window');
-const FIELD_WIDTH = width - 40;
-const FIELD_HEIGHT = FIELD_WIDTH * 1.5;
+const { width: SCREEN_W } = Dimensions.get('window');
+/** Portrait pitch — slightly taller than FIFA vertical so names fit. */
+const LINEUP_PITCH_ASPECT = FOOTBALL_PITCH_ASPECT_VERTICAL * 0.92;
+const DEFAULT_FIELD_W = Math.max(300, SCREEN_W - 24);
+/** Extra vertical room so names under dense back lines are not clipped. */
+const FIELD_PAD_Y = 10;
+
+/** Lateral (X) bounds on vertical pitch. */
+const X_MIN = 10;
+const X_MAX = 90;
+/** Depth (Y) bounds — own goal near top, attack toward bottom. */
+const Y_MIN = 8;
+const Y_MAX = 90;
 
 interface Player {
   id?: number;
@@ -48,328 +59,72 @@ interface FootballFieldProps {
   onPlayerPress?: (player: Player) => void;
 }
 
-const viewStyles = StyleSheet.create<{
-  container: ViewStyle;
-  field: ViewStyle;
-  fieldLines: ViewStyle;
-  centerLine: ViewStyle;
-  centerCircle: ViewStyle;
-  centerDot: ViewStyle;
-  penaltyBoxTop: ViewStyle;
-  goalBoxTop: ViewStyle;
-  penaltyArcTop: ViewStyle;
-  penaltyBoxBottom: ViewStyle;
-  goalBoxBottom: ViewStyle;
-  penaltyArcBottom: ViewStyle;
-  cornerArc: ViewStyle;
-  cornerTL: ViewStyle;
-  cornerTR: ViewStyle;
-  cornerBL: ViewStyle;
-  cornerBR: ViewStyle;
-  playersContainer: ViewStyle;
-  playersContainerAbsolute: ViewStyle;
-  absolutePlayer: ViewStyle;
-  playerRow: ViewStyle;
-  playerWrapper: ViewStyle;
-  playerCircleContainer: ViewStyle;
-  playerPhotoCircle: ViewStyle;
-  placeholderParams: ViewStyle;
-  playerBadgesRow: ViewStyle;
-  ratingBadge: ViewStyle;
-  ratingText: TextStyle;
-  eventBadges: ViewStyle;
-  miniBadge: ViewStyle;
-  miniBadgeText: TextStyle;
-  subIndicator: ViewStyle;
-  subbedOffDim: ViewStyle;
-}>({
-  container: {
-    alignItems: 'center',
-    marginVertical: 10,
-  },
-  field: {
-    width: FIELD_WIDTH,
-    height: FIELD_HEIGHT,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  fieldLines: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    opacity: 0.2,
-  },
-  centerLine: {
-    position: 'absolute',
-    top: '50%',
-    width: '100%',
-    height: 1,
-    backgroundColor: '#fff',
-  },
-  centerCircle: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 1,
-    borderColor: '#fff',
-    marginLeft: -50,
-    marginTop: -50,
-  },
-  centerDot: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#fff',
-    marginLeft: -3,
-    marginTop: -3,
-  },
-  penaltyBoxTop: {
-    position: 'absolute',
-    top: 0,
-    alignSelf: 'center',
-    width: '60%',
-    height: '16%',
-    borderBottomWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: '#fff',
-  },
-  goalBoxTop: {
-    position: 'absolute',
-    top: 0,
-    alignSelf: 'center',
-    width: '40%',
-    height: '40%',
-    borderBottomWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: '#fff',
-  },
-  penaltyArcTop: {
-    position: 'absolute',
-    bottom: -20,
-    alignSelf: 'center',
-    width: 60,
-    height: 40,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    borderBottomWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: '#fff',
-  },
-  penaltyBoxBottom: {
-    position: 'absolute',
-    bottom: 0,
-    alignSelf: 'center',
-    width: '60%',
-    height: '16%',
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: '#fff',
-  },
-  goalBoxBottom: {
-    position: 'absolute',
-    bottom: 0,
-    alignSelf: 'center',
-    width: '40%',
-    height: '40%',
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: '#fff',
-  },
-  penaltyArcBottom: {
-    position: 'absolute',
-    top: -20,
-    alignSelf: 'center',
-    width: 60,
-    height: 40,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: '#fff',
-  },
-  cornerArc: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderColor: '#fff',
-    borderWidth: 1,
-  },
-  cornerTL: { top: -15, left: -15, borderRadius: 15 },
-  cornerTR: { top: -15, right: -15, borderRadius: 15 },
-  cornerBL: { bottom: -15, left: -15, borderRadius: 15 },
-  cornerBR: { bottom: -15, right: -15, borderRadius: 15 },
-  playersContainer: {
-    flex: 1,
-    justifyContent: 'space-evenly',
-    paddingVertical: 40,
-  },
-  playersContainerAbsolute: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  absolutePlayer: {
-    position: 'absolute',
-    transform: [{ translateX: -41 }, { translateY: -36 }],
-    zIndex: 2,
-  },
-  playerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    alignItems: 'center',
-  },
-  playerWrapper: {
-    alignItems: 'center',
-    width: 82,
-  },
-  playerCircleContainer: {
-    width: 52,
-    height: 52,
-    marginBottom: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  playerPhotoCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#fff',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholderParams: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playerBadgesRow: {
-    position: 'absolute',
-    top: -10,
-    left: -6,
-    right: -6,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 2,
-    zIndex: 3,
-  },
-  ratingBadge: {
-    minWidth: 22,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  ratingText: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: '800',
-  },
-  eventBadges: {
-    flexDirection: 'row',
-    gap: 2,
-  },
-  miniBadge: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#22c55e',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  miniBadgeText: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: '800',
-  },
-  subIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    right: -4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#1f2937',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    zIndex: 4,
-  },
-  subbedOffDim: {
-    opacity: 0.5,
-  },
-});
+type PlacedPlayer = {
+  player: Player;
+  xPct: number;
+  yPct: number;
+};
 
-const imageStyles = StyleSheet.create<{
-  playerImage: ImageStyle;
-}>({
-  playerImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 26,
-  },
-});
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
 
-const textStyles = StyleSheet.create<{
-  formationLabel: TextStyle;
-  teamNameLabel: TextStyle;
-  placeholderNumber: TextStyle;
-  playerNameText: TextStyle;
-}>({
-  formationLabel: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  teamNameLabel: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  placeholderNumber: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  playerNameText: {
-    color: '#f0f0f0',
-    fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.85)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-});
+/** Evenly space `count` values between min and max (inclusive endpoints). */
+function spread(count: number, min: number, max: number): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [(min + max) / 2];
+  return Array.from({ length: count }, (_, i) => min + ((max - min) * i) / (count - 1));
+}
+
+/**
+ * Depth (Y) slots for formation lines including GK.
+ * GK near own goal (top); attack toward opposite goal (bottom).
+ */
+function depthSlots(columnCount: number): number[] {
+  if (columnCount <= 1) return [12];
+  if (columnCount === 2) return [12, 72];
+  if (columnCount === 3) return [10, 42, 78];
+  if (columnCount === 4) return [9, 32, 58, 82];
+  return spread(columnCount, 8, 86);
+}
+
+function placeFormationColumns(columns: Player[][]): PlacedPlayer[] {
+  const ys = depthSlots(columns.length);
+  const placed: PlacedPlayer[] = [];
+  columns.forEach((col, colIndex) => {
+    const yPct = ys[colIndex] ?? 50;
+    const pad = col.length >= 4 ? 14 : col.length === 3 ? 16 : 18;
+    const xs = spread(col.length, pad, 100 - pad);
+    col.forEach((player, i) => {
+      placed.push({
+        player,
+        xPct: clamp(xs[i] ?? 50, X_MIN, X_MAX),
+        yPct: clamp(yPct, Y_MIN, Y_MAX),
+      });
+    });
+  });
+  return placed;
+}
+
+function placeFromApiGrid(players: Player[]): PlacedPlayer[] {
+  return players.map((player) => {
+    // API fieldLine = attack depth, fieldSide = lateral → vertical: Y / X.
+    const yPct = clamp(Number(player.fieldLine ?? 50), Y_MIN, Y_MAX);
+    const xPct = clamp(Number(player.fieldSide ?? 50), X_MIN, X_MAX);
+    return { player, xPct, yPct };
+  });
+}
+
+function placeFromGridLines(players: Player[]): PlacedPlayer[] {
+  const cols = groupPlayersByGridLine(players);
+  return placeFormationColumns(cols.map((c) => c.players));
+}
+
+function markerSizeForDensity(maxInLine: number): { avatar: number; name: number; wrap: number } {
+  if (maxInLine >= 5) return { avatar: 30, name: 8, wrap: 44 };
+  if (maxInLine >= 4) return { avatar: 34, name: 8, wrap: 48 };
+  return { avatar: 38, name: 9, wrap: 52 };
+}
 
 export const FootballField: React.FC<FootballFieldProps> = ({
   formation,
@@ -377,182 +132,327 @@ export const FootballField: React.FC<FootballFieldProps> = ({
   teamName,
   onPlayerPress,
 }) => {
+  const [fieldWidth, setFieldWidth] = useState(DEFAULT_FIELD_W);
+
+  const onFieldLayout = (e: LayoutChangeEvent) => {
+    const w = Math.round(e.nativeEvent.layout.width);
+    if (w > 0 && Math.abs(w - fieldWidth) > 1) setFieldWidth(w);
+  };
+
+  const pitchH = Math.round(fieldWidth / LINEUP_PITCH_ASPECT);
+  const fieldHeight = pitchH + FIELD_PAD_Y * 2;
+
   const useAbsoluteGrid = players.some(
     (p) => p.fieldLine != null && p.fieldSide != null,
   );
   const useRowGrid = !useAbsoluteGrid && hasGridLayoutData(players);
 
-  const formationRows = formation.split('-').map(Number);
-  const allRows = [1, ...formationRows];
+  const formationRows = useMemo(
+    () => formation.split('-').map(Number).filter((n) => Number.isFinite(n) && n > 0),
+    [formation],
+  );
+  const allRows = useMemo(() => [1, ...formationRows], [formationRows]);
 
-  const distributePlayersInRows = () => {
-    const rows: Player[][] = [];
+  const formationColumns = useMemo(() => {
+    const columns: Player[][] = [];
     let playerIndex = 0;
     const ordered = sortPlayersByGrid(players);
 
     allRows.forEach((rowCount) => {
-      const rowPlayers = ordered.slice(playerIndex, playerIndex + rowCount);
-      if (rowPlayers.length > 0) {
-        rows.push(rowPlayers);
-      }
+      const colPlayers = ordered.slice(playerIndex, playerIndex + rowCount);
+      if (colPlayers.length > 0) columns.push(colPlayers);
       playerIndex += rowCount;
     });
 
     if (playerIndex < ordered.length) {
       const tail = ordered.slice(playerIndex);
-      if (rows.length === 0) {
-        rows.push(tail);
-      } else {
-        rows[rows.length - 1] = [...rows[rows.length - 1], ...tail];
-      }
+      if (columns.length === 0) columns.push(tail);
+      else columns[columns.length - 1] = [...columns[columns.length - 1], ...tail];
     }
+    return columns;
+  }, [players, allRows]);
 
-    return rows;
-  };
+  const placed = useMemo(() => {
+    if (useAbsoluteGrid) return placeFromApiGrid(players);
+    if (useRowGrid) return placeFromGridLines(players);
+    return placeFormationColumns(formationColumns);
+  }, [useAbsoluteGrid, useRowGrid, players, formationColumns]);
 
-  const playerRows = distributePlayersInRows();
-  const gridRows = groupPlayersByGridLine(players);
+  const densestLine = useMemo(() => {
+    if (useAbsoluteGrid) {
+      const buckets = new Map<number, number>();
+      for (const p of placed) {
+        const key = Math.round(p.yPct / 8);
+        buckets.set(key, (buckets.get(key) ?? 0) + 1);
+      }
+      return Math.max(1, ...buckets.values());
+    }
+    if (useRowGrid) {
+      return Math.max(
+        1,
+        ...groupPlayersByGridLine(players).map((c) => c.players.length),
+      );
+    }
+    return Math.max(1, ...formationColumns.map((c) => c.length));
+  }, [useAbsoluteGrid, useRowGrid, placed, formationColumns, players]);
 
-  const renderPlayer = (player: Player, key: string | number) => {
-    const goals = player.goals ?? 0;
-    const assists = player.assists ?? 0;
-
-    return (
-      <TouchableOpacity
-        key={key}
-        style={viewStyles.playerWrapper}
-        onPress={() => onPlayerPress?.(player)}
-        activeOpacity={onPlayerPress ? 0.7 : 1}
-      >
-        <View style={viewStyles.playerCircleContainer}>
-          {(player.rating != null && player.rating > 0) || goals > 0 || assists > 0 ? (
-            <View style={viewStyles.playerBadgesRow}>
-              {player.rating != null && player.rating > 0 ? (
-                <View
-                  style={[
-                    viewStyles.ratingBadge,
-                    { backgroundColor: ratingBadgeColor(player.rating) },
-                  ]}
-                >
-                  <Text style={viewStyles.ratingText}>{player.rating.toFixed(1)}</Text>
-                </View>
-              ) : null}
-              {(goals > 0 || assists > 0) && (
-                <View style={viewStyles.eventBadges}>
-                  {goals > 0 ? (
-                    <View style={viewStyles.miniBadge}>
-                      <MaterialCommunityIcons name="soccer" size={9} color="#fff" />
-                    </View>
-                  ) : null}
-                  {assists > 0 ? (
-                    <View style={[viewStyles.miniBadge, { backgroundColor: '#3b82f6' }]}>
-                      <Ionicons name="star" size={9} color="#fbbf24" />
-                    </View>
-                  ) : null}
-                </View>
-              )}
-            </View>
-          ) : null}
-
-          <View style={viewStyles.playerPhotoCircle}>
-            {player.photo ? (
-              <ExpoImage
-                source={{ uri: player.photo }}
-                style={imageStyles.playerImage}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                transition={120}
-                recyclingKey={player.photo}
-                placeholder={require('../../assets/images/football.png')}
-              />
-            ) : (
-              <View style={viewStyles.placeholderParams}>
-                <Text style={textStyles.placeholderNumber}>
-                  {player.number || '?'}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {player.subbedIn != null ? (
-            <View style={viewStyles.subIndicator}>
-              <Ionicons name="arrow-up" size={9} color="#22c55e" />
-            </View>
-          ) : null}
-        </View>
-        <Text style={textStyles.playerNameText} numberOfLines={1}>
-          {player.name.split(' ').pop()}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
+  const marker = markerSizeForDensity(densestLine);
+  const halfWrapX = marker.wrap / 2;
+  const halfWrapY = marker.avatar / 2 + 2;
 
   return (
-    <View style={viewStyles.container}>
-      <LinearGradient
-        colors={['#1e1b4b', '#1e1b4b', '#2e1065']}
-        style={viewStyles.field}
-      >
-        <View style={viewStyles.fieldLines}>
-          <View style={viewStyles.centerLine} />
-          <View style={viewStyles.centerCircle} />
-          <View style={viewStyles.centerDot} />
-          <View style={viewStyles.penaltyBoxTop}>
-            <View style={viewStyles.goalBoxTop} />
-            <View style={viewStyles.penaltyArcTop} />
-          </View>
-          <View style={viewStyles.penaltyBoxBottom}>
-            <View style={viewStyles.goalBoxBottom} />
-            <View style={viewStyles.penaltyArcBottom} />
-          </View>
-          <View style={[viewStyles.cornerArc, viewStyles.cornerTL]} />
-          <View style={[viewStyles.cornerArc, viewStyles.cornerTR]} />
-          <View style={[viewStyles.cornerArc, viewStyles.cornerBL]} />
-          <View style={[viewStyles.cornerArc, viewStyles.cornerBR]} />
+    <View style={styles.container} onLayout={onFieldLayout}>
+      <View style={[styles.field, { width: fieldWidth, height: fieldHeight }]}>
+        <View style={styles.pitchFill} pointerEvents="none">
+          <FootballPitchSvg
+            variant="lineup"
+            orientation="vertical"
+            fit="stretch"
+            width={fieldWidth}
+            height={pitchH}
+            style={{ marginTop: FIELD_PAD_Y }}
+          />
         </View>
 
-        <Text style={textStyles.formationLabel}>{formation}</Text>
-        <Text style={textStyles.teamNameLabel}>{teamName}</Text>
+        <Text style={styles.formationLabel}>{formation}</Text>
+        <Text style={styles.teamNameLabel} numberOfLines={1}>
+          {teamName}
+        </Text>
 
-        {useAbsoluteGrid ? (
-          <View style={viewStyles.playersContainerAbsolute}>
-            {players.map((player, index) => (
-              <View
+        <View style={styles.playersLayer} pointerEvents="box-none">
+          {placed.map(({ player, xPct, yPct }, index) => {
+            const grass = pitchPercentToContainer(
+              xPct,
+              yPct,
+              fieldWidth,
+              pitchH,
+              'vertical',
+            );
+            const left = grass.left;
+            const top = grass.top + FIELD_PAD_Y;
+            const goals = player.goals ?? 0;
+            const assists = player.assists ?? 0;
+
+            return (
+              <TouchableOpacity
                 key={`${player.id ?? player.name}-${index}`}
                 style={[
-                  viewStyles.absolutePlayer,
+                  styles.playerAbsolute,
                   {
-                    top: `${Math.min(92, Math.max(8, player.fieldLine ?? 50))}%`,
-                    left: `${Math.min(92, Math.max(8, player.fieldSide ?? 50))}%`,
+                    left: left - halfWrapX,
+                    top: top - halfWrapY,
+                    width: marker.wrap,
                   },
                 ]}
+                onPress={() => onPlayerPress?.(player)}
+                activeOpacity={onPlayerPress ? 0.7 : 1}
               >
-                {renderPlayer(player, index)}
-              </View>
-            ))}
-          </View>
-        ) : useRowGrid ? (
-          <View style={viewStyles.playersContainer}>
-            {gridRows.map((row) => (
-              <View key={row.line} style={viewStyles.playerRow}>
-                {row.players.map((player, playerIndex) =>
-                  renderPlayer(player, `${row.line}-${playerIndex}`),
-                )}
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={viewStyles.playersContainer}>
-            {playerRows.map((row, rowIndex) => (
-              <View key={rowIndex} style={viewStyles.playerRow}>
-                {row.map((player, playerIndex) =>
-                  renderPlayer(player, `${rowIndex}-${playerIndex}`),
-                )}
-              </View>
-            ))}
-          </View>
-        )}
-      </LinearGradient>
+                <View style={[styles.circleWrap, { width: marker.avatar, height: marker.avatar }]}>
+                  {(player.rating != null && player.rating > 0) || goals > 0 || assists > 0 ? (
+                    <View style={styles.badgesRow}>
+                      {player.rating != null && player.rating > 0 ? (
+                        <View
+                          style={[
+                            styles.ratingBadge,
+                            { backgroundColor: ratingBadgeColor(player.rating) },
+                          ]}
+                        >
+                          <Text style={styles.ratingText}>{player.rating.toFixed(1)}</Text>
+                        </View>
+                      ) : null}
+                      {(goals > 0 || assists > 0) && (
+                        <View style={styles.eventBadges}>
+                          {goals > 0 ? (
+                            <View style={styles.miniBadge}>
+                              <MaterialCommunityIcons name="soccer" size={8} color="#fff" />
+                            </View>
+                          ) : null}
+                          {assists > 0 ? (
+                            <View style={[styles.miniBadge, { backgroundColor: '#3b82f6' }]}>
+                              <Ionicons name="star" size={8} color="#fbbf24" />
+                            </View>
+                          ) : null}
+                        </View>
+                      )}
+                    </View>
+                  ) : null}
+
+                  <View
+                    style={[
+                      styles.photoCircle,
+                      {
+                        width: marker.avatar,
+                        height: marker.avatar,
+                        borderRadius: marker.avatar / 2,
+                      },
+                    ]}
+                  >
+                    {player.photo ? (
+                      <CachedAthletePhoto
+                        uri={player.photo}
+                        size={marker.avatar}
+                        recyclingKey={player.id ?? player.photo}
+                      />
+                    ) : (
+                      <View style={styles.placeholder}>
+                        <Text style={styles.placeholderNumber}>{player.number || '?'}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {player.subbedIn != null ? (
+                    <View style={styles.subIndicator}>
+                      <Ionicons name="arrow-up" size={8} color="#22c55e" />
+                    </View>
+                  ) : null}
+                </View>
+                <Text
+                  style={[styles.playerName, { fontSize: marker.name }]}
+                  numberOfLines={1}
+                >
+                  {player.name.split(' ').pop()}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    alignSelf: 'stretch',
+    width: '100%',
+    marginVertical: 4,
+  },
+  field: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#0E490B',
+  },
+  pitchFill: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'stretch',
+  },
+  playersLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  playerAbsolute: {
+    position: 'absolute',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  circleWrap: {
+    marginBottom: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  photoCircle: {
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.9)',
+  },
+  placeholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(124,58,237,0.9)',
+  },
+  placeholderNumber: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  badgesRow: {
+    position: 'absolute',
+    top: -8,
+    left: -10,
+    right: -10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 2,
+    zIndex: 3,
+  },
+  ratingBadge: {
+    minWidth: 18,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  ratingText: {
+    color: '#fff',
+    fontSize: 7,
+    fontWeight: '800',
+  },
+  eventBadges: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  miniBadge: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#22c55e',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subIndicator: {
+    position: 'absolute',
+    bottom: -1,
+    right: -3,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#1f2937',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    zIndex: 4,
+  },
+  playerName: {
+    color: '#f5f5f5',
+    fontWeight: '700',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.95)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    width: '100%',
+  },
+  formationLabel: {
+    position: 'absolute',
+    top: 8,
+    left: 10,
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    zIndex: 5,
+  },
+  teamNameLabel: {
+    position: 'absolute',
+    top: 8,
+    right: 10,
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.7)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    zIndex: 5,
+    maxWidth: '45%',
+  },
+});

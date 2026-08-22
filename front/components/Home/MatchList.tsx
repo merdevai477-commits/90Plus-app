@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import {
     View,
     Text,
@@ -26,6 +26,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from '../../src/i18n';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { SectionHeader } from './SectionHeader';
+import { usePauseRepeatInBackground } from '../../hooks/usePauseRepeatInBackground';
 import {
     PURPLE_PRIMARY,
     PURPLE_SOFT,
@@ -60,13 +61,14 @@ export interface MatchListItem {
 // ─── Shared shimmer ───────────────────────────────────────────────────────────
 function useShimmer(): SharedValue<number> {
     const shimmerX = useSharedValue(-SCREEN_WIDTH);
-    useEffect(() => {
+    const start = useCallback(() => {
         shimmerX.value = withRepeat(
             withTiming(SCREEN_WIDTH, { duration: 1400, easing: Easing.linear }),
             -1,
             false,
         );
-    }, []);
+    }, [shimmerX]);
+    usePauseRepeatInBackground(shimmerX, start);
     return shimmerX;
 }
 
@@ -298,13 +300,14 @@ function OrbitingRing({
     reverse?: boolean;
 }): React.ReactElement {
     const rotation = useSharedValue(0);
-    useEffect(() => {
+    const start = useCallback(() => {
         rotation.value = withRepeat(
             withTiming(reverse ? -360 : 360, { duration, easing: Easing.linear }),
             -1,
             false,
         );
     }, [duration, reverse, rotation]);
+    usePauseRepeatInBackground(rotation, start);
     const style = useAnimatedStyle(() => ({
         transform: [{ rotate: `${rotation.value}deg` }] as any,
     }));

@@ -90,7 +90,7 @@ export function GroupStatsPopup({
           <View style={styles.cardInner}>
             <PopupGlass {...POPUP_GLASS} style={StyleSheet.absoluteFill} />
             <LinearGradient
-              colors={['rgba(124,58,237,0.16)', 'rgba(0,0,0,0.55)']}
+              colors={['rgba(168,85,247,0.18)', 'rgba(0,0,0,0.55)']}
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
             />

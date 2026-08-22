@@ -14,7 +14,8 @@ import type { GroupRoundMatch } from '../../services/predictionGroups.service';
 import { mapRoundMatchToCard } from '../../services/predictionGroups.service';
 import { GlassCard } from './atoms';
 import { MatchPredictionCard } from './MatchPredictionCard';
-import { PG, PG_GRADIENTS, PG_RADII, PG_SPACING, usePGFonts } from './theme';
+import { PredictionSuccessOverlay } from './PredictionSuccessOverlay';
+import { PG, PG_GRADIENTS, PG_GLOW_PURPLE, PG_RADII, PG_SPACING, usePGFonts } from './theme';
 
 export { GroupsStandingsSection } from './GroupsStandingsSection';
 
@@ -106,6 +107,7 @@ export function PredictionsSection({
     Record<number, { mode: 'WINNER' | 'EXACT'; home: number; away: number; winner: 'home' | 'draw' | 'away' | null }>
   >({});
   const [saving, setSaving] = useState(false);
+  const [successOpen, setSuccessOpen] = useState(false);
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const align = isRTL ? 'right' : 'left';
 
@@ -206,7 +208,7 @@ export function PredictionsSection({
     try {
       await onSave(predictions);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      toast.showSuccess(pg.toast.savedTitle, pg.toast.savedBody);
+      setSuccessOpen(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '';
       toast.showError(pg.toast.saveFailedTitle, isAlreadySavedError(msg) ? pg.toast.alreadySaved : msg || pg.screen.loadFailed);
@@ -285,7 +287,7 @@ export function PredictionsSection({
           accessibilityState={{ disabled: saving }}
         >
           <LinearGradient
-            colors={PG_GRADIENTS.purple}
+            colors={[...PG_GRADIENTS.purple]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.saveBtn}
@@ -298,6 +300,14 @@ export function PredictionsSection({
           </LinearGradient>
         </Pressable>
       )}
+
+      <PredictionSuccessOverlay
+        visible={successOpen}
+        title={pg.toast.savedTitle}
+        body={pg.toast.savedBody}
+        doneLabel={pg.toast.successDone}
+        onDone={() => setSuccessOpen(false)}
+      />
     </View>
   );
 }
@@ -323,9 +333,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   roundCard: {
-    borderRadius: PG_RADII.lg,
+    borderRadius: PG_RADII.xl,
     borderWidth: 1,
-    borderColor: 'rgba(159,90,251,0.3)',
+    borderColor: PG.border,
+    backgroundColor: PG.card,
     padding: 16,
     overflow: 'hidden',
     gap: 12,
@@ -339,7 +350,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(124,58,237,0.2)',
+    backgroundColor: 'rgba(168,85,247,0.2)',
   },
   pointsCard: { padding: 14, gap: 12 },
   pointsCardTitle: { color: PG.text, fontSize: 14 },
@@ -356,16 +367,12 @@ const styles = StyleSheet.create({
   pointsColValue: { fontSize: 13, marginTop: 1 },
   pointsDivider: { width: 1, alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.08)' },
   saveBtn: {
-    borderRadius: PG_RADII.lg,
+    borderRadius: PG_RADII.xl,
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 52,
-    shadowColor: PG.purple,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 8,
+    ...PG_GLOW_PURPLE,
   },
   saveTxt: { color: '#fff', fontSize: 15 },
 });

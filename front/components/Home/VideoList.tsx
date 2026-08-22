@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
     View,
     Text,
@@ -26,6 +26,7 @@ import Animated, {
 import { useRouter } from 'expo-router';
 import { SectionHeader } from './SectionHeader';
 import { FeatureInfoModal as ReelsInfoModal } from '../common/FeatureInfoModal';
+import { usePauseRepeatInBackground } from '../../hooks/usePauseRepeatInBackground';
 import {
     BLUE_ELECTRIC,
     GOLD_PRIMARY,
@@ -243,13 +244,14 @@ const styles = StyleSheet.create<VideoListStyles>({
 
 function useShimmer(): SharedValue<number> {
     const shimmerX = useSharedValue(-SCREEN_WIDTH);
-    useEffect(() => {
+    const start = useCallback(() => {
         shimmerX.value = withRepeat(
             withTiming(SCREEN_WIDTH, { duration: 1200, easing: Easing.linear }),
             -1,
             false,
         );
     }, [shimmerX]);
+    usePauseRepeatInBackground(shimmerX, start);
     return shimmerX;
 }
 

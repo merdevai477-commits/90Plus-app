@@ -4,6 +4,7 @@ import type { FlashListRef } from '@shopify/flash-list';
 
 import type { Message } from './useAIChatNative';
 import { isKeyboardControllerActive } from '@/utils/keyboardControllerSafe';
+import { safeFlashListScrollToEnd } from '@/components/chat/safeFlashListScroll';
 
 const KEYBOARD_OPEN_GAP = 4;
 /** Manual composer lift on iOS and Android (keyboard-controller handles scroll). */
@@ -30,6 +31,9 @@ export function useChatKeyboard({ listRef, hasMessages, messageCount }: UseChatK
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const syncTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const scrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const scrollRafRef = useRef<number[]>([]);
+  const mountedRef = useRef(true);
   const keyboardVisibleRef = useRef(false);
   const lastScrolledCountRef = useRef(0);
   const useExpoKeyboardPath = !isKeyboardControllerActive;
@@ -41,14 +45,28 @@ export function useChatKeyboard({ listRef, hasMessages, messageCount }: UseChatK
     syncTimersRef.current = [];
   }, []);
 
+  const clearScrollTimers = useCallback(() => {
+    scrollTimersRef.current.forEach(clearTimeout);
+    scrollTimersRef.current = [];
+    scrollRafRef.current.forEach((id) => cancelAnimationFrame(id));
+    scrollRafRef.current = [];
+  }, []);
+
   const scrollToEnd = useCallback(
     (animated = true) => {
-      if (!hasMessages) return;
-      const run = () => listRef.current?.scrollToEnd({ animated });
-      requestAnimationFrame(() => requestAnimationFrame(run));
+      if (!hasMessages || !mountedRef.current) return;
+      const run = () => {
+        if (!mountedRef.current) return;
+        safeFlashListScrollToEnd(listRef.current, animated);
+      };
+      const outer = requestAnimationFrame(() => {
+        const inner = requestAnimationFrame(run);
+        scrollRafRef.current.push(inner);
+      });
+      scrollRafRef.current.push(outer);
       if (Platform.OS === 'android') {
-        setTimeout(() => listRef.current?.scrollToEnd({ animated }), 120);
-        setTimeout(() => listRef.current?.scrollToEnd({ animated }), 280);
+        scrollTimersRef.current.push(setTimeout(run, 120));
+        scrollTimersRef.current.push(setTimeout(run, 280));
       }
     },
     [hasMessages, listRef],
@@ -101,6 +119,14 @@ export function useChatKeyboard({ listRef, hasMessages, messageCount }: UseChatK
       syncTimersRef.current.push(setTimeout(trySync, ms));
     });
   }, [clearSyncTimers, setHeightIfValid]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearScrollTimers();
+    };
+  }, [clearScrollTimers]);
 
   useEffect(() => {
     const subs: { remove: () => void }[] = [];

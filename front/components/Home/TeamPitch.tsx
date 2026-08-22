@@ -36,6 +36,7 @@ import {
     pitchPercentToContainer,
 } from '../common/FootballPitchSvg';
 import { resolvePublicFirstName } from '../../hooks/useProfileCache';
+import { usePauseRepeatInBackground } from '../../hooks/usePauseRepeatInBackground';
 
 const AnimatedView = Animated.createAnimatedComponent(View);
 
@@ -349,12 +350,13 @@ function SkeletonPlayerNode({
     containerH: number;
 }) {
     const opacity = useSharedValue(0.35);
-    useEffect(() => {
+    const start = useCallback(() => {
         opacity.value = withDelay(
             index * 90,
             withRepeat(withTiming(0.7, { duration: 900, easing: Easing.inOut(Easing.ease) }), -1, true),
         );
-    }, [index]);
+    }, [index, opacity]);
+    usePauseRepeatInBackground(opacity, start);
     const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
     const { left, top } = pitchPercentToContainer(x, y, containerW, containerH);
 
@@ -385,12 +387,13 @@ function EmptyPlayerNode({
     containerH: number;
 }) {
     const opacity = useSharedValue(0.4);
-    useEffect(() => {
+    const start = useCallback(() => {
         opacity.value = withDelay(
             index * 200,
             withRepeat(withTiming(0.7, { duration: 2000, easing: Easing.inOut(Easing.ease) }), -1, true),
         );
-    }, [index]);
+    }, [index, opacity]);
+    usePauseRepeatInBackground(opacity, start);
     const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
     const { left, top } = pitchPercentToContainer(x, y, containerW, containerH);
 

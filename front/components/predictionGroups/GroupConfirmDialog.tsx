@@ -139,11 +139,11 @@ const styles = StyleSheet.create({
     borderColor: PG.heroGlassBorder,
     overflow: 'hidden',
     padding: PG_SPACING.lg,
-    backgroundColor: Platform.OS === 'android' ? 'rgba(4,2,8,0.98)' : undefined,
+    backgroundColor: Platform.OS === 'android' ? PG.card : undefined,
   },
   tint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(4,2,8,0.45)',
+    backgroundColor: 'rgba(3,3,3,0.55)',
   },
   iconWrap: {
     alignSelf: 'center',
@@ -152,9 +152,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(139,92,246,0.18)',
+    backgroundColor: 'rgba(168,85,247,0.18)',
     borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.28)',
+    borderColor: PG.border,
     marginBottom: PG_SPACING.md,
   },
   iconWrapDanger: {

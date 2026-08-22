@@ -21,7 +21,7 @@ import { useTranslation } from '../../src/i18n';
 import { PredictionGroupsService } from '../../services/predictionGroups.service';
 import { GroupAvatar } from './GroupAvatar';
 import { SheetBlurBackdrop } from './SheetBlurBackdrop';
-import { PG, PG_GRADIENTS, usePGFonts } from './theme';
+import { PG, PG_GRADIENTS, PG_RADII, usePGFonts } from './theme';
 
 export interface GroupJoinSheetProps {
   visible: boolean;
@@ -143,15 +143,15 @@ export function GroupJoinSheet({
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: 'rgba(12,8,20,0.98)',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: PG.card,
+    borderTopLeftRadius: PG_RADII.xl,
+    borderTopRightRadius: PG_RADII.xl,
     padding: 24,
     paddingBottom: 40,
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.2)',
+    borderColor: PG.border,
   },
   close: { alignSelf: 'flex-end' },
   name: { fontSize: 22, color: PG.text, textAlign: 'center' },
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingVertical: 14,
     paddingHorizontal: 48,
-    borderRadius: 14,
+    borderRadius: PG_RADII.lg,
     minWidth: 220,
     alignItems: 'center',
   },

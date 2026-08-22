@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { SectionHeader } from './SectionHeader';
 import { FeatureInfoModal } from '../common/FeatureInfoModal';
 import { useTranslation } from '../../src/i18n';
 import { resolvePublicFirstName } from '../../hooks/useProfileCache';
+import { usePauseRepeatInBackground } from '../../hooks/usePauseRepeatInBackground';
 import {
   GOLD_PRIMARY,
   SCREEN_PADDING_H,
@@ -126,11 +127,12 @@ function initialsFromName(name: string): string {
 // ─── Shared shimmer ───────────────────────────────────────────────────────────
 function useShimmer() {
   const shimmerX = useSharedValue(-SCREEN_WIDTH);
-  useEffect(() => {
+  const start = useCallback(() => {
     shimmerX.value = withRepeat(
       withTiming(SCREEN_WIDTH, { duration: 1200, easing: Easing.linear }), -1, false
     );
-  }, []);
+  }, [shimmerX]);
+  usePauseRepeatInBackground(shimmerX, start);
   return shimmerX;
 }
 

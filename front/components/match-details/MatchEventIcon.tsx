@@ -19,6 +19,7 @@ export function getMatchEventColor(type: string, detail: string): string {
   }
   if (type === 'subst') return '#3b82f6';
   if (type === 'Var') return '#a855f7';
+  if (/corner/i.test(type) || /corner/i.test(detail)) return '#f87171';
   return '#888';
 }
 
@@ -67,6 +68,10 @@ export const MatchEventIcon: React.FC<MatchEventIconProps> = ({ type, detail, si
 
   if (type === 'Var') {
     return <Ionicons name="tv-outline" size={size} color={color} />;
+  }
+
+  if (/corner/i.test(type) || /corner/i.test(detail)) {
+    return <Ionicons name="flag" size={size} color="#f87171" />;
   }
 
   return <Ionicons name="ellipse" size={size * 0.5} color={color} />;

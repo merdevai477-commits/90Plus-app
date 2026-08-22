@@ -2,7 +2,6 @@
  * Standings tab — global groups leaderboard with العالم / الأسبوعي / الشهري filters.
  */
 
-import { LinearGradient } from 'expo-linear-gradient';
 import React, { useMemo, useState } from 'react';
 import { Platform, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
@@ -10,7 +9,7 @@ import { AnimatedTabs } from './AnimatedTabs';
 import type { RankedGroup } from './data';
 import { GroupRankingRow } from './GroupRankingRow';
 import { PurpleTrophyIcon } from './PurpleTrophyIcon';
-import { PG, usePGFonts } from './theme';
+import { PG, PG_RADII, usePGFonts } from './theme';
 import { useTranslation } from '../../src/i18n';
 
 const PERIOD_TAB_KEYS = ['all', 'week', 'month'] as const;
@@ -66,20 +65,6 @@ export function GroupsStandingsSection({
   return (
     <View style={[styles.wrap, shellGlow]}>
       <View style={styles.darkBase}>
-        <LinearGradient
-          colors={['rgba(4,3,8,0.99)', 'rgba(2,2,5,0.99)', 'rgba(8,5,14,0.98)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <LinearGradient
-          colors={['rgba(124,58,237,0.08)', 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-
         <View style={styles.content}>
           <View style={[styles.cardHeader, row]}>
             <View style={[styles.titleBlock, row]}>
@@ -124,10 +109,11 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   darkBase: {
-    borderRadius: 22,
+    borderRadius: PG_RADII.xl,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.18)',
+    borderColor: PG.border,
+    backgroundColor: PG.card,
   },
   content: {
     padding: 16,
