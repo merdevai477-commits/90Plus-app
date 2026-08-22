@@ -19,6 +19,7 @@ import { prefetchFootballTranslations } from '../src/stores/footballTranslationS
 import { collectNamesFromMatches } from '../utils/footballNamePrefetch';
 import { getCountryFlagUri } from '../utils/countryFlagUri';
 import { prefetchMatchAssets } from '../utils/prefetchMatchAssets';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { useLiveFixtureStore } from '../src/store/liveFixtureStore';
 import type { LiveFixtureSnapshot } from '../src/store/liveFixtureStore.types';
 import {
@@ -418,19 +419,23 @@ export const useMatchesData = (
   const pollIdsKey = pollFixtureIds.join(',');
 
   // Subscribe only to interested snapshots — avoids remapping England→Chile on every WS tick.
-  const overlaySnapshots = useLiveFixtureStore(
-    useCallback(
-      (s) => {
-        const out: Record<number, LiveFixtureSnapshot> = {};
-        for (const id of pollFixtureIds) {
-          const snap = s.snapshots[id];
-          if (snap) out[id] = snap;
-        }
-        return out;
-      },
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- pollIdsKey tracks pollFixtureIds
-      [pollIdsKey],
-    ),
+  // Zustand v5's useBoundStore ignores equalityFn; useStoreWithEqualityFn caches getSnapshot
+  // so we don't return a fresh {} every call (React "getSnapshot should be cached" loop).
+  const selectOverlaySnapshots = useCallback(
+    (s: { snapshots: Record<number, LiveFixtureSnapshot> }) => {
+      const out: Record<number, LiveFixtureSnapshot> = {};
+      for (const id of pollFixtureIds) {
+        const snap = s.snapshots[id];
+        if (snap) out[id] = snap;
+      }
+      return out;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pollIdsKey tracks pollFixtureIds
+    [pollIdsKey],
+  );
+  const overlaySnapshots = useStoreWithEqualityFn(
+    useLiveFixtureStore,
+    selectOverlaySnapshots,
     listOverlaySnapshotsEqual,
   );
 
