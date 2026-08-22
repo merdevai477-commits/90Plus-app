@@ -1054,20 +1054,6 @@ export default function MatchesHubScreenV2() {
   // Bell (match-start push) subscription state
   const [subscribedFixtures, setSubscribedFixtures] = useState<Set<string>>(() => new Set());
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
-  /** Countries currently in the FlashList viewport — gates 1Hz live clocks. */
-  const [viewableCountries, setViewableCountries] = useState<Set<string>>(() => new Set());
-  const onCountryViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: Array<{ item?: CountryGroup }> }) => {
-      const next = new Set(
-        viewableItems.map((v) => v.item?.country).filter((c): c is string => !!c),
-      );
-      setViewableCountries((prev) => {
-        if (prev.size === next.size && [...next].every((c) => prev.has(c))) return prev;
-        return next;
-      });
-    },
-  ).current;
-  const countryViewabilityConfig = useRef({ itemVisiblePercentThreshold: 15 }).current;
 
   const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
   // Always fetch date-scoped WC when the feature is on so the WorldCup chip
@@ -1805,7 +1791,7 @@ export default function MatchesHubScreenV2() {
   );
 
   const renderCountryMatchCard = useCallback(
-    (match: Match, clockEnabled = true): React.ReactNode => {
+    (match: Match): React.ReactNode => {
       const fixture = matchToFixture(match);
       return (
         <MatchRow
@@ -1818,7 +1804,6 @@ export default function MatchesHubScreenV2() {
           isSubscribing={subscribingFixtureId === fixture.id}
           onToggleSubscription={handleToggleSubscription}
           onOpenDetails={handleOpenMatchDetails}
-          clockEnabled={clockEnabled}
         />
       );
     },
@@ -1846,19 +1831,18 @@ export default function MatchesHubScreenV2() {
         l.matches.some((m) => m.status === 'live'),
       );
       // Expand England by default, plus any country with live matches (Live tab glance).
+      // Do not gate clocks via onViewableItemsChanged — that setState looped with FlashList layout.
       const defaultExpanded = item.country === 'England' || hasLive;
-      const clockEnabled =
-        viewableCountries.size === 0 || viewableCountries.has(item.country);
       return (
         <CountryAccordion
           countryGroup={item}
-          renderMatchCard={(match) => renderCountryMatchCard(match, clockEnabled)}
+          renderMatchCard={renderCountryMatchCard}
           onViewAllLeague={handleViewAllLeague}
           defaultExpanded={defaultExpanded}
         />
       );
     },
-    [renderCountryMatchCard, handleViewAllLeague, viewableCountries],
+    [renderCountryMatchCard, handleViewAllLeague],
   );
 
   const renderLeagueCard = useCallback(
@@ -2191,8 +2175,6 @@ export default function MatchesHubScreenV2() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={listHeaderWithPinnedWc}
           ListEmptyComponent={listEmptyNode}
-          onViewableItemsChanged={onCountryViewableItemsChanged}
-          viewabilityConfig={countryViewabilityConfig}
         />
       )}
 

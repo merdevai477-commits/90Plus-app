@@ -250,6 +250,9 @@ function listOverlaySnapshotsEqual(
   return true;
 }
 
+/** Stable empty map so getSnapshot never allocates a fresh {} when idle. */
+const EMPTY_OVERLAY_SNAPSHOTS: Record<number, LiveFixtureSnapshot> = Object.freeze({});
+
 /** Overlay Zustand live snapshots onto calendar rows for live/finished fixtures. */
 function overlaySnapshotsOnCalendar(
   calendarRows: Match[],
@@ -423,12 +426,13 @@ export const useMatchesData = (
   // so we don't return a fresh {} every call (React "getSnapshot should be cached" loop).
   const selectOverlaySnapshots = useCallback(
     (s: { snapshots: Record<number, LiveFixtureSnapshot> }) => {
+      if (pollFixtureIds.length === 0) return EMPTY_OVERLAY_SNAPSHOTS;
       const out: Record<number, LiveFixtureSnapshot> = {};
       for (const id of pollFixtureIds) {
         const snap = s.snapshots[id];
         if (snap) out[id] = snap;
       }
-      return out;
+      return Object.keys(out).length === 0 ? EMPTY_OVERLAY_SNAPSHOTS : out;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pollIdsKey tracks pollFixtureIds
     [pollIdsKey],
