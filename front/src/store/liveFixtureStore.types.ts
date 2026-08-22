@@ -33,7 +33,12 @@ export const LIVE_FIXTURE_MAX_SNAPSHOTS = 64;
 export const LIVE_FIXTURE_FINISHED_RETENTION_MS = 10 * 60 * 1000;
 export const LIVE_FIXTURE_UPCOMING_GRACE_MS = 60 * 1000;
 export const LIVE_FIXTURE_SWEEP_MS = 60_000;
-export const LIVE_FIXTURE_CALENDAR_POLL_MS = 8_000;
+/** Full-day calendar refresh — live scores come from live-feed + WS + score polls. */
+export const LIVE_FIXTURE_CALENDAR_POLL_MS = 45_000;
+/** Max fixtures the matches list may register for background score polling. */
+export const MATCHES_LIST_INTEREST_CAP = 20;
+/** Upcoming kickoff window for list interest (ms before kickoff). */
+export const MATCHES_LIST_KICKOFF_INTEREST_MS = 10 * 60 * 1000;
 
 export const LIVE_STATUS_SHORTS = new Set([
   '1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP',

@@ -235,7 +235,7 @@ class FootballDataCacheService {
     private readonly TTL = {
         STANDINGS: 60 * 60 * 1000,      // 1 hour
         LIVE_MATCH: 30 * 1000,          // 30s — shared across all users via Redis
-        LIVE_EVENT_INGEST: 20 * 1000,   // sync-triggered ingest refresh window
+        LIVE_EVENT_INGEST: 8 * 1000,   // empty LIVE events — retry quickly (was 20s)
         UPCOMING_MATCH: 5 * 60 * 1000,  // 5 minutes
         FINISHED: 6 * 60 * 60 * 1000,   // 6h in-process (durable copy lives in Redis/DB)
         TEAM_STATISTICS: 60 * 60 * 1000, // 1 hour
@@ -302,6 +302,25 @@ class FootballDataCacheService {
         logger.info(
             `[CacheInvalidate] fixture=${fixtureId} reason=${reason} keys=${keys.join(',')}`,
         );
+    }
+
+    /**
+     * Drop today's matches-by-date hot caches so the list sees NS→LIVE without
+     * waiting for TTL (local map + shared match cache + Redis).
+     */
+    async invalidateMatchesByDateCache(
+        dateString: string,
+        reason = 'NS→LIVE',
+    ): Promise<void> {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return;
+        this.matchesByDateLocal.delete(dateString);
+        const cacheKey = `by_date_${dateString}`;
+        try {
+            await matchCacheService.invalidateKey(cacheKey);
+        } catch {
+            // best-effort
+        }
+        logger.info(`[CacheInvalidate] matches-by-date=${dateString} reason=${reason}`);
     }
 
     /**

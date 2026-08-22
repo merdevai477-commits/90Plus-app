@@ -4,6 +4,7 @@ import {
   applyWebSocketToFixture,
   buildSnapshotFromRaw,
   fetchFastSnapshot,
+  fetchScoreSnapshot,
   fetchFullSnapshot,
   shouldSkipHttpIngest,
 } from './liveFixtureSync';
@@ -29,7 +30,7 @@ interface LiveFixtureStoreState {
   patchFromWebSocket: (update: MatchUpdatePayload, messageTimestamp: number) => void;
   /** One-shot HTTP warm-up for WS/push paths — never increments interestCounts. */
   ensureSnapshot: (fixtureId: number) => Promise<void>;
-  fetchAndIngestFast: (fixtureId: number) => Promise<void>;
+  fetchAndIngestFast: (fixtureId: number, options?: { includeEvents?: boolean }) => Promise<void>;
   fetchAndIngestFull: (fixtureId: number) => Promise<void>;
   refreshInterestedLive: () => Promise<void>;
   getPollTargetIds: () => number[];
@@ -252,10 +253,13 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
     await runOneShotFetch(get, fixtureId);
   },
 
-  async fetchAndIngestFast(fixtureId: number) {
+  async fetchAndIngestFast(fixtureId: number, options?: { includeEvents?: boolean }) {
     const existing = get().snapshots[fixtureId] ?? null;
     const startedAt = Date.now();
-    const snapshot = await fetchFastSnapshot(fixtureId, existing);
+    const includeEvents = options?.includeEvents !== false;
+    const snapshot = includeEvents
+      ? await fetchFastSnapshot(fixtureId, existing)
+      : await fetchScoreSnapshot(fixtureId, existing);
     if (!snapshot) return;
 
     const current = get().snapshots[fixtureId];

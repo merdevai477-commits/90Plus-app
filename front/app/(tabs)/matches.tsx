@@ -77,8 +77,6 @@ function normalizePredictedMap(
 }
 
 // Top 5 European leagues' countries — these accordions start expanded by default.
-const TOP5_COUNTRIES: ReadonlySet<string> = new Set(['England', 'Spain', 'Italy', 'France', 'Germany']);
-
 // Convert a Match (from useMatchesData) into the Fixture shape used by MatchRow.
 // Single source of truth for this mapping — used both in the legacy `groups`
 // memo and in the new country-grouped renderer.
@@ -322,6 +320,7 @@ const MatchRow = memo(function MatchRow({
   onToggleSubscription,
   onOpenDetails,
   worldCupCard,
+  clockEnabled = true,
 }: {
   fixture: Fixture;
   showPreds: boolean;
@@ -333,6 +332,8 @@ const MatchRow = memo(function MatchRow({
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
   onOpenDetails: (fixture: Fixture) => void;
   worldCupCard?: { logoSource: ImageSource; leagueName: string };
+  /** When false, skip 1Hz tick (row off-screen). */
+  clockEnabled?: boolean;
 }) {
   const predictionEntry = predictedMatches[fixture.id];
   const existingPrediction = predictionEntry?.type ?? null;
@@ -342,14 +343,15 @@ const MatchRow = memo(function MatchRow({
   const awayName = getTeamDisplayName(fixture.away, language);
   const sharedLivePulse = getSharedLivePulse();
 
-  // Live MM:SS clock: tick every second only while this row is in normal play.
+  // Live MM:SS clock: tick every second only while this row is in normal play
+  // and visible in the FlashList viewport.
   const shortUpper = (fixture.statusShort ?? '').toUpperCase();
   const inStoppage = isLiveStoppage(fixture.statusShort, fixture.elapsed, fixture.extra);
   const liveInPlay =
     !!fixture.live &&
     ['1H', '2H', 'ET', 'LIVE', 'INT'].includes(shortUpper) &&
     !inStoppage;
-  useSecondTick(liveInPlay);
+  useSecondTick(liveInPlay && clockEnabled);
   const anchoredStart = useAnchoredPeriodStart(
     fixture.id,
     fixture.statusShort,
@@ -1052,6 +1054,20 @@ export default function MatchesHubScreenV2() {
   // Bell (match-start push) subscription state
   const [subscribedFixtures, setSubscribedFixtures] = useState<Set<string>>(() => new Set());
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
+  /** Countries currently in the FlashList viewport — gates 1Hz live clocks. */
+  const [viewableCountries, setViewableCountries] = useState<Set<string>>(() => new Set());
+  const onCountryViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: Array<{ item?: CountryGroup }> }) => {
+      const next = new Set(
+        viewableItems.map((v) => v.item?.country).filter((c): c is string => !!c),
+      );
+      setViewableCountries((prev) => {
+        if (prev.size === next.size && [...next].every((c) => prev.has(c))) return prev;
+        return next;
+      });
+    },
+  ).current;
+  const countryViewabilityConfig = useRef({ itemVisiblePercentThreshold: 15 }).current;
 
   const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
   // Always fetch date-scoped WC when the feature is on so the WorldCup chip
@@ -1789,7 +1805,7 @@ export default function MatchesHubScreenV2() {
   );
 
   const renderCountryMatchCard = useCallback(
-    (match: Match): React.ReactNode => {
+    (match: Match, clockEnabled = true): React.ReactNode => {
       const fixture = matchToFixture(match);
       return (
         <MatchRow
@@ -1802,11 +1818,11 @@ export default function MatchesHubScreenV2() {
           isSubscribing={subscribingFixtureId === fixture.id}
           onToggleSubscription={handleToggleSubscription}
           onOpenDetails={handleOpenMatchDetails}
+          clockEnabled={clockEnabled}
         />
       );
     },
     [
-      filter,
       handlePredict,
       submittingId,
       predictedMatches,
@@ -1825,15 +1841,24 @@ export default function MatchesHubScreenV2() {
   }, []);
 
   const renderCountryAccordion = useCallback(
-    ({ item }: { item: CountryGroup }) => (
-      <CountryAccordion
-        countryGroup={item}
-        renderMatchCard={renderCountryMatchCard}
-        onViewAllLeague={handleViewAllLeague}
-        defaultExpanded={TOP5_COUNTRIES.has(item.country)}
-      />
-    ),
-    [renderCountryMatchCard, handleViewAllLeague],
+    ({ item }: { item: CountryGroup }) => {
+      const hasLive = item.leagues.some((l) =>
+        l.matches.some((m) => m.status === 'live'),
+      );
+      // Expand England by default, plus any country with live matches (Live tab glance).
+      const defaultExpanded = item.country === 'England' || hasLive;
+      const clockEnabled =
+        viewableCountries.size === 0 || viewableCountries.has(item.country);
+      return (
+        <CountryAccordion
+          countryGroup={item}
+          renderMatchCard={(match) => renderCountryMatchCard(match, clockEnabled)}
+          onViewAllLeague={handleViewAllLeague}
+          defaultExpanded={defaultExpanded}
+        />
+      );
+    },
+    [renderCountryMatchCard, handleViewAllLeague, viewableCountries],
   );
 
   const renderLeagueCard = useCallback(
@@ -2166,6 +2191,8 @@ export default function MatchesHubScreenV2() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={listHeaderWithPinnedWc}
           ListEmptyComponent={listEmptyNode}
+          onViewableItemsChanged={onCountryViewableItemsChanged}
+          viewabilityConfig={countryViewabilityConfig}
         />
       )}
 

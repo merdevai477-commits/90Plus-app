@@ -7,7 +7,7 @@
  *  - Both country *and* league sections start COLLAPSED. Expanding the
  *    country alone never paints any match cards; the user has to also
  *    open a league. This caps the worst-case render budget on first
- *    paint to ~5 country headers (TOP5 default-expanded).
+ *    paint to England + live countries (default-expanded).
  *  - LayoutAnimation runs on iOS only. On Android the legacy
  *    LayoutAnimation pipeline blocks the JS thread for ~200–300ms per
  *    toggle and stutters mid-scroll, so we just snap on Android.

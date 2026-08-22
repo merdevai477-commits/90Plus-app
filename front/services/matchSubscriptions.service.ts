@@ -2,7 +2,7 @@
  * Match Subscriptions Service
  *
  * Thin client over `/api/notifications/match-subscribe` endpoints. Used by
- * the bell icon on the matches screen.
+ * the bell icon on the matches screen and match-details top bar.
  */
 
 import { getApiUrl } from '../config/api.config';
@@ -20,14 +20,22 @@ export interface SubscribeInput {
     leagueName?: string;
 }
 
-// Collapse duplicate concurrent GET calls from multiple screens.
+/** Collapse concurrent GETs and cache briefly across Matches + Match Details. */
+const LIST_IDS_TTL_MS = 30_000;
 let _inFlightIds: Promise<Set<number>> | null = null;
+let _cachedIds: Set<number> | null = null;
+let _cachedAt = 0;
 
 function authHeaders(token: string): HeadersInit {
     return {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
     };
+}
+
+function invalidateListIdsCache(): void {
+    _cachedIds = null;
+    _cachedAt = 0;
 }
 
 export const MatchSubscriptionsService = {
@@ -53,6 +61,7 @@ export const MatchSubscriptionsService = {
             const text = await response.text().catch(() => '');
             throw new Error(`Subscribe failed (${response.status}): ${text || response.statusText}`);
         }
+        invalidateListIdsCache();
     },
 
     /**
@@ -67,6 +76,7 @@ export const MatchSubscriptionsService = {
             const text = await response.text().catch(() => '');
             throw new Error(`Unsubscribe failed (${response.status}): ${text || response.statusText}`);
         }
+        invalidateListIdsCache();
     },
 
     /**
@@ -74,6 +84,9 @@ export const MatchSubscriptionsService = {
      * for O(1) membership checks on the UI side.
      */
     async listIds(token: string): Promise<Set<number>> {
+        if (_cachedIds && Date.now() - _cachedAt < LIST_IDS_TTL_MS) {
+            return _cachedIds;
+        }
         if (_inFlightIds) return _inFlightIds;
         _inFlightIds = (async () => {
             try {
@@ -85,7 +98,10 @@ export const MatchSubscriptionsService = {
                 }
                 const result = await response.json() as { data?: { fixtureIds?: number[] } };
                 const ids = Array.isArray(result?.data?.fixtureIds) ? result.data!.fixtureIds! : [];
-                return new Set(ids.map((id) => Number(id)).filter((id) => Number.isFinite(id)));
+                const set = new Set(ids.map((id) => Number(id)).filter((id) => Number.isFinite(id)));
+                _cachedIds = set;
+                _cachedAt = Date.now();
+                return set;
             } catch (err) {
                 logger.warn('MatchSubscriptionsService.listIds failed:', err);
                 return new Set<number>();

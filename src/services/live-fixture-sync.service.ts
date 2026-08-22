@@ -239,6 +239,24 @@ class LiveFixtureSyncService {
                     logger.info(
                         `[LiveFixtureSync] NS kickoff probe: ${becameLive.length}/${refreshed.length} now LIVE`,
                     );
+                    void import('./football-data-cache.service')
+                        .then(async ({ footballDataCacheService }) => {
+                            const { calendarTodayKey } = await import('../utils/calendar-day-bounds.util');
+                            await footballDataCacheService.invalidateMatchesByDateCache(
+                                calendarTodayKey(),
+                                'NS_probe→LIVE',
+                            );
+                            for (const f of becameLive) {
+                                const id = f.fixture?.id;
+                                if (id != null) {
+                                    await footballDataCacheService.invalidateFixtureDetailCaches(
+                                        id,
+                                        'NS_probe→LIVE',
+                                    );
+                                }
+                            }
+                        })
+                        .catch(() => undefined);
                 }
             }
             return refreshed;
@@ -291,6 +309,16 @@ class LiveFixtureSyncService {
                     )
                     .catch(() => undefined);
             }
+            // List must see LIVE without waiting for matches-by-date TTL.
+            void import('./football-data-cache.service')
+                .then(async ({ footballDataCacheService }) => {
+                    const { calendarTodayKey } = await import('../utils/calendar-day-bounds.util');
+                    await footballDataCacheService.invalidateMatchesByDateCache(
+                        calendarTodayKey(),
+                        'NS→LIVE',
+                    );
+                })
+                .catch(() => undefined);
             void import('./football-data-cache.service')
                 .then(({ footballDataCacheService }) =>
                     footballDataCacheService.warmLiveFixtureDetails(newlyLiveIds),

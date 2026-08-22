@@ -42,7 +42,9 @@ export function useLiveFixtureSync(): void {
         await Promise.all(
           batch.map((id) => {
             inFlightRef.current.add(id);
-            return state.fetchAndIngestFast(id).finally(() => {
+            // List interests: score/status only. Focused match-details keeps events.
+            const includeEvents = focusedId != null && id === focusedId;
+            return state.fetchAndIngestFast(id, { includeEvents }).finally(() => {
               inFlightRef.current.delete(id);
             });
           }),

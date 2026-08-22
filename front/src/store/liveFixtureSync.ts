@@ -28,6 +28,7 @@ import {
 } from './liveFixtureStore.types';
 
 const inFlightFast = new Map<number, Promise<LiveFixtureSnapshot | null>>();
+const inFlightScore = new Map<number, Promise<LiveFixtureSnapshot | null>>();
 const inFlightFull = new Map<number, Promise<LiveFixtureSnapshot | null>>();
 
 export function derivePhase(statusShort: string): LiveFixturePhase {
@@ -199,6 +200,51 @@ export async function fetchFastSnapshot(
   })();
 
   inFlightFast.set(fixtureId, promise);
+  return promise;
+}
+
+/**
+ * List / non-focused poll path: refresh status + score only.
+ * Keeps existing events/lineups so the matches list does not starve Events tab.
+ */
+export async function fetchScoreSnapshot(
+  fixtureId: number,
+  existing?: LiveFixtureSnapshot | null,
+): Promise<LiveFixtureSnapshot | null> {
+  const pending = inFlightScore.get(fixtureId);
+  if (pending) return pending;
+
+  const promise = (async () => {
+    try {
+      const fixtureData = await ApiFootballService.getFixtureById(fixtureId, {
+        skipCache: true,
+      });
+      if (!fixtureData) {
+        if (existing) return { ...existing, updatedAt: Date.now() };
+        return null;
+      }
+      return buildSnapshotFromRaw({
+        fixtureId,
+        fixture: fixtureData,
+        events: existing?.events ?? [],
+        lineups: existing?.lineups,
+        statistics: existing?.statistics,
+        venue: existing?.venue,
+        source: 'http-fast',
+        existing,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Score fetch failed';
+      if (existing) {
+        return { ...existing, lastFetchError: message, updatedAt: Date.now() };
+      }
+      return null;
+    } finally {
+      inFlightScore.delete(fixtureId);
+    }
+  })();
+
+  inFlightScore.set(fixtureId, promise);
   return promise;
 }
 

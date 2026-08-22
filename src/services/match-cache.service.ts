@@ -834,6 +834,18 @@ class MatchCacheService {
     }
 
     /**
+     * Drop one matches cache key (memory + Redis) so list can see NS→LIVE.
+     */
+    async invalidateKey(key: string): Promise<void> {
+        this.memoryCache.delete(key);
+        try {
+            await redisCacheService.del(`match:${key}`);
+        } catch {
+            /* best-effort */
+        }
+    }
+
+    /**
      * Clear memory cache (useful for testing)
      */
     clearMemoryCache(): void {

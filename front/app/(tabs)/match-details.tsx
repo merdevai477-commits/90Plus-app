@@ -332,7 +332,6 @@ const MatchDetailsScreen = () => {
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lineupsTabRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const eventsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -1002,28 +1001,13 @@ const MatchDetailsScreen = () => {
     void loadLmtIfNeeded();
   }, [fixtureId, fixture?.fixture?.id, loadLmtIfNeeded]);
 
-  // Refresh events while empty on the Events tab (live / not finished) — no manual retry.
+  // When Events tab is empty, kick one focused ingest — ongoing updates come from
+  // useLiveFixture focused sync (events included). Avoid a second 8s poller.
   useEffect(() => {
-    if (eventsPollingRef.current) {
-      clearInterval(eventsPollingRef.current);
-      eventsPollingRef.current = null;
-    }
     if (activeTab !== 'events' || !fixtureId || events.length > 0) return;
     if (isFinishedMatch()) return;
-
-    const tick = () => {
-      void useLiveFixtureStore.getState().fetchAndIngestFast(fixtureId);
-    };
-    tick();
-    eventsPollingRef.current = setInterval(tick, isLive() ? 8_000 : 20_000);
-
-    return () => {
-      if (eventsPollingRef.current) {
-        clearInterval(eventsPollingRef.current);
-        eventsPollingRef.current = null;
-      }
-    };
-  }, [activeTab, fixtureId, events.length, isLive, isFinishedMatch]);
+    void useLiveFixtureStore.getState().fetchAndIngestFast(fixtureId, { includeEvents: true });
+  }, [activeTab, fixtureId, events.length, isFinishedMatch]);
 
   // Reload stats when match reaches HT or full time
   useEffect(() => {

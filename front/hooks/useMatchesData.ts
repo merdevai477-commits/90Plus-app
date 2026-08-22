@@ -20,7 +20,12 @@ import { collectNamesFromMatches } from '../utils/footballNamePrefetch';
 import { getCountryFlagUri } from '../utils/countryFlagUri';
 import { prefetchMatchAssets } from '../utils/prefetchMatchAssets';
 import { useLiveFixtureStore } from '../src/store/liveFixtureStore';
-import { LIVE_FIXTURE_CALENDAR_POLL_MS } from '../src/store/liveFixtureStore.types';
+import type { LiveFixtureSnapshot } from '../src/store/liveFixtureStore.types';
+import {
+  LIVE_FIXTURE_CALENDAR_POLL_MS,
+  MATCHES_LIST_INTEREST_CAP,
+  MATCHES_LIST_KICKOFF_INTEREST_MS,
+} from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
 import { dateFromLocalKey } from '../utils/safeDate';
@@ -91,8 +96,8 @@ const getCacheTTL = (dateString: string): number => {
     return 60 * 60 * 1000; // 60 minutes for past matches
   } else if (isToday) {
     // Live scores arrive via WebSocket + live feed merge; keep calendar memory
-    // aligned with LIVE_FIXTURE_CALENDAR_POLL_MS so we don't re-download ~200KB every 3s.
-    return 8 * 1000;
+    // aligned with LIVE_FIXTURE_CALENDAR_POLL_MS (~45s).
+    return LIVE_FIXTURE_CALENDAR_POLL_MS;
   } else {
     return 30 * 60 * 1000; // 30 minutes for future matches
   }
@@ -106,9 +111,19 @@ const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
 };
 
 // ✅ Throttle background refresh - track last background fetch per date.
-// Align with 8s calendar poll / shared backend cache to avoid duplicate
-// ~200KB downloads when the user switches dates rapidly.
-const BACKGROUND_REFRESH_THROTTLE = 8 * 1000;
+// Align with calendar poll so we don't re-download ~200KB when switching dates rapidly.
+const BACKGROUND_REFRESH_THROTTLE = LIVE_FIXTURE_CALENDAR_POLL_MS;
+
+/** Throttle logo/name prefetch so live-feed merges don't stampede the network. */
+const PREFETCH_THROTTLE_MS = 30_000;
+let lastPrefetchAt = 0;
+
+function maybePrefetchMatchAssets(rows: Match[]): void {
+  const now = Date.now();
+  if (now - lastPrefetchAt < PREFETCH_THROTTLE_MS) return;
+  lastPrefetchAt = now;
+  prefetchMatchAssets(rows);
+}
 
 /**
  * Merge today's date-indexed calendar with the global live feed.
@@ -164,12 +179,9 @@ async function fetchTodayMatchesWithLiveFeed(
 }
 
 /**
- * Poll fixtures that are live, about to kick off, or overdue still marked upcoming.
- * Without this, the list never discovers NS→live until calendar/live-feed catches up.
+ * Poll fixtures that are live or about to kick off (10m window).
+ * Overdue NS discovery is owned by backend probe + live feed — not the list.
  */
-const NEAR_KICKOFF_POLL_MS = 12 * 60 * 1000;
-const OVERDUE_NS_POLL_MS = 3 * 60 * 60 * 1000;
-
 function shouldPollFixtureOnMatchesList(match: Match, now = Date.now()): boolean {
   if (match.status === 'live') return true;
   if (match.status === 'finished') return false;
@@ -177,15 +189,72 @@ function shouldPollFixtureOnMatchesList(match: Match, now = Date.now()): boolean
   const kickoff = new Date(match.fixtureDate).getTime();
   if (Number.isNaN(kickoff)) return false;
   const delta = kickoff - now;
-  // Within 12 min before kickoff, or past kickoff but still showing upcoming (up to 3h).
-  return delta <= NEAR_KICKOFF_POLL_MS && delta >= -OVERDUE_NS_POLL_MS;
+  return delta <= MATCHES_LIST_KICKOFF_INTEREST_MS && delta >= 0;
+}
+
+/** Live first, then nearest kickoffs — hard-capped for list interest. */
+function pickMatchesListInterestIds(matches: Match[], cap = MATCHES_LIST_INTEREST_CAP): number[] {
+  const now = Date.now();
+  const live: { id: number; kickoff: number }[] = [];
+  const near: { id: number; kickoff: number }[] = [];
+
+  for (const m of matches) {
+    if (!shouldPollFixtureOnMatchesList(m, now)) continue;
+    const id = parseInt(m.id, 10);
+    if (!Number.isFinite(id) || id <= 0) continue;
+    const kickoff = m.fixtureDate ? Date.parse(m.fixtureDate) : 0;
+    const row = { id, kickoff: Number.isFinite(kickoff) ? kickoff : 0 };
+    if (m.status === 'live') live.push(row);
+    else near.push(row);
+  }
+
+  live.sort((a, b) => a.kickoff - b.kickoff);
+  near.sort((a, b) => a.kickoff - b.kickoff);
+
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const row of [...live, ...near]) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row.id);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
+function listOverlaySnapshotsEqual(
+  a: Record<number, LiveFixtureSnapshot>,
+  b: Record<number, LiveFixtureSnapshot>,
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    const id = Number(key);
+    const sa = a[id];
+    const sb = b[id];
+    if (!sb || !sa) return false;
+    if (sa === sb) continue;
+    if (
+      sa.phase !== sb.phase ||
+      sa.fixture.goals.home !== sb.fixture.goals.home ||
+      sa.fixture.goals.away !== sb.fixture.goals.away ||
+      sa.fixture.fixture.status.elapsed !== sb.fixture.fixture.status.elapsed ||
+      sa.fixture.fixture.status.extra !== sb.fixture.fixture.status.extra ||
+      sa.fixture.fixture.status.short !== sb.fixture.fixture.status.short
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Overlay Zustand live snapshots onto calendar rows for live/finished fixtures. */
 function overlaySnapshotsOnCalendar(
   calendarRows: Match[],
-  snapshots: Record<number, import('../src/store/liveFixtureStore.types').LiveFixtureSnapshot>,
+  snapshots: Record<number, LiveFixtureSnapshot>,
 ): Match[] {
+  if (Object.keys(snapshots).length === 0) return calendarRows;
   return calendarRows.map((row) => {
     const id = parseInt(row.id, 10);
     if (Number.isNaN(id)) return row;
@@ -234,16 +303,16 @@ function getCountrySortKey(country: string): string {
 
 /**
  * Groups matches by country, then by league within each country.
+ * Pass pre-built league groups to avoid re-grouping the same match list.
  */
-const groupMatchesByCountry = (matches: Match[]): CountryGroup[] => {
-  // First group by league (existing logic)
-  const leagueGroups = groupMatchesByLeague(matches);
-
-  // Then group leagues by country
+const groupMatchesByCountry = (
+  matches: Match[],
+  leagueGroups?: GroupedMatches[],
+): CountryGroup[] => {
+  const groups = leagueGroups ?? groupMatchesByLeague(matches);
   const countryMap = new Map<string, { flag: string | null; leagues: GroupedMatches[] }>();
 
-  for (const group of leagueGroups) {
-    // Get country from the first match in the group
+  for (const group of groups) {
     const firstMatch = group.matches[0];
     const country = firstMatch?.league?.country || 'World';
     const flag = firstMatch?.league?.countryFlag || null;
@@ -254,16 +323,13 @@ const groupMatchesByCountry = (matches: Match[]): CountryGroup[] => {
     countryMap.get(country)!.leagues.push(group);
   }
 
-  // Convert to array and sort by priority
-  const result: CountryGroup[] = Array.from(countryMap.entries())
+  return Array.from(countryMap.entries())
     .map(([country, data]) => ({
       country,
       countryFlag: getCountryFlagUri(country, data.flag),
       leagues: data.leagues,
     }))
     .sort((a, b) => getCountrySortKey(a.country).localeCompare(getCountrySortKey(b.country)));
-
-  return result;
 };
 
 /**
@@ -319,7 +385,6 @@ export const useMatchesData = (
 ): UseMatchesDataResult => {
   const { pauseBackgroundRefresh = false } = options;
   const [calendarMatches, setCalendarMatches] = useState<Match[]>([]);
-  const snapshots = useLiveFixtureStore((s) => s.snapshots);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   // Fix ERR-3: track when background refresh fails so UI can show a stale indicator
@@ -345,17 +410,33 @@ export const useMatchesData = (
   const isToday = dateString === today;
   const isPastDate = dateString < today;
 
-  const matches = useMemo(
-    () => overlaySnapshotsOnCalendar(calendarMatches, snapshots),
-    [calendarMatches, snapshots],
-  );
+  // Interest from calendar only (before overlay) so WS updates don't widen the set.
   const pollFixtureIds = useMemo(
-    () =>
-      matches
-        .filter((m) => shouldPollFixtureOnMatchesList(m))
-        .map((m) => parseInt(m.id, 10))
-        .filter((id) => !Number.isNaN(id) && id > 0),
-    [matches],
+    () => pickMatchesListInterestIds(calendarMatches),
+    [calendarMatches],
+  );
+  const pollIdsKey = pollFixtureIds.join(',');
+
+  // Subscribe only to interested snapshots — avoids remapping England→Chile on every WS tick.
+  const overlaySnapshots = useLiveFixtureStore(
+    useCallback(
+      (s) => {
+        const out: Record<number, LiveFixtureSnapshot> = {};
+        for (const id of pollFixtureIds) {
+          const snap = s.snapshots[id];
+          if (snap) out[id] = snap;
+        }
+        return out;
+      },
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- pollIdsKey tracks pollFixtureIds
+      [pollIdsKey],
+    ),
+    listOverlaySnapshotsEqual,
+  );
+
+  const matches = useMemo(
+    () => overlaySnapshotsOnCalendar(calendarMatches, overlaySnapshots),
+    [calendarMatches, overlaySnapshots],
   );
   useRegisterLiveFixtures(
     pauseBackgroundRefresh || !isToday ? [] : pollFixtureIds,
@@ -409,11 +490,12 @@ export const useMatchesData = (
     });
   }, [pauseBackgroundRefresh]);
 
-  // Group matches by league
+  // Group matches by league, then country (reuse league groups — no double group)
   const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
-
-  // Group matches by country → league hierarchy
-  const countryGroups = useMemo(() => groupMatchesByCountry(matches), [matches]);
+  const countryGroups = useMemo(
+    () => groupMatchesByCountry(matches, groupedMatches),
+    [matches, groupedMatches],
+  );
 
   useEffect(() => {
     if (matches.length === 0 || language !== 'ar') return;
@@ -441,7 +523,7 @@ export const useMatchesData = (
             logger.debug(`📦 Memory cache hit for ${dateString}`);
             setCalendarMatches(memoryCached.data);
             setLoading(false);
-            prefetchMatchAssets(memoryCached.data);
+            maybePrefetchMatchAssets(memoryCached.data);
             
             // For past dates, don't refresh
             if (isPastDate) {
@@ -459,10 +541,10 @@ export const useMatchesData = (
                 .then((merged) => {
                   setCalendarMatches(merged);
                   setIsDataStale(false);
-                  prefetchMatchAssets(merged);
+                  maybePrefetchMatchAssets(merged);
                   evictOldestIfNeeded(memoryCache);
                   memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
-                  return cacheService.set(cacheKey, merged, 8 * 1000);
+                  return cacheService.set(cacheKey, merged, LIVE_FIXTURE_CALENDAR_POLL_MS);
                 })
                 .catch(() => setIsDataStale(true));
             } else {
@@ -485,7 +567,7 @@ export const useMatchesData = (
             memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
             setCalendarMatches(cached);
             setLoading(false);
-            prefetchMatchAssets(cached);
+            maybePrefetchMatchAssets(cached);
             
             // For past dates, don't refresh
             if (isPastDate) {
@@ -503,10 +585,10 @@ export const useMatchesData = (
                 .then((merged) => {
                   setCalendarMatches(merged);
                   setIsDataStale(false);
-                  prefetchMatchAssets(merged);
+                  maybePrefetchMatchAssets(merged);
                   evictOldestIfNeeded(memoryCache);
                   memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
-                  return cacheService.set(cacheKey, merged, 8 * 1000);
+                  return cacheService.set(cacheKey, merged, LIVE_FIXTURE_CALENDAR_POLL_MS);
                 })
                 .catch(() => setIsDataStale(true));
             } else {
@@ -538,7 +620,7 @@ export const useMatchesData = (
 
         setCalendarMatches(fetchedMatches);
         setIsDataStale(false); // fresh data loaded successfully
-        prefetchMatchAssets(fetchedMatches);
+        maybePrefetchMatchAssets(fetchedMatches);
 
         // Update caches
         const cacheTTL = isPastDate
@@ -649,7 +731,7 @@ export const useMatchesData = (
 
       // Today: short TTL so the disk cache doesn't override fresh polls.
       // Future: 3 days. Past dates handled by the foreground fetch.
-      const cacheTTL = isTodayFlag ? 8 * 1000 : 3 * 24 * 60 * 60 * 1000;
+      const cacheTTL = isTodayFlag ? LIVE_FIXTURE_CALENDAR_POLL_MS : 3 * 24 * 60 * 60 * 1000;
       const cacheKey = getMatchesCacheKey(dateStr);
       evictOldestIfNeeded(memoryCache);
       memoryCache.set(dateStr, { data: fetchedMatches, timestamp: Date.now() });
