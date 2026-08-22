@@ -18,6 +18,7 @@ import {
     writeLiveFixturesSnapshot,
     writeTerminalFixtureSnapshot,
     readLiveFixturesList,
+    isNsNearKickoff,
 } from './live-fixture-cache.service';
 import LiveMatchIngestorService from './live-match-ingestor.service';
 import {
@@ -28,6 +29,10 @@ import {
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
+const NS_KICKOFF_PROBE_LIMIT = Math.max(
+    5,
+    Math.min(parseInt(process.env.LIVE_NS_KICKOFF_PROBE_MAX || '15', 10) || 15, 30),
+);
 
 type LiveSnapshot = {
     homeScore: number;
@@ -44,6 +49,7 @@ class LiveFixtureSyncService {
     private previouslyLiveIds = new Set<number>();
     private finishingInFlight = new Set<number>();
     private droppedFromLiveIds = new Set<number>();
+    private warmedLiveIds = new Set<number>();
 
     start(): void {
         if (!process.env.FOOTBALL_API_KEY) {
@@ -78,6 +84,7 @@ class LiveFixtureSyncService {
         this.lastSnapshots.clear();
         this.previouslyLiveIds.clear();
         this.finishingInFlight.clear();
+        this.warmedLiveIds.clear();
         logger.info('🔴 Live fixture sync stopped');
     }
 
@@ -111,7 +118,11 @@ class LiveFixtureSyncService {
         try {
             if (fixture) {
                 await writeTerminalFixtureSnapshot(fixture);
+            } else {
+                const { footballDataCacheService } = await import('./football-data-cache.service');
+                await footballDataCacheService.invalidateFixtureDetailCaches(fixtureId, 'LIVE→FT');
             }
+            this.warmedLiveIds.delete(fixtureId);
 
             this.broadcastMatchUpdate(fixtureId, homeScore, awayScore, status, elapsed);
 
@@ -172,13 +183,94 @@ class LiveFixtureSyncService {
         this.droppedFromLiveIds.add(fixtureId);
     }
 
+    /**
+     * Probe NS fixtures in the kickoff window so NS→LIVE is discovered without waiting
+     * for calendar sync or the user opening match details.
+     */
+    private async probeNearKickoffNsFixtures(): Promise<FixtureFromAPI[]> {
+        if (isFootballQuotaExhausted()) return [];
+
+        const nowSec = Math.floor(Date.now() / 1000);
+        const windowBefore = 20 * 60;
+        const windowAfter = 90 * 60;
+        try {
+            const candidates = await prisma.cachedFixture.findMany({
+                where: {
+                    status: { in: ['NS', 'TBD'] },
+                    OR: [
+                        {
+                            matchTimestamp: {
+                                gte: nowSec - windowAfter,
+                                lte: nowSec + windowBefore,
+                            },
+                        },
+                        {
+                            matchTimestamp: null,
+                            matchDate: {
+                                gte: new Date(Date.now() - windowAfter * 1000),
+                                lte: new Date(Date.now() + windowBefore * 1000),
+                            },
+                        },
+                    ],
+                },
+                select: { fixtureId: true, matchDate: true, matchTimestamp: true, status: true },
+                orderBy: { matchDate: 'asc' },
+                take: NS_KICKOFF_PROBE_LIMIT * 2,
+            });
+
+            const ids = candidates
+                .filter((row) => isNsNearKickoff(row.status, row.matchDate, row.matchTimestamp))
+                .map((row) => row.fixtureId)
+                .filter((id) => id < 4_000_000)
+                .slice(0, NS_KICKOFF_PROBE_LIMIT);
+
+            if (!ids.length) return [];
+
+            const refreshed: FixtureFromAPI[] = [];
+            for (let i = 0; i < ids.length; i += 20) {
+                const chunk = ids.slice(i, i + 20);
+                const fixtures = await footballService.getFixtures(
+                    { ids: chunk.join('-') },
+                    { source: 'job' },
+                );
+                if (!Array.isArray(fixtures)) continue;
+                for (const fixture of fixtures) {
+                    if (fixture?.fixture?.id != null) {
+                        refreshed.push(fixture as FixtureFromAPI);
+                    }
+                }
+            }
+
+            if (refreshed.length > 0) {
+                await matchCacheService.upsertFixtures(refreshed);
+                const becameLive = refreshed.filter((f) =>
+                    LIVE_STATUSES_SET.has(f.fixture?.status?.short ?? ''),
+                );
+                if (becameLive.length > 0) {
+                    logger.info(
+                        `[LiveFixtureSync] NS kickoff probe: ${becameLive.length}/${refreshed.length} now LIVE`,
+                    );
+                }
+            }
+            return refreshed;
+        } catch (err) {
+            logger.warn('[LiveFixtureSync] NS kickoff probe failed:', err);
+            return [];
+        }
+    }
+
     private async processLiveFixtures(liveFixtures: FixtureFromAPI[]): Promise<void> {
         const currentLiveIds = new Set<number>();
+        const newlyLiveIds: number[] = [];
+
         for (const fixture of liveFixtures) {
             const id = fixture.fixture.id;
             const status = fixture.fixture.status.short;
             if (LIVE_STATUSES_SET.has(status)) {
                 currentLiveIds.add(id);
+                if (!this.previouslyLiveIds.has(id) && !this.warmedLiveIds.has(id)) {
+                    newlyLiveIds.push(id);
+                }
             }
             if (FINISHED_STATUSES_SET.has(status)) {
                 const homeScore = fixture.goals.home ?? 0;
@@ -199,6 +291,31 @@ class LiveFixtureSyncService {
             const batch = [...this.droppedFromLiveIds];
             this.droppedFromLiveIds.clear();
             await this.verifyFinishedBatch(batch);
+        }
+
+        if (newlyLiveIds.length > 0) {
+            for (const id of newlyLiveIds) {
+                this.warmedLiveIds.add(id);
+                void import('./football-data-cache.service')
+                    .then(({ footballDataCacheService }) =>
+                        footballDataCacheService.invalidateFixtureDetailCaches(id, 'NS→LIVE'),
+                    )
+                    .catch(() => undefined);
+            }
+            void import('./football-data-cache.service')
+                .then(({ footballDataCacheService }) =>
+                    footballDataCacheService.warmLiveFixtureDetails(newlyLiveIds),
+                )
+                .catch((err) =>
+                    logger.warn('[LiveFixtureSync] live detail warm failed:', err),
+                );
+        }
+
+        // Bound warmed set size
+        if (this.warmedLiveIds.size > 200) {
+            for (const id of this.warmedLiveIds) {
+                if (!currentLiveIds.has(id)) this.warmedLiveIds.delete(id);
+            }
         }
 
         const liveIds = [...currentLiveIds];
@@ -291,11 +408,29 @@ class LiveFixtureSyncService {
         }
 
         const liveFixturesRaw: FixtureFromAPI[] = await footballService.getLiveFixtures({ source: 'job' });
-        const liveFixtures: FixtureFromAPI[] = isWorldCupOnlyMode()
+        let liveFixtures: FixtureFromAPI[] = isWorldCupOnlyMode()
             ? (filterWorldCupFixtures(liveFixturesRaw) as FixtureFromAPI[])
             : liveFixturesRaw;
 
         signal.throwIfAborted();
+        // Discover NS→LIVE for matches not yet in live=all (kickoff window probe).
+        const probed = await this.probeNearKickoffNsFixtures();
+        signal.throwIfAborted();
+        if (probed.length > 0) {
+            const byId = new Map<number, FixtureFromAPI>();
+            for (const f of liveFixtures) {
+                if (f?.fixture?.id != null) byId.set(f.fixture.id, f);
+            }
+            for (const f of probed) {
+                const id = f?.fixture?.id;
+                const short = f?.fixture?.status?.short ?? '';
+                if (id != null && LIVE_STATUSES_SET.has(short)) {
+                    byId.set(id, f);
+                }
+            }
+            liveFixtures = Array.from(byId.values());
+        }
+
         await writeLiveFixturesSnapshot(liveFixtures);
 
         if (liveFixtures.length === 0) {

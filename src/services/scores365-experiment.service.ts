@@ -633,24 +633,35 @@ export async function ensureScores365GameMapping(fixtureId: number): Promise<num
   const isPlausiblyLive = !!dbRow && LIVE_STATUSES.has(dbRow.status);
 
   if (!isPlausiblyLive) {
-    logger.debug(`[Scores365] fixtureId=${fixtureId} not live — waiting for next scheduled bulk sync`);
+    logger.debug(
+      `[Scores365] fixtureId=${fixtureId} reason=not_live_waiting_bulk status=${dbRow?.status ?? 'unknown'}`,
+    );
     return null;
   }
 
   if (Date.now() - lastOnDemandRefresh < ON_DEMAND_REFRESH_MIN_INTERVAL_MS) {
-    logger.debug(`[Scores365] fixtureId=${fixtureId} is live but on-demand refresh was rate-limited — waiting`);
+    logger.warn(
+      `[Scores365] fixtureId=${fixtureId} reason=rate_skip status=LIVE missing_map`,
+    );
     return null;
   }
 
+  // WC-only bulk remap — never run for generic non-WC live fixtures (use day allscores above).
+  const cfgLeagueId = cfg.leagueId;
+  if (dbRow && dbRow.leagueId === cfgLeagueId) {
+    logger.warn(
+      `[Scores365] fixtureId=${fixtureId} is LIVE WC but missing from map — triggering WC bulk refresh`,
+    );
+    lastOnDemandRefresh = Date.now();
+    const { runBulkFixtureSyncTick } = await import('../workers/worldCupSync.service');
+    await runBulkFixtureSyncTick();
+    return getScores365GameIdForFixture(fixtureId);
+  }
+
   logger.warn(
-    `[Scores365] fixtureId=${fixtureId} is LIVE but missing from map — triggering immediate on-demand bulk refresh`,
+    `[Scores365] fixtureId=${fixtureId} reason=unmapped status=LIVE leagueId=${dbRow?.leagueId ?? 'n/a'} (day allscores miss; skipped WC bulk)`,
   );
-  lastOnDemandRefresh = Date.now();
-
-  const { runBulkFixtureSyncTick } = await import('../workers/worldCupSync.service');
-  await runBulkFixtureSyncTick();
-
-  return getScores365GameIdForFixture(fixtureId);
+  return null;
 }
 
 /**
@@ -2293,15 +2304,21 @@ export async function getScores365ExperimentEvents(
   language?: string | null,
 ): Promise<any[]> {
   const gameId = (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
-  if (!gameId) return [];
+  if (!gameId) {
+    logger.warn(`[365Events] fixture=${fixtureId} reason=unmapped`);
+    return [];
+  }
 
   const core = await resolve365ExperimentCore(fixtureId, gameId, language, { force });
-  if (!core) return [];
+  if (!core) {
+    logger.warn(`[365Events] fixture=${fixtureId} reason=upstream_empty gameId=${gameId}`);
+    return [];
+  }
 
   const { game, base, alignment } = core;
   const events = mapScores365Events(game, base, alignment);
   const scores = resolve365Scores(game, alignment);
-  return validate365MappedEvents(
+  const validated = validate365MappedEvents(
     fixtureId,
     game,
     base,
@@ -2310,6 +2327,12 @@ export async function getScores365ExperimentEvents(
     scores.home,
     scores.away,
   );
+  if (!validated.length && !(game.events?.length)) {
+    logger.warn(
+      `[365Events] fixture=${fixtureId} reason=upstream_empty gameId=${gameId} rawEvents=0`,
+    );
+  }
+  return validated;
 }
 
 export async function getScores365ExperimentFixture(
@@ -2593,8 +2616,9 @@ const SYNTHETIC_LIVE_BATCH = (() => {
   return Number.isFinite(raw) && raw > 0 ? raw : 80;
 })();
 const LIVE_DETAIL_MAX = (() => {
-  const raw = parseInt(process.env.SCORES365_LIVE_DETAIL_MAX || '5', 10);
-  return Number.isFinite(raw) && raw > 0 ? raw : 20;
+  // Raise default so major-league LIVE matches get lineups/events/stats warm, not only top-5.
+  const raw = parseInt(process.env.SCORES365_LIVE_DETAIL_MAX || '12', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 12;
 })();
 const SYNTHETIC_LIVE_CONCURRENCY = (() => {
   const raw = parseInt(process.env.SCORES365_SYNTHETIC_LIVE_CONCURRENCY || '4', 10);
@@ -2770,6 +2794,30 @@ async function sync365SyntheticLiveSnapshotsAsLeader(
     // Include terminal transitions so only the 365-owned snapshot drops those ids.
     await mergeLiveFixturesIntoRedisSnapshot(mappedFixtures);
   }
+
+  // Prioritize favorites + major leagues for the warm budget.
+  let favoritedDetail = new Set<number>();
+  try {
+    const favRows = await prisma.favoriteMatch.findMany({
+      where: { apiMatchId: { in: detailCandidates }, notifiedEnd: false },
+      select: { apiMatchId: true },
+      distinct: ['apiMatchId'],
+    });
+    favoritedDetail = new Set(favRows.map((f) => f.apiMatchId));
+  } catch {
+    // optional
+  }
+  const { isMajorLeagueId } = await import('../utils/fixture-importance');
+  detailCandidates.sort((a, b) => {
+    const score = (id: number) => {
+      const row = dbByFixtureId.get(id);
+      return (
+        (favoritedDetail.has(id) ? 1000 : 0) +
+        (isMajorLeagueId(row?.leagueId) ? 100 : 0)
+      );
+    };
+    return score(b) - score(a);
+  });
 
   const detailIds = detailCandidates.slice(0, LIVE_DETAIL_MAX);
   if (detailIds.length > 0) {

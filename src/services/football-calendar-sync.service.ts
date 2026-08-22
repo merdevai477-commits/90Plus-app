@@ -5,8 +5,10 @@
  * User HTTP requests never trigger upstream calls for calendar days covered here.
  *
  * Tuned for low user counts: fewer ticks, instant responses from DB/cache.
+ * Near kickoff: today interval drops to 15–30s so NS→LIVE appears on the list sooner.
  */
 
+import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { footballDataCacheService } from './football-data-cache.service';
 import { isFootballQuotaExhausted } from './football.service';
@@ -19,11 +21,18 @@ import {
     calendarTodayKey,
     offsetCalendarDateKey,
 } from '../utils/calendar-day-bounds.util';
+import { isNsNearKickoff } from './live-fixture-cache.service';
 
 function calendarSyncIntervalMs(): number {
     // Default 60s so kickoff status on the matches list catches up faster.
     const fromEnv = parseInt(process.env.FOOTBALL_CALENDAR_SYNC_MS || '60000', 10);
     return Math.max(60_000, Number.isFinite(fromEnv) ? fromEnv : 60_000);
+}
+
+function calendarNearKickoffIntervalMs(): number {
+    const fromEnv = parseInt(process.env.FOOTBALL_CALENDAR_NEAR_KICKOFF_MS || '20000', 10);
+    const value = Number.isFinite(fromEnv) ? fromEnv : 20_000;
+    return Math.max(15_000, Math.min(value, 30_000));
 }
 
 function prefetchIntervalMs(): number {
@@ -37,11 +46,12 @@ function appDateKey(offsetDays = 0): string {
 }
 
 class FootballCalendarSyncService {
-    private todayInterval: NodeJS.Timeout | null = null;
+    private todayTimeout: NodeJS.Timeout | null = null;
     private prefetchInterval: NodeJS.Timeout | null = null;
     private running = false;
     private backfillRunning = false;
     private syncingDates = new Set<string>();
+    private lastNearKickoff = false;
 
     start(): void {
         if (!process.env.FOOTBALL_API_KEY) {
@@ -50,20 +60,13 @@ class FootballCalendarSyncService {
         }
         if (this.running) return;
 
-        const todayMs = calendarSyncIntervalMs();
         const prefetchMs = prefetchIntervalMs();
 
         this.running = true;
         logWorldCupOnlyModeStartup();
         logger.info(
-            `[CalendarSync] Started — today every ${todayMs / 1000}s, prefetch every ${prefetchMs / 1000}s (leader-elected)${isWorldCupOnlyMode() ? ' [World Cup only]' : ''}`,
+            `[CalendarSync] Started — today adaptive 15–60s, prefetch every ${prefetchMs / 1000}s (leader-elected)${isWorldCupOnlyMode() ? ' [World Cup only]' : ''}`,
         );
-
-        const runToday = () => {
-            void this.syncToday().catch((err) =>
-                logger.warn('[CalendarSync] today sync failed:', err),
-            );
-        };
 
         const runPrefetch = () => {
             void this.syncUpcomingDays().catch((err) =>
@@ -71,7 +74,7 @@ class FootballCalendarSyncService {
             );
         };
 
-        setTimeout(runToday, 8_000);
+        setTimeout(() => this.scheduleTodayTick(), 8_000);
         setTimeout(runPrefetch, 20_000);
 
         if (isWorldCupOnlyMode()) {
@@ -82,8 +85,66 @@ class FootballCalendarSyncService {
             }, 5_000);
         }
 
-        this.todayInterval = setInterval(runToday, todayMs);
         this.prefetchInterval = setInterval(runPrefetch, prefetchMs);
+    }
+
+    private scheduleTodayTick(): void {
+        if (!this.running) return;
+        void this.runTodayTick();
+    }
+
+    private async runTodayTick(): Promise<void> {
+        if (!this.running) return;
+        try {
+            await this.syncToday();
+        } catch (err) {
+            logger.warn('[CalendarSync] today sync failed:', err);
+        }
+
+        const nearKickoff = await this.hasNearKickoffNsToday();
+        if (nearKickoff !== this.lastNearKickoff) {
+            logger.info(
+                `[CalendarSync] today interval → ${nearKickoff ? 'near-kickoff 15–30s' : 'default ~60s'}`,
+            );
+            this.lastNearKickoff = nearKickoff;
+        }
+        const delay = nearKickoff ? calendarNearKickoffIntervalMs() : calendarSyncIntervalMs();
+        this.todayTimeout = setTimeout(() => this.scheduleTodayTick(), delay);
+    }
+
+    private async hasNearKickoffNsToday(): Promise<boolean> {
+        try {
+            const nowSec = Math.floor(Date.now() / 1000);
+            const rows = await prisma.cachedFixture.findMany({
+                where: {
+                    status: { in: ['NS', 'TBD', '1H', '2H', 'HT', 'LIVE', 'ET', 'BT', 'P', 'INT'] },
+                    OR: [
+                        {
+                            matchTimestamp: {
+                                gte: nowSec - 30 * 60,
+                                lte: nowSec + 25 * 60,
+                            },
+                        },
+                        {
+                            matchTimestamp: null,
+                            matchDate: {
+                                gte: new Date(Date.now() - 30 * 60 * 1000),
+                                lte: new Date(Date.now() + 25 * 60 * 1000),
+                            },
+                        },
+                    ],
+                },
+                select: { status: true, matchDate: true, matchTimestamp: true },
+                take: 40,
+            });
+            return rows.some(
+                (row) =>
+                    ['1H', '2H', 'HT', 'LIVE', 'ET', 'BT', 'P', 'INT'].includes(row.status) ||
+                    isNsNearKickoff(row.status, row.matchDate, row.matchTimestamp),
+            );
+        } catch {
+            return false;
+        }
     }
 
     /**
@@ -126,9 +187,9 @@ class FootballCalendarSyncService {
     }
 
     stop(): void {
-        if (this.todayInterval) {
-            clearInterval(this.todayInterval);
-            this.todayInterval = null;
+        if (this.todayTimeout) {
+            clearTimeout(this.todayTimeout);
+            this.todayTimeout = null;
         }
         if (this.prefetchInterval) {
             clearInterval(this.prefetchInterval);

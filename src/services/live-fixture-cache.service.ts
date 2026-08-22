@@ -27,6 +27,37 @@ const TERMINAL_FIXTURE_TTL_SEC = 600;
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
+const NS_LIKE_STATUSES = new Set(['NS', 'TBD', 'PST']);
+/** Force upstream refresh when still NS-like from T−20m through kickoff+3h. */
+const NS_KICKOFF_REFRESH_BEFORE_MS = 20 * 60 * 1000;
+const NS_KICKOFF_REFRESH_AFTER_MS = 3 * 60 * 60 * 1000;
+
+function fixtureKickoffMs(row: {
+  matchDate?: Date | null;
+  matchTimestamp?: number | null;
+}): number | null {
+  if (row.matchTimestamp != null && row.matchTimestamp > 0) {
+    return row.matchTimestamp * 1000;
+  }
+  if (row.matchDate) return row.matchDate.getTime();
+  return null;
+}
+
+/** NS (or TBD/PST) that is past kickoff or within ~20 min of kickoff — DB short-circuit is unsafe. */
+export function isNsNearKickoff(
+  status: string | null | undefined,
+  matchDate?: Date | null,
+  matchTimestamp?: number | null,
+  nowMs = Date.now(),
+): boolean {
+  if (!status || !NS_LIKE_STATUSES.has(status)) return false;
+  const kickoffMs = fixtureKickoffMs({ matchDate, matchTimestamp });
+  if (kickoffMs == null) return false;
+  return (
+    nowMs >= kickoffMs - NS_KICKOFF_REFRESH_BEFORE_MS &&
+    nowMs <= kickoffMs + NS_KICKOFF_REFRESH_AFTER_MS
+  );
+}
 
 import {
   getScores365ExperimentConfig,
@@ -218,6 +249,14 @@ export async function writeTerminalFixtureSnapshot(
     // Remove the legacy per-fixture key during migration without touching the other provider.
     pipeline.del(liveFixtureKey(id));
     await pipeline.exec();
+    // Drop stale detail bundles so FT clients do not keep serving LIVE-TTL lineups/events/stats.
+    void import('./football-data-cache.service')
+      .then(({ footballDataCacheService }) =>
+        footballDataCacheService.invalidateFixtureDetailCaches(id, 'LIVE→FT'),
+      )
+      .catch((err) =>
+        logger.warn(`[LiveFixtureCache] detail invalidate failed for ${id}:`, err),
+      );
   } catch (err) {
     logger.warn(`[LiveFixtureCache] writeTerminalFixtureSnapshot failed for ${id}:`, err);
   }
@@ -291,6 +330,7 @@ export async function readTerminalFixtureById(fixtureId: number): Promise<Fixtur
 
 /**
  * Resolve a fixture for HTTP responses without calling API-Football when sync data exists.
+ * Near-kickoff NS rows are NOT treated as fresh from DB (avoids up-to-3h stuck NS).
  */
 export async function resolveFixtureForClient(
   fixtureId: number,
@@ -321,11 +361,26 @@ export async function resolveFixtureForClient(
     const status = dbRow.status;
     const isLive = LIVE_STATUSES_SET.has(status);
     const isFinished = FINISHED_STATUSES_SET.has(status);
+    const nearKickoffNs = isNsNearKickoff(status, dbRow.matchDate, dbRow.matchTimestamp);
     const updatedRecently =
       dbRow.updatedAt != null &&
       Date.now() - dbRow.updatedAt.getTime() < 3 * 60 * 60 * 1000;
 
-    if (isLive || isFinished || updatedRecently) {
+    // NS near/past kickoff: force upstream so clients are not stuck on stale NS for hours.
+    if (nearKickoffNs) {
+      const refreshed = await forceRefreshFixtureNearKickoff(fixtureId, language);
+      if (refreshed) {
+        return refreshed;
+      }
+    } else if (isLive || isFinished || updatedRecently) {
+      return {
+        fixture: matchCacheService.convertDbMatchToApiFormat(dbRow),
+        source: 'db',
+      };
+    }
+
+    // Upstream miss on near-kickoff NS — still serve DB rather than empty HTTP.
+    if (nearKickoffNs || isLive || isFinished || updatedRecently) {
       return {
         fixture: matchCacheService.convertDbMatchToApiFormat(dbRow),
         source: 'db',
@@ -334,6 +389,67 @@ export async function resolveFixtureForClient(
   }
 
   return { fixture: null, source: null };
+}
+
+async function forceRefreshFixtureNearKickoff(
+  fixtureId: number,
+  language?: string | null,
+): Promise<{ fixture: FixtureFromAPI; source: LiveFixtureReadSource } | null> {
+  try {
+    if (isScores365ExperimentEnabled() && isScores365ExperimentFixture(fixtureId)) {
+      const experimentFixture = await getScores365ExperimentFixture(
+        fixtureId,
+        resolveScores365AppLanguage(language),
+      );
+      if (experimentFixture) {
+        await matchCacheService.upsertFixtures([experimentFixture], { preserveFullData: true });
+        logger.info(
+          `[LiveFixtureCache] near-kickoff NS refresh fixture=${fixtureId} source=365 status=${experimentFixture.fixture?.status?.short}`,
+        );
+        return { fixture: experimentFixture, source: 'scores365-experiment' };
+      }
+    }
+
+    const { footballService, isFootballQuotaExhausted } = await import('./football.service');
+    if (!footballService.isConfigured() || isFootballQuotaExhausted()) {
+      logger.warn(
+        `[LiveFixtureCache] near-kickoff NS refresh skipped fixture=${fixtureId} reason=quota_or_unconfigured`,
+      );
+      return null;
+    }
+
+    const fresh = await footballService.getFixtureById(fixtureId, { source: 'job' });
+    if (!fresh?.fixture?.id) {
+      logger.warn(
+        `[LiveFixtureCache] near-kickoff NS refresh empty fixture=${fixtureId} reason=upstream_empty`,
+      );
+      return null;
+    }
+
+    await matchCacheService.upsertFixtures([fresh as FixtureFromAPI]);
+    const short = fresh.fixture?.status?.short ?? '';
+    if (LIVE_STATUSES_SET.has(short)) {
+      try {
+        const redis = getRedisClient();
+        if (redis) {
+          await redis.setex(
+            providerLiveFixtureKey('api-football', fixtureId),
+            LIVE_FIXTURE_TTL_SEC,
+            JSON.stringify(fresh),
+          );
+        }
+      } catch {
+        // non-fatal
+      }
+    }
+    logger.info(
+      `[LiveFixtureCache] near-kickoff NS refresh fixture=${fixtureId} source=api-football status=${short}`,
+    );
+    return { fixture: fresh as FixtureFromAPI, source: 'db' };
+  } catch (err) {
+    logger.warn(`[LiveFixtureCache] near-kickoff NS refresh failed fixture=${fixtureId}:`, err);
+    return null;
+  }
 }
 
 /**

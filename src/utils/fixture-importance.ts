@@ -3,6 +3,32 @@
  * Shared by chat highlights and prediction group daily rounds.
  */
 
+/** API-Football league ids treated as high-detail / warm priority. */
+export const MAJOR_LEAGUE_IDS = new Set<number>([
+  1, // World Cup
+  2, // UCL
+  3, // UEL
+  4, // Euro
+  6, // AFCON
+  12, // CAF CL
+  13, // CAF Confed
+  39, // Premier League
+  61, // Ligue 1
+  78, // Bundesliga
+  135, // Serie A
+  140, // La Liga
+  200, // Botola
+  203, // Super Lig
+  233, // Egyptian Premier
+  307, // Saudi Pro League
+  383, // Israel Premier
+  848, // Conference League
+]);
+
+export function isMajorLeagueId(leagueId: number | null | undefined): boolean {
+  return leagueId != null && MAJOR_LEAGUE_IDS.has(leagueId);
+}
+
 const HIGHLIGHT_LEAGUE_SCORE: Record<number, number> = {
   2: 100,
   3: 98,

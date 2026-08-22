@@ -89,7 +89,7 @@ import {
 } from './threeSixFiveScores.service';
 import { redisCacheService } from './redis-cache.service';
 import { buildMomentumPayload, type MomentumApiPayload } from './match-momentum.service';
-import { footballMomentumRedisKey } from '../utils/football-cache-keys.util';
+import { footballMomentumRedisKey, footballFixtureDetailCacheKeys } from '../utils/football-cache-keys.util';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import {
@@ -110,6 +110,7 @@ import {
     standingsFreshMs,
     standingsStaleMs,
 } from '../config/football-reliability-rollout.config';
+import { isMajorLeagueId } from '../utils/fixture-importance';
 
 const HISTORICAL_WORLD_CUP_STATUSES = ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'];
 
@@ -256,7 +257,130 @@ class FootballDataCacheService {
         MATCHES_BY_DATE_FUTURE: 15 * 60 * 1000,
         MATCHES_BY_DATE_PAST: 24 * 60 * 60 * 1000,
         TODAY_API_REFRESH: 60 * 1000,
+        /** Near kickoff / just started — keep details hot without full LIVE status yet. */
+        NEAR_KICKOFF_MATCH: 10 * 1000,
     };
+
+    private readonly liveDetailWarmInFlight = new Map<number, Promise<void>>();
+
+    /** Graduated detail TTL: live/near-kickoff seconds, finished hours, else upcoming. */
+    private detailTtlMs(
+        status: string | null | undefined,
+        kickoffMs?: number | null,
+        nowMs = Date.now(),
+    ): number {
+        const short = status ?? '';
+        if (['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(short)) {
+            return 8_000;
+        }
+        if (['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(short)) {
+            return this.TTL.FINISHED;
+        }
+        if (
+            kickoffMs != null &&
+            nowMs >= kickoffMs - 20 * 60 * 1000 &&
+            nowMs <= kickoffMs + 30 * 60 * 1000
+        ) {
+            return this.TTL.NEAR_KICKOFF_MATCH;
+        }
+        return this.TTL.UPCOMING_MATCH;
+    }
+
+    /**
+     * Actively drop lineups/events/statistics/momentum/details for a fixture
+     * (Redis + in-process). Call on LIVE→FT / NS→LIVE so TTL alone cannot serve stale data.
+     */
+    async invalidateFixtureDetailCaches(
+        fixtureId: number,
+        reason = 'status_change',
+    ): Promise<void> {
+        const keys = footballFixtureDetailCacheKeys(fixtureId);
+        await Promise.all(keys.map((key) => redisCacheService.del(key)));
+        this.lineupsCache.delete(fixtureId);
+        this.statisticsCache.delete(fixtureId);
+        this.eventsCache.delete(fixtureId);
+        logger.info(
+            `[CacheInvalidate] fixture=${fixtureId} reason=${reason} keys=${keys.join(',')}`,
+        );
+    }
+
+    /**
+     * Warm lineups/events/stats for LIVE fixtures (API-Football + 365), majors/favorites first.
+     */
+    async warmLiveFixtureDetails(
+        fixtureIds: number[],
+        options?: { concurrency?: number; language?: string | null },
+    ): Promise<void> {
+        const unique = [...new Set(fixtureIds)].filter((id) => id > 0);
+        if (!unique.length) return;
+
+        const concurrency = Math.max(1, Math.min(options?.concurrency ?? 3, 6));
+        const rows = await prisma.cachedFixture.findMany({
+            where: { fixtureId: { in: unique } },
+            select: { fixtureId: true, leagueId: true },
+        });
+        const leagueById = new Map(rows.map((r) => [r.fixtureId, r.leagueId]));
+
+        let favorited = new Set<number>();
+        try {
+            const favRows = await prisma.favoriteMatch.findMany({
+                where: { apiMatchId: { in: unique }, notifiedEnd: false },
+                select: { apiMatchId: true },
+                distinct: ['apiMatchId'],
+            });
+            favorited = new Set(favRows.map((f) => f.apiMatchId));
+        } catch {
+            // optional
+        }
+
+        const ranked = [...unique].sort((a, b) => {
+            const score = (id: number) =>
+                (favorited.has(id) ? 1000 : 0) +
+                (isMajorLeagueId(leagueById.get(id)) ? 100 : 0);
+            return score(b) - score(a);
+        });
+
+        // Cap warm set but always keep majors/favorites at the front.
+        const maxWarm = Math.max(
+            8,
+            parseInt(process.env.LIVE_DETAIL_WARM_MAX || '12', 10) || 12,
+        );
+        const targets = ranked.slice(0, maxWarm);
+        let next = 0;
+        await Promise.all(
+            Array.from({ length: Math.min(concurrency, targets.length) }, async () => {
+                for (;;) {
+                    const index = next++;
+                    if (index >= targets.length) return;
+                    const fixtureId = targets[index];
+                    const existing = this.liveDetailWarmInFlight.get(fixtureId);
+                    if (existing) {
+                        await existing;
+                        continue;
+                    }
+                    const warm = Promise.allSettled([
+                        this.getMatchLineups(fixtureId, { language: options?.language }),
+                        this.getMatchStatistics(fixtureId),
+                        this.getMatchEvents(fixtureId, {
+                            forceRefresh: true,
+                            language: options?.language,
+                        }),
+                    ]).then(() => undefined);
+                    this.liveDetailWarmInFlight.set(fixtureId, warm);
+                    try {
+                        await warm;
+                    } finally {
+                        if (this.liveDetailWarmInFlight.get(fixtureId) === warm) {
+                            this.liveDetailWarmInFlight.delete(fixtureId);
+                        }
+                    }
+                }
+            }),
+        );
+        logger.info(
+            `[LiveDetailWarm] warmed ${targets.length}/${unique.length} live fixtures (majors/favorites first)`,
+        );
+    }
 
     // ============================================
     // MATCHES BY DATE
@@ -1707,10 +1831,12 @@ class FootballDataCacheService {
                 forceRefresh,
             );
             if (hasLineupData(from365)) {
+                const kickoffMs = dbMatch?.matchDate?.getTime() ?? null;
+                const statusShort = dbMatch?.status ?? (isLive ? 'LIVE' : isFinished ? 'FT' : 'NS');
                 const cacheEntry: MemoryCacheEntry<any> = {
                     data: from365,
                     timestamp: Date.now(),
-                    ttl: isFinished ? this.TTL.FINISHED : isLive ? this.TTL.LIVE_MATCH : this.TTL.UPCOMING_MATCH,
+                    ttl: this.detailTtlMs(statusShort, kickoffMs),
                 };
                 const redisTtl =
                     cacheEntry.ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : cacheEntry.ttl;
@@ -1721,6 +1847,38 @@ class FootballDataCacheService {
                 }
                 return from365;
             }
+            // 365 empty — try API-Football for mapped API ids
+            if (
+                fixtureId < SCORES365_LEAGUE_ID_OFFSET &&
+                fixtureId < 4_000_000 &&
+                !isFootballQuotaExhausted() &&
+                footballService.isConfigured()
+            ) {
+                try {
+                    const apiLineups = await footballService.getFixtureLineupsResolved(fixtureId);
+                    if (hasLineupData(apiLineups)) {
+                        logger.warn(
+                            `[Lineups] fixture=${fixtureId} reason=365_empty_api_fallback`,
+                        );
+                        const kickoffMs = dbMatch?.matchDate?.getTime() ?? null;
+                        const ttl = this.detailTtlMs(dbMatch?.status, kickoffMs);
+                        const cacheEntry: MemoryCacheEntry<any> = {
+                            data: apiLineups,
+                            timestamp: Date.now(),
+                            ttl,
+                        };
+                        await redisCacheService.set(redisKey, cacheEntry, ttl);
+                        this.setBoundedCache(this.lineupsCache, fixtureId, cacheEntry);
+                        return apiLineups;
+                    }
+                } catch (err) {
+                    logger.warn(
+                        `[Lineups] fixture=${fixtureId} reason=api_fallback_failed:`,
+                        (err as Error)?.message,
+                    );
+                }
+            }
+            logger.warn(`[Lineups] fixture=${fixtureId} reason=upstream_empty source=365`);
             return from365 ?? [];
         }
 
@@ -1885,7 +2043,7 @@ class FootballDataCacheService {
             (['FT', 'AET', 'PEN'].includes(dbMatch.status) ||
                 this.isStaleLiveOnPastDay(dbMatch.status, dbMatch.matchDate));
 
-        if (isFinished && fullData?.statistics) {
+        if (isFinished && Array.isArray(fullData?.statistics) && fullData.statistics.length > 0) {
             logger.debug(`📦 Statistics ${fixtureId} from DB fullData`);
             return fullData.statistics;
         }
@@ -1994,6 +2152,40 @@ class FootballDataCacheService {
             if (!events.length && language !== 'en') {
                 events = await getScores365ExperimentEvents(fixtureId, true, 'en');
             }
+            // API-Football fallback when 365 timeline is empty for a mapped API id.
+            if (
+                !events.length &&
+                fixtureId < SCORES365_LEAGUE_ID_OFFSET &&
+                fixtureId < 4_000_000 &&
+                !isFootballQuotaExhausted() &&
+                footballService.isConfigured()
+            ) {
+                try {
+                    const apiEvents = await footballService.getFixtureEvents(fixtureId, {
+                        source: 'job',
+                    });
+                    if (Array.isArray(apiEvents) && apiEvents.length > 0) {
+                        logger.warn(
+                            `[Events] fixture=${fixtureId} reason=365_empty_api_fallback count=${apiEvents.length}`,
+                        );
+                        events = apiEvents;
+                    } else {
+                        logger.warn(
+                            `[Events] fixture=${fixtureId} reason=upstream_empty source=365+api count=0`,
+                        );
+                    }
+                } catch (err) {
+                    logger.warn(
+                        `[Events] fixture=${fixtureId} reason=api_fallback_failed:`,
+                        (err as Error)?.message,
+                    );
+                }
+            } else if (!events.length) {
+                const mapped = getScores365GameIdForFixture(fixtureId);
+                logger.warn(
+                    `[Events] fixture=${fixtureId} reason=${mapped ? 'upstream_empty' : 'unmapped'} source=365 count=0`,
+                );
+            }
             const ttl = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '3000', 10) || 3_000);
             if (events.length > 0) {
                 const cacheEntry: MemoryCacheEntry<any> = {
@@ -2035,8 +2227,14 @@ class FootballDataCacheService {
         const isLiveStatus =
             dbMatch &&
             ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(dbMatch.status);
-        // ✅ If finished and we have events in fullData, use them (no API call, shared for all users)
-        if (!forceRefresh && isFinished && fullData?.events) {
+        // ✅ If finished and we have non-empty events in fullData, use them (no API call).
+        // Empty [] must NOT short-circuit — otherwise FT matches stay eventless forever.
+        if (
+            !forceRefresh &&
+            isFinished &&
+            Array.isArray(fullData?.events) &&
+            fullData.events.length > 0
+        ) {
             logger.debug(`📦 Events ${fixtureId} from DB fullData (shared for all users, no API call)`);
             return fullData.events;
         }
@@ -2055,9 +2253,43 @@ class FootballDataCacheService {
         logger.debug(`📡 Fetching events for fixture ${fixtureId} (request will be shared with concurrent users)`);
         const apiRequestPromise = (async () => {
             try {
-                const events = await footballService.getFixtureEvents(fixtureId, { source: 'job' });
+                let events = await footballService.getFixtureEvents(fixtureId, { source: 'job' });
+
+                // 365 fallback when API-Football timeline is empty but a mapping exists.
+                if (
+                    (!Array.isArray(events) || events.length === 0) &&
+                    isScores365ExperimentEnabled() &&
+                    getScores365GameIdForFixture(fixtureId)
+                ) {
+                    try {
+                        const from365 = await getScores365ExperimentEvents(
+                            fixtureId,
+                            true,
+                            language,
+                        );
+                        if (from365.length > 0) {
+                            logger.warn(
+                                `[Events] fixture=${fixtureId} reason=api_empty_365_fallback count=${from365.length}`,
+                            );
+                            events = from365;
+                        }
+                    } catch (err) {
+                        logger.warn(
+                            `[Events] fixture=${fixtureId} reason=365_fallback_failed:`,
+                            (err as Error)?.message,
+                        );
+                    }
+                }
 
                 const isEmpty = !Array.isArray(events) || events.length === 0;
+                if (isEmpty) {
+                    const reason = isFootballQuotaExhausted()
+                        ? 'quota'
+                        : !footballService.isConfigured()
+                          ? 'unconfigured'
+                          : 'upstream_empty';
+                    logger.warn(`[Events] fixture=${fixtureId} reason=${reason} source=api-football count=0`);
+                }
                 const ttl = isEmpty
                     ? (isLiveStatus ? this.TTL.LIVE_EVENT_INGEST : this.TTL.EMPTY)
                     : (isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH);
@@ -2327,9 +2559,13 @@ class FootballDataCacheService {
         }
 
         const status = fixture?.fixture?.status?.short ?? payload.fixture?.fixture?.status?.short ?? '';
-        const isLive = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(status);
-        const isFinished = ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(status);
-        const ttl = isLive ? 3_000 : isFinished ? this.TTL.FINISHED : this.TTL.UPCOMING_MATCH;
+        const kickoffMs =
+            typeof fixture?.fixture?.timestamp === 'number'
+                ? fixture.fixture.timestamp * 1000
+                : typeof payload.fixture?.fixture?.timestamp === 'number'
+                  ? payload.fixture.fixture.timestamp * 1000
+                  : null;
+        const ttl = this.detailTtlMs(status, kickoffMs);
         const cacheEntry: MemoryCacheEntry<any> = {
             data: payload,
             timestamp: Date.now(),
