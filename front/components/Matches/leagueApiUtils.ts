@@ -220,6 +220,10 @@ function normalizeUnixSec(ts: number): number {
  * Important: do NOT drop MM:SS when the local minute crosses 45/90 while the
  * API elapsed is still behind — that used to snap the UI back to a frozen
  * `35'` minute-only label mid first half.
+ *
+ * Also: never invent the *next* half. Providers often leave status as `LIVE`
+ * with elapsed stuck at 45 through half-time; a free-running 1H anchor would
+ * keep ticking into 60+ and look like a jump to the 65th minute.
  */
 export const resolveLiveSecondsLabel = (
   statusShort: string | undefined | null,
@@ -242,7 +246,24 @@ export const resolveLiveSecondsLabel = (
   const startSec = normalizeUnixSec(options.startTimestamp);
   const offsetMin = period === '2H' ? 45 : period === 'ET' ? 90 : 0;
   const intoPeriod = Math.max(0, now - startSec);
-  const totalSeconds = intoPeriod + offsetMin * 60;
+  let totalSeconds = intoPeriod + offsetMin * 60;
+
+  // Allow a small lead over stale API elapsed so the clock still feels live,
+  // but do not runaway minutes ahead while the provider is frozen (HT).
+  const MAX_LEAD_SEC = 90;
+  if (elapsed != null && elapsed >= 0 && Number.isFinite(elapsed)) {
+    const elapsedFloorSec = Math.floor(elapsed) * 60;
+    totalSeconds = Math.min(totalSeconds, elapsedFloorSec + MAX_LEAD_SEC);
+    totalSeconds = Math.max(totalSeconds, elapsedFloorSec);
+  }
+
+  // Hard stop at the end of this half until status/elapsed moves us on.
+  const periodEndMin = period === '1H' ? 45 : period === '2H' ? 90 : 120;
+  const periodEndSec = periodEndMin * 60;
+  if (totalSeconds >= periodEndSec) {
+    return `${periodEndMin}:00`;
+  }
+
   const minute = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minute}:${String(seconds).padStart(2, '0')}`;

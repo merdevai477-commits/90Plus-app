@@ -347,6 +347,7 @@ const MatchRow = memo(function MatchRow({
   // and visible in the FlashList viewport.
   const shortUpper = (fixture.statusShort ?? '').toUpperCase();
   const inStoppage = isLiveStoppage(fixture.statusShort, fixture.elapsed, fixture.extra);
+  const isHalfTimeStatus = shortUpper === 'HT' || shortUpper === 'BT';
   const liveInPlay =
     !!fixture.live &&
     ['1H', '2H', 'ET', 'LIVE', 'INT'].includes(shortUpper) &&
@@ -424,6 +425,10 @@ const MatchRow = memo(function MatchRow({
               </View>
             ) : fixture.status === 'UPCOMING' ? (
               <View style={styles.upcomingBadgeWrap}><Text style={styles.upcomingBadge}>{t('matches.status.upcoming')}</Text></View>
+            ) : isHalfTimeStatus ? (
+              <Text style={styles.ftBadge}>
+                {shortUpper === 'BT' ? 'BT' : 'HT'}
+              </Text>
             ) : fixture.live ? (
               <Animated.Text style={[styles.liveBadge, { opacity: sharedLivePulse }]}>
                 {t('matches.status.live')}

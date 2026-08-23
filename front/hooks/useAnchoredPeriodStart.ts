@@ -49,7 +49,10 @@ export function useAnchoredPeriodStart(
   const localRef = useRef<Anchor | null>(null);
 
   if (!period) {
-    // HT / BT / finished — keep stored anchor for when play resumes (2H).
+    // HT / BT / finished — drop the in-play anchor so we do not resume a 1H
+    // wall-clock that already ran into the 60s during half-time.
+    if (key) anchorsByKey.delete(key);
+    localRef.current = null;
     return apiStartTimestamp != null && Number.isFinite(apiStartTimestamp)
       ? normalizeUnixSec(apiStartTimestamp)
       : undefined;
