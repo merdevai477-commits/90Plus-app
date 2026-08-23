@@ -124,7 +124,7 @@ class LiveFixtureSyncService {
             }
             const { footballDataCacheService } = await import('./football-data-cache.service');
             const { calendarDateFromKickoff, calendarTodayKey } = await import(
-                '../utils/calendar-day-bounds.util',
+                '../utils/calendar-day-bounds.util'
             );
             const dateKey =
                 calendarDateFromKickoff(fixture?.fixture?.date ?? null) ??
@@ -280,7 +280,7 @@ class LiveFixtureSyncService {
                     void import('./football-data-cache.service')
                         .then(async ({ footballDataCacheService }) => {
                             const { calendarDateFromKickoff, calendarTodayKey } = await import(
-                                '../utils/calendar-day-bounds.util',
+                                '../utils/calendar-day-bounds.util'
                             );
                             await footballDataCacheService.invalidateMatchesByDateCache(
                                 calendarTodayKey(),
