@@ -328,6 +328,35 @@ export async function readTerminalFixtureById(fixtureId: number): Promise<Fixtur
   }
 }
 
+/** Batch-read FT snapshots so calendar rows stuck on NS can pick up terminal scores. */
+export async function readTerminalFixturesForIds(
+  fixtureIds: number[],
+): Promise<FixtureFromAPI[]> {
+  const unique = [...new Set(fixtureIds.filter((id) => Number.isFinite(id) && id > 0))];
+  if (!unique.length) return [];
+
+  const redis = getRedisClient();
+  if (!redis) return [];
+
+  try {
+    const keys = unique.map((id) => terminalFixtureKey(id));
+    const rawRows = await redis.mget(...keys);
+    const out: FixtureFromAPI[] = [];
+    for (const raw of rawRows) {
+      if (!raw) continue;
+      try {
+        out.push(JSON.parse(raw) as FixtureFromAPI);
+      } catch {
+        // skip malformed
+      }
+    }
+    return out;
+  } catch (err) {
+    logger.warn('[LiveFixtureCache] readTerminalFixturesForIds failed:', err);
+    return [];
+  }
+}
+
 /**
  * Resolve a fixture for HTTP responses without calling API-Football when sync data exists.
  * Near-kickoff NS rows are NOT treated as fresh from DB (avoids up-to-3h stuck NS).

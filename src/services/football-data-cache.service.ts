@@ -253,10 +253,10 @@ class FootballDataCacheService {
         // will re-hit the API.
         // Short empty TTL so lineups/stats appear soon after providers populate them.
         EMPTY: 45 * 1000,
-        MATCHES_BY_DATE_TODAY: 60 * 1000,
+        MATCHES_BY_DATE_TODAY: 30 * 1000,
         MATCHES_BY_DATE_FUTURE: 15 * 60 * 1000,
         MATCHES_BY_DATE_PAST: 24 * 60 * 60 * 1000,
-        TODAY_API_REFRESH: 60 * 1000,
+        TODAY_API_REFRESH: 30 * 1000,
         /** Near kickoff / just started — keep details hot without full LIVE status yet. */
         NEAR_KICKOFF_MATCH: 10 * 1000,
     };
@@ -314,11 +314,20 @@ class FootballDataCacheService {
     ): Promise<void> {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return;
         this.matchesByDateLocal.delete(dateString);
+        this.liveOverlayCache = null;
         const cacheKey = `by_date_${dateString}`;
         try {
             await matchCacheService.invalidateKey(cacheKey);
         } catch {
             // best-effort
+        }
+        const redis = getRedisClient();
+        if (redis) {
+            try {
+                await redis.del(`football:date_api:${dateString}`);
+            } catch {
+                // best-effort
+            }
         }
         logger.info(`[CacheInvalidate] matches-by-date=${dateString} reason=${reason}`);
     }
@@ -1137,9 +1146,11 @@ class FootballDataCacheService {
         }
     }
 
-    /** Redis live overlay + 365Scores synthetic live rows for today's calendar. */
+    /** Redis live overlay + terminal FT + 365Scores for today's calendar. */
     private async mergeCalendarWithLiveSources(apiMatches: any[]): Promise<any[]> {
         let merged = await this.mergeLiveFromRedis(apiMatches);
+        merged = await this.mergeTerminalSnapshotsOntoCalendar(merged);
+
         if (!isScores365ExperimentEnabled()) return merged;
 
         try {
@@ -1160,6 +1171,42 @@ class FootballDataCacheService {
         } catch (err) {
             logger.warn('365 crowd prediction enrich failed:', err);
             return merged;
+        }
+    }
+
+    /** Overlay FT snapshots onto calendar rows still stuck on NS after kickoff. */
+    private async mergeTerminalSnapshotsOntoCalendar(apiMatches: any[]): Promise<any[]> {
+        if (!apiMatches.length) return apiMatches;
+
+        const finishedStatuses = new Set(['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO']);
+        const nsLike = new Set(['NS', 'TBD', 'PST']);
+        const now = Date.now();
+        const staleIds: number[] = [];
+
+        for (const row of apiMatches) {
+            const id = row?.fixture?.id;
+            const status = row?.fixture?.status?.short ?? '';
+            if (!Number.isFinite(id) || finishedStatuses.has(status)) continue;
+            if (!nsLike.has(status)) continue;
+
+            const kickoffMs =
+                row?.fixture?.timestamp != null && row.fixture.timestamp > 0
+                    ? row.fixture.timestamp * 1000
+                    : Date.parse(row?.fixture?.date ?? '');
+            if (!Number.isFinite(kickoffMs) || now - kickoffMs < 90 * 60 * 1000) continue;
+            staleIds.push(id);
+        }
+
+        if (!staleIds.length) return apiMatches;
+
+        try {
+            const { readTerminalFixturesForIds } = await import('./live-fixture-cache.service');
+            const terminals = await readTerminalFixturesForIds(staleIds);
+            if (!terminals.length) return apiMatches;
+            return mergeFixtureProviders(apiMatches, terminals);
+        } catch (err) {
+            logger.warn('Terminal calendar merge failed:', err);
+            return apiMatches;
         }
     }
 
