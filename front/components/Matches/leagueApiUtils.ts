@@ -370,21 +370,29 @@ let inFlightLiveMatches: Promise<Match[]> | null = null;
  * ✅ OPTIMIZED: Backend has permanent cache for finished matches
  * ✅ INTEGRATED: Direct backend API integration
  */
-export const fetchMatchesByDate = async (date: Date): Promise<Match[]> => {
+export const fetchMatchesByDate = async (
+  date: Date,
+  options?: { fresh?: boolean },
+): Promise<Match[]> => {
   const dateString = formatLocalDateKey(date);
 
-  // Collapse concurrent calls for the same date.
-  const existing = inFlightMatchesByDate.get(dateString);
+  // Collapse concurrent calls for the same date (unless bypassing cache).
+  const inflightKey = options?.fresh ? `${dateString}:fresh` : dateString;
+  const existing = inFlightMatchesByDate.get(inflightKey);
   if (existing) return existing;
 
-  const promise = fetchMatchesByDateImpl(date, dateString).finally(() => {
-    inFlightMatchesByDate.delete(dateString);
+  const promise = fetchMatchesByDateImpl(date, dateString, options).finally(() => {
+    inFlightMatchesByDate.delete(inflightKey);
   });
-  inFlightMatchesByDate.set(dateString, promise);
+  inFlightMatchesByDate.set(inflightKey, promise);
   return promise;
 };
 
-const fetchMatchesByDateImpl = async (date: Date, dateString: string): Promise<Match[]> => {
+const fetchMatchesByDateImpl = async (
+  date: Date,
+  dateString: string,
+  options?: { fresh?: boolean },
+): Promise<Match[]> => {
   const today = getLocalTodayKey();
   const isPastDate = dateString < today;
   
@@ -400,7 +408,8 @@ const fetchMatchesByDateImpl = async (date: Date, dateString: string): Promise<M
   try {
     // Try direct backend API call first (optimized endpoint)
     const apiUrl = getApiUrl();
-    const response = await fetch(`${apiUrl}/football/cached/matches/${dateString}`, {
+    const freshQs = options?.fresh ? '?fresh=1' : '';
+    const response = await fetch(`${apiUrl}/football/cached/matches/${dateString}${freshQs}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

@@ -26,24 +26,17 @@ import {
   LIVE_FIXTURE_CALENDAR_POLL_MS,
   MATCHES_LIST_INTEREST_CAP,
   MATCHES_LIST_KICKOFF_INTEREST_MS,
+  MATCHES_LIST_OVERDUE_KICKOFF_MS,
+  MATCHES_LIST_STALE_OVERDUE_CAP,
 } from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
 import { dateFromLocalKey } from '../utils/safeDate';
+import { sortCountryGroupsForMatches } from '../utils/matchesCountrySort';
 
-export interface GroupedMatches {
-  leagueId: number;
-  leagueName: string;
-  leagueLogo?: string;
-  matches: Match[];
-}
+import type { GroupedMatches, CountryGroup } from './matchesData.types';
 
-/** Country → Leagues → Matches hierarchy */
-export interface CountryGroup {
-  country: string;
-  countryFlag: string | null;
-  leagues: GroupedMatches[];
-}
+export type { GroupedMatches, CountryGroup } from './matchesData.types';
 
 export interface UseMatchesDataResult {
   matches: Match[];
@@ -119,7 +112,10 @@ const BACKGROUND_REFRESH_THROTTLE = LIVE_FIXTURE_CALENDAR_POLL_MS;
 const PREFETCH_THROTTLE_MS = 30_000;
 /** Live feed alone — faster than full-day calendar refresh. */
 const LIVE_FEED_REFRESH_MS = 15_000;
+/** When calendar rows are overdue NS, force a fresh day fetch (throttled). */
+const STALE_CALENDAR_REFRESH_MS = 20_000;
 let lastPrefetchAt = 0;
+let lastStaleCalendarRefreshAt = 0;
 
 function prefetchLiveMatchAssets(rows: Match[]): void {
   const live = rows.filter((m) => m.status === 'live');
@@ -169,8 +165,9 @@ function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Match[]): M
 async function fetchTodayMatchesWithLiveFeed(
   date: Date,
   onLiveEarly?: (liveFeed: Match[]) => void,
+  options?: { fresh?: boolean },
 ): Promise<Match[]> {
-  const byDatePromise = fetchMatchesByDate(date);
+  const byDatePromise = fetchMatchesByDate(date, options);
   const livePromise = fetchLiveMatches();
 
   // Paint live rows as soon as the live endpoint returns — don't wait for the
@@ -192,12 +189,22 @@ async function fetchTodayMatchesWithLiveFeed(
 }
 
 /**
- * Poll fixtures that are live or about to kick off (10m window).
- * Overdue NS discovery is owned by backend probe + live feed — not the list.
+ * Poll fixtures that are live, near kickoff, or overdue (calendar still NS after FT).
  */
+function isStaleUpcomingOnCalendar(match: Match, now = Date.now()): boolean {
+  if (match.status !== 'upcoming' && match.status !== 'NS' && match.status !== 'TBD') {
+    return false;
+  }
+  if (!match.fixtureDate) return false;
+  const kickoff = Date.parse(match.fixtureDate);
+  if (!Number.isFinite(kickoff)) return false;
+  return now - kickoff >= MATCHES_LIST_OVERDUE_KICKOFF_MS;
+}
+
 function shouldPollFixtureOnMatchesList(match: Match, now = Date.now()): boolean {
   if (match.status === 'live') return true;
   if (match.status === 'finished') return false;
+  if (isStaleUpcomingOnCalendar(match, now)) return true;
   if (!match.fixtureDate) return false;
   const kickoff = new Date(match.fixtureDate).getTime();
   if (Number.isNaN(kickoff)) return false;
@@ -205,10 +212,11 @@ function shouldPollFixtureOnMatchesList(match: Match, now = Date.now()): boolean
   return delta <= MATCHES_LIST_KICKOFF_INTEREST_MS && delta >= 0;
 }
 
-/** All live fixtures always register; near-kickoff NS fills remaining cap slots. */
+/** All live + overdue stale + near-kickoff NS (capped). */
 function pickMatchesListInterestIds(matches: Match[], cap = MATCHES_LIST_INTEREST_CAP): number[] {
   const now = Date.now();
   const live: { id: number; kickoff: number }[] = [];
+  const stale: { id: number; kickoff: number }[] = [];
   const near: { id: number; kickoff: number }[] = [];
 
   for (const m of matches) {
@@ -218,10 +226,12 @@ function pickMatchesListInterestIds(matches: Match[], cap = MATCHES_LIST_INTERES
     const kickoff = m.fixtureDate ? Date.parse(m.fixtureDate) : 0;
     const row = { id, kickoff: Number.isFinite(kickoff) ? kickoff : 0 };
     if (m.status === 'live') live.push(row);
+    else if (isStaleUpcomingOnCalendar(m, now)) stale.push(row);
     else near.push(row);
   }
 
   live.sort((a, b) => a.kickoff - b.kickoff);
+  stale.sort((a, b) => b.kickoff - a.kickoff);
   near.sort((a, b) => a.kickoff - b.kickoff);
 
   const out: number[] = [];
@@ -231,9 +241,17 @@ function pickMatchesListInterestIds(matches: Match[], cap = MATCHES_LIST_INTERES
     seen.add(row.id);
     out.push(row.id);
   }
+  let staleAdded = 0;
+  for (const row of stale) {
+    if (seen.has(row.id)) continue;
+    if (staleAdded >= MATCHES_LIST_STALE_OVERDUE_CAP) break;
+    seen.add(row.id);
+    out.push(row.id);
+    staleAdded += 1;
+  }
   for (const row of near) {
     if (seen.has(row.id)) continue;
-    if (out.length >= cap) break;
+    if (out.length >= live.length + MATCHES_LIST_STALE_OVERDUE_CAP + cap) break;
     seen.add(row.id);
     out.push(row.id);
   }
@@ -295,36 +313,9 @@ function overlaySnapshotsOnCalendar(
 }
 
 /**
- * Country sort priority:
- * 1. England, Spain, Italy, France, Germany (top 5 leagues)
- * 2. Middle East countries (alphabetical)
- * 3. Everything else (alphabetical)
- */
-const COUNTRY_PRIORITY: Record<string, number> = {
-  'England': 1,
-  'Spain': 2,
-  'Italy': 3,
-  'France': 4,
-  'Germany': 5,
-};
-
-const MIDDLE_EAST_COUNTRIES = new Set([
-  'Saudi-Arabia', 'Egypt', 'UAE', 'Qatar', 'Kuwait', 'Bahrain',
-  'Oman', 'Jordan', 'Iraq', 'Syria', 'Lebanon', 'Palestine',
-  'Yemen', 'Libya', 'Tunisia', 'Algeria', 'Morocco', 'Sudan',
-  'Turkey',
-]);
-
-function getCountrySortKey(country: string): string {
-  const priority = COUNTRY_PRIORITY[country];
-  if (priority) return `0${priority}`; // Top 5: "01" to "05"
-  if (MIDDLE_EAST_COUNTRIES.has(country)) return `1${country}`; // Middle East: "1Egypt"
-  return `2${country}`; // Rest: "2Argentina"
-}
-
-/**
  * Groups matches by country, then by league within each country.
  * Pass pre-built league groups to avoid re-grouping the same match list.
+ * Order: continental → top 5 → Arab (alpha) → rest (alpha).
  */
 const groupMatchesByCountry = (
   matches: Match[],
@@ -344,23 +335,13 @@ const groupMatchesByCountry = (
     countryMap.get(country)!.leagues.push(group);
   }
 
-  return Array.from(countryMap.entries())
-    .map(([country, data]) => ({
-      country,
-      countryFlag: getCountryFlagUri(country, data.flag),
-      leagues: [...data.leagues].sort((a, b) => {
-        const aLive = a.matches.some((m) => m.status === 'live');
-        const bLive = b.matches.some((m) => m.status === 'live');
-        if (aLive !== bLive) return aLive ? -1 : 1;
-        return 0;
-      }),
-    }))
-    .sort((a, b) => {
-      const aLive = a.leagues.some((l) => l.matches.some((m) => m.status === 'live'));
-      const bLive = b.leagues.some((l) => l.matches.some((m) => m.status === 'live'));
-      if (aLive !== bLive) return aLive ? -1 : 1;
-      return getCountrySortKey(a.country).localeCompare(getCountrySortKey(b.country));
-    });
+  const raw = Array.from(countryMap.entries()).map(([country, data]) => ({
+    country,
+    countryFlag: getCountryFlagUri(country, data.flag),
+    leagues: data.leagues,
+  }));
+
+  return sortCountryGroupsForMatches(raw);
 };
 
 /**
@@ -836,6 +817,27 @@ export const useMatchesData = (
     }, LIVE_FEED_REFRESH_MS);
     return () => clearInterval(id);
   }, [pauseBackgroundRefresh, isToday, isPastDate, refreshLiveFeedOnly]);
+
+  // Calendar still shows UPCOMING after kickoff+FT window — bypass day cache.
+  useEffect(() => {
+    if (pauseBackgroundRefresh || !isToday || isPastDate) return;
+    const hasStale = calendarMatches.some((m) => isStaleUpcomingOnCalendar(m));
+    if (!hasStale) return;
+    const now = Date.now();
+    if (now - lastStaleCalendarRefreshAt < STALE_CALENDAR_REFRESH_MS) return;
+    lastStaleCalendarRefreshAt = now;
+    void fetchTodayMatchesWithLiveFeed(selectedDate, (liveFeed) => {
+      setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+      setLoading(false);
+    }, { fresh: true })
+      .then((merged) => {
+        setCalendarMatches(merged);
+        setIsDataStale(false);
+        evictOldestIfNeeded(memoryCache);
+        memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
+      })
+      .catch(() => undefined);
+  }, [calendarMatches, pauseBackgroundRefresh, isToday, isPastDate, selectedDate, dateString]);
 
   const refetch = useCallback(async () => {
     await fetchData(true);

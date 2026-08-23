@@ -39,6 +39,10 @@ export const LIVE_FIXTURE_CALENDAR_POLL_MS = 45_000;
 export const MATCHES_LIST_INTEREST_CAP = 20;
 /** Upcoming kickoff window for list interest (ms before kickoff). */
 export const MATCHES_LIST_KICKOFF_INTEREST_MS = 10 * 60 * 1000;
+/** Calendar row still NS/upcoming this long after kickoff → stale; poll for FT. */
+export const MATCHES_LIST_OVERDUE_KICKOFF_MS = 105 * 60 * 1000;
+/** Cap overdue stale polls so we don't fan out on a stuck calendar day. */
+export const MATCHES_LIST_STALE_OVERDUE_CAP = 15;
 
 export const LIVE_STATUS_SHORTS = new Set([
   '1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP',

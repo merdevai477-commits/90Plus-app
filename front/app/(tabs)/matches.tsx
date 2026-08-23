@@ -43,11 +43,6 @@ import {
   subscribeSharedLivePulse,
   unsubscribeSharedLivePulse,
 } from '../../components/Matches/sharedLivePulse';
-import {
-  compareInternationalLeagues,
-  isInternationalCompetition,
-} from '../../utils/internationalCompetition';
-
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
   isCorrect?: boolean | null;
@@ -115,7 +110,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ITEM_SEPARATOR_8 = () => <View style={{ height: 8 }} />;
 const ITEM_SEPARATOR_10 = () => <View style={{ height: 10 }} />;
 
-const FILTERS = ['All', 'Live', 'Upcoming', 'International', 'WorldCup', 'Finished'] as const;
+const FILTERS = ['All', 'Live', 'Upcoming', 'Favorite', 'WorldCup', 'Finished'] as const;
 type MatchFilter = (typeof FILTERS)[number];
 
 /** Local midnight — calendar/filter sync uses device timezone. */
@@ -147,7 +142,7 @@ const FILTER_LABEL_KEYS: Record<(typeof FILTERS)[number], string> = {
   All: 'matches.tabs.all',
   Live: 'matches.tabs.live',
   Upcoming: 'matches.tabs.upcoming',
-  International: 'matches.tabs.international',
+  Favorite: 'matches.tabs.favorites',
   WorldCup: 'matches.tabs.worldCup',
   Finished: 'matches.tabs.finished',
 };
@@ -1205,8 +1200,13 @@ export default function MatchesHubScreenV2() {
   }, [userId]);
 
   useEffect(() => {
-    if (params.filter && FILTERS.includes(params.filter as any)) {
-      const f = params.filter as typeof FILTERS[number];
+    if (!params.filter) return;
+    const raw = params.filter as string;
+    // Legacy deep links — International tab became Favorites (placeholder).
+    const normalized =
+      raw === 'International' ? 'Favorite' : raw;
+    if (FILTERS.includes(normalized as MatchFilter)) {
+      const f = normalized as MatchFilter;
       if (f === 'WorldCup' && worldCupLocked && !worldCupEnabled) {
         setShowWorldCupLocked(true);
         return;
@@ -1229,6 +1229,10 @@ export default function MatchesHubScreenV2() {
       setSelectedDate(startOfLocalDay());
       void refetch();
     }
+    if (f === 'Finished') {
+      setSelectedDate(startOfLocalDay());
+      void refetch();
+    }
     setFilter(f);
   }, [worldCupEnabled, worldCupLocked, refetch]);
 
@@ -1238,9 +1242,9 @@ export default function MatchesHubScreenV2() {
     next.setHours(0, 0, 0, 0);
     setSelectedDate(next);
     setShowCalendar(false);
-    // Keep World Cup / International / Live when browsing dates — optional tabs
+    // Keep World Cup / Favorite / Live when browsing dates — optional tabs
     // fall back via the empty-availability effect if the new day has no matches.
-    if (filter !== 'WorldCup' && filter !== 'International' && filter !== 'Live') {
+    if (filter !== 'WorldCup' && filter !== 'Favorite' && filter !== 'Live') {
       setFilter(filterForCalendarDay(next));
     }
   }, [calendarViewDate, filter]);
@@ -1322,11 +1326,8 @@ export default function MatchesHubScreenV2() {
   );
 
   // Country → League hierarchy after filtering. Drops empty leagues and
-  // empty countries so the accordion list only renders sections with data.
-  // World Cup stays on its dedicated tab / pin. Other international comps
-  // normally live on the International tab — but Live (and All when a league
-  // has live action) must still surface them so "مباشر" is not empty while
-  // Club Friendlies / ASEAN / UCL / etc. are in play.
+  // empty countries. World Cup stays on its dedicated tab / pin.
+  // Continental / international leagues show in the main list (sorted on top).
   const filteredCountryGroups = useMemo<CountryGroup[]>(() => {
     return countryGroups
       .map(cg => {
@@ -1335,20 +1336,12 @@ export default function MatchesHubScreenV2() {
           .filter((l) => {
             if (l.matches.length === 0) return false;
             if (l.leagueId === worldCupLeagueId) return false;
-            const sample = l.matches[0]?.league;
-            const isIntl = isInternationalCompetition(
-              sample ?? { id: l.leagueId, name: l.leagueName },
-              { excludeLeagueId: worldCupLeagueId },
-            );
-            if (!isIntl) return true;
-            if (filter === 'Live') return true;
-            if (filter === 'All' && l.matches.some((m) => m.status === 'live')) return true;
-            return false;
+            return true;
           });
         return { ...cg, leagues };
       })
       .filter(cg => cg.leagues.length > 0);
-  }, [countryGroups, matchPassesFilter, worldCupLeagueId, filter]);
+  }, [countryGroups, matchPassesFilter, worldCupLeagueId]);
 
   const worldCupLeagueGroups = useMemo<LeagueGroup[]>(() => {
     if (worldCupMatches.length === 0) return [];
@@ -1410,7 +1403,7 @@ export default function MatchesHubScreenV2() {
   const pinnedWorldCupGroup = useMemo((): LeagueGroup | null => {
     if (
       filter === 'WorldCup' ||
-      filter === 'International' ||
+      filter === 'Favorite' ||
       !worldCupEnabled ||
       worldCupLeagueGroups.length === 0
     ) {
@@ -1422,82 +1415,29 @@ export default function MatchesHubScreenV2() {
     return { ...base, fixtures };
   }, [filter, worldCupEnabled, worldCupLeagueGroups, fixturePassesFilter]);
 
-  /** International tab — league cards sorted major continental → UCL → Europe → alpha. */
-  const internationalLeagueGroups = useMemo<LeagueGroup[]>(() => {
-    const intlMatches = matches.filter((m) =>
-      isInternationalCompetition(m.league, { excludeLeagueId: worldCupLeagueId }),
-    );
-    if (intlMatches.length === 0) return [];
-
-    const byLeague = new Map<number, Match[]>();
-    for (const m of intlMatches) {
-      const id = m.league?.id ?? 0;
-      const bucket = byLeague.get(id) ?? [];
-      bucket.push(m);
-      byLeague.set(id, bucket);
-    }
-
-    const groups: LeagueGroup[] = [];
-    for (const [leagueId, leagueMatches] of byLeague) {
-      const sample = leagueMatches[0];
-      const sortedMatches = [...leagueMatches].sort((a, b) => {
-        if (a.status === 'live' && b.status !== 'live') return -1;
-        if (b.status === 'live' && a.status !== 'live') return 1;
-        const ta = a.startTimestamp ?? (a.fixtureDate ? Date.parse(a.fixtureDate) / 1000 : 0);
-        const tb = b.startTimestamp ?? (b.fixtureDate ? Date.parse(b.fixtureDate) / 1000 : 0);
-        return ta - tb;
-      });
-      groups.push({
-        id: `intl-${leagueId}`,
-        league: sample?.league?.name ?? 'International',
-        leagueLogo: sample?.league?.logo ?? '',
-        fixtures: sortedMatches.map(matchToFixture),
-      });
-    }
-
-    groups.sort((a, b) =>
-      compareInternationalLeagues(
-        { id: a.fixtures[0]?.leagueId, name: a.league },
-        { id: b.fixtures[0]?.leagueId, name: b.league },
-      ),
-    );
-    return groups;
-  }, [matches, worldCupLeagueId]);
-
-  const hasInternationalMatches = internationalLeagueGroups.length > 0;
   const hasWorldCupMatchesForDate = useMemo(
     () => worldCupMatches.some((m) => isSameLocalDay(m.fixtureDate, selectedDate)),
     [worldCupMatches, selectedDate],
   );
 
-  // Keep optional chips stable while their fetch is in-flight to avoid flicker.
-  const showInternationalTab =
-    hasInternationalMatches || (filter === 'International' && loading);
   const showWorldCupTab =
     hasWorldCupMatchesForDate || (filter === 'WorldCup' && worldCupLoading && worldCupEnabled);
 
   const visibleFilters = useMemo(() => {
     return FILTERS.filter((f) => {
-      if (f === 'International') return showInternationalTab;
       if (f === 'WorldCup') return showWorldCupTab;
       return true;
     });
-  }, [showInternationalTab, showWorldCupTab]);
+  }, [showWorldCupTab]);
 
   // If the active optional tab vanishes after a date/data change, fall back.
   useEffect(() => {
-    if (filter === 'International' && !loading && !hasInternationalMatches) {
-      setFilter(filterForCalendarDay(selectedDate));
-      return;
-    }
     if (filter === 'WorldCup' && !worldCupLoading && !hasWorldCupMatchesForDate) {
       setFilter(filterForCalendarDay(selectedDate));
     }
   }, [
     filter,
-    loading,
     worldCupLoading,
-    hasInternationalMatches,
     hasWorldCupMatchesForDate,
     selectedDate,
   ]);
@@ -2144,8 +2084,7 @@ export default function MatchesHubScreenV2() {
         hype={t('matchesInfo.hype')}
         gotItLabel={t('matchesInfo.gotIt')}
       />
-      {/* FlashList — virtualized, JS-thread friendly, no nested scroll.
-          WorldCup / International / default (All/Live/Upcoming/Finished) modes. */}
+      {/* FlashList — WorldCup / Favorite (placeholder) / default country accordion. */}
       {filter === 'WorldCup' ? (
         <FlashList
           data={worldCupLeagueGroups}
@@ -2158,17 +2097,20 @@ export default function MatchesHubScreenV2() {
           ListHeaderComponent={listHeaderWithPinnedWc}
           ListEmptyComponent={listEmptyNode}
         />
-      ) : filter === 'International' ? (
+      ) : filter === 'Favorite' ? (
         <FlashList
-          data={internationalLeagueGroups}
-          keyExtractor={g => g.id}
-          renderItem={renderLeagueCard}
-          ItemSeparatorComponent={ITEM_SEPARATOR_10}
+          data={[] as CountryGroup[]}
+          keyExtractor={() => 'favorite-placeholder'}
+          renderItem={() => null}
           drawDistance={250}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={listHeaderNode}
-          ListEmptyComponent={listEmptyNode}
+          ListEmptyComponent={
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyTxt}>{t('matches.screen.favoritesComingSoon')}</Text>
+            </View>
+          }
         />
       ) : (
         <FlashList

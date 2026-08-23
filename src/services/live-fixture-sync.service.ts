@@ -122,6 +122,19 @@ class LiveFixtureSyncService {
                 const { footballDataCacheService } = await import('./football-data-cache.service');
                 await footballDataCacheService.invalidateFixtureDetailCaches(fixtureId, 'LIVE→FT');
             }
+            const { footballDataCacheService } = await import('./football-data-cache.service');
+            const { calendarDateFromKickoff, calendarTodayKey } = await import(
+                '../utils/calendar-day-bounds.util',
+            );
+            const dateKey =
+                calendarDateFromKickoff(fixture?.fixture?.date ?? null) ??
+                (fixture?.fixture?.timestamp != null
+                    ? calendarDateFromKickoff(
+                          new Date(fixture.fixture.timestamp * 1000).toISOString(),
+                      )
+                    : null) ??
+                calendarTodayKey();
+            await footballDataCacheService.invalidateMatchesByDateCache(dateKey, 'LIVE→FT');
             this.warmedLiveIds.delete(fixtureId);
 
             this.broadcastMatchUpdate(fixtureId, homeScore, awayScore, status, elapsed);
@@ -210,7 +223,6 @@ class LiveFixtureSyncService {
             const ids = candidates
                 .filter((row) => isNsNearKickoff(row.status, row.matchDate, row.matchTimestamp))
                 .map((row) => row.fixtureId)
-                .filter((id) => id < 4_000_000)
                 .slice(0, NS_KICKOFF_PROBE_LIMIT);
 
             if (!ids.length) return [];
@@ -235,6 +247,9 @@ class LiveFixtureSyncService {
                 const becameLive = refreshed.filter((f) =>
                     LIVE_STATUSES_SET.has(f.fixture?.status?.short ?? ''),
                 );
+                const becameFinished = refreshed.filter((f) =>
+                    FINISHED_STATUSES_SET.has(f.fixture?.status?.short ?? ''),
+                );
                 if (becameLive.length > 0) {
                     logger.info(
                         `[LiveFixtureSync] NS kickoff probe: ${becameLive.length}/${refreshed.length} now LIVE`,
@@ -254,6 +269,37 @@ class LiveFixtureSyncService {
                                         'NS_probe→LIVE',
                                     );
                                 }
+                            }
+                        })
+                        .catch(() => undefined);
+                }
+                if (becameFinished.length > 0) {
+                    logger.info(
+                        `[LiveFixtureSync] NS probe: ${becameFinished.length}/${refreshed.length} now FT`,
+                    );
+                    void import('./football-data-cache.service')
+                        .then(async ({ footballDataCacheService }) => {
+                            const { calendarDateFromKickoff, calendarTodayKey } = await import(
+                                '../utils/calendar-day-bounds.util',
+                            );
+                            await footballDataCacheService.invalidateMatchesByDateCache(
+                                calendarTodayKey(),
+                                'NS_probe→FT',
+                            );
+                            for (const f of becameFinished) {
+                                const id = f.fixture?.id;
+                                if (id == null) continue;
+                                const dateKey =
+                                    calendarDateFromKickoff(f.fixture?.date ?? null) ??
+                                    calendarTodayKey();
+                                await footballDataCacheService.invalidateMatchesByDateCache(
+                                    dateKey,
+                                    'NS_probe→FT',
+                                );
+                                await footballDataCacheService.invalidateFixtureDetailCaches(
+                                    id,
+                                    'NS_probe→FT',
+                                );
                             }
                         })
                         .catch(() => undefined);

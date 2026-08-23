@@ -1845,6 +1845,17 @@ export class FootballController {
         return;
       }
 
+      const forceFresh =
+        req.query.fresh === '1' ||
+        req.query.fresh === 'true' ||
+        req.query.forceRefresh === '1';
+      if (forceFresh) {
+        await footballDataCacheService.invalidateMatchesByDateCache(
+          dateString,
+          'client_fresh',
+        );
+      }
+
       const matches = await footballDataCacheService.getMatchesByDate(dateString);
 
       res.json({
