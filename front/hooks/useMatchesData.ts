@@ -117,9 +117,18 @@ const BACKGROUND_REFRESH_THROTTLE = LIVE_FIXTURE_CALENDAR_POLL_MS;
 
 /** Throttle logo/name prefetch so live-feed merges don't stampede the network. */
 const PREFETCH_THROTTLE_MS = 30_000;
+/** Live feed alone — faster than full-day calendar refresh. */
+const LIVE_FEED_REFRESH_MS = 15_000;
 let lastPrefetchAt = 0;
 
+function prefetchLiveMatchAssets(rows: Match[]): void {
+  const live = rows.filter((m) => m.status === 'live');
+  if (live.length === 0) return;
+  prefetchMatchAssets(live);
+}
+
 function maybePrefetchMatchAssets(rows: Match[]): void {
+  prefetchLiveMatchAssets(rows);
   const now = Date.now();
   if (now - lastPrefetchAt < PREFETCH_THROTTLE_MS) return;
   lastPrefetchAt = now;
@@ -168,7 +177,10 @@ async function fetchTodayMatchesWithLiveFeed(
   // full day calendar (often slower) so the Live tab feels instant.
   void livePromise
     .then((liveFeed) => {
-      if (liveFeed.length > 0) onLiveEarly?.(liveFeed);
+      if (liveFeed.length > 0) {
+        prefetchLiveMatchAssets(liveFeed);
+        onLiveEarly?.(liveFeed);
+      }
     })
     .catch(() => {});
 
@@ -193,7 +205,7 @@ function shouldPollFixtureOnMatchesList(match: Match, now = Date.now()): boolean
   return delta <= MATCHES_LIST_KICKOFF_INTEREST_MS && delta >= 0;
 }
 
-/** Live first, then nearest kickoffs — hard-capped for list interest. */
+/** All live fixtures always register; near-kickoff NS fills remaining cap slots. */
 function pickMatchesListInterestIds(matches: Match[], cap = MATCHES_LIST_INTEREST_CAP): number[] {
   const now = Date.now();
   const live: { id: number; kickoff: number }[] = [];
@@ -214,11 +226,16 @@ function pickMatchesListInterestIds(matches: Match[], cap = MATCHES_LIST_INTERES
 
   const out: number[] = [];
   const seen = new Set<number>();
-  for (const row of [...live, ...near]) {
+  for (const row of live) {
     if (seen.has(row.id)) continue;
     seen.add(row.id);
     out.push(row.id);
+  }
+  for (const row of near) {
+    if (seen.has(row.id)) continue;
     if (out.length >= cap) break;
+    seen.add(row.id);
+    out.push(row.id);
   }
   return out;
 }
@@ -331,9 +348,19 @@ const groupMatchesByCountry = (
     .map(([country, data]) => ({
       country,
       countryFlag: getCountryFlagUri(country, data.flag),
-      leagues: data.leagues,
+      leagues: [...data.leagues].sort((a, b) => {
+        const aLive = a.matches.some((m) => m.status === 'live');
+        const bLive = b.matches.some((m) => m.status === 'live');
+        if (aLive !== bLive) return aLive ? -1 : 1;
+        return 0;
+      }),
     }))
-    .sort((a, b) => getCountrySortKey(a.country).localeCompare(getCountrySortKey(b.country)));
+    .sort((a, b) => {
+      const aLive = a.leagues.some((l) => l.matches.some((m) => m.status === 'live'));
+      const bLive = b.leagues.some((l) => l.matches.some((m) => m.status === 'live'));
+      if (aLive !== bLive) return aLive ? -1 : 1;
+      return getCountrySortKey(a.country).localeCompare(getCountrySortKey(b.country));
+    });
 };
 
 /**
@@ -753,6 +780,20 @@ export const useMatchesData = (
     }
   }, []);
 
+  /** Live-only refresh — lightweight vs full calendar (~200KB). */
+  const refreshLiveFeedOnly = useCallback(async () => {
+    try {
+      const liveFeed = await fetchLiveMatches();
+      if (liveFeed.length === 0) return;
+      prefetchLiveMatchAssets(liveFeed);
+      setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+      setLoading(false);
+      setIsDataStale(false);
+    } catch {
+      /* best-effort */
+    }
+  }, []);
+
   // ✅ FIXED: Use ref to prevent infinite loop
   // fetchData is memoized with useCallback, but we use ref for extra safety
   const fetchDataRef = useRef(fetchData);
@@ -761,6 +802,21 @@ export const useMatchesData = (
   useEffect(() => {
     fetchDataRef.current();
   }, [dateString, isToday, isPastDate]);
+
+  // Paint live rows immediately on today — don't wait for the full-day calendar.
+  useEffect(() => {
+    if (pauseBackgroundRefresh || !isToday || isPastDate) return;
+    let cancelled = false;
+    void fetchLiveMatches().then((liveFeed) => {
+      if (cancelled || liveFeed.length === 0) return;
+      prefetchLiveMatchAssets(liveFeed);
+      setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pauseBackgroundRefresh, isToday, isPastDate, dateString]);
 
   // Calendar refresh only — live scores via useLiveFixtureSync + Zustand store.
   useEffect(() => {
@@ -771,6 +827,15 @@ export const useMatchesData = (
     }, intervalMs);
     return () => clearInterval(id);
   }, [pauseBackgroundRefresh, dateString, isToday, isPastDate, fetchDataInBackground]);
+
+  // Live feed poll — faster than calendar so scores/status stay fresh on the Live tab.
+  useEffect(() => {
+    if (pauseBackgroundRefresh || !isToday || isPastDate) return;
+    const id = setInterval(() => {
+      void refreshLiveFeedOnly();
+    }, LIVE_FEED_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [pauseBackgroundRefresh, isToday, isPastDate, refreshLiveFeedOnly]);
 
   const refetch = useCallback(async () => {
     await fetchData(true);

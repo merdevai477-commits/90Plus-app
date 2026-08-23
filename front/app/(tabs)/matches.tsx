@@ -1835,9 +1835,9 @@ export default function MatchesHubScreenV2() {
       const hasLive = item.leagues.some((l) =>
         l.matches.some((m) => m.status === 'live'),
       );
-      // Expand England by default, plus any country with live matches (Live tab glance).
+      // Expand live countries first so the Live tab shows action without scrolling.
       // Do not gate clocks via onViewableItemsChanged — that setState looped with FlashList layout.
-      const defaultExpanded = item.country === 'England' || hasLive;
+      const defaultExpanded = hasLive || item.country === 'England';
       return (
         <CountryAccordion
           countryGroup={item}
@@ -2060,7 +2060,8 @@ export default function MatchesHubScreenV2() {
   );
 
   const listLoading =
-    filter === 'WorldCup' && worldCupEnabled ? worldCupLoading : loading;
+    (filter === 'WorldCup' && worldCupEnabled ? worldCupLoading : loading) &&
+    !(filter === 'Live' && matches.some((m) => m.status === 'live'));
   const listError =
     filter === 'WorldCup' && worldCupEnabled ? worldCupError : error;
   const listRefetch =
