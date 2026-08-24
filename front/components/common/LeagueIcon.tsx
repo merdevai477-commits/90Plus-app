@@ -23,14 +23,18 @@ export default function LeagueIcon({
   const [uriIndex, setUriIndex] = useState(0);
 
   const candidates = useMemo(() => {
+    const looksLikeWorldCup = /world\s*cup|fifa/i.test(name || '');
     const resolved = leagueId != null ? leagueLogoUrl(leagueId, logo) : (logo?.trim() ?? '');
     const urls: string[] = [];
     if (resolved) urls.push(resolved);
-    if (leagueId != null && leagueId > 0) {
+    // Never invent the World Cup crest for mis-tagged leagueId=1 rows.
+    if (leagueId != null && leagueId > 1) {
       urls.push(`https://media.api-sports.io/football/leagues/${leagueId}.png`);
+    } else if (leagueId === 1 && looksLikeWorldCup) {
+      urls.push(`https://media.api-sports.io/football/leagues/1.png`);
     }
     return [...new Set(urls)];
-  }, [leagueId, logo]);
+  }, [leagueId, logo, name]);
 
   const uri = candidates[uriIndex] ?? '';
   const shouldShowLogo = uri && !imageError && uriIndex < candidates.length;

@@ -99,14 +99,20 @@ const LeagueSection = memo(function LeagueSection({
   );
   const matchCount = league.matches.length;
   const hasMore = matchCount > MATCHES_PREVIEW_COUNT;
+  // Mis-tagged synthetic rows sometimes land on WORLD_CUP_LEAGUE_ID (1) with a
+  // non-WC name — never show the World Cup trophy for those.
+  const leagueLogoUri =
+    league.leagueId === 1 && !/world\s*cup|fifa/i.test(league.leagueName || '')
+      ? ''
+      : league.leagueLogo;
 
   return (
     <View style={styles.leagueSection}>
       {/* League Header */}
       <TouchableOpacity style={styles.leagueHeader} onPress={toggle} activeOpacity={0.7}>
-        {league.leagueLogo ? (
+        {leagueLogoUri ? (
           <Image
-            source={{ uri: league.leagueLogo }}
+            source={{ uri: leagueLogoUri }}
             style={styles.leagueLogo}
             contentFit="contain"
             cachePolicy="memory-disk"

@@ -1302,6 +1302,79 @@ function build365CompetitorLogo(competitorId?: number): string {
   return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2/v3/Competitors/${competitorId}`;
 }
 
+/** Stable 365 competition logo (v2 path resolves for most competitions). */
+function build365CompetitionLogo(competitionId?: number | null): string {
+  if (!competitionId || competitionId <= 0) return '';
+  return `https://imagecache.365scores.com/image/upload/f_png,w_68,h_68,c_limit,q_auto:eco,dpr_2/v2/Competitions/${competitionId}`;
+}
+
+function getScores365WorldCupCompetitionId(): number {
+  return getScores365CompetitionId();
+}
+
+/**
+ * League identity for a 365 game. Non-WC competitions must NEVER fall through to
+ * WORLD_CUP_LEAGUE_ID (1) — that makes the app show the World Cup trophy logo.
+ */
+function resolveLeagueOverridesFrom365Game(
+  game: Scores365Game,
+  existing?: SynthesizeBaseOverrides | null,
+): SynthesizeBaseOverrides {
+  const cfg = getScores365ExperimentConfig();
+  const competitionId = game.competitionId ?? null;
+  const wcCompetitionId = getScores365WorldCupCompetitionId();
+  const isWcCompetition = competitionId != null && competitionId === wcCompetitionId;
+
+  if (competitionId != null && competitionId > 0 && !isWcCompetition) {
+    const syntheticId = scores365CompetitionToLeagueId(competitionId);
+    return {
+      leagueId: syntheticId,
+      season: existing?.season ?? cfg.season,
+      leagueName:
+        existing?.leagueName ??
+        resolve365LeagueDisplayName(game, game.competitionDisplayName ?? 'League'),
+      country: existing?.country && existing.country !== 'World' ? existing.country : existing?.country,
+      leagueLogo:
+        (existing?.leagueLogo && existing.leagueLogo.trim()) ||
+        build365CompetitionLogo(competitionId),
+    };
+  }
+
+  // WC competition (or missing competitionId on a known WC base): keep WC league id.
+  if (isWcCompetition || existing?.leagueId === cfg.leagueId) {
+    return {
+      leagueId: cfg.leagueId,
+      season: existing?.season ?? cfg.season,
+      leagueName: existing?.leagueName ?? resolve365LeagueDisplayName(game, 'FIFA World Cup'),
+      country: existing?.country ?? 'World',
+      leagueLogo: existing?.leagueLogo ?? '',
+    };
+  }
+
+  // Unknown competition and no WC base — still prefer synthetic id when we have competitionId.
+  if (competitionId != null && competitionId > 0) {
+    return {
+      leagueId: scores365CompetitionToLeagueId(competitionId),
+      season: existing?.season ?? cfg.season,
+      leagueName:
+        existing?.leagueName ??
+        resolve365LeagueDisplayName(game, game.competitionDisplayName ?? 'League'),
+      country: existing?.country,
+      leagueLogo:
+        (existing?.leagueLogo && existing.leagueLogo.trim()) ||
+        build365CompetitionLogo(competitionId),
+    };
+  }
+
+  return {
+    leagueId: existing?.leagueId ?? cfg.leagueId,
+    season: existing?.season ?? cfg.season,
+    leagueName: existing?.leagueName,
+    country: existing?.country,
+    leagueLogo: existing?.leagueLogo,
+  };
+}
+
 /**
  * Offset applied to a 365Scores competitionId to derive a synthetic `leagueId`
  * for non-WC leagues. Keeps 365's ID space from colliding with API-Football
@@ -1331,6 +1404,7 @@ export function synthesizeBaseFrom365Game(
   overrides?: SynthesizeBaseOverrides,
 ): FixtureFromAPI {
   const cfg = getScores365ExperimentConfig();
+  const league = resolveLeagueOverridesFrom365Game(game, overrides ?? null);
   const status = map365Status(game);
   // Guard against missing/malformed 365 startTime: an invalid kickoff string
   // propagates to clients where `new Date(...).toISOString()` throws
@@ -1376,12 +1450,14 @@ export function synthesizeBaseFrom365Game(
       },
     },
     league: {
-      id: overrides?.leagueId ?? cfg.leagueId,
-      name: overrides?.leagueName ?? resolve365LeagueDisplayName(game, 'FIFA World Cup'),
-      country: overrides?.country ?? 'World',
-      logo: overrides?.leagueLogo ?? '',
+      id: league.leagueId ?? cfg.leagueId,
+      name:
+        league.leagueName ??
+        resolve365LeagueDisplayName(game, overrides?.leagueName ?? 'FIFA World Cup'),
+      country: league.country ?? overrides?.country ?? 'World',
+      logo: league.leagueLogo ?? overrides?.leagueLogo ?? '',
       flag: null,
-      season: overrides?.season ?? cfg.season,
+      season: league.season ?? overrides?.season ?? cfg.season,
       round,
     },
     teams: {
@@ -1480,7 +1556,10 @@ async function resolve365BaseAndAlignment(
   let alignment = base ? detect365TeamAlignment(game, base) : null;
 
   if (!alignment) {
-    const overrides = synthesizeOverridesFromBase(base);
+    const overrides = resolveLeagueOverridesFrom365Game(
+      game,
+      synthesizeOverridesFromBase(base),
+    );
     base = synthesizeBaseFrom365Game(game, fixtureId, overrides);
     alignment = detect365TeamAlignment(game, base);
   }
@@ -2288,6 +2367,21 @@ export async function mapScores365ToApiFootballFixture(
     },
     league: {
       ...base.league,
+      ...(() => {
+        const corrected = resolveLeagueOverridesFrom365Game(
+          game,
+          synthesizeOverridesFromBase(base),
+        );
+        return {
+          id: corrected.leagueId ?? base.league.id,
+          country: corrected.country ?? base.league.country,
+          logo:
+            (corrected.leagueLogo && corrected.leagueLogo.trim()) ||
+            base.league.logo ||
+            '',
+          season: corrected.season ?? base.league.season,
+        };
+      })(),
       name: resolve365LeagueDisplayName(game, base.league.name),
       round: resolve365FixtureRound(game) || base.league.round || '',
     },

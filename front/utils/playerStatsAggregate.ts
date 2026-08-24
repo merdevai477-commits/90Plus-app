@@ -222,7 +222,9 @@ export function leagueLogoUrl(leagueId: number, logo?: string | null): string {
   if (logo && logo.trim() && !logo.includes('placeholder')) {
     return logo.trim();
   }
-  if (leagueId > 0) {
+  // Avoid inventing the API-Football World Cup crest (league id 1) for empty logos —
+  // mis-tagged 365 fixtures have used id=1 and then showed the WC trophy.
+  if (leagueId > 1) {
     return `https://media.api-sports.io/football/leagues/${leagueId}.png`;
   }
   return '';
