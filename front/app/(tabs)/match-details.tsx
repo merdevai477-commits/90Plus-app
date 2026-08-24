@@ -2162,6 +2162,9 @@ const MatchDetailsScreen = () => {
 
   const hasLmt = Boolean(lmtInfo?.widgetUrl);
   const showPitch = hasLmt && heroView === 'pitch';
+  // Only mount the native WebView while Pitch is visible. Keeping it at height:0
+  // on the Score tab lets Android still paint a black surface that clips scorers
+  // — especially when the widget reloads at FT / late stoppage.
 
   const scoreHeader = (
     <MatchHeader
@@ -2209,12 +2212,8 @@ const MatchDetailsScreen = () => {
     />
   );
 
-  const lmtWidget = hasLmt && isFocused ? (
-    <View
-      collapsable={false}
-      pointerEvents={showPitch ? 'auto' : 'none'}
-      style={showPitch ? undefined : styles.lmtHidden}
-    >
+  const lmtWidget = hasLmt && isFocused && showPitch ? (
+    <View collapsable={false}>
       <MatchLmtWebView
         variant="hero"
         widgetUrl={lmtInfo!.widgetUrl}
@@ -2251,8 +2250,8 @@ const MatchDetailsScreen = () => {
       />
 
       {lmtWidget}
-      {/* Keep score header mounted while on Pitch so the live clock anchor
-          does not reset when toggling Pitch ↔ Score. */}
+      {/* Score header stays mounted across Pitch ↔ Score so the live clock
+          anchor does not reset. LMT WebView mounts only while Pitch is shown. */}
       <View
         collapsable={false}
         pointerEvents={showPitch ? 'none' : 'auto'}
