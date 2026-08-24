@@ -1103,6 +1103,14 @@ const MatchDetailsScreen = () => {
     void loadVenueIfNeeded();
   }, [activeTab, fixture?.fixture?.id, loadVenueIfNeeded]);
 
+  // Reset Pitch/Score to score when match is not live (NS / FT) — must run before
+  // any early returns so hook order stays stable across loading/error states.
+  useEffect(() => {
+    if (!isLive() || isFinishedMatch()) {
+      setHeroView('score');
+    }
+  }, [fixture?.fixture?.status?.short, snapshot?.phase, isLive, isFinishedMatch]);
+
   // ── Tab change handler — triggers lazy load ───────────────────────────────
   const handleTabChange = useCallback((tab: string) => {
     setActiveTab(tab as any);
@@ -2149,12 +2157,6 @@ const MatchDetailsScreen = () => {
   // Only mount the native WebView while Pitch is visible. Keeping it at height:0
   // on the Score tab lets Android still paint a black surface that clips scorers
   // — especially when the widget reloads at FT / late stoppage.
-
-  useEffect(() => {
-    if (!isLive() || isFinishedMatch()) {
-      setHeroView('score');
-    }
-  }, [fixture?.fixture?.status?.short, snapshot?.phase, isLive, isFinishedMatch]);
 
   const scoreHeader = (
     <MatchHeader
