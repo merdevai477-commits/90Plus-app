@@ -6,6 +6,7 @@ import {
   TextInput,
   Pressable,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Alert,
   ActionSheetIOS,
@@ -13,6 +14,7 @@ import {
   ActivityIndicator,
   Modal,
   StatusBar,
+  type KeyboardEvent,
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
@@ -459,6 +461,7 @@ export function MatchChatTab({
   const [now, setNow] = useState(Date.now());
   const [expanded, setExpanded] = useState(false);
   const [likedIds, setLikedIds] = useState<Record<string, true>>({});
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const nearBottomLatest = useRef(true);
 
   const {
@@ -505,6 +508,33 @@ export function MatchChatTab({
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [frozenUntil]);
+
+  // Modal + Android `softwareKeyboardLayoutMode: pan` do not resize the
+  // window, so KeyboardAvoidingView alone leaves the composer under the
+  // keyboard — lift it manually from keyboard event coordinates.
+  useEffect(() => {
+    const onShow = (e: KeyboardEvent) => {
+      const h = e?.endCoordinates?.height ?? 0;
+      setKeyboardHeight(h > 0 ? h : 0);
+    };
+    const onHide = () => setKeyboardHeight(0);
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const subShow = Keyboard.addListener(showEvent, onShow);
+    const subHide = Keyboard.addListener(hideEvent, onHide);
+    return () => {
+      subShow.remove();
+      subHide.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (keyboardHeight <= 0 || messages.length === 0) return;
+    const id = requestAnimationFrame(() => {
+      safeFlashListScrollToEnd(expanded ? fullListRef.current : listRef.current, true);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [keyboardHeight, expanded, messages.length]);
 
   useEffect(() => {
     if (!nearBottomLatest.current || messages.length === 0) return;
@@ -695,46 +725,55 @@ export function MatchChatTab({
     </>
   );
 
-  const composer = (bottomPad: number) => (
-    <LinearGradient
-      colors={['#07040D', '#0C051A']}
-      style={[styles.composerBar, { paddingBottom: Math.max(bottomPad, 12) }]}
-    >
-      <Pressable
-        style={({ pressed }) => [styles.sendHit, pressed && canSend && styles.sendHitPressed]}
-        onPress={onSend}
-        disabled={!canSend && signedIn}
-        accessibilityRole="button"
-        accessibilityLabel={md.chatSend}
-        accessibilityState={{ disabled: !canSend && signedIn }}
+  const composer = (safeBottom: number) => {
+    const keyboardOpen = keyboardHeight > 0;
+    return (
+      <LinearGradient
+        colors={['#07040D', '#0C051A']}
+        style={[
+          styles.composerBar,
+          {
+            paddingBottom: keyboardOpen ? 10 : Math.max(safeBottom, 12),
+            marginBottom: keyboardOpen ? keyboardHeight : 0,
+          },
+        ]}
       >
-        <SendButtonIcon size={53} disabled={!canSend && signedIn} />
-      </Pressable>
+        <Pressable
+          style={({ pressed }) => [styles.sendHit, pressed && canSend && styles.sendHitPressed]}
+          onPress={onSend}
+          disabled={!canSend && signedIn}
+          accessibilityRole="button"
+          accessibilityLabel={md.chatSend}
+          accessibilityState={{ disabled: !canSend && signedIn }}
+        >
+          <SendButtonIcon size={53} disabled={!canSend && signedIn} />
+        </Pressable>
 
-      <View style={[styles.inputContainer, (frozen || !signedIn) && styles.inputContainerDisabled]}>
-        <FaceSmileIcon size={24} />
-        <TextInput
-          style={styles.input}
-          placeholder={
-            frozen ? md.chatFrozenPlaceholder : !signedIn ? md.chatLoginHint : md.chatPlaceholder
-          }
-          placeholderTextColor="#484050"
-          textAlign="right"
-          textAlignVertical="center"
-          editable={signedIn && !frozen}
-          value={draft}
-          onChangeText={setDraft}
-          maxLength={maxLength}
-          returnKeyType="send"
-          onSubmitEditing={onSend}
-          blurOnSubmit={false}
-        />
-        {draft.length > maxLength - 40 ? (
-          <Text style={styles.counter}>{maxLength - draft.length}</Text>
-        ) : null}
-      </View>
-    </LinearGradient>
-  );
+        <View style={[styles.inputContainer, (frozen || !signedIn) && styles.inputContainerDisabled]}>
+          <FaceSmileIcon size={24} />
+          <TextInput
+            style={styles.input}
+            placeholder={
+              frozen ? md.chatFrozenPlaceholder : !signedIn ? md.chatLoginHint : md.chatPlaceholder
+            }
+            placeholderTextColor="#484050"
+            textAlign="right"
+            textAlignVertical="center"
+            editable={signedIn && !frozen}
+            value={draft}
+            onChangeText={setDraft}
+            maxLength={maxLength}
+            returnKeyType="send"
+            onSubmitEditing={onSend}
+            blurOnSubmit={false}
+          />
+          {draft.length > maxLength - 40 ? (
+            <Text style={styles.counter}>{maxLength - draft.length}</Text>
+          ) : null}
+        </View>
+      </LinearGradient>
+    );
+  };
 
   const feedBody = (
     list: 'compact' | 'full',
@@ -813,10 +852,7 @@ export function MatchChatTab({
         presentationStyle="fullScreen"
         onRequestClose={onCloseFull}
       >
-        <KeyboardAvoidingView
-          style={styles.fullWrap}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <View style={styles.fullWrap}>
           <StatusBar barStyle="light-content" backgroundColor="#07040D" />
           <View style={[styles.fullInner, { paddingTop: Math.max(insets.top, 12) }]}>
             {matchSummary ? (
@@ -838,7 +874,7 @@ export function MatchChatTab({
             {feedBody('full', messages)}
             {composer(Math.max(insets.bottom, 12))}
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
     </KeyboardAvoidingView>
   );
