@@ -5,16 +5,18 @@ alwaysApply: true
 
 # Auto push to GitHub after changes
 
+**User preference (confirmed):** After any bug fix or feature change that touches tracked files, commit and push to `main` immediately — do **not** wait for "اه" / go-ahead.
+
 When you finish implementing a task that modified tracked project files:
 
-1. **Commit** — Create a commit with a clear message (why, not just what). Do not commit secrets (`.env`, credentials). Skip untracked docs unless the user asked for them.
+1. **Commit** — Create a commit with a clear message (why, not just what). Do not commit secrets (`.env`, credentials). Skip untracked docs/temps unless the user asked for them.
 2. **Push** — Run `git push origin main` (or the current branch with `-u` if no upstream).
 3. **Report** — Tell the user the commit hash and that push succeeded.
 
 ## When to skip
 
 - Question-only or read-only tasks (no file changes).
-- User explicitly says not to commit or push.
+- User explicitly says not to commit or push for that task.
 - Commit would be empty.
 - Push fails (auth, conflicts) — fix or report; do not force-push `main`.
 
