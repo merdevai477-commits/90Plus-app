@@ -139,6 +139,34 @@ describe('provider-owned live fixture snapshots', () => {
     ]);
   });
 
+  it('REPLACE keeps a statusGroup-3 row even if the mapper classified it as FT', async () => {
+    const id = 4_633_358;
+    const redis = redisHarness({
+      [FOOTBALL_365_LIVE_MATCHES_KEY]: JSON.stringify([]),
+    });
+    mockedGetRedisClient.mockReturnValue(redis.client as any);
+
+    await replace365LiveFixturesSnapshot([fixture(id, 'FT', '365')]);
+
+    const next365 = JSON.parse(redis.values.get(FOOTBALL_365_LIVE_MATCHES_KEY) ?? '[]') as any[];
+    expect(next365).toHaveLength(1);
+    expect(next365[0].fixture.id).toBe(id);
+    expect(next365[0].fixture.status.short).toBe('LIVE');
+    expect(redis.values.has(`${FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX}${id}`)).toBe(false);
+  });
+
+  it('keeps a current 365 live row even if a leftover terminal tombstone exists', async () => {
+    const id = 4_633_358;
+    const redis = redisHarness({
+      [`${FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX}${id}`]: JSON.stringify(fixture(id, 'FT', '365')),
+      [FOOTBALL_365_LIVE_MATCHES_KEY]: JSON.stringify([fixture(id, '2H', '365')]),
+    });
+    mockedGetRedisClient.mockReturnValue(redis.client as any);
+
+    await expect(readLiveFixturesList()).resolves.toEqual([fixture(id, '2H', '365')]);
+    await expect(readLiveFixtureById(id)).resolves.toEqual(fixture(id, '2H', '365'));
+  });
+
   it('does not rehydrate 365 live rows from CachedFixture when Redis is the source', async () => {
     const prisma = require('../../lib/prisma').default;
     prisma.cachedFixture.findMany.mockClear();

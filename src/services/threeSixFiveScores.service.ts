@@ -53,6 +53,8 @@ import { asTerminalFinishedFixture } from '../utils/fixture-terminal.util';
 import {
   findReplacedSyntheticFixture,
   isHotAllScoresPersistItem,
+  isAllScoresLiveItem,
+  coerceAllScoresLiveStatus,
 } from '../utils/scores365-live-identity.util';
 
 const BASE_URL = 'https://webws.365scores.com';
@@ -1181,30 +1183,33 @@ class ThreeSixFiveScoresService {
       return { live: 0, ended: 0, retired: 0 };
     }
 
+    const liveItems = loaded.items.filter((item) => isAllScoresLiveItem(item));
+    const liveFixtures: FixtureFromAPI[] = [];
+    for (const item of liveItems) {
+      const mapped = await this.mapAllScoresItemToLiveFixture(item, loaded.competitionMeta);
+      if (mapped) liveFixtures.push(mapped);
+    }
+    if (liveItems.length > 0 && liveFixtures.length === 0) {
+      logger.warn(
+        `[OtherLeagues-365] live tick mapped 0 fixtures despite ${liveItems.length} allscores live rows — keeping previous Redis list`,
+      );
+      return { live: 0, ended: 0, retired: 0 };
+    }
+
+    const { replace365LiveFixturesSnapshot } = await import('./live-fixture-cache.service');
+    await replace365LiveFixturesSnapshot(liveFixtures);
+
     const hotItems = loaded.items.filter((item) => isHotAllScoresPersistItem(item));
     const persistResult = await this.persistAllScoresFixtures(hotItems, loaded.competitionMeta, {
       refreshLiveDetails: false,
     });
-    const liveOn365 = loaded.items.filter((item) => item.phase === 'live');
-    if (liveOn365.length > 0 && persistResult.liveFixtures.length === 0) {
-      logger.warn(
-        `[OtherLeagues-365] live tick mapped 0 fixtures despite ${liveOn365.length} allscores live rows — keeping previous Redis list`,
-      );
-      return {
-        live: 0,
-        ended: Math.max(0, hotItems.length - persistResult.liveFixtures.length),
-        retired: persistResult.retiredIds.length,
-      };
-    }
-    const { replace365LiveFixturesSnapshot } = await import('./live-fixture-cache.service');
-    await replace365LiveFixturesSnapshot(persistResult.liveFixtures);
 
     logger.info(
-      `[OtherLeagues-365] live tick: ${persistResult.liveFixtures.length} live, ${hotItems.length - persistResult.liveFixtures.length} just-ended, ${persistResult.retiredIds.length} retired (${start}..${end}, ${loaded.items.length} allscores)`,
+      `[OtherLeagues-365] live tick: ${liveFixtures.length} live (allscores ${liveItems.length}), ${hotItems.length - liveItems.length} just-ended, ${persistResult.retiredIds.length} retired (${start}..${end}, ${loaded.items.length} allscores)`,
     );
     return {
-      live: persistResult.liveFixtures.length,
-      ended: Math.max(0, hotItems.length - persistResult.liveFixtures.length),
+      live: liveFixtures.length,
+      ended: Math.max(0, hotItems.length - liveItems.length),
       retired: persistResult.retiredIds.length,
     };
   }
@@ -4691,6 +4696,20 @@ class ThreeSixFiveScoresService {
     const base = this.buildSyntheticAllScoresBase(item, competitionMeta);
     if (!base) return null;
     return { base, fixtureId: item.gameId, retiredId };
+  }
+
+  private async mapAllScoresItemToLiveFixture(
+    item: ThreeSixFiveFixtureItem,
+    competitionMeta?: CompetitionMetaMap,
+  ): Promise<FixtureFromAPI | null> {
+    const base = this.buildSyntheticAllScoresBase(item, competitionMeta);
+    const mapped = await mapScores365ToApiFootballFixture(
+      item.raw as Parameters<typeof mapScores365ToApiFootballFixture>[0],
+      base,
+      item.gameId,
+    );
+    if (!mapped) return null;
+    return coerceAllScoresLiveStatus(mapped, item.raw);
   }
 
   private async retireReplacedSyntheticFixtures(ids: number[]): Promise<void> {

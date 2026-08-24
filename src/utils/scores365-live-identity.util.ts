@@ -41,12 +41,73 @@ export function isHotAllScoresPersistItem(
   },
   nowMs = Date.now(),
 ): boolean {
-  if (item.phase === 'live') return true;
+  if (isAllScoresLiveItem(item)) return true;
   if (item.phase !== 'finished') return false;
   const startRaw = item.raw?.startTime ?? item.startTime;
   const start = startRaw ? Date.parse(startRaw) : Number.NaN;
   if (!Number.isFinite(start)) return item.raw?.statusGroup === 4;
   return nowMs - start <= 8 * 60 * 60 * 1000;
+}
+
+/** 365 allscores live set — statusGroup 3 wins over our classifier. */
+export function isAllScoresLiveItem(item: {
+  phase?: string;
+  raw?: { statusGroup?: number };
+}): boolean {
+  if (item.raw?.statusGroup === 3) return true;
+  return item.phase === 'live';
+}
+
+const LIVE_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
+
+export function coerceAllScoresLiveStatus<
+  T extends {
+    fixture?: {
+      status?: { short?: string; long?: string; elapsed?: number | null; extra?: number | null };
+    };
+  },
+>(
+  fixture: T,
+  raw?: {
+    statusGroup?: number;
+    statusText?: string;
+    shortStatusText?: string;
+    gameTime?: number;
+  },
+): T {
+  const short = fixture.fixture?.status?.short ?? '';
+  if (LIVE_SHORTS.has(short)) return fixture;
+  if (raw?.statusGroup !== 3) return fixture;
+
+  const minute = raw.gameTime != null && raw.gameTime >= 0 ? Math.floor(raw.gameTime) : null;
+  const text = `${raw.statusText ?? ''} ${raw.shortStatusText ?? ''}`.toLowerCase();
+  let coerced = 'LIVE';
+  let long = 'In Progress';
+  let elapsed = minute;
+  if (text.includes('halftime') || text.includes('half time') || text === 'ht' || short === 'HT') {
+    coerced = 'HT';
+    long = 'Halftime';
+    elapsed = 45;
+  } else if (text.includes('2nd') || text.includes('second') || (minute != null && minute > 45)) {
+    coerced = '2H';
+    long = 'Second Half';
+  } else if (text.includes('1st') || text.includes('first') || (minute != null && minute > 0)) {
+    coerced = '1H';
+    long = 'First Half';
+  }
+
+  return {
+    ...fixture,
+    fixture: {
+      ...fixture.fixture,
+      status: {
+        ...fixture.fixture?.status,
+        short: coerced,
+        long,
+        elapsed,
+      },
+    },
+  };
 }
 
 /**

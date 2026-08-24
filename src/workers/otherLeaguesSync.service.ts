@@ -212,7 +212,7 @@ async function run365AllScoresLiveTick(): Promise<void> {
           { worker: 'other-leagues-sync', ...result },
         );
       }
-    }, { ttlSec: 40 });
+    }, { ttlSec: 90 });
     if (!lease.acquired) {
       logger.debug(`[${WORKER}][365allscores-live] distributed lease busy — skipping`);
     }

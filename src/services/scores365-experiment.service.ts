@@ -17,6 +17,7 @@ import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-sta
 import { calendarTodayKey, calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
+import { coerceAllScoresLiveStatus } from '../utils/scores365-live-identity.util';
 import { withSyncLeaderLease } from './football-sync-leader.service';
 import {
   SCORES365_LEAGUE_ID_OFFSET,
@@ -2865,7 +2866,8 @@ async function sync365SyntheticLiveSnapshotsAsLeader(
         }
         const dbRow = dbByFixtureId.get(fixtureId);
         const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
-        return await mapScores365ToApiFootballFixture(game, base, fixtureId);
+        const mapped = await mapScores365ToApiFootballFixture(game, base, fixtureId);
+        return mapped ? coerceAllScoresLiveStatus(mapped, game) : null;
       } catch (err: unknown) {
         logger.warn(`[365Live] refresh fixture ${fixtureId} failed:`, (err as Error)?.message);
         return null;

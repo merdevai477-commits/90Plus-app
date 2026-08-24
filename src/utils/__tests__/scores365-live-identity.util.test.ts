@@ -2,6 +2,8 @@ import { SCORES365_LEAGUE_ID_OFFSET } from '../scores365-league-id.util';
 import {
   findReplacedSyntheticFixture,
   isHotAllScoresPersistItem,
+  isAllScoresLiveItem,
+  coerceAllScoresLiveStatus,
 } from '../scores365-live-identity.util';
 
 describe('findReplacedSyntheticFixture', () => {
@@ -74,5 +76,28 @@ describe('isHotAllScoresPersistItem', () => {
       ),
     ).toBe(false);
     expect(isHotAllScoresPersistItem({ phase: 'upcoming' }, now)).toBe(false);
+  });
+});
+
+describe('isAllScoresLiveItem', () => {
+  it('treats statusGroup 3 as live even if our phase classifier said finished', () => {
+    expect(isAllScoresLiveItem({ phase: 'finished', raw: { statusGroup: 3 } })).toBe(true);
+    expect(isAllScoresLiveItem({ phase: 'live', raw: { statusGroup: 2 } })).toBe(true);
+    expect(isAllScoresLiveItem({ phase: 'upcoming', raw: { statusGroup: 2 } })).toBe(false);
+  });
+});
+
+describe('coerceAllScoresLiveStatus', () => {
+  it('keeps a 2H row that 365 still marks statusGroup 3', () => {
+    const fixture = {
+      fixture: { status: { short: 'FT', long: 'Match Finished', elapsed: 90 } },
+    };
+    const coerced = coerceAllScoresLiveStatus(fixture, {
+      statusGroup: 3,
+      statusText: '2nd Half',
+      shortStatusText: '2nd Half',
+      gameTime: 77,
+    });
+    expect(coerced.fixture.status.short).toBe('2H');
   });
 });

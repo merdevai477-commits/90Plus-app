@@ -131,12 +131,17 @@ function terminalFixtureKey(fixtureId: number): string {
 async function suppressTerminalTombstones(
   redis: NonNullable<ReturnType<typeof getRedisClient>>,
   fixtures: FixtureFromAPI[],
+  keepLiveIds?: Set<number>,
 ): Promise<FixtureFromAPI[]> {
   const ids = [...new Set(fixtures.map((f) => f?.fixture?.id).filter((id): id is number => id != null))];
   if (!ids.length) return fixtures;
   const tombstones = await Promise.all(ids.map((id) => redis.get(terminalFixtureKey(id))));
   const terminalIds = new Set(ids.filter((_id, index) => tombstones[index] != null));
-  return fixtures.filter((fixture) => !terminalIds.has(fixture.fixture.id));
+  return fixtures.filter((fixture) => {
+    const id = fixture.fixture.id;
+    if (keepLiveIds?.has(id)) return true;
+    return !terminalIds.has(id);
+  });
 }
 
 export async function writeLiveFixturesSnapshot(fixtures: FixtureFromAPI[]): Promise<void> {
@@ -269,9 +274,24 @@ export async function replace365LiveFixturesSnapshot(liveFixtures: FixtureFromAP
   const redis = getRedisClient();
   if (!redis) return;
 
-  const incomingLive = liveFixtures.filter((fixture) =>
-    LIVE_STATUSES_SET.has(fixture?.fixture?.status?.short ?? ''),
-  );
+  const incomingLive = liveFixtures
+    .filter((fixture) => fixture?.fixture?.id != null)
+    .map((fixture) => {
+      const short = fixture.fixture?.status?.short ?? '';
+      if (LIVE_STATUSES_SET.has(short)) return fixture;
+      // allscores already classified this as live (statusGroup 3); do not drop it as FT.
+      return {
+        ...fixture,
+        fixture: {
+          ...fixture.fixture,
+          status: {
+            ...fixture.fixture.status,
+            short: 'LIVE',
+            long: fixture.fixture.status?.long || 'In Progress',
+          },
+        },
+      };
+    });
   const incomingIds = new Set(
     incomingLive.map((fixture) => fixture?.fixture?.id).filter((id): id is number => id != null),
   );
@@ -313,6 +333,7 @@ export async function replace365LiveFixturesSnapshot(liveFixtures: FixtureFromAP
     for (const fixture of incomingLive) {
       const id = fixture?.fixture?.id;
       if (id == null) continue;
+      pipeline.del(terminalFixtureKey(id));
       void import('../utils/match-status-diag.util').then(({ diagBeforeCacheWrite }) => {
         diagBeforeCacheWrite(id, fixture.fixture?.status?.short ?? '', 'redis-365-merge', '365');
       });
@@ -395,9 +416,13 @@ export async function readLiveFixturesList(): Promise<FixtureFromAPI[] | null> {
       parseFixtureList(apiRaw),
       parseFixtureList(scores365Raw),
     );
-    // A terminal observation from either provider wins over stale live rows
-    // left in the other provider's snapshot until its TTL expires.
-    return suppressTerminalTombstones(redis, merged);
+    const keepLiveIds = new Set(
+      parseFixtureList(scores365Raw)
+        .filter((fixture) => LIVE_STATUSES_SET.has(fixture?.fixture?.status?.short ?? ''))
+        .map((fixture) => fixture.fixture.id),
+    );
+    // Tombstones win over stale provider rows, but not over the current 365 live set.
+    return suppressTerminalTombstones(redis, merged, keepLiveIds);
   } catch (err) {
     logger.warn('[LiveFixtureCache] readLiveFixturesList failed:', err);
     return null;
@@ -415,8 +440,14 @@ export async function readLiveFixtureById(fixtureId: number): Promise<FixtureFro
       redis.get(providerLiveFixtureKey('api-football', fixtureId)),
       redis.get(liveFixtureKey(fixtureId)),
     ]);
-    if (terminalRaw) return null;
-    const directRaw = scores365Raw ?? apiRaw ?? legacyRaw;
+    if (scores365Raw) {
+      return JSON.parse(scores365Raw) as FixtureFromAPI;
+    }
+    if (terminalRaw) {
+      const list = await readLiveFixturesList();
+      return list?.find((f) => f?.fixture?.id === fixtureId) ?? null;
+    }
+    const directRaw = apiRaw ?? legacyRaw;
     if (directRaw) {
       return JSON.parse(directRaw) as FixtureFromAPI;
     }
@@ -631,7 +662,7 @@ export async function resolveLiveFixturesForClient(
     }
   }
 
-  if (fixtures.length > 0) {
+  if (fixtures.length > 0 && source !== 'redis') {
     const terminalRows = await Promise.all(
       fixtures.map((fixture) => readTerminalFixtureById(fixture.fixture.id)),
     );
