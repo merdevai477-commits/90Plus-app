@@ -27,6 +27,14 @@ jest.mock('socket.io-client', () => ({
   })),
 }));
 
+jest.mock('@react-native-community/netinfo', () => ({
+  __esModule: true,
+  default: {
+    fetch: jest.fn(() => Promise.resolve({ isConnected: true, isInternetReachable: true })),
+    addEventListener: jest.fn(() => jest.fn()),
+  },
+}));
+
 // Mock api.config
 jest.mock('../../config/api.config', () => ({
   getWsUrl: jest.fn(() => 'ws://localhost:3000'),

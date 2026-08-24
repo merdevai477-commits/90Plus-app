@@ -152,6 +152,9 @@ export async function writeLiveFixturesSnapshot(fixtures: FixtureFromAPI[]): Pro
       if (id == null) continue;
       const status = fixture.fixture?.status?.short ?? '';
       if (LIVE_STATUSES_SET.has(status)) {
+        void import('../utils/match-status-diag.util').then(({ diagBeforeCacheWrite }) => {
+          diagBeforeCacheWrite(id, status, 'redis-live-fixture', 'api-football');
+        });
         pipeline.setex(
           providerLiveFixtureKey('api-football', id),
           LIVE_FIXTURE_TTL_SEC,
@@ -217,12 +220,18 @@ export async function mergeLiveFixturesIntoRedisSnapshot(incoming: FixtureFromAP
       if (id == null) continue;
       const status = fixture.fixture?.status?.short ?? '';
       if (LIVE_STATUSES_SET.has(status)) {
+        void import('../utils/match-status-diag.util').then(({ diagBeforeCacheWrite }) => {
+          diagBeforeCacheWrite(id, status, 'redis-365-merge', '365');
+        });
         pipeline.setex(
           providerLiveFixtureKey('365', id),
           LIVE_FIXTURE_TTL_SEC,
           JSON.stringify(fixture),
         );
       } else {
+        void import('../utils/match-status-diag.util').then(({ diagBeforeCacheWrite }) => {
+          diagBeforeCacheWrite(id, status, 'redis-terminal', '365');
+        });
         pipeline.del(providerLiveFixtureKey('365', id));
       }
     }
@@ -420,7 +429,7 @@ export async function resolveFixtureForClient(
   return { fixture: null, source: null };
 }
 
-async function forceRefreshFixtureNearKickoff(
+export async function forceRefreshFixtureNearKickoff(
   fixtureId: number,
   language?: string | null,
 ): Promise<{ fixture: FixtureFromAPI; source: LiveFixtureReadSource } | null> {

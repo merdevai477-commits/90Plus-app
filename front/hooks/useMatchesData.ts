@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import { Match } from '../components/Matches/matchCardUtils';
 import {
   fetchMatchesByDate,
@@ -14,6 +15,7 @@ import {
 } from '../components/Matches/leagueApiUtils';
 import { cacheService } from '../services/cacheService';
 import { logger } from '../utils/logger';
+import { websocketClient } from '../services/websocketClient';
 import { useLanguageStore } from '../src/i18n/store';
 import { prefetchFootballTranslations } from '../src/stores/footballTranslationStore';
 import { collectNamesFromMatches } from '../utils/footballNamePrefetch';
@@ -30,9 +32,12 @@ import {
   MATCHES_LIST_STALE_OVERDUE_CAP,
 } from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
-import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
+import { overlaySnapshotsOnCalendar } from '../utils/overlaySnapshotsOnCalendar';
 import { dateFromLocalKey } from '../utils/safeDate';
 import { sortCountryGroupsForMatches } from '../utils/matchesCountrySort';
+
+/** Wait after WS connect before suspending live HTTP poll (matches useLiveFixtureSync). */
+const WS_TRUST_DEBOUNCE_MS = 2500;
 
 import type { GroupedMatches, CountryGroup } from './matchesData.types';
 
@@ -287,30 +292,6 @@ function listOverlaySnapshotsEqual(
 
 /** Stable empty map so getSnapshot never allocates a fresh {} when idle. */
 const EMPTY_OVERLAY_SNAPSHOTS: Record<number, LiveFixtureSnapshot> = Object.freeze({});
-
-/** Overlay Zustand live snapshots onto calendar rows for live/finished fixtures. */
-function overlaySnapshotsOnCalendar(
-  calendarRows: Match[],
-  snapshots: Record<number, LiveFixtureSnapshot>,
-): Match[] {
-  if (Object.keys(snapshots).length === 0) return calendarRows;
-  return calendarRows.map((row) => {
-    const id = parseInt(row.id, 10);
-    if (Number.isNaN(id)) return row;
-    const snap = snapshots[id];
-    if (!snap) return row;
-    // Promote NS→live/finished from per-fixture polls even when calendar is still stale.
-    if (
-      row.status === 'live' ||
-      snap.phase === 'live' ||
-      snap.phase === 'finished' ||
-      (row.status === 'upcoming' && snap.phase !== 'upcoming' && snap.phase !== 'unknown')
-    ) {
-      return snapshotToMatchRow(snap);
-    }
-    return row;
-  });
-}
 
 /**
  * Groups matches by country, then by league within each country.
@@ -800,22 +781,105 @@ export const useMatchesData = (
   }, [pauseBackgroundRefresh, isToday, isPastDate, dateString]);
 
   // Calendar refresh only — live scores via useLiveFixtureSync + Zustand store.
+  // Pause while backgrounded; resume + silent refetch on foreground.
   useEffect(() => {
     if (pauseBackgroundRefresh || isPastDate) return;
     const intervalMs = isToday ? LIVE_FIXTURE_CALENDAR_POLL_MS : 5 * 60_000;
-    const id = setInterval(() => {
-      fetchDataInBackground(dateString, isToday, isPastDate).catch(() => {});
-    }, intervalMs);
-    return () => clearInterval(id);
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const appStateRef = { current: AppState.currentState };
+
+    const clearPoll = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+    const startPoll = () => {
+      if (intervalId || AppState.currentState !== 'active') return;
+      intervalId = setInterval(() => {
+        fetchDataInBackground(dateString, isToday, isPastDate).catch(() => {});
+      }, intervalMs);
+    };
+
+    startPoll();
+
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      const wasBg = /inactive|background/.test(appStateRef.current);
+      appStateRef.current = next;
+      if (next === 'active' && wasBg) {
+        fetchDataInBackground(dateString, isToday, isPastDate).catch(() => {});
+        startPoll();
+      } else if (next !== 'active') {
+        clearPoll();
+      }
+    });
+
+    return () => {
+      clearPoll();
+      sub.remove();
+    };
   }, [pauseBackgroundRefresh, dateString, isToday, isPastDate, fetchDataInBackground]);
 
-  // Live feed poll — faster than calendar so scores/status stay fresh on the Live tab.
+  // Live feed poll — HTTP fallback only when WS is not stably connected.
   useEffect(() => {
     if (pauseBackgroundRefresh || !isToday || isPastDate) return;
-    const id = setInterval(() => {
-      void refreshLiveFeedOnly();
-    }, LIVE_FEED_REFRESH_MS);
-    return () => clearInterval(id);
+
+    let wsTrusted = false;
+    let trustTimer: ReturnType<typeof setTimeout> | null = null;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let wasConnected = websocketClient.isConnected();
+
+    const clearTrustTimer = () => {
+      if (trustTimer) {
+        clearTimeout(trustTimer);
+        trustTimer = null;
+      }
+    };
+    const clearPoll = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+    const startPoll = () => {
+      if (intervalId || wsTrusted) return;
+      intervalId = setInterval(() => {
+        if (!wsTrusted) void refreshLiveFeedOnly();
+      }, LIVE_FEED_REFRESH_MS);
+    };
+
+    const unsub = websocketClient.subscribeConnectionState((connected) => {
+      if (connected) {
+        const isReconnect = !wasConnected;
+        wasConnected = true;
+        clearTrustTimer();
+        if (isReconnect) {
+          logger.debug('[useMatchesData] WS reconnect — silent live-feed reconcile');
+          void refreshLiveFeedOnly();
+        }
+        trustTimer = setTimeout(() => {
+          wsTrusted = true;
+          clearPoll();
+          logger.debug('[useMatchesData] WS trusted — suspending live-feed HTTP poll');
+        }, WS_TRUST_DEBOUNCE_MS);
+      } else {
+        wasConnected = false;
+        clearTrustTimer();
+        wsTrusted = false;
+        logger.debug('[useMatchesData] WS down — resuming live-feed HTTP poll');
+        void refreshLiveFeedOnly();
+        startPoll();
+      }
+    });
+
+    // Poll until WS proves stable (including the trust-debounce window after connect).
+    startPoll();
+
+    return () => {
+      unsub();
+      clearTrustTimer();
+      clearPoll();
+    };
   }, [pauseBackgroundRefresh, isToday, isPastDate, refreshLiveFeedOnly]);
 
   // Calendar still shows UPCOMING after kickoff+FT window — bypass day cache.

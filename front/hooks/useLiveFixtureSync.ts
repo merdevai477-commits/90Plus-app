@@ -10,23 +10,44 @@ import {
 import { logger } from '../utils/logger';
 
 const MAX_CONCURRENT_FAST = 6;
+/** Wait after connect before trusting WS and suspending HTTP polls (avoids flap). */
+const WS_TRUST_DEBOUNCE_MS = 2500;
 
 /**
  * Single global owner of live fixture HTTP polling and WebSocket patching.
  * Mount once in the tabs layout.
+ *
+ * Polling is the fallback: when WS has been stably connected for WS_TRUST_DEBOUNCE_MS,
+ * per-fixture HTTP polls are suspended. On disconnect they resume immediately.
  */
 export function useLiveFixtureSync(): void {
   const tickRef = useRef(0);
   const pollRunningRef = useRef(false);
   const inFlightRef = useRef(new Set<number>());
   const subscribedRoomsRef = useRef(new Set<number>());
+  /** True when WS is trusted healthy — skip HTTP live polls. */
+  const wsTrustedRef = useRef(false);
+  const wasConnectedRef = useRef(websocketClient.isConnected());
+  const trustTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollTickRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
+    const clearTrustTimer = () => {
+      if (trustTimerRef.current) {
+        clearTimeout(trustTimerRef.current);
+        trustTimerRef.current = null;
+      }
+    };
+
     const unsubWs = websocketClient.subscribeToAllMatchUpdates((update: MatchUpdatePayload) => {
       useLiveFixtureStore.getState().patchFromWebSocket(update, Date.now());
     });
 
     const pollTick = async () => {
+      if (wsTrustedRef.current) {
+        logger.debug('[LiveFixtureSync] HTTP poll skipped — WS trusted healthy');
+        return;
+      }
       if (pollRunningRef.current) {
         logger.debug('[LiveFixtureSync] Poll tick skipped — previous cycle still running');
         return;
@@ -57,10 +78,14 @@ export function useLiveFixtureSync(): void {
         pollRunningRef.current = false;
       }
     };
+    pollTickRef.current = pollTick;
 
-    void pollTick();
-    const pollId = setInterval(() => {
+    // Seed: poll until WS proves stable (or if already disconnected).
+    if (!websocketClient.isConnected()) {
       void pollTick();
+    }
+    const pollId = setInterval(() => {
+      void pollTickRef.current();
     }, LIVE_FIXTURE_FAST_POLL_MS);
 
     const sweepId = setInterval(() => {
@@ -86,6 +111,33 @@ export function useLiveFixtureSync(): void {
     syncRooms();
     const roomSyncId = setInterval(syncRooms, LIVE_FIXTURE_FAST_POLL_MS);
 
+    const unsubConnection = websocketClient.subscribeConnectionState((connected) => {
+      if (connected) {
+        const isReconnect = !wasConnectedRef.current;
+        wasConnectedRef.current = true;
+        clearTrustTimer();
+        // Reconcile silently if we just came back from disconnect.
+        if (isReconnect) {
+          logger.debug('[LiveFixtureSync] WS reconnect — silent reconcile fetch');
+          void useLiveFixtureStore.getState().refreshInterestedLive();
+        }
+        trustTimerRef.current = setTimeout(() => {
+          wsTrustedRef.current = true;
+          logger.debug('[LiveFixtureSync] WS trusted — suspending HTTP live polls');
+        }, WS_TRUST_DEBOUNCE_MS);
+      } else {
+        wasConnectedRef.current = false;
+        clearTrustTimer();
+        const wasTrusted = wsTrustedRef.current;
+        wsTrustedRef.current = false;
+        logger.debug('[LiveFixtureSync] WS down — resuming HTTP live polls');
+        // Immediate fallback tick so the UI never waits a full interval.
+        if (wasTrusted || AppState.currentState === 'active') {
+          void pollTickRef.current();
+        }
+      }
+    });
+
     const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next === 'active') {
         void useLiveFixtureStore.getState().refreshInterestedLive();
@@ -94,6 +146,8 @@ export function useLiveFixtureSync(): void {
 
     return () => {
       unsubWs();
+      unsubConnection();
+      clearTrustTimer();
       clearInterval(pollId);
       clearInterval(sweepId);
       clearInterval(roomSyncId);

@@ -489,6 +489,7 @@ export class FootballController {
    * Prefers Redis snapshot from LiveFixtureSync (≤10s) before upstream API.
    */
   static async getLiveFixtures(req: Request, res: Response): Promise<void> {
+    const startedAt = Date.now();
     try {
       const language = resolveAppLanguage(req);
       const redisLive = await resolveLiveFixturesForClient(language);
@@ -496,6 +497,10 @@ export class FootballController {
         (redisLive.source === 'redis' || redisLive.source === 'scores365-experiment') &&
         redisLive.fixtures.length > 0
       ) {
+        const elapsedMs = Date.now() - startedAt;
+        logger.info(
+          `[Perf] getLiveFixtures source=${redisLive.source} results=${redisLive.fixtures.length} elapsedMs=${elapsedMs}`,
+        );
         logger.debug(`📦 Returning ${redisLive.fixtures.length} live fixtures from ${redisLive.source}`);
         res.json({
           status: 'SUCCESS',
@@ -504,6 +509,7 @@ export class FootballController {
           cached: true,
           source: redisLive.source === 'scores365-experiment' ? 'scores365-experiment' : 'redis-sync',
           language,
+          _meta: { elapsedMs },
         });
         return;
       }
@@ -547,11 +553,16 @@ export class FootballController {
         });
       }
 
+      const elapsedMs = Date.now() - startedAt;
+      logger.info(
+        `[Perf] getLiveFixtures source=api results=${fixtures.length} elapsedMs=${elapsedMs}`,
+      );
       res.json({
         status: 'SUCCESS',
         results: fixtures.length,
         response: fixtures,
         cached: false,
+        _meta: { elapsedMs },
       });
     } catch (error: any) {
       const errMsg = error?.message || String(error);
@@ -563,6 +574,7 @@ export class FootballController {
         cached: false,
         degraded: true,
         message: 'Live fixtures temporarily unavailable',
+        _meta: { elapsedMs: Date.now() - startedAt },
       });
     }
   }
@@ -1835,6 +1847,7 @@ export class FootballController {
 
   static async getCachedMatchesByDate(req: Request, res: Response): Promise<void> {
     const dateString = ensureString(req.params.date);
+    const startedAt = Date.now();
     try {
       // Validate date format
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
@@ -1857,14 +1870,33 @@ export class FootballController {
       }
 
       const matches = await footballDataCacheService.getMatchesByDate(dateString);
+      // List endpoint: never ship detail blobs (events/lineups/stats/fullData).
+      const response = matches.map((fixture: Record<string, unknown>) => {
+        if (!fixture || typeof fixture !== 'object') return fixture;
+        const {
+          events: _e,
+          lineups: _l,
+          statistics: _s,
+          players: _p,
+          fullData: _f,
+          ...rest
+        } = fixture as Record<string, unknown>;
+        return rest;
+      });
+
+      const elapsedMs = Date.now() - startedAt;
+      logger.info(
+        `[Perf] getCachedMatchesByDate date=${dateString} results=${response.length} elapsedMs=${elapsedMs}`,
+      );
 
       res.json({
         status: 'SUCCESS',
-        results: matches.length,
-        response: matches,
+        results: response.length,
+        response,
         _meta: {
           date: dateString,
           cached: true,
+          elapsedMs,
         },
       });
     } catch (error) {
@@ -1876,6 +1908,7 @@ export class FootballController {
         _meta: {
           date: dateString,
           cached: true,
+          elapsedMs: Date.now() - startedAt,
         },
         degraded: true,
         message: 'Cached matches temporarily unavailable',

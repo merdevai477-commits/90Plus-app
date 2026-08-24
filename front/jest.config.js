@@ -18,6 +18,8 @@ module.exports = {
   ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^@react-native-async-storage/async-storage$': '<rootDir>/__mocks__/asyncStorage.ts',
+    '^@react-native-community/netinfo$': '<rootDir>/__mocks__/netinfo.ts',
   },
   testEnvironment: 'node',
   globals: {

@@ -364,6 +364,16 @@ class MatchCacheService {
                         }
                         return current !== value;
                     });
+                    if (changed && typeof candidate.status === 'string') {
+                        void import('../utils/match-status-diag.util').then(({ diagBeforeDbWrite }) => {
+                            diagBeforeDbWrite(
+                                fixture.fixture.id,
+                                candidate.status as string,
+                                existing.status as string | undefined,
+                                'matchCacheService.upsertFixtures',
+                            );
+                        });
+                    }
                     if (!changed) return [];
 
                     return [prisma.cachedFixture.update({

@@ -43,6 +43,7 @@ import {
   subscribeSharedLivePulse,
   unsubscribeSharedLivePulse,
 } from '../../components/Matches/sharedLivePulse';
+import { createObjectRefMemo } from '../../utils/createObjectRefMemo';
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
   isCorrect?: boolean | null;
@@ -72,35 +73,6 @@ function normalizePredictedMap(
 }
 
 // Top 5 European leagues' countries — these accordions start expanded by default.
-// Convert a Match (from useMatchesData) into the Fixture shape used by MatchRow.
-// Single source of truth for this mapping — used both in the legacy `groups`
-// memo and in the new country-grouped renderer.
-function matchToFixture(m: Match): Fixture {
-  return {
-    id: m.id,
-    home: m.homeTeam?.name || 'Home',
-    away: m.awayTeam?.name || 'Away',
-    homeLogo: m.homeTeam?.logo || '',
-    awayLogo: m.awayTeam?.logo || '',
-    homeScore: m.score?.home ?? 0,
-    awayScore: m.score?.away ?? 0,
-    status: mapStatus(m.status),
-    minute: m.minute,
-    elapsed: m.elapsed ?? null,
-    extra: m.extra ?? null,
-    live: m.status === 'live',
-    time: m.time,
-    leagueName: m.league?.name,
-    leagueId: m.league?.id,
-    leagueCountry: m.league?.country,
-    leagueLogo: m.league?.logo,
-    matchDate: m.fixtureDate,
-    statusShort: m.statusShort,
-    startTimestamp: m.startTimestamp,
-    corners: m.corners,
-    crowdPrediction: m.crowdPrediction,
-  };
-}
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -184,6 +156,34 @@ type Fixture = {
     totalVotes: number;
   };
 };
+
+// Convert a Match (from useMatchesData) into the Fixture shape used by MatchRow.
+// WeakMap-memoized by Match object identity so overlay-stable rows keep the same
+// Fixture ref after groupedMatches rebuilds — MatchRow's React.memo can skip.
+const matchToFixture = createObjectRefMemo((m: Match): Fixture => ({
+  id: m.id,
+  home: m.homeTeam?.name || 'Home',
+  away: m.awayTeam?.name || 'Away',
+  homeLogo: m.homeTeam?.logo || '',
+  awayLogo: m.awayTeam?.logo || '',
+  homeScore: m.score?.home ?? 0,
+  awayScore: m.score?.away ?? 0,
+  status: mapStatus(m.status),
+  minute: m.minute,
+  elapsed: m.elapsed ?? null,
+  extra: m.extra ?? null,
+  live: m.status === 'live',
+  time: m.time,
+  leagueName: m.league?.name,
+  leagueId: m.league?.id,
+  leagueCountry: m.league?.country,
+  leagueLogo: m.league?.logo,
+  matchDate: m.fixtureDate,
+  statusShort: m.statusShort,
+  startTimestamp: m.startTimestamp,
+  corners: m.corners,
+  crowdPrediction: m.crowdPrediction,
+}));
 
 type LeagueGroup = {
   id: string;
