@@ -793,6 +793,16 @@ function gameCacheKey(gameId: number, langId: number): string {
   return `${gameId}:${langId}`;
 }
 
+export function interpretScores365GameFetch(
+  httpStatus: number,
+  game: unknown | null,
+): 'ok' | 'gone' | 'transient' {
+  if (httpStatus === 404) return 'gone';
+  if (httpStatus === 200 && (game == null || typeof game !== 'object')) return 'gone';
+  if (httpStatus === 200) return 'ok';
+  return 'transient';
+}
+
 async function fetchScores365GameOnce(gameId: number, langId: number): Promise<Scores365Game | null> {
   const staleKey = lastGoodGameKey(gameId, langId);
   const lastGood = lastGoodGameByKey.get(staleKey) ?? null;
@@ -801,12 +811,32 @@ async function fetchScores365GameOnce(gameId: number, langId: number): Promise<S
       headers: scores365FetchHeaders(langId),
       signal: AbortSignal.timeout(12_000),
     });
+    if (interpretScores365GameFetch(res.status, res.ok ? {} : null) === 'gone' && !res.ok) {
+      lastGoodGameByKey.delete(staleKey);
+      setBoundedMapEntry(cachedGameByKey, gameCacheKey(gameId, langId), {
+        fetchedAt: Date.now(),
+        game: null,
+      });
+      logger.info(`[Scores365Experiment] game ${gameId} gone from 365 (HTTP ${res.status})`);
+      return null;
+    }
     if (!res.ok) {
       logger.warn(`[Scores365Experiment] HTTP ${res.status} for game ${gameId} lang=${langId}`);
       return lastGood;
     }
     const payload = (await res.json()) as Scores365GamePayload;
     const game = payload?.game ?? null;
+    if (interpretScores365GameFetch(res.status, game) === 'gone') {
+      lastGoodGameByKey.delete(staleKey);
+      setBoundedMapEntry(cachedGameByKey, gameCacheKey(gameId, langId), {
+        fetchedAt: Date.now(),
+        game: null,
+      });
+      logger.info(
+        `[Scores365Experiment] game ${gameId} empty payload — treating as retired`,
+      );
+      return null;
+    }
     if (game) {
       void import('../utils/match-status-diag.util').then(({ diag365RawStatus }) => {
         diag365RawStatus(gameId, game, 'fetchScores365GameOnce');
@@ -2730,7 +2760,7 @@ export async function applyScores365ExperimentToWorldCupList(
 
 const SYNTHETIC_LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'] as const;
 const SYNTHETIC_LIVE_BATCH = (() => {
-  const raw = parseInt(process.env.SCORES365_SYNTHETIC_LIVE_BATCH || '10', 10);
+  const raw = parseInt(process.env.SCORES365_SYNTHETIC_LIVE_BATCH || '80', 10);
   return Number.isFinite(raw) && raw > 0 ? raw : 80;
 })();
 const LIVE_DETAIL_MAX = (() => {
@@ -2766,8 +2796,7 @@ async function mapWithConcurrency<T, R>(
 /**
  * Refresh non-WC 365 synthetic fixtures from GET /web/game/ — accurate minutes/scores
  * plus a prioritized warm of lineups/stats for live matches.
- * (allscores list lags ~30–60s; mirrors WC liveRefresh in getScores365MatchesForDate).
- * Writes live rows into Redis overlay so /fixtures/live and today's calendar stay fresh.
+ * Targets Redis live IDs from the allscores REPLACE tick (not DB LIVE rows).
  */
 type SyntheticLiveRefreshOptions = {
   language?: string | null;
@@ -2784,8 +2813,6 @@ async function sync365SyntheticLiveSnapshotsAsLeader(
 
   const lang = resolveScores365AppLanguage(options?.language ?? null);
   const liveSet = new Set<string>(SYNTHETIC_LIVE_STATUSES);
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - 1);
 
   let targetIds: number[];
   if (options?.gameIds?.length) {
@@ -2811,35 +2838,8 @@ async function sync365SyntheticLiveSnapshotsAsLeader(
     });
     targetIds = rows.map((row) => row.fixtureId);
   } else {
-    const rows = await prisma.cachedFixture.findMany({
-      where: {
-        leagueId: { gte: SCORES365_LEAGUE_ID_OFFSET },
-        matchDate: { gte: since },
-        OR: [
-          { status: { in: [...SYNTHETIC_LIVE_STATUSES] } },
-          { status: '2H', elapsed: { gt: 100 } },
-        ],
-      },
-      select: { fixtureId: true },
-      orderBy: { updatedAt: 'asc' },
-      take: SYNTHETIC_LIVE_BATCH * 2,
-    });
-    targetIds = rows.map((r) => r.fixtureId);
-
-    try {
-      const favRows = await prisma.favoriteMatch.findMany({
-        where: { apiMatchId: { in: targetIds } },
-        select: { apiMatchId: true },
-        distinct: ['apiMatchId'],
-      });
-      const favSet = new Set(favRows.map((f) => f.apiMatchId));
-      if (favSet.size > 0) {
-        targetIds.sort((a, b) => Number(favSet.has(b)) - Number(favSet.has(a)));
-      }
-    } catch {
-      // FavoriteMatch may be unavailable — keep updatedAt order.
-    }
-    targetIds = targetIds.slice(0, SYNTHETIC_LIVE_BATCH);
+    const { read365LiveFixtureIds } = await import('./live-fixture-cache.service');
+    targetIds = (await read365LiveFixtureIds()).slice(0, SYNTHETIC_LIVE_BATCH);
   }
 
   if (!targetIds.length) return 0;
@@ -2857,7 +2857,12 @@ async function sync365SyntheticLiveSnapshotsAsLeader(
     async (fixtureId): Promise<FixtureFromAPI | null> => {
       try {
         const game = await fetchScores365GameById(fixtureId, { force: true, language: lang });
-        if (!game) return null;
+        if (!game) {
+          const dbRow = dbByFixtureId.get(fixtureId);
+          const converted = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
+          const { fixtureFromMissing365Game } = await import('../utils/fixture-terminal.util');
+          return fixtureFromMissing365Game(fixtureId, converted);
+        }
         const dbRow = dbByFixtureId.get(fixtureId);
         const base = dbRow ? matchCacheService.convertDbMatchToApiFormat(dbRow) : null;
         return await mapScores365ToApiFootballFixture(game, base, fixtureId);

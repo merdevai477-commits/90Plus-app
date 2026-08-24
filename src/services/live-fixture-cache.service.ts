@@ -14,6 +14,9 @@ import {
 } from '../utils/football-cache-keys.util';
 import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES } from './match-cache.service';
 import prisma from '../lib/prisma';
+import { asTerminalFinishedFixture } from '../utils/fixture-terminal.util';
+import { isNative365FixtureId } from '../utils/native-365-fixture-id';
+import { SCORES365_LEAGUE_ID_OFFSET as SYNTHETIC_365_LEAGUE_OFFSET } from '../utils/scores365-league-id.util';
 
 export const FOOTBALL_LIVE_FIXTURE_KEY_PREFIX = 'football:live_fixture:';
 export const FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX = 'football:fixture_terminal:';
@@ -23,6 +26,24 @@ const LIVE_LIST_TTL_SEC = Math.max(
     Math.ceil((parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '5000', 10) || 5_000) / 1000) + 20,
 );
 const LIVE_FIXTURE_TTL_SEC = LIVE_LIST_TTL_SEC;
+
+/** Redis TTL for the allscores-replaced 365 live list — must outlive the ~20s tick. */
+export function scores365LiveListTtlSec(): number {
+  const tickMs = parseInt(process.env.SCORES365_ALLSCORES_LIVE_MS || '20000', 10) || 20_000;
+  const tickSec = Math.max(1, Math.ceil(tickMs / 1000));
+  return Math.max(90, tickSec * 4);
+}
+
+function combinedLiveListTtlSec(): number {
+  return Math.max(LIVE_LIST_TTL_SEC, scores365LiveListTtlSec());
+}
+
+function isScores365OwnedLiveRow(fixture: FixtureFromAPI): boolean {
+  const leagueId = fixture?.league?.id;
+  if (typeof leagueId === 'number' && leagueId >= SYNTHETIC_365_LEAGUE_OFFSET) return true;
+  const id = fixture?.fixture?.id;
+  return typeof id === 'number' && isNative365FixtureId(id);
+}
 const TERMINAL_FIXTURE_TTL_SEC = 600;
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
@@ -65,7 +86,6 @@ import {
   isScores365ExperimentEnabled,
   isScores365ExperimentFixture,
   resolveScores365AppLanguage,
-  SCORES365_LEAGUE_ID_OFFSET,
 } from './scores365-experiment.service';
 
 export type LiveFixtureReadSource = 'redis-live' | 'redis-terminal' | 'db' | 'scores365-experiment' | null;
@@ -238,6 +258,93 @@ export async function mergeLiveFixturesIntoRedisSnapshot(incoming: FixtureFromAP
     await pipeline.exec();
   } catch (err) {
     logger.warn('[LiveFixtureCache] mergeLiveFixturesIntoRedisSnapshot failed:', err);
+  }
+}
+
+/**
+ * Replace the 365 live list with the current allscores live set (not a merge).
+ * IDs that left the set are tombstoned and dropped; API-Football rows stay intact.
+ */
+export async function replace365LiveFixturesSnapshot(liveFixtures: FixtureFromAPI[]): Promise<void> {
+  const redis = getRedisClient();
+  if (!redis) return;
+
+  const incomingLive = liveFixtures.filter((fixture) =>
+    LIVE_STATUSES_SET.has(fixture?.fixture?.status?.short ?? ''),
+  );
+  const incomingIds = new Set(
+    incomingLive.map((fixture) => fixture?.fixture?.id).filter((id): id is number => id != null),
+  );
+  const ttl = scores365LiveListTtlSec();
+  const combinedTtl = combinedLiveListTtlSec();
+
+  try {
+    const [existingRaw, apiRaw] = await Promise.all([
+      redis.get(FOOTBALL_365_LIVE_MATCHES_KEY),
+      redis.get(FOOTBALL_API_LIVE_MATCHES_KEY),
+    ]);
+    const existing = parseFixtureList(existingRaw);
+    const droppedForDb: FixtureFromAPI[] = [];
+
+    for (const previous of existing) {
+      const id = previous?.fixture?.id;
+      if (id == null || incomingIds.has(id)) continue;
+      if (isScores365OwnedLiveRow(previous)) {
+        const terminal = asTerminalFinishedFixture(previous);
+        await writeTerminalFixtureSnapshot(terminal, '365');
+        droppedForDb.push(terminal);
+      }
+    }
+
+    const pipeline = redis.pipeline();
+    pipeline.setex(FOOTBALL_365_LIVE_MATCHES_KEY, ttl, JSON.stringify(incomingLive));
+    pipeline.setex(
+      FOOTBALL_LIVE_MATCHES_KEY,
+      combinedTtl,
+      JSON.stringify(mergeFixtureLists(parseFixtureList(apiRaw), incomingLive)),
+    );
+
+    for (const previous of existing) {
+      const id = previous?.fixture?.id;
+      if (id == null || incomingIds.has(id)) continue;
+      pipeline.del(providerLiveFixtureKey('365', id));
+    }
+
+    for (const fixture of incomingLive) {
+      const id = fixture?.fixture?.id;
+      if (id == null) continue;
+      void import('../utils/match-status-diag.util').then(({ diagBeforeCacheWrite }) => {
+        diagBeforeCacheWrite(id, fixture.fixture?.status?.short ?? '', 'redis-365-merge', '365');
+      });
+      pipeline.setex(providerLiveFixtureKey('365', id), ttl, JSON.stringify(fixture));
+    }
+
+    await pipeline.exec();
+
+    if (droppedForDb.length > 0) {
+      try {
+        await matchCacheService.upsertFixtures(droppedForDb);
+      } catch (err) {
+        logger.warn('[LiveFixtureCache] replace365 dropped-row upsert failed:', err);
+      }
+    }
+  } catch (err) {
+    logger.warn('[LiveFixtureCache] replace365LiveFixturesSnapshot failed:', err);
+  }
+}
+
+export async function read365LiveFixtureIds(): Promise<number[]> {
+  const redis = getRedisClient();
+  if (!redis) return [];
+  try {
+    const raw = await redis.get(FOOTBALL_365_LIVE_MATCHES_KEY);
+    return parseFixtureList(raw)
+      .filter((fixture) => LIVE_STATUSES_SET.has(fixture?.fixture?.status?.short ?? ''))
+      .map((fixture) => fixture?.fixture?.id)
+      .filter((id): id is number => id != null);
+  } catch (err) {
+    logger.warn('[LiveFixtureCache] read365LiveFixtureIds failed:', err);
+    return [];
   }
 }
 
@@ -520,37 +627,6 @@ export async function resolveLiveFixturesForClient(
       const id = experimentFixture.fixture.id;
       fixtures = fixtures.filter((f) => f.fixture.id !== id);
       fixtures.unshift(experimentFixture);
-      source = source ?? 'scores365-experiment';
-    }
-  }
-
-  if (isScores365ExperimentEnabled()) {
-    const since = new Date();
-    since.setUTCDate(since.getUTCDate() - 1);
-    const syntheticRows = await prisma.cachedFixture.findMany({
-      where: {
-        leagueId: { gte: SCORES365_LEAGUE_ID_OFFSET },
-        status: { in: LIVE_STATUSES },
-        matchDate: { gte: since },
-      },
-      take: 80,
-      orderBy: { matchDate: 'asc' },
-    });
-    if (syntheticRows.length > 0) {
-      const byId = new Map<number, FixtureFromAPI>();
-      for (const f of fixtures) {
-        const id = f?.fixture?.id;
-        if (id != null) byId.set(id, f);
-      }
-      for (const row of syntheticRows) {
-        const converted = matchCacheService.convertDbMatchToApiFormat(row);
-        const short = converted.fixture?.status?.short ?? '';
-        if (!LIVE_STATUSES_SET.has(short)) continue;
-        if (!byId.has(row.fixtureId)) {
-          byId.set(row.fixtureId, converted);
-        }
-      }
-      fixtures = Array.from(byId.values());
       source = source ?? 'scores365-experiment';
     }
   }

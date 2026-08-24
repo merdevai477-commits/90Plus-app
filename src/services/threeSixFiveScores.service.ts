@@ -48,6 +48,11 @@ import {
   offsetCalendarDateKey,
 } from '../utils/calendar-day-bounds.util';
 import { scores365RateLimitMapMaxEntries } from '../config/football-reliability-rollout.config';
+import { asTerminalFinishedFixture } from '../utils/fixture-terminal.util';
+import {
+  findReplacedSyntheticFixture,
+  isHotAllScoresPersistItem,
+} from '../utils/scores365-live-identity.util';
 
 const BASE_URL = 'https://webws.365scores.com';
 
@@ -988,6 +993,7 @@ const FIXTURES_SYNC_CURSOR_KEY = '365:fixtures_sync_cursor';
 const SUPPLEMENT_COMPETITION_BATCH = 6;
 /** Always supplement / rotate these 365 competitionIds (lower tiers often missing from allscores). */
 const DEFAULT_TRACKED_COMPETITIONS = [
+  72, // Liga Profesional Argentina
   116, // Brasileirão Série B
   18, // Serie B (Italy)
   1, // Championship (England)
@@ -1139,42 +1145,67 @@ class ThreeSixFiveScoresService {
     startDate: string,
     endDate: string,
     language?: string | null,
-    options?: { force?: boolean },
+    options?: { force?: boolean; persist?: boolean },
   ): Promise<ThreeSixFiveResult<ThreeSixFiveFixtureItem[]>> {
     if (!this.isEnabled()) return { data: null, source: null };
 
     try {
-      const langId = resolveScores365LangId(language);
-      const majorOnly = useOnlyMajorGames();
-      const cacheKey = `365:allscores:${startDate}:${endDate}:${langId}:${majorOnly ? 'major' : 'all'}`;
-      if (!options?.force) {
-        const cached = await redisCacheService.get<ThreeSixFiveFixtureItem[]>(cacheKey);
-        if (cached) return { data: cached, source: '365scores' };
+      const loaded = await this.loadAllScoresItems(startDate, endDate, language, options);
+      if (!loaded) return { data: null, source: null };
+      if (options?.persist !== false && !loaded.fromCache) {
+        await this.persistAllScoresFixtures(loaded.items, loaded.competitionMeta);
+        await this.storeTrackedCompetitionIds(loaded.competitionMeta);
       }
-
-      const path =
-        `/web/games/allscores/?${this.commonParams(langId)}` +
-        `&sports=1&startDate=${encodeURIComponent(startDate)}` +
-        `&endDate=${encodeURIComponent(endDate)}&showOdds=true&onlyMajorGames=${majorOnly}&withTop=true`;
-
-      const payload = await this.fetchJson<AllScoresPayload>(
-        path,
-        `allscores:${startDate}:${endDate}`,
-        120_000,
-      );
-      if (!payload?.games?.length) return { data: null, source: null };
-
-      const competitionMeta = this.buildCompetitionMeta(payload);
-      const items = payload.games.map((g) => this.toFixtureItem(g));
-      await redisCacheService.set(cacheKey, items, 120_000);
-      await this.persistAllScoresFixtures(items, competitionMeta);
-      await this.storeTrackedCompetitionIds(competitionMeta);
-
-      return { data: items, source: '365scores' };
+      return { data: loaded.items, source: '365scores' };
     } catch (err: unknown) {
       logger.error('[365Scores] getAllScores failed:', (err as Error)?.message);
       return { data: null, source: null };
     }
+  }
+
+  /**
+   * Authoritative live tick: one /allscores/ call for yesterday–tomorrow (Cairo),
+   * persist live + just-ended rows only, REPLACE the Redis 365 live list.
+   */
+  async syncLiveSnapshotFromAllScores(
+    language?: string | null,
+  ): Promise<{ live: number; ended: number; retired: number }> {
+    if (!this.isEnabled()) return { live: 0, ended: 0, retired: 0 };
+
+    const start = offsetCalendarDateKey(calendarTodayKey(), -1);
+    const end = offsetCalendarDateKey(calendarTodayKey(), 1);
+    const loaded = await this.loadAllScoresItems(start, end, language, { force: true });
+    if (!loaded) {
+      logger.warn('[OtherLeagues-365] live allscores tick skipped — upstream fetch failed');
+      return { live: 0, ended: 0, retired: 0 };
+    }
+
+    const hotItems = loaded.items.filter((item) => isHotAllScoresPersistItem(item));
+    const persistResult = await this.persistAllScoresFixtures(hotItems, loaded.competitionMeta, {
+      refreshLiveDetails: false,
+    });
+    const liveOn365 = loaded.items.filter((item) => item.phase === 'live');
+    if (liveOn365.length > 0 && persistResult.liveFixtures.length === 0) {
+      logger.warn(
+        `[OtherLeagues-365] live tick mapped 0 fixtures despite ${liveOn365.length} allscores live rows — keeping previous Redis list`,
+      );
+      return {
+        live: 0,
+        ended: Math.max(0, hotItems.length - persistResult.liveFixtures.length),
+        retired: persistResult.retiredIds.length,
+      };
+    }
+    const { replace365LiveFixturesSnapshot } = await import('./live-fixture-cache.service');
+    await replace365LiveFixturesSnapshot(persistResult.liveFixtures);
+
+    logger.info(
+      `[OtherLeagues-365] live tick: ${persistResult.liveFixtures.length} live, ${hotItems.length - persistResult.liveFixtures.length} just-ended, ${persistResult.retiredIds.length} retired (${start}..${end}, ${loaded.items.length} allscores)`,
+    );
+    return {
+      live: persistResult.liveFixtures.length,
+      ended: Math.max(0, hotItems.length - persistResult.liveFixtures.length),
+      retired: persistResult.retiredIds.length,
+    };
   }
 
   /**
@@ -4313,6 +4344,48 @@ class ThreeSixFiveScoresService {
   }
 
   /**
+   * Fetch /allscores/ without persisting. Returns null on upstream failure so
+   * callers can avoid wiping the live Redis list.
+   */
+  private async loadAllScoresItems(
+    startDate: string,
+    endDate: string,
+    language?: string | null,
+    options?: { force?: boolean },
+  ): Promise<{
+    items: ThreeSixFiveFixtureItem[];
+    competitionMeta: CompetitionMetaMap;
+    fromCache: boolean;
+  } | null> {
+    const langId = resolveScores365LangId(language);
+    const majorOnly = useOnlyMajorGames();
+    const cacheKey = `365:allscores:${startDate}:${endDate}:${langId}:${majorOnly ? 'major' : 'all'}`;
+    if (!options?.force) {
+      const cached = await redisCacheService.get<ThreeSixFiveFixtureItem[]>(cacheKey);
+      if (cached) {
+        return { items: cached, competitionMeta: new Map(), fromCache: true };
+      }
+    }
+
+    const path =
+      `/web/games/allscores/?${this.commonParams(langId)}` +
+      `&sports=1&startDate=${encodeURIComponent(startDate)}` +
+      `&endDate=${encodeURIComponent(endDate)}&showOdds=true&onlyMajorGames=${majorOnly}&withTop=true`;
+
+    const payload = await this.fetchJson<AllScoresPayload>(
+      path,
+      `allscores:${startDate}:${endDate}`,
+      120_000,
+    );
+    if (!payload) return null;
+
+    const competitionMeta = this.buildCompetitionMeta(payload);
+    const items = (payload.games ?? []).map((g) => this.toFixtureItem(g));
+    await redisCacheService.set(cacheKey, items, 120_000);
+    return { items, competitionMeta, fromCache: false };
+  }
+
+  /**
    * League-agnostic persistence for the /allscores/ feed (non-WC competitions).
    * Processes one calendar day at a time with paged DB loads so a multi-day
    * window cannot explode RSS in a single unbounded findMany.
@@ -4320,8 +4393,9 @@ class ThreeSixFiveScoresService {
   private async persistAllScoresFixtures(
     items: ThreeSixFiveFixtureItem[],
     competitionMeta?: CompetitionMetaMap,
-  ): Promise<void> {
-    if (!items.length) return;
+    options?: { refreshLiveDetails?: boolean },
+  ): Promise<{ liveFixtures: FixtureFromAPI[]; retiredIds: number[] }> {
+    if (!items.length) return { liveFixtures: [], retiredIds: [] };
 
     const byDay = new Map<string, ThreeSixFiveFixtureItem[]>();
     for (const item of items) {
@@ -4332,14 +4406,22 @@ class ThreeSixFiveScoresService {
       else byDay.set(day, [item]);
     }
 
+    const liveFixtures: FixtureFromAPI[] = [];
+    const retiredIds: number[] = [];
     for (const [day, dayItems] of byDay) {
-      await this.persistAllScoresFixturesForDay(day, dayItems, competitionMeta);
+      const result = await this.persistAllScoresFixturesForDay(day, dayItems, competitionMeta);
+      liveFixtures.push(...result.liveFixtures);
+      retiredIds.push(...result.retiredIds);
     }
 
-    const liveGameIds = items.filter((i) => i.phase === 'live').map((i) => i.gameId);
-    if (liveGameIds.length > 0) {
-      void sync365SyntheticLiveSnapshots({ gameIds: liveGameIds, language: 'en' });
+    if (options?.refreshLiveDetails !== false) {
+      const liveGameIds = items.filter((i) => i.phase === 'live').map((i) => i.gameId);
+      if (liveGameIds.length > 0) {
+        void sync365SyntheticLiveSnapshots({ gameIds: liveGameIds, language: 'en' });
+      }
     }
+
+    return { liveFixtures, retiredIds: [...new Set(retiredIds)] };
   }
 
   /** Page CachedFixture rows for a date range — never one unbounded query. */
@@ -4375,12 +4457,14 @@ class ThreeSixFiveScoresService {
     day: string,
     items: ThreeSixFiveFixtureItem[],
     competitionMeta?: CompetitionMetaMap,
-  ): Promise<void> {
-    if (!items.length) return;
+  ): Promise<{ liveFixtures: FixtureFromAPI[]; retiredIds: number[] }> {
+    if (!items.length) return { liveFixtures: [], retiredIds: [] };
 
     const dayStart = new Date(`${day}T00:00:00.000Z`);
     const dayEnd = new Date(`${day}T23:59:59.999Z`);
-    if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) return;
+    if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) {
+      return { liveFixtures: [], retiredIds: [] };
+    }
 
     const WINDOW_MS = 3 * 60 * 60 * 1000;
     const gameIds = [...new Set(items.map((item) => item.gameId))];
@@ -4406,6 +4490,8 @@ class ThreeSixFiveScoresService {
     }
 
     const toUpsert: FixtureFromAPI[] = [];
+    const liveFixtures: FixtureFromAPI[] = [];
+    const retiredIds: number[] = [];
     const competitions = new Set<number>();
     const finishedItems = items.filter((item) => item.phase === 'finished');
     const finishedKeys = finishedItems.map(
@@ -4420,6 +4506,17 @@ class ThreeSixFiveScoresService {
     for (const item of items) {
       const isFinished = item.phase === 'finished';
       const upsertedKey = `${FINISHED_UPSERTED_KEY_PREFIX}${item.gameId}`;
+      const replaced = findReplacedSyntheticFixture(
+        {
+          gameId: item.gameId,
+          startTime: item.raw.startTime,
+          homeName: item.raw.homeCompetitor?.name ?? item.homeName,
+          awayName: item.raw.awayCompetitor?.name ?? item.awayName,
+          competitionId: item.competitionId ?? item.raw.competitionId,
+        },
+        dbRows,
+      );
+
       if (isFinished && finishedMarkerByGameId.get(item.gameId)) {
           const candidateRow =
             exactByFixtureId.get(item.gameId) ?? this.resolveDbRow(item.raw, dbRows);
@@ -4427,51 +4524,38 @@ class ThreeSixFiveScoresService {
             !!candidateRow &&
             candidateRow.leagueId >= SCORES365_LEAGUE_ID_OFFSET &&
             LIVE_STATUSES.includes(candidateRow.status);
-          if (!stillLiveInDb) continue;
+          if (!stillLiveInDb) {
+            if (replaced && LIVE_STATUSES.includes(replaced.status ?? '')) {
+              retiredIds.push(replaced.fixtureId);
+            }
+            continue;
+          }
       }
 
-      const dbRow = exactByFixtureId.get(item.gameId) ?? this.resolveDbRow(item.raw, dbRows);
-
-      let base: FixtureFromAPI | null;
-      let fixtureId: number;
-      if (dbRow) {
-        base = matchCacheService.convertDbMatchToApiFormat(dbRow);
-        fixtureId = dbRow.fixtureId;
-      } else {
-        const competitionId = item.competitionId ?? item.raw.competitionId;
-        if (!competitionId) {
-          logger.debug(
-            `[OtherLeagues-365] game ${item.gameId}: no competitionId — skipping synthetic build`,
-          );
-          continue;
-        }
-        const kickoff = item.raw.startTime ? new Date(item.raw.startTime) : new Date();
-        const meta = competitionMeta?.get(competitionId);
-        base = synthesizeBaseFrom365Game(
-          item.raw as Parameters<typeof synthesizeBaseFrom365Game>[0],
-          item.gameId,
-          {
-            leagueId: scores365CompetitionToLeagueId(competitionId),
-            season: kickoff.getUTCFullYear(),
-            leagueName: meta?.name ?? item.raw.competitionDisplayName,
-            country: meta?.country,
-            leagueLogo: meta?.logo,
-          },
-        );
-        fixtureId = item.gameId;
-      }
+      const target = this.resolveAllScoresPersistTarget(
+        item,
+        exactByFixtureId,
+        dbRows,
+        competitionMeta,
+        replaced,
+      );
+      if (!target) continue;
+      if (target.retiredId != null) retiredIds.push(target.retiredId);
 
       const mapped = await mapScores365ToApiFootballFixture(
         item.raw as Parameters<typeof mapScores365ToApiFootballFixture>[0],
-        base,
-        fixtureId,
+        target.base,
+        target.fixtureId,
       );
       if (mapped) {
         toUpsert.push(mapped);
-        registerScores365FixtureMapping(fixtureId, item.gameId);
+        registerScores365FixtureMapping(target.fixtureId, item.gameId);
         const compId = item.competitionId ?? item.raw.competitionId;
         if (compId) competitions.add(compId);
         if (isFinished) markersToSet.push(upsertedKey);
+        if (LIVE_STATUSES.includes(mapped.fixture?.status?.short ?? '')) {
+          liveFixtures.push(mapped);
+        }
       }
     }
 
@@ -4521,6 +4605,104 @@ class ThreeSixFiveScoresService {
         }
       }
     }
+
+    const uniqueRetired = [...new Set(retiredIds)];
+    if (uniqueRetired.length > 0) {
+      await this.retireReplacedSyntheticFixtures(uniqueRetired);
+    }
+
+    return { liveFixtures, retiredIds: uniqueRetired };
+  }
+
+  private buildSyntheticAllScoresBase(
+    item: ThreeSixFiveFixtureItem,
+    competitionMeta?: CompetitionMetaMap,
+  ): FixtureFromAPI | null {
+    const competitionId = item.competitionId ?? item.raw.competitionId;
+    if (!competitionId) {
+      logger.debug(
+        `[OtherLeagues-365] game ${item.gameId}: no competitionId — skipping synthetic build`,
+      );
+      return null;
+    }
+    const kickoff = item.raw.startTime ? new Date(item.raw.startTime) : new Date();
+    const meta = competitionMeta?.get(competitionId);
+    return synthesizeBaseFrom365Game(
+      item.raw as Parameters<typeof synthesizeBaseFrom365Game>[0],
+      item.gameId,
+      {
+        leagueId: scores365CompetitionToLeagueId(competitionId),
+        season: kickoff.getUTCFullYear(),
+        leagueName: meta?.name ?? item.raw.competitionDisplayName,
+        country: meta?.country,
+        leagueLogo: meta?.logo,
+      },
+    );
+  }
+
+  private resolveAllScoresPersistTarget(
+    item: ThreeSixFiveFixtureItem,
+    exactByFixtureId: Map<number, CachedFixturePersistenceRow>,
+    dbRows: CachedFixturePersistenceRow[],
+    competitionMeta: CompetitionMetaMap | undefined,
+    replaced: ReturnType<typeof findReplacedSyntheticFixture>,
+  ): { base: FixtureFromAPI; fixtureId: number; retiredId: number | null } | null {
+    const exact = exactByFixtureId.get(item.gameId);
+    const aligned = exact ?? this.resolveDbRow(item.raw, dbRows);
+    const retiredId =
+      replaced && replaced.fixtureId !== item.gameId ? replaced.fixtureId : null;
+
+    if (exact) {
+      return {
+        base: matchCacheService.convertDbMatchToApiFormat(exact),
+        fixtureId: exact.fixtureId,
+        retiredId,
+      };
+    }
+
+    if (aligned && aligned.leagueId < SCORES365_LEAGUE_ID_OFFSET) {
+      return {
+        base: matchCacheService.convertDbMatchToApiFormat(aligned),
+        fixtureId: aligned.fixtureId,
+        retiredId: null,
+      };
+    }
+
+    if (aligned && aligned.leagueId >= SCORES365_LEAGUE_ID_OFFSET && aligned.fixtureId !== item.gameId) {
+      const base = this.buildSyntheticAllScoresBase(item, competitionMeta);
+      if (!base) return null;
+      return { base, fixtureId: item.gameId, retiredId: aligned.fixtureId };
+    }
+
+    if (aligned) {
+      return {
+        base: matchCacheService.convertDbMatchToApiFormat(aligned),
+        fixtureId: aligned.fixtureId,
+        retiredId,
+      };
+    }
+
+    const base = this.buildSyntheticAllScoresBase(item, competitionMeta);
+    if (!base) return null;
+    return { base, fixtureId: item.gameId, retiredId };
+  }
+
+  private async retireReplacedSyntheticFixtures(ids: number[]): Promise<void> {
+    const unique = [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))];
+    if (!unique.length) return;
+    const rows = await prisma.cachedFixture.findMany({
+      where: { fixtureId: { in: unique } },
+      select: CACHED_FIXTURE_PERSIST_SELECT,
+    });
+    const terminals: FixtureFromAPI[] = [];
+    for (const row of rows) {
+      if (row.leagueId < SCORES365_LEAGUE_ID_OFFSET) continue;
+      terminals.push(asTerminalFinishedFixture(matchCacheService.convertDbMatchToApiFormat(row)));
+    }
+    if (!terminals.length) return;
+    await matchCacheService.upsertFixtures(terminals);
+    const { writeTerminalFixtureSnapshot } = await import('./live-fixture-cache.service');
+    await Promise.all(terminals.map((fixture) => writeTerminalFixtureSnapshot(fixture, '365')));
   }
 
   /**

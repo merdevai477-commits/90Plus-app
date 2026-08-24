@@ -11,8 +11,9 @@
  *   OTHER_LEAGUES_API_FOOTBALL_JOBS_ENABLED — legacy duplicate API jobs (default: false)
  *   OTHER_LEAGUES_SYNC_CRON      — cron expression (default: every 5 min)
  *   OTHER_LEAGUES_LIVE_CRON      — cron for live-match refresh (default: every 2 min)
- *   OTHER_LEAGUES_ALLSCORES_CRON — cron for 365 /allscores/ calendar sync (default: daily 05:00)
- *   OTHER_LEAGUES_365_LIVE_CRON  — cron for 365 live overlay refresh (default: every 2 min)
+ *   OTHER_LEAGUES_ALLSCORES_CRON — cron for 365 /allscores/ calendar sync (default: every 10 min)
+ *   OTHER_LEAGUES_365_LIVE_CRON  — cron for 365 per-game live overlay refresh (default: every 2 min)
+ *   SCORES365_ALLSCORES_LIVE_MS  — hot allscores live tick that REPLACES Redis live list (default: 20s)
  */
 
 import cron from 'node-cron';
@@ -66,8 +67,9 @@ function isAllScoresEnabled(): boolean {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-const isRunning = { calendar: false, live: false, allScores: false, scores365Live: false, catalog: false, fixturesBatch: false };
+const isRunning = { calendar: false, live: false, allScores: false, scores365Live: false, allScoresLive: false, catalog: false, fixturesBatch: false };
 let scores365FavoriteHotTimer: ReturnType<typeof setInterval> | null = null;
+let scores365AllScoresLiveTimer: ReturnType<typeof setInterval> | null = null;
 
 /** App-calendar YYYY-MM-DD offset by `days` from today (Cairo by default). */
 function dateKeyOffset(days: number): string {
@@ -189,11 +191,43 @@ async function runAllScoresSyncTick(): Promise<void> {
   }
 }
 
+// ─── 365 allscores live tick (authoritative Redis REPLACE) ───────────────────
+
+async function run365AllScoresLiveTick(): Promise<void> {
+  if (!isAllScoresEnabled()) return;
+  if (isRunning.allScoresLive) {
+    logger.debug(`[${WORKER}][365allscores-live] previous tick still running — skipping`);
+    return;
+  }
+  isRunning.allScoresLive = true;
+
+  try {
+    const lease = await withSyncLeaderLease('365-allscores-live', async ({ signal }) => {
+      signal.throwIfAborted();
+      const result = await threeSixFiveScoresService.syncLiveSnapshotFromAllScores('en');
+      signal.throwIfAborted();
+      if (result.live > 0 || result.ended > 0 || result.retired > 0) {
+        logger.debug(
+          `[${WORKER}][365allscores-live] live=${result.live} ended=${result.ended} retired=${result.retired}`,
+          { worker: 'other-leagues-sync', ...result },
+        );
+      }
+    }, { ttlSec: 40 });
+    if (!lease.acquired) {
+      logger.debug(`[${WORKER}][365allscores-live] distributed lease busy — skipping`);
+    }
+  } catch (err: unknown) {
+    logger.error(`[${WORKER}][365allscores-live] tick fatal (recovered):`, (err as Error)?.message);
+  } finally {
+    isRunning.allScoresLive = false;
+  }
+}
+
 // ─── 365 live minute refresh (non-WC synthetic fixtures) ─────────────────────
 
 /**
- * Poll GET /web/game/ for DB-live synthetic fixtures so minutes/scores match 365
- * (same quality as WC liveRefresh). Runs every minute, independent of allscores cron.
+ * Poll GET /web/game/ for Redis-live synthetic fixtures so minutes/scores match 365
+ * (same quality as WC liveRefresh). Independent of the allscores REPLACE tick.
  */
 async function run365LiveRefreshTick(): Promise<void> {
   if (!isAllScoresEnabled()) return;
@@ -307,8 +341,8 @@ export function startOtherLeaguesSyncWorker(): void {
 
   const calendarCron = process.env.OTHER_LEAGUES_SYNC_CRON?.trim() || '1-59/5 * * * *';
   const liveCron = process.env.OTHER_LEAGUES_LIVE_CRON?.trim() || '2-59/5 * * * *';
-  // Default once daily 05:11 — set OTHER_LEAGUES_ALLSCORES_CRON on Railway if needed.
-  const allScoresCron = process.env.OTHER_LEAGUES_ALLSCORES_CRON?.trim() || '11 5 * * *';
+  // Default every 10 min — NS/FT calendar coverage. Live set uses the 20s allscores tick.
+  const allScoresCron = process.env.OTHER_LEAGUES_ALLSCORES_CRON?.trim() || '4-59/10 * * * *';
   const scores365LiveCron = process.env.OTHER_LEAGUES_365_LIVE_CRON?.trim() || '1-59/2 * * * *';
   const catalogCron = process.env.OTHER_LEAGUES_365_CATALOG_CRON?.trim() || '17 4 * * *';
   const fixturesBatchCron = process.env.OTHER_LEAGUES_365_FIXTURES_CRON?.trim() || '3-59/5 * * * *';
@@ -355,6 +389,17 @@ export function startOtherLeaguesSyncWorker(): void {
       }, hotIntervalMs);
       scores365FavoriteHotTimer.unref?.();
     }
+    if (!scores365AllScoresLiveTimer) {
+      const liveTickMs = Math.max(
+        10_000,
+        parseInt(process.env.SCORES365_ALLSCORES_LIVE_MS || '20000', 10) || 20_000,
+      );
+      scores365AllScoresLiveTimer = setInterval(() => {
+        void run365AllScoresLiveTick();
+      }, liveTickMs);
+      scores365AllScoresLiveTimer.unref?.();
+      void run365AllScoresLiveTick();
+    }
     // Boot-time force syncs (catalog / allscores / 365live / fixtures) — gated.
     // With STARTUP_SYNC_DISABLED=true these are skipped; crons above still run.
     if (isStartupSyncDisabled()) {
@@ -371,6 +416,7 @@ export function startOtherLeaguesSyncWorker(): void {
         startupJobQueue.enqueue('other-leagues-catalog', () => runCompetitionsCatalogSyncTick(true));
         startupJobQueue.enqueue('other-leagues-allscores', () => runAllScoresSyncTick());
         startupJobQueue.enqueue('other-leagues-365live', () => run365LiveRefreshTick());
+        startupJobQueue.enqueue('other-leagues-365-allscores-live', () => run365AllScoresLiveTick());
         startupJobQueue.enqueue('other-leagues-fixtures', () => runCompetitionFixturesBatchTick());
       }, startupDelayMs);
       logger.info(
@@ -380,6 +426,6 @@ export function startOtherLeaguesSyncWorker(): void {
   }
 
   logger.info(
-    `[${WORKER}] started — apiFootball=${apiFootballEnabled ? `on (calendar="${calendarCron}", live="${liveCron}")` : 'off'}, allscores365=${allScoresEnabled ? `on (allscores="${allScoresCron}", 365live="${scores365LiveCron}", catalog="${catalogCron}", fixtures="${fixturesBatchCron}")` : 'off'}`,
+    `[${WORKER}] started — apiFootball=${apiFootballEnabled ? `on (calendar="${calendarCron}", live="${liveCron}")` : 'off'}, allscores365=${allScoresEnabled ? `on (allscores="${allScoresCron}", 365live="${scores365LiveCron}", catalog="${catalogCron}", fixtures="${fixturesBatchCron}", liveTick=${process.env.SCORES365_ALLSCORES_LIVE_MS || '20000'}ms)` : 'off'}`,
   );
 }

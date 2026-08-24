@@ -33,6 +33,7 @@ import {
 } from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { overlaySnapshotsOnCalendar } from '../utils/overlaySnapshotsOnCalendar';
+import { mergeTodayCalendarWithLiveFeed } from '../utils/mergeTodayCalendarWithLiveFeed';
 import { dateFromLocalKey } from '../utils/safeDate';
 import { sortCountryGroupsForMatches } from '../utils/matchesCountrySort';
 
@@ -134,37 +135,6 @@ function maybePrefetchMatchAssets(rows: Match[]): void {
   if (now - lastPrefetchAt < PREFETCH_THROTTLE_MS) return;
   lastPrefetchAt = now;
   prefetchMatchAssets(rows);
-}
-
-/**
- * Merge today's date-indexed calendar with the global live feed.
- * Calendar cache can lag behind kickoff; live endpoint is authoritative for status/score.
- */
-function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Match[]): Match[] {
-  const map = new Map<string, Match>();
-  for (const row of calendar) {
-    map.set(row.id, row);
-  }
-  for (const liveRow of liveFeed) {
-    if (liveRow.status !== 'live') continue;
-    const existing = map.get(liveRow.id);
-    map.set(
-      liveRow.id,
-      existing
-        ? {
-            ...existing,
-            ...liveRow,
-            status: 'live',
-            score: liveRow.score,
-            minute: liveRow.minute ?? existing.minute,
-            elapsed: liveRow.elapsed ?? existing.elapsed,
-            extra: liveRow.extra ?? existing.extra,
-            statusShort: liveRow.statusShort ?? existing.statusShort,
-          }
-        : liveRow,
-    );
-  }
-  return Array.from(map.values());
 }
 
 async function fetchTodayMatchesWithLiveFeed(
