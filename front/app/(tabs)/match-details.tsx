@@ -2160,11 +2160,21 @@ const MatchDetailsScreen = () => {
     (tab) => tab.key !== 'lineups' || hasLineupData(lineups),
   );
 
-  const hasLmt = Boolean(lmtInfo?.widgetUrl);
+  const hasLmtWidget = Boolean(lmtInfo?.widgetUrl);
+  // Pitch / Score toggle only while the match is live — same as NS (no toggle).
+  // When the match ends, hide LMT controls automatically so only the score header remains.
+  const showLmtControls = hasLmtWidget && isLive() && !isFinishedMatch();
+  const hasLmt = showLmtControls;
   const showPitch = hasLmt && heroView === 'pitch';
   // Only mount the native WebView while Pitch is visible. Keeping it at height:0
   // on the Score tab lets Android still paint a black surface that clips scorers
   // — especially when the widget reloads at FT / late stoppage.
+
+  useEffect(() => {
+    if (!isLive() || isFinishedMatch()) {
+      setHeroView('score');
+    }
+  }, [fixture?.fixture?.status?.short, snapshot?.phase, isLive, isFinishedMatch]);
 
   const scoreHeader = (
     <MatchHeader
