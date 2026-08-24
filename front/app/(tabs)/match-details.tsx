@@ -2403,7 +2403,7 @@ const styles = StyleSheet.create({
   },
   heroViewToggleWrap: {
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 6,
     marginBottom: 2,
     paddingHorizontal: 20,
   },

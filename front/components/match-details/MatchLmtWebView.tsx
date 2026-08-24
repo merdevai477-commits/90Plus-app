@@ -65,6 +65,11 @@ type MatchLmtWebViewProps = {
 
 type LoadMode = 'html' | 'uri';
 
+/** SportRadar LMT widgets are typically ~1.6 width:height (not 16:9). */
+const DEFAULT_LMT_ASPECT_RATIO = 1.6;
+/** SportRadar embed often letterboxes below the grass — trim so we do not show a black bar. */
+const LMT_HERO_BOTTOM_TRIM_PX = 36;
+
 type WebSource =
   | { html: string; baseUrl: string }
   | { uri: string };
@@ -213,15 +218,17 @@ export function MatchLmtWebView({
 }: MatchLmtWebViewProps) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const ratio = aspectRatio && aspectRatio > 0 ? aspectRatio : 16 / 9;
+  const ratio =
+    aspectRatio && aspectRatio > 0 ? aspectRatio : DEFAULT_LMT_ASPECT_RATIO;
   const sidePad = 16;
   const frameWidth = variant === 'hero'
     ? width
     : Math.max(280, width - sidePad * 2);
-  const frameHeight = Math.max(
-    variant === 'hero' ? 300 : 220,
-    Math.round(frameWidth / ratio) + (variant === 'hero' ? 48 : 0),
-  );
+  const rawHeight = Math.round(frameWidth / ratio);
+  const frameHeight =
+    variant === 'hero'
+      ? Math.max(200, rawHeight - LMT_HERO_BOTTOM_TRIM_PX)
+      : Math.max(220, rawHeight);
 
   const brandWidth = Math.min(280, Math.round(frameWidth * 0.72));
   const brandHeight = Math.round(brandWidth * (84 / 280));
@@ -457,7 +464,7 @@ const styles = StyleSheet.create({
   hero: {
     marginHorizontal: 0,
     marginTop: 4,
-    marginBottom: 8,
+    marginBottom: 0,
     borderRadius: 0,
     overflow: 'hidden',
     backgroundColor: '#000',
