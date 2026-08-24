@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -127,7 +127,7 @@ function markerSizeForDensity(maxInLine: number): { avatar: number; name: number
   return { avatar: 38, name: 9, wrap: 52 };
 }
 
-const FootballFieldInner: React.FC<FootballFieldProps> = ({
+export const FootballField: React.FC<FootballFieldProps> = ({
   formation,
   players,
   teamName,
@@ -321,8 +321,6 @@ const FootballFieldInner: React.FC<FootballFieldProps> = ({
     </View>
   );
 };
-
-export const FootballField = memo(FootballFieldInner);
 
 const styles = StyleSheet.create({
   container: {
