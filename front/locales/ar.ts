@@ -701,6 +701,7 @@ export const ar = {
     chatEmptyHint: 'التعليقات المباشرة على المباراة تظهر هنا.',
     chatEmptyFirst: 'كن أول من يعلق على الماتش',
     chatShowAll: 'عرض جميع المحادثات',
+    chatCloseFull: 'إغلاق المحادثة',
     chatProBadge: 'لاعبِ احترافي',
     chatLikeLabel: 'أعجب بالرسالة',
     chatSend: 'إرسال',

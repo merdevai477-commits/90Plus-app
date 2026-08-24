@@ -2310,7 +2310,29 @@ const MatchDetailsScreen = () => {
       />
 
       {activeTab === 'chats' ? (
-        <MatchChatTab fixtureId={fixtureId} kickoffAt={fixture?.fixture?.date} />
+        <MatchChatTab
+          fixtureId={fixtureId}
+          kickoffAt={fixture?.fixture?.date}
+          matchSummary={{
+            homeTeam: getTeamDisplayName(homeTeamName, language),
+            awayTeam: getTeamDisplayName(awayTeamName, language),
+            homeLogo: homeTeamLogo,
+            awayLogo: awayTeamLogo,
+            homeScore: fixture?.goals?.home,
+            awayScore: fixture?.goals?.away,
+            league: getLeagueDisplayName(
+              leagueName,
+              language,
+              fixture?.league?.id,
+              fixture?.league?.country,
+            ),
+            statusLabel: fixture?.fixture?.status?.short
+              ? fixture.fixture.status.short === 'NS'
+                ? t.matchDetails.kickoffStatus
+                : getLocalizedMatchStatus(fixture.fixture.status.short, language)
+              : t.matchDetails.kickoffStatus,
+          }}
+        />
       ) : (
         <View style={styles.content}>
           {activeTab === 'events' && renderEvents()}

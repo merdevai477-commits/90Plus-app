@@ -475,6 +475,7 @@ export const en = {
     chatEmptyHint: 'Live comments appear here during the match.',
     chatEmptyFirst: 'Be the first to comment on the match',
     chatShowAll: 'View all chats',
+    chatCloseFull: 'Close chat',
     chatProBadge: 'Pro player',
     chatLikeLabel: 'Like this message',
     chatSend: 'Send',
