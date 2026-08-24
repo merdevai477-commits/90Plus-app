@@ -153,7 +153,7 @@ export default function PlayerCareerScreen() {
             (typeof params.photo === 'string' && params.photo) ||
             career?.profile.imageUrl ||
             null;
-        return scores365AthletePhotoCandidates(athleteId, preferred, 80);
+        return scores365AthletePhotoCandidates(athleteId, preferred, 250);
     }, [athleteId, career?.profile.imageUrl, params.photo]);
 
     useEffect(() => {
@@ -161,7 +161,7 @@ export default function PlayerCareerScreen() {
     }, [athleteId, photoCandidates.join('|')]);
 
     const photoUri = photoCandidates[photoCandidateIndex];
-    const avatarUri = photoUri ? with365ImageSize(photoUri, 80) ?? photoUri : undefined;
+    const avatarUri = photoUri ? with365ImageSize(photoUri, 250) ?? photoUri : undefined;
     const photoFailed = photoCandidateIndex >= photoCandidates.length;
 
     useEffect(() => {
@@ -251,6 +251,7 @@ export default function PlayerCareerScreen() {
                             <View style={styles.avatarInner}>
                                 {avatarUri && !photoFailed ? (
                                     <TouchableOpacity
+                                        style={styles.avatarPress}
                                         onPress={() => setPhotoViewerOpen(true)}
                                         activeOpacity={0.85}
                                         accessibilityRole="imagebutton"
@@ -781,6 +782,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         overflow: 'hidden',
     },
+    avatarPress: { width: '100%', height: '100%' },
     avatar: { width: '100%', height: '100%' },
     heroName: {
         color: '#fff',
