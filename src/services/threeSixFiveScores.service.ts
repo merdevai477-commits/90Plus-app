@@ -3815,7 +3815,11 @@ class ThreeSixFiveScoresService {
       age: this.num365(raw?.age),
       dateOfBirth: this.parse365DateOfBirth(raw),
       height: this.parse365Height(raw),
-      imageUrl: buildScores365AthletePhotoUrl(athleteId, 80),
+      imageUrl: buildScores365AthletePhotoUrl(
+        athleteId,
+        80,
+        this.num365(raw?.imageVersion),
+      ),
       transfers: this.parse365AthleteTransfers(raw, competitorNames),
     };
   }

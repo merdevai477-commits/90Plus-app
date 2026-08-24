@@ -240,21 +240,28 @@ export function teamLogoUrl(teamId: number, logo?: string | null): string {
   return '';
 }
 
-import { buildScores365AthletePhotoUrl, isScores365ImageUrl } from './scores365AthletePhoto';
+import {
+  buildScores365AthletePhotoUrl,
+  buildScores365AthleteNationalTeamPhotoUrl,
+  isScores365ImageUrl,
+  preferScores365AthletesPhotoUrl,
+} from './scores365AthletePhoto';
 
-/** Ordered photo candidates — API url first, then canonical png/jpg or 365 NationalTeam. */
+/** Ordered photo candidates — preferred url first, then 365 Athletes / NationalTeam or API png/jpg. */
 export function playerPhotoCandidates(
   playerId: number,
   photo?: string | null,
   options?: { source?: '365' | 'api' },
 ): string[] {
   const urls: string[] = [];
-  if (photo && photo.trim() && !photo.includes('placeholder')) {
-    urls.push(photo.trim());
+  const preferred = preferScores365AthletesPhotoUrl(photo?.trim() || null) ?? photo?.trim();
+  if (preferred && !preferred.includes('placeholder')) {
+    urls.push(preferred);
   }
   if (playerId > 0) {
     if (options?.source === '365' || isScores365ImageUrl(photo)) {
       urls.push(buildScores365AthletePhotoUrl(playerId, 80));
+      urls.push(buildScores365AthleteNationalTeamPhotoUrl(playerId, 80));
     } else {
       urls.push(`https://media.api-sports.io/football/players/${playerId}.png`);
       urls.push(`https://media.api-sports.io/football/players/${playerId}.jpg`);

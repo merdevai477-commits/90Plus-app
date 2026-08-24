@@ -1,7 +1,26 @@
 /**
- * 365Scores athlete headshot URL (NationalTeam path — no imageVersion).
+ * 365Scores athlete headshot URL.
+ *
+ * Prefer the generic `Athletes/{id}` path (same as coaches) — `Athletes/NationalTeam/{id}`
+ * often returns only the tiny default silhouette (~2KB) even when a real headshot exists.
  */
 export function buildScores365AthletePhotoUrl(
+  athleteId: number,
+  size: 68 | 80 | 250 = 80,
+  imageVersion?: number | null,
+): string {
+  const versionSegment =
+    imageVersion != null && imageVersion > 0 ? `v${imageVersion}/` : '';
+  return (
+    `https://imagecache.365scores.com/image/upload/` +
+    `f_png,w_${size},h_${size},c_limit,q_auto:eco,dpr_2,` +
+    `d_Athletes:default.png,r_max,c_thumb,g_face,z_0.65/` +
+    `${versionSegment}Athletes/${athleteId}`
+  );
+}
+
+/** Legacy NationalTeam path — keep as a secondary candidate only. */
+export function buildScores365AthleteNationalTeamPhotoUrl(
   athleteId: number,
   size: 68 | 80 | 250 = 80,
 ): string {
@@ -11,6 +30,31 @@ export function buildScores365AthletePhotoUrl(
     `d_Athletes:default.png,r_max,c_thumb,g_face,z_0.65/` +
     `Athletes/NationalTeam/${athleteId}`
   );
+}
+
+/** Rewrite stale NationalTeam URLs (cached API responses / route params) to Athletes/. */
+export function preferScores365AthletesPhotoUrl(
+  url: string | null | undefined,
+): string | undefined {
+  if (!url) return undefined;
+  return url.replace('/Athletes/NationalTeam/', '/Athletes/');
+}
+
+/** Ordered CDN candidates for a 365 athlete headshot. */
+export function scores365AthletePhotoCandidates(
+  athleteId: number,
+  preferred?: string | null,
+  size: 68 | 80 | 250 = 80,
+  imageVersion?: number | null,
+): string[] {
+  const urls: string[] = [];
+  const preferredFixed = preferScores365AthletesPhotoUrl(preferred?.trim() || null);
+  if (preferredFixed) urls.push(preferredFixed);
+  if (athleteId > 0) {
+    urls.push(buildScores365AthletePhotoUrl(athleteId, size, imageVersion));
+    urls.push(buildScores365AthleteNationalTeamPhotoUrl(athleteId, size));
+  }
+  return [...new Set(urls)];
 }
 
 /** 365Scores coach headshot (Athletes path — not NationalTeam). */
@@ -39,8 +83,9 @@ export function with365ImageSize(
   size: number,
 ): string | undefined {
   if (!url) return undefined;
-  if (!url.includes('imagecache.365scores.com')) return url;
-  return url.replace(/w_\d+,h_\d+/, `w_${size},h_${size}`);
+  const fixed = preferScores365AthletesPhotoUrl(url) ?? url;
+  if (!fixed.includes('imagecache.365scores.com')) return fixed;
+  return fixed.replace(/w_\d+,h_\d+/, `w_${size},h_${size}`);
 }
 
 /** Larger asset for fullscreen photo viewer (365 URLs only; others pass through). */

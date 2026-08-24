@@ -35,7 +35,7 @@ import {
   teamLogoUrl,
   type PlayerStatRow,
 } from '../utils/playerStatsAggregate';
-import { toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
+import { preferScores365AthletesPhotoUrl, toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
 
 // Cache key prefix for player data
 const PLAYER_CACHE_PREFIX = 'player_cache_';
@@ -666,7 +666,78 @@ export default function PlayerProfileScreen() {
             }
             if (!report) {
                 setMatchReport365(null);
-                if (!player) {
+                // Still enrich from athlete info/career so nationality, club, DOB,
+                // height, and photo resolve even when the match report is missing.
+                if (contextAthleteId > 0) {
+                    const shell =
+                        player ??
+                        buildShellFromParams(params, contextAthleteId, contextTeamId);
+                    if (shell) setPlayer(shell);
+
+                    const info = await ApiFootballService.get365PlayerInfo(contextAthleteId);
+                    if (info) {
+                        setPlayer((prev) => {
+                            if (!prev) return prev;
+                            return {
+                                ...prev,
+                                player: {
+                                    ...prev.player,
+                                    nationality:
+                                        (typeof info.nationality === 'string' && info.nationality) ||
+                                        prev.player.nationality,
+                                      photo:
+                                        (typeof info.photo === 'string' &&
+                                          preferScores365AthletesPhotoUrl(info.photo)) ||
+                                        (typeof info.imageUrl === 'string' &&
+                                          preferScores365AthletesPhotoUrl(info.imageUrl)) ||
+                                        prev.player.photo,
+                                },
+                                statistics: prev.statistics.map((s) => ({
+                                    ...s,
+                                    team: {
+                                        ...s.team,
+                                        name:
+                                            (typeof info.club === 'string' && info.club) ||
+                                            s.team.name,
+                                    },
+                                    games: {
+                                        ...s.games,
+                                        position:
+                                            (typeof info.position === 'string' && info.position) ||
+                                            s.games.position,
+                                    },
+                                })),
+                            };
+                        });
+                    }
+                    const career = await ApiFootballService.get365PlayerCareer(
+                        contextAthleteId,
+                        language,
+                    );
+                    if (career) {
+                        setCareer365(career);
+                        setPlayer((prev) => {
+                            if (!prev) return prev;
+                            return {
+                                ...prev,
+                                player: {
+                                    ...prev.player,
+                                    photo:
+                                        preferScores365AthletesPhotoUrl(career.profile.imageUrl) ||
+                                        prev.player.photo,
+                                    birth: {
+                                        ...prev.player.birth,
+                                        date: career.profile.dateOfBirth || prev.player.birth?.date,
+                                    },
+                                    height: career.profile.height || prev.player.height,
+                                    nationality: career.profile.nationality || prev.player.nationality,
+                                },
+                            };
+                        });
+                    } else if (!player && !shell) {
+                        setError(t.playerProfile.playerNotFound);
+                    }
+                } else if (!player) {
                     setError(t.playerProfile.playerNotFound);
                 }
                 return;
@@ -680,7 +751,11 @@ export default function PlayerProfileScreen() {
             );
             if (shell) {
                 shell.player.name = report.name || shell.player.name;
-                shell.player.photo = report.imageUrl ?? params.photo ?? shell.player.photo;
+                shell.player.photo =
+                    preferScores365AthletesPhotoUrl(report.imageUrl ?? params.photo ?? shell.player.photo) ??
+                    report.imageUrl ??
+                    params.photo ??
+                    shell.player.photo;
                 if (report.position) {
                     shell.statistics = shell.statistics.map((s) => ({
                         ...s,

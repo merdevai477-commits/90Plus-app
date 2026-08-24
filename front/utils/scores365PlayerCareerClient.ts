@@ -241,7 +241,11 @@ export async function fetch365PlayerCareerClient(
     nationality: athlete.nationalityName ?? athlete.countryName ?? null,
     jerseyNumber: num365(athlete.jerseyNumber ?? athlete.shirtNumber),
     age: num365(athlete.age),
-    imageUrl: buildScores365AthletePhotoUrl(athleteId, 80),
+    imageUrl: buildScores365AthletePhotoUrl(
+      athleteId,
+      80,
+      num365(athlete.imageVersion),
+    ),
   };
 
   const currentSeasonKey = String(athlete.careerStats?.seasons?.[0]?.key ?? '') || null;

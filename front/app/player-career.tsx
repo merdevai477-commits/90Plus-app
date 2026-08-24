@@ -24,7 +24,7 @@ import ApiFootballService, {
     type Player365CareerSeason,
 } from '../services/apiFootball';
 import { ProfileTheme } from '../constants/ProfileTheme';
-import { buildScores365AthletePhotoUrl, toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
+import { scores365AthletePhotoCandidates, toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
 import ImageViewerModal from '../components/common/ImageViewerModal';
 import { fetch365PlayerCareerClient } from '../utils/scores365PlayerCareerClient';
 import { useTranslation } from '../src/i18n';
@@ -75,6 +75,7 @@ export default function PlayerCareerScreen() {
     const [seasonPickerOpen, setSeasonPickerOpen] = useState(false);
     const [highlightCompId, setHighlightCompId] = useState<number | null>(null);
     const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
+    const [photoCandidateIndex, setPhotoCandidateIndex] = useState(0);
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -143,11 +144,21 @@ export default function PlayerCareerScreen() {
         return list.find((h) => h.competitionId === highlightCompId) ?? list[0];
     }, [career, highlightCompId]);
 
-    const photoUri =
-        career?.profile.imageUrl ||
-        params.photo ||
-        (athleteId ? buildScores365AthletePhotoUrl(athleteId, 80) : undefined);
-    const avatarUri = with365ImageSize(photoUri, 80) ?? photoUri;
+    const photoCandidates = useMemo(() => {
+        const preferred =
+            (typeof params.photo === 'string' && params.photo) ||
+            career?.profile.imageUrl ||
+            null;
+        return scores365AthletePhotoCandidates(athleteId, preferred, 80);
+    }, [athleteId, career?.profile.imageUrl, params.photo]);
+
+    useEffect(() => {
+        setPhotoCandidateIndex(0);
+    }, [athleteId, photoCandidates.join('|')]);
+
+    const photoUri = photoCandidates[photoCandidateIndex];
+    const avatarUri = photoUri ? with365ImageSize(photoUri, 80) ?? photoUri : undefined;
+    const photoFailed = photoCandidateIndex >= photoCandidates.length;
 
     useEffect(() => {
         if (avatarUri) {
@@ -234,7 +245,7 @@ export default function PlayerCareerScreen() {
                             end={{ x: 1, y: 1 }}
                         >
                             <View style={styles.avatarInner}>
-                                {photoUri ? (
+                                {avatarUri && !photoFailed ? (
                                     <TouchableOpacity
                                         onPress={() => setPhotoViewerOpen(true)}
                                         activeOpacity={0.85}
@@ -245,9 +256,16 @@ export default function PlayerCareerScreen() {
                                             style={styles.avatar}
                                             contentFit="cover"
                                             cachePolicy="memory-disk"
-                                            recyclingKey={avatarUri}
+                                            recyclingKey={`career-${athleteId}-${photoCandidateIndex}`}
                                             priority="high"
                                             transition={0}
+                                            onError={() => {
+                                                setPhotoCandidateIndex((i) =>
+                                                    i + 1 < photoCandidates.length
+                                                        ? i + 1
+                                                        : photoCandidates.length,
+                                                );
+                                            }}
                                         />
                                     </TouchableOpacity>
                                 ) : (
@@ -536,7 +554,7 @@ export default function PlayerCareerScreen() {
                 </View>
             </ScrollView>
             <ImageViewerModal
-                visible={photoViewerOpen && !!photoUri}
+                visible={photoViewerOpen && !!photoUri && !photoFailed}
                 imageUrl={toFullscreenPhotoUrl(photoUri) || photoUri || ''}
                 onClose={() => setPhotoViewerOpen(false)}
             />
