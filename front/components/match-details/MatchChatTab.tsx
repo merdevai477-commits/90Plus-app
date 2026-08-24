@@ -21,11 +21,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import {
+  isLiveStoppage,
+  resolveLiveMinuteLabel,
+  resolveLiveSecondsLabel,
+} from '../Matches/leagueApiUtils';
+import { useSecondTick } from '../../hooks/useSecondTick';
+import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import { useTranslation } from '../../src/i18n';
 import { useMatchLiveChat } from '../../hooks/useMatchLiveChat';
 import type { MatchChatUiMessage } from '../../hooks/matchLiveChat.reducer';
 import type { MatchChatReportReason } from '../../types/matchChat';
 import { safeFlashListScrollToEnd } from '../chat/safeFlashListScroll';
+
+export type MatchChatScorer = { name: string; minute: string };
 
 export type MatchChatSummary = {
   homeTeam: string;
@@ -35,7 +44,22 @@ export type MatchChatSummary = {
   homeScore?: string | number | null;
   awayScore?: string | number | null;
   league?: string | null;
+  /** Localized finished / special status (FT, postponed…). */
   statusLabel?: string | null;
+  statusShort?: string | null;
+  elapsed?: number | null;
+  stoppage?: number | null;
+  startTimestamp?: number;
+  clockAnchorKey?: string | number;
+  fixtureDate?: string | null;
+  kickoffStatusLabel?: string | null;
+  liveLabel?: string | null;
+  halftimeLabel?: string | null;
+  finishedLabel?: string | null;
+  scorers?: {
+    home: MatchChatScorer[];
+    away: MatchChatScorer[];
+  };
 };
 
 type MatchChatTabProps = {
@@ -43,6 +67,11 @@ type MatchChatTabProps = {
   kickoffAt?: string | null;
   matchSummary?: MatchChatSummary | null;
 };
+
+const LIVE_STATUSES = ['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+const FINISHED_STATUSES = ['FT', 'AET', 'PEN'];
+const NOT_PLAYED_STATUSES = ['CANC', 'PST', 'ABD', 'AWD', 'WO', 'TBD'];
+const PAUSED_STATUSES = ['SUSP'];
 
 const REPORT_REASONS: MatchChatReportReason[] = [
   'PROFANITY',
@@ -273,6 +302,50 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
 }) {
   const homeScore = summary.homeScore != null && summary.homeScore !== '' ? String(summary.homeScore) : '0';
   const awayScore = summary.awayScore != null && summary.awayScore !== '' ? String(summary.awayScore) : '0';
+  const short = summary.statusShort || '';
+  const isHalftime = short === 'HT';
+  const isNotPlayed = NOT_PLAYED_STATUSES.includes(short);
+  const isPaused = PAUSED_STATUSES.includes(short);
+  const isLive =
+    !isNotPlayed && !isPaused && (LIVE_STATUSES.includes(short) || short === 'LIVE');
+  const isFinished = !isNotPlayed && FINISHED_STATUSES.includes(short);
+  const isStoppage = isLive && isLiveStoppage(short, summary.elapsed, summary.stoppage);
+
+  const clockActive = isLive && !isStoppage && !isHalftime;
+  useSecondTick(clockActive);
+  const anchoredStart = useAnchoredPeriodStart(
+    summary.clockAnchorKey,
+    short,
+    summary.elapsed,
+    summary.startTimestamp,
+  );
+  const secondsLabel = clockActive
+    ? resolveLiveSecondsLabel(short, summary.elapsed, {
+        startTimestamp: anchoredStart,
+        extra: summary.stoppage,
+      })
+    : undefined;
+  const minuteLabel =
+    secondsLabel ??
+    resolveLiveMinuteLabel(short, summary.elapsed, {
+      startTimestamp: anchoredStart,
+      extra: summary.stoppage,
+    }) ??
+    (isLive ? short || summary.liveLabel || 'LIVE' : '');
+
+  const statusLine = isLive
+    ? minuteLabel
+    : isFinished
+      ? summary.statusLabel || summary.finishedLabel || short
+      : isHalftime
+        ? summary.halftimeLabel || 'HT'
+        : isNotPlayed || isPaused
+          ? summary.statusLabel || short
+          : summary.kickoffStatusLabel || summary.statusLabel || '';
+
+  const homeScorers = summary.scorers?.home?.filter((s) => s.name) ?? [];
+  const awayScorers = summary.scorers?.away?.filter((s) => s.name) ?? [];
+  const showScorers = homeScorers.length > 0 || awayScorers.length > 0;
 
   return (
     <View style={styles.scoreCardWrap}>
@@ -314,9 +387,15 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
             <Text style={styles.scoreValue}>
               {homeScore} - {awayScore}
             </Text>
-            <Text style={styles.scoreStatus} numberOfLines={1}>
-              {summary.statusLabel || ''}
-            </Text>
+            <View style={styles.scoreStatusRow}>
+              {isLive ? <View style={[styles.liveDot, isStoppage && styles.liveDotStoppage]} /> : null}
+              <Text
+                style={[styles.scoreStatus, isLive && styles.scoreStatusLive, isStoppage && styles.scoreStatusStoppage]}
+                numberOfLines={1}
+              >
+                {statusLine}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.scoreTeamCol}>
@@ -332,6 +411,34 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
             </Text>
           </View>
         </View>
+
+        {showScorers ? (
+          <View style={styles.scorersRow}>
+            <View style={styles.scorersCol}>
+              {homeScorers.map((s, i) => (
+                <View key={`h-${s.name}-${s.minute}-${i}`} style={styles.scorerLine}>
+                  <Text style={styles.scorerName} numberOfLines={1}>
+                    {s.name}
+                  </Text>
+                  <Ionicons name="football" size={12} color="#c3c3c3" />
+                  <Text style={styles.scorerMinute}>{s.minute}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.scorersDivider} />
+            <View style={styles.scorersCol}>
+              {awayScorers.map((s, i) => (
+                <View key={`a-${s.name}-${s.minute}-${i}`} style={styles.scorerLine}>
+                  <Text style={styles.scorerName} numberOfLines={1}>
+                    {s.name}
+                  </Text>
+                  <Ionicons name="football" size={12} color="#c3c3c3" />
+                  <Text style={styles.scorerMinute}>{s.minute}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -1136,6 +1243,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  scoreStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  scoreStatusLive: {
+    color: '#ef4444',
+    fontVariant: ['tabular-nums'],
+  },
+  scoreStatusStoppage: {
+    color: '#fca5a5',
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ef4444',
+  },
+  liveDotStoppage: {
+    backgroundColor: '#f87171',
+  },
+  scorersRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  scorersCol: {
+    flex: 1,
+    gap: 4,
+  },
+  scorersDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(83, 25, 138, 0.55)',
+  },
+  scorerLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  scorerName: {
+    color: '#c3c3c3',
+    fontSize: 11,
+    fontWeight: '500',
+    maxWidth: 90,
+  },
+  scorerMinute: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   fullTopBar: {
     flexDirection: 'row',

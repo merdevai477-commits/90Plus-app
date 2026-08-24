@@ -2326,11 +2326,22 @@ const MatchDetailsScreen = () => {
               fixture?.league?.id,
               fixture?.league?.country,
             ),
+            statusShort: fixture?.fixture?.status?.short,
+            elapsed: fixture?.fixture?.status?.elapsed ?? undefined,
+            stoppage: fixture?.fixture?.status?.extra ?? null,
+            startTimestamp: fixture ? getPeriodStartTimestamp(fixture) : undefined,
+            clockAnchorKey: fixtureId || undefined,
+            fixtureDate: fixture?.fixture?.date,
+            kickoffStatusLabel: t.matchDetails.kickoffStatus,
+            liveLabel: getLocalizedMatchStatus('LIVE', language),
+            halftimeLabel: getLocalizedMatchStatus('HT', language),
+            finishedLabel: getLocalizedMatchStatus('FT', language),
             statusLabel: fixture?.fixture?.status?.short
               ? fixture.fixture.status.short === 'NS'
                 ? t.matchDetails.kickoffStatus
                 : getLocalizedMatchStatus(fixture.fixture.status.short, language)
               : t.matchDetails.kickoffStatus,
+            scorers: goalScorers,
           }}
         />
       ) : (
