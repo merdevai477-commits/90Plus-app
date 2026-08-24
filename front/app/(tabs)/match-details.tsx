@@ -12,6 +12,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -183,6 +184,7 @@ function resolveFormResult(
 const MatchDetailsScreen = () => {
   useScreenFont();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const { getToken } = useAuth();
   const { t, language, translate } = useTranslation();
   const params = useLocalSearchParams() as unknown as MatchDetailsParams;
@@ -675,7 +677,20 @@ const MatchDetailsScreen = () => {
         loadedTabsRef.current.delete('lineups');
       }
     } catch (err: any) {
-      setLineupsError(err?.message || t.matchDetails.loadLineupsFailed);
+      // Refresh failures must not wipe an already-rendered lineup (common after
+      // navigating to player profile and back while LMT/WebView remounts).
+      const stillHaveLineups = hasLineupData(
+        useLiveFixtureStore.getState().snapshots[fixtureId]?.lineups,
+      );
+      if (!stillHaveLineups) {
+        const raw = typeof err?.message === 'string' ? err.message : '';
+        const looksTechnical = /reload|undefined|null is not|cannot read/i.test(raw);
+        setLineupsError(
+          looksTechnical || !raw
+            ? t.matchDetails.loadLineupsFailed
+            : raw,
+        );
+      }
       setLineupFetchAttempts((n) => n + 1);
       loadedTabsRef.current.delete('lineups');
     } finally {
@@ -695,7 +710,7 @@ const MatchDetailsScreen = () => {
       clearInterval(lineupsPollingRef.current);
       lineupsPollingRef.current = null;
     }
-    if (!isLive() || !fixtureId || activeTab !== 'lineups') return;
+    if (!isLive() || !fixtureId || activeTab !== 'lineups' || !isFocused) return;
 
     lineupsPollingRef.current = setInterval(async () => {
       try {
@@ -710,7 +725,14 @@ const MatchDetailsScreen = () => {
         lineupsPollingRef.current = null;
       }
     };
-  }, [fixtureId, isLive, activeTab, loadLineupsIfNeeded]);
+  }, [fixtureId, isLive, activeTab, isFocused, loadLineupsIfNeeded]);
+
+  // Drop stale lineup errors once we have data again (e.g. after player profile pop).
+  useEffect(() => {
+    if (isFocused && hasLineupData(lineups) && lineupsError) {
+      setLineupsError(null);
+    }
+  }, [isFocused, lineups, lineupsError]);
 
   // Auto-retry lineups while the tab is open (capped — then show empty state + manual retry).
   // Live matches keep retrying (lineups can appear late); non-live matches (weak
@@ -721,7 +743,7 @@ const MatchDetailsScreen = () => {
       clearInterval(lineupsTabRetryRef.current);
       lineupsTabRetryRef.current = null;
     }
-    if (activeTab !== 'lineups' || !fixtureId || lineupsError) return;
+    if (activeTab !== 'lineups' || !fixtureId || lineupsError || !isFocused) return;
     if (isAuthoritativeLineupData(lineups)) return;
     const maxAttempts = isLive() ? MAX_LINEUP_AUTO_RETRIES : 1;
     if (lineupFetchAttempts >= maxAttempts) return;
@@ -749,6 +771,7 @@ const MatchDetailsScreen = () => {
     lineupFetchAttempts,
     isFinishedMatch,
     isLive,
+    isFocused,
     loadLineupsIfNeeded,
   ]);
 
@@ -1432,11 +1455,16 @@ const MatchDetailsScreen = () => {
       return <LineupsSkeleton shimmerX={shimmerX} />;
     }
 
-    if (lineupsError) {
+    // Prefer existing lineup data over a stale refresh error (e.g. after
+    // returning from player profile while a background refetch failed).
+    if (!hasLineupData(lineups) && lineupsError) {
       return (
         <View style={styles.emptyState}>
           <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
           <Text style={styles.emptyStateText}>{lineupsError}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={retryLineups}>
+            <Text style={styles.retryButtonText}>{t.matchDetails.retry}</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -2181,7 +2209,7 @@ const MatchDetailsScreen = () => {
     />
   );
 
-  const lmtWidget = hasLmt ? (
+  const lmtWidget = hasLmt && isFocused ? (
     <View
       collapsable={false}
       pointerEvents={showPitch ? 'auto' : 'none'}
@@ -2291,7 +2319,7 @@ const MatchDetailsScreen = () => {
       />
 
       {activeTab === 'chats' ? (
-        <MatchChatTab fixtureId={fixtureId} />
+        <MatchChatTab fixtureId={fixtureId} kickoffAt={fixture?.fixture?.date} />
       ) : (
         <View style={styles.content}>
           {activeTab === 'events' && renderEvents()}
