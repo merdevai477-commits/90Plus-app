@@ -7,8 +7,11 @@ import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { FOOTBALL_PITCH_ASPECT_VERTICAL } from '../common/FootballPitchSvg';
+
 const { width } = Dimensions.get('window');
 const CARD_W = width - 40;
+const LINEUP_SKELETON_FIELD_H = Math.min(Math.round(CARD_W / FOOTBALL_PITCH_ASPECT_VERTICAL), 520) + 20;
 
 // ── Shimmer bar ───────────────────────────────────────────────────────────────
 const ShimmerBar = ({
@@ -85,7 +88,7 @@ export const LineupsSkeleton = ({ shimmerX }: { shimmerX: Animated.AnimatedInter
       </View>
     </View>
     {/* Field placeholder */}
-    <ShimmerBar width={CARD_W} height={CARD_W * 1.5} borderRadius={24} shimmerX={shimmerX} style={{ marginVertical: 12 }} />
+    <ShimmerBar width={CARD_W} height={LINEUP_SKELETON_FIELD_H} borderRadius={24} shimmerX={shimmerX} style={{ marginVertical: 12 }} />
     {/* Substitutes */}
     <ShimmerBar width="40%" height={14} shimmerX={shimmerX} style={{ marginBottom: 10 }} />
     <View style={s.subRow}>

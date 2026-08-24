@@ -128,7 +128,9 @@ export function map365StandingsToGroups(
   const byGroup = new Map<string, Standing[]>();
 
   for (const row of rows) {
-    const groupLabel = row.groupName ?? `Group ${row.groupNum}`;
+    const groupLabel =
+      row.groupName?.trim() ||
+      (row.groupNum != null ? `Group ${row.groupNum}` : 'Table');
     const standing: Standing = {
       rank: row.position,
       team: { id: row.teamId, name: row.teamName, logo: row.teamLogo ?? '' },

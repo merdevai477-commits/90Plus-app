@@ -8,6 +8,7 @@ import {
   LIVE_FIXTURE_SWEEP_MS,
 } from '../src/store/liveFixtureStore.types';
 import { logger } from '../utils/logger';
+import { isLiveStoppage } from '../components/Matches/leagueApiUtils';
 
 const MAX_CONCURRENT_FAST = 6;
 /** Wait after connect before trusting WS and suspending HTTP polls (avoids flap). */
@@ -45,8 +46,17 @@ export function useLiveFixtureSync(): void {
 
     const pollTick = async () => {
       if (wsTrustedRef.current) {
-        logger.debug('[LiveFixtureSync] HTTP poll skipped — WS trusted healthy');
-        return;
+        const state = useLiveFixtureStore.getState();
+        const needsStoppagePoll = state.getPollTargetIds().some((id) => {
+          const snap = state.snapshots[id];
+          if (!snap) return false;
+          const st = snap.fixture.fixture.status;
+          return isLiveStoppage(st.short, st.elapsed, st.extra);
+        });
+        if (!needsStoppagePoll) {
+          logger.debug('[LiveFixtureSync] HTTP poll skipped — WS trusted healthy');
+          return;
+        }
       }
       if (pollRunningRef.current) {
         logger.debug('[LiveFixtureSync] Poll tick skipped — previous cycle still running');

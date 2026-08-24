@@ -7,7 +7,7 @@ import {
 import type { Fixture } from '../../../services/apiFootball';
 import type { LiveFixtureSnapshot } from '../liveFixtureStore.types';
 
-function makeFixture(elapsed: number, status: string, home: number, away: number): Fixture {
+function makeFixture(elapsed: number, status: string, home: number, away: number, extra?: number | null): Fixture {
   return {
     fixture: {
       id: 1,
@@ -17,7 +17,7 @@ function makeFixture(elapsed: number, status: string, home: number, away: number
       timestamp: 0,
       periods: { first: null, second: null },
       venue: { id: null, name: null, city: null },
-      status: { long: status, short: status, elapsed },
+      status: { long: status, short: status, elapsed, extra: extra ?? null },
     },
     league: {
       id: 39,
@@ -72,6 +72,19 @@ describe('liveFixtureSync WS merge', () => {
       minute: 45,
     });
     expect(patched.fixture.status.short).toBe('HT');
+  });
+
+  it('clears stoppage extra when WS reports FT', () => {
+    const snap = baseSnapshot(makeFixture(90, '2H', 2, 3, 4));
+    const patched = applyWebSocketToFixture(snap, {
+      homeScore: 2,
+      awayScore: 3,
+      status: 'FT',
+      minute: 90,
+      extra: null,
+    });
+    expect(patched.fixture.status.short).toBe('FT');
+    expect(patched.fixture.status.extra).toBeNull();
   });
 
   it('reconcile runs once in buildSnapshotFromRaw', () => {

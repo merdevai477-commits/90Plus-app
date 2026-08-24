@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -22,8 +22,9 @@ import {
 import { ratingBadgeColor } from '../../utils/lineupMatchState';
 
 const { width: SCREEN_W } = Dimensions.get('window');
-/** Portrait pitch — slightly taller than FIFA vertical so names fit. */
-const LINEUP_PITCH_ASPECT = FOOTBALL_PITCH_ASPECT_VERTICAL * 0.92;
+/** Portrait pitch — FIFA vertical ratio with a max height cap for match details. */
+const LINEUP_PITCH_ASPECT = FOOTBALL_PITCH_ASPECT_VERTICAL;
+const MAX_PITCH_HEIGHT = 520;
 const DEFAULT_FIELD_W = Math.max(300, SCREEN_W - 24);
 /** Extra vertical room so names under dense back lines are not clipped. */
 const FIELD_PAD_Y = 10;
@@ -126,7 +127,7 @@ function markerSizeForDensity(maxInLine: number): { avatar: number; name: number
   return { avatar: 38, name: 9, wrap: 52 };
 }
 
-export const FootballField: React.FC<FootballFieldProps> = ({
+const FootballFieldInner: React.FC<FootballFieldProps> = ({
   formation,
   players,
   teamName,
@@ -139,7 +140,7 @@ export const FootballField: React.FC<FootballFieldProps> = ({
     if (w > 0 && Math.abs(w - fieldWidth) > 1) setFieldWidth(w);
   };
 
-  const pitchH = Math.round(fieldWidth / LINEUP_PITCH_ASPECT);
+  const pitchH = Math.min(Math.round(fieldWidth / LINEUP_PITCH_ASPECT), MAX_PITCH_HEIGHT);
   const fieldHeight = pitchH + FIELD_PAD_Y * 2;
 
   const useAbsoluteGrid = players.some(
@@ -320,6 +321,8 @@ export const FootballField: React.FC<FootballFieldProps> = ({
     </View>
   );
 };
+
+export const FootballField = memo(FootballFieldInner);
 
 const styles = StyleSheet.create({
   container: {

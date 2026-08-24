@@ -1156,7 +1156,7 @@ export function classifyScores365MatchStatus(
   }
 
   if (statusGroup === 4) {
-    return withExtra('FT', 'Match Finished', 90);
+    return withExtra('FT', 'Match Finished', 90, null);
   }
 
   if (
@@ -1183,7 +1183,19 @@ export function classifyScores365MatchStatus(
     display.includes('ended');
 
   if (isFinishedText) {
-    return withExtra('FT', 'Match Finished', 90);
+    return withExtra('FT', 'Match Finished', 90, null);
+  }
+
+  // 365 may keep statusGroup=3 with a stuck `90+N` display after full time.
+  // When stoppage hits the parser cap (15) without live indicators, treat as FT.
+  if (
+    statusGroup === 3 &&
+    minute === 90 &&
+    stoppageFromDisplay != null &&
+    stoppageFromDisplay >= 15 &&
+    !has('live', '1st', '2nd', 'first', 'second', 'الأول', 'الثاني')
+  ) {
+    return withExtra('FT', 'Match Finished', 90, null);
   }
 
   // Stale/high clocks — finished matches sometimes keep gameTime > 90 without FT text.

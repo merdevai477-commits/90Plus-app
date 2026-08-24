@@ -109,6 +109,34 @@ describe('classifyScores365MatchStatus', () => {
     expect(result.extra).toBe(4);
   });
 
+  it('maps statusGroup 4 with stuck 90+4 display to FT and clears extra', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 4,
+        statusText: 'Ended',
+        shortStatusText: 'Ended',
+        gameTime: 90,
+        gameTimeDisplay: '90+4',
+      }),
+    );
+    expect(result.short).toBe('FT');
+    expect(result.extra).toBeNull();
+  });
+
+  it('maps ended text with 90+4 display to FT', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: 'Ended',
+        shortStatusText: 'Ended',
+        gameTime: 90,
+        gameTimeDisplay: '90+4',
+      }),
+    );
+    expect(result.short).toBe('FT');
+    expect(result.extra).toBeNull();
+  });
+
   it('parses first-half stoppage from gameTimeDisplay', () => {
     const result = classifyScores365MatchStatus(
       game({

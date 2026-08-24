@@ -364,11 +364,13 @@ export function applyWebSocketToFixture(
     awayScore: number;
     status: string;
     minute?: number;
+    extra?: number | null;
   },
 ): Fixture {
   const fixture = snapshot.fixture;
   const currentShort = fixture.fixture.status.short;
   const currentElapsed = fixture.fixture.status.elapsed ?? 0;
+  const currentExtra = fixture.fixture.status.extra ?? null;
   const currentHome = fixture.goals.home ?? 0;
   const currentAway = fixture.goals.away ?? 0;
 
@@ -393,6 +395,13 @@ export function applyWebSocketToFixture(
     nextElapsed = Math.max(currentElapsed, update.minute);
   }
 
+  let nextExtra = currentExtra;
+  if (FINISHED_STATUS_SHORTS.has(nextShort)) {
+    nextExtra = null;
+  } else if (update.extra !== undefined) {
+    nextExtra = update.extra;
+  }
+
   return {
     ...fixture,
     goals: { home: nextHome, away: nextAway },
@@ -402,6 +411,7 @@ export function applyWebSocketToFixture(
         ...fixture.fixture.status,
         short: nextShort,
         elapsed: nextElapsed,
+        extra: nextExtra,
       },
     },
   };

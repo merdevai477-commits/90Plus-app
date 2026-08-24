@@ -5,8 +5,6 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
-  KeyboardAvoidingView,
-  Keyboard,
   Platform,
   Alert,
   ActionSheetIOS,
@@ -14,7 +12,6 @@ import {
   ActivityIndicator,
   Modal,
   StatusBar,
-  type KeyboardEvent,
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +19,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useUser } from '@clerk/clerk-expo';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import {
   isLiveStoppage,
@@ -35,6 +33,7 @@ import { useMatchLiveChat } from '../../hooks/useMatchLiveChat';
 import type { MatchChatUiMessage } from '../../hooks/matchLiveChat.reducer';
 import type { MatchChatReportReason } from '../../types/matchChat';
 import { safeFlashListScrollToEnd } from '../chat/safeFlashListScroll';
+import { useChatKeyboard } from '../../hooks/useChatKeyboard';
 
 export type MatchChatScorer = { name: string; minute: string };
 
@@ -86,6 +85,7 @@ const REPORT_REASONS: MatchChatReportReason[] = [
 ];
 
 const COMPACT_VISIBLE = 8;
+const AVATAR_DOUBLE_TAP_MS = 300;
 
 function formatClock(iso: string): string {
   const d = new Date(iso);
@@ -194,7 +194,48 @@ const PlayerBadge = memo(function PlayerBadge({ label }: { label: string }) {
   );
 });
 
-const Avatar = memo(function Avatar({ uri, name }: { uri?: string | null; name: string }) {
+const Avatar = memo(function Avatar({
+  uri,
+  name,
+  onDoublePress,
+}: {
+  uri?: string | null;
+  name: string;
+  onDoublePress?: () => void;
+}) {
+  const lastTapRef = useRef(0);
+
+  const handlePress = useCallback(() => {
+    if (!onDoublePress) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < AVATAR_DOUBLE_TAP_MS) {
+      lastTapRef.current = 0;
+      onDoublePress();
+      return;
+    }
+    lastTapRef.current = now;
+  }, [onDoublePress]);
+
+  const content = uri ? (
+    <Image source={{ uri }} style={styles.avatar} />
+  ) : (
+    <Text style={styles.avatarInitials}>{initials(name)}</Text>
+  );
+
+  if (onDoublePress) {
+    return (
+      <Pressable
+        onPress={handlePress}
+        style={[styles.avatarWrapper, !uri && styles.avatarFallback]}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={name}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
   if (uri) {
     return (
       <View style={styles.avatarWrapper}>
@@ -245,6 +286,7 @@ const ChatMessageItem = memo(function ChatMessageItem({
   likeLabel,
   onLike,
   onReport,
+  onAvatarDoublePress,
 }: {
   item: MatchChatUiMessage;
   minute: string;
@@ -255,9 +297,14 @@ const ChatMessageItem = memo(function ChatMessageItem({
   likeLabel: string;
   onLike: (id: string) => void;
   onReport: (message: MatchChatUiMessage) => void;
+  onAvatarDoublePress?: (username: string) => void;
 }) {
   const name = item.user.displayName || item.user.username || '';
   const handleLike = useCallback(() => onLike(item.id), [onLike, item.id]);
+  const handleAvatarPress = useCallback(() => {
+    const username = item.user.username?.trim();
+    if (username) onAvatarDoublePress?.(username);
+  }, [item.user.username, onAvatarDoublePress]);
 
   return (
     <Pressable
@@ -286,7 +333,11 @@ const ChatMessageItem = memo(function ChatMessageItem({
             )}
             <Text style={styles.messageText}>{item.text}</Text>
           </View>
-          <Avatar uri={item.user.avatar} name={name} />
+          <Avatar
+            uri={item.user.avatar}
+            name={name}
+            onDoublePress={item.user.username ? handleAvatarPress : undefined}
+          />
         </View>
       </View>
     </Pressable>
@@ -453,6 +504,7 @@ export function MatchChatTab({
 }: MatchChatTabProps): React.ReactElement {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user: clerkUser } = useUser();
   const { t } = useTranslation();
   const md = t.matchDetails;
   const listRef = useRef<FlashListRef<MatchChatUiMessage> | null>(null);
@@ -461,7 +513,6 @@ export function MatchChatTab({
   const [now, setNow] = useState(Date.now());
   const [expanded, setExpanded] = useState(false);
   const [likedIds, setLikedIds] = useState<Record<string, true>>({});
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const nearBottomLatest = useRef(true);
 
   const {
@@ -484,6 +535,13 @@ export function MatchChatTab({
   } = useMatchLiveChat({
     matchId: fixtureId,
     enabled: fixtureId > 0,
+  });
+
+  const activeListRef = expanded ? fullListRef : listRef;
+  const keyboard = useChatKeyboard({
+    listRef: activeListRef,
+    hasMessages: messages.length > 0,
+    messageCount: messages.length,
   });
 
   useEffect(() => {
@@ -509,32 +567,16 @@ export function MatchChatTab({
     return () => clearInterval(id);
   }, [frozenUntil]);
 
-  // Modal + Android `softwareKeyboardLayoutMode: pan` do not resize the
-  // window, so KeyboardAvoidingView alone leaves the composer under the
-  // keyboard — lift it manually from keyboard event coordinates.
-  useEffect(() => {
-    const onShow = (e: KeyboardEvent) => {
-      const h = e?.endCoordinates?.height ?? 0;
-      setKeyboardHeight(h > 0 ? h : 0);
-    };
-    const onHide = () => setKeyboardHeight(0);
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const subShow = Keyboard.addListener(showEvent, onShow);
-    const subHide = Keyboard.addListener(hideEvent, onHide);
-    return () => {
-      subShow.remove();
-      subHide.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (keyboardHeight <= 0 || messages.length === 0) return;
-    const id = requestAnimationFrame(() => {
-      safeFlashListScrollToEnd(expanded ? fullListRef.current : listRef.current, true);
-    });
-    return () => cancelAnimationFrame(id);
-  }, [keyboardHeight, expanded, messages.length]);
+  const onAvatarDoublePress = useCallback(
+    (username: string) => {
+      const trimmed = username.trim();
+      if (!trimmed) return;
+      const selfUsername = clerkUser?.username?.trim();
+      if (selfUsername && selfUsername.toLowerCase() === trimmed.toLowerCase()) return;
+      router.push({ pathname: '/user/[username]' as any, params: { username: trimmed } } as any);
+    },
+    [router, clerkUser?.username],
+  );
 
   useEffect(() => {
     if (!nearBottomLatest.current || messages.length === 0) return;
@@ -673,10 +715,11 @@ export function MatchChatTab({
           likeLabel={md.chatLikeLabel}
           onLike={onLike}
           onReport={onReport}
+          onAvatarDoublePress={onAvatarDoublePress}
         />
       );
     },
-    [likedIds, kickoffAt, md.chatProBadge, md.chatLikeLabel, onLike, onReport],
+    [likedIds, kickoffAt, md.chatProBadge, md.chatLikeLabel, onLike, onReport, onAvatarDoublePress],
   );
 
   const empty = (
@@ -726,15 +769,17 @@ export function MatchChatTab({
   );
 
   const composer = (safeBottom: number) => {
-    const keyboardOpen = keyboardHeight > 0;
+    const keyboardOpen = keyboard.composerKeyboardLift > 0;
     return (
       <LinearGradient
         colors={['#07040D', '#0C051A']}
         style={[
           styles.composerBar,
           {
-            paddingBottom: keyboardOpen ? 10 : Math.max(safeBottom, 12),
-            marginBottom: keyboardOpen ? keyboardHeight : 0,
+            paddingBottom: keyboardOpen
+              ? keyboard.composerDockPadding
+              : Math.max(safeBottom, 12),
+            marginBottom: keyboard.composerKeyboardLift,
           },
         ]}
       >
@@ -766,6 +811,7 @@ export function MatchChatTab({
             returnKeyType="send"
             onSubmitEditing={onSend}
             blurOnSubmit={false}
+            onFocus={keyboard.onInputFocus}
           />
           {draft.length > maxLength - 40 ? (
             <Text style={styles.counter}>{maxLength - draft.length}</Text>
@@ -816,11 +862,7 @@ export function MatchChatTab({
   );
 
   return (
-    <KeyboardAvoidingView
-      style={styles.wrap}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-    >
+    <View style={styles.wrap}>
       {banners}
 
       <View style={styles.compactBody}>
@@ -876,7 +918,7 @@ export function MatchChatTab({
           </View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

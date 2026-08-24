@@ -16,7 +16,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent, Fixture } from '../../services/apiFootball';
+import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent, Fixture, Standing } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus, getLocalizedStatType, getLocalizedEventLabel } from '../../utils/i18nHelpers';
 import { prefetchFootballTranslations } from '../../src/stores/footballTranslationStore';
@@ -42,6 +42,7 @@ import { BG_BASE,
   TEXT_SECONDARY,
 } from '../../constants/tokens';
 import { FootballField } from '../../components/match-details/FootballField';
+import { MatchStandingsTable } from '../../components/match-details/MatchStandingsTable';
 import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
 import { MatchLmtWebView } from '../../components/match-details/MatchLmtWebView';
@@ -1167,6 +1168,19 @@ const MatchDetailsScreen = () => {
     [router, fixture?.teams?.home, fixture?.teams?.away, is365Fixture],
   );
 
+  const openStandingTeamProfile = useCallback(
+    (row: Standing) => {
+      const team = row.team;
+      if (!team?.id && !team?.name) return;
+      const navParams: Record<string, string> = {};
+      if (team.id) navParams.id = String(team.id);
+      if (team.name) navParams.name = team.name;
+      if (team.logo) navParams.logo = team.logo;
+      router.push({ pathname: '/team-profile' as any, params: navParams } as any);
+    },
+    [router],
+  );
+
   const parseFormation = (formation: string | null): number[] => {
     if (!formation) return [];
     return formation.split('-').map(Number).filter(n => !isNaN(n));
@@ -1960,54 +1974,44 @@ const MatchDetailsScreen = () => {
       );
     }
 
-    const renderStandingsTable = (rows: any[], keyPrefix: string) => (
-      <>
-        <View style={styles.standingsHeader}>
-          <Text style={[styles.standingsHeaderText, { width: 30 }]}>#</Text>
-          <Text style={[styles.standingsHeaderText, { flex: 1, textAlign: 'left' }]}>{t.matchDetails.team}</Text>
-          <Text style={[styles.standingsHeaderText, { width: 30 }]}>{t.matchDetails.standingsPlayed}</Text>
-          <Text style={[styles.standingsHeaderText, { width: 30 }]}>{t.matchDetails.standingsGoalDiff}</Text>
-          <Text style={[styles.standingsHeaderText, { width: 30 }]}>{t.matchDetails.standingsPoints}</Text>
-        </View>
-        {rows.map((team: any, index: number) => {
-          const homeRef = {
-            id: fixture?.teams?.home?.id,
-            name: fixture?.teams?.home?.name,
-          };
-          const awayRef = {
-            id: fixture?.teams?.away?.id,
-            name: fixture?.teams?.away?.name,
-          };
-          const isHighlighted =
-            standingRowMatchesTeam(team, homeRef) ||
-            standingRowMatchesTeam(team, awayRef);
-
-          return (
-            <View
-              key={`${keyPrefix}-${team.team.id ?? index}`}
-              style={[styles.standingsRow, isHighlighted && styles.standingsRowHighlighted]}
-            >
-              <Text style={[styles.standingsText, { width: 30 }]}>{team.rank}</Text>
-              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Image source={{ uri: team.team.logo }} style={{ width: 20, height: 20 }} />
-                <Text style={[styles.standingsText, { flex: 1, textAlign: 'left' }]} numberOfLines={1}>
-                  {getTeamDisplayName(team.team.name, language)}
-                </Text>
-              </View>
-              <Text style={[styles.standingsText, { width: 30 }]}>{team.all.played}</Text>
-              <Text style={[styles.standingsText, { width: 30 }]}>{team.goalsDiff}</Text>
-              <Text style={[styles.standingsText, { width: 30, fontWeight: 'bold' }]}>{team.points}</Text>
-            </View>
-          );
-        })}
-      </>
+    const renderStandingsTable = (rows: Standing[], keyPrefix: string) => (
+      <MatchStandingsTable
+        rows={rows}
+        keyPrefix={keyPrefix}
+        language={language}
+        homeRef={{
+          id: fixture?.teams?.home?.id,
+          name: fixture?.teams?.home?.name,
+        }}
+        awayRef={{
+          id: fixture?.teams?.away?.id,
+          name: fixture?.teams?.away?.name,
+        }}
+        labels={{
+          rank: '#',
+          team: t.matchDetails.team,
+          played: t.matchDetails.standingsPlayed,
+          goalDiff: t.matchDetails.standingsGoalDiff,
+          points: t.matchDetails.standingsPoints,
+        }}
+        onPressTeam={openStandingTeamProfile}
+      />
     );
 
     const groupIndex = Math.min(selectedGroupIndex, standingsGroups.length - 1);
     const activeGroup = standingsGroups[groupIndex];
+    const isValidGroupName = (group: string) => {
+      const trimmed = group.trim();
+      return (
+        trimmed.length > 0 &&
+        trimmed !== 'Table' &&
+        trimmed !== 'undefined' &&
+        trimmed !== 'Group undefined'
+      );
+    };
     const showGroupChips =
-      standingsGroups.length > 1 ||
-      (standingsGroups[0]?.group && standingsGroups[0].group !== 'Table');
+      standingsGroups.length > 1 &&
+      standingsGroups.every((g) => isValidGroupName(g.group));
     const chipLabel = (group: string) => group.replace(/^Group\s+/i, '');
 
     return (

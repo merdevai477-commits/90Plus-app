@@ -39,6 +39,7 @@ type LiveSnapshot = {
     awayScore: number;
     status: string;
     elapsed: number | null;
+    extra: number | null;
 };
 
 class LiveFixtureSyncService {
@@ -94,13 +95,16 @@ class LiveFixtureSyncService {
         awayScore: number,
         status: string,
         elapsed: number | null,
+        extra?: number | null,
     ): void {
+        const isFinished = ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(status);
         WebSocketService.sendMatchUpdate(fixtureId, {
             matchId: fixtureId,
             homeScore,
             awayScore,
             status,
             minute: elapsed ?? undefined,
+            extra: isFinished ? null : extra ?? undefined,
         });
     }
 
@@ -405,20 +409,23 @@ class LiveFixtureSyncService {
             const homeScore = fixture.goals.home ?? 0;
             const awayScore = fixture.goals.away ?? 0;
             const elapsed = fixture.fixture.status.elapsed ?? null;
+            const extra = fixture.fixture.status.extra ?? null;
 
             const prev = this.lastSnapshots.get(id);
             const scoreChanged =
                 !prev || prev.homeScore !== homeScore || prev.awayScore !== awayScore;
             const statusChanged = !prev || prev.status !== status;
+            const extraChanged = !prev || prev.extra !== extra;
             const changed =
                 !prev ||
                 scoreChanged ||
                 statusChanged ||
+                extraChanged ||
                 prev.elapsed !== elapsed;
 
             if (changed) {
-                this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed });
-                this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed);
+                this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed, extra });
+                this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed, extra);
             }
 
             // Re-ingest favorited live fixtures every tick so cards/VAR are

@@ -107,6 +107,7 @@ export interface MatchUpdatePayload {
   awayScore: number;
   status: string;
   minute?: number;
+  extra?: number | null;
 }
 
 /**

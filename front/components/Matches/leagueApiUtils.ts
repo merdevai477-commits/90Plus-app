@@ -21,11 +21,16 @@ function getAppLanguageParam(): string {
 export const mapFixtureStatus = (
   statusShort: string,
   elapsed?: number | null,
+  extra?: number | null,
 ): 'live' | 'upcoming' | 'finished' => {
   // Keep aligned with backend LIVE_STATUSES / is365Live (INT + SUSP stay "live"
   // so the client keeps polling until play resumes or the match ends).
   const liveStatuses = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'];
   const finishedStatuses = ['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO'];
+
+  if (finishedStatuses.includes(statusShort)) {
+    return 'finished';
+  }
 
   // Stale 365 rows: impossible stoppage → treat as finished.
   if (
@@ -155,6 +160,9 @@ export const resolveLiveMinuteLabel = (
   options?: { startTimestamp?: number; extra?: number | null },
 ): string | undefined => {
   const short = (statusShort ?? '').trim();
+  if (['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO', 'PST'].includes(short)) {
+    return undefined;
+  }
   if (!short || !LIVE_STATUS_SHORTS.has(short)) return undefined;
 
   const fromApi = formatLiveMinuteDisplay(short, elapsed, options?.extra);
