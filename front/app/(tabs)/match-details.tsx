@@ -26,6 +26,7 @@ import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { TeamToggle } from '../../components/match-details/TeamToggle';
 import { MatchDetailsTopBar } from '../../components/match-details/MatchDetailsTopBar';
 import { MatchChatTab } from '../../components/match-details/MatchChatTab';
+import { MatchStatsCompare } from '../../components/match-details/MatchStatsCompare';
 import CachedAthletePhoto from '../../components/common/CachedAthletePhoto';
 import { BG_BASE,
   GLASS_BORDER_SIDE,
@@ -1704,52 +1705,31 @@ const MatchDetailsScreen = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.statsContainer}>
-          {statsFromEvents && (
-            <Text style={styles.statsPartialNote}>
-              {t.matchDetails.statsFromEvents || 'Partial stats derived from match events'}
-            </Text>
-          )}
-          <Text style={styles.sectionTitle}>{t.matchDetails.statistics || 'Match Statistics'}</Text>
-          {statistics[0]?.statistics.map((stat: any, index: number) => {
-            const homeValue = stat.value;
-            const awayStat = statistics[1]?.statistics.find(
-              (s: { type: string }) => s.type === stat.type,
-            );
-            const awayValue = awayStat?.value ?? 0;
-
-            const parseStatNum = (v: unknown): number => {
-              if (typeof v === 'number' && Number.isFinite(v)) return v;
-              if (typeof v === 'string') {
-                const pct = v.match(/^(\d+(?:\.\d+)?)\s*%$/);
-                if (pct) return parseFloat(pct[1]) || 0;
-                const n = parseFloat(v.replace(/[^\d.]/g, ''));
-                return Number.isFinite(n) ? n : 0;
-              }
-              return 0;
-            };
-
-            const homeNum = parseStatNum(homeValue);
-            const awayNum = parseStatNum(awayValue);
-            const total = homeNum + awayNum || 1;
-            const homePercentage = (homeNum / total) * 100;
-            const awayPercentage = (awayNum / total) * 100;
-
-            return (
-              <View key={index} style={styles.statRow}>
-                <Text style={styles.statValue}>{String(homeValue || '0')}</Text>
-                <View style={styles.statCenter}>
-                  <Text style={styles.statLabel}>{getLocalizedStatType(stat.type, language)}</Text>
-                  <View style={styles.statBarsContainer}>
-                    <View style={[styles.statBar, styles.statBarHome, { width: `${homePercentage}%` }]} />
-                    <View style={[styles.statBar, styles.statBarAway, { width: `${awayPercentage}%` }]} />
-                  </View>
-                </View>
-                <Text style={styles.statValue}>{String(awayValue || '0')}</Text>
-              </View>
-            );
-          })}
-        </View>
+        {statsFromEvents ? (
+          <Text style={styles.statsPartialNote}>
+            {t.matchDetails.statsFromEvents || 'Partial stats derived from match events'}
+          </Text>
+        ) : null}
+        <MatchStatsCompare
+          statistics={statistics}
+          language={language}
+          title={
+            t.matchDetails.statsComparison ||
+            t.matchDetails.statistics ||
+            'Statistics Comparison'
+          }
+          possessionLabelLines={[
+            t.matchDetails.possessionLine1 || 'Possession',
+            t.matchDetails.possessionLine2 || '',
+          ]}
+          dangerousAttacksLabelLines={[
+            t.matchDetails.dangerousAttacksLine1 || 'Dangerous',
+            t.matchDetails.dangerousAttacksLine2 || 'Attacks',
+          ]}
+          attacksLabel={
+            t.matchDetails.statTypes?.attacks || 'Attacks'
+          }
+        />
       </ScrollView>
     );
   };
