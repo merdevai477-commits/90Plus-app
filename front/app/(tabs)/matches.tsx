@@ -33,7 +33,11 @@ import { CrowdOddsStrip } from '../../components/common/CrowdOddsStrip';
 import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModal';
 import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
-import { getWorldCupTimeLeft, WC_2026_OFFICIAL_LOGO } from '../../constants/worldCup';
+import {
+  getWorldCupTimeLeft,
+  isMisTaggedWorldCupLeagueName,
+  WC_2026_OFFICIAL_LOGO,
+} from '../../constants/worldCup';
 import type { ImageSource } from 'expo-image';
 import { resolveLiveMinuteLabel, resolveLiveSecondsLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
 import { useSecondTick } from '../../hooks/useSecondTick';
@@ -1335,7 +1339,14 @@ export default function MatchesHubScreenV2() {
           .map(l => ({ ...l, matches: l.matches.filter(matchPassesFilter) }))
           .filter((l) => {
             if (l.matches.length === 0) return false;
-            if (l.leagueId === worldCupLeagueId) return false;
+            // Real WC stays on the dedicated pin/tab. Mis-tagged leagueId=1 rows
+            // (e.g. "Italy, Primavera 1") must remain in the country list.
+            if (
+              l.leagueId === worldCupLeagueId &&
+              !isMisTaggedWorldCupLeagueName(l.leagueName)
+            ) {
+              return false;
+            }
             return true;
           });
         return { ...cg, leagues };
@@ -1344,9 +1355,12 @@ export default function MatchesHubScreenV2() {
   }, [countryGroups, matchPassesFilter, worldCupLeagueId]);
 
   const worldCupLeagueGroups = useMemo<LeagueGroup[]>(() => {
-    if (worldCupMatches.length === 0) return [];
+    const wcMatches = worldCupMatches.filter(
+      (m) => !isMisTaggedWorldCupLeagueName(m.league?.name),
+    );
+    if (wcMatches.length === 0) return [];
     const byStage = new Map<string, Match[]>();
-    for (const m of worldCupMatches) {
+    for (const m of wcMatches) {
       // Group by the specific stage name ("… دور الـ 16", "… ربع النهائي",
       // "… المجموعة أ"). The `round` field is a generic "الجولة" for every
       // knockout tie, so keying on it would merge R32/R16/QF into one card.
@@ -1375,12 +1389,16 @@ export default function MatchesHubScreenV2() {
         .filter((m) => m.status === 'finished')
         .map(tsOf)
         .filter((t) => t > 0);
+      const leagueName = sample?.league?.name ?? stageKey;
       return {
         group: {
           id: `wc-${index}-${stageKey}`,
-          league: sample?.league?.name ?? stageKey,
+          league: leagueName,
           leagueLogo: sample?.league?.logo ?? '',
-          logoSource: WC_2026_OFFICIAL_LOGO,
+          // Never stamp the official WC trophy on mis-tagged rows.
+          logoSource: isMisTaggedWorldCupLeagueName(leagueName)
+            ? undefined
+            : WC_2026_OFFICIAL_LOGO,
           fixtures: stageMatches.map(matchToFixture),
         },
         tier: hasLive ? 0 : upcomingTs.length > 0 ? 1 : 2,

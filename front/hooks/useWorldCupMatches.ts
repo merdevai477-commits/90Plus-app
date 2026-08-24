@@ -15,6 +15,7 @@ import { useRegisterLiveFixtures } from './useLiveFixture';
 import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
 import { registerWorldCupMemoryCacheClear } from '../services/footballCacheEpochSync';
 import { useLanguageStore } from '../src/i18n/store';
+import { isMisTaggedWorldCupLeagueName } from '../constants/worldCup';
 
 interface UseWorldCupMatchesResult {
   matches: Match[];
@@ -105,6 +106,11 @@ async function enrichLiveCorners(matches: Match[]): Promise<Match[]> {
   });
 }
 
+function isWorldCupMatchRow(match: Match, leagueId: number): boolean {
+  if (match.league?.id !== leagueId) return false;
+  return !isMisTaggedWorldCupLeagueName(match.league?.name);
+}
+
 function mergeWorldCupCalendarWithLiveFeed(
   calendar: Match[],
   liveFeed: Match[],
@@ -112,11 +118,12 @@ function mergeWorldCupCalendarWithLiveFeed(
 ): Match[] {
   const map = new Map<string, Match>();
   for (const row of calendar) {
+    if (!isWorldCupMatchRow(row, leagueId)) continue;
     map.set(row.id, row);
   }
   for (const liveRow of liveFeed) {
     if (liveRow.status !== 'live') continue;
-    if (liveRow.league?.id !== leagueId) continue;
+    if (!isWorldCupMatchRow(liveRow, leagueId)) continue;
     const existing = map.get(liveRow.id);
     map.set(
       liveRow.id,
@@ -217,6 +224,7 @@ export function useWorldCupMatches(
         const liveFeed = await fetchLiveMatches();
         list = mergeWorldCupCalendarWithLiveFeed(list, liveFeed, leagueId);
       }
+      list = list.filter((m) => isWorldCupMatchRow(m, leagueId));
       const liveNow = isToday && list.some((m) => m.status === 'live');
       if (liveNow && enrichCorners) {
         const now = Date.now();

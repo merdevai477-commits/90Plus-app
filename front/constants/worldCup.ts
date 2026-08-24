@@ -51,6 +51,26 @@ export const WC_2026_OFFICIAL_LOGO = require('../assets/images/fwc-2026-official
 export const WC_LEAGUE_ID = 1;
 
 /**
+ * True when a league display name is actually the World Cup (not a mis-tagged
+ * 365 row that landed on leagueId=1 with e.g. "Italy, Primavera 1").
+ */
+export function looksLikeWorldCupLeagueName(name?: string | null): boolean {
+  return /world\s*cup|fifa|كأس\s*العالم|كاس\s*العالم|مونديال/i.test(name || '');
+}
+
+/**
+ * 365 non-WC titles are usually "Country, Competition". Real WC rows are either
+ * explicitly named World Cup/FIFA or stage-only labels without a country comma
+ * (e.g. knockout round names).
+ */
+export function isMisTaggedWorldCupLeagueName(name?: string | null): boolean {
+  const n = (name || '').trim();
+  if (!n) return false;
+  if (looksLikeWorldCupLeagueName(n)) return false;
+  return /,/.test(n);
+}
+
+/**
  * Offset added to a 365Scores competitionId to form a synthetic leagueId for
  * non-WC leagues (mirrors backend SCORES365_LEAGUE_ID_OFFSET). A fixture whose
  * league.id >= this value is a 365Scores-sourced league; its 365 competitionId

@@ -26,6 +26,7 @@ import { Match } from './matchCardUtils';
 import { useTranslation } from '../../src/i18n';
 import { getCountryDisplayName, getLeagueDisplayName } from '../../utils/i18nHelpers';
 import { getCountryFlagEmoji, getCountryFlagUri } from '../../utils/countryFlagUri';
+import { isMisTaggedWorldCupLeagueName } from '../../constants/worldCup';
 
 // LayoutAnimation on Android is janky on long lists — we keep it iOS-only.
 // Don't even enable it on Android.
@@ -100,11 +101,15 @@ const LeagueSection = memo(function LeagueSection({
   const matchCount = league.matches.length;
   const hasMore = matchCount > MATCHES_PREVIEW_COUNT;
   // Mis-tagged synthetic rows sometimes land on WORLD_CUP_LEAGUE_ID (1) with a
-  // non-WC name — never show the World Cup trophy for those.
+  // non-WC name — never show the World Cup trophy / leagues/1.png for those.
+  const rawLogo = league.leagueLogo?.trim() || '';
   const leagueLogoUri =
-    league.leagueId === 1 && !/world\s*cup|fifa/i.test(league.leagueName || '')
-      ? ''
-      : league.leagueLogo;
+    isMisTaggedWorldCupLeagueName(league.leagueName) ||
+    (league.leagueId === 1 && !/world\s*cup|fifa|كأس\s*العالم|مونديال/i.test(league.leagueName || ''))
+      ? rawLogo && !/leagues\/1\.png/i.test(rawLogo)
+        ? rawLogo
+        : ''
+      : rawLogo;
 
   return (
     <View style={styles.leagueSection}>
