@@ -10,9 +10,10 @@ const TERMINAL_STATUS_SHORT = new Set(['FT', 'AET', 'PEN', 'ABD', 'AWD', 'WO', '
 export function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Match[]): Match[] {
   const liveIds = new Set(liveFeed.filter((row) => row.status === 'live').map((row) => row.id));
   const map = new Map<string, Match>();
+  const demoteMissingLive = liveIds.size > 0;
 
   for (const row of calendar) {
-    if (row.status === 'live' && !liveIds.has(row.id)) {
+    if (demoteMissingLive && row.status === 'live' && !liveIds.has(row.id)) {
       const statusShort =
         row.statusShort && TERMINAL_STATUS_SHORT.has(row.statusShort) ? row.statusShort : 'FT';
       map.set(row.id, {

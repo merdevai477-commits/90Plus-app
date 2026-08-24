@@ -33,10 +33,18 @@ describe('mergeTodayCalendarWithLiveFeed', () => {
     expect(live?.status).toBe('live');
   });
 
+  it('does not demote calendar live rows when the live feed is empty', () => {
+    const calendar = [makeMatch({ id: '1', status: 'live', statusShort: '1H' })];
+    const merged = mergeTodayCalendarWithLiveFeed(calendar, []);
+    expect(merged[0].status).toBe('live');
+    expect(merged[0].statusShort).toBe('1H');
+  });
+
   it('keeps a calendar FT short status when demoting a stale live row', () => {
     const calendar = [makeMatch({ id: '1', status: 'live', statusShort: 'FT' })];
-    const merged = mergeTodayCalendarWithLiveFeed(calendar, []);
-    expect(merged[0].status).toBe('finished');
-    expect(merged[0].statusShort).toBe('FT');
+    const liveFeed = [makeMatch({ id: '2', status: 'live', statusShort: '1H' })];
+    const merged = mergeTodayCalendarWithLiveFeed(calendar, liveFeed);
+    expect(merged.find((row) => row.id === '1')?.status).toBe('finished');
+    expect(merged.find((row) => row.id === '1')?.statusShort).toBe('FT');
   });
 });

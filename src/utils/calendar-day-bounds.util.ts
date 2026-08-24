@@ -64,3 +64,14 @@ export function offsetCalendarDateKey(dateString: string, days: number): string 
   dt.setUTCDate(dt.getUTCDate() + days);
   return dt.toISOString().slice(0, 10);
 }
+
+/**
+ * 365 `/web/games/allscores/` startDate/endDate are `DD/MM/YYYY`.
+ * ISO `YYYY-MM-DD` is accepted as a different (much smaller) window with
+ * almost no live games — do not send it on that endpoint.
+ */
+export function toScores365QueryDate(isoOrDmy: string): string {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoOrDmy.trim());
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  return isoOrDmy;
+}

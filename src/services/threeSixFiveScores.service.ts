@@ -46,6 +46,7 @@ import {
   calendarDateFromKickoff,
   calendarTodayKey,
   offsetCalendarDateKey,
+  toScores365QueryDate,
 } from '../utils/calendar-day-bounds.util';
 import { scores365RateLimitMapMaxEntries } from '../config/football-reliability-rollout.config';
 import { asTerminalFinishedFixture } from '../utils/fixture-terminal.util';
@@ -4150,6 +4151,7 @@ class ThreeSixFiveScoresService {
     rateKey: string,
     minIntervalMs: number,
     skipRateLimit = false,
+    timeoutMs = 12_000,
   ): Promise<T | null> {
     if (!skipRateLimit && minIntervalMs > 0 && !this.canFetchUpstream(rateKey, minIntervalMs)) {
       return null;
@@ -4160,7 +4162,7 @@ class ThreeSixFiveScoresService {
     try {
       const res = await fetch(url, {
         headers: HEADERS,
-        signal: AbortSignal.timeout(12_000),
+        signal: AbortSignal.timeout(Math.max(5_000, timeoutMs)),
       });
 
       if (res.status === 403) {
@@ -4359,7 +4361,9 @@ class ThreeSixFiveScoresService {
   } | null> {
     const langId = resolveScores365LangId(language);
     const majorOnly = useOnlyMajorGames();
-    const cacheKey = `365:allscores:${startDate}:${endDate}:${langId}:${majorOnly ? 'major' : 'all'}`;
+    const queryStart = toScores365QueryDate(startDate);
+    const queryEnd = toScores365QueryDate(endDate);
+    const cacheKey = `365:allscores:dmy:${startDate}:${endDate}:${langId}:${majorOnly ? 'major' : 'all'}`;
     if (!options?.force) {
       const cached = await redisCacheService.get<ThreeSixFiveFixtureItem[]>(cacheKey);
       if (cached) {
@@ -4369,13 +4373,15 @@ class ThreeSixFiveScoresService {
 
     const path =
       `/web/games/allscores/?${this.commonParams(langId)}` +
-      `&sports=1&startDate=${encodeURIComponent(startDate)}` +
-      `&endDate=${encodeURIComponent(endDate)}&showOdds=true&onlyMajorGames=${majorOnly}&withTop=true`;
+      `&sports=1&startDate=${encodeURIComponent(queryStart)}` +
+      `&endDate=${encodeURIComponent(queryEnd)}&showOdds=true&onlyMajorGames=${majorOnly}&withTop=true`;
 
     const payload = await this.fetchJson<AllScoresPayload>(
       path,
-      `allscores:${startDate}:${endDate}`,
-      120_000,
+      `allscores:${queryStart}:${queryEnd}`,
+      options?.force ? 0 : 120_000,
+      options?.force === true,
+      25_000,
     );
     if (!payload) return null;
 
