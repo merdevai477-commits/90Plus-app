@@ -680,6 +680,7 @@ export const en = {
     selectedSeason: 'Selected Season',
     selectSeason: 'Select Season',
     seasonStatistics: 'Season Statistics',
+    statsComparison: 'Statistics Overview',
     goalsAssistsTrend: 'Goals & Assists Trend',
     allSeasons: 'All Seasons',
     perCompetition: 'Per Competition',

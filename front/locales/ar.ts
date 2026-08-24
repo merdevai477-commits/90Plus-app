@@ -906,6 +906,7 @@ export const ar = {
     selectedSeason: 'الموسم المختار',
     selectSeason: 'اختر الموسم',
     seasonStatistics: 'إحصائيات الموسم',
+    statsComparison: 'مقارنة الإحصائيات',
     goalsAssistsTrend: 'اتجاه الأهداف والصناعة',
     allSeasons: 'كل المواسم',
     perCompetition: 'حسب البطولة',

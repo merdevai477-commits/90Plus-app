@@ -27,6 +27,10 @@ import { ProfileTheme } from '../constants/ProfileTheme';
 import { scores365AthletePhotoCandidates, toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
 import ImageViewerModal from '../components/common/ImageViewerModal';
 import { fetch365PlayerCareerClient } from '../utils/scores365PlayerCareerClient';
+import {
+    PlayerSeasonStatsCard,
+    parsePlayerStatNumber,
+} from '../components/player/PlayerSeasonStatsCard';
 import { useTranslation } from '../src/i18n';
 import { logger } from '../utils/logger';
 
@@ -274,10 +278,6 @@ export default function PlayerCareerScreen() {
                             </View>
                         </LinearGradient>
 
-                        <View style={styles.activeRow}>
-                            <View style={styles.activeDot} />
-                            <Text style={styles.activeText}>{pc.active}</Text>
-                        </View>
                         <Text style={styles.heroName} numberOfLines={2}>
                             {profile.name}
                         </Text>
@@ -404,32 +404,24 @@ export default function PlayerCareerScreen() {
                                 })}
                             </ScrollView>
 
-                            <View style={styles.highlightTopRow}>
-                                {activeHighlight.stats
+                            <PlayerSeasonStatsCard
+                                title={pc.statsComparison}
+                                rings={activeHighlight.stats
                                     .filter((s) => s.isTop)
-                                    .map((s) => (
-                                        <View key={`${s.type}-${s.name}`} style={styles.highlightTopCard}>
-                                            <Text style={styles.highlightTopValue}>{s.value}</Text>
-                                            <Text style={styles.highlightTopLabel} numberOfLines={2}>
-                                                {s.shortName || s.name}
-                                            </Text>
-                                        </View>
-                                    ))}
-                            </View>
-
-                            <Text style={styles.heading}>{pc.detailedStats}</Text>
-                            <View style={styles.detailGrid}>
-                                {activeHighlight.stats
+                                    .slice(0, 3)
+                                    .map((s) => ({
+                                        label: s.shortName || s.name,
+                                        value: parsePlayerStatNumber(s.value),
+                                        display: s.value,
+                                    }))}
+                                bars={activeHighlight.stats
                                     .filter((s) => !s.isTop)
-                                    .map((s) => (
-                                        <View key={`d-${s.type}-${s.name}`} style={styles.detailCell}>
-                                            <Text style={styles.detailValue}>{s.value}</Text>
-                                            <Text style={styles.detailLabel} numberOfLines={2}>
-                                                {s.name}
-                                            </Text>
-                                        </View>
-                                    ))}
-                            </View>
+                                    .map((s) => ({
+                                        label: s.name,
+                                        value: parsePlayerStatNumber(s.value),
+                                        display: s.value,
+                                    }))}
+                            />
                         </>
                     )}
 
@@ -486,18 +478,62 @@ export default function PlayerCareerScreen() {
                     )}
 
                     {/* Season statistics */}
-                    <Text style={styles.heading}>{pc.seasonStatistics}</Text>
                     {selectedSeason && (
-                        <View style={styles.statGrid}>
-                            <StatCard icon="football" color={ProfileTheme.colors.neonPurple} value={fmt(selectedSeason.goals)} label={pc.goals} />
-                            <StatCard icon="git-network" color={ProfileTheme.colors.neonBlue} value={fmt(selectedSeason.assists)} label={pc.assists} />
-                            <StatCard icon="shirt" color={ProfileTheme.colors.neonGreen} value={fmt(selectedSeason.appearances)} label={pc.appearances} />
-                            {isCurrentSeason && selectedSeason.minutes != null && (
-                                <StatCard icon="time" color={ProfileTheme.colors.gold} value={fmt(selectedSeason.minutes)} label={pc.minutes} />
-                            )}
-                            <StatCard icon="square" color={'#FFC400'} value={fmt(sumStat(selectedSeason, 'yellowCards'))} label={pc.yellowCards} />
-                            <StatCard icon="square" color={ProfileTheme.colors.neonRed} value={fmt(sumStat(selectedSeason, 'redCards'))} label={pc.redCards} />
-                        </View>
+                        <PlayerSeasonStatsCard
+                            title={pc.statsComparison}
+                            rings={[
+                                {
+                                    label: pc.appearances,
+                                    value: selectedSeason.appearances ?? 0,
+                                    display: fmt(selectedSeason.appearances),
+                                },
+                                {
+                                    label: pc.goals,
+                                    value: selectedSeason.goals ?? 0,
+                                    display: fmt(selectedSeason.goals),
+                                },
+                                {
+                                    label: pc.assists,
+                                    value: selectedSeason.assists ?? 0,
+                                    display: fmt(selectedSeason.assists),
+                                },
+                            ]}
+                            bars={[
+                                ...(isCurrentSeason && selectedSeason.minutes != null
+                                    ? [
+                                          {
+                                              label: pc.minutes,
+                                              value: selectedSeason.minutes,
+                                              display: fmt(selectedSeason.minutes),
+                                              max: Math.max(
+                                                  selectedSeason.minutes,
+                                                  (selectedSeason.appearances || 1) * 90,
+                                              ),
+                                          },
+                                      ]
+                                    : []),
+                                {
+                                    label: pc.yellowCards,
+                                    value: sumStat(selectedSeason, 'yellowCards'),
+                                    display: fmt(sumStat(selectedSeason, 'yellowCards')),
+                                    max: Math.max(
+                                        1,
+                                        sumStat(selectedSeason, 'yellowCards'),
+                                        sumStat(selectedSeason, 'redCards'),
+                                    ),
+                                },
+                                {
+                                    label: pc.redCards,
+                                    value: sumStat(selectedSeason, 'redCards'),
+                                    display: fmt(sumStat(selectedSeason, 'redCards')),
+                                    max: Math.max(
+                                        1,
+                                        sumStat(selectedSeason, 'yellowCards'),
+                                        sumStat(selectedSeason, 'redCards'),
+                                    ),
+                                },
+                            ]}
+                        />
                     )}
 
                     {/* Trend chart */}
@@ -572,18 +608,6 @@ function IdentityCard({ icon, label, value }: { icon: any; label: string; value:
             <Ionicons name={icon} size={18} color={ProfileTheme.colors.neonBlue} />
             <Text style={styles.identityValue} numberOfLines={1}>{value}</Text>
             <Text style={styles.identityLabel}>{label}</Text>
-        </View>
-    );
-}
-
-function StatCard({ icon, color, value, label }: { icon: any; color: string; value: string; label: string }) {
-    return (
-        <View style={styles.statCard}>
-            <View style={[styles.statIconWrap, { backgroundColor: color + '22' }]}>
-                <Ionicons name={icon} size={16} color={color} />
-            </View>
-            <Text style={[styles.statValue, { color }]}>{value}</Text>
-            <Text style={styles.statLabel}>{label}</Text>
         </View>
     );
 }
@@ -758,33 +782,11 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     avatar: { width: '100%', height: '100%' },
-    activeRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginTop: 12,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 999,
-        backgroundColor: 'rgba(50,205,50,0.15)',
-    },
-    activeDot: {
-        width: 7,
-        height: 7,
-        borderRadius: 4,
-        backgroundColor: ProfileTheme.colors.neonGreen,
-    },
-    activeText: {
-        color: ProfileTheme.colors.neonGreen,
-        fontSize: 11,
-        fontWeight: '700',
-        letterSpacing: 0.5,
-    },
     heroName: {
         color: '#fff',
         fontSize: 26,
         fontWeight: '800',
-        marginTop: 8,
+        marginTop: 14,
         textAlign: 'center',
     },
     heroSub: { color: ProfileTheme.colors.textSecondary, fontSize: 13, marginTop: 2 },
@@ -850,27 +852,6 @@ const styles = StyleSheet.create({
     dropdownItemTextActive: { color: '#fff', fontWeight: '700' },
 
     heading: { color: '#fff', fontSize: 18, fontWeight: '800', marginTop: 24, marginBottom: 12 },
-
-    statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-    statCard: {
-        width: '31.5%',
-        backgroundColor: ProfileTheme.colors.glass,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: ProfileTheme.colors.borderSoft,
-        paddingVertical: 16,
-        alignItems: 'center',
-        gap: 6,
-    },
-    statIconWrap: {
-        width: 34,
-        height: 34,
-        borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    statValue: { fontSize: 22, fontWeight: '900' },
-    statLabel: { color: ProfileTheme.colors.textTertiary, fontSize: 11 },
 
     chartCard: {
         backgroundColor: ProfileTheme.colors.glass,
