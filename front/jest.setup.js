@@ -1,4 +1,10 @@
-import '@testing-library/jest-native/extend-expect';
+try {
+  // Optional: RNTL ≥12.4 ships matchers; this package may be absent.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@testing-library/jest-native/extend-expect');
+} catch {
+  /* no-op when not installed */
+}
 
 // ── expo-router ────────────────────────────────────────────────────────────
 jest.mock('expo-router', () => ({

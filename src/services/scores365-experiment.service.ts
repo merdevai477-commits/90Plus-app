@@ -808,6 +808,9 @@ async function fetchScores365GameOnce(gameId: number, langId: number): Promise<S
     const payload = (await res.json()) as Scores365GamePayload;
     const game = payload?.game ?? null;
     if (game) {
+      void import('../utils/match-status-diag.util').then(({ diag365RawStatus }) => {
+        diag365RawStatus(gameId, game, 'fetchScores365GameOnce');
+      });
       setBoundedMapEntry(lastGoodGameByKey, staleKey, game);
       setBoundedMapEntry(cachedGameByKey, gameCacheKey(gameId, langId), {
         fetchedAt: Date.now(),
@@ -1135,10 +1138,16 @@ export function classifyScores365MatchStatus(
   }
 
   // 365 statusGroup: 2 = scheduled, 3 = live, 4 = finished (verified on allscores).
-  // Score placeholders of -1 are common right at kickoff / before the first
-  // event. Only treat them as NS when the game is not already marked live —
-  // otherwise statusGroup 3 never reaches the LIVE/1H/2H branches below.
-  if ((homeRaw === -1 || awayRaw === -1) && statusGroup !== 3) {
+  // Score placeholders of -1 are common for scheduled games and right at kickoff.
+  // Only force NS when statusGroup is actually scheduled (2). For live (3) or
+  // finished (4), fall through so statusGroup / text rules can classify correctly —
+  // otherwise a finished game with a momentary score=-1 glitch gets written as NS.
+  if ((homeRaw === -1 || awayRaw === -1) && statusGroup !== 2) {
+    logger.warn(
+      `[365Status] score=-1 with statusGroup=${statusGroup} for game ${game.id} — potential upstream lag, not forcing NS`,
+    );
+  }
+  if ((homeRaw === -1 || awayRaw === -1) && statusGroup === 2) {
     return withExtra('NS', 'Not Started', null);
   }
 
@@ -2187,6 +2196,9 @@ export async function mapScores365ToApiFootballFixture(
   registerScores365FixtureMapping(fixtureId, game.id);
 
   const status = map365Status(game);
+  void import('../utils/match-status-diag.util').then(({ diag365MappedStatus }) => {
+    diag365MappedStatus(fixtureId, status, 'mapScores365ToApiFootballFixture');
+  });
   const scores = resolve365Scores(game, alignment);
   const homeScore = scores.home;
   const awayScore = scores.away;

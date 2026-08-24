@@ -1114,6 +1114,14 @@ async function startServer() {
                         logger.warn('⚠️ Other leagues sync worker failed to start (non-fatal):', (olErr as Error)?.message);
                     }
 
+                    // ✅ Stale NS safety sweep — catch fixtures stuck NS past kickoff+3h
+                    try {
+                        const { startStaleNsSweepWorker } = await import('./services/stale-ns-sweep.service');
+                        startStaleNsSweepWorker();
+                    } catch (staleErr) {
+                        logger.warn('⚠️ Stale NS sweep worker failed to start (non-fatal):', (staleErr as Error)?.message);
+                    }
+
                     // ✅ Idempotently sync player name mappings (upsert) so new
                     // seed entries land on deploy even when the table isn't empty.
                     void import('./services/player-name-resolver.service')

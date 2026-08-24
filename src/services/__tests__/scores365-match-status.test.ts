@@ -21,6 +21,20 @@ describe('classifyScores365MatchStatus', () => {
     expect(result.short).toBe('FT');
   });
 
+  it('maps statusGroup 4 to FT even when one score is still -1', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 4,
+        statusText: 'Ended',
+        shortStatusText: 'Ended',
+        gameTime: 90,
+        homeCompetitor: { id: 1, name: 'H', score: -1 },
+        awayCompetitor: { id: 2, name: 'A', score: 2 },
+      }),
+    );
+    expect(result.short).toBe('FT');
+  });
+
   it('maps statusGroup 2 to NS', () => {
     const result = classifyScores365MatchStatus(
       game({ statusGroup: 2, statusText: 'Scheduled', gameTime: -1, homeCompetitor: { id: 1, name: 'H', score: -1 }, awayCompetitor: { id: 2, name: 'A', score: -1 } }),

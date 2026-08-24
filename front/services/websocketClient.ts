@@ -171,6 +171,7 @@ class WebSocketClient {
   // soon as connectivity comes back.
   private isOnline = true;
   private netInfoUnsubscribe: (() => void) | null = null;
+  private connectionStateListeners = new Set<(connected: boolean) => void>();
 
   constructor() {
     this.setupNetInfoListener();
@@ -269,10 +270,13 @@ class WebSocketClient {
       this.subscribedRooms.forEach(room => {
         this.socket?.emit('subscribe', room);
       });
+
+      this.notifyConnectionState(true);
     });
 
     this.socket.on('disconnect', (reason) => {
       logger.debug(`[WebSocket] Disconnected: ${reason}`);
+      this.notifyConnectionState(false);
 
       if (!this.isManualDisconnect) {
         this.attemptReconnect();
@@ -546,6 +550,31 @@ class WebSocketClient {
    */
   isConnected(): boolean {
     return this.socket?.connected ?? false;
+  }
+
+  /**
+   * Subscribe to socket connect/disconnect. Fires immediately with the current state.
+   */
+  subscribeConnectionState(listener: (connected: boolean) => void): () => void {
+    this.connectionStateListeners.add(listener);
+    try {
+      listener(this.isConnected());
+    } catch {
+      /* ignore listener errors */
+    }
+    return () => {
+      this.connectionStateListeners.delete(listener);
+    };
+  }
+
+  private notifyConnectionState(connected: boolean): void {
+    for (const listener of this.connectionStateListeners) {
+      try {
+        listener(connected);
+      } catch {
+        /* ignore listener errors */
+      }
+    }
   }
 
   /**
