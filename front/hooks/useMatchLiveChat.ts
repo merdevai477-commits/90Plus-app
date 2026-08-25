@@ -12,6 +12,7 @@ import {
   type MatchChatHistoryPayload,
   type MatchChatPublicMessage,
   type MatchChatRejectedPayload,
+  type MatchChatReplyTo,
   type MatchChatReportReason,
   type MatchChatWarnedPayload,
 } from '../types/matchChat';
@@ -201,7 +202,7 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
   }, [enabled, signedIn, matchId]);
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, opts?: { replyToMessageId?: string; replyTo?: MatchChatReplyTo }) => {
       const trimmed = text.trim();
       if (!trimmed || trimmed.length > MATCH_CHAT_MAX_LENGTH) return false;
       if (stateRef.current.frozenUntil && stateRef.current.frozenUntil > Date.now()) return false;
@@ -216,6 +217,7 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
         text: trimmed,
         createdAt: new Date().toISOString(),
         pending: true,
+        ...(opts?.replyTo ? { replyTo: opts.replyTo } : {}),
         user: {
           id: ownBackendIdRef.current ?? 'me',
           username: '',
@@ -226,7 +228,12 @@ export function useMatchLiveChat({ matchId, enabled }: UseMatchLiveChatOptions) 
       };
       ownBackendIdRef.current = ownBackendIdRef.current ?? 'me';
       dispatch({ type: 'optimistic', message: optimistic });
-      socket.emit(MATCH_CHAT_EVENTS.send, { clientMessageId, text: trimmed, matchId });
+      socket.emit(MATCH_CHAT_EVENTS.send, {
+        clientMessageId,
+        text: trimmed,
+        matchId,
+        ...(opts?.replyToMessageId ? { replyToMessageId: opts.replyToMessageId } : {}),
+      });
       return true;
     },
     [matchId],

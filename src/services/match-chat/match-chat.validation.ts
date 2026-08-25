@@ -10,6 +10,7 @@ export const matchChatJoinSchema = z.object({
 export const matchChatSendSchema = z.object({
   matchId: z.number().int().positive().max(2_147_483_647),
   clientMessageId: z.string().uuid(),
+  replyToMessageId: z.string().uuid().optional(),
   text: z
     .string()
     .transform((s) => s.replace(/\u0000/g, '').trim())

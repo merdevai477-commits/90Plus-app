@@ -12,6 +12,7 @@ import {
   buildPublicMessage,
   getBlockedPairIds,
   getHistoryFromPostgres,
+  getMessageById,
   getRecentMessages,
   pushRecentMessage,
   type PersistMatchChatMessageInput,
@@ -124,7 +125,7 @@ export async function processMatchChatSend(input: {
     return { ok: false, code: 'INVALID_MESSAGE', reason: 'validation' };
   }
 
-  const { matchId, clientMessageId, text } = parsed.data;
+  const { matchId, clientMessageId, text, replyToMessageId } = parsed.data;
 
   const existing = await readIdempotency(input.user.userId, clientMessageId);
   if (existing?.kind === 'accepted' && existing.message) {
@@ -206,6 +207,36 @@ export async function processMatchChatSend(input: {
     return rejected;
   }
 
+  let replySnapshot:
+    | {
+        replyToMessageId: string;
+        replyToUsername: string;
+        replyToDisplayName: string | null;
+        replyToText: string;
+      }
+    | undefined;
+
+  if (replyToMessageId) {
+    const parent = await getMessageById(replyToMessageId);
+    if (!parent || parent.deletedAt || parent.matchId !== matchId) {
+      matchChatIncr('rejected');
+      return { ok: false, code: 'INVALID_MESSAGE', reason: 'reply_target' };
+    }
+    const blocked = await getBlockedPairIds(input.user.userId);
+    if (blocked.has(parent.userId)) {
+      matchChatIncr('rejected');
+      return { ok: false, code: 'INVALID_MESSAGE', reason: 'reply_blocked' };
+    }
+    const snippet =
+      parent.text.trim().length > 100 ? `${parent.text.trim().slice(0, 99)}…` : parent.text.trim();
+    replySnapshot = {
+      replyToMessageId: parent.id,
+      replyToUsername: parent.user.username,
+      replyToDisplayName: parent.user.displayName,
+      replyToText: snippet,
+    };
+  }
+
   const createdAt = new Date();
   const persist: PersistMatchChatMessageInput = {
     id: randomUUID(),
@@ -218,6 +249,7 @@ export async function processMatchChatSend(input: {
     moderationScore: 0,
     clientMessageId,
     createdAt,
+    ...(replySnapshot ?? {}),
   };
 
   const message = buildPublicMessage(persist, {

@@ -37,4 +37,14 @@ describe('match-chat validation', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts optional replyToMessageId', () => {
+    const result = matchChatSendSchema.safeParse({
+      matchId: 42,
+      clientMessageId: '11111111-1111-4111-8111-111111111111',
+      replyToMessageId: '22222222-2222-4222-8222-222222222222',
+      text: 'رد',
+    });
+    expect(result.success).toBe(true);
+  });
 });

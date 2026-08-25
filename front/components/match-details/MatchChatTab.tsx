@@ -282,33 +282,38 @@ const LikeButton = memo(function LikeButton({
 
 const ChatMessageItem = memo(function ChatMessageItem({
   item,
-  minute,
   likes,
   likedByMe,
   verified,
   proBadgeLabel,
   likeLabel,
+  replyLabel,
   onLike,
+  onReply,
   onReport,
   onAvatarDoublePress,
 }: {
   item: MatchChatUiMessage;
-  minute: string;
   likes: number;
   likedByMe: boolean;
   verified: boolean;
   proBadgeLabel: string;
   likeLabel: string;
+  replyLabel: string;
   onLike: (id: string) => void;
+  onReply: (message: MatchChatUiMessage) => void;
   onReport: (message: MatchChatUiMessage) => void;
   onAvatarDoublePress?: (username: string) => void;
 }) {
   const name = item.user.displayName || item.user.username || '';
   const handleLike = useCallback(() => onLike(item.id), [onLike, item.id]);
+  const handleReply = useCallback(() => onReply(item), [onReply, item]);
   const handleAvatarPress = useCallback(() => {
     const username = item.user.username?.trim();
     if (username) onAvatarDoublePress?.(username);
   }, [item.user.username, onAvatarDoublePress]);
+  const replyAuthor =
+    item.replyTo?.user.displayName?.trim() || item.replyTo?.user.username?.trim() || '';
 
   return (
     <Pressable
@@ -316,8 +321,18 @@ const ChatMessageItem = memo(function ChatMessageItem({
       style={[styles.messageRow, item.failed && styles.messageFailed]}
     >
       <View style={styles.statsColumn}>
-        <Text style={styles.minute}>{item.pending ? '…' : minute}</Text>
         <LikeButton likes={likes} likedByMe={likedByMe} label={likeLabel} onPress={handleLike} />
+        {!item.pending ? (
+          <Pressable
+            onPress={handleReply}
+            hitSlop={8}
+            style={({ pressed }) => [styles.replyButton, pressed && styles.replyButtonPressed]}
+            accessibilityRole="button"
+            accessibilityLabel={replyLabel}
+          >
+            <Ionicons name="arrow-undo-outline" size={16} color="#A852FA" />
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={styles.messageContent}>
@@ -335,6 +350,16 @@ const ChatMessageItem = memo(function ChatMessageItem({
                 {name}
               </Text>
             )}
+            {item.replyTo ? (
+              <View style={styles.replyPreview}>
+                <Text style={styles.replyPreviewAuthor} numberOfLines={1}>
+                  {replyAuthor}
+                </Text>
+                <Text style={styles.replyPreviewText} numberOfLines={2}>
+                  {item.replyTo.text}
+                </Text>
+              </View>
+            ) : null}
             <Text style={styles.messageText}>{item.text}</Text>
           </View>
           <Avatar
@@ -513,7 +538,9 @@ export function MatchChatTab({
   const md = t.matchDetails;
   const listRef = useRef<FlashListRef<MatchChatUiMessage> | null>(null);
   const fullListRef = useRef<FlashListRef<MatchChatUiMessage> | null>(null);
+  const inputRef = useRef<TextInput>(null);
   const [draft, setDraft] = useState('');
+  const [replyTarget, setReplyTarget] = useState<MatchChatUiMessage | null>(null);
   const [now, setNow] = useState(Date.now());
   const [expanded, setExpanded] = useState(false);
   const [likedIds, setLikedIds] = useState<Record<string, true>>({});
@@ -663,6 +690,16 @@ export function MatchChatTab({
     });
   }, []);
 
+  const onReply = useCallback((message: MatchChatUiMessage) => {
+    if (message.pending || message.failed) return;
+    setReplyTarget(message);
+    inputRef.current?.focus();
+  }, []);
+
+  const clearReplyTarget = useCallback(() => {
+    setReplyTarget(null);
+  }, []);
+
   const onSend = useCallback(() => {
     if (!signedIn) {
       router.push('/auth');
@@ -674,9 +711,27 @@ export function MatchChatTab({
       Alert.alert(md.chatSendBlockedTitle, md.chatSendBlockedOffline);
       return;
     }
-    const ok = send(draft);
-    if (ok) setDraft('');
-  }, [signedIn, frozen, hasDraft, online, send, draft, router, md]);
+    const ok = send(
+      draft,
+      replyTarget
+        ? {
+            replyToMessageId: replyTarget.id,
+            replyTo: {
+              messageId: replyTarget.id,
+              text: replyTarget.text,
+              user: {
+                username: replyTarget.user.username,
+                displayName: replyTarget.user.displayName,
+              },
+            },
+          }
+        : undefined,
+    );
+    if (ok) {
+      setDraft('');
+      setReplyTarget(null);
+    }
+  }, [signedIn, frozen, hasDraft, online, send, draft, replyTarget, router, md]);
 
   const onShowAllChats = useCallback(() => {
     setExpanded(true);
@@ -720,19 +775,20 @@ export function MatchChatTab({
       return (
         <ChatMessageItem
           item={item}
-          minute={formatMatchMinute(item.createdAt, kickoffAt)}
           likes={likedByMe ? 1 : 0}
           likedByMe={likedByMe}
           verified={false}
           proBadgeLabel={md.chatProBadge}
           likeLabel={md.chatLikeLabel}
+          replyLabel={md.chatReplyLabel}
           onLike={onLike}
+          onReply={onReply}
           onReport={onReport}
           onAvatarDoublePress={onAvatarDoublePress}
         />
       );
     },
-    [likedIds, kickoffAt, md.chatProBadge, md.chatLikeLabel, onLike, onReport, onAvatarDoublePress],
+    [likedIds, md.chatProBadge, md.chatLikeLabel, md.chatReplyLabel, onLike, onReply, onReport, onAvatarDoublePress],
   );
 
   const empty = (
@@ -785,6 +841,8 @@ export function MatchChatTab({
     const lift = keyboard.composerKeyboardLift;
     const keyboardOpen = keyboard.keyboardVisible;
     const useStickyKeyboard = isKeyboardControllerActive;
+    const replyAuthor =
+      replyTarget?.user.displayName?.trim() || replyTarget?.user.username?.trim() || '';
     return (
       <LinearGradient
         colors={['#07040D', '#0C051A']}
@@ -800,6 +858,29 @@ export function MatchChatTab({
           },
         ]}
       >
+        {replyTarget ? (
+          <View style={styles.replyComposerBanner}>
+            <View style={styles.replyComposerTextWrap}>
+              <Text style={styles.replyComposerLabel}>{md.chatReplyingTo}</Text>
+              <Text style={styles.replyComposerName} numberOfLines={1}>
+                {replyAuthor}
+              </Text>
+              <Text style={styles.replyComposerSnippet} numberOfLines={1}>
+                {replyTarget.text}
+              </Text>
+            </View>
+            <Pressable
+              onPress={clearReplyTarget}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={md.chatReplyCancel}
+            >
+              <Ionicons name="close" size={20} color="#9CA3AF" />
+            </Pressable>
+          </View>
+        ) : null}
+
+        <View style={styles.composerRow}>
         <Pressable
           style={({ pressed }) => [styles.sendHit, pressed && canSend && styles.sendHitPressed]}
           onPress={onSend}
@@ -814,6 +895,7 @@ export function MatchChatTab({
         <View style={[styles.inputContainer, (frozen || !signedIn) && styles.inputContainerDisabled]}>
           <FaceSmileIcon size={24} />
           <TextInput
+            ref={inputRef}
             style={styles.input}
             placeholder={
               frozen ? md.chatFrozenPlaceholder : !signedIn ? md.chatLoginHint : md.chatPlaceholder
@@ -833,6 +915,7 @@ export function MatchChatTab({
           {draft.length > maxLength - 40 ? (
             <Text style={styles.counter}>{maxLength - draft.length}</Text>
           ) : null}
+        </View>
         </View>
       </LinearGradient>
     );
@@ -1096,11 +1179,35 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 8,
   },
-  minute: {
-    fontSize: 14,
-    color: '#C1C1C1',
-    fontWeight: '400',
-    lineHeight: 17,
+  replyButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1A052D',
+  },
+  replyButtonPressed: {
+    opacity: 0.7,
+  },
+  replyPreview: {
+    width: '100%',
+    borderRightWidth: 2,
+    borderRightColor: '#8B5CF6',
+    paddingRight: 8,
+    gap: 2,
+  },
+  replyPreviewAuthor: {
+    fontSize: 11,
+    color: '#A852FA',
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  replyPreviewText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'right',
+    lineHeight: 16,
   },
   likeCounter: {
     minWidth: 60,
@@ -1223,10 +1330,40 @@ const styles = StyleSheet.create({
     borderTopColor: '#24193B',
     minHeight: 125,
     paddingHorizontal: 14,
-    paddingTop: 17,
+    paddingTop: 12,
+    gap: 10,
+  },
+  composerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  replyComposerBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 4,
+    paddingBottom: 2,
+  },
+  replyComposerTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  replyComposerLabel: {
+    fontSize: 11,
+    color: '#A852FA',
+    fontWeight: '600',
+  },
+  replyComposerName: {
+    fontSize: 12,
+    color: '#E5E7EB',
+    fontWeight: '600',
+  },
+  replyComposerSnippet: {
+    fontSize: 11,
+    color: '#9CA3AF',
   },
   composerSticky: {
     flexShrink: 0,

@@ -1903,15 +1903,22 @@ model MatchChatMessage {
   moderationScore    Float                     @default(0)
   moderationReason   String?
   clientMessageId    String
+  replyToMessageId   String?
+  replyToUsername    String?
+  replyToDisplayName String?
+  replyToText        String?
   createdAt          DateTime                  @default(now())
   deletedAt          DateTime?
   user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   reports            MatchChatReport[]
+  replyToMessage     MatchChatMessage?         @relation("MatchChatReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies            MatchChatMessage[]        @relation("MatchChatReplies")
 
   @@unique([userId, clientMessageId])
   @@index([matchId, createdAt])
   @@index([matchId, id])
   @@index([userId, createdAt])
+  @@index([replyToMessageId])
   @@map("match_chat_messages")
 }
 

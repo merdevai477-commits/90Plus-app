@@ -41,6 +41,15 @@ export interface MatchChatAuthor {
   favoriteTeam: string | null;
 }
 
+export interface MatchChatReplyTo {
+  messageId: string;
+  text: string;
+  user: {
+    username: string;
+    displayName: string | null;
+  };
+}
+
 export interface MatchChatPublicMessage {
   id: string;
   matchId: number;
@@ -48,6 +57,7 @@ export interface MatchChatPublicMessage {
   text: string;
   createdAt: string;
   user: MatchChatAuthor;
+  replyTo?: MatchChatReplyTo;
 }
 
 export interface MatchChatJoinPayload {
@@ -59,6 +69,7 @@ export interface MatchChatSendPayload {
   clientMessageId: string;
   text: string;
   matchId: number;
+  replyToMessageId?: string;
 }
 
 export interface MatchChatRejectedPayload {

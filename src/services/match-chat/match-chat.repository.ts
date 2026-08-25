@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import prisma from '../../lib/prisma';
 import { getRedisClient, isRedisConnected } from '../../lib/redis';
 import { MATCH_CHAT_CONFIG, MATCH_CHAT_REDIS_KEYS } from '../../config/match-chat.config';
-import type { MatchChatAuthor, MatchChatPublicMessage } from './match-chat.types';
+import type { MatchChatAuthor, MatchChatPublicMessage, MatchChatReplyTo } from './match-chat.types';
 import { matchChatIncr } from './match-chat.metrics';
 
 export interface PersistMatchChatMessageInput {
@@ -26,7 +26,28 @@ export interface PersistMatchChatMessageInput {
   moderationScore: number;
   moderationReason?: string;
   clientMessageId: string;
+  replyToMessageId?: string;
+  replyToUsername?: string;
+  replyToDisplayName?: string | null;
+  replyToText?: string;
   createdAt: Date;
+}
+
+function replyToFromRow(row: {
+  replyToMessageId: string | null;
+  replyToUsername: string | null;
+  replyToDisplayName: string | null;
+  replyToText: string | null;
+}): MatchChatReplyTo | undefined {
+  if (!row.replyToMessageId || !row.replyToUsername || !row.replyToText) return undefined;
+  return {
+    messageId: row.replyToMessageId,
+    text: row.replyToText,
+    user: {
+      username: row.replyToUsername,
+      displayName: row.replyToDisplayName,
+    },
+  };
 }
 
 function toPublic(row: {
@@ -35,6 +56,10 @@ function toPublic(row: {
   clientMessageId: string;
   text: string;
   createdAt: Date;
+  replyToMessageId?: string | null;
+  replyToUsername?: string | null;
+  replyToDisplayName?: string | null;
+  replyToText?: string | null;
   user: {
     id: string;
     username: string;
@@ -43,6 +68,12 @@ function toPublic(row: {
     favoriteTeam: string | null;
   };
 }): MatchChatPublicMessage {
+  const replyTo = replyToFromRow({
+    replyToMessageId: row.replyToMessageId ?? null,
+    replyToUsername: row.replyToUsername ?? null,
+    replyToDisplayName: row.replyToDisplayName ?? null,
+    replyToText: row.replyToText ?? null,
+  });
   return {
     id: row.id,
     matchId: row.matchId,
@@ -56,6 +87,7 @@ function toPublic(row: {
       avatar: row.user.avatar,
       favoriteTeam: row.user.favoriteTeam,
     },
+    ...(replyTo ? { replyTo } : {}),
   };
 }
 
@@ -63,6 +95,17 @@ export function buildPublicMessage(
   input: PersistMatchChatMessageInput,
   author: MatchChatAuthor,
 ): MatchChatPublicMessage {
+  const replyTo =
+    input.replyToMessageId && input.replyToUsername && input.replyToText
+      ? {
+          messageId: input.replyToMessageId,
+          text: input.replyToText,
+          user: {
+            username: input.replyToUsername,
+            displayName: input.replyToDisplayName ?? null,
+          },
+        }
+      : undefined;
   return {
     id: input.id,
     matchId: input.matchId,
@@ -70,6 +113,7 @@ export function buildPublicMessage(
     text: input.text,
     createdAt: input.createdAt.toISOString(),
     user: author,
+    ...(replyTo ? { replyTo } : {}),
   };
 }
 
@@ -121,6 +165,10 @@ export async function persistMatchChatMessage(input: PersistMatchChatMessageInpu
       moderationScore: input.moderationScore,
       moderationReason: input.moderationReason,
       clientMessageId: input.clientMessageId,
+      replyToMessageId: input.replyToMessageId,
+      replyToUsername: input.replyToUsername,
+      replyToDisplayName: input.replyToDisplayName,
+      replyToText: input.replyToText,
       createdAt: input.createdAt,
     },
   });
@@ -139,6 +187,10 @@ export async function findMessageByClientId(
       text: true,
       createdAt: true,
       deletedAt: true,
+      replyToMessageId: true,
+      replyToUsername: true,
+      replyToDisplayName: true,
+      replyToText: true,
       user: { select: USER_SELECT },
     },
   });
@@ -178,6 +230,10 @@ export async function getHistoryFromPostgres(
       clientMessageId: true,
       text: true,
       createdAt: true,
+      replyToMessageId: true,
+      replyToUsername: true,
+      replyToDisplayName: true,
+      replyToText: true,
       user: { select: USER_SELECT },
     },
   });
@@ -201,6 +257,7 @@ export async function getMessageById(id: string) {
       text: true,
       deletedAt: true,
       createdAt: true,
+      user: { select: USER_SELECT },
     },
   });
 }
