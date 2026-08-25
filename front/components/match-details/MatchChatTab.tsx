@@ -770,8 +770,6 @@ export function MatchChatTab({
 
   const composer = (safeBottom: number) => {
     const keyboardOpen = keyboard.composerKeyboardLift > 0;
-    // Keyboard height is from the window bottom; subtract home-indicator inset so
-    // the composer sits flush on the keyboard (avoids a black gap on Android).
     const keyboardLift = keyboardOpen
       ? Math.max(0, keyboard.composerKeyboardLift - insets.bottom)
       : 0;
