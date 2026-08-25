@@ -42,6 +42,6 @@ const styles = StyleSheet.create({
   dock: {
     flexShrink: 0,
     zIndex: 40,
-    backgroundColor: 'transparent',
+    backgroundColor: '#050208',
   },
 });

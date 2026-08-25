@@ -6,8 +6,12 @@ import { isKeyboardControllerActive } from '@/utils/keyboardControllerSafe';
 import { safeFlashListScrollToEnd } from '@/components/chat/safeFlashListScroll';
 
 const KEYBOARD_OPEN_GAP = 4;
-/** Manual composer lift on iOS and Android (keyboard-controller handles scroll). */
-const USE_MANUAL_COMPOSER_LIFT = Platform.OS === 'ios' || Platform.OS === 'android';
+/**
+ * Manual composer lift is iOS-only. Android uses `softwareKeyboardLayoutMode: pan`
+ * in app.json — adding marginBottom on top of pan double-shifts the window and
+ * collapses the flex layout until the next unrelated re-render (e.g. typing).
+ */
+const USE_MANUAL_COMPOSER_LIFT = Platform.OS === 'ios';
 
 type UseChatKeyboardParams<TItem> = {
   listRef: RefObject<FlashListRef<TItem> | null>;
@@ -33,6 +37,8 @@ export function useChatKeyboard<TItem>({
 }: UseChatKeyboardParams<TItem>) {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  /** Bumped on every native keyboard show/hide so consumers relayout with the pan. */
+  const [layoutEpoch, setLayoutEpoch] = useState(0);
   const syncTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scrollRafRef = useRef<number[]>([]);
@@ -86,12 +92,15 @@ export function useChatKeyboard<TItem>({
   const applyKeyboardOpen = useCallback(
     (e?: KeyboardEvent) => {
       keyboardVisibleRef.current = true;
-      setKeyboardVisible((prev) => (prev ? prev : true));
+      setKeyboardVisible(true);
+      // Always tick — native pan/resize can happen with an unchanged height,
+      // and Yoga will not relayout until some React state changes.
+      setLayoutEpoch((n) => n + 1);
       const fromEvent = heightFromEvent(e);
       if (fromEvent > 0) {
         setHeightIfValid(fromEvent);
-        scrollToEndRef.current(false);
       }
+      scrollToEndRef.current(false);
     },
     [setHeightIfValid],
   );
@@ -101,7 +110,8 @@ export function useChatKeyboard<TItem>({
     clearSyncTimers();
     keyboardVisibleRef.current = false;
     setKeyboardVisible(false);
-    setKeyboardHeight((prev) => (prev === 0 ? prev : 0));
+    setKeyboardHeight(0);
+    setLayoutEpoch((n) => n + 1);
   }, [clearSyncTimers]);
 
   const applyKeyboardOpenRef = useRef(applyKeyboardOpen);
@@ -109,7 +119,7 @@ export function useChatKeyboard<TItem>({
   applyKeyboardOpenRef.current = applyKeyboardOpen;
   applyKeyboardCloseRef.current = applyKeyboardClose;
 
-  /** iOS only: poll metrics until keyboard animation finishes. */
+  /** iOS only: poll metrics until keyboard animation finishes. Android metrics() on focus is stale/too large. */
   const scheduleHeightSync = useCallback(() => {
     if (!USE_MANUAL_COMPOSER_LIFT) return;
     clearSyncTimers();
@@ -159,9 +169,13 @@ export function useChatKeyboard<TItem>({
   }, [hasMessages, messageCount]);
 
   const onInputFocus = useCallback(() => {
-    keyboardVisibleRef.current = true;
-    setKeyboardVisible(true);
-    scheduleHeightSync();
+    // Android: wait for keyboardDidShow so we don't apply a stale metrics()
+    // height (or a visible=true lift of 0) before the native pan finishes.
+    if (Platform.OS === 'ios') {
+      keyboardVisibleRef.current = true;
+      setKeyboardVisible(true);
+      scheduleHeightSync();
+    }
     scrollToEndRef.current(true);
   }, [scheduleHeightSync]);
 
@@ -189,6 +203,7 @@ export function useChatKeyboard<TItem>({
     useNativeKeyboardScroll,
     composerDockPadding,
     composerKeyboardLift,
+    layoutEpoch,
     KEYBOARD_OPEN_GAP,
   };
 }

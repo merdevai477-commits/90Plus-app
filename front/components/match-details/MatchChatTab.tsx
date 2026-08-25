@@ -10,8 +10,8 @@ import {
   ActionSheetIOS,
   Image,
   ActivityIndicator,
-  Modal,
   StatusBar,
+  BackHandler,
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
@@ -683,6 +683,15 @@ export function MatchChatTab({
     setExpanded(false);
   }, []);
 
+  useEffect(() => {
+    if (!expanded) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setExpanded(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [expanded]);
+
   const onScroll = useCallback(
     (e: {
       nativeEvent: {
@@ -769,7 +778,8 @@ export function MatchChatTab({
   );
 
   const composer = (safeBottom: number) => {
-    const keyboardOpen = keyboard.composerKeyboardLift > 0;
+    const lift = keyboard.composerKeyboardLift;
+    const keyboardOpen = keyboard.keyboardVisible;
     return (
       <LinearGradient
         colors={['#07040D', '#0C051A']}
@@ -779,9 +789,8 @@ export function MatchChatTab({
             paddingBottom: keyboardOpen
               ? keyboard.composerDockPadding
               : Math.max(safeBottom, 12),
-            marginBottom: keyboardOpen
-              ? Math.max(0, keyboard.composerKeyboardLift - insets.bottom)
-              : 0,
+            // iOS: lift above keyboard. Android pan already translates the window.
+            marginBottom: lift > 0 ? Math.max(0, lift - insets.bottom) : 0,
           },
         ]}
       >
@@ -864,10 +873,10 @@ export function MatchChatTab({
   );
 
   return (
-    <View style={styles.wrap}>
+    <View collapsable={false} style={styles.wrap}>
       {banners}
 
-      <View style={styles.compactBody}>
+      <View collapsable={false} style={styles.compactBody}>
         {feedBody('compact', compactMessages)}
 
         {showAllCta ? (
@@ -890,13 +899,8 @@ export function MatchChatTab({
 
       {!expanded ? composer(Math.max(insets.bottom, 8)) : null}
 
-      <Modal
-        visible={expanded}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={onCloseFull}
-      >
-        <View style={styles.fullWrap}>
+      {expanded ? (
+        <View collapsable={false} style={styles.fullOverlay} accessibilityViewIsModal>
           <StatusBar barStyle="light-content" backgroundColor="#07040D" />
           <View style={[styles.fullInner, { paddingTop: Math.max(insets.top, 12) }]}>
             {matchSummary ? (
@@ -919,7 +923,7 @@ export function MatchChatTab({
             {composer(Math.max(insets.bottom, 12))}
           </View>
         </View>
-      </Modal>
+      ) : null}
     </View>
   );
 }
@@ -929,8 +933,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#08050D',
   },
-  fullWrap: {
-    flex: 1,
+  fullOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    elevation: 24,
     backgroundColor: '#07040D',
   },
   fullInner: {
@@ -940,9 +946,11 @@ const styles = StyleSheet.create({
   compactBody: {
     flex: 1,
     position: 'relative',
+    backgroundColor: '#08050D',
   },
   feed: {
     flex: 1,
+    backgroundColor: '#08050D',
   },
   listContentCompact: {
     paddingHorizontal: 16,

@@ -35,7 +35,7 @@ export function ChatScreenLayout({
   );
 
   return (
-    <SafeAreaView style={styles.root} edges={['left', 'right']}>
+    <SafeAreaView collapsable={false} style={styles.root} edges={['left', 'right']}>
       <ChatScreenBackground />
       {historyPanel}
       <View style={styles.screen}>
