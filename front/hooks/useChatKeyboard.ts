@@ -5,7 +5,7 @@ import type { FlashListRef } from '@shopify/flash-list';
 import { isKeyboardControllerActive } from '@/utils/keyboardControllerSafe';
 import { safeFlashListScrollToEnd } from '@/components/chat/safeFlashListScroll';
 
-const KEYBOARD_OPEN_GAP = 4;
+const KEYBOARD_OPEN_GAP = Platform.OS === 'android' ? 0 : 4;
 /**
  * Manual composer lift is iOS-only. Android uses `softwareKeyboardLayoutMode: pan`
  * in app.json — adding marginBottom on top of pan double-shifts the window and
@@ -169,11 +169,13 @@ export function useChatKeyboard<TItem>({
   }, [hasMessages, messageCount]);
 
   const onInputFocus = useCallback(() => {
-    // Android: wait for keyboardDidShow so we don't apply a stale metrics()
-    // height (or a visible=true lift of 0) before the native pan finishes.
+    // Apply composer padding immediately on focus so Android pan + padding stay
+    // in sync (avoids a jump on the first keystroke). Do not read metrics() or
+    // set keyboardHeight on Android — lift is iOS-only.
+    keyboardVisibleRef.current = true;
+    setKeyboardVisible(true);
+    setLayoutEpoch((n) => n + 1);
     if (Platform.OS === 'ios') {
-      keyboardVisibleRef.current = true;
-      setKeyboardVisible(true);
       scheduleHeightSync();
     }
     scrollToEndRef.current(true);
