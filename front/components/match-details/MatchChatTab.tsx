@@ -770,6 +770,11 @@ export function MatchChatTab({
 
   const composer = (safeBottom: number) => {
     const keyboardOpen = keyboard.composerKeyboardLift > 0;
+    // Keyboard height is from the window bottom; subtract home-indicator inset so
+    // the composer sits flush on the keyboard (avoids a black gap on Android).
+    const keyboardLift = keyboardOpen
+      ? Math.max(0, keyboard.composerKeyboardLift - insets.bottom)
+      : 0;
     return (
       <LinearGradient
         colors={['#07040D', '#0C051A']}
@@ -779,7 +784,7 @@ export function MatchChatTab({
             paddingBottom: keyboardOpen
               ? keyboard.composerDockPadding
               : Math.max(safeBottom, 12),
-            marginBottom: keyboard.composerKeyboardLift,
+            marginBottom: keyboardLift,
           },
         ]}
       >
@@ -1190,11 +1195,11 @@ const styles = StyleSheet.create({
   },
   composerBar: {
     width: '100%',
-    borderTopWidth: 1,
+    borderTopWidth: 2,
     borderTopColor: '#24193B',
-    minHeight: 88,
+    minHeight: 125,
     paddingHorizontal: 18,
-    paddingTop: 14,
+    paddingTop: 17,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,

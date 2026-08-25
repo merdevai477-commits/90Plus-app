@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { Keyboard, Platform, type KeyboardEvent } from 'react-native';
 import type { FlashListRef } from '@shopify/flash-list';
 
-import type { Message } from './useAIChatNative';
 import { isKeyboardControllerActive } from '@/utils/keyboardControllerSafe';
 import { safeFlashListScrollToEnd } from '@/components/chat/safeFlashListScroll';
 
@@ -10,8 +9,8 @@ const KEYBOARD_OPEN_GAP = 4;
 /** Manual composer lift on iOS and Android (keyboard-controller handles scroll). */
 const USE_MANUAL_COMPOSER_LIFT = Platform.OS === 'ios' || Platform.OS === 'android';
 
-type UseChatKeyboardParams = {
-  listRef: React.RefObject<FlashListRef<Message> | null>;
+type UseChatKeyboardParams<TItem> = {
+  listRef: RefObject<FlashListRef<TItem> | null>;
   hasMessages: boolean;
   messageCount: number;
 };
@@ -27,7 +26,11 @@ function heightFromMetrics(): number {
   return h > 0 ? h : 0;
 }
 
-export function useChatKeyboard({ listRef, hasMessages, messageCount }: UseChatKeyboardParams) {
+export function useChatKeyboard<TItem>({
+  listRef,
+  hasMessages,
+  messageCount,
+}: UseChatKeyboardParams<TItem>) {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const syncTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
