@@ -5,11 +5,10 @@ import type { FlashListRef } from '@shopify/flash-list';
 import { isKeyboardControllerActive } from '@/utils/keyboardControllerSafe';
 import { safeFlashListScrollToEnd } from '@/components/chat/safeFlashListScroll';
 
-const KEYBOARD_OPEN_GAP = Platform.OS === 'android' ? 0 : 4;
+const KEYBOARD_OPEN_GAP = Platform.OS === 'android' ? 0 : 5;
 /**
- * Manual composer lift is iOS-only. Android uses `softwareKeyboardLayoutMode: pan`
- * in app.json — adding marginBottom on top of pan double-shifts the window and
- * collapses the flex layout until the next unrelated re-render (e.g. typing).
+ * Manual composer lift is iOS-only. Android uses adjustResize in app.json and,
+ * in dev/production builds, KeyboardStickyView on match live chat.
  */
 const USE_MANUAL_COMPOSER_LIFT = Platform.OS === 'ios';
 

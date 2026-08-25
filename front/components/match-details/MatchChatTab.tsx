@@ -34,6 +34,10 @@ import type { MatchChatUiMessage } from '../../hooks/matchLiveChat.reducer';
 import type { MatchChatReportReason } from '../../types/matchChat';
 import { safeFlashListScrollToEnd } from '../chat/safeFlashListScroll';
 import { useChatKeyboard } from '../../hooks/useChatKeyboard';
+import {
+  ChatKeyboardStickyView,
+  isKeyboardControllerActive,
+} from '@/utils/keyboardControllerSafe';
 
 export type MatchChatScorer = { name: string; minute: string };
 
@@ -780,6 +784,7 @@ export function MatchChatTab({
   const composer = (safeBottom: number) => {
     const lift = keyboard.composerKeyboardLift;
     const keyboardOpen = keyboard.keyboardVisible;
+    const useStickyKeyboard = isKeyboardControllerActive;
     return (
       <LinearGradient
         colors={['#07040D', '#0C051A']}
@@ -789,8 +794,9 @@ export function MatchChatTab({
             paddingBottom: keyboardOpen
               ? keyboard.composerDockPadding
               : Math.max(safeBottom, 12),
-            // iOS: lift above keyboard. Android pan already translates the window.
-            marginBottom: lift > 0 ? Math.max(0, lift - insets.bottom) : 0,
+            // StickyView / resize handle Android; iOS uses manual lift.
+            marginBottom:
+              !useStickyKeyboard && lift > 0 ? Math.max(0, lift - insets.bottom) : 0,
           },
         ]}
       >
@@ -829,6 +835,19 @@ export function MatchChatTab({
           ) : null}
         </View>
       </LinearGradient>
+    );
+  };
+
+  const renderComposerDock = (safeBottom: number) => {
+    const node = composer(safeBottom);
+    if (!isKeyboardControllerActive) return node;
+    return (
+      <ChatKeyboardStickyView
+        offset={{ closed: 0, opened: keyboard.KEYBOARD_OPEN_GAP }}
+        style={styles.composerSticky}
+      >
+        {node}
+      </ChatKeyboardStickyView>
     );
   };
 
@@ -897,7 +916,7 @@ export function MatchChatTab({
         ) : null}
       </View>
 
-      {!expanded ? composer(Math.max(insets.bottom, 8)) : null}
+      {!expanded ? renderComposerDock(Math.max(insets.bottom, 8)) : null}
 
       {expanded ? (
         <View collapsable={false} style={styles.fullOverlay} accessibilityViewIsModal>
@@ -920,7 +939,7 @@ export function MatchChatTab({
             )}
             {banners}
             {feedBody('full', messages)}
-            {composer(Math.max(insets.bottom, 12))}
+            {renderComposerDock(Math.max(insets.bottom, 12))}
           </View>
         </View>
       ) : null}
@@ -1203,11 +1222,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 2,
     borderTopColor: '#24193B',
     minHeight: 125,
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
     paddingTop: 17,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  composerSticky: {
+    flexShrink: 0,
+    width: '100%',
   },
   sendHit: {
     width: 53,
