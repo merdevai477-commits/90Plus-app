@@ -770,9 +770,6 @@ export function MatchChatTab({
 
   const composer = (safeBottom: number) => {
     const keyboardOpen = keyboard.composerKeyboardLift > 0;
-    const keyboardLift = keyboardOpen
-      ? Math.max(0, keyboard.composerKeyboardLift - insets.bottom)
-      : 0;
     return (
       <LinearGradient
         colors={['#07040D', '#0C051A']}
@@ -782,7 +779,9 @@ export function MatchChatTab({
             paddingBottom: keyboardOpen
               ? keyboard.composerDockPadding
               : Math.max(safeBottom, 12),
-            marginBottom: keyboardLift,
+            marginBottom: keyboardOpen
+              ? Math.max(0, keyboard.composerKeyboardLift - insets.bottom)
+              : 0,
           },
         ]}
       >
