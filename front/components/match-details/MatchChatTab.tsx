@@ -10,6 +10,7 @@ import {
   ActionSheetIOS,
   Image,
   ActivityIndicator,
+  Modal,
   StatusBar,
   BackHandler,
 } from 'react-native';
@@ -1001,8 +1002,14 @@ export function MatchChatTab({
 
       {!expanded ? renderComposerDock(Math.max(insets.bottom, 8)) : null}
 
-      {expanded ? (
-        <View collapsable={false} style={styles.fullOverlay} accessibilityViewIsModal>
+      <Modal
+        visible={expanded}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={onCloseFull}
+        statusBarTranslucent
+      >
+        <View collapsable={false} style={styles.fullWrap}>
           <StatusBar barStyle="light-content" backgroundColor="#07040D" />
           <View style={[styles.fullInner, { paddingTop: Math.max(insets.top, 12) }]}>
             {matchSummary ? (
@@ -1025,7 +1032,7 @@ export function MatchChatTab({
             {renderComposerDock(Math.max(insets.bottom, 12))}
           </View>
         </View>
-      ) : null}
+      </Modal>
     </View>
   );
 }
@@ -1035,10 +1042,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#08050D',
   },
-  fullOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 40,
-    elevation: 24,
+  fullWrap: {
+    flex: 1,
     backgroundColor: '#07040D',
   },
   fullInner: {
