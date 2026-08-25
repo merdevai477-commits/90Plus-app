@@ -14,6 +14,10 @@ import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/ma
 import { buildScores365AthletePhotoUrl, buildScores365CoachPhotoUrl } from '../utils/scores365-athlete-photo';
 import { findCoachInLineup } from './coach-lookup.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
+import {
+  buildTeamStatisticsFrom365GameStats,
+  type Scores365TeamStatsPayload,
+} from '../utils/scores365-team-stats';
 import { calendarTodayKey, calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
@@ -27,6 +31,7 @@ import {
 export { SCORES365_LEAGUE_ID_OFFSET, scores365CompetitionToLeagueId };
 
 const SCORES365_GAME_BASE = 'https://webws.365scores.com/web/game/';
+const SCORES365_GAME_STATS_BASE = 'https://webws.365scores.com/web/game/stats/';
 const SCORES365_FIXTURES_BASE = 'https://webws.365scores.com/web/games/fixtures/';
 const SCORES365_WEB_ORIGIN = 'https://webws.365scores.com';
 
@@ -754,6 +759,59 @@ function scores365CommonParams(langId: number): string {
 
 function scores365GameUrl(gameId: number, langId: number): string {
   return `${SCORES365_GAME_BASE}?${scores365CommonParams(langId)}&gameId=${gameId}`;
+}
+
+/** Team-level match stats (corners, attacks, possession, cards…). Uses `games=` (plural). */
+function scores365GameStatsUrl(gameId: number, langId: number): string {
+  return `${SCORES365_GAME_STATS_BASE}?${scores365CommonParams(langId)}&games=${gameId}`;
+}
+
+let cachedTeamStatsByKey = new Map<string, { fetchedAt: number; payload: Scores365TeamStatsPayload | null }>();
+const TEAM_STATS_TTL_MS = 20_000;
+
+async function fetchScores365GameTeamStats(
+  gameId: number,
+  langId: number,
+  force = false,
+): Promise<Scores365TeamStatsPayload | null> {
+  const key = `${gameId}:${langId}`;
+  const cached = cachedTeamStatsByKey.get(key);
+  if (!force && cached && Date.now() - cached.fetchedAt < TEAM_STATS_TTL_MS) {
+    return cached.payload;
+  }
+  try {
+    const res = await fetch(scores365GameStatsUrl(gameId, langId), {
+      headers: scores365FetchHeaders(langId),
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) {
+      logger.warn(`[Scores365Stats] HTTP ${res.status} for game ${gameId}`);
+      return cached?.payload ?? null;
+    }
+    const payload = (await res.json()) as Scores365TeamStatsPayload;
+    if (!payload || !Array.isArray(payload.statistics)) {
+      return cached?.payload ?? null;
+    }
+    setBoundedMapEntry(cachedTeamStatsByKey, key, { fetchedAt: Date.now(), payload });
+    return payload;
+  } catch (err) {
+    logger.warn(
+      `[Scores365Stats] fetch failed game=${gameId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return cached?.payload ?? null;
+  }
+}
+
+/** Map 365 home/away competitor ids onto fixture home/away after optional swap. */
+function fixtureOriented365CompetitorIds(
+  game: Scores365Game,
+  alignment: Scores365TeamAlignment,
+): { home: number; away: number } | null {
+  const home365 = game.homeCompetitor?.id;
+  const away365 = game.awayCompetitor?.id;
+  if (typeof home365 !== 'number' || typeof away365 !== 'number') return null;
+  if (alignment.swapped) return { home: away365, away: home365 };
+  return { home: home365, away: away365 };
 }
 
 function scores365FixturesUrl(langId: number): string {
@@ -2508,6 +2566,66 @@ export async function getScores365ExperimentFixture(
   return fixture;
 }
 
+/**
+ * Preferred statistics source for 365 fixtures: team-level `/web/game/stats`
+ * (includes Corner Kicks, Attacks, cards, possession). Falls back to player
+ * aggregation then events-derived stats.
+ */
+export async function getScores365ExperimentStatistics(
+  fixtureId: number,
+  options?: { force?: boolean; language?: string | null },
+): Promise<any[]> {
+  const gameId =
+    (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
+  if (!gameId) return [];
+
+  const core = await resolve365ExperimentCore(fixtureId, gameId, options?.language, {
+    force: options?.force === true,
+  });
+  if (!core) return [];
+
+  const { game, base, alignment } = core;
+  const teamRefs = {
+    home: {
+      id: base.teams.home?.id ?? 0,
+      name: base.teams.home?.name ?? 'Home',
+      logo: (base.teams.home as any)?.logo ?? '',
+    },
+    away: {
+      id: base.teams.away?.id ?? 0,
+      name: base.teams.away?.name ?? 'Away',
+      logo: (base.teams.away as any)?.logo ?? '',
+    },
+  };
+
+  const competitorIds = fixtureOriented365CompetitorIds(game, alignment);
+  if (competitorIds) {
+    const langId = resolveScores365LangId(resolveScores365AppLanguage(options?.language));
+    const payload = await fetchScores365GameTeamStats(gameId, langId, options?.force === true);
+    const fromTeam = buildTeamStatisticsFrom365GameStats(payload, teamRefs, competitorIds);
+    if (hasApiStatistics(fromTeam)) return fromTeam as any[];
+  }
+
+  const lineupData = mapScores365Lineups(game, base, alignment);
+  const playersWithSide = [
+    ...(lineupData[0]?.startXI ?? []).map((l: any) => ({ side: 'home' as const, stats: l.player._stats365 })),
+    ...(lineupData[0]?.substitutes ?? []).map((l: any) => ({ side: 'home' as const, stats: l.player._stats365 })),
+    ...(lineupData[1]?.startXI ?? []).map((l: any) => ({ side: 'away' as const, stats: l.player._stats365 })),
+    ...(lineupData[1]?.substitutes ?? []).map((l: any) => ({ side: 'away' as const, stats: l.player._stats365 })),
+  ];
+  const fromPlayers = buildTeamStatisticsFrom365Players(playersWithSide, teamRefs);
+  if (hasApiStatistics(fromPlayers)) return fromPlayers as any[];
+
+  const events = mapScores365Events(game, base, alignment);
+  if (events.length > 0 && base.teams && (base as any).goals) {
+    return buildFallbackStatisticsFromEvents(
+      { teams: base.teams as any, goals: (base as any).goals },
+      events,
+    ) as any[];
+  }
+  return [];
+}
+
 function overlay365LocalizedFixtureNames(
   fixture: FixtureFromAPI,
   localized: Scores365Game,
@@ -2583,22 +2701,37 @@ export async function getScores365ExperimentBundle(
 
   let statistics = (base as any).statistics ?? [];
   if (!hasApiStatistics(statistics)) {
-    // Try to aggregate full stats from player-level 365Scores data (shots, passes, fouls, xG…).
-    const playersWithSide = [
-      ...(lineupData[0]?.startXI ?? []).map((l: any) => ({ side: 'home' as const, stats: l.player._stats365 })),
-      ...(lineupData[0]?.substitutes ?? []).map((l: any) => ({ side: 'home' as const, stats: l.player._stats365 })),
-      ...(lineupData[1]?.startXI ?? []).map((l: any) => ({ side: 'away' as const, stats: l.player._stats365 })),
-      ...(lineupData[1]?.substitutes ?? []).map((l: any) => ({ side: 'away' as const, stats: l.player._stats365 })),
-    ];
     const teamRefs = {
       home: { id: base.teams.home?.id ?? 0, name: base.teams.home?.name ?? 'Home', logo: (base.teams.home as any)?.logo ?? '' },
       away: { id: base.teams.away?.id ?? 0, name: base.teams.away?.name ?? 'Away', logo: (base.teams.away as any)?.logo ?? '' },
     };
-    const playerStats = buildTeamStatisticsFrom365Players(playersWithSide, teamRefs);
-    if (playerStats.length > 0) {
-      statistics = playerStats;
-    } else if (events.length > 0) {
-      statistics = buildFallbackStatisticsFromEvents(fixture, events);
+    const competitorIds = fixtureOriented365CompetitorIds(game, alignment);
+    const langId = resolveScores365LangId(resolveScores365AppLanguage(language));
+    if (competitorIds) {
+      const teamStatsPayload = await fetchScores365GameTeamStats(game.id, langId, force);
+      const fromTeamEndpoint = buildTeamStatisticsFrom365GameStats(
+        teamStatsPayload,
+        teamRefs,
+        competitorIds,
+      );
+      if (hasApiStatistics(fromTeamEndpoint)) {
+        statistics = fromTeamEndpoint;
+      }
+    }
+    // Fallback: aggregate from player-level lineup stats (no corners on that path).
+    if (!hasApiStatistics(statistics)) {
+      const playersWithSide = [
+        ...(lineupData[0]?.startXI ?? []).map((l: any) => ({ side: 'home' as const, stats: l.player._stats365 })),
+        ...(lineupData[0]?.substitutes ?? []).map((l: any) => ({ side: 'home' as const, stats: l.player._stats365 })),
+        ...(lineupData[1]?.startXI ?? []).map((l: any) => ({ side: 'away' as const, stats: l.player._stats365 })),
+        ...(lineupData[1]?.substitutes ?? []).map((l: any) => ({ side: 'away' as const, stats: l.player._stats365 })),
+      ];
+      const playerStats = buildTeamStatisticsFrom365Players(playersWithSide, teamRefs);
+      if (playerStats.length > 0) {
+        statistics = playerStats;
+      } else if (events.length > 0) {
+        statistics = buildFallbackStatisticsFromEvents(fixture, events);
+      }
     }
   }
 

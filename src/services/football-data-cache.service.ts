@@ -49,6 +49,7 @@ import {
     getScores365ExperimentBundle,
     is365StoreDetailsHotfix,
     getScores365ExperimentEvents,
+    getScores365ExperimentStatistics,
     getScores365GameIdForFixture,
     getScores365MatchesForDate,
     getScores365WorldCupPhaseFixtures,
@@ -2037,7 +2038,32 @@ class FootballDataCacheService {
 
         await ensureScores365GameMapping(fixtureId);
         if (isScores365ExperimentFixture(fixtureId)) {
-            // Primary: aggregate real team stats from 365 player-level stats.
+            // Primary: team-level 365 `/web/game/stats` (corners, attacks, cards…).
+            try {
+                const teamStats = await getScores365ExperimentStatistics(fixtureId);
+                if (hasApiStatistics(teamStats)) {
+                    const cacheEntry: MemoryCacheEntry<any> = {
+                        data: teamStats,
+                        timestamp: Date.now(),
+                        ttl: this.TTL.LIVE_MATCH,
+                    };
+                    await redisCacheService.set(
+                        `statistics:${fixtureId}`,
+                        cacheEntry,
+                        this.TTL.LIVE_MATCH,
+                    );
+                    this.setBoundedCache(this.statisticsCache, fixtureId, cacheEntry);
+                    return teamStats;
+                }
+            } catch (err) {
+                logger.warn(
+                    `[Stats365] fixture=${fixtureId} team-stats failed: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`,
+                );
+            }
+
+            // Secondary: aggregate from player-level lineup stats (no corners).
             if (fullData?.teams) {
                 const named = await this.getCached365LineupsWithNames(fixtureId);
                 if (named.data?.length) {
