@@ -213,7 +213,7 @@ export function GroupOnboarding({
               { fontFamily: bold, textAlign: align, writingDirection },
             ]}
           >
-            {ob.myGroups}
+            {ob.suggestions}
           </Text>
         </View>
 
@@ -226,7 +226,7 @@ export function GroupOnboarding({
               { fontFamily: medium, textAlign: align, writingDirection },
             ]}
           >
-            {ob.emptyMyGroups}
+            {ob.emptySuggestions}
           </Text>
         ) : (
           <View style={styles.list}>
