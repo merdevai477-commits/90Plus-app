@@ -1,5 +1,6 @@
 /**
  * Group hero card — Figma 477:2766 cup banner.
+ * Title: جروب التوقعات; default art = trophy; actions sit above the title.
  */
 
 import * as Clipboard from 'expo-clipboard';
@@ -22,7 +23,7 @@ const ICON_SCHEDULE = require('../../assets/images/prediction-groups/icon-schedu
 export function PredictionsCupHero({
   isRTL,
   name: _name,
-  avatarUrl,
+  avatarUrl: _avatarUrl,
   membersCount,
   matchesCount,
   inviteCode,
@@ -49,14 +50,13 @@ export function PredictionsCupHero({
   const toast = useToast();
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const align = isRTL ? ('right' as const) : ('left' as const);
+  const showActions = Boolean((isOwner && onSettings) || onLeave);
 
   const copy = useCallback(async () => {
     await Clipboard.setStringAsync(inviteCode);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     toast.showSuccess(common.copiedTitle, common.copiedInvite);
   }, [common.copiedInvite, common.copiedTitle, inviteCode, toast]);
-
-  const showActions = Boolean((isOwner && onSettings) || onLeave);
 
   return (
     <View style={styles.card}>
@@ -68,17 +68,40 @@ export function PredictionsCupHero({
       />
       <View style={[styles.inner, row]}>
         <View style={[styles.copy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
+          {showActions ? (
+            <View style={[styles.actions, row]}>
+              {isOwner && onSettings ? (
+                <Pressable
+                  onPress={onSettings}
+                  style={styles.iconBtn}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={common.settings}
+                >
+                  <Settings size={15} color="#C4A6FF" />
+                </Pressable>
+              ) : null}
+              {onLeave ? (
+                <Pressable
+                  onPress={onLeave}
+                  style={styles.iconBtn}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={common.leaveGroup}
+                >
+                  <LogOut size={15} color="#C4A6FF" />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
           <Text
             style={[styles.title, { fontFamily: bold, textAlign: align, writingDirection: direction }]}
             numberOfLines={2}
           >
             {cup.title}
           </Text>
-          <Text
-            style={[styles.sub, { fontFamily: medium, textAlign: align, writingDirection: direction }]}
-          >
-            {cup.subtitle}
-          </Text>
+
           <View style={[styles.stats, row]}>
             <View style={[styles.stat, row]}>
               <Text style={[styles.statTxt, { fontFamily: medium }]}>
@@ -98,56 +121,33 @@ export function PredictionsCupHero({
               />
             </View>
           </View>
+
           <Pressable
             onPress={() => {
               void copy();
               onInvite();
             }}
-            style={[styles.codeBox, row]}
+            style={[
+              styles.codeBox,
+              row,
+              { alignSelf: isRTL ? 'flex-end' : 'flex-start' },
+            ]}
           >
-            <Text style={[styles.code, { fontFamily: medium }]}>{inviteCode}</Text>
+            <Text
+              style={[styles.code, { fontFamily: medium }]}
+              numberOfLines={1}
+              ellipsizeMode="middle"
+            >
+              {inviteCode}
+            </Text>
             <Image source={ICON_COPY} style={styles.copyIcon} contentFit="contain" transition={0} />
           </Pressable>
         </View>
+
         <View style={styles.artWrap}>
-          {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.art} contentFit="cover" />
-          ) : (
-            <Image source={CUP_TROPHY} style={styles.art} contentFit="contain" />
-          )}
+          <Image source={CUP_TROPHY} style={styles.art} contentFit="contain" transition={0} />
         </View>
       </View>
-
-      {/* Sit on the trophy side so they never collide with title/copy. */}
-      {showActions ? (
-        <View
-          style={[styles.actions, isRTL ? styles.actionsStart : styles.actionsEnd]}
-          pointerEvents="box-none"
-        >
-          {isOwner && onSettings ? (
-            <Pressable
-              onPress={onSettings}
-              style={styles.iconBtn}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={common.settings}
-            >
-              <Settings size={15} color="#C4A6FF" />
-            </Pressable>
-          ) : null}
-          {onLeave ? (
-            <Pressable
-              onPress={onLeave}
-              style={styles.iconBtn}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={common.leaveGroup}
-            >
-              <LogOut size={15} color="#C4A6FF" />
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -155,7 +155,7 @@ export function PredictionsCupHero({
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
-    height: 194,
+    minHeight: 194,
     borderRadius: 26,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(190,143,236,0.65)',
@@ -166,49 +166,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 19,
-    paddingVertical: 10,
+    paddingVertical: 14,
     gap: 10,
   },
-  copy: { flex: 1, gap: 8, minWidth: 0 },
-  title: { color: '#fff', fontSize: 20 },
-  sub: { color: '#B5B5B5', fontSize: 12 },
-  stats: { gap: 17, marginTop: 2, flexWrap: 'wrap' },
-  stat: { alignItems: 'center', gap: 4 },
-  statTxt: { color: '#5D5D5D', fontSize: 11 },
-  metaIcon: { width: 14, height: 14 },
-  codeBox: {
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-    alignSelf: 'flex-start',
-    height: 29,
-    paddingHorizontal: 16,
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#53198A',
-    backgroundColor: 'rgba(7,4,13,0.9)',
+  copy: {
+    flex: 1,
+    gap: 10,
+    minWidth: 0,
   },
-  code: { color: '#B673F5', fontSize: 11 },
-  copyIcon: { width: 12, height: 12 },
-  artWrap: {
-    width: 135,
-    height: 138,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  art: { width: '100%', height: '100%' },
   actions: {
-    position: 'absolute',
-    top: 12,
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    zIndex: 4,
+    marginBottom: 2,
   },
-  /** LTR: trophy is on the right → park actions there. */
-  actionsEnd: { right: 12 },
-  /** RTL: trophy is on the left → park actions there. */
-  actionsStart: { left: 12 },
   iconBtn: {
     width: 34,
     height: 34,
@@ -219,4 +189,30 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(190,143,236,0.55)',
   },
+  title: { color: '#fff', fontSize: 20 },
+  stats: { gap: 17, flexWrap: 'wrap' },
+  stat: { alignItems: 'center', gap: 4 },
+  statTxt: { color: '#5D5D5D', fontSize: 11 },
+  metaIcon: { width: 14, height: 14 },
+  codeBox: {
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    height: 29,
+    paddingHorizontal: 12,
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#53198A',
+    backgroundColor: 'rgba(7,4,13,0.9)',
+  },
+  code: { color: '#B673F5', fontSize: 11, maxWidth: 140 },
+  copyIcon: { width: 12, height: 12 },
+  artWrap: {
+    width: 135,
+    height: 138,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  art: { width: '100%', height: '100%' },
 });

@@ -1435,8 +1435,8 @@ export const ar = {
       submit: 'إنشاء المجموعة',
     },
     cup: {
-      title: 'كأس التوقعات',
-      subtitle: 'مسابقة توقعات خاصة',
+      title: 'جروب التوقعات',
+      subtitle: '',
       dailyMatches: '{count} مباريات يومياً',
       remainingToday: 'مباريات متبقية اليوم',
     },

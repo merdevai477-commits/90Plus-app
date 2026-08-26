@@ -1347,8 +1347,8 @@ export const en = {
       submit: 'Create group',
     },
     cup: {
-      title: 'Predictions Cup',
-      subtitle: 'Private predictions competition',
+      title: 'Predictions Group',
+      subtitle: '',
       dailyMatches: '{count} matches daily',
       remainingToday: 'matches remaining today',
     },
