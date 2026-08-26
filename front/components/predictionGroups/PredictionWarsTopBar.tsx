@@ -6,10 +6,15 @@ import { Image } from 'expo-image';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import GradientText from '../ShareWin/components/GradientText';
 import { useTranslation } from '../../src/i18n';
 import { usePGFonts } from './theme';
 
 const ICON_BACK = require('../../assets/images/prediction-groups/icon-back-arrow.svg');
+
+/** Figma text fill: #EFE5FF → #5C14CA → #120335 */
+const XP_GRADIENT = ['#EFE5FF', '#5C14CA', '#120335'] as const;
+const XP_GRADIENT_LOCATIONS = [0, 0.62, 1] as const;
 
 export const WARS_TOP_BAR_HEIGHT = 56;
 
@@ -63,10 +68,22 @@ export function PredictionWarsTopBar({
 
         <View style={styles.xpCluster}>
           <View style={styles.xpDot}>
-            <Text style={[styles.xpDotTxt, { fontFamily: bold }]}>XP</Text>
+            <GradientText
+              colors={XP_GRADIENT}
+              locations={XP_GRADIENT_LOCATIONS}
+              style={[styles.xpDotTxt, { fontFamily: bold }]}
+            >
+              XP
+            </GradientText>
           </View>
           <View style={styles.xpPill}>
-            <Text style={[styles.xpVal, { fontFamily: medium }]}>{xpLabel}</Text>
+            <GradientText
+              colors={XP_GRADIENT}
+              locations={XP_GRADIENT_LOCATIONS}
+              style={[styles.xpVal, { fontFamily: medium }]}
+            >
+              {xpLabel}
+            </GradientText>
           </View>
         </View>
       </View>
