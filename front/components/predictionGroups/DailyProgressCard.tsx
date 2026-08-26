@@ -1,13 +1,17 @@
 /**
- * Daily remaining-matches progress card — Figma 477:2766.
+ * Daily remaining-matches progress card — Figma 492:3207.
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 
+import GradientText from '../ShareWin/components/GradientText';
 import { useTranslation } from '../../src/i18n';
 import { usePGFonts } from './theme';
+
+const NUM_GRADIENT = ['#FFFFFF', '#999999'] as const;
+const FILL_GRADIENT = ['#5F00B9', '#2B0053'] as const;
 
 export function DailyProgressCard({
   isRTL,
@@ -21,41 +25,47 @@ export function DailyProgressCard({
   const { bold, medium } = usePGFonts();
   const { t, direction } = useTranslation();
   const cup = t.predictionGroups.cup;
-  const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
-  const predicted = Math.max(0, total - remaining);
-  const pct = total > 0 ? Math.min(1, predicted / total) : 0;
+
+  const safeTotal = Math.max(0, total);
+  const safeRemaining = Math.max(0, Math.min(remaining, safeTotal || remaining));
+  const predicted = Math.max(0, safeTotal - safeRemaining);
+  const pct = safeTotal > 0 ? Math.min(1, predicted / safeTotal) : 0;
+  const fracLabel = useMemo(
+    () => `${safeTotal}/${predicted}`,
+    [safeTotal, predicted],
+  );
+
+  /** Figma Arabic: big remaining digit sits on the right of the meta column. */
+  const shellRow: ViewStyle = { flexDirection: isRTL ? 'row' : 'row-reverse' };
+  const labelRow: ViewStyle = { flexDirection: isRTL ? 'row' : 'row-reverse' };
 
   return (
     <LinearGradient
       colors={['#0C051A', '#07040D']}
-      start={{ x: 0.5, y: 0 }}
-      end={{ x: 0.5, y: 1 }}
+      start={{ x: 0.5, y: 1 }}
+      end={{ x: 0.5, y: 0 }}
       style={styles.card}
     >
-      <View style={[styles.top, row]}>
-        <Text style={[styles.num, { fontFamily: bold }]}>{remaining}</Text>
+      <View style={[styles.row, shellRow]}>
         <View style={[styles.meta, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-          <View style={[styles.labelRow, row]}>
+          <View style={[styles.labelRow, labelRow]}>
             <Text
-              style={[
-                styles.frac,
-                { fontFamily: medium, writingDirection: direction },
-              ]}
+              style={[styles.frac, { fontFamily: medium, writingDirection: direction }]}
+              numberOfLines={1}
             >
-              {total}/{predicted}
+              {fracLabel}
             </Text>
             <Text
-              style={[
-                styles.label,
-                { fontFamily: medium, writingDirection: direction },
-              ]}
+              style={[styles.label, { fontFamily: medium, writingDirection: direction }]}
+              numberOfLines={1}
             >
               {cup.remainingToday}
             </Text>
           </View>
+
           <View style={styles.track}>
             <LinearGradient
-              colors={['#5F00B9', '#2B0053']}
+              colors={FILL_GRADIENT}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
               style={[
@@ -68,6 +78,13 @@ export function DailyProgressCard({
             />
           </View>
         </View>
+
+        <GradientText
+          colors={NUM_GRADIENT}
+          style={[styles.num, { fontFamily: bold }]}
+        >
+          {String(safeRemaining)}
+        </GradientText>
       </View>
     </LinearGradient>
   );
@@ -84,22 +101,42 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(89,10,164,0.62)',
     justifyContent: 'center',
   },
-  top: { alignItems: 'center', gap: 12 },
+  row: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
   num: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 43,
     lineHeight: 48,
-    minWidth: 48,
     textAlign: 'center',
+    minWidth: 36,
   },
-  meta: { flex: 1, gap: 12 },
+  meta: {
+    flex: 1,
+    gap: 12,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
   labelRow: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
+    gap: 8,
   },
-  label: { color: '#fff', fontSize: 15 },
-  frac: { color: '#979797', fontSize: 13 },
+  label: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  frac: {
+    color: '#979797',
+    fontSize: 13,
+    textAlign: 'center',
+  },
   track: {
     width: '100%',
     maxWidth: 254,
@@ -109,7 +146,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fill: {
-    height: '100%',
+    height: 7,
     borderRadius: 11,
   },
 });
