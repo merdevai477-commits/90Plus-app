@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   KeyboardAvoidingView,
@@ -11,13 +11,20 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from '../../src/i18n';
 import { runSafeModalClose } from '../../utils/safeModalClose';
+import {
+  detectSocialPlatformFromUrl,
+  normalizePastedUrl,
+  type SocialPlatformId,
+} from '../../src/utils/socialPlatformDetect';
 import { PROFILE_ICONS } from './profileV2Assets';
+import { getSocialBrandIcon, socialPlatformLabel } from './socialBrandIcons';
 
 const CARD_WIDTH = Math.min(404, Dimensions.get('window').width - 32);
-const INNER_WIDTH = Math.min(337, CARD_WIDTH - 66);
+const INNER_WIDTH = Math.min(337, CARD_WIDTH - 48);
 
 export function ProfileAddLinkModal({
   visible,
@@ -26,7 +33,7 @@ export function ProfileAddLinkModal({
 }: {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (url: string) => void;
+  onSubmit: (url: string, platform: SocialPlatformId) => void;
 }) {
   const { t } = useTranslation();
   const [url, setUrl] = useState('');
@@ -35,13 +42,21 @@ export function ProfileAddLinkModal({
     if (visible) setUrl('');
   }, [visible]);
 
+  const detected = useMemo(() => detectSocialPlatformFromUrl(url), [url]);
+  const brand = detected ? getSocialBrandIcon(detected) : null;
+  const hasText = url.trim().length > 0;
+
   const safeClose = useCallback(() => {
     runSafeModalClose(onClose);
   }, [onClose]);
 
   const handleDone = useCallback(() => {
-    const trimmed = url.trim();
-    if (trimmed) onSubmit(trimmed);
+    const normalized = normalizePastedUrl(url);
+    const platform = detectSocialPlatformFromUrl(url);
+    if (!normalized || !platform) {
+      return;
+    }
+    onSubmit(normalized, platform);
     safeClose();
   }, [onSubmit, safeClose, url]);
 
@@ -70,10 +85,12 @@ export function ProfileAddLinkModal({
               accessibilityLabel={t.common.close}
               style={styles.closeHit}
             >
-              <Image source={PROFILE_ICONS.close} style={styles.closeIcon} contentFit="contain" />
+              <Ionicons name="close" size={24} color="#fff" />
             </Pressable>
             <Text style={styles.title}>{t.profile.pasteLink}</Text>
           </View>
+
+          <Text style={styles.hint}>{t.profile.pasteLinkHint}</Text>
 
           <View style={styles.inputShell}>
             <LinearGradient
@@ -82,12 +99,16 @@ export function ProfileAddLinkModal({
               end={{ x: 0.5, y: 0 }}
               style={StyleSheet.absoluteFill}
             />
-            <Image source={PROFILE_ICONS.link} style={styles.linkIcon} contentFit="contain" />
+            {brand ? (
+              <Image source={brand.source} style={[styles.brandIcon, { width: brand.width, height: brand.height }]} contentFit="contain" />
+            ) : (
+              <Image source={PROFILE_ICONS.link} style={styles.linkIcon} contentFit="contain" />
+            )}
             <TextInput
               value={url}
               onChangeText={setUrl}
               placeholder={t.profile.pasteLinkHere}
-              placeholderTextColor="#E3E3E3"
+              placeholderTextColor="#9A9A9A"
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
@@ -97,10 +118,27 @@ export function ProfileAddLinkModal({
             />
           </View>
 
+          {hasText && detected && detected !== 'website' ? (
+            <Text style={styles.detected}>
+              {t.profile.linkRecognized.replace('{platform}', socialPlatformLabel(t, detected))}
+            </Text>
+          ) : hasText && detected === 'website' ? (
+            <Text style={styles.detectedMuted}>{t.profile.unrecognizedLink}</Text>
+          ) : hasText ? (
+            <Text style={styles.detectedMuted}>{t.profile.invalidLink}</Text>
+          ) : (
+            <View style={styles.detectedSpacer} />
+          )}
+
           <Pressable
             onPress={handleDone}
+            disabled={!detected}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.doneBtn, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [
+              styles.doneBtn,
+              pressed && { opacity: 0.9 },
+              !detected && { opacity: 0.45 },
+            ]}
           >
             <LinearGradient
               colors={['#3D0AB3', '#190448']}
@@ -125,13 +163,11 @@ const styles = StyleSheet.create({
   },
   card: {
     width: CARD_WIDTH,
-    height: 287,
     borderRadius: 26,
     backgroundColor: '#07040D',
-    paddingTop: 29,
-    paddingBottom: 32,
-    paddingHorizontal: 33,
-    justifyContent: 'space-between',
+    paddingTop: 28,
+    paddingBottom: 28,
+    paddingHorizontal: 24,
     shadowColor: '#7809E3',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.68,
@@ -142,6 +178,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     direction: 'ltr',
+    marginBottom: 10,
   },
   closeHit: {
     width: 24,
@@ -149,16 +186,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeIcon: {
-    width: 24,
-    height: 24,
-  },
   title: {
     flex: 1,
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'right',
+  },
+  hint: {
+    color: '#B7B7B7',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'right',
+    marginBottom: 16,
   },
   inputShell: {
     width: INNER_WIDTH,
@@ -169,7 +209,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     gap: 12,
     alignSelf: 'center',
   },
@@ -177,11 +217,31 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
   },
+  brandIcon: {
+    width: 28,
+    height: 28,
+  },
   input: {
     flex: 1,
-    color: '#E3E3E3',
+    color: '#fff',
     fontSize: 16,
     paddingVertical: 0,
+  },
+  detected: {
+    marginTop: 10,
+    color: '#C4B5FD',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  detectedMuted: {
+    marginTop: 10,
+    color: '#8C8C8C',
+    fontSize: 12,
+    textAlign: 'right',
+  },
+  detectedSpacer: {
+    height: 22,
   },
   doneBtn: {
     width: INNER_WIDTH,
@@ -191,10 +251,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 21,
+    marginTop: 16,
   },
   doneLabel: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
+    textAlign: 'center',
+    width: '100%',
   },
 });

@@ -15,7 +15,6 @@ import ProfileHero from '../../components/profile/ProfileHero';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
 import ProfileBioCard from '../../components/profile/ProfileBioCard';
 import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
-import type { ConnectSlotId } from '../../components/profile/ProfileConnectCard';
 import { ProfileAddLinkModal } from '../../components/profile/ProfileAddLinkModal';
 import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import { ProfileTheme } from '../../constants/ProfileTheme';
@@ -49,7 +48,7 @@ import {
   getVideoFileSizeBytes,
   isReelVideoOverSizeLimit,
 } from '../../src/utils/reelVideoLimits';
-import { normalizePastedUrl } from '../../src/utils/socialPlatformDetect';
+import { normalizePastedUrl, type SocialPlatformId } from '../../src/utils/socialPlatformDetect';
 import { getProfileCompletionStepLabel } from '../../utils/i18nHelpers';
 import {
   isCooldownApiError,
@@ -657,7 +656,7 @@ function ProfileScreen() {
   const [badgeCount, setBadgeCount] = useState(0);
   const [showCoinsInfo, setShowCoinsInfo] = useState(false);
   const [showLevelInfo, setShowLevelInfo] = useState(false);
-  const [addLinkPlatform, setAddLinkPlatform] = useState<ConnectSlotId | null>(null);
+  const [addLinkOpen, setAddLinkOpen] = useState(false);
 
   // Optimization: Fetch token for badges (memoized)
   useEffect(() => {
@@ -1739,9 +1738,7 @@ function ProfileScreen() {
     return [];
   }, [userData?.socialLinks, userData?.socials]);
 
-  const handleSaveAddLink = useCallback(async (rawUrl: string) => {
-    const platform = addLinkPlatform;
-    if (!platform) return;
+  const handleSaveAddLink = useCallback(async (rawUrl: string, platform: SocialPlatformId) => {
     const url = normalizePastedUrl(rawUrl);
     if (!url) return;
 
@@ -1782,7 +1779,6 @@ function ProfileScreen() {
       toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
     }
   }, [
-    addLinkPlatform,
     markStepCompleted,
     socialLinks,
     t.profile.profileSaveFailed,
@@ -2024,7 +2020,7 @@ function ProfileScreen() {
           title={t.profile.connectWithMe}
           emailCopiedTitle={t.profile.emailCopied}
           emailCopiedMessage={t.profile.emailCopiedMessage}
-          onAddLink={setAddLinkPlatform}
+          onAddLink={() => setAddLinkOpen(true)}
         />
 
         <ContentTabs
@@ -2083,8 +2079,8 @@ function ProfileScreen() {
         onClose={() => setShowCoinsInfo(false)}
       />
       <ProfileAddLinkModal
-        visible={!!addLinkPlatform}
-        onClose={() => setAddLinkPlatform(null)}
+        visible={addLinkOpen}
+        onClose={() => setAddLinkOpen(false)}
         onSubmit={handleSaveAddLink}
       />
 

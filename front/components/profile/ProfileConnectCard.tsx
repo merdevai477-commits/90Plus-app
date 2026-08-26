@@ -13,6 +13,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { PROFILE_ICONS } from './profileV2Assets';
+import { getSocialBrandIcon } from './socialBrandIcons';
 import { logger } from '../../utils/logger';
 import { toastManager } from '../../services/toastManager';
 
@@ -22,8 +23,6 @@ interface SocialLink {
   username?: string;
 }
 
-export type ConnectSlotId = 'whatsapp' | 'instagram' | 'tiktok';
-
 interface ProfileConnectCardProps {
   links: SocialLink[];
   email?: string | null;
@@ -31,19 +30,10 @@ interface ProfileConnectCardProps {
   title: string;
   emailCopiedTitle: string;
   emailCopiedMessage: string;
-  onAddLink?: (platform: ConnectSlotId) => void;
+  onAddLink?: () => void;
 }
 
-const SLOTS: Array<{
-  id: ConnectSlotId;
-  icon: number;
-  width: number;
-  height: number;
-}> = [
-  { id: 'whatsapp', icon: PROFILE_ICONS.whatsapp, width: 33, height: 37 },
-  { id: 'instagram', icon: PROFILE_ICONS.instagram, width: 33, height: 33 },
-  { id: 'tiktok', icon: PROFILE_ICONS.tiktok, width: 30, height: 33 },
-];
+const MAX_LINKS = 5;
 
 const ProfileConnectCard = memo(function ProfileConnectCard({
   links,
@@ -54,20 +44,17 @@ const ProfileConnectCard = memo(function ProfileConnectCard({
   emailCopiedMessage,
   onAddLink,
 }: ProfileConnectCardProps) {
-  const byPlatform = useMemo(() => {
-    const map: Record<string, SocialLink> = {};
-    for (const link of links) {
-      map[link.platform.toLowerCase()] = link;
-    }
-    return map;
-  }, [links]);
+  const filled = useMemo(
+    () => links.filter((l) => l.url?.trim()),
+    [links],
+  );
+
+  const plusCount = isOwnProfile
+    ? Math.min(MAX_LINKS - filled.length, Math.max(filled.length === 0 ? 3 : 1, 3 - filled.length))
+    : 0;
 
   const hasEmail = !!email?.trim();
-  const hasAnySlot = SLOTS.some((s) => byPlatform[s.id]);
-  const hasExtraLinks = links.some(
-    (l) => !SLOTS.some((s) => s.id === l.platform.toLowerCase()),
-  );
-  if (!isOwnProfile && !hasAnySlot && !hasExtraLinks && !hasEmail) return null;
+  if (!isOwnProfile && filled.length === 0 && !hasEmail) return null;
 
   const openLink = async (url: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -95,39 +82,39 @@ const ProfileConnectCard = memo(function ProfileConnectCard({
 
       <View style={styles.body}>
         <View style={styles.slots}>
-          {SLOTS.map((slot) => {
-            const link = byPlatform[slot.id];
+          {filled.map((link) => {
+            const brand = getSocialBrandIcon(link.platform);
             return (
               <TouchableOpacity
-                key={slot.id}
+                key={`${link.platform}-${link.url}`}
                 style={styles.slot}
                 activeOpacity={0.82}
-                onPress={() => {
-                  if (link) openLink(link.url);
-                  else onAddLink?.(slot.id);
-                }}
-                disabled={!link && !isOwnProfile}
+                onPress={() => openLink(link.url)}
               >
-                {link ? (
-                  <LinearGradient
-                    colors={['#170D2B', '#200D44']}
-                    start={{ x: 0.5, y: 1 }}
-                    end={{ x: 0.5, y: 0 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                ) : null}
-                {link ? (
-                  <Image
-                    source={slot.icon}
-                    style={{ width: slot.width, height: slot.height }}
-                    contentFit="contain"
-                  />
-                ) : isOwnProfile ? (
-                  <Ionicons name="add" size={24} color="#9E9E9E" />
-                ) : null}
+                <LinearGradient
+                  colors={['#170D2B', '#200D44']}
+                  start={{ x: 0.5, y: 1 }}
+                  end={{ x: 0.5, y: 0 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Image
+                  source={brand.source}
+                  style={{ width: brand.width, height: brand.height }}
+                  contentFit="contain"
+                />
               </TouchableOpacity>
             );
           })}
+          {Array.from({ length: plusCount }).map((_, index) => (
+            <TouchableOpacity
+              key={`plus-${index}`}
+              style={styles.slot}
+              activeOpacity={0.82}
+              onPress={onAddLink}
+            >
+              <Ionicons name="add" size={24} color="#9E9E9E" />
+            </TouchableOpacity>
+          ))}
         </View>
 
         {hasEmail && (
@@ -183,10 +170,13 @@ const styles = StyleSheet.create({
   },
   slots: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   slot: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '30%',
+    minWidth: 96,
     height: 62,
     borderRadius: 12,
     backgroundColor: 'rgba(44,39,55,0.3)',
