@@ -38,6 +38,19 @@ export function isMajorLeagueId(leagueId: number | null | undefined): boolean {
   return leagueId != null && MAJOR_LEAGUE_IDS.has(leagueId);
 }
 
+/** Big 5 European domestic leagues (prediction-group rounds only). */
+export const BIG_5_LEAGUE_IDS = new Set<number>([
+  39, // Premier League
+  140, // La Liga
+  135, // Serie A
+  78, // Bundesliga
+  61, // Ligue 1
+]);
+
+export function isBig5LeagueId(leagueId: number | null | undefined): boolean {
+  return leagueId != null && BIG_5_LEAGUE_IDS.has(leagueId);
+}
+
 const HIGHLIGHT_LEAGUE_SCORE: Record<number, number> = {
   1: 110,
   2: 100,
@@ -111,19 +124,19 @@ function kickoffMs(fixture: any): number {
 
 /**
  * Top upcoming fixtures for prediction-group daily rounds.
- * Prefers major-league kickoffs; fills with next-best only if needed.
+ * Strictly Big 5 leagues only (PL / La Liga / Serie A / Bundesliga / Ligue 1).
  */
 export function pickTopFixtures(fixtures: any[], limit = 10): any[] {
   const upcoming = fixtures.filter((f) => {
     const status = f?.fixture?.status?.short ?? '';
-    return UPCOMING_STATUSES.has(status);
+    if (!UPCOMING_STATUSES.has(status)) return false;
+    return isBig5LeagueId(f?.league?.id);
   });
 
   const ranked = upcoming
     .map((f) => ({
       f,
       score: scoreFixtureImportance(f),
-      major: isMajorLeagueId(f?.league?.id),
       kickoff: kickoffMs(f),
     }))
     .sort((a, b) => {
@@ -131,10 +144,7 @@ export function pickTopFixtures(fixtures: any[], limit = 10): any[] {
       return a.kickoff - b.kickoff;
     });
 
-  const majors = ranked.filter((r) => r.major || r.score >= 70);
-  const pool = majors.length >= Math.min(3, limit) ? majors : ranked;
-
-  return pool.slice(0, limit).map((r) => r.f);
+  return ranked.slice(0, limit).map((r) => r.f);
 }
 
 export function localDateKey(d = new Date()): string {

@@ -1,5 +1,5 @@
 /**
- * Daily prediction-group round — top 10 important matches per day.
+ * Daily prediction-group round — up to 10 Big 5 league matches per day.
  */
 
 import prisma from '../lib/prisma';
