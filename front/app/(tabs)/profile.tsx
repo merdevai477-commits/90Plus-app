@@ -331,7 +331,7 @@ const completionStyles = StyleSheet.create({
 const DEFAULT_COVER_IMAGE =
   'https://images.unsplash.com/photo-1522778119026-d647f0565c6a?q=80&w=2070&auto=format&fit=crop';
 
-function ProfileScreen() {
+function OwnProfileScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
@@ -657,6 +657,14 @@ function ProfileScreen() {
   const [showCoinsInfo, setShowCoinsInfo] = useState(false);
   const [showLevelInfo, setShowLevelInfo] = useState(false);
   const [addLinkOpen, setAddLinkOpen] = useState(false);
+  const addLinkPlatform = addLinkOpen;
+  const setAddLinkPlatform = useCallback((platform?: unknown) => {
+    if (platform === null || platform === false) {
+      setAddLinkOpen(false);
+      return;
+    }
+    setAddLinkOpen(true);
+  }, []);
 
   // Optimization: Fetch token for badges (memoized)
   useEffect(() => {
@@ -2020,7 +2028,7 @@ function ProfileScreen() {
           title={t.profile.connectWithMe}
           emailCopiedTitle={t.profile.emailCopied}
           emailCopiedMessage={t.profile.emailCopiedMessage}
-          onAddLink={() => setAddLinkOpen(true)}
+          onAddLink={setAddLinkPlatform}
         />
 
         <ContentTabs
@@ -2079,8 +2087,8 @@ function ProfileScreen() {
         onClose={() => setShowCoinsInfo(false)}
       />
       <ProfileAddLinkModal
-        visible={addLinkOpen}
-        onClose={() => setAddLinkOpen(false)}
+        visible={!!addLinkPlatform}
+        onClose={() => setAddLinkPlatform(null)}
         onSubmit={handleSaveAddLink}
       />
 
@@ -2798,7 +2806,7 @@ function ProfileScreen() {
 export default function ProfileScreenWithBoundary() {
   return (
     <ProfileErrorBoundary>
-      <ProfileScreen />
+      <OwnProfileScreen />
     </ProfileErrorBoundary>
   );
 }

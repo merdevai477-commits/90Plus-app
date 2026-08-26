@@ -49,6 +49,7 @@ interface State {
   errorInfo: ErrorInfo | null;
   isInfiniteLoop: boolean;
   errorTimestamp: number | null;
+  retryKey: number;
 }
 
 // ============================================================================
@@ -74,6 +75,7 @@ export class ProfileErrorBoundary extends Component<Props, State> {
       errorInfo: null,
       isInfiniteLoop: false,
       errorTimestamp: null,
+      retryKey: 0,
     };
   }
 
@@ -239,13 +241,14 @@ export class ProfileErrorBoundary extends Component<Props, State> {
     this.lastBurstAt = 0;
     this.loopReportedRef = false;
     
-    this.setState({
+    this.setState((prev) => ({
       hasError: false,
       error: null,
       errorInfo: null,
       isInfiniteLoop: false,
       errorTimestamp: null,
-    });
+      retryKey: prev.retryKey + 1,
+    }));
   };
 
   private handleSecondaryNavigate = (): void => {
@@ -406,8 +409,7 @@ export class ProfileErrorBoundary extends Component<Props, State> {
       return this.renderFallbackUI();
     }
 
-    // No error, render children normally
-    return this.props.children;
+    return <React.Fragment key={this.state.retryKey}>{this.props.children}</React.Fragment>;
   }
 }
 
