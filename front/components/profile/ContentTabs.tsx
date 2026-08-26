@@ -66,6 +66,7 @@ const ContentTabs = memo(function ContentTabs({
                             <GradientText
                                 colors={isActive ? ACTIVE_LABEL : INACTIVE_LABEL}
                                 style={styles.tabLabel}
+                                numberOfLines={1}
                             >
                                 {tab.label}
                             </GradientText>
@@ -94,8 +95,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         direction: 'ltr',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 28,
+        justifyContent: 'space-between',
+        gap: 8,
+        paddingHorizontal: 10,
         backgroundColor: ProfileTheme.colors.profileTabBar,
         borderWidth: 1,
         borderColor: ProfileTheme.colors.profileTabBorder,
@@ -104,15 +106,16 @@ const styles = StyleSheet.create({
         height: 53,
     },
     tab: {
-        width: 89,
+        flex: 1,
+        minWidth: 0,
         height: 35,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 4,
+        gap: 3,
+        paddingHorizontal: 2,
     },
     activeTab: {
-        width: 93,
         height: 53,
     },
     activeUnderline: {
@@ -125,11 +128,13 @@ const styles = StyleSheet.create({
     },
     tabLabel: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: '500',
+        flexShrink: 1,
     },
     tabIcon: {
-        width: 24,
-        height: 24,
+        width: 22,
+        height: 22,
+        flexShrink: 0,
     },
 });
