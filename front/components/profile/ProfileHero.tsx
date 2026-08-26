@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ImageSourcePropType,
-  useWindowDimensions,
+  Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -86,8 +86,7 @@ const ProfileHero = memo(function ProfileHero({
   addClubLabel,
   energyLabel,
 }: ProfileHeroProps) {
-  const { width: screenW } = useWindowDimensions();
-  const compact = screenW < 380;
+  const compact = Dimensions.get('window').width < 380;
   const avatarSize = compact ? 84 : AVATAR_SIZE;
   const hasCountry = isMeaningfulCountryFlag(countryFlag) || !!countryLabel?.trim();
   const hasClub = !!(clubLogo || clubName?.trim());
