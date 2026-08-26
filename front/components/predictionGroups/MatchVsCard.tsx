@@ -2,7 +2,6 @@
  * Compact VS match card — Figma CTA states (open / predicted / ended).
  */
 
-import { LinearGradient } from 'expo-linear-gradient';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
@@ -15,18 +14,18 @@ type CtaState = 'open' | 'predicted' | 'ended';
 
 const FINISHED = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO', 'CANC', 'ABD', 'PST']);
 
-/** Exact Figma / SwiftUI CTA fills */
+/** Exact Figma / SwiftUI CTA fills (solid — avoid LinearGradient flex bugs). */
 const CTA = {
-  openBg: ['#350662', '#2A054F'] as const,
+  openBg: '#350662',
   openBorder: '#570F9E',
   openText: '#D6ADFC',
-  predictedBg: ['#175F03', '#124A02'] as const,
+  predictedBg: '#175F03',
   predictedBorder: '#124A02',
   predictedText: '#FFFFFF',
-  endedBg: ['rgba(33,20,46,0.72)', 'rgba(33,20,46,0.56)'] as const,
+  endedBg: 'rgba(33,20,46,0.56)',
   endedBorder: '#2B1C3A',
   endedText: '#D6ADFC',
-};
+} as const;
 
 function resolveCtaState(saved: boolean, status: string): CtaState {
   const short = (status || '').toUpperCase();
@@ -71,7 +70,7 @@ export function MatchVsCard({
 
   const disabled = ctaState !== 'open';
 
-  const gradient =
+  const backgroundColor =
     ctaState === 'predicted'
       ? CTA.predictedBg
       : ctaState === 'ended'
@@ -129,35 +128,26 @@ export function MatchVsCard({
             accessibilityRole="button"
             accessibilityState={{ disabled }}
             style={({ pressed }) => [
-              styles.ctaOuter,
-              { borderColor },
+              styles.cta,
+              { backgroundColor, borderColor },
               pressed && !disabled && styles.ctaPressed,
-              ctaState === 'predicted' && styles.ctaGlowPredicted,
-              ctaState === 'open' && styles.ctaGlowOpen,
             ]}
           >
-            <LinearGradient
-              colors={[...gradient]}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={styles.ctaFill}
+            <Text
+              style={[
+                styles.ctaTxt,
+                {
+                  color: textColor,
+                  fontFamily: bold,
+                  writingDirection: direction,
+                },
+              ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
             >
-              <Text
-                style={[
-                  styles.ctaTxt,
-                  {
-                    color: textColor,
-                    fontFamily: bold,
-                    writingDirection: direction,
-                  },
-                ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.85}
-              >
-                {ctaLabel}
-              </Text>
-            </LinearGradient>
+              {ctaLabel}
+            </Text>
           </Pressable>
         </View>
         {team('away', 50)}
@@ -178,6 +168,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(138,56,245,0.55)',
     backgroundColor: '#07040D',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   row: {
     alignItems: 'center',
@@ -206,15 +197,11 @@ const styles = StyleSheet.create({
     color: '#777777',
     fontSize: 13,
   },
-  ctaOuter: {
+  cta: {
     width: 105,
     height: 33,
     borderRadius: 8,
     borderWidth: 1,
-    overflow: 'hidden',
-  },
-  ctaFill: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
@@ -222,20 +209,6 @@ const styles = StyleSheet.create({
   ctaPressed: {
     opacity: 0.88,
     transform: [{ scale: 0.98 }],
-  },
-  ctaGlowOpen: {
-    shadowColor: '#A855F7',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  ctaGlowPredicted: {
-    shadowColor: '#22C55E',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
   },
   ctaTxt: {
     fontSize: 10,

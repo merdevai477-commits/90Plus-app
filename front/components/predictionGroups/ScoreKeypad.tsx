@@ -246,7 +246,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   key: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
     height: 56,
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.06)',

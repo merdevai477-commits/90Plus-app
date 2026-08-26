@@ -524,10 +524,11 @@ const styles = StyleSheet.create({
   confirm: {
     width: '100%',
     minHeight: 62,
+    height: 62,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
+    paddingVertical: 0,
   },
   confirmTxt: {
     color: '#FFFFFF',
