@@ -1284,6 +1284,7 @@ export const en = {
       myGroups: 'My groups',
       managedByYou: 'Yours',
       emptySuggestions: 'No suggested groups yet',
+      emptyMyGroups: 'No groups yet',
       groupName: 'Group name',
       groupNamePlaceholder: 'e.g. Football Heroes',
       inviteCode: 'Invite code',

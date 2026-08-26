@@ -1,11 +1,12 @@
 /**
  * Hub — create, join by code, and suggested groups (Figma 469:1389).
+ * Fully RTL-aware; copy comes from i18n (ar/en).
  */
 
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -63,12 +64,15 @@ export function GroupOnboarding({
   joiningCode?: string | null;
 }) {
   const { medium, bold } = usePGFonts();
-  const { t } = useTranslation();
+  const { t, direction } = useTranslation();
   const ob = t.predictionGroups.onboarding;
   const common = t.predictionGroups.common;
   const toast = useToast();
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
-  const align = isRTL ? 'right' : 'left';
+  const align = isRTL ? ('right' as const) : ('left' as const);
+  const writingDirection = direction;
+  const BackIcon = isRTL ? ChevronRight : ChevronLeft;
+  const startEdge = isRTL ? { right: 12 } : { left: 12 };
 
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -107,6 +111,12 @@ export function GroupOnboarding({
     [isBanned, ob, onJoinByCode, toast],
   );
 
+  const searchIcon = busy ? (
+    <ActivityIndicator color={PG.primaryLight} size="small" />
+  ) : (
+    <Image source={ICON_SEARCH} style={styles.icon24} contentFit="contain" transition={0} />
+  );
+
   return (
     <View style={styles.wrap}>
       {groupBan?.until ? <GroupBanBanner untilIso={groupBan.until} /> : null}
@@ -121,16 +131,25 @@ export function GroupOnboarding({
           {onBack ? (
             <Pressable
               onPress={onBack}
-              style={[styles.backBtn, { top: topInset + 6, left: 12 }]}
+              style={[styles.backBtn, { top: topInset + 6 }, startEdge]}
               hitSlop={8}
               accessibilityRole="button"
+              accessibilityLabel={common.back}
             >
-              <ChevronLeft size={22} color="#fff" strokeWidth={2.25} />
+              <BackIcon size={22} color="#fff" strokeWidth={2.25} />
             </Pressable>
           ) : null}
           <View style={[styles.heroInner, { paddingBottom: 8 }]}>
-            <Text style={[styles.title, { fontFamily: bold }]}>{ob.heroTitle}</Text>
-            <Text style={[styles.sub, { fontFamily: medium }]}>{ob.heroSubtitle}</Text>
+            <Text
+              style={[styles.title, { fontFamily: bold, writingDirection }]}
+            >
+              {ob.heroTitle}
+            </Text>
+            <Text
+              style={[styles.sub, { fontFamily: medium, writingDirection }]}
+            >
+              {ob.heroSubtitle}
+            </Text>
           </View>
         </ImageBackground>
       </View>
@@ -146,6 +165,8 @@ export function GroupOnboarding({
             onCreatePress();
           }}
           style={({ pressed }) => [pressed && { opacity: 0.92 }]}
+          accessibilityRole="button"
+          accessibilityLabel={ob.createGroup}
         >
           <LinearGradient
             colors={[...PG_GRADIENTS.purple]}
@@ -153,23 +174,21 @@ export function GroupOnboarding({
             end={{ x: 0.5, y: 1 }}
             style={[styles.primaryBtn, row]}
           >
-            <Text style={[styles.primaryTxt, { fontFamily: bold }]}>{ob.createGroup}</Text>
+            <Text style={[styles.primaryTxt, { fontFamily: bold, writingDirection }]}>
+              {ob.createGroup}
+            </Text>
             <Image source={ICON_PLUS} style={styles.icon24} contentFit="contain" transition={0} />
           </LinearGradient>
         </Pressable>
 
         <View style={[styles.orRow, row]}>
           <View style={styles.orLine} />
-          <Text style={[styles.orTxt, { fontFamily: medium }]}>{ob.or}</Text>
+          <Text style={[styles.orTxt, { fontFamily: medium, writingDirection }]}>{ob.or}</Text>
           <View style={styles.orLine} />
         </View>
 
-        <View style={[styles.joinField, isRTL && styles.joinFieldRtl]}>
-          {isRTL ? null : busy ? (
-            <ActivityIndicator color={PG.primaryLight} size="small" />
-          ) : (
-            <Image source={ICON_SEARCH} style={styles.icon24} contentFit="contain" transition={0} />
-          )}
+        <View style={[styles.joinField, row]}>
+          {searchIcon}
           <TextInput
             value={code}
             onChangeText={setCode}
@@ -179,40 +198,35 @@ export function GroupOnboarding({
             returnKeyType="go"
             onSubmitEditing={() => void submitCode(code)}
             editable={!busy && !isBanned}
-            style={[styles.joinInput, { fontFamily: medium, textAlign: align }]}
+            style={[
+              styles.joinInput,
+              { fontFamily: medium, textAlign: align, writingDirection },
+            ]}
           />
-          {isRTL ? (
-            busy ? (
-              <ActivityIndicator color={PG.primaryLight} size="small" />
-            ) : (
-              <Image source={ICON_SEARCH} style={styles.icon24} contentFit="contain" transition={0} />
-            )
-          ) : null}
         </View>
 
-        <View style={[styles.sectionHead, isRTL ? styles.sectionHeadRtl : null]}>
-          {isRTL ? (
-            <>
-              <Text style={[styles.sectionTitle, { fontFamily: bold, textAlign: 'right' }]}>
-                {ob.myGroups}
-              </Text>
-              <View style={styles.sectionBar} />
-            </>
-          ) : (
-            <>
-              <View style={styles.sectionBar} />
-              <Text style={[styles.sectionTitle, { fontFamily: bold, textAlign: 'left' }]}>
-                {ob.myGroups}
-              </Text>
-            </>
-          )}
+        <View style={[styles.sectionHead, row]}>
+          <View style={styles.sectionBar} />
+          <Text
+            style={[
+              styles.sectionTitle,
+              { fontFamily: bold, textAlign: align, writingDirection },
+            ]}
+          >
+            {ob.myGroups}
+          </Text>
         </View>
 
         {suggestionsLoading && ranked.length === 0 ? (
           <ActivityIndicator color={PG.primaryLight} style={{ marginTop: 12 }} />
         ) : ranked.length === 0 ? (
-          <Text style={[styles.empty, { fontFamily: medium, textAlign: align }]}>
-            {ob.emptySuggestions}
+          <Text
+            style={[
+              styles.empty,
+              { fontFamily: medium, textAlign: align, writingDirection },
+            ]}
+          >
+            {ob.emptyMyGroups}
           </Text>
         ) : (
           <View style={styles.list}>
@@ -225,49 +239,16 @@ export function GroupOnboarding({
                   disabled={joining || isBanned}
                   onPress={() => void submitCode(g.inviteCode)}
                   style={({ pressed }) => [pressed && { opacity: 0.9 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={g.name}
                 >
                   <LinearGradient
                     colors={[...CARD_BG]}
                     start={{ x: 0.5, y: 0 }}
                     end={{ x: 0.5, y: 1 }}
-                    style={styles.groupCard}
+                    style={[styles.groupCard, row]}
                   >
-                    <View style={styles.cardAction}>
-                      {joining ? (
-                        <ActivityIndicator color={PG.primaryLight} size="small" />
-                      ) : owned ? (
-                        <LinearGradient
-                          colors={[...ADMIN_BADGE_BG]}
-                          start={{ x: 0.5, y: 0 }}
-                          end={{ x: 0.5, y: 1 }}
-                          style={styles.adminBadge}
-                        >
-                          <Text style={[styles.adminBadgeTxt, { fontFamily: medium }]}>
-                            {ob.managedByYou}
-                          </Text>
-                        </LinearGradient>
-                      ) : (
-                        <Image
-                          source={ICON_DOOR}
-                          style={styles.icon24}
-                          contentFit="contain"
-                          transition={0}
-                        />
-                      )}
-                    </View>
-
-                    <View style={styles.groupInfo}>
-                      <View style={styles.groupMeta}>
-                        <Text
-                          style={[styles.groupName, { fontFamily: medium }]}
-                          numberOfLines={1}
-                        >
-                          {g.name}
-                        </Text>
-                        <Text style={[styles.groupMembers, { fontFamily: medium }]}>
-                          {common.members.replace('{count}', String(g.members))}
-                        </Text>
-                      </View>
+                    <View style={[styles.groupInfo, row]}>
                       <View style={styles.avatarWrap}>
                         {g.avatarUrl ? (
                           <Image
@@ -280,6 +261,70 @@ export function GroupOnboarding({
                           <View style={[styles.avatar, styles.avatarFallback]} />
                         )}
                       </View>
+                      <View
+                        style={[
+                          styles.groupMeta,
+                          { alignItems: isRTL ? 'flex-end' : 'flex-start' },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.groupName,
+                            {
+                              fontFamily: medium,
+                              textAlign: align,
+                              writingDirection,
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {g.name}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.groupMembers,
+                            {
+                              fontFamily: medium,
+                              textAlign: align,
+                              writingDirection,
+                            },
+                          ]}
+                        >
+                          {common.members.replace('{count}', String(g.members))}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.cardAction}>
+                      {joining ? (
+                        <ActivityIndicator color={PG.primaryLight} size="small" />
+                      ) : owned ? (
+                        <LinearGradient
+                          colors={[...ADMIN_BADGE_BG]}
+                          start={{ x: 0.5, y: 0 }}
+                          end={{ x: 0.5, y: 1 }}
+                          style={styles.adminBadge}
+                        >
+                          <Text
+                            style={[
+                              styles.adminBadgeTxt,
+                              { fontFamily: medium, writingDirection },
+                            ]}
+                          >
+                            {ob.managedByYou}
+                          </Text>
+                        </LinearGradient>
+                      ) : (
+                        <Image
+                          source={ICON_DOOR}
+                          style={[
+                            styles.icon24,
+                            isRTL ? styles.iconFlipX : null,
+                          ]}
+                          contentFit="contain"
+                          transition={0}
+                        />
+                      )}
                     </View>
                   </LinearGradient>
                 </Pressable>
@@ -337,11 +382,11 @@ const styles = StyleSheet.create({
   },
   primaryTxt: { color: '#fff', fontSize: 18 },
   icon24: { width: 24, height: 24 },
+  iconFlipX: { transform: [{ scaleX: -1 }] },
   orRow: { alignItems: 'center', gap: 18, paddingHorizontal: 8 },
   orLine: { flex: 1, height: 1, backgroundColor: OR_LINE },
   orTxt: { color: OR_TEXT, fontSize: 20 },
   joinField: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     height: 58,
@@ -351,9 +396,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: FIELD_BORDER,
   },
-  joinFieldRtl: {
-    justifyContent: 'flex-end',
-  },
   joinInput: {
     flex: 1,
     color: PG.text,
@@ -361,13 +403,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   sectionHead: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     marginTop: 8,
-  },
-  sectionHeadRtl: {
-    justifyContent: 'flex-end',
   },
   sectionBar: {
     width: 2,
@@ -376,13 +414,13 @@ const styles = StyleSheet.create({
     backgroundColor: PG.primary,
   },
   sectionTitle: {
+    flex: 1,
     color: '#FFFFFF',
     fontSize: 20,
   },
   empty: { color: MEMBERS_MUTED, fontSize: 13, paddingVertical: 8 },
   list: { gap: 8 },
   groupCard: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     height: 77,
@@ -397,8 +435,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   adminBadge: {
-    width: 53,
+    minWidth: 53,
     height: 23,
+    paddingHorizontal: 10,
     borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
@@ -410,10 +449,8 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   groupInfo: {
-    flexDirection: 'row',
     flexShrink: 1,
     alignItems: 'center',
-    justifyContent: 'flex-end',
     gap: 12,
     minWidth: 0,
   },
@@ -421,17 +458,14 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     gap: 6,
     minWidth: 0,
-    alignItems: 'flex-end',
   },
   groupName: {
     color: '#FFFFFF',
     fontSize: 17,
-    textAlign: 'right',
   },
   groupMembers: {
     color: MEMBERS_MUTED,
     fontSize: 11,
-    textAlign: 'right',
   },
   avatarWrap: {
     width: 40,
