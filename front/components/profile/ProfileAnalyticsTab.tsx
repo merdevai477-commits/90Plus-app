@@ -60,8 +60,13 @@ const FILTER_OPTIONS: {
   { id: 'wrong', labelKey: 'wrongPredictions' },
 ];
 
-const INITIAL_VISIBLE = 3;
-const LOAD_MORE_STEP = 4;
+const COLLAPSED_COUNT = 1;
+
+function sortByLatest(list: UserPredictionItem[]): UserPredictionItem[] {
+  return [...list].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+}
 
 function pickLabel(
   item: UserPredictionItem,
@@ -233,7 +238,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
 }) => {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<PredictionFilter>('all');
-  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const [expanded, setExpanded] = useState(false);
 
   const derivedStats = useMemo(() => {
     if (!predictions.length) return null;
@@ -267,11 +272,14 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
     else if (filter === 'pending') list = list.filter((p) => p.isCorrect === null);
     else if (filter === 'correct') list = list.filter((p) => p.isCorrect === true);
     else if (filter === 'wrong') list = list.filter((p) => p.isCorrect === false);
-    return list;
+    return sortByLatest(list);
   }, [predictions, filter]);
 
-  const visiblePredictions = filteredPredictions.slice(0, visibleCount);
-  const hasMore = filteredPredictions.length > visibleCount;
+  const visiblePredictions = expanded
+    ? filteredPredictions
+    : filteredPredictions.slice(0, COLLAPSED_COUNT);
+  const canExpand = !expanded && filteredPredictions.length > COLLAPSED_COUNT;
+  const canCollapse = expanded && filteredPredictions.length > COLLAPSED_COUNT;
 
   const emptyMessage =
     filter === 'group' ? t.profile.noGroupPredictionsYet : t.profile.noPredictionsYet;
@@ -294,7 +302,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
               key={id}
               onPress={() => {
                 setFilter(id);
-                setVisibleCount(INITIAL_VISIBLE);
+                setExpanded(false);
               }}
               activeOpacity={0.8}
               style={[styles.filterChip, active && styles.filterChipActiveShell]}
@@ -341,22 +349,22 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
         </View>
       )}
 
-      {hasMore ? (
+      {canExpand ? (
         <TouchableOpacity
           style={styles.loadMore}
           activeOpacity={0.8}
-          onPress={() => setVisibleCount((n) => n + LOAD_MORE_STEP)}
+          onPress={() => setExpanded(true)}
         >
           <Image source={PROFILE_ICONS.chevronDownPurple} style={styles.loadMoreIcon} contentFit="contain" />
-          <Text style={styles.loadMoreText}>{t.profile.showMore}</Text>
+          <Text style={styles.loadMoreText}>{t.profile.viewAllPredictions}</Text>
         </TouchableOpacity>
       ) : null}
 
-      {visibleCount > INITIAL_VISIBLE ? (
+      {canCollapse ? (
         <TouchableOpacity
           style={styles.loadMore}
           activeOpacity={0.8}
-          onPress={() => setVisibleCount(INITIAL_VISIBLE)}
+          onPress={() => setExpanded(false)}
         >
           <Image
             source={PROFILE_ICONS.chevronDownPurple}

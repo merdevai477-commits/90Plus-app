@@ -1948,6 +1948,7 @@ export const ar = {
     noGroupPredictionsYet: 'لا توقعات جروب بعد',
     yourPick: 'توقعك',
     correctPredictionLabel: 'التوقع الصحيح',
+    viewAllPredictions: 'مشاهدة الكل',
     showMore: 'عرض المزيد',
     showLess: 'عرض أقل',
     predictNow: 'توقع الآن',

@@ -1974,6 +1974,7 @@ export const en = {
     noGroupPredictionsYet: 'No group predictions yet',
     yourPick: 'Your pick',
     correctPredictionLabel: 'Correct prediction',
+    viewAllPredictions: 'View all',
     showMore: 'Show more',
     showLess: 'Show less',
     predictNow: 'Predict now',
