@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
 import { PROFILE_ICONS } from './profileV2Assets';
@@ -184,22 +183,6 @@ const PredictionMatchCard = memo(function PredictionMatchCard({
         <TeamColumn name={homeName} logo={item.homeTeamLogo} />
         <View style={cardStyles.centerCol}>
           <Text style={cardStyles.vs}>{t.home.vs}</Text>
-          {isPending ? (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push('/(tabs)/matches' as never)}
-              style={cardStyles.predictBtnHit}
-            >
-              <LinearGradient
-                colors={['#8B5CF6', '#513690']}
-                style={cardStyles.predictBtn}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-              >
-                <Text style={cardStyles.predictBtnText}>{t.profile.predictNow}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          ) : null}
         </View>
         <TeamColumn name={awayName} logo={item.awayTeamLogo} />
       </View>
@@ -435,30 +418,14 @@ const cardStyles = StyleSheet.create({
     textAlign: 'center',
   },
   centerCol: {
-    width: 76,
+    width: 66,
+    height: 57,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 11,
   },
   vs: {
     color: '#fff',
     fontSize: 32,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  predictBtnHit: {
-    width: '100%',
-  },
-  predictBtn: {
-    height: 28,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  predictBtnText: {
-    color: '#fff',
-    fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
   },
