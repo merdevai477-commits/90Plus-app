@@ -12,7 +12,7 @@ import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { useToast } from '../../contexts/ToastContext';
 import { useTranslation } from '../../src/i18n';
-import { PG, usePGFonts } from './theme';
+import { usePGFonts } from './theme';
 
 const CUP_TROPHY = require('../../assets/images/prediction-groups/cup-trophy-frame.png');
 const ICON_COPY = require('../../assets/images/prediction-groups/icon-copy.svg');
@@ -55,6 +55,8 @@ export function PredictionsCupHero({
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     toast.showSuccess(common.copiedTitle, common.copiedInvite);
   }, [common.copiedInvite, common.copiedTitle, inviteCode, toast]);
+
+  const showActions = Boolean((isOwner && onSettings) || onLeave);
 
   return (
     <View style={styles.card}>
@@ -115,18 +117,37 @@ export function PredictionsCupHero({
           )}
         </View>
       </View>
-      <View style={[styles.actions, row]}>
-        {isOwner && onSettings ? (
-          <Pressable onPress={onSettings} style={styles.iconBtn} accessibilityLabel={common.settings}>
-            <Settings size={16} color={PG.primaryLight} />
-          </Pressable>
-        ) : null}
-        {onLeave ? (
-          <Pressable onPress={onLeave} style={styles.iconBtn} accessibilityLabel={common.leaveGroup}>
-            <LogOut size={16} color={PG.primaryLight} />
-          </Pressable>
-        ) : null}
-      </View>
+
+      {/* Sit on the trophy side so they never collide with title/copy. */}
+      {showActions ? (
+        <View
+          style={[styles.actions, isRTL ? styles.actionsStart : styles.actionsEnd]}
+          pointerEvents="box-none"
+        >
+          {isOwner && onSettings ? (
+            <Pressable
+              onPress={onSettings}
+              style={styles.iconBtn}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={common.settings}
+            >
+              <Settings size={15} color="#C4A6FF" />
+            </Pressable>
+          ) : null}
+          {onLeave ? (
+            <Pressable
+              onPress={onLeave}
+              style={styles.iconBtn}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={common.leaveGroup}
+            >
+              <LogOut size={15} color="#C4A6FF" />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -178,18 +199,24 @@ const styles = StyleSheet.create({
   art: { width: '100%', height: '100%' },
   actions: {
     position: 'absolute',
-    top: 10,
-    left: 12,
-    right: 12,
-    justifyContent: 'flex-start',
+    top: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    zIndex: 4,
   },
+  /** LTR: trophy is on the right → park actions there. */
+  actionsEnd: { right: 12 },
+  /** RTL: trophy is on the left → park actions there. */
+  actionsStart: { left: 12 },
   iconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(168,85,247,0.16)',
+    backgroundColor: 'rgba(5,1,14,0.72)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(190,143,236,0.55)',
   },
 });
