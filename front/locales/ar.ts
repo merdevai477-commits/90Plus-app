@@ -1886,6 +1886,7 @@ export const ar = {
     quizScore: 'نقاط الاختبار',
     achievements: 'الإنجازات',
     videos: 'الفيديوهات',
+    reels: 'ريلز',
 
     // Tabs
     profiles: 'الملفات الشخصية',
@@ -2021,6 +2022,8 @@ export const ar = {
     // Action Buttons
     shareQRCode: 'مشاركة رمز QR',
     shareProfileLink: 'مشاركة رابط البروفايل',
+    deleteAccount: 'مسح الحساب',
+    deleteAccountDesc: 'حذف حسابك وجميع بياناتك نهائياً',
     uploadVideoAction: 'رفع فيديو جديد',
     cooldownActive: 'يمكنك رفع فيديو كل 3 أيام',
     cooldownRemaining: 'متبقي {time} لرفع فيديو جديد',

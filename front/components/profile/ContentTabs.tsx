@@ -43,7 +43,7 @@ const ContentTabs = memo(function ContentTabs({
             : []),
         {
             id: 'videos',
-            label: t.profile.videos,
+            label: t.profile.reels,
             icon: PROFILE_ICONS.tabVideo,
             iconActive: PROFILE_ICONS.tabVideoActive,
         },

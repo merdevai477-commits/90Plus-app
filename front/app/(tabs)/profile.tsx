@@ -16,6 +16,7 @@ import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
 import ProfileBioCard from '../../components/profile/ProfileBioCard';
 import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
 import { ProfileAddLinkModal } from '../../components/profile/ProfileAddLinkModal';
+import { ProfileMoreMenuModal } from '../../components/profile/ProfileMoreMenuModal';
 import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
@@ -657,6 +658,7 @@ function OwnProfileScreen() {
   const [showCoinsInfo, setShowCoinsInfo] = useState(false);
   const [showLevelInfo, setShowLevelInfo] = useState(false);
   const [addLinkOpen, setAddLinkOpen] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const addLinkPlatform = addLinkOpen;
   const setAddLinkPlatform = useCallback((platform?: unknown) => {
     if (platform === null || platform === false) {
@@ -1601,64 +1603,12 @@ function OwnProfileScreen() {
   const handleQRPress = useCallback(() => setIsQRModalVisible(true), []);
 
   const handleMorePress = useCallback(() => {
-    const labels = [
-      t.profile.editProfile,
-      t.profile.uploadVideo,
-      t.profile.viewQR,
-      t.profile.saved,
-      t.profile.settings,
-      t.profile.selectPosition,
-      t.profile.editStats,
-    ];
-    if (completionStatus && completionStatus.percentage < 100) {
-      labels.push(t.profile.completeYourProfile);
-    }
-    const cancelLabel = t.common.cancel;
-    const run = (index: number) => {
-      if (index === 0) handleEditProfile();
-      else if (index === 1) handleUploadPress();
-      else if (index === 2) handleQRPress();
-      else if (index === 3) setActiveTab('saved');
-      else if (index === 4) router.push('/(tabs)/settings' as any);
-      else if (index === 5) setIsPositionModalVisible(true);
-      else if (index === 6) setIsStatsModalVisible(true);
-      else if (index === 7 && completionStatus && completionStatus.percentage < 100) {
-        setIsCompletionDetailVisible(true);
-      }
-    };
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: [...labels, cancelLabel], cancelButtonIndex: labels.length },
-        (buttonIndex) => {
-          if (buttonIndex != null && buttonIndex < labels.length) run(buttonIndex);
-        },
-      );
-    } else {
-      Alert.alert(
-        t.profile.moreOptions,
-        undefined,
-        [
-          ...labels.map((label, index) => ({ text: label, onPress: () => run(index) })),
-          { text: cancelLabel, style: 'cancel' as const },
-        ],
-      );
-    }
-  }, [
-    t.profile.editProfile,
-    t.profile.uploadVideo,
-    t.profile.viewQR,
-    t.profile.saved,
-    t.profile.settings,
-    t.profile.selectPosition,
-    t.profile.editStats,
-    t.profile.completeYourProfile,
-    t.profile.moreOptions,
-    t.common.cancel,
-    completionStatus,
-    handleEditProfile,
-    handleUploadPress,
-    handleQRPress,
-  ]);
+    setShowMoreMenu(true);
+  }, []);
+
+  const handleDeleteAccountPress = useCallback(() => {
+    router.push('/delete-account');
+  }, []);
 
   const handleFollowersPress = useCallback(() => {
     setFollowersModalTab('followers');
@@ -2090,6 +2040,12 @@ function OwnProfileScreen() {
         visible={!!addLinkPlatform}
         onClose={() => setAddLinkPlatform(null)}
         onSubmit={handleSaveAddLink}
+      />
+      <ProfileMoreMenuModal
+        visible={showMoreMenu}
+        onClose={() => setShowMoreMenu(false)}
+        onShareQR={handleQRPress}
+        onDeleteAccount={handleDeleteAccountPress}
       />
 
       {/* UX Fix 1+2: Image preview modal + Android action sheet */}

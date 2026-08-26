@@ -1914,6 +1914,7 @@ export const en = {
     quizScore: 'Quiz Score',
     achievements: 'Achievements',
     videos: 'Videos',
+    reels: 'Reels',
 
     // Tabs
     profiles: 'Profiles',
@@ -2047,6 +2048,8 @@ export const en = {
     // Action Buttons
     shareQRCode: 'Share QR Code',
     shareProfileLink: 'Share Profile Link',
+    deleteAccount: 'Delete Account',
+    deleteAccountDesc: 'Permanently delete your account and all data',
     uploadVideoAction: 'Upload New Video',
     cooldownActive: 'You can upload a video every 3 days',
     cooldownRemaining: '{time} remaining to upload new video',
