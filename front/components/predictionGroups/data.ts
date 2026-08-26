@@ -93,7 +93,7 @@ const TEAMS: Record<string, Team> = {
   benfica: { name: 'بنفيكا', short: 'SLB', crest: ['#E30613', '#7A0B12'] },
 };
 
-/** Upcoming round (الجولة 12) — 10 matches open for predictions. */
+/** Upcoming round — 1 featured match open for predictions. */
 export const CURRENT_ROUND: PredictionMatch[] = [
   { id: 'm1', home: TEAMS.barca, away: TEAMS.real, day: 'السبت', time: '22:00' },
   { id: 'm2', home: TEAMS.arsenal, away: TEAMS.liverpool, day: 'الأحد', time: '18:30' },

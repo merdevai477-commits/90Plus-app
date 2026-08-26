@@ -1222,7 +1222,7 @@ export const en = {
       pickWinnerOrScore: 'Pick a winner or enter the score',
       roundTitle: 'Round {n}',
       roundTitleDefault: 'Round',
-      roundSubLive: "Today's top 10 matches — complete picks before kickoff",
+      roundSubLive: "Today's featured match — complete your pick before kickoff",
       increase: 'Increase',
       decrease: 'Decrease',
     },

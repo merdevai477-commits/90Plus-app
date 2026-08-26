@@ -1,5 +1,6 @@
 /**
- * Daily prediction-group round — top 10 important matches per day.
+ * Daily prediction-group round — top N important matches per day.
+ * New cup UI is built around a single daily match.
  */
 
 import prisma from '../lib/prisma';
@@ -7,7 +8,7 @@ import { logger } from '../utils/logger';
 import { footballDataCacheService } from './football-data-cache.service';
 import { localDateKey, pickTopFixtures } from '../utils/fixture-importance';
 
-const ROUND_MATCH_LIMIT = 10;
+const ROUND_MATCH_LIMIT = 1;
 
 export function formatFixtureForClient(fixture: any) {
   const home = fixture?.teams?.home;
@@ -86,18 +87,18 @@ export async function ensureDailyRound(dateString = localDateKey()) {
   }
 
   // Rounds created during the temp freeze (or a failed pick) keep empty matchIds.
-  // Backfill OPEN empty rounds once freeze is lifted so groups show fixtures again.
+  // Also resize OPEN rounds when ROUND_MATCH_LIMIT changes (e.g. 10 → 1).
   if (existing) {
     const currentIds = Array.isArray(existing.matchIds)
       ? (existing.matchIds as unknown[]).filter((id): id is number => typeof id === 'number')
       : [];
-    if (
-      currentIds.length === 0 &&
+    const shouldResize =
+      existing.status === 'OPEN' &&
       matchIds.length > 0 &&
-      existing.status === 'OPEN'
-    ) {
+      (currentIds.length === 0 || currentIds.length !== ROUND_MATCH_LIMIT);
+    if (shouldResize) {
       logger.info(
-        `[GroupRound] Backfilling empty round ${dateString} with ${matchIds.length} matches`,
+        `[GroupRound] Updating round ${dateString}: ${currentIds.length} → ${matchIds.length} matches`,
       );
       return prisma.groupRound.update({
         where: { id: existing.id },
@@ -137,8 +138,8 @@ export async function getCurrentRoundWithMatches(dateString = localDateKey()) {
   const byId = new Map(fixtures.map((f: any) => [f?.fixture?.id, f]));
 
   const raw = matchIds.map((id) => byId.get(id)).filter(Boolean);
-  // Round is only ~10 matches — enrich them explicitly so group cards always
-  // get crowd % even if the big calendar list skipped these kickoffs.
+  // Round is only ~ROUND_MATCH_LIMIT matches — enrich them explicitly so group cards
+  // always get crowd % even if the big calendar list skipped these kickoffs.
   let enriched = raw;
   try {
     const { enrichFixturesWithCrowdPredictions } = await import(

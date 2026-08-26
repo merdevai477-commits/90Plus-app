@@ -1310,7 +1310,7 @@ export const ar = {
       pickWinnerOrScore: 'اختر الفائز أو أدخل النتيجة',
       roundTitle: 'الجولة {n}',
       roundTitleDefault: 'الجولة',
-      roundSubLive: 'أهم 10 مباريات اليوم — أكمل توقعاتك قبل انطلاق المباريات',
+      roundSubLive: 'مباراة اليوم المميزة — أكمل توقعك قبل انطلاقها',
       increase: 'زيادة',
       decrease: 'إنقاص',
     },
