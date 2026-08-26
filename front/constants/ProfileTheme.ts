@@ -34,6 +34,19 @@ export const ProfileTheme = {
     neonRed: '#FF3B30',
     gold: '#FFD700',
 
+    // Figma profile v2 (90plus file, My Profile)
+    profileBg: '#030303',
+    profileCard: '#0E071C',
+    profileCardBorder: '#250A3F',
+    profileChip: 'rgba(8,2,21,0.84)',
+    profileEmptyChip: 'rgba(44,39,55,0.74)',
+    profileMuted: '#B7B7B7',
+    profileHandle: '#717171',
+    profileTabBar: '#0B0910',
+    profileTabBorder: '#170F27',
+    profilePrimary: '#8B5CF6',
+    avatarRing: '#D8AEFF',
+
     // Semantic
     success: '#34C759',
     warning: '#FF9500',

@@ -5,14 +5,15 @@ import {
   ScrollView,
   StatusBar,
   TouchableOpacity,
-  Pressable,
   Text,
   ActivityIndicator,
   RefreshControl,
   Animated,
   Modal,
   Share,
-  useWindowDimensions,
+  Alert,
+  Platform,
+  ActionSheetIOS,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
@@ -20,18 +21,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Zap, Flag, Share2 } from 'lucide-react-native';
+import { Flag, Share2 } from 'lucide-react-native';
 import { buildProfileShareUrl } from '../../constants/shareLinks';
-import { XpInfoModal } from '../../components/common/XpInfoModal';
 
-import ProfileHeader from '../../components/profile/ProfileHeader';
-import ProfileCard from '../../components/profile/ProfileCard';
+import ProfileHero from '../../components/profile/ProfileHero';
+import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
+import ProfileBioCard from '../../components/profile/ProfileBioCard';
+import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
+import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
-import StatsRow from '../../components/profile/StatsRow';
 import VideoGrid from '../../components/profile/VideoGrid';
-import UserInfo from '../../components/profile/UserInfo';
 import BadgesDisplay from '../../components/profile/BadgesDisplay';
-import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import FollowersListModal from '../../components/profile/FollowersListModal';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import { ProfileTheme } from '../../constants/ProfileTheme';
@@ -51,7 +51,8 @@ import { useVideos, Comment } from '../../contexts/VideosContext';
 import { BlockService } from '../../services/blockService';
 import { cacheService, CACHE_TTL } from '../../services/cacheService';
 import { useTranslation } from '../../src/i18n';
-import { getProfileCardOverlapMargin } from '../../constants/profileLayout';
+import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
+import { getUserBadges } from '../../services/rankingsService';
 import { ReportSystem } from '../../components/common/ReportSystem';
 import { useUserReport } from '../../hooks/useReportSystem';
 import ContentTabs from '../../components/profile/ContentTabs';
@@ -67,124 +68,6 @@ const REELS_PAGE_SIZE = 30;
 
 const ACCENT = '#A855F7';
 const ACCENT_DARK = '#7C3AED';
-
-// ─── Top bar ──────────────────────────────────────────────────────────────────
-function UserTopBar({
-  topInset,
-  level,
-  xp,
-  onBack,
-}: {
-  topInset: number;
-  level?: number;
-  xp?: number;
-  onBack: () => void;
-}) {
-  const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-  const xpDisplay = xp != null ? (xp >= 1000 ? `${(xp / 1000).toFixed(1)}K` : String(xp)) : '—';
-  const [showXpInfo, setShowXpInfo] = useState(false);
-
-  return (
-    <GlassContainer
-      intensity={20}
-      tint="dark"
-      effect="regular"
-      style={[tb.container, { paddingTop: topInset + 10 }]}
-    >
-      {/* Back button */}
-      <TouchableOpacity onPress={onBack} style={tb.backBtn} hitSlop={12}>
-        <Ionicons name="arrow-back" size={18} color="rgba(255,255,255,0.85)" />
-      </TouchableOpacity>
-
-      {/* LVL badge */}
-      {level != null && (
-        <View style={tb.lvlBadge}>
-          <Text style={tb.lvlLabel}>LVL</Text>
-          <Text style={tb.lvlNumber}>{level}</Text>
-        </View>
-      )}
-
-      {/* XP chip */}
-      <Pressable
-        style={tb.xpChip}
-        onPress={() => setShowXpInfo(true)}
-        accessibilityRole="button"
-      >
-        <Zap size={13} color={ACCENT} fill={ACCENT} />
-        <Text style={tb.xpTxt}>{xpDisplay} XP</Text>
-      </Pressable>
-
-      <XpInfoModal visible={showXpInfo} onClose={() => setShowXpInfo(false)} />
-    </GlassContainer>
-  );
-}
-
-const tb = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 200,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: 'rgba(5,1,13,0.0)',
-  },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  lvlBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(168,85,247,0.18)',
-    borderRadius: 14,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.4)',
-  },
-  lvlLabel: {
-    color: 'rgba(168,85,247,0.9)',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-  },
-  lvlNumber: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  xpChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(168,85,247,0.12)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.3)',
-    gap: 5,
-  },
-  xpTxt: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-});
 
 function normalizeRouteUsername(value: string | string[] | undefined): string {
   if (typeof value === 'string') return value.trim();
@@ -202,8 +85,6 @@ function UserProfileScreen() {
   const toast = useToast();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { height: screenHeight } = useWindowDimensions();
-  const cardOverlap = getProfileCardOverlapMargin(screenHeight);
   const { reelComments, addComment, toggleCommentLike } = useVideos();
   const {
     reportUser,
@@ -243,12 +124,26 @@ function UserProfileScreen() {
   const [viewerImageUrl, setViewerImageUrl] = useState('');
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('videos');
+  const [badgeCount, setBadgeCount] = useState(0);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const hasRecordedViewRef = useRef(false);
   const followActionInFlightRef = useRef(false);
 
   const { follow, unfollow } = useFollowStore();
+
+  useEffect(() => {
+    if (!user?.id || String(user.id).startsWith('user_')) return;
+    let cancelled = false;
+    getUserBadges(authToken, user.id)
+      .then((res) => {
+        if (!cancelled) setBadgeCount(res?.summary?.total ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, user?.id]);
 
   const canViewPredictions = !!user && !blockedMe && !isBlocked;
   const {
@@ -673,14 +568,6 @@ function UserProfileScreen() {
         </View>
       </Modal>
 
-      {/* Fixed top bar */}
-      <UserTopBar
-        topInset={insets.top}
-        level={userLevel}
-        xp={userXp}
-        onBack={() => router.back()}
-      />
-
       {/* Video player */}
       <VideoPlayerModal
         visible={isVideoPlayerVisible}
@@ -723,10 +610,51 @@ function UserProfileScreen() {
           />
         }
       >
-        {/* Cover */}
-        <ProfileHeader
-          coverImage={user.coverImage ? { uri: user.coverImage } : undefined}
-          onPress={user.coverImage ? () => openPhotoViewer(user.coverImage) : undefined}
+        <ProfileHero
+          topInset={insets.top}
+          coverUri={user.coverImage}
+          avatarUri={user.avatar}
+          name={user.displayName || user.username}
+          username={user.username}
+          isVerified={user.isVerified}
+          isDeveloper={user.isDeveloper}
+          isOwnProfile={false}
+          level={userLevel}
+          xp={userXp}
+          nextLevelXp={(userLevel + 1) * 100}
+          progressPct={Math.min(1, Math.max(0, (userXp - userLevel * 100) / 100))}
+          countryFlag={isMeaningfulCountryFlag(user.countryFlag) ? user.countryFlag : null}
+          countryLabel={resolveCountryDisplayName(user.country || user.location, user.countryFlag)}
+          clubLogo={showFullProfile ? user.clubLogo : null}
+          clubName={showFullProfile ? user.favoriteTeam : null}
+          onCoverPress={user.coverImage ? () => openPhotoViewer(user.coverImage) : undefined}
+          onAvatarPress={user.avatar ? () => openPhotoViewer(user.avatar) : undefined}
+          onSharePress={handleShareProfilePress}
+          onBackPress={() => router.back()}
+          onMorePress={() => {
+            const labels = [
+              t.publicProfile.report,
+              isBlocked ? t.publicProfile.unblock : t.publicProfile.block,
+            ];
+            const run = (index: number) => {
+              if (index === 0) handleReportPress();
+              else if (index === 1) handleBlockUser();
+            };
+            if (Platform.OS === 'ios') {
+              ActionSheetIOS.showActionSheetWithOptions(
+                { options: [...labels, t.publicProfile.cancel], cancelButtonIndex: labels.length },
+                (i) => { if (i != null && i < labels.length) run(i); },
+              );
+            } else {
+              Alert.alert(t.profile.moreOptions, undefined, [
+                ...labels.map((label, index) => ({ text: label, onPress: () => run(index) })),
+                { text: t.publicProfile.cancel, style: 'cancel' as const },
+              ]);
+            }
+          }}
+          chooseCountryLabel={t.profile.chooseCountry}
+          addClubLabel={t.profile.addYourClub}
+          energyLabel={t.profile.energy}
         />
 
         {blockedMe ? (
@@ -737,53 +665,35 @@ function UserProfileScreen() {
           </View>
         ) : (
           <>
-        {/* FIFA Card — read-only */}
-        <View style={[s.cardContainer, { marginTop: cardOverlap }]}>
-          <ProfileCard
-            playerImage={user.avatar ? { uri: user.avatar } : undefined}
-            cardType="gold"
-            scale={0.60}
-            uploadedImage={user.avatar || null}
-            onImagePress={user.avatar ? () => openPhotoViewer(user.avatar) : undefined}
-            countryFlag={user.countryFlag || '🌍'}
-            position={user.position || 'ST'}
-            age={user.age?.toString()}
-            height={user.height?.toString()}
-            weight={user.weight?.toString()}
-            foot={user.preferredFoot || 'R'}
-            clubLogo={user.clubLogo || undefined}
-          />
-        </View>
-
-        <UserInfo
-          name={user.displayName || user.username}
-          username={user.username}
-          bio={showFullProfile ? user.bio || undefined : undefined}
-          location={user.country || user.location || ''}
-          countryFlag={user.countryFlag}
-          team={showFullProfile ? user.favoriteTeam || '' : ''}
-          isVerified={user.isVerified}
-          isDeveloper={user.isDeveloper}
-          clubLogo={user.clubLogo || undefined}
-          consecutiveLoginDays={user.consecutiveLoginDays || 0}
-        />
-
-        {showFullProfile && user.id && !String(user.id).startsWith('user_') && (
-          <View style={s.badgesWrap}>
-            <BadgesDisplay userId={user.id} token={authToken} compact />
-          </View>
-        )}
-
-        {showFullProfile && socialLinks.length > 0 && (
-          <SocialLinksSection links={socialLinks} isOwnProfile={false} />
-        )}
-
-        <StatsRow
-          followers={(user.followersCount || 0).toString()}
-          following={(user.followingCount || 0).toString()}
-          videos={(user.reelsCount || 0).toString()}
-          onFollowersPress={showFullProfile && user.id ? () => openFollowersModal('followers') : undefined}
-          onFollowingPress={showFullProfile && user.id ? () => openFollowersModal('following') : undefined}
+        <ProfileMetricStrip
+          items={[
+            {
+              key: 'followers',
+              icon: PROFILE_ICONS.followers,
+              value: user.followersCount || 0,
+              label: t.profile.followerShort,
+              onPress: showFullProfile && user.id ? () => openFollowersModal('followers') : undefined,
+            },
+            {
+              key: 'following',
+              icon: PROFILE_ICONS.following,
+              value: user.followingCount || 0,
+              label: t.profile.followingShort,
+              onPress: showFullProfile && user.id ? () => openFollowersModal('following') : undefined,
+            },
+            {
+              key: 'videos',
+              icon: PROFILE_ICONS.video,
+              value: user.reelsCount || 0,
+              label: t.profile.videos,
+            },
+            {
+              key: 'likes',
+              icon: PROFILE_ICONS.heart,
+              value: userVideos.reduce((sum, v) => sum + (v.likes || 0), 0),
+              label: t.profile.likes,
+            },
+          ]}
         />
 
         {/* Follow + Share + Report + Block */}
@@ -881,6 +791,50 @@ function UserProfileScreen() {
 
         {showFullProfile && (
           <>
+        <ProfileBioCard
+          bio={user.bio}
+          isOwnProfile={false}
+          addLabel={t.profile.addBio}
+          aboutLabel={t.profile.aboutMe}
+        />
+        <ProfileMetricStrip
+          variant="performance"
+          items={[
+            {
+              key: 'xp',
+              icon: PROFILE_ICONS.shield,
+              value: userXp,
+              label: t.profile.totalXp,
+            },
+            {
+              key: 'streak',
+              icon: PROFILE_ICONS.fire,
+              value: user.consecutiveLoginDays || 0,
+              label: t.profile.longestStreak,
+            },
+            {
+              key: 'rate',
+              icon: PROFILE_ICONS.bullseye,
+              value: `${Math.round(publicPredictionStats.accuracy <= 1 && publicPredictionStats.accuracy > 0 ? publicPredictionStats.accuracy * 100 : publicPredictionStats.accuracy || 0)}%`,
+              label: t.profile.predictionRate,
+              onPress: () => setActiveTab('predictions'),
+            },
+            {
+              key: 'achievements',
+              icon: PROFILE_ICONS.trophy,
+              value: badgeCount,
+              label: t.profile.achievements,
+              onPress: () => setActiveTab('achievements'),
+            },
+          ]}
+        />
+        <ProfileConnectCard
+          links={socialLinks}
+          isOwnProfile={false}
+          title={t.profile.connectWithMe}
+          emailCopiedTitle={t.profile.emailCopied}
+          emailCopiedMessage={t.profile.emailCopiedMessage}
+        />
         <ContentTabs
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -930,14 +884,20 @@ function UserProfileScreen() {
           </>
         )}
 
-        <View style={activeTab === 'analytics' ? undefined : s.hiddenTab}>
+        {activeTab === 'predictions' && (
           <ProfileAnalyticsTab
             analytics={null}
             predictionStats={publicPredictionStats}
             predictions={publicPredictions}
             variant="predictionsOnly"
           />
-        </View>
+        )}
+
+        {activeTab === 'achievements' && user.id && !String(user.id).startsWith('user_') && (
+          <View style={s.badgesWrap}>
+            <BadgesDisplay userId={user.id} token={authToken} compact={false} />
+          </View>
+        )}
           </>
         )}
           </>

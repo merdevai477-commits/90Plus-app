@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions, Modal, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
@@ -8,22 +8,24 @@ import VideoPlayerModal from '../../components/common/VideoPlayerModal';
 import UploadProgressModal from '../../components/common/UploadProgressModal';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, router } from 'expo-router';
-import ProfileHeader from '../../components/profile/ProfileHeader';
-import ProfileCard from '../../components/profile/ProfileCard';
-import UserInfo from '../../components/profile/UserInfo';
-import StatsRow from '../../components/profile/StatsRow';
 import ContentTabs from '../../components/profile/ContentTabs';
 import VideoGrid from '../../components/profile/VideoGrid';
-import ActionButtons from '../../components/profile/ActionButtons';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
-import ProfileTopBar from '../../components/profile/ProfileTopBar';
+import ProfileHero from '../../components/profile/ProfileHero';
+import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
+import ProfileBioCard from '../../components/profile/ProfileBioCard';
+import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
+import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import { ProfileTheme } from '../../constants/ProfileTheme';
-import { getProfileCardOverlapMargin } from '../../constants/profileLayout';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
-import { Flame } from 'lucide-react-native';
 import { useXp } from '../../contexts/XpContext';
+import { useCoins } from '../../contexts/CoinsContext';
+import { CoinsInfoModal } from '../../components/common/CoinsInfoModal';
+import { LevelInfoModal } from '../../components/common/LevelInfoModal';
+import { getUserBadges } from '../../services/rankingsService';
+import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
 import { useLevelUpCelebrationOnFocus } from '../../hooks/useLevelUpCelebrationOnFocus';
 import * as ImagePicker from 'expo-image-picker';
 import { usePhotoPermission } from '../../hooks/usePhotoPermission';
@@ -67,7 +69,6 @@ import { useReelUploadEventsStore } from '../../src/store/useReelUploadEventsSto
 import FollowersListModal from '../../components/profile/FollowersListModal';
 import QRCodeModal from '../../components/profile/QRCodeModal';
 import { useOptimisticProfile, useProfileFieldUpdate } from '../../hooks/useOptimisticProfile';
-import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import { TopClub } from '../../data/top5LeaguesClubs';
 import { DiamondProfile } from '../../types/profile';
 import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
@@ -80,7 +81,6 @@ import { useWebSocketEvent } from '../../hooks/useWebSocket';
 import type { AvatarProgressPayload } from '../../types/websocket';
 import { useScreenFont } from '../../utils/fontSetup';
 import { BlurView } from 'expo-blur';
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const API_URL = getApiUrl();
@@ -143,11 +143,24 @@ const getStepIcon = (stepId: string): keyof typeof Ionicons.glyphMap => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: ProfileTheme.colors.deepBlack,
+    backgroundColor: ProfileTheme.colors.profileBg,
     position: 'relative',
   },
   scrollContent: {
     paddingBottom: 20,
+  },
+  contentPanel: {
+    marginHorizontal: 20,
+    marginTop: -1,
+    backgroundColor: '#0E0919',
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: ProfileTheme.colors.profileTabBorder,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    overflow: 'hidden',
+    minHeight: 120,
+    marginBottom: 8,
   },
   hiddenTab: {
     display: 'none',
@@ -320,15 +333,14 @@ function ProfileScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
-  const { height: screenHeight } = useWindowDimensions();
-  const cardOverlap = getProfileCardOverlapMargin(screenHeight);
   const [activeTab, setActiveTab] = useState('videos');
   const [isOffline, setIsOffline] = useState(false);
   const { isSignedIn, getToken } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
   const { user: clerkUser } = useUser();
-  const { streak: loginStreak, refresh: refreshXp } = useXp();
+  const { streak: loginStreak, refresh: refreshXp, level, xp, nextLevelXp, progressPct } = useXp();
+  const { coins } = useCoins();
   
   // Optimistic Profile Updates
   const { 
@@ -639,6 +651,9 @@ function ProfileScreen() {
 
   // Optimization: Token state for BadgesDisplay
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [badgeCount, setBadgeCount] = useState(0);
+  const [showCoinsInfo, setShowCoinsInfo] = useState(false);
+  const [showLevelInfo, setShowLevelInfo] = useState(false);
 
   // Optimization: Fetch token for badges (memoized)
   useEffect(() => {
@@ -677,6 +692,16 @@ function ProfileScreen() {
     [userData?.position]
   );
   const displayClubLogo = userData?.clubLogo;
+
+  useEffect(() => {
+    const userId = userData?.id;
+    if (!userId || String(userId).startsWith('user_')) return;
+    let cancelled = false;
+    getUserBadges(authToken, userId).then((res) => {
+      if (!cancelled) setBadgeCount(res?.summary?.total ?? 0);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [authToken, userData?.id]);
   const displayStats = useMemo(
     () => ({
       age:
@@ -1564,6 +1589,66 @@ function ProfileScreen() {
 
   const handleQRPress = useCallback(() => setIsQRModalVisible(true), []);
 
+  const handleMorePress = useCallback(() => {
+    const labels = [
+      t.profile.editProfile,
+      t.profile.uploadVideo,
+      t.profile.viewQR,
+      t.profile.saved,
+      t.profile.settings,
+      t.profile.selectPosition,
+      t.profile.editStats,
+    ];
+    if (completionStatus && completionStatus.percentage < 100) {
+      labels.push(t.profile.completeYourProfile);
+    }
+    const cancelLabel = t.common.cancel;
+    const run = (index: number) => {
+      if (index === 0) handleEditProfile();
+      else if (index === 1) handleUploadPress();
+      else if (index === 2) handleQRPress();
+      else if (index === 3) setActiveTab('saved');
+      else if (index === 4) router.push('/(tabs)/settings' as any);
+      else if (index === 5) setIsPositionModalVisible(true);
+      else if (index === 6) setIsStatsModalVisible(true);
+      else if (index === 7 && completionStatus && completionStatus.percentage < 100) {
+        setIsCompletionDetailVisible(true);
+      }
+    };
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: [...labels, cancelLabel], cancelButtonIndex: labels.length },
+        (buttonIndex) => {
+          if (buttonIndex != null && buttonIndex < labels.length) run(buttonIndex);
+        },
+      );
+    } else {
+      Alert.alert(
+        t.profile.moreOptions,
+        undefined,
+        [
+          ...labels.map((label, index) => ({ text: label, onPress: () => run(index) })),
+          { text: cancelLabel, style: 'cancel' as const },
+        ],
+      );
+    }
+  }, [
+    t.profile.editProfile,
+    t.profile.uploadVideo,
+    t.profile.viewQR,
+    t.profile.saved,
+    t.profile.settings,
+    t.profile.selectPosition,
+    t.profile.editStats,
+    t.profile.completeYourProfile,
+    t.profile.moreOptions,
+    t.common.cancel,
+    completionStatus,
+    handleEditProfile,
+    handleUploadPress,
+    handleQRPress,
+  ]);
+
   const handleFollowersPress = useCallback(() => {
     setFollowersModalTab('followers');
     setIsFollowersModalVisible(true);
@@ -1757,9 +1842,6 @@ function ProfileScreen() {
         </View>
       )}
 
-      {/* Fixed top bar — 90PLUS brand + LVL badge + purple coin badge */}
-      <ProfileTopBar topInset={insets.top} level={userData?.level ?? undefined} />
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -1767,185 +1849,182 @@ function ProfileScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={onRefresh}
-            tintColor={ProfileTheme.colors.neonGreen}
-            colors={[ProfileTheme.colors.neonGreen]}
-            progressBackgroundColor={ProfileTheme.colors.deepBlack}
+            tintColor={ProfileTheme.colors.profilePrimary}
+            colors={[ProfileTheme.colors.profilePrimary]}
+            progressBackgroundColor={ProfileTheme.colors.profileBg}
           />
         }
       >
-        <ProfileHeader
-          coverImage={coverImage ? { uri: coverImage } : undefined}
-          onPress={handleCoverPress}
-        />
-
-        {/* Profile FIFA Card Frame */}
-        <View style={[styles.profileCardContainer, { marginTop: cardOverlap }]}>
-          <ProfileCard
-            playerImage={localImage ? { uri: localImage } : (userData?.avatar ? { uri: userData.avatar } : undefined)}
-            cardType="gold"
-            scale={0.60}
-            onImageUpload={handleImageUpload}
-            onImagePress={handleAvatarPress}
-            uploadedImage={localImage || userData?.avatar || null}
-            countryFlag={displayCountryFlag}
-            onCountryPress={() => setIsCountryModalVisible(true)}
-            position={displayPosition}
-            onPositionPress={() => setIsPositionModalVisible(true)}
-            age={displayStats.age}
-            height={displayStats.height}
-            weight={displayStats.weight}
-            foot={displayStats.foot}
-            onStatsPress={() => setIsStatsModalVisible(true)}
-            clubLogo={displayClubLogo}
-            onClubPress={() => setIsClubModalVisible(true)}
-            isAvatarUploading={isAvatarUploading}
-            isCountryUpdating={isCountryUpdating}
-            isClubUpdating={isClubUpdating}
-            isStatsUpdating={isStatsUpdating}
-          />
-        </View>
-
-        <UserInfo
+        <ProfileHero
+          topInset={insets.top}
+          coverUri={coverImage}
+          avatarUri={localImage || userData?.avatar || null}
           name={userData?.displayName || userData?.username || 'User'}
           username={userData?.username || 'user'}
-          bio={userData?.bio}
-          location={displayLocation}
-          countryFlag={displayCountryFlag}
-          team={userData?.favoriteTeam || ''}
           isVerified={userData?.isVerified || false}
           isDeveloper={userData?.isDeveloper || false}
-          onBioLongPress={() => setIsEditProfileModalVisible(true)}
-          onNameLongPress={() => setIsEditProfileModalVisible(true)}
+          isOwnProfile
+          level={level || userData?.level || 1}
+          xp={xp || userData?.xp || 0}
+          nextLevelXp={nextLevelXp || ((level || userData?.level || 1) + 1) * 100}
+          progressPct={progressPct || 0}
+          energyValue={coins}
+          countryFlag={isMeaningfulCountryFlag(userData?.countryFlag) ? userData?.countryFlag : null}
+          countryLabel={resolveCountryDisplayName(displayLocation, userData?.countryFlag)}
           clubLogo={displayClubLogo}
-          onEditPress={handleEditProfile}
-          socials={userData?.socials}
-          consecutiveLoginDays={Math.max(userData?.consecutiveLoginDays || 0, loginStreak.current)}
-        />
-
-        {loginStreak.current >= 10 && (
-          <View style={styles.streakMasterRow}>
-            <Flame size={16} color="#FF8C42" fill="#FF6B35" strokeWidth={2} />
-            <Text style={styles.streakMasterText}>
-              {t.profile.streakMaster.replace('{count}', String(loginStreak.current))}
-            </Text>
-          </View>
-        )}
-
-        {/* Profile Completion — compact liquid glass pill */}
-        {completionStatus && completionStatus.percentage < 100 && (() => {
-          const GlassCompletion = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-          const glassP = isLiquidGlassSupported
-            ? { effect: 'clear' as const, interactive: true }
-            : { intensity: 22, tint: 'dark' as const };
-          const pct = completionStatus.percentage;
-          return (
-            <View style={completionStyles.wrapper}>
-              <TouchableOpacity
-                style={completionStyles.pill}
-                activeOpacity={0.82}
-                onPress={() => setIsCompletionDetailVisible(true)}
-              >
-                <GlassCompletion {...(glassP as any)} style={StyleSheet.absoluteFill} />
-                {/* Purple-to-cyan tint */}
-                <LinearGradient
-                  colors={['rgba(124,58,237,0.18)', 'rgba(0,217,255,0.08)']}
-                  style={StyleSheet.absoluteFill}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                />
-
-                {/* Left: icon + label */}
-                <View style={completionStyles.left}>
-                  <View style={completionStyles.iconDot}>
-                    <Ionicons name="checkmark-done" size={12} color="#A855F7" />
-                  </View>
-                  <Text style={completionStyles.label}>{t.profile.completeYourProfile}</Text>
-                </View>
-
-                {/* Right: progress bar + percentage */}
-                <View style={completionStyles.right}>
-                  <View style={completionStyles.barBg}>
-                    <View style={[completionStyles.barFill, { width: `${pct}%` as any }]} />
-                  </View>
-                  <Text style={completionStyles.pct}>{pct}%</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          );
-        })()}
-
-        {/* Social Links Section */}
-        <SocialLinksSection
-          links={socialLinks}
-          isOwnProfile={true}
-          onEditPress={handleEditProfile}
-        />
-
-        {/* Badges need backend user UUID; Clerk-only fallback uses user_* id */}
-        {userData?.id && !String(userData.id).startsWith('user_') && (
-          <View style={styles.badgesContainer}>
-            <BadgesDisplay
-              userId={userData.id}
-              token={authToken}
-              compact={true}
-            />
-          </View>
-        )}
-
-        <ActionButtons
-          onEditPress={handleUploadPress}
+          clubName={userData?.favoriteTeam || null}
+          isAvatarUploading={isAvatarUploading}
+          onCoverPress={handleCoverPress}
+          onAvatarPress={handleAvatarPress}
+          onCountryPress={() => setIsCountryModalVisible(true)}
+          onClubPress={() => setIsClubModalVisible(true)}
           onSharePress={handleSharePress}
-          onQRPress={handleQRPress}
-          uploadCooldown={cooldowns?.reelUpload}
-          reelUploadActive={reelUploadUi.active}
-          reelUploadProgress={reelUploadUi.progress}
+          onMorePress={handleMorePress}
+          onLevelPress={() => setShowLevelInfo(true)}
+          onEnergyPress={() => setShowCoinsInfo(true)}
+          chooseCountryLabel={t.profile.chooseCountry}
+          addClubLabel={t.profile.addYourClub}
+          energyLabel={t.profile.energy}
         />
 
-        <StatsRow
-          followers={followStats.followersCount.toString()}
-          following={followStats.followingCount.toString()}
-          videos={(followStats.reelsCount || myVideos.length).toString()}
-          onFollowersPress={handleFollowersPress}
-          onFollowingPress={handleFollowingPress}
+        <ProfileMetricStrip
+          items={[
+            {
+              key: 'followers',
+              icon: PROFILE_ICONS.followers,
+              value: followStats.followersCount,
+              label: t.profile.followerShort,
+              onPress: handleFollowersPress,
+            },
+            {
+              key: 'following',
+              icon: PROFILE_ICONS.following,
+              value: followStats.followingCount,
+              label: t.profile.followingShort,
+              onPress: handleFollowingPress,
+            },
+            {
+              key: 'videos',
+              icon: PROFILE_ICONS.video,
+              value: followStats.reelsCount || myVideos.length,
+              label: t.profile.videos,
+              onPress: () => setActiveTab('videos'),
+            },
+            {
+              key: 'likes',
+              icon: PROFILE_ICONS.heart,
+              value: analytics?.totalLikes ?? 0,
+              label: t.profile.likes,
+            },
+          ]}
+        />
+
+        <ProfileBioCard
+          bio={userData?.bio}
+          isOwnProfile
+          addLabel={t.profile.addBio}
+          aboutLabel={t.profile.aboutMe}
+          onPress={handleEditProfile}
+        />
+
+        <ProfileMetricStrip
+          variant="performance"
+          items={[
+            {
+              key: 'xp',
+              icon: PROFILE_ICONS.shield,
+              value: xp || userData?.xp || 0,
+              label: t.profile.totalXp,
+              onPress: () => setShowLevelInfo(true),
+            },
+            {
+              key: 'streak',
+              icon: PROFILE_ICONS.fire,
+              value: Math.max(loginStreak.longest, userData?.consecutiveLoginDays || 0),
+              label: t.profile.longestStreak,
+            },
+            {
+              key: 'rate',
+              icon: PROFILE_ICONS.bullseye,
+              value: `${predictionStats.accuracy <= 1 && predictionStats.accuracy > 0 ? Math.round(predictionStats.accuracy * 100) : Math.round(predictionStats.accuracy || 0)}%`,
+              label: t.profile.predictionRate,
+              onPress: () => setActiveTab('predictions'),
+            },
+            {
+              key: 'achievements',
+              icon: PROFILE_ICONS.trophy,
+              value: badgeCount,
+              label: t.profile.achievements,
+              onPress: () => setActiveTab('achievements'),
+            },
+          ]}
+        />
+
+        <ProfileConnectCard
+          links={socialLinks}
+          email={clerkUser?.primaryEmailAddress?.emailAddress}
+          isOwnProfile
+          title={t.profile.connectWithMe}
+          emailCopiedTitle={t.profile.emailCopied}
+          emailCopiedMessage={t.profile.emailCopiedMessage}
+          onEditPress={handleEditProfile}
         />
 
         <ContentTabs
-          activeTab={activeTab}
+          activeTab={activeTab === 'saved' ? 'videos' : activeTab}
           onTabChange={setActiveTab}
           videoCount={myVideos.length}
           savedCount={followStats.savedReelsCount ?? 0}
           isOwnProfile={true}
         />
 
-        {activeTab === 'videos' && (
-          <VideoGrid
-            videos={myVideos}
-            onVideoPress={handleVideoPress}
-            onVideoLongPress={handleVideoLongPress}
-            onDeleteVideo={handleDeleteVideo}
-            isDeleteMode={isDeleteMode}
-          />
-        )}
+        <View style={styles.contentPanel}>
+          {activeTab === 'videos' && (
+            <VideoGrid
+              videos={myVideos}
+              onVideoPress={handleVideoPress}
+              onVideoLongPress={handleVideoLongPress}
+              onDeleteVideo={handleDeleteVideo}
+              isDeleteMode={isDeleteMode}
+            />
+          )}
 
-        {activeTab === 'saved' && (
-          <ProfileSavedGrid
-            getToken={getToken}
-            onCountChange={(count) => {
-              updateCachedFollowStats({ ...followStats, savedReelsCount: count });
-            }}
-          />
-        )}
+          {activeTab === 'saved' && (
+            <ProfileSavedGrid
+              getToken={getToken}
+              onCountChange={(count) => {
+                updateCachedFollowStats({ ...followStats, savedReelsCount: count });
+              }}
+            />
+          )}
 
-        {activeTab === 'analytics' && (
-          <ProfileAnalyticsTab
-            analytics={analytics}
-            predictionStats={predictionStats}
-            predictions={allPredictions}
-          />
-        )}
+          {activeTab === 'predictions' && (
+            <ProfileAnalyticsTab
+              analytics={analytics}
+              predictionStats={predictionStats}
+              predictions={allPredictions}
+            />
+          )}
+
+          {activeTab === 'achievements' && userData?.id && !String(userData.id).startsWith('user_') && (
+            <View style={styles.badgesContainer}>
+              <BadgesDisplay userId={userData.id} token={authToken} compact={false} />
+            </View>
+          )}
+        </View>
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <LevelInfoModal
+        visible={showLevelInfo}
+        onClose={() => setShowLevelInfo(false)}
+        level={level || userData?.level || 1}
+      />
+      <CoinsInfoModal
+        visible={showCoinsInfo}
+        onClose={() => setShowCoinsInfo(false)}
+      />
 
       {/* UX Fix 1+2: Image preview modal + Android action sheet */}
       <ImagePreviewModal
