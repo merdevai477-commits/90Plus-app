@@ -150,13 +150,8 @@ export default function PredictionGroupsScreen() {
     }, [refreshMeIfStale, refreshXp]),
   );
 
-  /** Header XP = this user's points in the group (matches standings), else app XP. */
-  const headerXp = useMemo(() => {
-    const me = members.find((m) => m.isMe);
-    if (typeof me?.totalPoints === 'number') return me.totalPoints;
-    if (typeof state?.membership?.groupXpTotal === 'number') return state.membership.groupXpTotal;
-    return xp ?? 0;
-  }, [xp, members, state?.membership?.groupXpTotal]);
+  /** Header XP = signed-in user's app XP balance (not group-only score). */
+  const headerXp = xp ?? 0;
 
   const warsTitle = useMemo(() => {
     if (navTab === 'standings' || tab === 'standings') {
