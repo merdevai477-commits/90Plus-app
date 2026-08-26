@@ -38,22 +38,23 @@ export function PredictionWarsTopBar({
   onBack: () => void;
 }) {
   const { bold, medium } = usePGFonts();
-  const { isRTL, direction } = useTranslation();
+  const { direction } = useTranslation();
   const xpLabel = useMemo(() => formatXp(xp), [xp]);
 
   return (
     <View style={[styles.shell, { paddingTop: topInset }]}>
       <View style={styles.inner}>
-        <View style={[styles.leftCluster, isRTL && styles.leftClusterRtl]}>
+        <View style={styles.leftCluster}>
           <Pressable
             onPress={onBack}
             style={styles.backBtn}
             hitSlop={8}
             accessibilityRole="button"
+            accessibilityLabel="Back"
           >
             <Image
               source={ICON_BACK}
-              style={[styles.backIcon, isRTL && styles.backIconRtl]}
+              style={styles.backIcon}
               contentFit="contain"
               transition={0}
             />
@@ -66,7 +67,7 @@ export function PredictionWarsTopBar({
           </Text>
         </View>
 
-        <View style={styles.xpCluster}>
+        <View style={styles.xpCluster} accessibilityLabel={`XP ${xpLabel}`}>
           <View style={styles.xpDot}>
             <GradientText
               colors={XP_GRADIENT}
@@ -111,15 +112,12 @@ const styles = StyleSheet.create({
   leftCluster: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 12,
+    justifyContent: 'space-between',
     flex: 1,
     minWidth: 0,
     height: 38,
     maxWidth: 232,
-  },
-  leftClusterRtl: {
-    flexDirection: 'row-reverse',
+    paddingRight: 8,
   },
   backBtn: {
     width: 38,
@@ -130,9 +128,6 @@ const styles = StyleSheet.create({
   backIcon: {
     width: 28,
     height: 28,
-  },
-  backIconRtl: {
-    transform: [{ scaleX: -1 }],
   },
   title: {
     color: '#FFFFFF',

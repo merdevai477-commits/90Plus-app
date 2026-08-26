@@ -55,7 +55,7 @@ export default function PredictionGroupsScreen() {
   const router = useRouter();
   const { isRTL, t } = useTranslation();
   const toast = useToast();
-  const { xp } = useXp();
+  const { xp, refresh: refreshXp } = useXp();
   const { upload } = useImageUpload();
   const pgScreen = t.predictionGroups.screen;
   const params = useLocalSearchParams<{ joinCode?: string; inviteId?: string }>();
@@ -146,8 +146,24 @@ export default function PredictionGroupsScreen() {
   useFocusEffect(
     useCallback(() => {
       void refreshMeIfStale(2000);
-    }, [refreshMeIfStale]),
+      void refreshXp();
+    }, [refreshMeIfStale, refreshXp]),
   );
+
+  /** Header XP = this user's points in the group (matches standings), else app XP. */
+  const headerXp = useMemo(() => {
+    const me = members.find((m) => m.isMe);
+    if (typeof me?.totalPoints === 'number') return me.totalPoints;
+    if (typeof state?.membership?.groupXpTotal === 'number') return state.membership.groupXpTotal;
+    return xp ?? 0;
+  }, [xp, members, state?.membership?.groupXpTotal]);
+
+  const warsTitle = useMemo(() => {
+    if (navTab === 'standings' || tab === 'standings') {
+      return t.predictionGroups.tabs.standings;
+    }
+    return t.predictionGroups.tabs.matches;
+  }, [navTab, tab, t.predictionGroups.tabs.matches, t.predictionGroups.tabs.standings]);
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -311,12 +327,8 @@ export default function PredictionGroupsScreen() {
       {isHub ? null : (
         <PredictionWarsTopBar
           topInset={insets.top}
-          title={
-            navTab === 'standings' || tab === 'standings'
-              ? t.predictionGroups.tabs.standings
-              : t.predictionGroups.tabs.matches
-          }
-          xp={xp}
+          title={warsTitle}
+          xp={headerXp}
           onBack={() => router.back()}
         />
       )}
