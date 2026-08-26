@@ -238,7 +238,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
 }) => {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<PredictionFilter>('all');
-  const [expanded, setExpanded] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(COLLAPSED_COUNT);
 
   const derivedStats = useMemo(() => {
     if (!predictions.length) return null;
@@ -275,11 +275,9 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
     return sortByLatest(list);
   }, [predictions, filter]);
 
-  const visiblePredictions = expanded
-    ? filteredPredictions
-    : filteredPredictions.slice(0, COLLAPSED_COUNT);
-  const canExpand = !expanded && filteredPredictions.length > COLLAPSED_COUNT;
-  const canCollapse = expanded && filteredPredictions.length > COLLAPSED_COUNT;
+  const visiblePredictions = filteredPredictions.slice(0, visibleCount);
+  const canExpand = visibleCount < filteredPredictions.length;
+  const canCollapse = visibleCount > COLLAPSED_COUNT;
 
   const emptyMessage =
     filter === 'group' ? t.profile.noGroupPredictionsYet : t.profile.noPredictionsYet;
@@ -302,7 +300,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
               key={id}
               onPress={() => {
                 setFilter(id);
-                setExpanded(false);
+                setVisibleCount(COLLAPSED_COUNT);
               }}
               activeOpacity={0.8}
               style={[styles.filterChip, active && styles.filterChipActiveShell]}
@@ -353,7 +351,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
         <TouchableOpacity
           style={styles.loadMore}
           activeOpacity={0.8}
-          onPress={() => setExpanded(true)}
+          onPress={() => setVisibleCount(filteredPredictions.length)}
         >
           <Image source={PROFILE_ICONS.chevronDownPurple} style={styles.loadMoreIcon} contentFit="contain" />
           <Text style={styles.loadMoreText}>{t.profile.viewAllPredictions}</Text>
@@ -364,7 +362,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
         <TouchableOpacity
           style={styles.loadMore}
           activeOpacity={0.8}
-          onPress={() => setExpanded(false)}
+          onPress={() => setVisibleCount(COLLAPSED_COUNT)}
         >
           <Image
             source={PROFILE_ICONS.chevronDownPurple}
