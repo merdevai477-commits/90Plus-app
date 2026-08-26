@@ -1,13 +1,13 @@
 /**
- * In-group member standings list.
+ * In-group member standings list — Figma 601:4171.
  */
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { GroupMember } from './data';
-import { HomeLeaderboardRow } from './HomeLeaderboardRow';
-import { PG, PG_RADII, usePGFonts } from './theme';
+import { GroupStandingsRow } from './GroupStandingsRow';
+import { PG, usePGFonts } from './theme';
 import { useTranslation } from '../../src/i18n';
 
 export function GroupMembersStandings({
@@ -20,11 +20,20 @@ export function GroupMembersStandings({
   onMemberPress?: (member: GroupMember) => void;
 }) {
   const { medium } = usePGFonts();
-  const { t } = useTranslation();
+  const { t, direction } = useTranslation();
 
   if (members.length === 0) {
     return (
-      <Text style={[styles.empty, { fontFamily: medium, textAlign: isRTL ? 'right' : 'left' }]}>
+      <Text
+        style={[
+          styles.empty,
+          {
+            fontFamily: medium,
+            textAlign: isRTL ? 'right' : 'left',
+            writingDirection: direction,
+          },
+        ]}
+      >
         {t.predictionGroups.leaderboard.emptyNudge}
       </Text>
     );
@@ -33,26 +42,24 @@ export function GroupMembersStandings({
   return (
     <View style={styles.list}>
       {members.map((m) => (
-        <View key={m.userId ?? `${m.rank}-${m.name}`} style={styles.card}>
-          <HomeLeaderboardRow
-            member={m}
-            isRTL={isRTL}
-            onPress={onMemberPress ? () => onMemberPress(m) : undefined}
-          />
-        </View>
+        <GroupStandingsRow
+          key={m.userId ?? `${m.rank}-${m.name}`}
+          member={m}
+          isRTL={isRTL}
+          onPress={onMemberPress ? () => onMemberPress(m) : undefined}
+        />
       ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24, gap: 8 },
-  card: {
-    borderRadius: PG_RADII.md,
-    borderWidth: 1,
-    borderColor: PG.border,
-    backgroundColor: PG.card,
-    overflow: 'hidden',
+  list: {
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+    gap: 8,
   },
   empty: {
     color: PG.textMuted,
