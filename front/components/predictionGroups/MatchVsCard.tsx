@@ -1,5 +1,5 @@
 /**
- * Compact VS match card with Predict Now CTA.
+ * Compact VS match card with Predict Now CTA — Figma 477:2766.
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,7 +9,7 @@ import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import TeamBadge from '../common/TeamBadge';
 import { useTranslation } from '../../src/i18n';
 import type { PredictionMatch } from './data';
-import { PG, PG_GRADIENTS, PG_RADII, usePGFonts } from './theme';
+import { usePGFonts } from './theme';
 
 export function MatchVsCard({
   match,
@@ -24,18 +24,24 @@ export function MatchVsCard({
   locked?: boolean;
   onPredict: () => void;
 }) {
-  const { extra, medium, bold } = usePGFonts();
-  const { t } = useTranslation();
+  const { bold, medium } = usePGFonts();
+  const { t, direction } = useTranslation();
   const pg = t.predictionGroups.predictions;
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
   const disabled = saved || locked;
 
-  const team = (side: 'home' | 'away') => {
+  const team = (side: 'home' | 'away', size: number) => {
     const tm = match[side];
     return (
-      <View style={styles.team}>
-        <TeamBadge name={tm.name} logo={tm.logo ?? undefined} size={48} color="transparent" />
-        <Text style={[styles.teamName, { fontFamily: medium }]} numberOfLines={2}>
+      <View style={[styles.team, { width: side === 'home' ? 60 : 49 }]}>
+        <TeamBadge name={tm.name} logo={tm.logo ?? undefined} size={size} color="transparent" />
+        <Text
+          style={[
+            styles.teamName,
+            { fontFamily: bold, fontSize: side === 'home' ? 13 : 14, writingDirection: direction },
+          ]}
+          numberOfLines={2}
+        >
           {tm.name}
         </Text>
       </View>
@@ -43,53 +49,65 @@ export function MatchVsCard({
   };
 
   return (
-    <View style={styles.card}>
+    <LinearGradient
+      colors={['#0C051A', '#07040D']}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+      style={styles.card}
+    >
       <View style={[styles.row, row]}>
-        {team('home')}
+        {team('home', 40)}
         <View style={styles.mid}>
-          <Text style={[styles.vs, { fontFamily: extra }]}>VS</Text>
+          <Text style={[styles.vs, { fontFamily: bold }]}>VS</Text>
           <Text style={[styles.time, { fontFamily: medium }]}>{match.time}</Text>
           <Pressable
             disabled={disabled}
             onPress={onPredict}
             style={({ pressed }) => [pressed && { opacity: 0.9 }, disabled && { opacity: 0.7 }]}
           >
-            <LinearGradient colors={[...PG_GRADIENTS.purple]} style={styles.cta}>
-              <Text style={[styles.ctaTxt, { fontFamily: bold }]}>
+            <LinearGradient
+              colors={['rgba(53,6,98,0.56)', 'rgba(26,4,47,0.56)']}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={styles.cta}
+            >
+              <Text style={[styles.ctaTxt, { fontFamily: bold, writingDirection: direction }]}>
                 {saved ? pg.predicted : pg.predictNow}
               </Text>
             </LinearGradient>
           </Pressable>
         </View>
-        {team('away')}
+        {team('away', 43)}
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
-    marginTop: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    borderRadius: PG_RADII.lg,
-    backgroundColor: PG.card,
-    borderWidth: 1,
-    borderColor: PG.border,
+    marginTop: 16,
+    height: 133,
+    paddingHorizontal: 34,
+    borderRadius: 25,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(83,25,138,0.65)',
+    justifyContent: 'center',
   },
-  row: { alignItems: 'center' },
-  team: { flex: 1, alignItems: 'center', gap: 6 },
-  teamName: { color: PG.text, fontSize: 12, textAlign: 'center' },
-  mid: { width: 118, alignItems: 'center', gap: 6 },
-  vs: { color: PG.primaryLight, fontSize: 16, letterSpacing: 1 },
-  time: { color: PG.textMuted, fontSize: 11 },
+  row: { alignItems: 'center', justifyContent: 'space-between' },
+  team: { alignItems: 'center', gap: 9 },
+  teamName: { color: '#fff', textAlign: 'center' },
+  mid: { width: 105, alignItems: 'center', gap: 9, height: 133, justifyContent: 'center' },
+  vs: { color: '#A855F7', fontSize: 21 },
+  time: { color: '#777', fontSize: 13 },
   cta: {
-    minWidth: 108,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    width: 105,
+    height: 33,
+    borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#580E9E',
   },
-  ctaTxt: { color: '#fff', fontSize: 12 },
+  ctaTxt: { color: '#D6AEFC', fontSize: 10 },
 });

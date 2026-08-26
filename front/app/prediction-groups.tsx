@@ -220,7 +220,7 @@ export default function PredictionGroupsScreen() {
   );
 
   const handleCreate = useCallback(
-    async (name: string, localImageUri: string | null) => {
+    async (name: string, localImageUri: string | null, inviteeIds: string[] = []) => {
       setCreateBusy(true);
       try {
         const data = await createGroup(name);
@@ -235,13 +235,29 @@ export default function PredictionGroupsScreen() {
             await updateGroup(undefined, uploaded.url);
           }
         }
+        if (inviteeIds.length > 0) {
+          const failures: string[] = [];
+          for (const userId of inviteeIds) {
+            try {
+              await inviteUser(userId);
+            } catch {
+              failures.push(userId);
+            }
+          }
+          if (failures.length > 0) {
+            toast.showError(
+              t.predictionGroups.createForm.inviteFailed,
+              t.predictionGroups.createForm.inviteFailed,
+            );
+          }
+        }
         setCreateOpen(false);
         setInviteShareOpen(true);
       } finally {
         setCreateBusy(false);
       }
     },
-    [createGroup, updateGroup, upload],
+    [createGroup, inviteUser, t.predictionGroups.createForm.inviteFailed, toast, updateGroup, upload],
   );
 
   const handlePredict = useCallback(
@@ -295,7 +311,11 @@ export default function PredictionGroupsScreen() {
       {isHub ? null : (
         <PredictionWarsTopBar
           topInset={insets.top}
-          title={t.predictionGroupsInfo.title}
+          title={
+            navTab === 'standings' || tab === 'standings'
+              ? t.predictionGroups.tabs.standings
+              : t.predictionGroups.tabs.matches
+          }
           xp={xp}
           onBack={() => router.back()}
         />

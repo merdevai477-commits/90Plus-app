@@ -1,13 +1,14 @@
 /**
- * Cup screen top bar — back, title, XP pill.
+ * Cup screen top bar — back, title, XP pill (Figma 477:2766).
+ * Bottom LiquidGlass nav is unchanged elsewhere.
  */
 
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
-import { PG, PG_GRADIENTS, PG_RADII, usePGFonts } from './theme';
+import { useTranslation } from '../../src/i18n';
+import { usePGFonts } from './theme';
 
 export const WARS_TOP_BAR_HEIGHT = 48;
 
@@ -22,23 +23,32 @@ export function PredictionWarsTopBar({
   xp: number;
   onBack: () => void;
 }) {
-  const { extra, bold } = usePGFonts();
+  const { bold, medium } = usePGFonts();
+  const { isRTL, direction } = useTranslation();
+  const BackIcon = isRTL ? ChevronRight : ChevronLeft;
 
   return (
     <View style={[styles.shell, { paddingTop: topInset + 6 }]}>
-      <View style={styles.row}>
-        <Pressable onPress={onBack} style={styles.side} hitSlop={8} accessibilityRole="button">
-          <ChevronLeft size={22} color="#fff" strokeWidth={2.25} />
-        </Pressable>
-        <Text style={[styles.title, { fontFamily: extra }]} numberOfLines={1}>
-          {title}
-        </Text>
-        <LinearGradient colors={[...PG_GRADIENTS.purple]} style={styles.xpPill}>
+      <View style={[styles.row, isRTL && styles.rowRtl]}>
+        <View style={styles.leftCluster}>
+          <Pressable onPress={onBack} style={styles.side} hitSlop={8} accessibilityRole="button">
+            <BackIcon size={22} color="#fff" strokeWidth={2.25} />
+          </Pressable>
+          <Text
+            style={[styles.title, { fontFamily: bold, writingDirection: direction }]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+        </View>
+        <View style={styles.xpCluster}>
           <View style={styles.xpDot}>
-            <Text style={[styles.xpDotTxt, { fontFamily: extra }]}>XP</Text>
+            <Text style={[styles.xpDotTxt, { fontFamily: bold }]}>XP</Text>
           </View>
-          <Text style={[styles.xpVal, { fontFamily: bold }]}>{xp}</Text>
-        </LinearGradient>
+          <View style={styles.xpPill}>
+            <Text style={[styles.xpVal, { fontFamily: medium }]}>{xp}</Text>
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -51,34 +61,62 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 200,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingBottom: 8,
-    backgroundColor: 'rgba(3,3,3,0.78)',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: PG.borderSoft,
+    backgroundColor: '#030303',
   },
-  row: { flexDirection: 'row', alignItems: 'center', minHeight: WARS_TOP_BAR_HEIGHT, gap: 8 },
-  side: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, color: PG.text, fontSize: 16, textAlign: 'center' },
-  xpPill: {
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    minHeight: WARS_TOP_BAR_HEIGHT,
+  },
+  rowRtl: { flexDirection: 'row-reverse' },
+  leftCluster: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 5,
-    paddingLeft: 5,
-    paddingRight: 10,
-    borderRadius: PG_RADII.pill,
-    borderWidth: 1,
-    borderColor: PG.borderBright,
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
   },
-  xpDot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: PG.primary,
+  side: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
+  title: { color: '#fff', fontSize: 20, flexShrink: 1 },
+  xpCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  xpPill: {
+    height: 39,
+    minWidth: 94,
+    paddingLeft: 28,
+    paddingRight: 20,
+    marginLeft: -12,
+    borderTopRightRadius: 48,
+    borderBottomRightRadius: 48,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
+    backgroundColor: '#05010E',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#000',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: 'rgba(92,20,202,0.58)',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 8.6,
+    elevation: 8,
   },
-  xpDotTxt: { color: '#fff', fontSize: 8 },
-  xpVal: { color: PG.primaryLight, fontSize: 13 },
+  xpDot: {
+    width: 39,
+    height: 39,
+    borderRadius: 35,
+    backgroundColor: '#05010E',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  xpDotTxt: { color: '#EFE5FF', fontSize: 16 },
+  xpVal: { color: '#EFE5FF', fontSize: 16 },
 });

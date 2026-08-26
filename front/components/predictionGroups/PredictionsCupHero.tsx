@@ -1,22 +1,27 @@
 /**
- * Group hero card — name, photo, stats, invite code.
+ * Group hero card — Figma 477:2766 cup banner.
  */
 
 import * as Clipboard from 'expo-clipboard';
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, Copy, LogOut, Settings, Users } from 'lucide-react-native';
+import { LogOut, Settings } from 'lucide-react-native';
 import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { useToast } from '../../contexts/ToastContext';
 import { useTranslation } from '../../src/i18n';
-import { GroupAvatar } from './GroupAvatar';
-import { PG, PG_RADII, usePGFonts } from './theme';
+import { PG, usePGFonts } from './theme';
+
+const CUP_TROPHY = require('../../assets/images/prediction-groups/cup-trophy-frame.png');
+const ICON_COPY = require('../../assets/images/prediction-groups/icon-copy.svg');
+const ICON_USERS = require('../../assets/images/prediction-groups/icon-users-sm.svg');
+const ICON_SCHEDULE = require('../../assets/images/prediction-groups/icon-schedule.svg');
 
 export function PredictionsCupHero({
   isRTL,
-  name,
+  name: _name,
   avatarUrl,
   membersCount,
   matchesCount,
@@ -37,13 +42,13 @@ export function PredictionsCupHero({
   onSettings?: () => void;
   onLeave?: () => void;
 }) {
-  const { medium, extra } = usePGFonts();
-  const { t } = useTranslation();
+  const { medium, bold } = usePGFonts();
+  const { t, direction } = useTranslation();
   const cup = t.predictionGroups.cup;
   const common = t.predictionGroups.common;
   const toast = useToast();
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
-  const align = isRTL ? 'right' : 'left';
+  const align = isRTL ? ('right' as const) : ('left' as const);
 
   const copy = useCallback(async () => {
     await Clipboard.setStringAsync(inviteCode);
@@ -52,30 +57,43 @@ export function PredictionsCupHero({
   }, [common.copiedInvite, common.copiedTitle, inviteCode, toast]);
 
   return (
-    <LinearGradient
-      colors={['#1A0B2E', '#0B0414', PG.card]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.card}
-    >
-      <View style={[styles.top, row]}>
+    <View style={styles.card}>
+      <LinearGradient
+        colors={['rgba(35,9,59,0.94)', 'rgba(0,0,0,0.94)']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={[styles.inner, row]}>
         <View style={[styles.copy, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-          <Text style={[styles.title, { fontFamily: extra, textAlign: align }]} numberOfLines={2}>
-            {name}
+          <Text
+            style={[styles.title, { fontFamily: bold, textAlign: align, writingDirection: direction }]}
+            numberOfLines={2}
+          >
+            {cup.title}
           </Text>
-          <Text style={[styles.sub, { fontFamily: medium, textAlign: align }]}>{cup.subtitle}</Text>
+          <Text
+            style={[styles.sub, { fontFamily: medium, textAlign: align, writingDirection: direction }]}
+          >
+            {cup.subtitle}
+          </Text>
           <View style={[styles.stats, row]}>
             <View style={[styles.stat, row]}>
-              <Users size={14} color={PG.primaryLight} />
               <Text style={[styles.statTxt, { fontFamily: medium }]}>
                 {common.members.replace('{count}', String(membersCount))}
               </Text>
+              <Image source={ICON_USERS} style={styles.metaIcon} contentFit="contain" transition={0} />
             </View>
             <View style={[styles.stat, row]}>
-              <Calendar size={14} color={PG.primaryLight} />
               <Text style={[styles.statTxt, { fontFamily: medium }]}>
                 {cup.dailyMatches.replace('{count}', String(matchesCount))}
               </Text>
+              <Image
+                source={ICON_SCHEDULE}
+                style={styles.metaIcon}
+                contentFit="contain"
+                transition={0}
+              />
             </View>
           </View>
           <Pressable
@@ -85,11 +103,17 @@ export function PredictionsCupHero({
             }}
             style={[styles.codeBox, row]}
           >
-            <Text style={[styles.code, { fontFamily: extra }]}>{inviteCode}</Text>
-            <Copy size={14} color={PG.primaryLight} />
+            <Text style={[styles.code, { fontFamily: medium }]}>{inviteCode}</Text>
+            <Image source={ICON_COPY} style={styles.copyIcon} contentFit="contain" transition={0} />
           </Pressable>
         </View>
-        <GroupAvatar imageUri={avatarUrl ?? null} size={88} />
+        <View style={styles.artWrap}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.art} contentFit="cover" />
+          ) : (
+            <Image source={CUP_TROPHY} style={styles.art} contentFit="contain" />
+          )}
+        </View>
       </View>
       <View style={[styles.actions, row]}>
         {isOwner && onSettings ? (
@@ -103,40 +127,63 @@ export function PredictionsCupHero({
           </Pressable>
         ) : null}
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
-    borderRadius: PG_RADII.xl,
-    borderWidth: 1,
-    borderColor: PG.border,
-    padding: 16,
+    height: 194,
+    borderRadius: 26,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(190,143,236,0.65)',
     overflow: 'hidden',
+    justifyContent: 'center',
   },
-  top: { alignItems: 'center', gap: 10 },
-  copy: { flex: 1, gap: 6 },
-  title: { color: PG.text, fontSize: 22 },
-  sub: { color: PG.textSecondary, fontSize: 13 },
-  stats: { gap: 12, marginTop: 4, flexWrap: 'wrap' },
-  stat: { alignItems: 'center', gap: 6 },
-  statTxt: { color: PG.textSecondary, fontSize: 12 },
+  inner: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 19,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  copy: { flex: 1, gap: 8, minWidth: 0 },
+  title: { color: '#fff', fontSize: 20 },
+  sub: { color: '#B5B5B5', fontSize: 12 },
+  stats: { gap: 17, marginTop: 2, flexWrap: 'wrap' },
+  stat: { alignItems: 'center', gap: 4 },
+  statTxt: { color: '#5D5D5D', fontSize: 11 },
+  metaIcon: { width: 14, height: 14 },
   codeBox: {
     alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
+    gap: 4,
+    marginTop: 4,
     alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: PG.borderBright,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    height: 29,
+    paddingHorizontal: 16,
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#53198A',
+    backgroundColor: 'rgba(7,4,13,0.9)',
   },
-  code: { color: PG.primaryLight, fontSize: 13, letterSpacing: 0.6 },
-  actions: { justifyContent: 'flex-end', gap: 8, marginTop: 8 },
+  code: { color: '#B673F5', fontSize: 11 },
+  copyIcon: { width: 12, height: 12 },
+  artWrap: {
+    width: 135,
+    height: 138,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  art: { width: '100%', height: '100%' },
+  actions: {
+    position: 'absolute',
+    top: 10,
+    left: 12,
+    right: 12,
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
   iconBtn: {
     width: 32,
     height: 32,

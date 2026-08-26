@@ -1338,6 +1338,12 @@ export const en = {
       typePrivateHint: 'Approval only via invitation',
       maxMembers: 'Number of participants',
       maxMembersValue: '20 participants',
+      addMembers: 'Add members',
+      searchMembers: 'Search for a user...',
+      add: 'Add',
+      added: 'Added',
+      emptySearch: 'No results',
+      inviteFailed: 'Could not invite some members',
       submit: 'Create group',
     },
     cup: {

@@ -1426,6 +1426,12 @@ export const ar = {
       typePrivateHint: 'بالموافقة فقط عبر الدعوة',
       maxMembers: 'عدد المشاركين',
       maxMembersValue: '20 مشارك',
+      addMembers: 'إضافة أعضاء',
+      searchMembers: 'ابحث عن مستخدم...',
+      add: 'إضافة',
+      added: 'تمت الإضافة',
+      emptySearch: 'لا توجد نتائج',
+      inviteFailed: 'تعذرت دعوة بعض الأعضاء',
       submit: 'إنشاء المجموعة',
     },
     cup: {

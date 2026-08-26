@@ -1,14 +1,16 @@
 /**
- * In-page segmented tabs: Matches | Standings.
+ * In-page segmented tabs: Matches | Standings — Figma 477:2766.
  */
 
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { BarChart3 } from 'lucide-react-native';
+import { Image } from 'expo-image';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 
-import { PG, PG_GRADIENTS, PG_RADII, usePGFonts } from './theme';
+import { useTranslation } from '../../src/i18n';
+import { usePGFonts } from './theme';
+
+const ICON_FOOTBALL = require('../../assets/images/prediction-groups/icon-football.svg');
+const ICON_LEADERBOARD = require('../../assets/images/prediction-groups/icon-leaderboard.svg');
 
 export type CupTabKey = 'matches' | 'standings';
 
@@ -25,42 +27,64 @@ export function CupSegmentTabs({
   standingsLabel: string;
   onChange: (key: CupTabKey) => void;
 }) {
-  const { bold } = usePGFonts();
+  const { bold, medium } = usePGFonts();
+  const { direction } = useTranslation();
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
-
-  const item = (key: CupTabKey, label: string, icon: React.ReactNode) => {
-    const on = active === key;
-    const inner = (
-      <View style={[styles.itemInner, row]}>
-        {icon}
-        <Text style={[styles.label, { fontFamily: bold, color: on ? '#fff' : PG.textMuted }]}>{label}</Text>
-      </View>
-    );
-    return (
-      <Pressable key={key} onPress={() => onChange(key)} style={styles.item}>
-        {on ? (
-          <LinearGradient colors={[...PG_GRADIENTS.purple]} style={styles.active}>
-            {inner}
-          </LinearGradient>
-        ) : (
-          inner
-        )}
-      </Pressable>
-    );
-  };
 
   return (
     <View style={[styles.shell, row]}>
-      {item(
-        'matches',
-        matchesLabel,
-        <MaterialCommunityIcons name="soccer" size={16} color={active === 'matches' ? '#fff' : PG.textMuted} />,
-      )}
-      {item(
-        'standings',
-        standingsLabel,
-        <BarChart3 size={16} color={active === 'standings' ? '#fff' : PG.textMuted} />,
-      )}
+      <Pressable
+        onPress={() => onChange('matches')}
+        style={[styles.item, active === 'matches' && styles.itemActive]}
+      >
+        <View style={[styles.itemInner, row]}>
+          <Text
+            style={[
+              styles.label,
+              {
+                fontFamily: bold,
+                color: active === 'matches' ? '#9C75F5' : '#6C6C6C',
+                fontSize: active === 'matches' ? 17 : 14,
+                writingDirection: direction,
+              },
+            ]}
+          >
+            {matchesLabel}
+          </Text>
+          <Image
+            source={ICON_FOOTBALL}
+            style={[styles.icon, active !== 'matches' && styles.iconMuted]}
+            contentFit="contain"
+            transition={0}
+          />
+        </View>
+      </Pressable>
+      <Pressable
+        onPress={() => onChange('standings')}
+        style={[styles.item, active === 'standings' && styles.itemActive]}
+      >
+        <View style={[styles.itemInner, row]}>
+          <Text
+            style={[
+              styles.label,
+              {
+                fontFamily: active === 'standings' ? bold : medium,
+                color: active === 'standings' ? '#9C75F5' : '#6C6C6C',
+                fontSize: active === 'standings' ? 17 : 14,
+                writingDirection: direction,
+              },
+            ]}
+          >
+            {standingsLabel}
+          </Text>
+          <Image
+            source={ICON_LEADERBOARD}
+            style={[styles.iconSm, active !== 'standings' && styles.iconMuted]}
+            contentFit="contain"
+            transition={0}
+          />
+        </View>
+      </Pressable>
     </View>
   );
 }
@@ -69,19 +93,24 @@ const styles = StyleSheet.create({
   shell: {
     marginHorizontal: 16,
     marginTop: 14,
-    padding: 4,
-    borderRadius: PG_RADII.lg,
-    backgroundColor: PG.card,
-    borderWidth: 1,
-    borderColor: PG.border,
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: 'rgba(17,3,49,0.2)',
+    overflow: 'hidden',
   },
-  item: { flex: 1 },
-  active: { borderRadius: PG_RADII.md },
+  item: { flex: 1, justifyContent: 'center' },
+  itemActive: {
+    backgroundColor: 'rgba(17,3,49,0.32)',
+    borderRadius: 16,
+  },
   itemInner: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    minHeight: 40,
+    gap: 5,
+    minHeight: 54,
   },
-  label: { fontSize: 13 },
+  label: { textAlign: 'center' },
+  icon: { width: 24, height: 24 },
+  iconSm: { width: 18, height: 18 },
+  iconMuted: { opacity: 0.45 },
 });
