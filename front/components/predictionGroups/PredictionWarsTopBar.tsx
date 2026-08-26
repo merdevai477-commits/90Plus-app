@@ -1,16 +1,25 @@
 /**
- * Cup screen top bar — back, title, XP pill (Figma 477:2766).
- * Bottom LiquidGlass nav is unchanged elsewhere.
+ * Cup screen top bar — back, title, XP chip (Figma 601:4075).
  */
 
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
-import React from 'react';
+import { Image } from 'expo-image';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
 import { usePGFonts } from './theme';
 
-export const WARS_TOP_BAR_HEIGHT = 48;
+const ICON_BACK = require('../../assets/images/prediction-groups/icon-back-arrow.svg');
+
+export const WARS_TOP_BAR_HEIGHT = 56;
+
+function formatXp(value: number): string {
+  try {
+    return Math.round(value).toLocaleString('en-US');
+  } catch {
+    return String(Math.round(value));
+  }
+}
 
 export function PredictionWarsTopBar({
   topInset,
@@ -25,14 +34,24 @@ export function PredictionWarsTopBar({
 }) {
   const { bold, medium } = usePGFonts();
   const { isRTL, direction } = useTranslation();
-  const BackIcon = isRTL ? ChevronRight : ChevronLeft;
+  const xpLabel = useMemo(() => formatXp(xp), [xp]);
 
   return (
-    <View style={[styles.shell, { paddingTop: topInset + 6 }]}>
-      <View style={[styles.row, isRTL && styles.rowRtl]}>
-        <View style={styles.leftCluster}>
-          <Pressable onPress={onBack} style={styles.side} hitSlop={8} accessibilityRole="button">
-            <BackIcon size={22} color="#fff" strokeWidth={2.25} />
+    <View style={[styles.shell, { paddingTop: topInset }]}>
+      <View style={styles.inner}>
+        <View style={[styles.leftCluster, isRTL && styles.leftClusterRtl]}>
+          <Pressable
+            onPress={onBack}
+            style={styles.backBtn}
+            hitSlop={8}
+            accessibilityRole="button"
+          >
+            <Image
+              source={ICON_BACK}
+              style={[styles.backIcon, isRTL && styles.backIconRtl]}
+              contentFit="contain"
+              transition={0}
+            />
           </Pressable>
           <Text
             style={[styles.title, { fontFamily: bold, writingDirection: direction }]}
@@ -41,12 +60,13 @@ export function PredictionWarsTopBar({
             {title}
           </Text>
         </View>
+
         <View style={styles.xpCluster}>
           <View style={styles.xpDot}>
             <Text style={[styles.xpDotTxt, { fontFamily: bold }]}>XP</Text>
           </View>
           <View style={styles.xpPill}>
-            <Text style={[styles.xpVal, { fontFamily: medium }]}>{xp}</Text>
+            <Text style={[styles.xpVal, { fontFamily: medium }]}>{xpLabel}</Text>
           </View>
         </View>
       </View>
@@ -61,40 +81,77 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 200,
-    paddingHorizontal: 10,
-    paddingBottom: 8,
     backgroundColor: '#030303',
+    paddingHorizontal: 10,
+    paddingBottom: 10,
   },
-  row: {
+  inner: {
+    height: 46,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    minHeight: WARS_TOP_BAR_HEIGHT,
   },
-  rowRtl: { flexDirection: 'row-reverse' },
   leftCluster: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-start',
     gap: 12,
     flex: 1,
     minWidth: 0,
+    height: 38,
+    maxWidth: 232,
   },
-  side: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  title: { color: '#fff', fontSize: 20, flexShrink: 1 },
-  xpCluster: {
-    flexDirection: 'row',
+  leftClusterRtl: {
+    flexDirection: 'row-reverse',
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backIcon: {
+    width: 28,
+    height: 28,
+  },
+  backIconRtl: {
+    transform: [{ scaleX: -1 }],
+  },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    flexShrink: 1,
+    textAlign: 'center',
+  },
+  xpCluster: {
+    width: 111,
+    height: 39,
+    position: 'relative',
+  },
+  xpDot: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 39,
+    height: 39,
+    borderRadius: 35,
+    backgroundColor: '#05010E',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
   },
   xpPill: {
+    position: 'absolute',
+    left: 17,
+    top: 0,
+    width: 94,
     height: 39,
-    minWidth: 94,
     paddingLeft: 28,
-    paddingRight: 20,
-    marginLeft: -12,
+    paddingRight: 16,
     borderTopRightRadius: 48,
     borderBottomRightRadius: 48,
-    borderTopLeftRadius: 0,
-    borderBottomLeftRadius: 0,
     backgroundColor: '#05010E',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#000',
@@ -106,17 +163,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8.6,
     elevation: 8,
   },
-  xpDot: {
-    width: 39,
-    height: 39,
-    borderRadius: 35,
-    backgroundColor: '#05010E',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
+  xpDotTxt: {
+    color: '#EFE5FF',
+    fontSize: 16,
   },
-  xpDotTxt: { color: '#EFE5FF', fontSize: 16 },
-  xpVal: { color: '#EFE5FF', fontSize: 16 },
+  xpVal: {
+    color: '#EFE5FF',
+    fontSize: 16,
+  },
 });
