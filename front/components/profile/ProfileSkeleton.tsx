@@ -213,8 +213,9 @@ ActionButtonsSkeleton.displayName = 'ActionButtonsSkeleton';
  */
 export const ContentTabsSkeleton: React.FC = memo(() => (
   <View style={styles.tabsContainer}>
-    <Skeleton width={80} height={36} borderRadius={18} />
-    <Skeleton width={80} height={36} borderRadius={18} />
+    <Skeleton width={89} height={35} borderRadius={8} />
+    <Skeleton width={89} height={35} borderRadius={8} />
+    <Skeleton width={93} height={35} borderRadius={8} />
   </View>
 ));
 
@@ -345,9 +346,16 @@ const styles = StyleSheet.create({
   tabsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 16,
+    alignItems: 'center',
+    gap: 28,
+    height: 53,
+    marginHorizontal: 20,
     marginBottom: 16,
-    paddingHorizontal: 20,
+    backgroundColor: ProfileTheme.colors.profileTabBar,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileTabBorder,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   videoGridContainer: {
     flexDirection: 'row',

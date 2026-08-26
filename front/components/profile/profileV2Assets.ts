@@ -19,4 +19,10 @@ export const PROFILE_ICONS = {
   video: require('../../assets/images/profile-v2/icon-video.png'),
   followers: require('../../assets/images/profile-v2/icon-followers.png'),
   following: require('../../assets/images/profile-v2/icon-following.png'),
+  tabTrophy: require('../../assets/images/profile-v2/tab-trophy.svg'),
+  tabTrophyActive: require('../../assets/images/profile-v2/tab-trophy-active.svg'),
+  tabBullseye: require('../../assets/images/profile-v2/tab-bullseye.svg'),
+  tabBullseyeActive: require('../../assets/images/profile-v2/tab-bullseye-active.svg'),
+  tabVideo: require('../../assets/images/profile-v2/tab-video-inactive.svg'),
+  tabVideoActive: require('../../assets/images/profile-v2/tab-video.svg'),
 } as const;
