@@ -242,7 +242,7 @@ function TeamColumn({ name, logo }: { name: string; logo: string | null }) {
       </Text>
     </View>
   );
-});
+}
 
 export const ProfileAnalyticsTab: React.FC<Props> = ({
   predictionStats,
