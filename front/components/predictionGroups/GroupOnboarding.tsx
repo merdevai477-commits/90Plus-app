@@ -1,10 +1,11 @@
 /**
- * Hub — create, join by code, and suggested groups (most members first).
+ * Hub — create, join by code, and suggested groups (Figma 469:1389).
  */
 
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { ChevronLeft, Plus, Search } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,11 +22,24 @@ import { useToast } from '../../contexts/ToastContext';
 import { useTranslation } from '../../src/i18n';
 import type { RankedGroupRow } from '../../services/predictionGroups.service';
 import { parseGroupCodeFromUrl } from '../../services/predictionGroups.service';
-import { GroupAvatar } from './GroupAvatar';
 import { GroupBanBanner } from './GroupBanBanner';
-import { PG, PG_GRADIENTS, PG_GLOW_PURPLE, PG_RADII, usePGFonts } from './theme';
+import { PG, PG_GRADIENTS, usePGFonts } from './theme';
 
-const GROUP_HERO = require('../../assets/images/groub pr.jpg');
+const GROUP_HERO = require('../../assets/images/prediction-groups/hero-stadium.png');
+const ICON_PLUS = require('../../assets/images/prediction-groups/icon-plus.svg');
+const ICON_SEARCH = require('../../assets/images/prediction-groups/icon-search.svg');
+const ICON_DOOR = require('../../assets/images/prediction-groups/icon-door-enter.svg');
+
+const CARD_BORDER = '#53198A';
+const CARD_BG = ['#0C051A', '#07040D'] as const;
+const ADMIN_BADGE_BG = ['rgba(54,5,100,0.53)', 'rgba(6,1,11,0.53)'] as const;
+const JOIN_PLACEHOLDER = '#5D5D5D';
+const OR_LINE = '#1F1F1F';
+const OR_TEXT = '#787878';
+const MEMBERS_MUTED = '#737373';
+const ADMIN_LABEL = '#914ED2';
+const SUBTITLE = '#B5B5B5';
+const FIELD_BORDER = '#262626';
 
 export function GroupOnboarding({
   isRTL,
@@ -48,7 +62,7 @@ export function GroupOnboarding({
   suggestionsLoading?: boolean;
   joiningCode?: string | null;
 }) {
-  const { medium, bold, extra } = usePGFonts();
+  const { medium, bold } = usePGFonts();
   const { t } = useTranslation();
   const ob = t.predictionGroups.onboarding;
   const common = t.predictionGroups.common;
@@ -97,11 +111,11 @@ export function GroupOnboarding({
     <View style={styles.wrap}>
       {groupBan?.until ? <GroupBanBanner untilIso={groupBan.until} /> : null}
 
-      <View style={[styles.heroShell, { height: 360 + topInset }]}>
+      <View style={[styles.heroShell, { height: 340 + topInset }]}>
         <ImageBackground source={GROUP_HERO} style={styles.heroBg} resizeMode="cover">
           <LinearGradient
-            colors={['rgba(3,3,3,0.12)', 'transparent', 'rgba(3,3,3,0.55)', PG.bg]}
-            locations={[0, 0.18, 0.72, 1]}
+            colors={['rgba(34,34,34,0.39)', 'rgba(3,3,3,0.72)', PG.bg]}
+            locations={[0.22, 0.55, 1]}
             style={StyleSheet.absoluteFill}
           />
           {onBack ? (
@@ -114,105 +128,173 @@ export function GroupOnboarding({
               <ChevronLeft size={22} color="#fff" strokeWidth={2.25} />
             </Pressable>
           ) : null}
-          <View style={styles.heroInner}>
-            <Text style={[styles.title, { fontFamily: extra }]}>{ob.heroTitle}</Text>
+          <View style={[styles.heroInner, { paddingBottom: 8 }]}>
+            <Text style={[styles.title, { fontFamily: bold }]}>{ob.heroTitle}</Text>
             <Text style={[styles.sub, { fontFamily: medium }]}>{ob.heroSubtitle}</Text>
           </View>
         </ImageBackground>
       </View>
 
-      <Pressable
-        onPress={() => {
-          if (isBanned) {
-            toast.showError(ob.bannedTitle, ob.bannedCreate);
-            return;
-          }
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-          onCreatePress();
-        }}
-        style={({ pressed }) => [pressed && { opacity: 0.92 }]}
-      >
-        <LinearGradient
-          colors={[...PG_GRADIENTS.purple]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.primaryCard, row]}
+      <View style={styles.body}>
+        <Pressable
+          onPress={() => {
+            if (isBanned) {
+              toast.showError(ob.bannedTitle, ob.bannedCreate);
+              return;
+            }
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            onCreatePress();
+          }}
+          style={({ pressed }) => [pressed && { opacity: 0.92 }]}
         >
-          <Plus size={20} color="#fff" />
-          <Text style={[styles.primaryTxt, { fontFamily: bold }]}>{ob.createGroup}</Text>
-        </LinearGradient>
-      </Pressable>
+          <LinearGradient
+            colors={[...PG_GRADIENTS.purple]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={[styles.primaryBtn, row]}
+          >
+            <Text style={[styles.primaryTxt, { fontFamily: bold }]}>{ob.createGroup}</Text>
+            <Image source={ICON_PLUS} style={styles.icon24} contentFit="contain" transition={0} />
+          </LinearGradient>
+        </Pressable>
 
-      <View style={[styles.orRow, row]}>
-        <View style={styles.orLine} />
-        <Text style={[styles.orTxt, { fontFamily: medium }]}>{ob.or}</Text>
-        <View style={styles.orLine} />
+        <View style={[styles.orRow, row]}>
+          <View style={styles.orLine} />
+          <Text style={[styles.orTxt, { fontFamily: medium }]}>{ob.or}</Text>
+          <View style={styles.orLine} />
+        </View>
+
+        <View style={[styles.joinField, isRTL && styles.joinFieldRtl]}>
+          {isRTL ? null : busy ? (
+            <ActivityIndicator color={PG.primaryLight} size="small" />
+          ) : (
+            <Image source={ICON_SEARCH} style={styles.icon24} contentFit="contain" transition={0} />
+          )}
+          <TextInput
+            value={code}
+            onChangeText={setCode}
+            placeholder={ob.joinPlaceholder}
+            placeholderTextColor={JOIN_PLACEHOLDER}
+            autoCapitalize="characters"
+            returnKeyType="go"
+            onSubmitEditing={() => void submitCode(code)}
+            editable={!busy && !isBanned}
+            style={[styles.joinInput, { fontFamily: medium, textAlign: align }]}
+          />
+          {isRTL ? (
+            busy ? (
+              <ActivityIndicator color={PG.primaryLight} size="small" />
+            ) : (
+              <Image source={ICON_SEARCH} style={styles.icon24} contentFit="contain" transition={0} />
+            )
+          ) : null}
+        </View>
+
+        <View style={[styles.sectionHead, isRTL ? styles.sectionHeadRtl : null]}>
+          {isRTL ? (
+            <>
+              <Text style={[styles.sectionTitle, { fontFamily: bold, textAlign: 'right' }]}>
+                {ob.myGroups}
+              </Text>
+              <View style={styles.sectionBar} />
+            </>
+          ) : (
+            <>
+              <View style={styles.sectionBar} />
+              <Text style={[styles.sectionTitle, { fontFamily: bold, textAlign: 'left' }]}>
+                {ob.myGroups}
+              </Text>
+            </>
+          )}
+        </View>
+
+        {suggestionsLoading && ranked.length === 0 ? (
+          <ActivityIndicator color={PG.primaryLight} style={{ marginTop: 12 }} />
+        ) : ranked.length === 0 ? (
+          <Text style={[styles.empty, { fontFamily: medium, textAlign: align }]}>
+            {ob.emptySuggestions}
+          </Text>
+        ) : (
+          <View style={styles.list}>
+            {ranked.map((g) => {
+              const joining = activeCode === g.inviteCode || joiningCode === g.inviteCode;
+              const owned = Boolean(g.isMine);
+              return (
+                <Pressable
+                  key={g.id}
+                  disabled={joining || isBanned}
+                  onPress={() => void submitCode(g.inviteCode)}
+                  style={({ pressed }) => [pressed && { opacity: 0.9 }]}
+                >
+                  <LinearGradient
+                    colors={[...CARD_BG]}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={styles.groupCard}
+                  >
+                    <View style={styles.cardAction}>
+                      {joining ? (
+                        <ActivityIndicator color={PG.primaryLight} size="small" />
+                      ) : owned ? (
+                        <LinearGradient
+                          colors={[...ADMIN_BADGE_BG]}
+                          start={{ x: 0.5, y: 0 }}
+                          end={{ x: 0.5, y: 1 }}
+                          style={styles.adminBadge}
+                        >
+                          <Text style={[styles.adminBadgeTxt, { fontFamily: medium }]}>
+                            {ob.managedByYou}
+                          </Text>
+                        </LinearGradient>
+                      ) : (
+                        <Image
+                          source={ICON_DOOR}
+                          style={styles.icon24}
+                          contentFit="contain"
+                          transition={0}
+                        />
+                      )}
+                    </View>
+
+                    <View style={styles.groupInfo}>
+                      <View style={styles.groupMeta}>
+                        <Text
+                          style={[styles.groupName, { fontFamily: medium }]}
+                          numberOfLines={1}
+                        >
+                          {g.name}
+                        </Text>
+                        <Text style={[styles.groupMembers, { fontFamily: medium }]}>
+                          {common.members.replace('{count}', String(g.members))}
+                        </Text>
+                      </View>
+                      <View style={styles.avatarWrap}>
+                        {g.avatarUrl ? (
+                          <Image
+                            source={{ uri: g.avatarUrl }}
+                            style={styles.avatar}
+                            contentFit="cover"
+                            transition={0}
+                          />
+                        ) : (
+                          <View style={[styles.avatar, styles.avatarFallback]} />
+                        )}
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
       </View>
-
-      <View style={[styles.joinField, row]}>
-        <Search size={18} color={PG.textMuted} />
-        <TextInput
-          value={code}
-          onChangeText={setCode}
-          placeholder={ob.joinPlaceholder}
-          placeholderTextColor={PG.textMuted}
-          autoCapitalize="characters"
-          returnKeyType="go"
-          onSubmitEditing={() => void submitCode(code)}
-          editable={!busy && !isBanned}
-          style={[styles.joinInput, { fontFamily: medium, textAlign: align }]}
-        />
-        {busy ? <ActivityIndicator color={PG.primaryLight} size="small" /> : null}
-      </View>
-
-      <View style={styles.suggestHead}>
-        <View style={styles.suggestBar} />
-        <Text style={[styles.suggestTitle, { fontFamily: extra, textAlign: align }]}>{ob.suggestions}</Text>
-      </View>
-
-      {suggestionsLoading && ranked.length === 0 ? (
-        <ActivityIndicator color={PG.primaryLight} style={{ marginTop: 12 }} />
-      ) : ranked.length === 0 ? (
-        <Text style={[styles.empty, { fontFamily: medium, textAlign: align }]}>{ob.emptySuggestions}</Text>
-      ) : (
-        ranked.map((g) => {
-          const joining = activeCode === g.inviteCode || joiningCode === g.inviteCode;
-          return (
-            <Pressable
-              key={g.id}
-              disabled={joining || isBanned}
-              onPress={() => void submitCode(g.inviteCode)}
-              style={({ pressed }) => [styles.suggestCard, row, pressed && { opacity: 0.9 }]}
-            >
-              <GroupAvatar imageUri={g.avatarUrl} size={46} />
-              <View style={[styles.suggestMeta, { alignItems: isRTL ? 'flex-end' : 'flex-start' }]}>
-                <Text style={[styles.suggestName, { fontFamily: bold, textAlign: align }]} numberOfLines={1}>
-                  {g.name}
-                </Text>
-                <Text style={[styles.suggestMembers, { fontFamily: medium }]}>
-                  {common.members.replace('{count}', String(g.members))}
-                </Text>
-              </View>
-              <View style={styles.joinChip}>
-                {joining ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={[styles.joinChipTxt, { fontFamily: medium }]}>{common.join}</Text>
-                )}
-              </View>
-            </Pressable>
-          );
-        })
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: 20, paddingBottom: 28, gap: 16 },
+  wrap: { paddingBottom: 28 },
   heroShell: {
-    marginHorizontal: -20,
-    marginTop: 0,
     overflow: 'hidden',
   },
   heroBg: { flex: 1, justifyContent: 'flex-end' },
@@ -224,58 +306,144 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroInner: { alignItems: 'center', gap: 8, paddingBottom: 10, paddingHorizontal: 24 },
-  title: { fontSize: 26, color: PG.text, textAlign: 'center' },
-  sub: { fontSize: 15, color: PG.textSecondary, textAlign: 'center' },
-  primaryCard: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    gap: 10,
-    justifyContent: 'center',
-    borderRadius: PG_RADII.xl,
-    minHeight: 54,
-    ...PG_GLOW_PURPLE,
-  },
-  primaryTxt: { color: '#fff', fontSize: 16 },
-  orRow: { alignItems: 'center', gap: 10, paddingHorizontal: 8 },
-  orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.18)' },
-  orTxt: { color: PG.textMuted, fontSize: 13 },
-  joinField: {
-    alignItems: 'center',
-    gap: 10,
-    minHeight: 52,
-    paddingHorizontal: 14,
-    borderRadius: PG_RADII.lg,
-    backgroundColor: PG.card,
-    borderWidth: 1,
-    borderColor: PG.borderBright,
-  },
-  joinInput: { flex: 1, color: PG.text, fontSize: 14, paddingVertical: 12 },
-  suggestHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  suggestBar: { width: 3, height: 16, borderRadius: 2, backgroundColor: PG.primary },
-  suggestTitle: { flex: 1, color: PG.text, fontSize: 16 },
-  empty: { color: PG.textMuted, fontSize: 13, paddingVertical: 8 },
-  suggestCard: {
+  heroInner: {
     alignItems: 'center',
     gap: 12,
-    padding: 12,
-    borderRadius: PG_RADII.lg,
-    backgroundColor: PG.card,
-    borderWidth: 1,
-    borderColor: PG.border,
+    paddingHorizontal: 24,
   },
-  suggestMeta: { flex: 1, minWidth: 0 },
-  suggestName: { color: PG.text, fontSize: 15 },
-  suggestMembers: { color: PG.textMuted, fontSize: 12, marginTop: 2 },
-  joinChip: {
-    minWidth: 64,
-    height: 32,
-    paddingHorizontal: 12,
+  title: {
+    fontSize: 32,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 40,
+  },
+  sub: {
+    fontSize: 18,
+    color: SUBTITLE,
+    textAlign: 'center',
+  },
+  body: {
+    paddingHorizontal: 22,
+    gap: 16,
+    marginTop: 18,
+  },
+  primaryBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
     borderRadius: 16,
-    backgroundColor: PG.purple,
+    paddingVertical: 21,
+    minHeight: 66,
+  },
+  primaryTxt: { color: '#fff', fontSize: 18 },
+  icon24: { width: 24, height: 24 },
+  orRow: { alignItems: 'center', gap: 18, paddingHorizontal: 8 },
+  orLine: { flex: 1, height: 1, backgroundColor: OR_LINE },
+  orTxt: { color: OR_TEXT, fontSize: 20 },
+  joinField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    height: 58,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    backgroundColor: '#030303',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: FIELD_BORDER,
+  },
+  joinFieldRtl: {
+    justifyContent: 'flex-end',
+  },
+  joinInput: {
+    flex: 1,
+    color: PG.text,
+    fontSize: 16,
+    paddingVertical: 10,
+  },
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  sectionHeadRtl: {
+    justifyContent: 'flex-end',
+  },
+  sectionBar: {
+    width: 2,
+    height: 30,
+    borderRadius: 1,
+    backgroundColor: PG.primary,
+  },
+  sectionTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+  },
+  empty: { color: MEMBERS_MUTED, fontSize: 13, paddingVertical: 8 },
+  list: { gap: 8 },
+  groupCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 77,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: CARD_BORDER,
+  },
+  cardAction: {
+    minWidth: 53,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  joinChipTxt: { color: '#fff', fontSize: 12 },
+  adminBadge: {
+    width: 53,
+    height: 23,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: CARD_BORDER,
+  },
+  adminBadgeTxt: {
+    color: ADMIN_LABEL,
+    fontSize: 10,
+  },
+  groupInfo: {
+    flexDirection: 'row',
+    flexShrink: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 12,
+    minWidth: 0,
+  },
+  groupMeta: {
+    flexShrink: 1,
+    gap: 6,
+    minWidth: 0,
+    alignItems: 'flex-end',
+  },
+  groupName: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    textAlign: 'right',
+  },
+  groupMembers: {
+    color: MEMBERS_MUTED,
+    fontSize: 11,
+    textAlign: 'right',
+  },
+  avatarWrap: {
+    width: 40,
+    height: 41,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarFallback: {
+    backgroundColor: 'rgba(128,59,69,0.5)',
+  },
 });

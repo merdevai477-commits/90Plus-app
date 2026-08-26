@@ -1281,6 +1281,8 @@ export const en = {
       joinPlaceholder: 'Join a group...',
       or: 'or',
       suggestions: 'Suggestions',
+      myGroups: 'My groups',
+      managedByYou: 'Yours',
       emptySuggestions: 'No suggested groups yet',
       groupName: 'Group name',
       groupNamePlaceholder: 'e.g. Football Heroes',

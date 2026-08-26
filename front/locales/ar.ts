@@ -1369,6 +1369,8 @@ export const ar = {
       joinPlaceholder: 'انضم إلى مجموعة...',
       or: 'أو',
       suggestions: 'اقتراحات',
+      myGroups: 'مجموعاتي',
+      managedByYou: 'إدارتك',
       emptySuggestions: 'لا توجد مجموعات مقترحة حالياً',
       groupName: 'اسم المجموعة',
       groupNamePlaceholder: 'مثال: أبطال كرة القدم',
