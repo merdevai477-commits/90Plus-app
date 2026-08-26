@@ -33,8 +33,14 @@ export function MatchVsCard({
   const team = (side: 'home' | 'away', size: number) => {
     const tm = match[side];
     return (
-      <View style={[styles.team, { width: side === 'home' ? 60 : 49 }]}>
-        <TeamBadge name={tm.name} logo={tm.logo ?? undefined} size={size} color="transparent" />
+      <View style={[styles.team, { width: side === 'home' ? 72 : 64 }]}>
+        <TeamBadge
+          name={tm.name}
+          logo={tm.logo ?? undefined}
+          size={size}
+          color="transparent"
+          highQuality
+        />
         <Text
           style={[
             styles.teamName,
@@ -56,7 +62,7 @@ export function MatchVsCard({
       style={styles.card}
     >
       <View style={[styles.row, row]}>
-        {team('home', 40)}
+        {team('home', 52)}
         <View style={styles.mid}>
           <Text style={[styles.vs, { fontFamily: bold }]}>VS</Text>
           <Text style={[styles.time, { fontFamily: medium }]}>{match.time}</Text>
@@ -77,7 +83,7 @@ export function MatchVsCard({
             </LinearGradient>
           </Pressable>
         </View>
-        {team('away', 43)}
+        {team('away', 54)}
       </View>
     </LinearGradient>
   );

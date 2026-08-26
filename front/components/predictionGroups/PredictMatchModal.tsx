@@ -1,27 +1,39 @@
 /**
- * Predict a single match: winner cards + score boxes + confirm.
+ * Predict a single match — Figma 494:4661.
  */
 
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Info, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import TeamBadge from '../common/TeamBadge';
+import GradientText from '../ShareWin/components/GradientText';
 import { useTranslation } from '../../src/i18n';
+import { prefetchImageUrls } from '../../utils/prefetchMatchAssets';
+import { with365ImageSize } from '../../utils/scores365AthletePhoto';
 import type { PredictionMatch } from './data';
 import { ScoreKeypad } from './ScoreKeypad';
-import { PG, PG_GRADIENTS, PG_GLOW_PURPLE, PG_RADII, usePGFonts } from './theme';
+import { usePGFonts } from './theme';
+
+const ICON_CLOSE = require('../../assets/images/prediction-groups/icon-close-cross.svg');
+const ICON_INFO = require('../../assets/images/prediction-groups/icon-info-outline.svg');
+
+const VS_GRADIENT = ['#A855F7', '#633291'] as const;
+const CONFIRM_GRADIENT = ['#3D0AB3', '#190448'] as const;
+const CARD_GRADIENT = ['#0C051A', '#07040D'] as const;
 
 type Winner = 'home' | 'away' | null;
 type ScoreSide = 'home' | 'away' | null;
@@ -47,8 +59,9 @@ export function PredictMatchModal({
   }) => Promise<void>;
 }) {
   const insets = useSafeAreaInsets();
-  const { extra, bold, medium } = usePGFonts();
-  const { t } = useTranslation();
+  const { height: windowH } = useWindowDimensions();
+  const { bold, medium, regular } = usePGFonts();
+  const { t, direction } = useTranslation();
   const pg = t.predictionGroups.predictions;
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
 
@@ -65,6 +78,19 @@ export function PredictMatchModal({
       setKeypad(null);
     }
   }, [visible, match?.id]);
+
+  useEffect(() => {
+    if (!visible || !match) return;
+    prefetchImageUrls(
+      [
+        with365ImageSize(match.home.logo, 256),
+        with365ImageSize(match.away.logo, 256),
+        match.home.logo,
+        match.away.logo,
+      ],
+      8,
+    );
+  }, [visible, match?.id, match?.home.logo, match?.away.logo]);
 
   const hasScores = homeScore != null && awayScore != null;
   const derivedWinner = useMemo<'home' | 'draw' | 'away' | null>(() => {
@@ -96,7 +122,7 @@ export function PredictMatchModal({
 
   if (!match) return null;
 
-  const teamCard = (side: 'home' | 'away') => {
+  const teamPick = (side: 'home' | 'away') => {
     const tm = match[side];
     const selected = winner === side;
     return (
@@ -107,8 +133,17 @@ export function PredictMatchModal({
         }}
         style={[styles.pick, selected && styles.pickOn]}
       >
-        <TeamBadge name={tm.name} logo={tm.logo ?? undefined} size={44} color="transparent" />
-        <Text style={[styles.pickName, { fontFamily: medium }]} numberOfLines={2}>
+        <TeamBadge
+          name={tm.name}
+          logo={tm.logo ?? undefined}
+          size={side === 'home' ? 52 : 56}
+          color="transparent"
+          highQuality
+        />
+        <Text
+          style={[styles.pickName, { fontFamily: medium, writingDirection: direction }]}
+          numberOfLines={2}
+        >
           {tm.name}
         </Text>
       </Pressable>
@@ -117,73 +152,180 @@ export function PredictMatchModal({
 
   const scoreBox = (side: 'home' | 'away', value: number | null) => (
     <Pressable onPress={() => setKeypad(side)} style={styles.scoreBox}>
-      <Text style={[styles.scoreVal, { fontFamily: extra }]}>{value == null ? '—' : value}</Text>
+      <Text style={[styles.scoreVal, { fontFamily: bold }]}>
+        {value == null ? '—' : String(value)}
+      </Text>
     </Pressable>
   );
 
+  const maxCardH = Math.min(732, windowH * 0.92);
+
   return (
-    <>
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
-          <View style={styles.head}>
-            <Pressable onPress={onClose} style={styles.close} hitSlop={8}>
-              <X size={20} color={PG.textMuted} />
-            </Pressable>
-            <Text style={[styles.title, { fontFamily: extra }]}>{pg.modalTitle}</Text>
-            <View style={styles.close} />
-          </View>
-
-          <View style={[styles.matchRow, row]}>
-            <View style={styles.team}>
-              <TeamBadge name={match.home.name} logo={match.home.logo ?? undefined} size={52} color="transparent" />
-              <Text style={[styles.teamName, { fontFamily: medium }]} numberOfLines={2}>{match.home.name}</Text>
-            </View>
-            <View style={styles.vsCol}>
-              <Text style={[styles.vs, { fontFamily: extra }]}>VS</Text>
-              <Text style={[styles.time, { fontFamily: medium }]}>{match.time}</Text>
-            </View>
-            <View style={styles.team}>
-              <TeamBadge name={match.away.name} logo={match.away.logo ?? undefined} size={52} color="transparent" />
-              <Text style={[styles.teamName, { fontFamily: medium }]} numberOfLines={2}>{match.away.name}</Text>
-            </View>
-          </View>
-
-          <Text style={[styles.section, { fontFamily: extra }]}>{pg.whoWins}</Text>
-          <View style={[styles.picks, row]}>
-            {teamCard('home')}
-            {teamCard('away')}
-          </View>
-
-          <Text style={[styles.section, { fontFamily: extra }]}>{pg.matchScore}</Text>
-          <View style={[styles.scores, row]}>
-            {scoreBox('home', homeScore)}
-            <Text style={[styles.vs, { fontFamily: extra }]}>VS</Text>
-            {scoreBox('away', awayScore)}
-          </View>
-
-          <Pressable
-            disabled={busy || !derivedWinner}
-            onPress={() => void submit()}
-            style={({ pressed }) => [pressed && { opacity: 0.92 }, (!derivedWinner || busy) && { opacity: 0.55 }]}
+      <View style={[styles.backdrop, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[styles.cardWrap, { maxHeight: maxCardH }]}>
+          <LinearGradient
+            colors={CARD_GRADIENT}
+            start={{ x: 0.5, y: 1 }}
+            end={{ x: 0.5, y: 0 }}
+            style={styles.card}
           >
-            <LinearGradient colors={[...PG_GRADIENTS.purple]} style={styles.confirm}>
-              {busy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={[styles.confirmTxt, { fontFamily: bold }]}>{pg.confirmPrediction}</Text>
-              )}
-            </LinearGradient>
-          </Pressable>
-          <View style={[styles.hintRow, row]}>
-            <Info size={14} color={PG.textMuted} />
-            <Text style={[styles.hint, { fontFamily: medium }]}>{pg.editBeforeKickoff}</Text>
-          </View>
+            <ScrollView
+              bounces={false}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollInner}
+            >
+              <View style={[styles.head, row]}>
+                <Pressable
+                  onPress={onClose}
+                  style={styles.close}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                >
+                  <Image
+                    source={ICON_CLOSE}
+                    style={styles.closeIcon}
+                    contentFit="contain"
+                    transition={0}
+                  />
+                </Pressable>
+              </View>
+
+              <View style={styles.body}>
+                <Text
+                  style={[styles.title, { fontFamily: bold, writingDirection: direction }]}
+                >
+                  {pg.modalTitle}
+                </Text>
+
+                <View style={[styles.matchRow, row]}>
+                  <View style={styles.teamColHome}>
+                    <TeamBadge
+                      name={match.home.name}
+                      logo={match.home.logo ?? undefined}
+                      size={56}
+                      color="transparent"
+                      highQuality
+                    />
+                    <Text
+                      style={[styles.teamName, { fontFamily: bold, writingDirection: direction }]}
+                      numberOfLines={2}
+                    >
+                      {match.home.name}
+                    </Text>
+                  </View>
+                  <View style={styles.vsCol}>
+                    <GradientText
+                      colors={VS_GRADIENT}
+                      style={[styles.vsBig, { fontFamily: bold }]}
+                    >
+                      VS
+                    </GradientText>
+                    <Text style={[styles.time, { fontFamily: medium }]}>{match.time}</Text>
+                  </View>
+                  <View style={styles.teamColAway}>
+                    <TeamBadge
+                      name={match.away.name}
+                      logo={match.away.logo ?? undefined}
+                      size={58}
+                      color="transparent"
+                      highQuality
+                    />
+                    <Text
+                      style={[styles.teamName, { fontFamily: bold, writingDirection: direction }]}
+                      numberOfLines={2}
+                    >
+                      {match.away.name}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.block}>
+                  <Text
+                    style={[styles.section, { fontFamily: bold, writingDirection: direction }]}
+                  >
+                    {pg.whoWins}
+                  </Text>
+                  <View style={[styles.picks, row]}>
+                    {teamPick('home')}
+                    {teamPick('away')}
+                  </View>
+                </View>
+
+                <View style={styles.block}>
+                  <Text
+                    style={[styles.section, { fontFamily: bold, writingDirection: direction }]}
+                  >
+                    {pg.matchScore}
+                  </Text>
+                  <View style={[styles.scores, row]}>
+                    {scoreBox('home', homeScore)}
+                    <GradientText
+                      colors={VS_GRADIENT}
+                      style={[styles.vsScore, { fontFamily: bold }]}
+                    >
+                      VS
+                    </GradientText>
+                    {scoreBox('away', awayScore)}
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.footer}>
+                <Pressable
+                  disabled={busy || !derivedWinner}
+                  onPress={() => void submit()}
+                  style={({ pressed }) => [
+                    pressed && { opacity: 0.92 },
+                    (!derivedWinner || busy) && { opacity: 0.55 },
+                    styles.confirmPress,
+                  ]}
+                >
+                  <LinearGradient
+                    colors={CONFIRM_GRADIENT}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={styles.confirm}
+                  >
+                    {busy ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={[styles.confirmTxt, { fontFamily: bold }]}>
+                        {pg.confirmPrediction}
+                      </Text>
+                    )}
+                  </LinearGradient>
+                </Pressable>
+                <View style={[styles.hintRow, row]}>
+                  <Text
+                    style={[
+                      styles.hint,
+                      { fontFamily: regular ?? medium, writingDirection: direction },
+                    ]}
+                  >
+                    {pg.editBeforeKickoff}
+                  </Text>
+                  <Image
+                    source={ICON_INFO}
+                    style={styles.infoIcon}
+                    contentFit="contain"
+                    transition={0}
+                  />
+                </View>
+              </View>
+            </ScrollView>
+          </LinearGradient>
         </View>
+
         <ScoreKeypad
           embedded
           visible={keypad != null}
-          title={keypad === 'away' ? pg.keypadAway.replace('{team}', match.away.name) : pg.keypadHome.replace('{team}', match.home.name)}
+          title={
+            keypad === 'away'
+              ? pg.keypadAway.replace('{team}', match.away.name)
+              : pg.keypadHome.replace('{team}', match.home.name)
+          }
           value={keypad === 'away' ? awayScore ?? 0 : homeScore ?? 0}
           confirmLabel={pg.confirmScore}
           onChange={(n) => {
@@ -198,71 +340,196 @@ export function PredictMatchModal({
         />
       </View>
     </Modal>
-    </>
   );
 }
 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    position: 'relative',
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.78)',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
   },
-  sheet: {
-    backgroundColor: PG.bg,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderWidth: 1,
-    borderColor: PG.borderBright,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    gap: 12,
+  cardWrap: {
+    borderRadius: 44,
+    overflow: 'hidden',
+    shadowColor: 'rgba(90,18,158,0.36)',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 26,
+    elevation: 18,
+    zIndex: 2,
   },
-  head: { flexDirection: 'row', alignItems: 'center' },
-  close: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, color: PG.text, fontSize: 16, textAlign: 'center' },
-  matchRow: { alignItems: 'center', paddingVertical: 8 },
-  team: { flex: 1, alignItems: 'center', gap: 6 },
-  teamName: { color: PG.text, fontSize: 12, textAlign: 'center' },
-  vsCol: { width: 72, alignItems: 'center', gap: 4 },
-  vs: { color: PG.primary, fontSize: 16 },
-  time: { color: PG.textMuted, fontSize: 11 },
-  section: { color: PG.text, fontSize: 15, marginTop: 4 },
-  picks: { gap: 10 },
-  pick: {
-    flex: 1,
+  card: {
+    borderRadius: 44,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(79,10,144,0.62)',
+    overflow: 'hidden',
+  },
+  scrollInner: {
+    paddingVertical: 16,
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: PG_RADII.lg,
-    backgroundColor: PG.card,
-    borderWidth: 1,
-    borderColor: PG.borderSoft,
+    gap: 48,
   },
-  pickOn: { borderColor: PG.primary, backgroundColor: 'rgba(168,85,247,0.16)' },
-  pickName: { color: PG.text, fontSize: 12, textAlign: 'center' },
-  scores: { alignItems: 'center', justifyContent: 'center', gap: 16 },
-  scoreBox: {
-    width: 88,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: PG.cardElevated,
-    borderWidth: 1,
-    borderColor: PG.border,
+  head: {
+    width: '100%',
+    height: 35,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  close: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scoreVal: { color: PG.text, fontSize: 24 },
-  confirm: {
-    minHeight: 52,
-    borderRadius: PG_RADII.xl,
+  closeIcon: { width: 36, height: 36 },
+  body: {
+    width: '100%',
+    maxWidth: 331,
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 12,
+  },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    textAlign: 'center',
+    width: '100%',
+  },
+  matchRow: {
+    width: '100%',
+    height: 101,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    borderRadius: 25,
+  },
+  teamColHome: {
+    width: 81,
+    alignItems: 'center',
+    gap: 9,
+  },
+  teamColAway: {
+    width: 72,
+    alignItems: 'center',
+    gap: 9,
+  },
+  teamName: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  vsCol: {
+    width: 105,
+    height: 101,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
+  },
+  vsBig: {
+    color: '#A855F7',
+    fontSize: 21,
+    textAlign: 'center',
+  },
+  time: {
+    color: '#777777',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  block: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 16,
     marginTop: 8,
-    ...PG_GLOW_PURPLE,
   },
-  confirmTxt: { color: '#fff', fontSize: 16 },
-  hintRow: { alignItems: 'center', justifyContent: 'center', gap: 6, paddingBottom: 4 },
-  hint: { color: PG.textMuted, fontSize: 11, flexShrink: 1 },
+  section: {
+    color: '#FFFFFF',
+    fontSize: 23,
+    textAlign: 'center',
+    width: '100%',
+  },
+  picks: {
+    width: '100%',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  pick: {
+    width: 147,
+    height: 114,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    borderRadius: 16,
+    backgroundColor: '#07040D',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#241830',
+    paddingHorizontal: 8,
+  },
+  pickOn: {
+    borderColor: '#A855F7',
+    backgroundColor: 'rgba(168,85,247,0.12)',
+  },
+  pickName: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  scores: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 6,
+  },
+  scoreBox: {
+    width: 95,
+    height: 74,
+    borderRadius: 16,
+    backgroundColor: '#07040D',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#241830',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scoreVal: {
+    color: '#FFFFFF',
+    fontSize: 28,
+  },
+  vsScore: {
+    color: '#A855F7',
+    fontSize: 26,
+    textAlign: 'center',
+  },
+  footer: {
+    width: '100%',
+    maxWidth: 331,
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  confirmPress: { width: '100%' },
+  confirm: {
+    width: '100%',
+    paddingVertical: 21,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmTxt: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  hintRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  hint: {
+    color: '#6B6B6B',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  infoIcon: { width: 16, height: 16 },
 });

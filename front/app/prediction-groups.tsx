@@ -12,6 +12,8 @@ import { useToast } from '../contexts/ToastContext';
 import { useXp } from '../contexts/XpContext';
 import { usePredictionGroup, type GroupNavKey } from '../hooks/usePredictionGroup';
 import { useImageUpload } from '../hooks/useImageUpload';
+import { prefetchImageUrls } from '../utils/prefetchMatchAssets';
+import { with365ImageSize } from '../utils/scores365AthletePhoto';
 import { LiquidGlassTabBar } from '../components/navigation/LiquidGlassTabBar';
 import { COMPACT_TAB_BAR_HEIGHT } from '../components/navigation/liquidGlassTabBar.constants';
 import type { ConfigurableLiquidTabItem } from '../components/navigation/liquidGlassTabBar.types';
@@ -209,6 +211,18 @@ export default function PredictionGroupsScreen() {
   const memberUserIds = useMemo(() => members.map((m) => m.userId), [members]);
 
   const matchCards = useMemo(() => roundMatches.map(mapRoundMatchToCard), [roundMatches]);
+
+  useEffect(() => {
+    if (matchCards.length === 0) return;
+    const urls = matchCards.flatMap((m) => [
+      with365ImageSize(m.home.logo, 256),
+      with365ImageSize(m.away.logo, 256),
+      m.home.logo,
+      m.away.logo,
+    ]);
+    prefetchImageUrls(urls, 40);
+  }, [matchCards]);
+
   const remaining = useMemo(
     () => roundMatches.filter((m) => !m.prediction).length,
     [roundMatches],
