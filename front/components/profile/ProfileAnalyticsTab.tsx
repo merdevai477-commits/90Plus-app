@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,19 +8,10 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
-import {
-  BG_BASE,
-  PURPLE_PRIMARY,
-  PURPLE_DARK,
-  PURPLE_GLOW_SM,
-  PURPLE_SOFT,
-  BLUE_PRIMARY,
-  TEXT_MUTED,
-  TEXT_PRIMARY,
-} from '../../constants/tokens';
+import { PROFILE_ICONS } from './profileV2Assets';
 
 interface PredictionStats {
   correct?: number;
@@ -28,13 +19,6 @@ interface PredictionStats {
   pending?: number;
   accuracy?: number;
   total?: number;
-}
-
-interface ProfileAnalytics {
-  totalViews?: number;
-  totalLikes?: number;
-  totalComments?: number;
-  recentFollowers?: number;
 }
 
 export interface UserPredictionItem {
@@ -59,242 +43,214 @@ export interface UserPredictionItem {
   predictedAwayScore?: number | null;
 }
 
-type PredictionFilter = 'all' | 'group' | 'pending' | 'correct' | 'wrong';
+type PredictionFilter = 'all' | 'correct' | 'pending' | 'group' | 'wrong';
 
 interface Props {
-  analytics: ProfileAnalytics | null;
   predictionStats: PredictionStats | null;
   predictions?: UserPredictionItem[];
-  variant?: 'full' | 'predictionsOnly';
 }
 
-interface StatCardProps {
-  icon: keyof typeof Ionicons.glyphMap;
-  value: string | number;
-  label: string;
-  accent: string;
-  gradient: readonly [string, string];
+const FILTER_OPTIONS: {
+  id: PredictionFilter;
+  labelKey: 'predictionFilterAll' | 'correctPredictions' | 'pendingPredictions' | 'predictionFilterGroup' | 'wrongPredictions';
+}[] = [
+  { id: 'all', labelKey: 'predictionFilterAll' },
+  { id: 'correct', labelKey: 'correctPredictions' },
+  { id: 'pending', labelKey: 'pendingPredictions' },
+  { id: 'group', labelKey: 'predictionFilterGroup' },
+  { id: 'wrong', labelKey: 'wrongPredictions' },
+];
+
+const INITIAL_VISIBLE = 3;
+const LOAD_MORE_STEP = 4;
+
+function pickLabel(
+  item: UserPredictionItem,
+  homeName: string,
+  awayName: string,
+  t: ReturnType<typeof useTranslation>['t'],
+): string {
+  if (
+    item.mode === 'EXACT' &&
+    item.predictedHomeScore != null &&
+    item.predictedAwayScore != null
+  ) {
+    return `${item.predictedHomeScore}-${item.predictedAwayScore}`;
+  }
+  if (item.predictionType === 'home') return homeName;
+  if (item.predictionType === 'away') return awayName;
+  return t.predictions.draw;
 }
 
-function SectionHeader({ icon, title }: { icon: keyof typeof Ionicons.glyphMap; title: string }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <LinearGradient
-        colors={[PURPLE_PRIMARY, PURPLE_DARK]}
-        style={styles.sectionIconWrap}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <Ionicons name={icon} size={16} color={TEXT_PRIMARY} />
-      </LinearGradient>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionLine} />
-    </View>
-  );
+function resolveCorrectLabel(
+  item: UserPredictionItem,
+  homeName: string,
+  awayName: string,
+  userPick: string,
+  pendingLabel: string,
+  drawLabel: string,
+): string {
+  if (item.isCorrect === null) return pendingLabel;
+  if (item.isCorrect === true) return userPick;
+  if (item.predictionType === 'home') return awayName;
+  if (item.predictionType === 'away') return homeName;
+  if (item.predictionType === 'draw') return homeName;
+  return drawLabel;
 }
 
-function StatCard({ icon, value, label, accent, gradient }: StatCardProps) {
-  return (
-    <View style={[styles.card, { borderColor: `${accent}44`, shadowColor: accent }]}>
-      <LinearGradient colors={gradient} style={StyleSheet.absoluteFill} />
-      <View style={[styles.iconCircle, { backgroundColor: `${accent}22`, borderColor: `${accent}55` }]}>
-        <Ionicons name={icon} size={20} color={accent} />
-      </View>
-      <Text style={[styles.cardValue, { color: accent }]}>{value}</Text>
-      <Text style={styles.cardLabel}>{label}</Text>
-    </View>
-  );
+type CardTheme = 'pending' | 'correct' | 'wrong';
+
+function cardThemeFor(item: UserPredictionItem): CardTheme {
+  if (item.isCorrect === null) return 'pending';
+  if (item.isCorrect === true) return 'correct';
+  return 'wrong';
 }
 
-function WideStatCard({ icon, value, label, accent, gradient }: StatCardProps) {
-  return (
-    <View style={[styles.wideCard, { borderColor: `${accent}44`, shadowColor: accent }]}>
-      <LinearGradient colors={gradient} style={StyleSheet.absoluteFill} />
-      <View style={[styles.wideIconCircle, { backgroundColor: `${accent}22`, borderColor: `${accent}55` }]}>
-        <Ionicons name={icon} size={24} color={accent} />
-      </View>
-      <View style={styles.wideCardText}>
-        <Text style={styles.wideCardLabel}>{label}</Text>
-      </View>
-      <Text style={[styles.wideCardValue, { color: accent }]}>{value}</Text>
-    </View>
-  );
-}
+const CARD_THEMES: Record<
+  CardTheme,
+  {
+    border: string;
+    gradient: readonly [string, string];
+    shadow: string;
+  }
+> = {
+  pending: {
+    border: '#04081F',
+    gradient: ['rgba(12,40,176,0.14)', 'rgba(5,17,77,0.14)'],
+    shadow: 'rgba(9,27,113,0.33)',
+  },
+  correct: {
+    border: '#081F04',
+    gradient: ['rgba(12,176,42,0.18)', 'rgba(5,77,18,0.18)'],
+    shadow: 'rgba(25,113,9,0.33)',
+  },
+  wrong: {
+    border: '#300D0D',
+    gradient: ['rgba(182,6,6,0.18)', 'rgba(80,3,3,0.18)'],
+    shadow: 'rgba(176,35,25,0.33)',
+  },
+};
 
-function TeamBadge({
-  name,
-  logo,
+function ResultPill({
+  label,
+  tone,
 }: {
-  name: string;
-  logo: string | null;
+  label: string;
+  tone: 'pending' | 'correct' | 'wrong';
 }) {
-  const initial = (name || '?').charAt(0).toUpperCase();
+  const palette =
+    tone === 'pending'
+      ? { bg: 'rgba(30,40,89,0.24)', color: '#3B4FAF' }
+      : tone === 'correct'
+        ? { bg: 'rgba(33,89,30,0.24)', color: '#3DA437' }
+        : { bg: 'rgba(99,7,7,0.24)', color: '#D64949' };
+
   return (
-    <View style={matchStyles.teamCol}>
-      <View style={matchStyles.teamLogoWrap}>
-        {logo ? (
-          <Image source={{ uri: logo }} style={matchStyles.teamLogoImg} contentFit="contain" />
-        ) : (
-          <View style={matchStyles.teamAvatar}>
-            <Text style={matchStyles.teamAvatarText}>{initial}</Text>
-          </View>
-        )}
-      </View>
-      <Text style={matchStyles.teamName} numberOfLines={1}>
-        {name || '—'}
+    <View style={[pillStyles.wrap, { backgroundColor: palette.bg }]}>
+      <Text style={[pillStyles.text, { color: palette.color }]} numberOfLines={1}>
+        {label}
       </Text>
     </View>
   );
 }
 
-function PredictionMatchCard({ item }: { item: UserPredictionItem }) {
-  const { t, formatDate } = useTranslation();
-
+const PredictionMatchCard = memo(function PredictionMatchCard({
+  item,
+}: {
+  item: UserPredictionItem;
+}) {
+  const { t } = useTranslation();
   const homeName = item.homeTeam || '—';
   const awayName = item.awayTeam || '—';
-  const groupSourceLabel = t.predictionGroups.profileSource;
+  const themeKey = cardThemeFor(item);
+  const theme = CARD_THEMES[themeKey];
+  const isPending = themeKey === 'pending';
+  const pendingLabel = t.profile.pendingPredictions;
 
-  const pickLabel = useMemo(() => {
-    if (
-      item.mode === 'EXACT' &&
-      item.predictedHomeScore != null &&
-      item.predictedAwayScore != null
-    ) {
-      return `${item.predictedHomeScore}-${item.predictedAwayScore}`;
-    }
-    if (item.predictionType === 'home') return homeName;
-    if (item.predictionType === 'away') return awayName;
-    return t.predictions.draw;
-  }, [item, homeName, awayName, t]);
-
-  const pickKindLabel =
-    item.mode === 'EXACT'
-      ? t.predictionGroups.predictions.exactScore
-      : t.profile.yourPick;
-
-  const isPending = item.isCorrect === null;
-  const isCorrect = item.isCorrect === true;
-
-  const accentColor = isPending
-    ? BLUE_PRIMARY
-    : isCorrect
-      ? '#22c55e'
-      : '#ef4444';
-
-  const statusLabel = isPending
-    ? t.profile.pendingPredictions
-    : isCorrect
-      ? t.predictions.correctPrediction.replace('!', '')
-      : t.predictions.wrongPrediction;
-
-  const dateLabel = item.matchDate
-    ? formatDate(new Date(item.matchDate), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-    : formatDate(new Date(item.createdAt), { day: 'numeric', month: 'short' });
-
-  const rewardLabel =
-    item.source === 'group' && isCorrect && (item.xpAwarded ?? 0) > 0
-      ? `+${item.xpAwarded} XP`
-      : item.source !== 'group' && isCorrect && (item.coinsWon ?? 0) > 0
-        ? `+${item.coinsWon}`
-        : null;
+  const userPick = pickLabel(item, homeName, awayName, t);
+  const correctPick = resolveCorrectLabel(
+    item,
+    homeName,
+    awayName,
+    userPick,
+    pendingLabel,
+    t.predictions.draw,
+  );
 
   return (
-    <View
-      style={[
-        matchStyles.card,
-        !isPending && isCorrect && matchStyles.cardWin,
-        !isPending && !isCorrect && matchStyles.cardLoss,
-        isPending && matchStyles.cardPending,
-      ]}
-    >
-      <LinearGradient
-        colors={[`${accentColor}33`, 'transparent', `${accentColor}22`]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-
-      <View style={matchStyles.cardTop}>
-        <View style={matchStyles.leagueRow}>
-          <Text style={matchStyles.leagueText} numberOfLines={1}>
-            {item.leagueName || t.profile.predictionHistory}
-          </Text>
-          {item.source === 'group' ? (
-            <View style={matchStyles.sourceBadge}>
-              <Text style={matchStyles.sourceBadgeText} numberOfLines={1}>
-                {groupSourceLabel}
-              </Text>
-            </View>
+    <View style={[cardStyles.wrap, { borderColor: theme.border, shadowColor: theme.shadow }]}>
+      <LinearGradient colors={theme.gradient} style={StyleSheet.absoluteFill} />
+      <View style={cardStyles.teamsRow}>
+        <TeamColumn name={homeName} logo={item.homeTeamLogo} />
+        <View style={cardStyles.centerCol}>
+          <Text style={cardStyles.vs}>{t.home.vs}</Text>
+          {isPending ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => router.push('/(tabs)/matches' as never)}
+              style={cardStyles.predictBtnHit}
+            >
+              <LinearGradient
+                colors={['#8B5CF6', '#513690']}
+                style={cardStyles.predictBtn}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+              >
+                <Text style={cardStyles.predictBtnText}>{t.profile.predictNow}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           ) : null}
         </View>
-        <View
-          style={[
-            matchStyles.statusBadge,
-            isPending && matchStyles.statusPending,
-            isCorrect && matchStyles.statusCorrect,
-            !isPending && !isCorrect && matchStyles.statusWrong,
-          ]}
-        >
-          <Text
-            style={[
-              matchStyles.statusText,
-              { color: accentColor },
-            ]}
-          >
-            {statusLabel}
-          </Text>
-        </View>
+        <TeamColumn name={awayName} logo={item.awayTeamLogo} />
       </View>
 
-      <View style={matchStyles.teamsRow}>
-        <TeamBadge name={homeName} logo={item.homeTeamLogo} />
+      <Image source={PROFILE_ICONS.predictionDivider} style={cardStyles.divider} contentFit="fill" />
 
-        <View style={matchStyles.pickArea}>
-          <Text style={matchStyles.vsText}>{t.home.vs}</Text>
-          <View style={[matchStyles.pickPill, { borderColor: `${accentColor}55`, backgroundColor: `${accentColor}18` }]}>
-            <Text style={[matchStyles.pickPillText, { color: accentColor }]} numberOfLines={1}>
-              {pickLabel}
-            </Text>
-          </View>
+      <View style={cardStyles.resultsBlock}>
+        <View style={cardStyles.resultRow}>
+          <ResultPill
+            label={isPending ? pendingLabel : userPick}
+            tone={isPending ? 'pending' : themeKey === 'wrong' ? 'wrong' : 'correct'}
+          />
+          <Text style={cardStyles.resultLabel}>{t.profile.yourPick}</Text>
         </View>
-
-        <TeamBadge name={awayName} logo={item.awayTeamLogo} />
-      </View>
-
-      <View style={matchStyles.cardBottom}>
-        <Text style={matchStyles.pickHint}>
-          {pickKindLabel}: <Text style={matchStyles.pickHintValue}>{pickLabel}</Text>
-        </Text>
-        <View style={matchStyles.bottomMeta}>
-          {rewardLabel ? <Text style={matchStyles.xpEarned}>{rewardLabel}</Text> : null}
-          <Text style={matchStyles.dateText}>{dateLabel}</Text>
+        <View style={cardStyles.resultRow}>
+          <ResultPill
+            label={isPending ? pendingLabel : correctPick}
+            tone={isPending ? 'pending' : 'correct'}
+          />
+          <Text style={cardStyles.resultLabel}>{t.profile.correctPredictionLabel}</Text>
         </View>
       </View>
     </View>
   );
-}
+});
 
-const FILTER_OPTIONS: {
-  id: PredictionFilter;
-  labelKey: 'predictionFilterAll' | 'predictionFilterGroup' | 'pendingPredictions' | 'correctPredictions' | 'wrongPredictions';
-}[] = [
-  { id: 'all', labelKey: 'predictionFilterAll' },
-  { id: 'group', labelKey: 'predictionFilterGroup' },
-  { id: 'pending', labelKey: 'pendingPredictions' },
-  { id: 'correct', labelKey: 'correctPredictions' },
-  { id: 'wrong', labelKey: 'wrongPredictions' },
-];
+function TeamColumn({ name, logo }: { name: string; logo: string | null }) {
+  const initial = name.charAt(0).toUpperCase();
+  return (
+    <View style={cardStyles.teamCol}>
+      <View style={cardStyles.logoWrap}>
+        {logo ? (
+          <Image source={{ uri: logo }} style={cardStyles.logo} contentFit="contain" />
+        ) : (
+          <Text style={cardStyles.logoFallback}>{initial}</Text>
+        )}
+      </View>
+      <Text style={cardStyles.teamName} numberOfLines={2}>
+        {name}
+      </Text>
+    </View>
+  );
+});
 
 export const ProfileAnalyticsTab: React.FC<Props> = ({
-  analytics,
   predictionStats,
   predictions = [],
-  variant = 'full',
 }) => {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<PredictionFilter>('all');
-  const predictionsOnly = variant === 'predictionsOnly';
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
 
   const derivedStats = useMemo(() => {
     if (!predictions.length) return null;
@@ -328,471 +284,303 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
     else if (filter === 'pending') list = list.filter((p) => p.isCorrect === null);
     else if (filter === 'correct') list = list.filter((p) => p.isCorrect === true);
     else if (filter === 'wrong') list = list.filter((p) => p.isCorrect === false);
-    return list.slice(0, filter === 'group' ? 10 : 5);
+    return list;
   }, [predictions, filter]);
+
+  const visiblePredictions = filteredPredictions.slice(0, visibleCount);
+  const hasMore = filteredPredictions.length > visibleCount;
 
   const emptyMessage =
     filter === 'group' ? t.profile.noGroupPredictionsYet : t.profile.noPredictionsYet;
 
-  const fmt = (n?: number): string => {
-    if (!n) return '0';
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-    return String(n);
-  };
+  const accuracyPct = displayStats?.accuracy ?? 0;
+  const normalizedAccuracy =
+    accuracyPct <= 1 && accuracyPct > 0 ? Math.round(accuracyPct * 100) : Math.round(accuracyPct);
 
   return (
     <View style={styles.container}>
-      {!predictionsOnly && (
-        <>
-          <SectionHeader icon="videocam-outline" title={t.profile.videoAnalytics} />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
+        {FILTER_OPTIONS.map(({ id, labelKey }) => {
+          const active = filter === id;
+          return (
+            <TouchableOpacity
+              key={id}
+              onPress={() => {
+                setFilter(id);
+                setVisibleCount(INITIAL_VISIBLE);
+              }}
+              activeOpacity={0.8}
+              style={[styles.filterChip, active && styles.filterChipActiveShell]}
+            >
+              {active ? (
+                <LinearGradient
+                  colors={['#8B5CF6', '#513690']}
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 1 }}
+                />
+              ) : null}
+              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                {t.profile[labelKey]}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
-          <View style={styles.grid}>
-            <StatCard
-              icon="eye-outline"
-              value={fmt(analytics?.totalViews)}
-              label={t.profile.views}
-              accent={ProfileTheme.colors.neonBlue}
-              gradient={['rgba(0,217,255,0.14)', 'rgba(0,217,255,0.04)']}
-            />
-            <StatCard
-              icon="heart-outline"
-              value={fmt(analytics?.totalLikes)}
-              label={t.profile.likes}
-              accent="#FF6B6B"
-              gradient={['rgba(255,107,107,0.14)', 'rgba(255,107,107,0.04)']}
-            />
-            <StatCard
-              icon="chatbubble-outline"
-              value={fmt(analytics?.totalComments)}
-              label={t.profile.comments}
-              accent={ProfileTheme.colors.neonGreen}
-              gradient={['rgba(50,205,50,0.14)', 'rgba(50,205,50,0.04)']}
-            />
-            <StatCard
-              icon="person-add-outline"
-              value={fmt(analytics?.recentFollowers)}
-              label={t.profile.newFollowers}
-              accent={PURPLE_SOFT}
-              gradient={['rgba(167,139,250,0.16)', 'rgba(124,58,237,0.06)']}
-            />
-          </View>
-        </>
-      )}
-
-      <SectionHeader icon="stats-chart-outline" title={t.profile.predictionStats} />
-
-      <WideStatCard
-        icon="analytics"
-        value={`${displayStats?.accuracy ?? 0}%`}
-        label={t.profile.successRate}
-        accent={PURPLE_PRIMARY}
-        gradient={['rgba(124,58,237,0.16)', 'rgba(91,33,182,0.06)']}
-      />
-
-      <SectionHeader icon="list-outline" title={t.profile.predictionHistory} />
-
-      <View style={styles.filterScrollWrap}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {FILTER_OPTIONS.map(({ id, labelKey }) => {
-            const active = filter === id;
-            return (
-              <TouchableOpacity
-                key={id}
-                style={[styles.filterChip, active && styles.filterChipActive]}
-                onPress={() => setFilter(id)}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                  {t.profile[labelKey]}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+      <View style={styles.successCard}>
+        <LinearGradient
+          colors={['#110A22', '#2A1950']}
+          style={StyleSheet.absoluteFill}
+          start={{ x: 0.5, y: 1 }}
+          end={{ x: 0.5, y: 0 }}
+        />
+        <Text style={styles.successPct}>{normalizedAccuracy}%</Text>
+        <View style={styles.successRight}>
+          <Text style={styles.successLabel}>{t.profile.successRate}</Text>
+          <Image source={PROFILE_ICONS.lineChart} style={styles.successIcon} contentFit="contain" />
+        </View>
       </View>
 
-      {filteredPredictions.length === 0 ? (
+      {visiblePredictions.length === 0 ? (
         <View style={styles.emptyWrap}>
-          <Ionicons name="football-outline" size={28} color={TEXT_MUTED} />
           <Text style={styles.emptyText}>{emptyMessage}</Text>
         </View>
       ) : (
-        <View style={styles.predList}>
-          {filteredPredictions.map((item) => (
+        <View style={styles.list}>
+          {visiblePredictions.map((item) => (
             <PredictionMatchCard key={item.id} item={item} />
           ))}
         </View>
       )}
+
+      {hasMore ? (
+        <TouchableOpacity
+          style={styles.loadMore}
+          activeOpacity={0.8}
+          onPress={() => setVisibleCount((n) => n + LOAD_MORE_STEP)}
+        >
+          <Image source={PROFILE_ICONS.chevronDownPurple} style={styles.loadMoreIcon} contentFit="contain" />
+          <Text style={styles.loadMoreText}>{t.profile.showMore}</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 };
 
-const matchStyles = StyleSheet.create({
-  card: {
-    width: '100%',
-    minHeight: 156,
-    borderRadius: 16,
-    backgroundColor: 'rgba(18,12,28,0.98)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.07)',
-    overflow: 'hidden',
-    shadowColor: '#fff',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 0,
-    elevation: 2,
-  },
-  cardPending: {
-    borderColor: 'rgba(59,130,246,0.22)',
-    shadowColor: BLUE_PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  cardWin: {
-    borderColor: 'rgba(34,197,94,0.25)',
-    shadowColor: '#22c55e',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  cardLoss: {
-    borderColor: 'rgba(239,68,68,0.25)',
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 8,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-    gap: 8,
-  },
-  leagueText: {
-    flexShrink: 1,
-    color: TEXT_MUTED,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  leagueRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 0,
-  },
-  sourceBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: 'rgba(245,185,66,0.18)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(245,185,66,0.45)',
-    maxWidth: 120,
-  },
-  sourceBadgeText: {
-    color: '#F5B942',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  statusBadge: {
+const pillStyles = StyleSheet.create({
+  wrap: {
+    minWidth: 67,
+    height: 20,
+    borderRadius: 44,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 0.5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  statusPending: {
-    borderColor: 'rgba(59,130,246,0.35)',
-    backgroundColor: 'rgba(59,130,246,0.1)',
+  text: {
+    fontSize: 11,
+    fontWeight: '500',
+    textAlign: 'center',
   },
-  statusCorrect: {
-    borderColor: 'rgba(34,197,94,0.35)',
-    backgroundColor: 'rgba(34,197,94,0.1)',
-  },
-  statusWrong: {
-    borderColor: 'rgba(239,68,68,0.35)',
-    backgroundColor: 'rgba(239,68,68,0.1)',
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+});
+
+const cardStyles = StyleSheet.create({
+  wrap: {
+    borderRadius: 29,
+    borderWidth: 1,
+    overflow: 'hidden',
+    paddingTop: 9,
+    paddingBottom: 34,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 7.4,
+    elevation: 4,
   },
   teamsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 31,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    flex: 1,
+    minHeight: 119,
   },
   teamCol: {
-    flex: 1,
+    width: 67,
     alignItems: 'center',
-    gap: 6,
-    minWidth: 0,
+    gap: 9,
   },
-  teamLogoWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  logoWrap: {
+    width: 60,
+    height: 80,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.08)',
   },
-  teamLogoImg: {
-    width: 28,
-    height: 28,
+  logo: {
+    width: 60,
+    height: 80,
   },
-  teamAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(124,58,237,0.15)',
-  },
-  teamAvatarText: {
-    color: TEXT_PRIMARY,
-    fontSize: 14,
-    fontWeight: '800',
+  logoFallback: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '700',
   },
   teamName: {
-    color: TEXT_PRIMARY,
-    fontSize: 11,
+    color: '#fff',
+    fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
-    maxWidth: 88,
   },
-  pickArea: {
+  centerCol: {
+    width: 76,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 88,
-    gap: 6,
+    gap: 11,
   },
-  vsText: {
-    color: 'rgba(255,255,255,0.25)',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-  },
-  pickPill: {
-    maxWidth: 96,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 0.5,
-  },
-  pickPillText: {
-    fontSize: 10,
-    fontWeight: '800',
+  vs: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: '600',
     textAlign: 'center',
   },
-  cardBottom: {
+  predictBtnHit: {
+    width: '100%',
+  },
+  predictBtn: {
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  predictBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  divider: {
+    width: '82%',
+    height: 1,
+    alignSelf: 'center',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  resultsBlock: {
+    gap: 7,
+    paddingHorizontal: 20,
+  },
+  resultRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    paddingTop: 4,
-    borderTopWidth: 0.5,
-    borderTopColor: 'rgba(255,255,255,0.05)',
-    gap: 8,
+    direction: 'rtl',
   },
-  pickHint: {
-    flex: 1,
-    fontSize: 11,
-    color: TEXT_MUTED,
+  resultLabel: {
+    color: '#C5C5C5',
+    fontSize: 12,
     fontWeight: '500',
-  },
-  pickHintValue: {
-    color: TEXT_PRIMARY,
-    fontWeight: '700',
-  },
-  bottomMeta: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  xpEarned: {
-    fontSize: 10,
-    color: '#22c55e',
-    fontWeight: '800',
-  },
-  dateText: {
-    fontSize: 10,
-    color: PURPLE_SOFT,
-    fontWeight: '600',
   },
 });
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    paddingTop: 4,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-    marginTop: 6,
-    gap: 10,
-  },
-  sectionIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: TEXT_PRIMARY,
-    letterSpacing: 0.2,
-  },
-  sectionLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: PURPLE_GLOW_SM,
-    marginLeft: 4,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 8,
-  },
-  card: {
-    width: '48%',
-    borderRadius: 16,
-    overflow: 'hidden',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    backgroundColor: BG_BASE,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-    borderWidth: 1,
-  },
-  cardValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    marginBottom: 4,
-    letterSpacing: -0.5,
-  },
-  cardLabel: {
-    fontSize: 11,
-    color: TEXT_MUTED,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 15,
-  },
-  wideCard: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    overflow: 'hidden',
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    backgroundColor: BG_BASE,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    elevation: 5,
-    marginBottom: 8,
-    gap: 14,
-  },
-  wideIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  wideCardText: {
-    flex: 1,
-  },
-  wideCardLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: TEXT_PRIMARY,
-  },
-  wideCardValue: {
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  filterScrollWrap: {
-    marginBottom: 12,
+    paddingTop: 21,
+    paddingBottom: 11,
+    paddingHorizontal: 8,
+    gap: 20,
   },
   filterRow: {
     flexDirection: 'row',
-    gap: 8,
-    paddingRight: 4,
+    gap: 4,
+    paddingHorizontal: 4,
   },
   filterChip: {
+    height: 24,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
+    borderRadius: 23,
     borderWidth: 1,
-    borderColor: PURPLE_GLOW_SM,
-    backgroundColor: 'rgba(124,58,237,0.08)',
+    borderColor: '#23162E',
+    backgroundColor: '#120D1F',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  filterChipActive: {
-    borderColor: PURPLE_PRIMARY,
-    backgroundColor: 'rgba(124,58,237,0.28)',
+  filterChipActiveShell: {
+    borderColor: 'transparent',
+    backgroundColor: 'transparent',
   },
   filterChipText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: TEXT_MUTED,
+    fontWeight: '500',
+    color: '#41354D',
   },
   filterChipTextActive: {
-    color: TEXT_PRIMARY,
+    color: '#fff',
   },
-  emptyWrap: {
-    paddingVertical: 28,
+  successCard: {
+    height: 64,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#331E64',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    overflow: 'hidden',
+    marginHorizontal: 4,
+  },
+  successPct: {
+    color: '#EBD9FC',
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  successRight: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    direction: 'rtl',
   },
-  emptyText: {
-    fontSize: 13,
-    color: TEXT_MUTED,
+  successLabel: {
+    color: '#fff',
+    fontSize: 12,
     fontWeight: '600',
   },
-  predList: {
-    gap: 12,
+  successIcon: {
+    width: 35,
+    height: 35,
+  },
+  list: {
+    gap: 20,
+    paddingHorizontal: 4,
+  },
+  emptyWrap: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#8C8C8C',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  loadMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+  },
+  loadMoreIcon: {
+    width: 16,
+    height: 16,
+  },
+  loadMoreText: {
+    color: ProfileTheme.colors.profilePrimary,
+    fontSize: 10,
+    fontWeight: '600',
   },
 });

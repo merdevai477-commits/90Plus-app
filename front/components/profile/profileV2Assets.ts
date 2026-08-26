@@ -30,4 +30,7 @@ export const PROFILE_ICONS = {
   tabBullseyeActive: require('../../assets/images/profile-v2/tab-bullseye-active.svg'),
   tabVideo: require('../../assets/images/profile-v2/tab-video-inactive.svg'),
   tabVideoActive: require('../../assets/images/profile-v2/tab-video.svg'),
+  lineChart: require('../../assets/images/profile-v2/icon-line-chart.svg'),
+  predictionDivider: require('../../assets/images/profile-v2/prediction-divider.svg'),
+  chevronDownPurple: require('../../assets/images/profile-v2/icon-chevron-down-purple.svg'),
 } as const;

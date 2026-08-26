@@ -31,7 +31,6 @@ import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
 import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
 import VideoGrid from '../../components/profile/VideoGrid';
-import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import FollowersListModal from '../../components/profile/FollowersListModal';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import { ProfileTheme } from '../../constants/ProfileTheme';
@@ -57,6 +56,7 @@ import { ReportSystem } from '../../components/common/ReportSystem';
 import { useUserReport } from '../../hooks/useReportSystem';
 import ContentTabs from '../../components/profile/ContentTabs';
 import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
+import { ProfileAchievementsTab } from '../../components/profile/ProfileAchievementsTab';
 import { usePublicUserPredictions } from '../../hooks/usePublicUserPredictions';
 import { ProfileErrorBoundary } from '../../components/common/ProfileErrorBoundary';
 import { logger } from '../../utils/logger';
@@ -886,17 +886,17 @@ function UserProfileScreen() {
 
         {activeTab === 'predictions' && (
           <ProfileAnalyticsTab
-            analytics={null}
             predictionStats={publicPredictionStats}
             predictions={publicPredictions}
-            variant="predictionsOnly"
           />
         )}
 
         {activeTab === 'achievements' && user.id && !String(user.id).startsWith('user_') && (
-          <View style={s.badgesWrap}>
-            <BadgesDisplay userId={user.id} token={authToken} compact={false} />
-          </View>
+          <ProfileAchievementsTab
+            analytics={null}
+            userId={user.id}
+            authToken={authToken}
+          />
         )}
           </>
         )}

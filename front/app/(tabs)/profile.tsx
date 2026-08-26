@@ -56,7 +56,6 @@ import {
   isGatewayOrServerError,
   isReelUploadConflictError,
 } from '../../utils/profileErrorHelpers';
-import BadgesDisplay from '../../components/profile/BadgesDisplay';
 import { getApiUrl } from '../../config/api.config';
 import { buildProfileShareUrl } from '../../constants/shareLinks';
 import { compressImage } from '@/utils/imageCompressor';
@@ -75,6 +74,7 @@ import { useOptimisticProfile, useProfileFieldUpdate } from '../../hooks/useOpti
 import { TopClub } from '../../data/top5LeaguesClubs';
 import { DiamondProfile } from '../../types/profile';
 import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
+import { ProfileAchievementsTab } from '../../components/profile/ProfileAchievementsTab';
 import { ProfileSavedGrid } from '../../components/profile/ProfileVideoGrid';
 import { ImagePreviewModal, AndroidImageSourceSheet, showImageSourceSheet } from '../../components/common/ImagePreviewModal';
 import { CooldownBlockModal } from '../../components/common/CooldownBlockModal';
@@ -2011,16 +2011,17 @@ function OwnProfileScreen() {
 
           {activeTab === 'predictions' && (
             <ProfileAnalyticsTab
-              analytics={analytics}
               predictionStats={predictionStats}
               predictions={allPredictions}
             />
           )}
 
           {activeTab === 'achievements' && userData?.id && !String(userData.id).startsWith('user_') && (
-            <View style={styles.badgesContainer}>
-              <BadgesDisplay userId={userData.id} token={authToken} compact={false} />
-            </View>
+            <ProfileAchievementsTab
+              analytics={analytics}
+              userId={userData.id}
+              authToken={authToken}
+            />
           )}
         </View>
 
