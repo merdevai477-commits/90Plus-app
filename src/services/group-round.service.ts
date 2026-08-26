@@ -1,6 +1,6 @@
 /**
- * Daily prediction-group round — up to 10 Big 5 league matches per day.
- * Midweek days often have no Big 5 kickoffs, so we look ahead a few days.
+ * Daily prediction-group round — Big 5 first, then marquee clubs by continent.
+ * Midweek days often have few Big 5 kickoffs, so we look ahead a few days.
  */
 
 import prisma from '../lib/prisma';
@@ -122,7 +122,7 @@ export async function ensureDailyRound(dateString = calendarTodayKey()) {
     );
   } else {
     logger.info(
-      `[GroupRound] Picked ${matchIds.length}/${ROUND_MATCH_LIMIT} Big 5 matches for ${dateString} from ${fixtures.length} fixtures (+${BIG5_LOOKAHEAD_DAYS}d)`,
+      `[GroupRound] Picked ${matchIds.length}/${ROUND_MATCH_LIMIT} round matches for ${dateString} from ${fixtures.length} fixtures (+${BIG5_LOOKAHEAD_DAYS}d)`,
     );
   }
 
