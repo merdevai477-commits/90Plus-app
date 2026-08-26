@@ -1,14 +1,21 @@
 /**
- * Daily prediction-group round — top N important matches per day.
- * New cup UI is built around a single daily match.
+ * Daily prediction-group round — top 10 important matches per day.
  */
 
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { calendarTodayKey } from '../utils/calendar-day-bounds.util';
 import { footballDataCacheService } from './football-data-cache.service';
-import { localDateKey, pickTopFixtures } from '../utils/fixture-importance';
+import { pickTopFixtures } from '../utils/fixture-importance';
 
-const ROUND_MATCH_LIMIT = 1;
+const ROUND_MATCH_LIMIT = 10;
+
+function sameIdSet(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const left = [...a].sort((x, y) => x - y);
+  const right = [...b].sort((x, y) => x - y);
+  return left.every((id, i) => id === right[i]);
+}
 
 export function formatFixtureForClient(fixture: any) {
   const home = fixture?.teams?.home;
@@ -30,7 +37,7 @@ export function formatFixtureForClient(fixture: any) {
       logo: away?.logo ?? null,
       short: away?.name?.slice(0, 3)?.toUpperCase() ?? 'AWY',
     },
-    day: fixtureMeta.date ? String(fixtureMeta.date).slice(0, 10) : localDateKey(),
+    day: fixtureMeta.date ? String(fixtureMeta.date).slice(0, 10) : calendarTodayKey(),
     time: fixtureMeta.date ? String(fixtureMeta.date).slice(11, 16) : '',
     status: fixtureMeta.status?.short ?? 'NS',
     leagueName: fixture?.league?.name ?? null,
@@ -58,7 +65,7 @@ export function formatFixtureForClient(fixture: any) {
   };
 }
 
-export async function ensureDailyRound(dateString = localDateKey()) {
+export async function ensureDailyRound(dateString = calendarTodayKey()) {
   const existing = await prisma.groupRound.findUnique({ where: { date: dateString } });
   const { TEMP_FREEZE_GROUP_PREDICTION_MATCHES } = await import(
     '../config/temp-surface-freeze.config'
@@ -83,20 +90,25 @@ export async function ensureDailyRound(dateString = localDateKey()) {
     .filter((id): id is number => typeof id === 'number');
 
   if (matchIds.length === 0) {
-    logger.warn(`[GroupRound] No upcoming fixtures for ${dateString}`);
+    logger.warn(
+      `[GroupRound] No upcoming fixtures for ${dateString} (pool=${fixtures.length})`,
+    );
+  } else {
+    logger.info(
+      `[GroupRound] Picked ${matchIds.length}/${ROUND_MATCH_LIMIT} top matches for ${dateString} from ${fixtures.length} fixtures`,
+    );
   }
 
-  // Rounds created during the temp freeze (or a failed pick) keep empty matchIds.
-  // Also resize OPEN rounds when ROUND_MATCH_LIMIT changes (e.g. 10 → 1).
+  // Refresh OPEN rounds when empty, wrong size, or picker set changed (better importance).
   if (existing) {
     const currentIds = Array.isArray(existing.matchIds)
       ? (existing.matchIds as unknown[]).filter((id): id is number => typeof id === 'number')
       : [];
-    const shouldResize =
+    const shouldRefresh =
       existing.status === 'OPEN' &&
       matchIds.length > 0 &&
-      (currentIds.length === 0 || currentIds.length !== ROUND_MATCH_LIMIT);
-    if (shouldResize) {
+      (currentIds.length === 0 || !sameIdSet(currentIds, matchIds));
+    if (shouldRefresh) {
       logger.info(
         `[GroupRound] Updating round ${dateString}: ${currentIds.length} → ${matchIds.length} matches`,
       );
@@ -117,7 +129,7 @@ export async function ensureDailyRound(dateString = localDateKey()) {
   });
 }
 
-export async function getCurrentRoundWithMatches(dateString = localDateKey()) {
+export async function getCurrentRoundWithMatches(dateString = calendarTodayKey()) {
   const { TEMP_FREEZE_GROUP_PREDICTION_MATCHES } = await import(
     '../config/temp-surface-freeze.config'
   );
