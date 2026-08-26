@@ -22,6 +22,8 @@ interface SocialLink {
   username?: string;
 }
 
+export type ConnectSlotId = 'whatsapp' | 'instagram' | 'tiktok';
+
 interface ProfileConnectCardProps {
   links: SocialLink[];
   email?: string | null;
@@ -29,14 +31,19 @@ interface ProfileConnectCardProps {
   title: string;
   emailCopiedTitle: string;
   emailCopiedMessage: string;
-  onEditPress?: () => void;
+  onAddLink?: (platform: ConnectSlotId) => void;
 }
 
-const SLOTS = [
-  { id: 'whatsapp', icon: PROFILE_ICONS.whatsapp },
-  { id: 'instagram', icon: PROFILE_ICONS.instagram },
-  { id: 'tiktok', icon: PROFILE_ICONS.tiktok },
-] as const;
+const SLOTS: Array<{
+  id: ConnectSlotId;
+  icon: number;
+  width: number;
+  height: number;
+}> = [
+  { id: 'whatsapp', icon: PROFILE_ICONS.whatsapp, width: 33, height: 37 },
+  { id: 'instagram', icon: PROFILE_ICONS.instagram, width: 33, height: 33 },
+  { id: 'tiktok', icon: PROFILE_ICONS.tiktok, width: 30, height: 33 },
+];
 
 const ProfileConnectCard = memo(function ProfileConnectCard({
   links,
@@ -45,7 +52,7 @@ const ProfileConnectCard = memo(function ProfileConnectCard({
   title,
   emailCopiedTitle,
   emailCopiedMessage,
-  onEditPress,
+  onAddLink,
 }: ProfileConnectCardProps) {
   const byPlatform = useMemo(() => {
     const map: Record<string, SocialLink> = {};
@@ -86,48 +93,61 @@ const ProfileConnectCard = memo(function ProfileConnectCard({
         <View style={styles.titleRule} />
       </View>
 
-      <View style={styles.slots}>
-        {SLOTS.map((slot) => {
-          const link = byPlatform[slot.id];
-          return (
-            <TouchableOpacity
-              key={slot.id}
-              style={styles.slot}
-              activeOpacity={0.82}
-              onPress={() => {
-                if (link) openLink(link.url);
-                else onEditPress?.();
-              }}
-              disabled={!link && !isOwnProfile}
-            >
-              {link ? (
-                <LinearGradient
-                  colors={['#170D2B', '#200D44']}
-                  style={StyleSheet.absoluteFill}
-                />
-              ) : null}
-              {link ? (
-                <Image source={slot.icon} style={styles.brand} contentFit="contain" />
-              ) : isOwnProfile ? (
-                <Ionicons name="add" size={24} color="#9E9E9E" />
-              ) : null}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <View style={styles.body}>
+        <View style={styles.slots}>
+          {SLOTS.map((slot) => {
+            const link = byPlatform[slot.id];
+            return (
+              <TouchableOpacity
+                key={slot.id}
+                style={styles.slot}
+                activeOpacity={0.82}
+                onPress={() => {
+                  if (link) openLink(link.url);
+                  else onAddLink?.(slot.id);
+                }}
+                disabled={!link && !isOwnProfile}
+              >
+                {link ? (
+                  <LinearGradient
+                    colors={['#170D2B', '#200D44']}
+                    start={{ x: 0.5, y: 1 }}
+                    end={{ x: 0.5, y: 0 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                ) : null}
+                {link ? (
+                  <Image
+                    source={slot.icon}
+                    style={{ width: slot.width, height: slot.height }}
+                    contentFit="contain"
+                  />
+                ) : isOwnProfile ? (
+                  <Ionicons name="add" size={24} color="#9E9E9E" />
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
-      {hasEmail && (
-        <TouchableOpacity style={styles.emailRow} onPress={copyEmail} activeOpacity={0.85}>
-          <LinearGradient colors={['#170D2B', '#200D44']} style={StyleSheet.absoluteFill} />
-          <View style={styles.emailLeft}>
-            <Image source={PROFILE_ICONS.email} style={styles.emailIcon} contentFit="contain" />
-            <Text style={styles.emailText} numberOfLines={1}>
-              {email}
-            </Text>
-          </View>
-          <Ionicons name="copy-outline" size={18} color="#C4B5FD" />
-        </TouchableOpacity>
-      )}
+        {hasEmail && (
+          <TouchableOpacity style={styles.emailRow} onPress={copyEmail} activeOpacity={0.85}>
+            <LinearGradient
+              colors={['#170D2B', '#200D44']}
+              start={{ x: 0.5, y: 1 }}
+              end={{ x: 0.5, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.emailLeft}>
+              <Image source={PROFILE_ICONS.email} style={styles.emailIcon} contentFit="contain" />
+              <Text style={styles.emailText} numberOfLines={1}>
+                {email}
+              </Text>
+            </View>
+            <Image source={PROFILE_ICONS.copy} style={styles.copyIcon} contentFit="contain" />
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 });
@@ -138,7 +158,7 @@ const styles = StyleSheet.create({
   wrap: {
     marginHorizontal: 19,
     marginTop: 24,
-    gap: 16,
+    gap: 24,
   },
   titleRow: {
     flexDirection: 'row',
@@ -152,10 +172,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   titleRule: {
-    width: 3,
+    width: 2,
     height: 20,
     borderRadius: 2,
     backgroundColor: ProfileTheme.colors.profilePrimary,
+  },
+  body: {
+    width: '100%',
+    gap: 16,
   },
   slots: {
     flexDirection: 'row',
@@ -166,20 +190,16 @@ const styles = StyleSheet.create({
     height: 62,
     borderRadius: 12,
     backgroundColor: 'rgba(44,39,55,0.3)',
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  brand: {
-    width: 33,
-    height: 33,
-  },
   emailRow: {
     height: 55,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: ProfileTheme.colors.profileCardBorder,
     overflow: 'hidden',
     flexDirection: 'row',
@@ -203,5 +223,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     flex: 1,
+  },
+  copyIcon: {
+    width: 20,
+    height: 20,
   },
 });

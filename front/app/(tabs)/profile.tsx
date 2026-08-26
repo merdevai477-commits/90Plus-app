@@ -15,6 +15,8 @@ import ProfileHero from '../../components/profile/ProfileHero';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
 import ProfileBioCard from '../../components/profile/ProfileBioCard';
 import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
+import type { ConnectSlotId } from '../../components/profile/ProfileConnectCard';
+import { ProfileAddLinkModal } from '../../components/profile/ProfileAddLinkModal';
 import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
@@ -47,6 +49,7 @@ import {
   getVideoFileSizeBytes,
   isReelVideoOverSizeLimit,
 } from '../../src/utils/reelVideoLimits';
+import { normalizePastedUrl } from '../../src/utils/socialPlatformDetect';
 import { getProfileCompletionStepLabel } from '../../utils/i18nHelpers';
 import {
   isCooldownApiError,
@@ -654,6 +657,7 @@ function ProfileScreen() {
   const [badgeCount, setBadgeCount] = useState(0);
   const [showCoinsInfo, setShowCoinsInfo] = useState(false);
   const [showLevelInfo, setShowLevelInfo] = useState(false);
+  const [addLinkPlatform, setAddLinkPlatform] = useState<ConnectSlotId | null>(null);
 
   // Optimization: Fetch token for badges (memoized)
   useEffect(() => {
@@ -1735,6 +1739,59 @@ function ProfileScreen() {
     return [];
   }, [userData?.socialLinks, userData?.socials]);
 
+  const handleSaveAddLink = useCallback(async (rawUrl: string) => {
+    const platform = addLinkPlatform;
+    if (!platform) return;
+    const url = normalizePastedUrl(rawUrl);
+    if (!url) return;
+
+    const previous = (socialLinks as Array<{ platform: string; url: string; username?: string }>) || [];
+    const next = [
+      ...previous.filter((link) => link.platform.toLowerCase() !== platform),
+      {
+        platform,
+        url,
+        username: url.replace(/.*\//, '').replace('@', '') || undefined,
+      },
+    ];
+    if (next.length > 5) {
+      toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
+      return;
+    }
+
+    updateCachedUserData({ socialLinks: next });
+    if (globalState.userProfile) {
+      globalState.setUserProfile({
+        ...globalState.userProfile,
+        socialLinks: next,
+      });
+    }
+
+    const result = await updateSocialLinks(next);
+    if (result.success) {
+      toastManager.showSuccess(t.profile.updated, t.profile.socialLinksUpdatedSuccess);
+      await markStepCompleted('socialLinks');
+    } else {
+      updateCachedUserData({ socialLinks: previous });
+      if (globalState.userProfile) {
+        globalState.setUserProfile({
+          ...globalState.userProfile,
+          socialLinks: previous,
+        });
+      }
+      toastManager.showError(t.profile.updated, t.profile.profileSaveFailed);
+    }
+  }, [
+    addLinkPlatform,
+    markStepCompleted,
+    socialLinks,
+    t.profile.profileSaveFailed,
+    t.profile.socialLinksUpdatedSuccess,
+    t.profile.updated,
+    updateCachedUserData,
+    updateSocialLinks,
+  ]);
+
   // Prevent guest access - redirect to auth
   if (!isSignedIn) {
     return null;
@@ -1967,7 +2024,7 @@ function ProfileScreen() {
           title={t.profile.connectWithMe}
           emailCopiedTitle={t.profile.emailCopied}
           emailCopiedMessage={t.profile.emailCopiedMessage}
-          onEditPress={handleEditProfile}
+          onAddLink={setAddLinkPlatform}
         />
 
         <ContentTabs
@@ -2024,6 +2081,11 @@ function ProfileScreen() {
       <CoinsInfoModal
         visible={showCoinsInfo}
         onClose={() => setShowCoinsInfo(false)}
+      />
+      <ProfileAddLinkModal
+        visible={!!addLinkPlatform}
+        onClose={() => setAddLinkPlatform(null)}
+        onSubmit={handleSaveAddLink}
       />
 
       {/* UX Fix 1+2: Image preview modal + Android action sheet */}

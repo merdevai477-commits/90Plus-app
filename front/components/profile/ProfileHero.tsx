@@ -17,6 +17,7 @@ import VerifiedBadge from './VerifiedBadge';
 import DeveloperBadge from './DeveloperBadge';
 import { formatProfileStat } from './formatProfileStat';
 import { isMeaningfulCountryFlag } from '../../utils/countryDisplay';
+import { getCountryFlagUri } from '../../utils/countryFlagUri';
 
 const COVER_HEIGHT = 420;
 const AVATAR_SIZE = 101;
@@ -91,6 +92,7 @@ const ProfileHero = memo(function ProfileHero({
   const hasCountry = isMeaningfulCountryFlag(countryFlag) || !!countryLabel?.trim();
   const hasClub = !!(clubLogo || clubName?.trim());
   const fillPct = Math.max(0, Math.min(1, progressPct > 1 ? progressPct / 100 : progressPct));
+  const countryFlagUri = getCountryFlagUri(countryLabel || '', countryFlag, 80);
 
   return (
     <View style={styles.wrap}>
@@ -162,12 +164,19 @@ const ProfileHero = memo(function ProfileHero({
               <Text style={styles.lvlWord}>LVL</Text>
               <Text style={styles.lvlNum}>{level}</Text>
             </View>
-            <View style={styles.xpTrack}>
-              <View style={[styles.xpFill, { width: `${Math.round(fillPct * 100)}%` }]} />
+            <View style={styles.xpBlock}>
+              <View style={styles.xpTrack}>
+                <LinearGradient
+                  colors={['#5E2990', '#A047F6']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.xpFill, { width: `${Math.round(fillPct * 100)}%` }]}
+                />
+              </View>
+              <Text style={styles.xpCaption} numberOfLines={1}>
+                {formatProfileStat(xp)} / {formatProfileStat(nextLevelXp)} XP
+              </Text>
             </View>
-            <Text style={styles.xpCaption} numberOfLines={1}>
-              {formatProfileStat(xp)} / {formatProfileStat(nextLevelXp)} XP
-            </Text>
           </TouchableOpacity>
 
           <SideSlot
@@ -178,7 +187,15 @@ const ProfileHero = memo(function ProfileHero({
           >
             {hasCountry ? (
               <>
-                <Text style={styles.flag}>{countryFlag?.trim() || '🏳️'}</Text>
+                {countryFlagUri ? (
+                  <Image
+                    source={{ uri: countryFlagUri }}
+                    style={styles.flagImage}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <Text style={styles.flag}>{countryFlag?.trim() || '🏳️'}</Text>
+                )}
                 {!!countryLabel?.trim() && (
                   <Text style={styles.slotCaption} numberOfLines={1}>
                     {countryLabel}
@@ -263,7 +280,11 @@ const ProfileHero = memo(function ProfileHero({
                 <Image source={PROFILE_ICONS.energy} style={styles.energyIcon} />
                 <Text style={styles.energyValue}>{formatProfileStat(energyValue)}</Text>
               </View>
-              <View style={styles.energyLine} />
+              <Image
+                source={PROFILE_ICONS.energyLine}
+                style={styles.energyLine}
+                contentFit="fill"
+              />
               <Text style={styles.energyLabel}>{energyLabel}</Text>
             </TouchableOpacity>
           ) : (
@@ -304,7 +325,7 @@ function SideSlot({
   if (!filled && !editable) return <View style={styles.slotSpacer} />;
   return (
     <TouchableOpacity
-      style={styles.sideSlot}
+      style={[styles.sideSlot, filled ? styles.sideSlotFilled : styles.sideSlotEmpty]}
       onPress={onPress}
       disabled={!onPress}
       activeOpacity={0.85}
@@ -382,25 +403,25 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   levelChip: {
-    width: 78,
+    width: 83,
     height: 75,
     borderRadius: 11,
     backgroundColor: ProfileTheme.colors.profileChip,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 6,
+    gap: 10,
   },
   levelPill: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'center',
+    width: 65,
+    height: 24,
     backgroundColor: '#010602',
     borderWidth: 0.5,
     borderColor: '#64497E',
     borderRadius: 42,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 10,
     gap: 3,
   },
   lvlWord: {
@@ -413,6 +434,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  xpBlock: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 3,
+  },
   xpTrack: {
     width: 64,
     height: 6,
@@ -423,7 +449,6 @@ const styles = StyleSheet.create({
   xpFill: {
     height: '100%',
     borderRadius: 53,
-    backgroundColor: '#A047F6',
   },
   xpCaption: {
     color: '#C8C8C8',
@@ -431,29 +456,39 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   sideSlot: {
-    width: 62,
+    width: 67,
     height: 77,
     borderRadius: 11,
-    backgroundColor: ProfileTheme.colors.profileEmptyChip,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     paddingHorizontal: 4,
   },
+  sideSlotFilled: {
+    backgroundColor: ProfileTheme.colors.profileFilledChip,
+    gap: 9,
+  },
+  sideSlotEmpty: {
+    backgroundColor: ProfileTheme.colors.profileEmptyChip,
+    gap: 6,
+  },
   slotSpacer: {
-    width: 62,
+    width: 67,
     height: 77,
   },
   flag: {
     fontSize: 22,
     lineHeight: 26,
   },
+  flagImage: {
+    width: 41,
+    height: 23,
+  },
   clubLogo: {
-    width: 28,
-    height: 40,
+    width: 27,
+    height: 48,
   },
   slotCaption: {
-    color: '#9E9E9E',
+    color: '#fff',
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
@@ -517,6 +552,8 @@ const styles = StyleSheet.create({
   energyRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    height: 21,
   },
   energyIcon: {
     width: 20,
@@ -529,8 +566,7 @@ const styles = StyleSheet.create({
   },
   energyLine: {
     width: 49,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    height: 1,
   },
   energyLabel: {
     color: '#8C8C8C',

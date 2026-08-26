@@ -39,6 +39,7 @@ export const ProfileTheme = {
     profileCard: '#0E071C',
     profileCardBorder: '#250A3F',
     profileChip: 'rgba(8,2,21,0.84)',
+    profileFilledChip: 'rgba(8,2,21,0.74)',
     profileEmptyChip: 'rgba(44,39,55,0.74)',
     profileMuted: '#B7B7B7',
     profileHandle: '#717171',

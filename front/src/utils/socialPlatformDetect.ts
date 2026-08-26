@@ -6,7 +6,8 @@ export type SocialPlatformId =
     | 'tiktok'
     | 'website'
     | 'linkedin'
-    | 'snapchat';
+    | 'snapchat'
+    | 'whatsapp';
 
 const HOST_RULES: Array<{ match: (host: string) => boolean; platform: SocialPlatformId }> = [
     { match: (h) => h.includes('instagram.com'), platform: 'instagram' },
@@ -16,6 +17,7 @@ const HOST_RULES: Array<{ match: (host: string) => boolean; platform: SocialPlat
     { match: (h) => h.includes('tiktok.com'), platform: 'tiktok' },
     { match: (h) => h.includes('linkedin.com'), platform: 'linkedin' },
     { match: (h) => h.includes('snapchat.com'), platform: 'snapchat' },
+    { match: (h) => h === 'wa.me' || h.endsWith('.wa.me') || h.includes('whatsapp.com'), platform: 'whatsapp' },
 ];
 
 /**
@@ -40,4 +42,12 @@ export function detectSocialPlatformFromUrl(url: string): SocialPlatformId | nul
 
     if (host.includes('.')) return 'website';
     return null;
+}
+
+/** Prefix https:// when the pasted value has no scheme. Empty input returns null. */
+export function normalizePastedUrl(raw: string): string | null {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
 }

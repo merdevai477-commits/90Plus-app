@@ -1974,6 +1974,9 @@ export const ar = {
     followingShort: 'يتابع',
     emailCopied: 'تم نسخ الإيميل',
     emailCopiedMessage: 'تم نسخ عنوان الإيميل.',
+    pasteLink: 'ضع الرابط',
+    pasteLinkHere: 'Paste Link here',
+    done: 'تم',
     moreOptions: 'المزيد',
 
     // QR Code Modal

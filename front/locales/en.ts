@@ -2000,6 +2000,9 @@ export const en = {
     followingShort: 'Following',
     emailCopied: 'Email copied',
     emailCopiedMessage: 'The email address was copied to your clipboard.',
+    pasteLink: 'Paste the link',
+    pasteLinkHere: 'Paste Link here',
+    done: 'Done',
     moreOptions: 'More',
 
     // QR Code Modal
