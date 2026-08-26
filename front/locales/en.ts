@@ -1975,6 +1975,7 @@ export const en = {
     yourPick: 'Your pick',
     correctPredictionLabel: 'Correct prediction',
     showMore: 'Show more',
+    showLess: 'Show less',
     predictNow: 'Predict now',
     coinsEarned: 'Coins Earned from Predictions',
     achievementsTitle: 'Achievements',

@@ -351,6 +351,21 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
           <Text style={styles.loadMoreText}>{t.profile.showMore}</Text>
         </TouchableOpacity>
       ) : null}
+
+      {visibleCount > INITIAL_VISIBLE ? (
+        <TouchableOpacity
+          style={styles.loadMore}
+          activeOpacity={0.8}
+          onPress={() => setVisibleCount(INITIAL_VISIBLE)}
+        >
+          <Image
+            source={PROFILE_ICONS.chevronDownPurple}
+            style={[styles.loadMoreIcon, styles.loadLessIcon]}
+            contentFit="contain"
+          />
+          <Text style={styles.loadMoreText}>{t.profile.showLess}</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 };
@@ -544,6 +559,9 @@ const styles = StyleSheet.create({
   loadMoreIcon: {
     width: 16,
     height: 16,
+  },
+  loadLessIcon: {
+    transform: [{ rotate: '180deg' }],
   },
   loadMoreText: {
     color: ProfileTheme.colors.profilePrimary,

@@ -1949,6 +1949,7 @@ export const ar = {
     yourPick: 'توقعك',
     correctPredictionLabel: 'التوقع الصحيح',
     showMore: 'عرض المزيد',
+    showLess: 'عرض أقل',
     predictNow: 'توقع الآن',
     coinsEarned: 'كوينز مكتسبة من التوقعات',
     achievementsTitle: 'الإنجازات',
