@@ -23,7 +23,7 @@ const ICON_SCHEDULE = require('../../assets/images/prediction-groups/icon-schedu
 export function PredictionsCupHero({
   isRTL,
   name: _name,
-  avatarUrl: _avatarUrl,
+  avatarUrl,
   membersCount,
   matchesCount,
   inviteCode,
@@ -145,7 +145,16 @@ export function PredictionsCupHero({
         </View>
 
         <View style={styles.artWrap}>
-          <Image source={CUP_TROPHY} style={styles.art} contentFit="contain" transition={0} />
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={[styles.art, styles.artAvatar]}
+              contentFit="cover"
+              transition={0}
+            />
+          ) : (
+            <Image source={CUP_TROPHY} style={styles.art} contentFit="contain" transition={0} />
+          )}
         </View>
       </View>
     </View>
@@ -215,4 +224,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   art: { width: '100%', height: '100%' },
+  artAvatar: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
 });
