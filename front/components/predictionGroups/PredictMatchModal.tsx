@@ -136,7 +136,7 @@ export function PredictMatchModal({
         <TeamBadge
           name={tm.name}
           logo={tm.logo ?? undefined}
-          size={side === 'home' ? 52 : 56}
+          size={56}
           color="transparent"
           highQuality
         />
@@ -452,24 +452,32 @@ const styles = StyleSheet.create({
   },
   picks: {
     width: '100%',
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 16,
+    gap: 12,
   },
   pick: {
-    width: 147,
-    height: 114,
+    flex: 1,
+    maxWidth: 160,
+    minHeight: 114,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 9,
     borderRadius: 16,
     backgroundColor: '#07040D',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: '#241830',
     paddingHorizontal: 8,
+    paddingVertical: 12,
   },
   pickOn: {
     borderColor: '#A855F7',
-    backgroundColor: 'rgba(168,85,247,0.12)',
+    backgroundColor: 'rgba(168,85,247,0.14)',
+    shadowColor: '#A855F7',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 5,
   },
   pickName: {
     color: '#FFFFFF',
@@ -487,7 +495,7 @@ const styles = StyleSheet.create({
     height: 74,
     borderRadius: 16,
     backgroundColor: '#07040D',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: '#241830',
     alignItems: 'center',
     justifyContent: 'center',
@@ -504,17 +512,22 @@ const styles = StyleSheet.create({
   footer: {
     width: '100%',
     maxWidth: 331,
-    alignItems: 'center',
-    gap: 6,
+    alignSelf: 'center',
+    alignItems: 'stretch',
+    gap: 8,
     paddingHorizontal: 12,
   },
-  confirmPress: { width: '100%' },
+  confirmPress: {
+    width: '100%',
+    alignSelf: 'stretch',
+  },
   confirm: {
     width: '100%',
-    paddingVertical: 21,
+    minHeight: 62,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 18,
   },
   confirmTxt: {
     color: '#FFFFFF',
@@ -524,7 +537,8 @@ const styles = StyleSheet.create({
   hintRow: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: 4,
+    alignSelf: 'center',
   },
   hint: {
     color: '#6B6B6B',
