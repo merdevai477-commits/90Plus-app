@@ -306,6 +306,18 @@ function RootLayoutNav() {
        */}
       <Stack.Screen name="share-win/index" options={{ headerShown: false }} />
       <Stack.Screen name="share-win/leaderboard" options={{ headerShown: false }} />
+      {/*
+       * PREDICT & WIN (توقع واربح) — front/app/predict-and-win.tsx + /predict-and-win/
+       *   predict-and-win        → hub (Figma 597:2152)
+       *   predict-and-win/[id]   → competition detail + prediction entry
+       *   predict-and-win/create → sponsor prize wizard
+       * STACK_SCREEN_OPTIONS does not set headerShown, so a route with no entry
+       * here gets the default native bar titled "predict-and-win" stacked on
+       * top of PWHeader — the same failure the quiz screens hit below.
+       */}
+      <Stack.Screen name="predict-and-win" options={{ headerShown: false }} />
+      <Stack.Screen name="predict-and-win/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="predict-and-win/create" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="world-cup-news" options={{ headerShown: false }} />
       <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />

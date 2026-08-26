@@ -1390,5 +1390,359 @@ router.get('/quiz/questions/statistics', requireAdmin, async (req: Request, res:
     }
 });
 
+/**
+ * ─── Predict & Win (توقع واربح) admin ────────────────────────────────────
+ *
+ * The dashboard surface for the feature. Everything the mobile app renders is
+ * created and governed here — competitions, sponsors, prizes, categories,
+ * results and winners — so new content never requires an app release.
+ */
+
+/** Narrow an untrusted status string to the enum, avoiding a Prisma throw. */
+const COMPETITION_STATUSES = [
+    'DRAFT', 'PUBLISHED', 'LOCKED', 'SETTLED', 'CANCELLED', 'REJECTED',
+] as const;
+type AdminCompetitionStatus = (typeof COMPETITION_STATUSES)[number];
+
+function parseStatus(value: unknown): AdminCompetitionStatus | undefined {
+    return COMPETITION_STATUSES.includes(value as AdminCompetitionStatus)
+        ? (value as AdminCompetitionStatus)
+        : undefined;
+}
+
+function competitionError(res: Response, error: any, fallback: string): boolean {
+    const known: Record<string, [number, string]> = {
+        COMPETITION_NOT_FOUND: [404, 'Competition not found'],
+        COMPETITION_NOT_DRAFT: [409, 'Competition already reviewed'],
+        COMPETITION_SETTLED: [409, 'Competition already settled'],
+        SPONSOR_NOT_FOUND: [404, 'Sponsor not found'],
+        CATEGORY_NOT_FOUND: [400, 'Prize category not found'],
+        MATCH_NOT_IN_POOL: [400, 'Match is not in the selectable pool'],
+        INVALID_DEADLINE: [400, 'Invalid prediction deadline'],
+        DEADLINE_AFTER_KICKOFF: [400, 'Prediction must close before kickoff'],
+        INVALID_WINNERS_COUNT: [400, 'Invalid winners count'],
+        INVALID_WINDOW: [400, 'Invalid competition window'],
+        INVALID_PRIZE: [400, 'Invalid prize details'],
+        INVALID_POOL_DATE: [400, 'Invalid pool date'],
+    };
+    const hit = known[error?.message];
+    if (!hit) return false;
+    res.status(hit[0]).json({ status: 'ERROR', message: hit[1] });
+    return true;
+}
+
+/** GET /api/admin/competitions?status=DRAFT — moderation queue / browse. */
+router.get('/competitions', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const status = parseStatus(req.query.status);
+        const take = Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 50, 200);
+        const competitions = await prisma.competition.findMany({
+            where: status ? { status } : {},
+            include: {
+                sponsor: true,
+                category: true,
+                _count: { select: { entries: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+            take,
+        });
+        res.json({ status: 'SUCCESS', data: competitions });
+    } catch (error: unknown) {
+        logger.error('Admin competitions list error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load competitions');
+    }
+});
+
+/** GET /api/admin/competitions/match-pool — the selectable daily matches. */
+router.get('/competitions/match-pool', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { getMatchPool } = await import('../services/competitions.service');
+        const { POOL_SIZE } = await import('../services/competition-match-pool.service');
+        const date = typeof req.query.date === 'string' ? req.query.date : undefined;
+        const matches = await getMatchPool(date);
+        res.json({ status: 'SUCCESS', data: matches, meta: { poolSize: POOL_SIZE } });
+    } catch (error: any) {
+        if (competitionError(res, error, 'pool')) return;
+        logger.error('Admin match pool error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load match pool');
+    }
+});
+
+/** POST /api/admin/competitions — create a competition directly. */
+router.post('/competitions', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { adminCreateCompetition } = await import('../services/competitions.service');
+        const created = await adminCreateCompetition(req.body ?? {});
+        res.status(201).json({ status: 'SUCCESS', data: created });
+    } catch (error: any) {
+        if (competitionError(res, error, 'create')) return;
+        logger.error('Admin competition create error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to create competition');
+    }
+});
+
+/** PATCH /api/admin/competitions/:id — edit prize/rules/window/winners. */
+router.patch('/competitions/:id', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const b = req.body ?? {};
+        const data: Record<string, unknown> = {};
+        for (const key of ['prizeName', 'prizeType', 'prizeImageUrl', 'prizeDescription', 'rules', 'leagueName'] as const) {
+            if (b[key] !== undefined) data[key] = b[key];
+        }
+        if (b.isFree !== undefined) data.isFree = !!b.isFree;
+        if (b.categoryId !== undefined) data.categoryId = b.categoryId;
+        if (b.winnersCount !== undefined) {
+            if (!Number.isInteger(b.winnersCount) || b.winnersCount < 1) {
+                res.status(400).json({ status: 'ERROR', message: 'Invalid winners count' });
+                return;
+            }
+            data.winnersCount = b.winnersCount;
+        }
+        for (const key of ['predictionDeadline', 'startAt', 'endAt'] as const) {
+            if (b[key] === undefined) continue;
+            if (b[key] === null) { data[key] = null; continue; }
+            const d = new Date(b[key]);
+            if (Number.isNaN(d.getTime())) {
+                res.status(400).json({ status: 'ERROR', message: 'Invalid ' + key });
+                return;
+            }
+            data[key] = d;
+        }
+
+        const existing = await prisma.competition.findUnique({ where: { id } });
+        if (!existing) {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Competition not found');
+            return;
+        }
+        // Same invariants the create path enforces — an admin edit must not be
+        // able to reopen predictions on a match that has already kicked off.
+        const nextDeadline = (data.predictionDeadline as Date | undefined) ?? existing.predictionDeadline;
+        if (nextDeadline > existing.matchDate) {
+            res.status(400).json({ status: 'ERROR', message: 'Prediction must close before kickoff' });
+            return;
+        }
+        if (data.categoryId) {
+            const category = await prisma.prizeCategory.findUnique({
+                where: { id: data.categoryId as string },
+            });
+            if (!category) {
+                res.status(400).json({ status: 'ERROR', message: 'Prize category not found' });
+                return;
+            }
+        }
+
+        const updated = await prisma.competition.update({
+            where: { id },
+            data,
+            include: { sponsor: true, category: true },
+        });
+        res.json({ status: 'SUCCESS', data: updated });
+    } catch (error: any) {
+        if (error?.code === 'P2025') {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Competition not found');
+            return;
+        }
+        logger.error('Admin competition update error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to update competition');
+    }
+});
+
+/** Lifecycle transitions. */
+for (const [path, fnName, label] of [
+    ['publish', 'publishCompetition', 'publish'],
+    ['reject', 'rejectCompetition', 'reject'],
+    ['unpublish', 'unpublishCompetition', 'unpublish'],
+    ['cancel', 'cancelCompetition', 'cancel'],
+] as const) {
+    router.post('/competitions/:id/' + path, requireAdmin, async (req: Request, res: Response): Promise<void> => {
+        try {
+            const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+            const svc = await import('../services/competitions.service');
+            const result = await (svc as any)[fnName](id);
+            res.json({ status: 'SUCCESS', data: result });
+        } catch (error: any) {
+            if (competitionError(res, error, label)) return;
+            logger.error('Admin competition ' + label + ' error:', error);
+            sendError(req, res, ErrorCode.INTERNAL, 'Failed to ' + label + ' competition');
+        }
+    });
+}
+
+/** GET participants / winners for a competition. */
+router.get('/competitions/:id/entries', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const { listCompetitionEntries } = await import('../services/competitions.service');
+        const onlyWinners = req.query.winners === 'true';
+        res.json({ status: 'SUCCESS', data: await listCompetitionEntries(id, onlyWinners) });
+    } catch (error: unknown) {
+        logger.error('Admin competition entries error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load entries');
+    }
+});
+
+/**
+ * POST /api/admin/competitions/:id/result — record or correct the official
+ * result and (re)determine winners. This is the only path that rewrites an
+ * already-settled competition.
+ */
+router.post('/competitions/:id/result', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const { homeScore, awayScore } = req.body ?? {};
+        if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore) || homeScore < 0 || awayScore < 0) {
+            res.status(400).json({ status: 'ERROR', message: 'homeScore and awayScore must be non-negative integers' });
+            return;
+        }
+        const { CompetitionResolverService } = await import('../services/competition-resolver.service');
+        const result = await CompetitionResolverService.resettleCompetition(id, homeScore, awayScore);
+        res.json({ status: 'SUCCESS', data: result });
+    } catch (error: any) {
+        if (competitionError(res, error, 'settle')) return;
+        logger.error('Admin competition result error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to settle competition');
+    }
+});
+
+/** ─── Sponsors ───────────────────────────────────────────────────────── */
+
+router.get('/sponsors', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const sponsors = await prisma.sponsor.findMany({
+            include: { _count: { select: { competitions: true } } },
+            orderBy: { createdAt: 'desc' },
+        });
+        res.json({ status: 'SUCCESS', data: sponsors });
+    } catch (error: unknown) {
+        logger.error('Admin sponsors list error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load sponsors');
+    }
+});
+
+router.post('/sponsors', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { name, description, logoUrl, address, hasDelivery, socialLinks, isVerified } = req.body ?? {};
+        if (!name || typeof name !== 'string' || !name.trim()) {
+            res.status(400).json({ status: 'ERROR', message: 'name is required' });
+            return;
+        }
+        const sponsor = await prisma.sponsor.create({
+            data: {
+                name: name.trim(),
+                description: description ?? null,
+                logoUrl: logoUrl ?? null,
+                address: address ?? null,
+                hasDelivery: !!hasDelivery,
+                socialLinks: socialLinks ?? undefined,
+                isVerified: !!isVerified,
+            },
+        });
+        res.status(201).json({ status: 'SUCCESS', data: sponsor });
+    } catch (error: unknown) {
+        logger.error('Admin sponsor create error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to create sponsor');
+    }
+});
+
+router.patch('/sponsors/:id', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const b = req.body ?? {};
+        const data: Record<string, unknown> = {};
+        for (const key of ['name', 'description', 'logoUrl', 'address', 'socialLinks'] as const) {
+            if (b[key] !== undefined) data[key] = b[key];
+        }
+        for (const key of ['hasDelivery', 'isVerified', 'isActive'] as const) {
+            if (b[key] !== undefined) data[key] = !!b[key];
+        }
+        const sponsor = await prisma.sponsor.update({ where: { id }, data });
+        res.json({ status: 'SUCCESS', data: sponsor });
+    } catch (error: any) {
+        if (error?.code === 'P2025') {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Sponsor not found');
+            return;
+        }
+        logger.error('Admin sponsor update error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to update sponsor');
+    }
+});
+
+/** ─── Prize categories ───────────────────────────────────────────────── */
+
+router.get('/prize-categories', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const categories = await prisma.prizeCategory.findMany({ orderBy: { sortOrder: 'asc' } });
+        res.json({ status: 'SUCCESS', data: categories });
+    } catch (error: unknown) {
+        logger.error('Admin prize categories list error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load categories');
+    }
+});
+
+router.patch('/prize-categories/:id', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        // `icon` is an absolute URL, normally one returned by
+        // `POST /api/upload/competition-asset` — the app's single upload
+        // surface. Category artwork needs no storage mechanism of its own.
+        const { nameAr, nameEn, description, descriptionEn, icon, sortOrder, isActive } =
+            req.body ?? {};
+        const category = await prisma.prizeCategory.update({
+            where: { id },
+            data: {
+                ...(nameAr !== undefined ? { nameAr } : {}),
+                ...(nameEn !== undefined ? { nameEn } : {}),
+                ...(description !== undefined ? { description } : {}),
+                ...(descriptionEn !== undefined ? { descriptionEn } : {}),
+                ...(icon !== undefined ? { icon } : {}),
+                ...(sortOrder !== undefined ? { sortOrder } : {}),
+                ...(isActive !== undefined ? { isActive: !!isActive } : {}),
+            },
+        });
+        res.json({ status: 'SUCCESS', data: category });
+    } catch (error: any) {
+        if (error?.code === 'P2025') {
+            sendError(req, res, ErrorCode.NOT_FOUND, 'Category not found');
+            return;
+        }
+        logger.error('Admin prize category update error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to update category');
+    }
+});
+
+router.post('/prize-categories', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { key, nameAr, nameEn, description, descriptionEn, icon, sortOrder } =
+            req.body ?? {};
+        if (!key || !nameAr) {
+            sendError(req, res, ErrorCode.VALIDATION, 'key and nameAr are required');
+            return;
+        }
+        // Without `nameEn` a new category renders its Arabic name in the
+        // English build; the app falls back to its bundled label only for the
+        // ten seeded keys, which a custom key is not one of.
+        const category = await prisma.prizeCategory.create({
+            data: {
+                key,
+                nameAr,
+                nameEn: nameEn ?? null,
+                description: description ?? null,
+                descriptionEn: descriptionEn ?? null,
+                icon: icon ?? null,
+                sortOrder: sortOrder ?? 0,
+            },
+        });
+        res.status(201).json({ status: 'SUCCESS', data: category });
+    } catch (error: any) {
+        if (error?.code === 'P2002') {
+            sendError(req, res, ErrorCode.CONFLICT, 'Category key already exists');
+            return;
+        }
+        logger.error('Admin prize category create error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to create category');
+    }
+});
+
 export default router;
 

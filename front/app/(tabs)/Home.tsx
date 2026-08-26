@@ -37,6 +37,7 @@ import { snapshotToMatchRow } from '../../src/utils/snapshotToMatchRow';
 import { isMatchFinished, isMatchLive } from '../../utils/matchStatusUtils';
 import AdvancedSearchBar, { SearchResult } from '../../components/common/AdvancedSearchBar';
 import LuckyWheelModal from '../../components/common/LuckyWheelModal';
+import { PredictAndWinHomeBanner } from '../../components/predictAndWin/HomeEntryBanner';
 import { HomeSectionError } from '../../components/Home/HomeSectionError';
 import { useHomeStore, type Match as HomeMatch } from '../../src/store/home.store';
 import { APP_BG } from '../../constants/ui';
@@ -955,6 +956,11 @@ export default function HomeScreen() {
                             isLoading={loadingMatches && matches.length === 0}
                         />
                     )}
+                </ScreenSection>
+
+                {/* ── Predict & Win ───────────────────────────────────────── */}
+                <ScreenSection>
+                    <PredictAndWinHomeBanner />
                 </ScreenSection>
 
                 {/* ── Videos ──────────────────────────────────────────────── */}

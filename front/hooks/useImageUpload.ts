@@ -180,6 +180,9 @@ export const useImageUpload = (): UseImageUploadReturn => {
             const result = await uploadPromise;
             if (!result.success) {
               // Server responded but with an app-level error (e.g. cooldown)
+              setError(result.error || (isRTL ? 'فشل رفع الصورة' : 'Failed to upload image'));
+              setIsUploading(false);
+              setProgress(0);
               return result;
             }
 

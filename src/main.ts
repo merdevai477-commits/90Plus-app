@@ -237,6 +237,7 @@ import footballRoutes from './routes/football.routes';
 import knowledgeExportRoutes from './routes/knowledge-export.routes';
 import predictionsRoutes from './routes/predictions.routes';
 import predictionGroupsRoutes from './routes/prediction-groups.routes';
+import competitionsRoutes from './routes/competitions.routes';
 import coinsRoutes from './routes/coins.routes';
 
 import adminRoutes from './routes/admin.routes';
@@ -425,6 +426,7 @@ app.use(`${API_PREFIX}/news`, newsRoutes);
 app.use(`${API_PREFIX}/i18n`, i18nRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/prediction-groups`, predictionGroupsRoutes);
+app.use(`${API_PREFIX}/competitions`, competitionsRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
 app.use(`${API_PREFIX}/app`, appVersionRoutes);
 app.use(`${API_PREFIX}/terms`, termsRoutes);

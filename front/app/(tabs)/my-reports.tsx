@@ -3,7 +3,7 @@
  * Shows user's submitted reports and their status
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -122,12 +122,26 @@ export default function MyReportsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * `@clerk/clerk-expo`'s `useAuth` rebuilds `getToken` on every render, so
+   * listing it as a dependency made `fetchReports` a new function each render.
+   * The mount effect below depends on that function and the fetch ends with
+   * `setReports(data.reports || [])` — always a fresh array — so it re-rendered,
+   * rebuilt the callback, and fetched again, without end. Pinning the identity
+   * in a ref is what the rest of the app already does for this hook.
+   */
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+  const tReportsRef = useRef(tReports);
+  tReportsRef.current = tReports;
+
   const fetchReports = useCallback(async (isRefresh = false) => {
+    const tReports = tReportsRef.current;
     try {
       if (!isRefresh) setLoading(true);
       setError(null);
 
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) {
         throw new Error(tReports.authRequired);
       }
@@ -152,7 +166,10 @@ export default function MyReportsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [getToken, tReports]);
+    // No dependencies: both the token function and the copy are read from
+    // refs, so this callback is created once and the mount effect below fires
+    // exactly once.
+  }, []);
 
   useEffect(() => {
     fetchReports();

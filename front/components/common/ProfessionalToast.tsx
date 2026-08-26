@@ -193,15 +193,25 @@ export const ProfessionalToast: React.FC<ProfessionalToastProps> = ({
     }
   };
 
-  if (!visible) return null;
-
   const spin = spinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
   return (
-    <View style={[styles.container, getPositionStyle(), { pointerEvents: 'box-none' }]}>
+    <View
+      style={[styles.container, getPositionStyle()]}
+      // This tree used to `return null` while hidden, so every show/hide cycle
+      // inserted/removed the whole subtree. A caller that shows the toast and
+      // navigates in the same tick (e.g. publish success) batches that insert
+      // with the screen swap's own mount/unmount into one Fabric commit, which
+      // has crashed Android with `addView: failed to insert view`. Staying
+      // mounted turns "show" into a style-only update (opacity/transform), so
+      // `visible` now only gates touches; `none` also covers the sliver that
+      // `translateY` leaves inside the screen bounds while hidden (position
+      // 'top' only clears -120 of a ~72-120px tall card).
+      pointerEvents={visible ? 'box-none' : 'none'}
+    >
       <Animated.View
         style={[
           styles.toastContainer,

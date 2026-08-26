@@ -48,8 +48,9 @@ const BottomNav = memo(function BottomNav() {
   const isChat = pathname?.includes('chat');
   const isQuiz = pathname?.includes('quiz');
   const isPredictionGroups = pathname?.includes('prediction-groups');
+  const isPredictAndWin = pathname?.includes('predict-and-win');
   const isMatchDetails = pathname?.includes('match-details');
-  const hidden = isChat || isQuiz || isPredictionGroups || isMatchDetails;
+  const hidden = isChat || isQuiz || isPredictionGroups || isPredictAndWin || isMatchDetails;
 
   const activeIndex = useMemo(
     () => resolveActiveIndex(pathname),

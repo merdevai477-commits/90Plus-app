@@ -184,6 +184,11 @@ const MatchDetailsScreen = () => {
   useScreenFont();
   const router = useRouter();
   const { getToken } = useAuth();
+  // Clerk rebuilds `getToken` on every render. This screen re-renders on
+  // every live tick, so effects must read it through a ref rather than
+  // depend on it — see the subscription hydrate effect below.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const { t, language, translate } = useTranslation();
   const params = useLocalSearchParams() as unknown as MatchDetailsParams;
   const shimmerX = useShimmer();
@@ -360,7 +365,7 @@ const MatchDetailsScreen = () => {
     let cancelled = false;
     (async () => {
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token || cancelled) return;
         const ids = await MatchSubscriptionsService.listIds(token);
         if (!cancelled) setIsMatchSubscribed(ids.has(fixtureId));
@@ -371,7 +376,10 @@ const MatchDetailsScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [fixtureId, getToken]);
+    // `getToken` is deliberately absent: Clerk rebuilds it on every render,
+    // and this screen re-renders on every live tick, so depending on it re-ran
+    // this request several times a second for the whole match.
+  }, [fixtureId]);
 
   const handleToggleMatchNotifications = useCallback(async () => {
     if (!fixtureId || matchSubLoading) return;
