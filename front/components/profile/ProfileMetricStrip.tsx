@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity, ImageSourcePropType } from 'r
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { ProfileTheme } from '../../constants/ProfileTheme';
 import { formatProfileStat } from './formatProfileStat';
 
 export interface ProfileMetricItem {
@@ -18,6 +17,9 @@ interface ProfileMetricStripProps {
   items: ProfileMetricItem[];
   variant?: 'social' | 'performance';
 }
+
+const FONT_BOLD = 'Inter_700Bold';
+const FONT_MEDIUM = 'Inter_500Medium';
 
 const ProfileMetricStrip = memo(function ProfileMetricStrip({
   items,
@@ -53,13 +55,17 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
 function MetricCell({ item }: { item: ProfileMetricItem }) {
   const body = (
     <View style={styles.cell}>
-      <Image source={item.icon} style={styles.icon} contentFit="contain" />
-      <Text style={styles.value} numberOfLines={1}>
-        {formatProfileStat(item.value)}
-      </Text>
-      <Text style={styles.label} numberOfLines={1}>
-        {item.label}
-      </Text>
+      <View style={styles.iconBox}>
+        <Image source={item.icon} style={styles.icon} contentFit="contain" />
+      </View>
+      <View style={styles.copy}>
+        <Text style={styles.value} numberOfLines={1}>
+          {formatProfileStat(item.value)}
+        </Text>
+        <Text style={styles.label} numberOfLines={1}>
+          {item.label}
+        </Text>
+      </View>
     </View>
   );
 
@@ -67,7 +73,6 @@ function MetricCell({ item }: { item: ProfileMetricItem }) {
 
   return (
     <TouchableOpacity
-      style={styles.touch}
       onPress={() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         item.onPress?.();
@@ -86,12 +91,15 @@ const styles = StyleSheet.create({
     marginHorizontal: 22,
     borderRadius: 16,
     paddingVertical: 13,
-    paddingHorizontal: 12,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   socialCard: {
-    backgroundColor: ProfileTheme.colors.profileCard,
-    borderWidth: 1,
-    borderColor: ProfileTheme.colors.profileCardBorder,
+    backgroundColor: '#0E071C',
+    borderWidth: 0.5,
+    borderColor: '#250A3F',
     marginTop: -72,
   },
   performanceCard: {
@@ -100,33 +108,45 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 23,
   },
   divider: {
     width: StyleSheet.hairlineWidth,
     height: 47,
-    backgroundColor: 'rgba(168,85,247,0.28)',
-  },
-  touch: {
-    flex: 1,
+    backgroundColor: '#250A3F',
   },
   cell: {
-    flex: 1,
+    width: 56,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
+  },
+  iconBox: {
+    width: 28,
+    height: 28,
+    overflow: 'hidden',
   },
   icon: {
     width: 28,
     height: 28,
   },
+  copy: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
   value: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 18,
+    fontFamily: FONT_BOLD,
     fontWeight: '700',
+    textAlign: 'center',
   },
   label: {
-    color: ProfileTheme.colors.profileMuted,
+    color: '#B7B7B7',
     fontSize: 9,
+    fontFamily: FONT_MEDIUM,
     fontWeight: '500',
     textAlign: 'center',
   },
