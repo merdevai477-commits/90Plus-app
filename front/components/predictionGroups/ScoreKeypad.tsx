@@ -1,5 +1,5 @@
 /**
- * Numeric keypad for entering an exact match score (Figma Prediction feature).
+ * Numeric keypad for exact score entry — dark Figma-styled pad.
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,9 +9,14 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { PG, PG_GRADIENTS, PG_RADII, usePGFonts } from './theme';
+import { usePGFonts } from './theme';
 
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const;
+const ROWS: string[][] = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  ['back', '0', 'ok'],
+];
 const MAX_SCORE = 20;
 
 export function ScoreKeypad({
@@ -33,7 +38,7 @@ export function ScoreKeypad({
   onClose: () => void;
   embedded?: boolean;
 }) {
-  const { extra, bold, medium } = usePGFonts();
+  const { bold, medium } = usePGFonts();
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState(String(value));
 
@@ -74,58 +79,85 @@ export function ScoreKeypad({
   if (!visible) return null;
 
   const sheet = (
-    <View
+    <LinearGradient
+      colors={['#0C051A', '#07040D']}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
       style={[
         styles.sheet,
         embedded && styles.embeddedSheet,
-        { paddingBottom: Math.max(insets.bottom, 16) + 8 },
+        { paddingBottom: Math.max(insets.bottom, 14) + 10 },
       ]}
     >
-      <Text style={[styles.title, { fontFamily: extra }]}>{title}</Text>
-      <Text style={[styles.value, { fontFamily: extra }]}>{draft}</Text>
-
-      <View style={styles.grid}>
-        {KEYS.map((k) => (
-          <Pressable
-            key={k}
-            onPress={() => tapDigit(k)}
-            style={({ pressed }) => [styles.key, pressed && styles.keyPressed]}
-          >
-            <Text style={[styles.keyTxt, { fontFamily: bold }]}>{k}</Text>
-          </Pressable>
-        ))}
-        <Pressable
-          onPress={backspace}
-          style={({ pressed }) => [styles.key, styles.keyMuted, pressed && styles.keyPressed]}
-        >
-          <Delete size={22} color={PG.text} />
-        </Pressable>
-        <Pressable
-          onPress={() => tapDigit('0')}
-          style={({ pressed }) => [styles.key, pressed && styles.keyPressed]}
-        >
-          <Text style={[styles.keyTxt, { fontFamily: bold }]}>0</Text>
-        </Pressable>
-        <Pressable
-          onPress={onConfirm}
-          style={({ pressed }) => [styles.key, pressed && { opacity: 0.9 }]}
-        >
-          <LinearGradient
-            colors={[...PG_GRADIENTS.purple]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.confirmFill}
-          >
-            <Text style={[styles.confirmTxt, { fontFamily: medium }]}>{confirmLabel}</Text>
-          </LinearGradient>
-        </Pressable>
+      <View style={styles.handle} />
+      <Text style={[styles.title, { fontFamily: bold }]} numberOfLines={1}>
+        {title}
+      </Text>
+      <View style={styles.valueBox}>
+        <Text style={[styles.value, { fontFamily: bold }]}>{draft}</Text>
       </View>
-    </View>
+
+      <View style={styles.pad}>
+        {ROWS.map((row) => (
+          <View key={row.join('-')} style={styles.padRow}>
+            {row.map((key) => {
+              if (key === 'back') {
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={backspace}
+                    style={({ pressed }) => [
+                      styles.key,
+                      styles.keyMuted,
+                      pressed && styles.keyPressed,
+                    ]}
+                  >
+                    <Delete size={22} color="#E8E8E8" />
+                  </Pressable>
+                );
+              }
+              if (key === 'ok') {
+                return (
+                  <Pressable
+                    key={key}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                      onConfirm();
+                    }}
+                    style={({ pressed }) => [styles.key, pressed && { opacity: 0.9 }]}
+                  >
+                    <LinearGradient
+                      colors={['#3D0AB3', '#190448']}
+                      start={{ x: 0.5, y: 0 }}
+                      end={{ x: 0.5, y: 1 }}
+                      style={styles.confirmFill}
+                    >
+                      <Text style={[styles.confirmTxt, { fontFamily: medium }]} numberOfLines={1}>
+                        {confirmLabel}
+                      </Text>
+                    </LinearGradient>
+                  </Pressable>
+                );
+              }
+              return (
+                <Pressable
+                  key={key}
+                  onPress={() => tapDigit(key)}
+                  style={({ pressed }) => [styles.key, pressed && styles.keyPressed]}
+                >
+                  <Text style={[styles.keyTxt, { fontFamily: bold }]}>{key}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </LinearGradient>
   );
 
   if (embedded) {
     return (
-      <View style={styles.embeddedRoot}>
+      <View style={styles.embeddedRoot} pointerEvents="box-none">
         <Pressable style={styles.backdrop} onPress={onClose} />
         {sheet}
       </View>
@@ -134,63 +166,95 @@ export function ScoreKeypad({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      {sheet}
+      <View style={styles.modalRoot}>
+        <Pressable style={styles.backdrop} onPress={onClose} />
+        {sheet}
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  modalRoot: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.62)',
   },
   sheet: {
-    backgroundColor: PG.card,
-    borderTopLeftRadius: PG_RADII.xl,
-    borderTopRightRadius: PG_RADII.xl,
-    borderWidth: 1,
-    borderColor: PG.border,
-    paddingHorizontal: 20,
-    paddingTop: 18,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(79,10,144,0.62)',
+    paddingHorizontal: 18,
+    paddingTop: 10,
     gap: 14,
+    shadowColor: 'rgba(90,18,158,0.36)',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    elevation: 20,
   },
   embeddedRoot: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
-    zIndex: 20,
+    zIndex: 40,
   },
   embeddedSheet: {
-    borderRadius: PG_RADII.xl,
-    marginHorizontal: 8,
-    marginBottom: 8,
+    borderRadius: 28,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    marginBottom: 4,
   },
   title: {
-    color: PG.text,
+    color: '#FFFFFF',
     fontSize: 16,
     textAlign: 'center',
   },
-  value: {
-    color: PG.primaryLight,
-    fontSize: 48,
-    textAlign: 'center',
-    lineHeight: 56,
+  valueBox: {
+    alignSelf: 'center',
+    minWidth: 96,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: '#07040D',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#241830',
   },
-  grid: {
+  value: {
+    color: '#C4A6FF',
+    fontSize: 44,
+    textAlign: 'center',
+    lineHeight: 52,
+  },
+  pad: {
+    gap: 10,
+  },
+  padRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 10,
+    gap: 10,
   },
   key: {
-    width: '31%',
-    height: 52,
-    borderRadius: PG_RADII.md,
-    backgroundColor: PG.cardElevated,
-    borderWidth: 1,
-    borderColor: PG.borderSoft,
+    flex: 1,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   keyMuted: {
     backgroundColor: 'rgba(255,255,255,0.04)',
@@ -200,12 +264,11 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.97 }],
   },
   keyTxt: {
-    color: PG.text,
-    fontSize: 22,
+    color: '#FFFFFF',
+    fontSize: 24,
   },
   confirmFill: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: PG_RADII.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -213,5 +276,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     textAlign: 'center',
+    paddingHorizontal: 4,
   },
 });

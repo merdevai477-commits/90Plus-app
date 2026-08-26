@@ -1214,6 +1214,7 @@ export const en = {
       keypadAway: '{team} goals',
       predictNow: 'Predict now',
       predicted: 'Predicted',
+      matchEnded: 'Match ended',
       modalTitle: 'Predict match result',
       whoWins: 'Who will win?',
       matchScore: 'Match score',

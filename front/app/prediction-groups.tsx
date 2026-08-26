@@ -420,6 +420,7 @@ export default function PredictionGroupsScreen() {
                       isRTL={isRTL}
                       saved={saved}
                       locked={locked}
+                      status={status}
                       onPredict={() => setPredictMatch(m)}
                     />
                   );

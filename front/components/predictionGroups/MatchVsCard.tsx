@@ -1,9 +1,8 @@
 /**
- * Compact VS match card with Predict Now CTA — Figma 477:2766.
+ * Compact VS match card with Predict Now CTA — Figma 477:2766 + CTA states.
  */
 
-import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import TeamBadge from '../common/TeamBadge';
@@ -11,24 +10,66 @@ import { useTranslation } from '../../src/i18n';
 import type { PredictionMatch } from './data';
 import { usePGFonts } from './theme';
 
+type CtaState = 'open' | 'predicted' | 'ended';
+
+const FINISHED = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO', 'CANC', 'ABD', 'PST']);
+
+function resolveCtaState(saved: boolean, status: string): CtaState {
+  const short = (status || '').toUpperCase();
+  const finished = FINISHED.has(short);
+  const notUpcoming = short !== '' && short !== 'NS' && short !== 'TBD';
+  if (finished || (notUpcoming && !saved)) return 'ended';
+  if (saved) return 'predicted';
+  return 'open';
+}
+
 export function MatchVsCard({
   match,
   isRTL,
   saved,
-  locked,
+  locked: _locked,
+  status,
   onPredict,
 }: {
   match: PredictionMatch;
   isRTL: boolean;
   saved?: boolean;
   locked?: boolean;
+  status?: string;
   onPredict: () => void;
 }) {
   const { bold, medium } = usePGFonts();
   const { t, direction } = useTranslation();
   const pg = t.predictionGroups.predictions;
   const row: ViewStyle = { flexDirection: isRTL ? 'row-reverse' : 'row' };
-  const disabled = saved || locked;
+
+  const ctaState = useMemo(
+    () => resolveCtaState(Boolean(saved), status ?? match.status ?? ''),
+    [saved, status, match.status],
+  );
+
+  const ctaLabel =
+    ctaState === 'predicted'
+      ? pg.predicted
+      : ctaState === 'ended'
+        ? pg.matchEnded
+        : pg.predictNow;
+
+  const ctaStyle =
+    ctaState === 'predicted'
+      ? styles.ctaPredicted
+      : ctaState === 'ended'
+        ? styles.ctaEnded
+        : styles.ctaOpen;
+
+  const ctaTxtStyle =
+    ctaState === 'predicted'
+      ? styles.ctaTxtPredicted
+      : ctaState === 'ended'
+        ? styles.ctaTxtEnded
+        : styles.ctaTxtOpen;
+
+  const disabled = ctaState !== 'open';
 
   const team = (side: 'home' | 'away', size: number) => {
     const tm = match[side];
@@ -55,12 +96,7 @@ export function MatchVsCard({
   };
 
   return (
-    <LinearGradient
-      colors={['#0C051A', '#07040D']}
-      start={{ x: 0.5, y: 0 }}
-      end={{ x: 0.5, y: 1 }}
-      style={styles.card}
-    >
+    <View style={styles.card}>
       <View style={[styles.row, row]}>
         {team('home', 52)}
         <View style={styles.mid}>
@@ -69,23 +105,23 @@ export function MatchVsCard({
           <Pressable
             disabled={disabled}
             onPress={onPredict}
-            style={({ pressed }) => [pressed && { opacity: 0.9 }, disabled && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.cta,
+              ctaStyle,
+              pressed && !disabled && { opacity: 0.9 },
+            ]}
           >
-            <LinearGradient
-              colors={['rgba(53,6,98,0.56)', 'rgba(26,4,47,0.56)']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={styles.cta}
+            <Text
+              style={[styles.ctaTxt, ctaTxtStyle, { fontFamily: bold, writingDirection: direction }]}
+              numberOfLines={1}
             >
-              <Text style={[styles.ctaTxt, { fontFamily: bold, writingDirection: direction }]}>
-                {saved ? pg.predicted : pg.predictNow}
-              </Text>
-            </LinearGradient>
+              {ctaLabel}
+            </Text>
           </Pressable>
         </View>
         {team('away', 54)}
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -98,6 +134,7 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(83,25,138,0.65)',
+    backgroundColor: '#07040D',
     justifyContent: 'center',
   },
   row: { alignItems: 'center', justifyContent: 'space-between' },
@@ -113,7 +150,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  ctaOpen: {
+    backgroundColor: '#350662',
     borderColor: '#580E9E',
   },
-  ctaTxt: { color: '#D6AEFC', fontSize: 10 },
+  ctaPredicted: {
+    backgroundColor: '#175F03',
+    borderColor: '#124A02',
+  },
+  ctaEnded: {
+    backgroundColor: 'rgba(33,20,46,0.56)',
+    borderColor: '#2B1C3A',
+  },
+  ctaTxt: { fontSize: 10, textAlign: 'center' },
+  ctaTxtOpen: { color: '#D6AEFC' },
+  ctaTxtPredicted: { color: '#FFFFFF' },
+  ctaTxtEnded: { color: '#D6AEFC' },
 });

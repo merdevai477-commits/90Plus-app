@@ -20,6 +20,8 @@ export interface PredictionMatch {
   away: Team;
   day: string;
   time: string;
+  /** Fixture status short code (NS, FT, …). */
+  status?: string;
   /** Present only for finished matches (النتائج tab). */
   result?: { home: number; away: number };
   /** 365 community Who Will Win? percentages (optional). */

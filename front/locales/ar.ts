@@ -1302,6 +1302,7 @@ export const ar = {
       keypadAway: 'أهداف {team}',
       predictNow: 'توقع الآن',
       predicted: 'تم التوقع',
+      matchEnded: 'انتهت المباراة',
       modalTitle: 'توقع نتيجة المباراة',
       whoWins: 'من سيفوز؟',
       matchScore: 'نتيجة المباراة',
