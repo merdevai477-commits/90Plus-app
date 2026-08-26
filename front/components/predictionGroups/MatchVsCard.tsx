@@ -14,18 +14,32 @@ type CtaState = 'open' | 'predicted' | 'ended';
 
 const FINISHED = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO', 'CANC', 'ABD', 'PST']);
 
-/** Exact Figma / SwiftUI CTA fills (solid — avoid LinearGradient flex bugs). */
-const CTA = {
-  openBg: '#350662',
-  openBorder: '#570F9E',
-  openText: '#D6ADFC',
-  predictedBg: '#175F03',
-  predictedBorder: '#124A02',
-  predictedText: '#FFFFFF',
-  endedBg: 'rgba(33,20,46,0.56)',
-  endedBorder: '#2B1C3A',
-  endedText: '#D6ADFC',
-} as const;
+/**
+ * Exact SwiftUI / Figma CTA tokens:
+ * open      bg(0.21,0.02,0.38) border(0.34,0.06,0.62) text(0.84,0.68,0.99)
+ * predicted bg(0.09,0.38,0.02) border(0.07,0.29,0.02) text white
+ * ended     bg(0.13,0.08,0.18,0.56) border(0.17,0.11,0.23) text(0.84,0.68,0.99)
+ */
+const CTA_THEME: Record<
+  CtaState,
+  { bg: string; border: string; text: string }
+> = {
+  open: {
+    bg: '#360561',
+    border: '#570F9E',
+    text: '#D6ADFC',
+  },
+  predicted: {
+    bg: '#176105',
+    border: '#124A05',
+    text: '#FFFFFF',
+  },
+  ended: {
+    bg: 'rgba(33,20,46,0.85)',
+    border: '#2B1C3A',
+    text: '#D6ADFC',
+  },
+};
 
 function resolveCtaState(saved: boolean, status: string): CtaState {
   const short = (status || '').toUpperCase();
@@ -61,6 +75,7 @@ export function MatchVsCard({
     [saved, status, match.status],
   );
 
+  const theme = CTA_THEME[ctaState];
   const ctaLabel =
     ctaState === 'predicted'
       ? pg.predicted
@@ -68,28 +83,7 @@ export function MatchVsCard({
         ? pg.matchEnded
         : pg.predictNow;
 
-  const disabled = ctaState !== 'open';
-
-  const backgroundColor =
-    ctaState === 'predicted'
-      ? CTA.predictedBg
-      : ctaState === 'ended'
-        ? CTA.endedBg
-        : CTA.openBg;
-
-  const borderColor =
-    ctaState === 'predicted'
-      ? CTA.predictedBorder
-      : ctaState === 'ended'
-        ? CTA.endedBorder
-        : CTA.openBorder;
-
-  const textColor =
-    ctaState === 'predicted'
-      ? CTA.predictedText
-      : ctaState === 'ended'
-        ? CTA.endedText
-        : CTA.openText;
+  const canPress = ctaState === 'open';
 
   const team = (side: 'home' | 'away', size: number) => {
     const tm = match[side];
@@ -122,32 +116,40 @@ export function MatchVsCard({
         <View style={styles.mid}>
           <Text style={[styles.vs, { fontFamily: bold }]}>VS</Text>
           <Text style={[styles.time, { fontFamily: medium }]}>{match.time}</Text>
+
+          {/* Visual chip is a View (not Pressable) so Android never greys out fills. */}
           <Pressable
-            disabled={disabled}
+            disabled={!canPress}
             onPress={onPredict}
             accessibilityRole="button"
-            accessibilityState={{ disabled }}
-            style={({ pressed }) => [
-              styles.cta,
-              { backgroundColor, borderColor },
-              pressed && !disabled && styles.ctaPressed,
-            ]}
+            accessibilityState={{ disabled: !canPress }}
+            style={({ pressed }) => [pressed && canPress && styles.ctaPressed]}
           >
-            <Text
+            <View
               style={[
-                styles.ctaTxt,
+                styles.ctaChip,
                 {
-                  color: textColor,
-                  fontFamily: bold,
-                  writingDirection: direction,
+                  backgroundColor: theme.bg,
+                  borderColor: theme.border,
                 },
               ]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.85}
             >
-              {ctaLabel}
-            </Text>
+              <Text
+                style={[
+                  styles.ctaTxt,
+                  {
+                    color: theme.text,
+                    fontFamily: bold,
+                    writingDirection: direction,
+                  },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
+                {ctaLabel}
+              </Text>
+            </View>
           </Pressable>
         </View>
         {team('away', 50)}
@@ -168,7 +170,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(138,56,245,0.55)',
     backgroundColor: '#07040D',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
   row: {
     alignItems: 'center',
@@ -197,22 +198,23 @@ const styles = StyleSheet.create({
     color: '#777777',
     fontSize: 13,
   },
-  cta: {
+  ctaPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  ctaChip: {
     width: 105,
     height: 33,
     borderRadius: 8,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  ctaPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.98 }],
+    paddingHorizontal: 8,
   },
   ctaTxt: {
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
+    includeFontPadding: false,
   },
 });
