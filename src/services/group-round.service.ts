@@ -1,5 +1,6 @@
 /**
  * Daily prediction-group round — up to 10 Big 5 league matches per day.
+ * Midweek days often have no Big 5 kickoffs, so we look ahead a few days.
  */
 
 import prisma from '../lib/prisma';
@@ -9,12 +10,38 @@ import { footballDataCacheService } from './football-data-cache.service';
 import { pickTopFixtures } from '../utils/fixture-importance';
 
 const ROUND_MATCH_LIMIT = 10;
+/** Extra calendar days to search when today has few/no Big 5 fixtures. */
+const BIG5_LOOKAHEAD_DAYS = 5;
 
 function sameIdSet(a: number[], b: number[]): boolean {
   if (a.length !== b.length) return false;
   const left = [...a].sort((x, y) => x - y);
   const right = [...b].sort((x, y) => x - y);
   return left.every((id, i) => id === right[i]);
+}
+
+function addCalendarDays(dateString: string, days: number): string {
+  const d = new Date(`${dateString}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+async function loadFixturePool(dateString: string): Promise<any[]> {
+  const dates: string[] = [];
+  for (let i = 0; i <= BIG5_LOOKAHEAD_DAYS; i++) {
+    dates.push(addCalendarDays(dateString, i));
+  }
+  const batches = await Promise.all(
+    dates.map((d) => footballDataCacheService.getMatchesByDate(d)),
+  );
+  const byId = new Map<number, any>();
+  for (const batch of batches) {
+    for (const f of batch as any[]) {
+      const id = f?.fixture?.id;
+      if (typeof id === 'number' && !byId.has(id)) byId.set(id, f);
+    }
+  }
+  return [...byId.values()];
 }
 
 export function formatFixtureForClient(fixture: any) {
@@ -83,7 +110,7 @@ export async function ensureDailyRound(dateString = calendarTodayKey()) {
     });
   }
 
-  const fixtures = await footballDataCacheService.getMatchesByDate(dateString);
+  const fixtures = await loadFixturePool(dateString);
   const top = pickTopFixtures(fixtures, ROUND_MATCH_LIMIT);
   const matchIds = top
     .map((f) => f?.fixture?.id)
@@ -91,11 +118,11 @@ export async function ensureDailyRound(dateString = calendarTodayKey()) {
 
   if (matchIds.length === 0) {
     logger.warn(
-      `[GroupRound] No upcoming fixtures for ${dateString} (pool=${fixtures.length})`,
+      `[GroupRound] No upcoming Big 5 fixtures for ${dateString} (+${BIG5_LOOKAHEAD_DAYS}d, pool=${fixtures.length})`,
     );
   } else {
     logger.info(
-      `[GroupRound] Picked ${matchIds.length}/${ROUND_MATCH_LIMIT} top matches for ${dateString} from ${fixtures.length} fixtures`,
+      `[GroupRound] Picked ${matchIds.length}/${ROUND_MATCH_LIMIT} Big 5 matches for ${dateString} from ${fixtures.length} fixtures (+${BIG5_LOOKAHEAD_DAYS}d)`,
     );
   }
 
@@ -146,7 +173,7 @@ export async function getCurrentRoundWithMatches(dateString = calendarTodayKey()
   }
 
   const matchIds = (round.matchIds as number[]) ?? [];
-  const fixtures = await footballDataCacheService.getMatchesByDate(dateString);
+  const fixtures = await loadFixturePool(dateString);
   const byId = new Map(fixtures.map((f: any) => [f?.fixture?.id, f]));
 
   const raw = matchIds.map((id) => byId.get(id)).filter(Boolean);

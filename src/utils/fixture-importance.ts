@@ -3,6 +3,8 @@
  * Shared by chat highlights and prediction group daily rounds.
  */
 
+import { scores365CompetitionToLeagueId } from './scores365-league-id.util';
+
 /** API-Football league ids treated as high-detail / warm priority. */
 export const MAJOR_LEAGUE_IDS = new Set<number>([
   1, // World Cup
@@ -38,17 +40,36 @@ export function isMajorLeagueId(leagueId: number | null | undefined): boolean {
   return leagueId != null && MAJOR_LEAGUE_IDS.has(leagueId);
 }
 
-/** Big 5 European domestic leagues (prediction-group rounds only). */
+/** Scores365 competitionIds for the Big 5 domestic leagues. */
+export const BIG_5_SCORES365_COMPETITION_IDS = [7, 11, 17, 25, 35] as const;
+// 7 PL · 11 LaLiga · 17 Serie A · 25 Bundesliga · 35 Ligue 1
+
+/** Big 5 European domestic leagues (API-Football + Scores365 synthetic ids). */
 export const BIG_5_LEAGUE_IDS = new Set<number>([
-  39, // Premier League
+  39, // Premier League (API-Football)
   140, // La Liga
   135, // Serie A
   78, // Bundesliga
   61, // Ligue 1
+  ...BIG_5_SCORES365_COMPETITION_IDS.map(scores365CompetitionToLeagueId),
 ]);
 
 export function isBig5LeagueId(leagueId: number | null | undefined): boolean {
   return leagueId != null && BIG_5_LEAGUE_IDS.has(leagueId);
+}
+
+/** Name/country fallback when league id is missing or unmapped. */
+export function isBig5LeagueFixture(fixture: any): boolean {
+  if (isBig5LeagueId(fixture?.league?.id)) return true;
+  const name = String(fixture?.league?.name ?? '');
+  const country = String(fixture?.league?.country ?? '');
+  // Exact-ish domestic top flights only (exclude "Premier League" Egypt/SA, Serie B, etc.).
+  if (/^LaLiga$/i.test(name) && /spain/i.test(country)) return true;
+  if (/^Premier League$/i.test(name) && /england/i.test(country)) return true;
+  if (/^Serie A$/i.test(name) && /italy/i.test(country)) return true;
+  if (/^Bundesliga$/i.test(name) && /germany/i.test(country)) return true;
+  if (/^Ligue 1$/i.test(name) && /france/i.test(country)) return true;
+  return false;
 }
 
 const HIGHLIGHT_LEAGUE_SCORE: Record<number, number> = {
@@ -65,6 +86,12 @@ const HIGHLIGHT_LEAGUE_SCORE: Record<number, number> = {
   135: 93,
   78: 92,
   61: 91,
+  // Scores365 synthetic Big 5
+  [scores365CompetitionToLeagueId(7)]: 95, // Premier League
+  [scores365CompetitionToLeagueId(11)]: 94, // LaLiga
+  [scores365CompetitionToLeagueId(17)]: 93, // Serie A
+  [scores365CompetitionToLeagueId(25)]: 92, // Bundesliga
+  [scores365CompetitionToLeagueId(35)]: 91, // Ligue 1
   233: 88,
   307: 85,
   203: 84,
@@ -125,12 +152,13 @@ function kickoffMs(fixture: any): number {
 /**
  * Top upcoming fixtures for prediction-group daily rounds.
  * Strictly Big 5 leagues only (PL / La Liga / Serie A / Bundesliga / Ligue 1).
+ * Caps per league so midweek/weekend rounds mix competitions instead of all-EPL.
  */
 export function pickTopFixtures(fixtures: any[], limit = 10): any[] {
   const upcoming = fixtures.filter((f) => {
     const status = f?.fixture?.status?.short ?? '';
     if (!UPCOMING_STATUSES.has(status)) return false;
-    return isBig5LeagueId(f?.league?.id);
+    return isBig5LeagueFixture(f);
   });
 
   const ranked = upcoming
@@ -138,13 +166,35 @@ export function pickTopFixtures(fixtures: any[], limit = 10): any[] {
       f,
       score: scoreFixtureImportance(f),
       kickoff: kickoffMs(f),
+      leagueId: f?.league?.id ?? 0,
     }))
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       return a.kickoff - b.kickoff;
     });
 
-  return ranked.slice(0, limit).map((r) => r.f);
+  const maxPerLeague = 2;
+  const selected: any[] = [];
+  const perLeague = new Map<number, number>();
+  const used = new Set<number>();
+
+  const tryPick = (respectCap: boolean) => {
+    for (const r of ranked) {
+      if (selected.length >= limit) break;
+      const id = r.f?.fixture?.id;
+      if (typeof id === 'number' && used.has(id)) continue;
+      const count = perLeague.get(r.leagueId) ?? 0;
+      if (respectCap && count >= maxPerLeague) continue;
+      selected.push(r.f);
+      if (typeof id === 'number') used.add(id);
+      perLeague.set(r.leagueId, count + 1);
+    }
+  };
+
+  tryPick(true);
+  if (selected.length < limit) tryPick(false);
+
+  return selected;
 }
 
 export function localDateKey(d = new Date()): string {
