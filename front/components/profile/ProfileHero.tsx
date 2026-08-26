@@ -125,13 +125,27 @@ const ProfileHero = memo(function ProfileHero({
           )}
           <View style={styles.navRight}>
             {onSharePress ? (
-              <TouchableOpacity onPress={onSharePress} hitSlop={8} style={styles.navIcon}>
-                <Ionicons name="share-outline" size={22} color="#fff" />
+              <TouchableOpacity
+                onPress={onSharePress}
+                activeOpacity={0.8}
+                style={styles.navCircleBtn}
+                accessibilityRole="button"
+              >
+                <View style={styles.navCircleIcon}>
+                  <Ionicons name="share-outline" size={24} color="#fff" />
+                </View>
               </TouchableOpacity>
             ) : null}
             {onMorePress ? (
-              <TouchableOpacity onPress={onMorePress} style={styles.moreBtn}>
-                <Ionicons name="ellipsis-horizontal" size={18} color="#fff" />
+              <TouchableOpacity
+                onPress={onMorePress}
+                activeOpacity={0.8}
+                style={styles.navCircleBtn}
+                accessibilityRole="button"
+              >
+                <View style={styles.navCircleIcon}>
+                  <Ionicons name="ellipsis-horizontal" size={24} color="#fff" />
+                </View>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -338,19 +352,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  navCircleBtn: {
+    width: 37,
+    height: 37,
+    borderRadius: 40,
+    paddingVertical: 4,
+    paddingHorizontal: 5,
+    backgroundColor: 'rgba(0,0,0,0.66)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navCircleIcon: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   navIcon: {
     width: 37,
     height: 37,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  moreBtn: {
-    width: 37,
-    height: 37,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.66)',
   },
   identityRow: {
     flexDirection: 'row',
