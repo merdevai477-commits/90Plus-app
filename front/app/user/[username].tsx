@@ -21,7 +21,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Flag, Share2 } from 'lucide-react-native';
 import { buildProfileShareUrl } from '../../constants/shareLinks';
 
 import ProfileHero from '../../components/profile/ProfileHero';
@@ -665,6 +664,53 @@ function UserProfileScreen() {
           </View>
         ) : (
           <>
+        {/* Follow — full-width CTA under identity (Figma 845:2131) */}
+        <Animated.View style={[s.followBlock, { transform: [{ scale: scaleAnim }] }]}>
+          <TouchableOpacity onPress={handleFollow} activeOpacity={0.85} style={s.followTouchable}>
+            {user.isFollowing ? (
+              (() => {
+                const G = isLiquidGlassSupported ? LiquidGlassView : BlurView;
+                const gp = isLiquidGlassSupported
+                  ? { effect: 'clear' as const, interactive: true }
+                  : { intensity: 30, tint: 'dark' as const };
+                return (
+                  <G {...(gp as any)} style={s.followingBtn}>
+                    <LinearGradient
+                      colors={['rgba(168,85,247,0.18)', 'rgba(124,58,237,0.1)']}
+                      style={StyleSheet.absoluteFill}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    />
+                    <Ionicons name="checkmark" size={18} color={ACCENT} />
+                    <Text style={s.followingTxt}>{t.publicProfile.following}</Text>
+                  </G>
+                );
+              })()
+            ) : (
+              <LinearGradient
+                colors={['#4E0DE4', '#2B077E']}
+                style={s.followBtn}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+              >
+                <Text style={s.followTxt}>
+                  {user.isFollowingMe ? t.publicProfile.followBack : t.publicProfile.follow}
+                </Text>
+              </LinearGradient>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
+
+        {isBlocked && (
+          <View style={s.restrictedBanner}>
+            <Ionicons name="ban" size={20} color="#ef4444" />
+            <View style={s.restrictedBannerText}>
+              <Text style={s.restrictedBannerTitle}>{t.publicProfile.blockedTitle}</Text>
+              <Text style={s.restrictedBannerSub}>{t.publicProfile.blockedSub}</Text>
+            </View>
+          </View>
+        )}
+
         <ProfileMetricStrip
           items={[
             {
@@ -686,6 +732,7 @@ function UserProfileScreen() {
               icon: PROFILE_ICONS.video,
               value: user.reelsCount || 0,
               label: t.profile.videos,
+              onPress: () => setActiveTab('videos'),
             },
             {
               key: 'likes',
@@ -695,99 +742,6 @@ function UserProfileScreen() {
             },
           ]}
         />
-
-        {/* Follow + Share + Report + Block */}
-        <View style={s.actionRow}>
-          {/* Follow button */}
-          <Animated.View style={[s.followWrap, { transform: [{ scale: scaleAnim }] }]}>
-            <TouchableOpacity onPress={handleFollow} activeOpacity={0.85} style={s.followTouchable}>
-              {user.isFollowing ? (
-                /* Following state — glass */
-                (() => {
-                  const G = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-                  const gp = isLiquidGlassSupported
-                    ? { effect: 'clear' as const, interactive: true }
-                    : { intensity: 30, tint: 'dark' as const };
-                  return (
-                    <G {...(gp as any)} style={s.followingBtn}>
-                      <LinearGradient
-                        colors={['rgba(168,85,247,0.15)', 'rgba(124,58,237,0.08)']}
-                        style={StyleSheet.absoluteFill}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                      />
-                      <Ionicons name="checkmark" size={18} color={ACCENT} />
-                      <Text style={s.followingTxt}>{t.publicProfile.following}</Text>
-                    </G>
-                  );
-                })()
-              ) : (
-                /* Follow state — purple gradient */
-                <LinearGradient
-                  colors={[ACCENT, ACCENT_DARK]}
-                  style={s.followBtn}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Ionicons
-                    name={user.isFollowingMe ? 'people' : 'person-add'}
-                    size={18}
-                    color="#fff"
-                  />
-                  <Text style={s.followTxt}>
-                    {user.isFollowingMe ? t.publicProfile.followBack : t.publicProfile.follow}
-                  </Text>
-                </LinearGradient>
-              )}
-            </TouchableOpacity>
-          </Animated.View>
-
-          <TouchableOpacity
-            style={s.secondaryBtn}
-            onPress={handleShareProfilePress}
-            activeOpacity={0.75}
-          >
-            <Share2 size={18} color="#fff" />
-            <Text style={s.secondaryBtnTxt}>{t.publicProfile.share}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={s.secondaryBtn}
-            onPress={handleReportPress}
-            activeOpacity={0.75}
-          >
-            <Flag size={18} color="#fbbf24" />
-            <Text style={s.secondaryBtnTxt}>{t.publicProfile.report}</Text>
-          </TouchableOpacity>
-
-          {/* Block button */}
-          <TouchableOpacity
-            style={[s.blockBtn, isBlocked && s.blockedBtn]}
-            onPress={handleBlockUser}
-            disabled={isBlockLoading}
-            activeOpacity={0.75}
-          >
-            {isBlockLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons
-                name={isBlocked ? 'checkmark-circle' : 'ban'}
-                size={20}
-                color={isBlocked ? ACCENT : '#ef4444'}
-              />
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {isBlocked && (
-          <View style={s.restrictedBanner}>
-            <Ionicons name="ban" size={20} color="#ef4444" />
-            <View style={s.restrictedBannerText}>
-              <Text style={s.restrictedBannerTitle}>{t.publicProfile.blockedTitle}</Text>
-              <Text style={s.restrictedBannerSub}>{t.publicProfile.blockedSub}</Text>
-            </View>
-          </View>
-        )}
 
         {showFullProfile && (
           <>
@@ -835,6 +789,7 @@ function UserProfileScreen() {
           emailCopiedTitle={t.profile.emailCopied}
           emailCopiedMessage={t.profile.emailCopiedMessage}
         />
+
         <ContentTabs
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -843,6 +798,7 @@ function UserProfileScreen() {
           showPublicAnalytics
         />
 
+        <View style={s.contentPanel}>
         {activeTab === 'videos' && (
           <>
         {isLoadingVideos ? (
@@ -877,7 +833,10 @@ function UserProfileScreen() {
             {loadingMoreVideos ? (
               <ActivityIndicator size="small" color={ACCENT} />
             ) : (
-              <Text style={s.loadMoreTxt}>{t.publicProfile.loadMoreVideos}</Text>
+              <>
+                <Ionicons name="chevron-down" size={16} color={ProfileTheme.colors.profilePrimary} />
+                <Text style={s.loadMoreTxt}>{t.publicProfile.loadMoreVideos}</Text>
+              </>
             )}
           </TouchableOpacity>
         )}
@@ -898,6 +857,7 @@ function UserProfileScreen() {
             authToken={authToken}
           />
         )}
+        </View>
           </>
         )}
           </>
@@ -947,7 +907,7 @@ export default function UserProfileScreenWithBoundary() {
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: ProfileTheme.colors.deepBlack,
+    backgroundColor: ProfileTheme.colors.profileBg,
   },
   center: { justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingBottom: 20 },
@@ -977,63 +937,39 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  /* Action row */
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 20,
-    marginBottom: 24,
-    gap: 10,
-    alignItems: 'center',
+  followBlock: {
+    marginHorizontal: 22,
+    marginTop: 12,
+    marginBottom: 16,
   },
-  followWrap: { flex: 1, minWidth: 0 },
   followTouchable: { borderRadius: 16, overflow: 'hidden' },
-
-  secondaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  secondaryBtnTxt: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
 
   followBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    height: 50,
+    height: 54,
     borderRadius: 16,
-    shadowColor: ACCENT,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowColor: '#460BCB',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.46,
+    shadowRadius: 5.45,
+    elevation: 6,
   },
-  followTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  followTxt: { color: '#fff', fontSize: 18, fontWeight: '700' },
 
   followingBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    height: 50,
+    height: 54,
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1.5,
     borderColor: 'rgba(168,85,247,0.4)',
   },
-  followingTxt: { color: ACCENT, fontSize: 15, fontWeight: '800' },
+  followingTxt: { color: ACCENT, fontSize: 16, fontWeight: '800' },
 
   blockBtn: {
     width: 50,
@@ -1048,6 +984,20 @@ const s = StyleSheet.create({
   blockedBtn: {
     backgroundColor: 'rgba(168,85,247,0.1)',
     borderColor: 'rgba(168,85,247,0.3)',
+  },
+
+  contentPanel: {
+    marginHorizontal: 20,
+    marginTop: -1,
+    backgroundColor: '#0E0919',
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: ProfileTheme.colors.profileTabBorder,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    overflow: 'hidden',
+    minHeight: 120,
+    marginBottom: 8,
   },
 
   /* Section header */
@@ -1121,19 +1071,17 @@ const s = StyleSheet.create({
     lineHeight: 20,
   },
   loadMoreBtn: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 16,
-    paddingVertical: 14,
-    borderRadius: 14,
+    marginTop: 4,
+    marginBottom: 12,
+    paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: 'rgba(168,85,247,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.3)',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   loadMoreTxt: {
-    color: ACCENT,
-    fontSize: 14,
+    color: ProfileTheme.colors.profilePrimary,
+    fontSize: 10,
     fontWeight: '700',
   },
 
