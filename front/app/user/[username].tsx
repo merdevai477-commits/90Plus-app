@@ -757,8 +757,6 @@ function UserProfileScreen() {
           links={socialLinks}
           isOwnProfile={false}
           title={t.profile.connectWithMe}
-          emailCopiedTitle={t.profile.emailCopied}
-          emailCopiedMessage={t.profile.emailCopiedMessage}
         />
 
         <ContentTabs

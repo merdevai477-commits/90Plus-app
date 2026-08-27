@@ -1977,11 +1977,8 @@ function OwnProfileScreen() {
 
         <ProfileConnectCard
           links={socialLinks}
-          email={clerkUser?.primaryEmailAddress?.emailAddress}
           isOwnProfile
           title={t.profile.connectWithMe}
-          emailCopiedTitle={t.profile.emailCopied}
-          emailCopiedMessage={t.profile.emailCopiedMessage}
           onAddLink={setAddLinkPlatform}
         />
 

@@ -2234,6 +2234,24 @@ export const ar = {
     nameMaxLength: 'الاسم طويل جداً (الحد الأقصى 30 حرف)',
     usernameChangeAfter: 'يمكنك تغيير اسم المستخدم بعد',
 
+    verifiedBadgeTitle: 'علامة التوثيق',
+    verifiedBadgeSubtitle: 'حساب موثق',
+    verifiedBadgeBody:
+      'تُمنح هذه العلامة للحسابات الأكثر نشاطاً وتفاعلاً ومساهمة — رمز للأصالة والثقة.',
+    verifiedFeature1: 'مستخدم نشط وموثوق',
+    verifiedFeature2: 'تفاعل مستمر مع المجتمع',
+    verifiedFeature3: 'محتوى أصلي ومميز',
+    verifiedBadgeCta: 'رائع',
+
+    developerBadgeTitle: 'شارة المطور',
+    developerBadgeSubtitle: 'مطور التطبيق',
+    developerBadgeBody:
+      'تُمنح هذه الشارة لمطوري التطبيق والمساهمين في بنائه وتطويره.',
+    developerFeature1: 'تميز حصري',
+    developerFeature2: 'صاحب التطبيق',
+    developerFeature3: 'مطور محترف',
+    developerBadgeCta: 'حسناً',
+
     // مهام إكمال البروفايل
     completionTasksTitle: 'مهام البروفايل',
     completionTasksProgress: '{done} من {total} مكتملة',

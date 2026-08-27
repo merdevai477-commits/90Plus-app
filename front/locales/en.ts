@@ -2262,6 +2262,24 @@ export const en = {
     nameMaxLength: 'Name is too long (max 30 characters)',
     usernameChangeAfter: 'You can change username after',
 
+    verifiedBadgeTitle: 'Verification badge',
+    verifiedBadgeSubtitle: 'Verified account',
+    verifiedBadgeBody:
+      'This badge is awarded to the most active, engaged, and contributing accounts — a mark of authenticity and trust.',
+    verifiedFeature1: 'Active and trusted member',
+    verifiedFeature2: 'Consistent community engagement',
+    verifiedFeature3: 'Original, high-quality content',
+    verifiedBadgeCta: 'Got it',
+
+    developerBadgeTitle: 'Developer badge',
+    developerBadgeSubtitle: 'App developer',
+    developerBadgeBody:
+      'This badge is granted to the app developers and contributors who build and improve 90Plus.',
+    developerFeature1: 'Exclusive distinction',
+    developerFeature2: 'App creator',
+    developerFeature3: 'Professional developer',
+    developerBadgeCta: 'Okay',
+
     // Profile completion (steps shown in ProfileTasksModal + completion pill)
     completionTasksTitle: 'Profile tasks',
     completionTasksProgress: '{done} of {total} completed',

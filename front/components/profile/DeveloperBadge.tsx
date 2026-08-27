@@ -1,319 +1,261 @@
 import React, { useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Animated, Modal, Text } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+  Modal,
+  Text,
+  Pressable,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { SURFACE_BG, AppGradients, ACCENT } from '../../constants/ui';
+import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useTranslation } from '../../src/i18n';
 
 interface DeveloperBadgeProps {
-    size?: number;
+  size?: number;
 }
 
 export default function DeveloperBadge({ size = 32 }: DeveloperBadgeProps) {
-    const [showModal, setShowModal] = useState(false);
-    const scaleAnim = useRef(new Animated.Value(1)).current;
+  const { t, isRTL } = useTranslation();
+  const [showModal, setShowModal] = useState(false);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
-    const handlePressIn = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 0.92,
-            useNativeDriver: true,
-        }).start();
-    };
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.92,
+      useNativeDriver: true,
+    }).start();
+  };
 
-    const handlePressOut = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 1,
-            friction: 3,
-            tension: 40,
-            useNativeDriver: true,
-        }).start();
-        setShowModal(true);
-    };
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 3,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+    setShowModal(true);
+  };
 
-    return (
-        <>
+  const features = [
+    t.profile.developerFeature1,
+    t.profile.developerFeature2,
+    t.profile.developerFeature3,
+  ];
+
+  return (
+    <>
+      <TouchableOpacity
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+        style={styles.container}
+        accessibilityRole="button"
+        accessibilityLabel={t.profile.developerBadgeTitle}
+      >
+        <Animated.View
+          style={[
+            styles.badge,
+            { width: size, height: size, transform: [{ scale: scaleAnim }] },
+          ]}
+        >
+          <View
+            style={[
+              styles.outerCircle,
+              {
+                width: size,
+                height: size,
+                borderRadius: size / 2,
+              },
+            ]}
+          />
+          <View style={styles.innerContent}>
+            <Ionicons name="person" size={size * 0.55} color={ACCENT} />
+            <Ionicons
+              name="star"
+              size={size * 0.28}
+              color={ACCENT}
+              style={styles.starIcon}
+            />
+          </View>
+        </Animated.View>
+      </TouchableOpacity>
+
+      <Modal
+        visible={showModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFill} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowModal(false)} />
+          <View style={styles.modalCard}>
+            <LinearGradient
+              colors={['#170B2E', '#0B0614', '#140A28']}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.glow} />
+
+            <View style={styles.modalIconWrap}>
+              <LinearGradient
+                colors={[...AppGradients.purpleCTA]}
+                style={styles.modalIconBg}
+              >
+                <Ionicons name="code-slash" size={30} color="#fff" />
+              </LinearGradient>
+            </View>
+
+            <Text style={[styles.modalTitle, isRTL && styles.textRtl]}>
+              {t.profile.developerBadgeTitle}
+            </Text>
+            <View style={styles.divider} />
+            <Text style={styles.modalSubtitle}>{t.profile.developerBadgeSubtitle}</Text>
+            <Text style={[styles.modalText, isRTL && styles.textRtl]}>
+              {t.profile.developerBadgeBody}
+            </Text>
+
+            <View style={styles.features}>
+              {features.map((item) => (
+                <View key={item} style={[styles.featureRow, isRTL && styles.rowRtl]}>
+                  <View style={styles.bullet} />
+                  <Text style={[styles.featureText, isRTL && styles.textRtl]}>{item}</Text>
+                </View>
+              ))}
+            </View>
+
             <TouchableOpacity
-                onPressIn={handlePressIn}
-                onPressOut={handlePressOut}
-                activeOpacity={1}
-                style={styles.container}
+              style={styles.ctaWrap}
+              onPress={() => setShowModal(false)}
+              activeOpacity={0.88}
             >
-                <Animated.View
-                    style={[
-                        styles.badge,
-                        {
-                            width: size,
-                            height: size,
-                            transform: [{ scale: scaleAnim }],
-                        }
-                    ]}
-                >
-                    <View style={[styles.badgeContainer, { width: size, height: size }]}>
-                        <View style={[styles.outerCircle, {
-                            width: size,
-                            height: size,
-                            borderRadius: size / 2,
-                            borderWidth: 1.5
-                        }]} />
-                        <View style={styles.innerContent}>
-                            <Ionicons name="person" size={size * 0.6} color="#A855F7" style={styles.personIcon} />
-                            <Ionicons
-                                name="star"
-                                size={size * 0.3}
-                                color="#A855F7"
-                                style={[styles.starIcon, { position: 'absolute', right: 0, bottom: 0 }]}
-                            />
-                        </View>
-                    </View>
-                </Animated.View>
+              <LinearGradient
+                colors={[...AppGradients.purpleCTA]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cta}
+              >
+                <Text style={styles.ctaText}>{t.profile.developerBadgeCta}</Text>
+              </LinearGradient>
             </TouchableOpacity>
-
-            <Modal
-                visible={showModal}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowModal(false)}
-            >
-                <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setShowModal(false)}
-                >
-                    <Animated.View
-                        style={styles.modalContent}
-                        onStartShouldSetResponder={() => true}
-                    >
-                        <LinearGradient
-                            colors={['#0f172a', '#1e293b', '#0f172a']}
-                            style={styles.modalCard}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                        >
-                            <View style={styles.modalBackgroundAccent} />
-
-                            <View style={styles.modalIconContainer}>
-                                <View style={styles.modalBadgeContainer}>
-                                    <View style={styles.modalOuterCircle} />
-                                    <View style={styles.modalInnerContent}>
-                                        <Ionicons name="person" size={40} color="#A855F7" style={styles.modalPersonIcon} />
-                                        <Ionicons name="star" size={20} color="#A855F7" style={styles.modalStarIcon} />
-                                    </View>
-                                </View>
-                            </View>
-
-                            <Text style={styles.modalTitle}>شـارة المطور</Text>
-
-                            <View style={styles.divider} />
-
-                            <Text style={styles.modalSubtitle}>مطور التطبيق</Text>
-
-                            <Text style={styles.modalText}>
-                                تُمنح هذه الشارة لمطوري التطبيق والمساهمين في بنائه وتطويره.
-                            </Text>
-
-                            <View style={styles.modalFeatures}>
-                                <View style={styles.featureItem}>
-                                    <View style={styles.featureBullet} />
-                                    <Text style={styles.featureText}>تميز حصري</Text>
-                                </View>
-                                <View style={styles.featureItem}>
-                                    <View style={styles.featureBullet} />
-                                    <Text style={styles.featureText}>صاحب التطبيق</Text>
-                                </View>
-                                <View style={styles.featureItem}>
-                                    <View style={styles.featureBullet} />
-                                    <Text style={styles.featureText}>مطور محترف</Text>
-                                </View>
-                            </View>
-
-                            <TouchableOpacity
-                                style={styles.closeButton}
-                                onPress={() => setShowModal(false)}
-                            >
-                                <LinearGradient
-                                    colors={['#9333EA', '#7C3AED']}
-                                    style={styles.closeButtonGradient}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 0 }}
-                                >
-                                    <Text style={styles.closeButtonText}>حسناً</Text>
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        </LinearGradient>
-                    </Animated.View>
-                </TouchableOpacity>
-            </Modal>
-        </>
-    );
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        position: 'relative',
-    },
-    badge: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    badgeContainer: {
-        justifyContent: 'center',
-        alignItems: 'center',
-        position: 'relative',
-    },
-    outerCircle: {
-        position: 'absolute',
-        borderColor: '#A855F7',
-        backgroundColor: 'transparent',
-    },
-    innerContent: {
-        justifyContent: 'center',
-        alignItems: 'center',
-        width: '100%',
-        height: '100%',
-    },
-    personIcon: {
-        marginTop: 2,
-    },
-    starIcon: {
-        // positioned absolutely in JSX
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.92)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    modalContent: {
-        width: '100%',
-        maxWidth: 400,
-    },
-    modalCard: {
-        padding: 32,
-        borderRadius: 28,
-        borderWidth: 2,
-        borderColor: '#9333EA',
-        alignItems: 'center',
-        shadowColor: '#9333EA',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.6,
-        shadowRadius: 24,
-        elevation: 15,
-        overflow: 'hidden',
-    },
-    modalBackgroundAccent: {
-        position: 'absolute',
-        top: -100,
-        right: -100,
-        width: 250,
-        height: 250,
-        borderRadius: 125,
-        backgroundColor: '#9333EA',
-        opacity: 0.08,
-    },
-    modalIconContainer: {
-        marginBottom: 24,
-        position: 'relative',
-    },
-    modalBadgeContainer: {
-        width: 80,
-        height: 80,
-        justifyContent: 'center',
-        alignItems: 'center',
-        position: 'relative',
-    },
-    modalOuterCircle: {
-        position: 'absolute',
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        borderWidth: 6,
-        borderColor: '#A855F7',
-        backgroundColor: 'transparent',
-    },
-    modalInnerContent: {
-        justifyContent: 'center',
-        alignItems: 'center',
-        width: '100%',
-        height: '100%',
-    },
-    modalPersonIcon: {
-        marginTop: 2,
-    },
-    modalStarIcon: {
-        position: 'absolute',
-        right: 12,
-        bottom: 18,
-    },
-    modalTitle: {
-        color: '#FFF',
-        fontSize: 26,
-        fontWeight: 'bold',
-        marginBottom: 12,
-        textAlign: 'center',
-        letterSpacing: 0.5,
-    },
-    divider: {
-        width: 60,
-        height: 3,
-        backgroundColor: '#9333EA',
-        borderRadius: 2,
-        marginBottom: 16,
-    },
-    modalSubtitle: {
-        color: '#C084FC',
-        fontSize: 16,
-        fontWeight: '600',
-        marginBottom: 16,
-        textAlign: 'center',
-    },
-    modalText: {
-        color: '#94a3b8',
-        fontSize: 15,
-        textAlign: 'center',
-        lineHeight: 24,
-        marginBottom: 24,
-        paddingHorizontal: 8,
-    },
-    modalFeatures: {
-        width: '100%',
-        marginBottom: 28,
-        paddingHorizontal: 8,
-    },
-    featureItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    featureBullet: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#9333EA',
-        marginRight: 12,
-    },
-    featureText: {
-        color: '#cbd5e1',
-        fontSize: 14,
-        fontWeight: '500',
-    },
-    closeButton: {
-        width: '100%',
-        borderRadius: 14,
-        overflow: 'hidden',
-        shadowColor: '#9333EA',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 8,
-        elevation: 6,
-    },
-    closeButtonGradient: {
-        paddingVertical: 14,
-        paddingHorizontal: 32,
-        alignItems: 'center',
-    },
-    closeButtonText: {
-        color: '#FFF',
-        fontSize: 16,
-        fontWeight: 'bold',
-        letterSpacing: 0.5,
-    },
+  container: { position: 'relative' },
+  badge: { justifyContent: 'center', alignItems: 'center' },
+  outerCircle: {
+    position: 'absolute',
+    borderWidth: 1.5,
+    borderColor: ACCENT,
+    backgroundColor: 'rgba(168,85,247,0.12)',
+  },
+  innerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  starIcon: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 22,
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.4)',
+    backgroundColor: SURFACE_BG,
+  },
+  glow: {
+    position: 'absolute',
+    top: -80,
+    alignSelf: 'center',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(168,85,247,0.18)',
+  },
+  modalIconWrap: { marginBottom: 18 },
+  modalIconBg: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(216,174,255,0.25)',
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  divider: {
+    width: 48,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: ProfileTheme.colors.profilePrimary,
+    marginVertical: 12,
+  },
+  modalSubtitle: {
+    color: ProfileTheme.colors.avatarRing,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  modalText: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 18,
+  },
+  features: { width: '100%', gap: 10, marginBottom: 22 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rowRtl: { flexDirection: 'row-reverse' },
+  bullet: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: ProfileTheme.colors.profilePrimary,
+  },
+  featureText: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  textRtl: { textAlign: 'right', writingDirection: 'rtl' },
+  ctaWrap: { width: '100%', borderRadius: 14, overflow: 'hidden' },
+  cta: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  ctaText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });
