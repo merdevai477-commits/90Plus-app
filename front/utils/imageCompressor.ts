@@ -22,6 +22,8 @@ export interface CompressionOptions {
   quality?: number;         // default: 0.6 (60% quality = good balance)
   format?: 'jpeg' | 'png' | 'webp';  // default: 'jpeg'
   enableWebP?: boolean;     // default: true for Android, false for iOS
+  /** Skip size/dimension probe (one fewer ImageManipulator pass) — preferred for avatar/cover uploads. */
+  skipProbe?: boolean;
 }
 
 export interface CompressedImage {
@@ -76,9 +78,21 @@ export async function compressImage(
 ): Promise<CompressedImage> {
   try {
     const startTime = Date.now();
-    
-    // Get original size
-    const originalInfo = await getImageSize(uri);
+    const skipProbe = options?.skipProbe === true;
+
+    let originalInfo = { width: 0, height: 0, size: 0 };
+    if (!skipProbe) {
+      // Probe is expensive (extra ImageManipulator pass) — skip for profile uploads.
+      originalInfo = await getImageSize(uri);
+    } else {
+      try {
+        const info = await FileSystem.getInfoAsync(uri);
+        originalInfo.size = info.exists ? ((info as { size?: number }).size ?? 0) : 0;
+      } catch {
+        originalInfo.size = 0;
+      }
+    }
+
     const originalSize = originalInfo.size;
     const knownSize = originalSize > 0;
 
@@ -87,7 +101,7 @@ export async function compressImage(
     // can't trust the size, so we fall through to compression rather than
     // skipping — otherwise we'd ship full-resolution camera output (5–10MB)
     // and uploads would time out on flaky mobile networks.
-    if (knownSize && originalSize < 100 * 1024) { // < 100KB, confirmed
+    if (!skipProbe && knownSize && originalSize < 100 * 1024) { // < 100KB, confirmed
       logger.info('[imageCompressor] Image already small, skipping compression', {
         originalSize: formatFileSize(originalSize),
       });
@@ -130,11 +144,15 @@ export async function compressImage(
     const enableWebP = options?.enableWebP ?? Platform.OS === 'android';
     const format = options?.format || (enableWebP ? 'webp' : 'jpeg');
     
-    // Calculate resize dimensions while maintaining aspect ratio.
-    // When original size is unknown we always resize down to maxWidth/maxHeight
-    // to guarantee the upload payload is bounded.
+    // Always resize when probing was skipped so camera originals stay bounded.
     const actions: ImageManipulator.Action[] = [];
-    if (!knownSize || originalInfo.width > maxWidth || originalInfo.height > maxHeight) {
+    if (
+      skipProbe ||
+      !knownSize ||
+      originalInfo.width > maxWidth ||
+      originalInfo.height > maxHeight ||
+      originalInfo.width === 0
+    ) {
       actions.push({
         resize: {
           width: maxWidth,

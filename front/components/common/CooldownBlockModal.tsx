@@ -1,15 +1,18 @@
 /**
  * CooldownBlockModal
  *
- * UX Fix 3: Shown BEFORE opening any upload picker when a cooldown is active.
- * Displays remaining time with a live countdown.
+ * Shown BEFORE opening any upload picker when a cooldown is active.
+ * Purple glass styling aligned with the profile theme.
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useCooldownTimer, CooldownInfo } from '../../hooks/useCooldownTimer';
+import { useTranslation } from '../../src/i18n';
+import { ProfileTheme } from '../../constants/ProfileTheme';
 
 interface Props {
   visible: boolean;
@@ -18,13 +21,8 @@ interface Props {
   onClose: () => void;
 }
 
-const TYPE_LABELS: Record<Props['type'], string> = {
-  avatar: 'تغيير صورة البروفايل',
-  cover: 'تغيير صورة الغلاف',
-  reel: 'رفع فيديو جديد',
-};
-
 export const CooldownBlockModal: React.FC<Props> = ({ visible, cooldown, type, onClose }) => {
+  const { t, isRTL } = useTranslation();
   const closingRef = useRef(false);
   const { remainingText } = useCooldownTimer(visible ? cooldown : null, visible);
 
@@ -44,6 +42,13 @@ export const CooldownBlockModal: React.FC<Props> = ({ visible, cooldown, type, o
     return null;
   }
 
+  const title =
+    type === 'avatar'
+      ? t.profile.cooldownCannotAvatar
+      : type === 'cover'
+        ? t.profile.cooldownCannotCover
+        : t.profile.cooldownCannotReel;
+
   return (
     <Modal
       visible
@@ -54,29 +59,46 @@ export const CooldownBlockModal: React.FC<Props> = ({ visible, cooldown, type, o
       presentationStyle="overFullScreen"
     >
       <Pressable style={styles.overlay} onPress={handleClose}>
+        <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
         <Pressable style={styles.container} onPress={(e) => e.stopPropagation()}>
           <LinearGradient
-            colors={['rgba(255,165,0,0.15)', 'rgba(255,69,0,0.1)']}
+            colors={['#1A0B33', '#0B0614', '#12081F']}
             style={StyleSheet.absoluteFill}
           />
+          <View style={styles.glow} />
 
-          <View style={styles.iconRow}>
-            <Ionicons name="time-outline" size={48} color="#FFD700" />
+          <View style={styles.iconWrap}>
+            <LinearGradient
+              colors={['#8B5CF6', '#5B21B6']}
+              style={styles.iconBg}
+            >
+              <Ionicons name="time-outline" size={32} color="#fff" />
+            </LinearGradient>
           </View>
 
-          <Text style={styles.title}>لا يمكنك {TYPE_LABELS[type]} الآن</Text>
+          <Text style={[styles.title, isRTL && styles.rtl]}>{title}</Text>
 
           {remainingText ? (
-            <Text style={styles.subtitle}>
-              متاح بعد{'\n'}
+            <Text style={[styles.subtitle, isRTL && styles.rtl]}>
+              {t.profile.cooldownAvailableAfter}
+              {'\n'}
               <Text style={styles.countdown}>{remainingText}</Text>
             </Text>
           ) : (
-            <Text style={styles.subtitle}>يرجى الانتظار قبل المحاولة مجدداً</Text>
+            <Text style={[styles.subtitle, isRTL && styles.rtl]}>
+              {t.profile.cooldownPleaseWait}
+            </Text>
           )}
 
-          <TouchableOpacity style={styles.btn} onPress={handleClose} activeOpacity={0.8}>
-            <Text style={styles.btnText}>حسناً</Text>
+          <TouchableOpacity style={styles.btnWrap} onPress={handleClose} activeOpacity={0.88}>
+            <LinearGradient
+              colors={['#8B5CF6', '#5B21B6']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.btn}
+            >
+              <Text style={styles.btnText}>{t.profile.okay}</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </Pressable>
       </Pressable>
@@ -87,48 +109,68 @@ export const CooldownBlockModal: React.FC<Props> = ({ visible, cooldown, type, o
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.72)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: 28,
   },
   container: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 20,
-    padding: 28,
     width: '100%',
+    maxWidth: 360,
+    borderRadius: 24,
+    padding: 26,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,165,0,0.3)',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.35)',
+    backgroundColor: ProfileTheme.colors.profileCard,
   },
-  iconRow: { marginBottom: 16 },
+  glow: {
+    position: 'absolute',
+    top: -70,
+    alignSelf: 'center',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(139,92,246,0.18)',
+  },
+  iconWrap: { marginBottom: 16 },
+  iconBg: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
   title: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '800',
     textAlign: 'center',
     marginBottom: 12,
+    lineHeight: 26,
   },
   subtitle: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 15,
+    color: 'rgba(255,255,255,0.62)',
+    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 24,
+    lineHeight: 22,
+    marginBottom: 22,
   },
   countdown: {
-    color: '#FFD700',
+    color: ProfileTheme.colors.avatarRing,
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '800',
   },
+  rtl: { writingDirection: 'rtl' },
+  btnWrap: { width: '100%', borderRadius: 14, overflow: 'hidden' },
   btn: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 40,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  btnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });

@@ -2043,6 +2043,19 @@ export const ar = {
     noFollowersYet: 'لا يوجد متابعين بعد',
     noFollowingYet: 'لا يتابع أحد بعد',
     searchFollowersPlaceholder: 'ابحث عن أشخاص...',
+    cooldownCannotAvatar: 'لا يمكنك تغيير صورة البروفايل الآن',
+    cooldownCannotCover: 'لا يمكنك تغيير صورة الغلاف الآن',
+    cooldownCannotReel: 'لا يمكنك رفع ريل جديد الآن',
+    cooldownAvailableAfter: 'متاح بعد',
+    cooldownPleaseWait: 'يرجى الانتظار قبل المحاولة مجدداً',
+    chooseFromGallery: 'اختر من المعرض',
+    takePhoto: 'التقط صورة',
+    removePhoto: 'إزالة الصورة',
+    previewAvatarTitle: 'معاينة صورة البروفايل',
+    previewCoverTitle: 'معاينة صورة الغلاف',
+    confirmUpload: 'رفع',
+    rechoose: 'اختيار من جديد',
+
     offlineShowingCached: 'لا يمكن الاتصال بالخادم. يتم عرض البيانات المحفوظة.',
 
     // Block & Report

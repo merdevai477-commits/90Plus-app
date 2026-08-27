@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, StatusBar, Text, Share, Alert, ActionSheetIOS, Platform, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions, Modal } from 'react-native';
+import { View, StyleSheet, ScrollView, StatusBar, Text, Share, RefreshControl, AppState, AppStateStatus, TouchableOpacity, Dimensions, Modal } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
@@ -17,6 +18,7 @@ import ProfileBioCard from '../../components/profile/ProfileBioCard';
 import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
 import { ProfileAddLinkModal } from '../../components/profile/ProfileAddLinkModal';
 import { ProfileMoreMenuModal } from '../../components/profile/ProfileMoreMenuModal';
+import ProfileMediaChoiceSheet from '../../components/profile/ProfileMediaChoiceSheet';
 import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import { ProfileTheme } from '../../constants/ProfileTheme';
 import { DEFAULT_COUNTRY_FLAG, DEFAULT_POSITION, DEFAULT_STATS } from '../../constants/profileDefaults';
@@ -395,6 +397,7 @@ function OwnProfileScreen() {
     loadVideos,
     updateUserData: updateCachedUserData,
     updateFollowStats: updateCachedFollowStats,
+    updateCooldowns: updateCachedCooldowns,
   } = useProfileCache({
     getToken,
     clerkUserImageUrl: clerkUser?.imageUrl,
@@ -551,6 +554,8 @@ function OwnProfileScreen() {
   // UX Fix 3: Cooldown block modal state
   const [cooldownBlockVisible, setCooldownBlockVisible] = useState(false);
   const [cooldownBlockType, setCooldownBlockType] = useState<'avatar' | 'cover' | 'reel'>('avatar');
+  const [mediaChoiceVisible, setMediaChoiceVisible] = useState(false);
+  const [mediaChoiceKind, setMediaChoiceKind] = useState<'avatar' | 'cover'>('avatar');
   const handleCooldownBlockClose = useCallback(() => {
     setCooldownBlockVisible(false);
   }, []);
@@ -816,6 +821,16 @@ function OwnProfileScreen() {
   const analytics = cachedAnalytics;
   const cooldowns = cachedCooldowns;
 
+  // Prefetch hero images so profile opens feel instant on revisit
+  useEffect(() => {
+    const urls = [
+      localImage || cachedUserData?.avatar,
+      coverImage || cachedUserData?.coverImage,
+    ].filter((u): u is string => typeof u === 'string' && u.startsWith('http'));
+    if (urls.length === 0) return;
+    void Promise.all(urls.map((uri) => Image.prefetch(uri).catch(() => undefined)));
+  }, [localImage, coverImage, cachedUserData?.avatar, cachedUserData?.coverImage]);
+
   // Predictions store — hydrate from cache on mount for instant analytics
   const predictionStats = usePredictionsStore((s) => s.stats);
   const allPredictions = usePredictionsStore((s) => s.allPredictions);
@@ -1000,35 +1015,9 @@ function OwnProfileScreen() {
 
   // Optimization: Memoize cover press handler
   const handleCoverPress = useCallback(() => {
-    const options = [t.profile.viewImage, t.profile.changeImage, t.profile.cancel];
-    const cancelButtonIndex = 2;
-
-    const handlePress = (buttonIndex: number) => {
-      if (buttonIndex === 0) {
-        setViewerImageUrl(coverImage || DEFAULT_COVER_IMAGE);
-        setIsImageViewerVisible(true);
-      } else if (buttonIndex === 1) {
-        handleCoverUpload();
-      }
-    };
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex },
-        handlePress
-      );
-    } else {
-      Alert.alert(
-        t.profile.coverImage,
-        t.profile.whatToDo,
-        [
-          { text: t.profile.viewImage, onPress: () => handlePress(0) },
-          { text: t.profile.changeImage, onPress: () => handlePress(1) },
-          { text: t.profile.cancel, style: 'cancel' },
-        ]
-      );
-    }
-  }, [t, coverImage]);
+    setMediaChoiceKind('cover');
+    setMediaChoiceVisible(true);
+  }, []);
 
   const handleCoverUpload = async () => {
     if (!userData) {
@@ -1051,6 +1040,12 @@ function OwnProfileScreen() {
         hasExistingImage: !!userData.coverImage,
         onGallery: () => _pickCoverFromGallery(),
         onCamera: () => _pickCoverFromCamera(),
+        labels: {
+          gallery: t.profile.chooseFromGallery,
+          camera: t.profile.takePhoto,
+          remove: t.profile.removePhoto,
+          cancel: t.profile.cancel,
+        },
       },
       setAndroidSheetVisible,
       setAndroidSheetOptions,
@@ -1098,8 +1093,12 @@ function OwnProfileScreen() {
   const _prepareCoverPreview = async (imageUri: string) => {
     let finalUri = imageUri;
     try {
-      toastManager.showInfo(t.profile.processing, t.profile.compressingCoverImage);
-      const compressed = await compressImage(imageUri, { maxWidth: 1920, maxHeight: 1080, quality: 0.8 });
+      const compressed = await compressImage(imageUri, {
+        maxWidth: 1280,
+        maxHeight: 720,
+        quality: 0.58,
+        skipProbe: true,
+      });
       finalUri = compressed.uri;
     } catch {
       finalUri = imageUri;
@@ -1127,8 +1126,8 @@ function OwnProfileScreen() {
       const uploadResult = await uploadImage(finalUri, {
         endpoint: '/upload/cover',
         fieldName: 'file',
-        maxRetries: 2,
-        timeoutMs: 55_000,
+        maxRetries: 1,
+        timeoutMs: 40_000,
       });
       if (uploadResult.success && uploadResult.url) {
         setCoverImage(uploadResult.url);
@@ -1175,6 +1174,12 @@ function OwnProfileScreen() {
         onGallery: () => _pickAvatarFromGallery(),
         onCamera: () => _pickAvatarFromCamera(),
         onRemove: () => _removeAvatar(),
+        labels: {
+          gallery: t.profile.chooseFromGallery,
+          camera: t.profile.takePhoto,
+          remove: t.profile.removePhoto,
+          cancel: t.profile.cancel,
+        },
       },
       setAndroidSheetVisible,
       setAndroidSheetOptions,
@@ -1187,35 +1192,8 @@ function OwnProfileScreen() {
       handleImageUpload();
       return;
     }
-
-    const options = [t.profile.viewImage, t.profile.changeImage, t.profile.cancel];
-    const cancelButtonIndex = 2;
-
-    const handlePress = (buttonIndex: number) => {
-      if (buttonIndex === 0) {
-        setViewerImageUrl(avatarUrl);
-        setIsImageViewerVisible(true);
-      } else if (buttonIndex === 1) {
-        handleImageUpload();
-      }
-    };
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, cancelButtonIndex },
-        handlePress
-      );
-    } else {
-      Alert.alert(
-        t.profile.avatarImageTitle,
-        t.profile.whatToDo,
-        [
-          { text: t.profile.viewImage, onPress: () => handlePress(0) },
-          { text: t.profile.changeImage, onPress: () => handlePress(1) },
-          { text: t.profile.cancel, style: 'cancel' },
-        ]
-      );
-    }
+    setMediaChoiceKind('avatar');
+    setMediaChoiceVisible(true);
   };
 
   // UX Fix 5: Remove avatar
@@ -1287,7 +1265,12 @@ function OwnProfileScreen() {
   const _prepareAvatarPreview = async (imageUri: string) => {
     let finalUri = imageUri;
     try {
-      const compressed = await compressImage(imageUri, { maxWidth: 1080, maxHeight: 1080, quality: 0.7 });
+      const compressed = await compressImage(imageUri, {
+        maxWidth: 640,
+        maxHeight: 640,
+        quality: 0.55,
+        skipProbe: true,
+      });
       finalUri = compressed.uri;
     } catch { finalUri = imageUri; }
     // UX Fix 1: Show preview before uploading
@@ -1308,8 +1291,8 @@ function OwnProfileScreen() {
       const uploadResult = await uploadImage(finalUri, {
         endpoint: '/upload/avatar',
         fieldName: 'file',
-        maxRetries: 2,
-        timeoutMs: 55_000,
+        maxRetries: 1,
+        timeoutMs: 35_000,
       });
       if (uploadResult.success && uploadResult.url) {
         setLocalImage(uploadResult.url);
@@ -1520,6 +1503,11 @@ function OwnProfileScreen() {
         await reelUploadNotification.success(undefined, getToken);
         void syncExpoPushToken(getToken);
 
+        // Hide Add-reel immediately for the 3-day cooldown window
+        updateCachedCooldowns({
+          reelUpload: { canChange: false, daysRemaining: 3, hoursRemaining: 72 },
+        });
+
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         removeVideo(newVideo.id);
@@ -1587,8 +1575,20 @@ function OwnProfileScreen() {
       toastManager.showWarning(t.profile.uploading, reelUploadUi.phaseLabel || t.profile.uploadAlreadyInProgress);
       return;
     }
+    if (cooldowns && !cooldowns.reelUpload.canChange) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setCooldownBlockType('reel');
+      setCooldownBlockVisible(true);
+      return;
+    }
     setIsUploadModalVisible(true);
-  }, [reelUploadUi.active, reelUploadUi.phaseLabel, t.profile.uploading, t.profile.uploadAlreadyInProgress]);
+  }, [
+    reelUploadUi.active,
+    reelUploadUi.phaseLabel,
+    cooldowns,
+    t.profile.uploading,
+    t.profile.uploadAlreadyInProgress,
+  ]);
 
   const handleSharePress = useCallback(async () => {
     try {
@@ -1998,7 +1998,9 @@ function OwnProfileScreen() {
               onVideoLongPress={handleVideoLongPress}
               onDeleteVideo={handleDeleteVideo}
               isDeleteMode={isDeleteMode}
-              onAddPress={handleUploadPress}
+              onAddPress={
+                !cooldowns || cooldowns.reelUpload.canChange ? handleUploadPress : undefined
+              }
               addLabel={t.profile.addReel}
               horizontalInset={20}
             />
@@ -2147,6 +2149,28 @@ function OwnProfileScreen() {
         visible={androidSheetVisible}
         options={androidSheetOptions}
         onClose={() => setAndroidSheetVisible(false)}
+      />
+
+      <ProfileMediaChoiceSheet
+        visible={mediaChoiceVisible}
+        title={
+          mediaChoiceKind === 'avatar' ? t.profile.avatarImageTitle : t.profile.coverImage
+        }
+        subtitle={t.profile.whatToDo}
+        onView={() => {
+          const url =
+            mediaChoiceKind === 'avatar'
+              ? localImage || userData?.avatar || ''
+              : coverImage || DEFAULT_COVER_IMAGE;
+          if (!url) return;
+          setViewerImageUrl(url);
+          setIsImageViewerVisible(true);
+        }}
+        onChange={() => {
+          if (mediaChoiceKind === 'avatar') handleImageUpload();
+          else handleCoverUpload();
+        }}
+        onClose={() => setMediaChoiceVisible(false)}
       />
 
       {/* UX Fix 3: Cooldown block modal */}

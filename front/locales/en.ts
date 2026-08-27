@@ -2069,6 +2069,19 @@ export const en = {
     noFollowersYet: 'No followers yet',
     noFollowingYet: 'Not following anyone yet',
     searchFollowersPlaceholder: 'Search people...',
+    cooldownCannotAvatar: 'You cannot change your profile picture right now',
+    cooldownCannotCover: 'You cannot change your cover photo right now',
+    cooldownCannotReel: 'You cannot upload a new reel right now',
+    cooldownAvailableAfter: 'Available in',
+    cooldownPleaseWait: 'Please wait before trying again',
+    chooseFromGallery: 'Choose from gallery',
+    takePhoto: 'Take a photo',
+    removePhoto: 'Remove photo',
+    previewAvatarTitle: 'Preview profile picture',
+    previewCoverTitle: 'Preview cover photo',
+    confirmUpload: 'Upload',
+    rechoose: 'Choose again',
+
     offlineShowingCached: 'Could not reach the server. Showing saved data.',
 
     // Block & Report
