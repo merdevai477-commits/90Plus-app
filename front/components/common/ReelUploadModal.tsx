@@ -6,6 +6,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { GlassWrapper, glassProps, ACCENT, ACCENT_DARK, SURFACE_BG, AppGradients } from '../../constants/ui';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
@@ -354,16 +355,24 @@ export default function ReelUploadModal({
                 <BlurView intensity={40} style={StyleSheet.absoluteFill} tint="dark" />
 
                 <View style={styles.content}>
+                    <GlassWrapper {...(glassProps.modal as any)} style={StyleSheet.absoluteFill} />
+                    <LinearGradient
+                        colors={[ACCENT, ACCENT_DARK, 'transparent']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.topAccent}
+                    />
+
                     <View style={styles.header}>
                         <Text style={styles.title}>{t.reels.uploadTitle}</Text>
                         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                            <Ionicons name="close" size={24} color="#FFF" />
+                            <Ionicons name="close" size={20} color="rgba(255,255,255,0.85)" />
                         </TouchableOpacity>
                     </View>
 
                     {uploadLocked && (
                         <View style={styles.lockedBanner}>
-                            <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                            <ActivityIndicator size="small" color={ProfileTheme.colors.profilePrimary} />
                             <Text style={styles.lockedBannerText}>
                                 {t.reels.uploadLockedBanner}
                             </Text>
@@ -379,7 +388,7 @@ export default function ReelUploadModal({
                     >
                         {isPickingVideo ? (
                             <View style={styles.placeholderContainer}>
-                                <ActivityIndicator color={ProfileTheme.colors.neonGreen} size="large" />
+                                <ActivityIndicator color={ProfileTheme.colors.profilePrimary} size="large" />
                                 <Text style={styles.uploadText}>{t.reels.uploadPreparing}</Text>
                             </View>
                         ) : videoAsset ? (
@@ -395,7 +404,7 @@ export default function ReelUploadModal({
                             </View>
                         ) : (
                             <View style={styles.placeholderContainer}>
-                                <Ionicons name="cloud-upload-outline" size={48} color={ProfileTheme.colors.neonGreen} />
+                                <Ionicons name="cloud-upload-outline" size={40} color={ProfileTheme.colors.profilePrimary} />
                                 <Text style={styles.uploadText}>{t.reels.uploadPickVideo}</Text>
                                 <Text style={styles.uploadSubText}>
                                     {(t.reels.uploadDurationHint as string).replace(
@@ -411,7 +420,7 @@ export default function ReelUploadModal({
                     <TextInput
                         style={[styles.input, uploadLocked && styles.inputDisabled]}
                         placeholder={t.reels.uploadCaptionPlaceholder}
-                        placeholderTextColor="#aaa"
+                        placeholderTextColor={ProfileTheme.colors.textTertiary}
                         value={caption}
                         onChangeText={setCaption}
                         multiline
@@ -433,7 +442,7 @@ export default function ReelUploadModal({
                         style={{ opacity: !videoAsset || isUploading || uploadLocked || !isOnline ? 0.5 : 1 }}
                     >
                         <LinearGradient
-                            colors={[ProfileTheme.colors.neonGreen, '#15803d']}
+                            colors={[...AppGradients.purpleCTA]}
                             style={styles.submitButton}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
@@ -465,37 +474,55 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.6)',
+        backgroundColor: 'rgba(0,0,0,0.55)',
     },
     content: {
-        backgroundColor: '#1E1E1E',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
+        backgroundColor: SURFACE_BG,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        borderTopWidth: 1,
+        borderColor: 'rgba(168,85,247,0.2)',
         padding: 24,
         minHeight: '60%',
+        overflow: 'hidden',
+    },
+    topAccent: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 2,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 24,
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(168,85,247,0.15)',
     },
     title: {
-        fontSize: 20,
-        fontWeight: 'bold',
+        fontSize: 18,
+        fontWeight: '800',
         color: '#FFF',
+        letterSpacing: 0.2,
     },
     closeButton: {
         padding: 8,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(139,92,246,0.15)',
         borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(139,92,246,0.25)',
     },
     uploadArea: {
         height: 200,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(139,92,246,0.06)',
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: 'rgba(139,92,246,0.3)',
         borderStyle: 'dashed',
         marginBottom: 20,
         overflow: 'hidden',
@@ -508,11 +535,11 @@ const styles = StyleSheet.create({
     },
     uploadText: {
         color: '#FFF',
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '600',
     },
     uploadSubText: {
-        color: '#888',
+        color: ProfileTheme.colors.textTertiary,
         fontSize: 12,
     },
     previewContainer: {
@@ -527,18 +554,23 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 10,
         alignSelf: 'center',
-        backgroundColor: 'rgba(0,0,0,0.6)',
+        backgroundColor: 'rgba(14,7,28,0.75)',
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(139,92,246,0.35)',
     },
     changeText: {
-        color: '#FFF',
+        color: ProfileTheme.colors.avatarRing,
         fontSize: 12,
+        fontWeight: '600',
     },
     input: {
-        backgroundColor: 'rgba(0,0,0,0.2)',
+        backgroundColor: 'rgba(139,92,246,0.06)',
         borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(168,85,247,0.2)',
         padding: 16,
         color: '#FFF',
         fontSize: 16,
@@ -547,26 +579,26 @@ const styles = StyleSheet.create({
         marginBottom: 24,
     },
     submitButton: {
-        height: 56,
+        height: 52,
         borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
     },
     submitText: {
         color: '#FFF',
-        fontSize: 18,
-        fontWeight: 'bold',
+        fontSize: 17,
+        fontWeight: '700',
     },
     progressContainer: {
         height: 4,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(139,92,246,0.15)',
         borderRadius: 2,
         marginBottom: 16,
         overflow: 'hidden',
     },
     progressBar: {
         height: '100%',
-        backgroundColor: ProfileTheme.colors.neonGreen,
+        backgroundColor: ProfileTheme.colors.profilePrimary,
         borderRadius: 2,
     },
     uploadingContent: {
@@ -578,16 +610,16 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
-        backgroundColor: 'rgba(34,197,94,0.12)',
+        backgroundColor: 'rgba(139,92,246,0.12)',
         borderWidth: 1,
-        borderColor: 'rgba(34,197,94,0.35)',
+        borderColor: 'rgba(139,92,246,0.35)',
         borderRadius: 12,
         padding: 12,
         marginBottom: 16,
     },
     lockedBannerText: {
         flex: 1,
-        color: '#E8FFE8',
+        color: ProfileTheme.colors.avatarRing,
         fontSize: 13,
         lineHeight: 18,
     },
@@ -650,7 +682,7 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     frameGalleryText: {
-        color: ProfileTheme.colors.neonGreen,
+        color: ProfileTheme.colors.profilePrimary,
         fontSize: 10,
         fontWeight: '600',
     },

@@ -3,7 +3,10 @@ import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { GlassWrapper, glassProps } from '../../constants/ui';
+import { isLiquidGlassSupported } from '../../utils/liquidGlassSafe';
 import { shouldShowDuration } from '../../utils/videoDuration';
 import { isValidThumbnail, VIDEO_THUMBNAIL_PLACEHOLDER } from '../../constants/VideoPlaceholder';
 const { width } = Dimensions.get('window');
@@ -34,6 +37,11 @@ interface VideoGridProps {
 }
 
 function AddReelTile({ onPress, label }: { onPress: () => void; label: string }) {
+    const GlassChip = isLiquidGlassSupported ? GlassWrapper : BlurView;
+    const chipProps = isLiquidGlassSupported
+        ? { ...glassProps.chip, interactive: true }
+        : glassProps.chip;
+
     return (
         <TouchableOpacity
             activeOpacity={0.85}
@@ -43,23 +51,18 @@ function AddReelTile({ onPress, label }: { onPress: () => void; label: string })
             accessibilityLabel={label}
         >
             <LinearGradient
-                colors={['#170D2B', '#200D44']}
+                colors={['rgba(23,13,43,0.55)', 'rgba(32,13,68,0.45)']}
                 start={{ x: 0.5, y: 1 }}
                 end={{ x: 0.5, y: 0 }}
                 style={StyleSheet.absoluteFill}
             />
             <View style={styles.addInnerBorder} pointerEvents="none" />
             <View style={styles.addContent}>
-                <LinearGradient
-                    colors={['#8B5CF6', '#513690']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.addIconRing}
-                >
-                    <View style={styles.addIconCore}>
-                        <Ionicons name="add" size={28} color="#fff" />
-                    </View>
-                </LinearGradient>
+                <View style={styles.addGlassBtn}>
+                    <GlassChip {...(chipProps as any)} style={StyleSheet.absoluteFill} />
+                    <View style={styles.addGlassRing} pointerEvents="none" />
+                    <Ionicons name="add" size={20} color={ProfileTheme.colors.avatarRing} />
+                </View>
                 <Text style={styles.addLabel}>{label}</Text>
             </View>
         </TouchableOpacity>
@@ -303,39 +306,36 @@ const styles = StyleSheet.create({
     },
     addInnerBorder: {
         ...StyleSheet.absoluteFillObject,
-        borderWidth: 1,
-        borderColor: 'rgba(139,92,246,0.55)',
+        borderWidth: 0.5,
+        borderColor: ProfileTheme.colors.profileCardBorder,
         borderRadius: 2,
     },
     addContent: {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 10,
-        paddingHorizontal: 8,
+        gap: 8,
+        paddingHorizontal: 6,
     },
-    addIconRing: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        padding: 2,
-        shadowColor: '#8B5CF6',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.45,
-        shadowRadius: 10,
-        elevation: 6,
-    },
-    addIconCore: {
-        flex: 1,
-        borderRadius: 24,
-        backgroundColor: 'rgba(7,4,13,0.35)',
+    addGlassBtn: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
         alignItems: 'center',
         justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    addGlassRing: {
+        ...StyleSheet.absoluteFillObject,
+        borderRadius: 19,
+        borderWidth: 1,
+        borderColor: 'rgba(139,92,246,0.45)',
+        backgroundColor: 'rgba(139,92,246,0.12)',
     },
     addLabel: {
-        color: '#D8AEFF',
-        fontSize: 11,
-        fontWeight: '700',
+        color: ProfileTheme.colors.avatarRing,
+        fontSize: 10,
+        fontWeight: '600',
         textAlign: 'center',
     },
 });
