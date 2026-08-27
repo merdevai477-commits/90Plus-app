@@ -118,6 +118,8 @@ model User {
   notifications                 Notification[]
   parentalConsentRequests       ParentalConsentRequest[]
   predictions                   Prediction[]
+  ownedSponsors                 Sponsor[]                @relation("OwnedSponsors")
+  competitionEntries            CompetitionEntry[]
   ownedPredictionGroups         PredictionGroup[]        @relation("OwnedPredictionGroups")
   groupMemberships              GroupMember[]
   groupInvitesSent              GroupInvite[]            @relation("GroupInvitesSent")
@@ -1400,6 +1402,147 @@ model GroupPrediction {
   @@map("group_predictions")
 }
 
+/// ─── Predict & Win (توقع واربح) ────────────────────────────────────────────
+/// Sponsors post real-world prizes tied to a specific match; users predict the
+/// result to win. Fully dynamic — sponsors, prizes, and competitions are all
+/// managed via API/admin, no app release needed to add new content.
+
+model Sponsor {
+  id           String        @id @default(uuid())
+  name         String
+  /// Trade line shown under the sponsor name on the competition card
+  /// (Figma `650:5295` — e.g. "متجر أحذية رياضية").
+  description  String?
+  logoUrl      String?
+  address      String?
+  hasDelivery  Boolean       @default(false)
+  /// { facebook?, instagram?, whatsapp? }
+  socialLinks  Json?
+  /// Null when the sponsor entity was created directly by an admin.
+  ownerId      String?
+  isVerified   Boolean       @default(false)
+  /// Admin kill-switch — a disabled sponsor's competitions stop accepting
+  /// entries and drop out of the public list.
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  owner        User?         @relation("OwnedSponsors", fields: [ownerId], references: [id], onDelete: SetNull)
+  competitions Competition[]
+
+  @@index([ownerId])
+  @@map("sponsors")
+}
+
+/// Dynamic prize category list rendered on the "اختر فئة الجائزة" grid —
+/// admins can add/reorder/hide categories without an app release.
+model PrizeCategory {
+  id            String        @id @default(uuid())
+  key           String        @unique
+  nameAr        String
+  /// English name. The grid rendered `nameAr` in every language before this
+  /// existed, which is how Arabic category names reached the English build.
+  nameEn        String?
+  /// Cell subtitle on the category grid (Figma `660:5613`), Arabic.
+  description   String?
+  /// English cell subtitle; see `nameEn`.
+  descriptionEn String?
+  /// Optional artwork URL; when absent the app uses the bundled Figma
+  /// illustration matched on `key`.
+  icon          String?
+  sortOrder     Int           @default(0)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  competitions  Competition[]
+
+  @@index([isActive, sortOrder])
+  @@map("prize_categories")
+}
+
+model Competition {
+  id                 String             @id @default(uuid())
+  sponsorId          String
+  categoryId         String
+  prizeName          String
+  prizeImageUrl      String?
+  prizeType          String
+  prizeDescription   String?
+  winnersCount       Int                @default(1)
+  apiMatchId         Int
+  homeTeam           String
+  awayTeam           String
+  homeTeamLogo       String?
+  awayTeamLogo       String?
+  matchDate          DateTime
+  leagueName         String?
+  /// Last fixture status seen by the settlement job (FT/PST/CANC/…), so a
+  /// postponed or abandoned match can be told apart from one still to be played.
+  matchStatus        String?
+  /// Official result, persisted when the competition settles. Kept on the
+  /// competition so a later correction can be detected and re-settled.
+  resultHomeScore    Int?
+  resultAwayScore    Int?
+  /// Competition window. `startAt` defaults to publication; `endAt` bounds
+  /// prize fulfilment. Predictions close at `predictionDeadline`.
+  startAt            DateTime?
+  endAt              DateTime?
+  /// Free-form entry conditions shown to entrants ("شروط المسابقة").
+  rules              String?
+  predictionDeadline DateTime
+  predictionMode     PredictionMode     @default(EXACT_SCORE)
+  status             CompetitionStatus  @default(DRAFT)
+  /// Free to enter vs. sponsor-funded entry cost — drives the "المسابقات
+  /// المجانية" filter chip.
+  isFree             Boolean            @default(true)
+  /// Denormalized counter, kept in sync on entry create — backs the "الأكثر
+  /// مشاركة" sort without a COUNT() on every list request.
+  participantsCount  Int                @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  publishedAt        DateTime?
+  settledAt          DateTime?
+  sponsor            Sponsor            @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
+  category           PrizeCategory      @relation(fields: [categoryId], references: [id])
+  entries            CompetitionEntry[]
+
+  @@index([status, predictionDeadline])
+  @@index([apiMatchId])
+  @@index([sponsorId])
+  @@index([categoryId])
+  @@index([status, participantsCount(sort: Desc)])
+  /// Backs the hub's default "الأحدث" ordering.
+  @@index([status, createdAt(sort: Desc)])
+  @@map("competitions")
+}
+
+model CompetitionEntry {
+  id                 String      @id @default(uuid())
+  competitionId      String
+  userId             String
+  predictedHomeScore Int?
+  predictedAwayScore Int?
+  predictedWinner    String?
+  isCorrect          Boolean?
+  isWinner           Boolean     @default(false)
+  /// Rank among winners (1..winnersCount), stamped at settlement.
+  rank               Int?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  /// When this entry was graded. Null while the competition is open.
+  settledAt          DateTime?
+  competition        Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([competitionId, userId])
+  /// Two entries can never hold the same winning position. Postgres allows
+  /// many NULLs, so non-winners are unaffected.
+  @@unique([competitionId, rank])
+  @@index([userId])
+  @@index([competitionId])
+  @@index([competitionId, isCorrect, createdAt])
+  @@map("competition_entries")
+}
+
 /// ─── Share & Win ────────────────────────────────────────────────────────────
 /// Weekly referral competition. Every cycle keeps its own standings so past
 /// weeks are never overwritten and historical winners stay queryable.
@@ -2467,6 +2610,20 @@ enum GroupRoundStatus {
 enum GroupPredictionMode {
   WINNER
   EXACT
+}
+
+enum PredictionMode {
+  WINNER
+  EXACT_SCORE
+}
+
+enum CompetitionStatus {
+  DRAFT
+  PUBLISHED
+  LOCKED
+  SETTLED
+  CANCELLED
+  REJECTED
 }
 
 enum ShareWinCycleStatus {

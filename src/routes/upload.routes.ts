@@ -789,6 +789,98 @@ router.post(
   },
 );
 
+// ─── POST /api/upload/competition-asset ──────────────────────────────────────
+// Predict & Win prize photo / sponsor logo → Cloudflare R2
+// (competitions/{prize|sponsor}/...).
+//
+// This lives here, on the mounted `/api/upload` router, rather than in
+// `src/routes/storage.routes.ts`. That file exports a router that `main.ts`
+// never mounts, so every path on it — including the `/competition-asset` a
+// previous pass added there — answered `404 Route not found`. `/api/upload` is
+// the one upload surface the app actually uses (`/avatar`, `/cover`,
+// `/group-avatar`), and it is the only one that runs magic-byte validation,
+// image moderation, re-encoding and the per-user storage quota. Adding a
+// second upload stack would have meant a second, unvalidated one.
+router.post(
+  '/competition-asset',
+  requireAuth,
+  uploadImage.single('file'),
+  validateUploadMagicBytes,
+  validateUploadedImage,
+  optimizeUploadedImage,
+  async (req: Request, res: Response): Promise<void> => {
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) {
+      sendError(req, res, 401, ErrorCode.AUTHENTICATION, 'UNAUTHORIZED', 'Unauthorized');
+      return;
+    }
+
+    const file = req.file;
+    if (!file?.buffer?.length) {
+      sendError(req, res, 400, ErrorCode.FILE_UPLOAD, 'NO_FILE', 'No file provided');
+      return;
+    }
+
+    /**
+     * The wizard uploads before the competition row exists, so there is no id
+     * to scope by and no ownership to check beyond "is a signed-in user".
+     * `kind` only partitions the key space so prize photos and sponsor logos
+     * stay tellable apart in the bucket.
+     */
+    const rawKind = String(req.body?.kind ?? 'prize').trim();
+    const kind = rawKind === 'sponsor' ? 'sponsor' : 'prize';
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { clerkUserId },
+        select: { id: true },
+      });
+      if (!user) {
+        sendError(req, res, 404, ErrorCode.NOT_FOUND, 'USER_NOT_FOUND', 'User not found');
+        return;
+      }
+
+      const quotaOk = await checkQuota(user.id, file.buffer.length, req, res);
+      if (!quotaOk) return;
+
+      const safeName = sanitizeOriginalName(file.originalname, `competition-${kind}`);
+      const result = await r2MediaStorage.uploadPublic(
+        'competitions',
+        `${kind}/${user.id}`,
+        file.buffer,
+        safeName,
+        file.mimetype,
+      );
+
+      if (!result.success || !result.url || !result.key) {
+        sendError(
+          req,
+          res,
+          500,
+          ErrorCode.EXTERNAL_SERVICE,
+          'STORAGE_UPLOAD_FAILED',
+          result.error || 'Upload failed',
+        );
+        return;
+      }
+
+      await incrementQuota(user.id, file.buffer.length);
+
+      // Same envelope as every other upload route, so the shared
+      // `useImageUpload` client reads `url` without a special case.
+      res.json({
+        status: 'SUCCESS',
+        message: 'Competition asset uploaded successfully.',
+        url: result.url,
+        data: { url: result.url, storagePath: result.key },
+      });
+    } catch (error: any) {
+      logger.error('[upload/competition-asset] error:', error);
+      sendError(req, res, 500, ErrorCode.INTERNAL, 'UPLOAD_ERROR', error?.message || 'Upload failed');
+    }
+  },
+);
+
 /** Heavy Mux PUT + metadata — runs after HTTP response so mobile clients don't 499. */
 async function processReelMuxUploadInBackground(params: {
   userId: string;

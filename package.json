@@ -27,6 +27,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node --project prisma/tsconfig.json prisma/seed.ts",
+    "seed:prize-categories": "ts-node --project prisma/tsconfig.json prisma/seed-prize-categories.ts",
+    "seed:predict-win": "ts-node --project tsconfig.scripts.json scripts/seed-predict-and-win.ts",
     "prisma:reset": "prisma migrate reset",
     "seed:transfers": "ts-node src/scripts/seed-transfers.ts",
     "seed:transfers:force": "ts-node src/scripts/seed-transfers.ts --force",

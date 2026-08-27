@@ -15,6 +15,7 @@
     "scripts/test-mux-direct.ts",
     "scripts/verify-share-win.ts",
     "scripts/seed-share-win.ts",
+    "scripts/seed-predict-and-win.ts",
     "src/lib/prisma.ts"
   ],
   "exclude": [
