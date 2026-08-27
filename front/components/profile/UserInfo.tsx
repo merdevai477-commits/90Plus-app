@@ -18,6 +18,7 @@ import DeveloperBadge from './DeveloperBadge';
 import { logger } from '../../utils/logger';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
+import { useTranslation } from '../../src/i18n';
 
 interface SocialLinks {
   instagram?: string;
@@ -58,6 +59,7 @@ const UserInfo = memo(function UserInfo({
   socials,
   consecutiveLoginDays = 0,
 }: UserInfoProps) {
+  const { t } = useTranslation();
   const handleSocialPress = (url: string) => {
     Linking.openURL(url).catch(err =>
       logger.error("Couldn't open social link", { url, error: err })
@@ -172,7 +174,7 @@ const UserInfo = memo(function UserInfo({
                   style={[styles.pillText, !hasLocation && styles.pillTextEmpty]}
                   numberOfLines={1}
                 >
-                  {hasLocation ? displayCountry : 'اختر بلدك'}
+                  {hasLocation ? displayCountry : t.profile.selectCountry}
                 </Text>
               </TouchableOpacity>
 
@@ -206,7 +208,7 @@ const UserInfo = memo(function UserInfo({
                   style={[styles.pillText, !hasTeam && styles.pillTextEmpty]}
                   numberOfLines={1}
                 >
-                  {team || 'اختر ناديك'}
+                  {team || t.profile.selectClub}
                 </Text>
               </TouchableOpacity>
             </>
@@ -227,7 +229,7 @@ const UserInfo = memo(function UserInfo({
         style={styles.bioTouchable}
       >
         <Text style={[styles.bio, !bio && styles.bioEmpty]}>
-          {bio || 'أضف نبذة عنك...'}
+          {bio || t.profile.addBio}
         </Text>
       </TouchableOpacity>
 

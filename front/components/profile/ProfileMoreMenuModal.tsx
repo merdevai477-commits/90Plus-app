@@ -263,7 +263,9 @@ export function ProfileMoreMenuModal({
     if (nextUsername !== currentUsername && !canEditUsername) {
       Alert.alert(
         t.common.error,
-        `${t.profile.usernameChangeAfter} ${daysRemaining}d ${hoursRemaining}h`,
+        `${t.profile.usernameChangeAfter} ${t.profile.cooldownShortDaysHours
+          .replace('{days}', String(daysRemaining))
+          .replace('{hours}', String(hoursRemaining))}`,
       );
       return;
     }
@@ -434,7 +436,10 @@ export function ProfileMoreMenuModal({
                     ) : null}
                     {!canEditUsername ? (
                       <Text style={styles.cooldownTxt}>
-                        {t.profile.usernameChangeAfter} {daysRemaining}d {hoursRemaining}h
+                        {t.profile.usernameChangeAfter}{' '}
+                        {t.profile.cooldownShortDaysHours
+                          .replace('{days}', String(daysRemaining))
+                          .replace('{hours}', String(hoursRemaining))}
                       </Text>
                     ) : null}
 

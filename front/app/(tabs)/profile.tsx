@@ -2246,14 +2246,14 @@ function OwnProfileScreen() {
               await rollback();
               toastManager.showError(
                 t.common.error,
-                'تعذر تحديث العلم. حاول مرة أخرى.',
+                t.profile.flagUpdateFailed,
               );
             }
           } catch {
             await rollback();
             toastManager.showError(
               t.common.error,
-              'تعذر تحديث العلم. حاول مرة أخرى.',
+              t.profile.flagUpdateFailed,
             );
           } finally {
             setIsCountryUpdating(false);

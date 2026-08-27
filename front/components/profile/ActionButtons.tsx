@@ -36,9 +36,16 @@ interface ActionButtonsProps {
   reelUploadProgress?: number;
 }
 
-function formatCooldown(c: CooldownInfo): string {
-  if (c.daysRemaining > 0) return `${c.daysRemaining}d ${c.hoursRemaining}h`;
-  return `${c.hoursRemaining}h`;
+function formatCooldown(
+  c: CooldownInfo,
+  t: { cooldownShortDaysHours: string; cooldownShortHours: string },
+): string {
+  if (c.daysRemaining > 0) {
+    return t.cooldownShortDaysHours
+      .replace('{days}', String(c.daysRemaining))
+      .replace('{hours}', String(c.hoursRemaining));
+  }
+  return t.cooldownShortHours.replace('{hours}', String(c.hoursRemaining));
 }
 
 // Reusable glass button wrapper
@@ -136,7 +143,7 @@ export default function ActionButtons({
             />
             <Ionicons name="time-outline" size={17} color="#FF6B6B" />
             <Text style={[styles.btnText, { color: '#FF6B6B' }]}>
-              {formatCooldown(uploadCooldown)}
+              {formatCooldown(uploadCooldown, t.profile)}
             </Text>
           </GlassBtn>
         ) : (

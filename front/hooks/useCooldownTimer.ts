@@ -1,11 +1,11 @@
 /**
  * useCooldownTimer
  *
- * UX Fix 3: Provides a live countdown for upload cooldowns.
- * Returns formatted remaining time string that updates every second.
+ * Provides a live countdown for upload cooldowns with localized remaining text.
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from '../src/i18n';
 
 export interface CooldownInfo {
   canChange: boolean;
@@ -15,7 +15,7 @@ export interface CooldownInfo {
 }
 
 export interface CooldownTimerResult {
-  /** Human-readable remaining time, e.g. "2 أيام و 3 ساعات" */
+  /** Human-readable remaining time */
   remainingText: string;
   /** True when the cooldown has expired (timer hit zero) */
   expired: boolean;
@@ -28,6 +28,8 @@ export function useCooldownTimer(
   cooldown: CooldownInfo | null | undefined,
   enabled = true,
 ): CooldownTimerResult {
+  const { t } = useTranslation();
+
   const getRemaining = () => {
     if (!cooldown || cooldown.canChange) {
       return { days: 0, hours: 0, minutes: 0, expired: true };
@@ -41,7 +43,6 @@ export function useCooldownTimer(
       const minutes = totalMinutes % 60;
       return { days, hours, minutes, expired: false };
     }
-    // Fallback to static values from cooldown object
     return {
       days: cooldown.daysRemaining,
       hours: cooldown.hoursRemaining % 24,
@@ -70,7 +71,7 @@ export function useCooldownTimer(
       if (next.expired && intervalRef.current) {
         clearInterval(intervalRef.current);
       }
-    }, 60_000); // update every minute
+    }, 60_000);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -86,10 +87,22 @@ export function useCooldownTimer(
   const buildText = () => {
     if (state.expired) return '';
     const parts: string[] = [];
-    if (state.days > 0) parts.push(`${state.days} ${state.days === 1 ? 'يوم' : 'أيام'}`);
-    if (state.hours > 0) parts.push(`${state.hours} ساعة`);
-    if (state.minutes > 0 && state.days === 0) parts.push(`${state.minutes} دقيقة`);
-    return parts.join(' و ');
+    if (state.days > 0) {
+      parts.push(
+        `${state.days} ${state.days === 1 ? t.profile.timeDay : t.profile.timeDays}`,
+      );
+    }
+    if (state.hours > 0) {
+      parts.push(
+        `${state.hours} ${state.hours === 1 ? t.profile.timeHour : t.profile.timeHours}`,
+      );
+    }
+    if (state.minutes > 0 && state.days === 0) {
+      parts.push(
+        `${state.minutes} ${state.minutes === 1 ? t.profile.timeMinute : t.profile.timeMinutes}`,
+      );
+    }
+    return parts.join(` ${t.profile.timeJoiner} `);
   };
 
   return {

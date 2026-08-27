@@ -9,6 +9,7 @@ import { GlassWrapper, glassProps } from '../../constants/ui';
 import { isLiquidGlassSupported } from '../../utils/liquidGlassSafe';
 import { shouldShowDuration } from '../../utils/videoDuration';
 import { isValidThumbnail, VIDEO_THUMBNAIL_PLACEHOLDER } from '../../constants/VideoPlaceholder';
+import { useTranslation } from '../../src/i18n';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
 const SPACING = 6;
@@ -94,6 +95,7 @@ const VideoGrid = memo(function VideoGrid({
     addLabel = 'Add',
     horizontalInset = 0,
 }: VideoGridProps) {
+    const { t } = useTranslation();
     const itemSize = computeItemSize(horizontalInset);
     const itemHeight = Math.round(itemSize * 1.28);
 
@@ -127,7 +129,7 @@ const VideoGrid = memo(function VideoGrid({
                     ) : (
                         <View style={[styles.thumbnail, styles.placeholderContainer]}>
                             <Ionicons name="videocam-outline" size={32} color="#666" />
-                            <Text style={styles.placeholderText}>No Preview</Text>
+                            <Text style={styles.placeholderText}>{t.profile.noPreview}</Text>
                         </View>
                     )}
 
@@ -149,11 +151,14 @@ const VideoGrid = memo(function VideoGrid({
                     {item.isUploading && (
                         <View style={styles.uploadingOverlay}>
                             <View style={styles.uploadingContent}>
-                                <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                                <ActivityIndicator size="small" color={ProfileTheme.colors.profilePrimary} />
                                 <Text style={styles.uploadingText}>
                                     {item.uploadProgress !== undefined
-                                        ? `جاري الرفع ${Math.round(item.uploadProgress)}%`
-                                        : 'جاري الرفع...'}
+                                        ? t.profile.uploadingProgressLabel.replace(
+                                            '{percent}',
+                                            String(Math.round(item.uploadProgress)),
+                                          )
+                                        : t.profile.uploadingLabel}
                                 </Text>
                             </View>
                             {item.uploadProgress !== undefined && (
@@ -167,8 +172,8 @@ const VideoGrid = memo(function VideoGrid({
                     {!item.isUploading && item.isProcessing && (
                         <View style={styles.uploadingOverlay}>
                             <View style={styles.uploadingContent}>
-                                <ActivityIndicator size="small" color="#FFA500" />
-                                <Text style={styles.uploadingText}>جاري المعالجة...</Text>
+                                <ActivityIndicator size="small" color={ProfileTheme.colors.avatarRing} />
+                                <Text style={styles.uploadingText}>{t.profile.processingLabel}</Text>
                             </View>
                         </View>
                     )}
@@ -177,8 +182,8 @@ const VideoGrid = memo(function VideoGrid({
                         <View style={styles.failedOverlay}>
                             <View style={styles.uploadingContent}>
                                 <Ionicons name="alert-circle" size={24} color="#FF4444" />
-                                <Text style={styles.failedText}>فشل المعالجة</Text>
-                                <Text style={styles.retryText}>اضغط لإعادة المحاولة</Text>
+                                <Text style={styles.failedText}>{t.profile.processingFailed}</Text>
+                                <Text style={styles.retryText}>{t.profile.tapToRetry}</Text>
                             </View>
                         </View>
                     )}

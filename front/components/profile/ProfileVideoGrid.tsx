@@ -10,6 +10,7 @@ import VideoGrid from './VideoGrid';
 import { ReelsService } from '../../src/services/authService';
 import { logger } from '../../utils/logger';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { useTranslation } from '../../src/i18n';
 
 interface VideoItem {
   id: string;
@@ -61,6 +62,7 @@ export const ProfileSavedGrid: React.FC<{
   getToken: () => Promise<string | null>;
   onCountChange?: (count: number) => void;
 }> = ({ getToken, onCountChange }) => {
+  const { t } = useTranslation();
   const [savedVideos, setSavedVideos] = useState<any[]>([]);
   const [isLoadingSaved, setIsLoadingSaved] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -79,11 +81,11 @@ export const ProfileSavedGrid: React.FC<{
       }
     } catch (error) {
       logger.error('Error loading saved videos:', error);
-      setLoadError('فشل تحميل المحفوظات');
+      setLoadError(t.profile.savedLoadFailed);
     } finally {
       setIsLoadingSaved(false);
     }
-  }, [getToken, onCountChange]);
+  }, [getToken, onCountChange, t.profile.savedLoadFailed]);
 
   React.useEffect(() => {
     if (!hasLoadedRef.current) {
