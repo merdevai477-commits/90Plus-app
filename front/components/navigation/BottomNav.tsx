@@ -10,7 +10,7 @@ import { useProfileTabAvatar } from './useProfileTabAvatar';
 function resolveActiveIndex(pathname: string | null): number {
   const p = (pathname ?? '').toLowerCase();
 
-  if (p.includes('match-details') || p.includes('matches')) {
+  if (p.includes('match-details') || (p.includes('matches') && !p.includes('predict-and-win'))) {
     return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'matches');
   }
   if (p.includes('chat')) {
@@ -26,8 +26,8 @@ function resolveActiveIndex(pathname: string | null): number {
   if (p.includes('/rank')) {
     return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'rank');
   }
-  if (p.includes('/reels')) {
-    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'reels');
+  if (p.includes('predict-and-win')) {
+    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'sponsors');
   }
 
   const found = LIQUID_TAB_ITEMS.findIndex((tab) => {
@@ -48,8 +48,9 @@ const BottomNav = memo(function BottomNav() {
   const isChat = pathname?.includes('chat');
   const isQuiz = pathname?.includes('quiz');
   const isPredictionGroups = pathname?.includes('prediction-groups');
+  const isPredictAndWinStack = /predict-and-win\/.+/.test(pathname ?? '');
   const isMatchDetails = pathname?.includes('match-details');
-  const hidden = isChat || isQuiz || isPredictionGroups || isMatchDetails;
+  const hidden = isChat || isQuiz || isPredictionGroups || isPredictAndWinStack || isMatchDetails;
 
   const activeIndex = useMemo(
     () => resolveActiveIndex(pathname),

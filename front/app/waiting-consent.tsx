@@ -57,7 +57,7 @@ export default function WaitingConsentScreen() {
     maxTotalChecks: 40,
     onConsentGranted: () => {
       logger.info('[WaitingConsent] Consent confirmed (poll)!');
-      router.replace('/(tabs)/Home');
+      router.replace('/(tabs)/matches');
     },
   });
 
@@ -99,7 +99,7 @@ export default function WaitingConsentScreen() {
 
       if (ok && parentalConsent) {
         logger.info('[WaitingConsent] Consent confirmed!');
-        router.replace('/(tabs)/Home');
+      router.replace('/(tabs)/matches');
         return;
       }
     } catch (err: any) {

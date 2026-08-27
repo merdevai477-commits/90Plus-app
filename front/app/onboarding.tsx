@@ -84,9 +84,9 @@ export default function OnboardingScreen() {
                     }
 
                     try {
-                        router.replace('/(tabs)/Home');
+                        router.replace('/(tabs)/matches');
                     } catch (navError) {
-                        router.push('/(tabs)/Home');
+                        router.push('/(tabs)/matches');
                     }
                 } catch (error) {
                     console.error('Save preferences error:', error);
@@ -96,9 +96,9 @@ export default function OnboardingScreen() {
                             text: t.onboardingFlow.skip,
                             onPress: () => {
                                 try {
-                                    router.replace('/(tabs)/Home');
+                                    router.replace('/(tabs)/matches');
                                 } catch {
-                                    router.push('/(tabs)/Home');
+                                    router.push('/(tabs)/matches');
                                 }
                             },
                             style: 'cancel',
@@ -113,9 +113,9 @@ export default function OnboardingScreen() {
                     text: t.onboardingFlow.okay,
                     onPress: () => {
                         try {
-                            router.replace('/(tabs)/Home');
+                            router.replace('/(tabs)/matches');
                         } catch {
-                            router.push('/(tabs)/Home');
+                            router.push('/(tabs)/matches');
                         }
                     },
                 },

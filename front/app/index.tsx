@@ -25,7 +25,7 @@ export default function Index() {
   }
 
   if (isSignedIn) {
-    return <Redirect href="/(tabs)/Home" />;
+    return <Redirect href="/(tabs)/matches" />;
   }
 
   return <Redirect href="/auth" />;

@@ -12,7 +12,7 @@ import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import type { LucideIcon } from 'lucide-react-native';
@@ -641,8 +641,17 @@ export default function NotificationsScreen() {
     } = useNotifications();
     const { clearNotifications: clearMatchNotifications } = useHomeStore();
 
+    const params = useLocalSearchParams<{ openLuckyWheel?: string }>();
     const [showLuckyWheel, setShowLuckyWheel] = useState(false);
     const loadingToastShownRef = useRef(false);
+    const openLuckyWheelHandledRef = useRef(false);
+
+    useEffect(() => {
+        if (params.openLuckyWheel === 'true' && !openLuckyWheelHandledRef.current) {
+            openLuckyWheelHandledRef.current = true;
+            setShowLuckyWheel(true);
+        }
+    }, [params.openLuckyWheel]);
 
     useFocusEffect(
         useCallback(() => {
@@ -690,7 +699,7 @@ export default function NotificationsScreen() {
     const handleBack = useCallback(() => {
         Haptics.selectionAsync();
         if (router.canGoBack()) router.back();
-        else router.replace('/(tabs)/Home');
+        else router.replace('/(tabs)/matches');
     }, [router]);
 
     const markAllRead = useCallback(async () => {

@@ -1,8 +1,7 @@
 import { Tabs, useRouter, usePathname } from "expo-router";
-import { Home, User, Video, Brain, BarChart2 } from "lucide-react-native";
+import { User, Video, Brain, BarChart2, Gift } from "lucide-react-native";
 import React, { useEffect } from "react";
 import { Animated, BackHandler, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNav from '@/components/navigation/BottomNav';
 import { useLiveFixtureSync } from '../../hooks/useLiveFixtureSync';
 
@@ -14,13 +13,16 @@ function LiveFixtureSyncBootstrap() {
 const TAB_STACK_OPTIONS = {
   headerShown: false,
   contentStyle: { backgroundColor: '#000' },
-  // Keep inactive tabs mounted but frozen — faster tab switches, less JS work on blur.
   lazy: true,
   freezeOnBlur: true,
 } as const;
 
+function isLandingTab(pathname: string | null): boolean {
+  const p = (pathname ?? '').toLowerCase();
+  return p === '/matches' || p.endsWith('/matches');
+}
+
 export default function TabLayout() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -29,25 +31,22 @@ export default function TabLayout() {
     let backPressTimer: ReturnType<typeof setTimeout>;
 
     const backAction = () => {
-      if (pathname === "/Home") {
+      if (isLandingTab(pathname)) {
         backPressCount++;
 
         if (backPressCount === 2) {
-          // If pressed twice quickly, let the app close
           return false;
         }
 
-        // Reset the counter after 2 seconds
         backPressTimer = setTimeout(() => {
           backPressCount = 0;
         }, 2000);
 
         return true;
-      } else {
-        // If not on home, navigate to home
-        router.replace("/Home");
-        return true;
       }
+
+      router.replace('/(tabs)/matches');
+      return true;
     };
 
     const backHandler = BackHandler.addEventListener(
@@ -67,6 +66,7 @@ export default function TabLayout() {
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <LiveFixtureSyncBootstrap />
       <Tabs
+        initialRouteName="matches"
         screenOptions={{
           ...TAB_STACK_OPTIONS,
           tabBarStyle: {
@@ -75,9 +75,9 @@ export default function TabLayout() {
         }}
       >
         <Tabs.Screen
-          name="profile"
+          name="matches"
           options={{
-            title: "Profile",
+            title: "Matches",
             tabBarIcon: ({ color, focused }) => (
               <Animated.View
                 style={{
@@ -88,26 +88,7 @@ export default function TabLayout() {
                   opacity: focused ? 1 : 0.7
                 }}
               >
-                <User color={color} size={24} />
-              </Animated.View>
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="Home"
-          options={{
-            title: "Home",
-            tabBarIcon: ({ color, focused }) => (
-              <Animated.View
-                style={{
-                  transform: [
-                    { scale: focused ? 1.15 : 1 },
-                    { translateY: focused ? -3 : 0 }
-                  ],
-                  opacity: focused ? 1 : 0.7
-                }}
-              >
-                <Home color={color} size={26} />
+                <Video color={color} size={24} />
               </Animated.View>
             ),
           }}
@@ -132,8 +113,47 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
+          name="predict-and-win"
+          options={{
+            title: "Sponsors",
+            tabBarIcon: ({ color, focused }) => (
+              <Animated.View
+                style={{
+                  transform: [
+                    { scale: focused ? 1.1 : 1 },
+                    { translateY: focused ? -2 : 0 }
+                  ],
+                  opacity: focused ? 1 : 0.7
+                }}
+              >
+                <Gift color={color} size={24} />
+              </Animated.View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+            tabBarIcon: ({ color, focused }) => (
+              <Animated.View
+                style={{
+                  transform: [
+                    { scale: focused ? 1.1 : 1 },
+                    { translateY: focused ? -2 : 0 }
+                  ],
+                  opacity: focused ? 1 : 0.7
+                }}
+              >
+                <User color={color} size={24} />
+              </Animated.View>
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="quiz"
           options={{
+            href: null,
             title: "Quiz",
             tabBarIcon: ({ color, focused }) => (
               <Animated.View
@@ -151,47 +171,15 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="matches"
-          options={{
-            title: "Highlights",
-            tabBarIcon: ({ color, focused }) => (
-              <Animated.View
-                style={{
-                  transform: [
-                    { scale: focused ? 1.1 : 1 },
-                    { translateY: focused ? -2 : 0 }
-                  ],
-                  opacity: focused ? 1 : 0.7
-                }}
-              >
-                <Video color={color} size={24} />
-              </Animated.View>
-            ),
-          }}
-        />
-        <Tabs.Screen
           name="reels"
           options={{
-            title: "Highlights",
-            tabBarIcon: ({ color, focused }) => (
-              <Animated.View
-                style={{
-                  transform: [
-                    { scale: focused ? 1.1 : 1 },
-                    { translateY: focused ? -2 : 0 }
-                  ],
-                  opacity: focused ? 1 : 0.7
-                }}
-              >
-                <Video color={color} size={24} />
-              </Animated.View>
-            ),
+            href: null,
+            title: "Reels",
           }}
         />
         <Tabs.Screen
           name="chat"
           options={{
-            // No tab icon — navigation handled by BottomNav's AI button.
             href: null,
           }}
         />
@@ -207,6 +195,10 @@ export default function TabLayout() {
             href: null,
           }}
         />
+        <Tabs.Screen name="Home" options={{ href: null }} />
+        <Tabs.Screen name="settings" options={{ href: null }} />
+        <Tabs.Screen name="privacy-settings" options={{ href: null }} />
+        <Tabs.Screen name="my-reports" options={{ href: null }} />
       </Tabs>
       <BottomNav />
     </View>

@@ -1,0 +1,276 @@
+import { useAuth } from '@clerk/clerk-expo';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import {
+  CompetitionFilter,
+  CompetitionInfo,
+  CompetitionsService,
+  CompetitionSort,
+  CompetitionTab,
+  PrizeCategoryInfo,
+} from '../services/competitions.service';
+import { getClerkBearerToken } from '../utils/clerkAuthToken';
+import { logger } from '../utils/logger';
+
+/**
+ * `undefined` is a meaningful filter value ("no quick filter"), so a load
+ * cannot use `opts.filter ?? filter` to fall back — that makes clearing the
+ * filter impossible. The override is signalled by the key being present.
+ */
+interface LoadOpts {
+  tab?: CompetitionTab;
+  filter?: CompetitionFilter;
+  sort?: CompetitionSort;
+  append?: boolean;
+}
+
+export function useCompetitions() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const [tab, setTab] = useState<CompetitionTab>('all');
+  const [filter, setFilter] = useState<CompetitionFilter | undefined>(undefined);
+  // Figma's sort pill reads "الأحدث" in its default state.
+  const [sort, setSort] = useState<CompetitionSort>('newest');
+  const [items, setItems] = useState<CompetitionInfo[]>([]);
+  const [categories, setCategories] = useState<PrizeCategoryInfo[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
+  const isSignedInRef = useRef(isSignedIn);
+  isSignedInRef.current = isSignedIn;
+
+  /**
+   * Current selection, mirrored in refs. `load` reads these instead of closing
+   * over state so it stays referentially stable — otherwise every tab/filter/
+   * cursor change would produce a new `load`, a new `refresh`, and re-fire the
+   * focus effect that depends on it.
+   */
+  const tabRef = useRef<CompetitionTab>(tab);
+  const filterRef = useRef<CompetitionFilter | undefined>(filter);
+  const sortRef = useRef<CompetitionSort>(sort);
+  const cursorRef = useRef<string | null>(null);
+
+  /**
+   * Monotonic request id. Switching tabs quickly fires overlapping requests and
+   * the slower (older) one can land last — this drops any response that a newer
+   * selection has already superseded.
+   */
+  const requestSeq = useRef(0);
+
+  const resolveToken = useCallback(async () => {
+    if (!isSignedInRef.current) return null;
+    try {
+      // Raw `getToken()` can hang on iOS SecureStore — that blocked `load()`
+      // forever and left the hub on a spinner even while the API answered.
+      // The list is public (`optionalAuth`); a null token is fine.
+      //
+      // `getClerkBearerToken`'s retries only protect against `getToken()`
+      // resolving/rejecting repeatedly — if a single attempt's promise never
+      // settles at all (observed on Android too, not just iOS), the retry
+      // loop never reaches attempt two and this hangs forever, leaving `load`
+      // permanently unresolved: no items, no error, no spinner update, ever.
+      // Racing it against a timeout guarantees `load` always settles.
+      return await Promise.race([
+        getClerkBearerToken(getTokenRef.current, { retries: 5, baseDelayMs: 200 }),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+      ]);
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const resolveTokenRef = useRef(resolveToken);
+  resolveTokenRef.current = resolveToken;
+
+  const load = useCallback(async (opts: LoadOpts = {}) => {
+    const activeTab = opts.tab ?? tabRef.current;
+    const activeFilter = 'filter' in opts ? opts.filter : filterRef.current;
+    const activeSort = opts.sort ?? sortRef.current;
+    const append = !!opts.append;
+
+    const seq = ++requestSeq.current;
+    const token = await resolveTokenRef.current();
+    if (seq !== requestSeq.current) return;
+
+    // "تحدياتي" is per-user; without a session there is nothing to ask for.
+    if (activeTab === 'mine' && !token) {
+      // An append must never clear an already-rendered page.
+      if (!append) {
+        setItems([]);
+        setNextCursor(null);
+        cursorRef.current = null;
+      }
+      setError('AUTH_REQUIRED');
+      return;
+    }
+
+    try {
+      const result = await CompetitionsService.list(token, {
+        tab: activeTab,
+        filter: activeFilter,
+        sort: activeSort,
+        cursor: append ? cursorRef.current ?? undefined : undefined,
+      });
+      if (seq !== requestSeq.current) return;
+      setItems((prev) => (append ? [...prev, ...result.items] : result.items));
+      setNextCursor(result.nextCursor);
+      cursorRef.current = result.nextCursor;
+      setError(null);
+    } catch (err: any) {
+      if (seq !== requestSeq.current) return;
+      logger.error('[useCompetitions] load failed:', err);
+      // A failed request must not be shown as "no competitions".
+      if (!append) {
+        setItems([]);
+        setNextCursor(null);
+        cursorRef.current = null;
+        setError(err?.message || 'LOAD_FAILED');
+      }
+    }
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !cursorRef.current) return;
+    setLoadingMore(true);
+    try {
+      await load({ append: true });
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [load, loadingMore]);
+
+  const changeTab = useCallback(
+    async (nextTab: CompetitionTab) => {
+      if (nextTab === tabRef.current) return;
+      tabRef.current = nextTab;
+      cursorRef.current = null;
+      setTab(nextTab);
+      setItems([]);
+      setLoading(true);
+      try {
+        await load({ tab: nextTab });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [load],
+  );
+
+  const changeFilter = useCallback(
+    async (nextFilter: CompetitionFilter | undefined) => {
+      if (nextFilter === filterRef.current) return;
+      filterRef.current = nextFilter;
+      cursorRef.current = null;
+      setFilter(nextFilter);
+      setItems([]);
+      setLoading(true);
+      try {
+        // `filter` is passed explicitly (even as undefined) so `load` treats it
+        // as an override rather than falling back to the previous value.
+        await load({ filter: nextFilter });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [load],
+  );
+
+  const changeSort = useCallback(
+    async (nextSort: CompetitionSort) => {
+      if (nextSort === sortRef.current) return;
+      sortRef.current = nextSort;
+      cursorRef.current = null;
+      setSort(nextSort);
+      setItems([]);
+      setLoading(true);
+      try {
+        await load({ sort: nextSort });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [load],
+  );
+
+  /**
+   * Clerk resolves asynchronously. Re-fetch when the session lands so `myEntry`
+   * is populated, but never block the public list on auth — it works with a
+   * null token and must not sit behind a hung `getToken()`.
+   */
+  const authKey = !isLoaded ? 'pending' : isSignedIn ? 'in' : 'out';
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        await load();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authKey, load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    CompetitionsService.getPrizeCategories()
+      .then((cats) => {
+        if (!cancelled) setCategories(cats);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /**
+   * Coming back from a competition detail screen the user may have just
+   * entered, so `myEntry` / `participantsCount` on the cards are stale. Skip
+   * the first focus — the auth effect above has already fetched.
+   */
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      void load();
+    }, [load]),
+  );
+
+  return {
+    tab,
+    filter,
+    sort,
+    items,
+    categories,
+    loading,
+    refreshing,
+    loadingMore,
+    error,
+    hasMore: !!nextCursor,
+    changeTab,
+    changeFilter,
+    changeSort,
+    refresh,
+    loadMore,
+  };
+}

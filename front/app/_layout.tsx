@@ -307,6 +307,8 @@ function RootLayoutNav() {
        */}
       <Stack.Screen name="share-win/index" options={{ headerShown: false }} />
       <Stack.Screen name="share-win/leaderboard" options={{ headerShown: false }} />
+      <Stack.Screen name="predict-and-win/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="predict-and-win/create" options={{ headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="world-cup-news" options={{ headerShown: false }} />
       <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />
