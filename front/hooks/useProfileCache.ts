@@ -287,6 +287,7 @@ export interface UseProfileCacheResult {
   loadVideos: (username: string, bustCache?: boolean) => Promise<void>;
   updateUserData: (updates: Partial<ProfileUserData>) => void;
   updateFollowStats: (stats: FollowStats) => void;
+  updateCooldowns: (updates: Partial<CooldownsResponse>) => void;
   invalidateCache: () => Promise<void>;
 }
 
@@ -441,7 +442,10 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
   /**
    * Transform backend user profile to ProfileUserData
    */
-  const transformUserProfile = useCallback((user: UserProfile, fallbackAvatar?: string): ProfileUserData => {
+  const transformUserProfile = useCallback((user: UserProfile | null | undefined, fallbackAvatar?: string): ProfileUserData | null => {
+    if (!user?.id || !user?.username) {
+      return null;
+    }
     return {
       id: user.id, // Include user ID for badges and other features
       displayName: resolveProfileDisplayName(user.displayName, user.username, clerkFallback),
@@ -562,7 +566,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         newUserData = transformUserProfile(userResult, clerkUserImageUrl);
         
         // Validate user data before setting
-        if (!newUserData.username || !newUserData.id) {
+        if (!newUserData?.username || !newUserData?.id) {
           console.error('[useProfileCache] ❌ Invalid user data received from backend');
           setError('Invalid user data received');
           setIsLoading(false);

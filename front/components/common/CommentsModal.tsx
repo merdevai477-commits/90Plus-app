@@ -67,18 +67,19 @@ function mapBackendComment(c: {
     content?: string;
     text?: string;
     createdAt: string;
-    user: { id: string; displayName?: string; username: string; avatar?: string; isVerified?: boolean };
+    user?: { id: string; displayName?: string; username: string; avatar?: string; isVerified?: boolean };
     likesCount?: number;
     likes?: number;
     liked?: boolean;
 }) {
+    const user = c?.user;
     return {
         id: c.id,
         user: {
-            id: c.user.id,
-            name: c.user.displayName || c.user.username,
-            avatar: c.user.avatar,
-            verified: c.user.isVerified,
+            id: user?.id || 'unknown',
+            name: user?.displayName || user?.username || 'User',
+            avatar: user?.avatar,
+            verified: user?.isVerified,
         },
         text: c.content || c.text || '',
         timestamp: formatTimestamp(c.createdAt),

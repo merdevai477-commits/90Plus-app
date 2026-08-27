@@ -323,11 +323,14 @@ export default function FollowersListModal({
 
   const currentList = activeTab === 'followers' ? followers : following;
   const filteredList = searchQuery
-    ? currentList.filter(
-        (u) =>
-          u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          u.displayName?.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
+    ? currentList.filter((u) => {
+        if (!u) return false;
+        const q = searchQuery.toLowerCase();
+        return (
+          (u.username || '').toLowerCase().includes(q) ||
+          (u.displayName || '').toLowerCase().includes(q)
+        );
+      })
     : currentList;
 
   const headerTitle = username

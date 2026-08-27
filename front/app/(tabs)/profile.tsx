@@ -1961,7 +1961,7 @@ function OwnProfileScreen() {
             {
               key: 'rate',
               icon: PROFILE_ICONS.bullseye,
-              value: `${predictionStats.accuracy <= 1 && predictionStats.accuracy > 0 ? Math.round(predictionStats.accuracy * 100) : Math.round(predictionStats.accuracy || 0)}%`,
+              value: `${(predictionStats?.accuracy ?? 0) <= 1 && (predictionStats?.accuracy ?? 0) > 0 ? Math.round((predictionStats?.accuracy ?? 0) * 100) : Math.round(predictionStats?.accuracy || 0)}%`,
               label: t.profile.predictionRate,
               onPress: () => setActiveTab('predictions'),
             },

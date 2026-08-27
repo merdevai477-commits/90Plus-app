@@ -52,11 +52,11 @@ export interface UseReelsCacheResult {
 const transformBackendReel = (reel: ReelFeedItem, likedReelIds: string[] = []): ReelData => ({
   id: reel.id,
   user: {
-    id: reel.user.id,
-    username: reel.user.username,
-    name: reel.user.displayName || reel.user.username,
-    avatar: reel.user.avatar || 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff',
-    verified: reel.user.isVerified,
+    id: reel.user?.id || 'unknown',
+    username: reel.user?.username || 'user',
+    name: reel.user?.displayName || reel.user?.username || 'User',
+    avatar: reel.user?.avatar || 'https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff',
+    verified: reel.user?.isVerified,
     followers: 0,
     isFollowing: false
   },

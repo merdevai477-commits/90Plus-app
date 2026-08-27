@@ -277,18 +277,25 @@ export class ProfileErrorBoundary extends Component<Props, State> {
   // ============================================================================
 
   private renderFallbackUI(): ReactNode {
-    const { error, isInfiniteLoop, errorTimestamp } = this.state;
+    const { error, isInfiniteLoop } = this.state;
     const {
       errorMessage = 'عذراً، حدث خطأ غير متوقع في صفحة البروفايل.',
-      infiniteLoopMessage = 'تم اكتشاف حلقة لا نهائية في البروفايل. تم إيقاف التطبيق للحماية.',
+      infiniteLoopMessage = 'تم إيقاف الصفحة مؤقتاً لحماية التطبيق. جرّب إعادة المحاولة.',
       secondaryAction = 'home',
     } = this.props;
 
+    // Never show Metro/stack URLs to users — keep details in logs only.
+    if (error) {
+      logger.error('[ProfileErrorBoundary] fallback shown', {
+        message: error.message,
+        stack: error.stack?.slice(0, 500),
+      });
+    }
+
     return (
       <View style={styles.container}>
-        {/* Background Gradient */}
         <LinearGradient
-          colors={[ProfileTheme.colors.deepBlack, '#1a1a2e', ProfileTheme.colors.deepBlack]}
+          colors={['#1A0B33', '#0B0614', '#030303']}
           style={StyleSheet.absoluteFill}
         />
 
@@ -296,99 +303,64 @@ export class ProfileErrorBoundary extends Component<Props, State> {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Error Icon */}
-          <View style={styles.iconContainer}>
-            <Ionicons
-              name={isInfiniteLoop ? "infinite" : "alert-circle"}
-              size={80}
-              color={isInfiniteLoop ? "#f59e0b" : "#ef4444"}
-            />
+          <View style={styles.iconWrap}>
+            <LinearGradient colors={['#8B5CF6', '#5B21B6']} style={styles.iconBg}>
+              <Ionicons
+                name={isInfiniteLoop ? 'infinite' : 'alert-circle'}
+                size={36}
+                color="#fff"
+              />
+            </LinearGradient>
           </View>
 
-          {/* Error Title */}
           <Text style={styles.title}>
-            {isInfiniteLoop ? '🔄 حلقة لا نهائية' : '⚠️ حدث خطأ'}
+            {isInfiniteLoop ? 'توقف مؤقت' : 'حدث خطأ'}
           </Text>
 
-          {/* Error Message */}
           <Text style={styles.message}>
             {isInfiniteLoop ? infiniteLoopMessage : errorMessage}
           </Text>
 
-          {/* Error Details (Collapsible) */}
-          {error && __DEV__ && (
-            <View style={styles.errorDetailsContainer}>
-              <Text style={styles.errorDetailsTitle}>تفاصيل الخطأ (للمطورين):</Text>
-              <View style={styles.errorDetailsBox}>
-                <Text style={styles.errorDetailsText}>
-                  {error.message}
-                </Text>
-                {error.stack && (
-                  <Text style={styles.errorStackText} numberOfLines={10}>
-                    {error.stack}
-                  </Text>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* Timestamp */}
-          {errorTimestamp && (
-            <Text style={styles.timestamp}>
-              الوقت: {new Date(errorTimestamp).toLocaleString('ar-EG')}
-            </Text>
-          )}
-
-          {/* Action Buttons */}
           <View style={styles.actionsContainer}>
-            {/* Retry Button */}
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={this.handleRetry}
-              activeOpacity={0.8}
+              activeOpacity={0.88}
             >
               <LinearGradient
-                colors={[ProfileTheme.colors.neonGreen, '#15803d']}
+                colors={['#8B5CF6', '#5B21B6']}
                 style={styles.buttonGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
-                <Ionicons name="refresh" size={20} color="#000" />
+                <Ionicons name="refresh" size={20} color="#fff" />
                 <Text style={styles.primaryButtonText}>إعادة المحاولة</Text>
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Go back / home */}
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={this.handleSecondaryNavigate}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               <Ionicons
                 name={secondaryAction === 'back' ? 'arrow-back' : 'home-outline'}
                 size={20}
-                color={ProfileTheme.colors.textPrimary}
+                color={ProfileTheme.colors.avatarRing}
               />
               <Text style={styles.secondaryButtonText}>
                 {secondaryAction === 'back' ? 'رجوع' : 'العودة للرئيسية'}
               </Text>
             </TouchableOpacity>
 
-            {/* Reload App Button */}
             <TouchableOpacity
               style={styles.tertiaryButton}
               onPress={this.handleReload}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <Ionicons name="reload-outline" size={18} color="#999" />
               <Text style={styles.tertiaryButtonText}>إعادة تحميل التطبيق</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Help Text */}
-          <Text style={styles.helpText}>
-            إذا استمرت المشكلة، يرجى التواصل مع الدعم الفني
-          </Text>
         </ScrollView>
       </View>
     );
@@ -420,130 +392,88 @@ export class ProfileErrorBoundary extends Component<Props, State> {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: ProfileTheme.colors.deepBlack,
+    backgroundColor: ProfileTheme.colors.profileBg,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: 28,
   },
-  iconContainer: {
-    marginBottom: 24,
-    padding: 20,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 100,
+  iconWrap: {
+    marginBottom: 22,
+  },
+  iconBg: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.16)',
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: ProfileTheme.colors.textPrimary,
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   message: {
-    fontSize: 16,
-    color: ProfileTheme.colors.textSecondary,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.65)',
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 24,
-    maxWidth: '90%',
-  },
-  errorDetailsContainer: {
-    width: '100%',
-    marginBottom: 24,
-  },
-  errorDetailsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#f59e0b',
-    marginBottom: 8,
-  },
-  errorDetailsBox: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  errorDetailsText: {
-    fontSize: 12,
-    color: '#ef4444',
-    fontFamily: 'monospace',
-    marginBottom: 8,
-  },
-  errorStackText: {
-    fontSize: 10,
-    color: '#999',
-    fontFamily: 'monospace',
-  },
-  timestamp: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 32,
+    marginBottom: 28,
+    maxWidth: '92%',
   },
   actionsContainer: {
     width: '100%',
     gap: 12,
   },
   primaryButton: {
-    width: '100%',
-    height: 56,
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: 'hidden',
   },
   buttonGradient: {
-    flex: 1,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   primaryButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
   },
   secondaryButton: {
-    width: '100%',
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    height: 52,
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    backgroundColor: '#26095C',
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.35)',
   },
   secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: ProfileTheme.colors.textPrimary,
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   tertiaryButton: {
-    width: '100%',
     height: 48,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    flexDirection: 'row',
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   tertiaryButtonText: {
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 14,
-    fontWeight: '500',
-    color: '#999',
-  },
-  helpText: {
-    fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 24,
-    fontStyle: 'italic',
+    fontWeight: '600',
   },
 });
 

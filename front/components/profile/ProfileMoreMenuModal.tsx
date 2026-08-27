@@ -132,8 +132,8 @@ export function ProfileMoreMenuModal({
   const prevUserIdRef = useRef(userId);
 
   const [editing, setEditing] = useState(false);
-  const [draftName, setDraftName] = useState(displayName);
-  const [draftUsername, setDraftUsername] = useState(username.replace(/^@/, ''));
+  const [draftName, setDraftName] = useState(displayName || '');
+  const [draftUsername, setDraftUsername] = useState((username || 'user').replace(/^@/, ''));
   const [nameError, setNameError] = useState('');
   const [usernameError, setUsernameError] = useState('');
   const [saving, setSaving] = useState(false);

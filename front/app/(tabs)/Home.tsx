@@ -257,6 +257,10 @@ export default function HomeScreen() {
 
             try {
                 const userData = await AuthService.syncUserWithBackend(token, { getToken });
+                if (!userData) {
+                    applyClerkHomeFallback();
+                    return;
+                }
                 const greetingName = resolveProfileDisplayName(
                     userData.displayName,
                     userData.username,
