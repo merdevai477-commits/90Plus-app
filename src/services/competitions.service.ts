@@ -8,6 +8,8 @@
 import type { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { calendarDayBounds, calendarTodayKey } from '../utils/calendar-day-bounds.util';
+import { DEFAULT_PRIZE_CATEGORIES } from '../data/prize-categories';
+import { logger } from '../utils/logger';
 import {
   findInPool,
   getPoolForDate,
@@ -99,10 +101,42 @@ function todayBounds(): { start: Date; end: Date } {
 }
 
 export async function listPrizeCategories() {
-  return prisma.prizeCategory.findMany({
-    where: { isActive: true },
-    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-  });
+  try {
+    const existing = await prisma.prizeCategory.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    if (existing.length > 0) return existing;
+
+    await Promise.all(
+      DEFAULT_PRIZE_CATEGORIES.map((category) =>
+        prisma.prizeCategory.upsert({
+          where: { key: category.key },
+          create: category,
+          update: {
+            nameAr: category.nameAr,
+            nameEn: category.nameEn,
+            description: category.description,
+            descriptionEn: category.descriptionEn,
+            sortOrder: category.sortOrder,
+            isActive: true,
+          },
+        }),
+      ),
+    );
+
+    return prisma.prizeCategory.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+  } catch (error: any) {
+    if (error?.code === 'P2021') {
+      logger.error(
+        '[Competitions] prize_categories table missing — apply the Predict & Win migration',
+      );
+    }
+    throw error;
+  }
 }
 
 /**

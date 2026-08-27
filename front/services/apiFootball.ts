@@ -1731,6 +1731,25 @@ export const ApiFootballService = {
         return cached as Fixture;
       }
     }
+
+    // Native 365 game ids are not API-Football fixtures. Hitting `/fixtures/:id`
+    // throws ApiFootballError and toasts on screens that never asked for it.
+    if (fixtureId >= 4_000_000) {
+      try {
+        const bundle = await fetchFromProxy<{ fixture?: Fixture }>(
+          `/cached/fixture/${fixtureId}/details`,
+          {},
+          options?.skipCache ? { fresh: true } : {},
+        );
+        const fixture = bundle && !Array.isArray(bundle) ? bundle.fixture ?? null : null;
+        if (fixture && !options?.skipCache) {
+          footballCacheService.cacheMatch(fixture as any).catch(() => undefined);
+        }
+        return fixture;
+      } catch {
+        return null;
+      }
+    }
     
     try {
       const fixtures = await fetchFromProxy<Fixture[]>(

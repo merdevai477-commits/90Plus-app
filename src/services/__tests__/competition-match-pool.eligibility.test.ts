@@ -41,10 +41,8 @@ function loadPool(byDate: Record<string, unknown[]>, env: Record<string, string 
   jest.resetModules();
   process.env = { ...ORIGINAL_ENV, ...env };
 
-  jest.doMock('../football-data-cache.service', () => ({
-    footballDataCacheService: {
-      getMatchesByDate: jest.fn(async (day: string) => byDate[day] ?? []),
-    },
+  jest.doMock('../competition-match-pool.source', () => ({
+    loadPoolFixturesForDate: jest.fn(async (day: string) => byDate[day] ?? []),
   }));
   jest.doMock('../../utils/logger', () => ({
     logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() },
@@ -213,13 +211,11 @@ describe('upcoming window', () => {
   it('survives one day failing without emptying the picker', async () => {
     jest.resetModules();
     process.env = { ...ORIGINAL_ENV, PREDICT_WIN_POOL_DAYS_AHEAD: '1', PREDICT_WIN_POOL_MIN_LEAD_MINUTES: '0' };
-    jest.doMock('../football-data-cache.service', () => ({
-      footballDataCacheService: {
-        getMatchesByDate: jest.fn(async (day: string) => {
-          if (day === '2026-03-10') throw new Error('upstream down');
-          return [fixture(2, '2026-03-11T15:00:00.000Z')];
-        }),
-      },
+    jest.doMock('../competition-match-pool.source', () => ({
+      loadPoolFixturesForDate: jest.fn(async (day: string) => {
+        if (day === '2026-03-10') throw new Error('upstream down');
+        return [fixture(2, '2026-03-11T15:00:00.000Z')];
+      }),
     }));
     jest.doMock('../../utils/logger', () => ({
       logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() },

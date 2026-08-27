@@ -15,6 +15,7 @@ import { GroupPredictionResolverService } from './group-prediction-resolver.serv
 import { CompetitionResolverService } from './competition-resolver.service';
 import { notifyUser } from './notify.service';
 import { NotificationType } from './notification.service';
+import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 
 /**
  * Stable bucket for idempotency on leaderboard notifications. We use UTC
@@ -161,11 +162,15 @@ export class PredictionWatcherService {
     }
 
     /**
-     * Resolve match status/score from API-Football, local cache, or 365Scores fallback.
+     * Resolve match status/score. Native 365 game ids never go to API-Football.
      */
     private static async resolveMatchSnapshot(
         matchId: number,
     ): Promise<{ status: string; homeScore: number; awayScore: number } | null> {
+        if (isNative365FixtureId(matchId)) {
+            return this.resolve365Snapshot(matchId);
+        }
+
         try {
             const data = await footballService.fetchFromApi<any[]>(
                 '/fixtures',
@@ -186,38 +191,51 @@ export class PredictionWatcherService {
 
         const cached = await prisma.cachedFixture.findUnique({
             where: { fixtureId: matchId },
-            select: { status: true, fullData: true },
+            select: { status: true, fullData: true, homeScore: true, awayScore: true },
         });
         if (cached?.status) {
             const fullData = cached.fullData as { goals?: { home?: number; away?: number } } | null;
             return {
                 status: cached.status,
-                homeScore: fullData?.goals?.home ?? 0,
-                awayScore: fullData?.goals?.away ?? 0,
+                homeScore: cached.homeScore ?? fullData?.goals?.home ?? 0,
+                awayScore: cached.awayScore ?? fullData?.goals?.away ?? 0,
             };
         }
 
-        if (process.env.SCORES365_EXPERIMENT_ENABLED === 'true' || process.env.SCORES365_EXPERIMENT_ENABLED === '1') {
-            try {
-                const {
-                    ensureScores365GameMapping,
-                    fetchScores365GameById,
-                } = await import('./scores365-experiment.service');
-                const gameId = (await ensureScores365GameMapping(matchId)) ?? matchId;
-                const game = await fetchScores365GameById(gameId, { language: 'en' });
-                if (game) {
-                    const statusGroup = game.statusGroup;
-                    const status =
-                        statusGroup === 4 ? 'FT' : statusGroup === 3 ? 'LIVE' : 'NS';
-                    return {
-                        status,
-                        homeScore: game.homeCompetitor?.score ?? 0,
-                        awayScore: game.awayCompetitor?.score ?? 0,
-                    };
-                }
-            } catch {
-                // ignore
+        return this.resolve365Snapshot(matchId);
+    }
+
+    private static async resolve365Snapshot(
+        matchId: number,
+    ): Promise<{ status: string; homeScore: number; awayScore: number } | null> {
+        const cached = await prisma.cachedFixture.findUnique({
+            where: { fixtureId: matchId },
+            select: { status: true, fullData: true, homeScore: true, awayScore: true },
+        });
+        if (cached?.status) {
+            const fullData = cached.fullData as { goals?: { home?: number; away?: number } } | null;
+            return {
+                status: cached.status,
+                homeScore: cached.homeScore ?? fullData?.goals?.home ?? 0,
+                awayScore: cached.awayScore ?? fullData?.goals?.away ?? 0,
+            };
+        }
+
+        try {
+            const { fetchScores365GameById } = await import('./scores365-experiment.service');
+            const game = await fetchScores365GameById(matchId, { language: 'en' });
+            if (game) {
+                const statusGroup = game.statusGroup;
+                const status =
+                    statusGroup === 4 ? 'FT' : statusGroup === 3 ? 'LIVE' : 'NS';
+                return {
+                    status,
+                    homeScore: game.homeCompetitor?.score ?? 0,
+                    awayScore: game.awayCompetitor?.score ?? 0,
+                };
             }
+        } catch {
+            // ignore
         }
 
         return null;

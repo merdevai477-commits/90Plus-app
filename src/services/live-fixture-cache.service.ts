@@ -532,12 +532,13 @@ export async function resolveFixtureForClient(
     return { fixture: live, source: 'redis-live' };
   }
 
-  const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
+    const dbRow = await prisma.cachedFixture.findUnique({ where: { fixtureId } });
   if (dbRow) {
     const status = dbRow.status;
     const isLive = LIVE_STATUSES_SET.has(status);
     const isFinished = FINISHED_STATUSES_SET.has(status);
     const nearKickoffNs = isNsNearKickoff(status, dbRow.matchDate, dbRow.matchTimestamp);
+    const native365 = isNative365FixtureId(fixtureId);
     const updatedRecently =
       dbRow.updatedAt != null &&
       Date.now() - dbRow.updatedAt.getTime() < 3 * 60 * 60 * 1000;
@@ -548,7 +549,7 @@ export async function resolveFixtureForClient(
       if (refreshed) {
         return refreshed;
       }
-    } else if (isLive || isFinished || updatedRecently) {
+    } else if (isLive || isFinished || updatedRecently || native365) {
       return {
         fixture: matchCacheService.convertDbMatchToApiFormat(dbRow),
         source: 'db',
@@ -556,7 +557,7 @@ export async function resolveFixtureForClient(
     }
 
     // Upstream miss on near-kickoff NS — still serve DB rather than empty HTTP.
-    if (nearKickoffNs || isLive || isFinished || updatedRecently) {
+    if (nearKickoffNs || isLive || isFinished || updatedRecently || native365) {
       return {
         fixture: matchCacheService.convertDbMatchToApiFormat(dbRow),
         source: 'db',
@@ -584,6 +585,12 @@ export async function forceRefreshFixtureNearKickoff(
         );
         return { fixture: experimentFixture, source: 'scores365-experiment' };
       }
+    }
+
+    // Native 365 game ids are not API-Football fixtures. A miss here lets the
+    // caller serve CachedFixture instead of querying a different provider.
+    if (isNative365FixtureId(fixtureId)) {
+      return null;
     }
 
     const { footballService, isFootballQuotaExhausted } = await import('./football.service');

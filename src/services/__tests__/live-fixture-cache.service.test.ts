@@ -11,6 +11,7 @@ import {
   readLiveFixtureById,
   readLiveFixturesList,
   replace365LiveFixturesSnapshot,
+  resolveFixtureForClient,
   resolveLiveFixturesForClient,
   writeLiveFixturesSnapshot,
 } from '../live-fixture-cache.service';
@@ -181,5 +182,26 @@ describe('provider-owned live fixture snapshots', () => {
     const { fixtures } = await resolveLiveFixturesForClient();
     expect(fixtures.map((row) => row.fixture.id)).toEqual([4_822_440]);
     expect(prisma.cachedFixture.findMany).not.toHaveBeenCalled();
+  });
+
+  it('serves a native 365 fixture from CachedFixture even when the row is stale', async () => {
+    const prisma = require('../../lib/prisma').default;
+    const { matchCacheService } = require('../match-cache.service');
+    const id = 4_627_937;
+    const converted = fixture(id, 'NS', '365');
+    matchCacheService.convertDbMatchToApiFormat.mockReturnValue(converted);
+    prisma.cachedFixture.findUnique.mockResolvedValue({
+      fixtureId: id,
+      status: 'NS',
+      matchDate: new Date('2026-12-01T18:00:00.000Z'),
+      matchTimestamp: Math.floor(new Date('2026-12-01T18:00:00.000Z').getTime() / 1000),
+      updatedAt: new Date('2020-01-01T00:00:00.000Z'),
+    });
+    mockedGetRedisClient.mockReturnValue(redisHarness().client as any);
+
+    await expect(resolveFixtureForClient(id)).resolves.toEqual({
+      fixture: converted,
+      source: 'db',
+    });
   });
 });

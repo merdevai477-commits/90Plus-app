@@ -2582,8 +2582,20 @@ class FootballDataCacheService {
         // API-Football id range. If we reach here for such an id, the 365
         // mapping/experiment could not resolve it — never query API-Football
         // with a 365 gameId (returns 404 or collides with an unrelated match).
-        // Return an empty bundle so the client shows the "unavailable" state.
         if (fixtureId >= SCORES365_LEAGUE_ID_OFFSET || fixtureId >= 4_000_000) {
+            if (durableRow) {
+                const fixture = matchCacheService.convertDbMatchToApiFormat(durableRow);
+                const fullData = durableRow.fullData as any;
+                return {
+                    fixture,
+                    lineups: Array.isArray(fullData?.lineups) ? fullData.lineups : [],
+                    statistics: Array.isArray(fullData?.statistics) ? fullData.statistics : [],
+                    events: Array.isArray(fullData?.events) ? fullData.events : [],
+                    venue: fixture.fixture?.venue ?? null,
+                    lineupsAvailable: hasLineupData(fullData?.lineups),
+                    lineupsStatus: fullData?.lineupsStatus ?? null,
+                };
+            }
             return { fixture: null, lineups: [], statistics: [], events: [], venue: null };
         }
 

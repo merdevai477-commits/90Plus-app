@@ -12,6 +12,7 @@ import {
   resolveLiveFixturesForClient,
 } from '../services/live-fixture-cache.service';
 import { getScores365GameIdForFixture, ensureScores365GameMapping, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId } from '../services/scores365-experiment.service';
+import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
 import { buildScores365LmtEmbedHtml } from '../utils/scores365-lmt-html';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
@@ -584,14 +585,6 @@ export class FootballController {
    */
   static async getFixtureById(req: Request, res: Response): Promise<void> {
     try {
-      if (!footballService.isConfigured()) {
-        res.status(503).json({
-          status: 'ERROR',
-          message: 'Football API not configured',
-        });
-        return;
-      }
-
       const fixtureId = parseInt(ensureString(req.params.id));
 
       if (isNaN(fixtureId)) {
@@ -610,6 +603,22 @@ export class FootballController {
           response: [resolved.fixture],
           cached: resolved.source !== null,
           source: resolved.source ?? undefined,
+        });
+        return;
+      }
+
+      if (isNative365FixtureId(fixtureId)) {
+        res.status(404).json({
+          status: 'ERROR',
+          message: 'Fixture not found',
+        });
+        return;
+      }
+
+      if (!footballService.isConfigured()) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: 'Football API not configured',
         });
         return;
       }

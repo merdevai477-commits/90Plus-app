@@ -7,8 +7,9 @@
  * raising it later needs no schema or app change.
  *
  * This deliberately does NOT reuse `group-round.service`: that pool belongs to
- * the Prediction Groups feature and is capped at its own fixed 10. Both read the
- * same cached fixtures and ranking helper, but they stay independently tunable.
+ * the Prediction Groups feature and is capped at its own fixed 10. Both share
+ * the same ranking helper, but this picker reads Scores365 `cached_fixtures`
+ * only — never API-Football.
  */
 
 import {
@@ -19,6 +20,7 @@ import {
 } from '../utils/calendar-day-bounds.util';
 import { pickTopFixtures } from '../utils/fixture-importance';
 import { logger } from '../utils/logger';
+import { loadPoolFixturesForDate } from './competition-match-pool.source';
 
 /** Sponsors choose from this many matches per day. Configurable, not fixed. */
 export const POOL_SIZE = Math.max(
@@ -162,10 +164,7 @@ function isOfferable(match: PoolMatch, now: Date): boolean {
  */
 export async function getPoolForDate(dateString?: string, now: Date = new Date()): Promise<PoolMatch[]> {
   const day = normalisePoolDate(dateString);
-  // Imported lazily: the fixture cache spins up background sync on load, which
-  // must not happen merely because something imported this module.
-  const { footballDataCacheService } = await import('./football-data-cache.service');
-  const fixtures = await footballDataCacheService.getMatchesByDate(day);
+  const fixtures = await loadPoolFixturesForDate(day);
 
   // `pickTopFixtures` with no limit keeps its status filter and its ranking
   // while leaving the cap to us — the eligibility filter has to come first.
