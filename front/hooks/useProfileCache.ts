@@ -287,6 +287,7 @@ export interface UseProfileCacheResult {
   loadVideos: (username: string, bustCache?: boolean) => Promise<void>;
   updateUserData: (updates: Partial<ProfileUserData>) => void;
   updateFollowStats: (stats: FollowStats) => void;
+  updateCooldowns: (updates: Partial<CooldownsResponse>) => void;
   invalidateCache: () => Promise<void>;
 }
 
@@ -441,7 +442,10 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
   /**
    * Transform backend user profile to ProfileUserData
    */
-  const transformUserProfile = useCallback((user: UserProfile, fallbackAvatar?: string): ProfileUserData => {
+  const transformUserProfile = useCallback((user: UserProfile | null | undefined, fallbackAvatar?: string): ProfileUserData | null => {
+    if (!user?.id || !user?.username) {
+      return null;
+    }
     return {
       id: user.id, // Include user ID for badges and other features
       displayName: resolveProfileDisplayName(user.displayName, user.username, clerkFallback),
@@ -562,7 +566,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
         newUserData = transformUserProfile(userResult, clerkUserImageUrl);
         
         // Validate user data before setting
-        if (!newUserData.username || !newUserData.id) {
+        if (!newUserData?.username || !newUserData?.id) {
           console.error('[useProfileCache] ❌ Invalid user data received from backend');
           setError('Invalid user data received');
           setIsLoading(false);
@@ -869,6 +873,41 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
   }, []);
 
   /**
+   * Patch cooldowns in memory + durable cache (e.g. hide Add-reel after upload).
+   */
+  const updateCooldowns = useCallback((updates: Partial<CooldownsResponse>): void => {
+    setCooldowns((prev) => {
+      if (!prev) {
+        // Seed a minimal cooldown object so UI can hide Add-reel immediately.
+        const seeded: CooldownsResponse = {
+          avatar: { canChange: true, daysRemaining: 0, hoursRemaining: 0 },
+          cover: { canChange: true, daysRemaining: 0, hoursRemaining: 0 },
+          reelUpload: { canChange: true, daysRemaining: 0, hoursRemaining: 0 },
+          username: { canChange: true, daysRemaining: 0, hoursRemaining: 0 },
+          ...updates,
+        };
+        const mem = getFromMemoryCache(cacheKey);
+        if (mem) setMemoryCache(cacheKey, { ...mem, cooldowns: seeded });
+        return seeded;
+      }
+      const next = { ...prev, ...updates };
+      const mem = getFromMemoryCache(cacheKey);
+      if (mem) setMemoryCache(cacheKey, { ...mem, cooldowns: next });
+      void (async () => {
+        try {
+          const currentCache = await cacheService.get<ProfileCacheData>(cacheKey);
+          if (currentCache) {
+            await saveToCache({ ...currentCache, cooldowns: next });
+          }
+        } catch (error) {
+          console.warn('Failed to update cooldowns cache:', error);
+        }
+      })();
+      return next;
+    });
+  }, [saveToCache, cacheKey]);
+
+  /**
    * Invalidate cache
    */
   const invalidateCache = useCallback(async (): Promise<void> => {
@@ -897,6 +936,7 @@ export function useProfileCache(options: UseProfileCacheOptions): UseProfileCach
     loadVideos,
     updateUserData,
     updateFollowStats,
+    updateCooldowns,
     invalidateCache,
   };
 }

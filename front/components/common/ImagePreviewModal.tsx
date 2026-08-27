@@ -1,21 +1,11 @@
 /**
  * ImagePreviewModal
  *
- * UX Fix 1: Shows a preview of the selected image before uploading.
- * UX Fix 2: Provides a cross-platform bottom-sheet action sheet for
- *           choosing gallery vs camera (replaces Alert.alert on Android).
- *
- * Usage:
- *   <ImagePreviewModal
- *     visible={visible}
- *     imageUri={uri}
- *     type="avatar" | "cover"
- *     onConfirm={() => startUpload()}
- *     onCancel={() => setVisible(false)}
- *   />
+ * Preview selected image before upload + cross-platform source sheet.
+ * Styled to match the purple profile glass theme.
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Modal,
   View,
@@ -32,6 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from '../../src/i18n';
+import { ProfileTheme } from '../../constants/ProfileTheme';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -74,20 +65,27 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
-          {/* Header */}
+          <LinearGradient
+            colors={['#1A0B33', '#0B0614', '#12081F']}
+            style={StyleSheet.absoluteFill}
+          />
           <View style={styles.header}>
             <Text style={styles.title}>
-              {isAvatar ? 'معاينة صورة البروفايل' : 'معاينة صورة الغلاف'}
+              {isAvatar ? t.profile.previewAvatarTitle : t.profile.previewCoverTitle}
             </Text>
             <TouchableOpacity onPress={onCancel} style={styles.closeBtn} disabled={isUploading}>
-              <Ionicons name="close" size={22} color="#fff" />
+              <Ionicons name="close" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
 
-          {/* Preview */}
           <View style={[styles.previewWrapper, { alignItems: 'center' }]}>
             {isAvatar ? (
-              <View style={[styles.avatarCircle, { width: previewSize, height: previewSize, borderRadius: previewSize / 2 }]}>
+              <View
+                style={[
+                  styles.avatarCircle,
+                  { width: previewSize, height: previewSize, borderRadius: previewSize / 2 },
+                ]}
+              >
                 <Image
                   source={{ uri: imageUri }}
                   style={{ width: previewSize, height: previewSize, borderRadius: previewSize / 2 }}
@@ -105,17 +103,15 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
             )}
           </View>
 
-          {/* Upload progress */}
-          {isUploading && (
+          {isUploading ? (
             <View style={styles.progressContainer}>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
               </View>
               <Text style={styles.progressText}>{Math.round(uploadProgress)}%</Text>
             </View>
-          )}
+          ) : null}
 
-          {/* Actions */}
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.cancelBtn}
@@ -123,7 +119,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
               disabled={isUploading}
               activeOpacity={0.7}
             >
-              <Text style={styles.cancelText}>إلغاء</Text>
+              <Text style={styles.cancelText}>{t.profile.cancel}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -136,17 +132,17 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={['#FFD700', '#FFA500']}
+                colors={['#8B5CF6', '#5B21B6']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.confirmGradient}
               >
                 {isUploading ? (
-                  <ActivityIndicator color="#000" size="small" />
+                  <ActivityIndicator color="#fff" size="small" />
                 ) : (
                   <>
-                    <Ionicons name="cloud-upload-outline" size={18} color="#000" />
-                    <Text style={styles.confirmText}>رفع</Text>
+                    <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+                    <Text style={styles.confirmText}>{t.profile.confirmUpload}</Text>
                   </>
                 )}
               </LinearGradient>
@@ -158,8 +154,6 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   );
 };
 
-// ─── Cross-platform action sheet (UX Fix 2) ───────────────────────────────────
-
 export interface ImageSourceSheetOptions {
   title?: string;
   hasExistingImage?: boolean;
@@ -167,28 +161,35 @@ export interface ImageSourceSheetOptions {
   onCamera: () => void;
   onRemove?: () => void;
   onCancel?: () => void;
+  labels?: {
+    gallery: string;
+    camera: string;
+    remove: string;
+    cancel: string;
+  };
 }
 
-/**
- * showImageSourceSheet
- * Shows iOS ActionSheet or Android Modal bottom sheet for picking image source.
- * Pass `setAndroidSheetVisible` to control the Android fallback modal.
- */
 export function showImageSourceSheet(
   options: ImageSourceSheetOptions,
   setAndroidSheetVisible: (v: boolean) => void,
   setAndroidSheetOptions: (o: ImageSourceSheetOptions) => void,
 ): void {
   if (Platform.OS === 'ios') {
-    const iosOptions: string[] = ['اختر من المعرض', 'التقط صورة'];
-    if (options.hasExistingImage && options.onRemove) iosOptions.push('إزالة الصورة');
-    iosOptions.push('إلغاء');
+    const gallery = options.labels?.gallery ?? 'Choose from gallery';
+    const camera = options.labels?.camera ?? 'Take a photo';
+    const remove = options.labels?.remove ?? 'Remove photo';
+    const cancel = options.labels?.cancel ?? 'Cancel';
+
+    const iosOptions: string[] = [gallery, camera];
+    if (options.hasExistingImage && options.onRemove) iosOptions.push(remove);
+    iosOptions.push(cancel);
 
     ActionSheetIOS.showActionSheetWithOptions(
       {
         options: iosOptions,
         cancelButtonIndex: iosOptions.length - 1,
-        destructiveButtonIndex: options.hasExistingImage && options.onRemove ? iosOptions.length - 2 : undefined,
+        destructiveButtonIndex:
+          options.hasExistingImage && options.onRemove ? iosOptions.length - 2 : undefined,
         title: options.title,
       },
       (idx) => {
@@ -203,54 +204,69 @@ export function showImageSourceSheet(
   }
 }
 
-/**
- * AndroidImageSourceSheet
- * Bottom-sheet modal for Android that matches iOS ActionSheet style.
- */
 interface AndroidSheetProps {
   visible: boolean;
   options: ImageSourceSheetOptions | null;
   onClose: () => void;
 }
 
-export const AndroidImageSourceSheet: React.FC<AndroidSheetProps> = ({ visible, options, onClose }) => {
+export const AndroidImageSourceSheet: React.FC<AndroidSheetProps> = ({
+  visible,
+  options,
+  onClose,
+}) => {
+  const { t } = useTranslation();
   if (!options) return null;
 
   const handleOption = (fn: () => void) => {
     onClose();
-    setTimeout(fn, 150); // small delay so modal closes before picker opens
+    setTimeout(fn, 150);
   };
+
+  const gallery = options.labels?.gallery ?? t.profile.chooseFromGallery;
+  const camera = options.labels?.camera ?? t.profile.takePhoto;
+  const remove = options.labels?.remove ?? t.profile.removePhoto;
+  const cancel = options.labels?.cancel ?? t.profile.cancel;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={onClose} />
       <View style={styles.sheetContainer}>
+        <LinearGradient colors={['#1A0B33', '#0B0614']} style={StyleSheet.absoluteFill} />
         <View style={styles.sheetHandle} />
-        {options.title && <Text style={styles.sheetTitle}>{options.title}</Text>}
+        {options.title ? <Text style={styles.sheetTitle}>{options.title}</Text> : null}
 
-        <TouchableOpacity style={styles.sheetOption} onPress={() => handleOption(options.onGallery)} activeOpacity={0.7}>
-          <Ionicons name="images-outline" size={22} color="#FFD700" />
-          <Text style={styles.sheetOptionText}>اختر من المعرض</Text>
+        <TouchableOpacity
+          style={styles.sheetOption}
+          onPress={() => handleOption(options.onGallery)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="images-outline" size={22} color={ProfileTheme.colors.avatarRing} />
+          <Text style={styles.sheetOptionText}>{gallery}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.sheetOption} onPress={() => handleOption(options.onCamera)} activeOpacity={0.7}>
-          <Ionicons name="camera-outline" size={22} color="#FFD700" />
-          <Text style={styles.sheetOptionText}>التقط صورة</Text>
+        <TouchableOpacity
+          style={styles.sheetOption}
+          onPress={() => handleOption(options.onCamera)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="camera-outline" size={22} color={ProfileTheme.colors.avatarRing} />
+          <Text style={styles.sheetOptionText}>{camera}</Text>
         </TouchableOpacity>
 
-        {options.hasExistingImage && options.onRemove && (
+        {options.hasExistingImage && options.onRemove ? (
           <TouchableOpacity
             style={[styles.sheetOption, styles.sheetOptionDestructive]}
             onPress={() => handleOption(options.onRemove!)}
             activeOpacity={0.7}
           >
             <Ionicons name="trash-outline" size={22} color="#FF3B30" />
-            <Text style={[styles.sheetOptionText, { color: '#FF3B30' }]}>إزالة الصورة</Text>
+            <Text style={[styles.sheetOptionText, { color: '#FF3B30' }]}>{remove}</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
 
         <TouchableOpacity style={[styles.sheetOption, styles.sheetCancel]} onPress={onClose} activeOpacity={0.7}>
-          <Text style={[styles.sheetOptionText, { color: 'rgba(255,255,255,0.5)' }]}>إلغاء</Text>
+          <Text style={[styles.sheetOptionText, { color: 'rgba(255,255,255,0.5)' }]}>{cancel}</Text>
         </TouchableOpacity>
       </View>
     </Modal>
@@ -260,18 +276,19 @@ export const AndroidImageSourceSheet: React.FC<AndroidSheetProps> = ({ visible, 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: 'rgba(0,0,0,0.78)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   container: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 20,
+    backgroundColor: ProfileTheme.colors.profileCard,
+    borderRadius: 22,
     width: '100%',
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(139,92,246,0.32)',
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
@@ -279,27 +296,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  title: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  title: { fontSize: 17, fontWeight: '800', color: '#fff', flex: 1, paddingRight: 8 },
   closeBtn: {
     padding: 4,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 14,
     width: 28,
     height: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.25)',
   },
   previewWrapper: { marginBottom: 20 },
   avatarCircle: {
     overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: '#FFD700',
+    borderWidth: 2.5,
+    borderColor: ProfileTheme.colors.avatarRing,
   },
   coverPreview: {
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(139,92,246,0.35)',
   },
   progressContainer: { marginBottom: 16 },
   progressTrack: {
@@ -309,7 +328,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 6,
   },
-  progressFill: { height: '100%', backgroundColor: '#FFD700', borderRadius: 3 },
+  progressFill: {
+    height: '100%',
+    backgroundColor: ProfileTheme.colors.profilePrimary,
+    borderRadius: 3,
+  },
   progressText: { color: 'rgba(255,255,255,0.6)', fontSize: 12, textAlign: 'center' },
   actions: { flexDirection: 'row', gap: 12 },
   cancelBtn: {
@@ -317,11 +340,12 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.15)',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
-  cancelText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  cancelText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   confirmBtn: { flex: 1, borderRadius: 12, overflow: 'hidden' },
   btnDisabled: { opacity: 0.5 },
   confirmGradient: {
@@ -331,31 +355,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  confirmText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
-  // Android sheet
-  sheetOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
+  confirmText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  sheetOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.65)' },
   sheetContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#1C1C1E',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: ProfileTheme.colors.profileBg,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     paddingBottom: 34,
     paddingTop: 12,
     paddingHorizontal: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.3)',
   },
   sheetHandle: {
     width: 40,
     height: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(216,174,255,0.35)',
     borderRadius: 2,
     alignSelf: 'center',
     marginBottom: 16,
   },
   sheetTitle: {
-    color: 'rgba(255,255,255,0.5)',
+    color: ProfileTheme.colors.profileMuted,
     fontSize: 13,
     textAlign: 'center',
     marginBottom: 8,
@@ -371,5 +397,5 @@ const styles = StyleSheet.create({
   },
   sheetOptionDestructive: { borderBottomColor: 'rgba(255,59,48,0.15)' },
   sheetCancel: { borderBottomWidth: 0, marginTop: 8 },
-  sheetOptionText: { color: '#fff', fontSize: 17 },
+  sheetOptionText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

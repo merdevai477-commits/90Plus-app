@@ -2415,6 +2415,164 @@ export const en = {
       brand: 'Favourite brand',
       socialLinks: 'Social links',
     },
+
+    // Profile v2 (from main)
+    reels: 'Reels',
+
+    addReel: 'Add reel',
+
+    // Tabs
+
+    correctPredictionLabel: 'Correct prediction',
+
+    viewAllPredictions: 'View all',
+
+    showMore: 'Show more',
+
+    showLess: 'Show less',
+
+    predictNow: 'Predict now',
+
+    chooseCountry: 'Choose your country',
+
+    addYourClub: 'Add your club',
+
+    addBio: 'Add a short bio',
+
+    aboutMe: 'About me',
+
+    connectWithMe: 'Connect with me',
+
+    energy: 'Energy',
+
+    totalXp: 'Total XP',
+
+    longestStreak: 'Longest streak',
+
+    predictionRate: 'Prediction accuracy',
+
+    predictionsTab: 'Predictions',
+
+    followerShort: 'Followers',
+
+    followingShort: 'Following',
+
+    emailCopied: 'Email copied',
+
+    emailCopiedMessage: 'The email address was copied to your clipboard.',
+
+    pasteLink: 'Paste your link',
+
+    pasteLinkHint: 'Paste your TikTok, Instagram, X, Snapchat, WhatsApp, or Facebook profile link.',
+
+    pasteLinkHere: 'Paste your profile link here',
+
+    linkRecognized: 'Detected: {platform}',
+
+    unrecognizedLink: 'Unknown link — it will be saved as a website.',
+
+    invalidLink: 'Paste a valid profile link.',
+
+    whatsapp: 'WhatsApp',
+
+    done: 'Done',
+
+    moreOptions: 'More',
+
+    // QR Code Modal
+
+    deleteAccount: 'Delete Account',
+
+    deleteAccountDesc: 'Permanently delete your account and all data',
+
+    searchFollowersPlaceholder: 'Search for people...',
+
+    cooldownCannotAvatar: 'You can’t change your profile picture right now',
+
+    cooldownCannotCover: 'You can’t change your cover photo right now',
+
+    cooldownCannotReel: 'You can’t upload a new reel right now',
+
+    cooldownAvailableAfter: 'Available in',
+
+    cooldownPleaseWait: 'Please wait before trying again',
+
+    chooseFromGallery: 'Choose from gallery',
+
+    takePhoto: 'Take a photo',
+
+    removePhoto: 'Remove photo',
+
+    previewAvatarTitle: 'Preview profile picture',
+
+    previewCoverTitle: 'Preview cover photo',
+
+    confirmUpload: 'Upload',
+
+    rechoose: 'Choose again',
+
+    noPreview: 'No preview',
+
+    processingLabel: 'Processing…',
+
+    processingFailed: 'Processing failed',
+
+    tapToRetry: 'Tap to retry',
+
+    savedLoadFailed: 'Couldn’t load saved reels',
+
+    flagUpdateFailed: 'Couldn’t update the country flag. Please try again.',
+
+    timeDay: 'day',
+
+    timeDays: 'days',
+
+    timeHour: 'hour',
+
+    timeHours: 'hours',
+
+    timeMinute: 'minute',
+
+    timeMinutes: 'minutes',
+
+    timeJoiner: 'and',
+
+    cooldownShortDaysHours: '{days}d {hours}h',
+
+    cooldownShortHours: '{hours}h',
+
+    verifiedBadgeTitle: 'Verification badge',
+
+    verifiedBadgeSubtitle: 'Verified account',
+
+    verifiedBadgeBody:
+      'This badge is awarded to the most active, engaged, and contributing accounts — a mark of authenticity and trust.',
+
+    verifiedFeature1: 'Active and trusted member',
+
+    verifiedFeature2: 'Consistent community engagement',
+
+    verifiedFeature3: 'Original, high-quality content',
+
+    verifiedBadgeCta: 'Got it',
+
+    developerBadgeTitle: 'Developer badge',
+
+    developerBadgeSubtitle: 'App developer',
+
+    developerBadgeBody:
+      'This badge is granted to the app developers and contributors who build and improve 90Plus.',
+
+    developerFeature1: 'Exclusive distinction',
+
+    developerFeature2: 'App creator',
+
+    developerFeature3: 'Professional developer',
+
+    developerBadgeCta: 'Got it',
+
+    // Profile completion (steps shown in ProfileTasksModal + completion pill)
+
   },
 
   settings: {
@@ -3195,6 +3353,7 @@ export const en = {
     confirmBlock: 'Block',
     confirmUnblock: 'Unblock',
     follow: 'Follow',
+    unfollow: 'Unfollow',
     followBack: 'Follow back',
     following: 'Following',
     videosTitle: 'Videos',

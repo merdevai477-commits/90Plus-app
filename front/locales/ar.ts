@@ -2371,6 +2371,164 @@ export const ar = {
       brand: 'البراند المفضل',
       socialLinks: 'روابط السوشيال ميديا',
     },
+
+    // Profile v2 (from main)
+    reels: 'ريلز',
+
+    addReel: 'إضافة ريل',
+
+    // Tabs
+
+    correctPredictionLabel: 'التوقع الصحيح',
+
+    viewAllPredictions: 'مشاهدة الكل',
+
+    showMore: 'عرض المزيد',
+
+    showLess: 'عرض أقل',
+
+    predictNow: 'توقع الآن',
+
+    chooseCountry: 'اختر دولتك',
+
+    addYourClub: 'أضف ناديك',
+
+    addBio: 'أضف نبذة عنك',
+
+    aboutMe: 'نبذة عني',
+
+    connectWithMe: 'تواصل معي',
+
+    energy: 'الطاقة',
+
+    totalXp: 'إجمالي الـ XP',
+
+    longestStreak: 'أطول سلسلة',
+
+    predictionRate: 'دقة التوقعات',
+
+    predictionsTab: 'التوقعات',
+
+    followerShort: 'متابعون',
+
+    followingShort: 'متابعة',
+
+    emailCopied: 'تم نسخ الإيميل',
+
+    emailCopiedMessage: 'تم نسخ عنوان الإيميل.',
+
+    pasteLink: 'الصق رابطك',
+
+    pasteLinkHint: 'الصق رابط حسابك على تيك توك، إنستغرام، إكس، سناب شات، واتساب أو فيسبوك.',
+
+    pasteLinkHere: 'الصق رابط حسابك هنا',
+
+    linkRecognized: 'تم التعرف: {platform}',
+
+    unrecognizedLink: 'الرابط مش معروف — هيتسجل كموقع',
+
+    invalidLink: 'حط رابط حساب صحيح.',
+
+    whatsapp: 'واتساب',
+
+    done: 'تم',
+
+    moreOptions: 'المزيد',
+
+    // QR Code Modal
+
+    deleteAccount: 'مسح الحساب',
+
+    deleteAccountDesc: 'حذف حسابك وجميع بياناتك نهائياً',
+
+    searchFollowersPlaceholder: 'ابحث عن أشخاص...',
+
+    cooldownCannotAvatar: 'لا يمكنك تغيير صورة البروفايل الآن',
+
+    cooldownCannotCover: 'لا يمكنك تغيير صورة الغلاف الآن',
+
+    cooldownCannotReel: 'لا يمكنك رفع ريل جديد الآن',
+
+    cooldownAvailableAfter: 'متاح بعد',
+
+    cooldownPleaseWait: 'يرجى الانتظار قبل المحاولة مجدداً',
+
+    chooseFromGallery: 'اختر من المعرض',
+
+    takePhoto: 'التقط صورة',
+
+    removePhoto: 'إزالة الصورة',
+
+    previewAvatarTitle: 'معاينة صورة البروفايل',
+
+    previewCoverTitle: 'معاينة صورة الغلاف',
+
+    confirmUpload: 'رفع',
+
+    rechoose: 'اختيار من جديد',
+
+    noPreview: 'لا توجد معاينة',
+
+    processingLabel: 'جاري المعالجة...',
+
+    processingFailed: 'فشل المعالجة',
+
+    tapToRetry: 'اضغط لإعادة المحاولة',
+
+    savedLoadFailed: 'تعذّر تحميل الريلز المحفوظة',
+
+    flagUpdateFailed: 'تعذّر تحديث العلم. حاول مرة أخرى.',
+
+    timeDay: 'يوم',
+
+    timeDays: 'أيام',
+
+    timeHour: 'ساعة',
+
+    timeHours: 'ساعات',
+
+    timeMinute: 'دقيقة',
+
+    timeMinutes: 'دقائق',
+
+    timeJoiner: 'و',
+
+    cooldownShortDaysHours: '{days}ي {hours}س',
+
+    cooldownShortHours: '{hours}س',
+
+    verifiedBadgeTitle: 'علامة التوثيق',
+
+    verifiedBadgeSubtitle: 'حساب موثّق',
+
+    verifiedBadgeBody:
+      'تُمنح هذه العلامة للحسابات الأكثر نشاطاً وتفاعلاً ومساهمة — رمزاً للأصالة والثقة.',
+
+    verifiedFeature1: 'مستخدم نشط وموثوق',
+
+    verifiedFeature2: 'تفاعل مستمر مع المجتمع',
+
+    verifiedFeature3: 'محتوى أصلي ومميّز',
+
+    verifiedBadgeCta: 'حسناً',
+
+    developerBadgeTitle: 'شارة المطوّر',
+
+    developerBadgeSubtitle: 'مطوّر التطبيق',
+
+    developerBadgeBody:
+      'تُمنح هذه الشارة لمطوّري التطبيق والمساهمين في بنائه وتطويره.',
+
+    developerFeature1: 'تميّز حصري',
+
+    developerFeature2: 'صاحب التطبيق',
+
+    developerFeature3: 'مطوّر محترف',
+
+    developerBadgeCta: 'حسناً',
+
+    // مهام إكمال البروفايل
+
   },
 
   settings: {
@@ -3106,6 +3264,7 @@ export const ar = {
     confirmBlock: 'حظر',
     confirmUnblock: 'إلغاء الحظر',
     follow: 'متابعة',
+    unfollow: 'إلغاء المتابعة',
     followBack: 'رد المتابعة',
     following: 'متابَع',
     videosTitle: 'الفيديوهات',

@@ -3,13 +3,17 @@ import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { ProfileTheme } from '../../constants/ProfileTheme';
+import { GlassWrapper, glassProps } from '../../constants/ui';
+import { isLiquidGlassSupported } from '../../utils/liquidGlassSafe';
 import { shouldShowDuration } from '../../utils/videoDuration';
 import { isValidThumbnail, VIDEO_THUMBNAIL_PLACEHOLDER } from '../../constants/VideoPlaceholder';
-const { width } = Dimensions.get('window');
+import { useTranslation } from '../../src/i18n';
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
-const SPACING = 2;
-const ITEM_SIZE = (width - (SPACING * (COLUMN_COUNT - 1))) / COLUMN_COUNT;
+const SPACING = 6;
+const GRID_PAD = 8;
 
 interface VideoItem {
     id: string;
@@ -29,16 +33,82 @@ interface VideoGridProps {
     onVideoLongPress: (video: VideoItem) => void;
     onDeleteVideo: (videoId: string) => void;
     isDeleteMode: boolean;
+    onAddPress?: () => void;
+    addLabel?: string;
+    /** Outer panel horizontal margin so tiles fit the content area. */
+    horizontalInset?: number;
 }
 
-const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPress, onDeleteVideo, isDeleteMode }: VideoGridProps) {
+function computeItemSize(horizontalInset: number) {
+    const usable = SCREEN_WIDTH - horizontalInset * 2 - GRID_PAD * 2 - SPACING * (COLUMN_COUNT - 1);
+    return Math.floor(usable / COLUMN_COUNT);
+}
+
+function AddReelTile({
+    onPress,
+    label,
+    size,
+}: {
+    onPress: () => void;
+    label: string;
+    size: number;
+}) {
+    const GlassChip = isLiquidGlassSupported ? GlassWrapper : BlurView;
+    const chipProps = isLiquidGlassSupported
+        ? { ...glassProps.chip, interactive: true }
+        : glassProps.chip;
+
+    return (
+        <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.itemContainer, { width: size, height: Math.round(size * 1.28) }]}
+            onPress={onPress}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+        >
+            <LinearGradient
+                colors={['rgba(23,13,43,0.55)', 'rgba(32,13,68,0.45)']}
+                start={{ x: 0.5, y: 1 }}
+                end={{ x: 0.5, y: 0 }}
+                style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.addInnerBorder} pointerEvents="none" />
+            <View style={styles.addContent}>
+                <View style={styles.addGlassBtn}>
+                    <GlassChip {...(chipProps as any)} style={StyleSheet.absoluteFill} />
+                    <View style={styles.addGlassRing} pointerEvents="none" />
+                    <Ionicons name="add" size={20} color={ProfileTheme.colors.avatarRing} />
+                </View>
+                <Text style={styles.addLabel}>{label}</Text>
+            </View>
+        </TouchableOpacity>
+    );
+}
+
+const VideoGrid = memo(function VideoGrid({
+    videos,
+    onVideoPress,
+    onVideoLongPress,
+    onDeleteVideo,
+    isDeleteMode,
+    onAddPress,
+    addLabel = 'Add',
+    horizontalInset = 0,
+}: VideoGridProps) {
+    const { t } = useTranslation();
+    const itemSize = computeItemSize(horizontalInset);
+    const itemHeight = Math.round(itemSize * 1.28);
+
     return (
         <View style={styles.grid}>
+            {onAddPress && !isDeleteMode ? (
+                <AddReelTile onPress={onAddPress} label={addLabel} size={itemSize} />
+            ) : null}
             {videos.map((item, index) => (
                 <TouchableOpacity
                     key={item.id}
                     activeOpacity={0.8}
-                    style={styles.itemContainer}
+                    style={[styles.itemContainer, { width: itemSize, height: itemHeight }]}
                     onPress={() => {
                         if (isDeleteMode) {
                             onDeleteVideo(item.id);
@@ -59,7 +129,7 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
                     ) : (
                         <View style={[styles.thumbnail, styles.placeholderContainer]}>
                             <Ionicons name="videocam-outline" size={32} color="#666" />
-                            <Text style={styles.placeholderText}>No Preview</Text>
+                            <Text style={styles.placeholderText}>{t.profile.noPreview}</Text>
                         </View>
                     )}
 
@@ -81,11 +151,14 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
                     {item.isUploading && (
                         <View style={styles.uploadingOverlay}>
                             <View style={styles.uploadingContent}>
-                                <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                                <ActivityIndicator size="small" color={ProfileTheme.colors.profilePrimary} />
                                 <Text style={styles.uploadingText}>
                                     {item.uploadProgress !== undefined
-                                        ? `جاري الرفع ${Math.round(item.uploadProgress)}%`
-                                        : 'جاري الرفع...'}
+                                        ? t.profile.uploadingProgressLabel.replace(
+                                            '{percent}',
+                                            String(Math.round(item.uploadProgress)),
+                                          )
+                                        : t.profile.uploadingLabel}
                                 </Text>
                             </View>
                             {item.uploadProgress !== undefined && (
@@ -99,8 +172,8 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
                     {!item.isUploading && item.isProcessing && (
                         <View style={styles.uploadingOverlay}>
                             <View style={styles.uploadingContent}>
-                                <ActivityIndicator size="small" color="#FFA500" />
-                                <Text style={styles.uploadingText}>جاري المعالجة...</Text>
+                                <ActivityIndicator size="small" color={ProfileTheme.colors.avatarRing} />
+                                <Text style={styles.uploadingText}>{t.profile.processingLabel}</Text>
                             </View>
                         </View>
                     )}
@@ -109,8 +182,8 @@ const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPre
                         <View style={styles.failedOverlay}>
                             <View style={styles.uploadingContent}>
                                 <Ionicons name="alert-circle" size={24} color="#FF4444" />
-                                <Text style={styles.failedText}>فشل المعالجة</Text>
-                                <Text style={styles.retryText}>اضغط لإعادة المحاولة</Text>
+                                <Text style={styles.failedText}>{t.profile.processingFailed}</Text>
+                                <Text style={styles.retryText}>{t.profile.tapToRetry}</Text>
                             </View>
                         </View>
                     )}
@@ -132,13 +205,15 @@ const styles = StyleSheet.create({
     grid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        paddingBottom: 100,
+        paddingBottom: 24,
+        paddingHorizontal: GRID_PAD,
+        paddingTop: 12,
         columnGap: SPACING,
+        rowGap: SPACING,
     },
     itemContainer: {
-        width: ITEM_SIZE,
-        height: ITEM_SIZE * 1.5,
-        marginBottom: SPACING,
+        borderRadius: 8,
+        overflow: 'hidden',
         backgroundColor: ProfileTheme.colors.glassBlack,
     },
     thumbnail: {
@@ -252,6 +327,40 @@ const styles = StyleSheet.create({
         fontSize: 10,
         marginTop: 4,
         fontWeight: '500',
+    },
+    addInnerBorder: {
+        ...StyleSheet.absoluteFillObject,
+        borderWidth: 0.5,
+        borderColor: ProfileTheme.colors.profileCardBorder,
+        borderRadius: 2,
+    },
+    addContent: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingHorizontal: 6,
+    },
+    addGlassBtn: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    addGlassRing: {
+        ...StyleSheet.absoluteFillObject,
+        borderRadius: 19,
+        borderWidth: 1,
+        borderColor: 'rgba(139,92,246,0.45)',
+        backgroundColor: 'rgba(139,92,246,0.12)',
+    },
+    addLabel: {
+        color: ProfileTheme.colors.avatarRing,
+        fontSize: 10,
+        fontWeight: '600',
+        textAlign: 'center',
     },
 });
 

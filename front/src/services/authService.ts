@@ -780,6 +780,7 @@ export interface SearchUserResult {
     isDeveloper: boolean;
     level: number;
     xp?: number;
+    coins?: number;
     favoriteTeam: string | null;
     createdAt?: string;
     followersCount?: number;

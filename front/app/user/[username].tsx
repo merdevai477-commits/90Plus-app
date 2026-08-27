@@ -5,37 +5,31 @@ import {
   ScrollView,
   StatusBar,
   TouchableOpacity,
-  Pressable,
   Text,
   ActivityIndicator,
   RefreshControl,
   Animated,
   Modal,
   Share,
-  useWindowDimensions,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Zap, Flag, Share2 } from 'lucide-react-native';
 import { buildProfileShareUrl } from '../../constants/shareLinks';
-import { XpInfoModal } from '../../components/common/XpInfoModal';
 
-import ProfileHeader from '../../components/profile/ProfileHeader';
-import ProfileCard from '../../components/profile/ProfileCard';
+import ProfileHero from '../../components/profile/ProfileHero';
+import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
+import ProfileBioCard from '../../components/profile/ProfileBioCard';
+import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
+import { PROFILE_ICONS } from '../../components/profile/profileV2Assets';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
-import StatsRow from '../../components/profile/StatsRow';
 import VideoGrid from '../../components/profile/VideoGrid';
-import UserInfo from '../../components/profile/UserInfo';
-import BadgesDisplay from '../../components/profile/BadgesDisplay';
-import SocialLinksSection from '../../components/profile/SocialLinksSection';
 import FollowersListModal from '../../components/profile/FollowersListModal';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import { ProfileTheme } from '../../constants/ProfileTheme';
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import {
   AuthService,
   SearchUserResult,
@@ -51,11 +45,14 @@ import { useVideos, Comment } from '../../contexts/VideosContext';
 import { BlockService } from '../../services/blockService';
 import { cacheService, CACHE_TTL } from '../../services/cacheService';
 import { useTranslation } from '../../src/i18n';
-import { getProfileCardOverlapMargin } from '../../constants/profileLayout';
+import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
+import { getUserBadges } from '../../services/rankingsService';
 import { ReportSystem } from '../../components/common/ReportSystem';
 import { useUserReport } from '../../hooks/useReportSystem';
 import ContentTabs from '../../components/profile/ContentTabs';
 import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
+import { ProfileAchievementsTab } from '../../components/profile/ProfileAchievementsTab';
+import { ProfilePublicMoreModal } from '../../components/profile/ProfilePublicMoreModal';
 import { usePublicUserPredictions } from '../../hooks/usePublicUserPredictions';
 import { ProfileErrorBoundary } from '../../components/common/ProfileErrorBoundary';
 import { logger } from '../../utils/logger';
@@ -66,125 +63,6 @@ const USER_VIDEOS_CACHE  = 'user_videos';
 const REELS_PAGE_SIZE = 30;
 
 const ACCENT = '#A855F7';
-const ACCENT_DARK = '#7C3AED';
-
-// ─── Top bar ──────────────────────────────────────────────────────────────────
-function UserTopBar({
-  topInset,
-  level,
-  xp,
-  onBack,
-}: {
-  topInset: number;
-  level?: number;
-  xp?: number;
-  onBack: () => void;
-}) {
-  const GlassContainer = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-  const xpDisplay = xp != null ? (xp >= 1000 ? `${(xp / 1000).toFixed(1)}K` : String(xp)) : '—';
-  const [showXpInfo, setShowXpInfo] = useState(false);
-
-  return (
-    <GlassContainer
-      intensity={20}
-      tint="dark"
-      effect="regular"
-      style={[tb.container, { paddingTop: topInset + 10 }]}
-    >
-      {/* Back button */}
-      <TouchableOpacity onPress={onBack} style={tb.backBtn} hitSlop={12}>
-        <Ionicons name="arrow-back" size={18} color="rgba(255,255,255,0.85)" />
-      </TouchableOpacity>
-
-      {/* LVL badge */}
-      {level != null && (
-        <View style={tb.lvlBadge}>
-          <Text style={tb.lvlLabel}>LVL</Text>
-          <Text style={tb.lvlNumber}>{level}</Text>
-        </View>
-      )}
-
-      {/* XP chip */}
-      <Pressable
-        style={tb.xpChip}
-        onPress={() => setShowXpInfo(true)}
-        accessibilityRole="button"
-      >
-        <Zap size={13} color={ACCENT} fill={ACCENT} />
-        <Text style={tb.xpTxt}>{xpDisplay} XP</Text>
-      </Pressable>
-
-      <XpInfoModal visible={showXpInfo} onClose={() => setShowXpInfo(false)} />
-    </GlassContainer>
-  );
-}
-
-const tb = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 200,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: 'rgba(5,1,13,0.0)',
-  },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  lvlBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(168,85,247,0.18)',
-    borderRadius: 14,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.4)',
-  },
-  lvlLabel: {
-    color: 'rgba(168,85,247,0.9)',
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-  },
-  lvlNumber: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  xpChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(168,85,247,0.12)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.3)',
-    gap: 5,
-  },
-  xpTxt: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-});
 
 function normalizeRouteUsername(value: string | string[] | undefined): string {
   if (typeof value === 'string') return value.trim();
@@ -202,8 +80,6 @@ function UserProfileScreen() {
   const toast = useToast();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { height: screenHeight } = useWindowDimensions();
-  const cardOverlap = getProfileCardOverlapMargin(screenHeight);
   const { reelComments, addComment, toggleCommentLike } = useVideos();
   const {
     reportUser,
@@ -243,12 +119,27 @@ function UserProfileScreen() {
   const [viewerImageUrl, setViewerImageUrl] = useState('');
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('videos');
+  const [badgeCount, setBadgeCount] = useState(0);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const hasRecordedViewRef = useRef(false);
   const followActionInFlightRef = useRef(false);
 
   const { follow, unfollow } = useFollowStore();
+
+  useEffect(() => {
+    if (!user?.id || String(user.id).startsWith('user_')) return;
+    let cancelled = false;
+    getUserBadges(authToken, user.id)
+      .then((res) => {
+        if (!cancelled) setBadgeCount(res?.summary?.total ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, user?.id]);
 
   const canViewPredictions = !!user && !blockedMe && !isBlocked;
   const {
@@ -673,14 +564,6 @@ function UserProfileScreen() {
         </View>
       </Modal>
 
-      {/* Fixed top bar */}
-      <UserTopBar
-        topInset={insets.top}
-        level={userLevel}
-        xp={userXp}
-        onBack={() => router.back()}
-      />
-
       {/* Video player */}
       <VideoPlayerModal
         visible={isVideoPlayerVisible}
@@ -723,10 +606,62 @@ function UserProfileScreen() {
           />
         }
       >
-        {/* Cover */}
-        <ProfileHeader
-          coverImage={user.coverImage ? { uri: user.coverImage } : undefined}
-          onPress={user.coverImage ? () => openPhotoViewer(user.coverImage) : undefined}
+        <ProfileHero
+          topInset={insets.top}
+          coverUri={user.coverImage}
+          avatarUri={user.avatar}
+          name={user.displayName || user.username}
+          username={user.username}
+          isVerified={user.isVerified}
+          isDeveloper={user.isDeveloper}
+          isOwnProfile={false}
+          level={userLevel}
+          xp={userXp}
+          nextLevelXp={(userLevel + 1) * 100}
+          progressPct={Math.min(1, Math.max(0, (userXp - userLevel * 100) / 100))}
+          energyValue={user.coins ?? 0}
+          countryFlag={isMeaningfulCountryFlag(user.countryFlag) ? user.countryFlag : null}
+          countryLabel={resolveCountryDisplayName(user.country || user.location, user.countryFlag)}
+          clubLogo={showFullProfile ? user.clubLogo : null}
+          clubName={showFullProfile ? user.favoriteTeam : null}
+          onCoverPress={user.coverImage ? () => openPhotoViewer(user.coverImage) : undefined}
+          onAvatarPress={user.avatar ? () => openPhotoViewer(user.avatar) : undefined}
+          onSharePress={handleShareProfilePress}
+          onBackPress={() => router.back()}
+          onMorePress={() => setShowMoreMenu(true)}
+          chooseCountryLabel={t.profile.chooseCountry}
+          addClubLabel={t.profile.addYourClub}
+          energyLabel={t.profile.energy}
+          actionBelowName={
+            !blockedMe ? (
+              <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                <TouchableOpacity
+                  onPress={handleFollow}
+                  activeOpacity={0.88}
+                  style={s.followTouchable}
+                >
+                  {user.isFollowing ? (
+                    <View style={s.unfollowBtn}>
+                      <Text style={s.unfollowTxt}>{t.publicProfile.unfollow}</Text>
+                    </View>
+                  ) : (
+                    <LinearGradient
+                      colors={['#4E0DE4', '#2B077E']}
+                      style={s.followBtn}
+                      start={{ x: 0.5, y: 0 }}
+                      end={{ x: 0.5, y: 1 }}
+                    >
+                      <Text style={s.followTxt}>
+                        {user.isFollowingMe
+                          ? t.publicProfile.followBack
+                          : t.publicProfile.follow}
+                      </Text>
+                    </LinearGradient>
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
+            ) : null
+          }
         />
 
         {blockedMe ? (
@@ -737,138 +672,6 @@ function UserProfileScreen() {
           </View>
         ) : (
           <>
-        {/* FIFA Card — read-only */}
-        <View style={[s.cardContainer, { marginTop: cardOverlap }]}>
-          <ProfileCard
-            playerImage={user.avatar ? { uri: user.avatar } : undefined}
-            cardType="gold"
-            scale={0.60}
-            uploadedImage={user.avatar || null}
-            onImagePress={user.avatar ? () => openPhotoViewer(user.avatar) : undefined}
-            countryFlag={user.countryFlag || '🌍'}
-            position={user.position || 'ST'}
-            age={user.age?.toString()}
-            height={user.height?.toString()}
-            weight={user.weight?.toString()}
-            foot={user.preferredFoot || 'R'}
-            clubLogo={user.clubLogo || undefined}
-          />
-        </View>
-
-        <UserInfo
-          name={user.displayName || user.username}
-          username={user.username}
-          bio={showFullProfile ? user.bio || undefined : undefined}
-          location={user.country || user.location || ''}
-          countryFlag={user.countryFlag}
-          team={showFullProfile ? user.favoriteTeam || '' : ''}
-          isVerified={user.isVerified}
-          isDeveloper={user.isDeveloper}
-          clubLogo={user.clubLogo || undefined}
-          consecutiveLoginDays={user.consecutiveLoginDays || 0}
-        />
-
-        {showFullProfile && user.id && !String(user.id).startsWith('user_') && (
-          <View style={s.badgesWrap}>
-            <BadgesDisplay userId={user.id} token={authToken} compact />
-          </View>
-        )}
-
-        {showFullProfile && socialLinks.length > 0 && (
-          <SocialLinksSection links={socialLinks} isOwnProfile={false} />
-        )}
-
-        <StatsRow
-          followers={(user.followersCount || 0).toString()}
-          following={(user.followingCount || 0).toString()}
-          videos={(user.reelsCount || 0).toString()}
-          onFollowersPress={showFullProfile && user.id ? () => openFollowersModal('followers') : undefined}
-          onFollowingPress={showFullProfile && user.id ? () => openFollowersModal('following') : undefined}
-        />
-
-        {/* Follow + Share + Report + Block */}
-        <View style={s.actionRow}>
-          {/* Follow button */}
-          <Animated.View style={[s.followWrap, { transform: [{ scale: scaleAnim }] }]}>
-            <TouchableOpacity onPress={handleFollow} activeOpacity={0.85} style={s.followTouchable}>
-              {user.isFollowing ? (
-                /* Following state — glass */
-                (() => {
-                  const G = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-                  const gp = isLiquidGlassSupported
-                    ? { effect: 'clear' as const, interactive: true }
-                    : { intensity: 30, tint: 'dark' as const };
-                  return (
-                    <G {...(gp as any)} style={s.followingBtn}>
-                      <LinearGradient
-                        colors={['rgba(168,85,247,0.15)', 'rgba(124,58,237,0.08)']}
-                        style={StyleSheet.absoluteFill}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                      />
-                      <Ionicons name="checkmark" size={18} color={ACCENT} />
-                      <Text style={s.followingTxt}>{t.publicProfile.following}</Text>
-                    </G>
-                  );
-                })()
-              ) : (
-                /* Follow state — purple gradient */
-                <LinearGradient
-                  colors={[ACCENT, ACCENT_DARK]}
-                  style={s.followBtn}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Ionicons
-                    name={user.isFollowingMe ? 'people' : 'person-add'}
-                    size={18}
-                    color="#fff"
-                  />
-                  <Text style={s.followTxt}>
-                    {user.isFollowingMe ? t.publicProfile.followBack : t.publicProfile.follow}
-                  </Text>
-                </LinearGradient>
-              )}
-            </TouchableOpacity>
-          </Animated.View>
-
-          <TouchableOpacity
-            style={s.secondaryBtn}
-            onPress={handleShareProfilePress}
-            activeOpacity={0.75}
-          >
-            <Share2 size={18} color="#fff" />
-            <Text style={s.secondaryBtnTxt}>{t.publicProfile.share}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={s.secondaryBtn}
-            onPress={handleReportPress}
-            activeOpacity={0.75}
-          >
-            <Flag size={18} color="#fbbf24" />
-            <Text style={s.secondaryBtnTxt}>{t.publicProfile.report}</Text>
-          </TouchableOpacity>
-
-          {/* Block button */}
-          <TouchableOpacity
-            style={[s.blockBtn, isBlocked && s.blockedBtn]}
-            onPress={handleBlockUser}
-            disabled={isBlockLoading}
-            activeOpacity={0.75}
-          >
-            {isBlockLoading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons
-                name={isBlocked ? 'checkmark-circle' : 'ban'}
-                size={20}
-                color={isBlocked ? ACCENT : '#ef4444'}
-              />
-            )}
-          </TouchableOpacity>
-        </View>
-
         {isBlocked && (
           <View style={s.restrictedBanner}>
             <Ionicons name="ban" size={20} color="#ef4444" />
@@ -879,8 +682,83 @@ function UserProfileScreen() {
           </View>
         )}
 
+        <ProfileMetricStrip
+          items={[
+            {
+              key: 'followers',
+              icon: PROFILE_ICONS.followers,
+              value: user.followersCount || 0,
+              label: t.profile.followerShort,
+              onPress: showFullProfile && user.id ? () => openFollowersModal('followers') : undefined,
+            },
+            {
+              key: 'following',
+              icon: PROFILE_ICONS.following,
+              value: user.followingCount || 0,
+              label: t.profile.followingShort,
+              onPress: showFullProfile && user.id ? () => openFollowersModal('following') : undefined,
+            },
+            {
+              key: 'videos',
+              icon: PROFILE_ICONS.video,
+              value: user.reelsCount || 0,
+              label: t.profile.videos,
+              onPress: () => setActiveTab('videos'),
+            },
+            {
+              key: 'likes',
+              icon: PROFILE_ICONS.heart,
+              value: userVideos.reduce((sum, v) => sum + (v.likes || 0), 0),
+              label: t.profile.likes,
+            },
+          ]}
+        />
+
         {showFullProfile && (
           <>
+        <ProfileBioCard
+          bio={user.bio}
+          isOwnProfile={false}
+          addLabel={t.profile.addBio}
+          aboutLabel={t.profile.aboutMe}
+        />
+        <ProfileMetricStrip
+          variant="performance"
+          items={[
+            {
+              key: 'xp',
+              icon: PROFILE_ICONS.shield,
+              value: userXp,
+              label: t.profile.totalXp,
+            },
+            {
+              key: 'streak',
+              icon: PROFILE_ICONS.fire,
+              value: user.consecutiveLoginDays || 0,
+              label: t.profile.longestStreak,
+            },
+            {
+              key: 'rate',
+              icon: PROFILE_ICONS.bullseye,
+              value: `${Math.round(publicPredictionStats.accuracy <= 1 && publicPredictionStats.accuracy > 0 ? publicPredictionStats.accuracy * 100 : publicPredictionStats.accuracy || 0)}%`,
+              label: t.profile.predictionRate,
+              onPress: () => setActiveTab('predictions'),
+            },
+            {
+              key: 'achievements',
+              icon: PROFILE_ICONS.trophy,
+              value: badgeCount,
+              label: t.profile.achievements,
+              onPress: () => setActiveTab('achievements'),
+            },
+          ]}
+        />
+        <ProfileConnectCard
+          links={socialLinks}
+          isOwnProfile={false}
+          title={t.profile.connectWithMe}
+        />
+
         <ContentTabs
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -889,6 +767,7 @@ function UserProfileScreen() {
           showPublicAnalytics
         />
 
+        <View style={s.contentPanel}>
         {activeTab === 'videos' && (
           <>
         {isLoadingVideos ? (
@@ -910,6 +789,7 @@ function UserProfileScreen() {
             onVideoLongPress={() => {}}
             onDeleteVideo={() => {}}
             isDeleteMode={false}
+            horizontalInset={20}
           />
         )}
 
@@ -923,20 +803,30 @@ function UserProfileScreen() {
             {loadingMoreVideos ? (
               <ActivityIndicator size="small" color={ACCENT} />
             ) : (
-              <Text style={s.loadMoreTxt}>{t.publicProfile.loadMoreVideos}</Text>
+              <>
+                <Ionicons name="chevron-down" size={16} color={ProfileTheme.colors.profilePrimary} />
+                <Text style={s.loadMoreTxt}>{t.publicProfile.loadMoreVideos}</Text>
+              </>
             )}
           </TouchableOpacity>
         )}
           </>
         )}
 
-        <View style={activeTab === 'analytics' ? undefined : s.hiddenTab}>
+        {activeTab === 'predictions' && (
           <ProfileAnalyticsTab
-            analytics={null}
             predictionStats={publicPredictionStats}
             predictions={publicPredictions}
-            variant="predictionsOnly"
           />
+        )}
+
+        {activeTab === 'achievements' && user.id && !String(user.id).startsWith('user_') && (
+          <ProfileAchievementsTab
+            analytics={null}
+            userId={user.id}
+            authToken={authToken}
+          />
+        )}
         </View>
           </>
         )}
@@ -959,6 +849,16 @@ function UserProfileScreen() {
         visible={photoViewerOpen}
         imageUrl={viewerImageUrl}
         onClose={() => setPhotoViewerOpen(false)}
+      />
+      <ProfilePublicMoreModal
+        visible={showMoreMenu}
+        onClose={() => setShowMoreMenu(false)}
+        displayName={user.displayName || user.username}
+        username={user.username}
+        avatarUri={user.avatar}
+        isBlocked={isBlocked}
+        onReport={handleReportPress}
+        onBlock={handleBlockUser}
       />
     </View>
   );
@@ -987,7 +887,7 @@ export default function UserProfileScreenWithBoundary() {
 const s = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: ProfileTheme.colors.deepBlack,
+    backgroundColor: ProfileTheme.colors.profileBg,
   },
   center: { justifyContent: 'center', alignItems: 'center' },
   scroll: { paddingBottom: 20 },
@@ -1017,63 +917,56 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  /* Action row */
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 20,
-    marginBottom: 24,
-    gap: 10,
-    alignItems: 'center',
+  followBlock: {
+    marginHorizontal: 22,
+    marginTop: 12,
+    marginBottom: 16,
   },
-  followWrap: { flex: 1, minWidth: 0 },
-  followTouchable: { borderRadius: 16, overflow: 'hidden' },
-
-  secondaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  secondaryBtnTxt: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
+  followTouchable: { borderRadius: 16, overflow: 'hidden', width: '100%' },
 
   followBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    height: 50,
+    height: 54,
     borderRadius: 16,
-    shadowColor: ACCENT,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 5,
+    width: '100%',
+    shadowColor: '#460BCB',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.46,
+    shadowRadius: 5.45,
+    elevation: 6,
   },
-  followTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  followTxt: { color: '#fff', fontSize: 20, fontWeight: '600' },
+
+  unfollowBtn: {
+    height: 54,
+    borderRadius: 16,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#26095C',
+    borderWidth: 0.5,
+    borderColor: 'rgba(139,92,246,0.35)',
+  },
+  unfollowTxt: {
+    color: '#BABABA',
+    fontSize: 20,
+    fontWeight: '600',
+  },
 
   followingBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    height: 50,
+    height: 54,
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1.5,
     borderColor: 'rgba(168,85,247,0.4)',
   },
-  followingTxt: { color: ACCENT, fontSize: 15, fontWeight: '800' },
+  followingTxt: { color: ACCENT, fontSize: 16, fontWeight: '800' },
 
   blockBtn: {
     width: 50,
@@ -1088,6 +981,20 @@ const s = StyleSheet.create({
   blockedBtn: {
     backgroundColor: 'rgba(168,85,247,0.1)',
     borderColor: 'rgba(168,85,247,0.3)',
+  },
+
+  contentPanel: {
+    marginHorizontal: 20,
+    marginTop: -1,
+    backgroundColor: '#0E0919',
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: ProfileTheme.colors.profileTabBorder,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    overflow: 'hidden',
+    minHeight: 120,
+    marginBottom: 8,
   },
 
   /* Section header */
@@ -1161,19 +1068,17 @@ const s = StyleSheet.create({
     lineHeight: 20,
   },
   loadMoreBtn: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 16,
-    paddingVertical: 14,
-    borderRadius: 14,
+    marginTop: 4,
+    marginBottom: 12,
+    paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: 'rgba(168,85,247,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.3)',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   loadMoreTxt: {
-    color: ACCENT,
-    fontSize: 14,
+    color: ProfileTheme.colors.profilePrimary,
+    fontSize: 10,
     fontWeight: '700',
   },
 

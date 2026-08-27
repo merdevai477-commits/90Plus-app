@@ -213,8 +213,9 @@ ActionButtonsSkeleton.displayName = 'ActionButtonsSkeleton';
  */
 export const ContentTabsSkeleton: React.FC = memo(() => (
   <View style={styles.tabsContainer}>
-    <Skeleton width={80} height={36} borderRadius={18} />
-    <Skeleton width={80} height={36} borderRadius={18} />
+    <Skeleton width={89} height={35} borderRadius={8} />
+    <Skeleton width={89} height={35} borderRadius={8} />
+    <Skeleton width={93} height={35} borderRadius={8} />
   </View>
 ));
 
@@ -250,10 +251,16 @@ VideoGridSkeleton.displayName = 'VideoGridSkeleton';
 export const ProfileSkeleton: React.FC = memo(() => (
   <SkeletonAnimationProvider>
     <View style={styles.container}>
-      <ProfileCoverSkeleton />
-      <ProfileCardSkeleton />
-      <UserInfoSkeleton />
-      <ActionButtonsSkeleton />
+      <Skeleton width={SCREEN_WIDTH} height={420} borderRadius={0} />
+      <View style={{ alignItems: 'center', marginTop: -210, marginBottom: 24 }}>
+        <Skeleton width={101} height={101} borderRadius={51} />
+        <Skeleton width={168} height={24} borderRadius={8} style={{ marginTop: 16 }} />
+        <Skeleton width={110} height={16} borderRadius={8} style={{ marginTop: 8 }} />
+      </View>
+      <StatsRowSkeleton />
+      <View style={{ marginHorizontal: 22, marginBottom: 16 }}>
+        <Skeleton width={SCREEN_WIDTH - 44} height={106} borderRadius={16} />
+      </View>
       <StatsRowSkeleton />
       <ContentTabsSkeleton />
       <VideoGridSkeleton count={6} />
@@ -339,9 +346,16 @@ const styles = StyleSheet.create({
   tabsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 16,
+    alignItems: 'center',
+    gap: 28,
+    height: 53,
+    marginHorizontal: 20,
     marginBottom: 16,
-    paddingHorizontal: 20,
+    backgroundColor: ProfileTheme.colors.profileTabBar,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileTabBorder,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   videoGridContainer: {
     flexDirection: 'row',
