@@ -334,41 +334,41 @@ export function ProfileMoreMenuModal({
             <Text style={[styles.title, isRTL && styles.textRtl]}>{t.profile.moreOptions}</Text>
 
             <View style={styles.userCard}>
-              <View style={[styles.userCardTop, isRTL && styles.userCardTopRtl]}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.avatar} contentFit="cover" />
-                ) : (
-                  <View style={styles.avatarFallback}>
-                    <Ionicons name="person" size={22} color={ProfileTheme.colors.avatarRing} />
-                  </View>
-                )}
-                <View style={[styles.userTextWrap, isRTL && styles.userTextWrapRtl]}>
-                  <Text style={[styles.userName, isRTL && styles.textRtl]} numberOfLines={1}>
-                    {safeName}
-                  </Text>
-                  <View style={[styles.handleRow, isRTL && styles.handleRowRtl]}>
+              <View style={styles.userCardTop}>
+                <View style={[styles.userCardIdentity, isRTL && styles.userCardIdentityRtl]}>
+                  {avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={styles.avatar} contentFit="cover" />
+                  ) : (
+                    <View style={styles.avatarFallback}>
+                      <Ionicons name="person" size={22} color={ProfileTheme.colors.avatarRing} />
+                    </View>
+                  )}
+                  <View style={[styles.userTextWrap, isRTL && styles.userTextWrapRtl]}>
+                    <Text style={[styles.userName, isRTL && styles.textRtl]} numberOfLines={1}>
+                      {safeName}
+                    </Text>
                     <Text style={[styles.userHandle, isRTL && styles.textRtl]} numberOfLines={1}>
                       @{safeUsername}
                     </Text>
-                    <Pressable
-                      onPress={editing ? closeDrawer : openDrawer}
-                      hitSlop={10}
-                      style={({ pressed }) => [
-                        styles.penBtn,
-                        editing && styles.penBtnActive,
-                        pressed && styles.optionPressed,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={t.profile.editProfile}
-                    >
-                      <Ionicons
-                        name={editing ? 'close' : 'pencil'}
-                        size={14}
-                        color={editing ? '#fff' : ProfileTheme.colors.avatarRing}
-                      />
-                    </Pressable>
                   </View>
                 </View>
+                <Pressable
+                  onPress={editing ? closeDrawer : openDrawer}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.penBtn,
+                    editing && styles.penBtnActive,
+                    pressed && styles.optionPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.profile.editProfile}
+                >
+                  <Ionicons
+                    name={editing ? 'close' : 'pencil'}
+                    size={18}
+                    color={editing ? '#fff' : ProfileTheme.colors.avatarRing}
+                  />
+                </Pressable>
               </View>
 
               <Animated.View style={drawerStyle}>
@@ -553,7 +553,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  userCardTopRtl: {
+  userCardIdentity: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 0,
+  },
+  userCardIdentityRtl: {
     flexDirection: 'row-reverse',
   },
   avatar: {
@@ -585,30 +592,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  handleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 2,
-  },
-  handleRowRtl: {
-    flexDirection: 'row-reverse',
-  },
   userHandle: {
     color: ProfileTheme.colors.avatarRing,
     fontSize: 13,
     fontWeight: '500',
-    flexShrink: 1,
+    marginTop: 2,
   },
   penBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(139,92,246,0.18)',
     borderWidth: 1,
     borderColor: 'rgba(139,92,246,0.35)',
+    flexShrink: 0,
   },
   penBtnActive: {
     backgroundColor: 'rgba(139,92,246,0.55)',

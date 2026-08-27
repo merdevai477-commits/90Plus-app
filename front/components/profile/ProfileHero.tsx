@@ -292,7 +292,13 @@ const ProfileHero = memo(function ProfileHero({
           )}
         </View>
 
-        <View style={styles.nameBlock}>
+        <TouchableOpacity
+          style={styles.nameBlock}
+          onPress={onMorePress}
+          disabled={!onMorePress}
+          activeOpacity={onMorePress ? 0.75 : 1}
+          accessibilityRole={onMorePress ? 'button' : undefined}
+        >
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>
               {name}
@@ -303,7 +309,7 @@ const ProfileHero = memo(function ProfileHero({
           <Text style={styles.handle} numberOfLines={1}>
             @{username}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -366,7 +372,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 40,
+    marginBottom: 55,
   },
   navRight: {
     flexDirection: 'row',
