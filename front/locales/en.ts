@@ -1915,6 +1915,7 @@ export const en = {
     achievements: 'Achievements',
     videos: 'Videos',
     reels: 'Reels',
+    addReel: 'Add reel',
 
     // Tabs
     profiles: 'Profiles',

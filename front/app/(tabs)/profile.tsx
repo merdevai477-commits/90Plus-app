@@ -1997,6 +1997,8 @@ function OwnProfileScreen() {
               onVideoLongPress={handleVideoLongPress}
               onDeleteVideo={handleDeleteVideo}
               isDeleteMode={isDeleteMode}
+              onAddPress={handleUploadPress}
+              addLabel={t.profile.addReel}
             />
           )}
 

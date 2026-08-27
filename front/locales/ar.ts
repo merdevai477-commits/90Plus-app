@@ -1887,6 +1887,7 @@ export const ar = {
     achievements: 'الإنجازات',
     videos: 'الفيديوهات',
     reels: 'ريلز',
+    addReel: 'إضافة ريل',
 
     // Tabs
     profiles: 'الملفات الشخصية',

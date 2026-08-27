@@ -29,11 +29,57 @@ interface VideoGridProps {
     onVideoLongPress: (video: VideoItem) => void;
     onDeleteVideo: (videoId: string) => void;
     isDeleteMode: boolean;
+    onAddPress?: () => void;
+    addLabel?: string;
 }
 
-const VideoGrid = memo(function VideoGrid({ videos, onVideoPress, onVideoLongPress, onDeleteVideo, isDeleteMode }: VideoGridProps) {
+function AddReelTile({ onPress, label }: { onPress: () => void; label: string }) {
+    return (
+        <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.itemContainer}
+            onPress={onPress}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+        >
+            <LinearGradient
+                colors={['#170D2B', '#200D44']}
+                start={{ x: 0.5, y: 1 }}
+                end={{ x: 0.5, y: 0 }}
+                style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.addInnerBorder} pointerEvents="none" />
+            <View style={styles.addContent}>
+                <LinearGradient
+                    colors={['#8B5CF6', '#513690']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.addIconRing}
+                >
+                    <View style={styles.addIconCore}>
+                        <Ionicons name="add" size={28} color="#fff" />
+                    </View>
+                </LinearGradient>
+                <Text style={styles.addLabel}>{label}</Text>
+            </View>
+        </TouchableOpacity>
+    );
+}
+
+const VideoGrid = memo(function VideoGrid({
+    videos,
+    onVideoPress,
+    onVideoLongPress,
+    onDeleteVideo,
+    isDeleteMode,
+    onAddPress,
+    addLabel = 'Add',
+}: VideoGridProps) {
     return (
         <View style={styles.grid}>
+            {onAddPress && !isDeleteMode ? (
+                <AddReelTile onPress={onAddPress} label={addLabel} />
+            ) : null}
             {videos.map((item, index) => (
                 <TouchableOpacity
                     key={item.id}
@@ -133,6 +179,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         paddingBottom: 100,
+        paddingHorizontal: 10,
+        paddingTop: 12,
         columnGap: SPACING,
     },
     itemContainer: {
@@ -252,6 +300,43 @@ const styles = StyleSheet.create({
         fontSize: 10,
         marginTop: 4,
         fontWeight: '500',
+    },
+    addInnerBorder: {
+        ...StyleSheet.absoluteFillObject,
+        borderWidth: 1,
+        borderColor: 'rgba(139,92,246,0.55)',
+        borderRadius: 2,
+    },
+    addContent: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        paddingHorizontal: 8,
+    },
+    addIconRing: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        padding: 2,
+        shadowColor: '#8B5CF6',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.45,
+        shadowRadius: 10,
+        elevation: 6,
+    },
+    addIconCore: {
+        flex: 1,
+        borderRadius: 24,
+        backgroundColor: 'rgba(7,4,13,0.35)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    addLabel: {
+        color: '#D8AEFF',
+        fontSize: 11,
+        fontWeight: '700',
+        textAlign: 'center',
     },
 });
 
