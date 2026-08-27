@@ -254,12 +254,12 @@ export class ProfileErrorBoundary extends Component<Props, State> {
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.replace('/(tabs)/Home');
+        router.replace('/(tabs)/matches');
       }
       return;
     }
-    logger.info('[ProfileErrorBoundary] User navigating to home');
-    router.replace('/(tabs)/Home');
+    logger.info('[ProfileErrorBoundary] User navigating to matches');
+    router.replace('/(tabs)/matches');
   };
 
   private handleReload = (): void => {

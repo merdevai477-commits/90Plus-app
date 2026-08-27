@@ -39,7 +39,7 @@ export default function SplashScreen() {
 
     // Navigate after 3 seconds
     const timer = setTimeout(() => {
-      router.replace('/(tabs)/Home');
+      router.replace('/(tabs)/matches');
     }, 3000);
 
     return () => clearTimeout(timer);

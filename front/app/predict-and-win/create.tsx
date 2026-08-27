@@ -298,7 +298,7 @@ export default function CreateCompetitionScreen() {
         predictionDeadline: iso,
       });
       toast.showSuccess(wizard.submittedTitle, wizard.submittedSubtitle);
-      router.replace('/predict-and-win');
+      router.replace('/(tabs)/predict-and-win');
     } catch (err: any) {
       toast.showError(wizard.publish, errorMessage(err));
     } finally {

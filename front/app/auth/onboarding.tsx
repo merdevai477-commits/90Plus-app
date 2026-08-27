@@ -68,7 +68,7 @@ export default function OnboardingScreen() {
             
             globalState.setUserType('diamond');
             useHomeStore.getState().setUserMode('diamond');
-            router.replace('/(tabs)/Home');
+            router.replace('/(tabs)/matches');
         }
     }, [step, selectedClub, selectedCountry, selectedLeagues, addFavoriteLeague]);
 

@@ -14,7 +14,7 @@ async function routeFromAgeStatus(
   status: Awaited<ReturnType<typeof fetchAgeStatus>>,
 ): Promise<void> {
   if (!status.ok || !status.ageVerified) {
-    router.replace('/(tabs)/Home');
+    router.replace('/(tabs)/matches');
     return;
   }
 
@@ -25,10 +25,10 @@ async function routeFromAgeStatus(
     return;
   }
 
-  router.replace('/(tabs)/Home');
+  router.replace('/(tabs)/matches');
 }
 
-/** Route to Home after sign-in — waits for JWT + backend user sync when possible. */
+/** Route to matches after sign-in — waits for JWT + backend user sync when possible. */
 export async function navigateAfterAuth(
   router: Router,
   getToken?: GetToken,
@@ -38,7 +38,7 @@ export async function navigateAfterAuth(
     if (token) {
       // Sync the backend user, retrying once on a flaky network before warning.
       // The Clerk webhook also provisions the user server-side, so even a total
-      // client-sync failure self-heals on the next Home focus — we only alert to
+      // client-sync failure self-heals on the next matches focus — we only alert to
       // explain a transient hiccup, never block entry.
       try {
         await AuthService.syncUserWithBackend(token);
@@ -67,14 +67,14 @@ export async function navigateAfterAuth(
   try {
     const verified = await AsyncStorage.getItem(AGE_VERIFIED_KEY);
     if (verified === 'true') {
-      router.replace('/(tabs)/Home');
+      router.replace('/(tabs)/matches');
       return;
     }
   } catch {
     // fall through
   }
 
-  router.replace('/(tabs)/Home');
+  router.replace('/(tabs)/matches');
 }
 
 /** Call after successful age verification (ADULT or TEEN with consent pending). */

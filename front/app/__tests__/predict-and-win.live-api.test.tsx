@@ -91,7 +91,7 @@ jest.mock('../../utils/logger', () => ({
   logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() },
 }));
 
-import PredictAndWinScreen from '../predict-and-win';
+import PredictAndWinScreen from '../(tabs)/predict-and-win';
 import { CompetitionsService } from '../../services/competitions.service';
 import { useLanguageStore } from '../../src/i18n/store';
 

@@ -35,7 +35,7 @@ import { preloadVideo, preloadVideos, isVideoPreloaded, clearPreloadedVideos } f
 import { setProfileMemoryCache } from '../hooks/useProfileCache';
 
 // Screen names that can be preloaded
-export type ScreenName = 'profile' | 'reels' | 'notifications' | 'matches' | 'rankings' | 'home';
+export type ScreenName = 'profile' | 'reels' | 'notifications' | 'matches' | 'rankings';
 
 // Preload configuration
 export interface PreloadConfig {
@@ -46,7 +46,7 @@ export interface PreloadConfig {
 
 // Default configuration - OPTIMIZED for faster loading
 const DEFAULT_CONFIG: PreloadConfig = {
-  screens: ['home', 'profile', 'reels', 'notifications', 'matches', 'rankings'],
+  screens: ['profile', 'reels', 'notifications', 'matches', 'rankings'],
   reelsCount: 5,
   refreshInterval: 10 * 60 * 1000, // 10 minutes (reduce background traffic)
 };
@@ -66,7 +66,6 @@ const PRELOAD_CACHE_KEYS = {
   notifications: CACHE_KEYS.NOTIFICATIONS,
   matches: CACHE_KEYS.MATCHES,
   rankings: 'rankings_all',
-  home: 'home_data',
 } as const;
 
 // Preload status tracking
@@ -165,10 +164,10 @@ class PreloadManagerClass {
     await this.preloadScreen('profile');
   }
 
-  /** Tier 2: live data visible on first screen — home + reels */
+  /** Tier 2: live data visible on first screen — matches + reels */
   private async loadTier2(): Promise<void> {
     await Promise.allSettled([
-      this.preloadScreen('home'),
+      this.preloadScreen('matches'),
       this.preloadScreen('reels'),
     ]);
   }
@@ -200,11 +199,11 @@ class PreloadManagerClass {
       return;
     }
 
-    // Profile + home in parallel: account tab must feel instant; home is visible first
-    logger.debug('[PreloadManager] Priority 1: Preloading profile + home in parallel...');
+    // Profile + matches in parallel: account tab must feel instant; matches is the landing tab
+    logger.debug('[PreloadManager] Priority 1: Preloading profile + matches in parallel...');
     await Promise.allSettled([
       this.preloadScreen('profile'),
-      this.preloadScreen('home'),
+      this.preloadScreen('matches'),
     ]);
 
     // Priority 3: Reels (popular feature - preload first 7)
@@ -269,9 +268,6 @@ class PreloadManagerClass {
           break;
         case 'rankings':
           await this.preloadRankings(token);
-          break;
-        case 'home':
-          await this.preloadHomeData(token);
           break;
       }
 
@@ -661,26 +657,6 @@ class PreloadManagerClass {
       logger.debug('[PreloadManager] Rankings preloaded successfully');
     } catch (error) {
       logger.warn('[PreloadManager] Failed to preload rankings:', error);
-    }
-  }
-
-  /**
-   * Preload home screen data
-   * ✅ NEW: Preloads matches, videos, players, and rankings for home screen
-   */
-  private async preloadHomeData(token: string): Promise<void> {
-    try {
-      const { useHomeStore } = await import('../src/store/home.store');
-      const homeStore = useHomeStore.getState();
-
-      await Promise.all([
-        homeStore.fetchHomeData(token),
-        homeStore.fetchRankingsData(token),
-      ]);
-
-      logger.debug('[PreloadManager] Home data preloaded successfully');
-    } catch (error) {
-      logger.warn('[PreloadManager] Failed to preload home data:', error);
     }
   }
 

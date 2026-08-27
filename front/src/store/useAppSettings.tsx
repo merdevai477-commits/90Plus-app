@@ -84,7 +84,7 @@ const initialUI = {
 };
 
 const initialPreferences = {
-  defaultTab: 'home',
+  defaultTab: 'matches',
   lastScrollPositions: {},
   dateFormat: 'DD/MM/YYYY',
   timeFormat: '24h' as const,

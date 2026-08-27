@@ -24,6 +24,11 @@ import { useLiveFixtureStore } from '../store/liveFixtureStore';
 
 const PERMISSION_REQUESTED_KEY = NOTIFICATION_PERMISSION_REQUESTED_KEY;
 
+function remapRetiredHomeScreen(screen: unknown): unknown {
+    if (screen === '/(tabs)/Home' || screen === '/Home') return '/(tabs)/matches';
+    return screen;
+}
+
 export interface PushNotificationState {
     expoPushToken: string | null;
     notification: any | null;
@@ -107,7 +112,7 @@ export function usePushNotifications(): PushNotificationState {
             const r = routerRef.current;
 
             if (type === 'LUCKY_WHEEL') {
-                r.push({ pathname: '/(tabs)/Home', params: { openLuckyWheel: 'true' } });
+                r.push({ pathname: '/notifications', params: { openLuckyWheel: 'true' } });
             } else if (type === 'MATCH_GOAL' || type === 'MATCH_UPDATE' || type === 'MATCH_START' || type === 'MATCH_END' || type === 'MATCH_HALFTIME' || type?.includes('MATCH')) {
                 if (data.matchId || data.fixtureId) {
                     const fId = String(data.matchId || data.fixtureId);
@@ -191,7 +196,7 @@ export function usePushNotifications(): PushNotificationState {
             } else if (type === 'COIN_MILESTONE') {
                 r.push({ pathname: '/(tabs)/profile', params: { tab: 'wallet' } });
             } else if (type === 'MILESTONE' || type === 'REPORT_RESOLVED' || type === 'REPORT_SUBMITTED') {
-                const screen = data.screen;
+                const screen = remapRetiredHomeScreen(data.screen);
                 if (screen) {
                     r.push(screen as any);
                 } else {
@@ -216,11 +221,11 @@ export function usePushNotifications(): PushNotificationState {
             } else if (type === 'DAILY_QUIZ_RENEWED' || type === 'QUIZ_REWARD') {
                 r.push('/(tabs)/quiz' as any);
             } else if (type === 'LUCKY_WHEEL_RENEWED') {
-                r.push({ pathname: '/(tabs)/Home', params: { openLuckyWheel: 'true' } });
+                r.push({ pathname: '/notifications', params: { openLuckyWheel: 'true' } });
             } else if (type === 'COOLDOWN_EXPIRED') {
                 r.push('/(tabs)/profile' as any);
             } else if (data.screen) {
-                r.push(data.screen as any);
+                r.push(remapRetiredHomeScreen(data.screen) as any);
             } else if (data.url) {
                 r.push(data.url as any);
             } else {

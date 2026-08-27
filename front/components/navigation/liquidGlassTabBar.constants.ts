@@ -16,10 +16,9 @@ export const TAB_BUBBLE_WIDTH = 76;
 export const TAB_BUBBLE_SIZE = TAB_BUBBLE_WIDTH;
 
 export const TAB_BUBBLE_WIDTHS: Record<LiquidTabItem['id'], number> = {
-  home: 76,
   matches: 94,
   rank: 68,
-  reels: 74,
+  sponsors: 92,
   ai: 58,
   profile: 88,
 };
@@ -67,13 +66,6 @@ export const TAB_BLOB_SPAWN_SPRING = {
 
 export const LIQUID_TAB_ITEMS: LiquidTabItem[] = [
   {
-    id: 'home',
-    label: 'Home',
-    route: '/(tabs)/Home',
-    accent: '#FFFFFF',
-    icon: 'home',
-  },
-  {
     id: 'matches',
     label: 'Matches',
     route: '/(tabs)/matches',
@@ -88,11 +80,11 @@ export const LIQUID_TAB_ITEMS: LiquidTabItem[] = [
     icon: 'rank',
   },
   {
-    id: 'reels',
-    label: 'Reels',
-    route: '/(tabs)/reels',
-    accent: '#EC4899',
-    icon: 'reels',
+    id: 'sponsors',
+    label: 'Sponsors',
+    route: '/(tabs)/predict-and-win',
+    accent: '#F59E0B',
+    icon: 'sponsors',
   },
   {
     id: 'ai',

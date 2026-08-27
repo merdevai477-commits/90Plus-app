@@ -108,7 +108,7 @@ jest.mock('../../services/competitions.service', () => ({
   },
 }));
 
-import PredictAndWinScreen from '../predict-and-win';
+import PredictAndWinScreen from '../(tabs)/predict-and-win';
 import { AddPrizeFab } from '../../components/predictAndWin/AddPrizeFab';
 import { useLanguageStore } from '../../src/i18n/store';
 

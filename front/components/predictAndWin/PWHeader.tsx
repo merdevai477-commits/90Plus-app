@@ -20,7 +20,7 @@ export function PWHeader({
   onBell,
 }: {
   title: string;
-  onBack: () => void;
+  onBack?: () => void;
   onBell?: () => void;
 }) {
   const { s, f } = usePWScale();
@@ -40,13 +40,17 @@ export function PWHeader({
           },
         ]}
       >
-        <Pressable onPress={onBack} hitSlop={10} accessibilityRole="button">
-          <Ionicons
-            name={isRTL ? 'arrow-forward' : 'arrow-back'}
-            size={s(PW_HEADER.backSize)}
-            color={PW.text}
-          />
-        </Pressable>
+        {onBack ? (
+          <Pressable onPress={onBack} hitSlop={10} accessibilityRole="button">
+            <Ionicons
+              name={isRTL ? 'arrow-forward' : 'arrow-back'}
+              size={s(PW_HEADER.backSize)}
+              color={PW.text}
+            />
+          </Pressable>
+        ) : (
+          <View style={{ width: s(PW_HEADER.backSize), height: s(PW_HEADER.backSize) }} />
+        )}
 
         <Text
           style={[styles.title, { fontFamily: semibold, fontSize: f(PW_HEADER.titleSize) }]}
