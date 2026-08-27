@@ -6,7 +6,7 @@ import NetInfo from '@react-native-community/netinfo';
 import ImageViewerModal from '../../components/common/ImageViewerModal';
 import ReelUploadModal from '../../components/common/ReelUploadModal';
 import VideoPlayerModal from '../../components/common/VideoPlayerModal';
-import UploadProgressModal from '../../components/common/UploadProgressModal';
+import { UploadProgressModal } from '../../components/common/UploadProgressModal';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, router } from 'expo-router';
 import ContentTabs from '../../components/profile/ContentTabs';
