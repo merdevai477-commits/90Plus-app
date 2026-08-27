@@ -2042,6 +2042,7 @@ export const ar = {
     stepRequired: 'مطلوب',
     noFollowersYet: 'لا يوجد متابعين بعد',
     noFollowingYet: 'لا يتابع أحد بعد',
+    searchFollowersPlaceholder: 'ابحث عن أشخاص...',
     offlineShowingCached: 'لا يمكن الاتصال بالخادم. يتم عرض البيانات المحفوظة.',
 
     // Block & Report

@@ -2068,6 +2068,7 @@ export const en = {
     stepRequired: 'Required',
     noFollowersYet: 'No followers yet',
     noFollowingYet: 'Not following anyone yet',
+    searchFollowersPlaceholder: 'Search people...',
     offlineShowingCached: 'Could not reach the server. Showing saved data.',
 
     // Block & Report
