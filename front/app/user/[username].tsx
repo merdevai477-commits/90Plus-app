@@ -12,14 +12,11 @@ import {
   Modal,
   Share,
   Alert,
-  Platform,
-  ActionSheetIOS,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { buildProfileShareUrl } from '../../constants/shareLinks';
 
@@ -33,7 +30,6 @@ import VideoGrid from '../../components/profile/VideoGrid';
 import FollowersListModal from '../../components/profile/FollowersListModal';
 import { ProfileSkeleton } from '../../components/profile/ProfileSkeleton';
 import { ProfileTheme } from '../../constants/ProfileTheme';
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import {
   AuthService,
   SearchUserResult,
@@ -56,6 +52,7 @@ import { useUserReport } from '../../hooks/useReportSystem';
 import ContentTabs from '../../components/profile/ContentTabs';
 import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
 import { ProfileAchievementsTab } from '../../components/profile/ProfileAchievementsTab';
+import { ProfilePublicMoreModal } from '../../components/profile/ProfilePublicMoreModal';
 import { usePublicUserPredictions } from '../../hooks/usePublicUserPredictions';
 import { ProfileErrorBoundary } from '../../components/common/ProfileErrorBoundary';
 import { logger } from '../../utils/logger';
@@ -66,7 +63,6 @@ const USER_VIDEOS_CACHE  = 'user_videos';
 const REELS_PAGE_SIZE = 30;
 
 const ACCENT = '#A855F7';
-const ACCENT_DARK = '#7C3AED';
 
 function normalizeRouteUsername(value: string | string[] | undefined): string {
   if (typeof value === 'string') return value.trim();
@@ -124,6 +120,7 @@ function UserProfileScreen() {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('videos');
   const [badgeCount, setBadgeCount] = useState(0);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const hasRecordedViewRef = useRef(false);
@@ -622,6 +619,7 @@ function UserProfileScreen() {
           xp={userXp}
           nextLevelXp={(userLevel + 1) * 100}
           progressPct={Math.min(1, Math.max(0, (userXp - userLevel * 100) / 100))}
+          energyValue={user.coins ?? 0}
           countryFlag={isMeaningfulCountryFlag(user.countryFlag) ? user.countryFlag : null}
           countryLabel={resolveCountryDisplayName(user.country || user.location, user.countryFlag)}
           clubLogo={showFullProfile ? user.clubLogo : null}
@@ -630,30 +628,40 @@ function UserProfileScreen() {
           onAvatarPress={user.avatar ? () => openPhotoViewer(user.avatar) : undefined}
           onSharePress={handleShareProfilePress}
           onBackPress={() => router.back()}
-          onMorePress={() => {
-            const labels = [
-              t.publicProfile.report,
-              isBlocked ? t.publicProfile.unblock : t.publicProfile.block,
-            ];
-            const run = (index: number) => {
-              if (index === 0) handleReportPress();
-              else if (index === 1) handleBlockUser();
-            };
-            if (Platform.OS === 'ios') {
-              ActionSheetIOS.showActionSheetWithOptions(
-                { options: [...labels, t.publicProfile.cancel], cancelButtonIndex: labels.length },
-                (i) => { if (i != null && i < labels.length) run(i); },
-              );
-            } else {
-              Alert.alert(t.profile.moreOptions, undefined, [
-                ...labels.map((label, index) => ({ text: label, onPress: () => run(index) })),
-                { text: t.publicProfile.cancel, style: 'cancel' as const },
-              ]);
-            }
-          }}
+          onMorePress={() => setShowMoreMenu(true)}
           chooseCountryLabel={t.profile.chooseCountry}
           addClubLabel={t.profile.addYourClub}
           energyLabel={t.profile.energy}
+          actionBelowName={
+            !blockedMe ? (
+              <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                <TouchableOpacity
+                  onPress={handleFollow}
+                  activeOpacity={0.88}
+                  style={s.followTouchable}
+                >
+                  {user.isFollowing ? (
+                    <View style={s.unfollowBtn}>
+                      <Text style={s.unfollowTxt}>{t.publicProfile.unfollow}</Text>
+                    </View>
+                  ) : (
+                    <LinearGradient
+                      colors={['#4E0DE4', '#2B077E']}
+                      style={s.followBtn}
+                      start={{ x: 0.5, y: 0 }}
+                      end={{ x: 0.5, y: 1 }}
+                    >
+                      <Text style={s.followTxt}>
+                        {user.isFollowingMe
+                          ? t.publicProfile.followBack
+                          : t.publicProfile.follow}
+                      </Text>
+                    </LinearGradient>
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
+            ) : null
+          }
         />
 
         {blockedMe ? (
@@ -664,43 +672,6 @@ function UserProfileScreen() {
           </View>
         ) : (
           <>
-        {/* Follow — full-width CTA under identity (Figma 845:2131) */}
-        <Animated.View style={[s.followBlock, { transform: [{ scale: scaleAnim }] }]}>
-          <TouchableOpacity onPress={handleFollow} activeOpacity={0.85} style={s.followTouchable}>
-            {user.isFollowing ? (
-              (() => {
-                const G = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-                const gp = isLiquidGlassSupported
-                  ? { effect: 'clear' as const, interactive: true }
-                  : { intensity: 30, tint: 'dark' as const };
-                return (
-                  <G {...(gp as any)} style={s.followingBtn}>
-                    <LinearGradient
-                      colors={['rgba(168,85,247,0.18)', 'rgba(124,58,237,0.1)']}
-                      style={StyleSheet.absoluteFill}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                    />
-                    <Ionicons name="checkmark" size={18} color={ACCENT} />
-                    <Text style={s.followingTxt}>{t.publicProfile.following}</Text>
-                  </G>
-                );
-              })()
-            ) : (
-              <LinearGradient
-                colors={['#4E0DE4', '#2B077E']}
-                style={s.followBtn}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-              >
-                <Text style={s.followTxt}>
-                  {user.isFollowingMe ? t.publicProfile.followBack : t.publicProfile.follow}
-                </Text>
-              </LinearGradient>
-            )}
-          </TouchableOpacity>
-        </Animated.View>
-
         {isBlocked && (
           <View style={s.restrictedBanner}>
             <Ionicons name="ban" size={20} color="#ef4444" />
@@ -820,6 +791,7 @@ function UserProfileScreen() {
             onVideoLongPress={() => {}}
             onDeleteVideo={() => {}}
             isDeleteMode={false}
+            horizontalInset={20}
           />
         )}
 
@@ -879,6 +851,16 @@ function UserProfileScreen() {
         visible={photoViewerOpen}
         imageUrl={viewerImageUrl}
         onClose={() => setPhotoViewerOpen(false)}
+      />
+      <ProfilePublicMoreModal
+        visible={showMoreMenu}
+        onClose={() => setShowMoreMenu(false)}
+        displayName={user.displayName || user.username}
+        username={user.username}
+        avatarUri={user.avatar}
+        isBlocked={isBlocked}
+        onReport={handleReportPress}
+        onBlock={handleBlockUser}
       />
     </View>
   );
@@ -942,7 +924,7 @@ const s = StyleSheet.create({
     marginTop: 12,
     marginBottom: 16,
   },
-  followTouchable: { borderRadius: 16, overflow: 'hidden' },
+  followTouchable: { borderRadius: 16, overflow: 'hidden', width: '100%' },
 
   followBtn: {
     flexDirection: 'row',
@@ -950,13 +932,30 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     height: 54,
     borderRadius: 16,
+    width: '100%',
     shadowColor: '#460BCB',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.46,
     shadowRadius: 5.45,
     elevation: 6,
   },
-  followTxt: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  followTxt: { color: '#fff', fontSize: 20, fontWeight: '600' },
+
+  unfollowBtn: {
+    height: 54,
+    borderRadius: 16,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#26095C',
+    borderWidth: 0.5,
+    borderColor: 'rgba(139,92,246,0.35)',
+  },
+  unfollowTxt: {
+    color: '#BABABA',
+    fontSize: 20,
+    fontWeight: '600',
+  },
 
   followingBtn: {
     flexDirection: 'row',

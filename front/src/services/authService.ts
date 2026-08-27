@@ -805,6 +805,7 @@ export interface SearchUserResult {
     }>;
     coverImage?: string | null;
     consecutiveLoginDays?: number;
+    coins?: number;
     blockStatus?: {
         blockedByMe: boolean;
         blockedMe: boolean;

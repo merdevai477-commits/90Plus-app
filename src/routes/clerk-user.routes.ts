@@ -681,6 +681,7 @@ router.get('/user/:username', optionalAuth, async (req: Request, res: Response):
                 coverImage: true,
                 socialLinks: true,
                 consecutiveLoginDays: true,
+                coins: true,
                 _count: {
                     select: {
                         followers: true,

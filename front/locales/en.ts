@@ -3068,6 +3068,7 @@ export const en = {
     follow: 'Follow',
     followBack: 'Follow back',
     following: 'Following',
+    unfollow: 'Unfollow',
     videosTitle: 'Videos',
     noVideosYet: 'No videos yet',
     bioEmpty: 'No bio yet',

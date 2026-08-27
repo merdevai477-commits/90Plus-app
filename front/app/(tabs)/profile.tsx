@@ -2003,6 +2003,7 @@ function OwnProfileScreen() {
               isDeleteMode={isDeleteMode}
               onAddPress={handleUploadPress}
               addLabel={t.profile.addReel}
+              horizontalInset={20}
             />
           )}
 

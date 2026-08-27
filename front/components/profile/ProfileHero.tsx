@@ -53,6 +53,8 @@ export interface ProfileHeroProps {
   chooseCountryLabel: string;
   addClubLabel: string;
   energyLabel: string;
+  /** Optional CTA under the name (e.g. Follow on public profiles). */
+  actionBelowName?: React.ReactNode;
 }
 
 const ProfileHero = memo(function ProfileHero({
@@ -86,6 +88,7 @@ const ProfileHero = memo(function ProfileHero({
   chooseCountryLabel,
   addClubLabel,
   energyLabel,
+  actionBelowName,
 }: ProfileHeroProps) {
   const compact = Dimensions.get('window').width < 380;
   const avatarSize = compact ? 84 : AVATAR_SIZE;
@@ -93,9 +96,10 @@ const ProfileHero = memo(function ProfileHero({
   const hasClub = !!(clubLogo || clubName?.trim());
   const fillPct = Math.max(0, Math.min(1, progressPct > 1 ? progressPct / 100 : progressPct));
   const countryFlagUri = getCountryFlagUri(countryLabel || '', countryFlag, 80);
+  const heroHeight = actionBelowName ? COVER_HEIGHT + 72 : COVER_HEIGHT;
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, { height: heroHeight }]}>
       <TouchableOpacity
         activeOpacity={0.96}
         onPress={onCoverPress}
@@ -295,9 +299,9 @@ const ProfileHero = memo(function ProfileHero({
         <TouchableOpacity
           style={styles.nameBlock}
           onPress={onMorePress}
-          disabled={!onMorePress}
-          activeOpacity={onMorePress ? 0.75 : 1}
-          accessibilityRole={onMorePress ? 'button' : undefined}
+          disabled={!onMorePress || !isOwnProfile}
+          activeOpacity={onMorePress && isOwnProfile ? 0.75 : 1}
+          accessibilityRole={onMorePress && isOwnProfile ? 'button' : undefined}
         >
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>
@@ -310,6 +314,8 @@ const ProfileHero = memo(function ProfileHero({
             @{username}
           </Text>
         </TouchableOpacity>
+
+        {actionBelowName ? <View style={styles.actionBelowName}>{actionBelowName}</View> : null}
       </View>
     </View>
   );
@@ -581,6 +587,11 @@ const styles = StyleSheet.create({
   nameBlock: {
     alignItems: 'center',
     marginTop: 14,
+  },
+  actionBelowName: {
+    marginTop: 14,
+    paddingHorizontal: 10,
+    width: '100%',
   },
   nameRow: {
     flexDirection: 'row',

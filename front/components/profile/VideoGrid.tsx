@@ -9,10 +9,10 @@ import { GlassWrapper, glassProps } from '../../constants/ui';
 import { isLiquidGlassSupported } from '../../utils/liquidGlassSafe';
 import { shouldShowDuration } from '../../utils/videoDuration';
 import { isValidThumbnail, VIDEO_THUMBNAIL_PLACEHOLDER } from '../../constants/VideoPlaceholder';
-const { width } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
-const SPACING = 2;
-const ITEM_SIZE = (width - (SPACING * (COLUMN_COUNT - 1))) / COLUMN_COUNT;
+const SPACING = 6;
+const GRID_PAD = 8;
 
 interface VideoItem {
     id: string;
@@ -34,9 +34,24 @@ interface VideoGridProps {
     isDeleteMode: boolean;
     onAddPress?: () => void;
     addLabel?: string;
+    /** Outer panel horizontal margin so tiles fit the content area. */
+    horizontalInset?: number;
 }
 
-function AddReelTile({ onPress, label }: { onPress: () => void; label: string }) {
+function computeItemSize(horizontalInset: number) {
+    const usable = SCREEN_WIDTH - horizontalInset * 2 - GRID_PAD * 2 - SPACING * (COLUMN_COUNT - 1);
+    return Math.floor(usable / COLUMN_COUNT);
+}
+
+function AddReelTile({
+    onPress,
+    label,
+    size,
+}: {
+    onPress: () => void;
+    label: string;
+    size: number;
+}) {
     const GlassChip = isLiquidGlassSupported ? GlassWrapper : BlurView;
     const chipProps = isLiquidGlassSupported
         ? { ...glassProps.chip, interactive: true }
@@ -45,7 +60,7 @@ function AddReelTile({ onPress, label }: { onPress: () => void; label: string })
     return (
         <TouchableOpacity
             activeOpacity={0.85}
-            style={styles.itemContainer}
+            style={[styles.itemContainer, { width: size, height: Math.round(size * 1.28) }]}
             onPress={onPress}
             accessibilityRole="button"
             accessibilityLabel={label}
@@ -77,17 +92,21 @@ const VideoGrid = memo(function VideoGrid({
     isDeleteMode,
     onAddPress,
     addLabel = 'Add',
+    horizontalInset = 0,
 }: VideoGridProps) {
+    const itemSize = computeItemSize(horizontalInset);
+    const itemHeight = Math.round(itemSize * 1.28);
+
     return (
         <View style={styles.grid}>
             {onAddPress && !isDeleteMode ? (
-                <AddReelTile onPress={onAddPress} label={addLabel} />
+                <AddReelTile onPress={onAddPress} label={addLabel} size={itemSize} />
             ) : null}
             {videos.map((item, index) => (
                 <TouchableOpacity
                     key={item.id}
                     activeOpacity={0.8}
-                    style={styles.itemContainer}
+                    style={[styles.itemContainer, { width: itemSize, height: itemHeight }]}
                     onPress={() => {
                         if (isDeleteMode) {
                             onDeleteVideo(item.id);
@@ -181,15 +200,15 @@ const styles = StyleSheet.create({
     grid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        paddingBottom: 100,
-        paddingHorizontal: 10,
+        paddingBottom: 24,
+        paddingHorizontal: GRID_PAD,
         paddingTop: 12,
         columnGap: SPACING,
+        rowGap: SPACING,
     },
     itemContainer: {
-        width: ITEM_SIZE,
-        height: ITEM_SIZE * 1.5,
-        marginBottom: SPACING,
+        borderRadius: 8,
+        overflow: 'hidden',
         backgroundColor: ProfileTheme.colors.glassBlack,
     },
     thumbnail: {

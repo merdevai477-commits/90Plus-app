@@ -2995,6 +2995,7 @@ export const ar = {
     follow: 'متابعة',
     followBack: 'رد المتابعة',
     following: 'متابَع',
+    unfollow: 'إلغاء المتابعة',
     videosTitle: 'الفيديوهات',
     noVideosYet: 'لا يوجد فيديوهات بعد',
     bioEmpty: 'لا توجد نبذة',
