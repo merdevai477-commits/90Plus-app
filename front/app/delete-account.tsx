@@ -1,17 +1,8 @@
 /**
- * Delete Account Screen
- * 
- * Account deletion with:
- * - Warning messages
- * - Reason selection
- * - Confirmation
- * - 30-day grace period
- * 
- * @author Kiro AI Assistant
- * @date 2026-03-30
+ * Delete Account Screen — profile-aligned purple glass UI
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -23,274 +14,266 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from '../src/i18n';
 import { logger } from '../services/logger';
 import { getApiEndpoint } from '../config/api.config';
 import { captureException } from '../services/sentry.service';
 import { cacheService } from '../services/cacheService';
 import { predictionsMapKey, predictionsTicketsKey } from '../services/predictionsCacheKeys';
+import { ProfileTheme } from '../constants/ProfileTheme';
+import {
+  APP_BG,
+  ACCENT,
+  GlassWrapper,
+  glassProps,
+  SURFACE_BG,
+} from '../constants/ui';
 
-const DELETION_REASONS = [
-  { id: 'privacy', label: 'Privacy concerns' },
-  { id: 'not_useful', label: 'App not useful' },
-  { id: 'too_many_notifications', label: 'Too many notifications' },
-  { id: 'found_alternative', label: 'Found alternative' },
-  { id: 'temporary_break', label: 'Taking a break' },
-  { id: 'other', label: 'Other' },
+type ReasonId =
+  | 'privacy'
+  | 'not_useful'
+  | 'too_many_notifications'
+  | 'found_alternative'
+  | 'temporary_break'
+  | 'other';
+
+const DELETE_ITEMS: Array<{ icon: keyof typeof Ionicons.glyphMap; key: 'profile' | 'videos' | 'achievements' | 'social' | 'interactions' }> = [
+  { icon: 'person-outline', key: 'profile' },
+  { icon: 'videocam-outline', key: 'videos' },
+  { icon: 'trophy-outline', key: 'achievements' },
+  { icon: 'people-outline', key: 'social' },
+  { icon: 'chatbubbles-outline', key: 'interactions' },
 ];
 
 export default function DeleteAccountScreen() {
   const { getToken, signOut, userId } = useAuth();
-  const { translate: t, language, isRTL } = useTranslation();
-  
-  const [selectedReason, setSelectedReason] = useState<string | null>(null);
+  const { t, isRTL } = useTranslation();
+  const d = t.deleteAccount;
+
+  const [selectedReason, setSelectedReason] = useState<ReasonId | null>(null);
   const [otherReason, setOtherReason] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const reasons = useMemo(
+    () =>
+      [
+        { id: 'privacy' as const, label: d.reasons.privacy },
+        { id: 'not_useful' as const, label: d.reasons.notUseful },
+        { id: 'too_many_notifications' as const, label: d.reasons.tooManyNotifications },
+        { id: 'found_alternative' as const, label: d.reasons.foundAlternative },
+        { id: 'temporary_break' as const, label: d.reasons.temporaryBreak },
+        { id: 'other' as const, label: d.reasons.other },
+      ] as const,
+    [d.reasons],
+  );
+
   const handleDeleteAccount = async () => {
     if (!agreed) {
-      Alert.alert(
-        t('common.warning') || 'Warning',
-        t('deleteAccount.mustAgree') || 'You must agree to the terms before deleting your account'
-      );
+      Alert.alert(t.common.warning || 'Warning', d.mustAgree);
       return;
     }
 
-    if (!selectedReason) {
-      Alert.alert(
-        t('common.warning') || 'Warning',
-        t('deleteAccount.selectReason') || 'Please select a reason for deletion'
-      );
-      return;
-    }
+    Alert.alert(d.finalConfirmTitle, d.finalConfirmMessage, [
+      { text: t.common.cancel, style: 'cancel' },
+      {
+        text: d.confirmDelete,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setLoading(true);
+            const token = await getToken();
+            if (!token) throw new Error('Authentication token not found');
 
-    Alert.alert(
-      t('deleteAccount.finalConfirmTitle') || 'Final Confirmation',
-      t('deleteAccount.finalConfirmMessage') || 'Are you absolutely sure? This action cannot be undone after 30 days.',
-      [
-        {
-          text: t('common.cancel') || 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: t('deleteAccount.confirmDelete') || 'Yes, Delete My Account',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const token = await getToken();
-              
-              if (!token) throw new Error('Authentication token not found');
+            const reason =
+              selectedReason === 'other'
+                ? otherReason.trim() || 'other'
+                : selectedReason || 'unspecified';
 
-              const reason = selectedReason === 'other' ? otherReason : selectedReason;
+            const response = await fetch(getApiEndpoint('gdpr/delete-account'), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ reason }),
+            });
 
-              const response = await fetch(getApiEndpoint('gdpr/delete-account'), {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({ reason }),
-              });
-
-              const data = await response.json();
-
-              if (!response.ok) {
-                throw new Error(data.message || 'Failed to delete account');
-              }
-
-              logger.info('[DeleteAccount] Account deletion requested');
-
-              Alert.alert(
-                t('common.success') || 'Success',
-                t('deleteAccount.deletionScheduled') || 'Your account will be deleted in 30 days. You can cancel anytime before then.',
-                [
-                  {
-                    text: t('common.done') || 'Done',
-                    onPress: async () => {
-                      // Purge this user's prediction caches before sign-out so
-                      // a later login on the same device starts clean.
-                      if (userId) {
-                        await Promise.all([
-                          cacheService.invalidate(predictionsMapKey(userId)),
-                          cacheService.invalidate(predictionsTicketsKey(userId)),
-                        ]).catch(() => {});
-                      }
-                      signOut();
-                      router.replace('/');
-                    },
-                  },
-                ]
-              );
-
-            } catch (error: any) {
-              logger.error('[DeleteAccount] Deletion error:', error);
-              captureException(error, { tags: { screen: 'DeleteAccount' } });
-              
-              Alert.alert(
-                t('common.error') || 'Error',
-                error.message || t('deleteAccount.deletionError') || 'Failed to delete account'
-              );
-            } finally {
-              setLoading(false);
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.message || 'Failed to delete account');
             }
-          },
+
+            logger.info('[DeleteAccount] Account deletion requested');
+
+            Alert.alert(t.common.success || 'Success', d.deletionScheduled, [
+              {
+                text: t.common.done || 'Done',
+                onPress: async () => {
+                  if (userId) {
+                    await Promise.all([
+                      cacheService.invalidate(predictionsMapKey(userId)),
+                      cacheService.invalidate(predictionsTicketsKey(userId)),
+                    ]).catch(() => {});
+                  }
+                  signOut();
+                  router.replace('/');
+                },
+              },
+            ]);
+          } catch (error: any) {
+            logger.error('[DeleteAccount] Deletion error:', error);
+            captureException(error, { tags: { screen: 'DeleteAccount' } });
+            Alert.alert(t.common.error || 'Error', error.message || d.deletionError);
+          } finally {
+            setLoading(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={styles.header}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <LinearGradient
+        colors={['#12081F', APP_BG, '#05010D']}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.header, isRTL && styles.rowRtl]}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
+            accessibilityRole="button"
           >
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+            <Ionicons
+              name={isRTL ? 'arrow-forward' : 'arrow-back'}
+              size={22}
+              color="#fff"
+            />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>
-            {t('deleteAccount.title') || 'Delete Account'}
-          </Text>
+          <Text style={[styles.headerTitle, isRTL && styles.textRtl]}>{d.title}</Text>
+          <View style={styles.headerSpacer} />
         </View>
 
-        {/* Warning */}
         <View style={styles.warningBox}>
-          <Ionicons name="warning" size={48} color="#ef4444" />
-          <Text style={styles.warningTitle}>
-            {t('deleteAccount.warningTitle') || 'Important Warning'}
-          </Text>
-          <Text style={styles.warningText}>
-            {t('deleteAccount.warningMessage') || 'Account deletion is permanent and cannot be undone. All your data will be deleted including:'}
-          </Text>
+          <GlassWrapper {...(glassProps.card as any)} style={StyleSheet.absoluteFill} />
+          <View style={styles.warningIconWrap}>
+            <Ionicons name="warning" size={28} color="#FF6B6B" />
+          </View>
+          <Text style={[styles.warningTitle, isRTL && styles.textRtl]}>{d.warningTitle}</Text>
+          <Text style={[styles.warningText, isRTL && styles.textRtl]}>{d.warningMessage}</Text>
         </View>
 
-        {/* What Will Be Deleted */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            {t('deleteAccount.whatWillBeDeleted') || 'What will be deleted:'}
+          <Text style={[styles.sectionTitle, isRTL && styles.textRtl]}>
+            {d.whatWillBeDeleted}
           </Text>
-          
-          {[
-            { icon: 'person', text: t('deleteAccount.profile') || 'Profile and settings' },
-            { icon: 'videocam', text: t('deleteAccount.videos') || 'All videos and content' },
-            { icon: 'trophy', text: t('deleteAccount.achievements') || 'Predictions, points, and achievements' },
-            { icon: 'people', text: t('deleteAccount.social') || 'Followers and following' },
-            { icon: 'chatbubbles', text: t('deleteAccount.interactions') || 'Comments and interactions' },
-          ].map((item, index) => (
-            <View key={index} style={styles.deleteItem}>
-              <Ionicons name={item.icon as any} size={20} color="#ef4444" />
-              <Text style={styles.deleteItemText}>{item.text}</Text>
+          {DELETE_ITEMS.map((item) => (
+            <View key={item.key} style={[styles.deleteItem, isRTL && styles.rowRtl]}>
+              <View style={styles.deleteIconWrap}>
+                <Ionicons name={item.icon} size={18} color="#FF6B6B" />
+              </View>
+              <Text style={[styles.deleteItemText, isRTL && styles.textRtl]}>
+                {d[item.key]}
+              </Text>
             </View>
           ))}
         </View>
 
-        {/* Grace Period */}
-        <View style={styles.infoBox}>
-          <Ionicons name="time" size={24} color="#3b82f6" />
+        <View style={[styles.infoBox, isRTL && styles.rowRtl]}>
+          <GlassWrapper {...(glassProps.card as any)} style={StyleSheet.absoluteFill} />
+          <View style={styles.infoIconWrap}>
+            <Ionicons name="time-outline" size={20} color={ProfileTheme.colors.avatarRing} />
+          </View>
           <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>
-              {t('deleteAccount.gracePeriodTitle') || '30-Day Grace Period'}
-            </Text>
-            <Text style={styles.infoText}>
-              {t('deleteAccount.gracePeriodMessage') || 'You have 30 days to cancel the deletion. After that, your account will be permanently deleted.'}
-            </Text>
+            <Text style={[styles.infoTitle, isRTL && styles.textRtl]}>{d.gracePeriodTitle}</Text>
+            <Text style={[styles.infoText, isRTL && styles.textRtl]}>{d.gracePeriodMessage}</Text>
           </View>
         </View>
 
-        {/* Reason Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            {t('deleteAccount.reasonTitle') || 'Why are you leaving? (Optional)'}
-          </Text>
-          
-          {DELETION_REASONS.map((reason) => (
-            <TouchableOpacity
-              key={reason.id}
-              style={[
-                styles.reasonButton,
-                selectedReason === reason.id && styles.reasonButtonSelected,
-              ]}
-              onPress={() => setSelectedReason(reason.id)}
-            >
-              <View style={[
-                styles.radioButton,
-                selectedReason === reason.id && styles.radioButtonSelected,
-              ]}>
-                {selectedReason === reason.id && (
-                  <View style={styles.radioButtonInner} />
-                )}
-              </View>
-              <Text style={styles.reasonText}>{reason.label}</Text>
-            </TouchableOpacity>
-          ))}
+          <Text style={[styles.sectionTitle, isRTL && styles.textRtl]}>{d.reasonTitle}</Text>
+          {reasons.map((reason) => {
+            const selected = selectedReason === reason.id;
+            return (
+              <TouchableOpacity
+                key={reason.id}
+                style={[
+                  styles.reasonButton,
+                  isRTL && styles.rowRtl,
+                  selected && styles.reasonButtonSelected,
+                ]}
+                onPress={() => setSelectedReason(reason.id)}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.radioButton, selected && styles.radioButtonSelected]}>
+                  {selected ? <View style={styles.radioButtonInner} /> : null}
+                </View>
+                <Text style={[styles.reasonText, isRTL && styles.textRtl]}>{reason.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
 
-          {selectedReason === 'other' && (
+          {selectedReason === 'other' ? (
             <TextInput
-              style={styles.otherReasonInput}
-              placeholder={t('deleteAccount.otherReasonPlaceholder') || 'Please tell us more...'}
-              placeholderTextColor="#6b7280"
+              style={[styles.otherReasonInput, isRTL && styles.textRtl]}
+              placeholder={d.otherReasonPlaceholder}
+              placeholderTextColor="rgba(255,255,255,0.35)"
               value={otherReason}
               onChangeText={setOtherReason}
               multiline
               numberOfLines={3}
             />
-          )}
+          ) : null}
         </View>
 
-        {/* Agreement */}
         <TouchableOpacity
-          style={styles.agreementContainer}
+          style={[styles.agreementContainer, isRTL && styles.rowRtl]}
           onPress={() => setAgreed(!agreed)}
+          activeOpacity={0.85}
         >
-          <View style={[
-            styles.checkbox,
-            agreed && styles.checkboxChecked,
-          ]}>
-            {agreed && (
-              <Ionicons name="checkmark" size={16} color="#000" />
-            )}
+          <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
+            {agreed ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
           </View>
-          <Text style={styles.agreementText}>
-            {t('deleteAccount.agreement') || 'I understand that this action is permanent and I cannot recover my data after 30 days'}
-          </Text>
+          <Text style={[styles.agreementText, isRTL && styles.textRtl]}>{d.agreement}</Text>
         </TouchableOpacity>
 
-        {/* Delete Button */}
         <TouchableOpacity
-          style={[
-            styles.deleteButton,
-            (!agreed || loading) && styles.deleteButtonDisabled,
-          ]}
+          style={[styles.deleteButtonWrap, (!agreed || loading) && styles.deleteButtonDisabled]}
           onPress={handleDeleteAccount}
           disabled={!agreed || loading}
+          activeOpacity={0.88}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="trash" size={24} color="#fff" />
-              <Text style={styles.deleteButtonText}>
-                {t('deleteAccount.deleteButton') || 'Delete My Account'}
-              </Text>
-            </>
-          )}
+          <LinearGradient
+            colors={agreed && !loading ? ['#EF4444', '#B91C1C'] : ['#2A2438', '#1A1524']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.deleteButton}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="trash-outline" size={20} color="#fff" />
+                <Text style={styles.deleteButtonText}>{d.deleteButton}</Text>
+              </>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
 
-        {/* Cancel Button */}
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.cancelButtonText}>
-            {t('common.cancel') || 'Cancel'}
-          </Text>
+        <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()}>
+          <Text style={styles.cancelButtonText}>{t.common.cancel}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -300,185 +283,259 @@ export default function DeleteAccountScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: APP_BG,
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+    paddingTop: 8,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
+    gap: 12,
+  },
+  rowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  textRtl: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   backButton: {
-    marginRight: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(139,92,246,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.3)',
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '800',
     color: '#fff',
+  },
+  headerSpacer: {
+    width: 40,
   },
   warningBox: {
-    backgroundColor: '#7f1d1d',
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 18,
+    padding: 18,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 22,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.28)',
+  },
+  warningIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239,68,68,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.35)',
+    marginBottom: 12,
   },
   warningTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fca5a5',
-    marginTop: 12,
-    marginBottom: 8,
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#FFB4B4',
+    marginBottom: 6,
   },
   warningText: {
-    fontSize: 14,
-    color: '#fca5a5',
+    fontSize: 13,
+    color: 'rgba(255,180,180,0.9)',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 19,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 22,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 12,
+    fontSize: 14,
+    fontWeight: '700',
+    color: ProfileTheme.colors.avatarRing,
+    marginBottom: 10,
+    letterSpacing: 0.3,
   },
   deleteItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1f2937',
-    borderRadius: 8,
-    padding: 12,
+    gap: 12,
+    backgroundColor: 'rgba(139,92,246,0.06)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
+  },
+  deleteIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239,68,68,0.12)',
   },
   deleteItemText: {
+    flex: 1,
     fontSize: 14,
-    color: '#d1d5db',
-    marginLeft: 12,
+    color: 'rgba(255,255,255,0.88)',
+    fontWeight: '500',
   },
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: '#1e3a8a',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
+    alignItems: 'flex-start',
+    gap: 12,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 22,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(139,92,246,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.28)',
+  },
+  infoIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(139,92,246,0.18)',
   },
   infoContent: {
-    marginLeft: 12,
     flex: 1,
   },
   infoTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#93c5fd',
+    fontSize: 15,
+    fontWeight: '800',
+    color: ProfileTheme.colors.avatarRing,
     marginBottom: 4,
   },
   infoText: {
-    fontSize: 14,
-    color: '#93c5fd',
-    lineHeight: 20,
+    fontSize: 13,
+    color: 'rgba(216,174,255,0.85)',
+    lineHeight: 19,
   },
   reasonButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1f2937',
-    borderRadius: 8,
-    padding: 12,
+    gap: 12,
+    backgroundColor: 'rgba(44,39,55,0.35)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
   },
   reasonButtonSelected: {
-    backgroundColor: '#374151',
-    borderWidth: 2,
-    borderColor: '#22c55e',
+    backgroundColor: 'rgba(139,92,246,0.14)',
+    borderColor: 'rgba(168,85,247,0.55)',
   },
   radioButton: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#6b7280',
+    borderColor: 'rgba(255,255,255,0.28)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   radioButtonSelected: {
-    borderColor: '#22c55e',
+    borderColor: ACCENT,
   },
   radioButtonInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#22c55e',
+    backgroundColor: ACCENT,
   },
   reasonText: {
+    flex: 1,
     fontSize: 14,
-    color: '#d1d5db',
+    color: 'rgba(255,255,255,0.88)',
   },
   otherReasonInput: {
-    backgroundColor: '#1f2937',
-    borderRadius: 8,
+    backgroundColor: SURFACE_BG,
+    borderRadius: 12,
     padding: 12,
     color: '#fff',
     fontSize: 14,
-    marginTop: 8,
-    minHeight: 80,
+    marginTop: 4,
+    minHeight: 84,
     textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.28)',
   },
   agreementContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 24,
+    gap: 12,
+    marginBottom: 20,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(139,92,246,0.06)',
+    borderWidth: 1,
+    borderColor: ProfileTheme.colors.profileCardBorder,
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#6b7280',
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(168,85,247,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-    marginTop: 2,
+    marginTop: 1,
+    backgroundColor: 'rgba(8,2,21,0.4)',
   },
   checkboxChecked: {
-    backgroundColor: '#22c55e',
-    borderColor: '#22c55e',
+    backgroundColor: ACCENT,
+    borderColor: ACCENT,
   },
   agreementText: {
-    fontSize: 14,
-    color: '#d1d5db',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.78)',
     flex: 1,
-    lineHeight: 20,
+    lineHeight: 19,
+  },
+  deleteButtonWrap: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 10,
   },
   deleteButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ef4444',
-    borderRadius: 12,
-    paddingVertical: 16,
-    marginBottom: 12,
+    gap: 8,
+    height: 50,
+    borderRadius: 14,
   },
   deleteButtonDisabled: {
-    backgroundColor: '#374151',
-    opacity: 0.5,
+    opacity: 0.55,
   },
   deleteButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '800',
     color: '#fff',
-    marginLeft: 8,
   },
   cancelButton: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14,
   },
   cancelButtonText: {
-    fontSize: 16,
-    color: '#9ca3af',
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.45)',
+    fontWeight: '500',
   },
 });

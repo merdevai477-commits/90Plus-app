@@ -2522,6 +2522,14 @@ export const ar = {
     deletionScheduled: 'سيتم حذف حسابك خلال 30 يوماً. يمكنك الإلغاء في أي وقت قبل ذلك.',
     deletionError: 'فشل حذف الحساب',
     deleteButton: 'حذف حسابي',
+    reasons: {
+      privacy: 'مخاوف الخصوصية',
+      notUseful: 'التطبيق غير مفيد',
+      tooManyNotifications: 'إشعارات كثيرة',
+      foundAlternative: 'وجدت بديلاً',
+      temporaryBreak: 'أخذ استراحة',
+      other: 'أخرى',
+    },
   },
 
   reels: {

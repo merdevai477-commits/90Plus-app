@@ -2550,6 +2550,14 @@ export const en = {
     deletionScheduled: 'Your account will be deleted in 30 days. You can cancel anytime before then.',
     deletionError: 'Failed to delete account',
     deleteButton: 'Delete My Account',
+    reasons: {
+      privacy: 'Privacy concerns',
+      notUseful: 'App not useful',
+      tooManyNotifications: 'Too many notifications',
+      foundAlternative: 'Found alternative',
+      temporaryBreak: 'Taking a break',
+      other: 'Other',
+    },
   },
 
   reels: {
