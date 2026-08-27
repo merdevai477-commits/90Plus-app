@@ -2058,6 +2058,73 @@ function OwnProfileScreen() {
         username={userData?.username || 'user'}
         avatarUri={localImage || userData?.avatar || clerkUser?.imageUrl}
         userId={clerkUser?.id}
+        usernameCooldown={cooldowns?.username}
+        onSaveIdentity={async ({ displayName: nextName, username: nextUsername }) => {
+          const currentName = userData?.displayName || userData?.username || 'User';
+          const currentUsername = userData?.username || 'user';
+          const changedName = nextName !== currentName;
+          const changedUsername = nextUsername !== currentUsername;
+          if (!changedName && !changedUsername) {
+            toastManager.showInfo(t.profile.noChanges, t.profile.noProfileChanges);
+            return;
+          }
+
+          profileSaveInFlightRef.current = true;
+          toastManager.showInfo(t.profile.updating, t.profile.savingProfileChanges);
+          try {
+            if (changedUsername) {
+              const result = await updateUsername(nextUsername);
+              if (result.success) {
+                updateCachedUserData({ username: nextUsername });
+                if (globalState.userProfile) {
+                  globalState.setUserProfile({
+                    ...globalState.userProfile,
+                    username: nextUsername,
+                  });
+                }
+                toastManager.showSuccess(
+                  t.profile.updated,
+                  t.profile.usernameUpdatedTo.replace('{username}', `@${nextUsername}`),
+                );
+              } else {
+                updateCachedUserData({ username: currentUsername });
+                if (globalState.userProfile) {
+                  globalState.setUserProfile({
+                    ...globalState.userProfile,
+                    username: currentUsername,
+                  });
+                }
+              }
+            }
+
+            if (changedName) {
+              const result = await updateDisplayName(nextName);
+              if (result.success) {
+                updateCachedUserData({ displayName: nextName });
+                if (globalState.userProfile) {
+                  globalState.setUserProfile({
+                    ...globalState.userProfile,
+                    displayName: nextName,
+                  });
+                }
+                toastManager.showSuccess(
+                  t.profile.updated,
+                  t.profile.nameUpdatedTo.replace('{name}', nextName),
+                );
+              } else {
+                updateCachedUserData({ displayName: currentName });
+                if (globalState.userProfile) {
+                  globalState.setUserProfile({
+                    ...globalState.userProfile,
+                    displayName: currentName,
+                  });
+                }
+              }
+            }
+          } finally {
+            profileSaveInFlightRef.current = false;
+          }
+        }}
       />
 
       {/* UX Fix 1+2: Image preview modal + Android action sheet */}
