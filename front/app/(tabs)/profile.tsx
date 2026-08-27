@@ -668,6 +668,10 @@ function OwnProfileScreen() {
     setAddLinkOpen(true);
   }, []);
 
+  useEffect(() => {
+    setShowMoreMenu(false);
+  }, [clerkUser?.id]);
+
   // Optimization: Fetch token for badges (memoized)
   useEffect(() => {
     let isMounted = true;
@@ -2045,10 +2049,15 @@ function OwnProfileScreen() {
         onSubmit={handleSaveAddLink}
       />
       <ProfileMoreMenuModal
+        key={clerkUser?.id ?? 'guest'}
         visible={showMoreMenu}
         onClose={() => setShowMoreMenu(false)}
         onShareQR={handleQRPress}
         onDeleteAccount={handleDeleteAccountPress}
+        displayName={userData?.displayName || userData?.username || 'User'}
+        username={userData?.username || 'user'}
+        avatarUri={localImage || userData?.avatar || clerkUser?.imageUrl}
+        userId={clerkUser?.id}
       />
 
       {/* UX Fix 1+2: Image preview modal + Android action sheet */}
