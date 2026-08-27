@@ -11,15 +11,21 @@ import {
     KeyboardAvoidingView,
     Platform,
     Keyboard,
+    Pressable,
 } from 'react-native';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ProfileTheme } from '../../constants/ProfileTheme';
 import { useTranslation } from '../../src/i18n';
-import { GlassWrapper, glassProps, ACCENT, ACCENT_DARK, SURFACE_BG, AppGradients } from '../../constants/ui';
+import { ProfileTheme } from '../../constants/ProfileTheme';
+import {
+    GlassWrapper,
+    glassProps,
+    ACCENT,
+    ACCENT_DARK,
+    SURFACE_BG,
+    AppGradients,
+} from '../../constants/ui';
 import { detectSocialPlatformFromUrl, SocialPlatformId } from '../../src/utils/socialPlatformDetect';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface SocialLink {
     platform: SocialPlatformId;
@@ -27,12 +33,6 @@ interface SocialLink {
 }
 
 type SocialLinkRow = SocialLink & { rowId: string };
-
-interface CooldownInfo {
-    canChange: boolean;
-    daysRemaining: number;
-    hoursRemaining: number;
-}
 
 interface UserData {
     name: string;
@@ -47,60 +47,38 @@ interface ProfileEditModalProps {
     onClose: () => void;
     initialData: UserData;
     onSave: (data: UserData) => void;
-    usernameCooldown?: CooldownInfo;
+    /** Kept for call-site compatibility; identity edits moved to More menu. */
+    usernameCooldown?: unknown;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const SOCIAL_PLATFORMS = [
-    { id: 'instagram',  icon: 'instagram',     iconLibrary: 'FontAwesome' as const, color: '#E1306C' },
-    { id: 'twitter',    icon: 'twitter',        iconLibrary: 'FontAwesome' as const, color: '#1DA1F2' },
-    { id: 'facebook',   icon: 'facebook',       iconLibrary: 'FontAwesome' as const, color: '#1877F2' },
-    { id: 'youtube',    icon: 'youtube-play',   iconLibrary: 'FontAwesome' as const, color: '#FF0000' },
-    { id: 'tiktok',     icon: 'musical-notes',  iconLibrary: 'Ionicons'    as const, color: '#FFFFFF' },
-    { id: 'linkedin',   icon: 'linkedin',       iconLibrary: 'FontAwesome' as const, color: '#0A66C2' },
-    { id: 'snapchat',   icon: 'snapchat',       iconLibrary: 'FontAwesome' as const, color: '#FFFC00' },
-    { id: 'website',    icon: 'globe',          iconLibrary: 'Ionicons'    as const, color: '#22c55e' },
+    { id: 'instagram', icon: 'instagram', iconLibrary: 'FontAwesome' as const, color: '#E1306C' },
+    { id: 'twitter', icon: 'twitter', iconLibrary: 'FontAwesome' as const, color: '#1DA1F2' },
+    { id: 'facebook', icon: 'facebook', iconLibrary: 'FontAwesome' as const, color: '#1877F2' },
+    { id: 'youtube', icon: 'youtube-play', iconLibrary: 'FontAwesome' as const, color: '#FF0000' },
+    { id: 'tiktok', icon: 'musical-notes', iconLibrary: 'Ionicons' as const, color: '#FFFFFF' },
+    { id: 'linkedin', icon: 'linkedin', iconLibrary: 'FontAwesome' as const, color: '#0A66C2' },
+    { id: 'snapchat', icon: 'snapchat', iconLibrary: 'FontAwesome' as const, color: '#FFFC00' },
+    { id: 'website', icon: 'globe', iconLibrary: 'Ionicons' as const, color: '#22c55e' },
 ];
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 const ProfileEditModal = memo(function ProfileEditModal({
     visible,
     onClose,
     initialData,
     onSave,
-    usernameCooldown,
 }: ProfileEditModalProps) {
-    const { t } = useTranslation();
+    const { t, isRTL } = useTranslation();
 
-    const [name,     setName]     = useState(initialData.name);
-    const [bio,      setBio]      = useState(initialData.bio);
-    const [username, setUsername] = useState(initialData.username);
-    const [socials,  setSocials]  = useState<SocialLinkRow[]>(() =>
-        (initialData.socials || []).map((s, i) => ({ ...s, rowId: `social-${i}` }))
+    const [bio, setBio] = useState(initialData.bio);
+    const [socials, setSocials] = useState<SocialLinkRow[]>(() =>
+        (initialData.socials || []).map((s, i) => ({ ...s, rowId: `social-${i}` })),
     );
+    const [focusedField, setFocusedField] = useState<string | null>(null);
 
     const wasVisibleRef = useRef(false);
     const socialRowIdRef = useRef(0);
-
-    const [nameError,     setNameError]     = useState('');
-    const [usernameError, setUsernameError] = useState('');
-    const [focusedField,  setFocusedField]  = useState<string | null>(null);
-
-    const nameInputRef     = useRef<TextInput>(null);
-    const usernameInputRef = useRef<TextInput>(null);
-    const bioInputRef      = useRef<TextInput>(null);
-
-    // Username cooldown
-    const canEditUsername = usernameCooldown
-        ? usernameCooldown.canChange
-        : (initialData.lastUsernameChange
-            ? Math.floor((Date.now() - new Date(initialData.lastUsernameChange).getTime()) / 86_400_000) >= 15
-            : true);
-
-    const daysRemaining  = usernameCooldown?.daysRemaining  ?? 0;
-    const hoursRemaining = usernameCooldown?.hoursRemaining ?? 0;
+    const bioInputRef = useRef<TextInput>(null);
 
     const toSocialRows = useCallback((links: SocialLink[] = []): SocialLinkRow[] => {
         socialRowIdRef.current = links.length;
@@ -110,101 +88,75 @@ const ProfileEditModal = memo(function ProfileEditModal({
     useEffect(() => {
         const justOpened = visible && !wasVisibleRef.current;
         if (justOpened) {
-            setName(initialData.name);
             setBio(initialData.bio);
-            setUsername(initialData.username);
             setSocials(toSocialRows(initialData.socials || []));
-            setNameError('');
-            setUsernameError('');
             setFocusedField(null);
         }
         wasVisibleRef.current = visible;
     }, [visible, initialData, toSocialRows]);
 
-    // Validation
-    const validateUsername = useCallback((text: string): string => {
-        if (!text.trim())              return t.profile.usernameRequired;
-        if (text.length < 3)           return t.profile.usernameMinLength;
-        if (text.length > 20)          return t.profile.usernameMaxLength;
-        if (!/^[a-zA-Z0-9_]+$/.test(text)) return t.profile.usernamePatternError;
-        return '';
-    }, [t.profile]);
-
-    const validateName = useCallback((text: string): string => {
-        if (!text.trim())    return t.profile.nameRequired;
-        if (text.length < 2) return t.profile.nameTooShort;
-        if (text.length > 30) return t.profile.nameMaxLength;
-        return '';
-    }, [t.profile]);
-
     const handleSave = useCallback(() => {
         Keyboard.dismiss();
-        const nameErr = validateName(name);
-        const userErr = validateUsername(username);
-        if (nameErr) { setNameError(nameErr); Alert.alert(t.common.error, nameErr); return; }
-        if (userErr) { setUsernameError(userErr); Alert.alert(t.common.error, userErr); return; }
         onSave({
-            name: name.trim(),
+            name: initialData.name,
+            username: initialData.username,
             bio: bio.trim(),
-            username: username.trim().toLowerCase(),
             socials: socials
-                .filter(s => s.url.trim() !== '')
+                .filter((s) => s.url.trim() !== '')
                 .map(({ platform, url }) => ({ platform, url: url.trim() })),
-            lastUsernameChange: username !== initialData.username ? new Date() : initialData.lastUsernameChange,
+            lastUsernameChange: initialData.lastUsernameChange,
         });
         onClose();
-    }, [name, bio, username, socials, initialData, validateName, validateUsername, onSave, onClose, t.common.error]);
+    }, [bio, socials, initialData, onSave, onClose]);
 
     const handleAddSocial = useCallback(() => {
-        setSocials(p => {
+        setSocials((p) => {
             if (p.length >= 5) {
                 Alert.alert(t.common.error, t.profile.maxSocialLinks);
                 return p;
             }
             socialRowIdRef.current += 1;
-            return [...p, { rowId: `social-new-${socialRowIdRef.current}`, platform: 'instagram', url: '' }];
+            return [
+                ...p,
+                {
+                    rowId: `social-new-${socialRowIdRef.current}`,
+                    platform: 'instagram',
+                    url: '',
+                },
+            ];
         });
     }, [t.common.error, t.profile.maxSocialLinks]);
 
-    const handleRemoveSocial = useCallback((rowId: string) =>
-        setSocials(p => p.filter(s => s.rowId !== rowId)), []);
+    const handleRemoveSocial = useCallback(
+        (rowId: string) => setSocials((p) => p.filter((s) => s.rowId !== rowId)),
+        [],
+    );
 
-    const updateSocial = useCallback((rowId: string, field: keyof SocialLink, val: string) =>
-        setSocials(p => p.map(s => (s.rowId === rowId ? { ...s, [field]: val } : s))), []);
-
-    const handleSocialUrlChange = useCallback((rowId: string, url: string) => {
-        setSocials(p => p.map(s => {
-            if (s.rowId !== rowId) return s;
-            const detected = detectSocialPlatformFromUrl(url);
-            return {
-                ...s,
-                url,
-                platform: detected ?? s.platform,
-            };
-        }));
+    const updateSocial = useCallback((rowId: string, field: keyof SocialLink, val: string) => {
+        setSocials((p) => p.map((s) => (s.rowId === rowId ? { ...s, [field]: val } : s)));
     }, []);
 
-    const handleUsernameChange = useCallback((text: string) => {
-        setUsername(text);
-        setUsernameError(validateUsername(text));
-    }, [validateUsername]);
+    const handleSocialUrlChange = useCallback((rowId: string, url: string) => {
+        setSocials((p) =>
+            p.map((s) => {
+                if (s.rowId !== rowId) return s;
+                const detected = detectSocialPlatformFromUrl(url);
+                return {
+                    ...s,
+                    url,
+                    platform: detected ?? s.platform,
+                };
+            }),
+        );
+    }, []);
 
-    const handleNameChange = useCallback((text: string) => {
-        setName(text);
-        setNameError(validateName(text));
-    }, [validateName]);
-
-    // Input border color based on focus / error
-    const inputBorder = (field: string, hasError: boolean) => {
-        if (hasError)            return '#ef4444';
-        if (focusedField === field) return ACCENT;
-        return 'rgba(168,85,247,0.2)';
-    };
+    const bioBorder =
+        focusedField === 'bio' ? ACCENT : 'rgba(168,85,247,0.28)';
 
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-            <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={Keyboard.dismiss}>
-                {/* Backdrop blur */}
+            <View style={s.overlay}>
+                <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
                 <GlassWrapper {...(glassProps.modal as any)} style={StyleSheet.absoluteFill} />
 
                 <KeyboardAvoidingView
@@ -213,7 +165,7 @@ const ProfileEditModal = memo(function ProfileEditModal({
                     keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
                 >
                     <View style={s.sheet}>
-                        {/* Purple top accent line */}
+                        <GlassWrapper {...(glassProps.modal as any)} style={StyleSheet.absoluteFill} />
                         <LinearGradient
                             colors={[ACCENT, ACCENT_DARK, 'transparent']}
                             start={{ x: 0, y: 0 }}
@@ -221,11 +173,12 @@ const ProfileEditModal = memo(function ProfileEditModal({
                             style={s.topAccent}
                         />
 
-                        {/* Header */}
-                        <View style={s.header}>
-                            <Text style={s.title}>{t.profile.editProfileTitle} ✏️</Text>
+                        <View style={[s.header, isRTL && s.rowRtl]}>
+                            <Text style={[s.title, isRTL && s.textRtl]}>
+                                {t.profile.editProfileTitle}
+                            </Text>
                             <TouchableOpacity onPress={onClose} style={s.closeBtn}>
-                                <Ionicons name="close" size={20} color="rgba(255,255,255,0.8)" />
+                                <Ionicons name="close" size={18} color="rgba(255,255,255,0.85)" />
                             </TouchableOpacity>
                         </View>
 
@@ -234,87 +187,17 @@ const ProfileEditModal = memo(function ProfileEditModal({
                             contentContainerStyle={s.scroll}
                             keyboardShouldPersistTaps="handled"
                         >
-                            {/* ── Name ─────────────────────────────────────── */}
                             <View style={s.field}>
-                                <Text style={s.label}>{t.profile.nameLabel}</Text>
-                                <View style={[s.inputWrap, { borderColor: inputBorder('name', !!nameError) }]}>
-                                    <GlassWrapper {...(glassProps.card as any)} style={StyleSheet.absoluteFill} />
-                                    <TextInput
-                                        ref={nameInputRef}
-                                        style={s.input}
-                                        value={name}
-                                        onChangeText={handleNameChange}
-                                        placeholder={t.profile.namePlaceholder}
-                                        placeholderTextColor="rgba(255,255,255,0.25)"
-                                        returnKeyType="next"
-                                        onSubmitEditing={() => usernameInputRef.current?.focus()}
-                                        blurOnSubmit={false}
-                                        onFocus={() => setFocusedField('name')}
-                                        onBlur={() => setFocusedField(null)}
-                                    />
-                                </View>
-                                {nameError ? <Text style={s.errorTxt}>⚠ {nameError}</Text> : null}
-                            </View>
-
-                            {/* ── Username ──────────────────────────────────── */}
-                            <View style={s.field}>
-                                <View style={s.labelRow}>
-                                    <Text style={s.label}>{t.profile.usernameLabel}</Text>
-                                    {!canEditUsername && (
-                                        <View style={s.cooldownBadge}>
-                                            <Ionicons name="time-outline" size={11} color="#FFA500" />
-                                            <Text style={s.cooldownTxt}>
-                                                {daysRemaining > 0
-                                                    ? `${daysRemaining}d ${hoursRemaining > 0 ? `${hoursRemaining}h` : ''}`
-                                                    : `${hoursRemaining}h`}
-                                            </Text>
-                                        </View>
-                                    )}
-                                </View>
-                                <View style={[
-                                    s.inputWrap,
-                                    { borderColor: inputBorder('username', !!usernameError) },
-                                    !canEditUsername && s.disabledWrap,
-                                ]}>
-                                    <GlassWrapper {...(glassProps.card as any)} style={StyleSheet.absoluteFill} />
-                                    <TextInput
-                                        ref={usernameInputRef}
-                                        style={[s.input, !canEditUsername && s.disabledInput]}
-                                        value={username}
-                                        onChangeText={handleUsernameChange}
-                                        placeholder="username"
-                                        placeholderTextColor="rgba(255,255,255,0.25)"
-                                        editable={canEditUsername}
-                                        autoCapitalize="none"
-                                        autoCorrect={false}
-                                        returnKeyType="next"
-                                        onSubmitEditing={() => bioInputRef.current?.focus()}
-                                        blurOnSubmit={false}
-                                        onFocus={() => setFocusedField('username')}
-                                        onBlur={() => setFocusedField(null)}
-                                    />
-                                </View>
-                                {usernameError && canEditUsername
-                                    ? <Text style={s.errorTxt}>⚠ {usernameError}</Text>
-                                    : !canEditUsername
-                                    ? <Text style={s.warnTxt}>
-                                        {`⏳ ${t.profile.usernameChangeAfter} ${daysRemaining > 0 ? `${daysRemaining}d` : ''} ${hoursRemaining > 0 ? `${hoursRemaining}h` : ''}`}
-                                      </Text>
-                                    : null}
-                            </View>
-
-                            {/* ── Bio ───────────────────────────────────────── */}
-                            <View style={s.field}>
-                                <Text style={s.label}>{t.profile.bioLabel}</Text>
-                                <View style={[s.inputWrap, s.textAreaWrap, { borderColor: inputBorder('bio', false) }]}>
+                                <Text style={[s.label, isRTL && s.textRtl]}>{t.profile.bioLabel}</Text>
+                                <View style={[s.inputWrap, s.textAreaWrap, { borderColor: bioBorder }]}>
                                     <GlassWrapper {...(glassProps.card as any)} style={StyleSheet.absoluteFill} />
                                     <TextInput
                                         ref={bioInputRef}
-                                        style={[s.input, s.textArea]}
+                                        style={[s.input, s.textArea, isRTL && s.textRtl]}
                                         value={bio}
                                         onChangeText={setBio}
                                         placeholder={t.profile.bioPlaceholder}
-                                        placeholderTextColor="rgba(255,255,255,0.25)"
+                                        placeholderTextColor="rgba(255,255,255,0.3)"
                                         multiline
                                         maxLength={500}
                                         blurOnSubmit
@@ -322,61 +205,96 @@ const ProfileEditModal = memo(function ProfileEditModal({
                                         onBlur={() => setFocusedField(null)}
                                     />
                                 </View>
-                                <Text style={[s.charCount, bio.length >= 450 && { color: '#FFA500' }]}>
+                                <Text
+                                    style={[
+                                        s.charCount,
+                                        isRTL && s.textRtl,
+                                        bio.length >= 450 && { color: ProfileTheme.colors.avatarRing },
+                                    ]}
+                                >
                                     {bio.length}/500
                                 </Text>
                             </View>
 
-                            {/* ── Social Links ──────────────────────────────── */}
                             <View style={s.field}>
-                                <View style={s.sectionHeader}>
-                                    <Text style={s.label}>{t.profile.socialLinks}</Text>
-                                    <TouchableOpacity onPress={handleAddSocial} style={s.addBtn}>
-                                        <LinearGradient
-                                            colors={[ACCENT, ACCENT_DARK]}
-                                            style={s.addBtnGrad}
-                                            start={{ x: 0, y: 0 }}
-                                            end={{ x: 1, y: 1 }}
-                                        >
-                                            <Ionicons name="add" size={14} color="#fff" />
+                                <View style={[s.sectionHeader, isRTL && s.rowRtl]}>
+                                    <Text style={[s.label, s.labelInline, isRTL && s.textRtl]}>
+                                        {t.profile.socialLinks}
+                                    </Text>
+                                    <TouchableOpacity
+                                        onPress={handleAddSocial}
+                                        activeOpacity={0.85}
+                                        style={s.addBtn}
+                                    >
+                                        <GlassWrapper
+                                            {...(glassProps.chip as any)}
+                                            style={StyleSheet.absoluteFill}
+                                        />
+                                        <View style={s.addBtnInner}>
+                                            <Ionicons
+                                                name="add"
+                                                size={13}
+                                                color={ProfileTheme.colors.avatarRing}
+                                            />
                                             <Text style={s.addBtnTxt}>{t.profile.addSocialAction}</Text>
-                                        </LinearGradient>
+                                        </View>
                                     </TouchableOpacity>
                                 </View>
 
                                 {socials.map((social) => {
-                                    const platform = SOCIAL_PLATFORMS.find(p => p.id === social.platform);
-                                    const IconComp = platform?.iconLibrary === 'FontAwesome' ? FontAwesome : Ionicons;
+                                    const platform = SOCIAL_PLATFORMS.find((p) => p.id === social.platform);
+                                    const IconComp =
+                                        platform?.iconLibrary === 'FontAwesome' ? FontAwesome : Ionicons;
                                     return (
                                         <View key={social.rowId} style={s.socialRow}>
                                             <View style={s.socialWrap}>
-                                                <GlassWrapper {...(glassProps.card as any)} style={StyleSheet.absoluteFill} />
+                                                <GlassWrapper
+                                                    {...(glassProps.card as any)}
+                                                    style={StyleSheet.absoluteFill}
+                                                />
                                                 <TouchableOpacity
                                                     style={s.platformBtn}
                                                     onPress={() => {
-                                                        const ci = SOCIAL_PLATFORMS.findIndex(p => p.id === social.platform);
+                                                        const ci = SOCIAL_PLATFORMS.findIndex(
+                                                            (p) => p.id === social.platform,
+                                                        );
                                                         updateSocial(
                                                             social.rowId,
                                                             'platform',
-                                                            SOCIAL_PLATFORMS[(ci + 1) % SOCIAL_PLATFORMS.length].id,
+                                                            SOCIAL_PLATFORMS[
+                                                                (ci + 1) % SOCIAL_PLATFORMS.length
+                                                            ].id,
                                                         );
                                                     }}
                                                 >
-                                                    {platform && (
-                                                        <IconComp name={platform.icon as any} size={18} color={platform.color} />
-                                                    )}
+                                                    {platform ? (
+                                                        <IconComp
+                                                            name={platform.icon as any}
+                                                            size={17}
+                                                            color={platform.color}
+                                                        />
+                                                    ) : null}
                                                 </TouchableOpacity>
                                                 <TextInput
                                                     style={s.socialInput}
                                                     value={social.url}
-                                                    onChangeText={url => handleSocialUrlChange(social.rowId, url)}
+                                                    onChangeText={(url) =>
+                                                        handleSocialUrlChange(social.rowId, url)
+                                                    }
                                                     placeholder={t.profile.socialUrlPlaceholder}
-                                                    placeholderTextColor="rgba(255,255,255,0.25)"
+                                                    placeholderTextColor="rgba(255,255,255,0.28)"
                                                     autoCapitalize="none"
                                                     keyboardType="url"
                                                 />
-                                                <TouchableOpacity onPress={() => handleRemoveSocial(social.rowId)} style={s.removeBtn}>
-                                                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                                                <TouchableOpacity
+                                                    onPress={() => handleRemoveSocial(social.rowId)}
+                                                    style={s.removeBtn}
+                                                >
+                                                    <Ionicons
+                                                        name="trash-outline"
+                                                        size={15}
+                                                        color="#ef4444"
+                                                    />
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
@@ -384,36 +302,34 @@ const ProfileEditModal = memo(function ProfileEditModal({
                                 })}
                             </View>
 
-                            <View style={{ height: 24 }} />
+                            <View style={{ height: 16 }} />
                         </ScrollView>
 
-                        {/* ── Save button — purple gradient ─────────────────── */}
-                        <TouchableOpacity onPress={handleSave} activeOpacity={0.85}>
+                        <TouchableOpacity onPress={handleSave} activeOpacity={0.85} style={s.saveWrap}>
                             <LinearGradient
-                                colors={AppGradients.purpleCTA}
+                                colors={[...AppGradients.purpleCTA]}
                                 style={s.saveBtn}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
                             >
+                                <View style={s.saveGlass} pointerEvents="none" />
                                 <Text style={s.saveTxt}>{t.profile.saveChanges}</Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
-            </TouchableOpacity>
+            </View>
         </Modal>
     );
 });
 
 export default ProfileEditModal;
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const s = StyleSheet.create({
     overlay: {
         flex: 1,
         justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.55)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
     },
     kav: {
         flex: 1,
@@ -421,14 +337,16 @@ const s = StyleSheet.create({
     },
     sheet: {
         backgroundColor: SURFACE_BG,
-        borderTopLeftRadius: 28,
-        borderTopRightRadius: 28,
-        padding: 24,
-        height: '88%',
-        paddingBottom: Platform.OS === 'ios' ? 44 : 24,
+        borderTopLeftRadius: 26,
+        borderTopRightRadius: 26,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        maxHeight: '72%',
+        minHeight: '48%',
+        paddingBottom: Platform.OS === 'ios' ? 36 : 20,
         overflow: 'hidden',
         borderTopWidth: 1,
-        borderColor: 'rgba(168,85,247,0.2)',
+        borderColor: 'rgba(168,85,247,0.22)',
     },
     topAccent: {
         position: 'absolute',
@@ -436,121 +354,83 @@ const s = StyleSheet.create({
         left: 0,
         right: 0,
         height: 2,
-        borderTopLeftRadius: 28,
-        borderTopRightRadius: 28,
+        borderTopLeftRadius: 26,
+        borderTopRightRadius: 26,
     },
-
-    /* Header */
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
-        paddingBottom: 16,
+        marginBottom: 16,
+        paddingBottom: 14,
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(168,85,247,0.15)',
     },
+    rowRtl: {
+        flexDirection: 'row-reverse',
+    },
     title: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '800',
         color: '#fff',
         letterSpacing: 0.2,
+        flex: 1,
     },
     closeBtn: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: 'rgba(139,92,246,0.15)',
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: 'rgba(139,92,246,0.28)',
     },
-
-    scroll: { paddingBottom: 16 },
-
-    /* Fields */
-    field: { marginBottom: 18 },
+    scroll: {
+        paddingBottom: 12,
+    },
+    field: {
+        marginBottom: 18,
+    },
     label: {
-        color: 'rgba(255,255,255,0.5)',
+        color: 'rgba(216,174,255,0.7)',
         fontSize: 12,
-        fontWeight: '600',
+        fontWeight: '700',
         letterSpacing: 0.6,
         textTransform: 'uppercase',
         marginBottom: 8,
+    },
+    labelInline: {
+        marginBottom: 0,
+    },
+    textRtl: {
         textAlign: 'right',
+        writingDirection: 'rtl',
     },
-    labelRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-
-    /* Input wrapper — glass + colored border */
     inputWrap: {
         borderRadius: 14,
-        borderWidth: 1.5,
+        borderWidth: 1,
         overflow: 'hidden',
+        backgroundColor: 'rgba(139,92,246,0.06)',
     },
     textAreaWrap: {},
-    disabledWrap: { opacity: 0.45 },
-
     input: {
         color: '#fff',
         fontSize: 15,
         fontWeight: '500',
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        textAlign: 'right',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
     },
     textArea: {
-        minHeight: 100,
+        minHeight: 110,
         textAlignVertical: 'top',
-        paddingTop: 14,
+        paddingTop: 12,
     },
-    disabledInput: { opacity: 0.6 },
-
     charCount: {
-        color: 'rgba(255,255,255,0.3)',
+        color: 'rgba(255,255,255,0.32)',
         fontSize: 11,
-        textAlign: 'left',
         marginTop: 5,
     },
-
-    /* Validation */
-    errorTxt: {
-        color: '#ef4444',
-        fontSize: 12,
-        marginTop: 5,
-        textAlign: 'right',
-    },
-    warnTxt: {
-        color: '#FFA500',
-        fontSize: 12,
-        marginTop: 5,
-        textAlign: 'right',
-    },
-
-    /* Cooldown badge */
-    cooldownBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255,165,0,0.12)',
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 10,
-        gap: 4,
-        borderWidth: 1,
-        borderColor: 'rgba(255,165,0,0.25)',
-    },
-    cooldownTxt: {
-        color: '#FFA500',
-        fontSize: 11,
-        fontWeight: '700',
-    },
-
-    /* Social links */
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -558,34 +438,40 @@ const s = StyleSheet.create({
         marginBottom: 10,
     },
     addBtn: {
-        borderRadius: 14,
+        borderRadius: 12,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(139,92,246,0.4)',
+        backgroundColor: 'rgba(139,92,246,0.12)',
     },
-    addBtnGrad: {
+    addBtnInner: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        gap: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        gap: 3,
     },
     addBtnTxt: {
-        color: '#fff',
-        fontSize: 12,
+        color: ProfileTheme.colors.avatarRing,
+        fontSize: 11,
         fontWeight: '700',
     },
-    socialRow: { marginBottom: 8 },
+    socialRow: {
+        marginBottom: 8,
+    },
     socialWrap: {
         flexDirection: 'row',
         alignItems: 'center',
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: 'rgba(168,85,247,0.2)',
+        borderColor: 'rgba(168,85,247,0.22)',
         overflow: 'hidden',
-        paddingVertical: 4,
+        backgroundColor: 'rgba(139,92,246,0.05)',
+        paddingVertical: 2,
     },
     platformBtn: {
-        width: 44,
-        height: 40,
+        width: 42,
+        height: 38,
         alignItems: 'center',
         justifyContent: 'center',
         borderRightWidth: 1,
@@ -595,30 +481,31 @@ const s = StyleSheet.create({
         flex: 1,
         color: '#fff',
         paddingHorizontal: 12,
-        fontSize: 14,
-        textAlign: 'left',
+        fontSize: 13,
     },
     removeBtn: {
         padding: 10,
     },
-
-    /* Save */
+    saveWrap: {
+        marginTop: 4,
+        alignSelf: 'center',
+        width: '88%',
+    },
     saveBtn: {
-        height: 54,
-        borderRadius: 16,
+        height: 46,
+        borderRadius: 14,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 8,
-        shadowColor: '#A855F7',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.45,
-        shadowRadius: 12,
-        elevation: 8,
+        overflow: 'hidden',
+    },
+    saveGlass: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(255,255,255,0.08)',
     },
     saveTxt: {
         color: '#fff',
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '800',
-        letterSpacing: 0.3,
+        letterSpacing: 0.2,
     },
 });
