@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -223,6 +223,8 @@ export const ProfessionalToast: React.FC<ProfessionalToastProps> = ({
               interactive: false,
             } as any)}
           />
+        ) : Platform.OS === 'android' ? (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: config.glassTint }]} />
         ) : (
           <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
         )}

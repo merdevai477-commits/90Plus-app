@@ -221,6 +221,7 @@ export function CompetitionCard({
       ]}
     >
       <View
+        collapsable={false}
         style={{
           flex: 1,
           borderRadius: c(PW_RADII.card),

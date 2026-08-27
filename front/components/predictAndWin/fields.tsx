@@ -653,28 +653,46 @@ export function PWPrimaryButton({
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
-      accessibilityState={{ disabled: !!disabled }}
+      accessibilityState={{ disabled: !!disabled, busy: !!loading }}
     >
-      <LinearGradient
-        colors={[...PW_GRADIENTS.cta]}
-        style={{
-          borderRadius: s(PW_RADII.input),
-          paddingVertical: s(21),
-          paddingHorizontal: s(16),
-          alignItems: 'center',
-          justifyContent: 'center',
-          opacity: disabled ? 0.55 : 1,
-        }}
-      >
-        {loading ?? (
+      {/* Android Fabric crashes (`addViewAt` / child already has a parent) if
+          LinearGradient's clipped children are swapped — which is exactly what
+          replacing the label with a spinner used to do on Publish. Keep the
+          gradient's child stable and overlay the spinner. */}
+      <View>
+        <LinearGradient
+          colors={[...PW_GRADIENTS.cta]}
+          style={{
+            borderRadius: s(PW_RADII.input),
+            paddingVertical: s(21),
+            paddingHorizontal: s(16),
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: disabled && !loading ? 0.55 : 1,
+          }}
+        >
           <Text
-            style={{ fontFamily: semibold, fontSize: f(18), color: PW.text, textAlign: 'center' }}
+            style={{
+              fontFamily: semibold,
+              fontSize: f(18),
+              color: PW.text,
+              textAlign: 'center',
+              opacity: loading ? 0 : 1,
+            }}
             numberOfLines={2}
           >
             {label}
           </Text>
-        )}
-      </LinearGradient>
+        </LinearGradient>
+        {loading ? (
+          <View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}
+          >
+            {loading}
+          </View>
+        ) : null}
+      </View>
     </Pressable>
   );
 }

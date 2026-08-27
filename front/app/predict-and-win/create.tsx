@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  InteractionManager,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -297,15 +298,18 @@ export default function CreateCompetitionScreen() {
         apiMatchId: selectedMatch.apiMatchId,
         predictionDeadline: iso,
       });
-      toast.showSuccess(wizard.submittedTitle, wizard.submittedSubtitle);
+      // Leave `submitting` true so this screen does not remount CTA children
+      // while Fabric is tearing it down. Toast after the hub has mounted —
+      // showing BlurView in the same tick as `replace` crashed Android with
+      // `addViewAt: failed to insert view`.
       router.replace('/(tabs)/predict-and-win');
+      InteractionManager.runAfterInteractions(() => {
+        toast.showSuccess(wizard.submittedTitle, wizard.submittedSubtitle);
+      });
     } catch (err: any) {
-      toast.showError(wizard.publish, errorMessage(err));
-    } finally {
-      // Reset so a failed attempt can be retried — the ref only needs to hold
-      // for the duration of one in-flight request, not forever.
       publishInFlight.current = false;
       setSubmitting(false);
+      toast.showError(wizard.publish, errorMessage(err));
     }
   };
 
@@ -838,27 +842,29 @@ export default function CreateCompetitionScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <ImageUploadModal
-        visible={pickerTarget !== null}
-        onClose={() => setPickerTarget(null)}
-        onSuccess={(url) => {
-          if (pickerTarget === 'prize') setPrizeImageUrl(url);
-          else if (pickerTarget === 'store') setStoreImageUrl(url);
-          setPickerTarget(null);
-        }}
-        /**
-         * `/api/upload` is the app's one mounted upload surface — the same one
-         * `/upload/avatar`, `/upload/cover` and `/upload/group-avatar` use.
-         * This pointed at `/storage/competition-asset`, on a router `main.ts`
-         * never mounts, so every prize and store image upload answered
-         * `404 Route not found`.
-         */
-        uploadOptions={{
-          endpoint: '/upload/competition-asset',
-          fieldName: 'file',
-          additionalData: { kind: pickerTarget === 'store' ? 'sponsor' : 'prize' },
-        }}
-      />
+      {pickerTarget !== null ? (
+        <ImageUploadModal
+          visible
+          onClose={() => setPickerTarget(null)}
+          onSuccess={(url) => {
+            if (pickerTarget === 'prize') setPrizeImageUrl(url);
+            else if (pickerTarget === 'store') setStoreImageUrl(url);
+            setPickerTarget(null);
+          }}
+          /**
+           * `/api/upload` is the app's one mounted upload surface — the same one
+           * `/upload/avatar`, `/upload/cover` and `/upload/group-avatar` use.
+           * This pointed at `/storage/competition-asset`, on a router `main.ts`
+           * never mounts, so every prize and store image upload answered
+           * `404 Route not found`.
+           */
+          uploadOptions={{
+            endpoint: '/upload/competition-asset',
+            fieldName: 'file',
+            additionalData: { kind: pickerTarget === 'store' ? 'sponsor' : 'prize' },
+          }}
+        />
+      ) : null}
     </View>
   );
 }
