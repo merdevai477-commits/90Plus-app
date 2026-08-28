@@ -254,7 +254,7 @@ class FootballDataCacheService {
         // will re-hit the API.
         // Short empty TTL so lineups/stats appear soon after providers populate them.
         EMPTY: 45 * 1000,
-        MATCHES_BY_DATE_TODAY: 30 * 1000,
+        MATCHES_BY_DATE_TODAY: 5 * 60 * 1000,
         MATCHES_BY_DATE_FUTURE: 15 * 60 * 1000,
         MATCHES_BY_DATE_PAST: 24 * 60 * 60 * 1000,
         TODAY_API_REFRESH: 30 * 1000,
@@ -1168,7 +1168,14 @@ class FootballDataCacheService {
             const { enrichFixturesWithCrowdPredictions } = await import(
                 './scores365-crowd-prediction.service'
             );
-            return await enrichFixturesWithCrowdPredictions(merged);
+            const withCachedCrowd = await enrichFixturesWithCrowdPredictions(merged, undefined, {
+                cacheOnly: true,
+            });
+            // Fill Redis/memory in the background — never block the scores list on 365 HTTP.
+            void enrichFixturesWithCrowdPredictions(merged).catch((err) => {
+                logger.warn('365 crowd prediction background enrich failed:', err);
+            });
+            return withCachedCrowd;
         } catch (err) {
             logger.warn('365 crowd prediction enrich failed:', err);
             return merged;

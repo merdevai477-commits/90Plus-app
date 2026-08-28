@@ -15,6 +15,22 @@ function getAppLanguageParam(): string {
   return getAppLanguageCode();
 }
 
+const MATCH_FETCH_TIMEOUT_MS = 12_000;
+
+async function fetchJsonWithTimeout(url: string): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), MATCH_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Maps API fixture status to component match status
  */
@@ -389,7 +405,7 @@ export const fetchMatchesByDate = async (
   const existing = inFlightMatchesByDate.get(inflightKey);
   if (existing) return existing;
 
-  const promise = fetchMatchesByDateImpl(date, dateString, options).finally(() => {
+  const promise = fetchMatchesByDateImpl(dateString, options).finally(() => {
     inFlightMatchesByDate.delete(inflightKey);
   });
   inFlightMatchesByDate.set(inflightKey, promise);
@@ -397,75 +413,79 @@ export const fetchMatchesByDate = async (
 };
 
 const fetchMatchesByDateImpl = async (
-  date: Date,
   dateString: string,
   options?: { fresh?: boolean },
 ): Promise<Match[]> => {
   const today = getLocalTodayKey();
   const isPastDate = dateString < today;
-  
-  // For past dates, check local cache first (instant response)
-  if (isPastDate) {
-    const cached = await cacheService.getMatchesByDate(dateString);
-    if (cached && cached.length > 0) {
-      logger.debug(`📦 [FAST] Matches from local cache for past date ${dateString}`);
-      return cached;
-    }
-  }
-  
-  try {
-    // Try direct backend API call first (optimized endpoint)
-    const apiUrl = getApiUrl();
-    const freshQs = options?.fresh ? '?fresh=1' : '';
-    const response = await fetch(`${apiUrl}/football/cached/matches/${dateString}${freshQs}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
 
-    if (response.ok) {
-      // Backend wraps the fixtures array in { status, results, response: [...] }.
-      // Accept both shapes for safety (raw array OR wrapped object).
-      const raw = await response.json();
-      const fixtures: Fixture[] = Array.isArray(raw)
-        ? raw
-        : Array.isArray(raw?.response)
-          ? raw.response
-          : Array.isArray(raw?.data)
-            ? raw.data
-            : [];
-      const matches = mapFixturesToMatches(fixtures);
-      
-      // Cache the results locally - permanent for past dates
-      if (matches.length > 0) {
-        const cacheTTL = isPastDate 
-          ? Number.MAX_SAFE_INTEGER // Permanent cache for past matches
-          : undefined; // Use default TTL for future matches
-        await cacheService.cacheMatchesByDate(dateString, matches, cacheTTL);
-        logger.debug(`💾 Cached ${matches.length} matches for ${dateString} from backend (permanent: ${isPastDate})`);
-      }
-      
-      return matches;
-    }
+  const diskCached =
+    options?.fresh ? null : await cacheService.getMatchesByDate(dateString, true);
+  if (diskCached && diskCached.length > 0) {
+    logger.debug(`📦 [FAST] Matches from local cache for ${dateString}`);
+    return diskCached;
+  }
+
+  try {
+    return await fetchMatchesByDateFromNetwork(dateString, isPastDate);
   } catch (error) {
-    logger.warn(`Direct backend call failed, falling back to ApiFootballService:`, error);
+    logger.warn(`Direct backend call failed, falling back:`, error);
+    if ((error as Error)?.name === 'AbortError') {
+      throw error;
+    }
   }
-  
-  // Fallback to ApiFootballService
-  logger.debug(`🔍 Fetching matches for date ${dateString} from backend via ApiFootballService...`);
-  const fixtures = await ApiFootballService.getFixturesByDate(dateString);
+
+  try {
+    logger.debug(`🔍 Fetching matches for date ${dateString} from backend via ApiFootballService...`);
+    const fixtures = await ApiFootballService.getFixturesByDate(dateString);
+    const matches = mapFixturesToMatches(fixtures);
+    if (matches.length > 0) {
+      await cacheService.cacheMatchesByDate(
+        dateString,
+        matches,
+        isPastDate ? Number.MAX_SAFE_INTEGER : undefined,
+      );
+    }
+    return matches;
+  } catch (error) {
+    throw error;
+  }
+};
+
+const fetchMatchesByDateFromNetwork = async (
+  dateString: string,
+  isPastDate: boolean,
+): Promise<Match[]> => {
+  const apiUrl = getApiUrl();
+  const response = await fetchJsonWithTimeout(
+    `${apiUrl}/football/cached/matches/${dateString}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(`matches-by-date HTTP ${response.status}`);
+  }
+
+  const raw = await response.json();
+  const fixtures: Fixture[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.response)
+      ? raw.response
+      : Array.isArray(raw?.data)
+        ? raw.data
+        : [];
   const matches = mapFixturesToMatches(fixtures);
-  
-  // Cache the results locally - permanent for past dates
+
   if (matches.length > 0) {
-    const cacheTTL = isPastDate 
-      ? Number.MAX_SAFE_INTEGER // Permanent cache for past matches
-      : undefined; // Use default TTL for future matches
-    await cacheService.cacheMatchesByDate(dateString, matches, cacheTTL);
-    logger.debug(`💾 Cached ${matches.length} matches for ${dateString} (permanent: ${isPastDate})`);
+    await cacheService.cacheMatchesByDate(
+      dateString,
+      matches,
+      isPastDate ? Number.MAX_SAFE_INTEGER : undefined,
+    );
+    logger.debug(
+      `💾 Cached ${matches.length} matches for ${dateString} from backend (permanent: ${isPastDate})`,
+    );
   }
-  
+
   return matches;
 };
 
@@ -477,9 +497,8 @@ export const fetchLeagueMatchesByDate = async (
   const dateString = formatLocalDateKey(date);
   try {
     const apiUrl = getApiUrl();
-    const response = await fetch(
+    const response = await fetchJsonWithTimeout(
       `${apiUrl}/football/cached/league/${leagueId}/matches/${dateString}`,
-      { method: 'GET', headers: { 'Content-Type': 'application/json' } },
     );
     if (!response.ok) return [];
     const raw = await response.json();
@@ -613,14 +632,8 @@ export const fetchLiveMatches = async (): Promise<Match[]> => {
 
 const fetchLiveMatchesImpl = async (): Promise<Match[]> => {
   try {
-    // Try direct backend API call first
     const apiUrl = getApiUrl();
-    const response = await fetch(`${apiUrl}/football/fixtures/live`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await fetchJsonWithTimeout(`${apiUrl}/football/fixtures/live`);
 
     if (response.ok) {
       // Backend wraps the fixtures array in { status, results, response: [...] }.
@@ -637,9 +650,11 @@ const fetchLiveMatchesImpl = async (): Promise<Match[]> => {
     }
   } catch (error) {
     logger.warn(`Direct backend call failed, falling back to ApiFootballService:`, error);
+    if ((error as Error)?.name === 'AbortError') {
+      return [];
+    }
   }
-  
-  // Fallback to ApiFootballService
+
   const fixtures = await ApiFootballService.getLiveFixtures();
   return mapFixturesToMatches(fixtures);
 };

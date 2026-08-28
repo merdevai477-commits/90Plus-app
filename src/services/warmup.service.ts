@@ -273,13 +273,20 @@ export function startKeepAlivePing(port: number) {
     return;
   }
 
-  keepAlivePingInterval = setInterval(async () => {
+  const ping = async () => {
     try {
       const response = await fetch(`http://localhost:${port}/health`);
       if (response.ok) {
         logger.debug('✅ Keep-alive ping successful');
       } else {
         logger.warn(`⚠️ Keep-alive ping returned ${response.status}`);
+      }
+
+      try {
+        const { getRedisClient } = await import('../lib/redis');
+        await getRedisClient()?.ping();
+      } catch {
+        /* non-fatal */
       }
 
       try {
@@ -292,9 +299,12 @@ export function startKeepAlivePing(port: number) {
     } catch (error: any) {
       logger.warn('⚠️ Keep-alive ping failed:', error.message);
     }
-  }, 5 * 60 * 1000); // 5 minutes
+  };
 
-  logger.info('✅ Keep-alive ping started (every 5 minutes)');
+  void ping();
+  keepAlivePingInterval = setInterval(ping, 60 * 1000);
+
+  logger.info('✅ Keep-alive ping started (every 60 seconds)');
 }
 
 /**

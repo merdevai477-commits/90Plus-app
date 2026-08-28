@@ -784,7 +784,13 @@ async function startServer() {
             logger.info(`📍 Health: http://0.0.0.0:${PORT}${API_PREFIX}/health`);
             logger.info(`📍 WebSocket: ws://0.0.0.0:${PORT}`);
             logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-            
+
+            try {
+                const { startKeepAlivePing } = await import('./services/warmup.service');
+                startKeepAlivePing(PORT);
+            } catch (pingErr) {
+                logger.warn('Could not start keep-alive ping (non-fatal):', pingErr);
+            } 
 
                 // Start match watcher for push notifications
                 if (process.env.FOOTBALL_API_KEY) {

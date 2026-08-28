@@ -51,22 +51,16 @@ async function fetchCrowdPredictionForGameId(
   gameId: number,
   language?: string | null,
   swapped = false,
+  cacheOnly = false,
 ): Promise<Scores365CrowdPrediction | null> {
   const mem = crowdPredictionMemory.get(gameId);
   if (mem && Date.now() - mem.fetchedAt < CROWD_PRED_TTL_MS) {
     return swapCrowdSides(mem.prediction, swapped);
   }
 
-  try {
-    const redisHit = await redisCacheService.get<Scores365CrowdPrediction>(
-      `365:crowd-pred:${gameId}`,
-    );
-    if (redisHit && typeof redisHit.homePercent === 'number') {
-      crowdPredictionMemory.set(gameId, { prediction: redisHit, fetchedAt: Date.now() });
-      return swapCrowdSides(redisHit, swapped);
-    }
-  } catch {
-    /* non-fatal */
+  // List endpoint: never wait on Redis/365 — memory hits only; background enrich fills cache.
+  if (cacheOnly) {
+    return null;
   }
 
   const pending = crowdPredictionInFlight.get(gameId);
@@ -122,6 +116,7 @@ function isUpcomingCrowdStatus(short?: string): boolean {
 export async function enrichFixturesWithCrowdPredictions(
   fixtures: any[],
   language?: string | null,
+  options?: { cacheOnly?: boolean },
 ): Promise<any[]> {
   if (!isScores365ExperimentEnabled() || !Array.isArray(fixtures) || fixtures.length === 0) {
     return fixtures;
@@ -160,7 +155,12 @@ export async function enrichFixturesWithCrowdPredictions(
     await Promise.all(
       batch.map(async ({ f, index, gameId }) => {
         const swapped = Boolean((f as { _scores365TeamsSwapped?: boolean })?._scores365TeamsSwapped);
-        const prediction = await fetchCrowdPredictionForGameId(gameId!, language, swapped);
+        const prediction = await fetchCrowdPredictionForGameId(
+          gameId!,
+          language,
+          swapped,
+          options?.cacheOnly === true,
+        );
         if (!prediction) return;
         attached += 1;
         // Expose both underscore + plain key so clients can't miss it.

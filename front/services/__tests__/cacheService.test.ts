@@ -281,4 +281,28 @@ describe('CacheService Property Tests', () => {
       expect(entriesWithTimestamps[2].key).toBe('newest');
     });
   });
+
+  describe('pinned matches calendar survives cleanup', () => {
+    it('keeps expired matches_* entries and removes other expired keys', async () => {
+      const now = Date.now();
+      const store: Record<string, string> = {};
+      store['@cache_matches_2026-08-28'] = JSON.stringify({
+        data: [{ id: '1' }],
+        timestamp: now - 10_000,
+        ttl: 1,
+      });
+      store['@cache_other_key'] = JSON.stringify({
+        data: { x: 1 },
+        timestamp: now - 10_000,
+        ttl: 1,
+      });
+      mockStorage.__setStore(store);
+
+      await cacheService.cleanup();
+
+      const leftover = mockStorage.__getStore();
+      expect(leftover['@cache_matches_2026-08-28']).toBeDefined();
+      expect(leftover['@cache_other_key']).toBeUndefined();
+    });
+  });
 });

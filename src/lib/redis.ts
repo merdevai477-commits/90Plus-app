@@ -29,6 +29,7 @@ export function initializeRedis(): Redis | null {
   try {
     redisClient = new Redis(redisUrl, {
       maxRetriesPerRequest: 3,
+      keepAlive: 10_000,
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);
         return delay;

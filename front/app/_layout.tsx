@@ -437,6 +437,7 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
     if (!isLoaded) return;
 
     let cancelled = false;
+    let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 
     const run = async () => {
       // Fix 4: fire-and-forget — don't block on server wakeup
@@ -518,9 +519,16 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
         logger.warn('[PreloadInitializer] Failed to clear old profile cache (non-critical):', err);
       }
 
-      cacheService.cleanup().catch(err => {
-        logger.warn('[PreloadInitializer] Cache cleanup failed (non-critical):', err);
-      });
+      if (cancelled) return;
+
+      // Don't wipe match calendars during first paint — cleanup used to delete
+      // today's snapshot (short TTL) and force a blank spinner after app kill.
+      cleanupTimer = setTimeout(() => {
+        if (cancelled) return;
+        cacheService.cleanup().catch(err => {
+          logger.warn('[PreloadInitializer] Cache cleanup failed (non-critical):', err);
+        });
+      }, 15_000);
 
       if (isSignedIn) {
         const tokenGetter = createClerkTokenGetter(getTokenRef.current);
@@ -537,6 +545,7 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      if (cleanupTimer) clearTimeout(cleanupTimer);
       if (!isSignedIn) {
         preloadManager.cleanup();
       }

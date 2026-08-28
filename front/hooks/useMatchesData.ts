@@ -13,7 +13,7 @@ import {
   getLocalTodayKey,
   formatLocalDateKey,
 } from '../components/Matches/leagueApiUtils';
-import { cacheService } from '../services/cacheService';
+import { cacheService, MATCHES_CALENDAR_DISK_TTL_MS } from '../services/cacheService';
 import { logger } from '../utils/logger';
 import { websocketClient } from '../services/websocketClient';
 import { useLanguageStore } from '../src/i18n/store';
@@ -84,30 +84,6 @@ const evictOldestIfNeeded = (map: Map<string, any>) => {
     const oldestKey = map.keys().next().value;
     if (oldestKey !== undefined) map.delete(oldestKey);
   }
-};
-
-// TTL configuration based on match date
-const getCacheTTL = (dateString: string): number => {
-  const today = getLocalTodayKey();
-  const isPast = dateString < today;
-  const isToday = dateString === today;
-
-  if (isPast) {
-    return 60 * 60 * 1000; // 60 minutes for past matches
-  } else if (isToday) {
-    // Live scores arrive via WebSocket + live feed merge; keep calendar memory
-    // aligned with LIVE_FIXTURE_CALENDAR_POLL_MS (~45s).
-    return LIVE_FIXTURE_CALENDAR_POLL_MS;
-  } else {
-    return 30 * 60 * 1000; // 30 minutes for future matches
-  }
-};
-
-// Check if cache entry is still valid
-const isCacheValid = (entry: MemoryCacheEntry, dateString: string): boolean => {
-  const ttl = getCacheTTL(dateString);
-  const age = Date.now() - entry.timestamp;
-  return age < ttl;
 };
 
 // ✅ Throttle background refresh - track last background fetch per date.
@@ -347,29 +323,19 @@ export const useMatchesData = (
   options: UseMatchesDataOptions = {},
 ): UseMatchesDataResult => {
   const { pauseBackgroundRefresh = false } = options;
-  const [calendarMatches, setCalendarMatches] = useState<Match[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const dateString = formatLocalDateKey(selectedDate);
+  const memoryBoot = memoryCache.get(dateString);
+  const [calendarMatches, setCalendarMatches] = useState<Match[]>(() => memoryBoot?.data ?? []);
+  const [loading, setLoading] = useState<boolean>(() => !memoryBoot);
   const [error, setError] = useState<string | null>(null);
   // Fix ERR-3: track when background refresh fails so UI can show a stale indicator
   const [isDataStale, setIsDataStale] = useState<boolean>(false);
   const isFetchingRef = useRef(false);
+  const calendarLenRef = useRef(0);
   const language = useLanguageStore((s) => s.language);
+  calendarLenRef.current = calendarMatches.length;
 
-  // Use LOCAL date string (not UTC) so a user in UTC+3 at 00:30 local
-  // doesn't accidentally fetch yesterday's matches.
-  const dateString = useMemo(() => {
-    const y = selectedDate.getFullYear();
-    const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
-    const d = String(selectedDate.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }, [selectedDate]);
-  const today = useMemo(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }, []);
+  const today = getLocalTodayKey();
   const isToday = dateString === today;
   const isPastDate = dateString < today;
 
@@ -414,7 +380,7 @@ export const useMatchesData = (
   useEffect(() => {
     let cancelled = false;
     const memoryCached = memoryCache.get(dateString);
-    if (memoryCached) {
+    if (memoryCached?.data?.length) {
       setCalendarMatches(memoryCached.data);
       setLoading(false);
     } else {
@@ -422,7 +388,7 @@ export const useMatchesData = (
     }
 
     const cacheKey = getMatchesCacheKey(dateString);
-    cacheService.get<Match[]>(cacheKey).then((cached) => {
+    cacheService.get<Match[]>(cacheKey, true).then((cached) => {
       if (cancelled || !cached?.length) return;
       evictOldestIfNeeded(memoryCache);
       memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
@@ -452,7 +418,7 @@ export const useMatchesData = (
         if (data.length > 0) {
           evictOldestIfNeeded(memoryCache);
           memoryCache.set(key, { data, timestamp: Date.now() });
-          cacheService.set(getMatchesCacheKey(key), data, key === todayKey ? 2 * 60 * 1000 : Number.MAX_SAFE_INTEGER).catch(() => {});
+          cacheService.set(getMatchesCacheKey(key), data, key === todayKey ? MATCHES_CALENDAR_DISK_TTL_MS : Number.MAX_SAFE_INTEGER).catch(() => {});
         }
       }).catch(() => {});
     });
@@ -484,37 +450,52 @@ export const useMatchesData = (
       try {
         const cacheKey = getMatchesCacheKey(dateString);
 
-        // Try memory cache first (instant)
+        const persistCalendar = (data: Match[]) => {
+          evictOldestIfNeeded(memoryCache);
+          memoryCache.set(dateString, { data, timestamp: Date.now() });
+          const ttl = isPastDate
+            ? Number.MAX_SAFE_INTEGER
+            : isToday
+              ? MATCHES_CALENDAR_DISK_TTL_MS
+              : 3 * 24 * 60 * 60 * 1000;
+          return cacheService.set(cacheKey, data, ttl);
+        };
+
+        const refreshTodayInBackground = () => {
+          void fetchTodayMatchesWithLiveFeed(
+            selectedDate,
+            (liveFeed) => {
+              setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+              setLoading(false);
+              setIsDataStale(false);
+            },
+            { fresh: true },
+          )
+            .then((merged) => {
+              setCalendarMatches(merged);
+              setIsDataStale(false);
+              maybePrefetchMatchAssets(merged);
+              return persistCalendar(merged);
+            })
+            .catch(() => setIsDataStale(true));
+        };
+
+        // Try memory cache first (instant) — even if TTL elapsed, paint then refresh.
         if (!forceRefresh) {
           const memoryCached = memoryCache.get(dateString);
-          if (memoryCached && isCacheValid(memoryCached, dateString)) {
+          if (memoryCached?.data?.length) {
             logger.debug(`📦 Memory cache hit for ${dateString}`);
             setCalendarMatches(memoryCached.data);
             setLoading(false);
             maybePrefetchMatchAssets(memoryCached.data);
-            
-            // For past dates, don't refresh
+
             if (isPastDate) {
               isFetchingRef.current = false;
               return;
             }
-            
-            // For today, always merge live feed immediately (calendar cache can lag).
+
             if (isToday) {
-              void fetchTodayMatchesWithLiveFeed(selectedDate, (liveFeed) => {
-                setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
-                setLoading(false);
-                setIsDataStale(false);
-              })
-                .then((merged) => {
-                  setCalendarMatches(merged);
-                  setIsDataStale(false);
-                  maybePrefetchMatchAssets(merged);
-                  evictOldestIfNeeded(memoryCache);
-                  memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
-                  return cacheService.set(cacheKey, merged, LIVE_FIXTURE_CALENDAR_POLL_MS);
-                })
-                .catch(() => setIsDataStale(true));
+              refreshTodayInBackground();
             } else {
               fetchDataInBackground(dateString, isToday, isPastDate);
             }
@@ -523,42 +504,26 @@ export const useMatchesData = (
           }
         }
 
-        // Try AsyncStorage cache
+        // Try AsyncStorage cache (including expired snapshots)
         if (!forceRefresh) {
-          const cached = await cacheService.get<Match[]>(cacheKey);
+          const cached = await cacheService.get<Match[]>(cacheKey, true);
           if (cached && cached.length > 0) {
             logger.debug(`📦 AsyncStorage cache hit for ${dateString}`, {
               cachedCount: cached.length,
             });
-            // Update memory cache first
             evictOldestIfNeeded(memoryCache);
             memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
             setCalendarMatches(cached);
             setLoading(false);
             maybePrefetchMatchAssets(cached);
-            
-            // For past dates, don't refresh
+
             if (isPastDate) {
               isFetchingRef.current = false;
               return;
             }
-            
-            // For today, always merge live feed immediately (calendar cache can lag).
+
             if (isToday) {
-              void fetchTodayMatchesWithLiveFeed(selectedDate, (liveFeed) => {
-                setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
-                setLoading(false);
-                setIsDataStale(false);
-              })
-                .then((merged) => {
-                  setCalendarMatches(merged);
-                  setIsDataStale(false);
-                  maybePrefetchMatchAssets(merged);
-                  evictOldestIfNeeded(memoryCache);
-                  memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
-                  return cacheService.set(cacheKey, merged, LIVE_FIXTURE_CALENDAR_POLL_MS);
-                })
-                .catch(() => setIsDataStale(true));
+              refreshTodayInBackground();
             } else {
               fetchDataInBackground(dateString, isToday, isPastDate);
             }
@@ -567,8 +532,10 @@ export const useMatchesData = (
           }
         }
 
-        // Only set loading if no cache found
-        setLoading(true);
+        // Only block the list on loading when we have nothing to show.
+        if (calendarLenRef.current === 0) {
+          setLoading(true);
+        }
 
         let fetchedMatches: Match[];
 
@@ -579,27 +546,15 @@ export const useMatchesData = (
             setIsDataStale(false);
           });
         } else if (!isPastDate) {
-          // For future dates, just fetch scheduled matches
           fetchedMatches = await fetchMatchesByDate(selectedDate);
         } else {
-          // For past dates, fetch from cache only (permanent storage)
           fetchedMatches = await fetchMatchesByDate(selectedDate);
         }
 
         setCalendarMatches(fetchedMatches);
-        setIsDataStale(false); // fresh data loaded successfully
+        setIsDataStale(false);
         maybePrefetchMatchAssets(fetchedMatches);
-
-        // Update caches
-        const cacheTTL = isPastDate
-          ? Number.MAX_SAFE_INTEGER // Permanent cache for past matches (never expires)
-          : isToday
-          ? 2 * 60 * 1000 // 2 minutes for today
-          : 3 * 24 * 60 * 60 * 1000; // 3 days for future
-
-        evictOldestIfNeeded(memoryCache);
-        memoryCache.set(dateString, { data: fetchedMatches, timestamp: Date.now() });
-        await cacheService.set(cacheKey, fetchedMatches, cacheTTL);
+        await persistCalendar(fetchedMatches);
 
         logger.debug('[useMatchesData] Fetched and set matches', {
           count: fetchedMatches.length,
@@ -688,18 +643,20 @@ export const useMatchesData = (
       const date = dateFromLocalKey(dateStr);
       let fetchedMatches: Match[];
       fetchedMatches = isTodayFlag
-        ? await fetchTodayMatchesWithLiveFeed(date, (liveFeed) => {
-            setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
-            setIsDataStale(false);
-          })
-        : await fetchMatchesByDate(date);
+        ? await fetchTodayMatchesWithLiveFeed(
+            date,
+            (liveFeed) => {
+              setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+              setIsDataStale(false);
+            },
+            { fresh: true },
+          )
+        : await fetchMatchesByDate(date, { fresh: true });
 
       setCalendarMatches(fetchedMatches);
       setIsDataStale(false); // background refresh succeeded
 
-      // Today: short TTL so the disk cache doesn't override fresh polls.
-      // Future: 3 days. Past dates handled by the foreground fetch.
-      const cacheTTL = isTodayFlag ? LIVE_FIXTURE_CALENDAR_POLL_MS : 3 * 24 * 60 * 60 * 1000;
+      const cacheTTL = isTodayFlag ? MATCHES_CALENDAR_DISK_TTL_MS : 3 * 24 * 60 * 60 * 1000;
       const cacheKey = getMatchesCacheKey(dateStr);
       evictOldestIfNeeded(memoryCache);
       memoryCache.set(dateStr, { data: fetchedMatches, timestamp: Date.now() });

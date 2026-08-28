@@ -18,6 +18,23 @@ const DEFAULT_TTL = 5 * 60 * 1000;
 // ✅ Reduced to prevent SQLITE_FULL errors on low-storage devices
 const MAX_CACHE_ENTRIES = 50;
 
+/** Keep the matches calendar on disk across app kills — scores overlay separately. */
+export const MATCHES_CALENDAR_DISK_TTL_MS = 6 * 60 * 60 * 1000;
+
+function logicalKeyFromStorageKey(storageKey: string): string {
+  return storageKey.startsWith(CACHE_PREFIX) ? storageKey.slice(CACHE_PREFIX.length) : storageKey;
+}
+
+/** Fixture lists must survive TTL cleanup / LRU or the scores tab cold-starts empty. */
+function isPinnedLogicalKey(logicalKey: string): boolean {
+  return (
+    logicalKey.startsWith('matches_') ||
+    logicalKey.startsWith('matches_by_date_') ||
+    logicalKey.startsWith('wc_matches_') ||
+    logicalKey.startsWith('wc_phase_')
+  );
+}
+
 /**
  * Module-level in-memory store for large object caches (e.g. reels feed).
  * AsyncStorage only stores IDs + metadata for these keys; full objects live here.
@@ -330,7 +347,7 @@ class CacheService {
             const entry: CacheEntry<unknown> = JSON.parse(raw);
             const age = now - entry.timestamp;
             
-            if (age > entry.ttl) {
+            if (age > entry.ttl && !isPinnedLogicalKey(logicalKeyFromStorageKey(cacheKey))) {
               keysToRemove.push(cacheKey);
             }
           }
@@ -490,10 +507,15 @@ class CacheService {
         }
       }
 
-      // Sort by timestamp (oldest first)
-      entriesWithTimestamp.sort((a, b) => a.timestamp - b.timestamp);
+      // Sort by timestamp (oldest first). Never evict pinned match calendars
+      // unless they are the only keys over the cap (SQLITE_FULL path).
+      entriesWithTimestamp.sort((a, b) => {
+        const aPinned = isPinnedLogicalKey(logicalKeyFromStorageKey(a.key));
+        const bPinned = isPinnedLogicalKey(logicalKeyFromStorageKey(b.key));
+        if (aPinned !== bPinned) return aPinned ? 1 : -1;
+        return a.timestamp - b.timestamp;
+      });
 
-      // Calculate how many entries to remove
       const entriesToRemove = entriesWithTimestamp.length - maxEntries;
       
       if (entriesToRemove > 0) {
@@ -679,8 +701,8 @@ class CacheService {
         // Past dates - permanent cache (matches are finished, never change)
         cacheTTL = Number.MAX_SAFE_INTEGER;
       } else if (dateString === todayKey) {
-        // Today - cache for 5 minutes (matches may be live, need frequent updates)
-        cacheTTL = 5 * 60 * 1000; // 5 minutes for live data
+        // Calendar snapshot — live scores come from the live feed / WS overlay.
+        cacheTTL = MATCHES_CALENDAR_DISK_TTL_MS;
       } else {
         // Future dates - cache for 3 days (schedule rarely changes)
         cacheTTL = 3 * 24 * 60 * 60 * 1000; // 3 days
@@ -692,13 +714,14 @@ class CacheService {
 
   /**
    * Get cached matches for a specific date.
+   * Defaults to allowing stale snapshots so a killed app can paint instantly.
    */
-  async getMatchesByDate(dateString: string): Promise<any[] | null> {
+  async getMatchesByDate(dateString: string, allowStale: boolean = true): Promise<any[] | null> {
     const unifiedKey = `${CACHE_KEYS.MATCHES}_${dateString}`;
     const legacyKey = `${CACHE_KEYS.MATCHES_BY_DATE}_${dateString}`;
-    const unified = await this.get<any[]>(unifiedKey);
+    const unified = await this.get<any[]>(unifiedKey, allowStale);
     if (unified && unified.length > 0) return unified;
-    return this.get<any[]>(legacyKey);
+    return this.get<any[]>(legacyKey, allowStale);
   }
 
   /**
