@@ -27,7 +27,7 @@ import {
 } from '../../services/competitions.service';
 import { getClerkBearerToken } from '../../utils/clerkAuthToken';
 import { GlassCtaShell } from './glassCta';
-import { PW, PW_RADII, usePWDirection, usePWFonts, usePWScale } from './theme';
+import { PW, usePWDirection, usePWFonts, usePWScale } from './theme';
 
 const AWARD_GLASS_TINT = ['rgba(0,220,80,0.32)', 'rgba(0,120,40,0.14)'] as const;
 const PROFILE_GLASS_TINT = ['rgba(140,40,255,0.28)', 'rgba(61,10,179,0.14)'] as const;
