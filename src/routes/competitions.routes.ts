@@ -52,6 +52,10 @@ const ERROR_MAP: Record<string, { status: ErrorCodeValue; message: string }> = {
   SPONSOR_DISABLED: { status: ErrorCode.AUTHORIZATION, message: 'حساب الراعي موقوف' },
   SPONSOR_NOT_FOUND: { status: ErrorCode.NOT_FOUND, message: 'الراعي غير موجود' },
   INVALID_PRIZE: { status: ErrorCode.VALIDATION, message: 'بيانات الجائزة غير صالحة' },
+  INVALID_CASH_AMOUNT: {
+    status: ErrorCode.VALIDATION,
+    message: 'مبلغ الجائزة النقدية يجب أن يكون 100 جنيه أو أكثر',
+  },
   INVALID_WINNERS_COUNT: { status: ErrorCode.VALIDATION, message: 'عدد الفائزين غير صالح' },
   INVALID_DEADLINE: { status: ErrorCode.VALIDATION, message: 'موعد انتهاء التوقعات غير صالح' },
   DEADLINE_AFTER_KICKOFF: {

@@ -25,7 +25,6 @@ export async function loadPoolFixturesForDate(day: string): Promise<PoolSourceFi
   const { start, end } = calendarDayBounds(day);
   const rows = await prisma.cachedFixture.findMany({
     where: {
-      fixtureId: { gte: 4_000_000 },
       matchDate: { gte: start, lte: end },
     },
     select: {
@@ -43,7 +42,7 @@ export async function loadPoolFixturesForDate(day: string): Promise<PoolSourceFi
     take: MAX_ROWS_PER_DAY,
   });
 
-  return rows.filter((row) => isNative365FixtureId(row.fixtureId)).map((row) => ({
+  const mapRow = (row: typeof rows[number]): PoolSourceFixture => ({
     fixture: {
       id: row.fixtureId,
       date: row.matchDate.toISOString(),
@@ -54,5 +53,11 @@ export async function loadPoolFixturesForDate(day: string): Promise<PoolSourceFi
       away: { name: row.awayTeamName, logo: row.awayTeamLogo },
     },
     league: { name: row.leagueName, id: row.leagueId },
-  }));
+  });
+
+  const all = rows.map(mapRow);
+  const native365 = rows.filter((row) => isNative365FixtureId(row.fixtureId)).map(mapRow);
+  // Prefer Scores365 ids when present; otherwise fall back to any cached fixture
+  // so sponsors are not blocked when the cache only holds API-Football ids.
+  return native365.length > 0 ? native365 : all;
 }

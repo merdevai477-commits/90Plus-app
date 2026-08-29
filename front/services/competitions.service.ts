@@ -69,6 +69,7 @@ export interface CompetitionInfo {
   prizeImageUrl: string | null;
   prizeType: string;
   prizeDescription: string | null;
+  prizeCashAmount?: number | null;
   winnersCount: number;
   apiMatchId: number;
   homeTeam: string;
@@ -169,8 +170,11 @@ export interface CreateCompetitionPayload {
   prizeImageUrl?: string | null;
   prizeType: string;
   prizeDescription?: string | null;
+  prizeCashAmount?: number | null;
   winnersCount: number;
   apiMatchId: number;
+  /** Pool calendar day (`YYYY-MM-DD`) the match was chosen from. */
+  poolDate?: string;
   predictionDeadline: string;
   predictionMode?: 'WINNER' | 'EXACT_SCORE';
   /** Entry conditions ("شروط المسابقة"). */
@@ -215,6 +219,7 @@ const KNOWN_ERROR_CODES = new Set([
   'SPONSOR_DISABLED',
   'SPONSOR_NOT_FOUND',
   'INVALID_PRIZE',
+  'INVALID_CASH_AMOUNT',
   'INVALID_WINNERS_COUNT',
   'INVALID_DEADLINE',
   'DEADLINE_AFTER_KICKOFF',

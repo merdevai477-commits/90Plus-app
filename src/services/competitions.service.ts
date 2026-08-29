@@ -47,6 +47,8 @@ export interface CreateCompetitionInput {
   prizeImageUrl?: string | null;
   prizeType: string;
   prizeDescription?: string | null;
+  /** Cash prizes only — amount in EGP (minimum 100). */
+  prizeCashAmount?: number | null;
   winnersCount: number;
   apiMatchId: number;
   predictionDeadline: string | Date;
@@ -435,6 +437,16 @@ async function buildCompetitionData(input: CreateCompetitionInput, sponsorId: st
   const category = await prisma.prizeCategory.findUnique({ where: { id: input.categoryId } });
   if (!category || !category.isActive) throw new Error('CATEGORY_NOT_FOUND');
 
+  const isCash = category.key === 'cash';
+  if (isCash) {
+    if (
+      !Number.isInteger(input.prizeCashAmount) ||
+      (input.prizeCashAmount as number) < 100
+    ) {
+      throw new Error('INVALID_CASH_AMOUNT');
+    }
+  }
+
   const match = await findInPool(input.apiMatchId, input.poolDate);
   if (!match) throw new Error('MATCH_NOT_IN_POOL');
 
@@ -454,9 +466,10 @@ async function buildCompetitionData(input: CreateCompetitionInput, sponsorId: st
     sponsorId,
     categoryId: category.id,
     prizeName: input.prizeName.trim(),
-    prizeImageUrl: input.prizeImageUrl ?? null,
+    prizeImageUrl: isCash ? null : input.prizeImageUrl ?? null,
     prizeType: input.prizeType.trim(),
     prizeDescription: input.prizeDescription ?? null,
+    prizeCashAmount: isCash ? (input.prizeCashAmount as number) : null,
     winnersCount: input.winnersCount,
     apiMatchId: input.apiMatchId,
     homeTeam: match.home.name,

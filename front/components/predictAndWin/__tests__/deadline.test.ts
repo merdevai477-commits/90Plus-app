@@ -59,6 +59,17 @@ describe('buildDeadline', () => {
     expect(at.getDate()).toBe(12);
   });
 
+  it('supports 24-hour clock without meridiem', () => {
+    const at = buildDeadline({
+      date: local(2026, 9, 12),
+      hour: '21',
+      minute: '30',
+      meridiem: null,
+      use24Hour: true,
+    });
+    expect(at).toEqual(local(2026, 9, 12, 21, 30));
+  });
+
   it.each([
     ['no date', { date: null, hour: '9', minute: '30', meridiem: 'pm' as const }],
     ['no hour', { date: local(2026, 9, 12), hour: '', minute: '30', meridiem: 'pm' as const }],

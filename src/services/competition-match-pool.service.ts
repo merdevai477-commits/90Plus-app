@@ -164,7 +164,21 @@ function isOfferable(match: PoolMatch, now: Date): boolean {
  */
 export async function getPoolForDate(dateString?: string, now: Date = new Date()): Promise<PoolMatch[]> {
   const day = normalisePoolDate(dateString);
-  const fixtures = await loadPoolFixturesForDate(day);
+  let fixtures = await loadPoolFixturesForDate(day);
+
+  // When the durable cache is cold, warm it the same way the Matches tab does
+  // so sponsors are not stuck on "Couldn't load the match list".
+  if (fixtures.length === 0) {
+    try {
+      const { footballDataCacheService } = await import('./football-data-cache.service');
+      const warmed = await footballDataCacheService.getMatchesByDate(day);
+      if (warmed.length > 0) {
+        fixtures = await loadPoolFixturesForDate(day);
+      }
+    } catch (err) {
+      logger.warn(`[PredictWinPool] warm cache for ${day} failed:`, err);
+    }
+  }
 
   // `pickTopFixtures` with no limit keeps its status filter and its ranking
   // while leaving the cap to us — the eligibility filter has to come first.

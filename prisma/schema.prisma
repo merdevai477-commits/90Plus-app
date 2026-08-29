@@ -1468,6 +1468,8 @@ model Competition {
   prizeImageUrl      String?
   prizeType          String
   prizeDescription   String?
+  /// Cash prizes only — amount in EGP (minimum 100).
+  prizeCashAmount    Int?
   winnersCount       Int                @default(1)
   apiMatchId         Int
   homeTeam           String

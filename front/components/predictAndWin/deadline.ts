@@ -23,24 +23,39 @@ export interface DeadlineParts {
   hour: string;
   minute: string;
   meridiem: 'am' | 'pm' | null;
+  /** When true, `hour` is 0–23 and `meridiem` is ignored. */
+  use24Hour?: boolean;
 }
 
 /**
  * Combines the picked day with the 12-hour clock into a local instant, or
  * `null` when the form is incomplete or the digits are out of range.
  */
-export function buildDeadline({ date, hour, minute, meridiem }: DeadlineParts): Date | null {
-  if (!date || !hour || !minute || !meridiem) return null;
+export function buildDeadline({
+  date,
+  hour,
+  minute,
+  meridiem,
+  use24Hour = false,
+}: DeadlineParts): Date | null {
+  if (!date || !hour || !minute) return null;
+  if (!use24Hour && !meridiem) return null;
 
   const rawHour = Number.parseInt(hour, 10);
   const rawMinute = Number.parseInt(minute, 10);
   if (!Number.isFinite(rawHour) || !Number.isFinite(rawMinute)) return null;
-  // 12-hour clock: 12 AM is midnight and 12 PM is noon, so `12` is legal and
-  // `0` is not.
-  if (rawHour < 1 || rawHour > 12 || rawMinute < 0 || rawMinute > 59) return null;
 
-  let hours = rawHour % 12;
-  if (meridiem === 'pm') hours += 12;
+  let hours: number;
+  if (use24Hour) {
+    if (rawHour < 0 || rawHour > 23 || rawMinute < 0 || rawMinute > 59) return null;
+    hours = rawHour;
+  } else {
+    // 12-hour clock: 12 AM is midnight and 12 PM is noon, so `12` is legal and
+    // `0` is not.
+    if (rawHour < 1 || rawHour > 12 || rawMinute < 0 || rawMinute > 59) return null;
+    hours = rawHour % 12;
+    if (meridiem === 'pm') hours += 12;
+  }
 
   const at = new Date(
     date.getFullYear(),
@@ -66,6 +81,18 @@ export function isDeadlineWithinBounds(
   if (!deadline || !kickoff) return false;
   const at = deadline.getTime();
   return at > now.getTime() && at <= kickoff.getTime();
+}
+
+/** Parse `YYYY-MM-DD` into local midnight — pool `day` keys are calendar days. */
+export function parseCalendarDay(day: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const at = new Date(y, mo - 1, d);
+  return Number.isNaN(at.getTime()) ? null : at;
 }
 
 /** Midnight today, local — the earliest day a deadline may fall on. */

@@ -517,18 +517,23 @@ export function PWNumberStepper({
   onChange,
   min = 1,
   max = 999,
+  step = 1,
 }: {
   value: number;
   onChange: (n: number) => void;
   min?: number;
   max?: number;
+  /** Increment/decrement stride — cash prizes use 50 EGP steps. */
+  step?: number;
 }) {
   const { s, f } = usePWScale();
   const { semibold } = usePWFonts();
   // Figma `690:1349`: the minus sits on a 46×46 r12 gradient plate with a 28px
   // glyph; the plus is a single 46×46 exported asset that carries its own plate.
+  const stride = Math.max(1, step);
   const btn = (kind: 'minus' | 'plus') => {
-    const next = kind === 'minus' ? Math.max(min, value - 1) : Math.min(max, value + 1);
+    const next =
+      kind === 'minus' ? Math.max(min, value - stride) : Math.min(max, value + stride);
     const disabled = next === value;
     return (
       <Pressable

@@ -47,15 +47,15 @@ import {
   PWOutlineButton,
   PWPrimaryButton,
   PWSegmentedPair,
-  PWSelectField,
   PWSubLabel,
   PWTextArea,
   PWTextField,
 } from '../../components/predictAndWin/fields';
 import {
   buildDeadline,
-  isDayAfterKickoff,
   isDeadlineWithinBounds,
+  parseCalendarDay,
+  startOfDay,
   startOfToday,
 } from '../../components/predictAndWin/deadline';
 import { usePWLocalize } from '../../components/predictAndWin/localize';
@@ -89,6 +89,10 @@ import { useScreenFont } from '../../utils/fontSetup';
 
 type Phase = 'category' | 1 | 2 | 3 | 4;
 
+const CASH_MIN_EGP = 100;
+const CASH_STEP_EGP = 50;
+const CASH_MAX_EGP = 500_000;
+
 export default function CreateCompetitionScreen() {
   useScreenFont();
   const { s, f } = usePWScale();
@@ -109,14 +113,15 @@ export default function CreateCompetitionScreen() {
   const [category, setCategory] = useState<PrizeCategoryInfo | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'prize' | 'store' | null>(null);
-  const [typeOpen, setTypeOpen] = useState(false);
   const publishInFlight = useRef(false);
+
+  const isCashCategory = category?.key === 'cash';
 
   // Step 1
   const [prizeImageUrl, setPrizeImageUrl] = useState<string | null>(null);
   const [prizeName, setPrizeName] = useState('');
-  const [prizeType, setPrizeType] = useState<PrizeCategoryInfo | null>(null);
   const [prizeDescription, setPrizeDescription] = useState('');
+  const [cashAmount, setCashAmount] = useState(CASH_MIN_EGP);
   const [winnersCount, setWinnersCount] = useState(2);
   const [rules, setRules] = useState('');
 
@@ -127,6 +132,7 @@ export default function CreateCompetitionScreen() {
   const [hour, setHour] = useState('');
   const [minute, setMinute] = useState('');
   const [meridiem, setMeridiem] = useState<'am' | 'pm' | null>(null);
+  const [timeFormat, setTimeFormat] = useState<'12' | '24'>('12');
 
   // Step 3
   const [storeImageUrl, setStoreImageUrl] = useState<string | null>(null);
@@ -184,7 +190,10 @@ export default function CreateCompetitionScreen() {
 
   const canAdvance = (): boolean => {
     if (phase === 'category') return !!category;
-    if (phase === 1) return !!prizeName.trim() && !!prizeType && winnersCount >= 1;
+    if (phase === 1) {
+      if (isCashCategory) return cashAmount >= CASH_MIN_EGP && winnersCount >= 1;
+      return !!prizeName.trim() && winnersCount >= 1;
+    }
     if (phase === 2) return step2Problem === null;
     if (phase === 3) return !!storeName.trim() && hasDelivery !== null;
     return true;
@@ -201,9 +210,11 @@ export default function CreateCompetitionScreen() {
     else setPhase(((phase as number) - 1) as Phase);
   };
 
+  const use24Hour = timeFormat === '24';
+
   /** See `deadline.ts` — local-component assembly, and the server's own gates. */
   const deadlineAt = (): Date | null =>
-    buildDeadline({ date: deadlineDate, hour, minute, meridiem });
+    buildDeadline({ date: deadlineDate, hour, minute, meridiem, use24Hour });
 
   const deadlineIso = (): string | null => deadlineAt()?.toISOString() ?? null;
 
@@ -230,9 +241,10 @@ export default function CreateCompetitionScreen() {
   const step2Problem: string | null = (() => {
     if (!selectedMatch) return wizard.needMatch;
     if (!deadlineDate) return wizard.needDate;
-    if (!hour || !minute || !meridiem) return wizard.needTime;
+    const timeMissing = !hour || !minute || (!use24Hour && !meridiem);
+    if (timeMissing) return wizard.needTime;
     const at = deadlineAt();
-    if (!at) return wizard.needValidTime;
+    if (!at) return use24Hour ? wizard.needValidTime24 : wizard.needValidTime;
     if (!isDeadlineWithinBounds(at, kickoffAt)) {
       return at.getTime() <= Date.now()
         ? wizard.deadlineInPast
@@ -252,21 +264,24 @@ export default function CreateCompetitionScreen() {
   const onSelectMatch = useCallback((match: MatchPoolEntry) => {
     setSelectedMatch(match);
     const kickoff = new Date(match.kickoffIso);
-    setDeadlineDate((current) =>
-      current && isDayAfterKickoff(current, kickoff) ? null : current,
-    );
+    const matchDay = parseCalendarDay(match.day) ?? startOfDay(kickoff);
+    setDeadlineDate(matchDay);
   }, []);
 
-  /**
-   * Stable bounds for the date picker. Building these inline in JSX handed
-   * `PWDateField` a new `Date` on every render, which invalidated its memoised
-   * open handler each time.
-   */
-  const minDeadlineDate = React.useMemo(() => startOfToday(), []);
+  const minDeadlineDate = React.useMemo(() => {
+    if (selectedMatch) {
+      return parseCalendarDay(selectedMatch.day) ?? startOfDay(new Date(selectedMatch.kickoffIso));
+    }
+    return startOfToday();
+  }, [selectedMatch]);
+
+  const resolvedPrizeName = isCashCategory
+    ? wizard.cashPrizeName.replace('{amount}', String(cashAmount))
+    : prizeName.trim();
 
   const handlePublish = async () => {
     const iso = deadlineIso();
-    if (!category || !selectedMatch || !prizeType || !iso) return;
+    if (!category || !selectedMatch || !iso) return;
     // `submitting` state alone cannot stop a double-tap: both presses can fire
     // before React re-renders with the disabled button. The ref closes that gap.
     if (publishInFlight.current) return;
@@ -289,13 +304,15 @@ export default function CreateCompetitionScreen() {
           },
         },
         categoryId: category.id,
-        prizeName,
-        prizeImageUrl,
-        prizeType: prizeType.key,
+        prizeName: resolvedPrizeName,
+        prizeImageUrl: isCashCategory ? null : prizeImageUrl,
+        prizeType: category.key,
         prizeDescription: prizeDescription || null,
+        prizeCashAmount: isCashCategory ? cashAmount : null,
         rules: rules || null,
         winnersCount,
         apiMatchId: selectedMatch.apiMatchId,
+        poolDate: selectedMatch.day,
         predictionDeadline: iso,
       });
       // Leave `submitting` true so this screen does not remount CTA children
@@ -327,9 +344,9 @@ export default function CreateCompetitionScreen() {
       isVerified: false,
     },
     category: category!,
-    prizeName,
-    prizeImageUrl,
-    prizeType: prizeType?.key ?? '',
+    prizeName: resolvedPrizeName,
+    prizeImageUrl: isCashCategory ? null : prizeImageUrl,
+    prizeType: category?.key ?? '',
     prizeDescription: prizeDescription || null,
     rules: rules || null,
     winnersCount,
@@ -457,106 +474,122 @@ export default function CreateCompetitionScreen() {
           {/* ─── Step 1 · prize info ──────────────────────────────────── */}
           {phase === 1 ? (
             <>
-              <View style={[gutter, { marginTop: s(37), alignItems: dir.alignStart }]}>
-                <PWFieldLabel label={wizard.prizeImage} />
-              </View>
-              <Pressable
-                onPress={() => setPickerTarget('prize')}
-                style={{
-                  width: contentWidth,
-                  height: s(207),
-                  alignSelf: 'center',
-                  marginTop: s(27),
-                  borderRadius: s(PW_RADII.card),
-                  overflow: 'hidden',
-                  backgroundColor: PW.inputBottom,
-                  borderWidth: 1,
-                  borderColor: PW.inputBorder,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {prizeImageUrl ? (
-                  <Image source={{ uri: prizeImageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                ) : (
-                  <IconCamera width={s(55)} height={s(49)} />
-                )}
-              </Pressable>
+              {!isCashCategory ? (
+                <>
+                  <View style={[gutter, { marginTop: s(37), alignItems: dir.alignStart }]}>
+                    <PWFieldLabel label={wizard.prizeImage} />
+                  </View>
+                  <Pressable
+                    onPress={() => setPickerTarget('prize')}
+                    style={{
+                      width: contentWidth,
+                      height: s(207),
+                      alignSelf: 'center',
+                      marginTop: s(27),
+                      borderRadius: s(PW_RADII.card),
+                      overflow: 'hidden',
+                      backgroundColor: PW.inputBottom,
+                      borderWidth: 1,
+                      borderColor: PW.inputBorder,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {prizeImageUrl ? (
+                      <Image
+                        source={{ uri: prizeImageUrl }}
+                        style={{ width: '100%', height: '100%' }}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <IconCamera width={s(55)} height={s(49)} />
+                    )}
+                  </Pressable>
+                </>
+              ) : (
+                <View style={{ marginTop: s(37), alignItems: 'center', gap: s(12) }}>
+                  {category ? (
+                    <CategoryMedallion category={category} size={126} artSize={96} />
+                  ) : null}
+                </View>
+              )}
 
               <View style={[gutter, { marginTop: s(20), gap: s(34) }]}>
-                <View style={{ gap: s(16), alignItems: dir.alignStart }}>
-                  <PWFieldLabel label={wizard.prizeName} />
-                  <View style={{ width: '100%' }}>
-                    <PWTextField
-                      value={prizeName}
-                      onChangeText={setPrizeName}
-                      placeholder={wizard.prizeName}
-                      icon={<IconShoe width={s(35)} height={s(35)} />}
-                    />
+                {isCashCategory ? (
+                  <View style={{ gap: s(16), alignItems: dir.alignStart }}>
+                    <PWFieldLabel label={wizard.cashAmount} />
+                    <View style={{ width: '100%', gap: s(8) }}>
+                      <PWNumberStepper
+                        value={cashAmount}
+                        onChange={setCashAmount}
+                        min={CASH_MIN_EGP}
+                        max={CASH_MAX_EGP}
+                        step={CASH_STEP_EGP}
+                      />
+                      <Text
+                        style={{
+                          fontFamily: regular,
+                          fontSize: f(12),
+                          color: PW.textTileSub,
+                          textAlign: dir.textAlign,
+                        }}
+                      >
+                        {wizard.cashAmountHint}
+                      </Text>
+                    </View>
                   </View>
-                </View>
+                ) : (
+                  <View style={{ gap: s(16), alignItems: dir.alignStart }}>
+                    <PWFieldLabel label={wizard.prizeName} />
+                    <View style={{ width: '100%' }}>
+                      <PWTextField
+                        value={prizeName}
+                        onChangeText={setPrizeName}
+                        placeholder={wizard.prizeName}
+                        icon={<IconShoe width={s(35)} height={s(35)} />}
+                      />
+                    </View>
+                  </View>
+                )}
 
                 <View style={{ gap: s(16), alignItems: dir.alignStart }}>
                   <PWFieldLabel label={wizard.prizeType} />
                   <View style={{ width: '100%' }}>
-                    <PWSelectField
-                      value={prizeType ? categoryName(prizeType) : null}
-                      placeholder={wizard.prizeTypePlaceholder}
-                      onPress={() => setTypeOpen((v) => !v)}
-                      expanded={typeOpen}
-                    />
-                    {typeOpen ? (
-                      <View style={{ marginTop: s(8), gap: s(8) }}>
-                        {categoriesLoading ? (
-                          <ActivityIndicator color={PW.ctaTop} style={{ marginVertical: s(16) }} />
-                        ) : null}
-                        {!categoriesLoading && (categoriesError || categories.length === 0) ? (
-                          <CategoriesPlaceholder failed={categoriesError} onRetry={reloadCategories} />
-                        ) : null}
-                        {/* Rendered verbatim from the API. This used to be
-                            filtered against a hardcoded ten-key allowlist, so
-                            any category an admin added or renamed silently
-                            vanished from "Add Gift" while still showing on the
-                            category grid. The server's isActive + sortOrder is
-                            the only source of truth. */}
-                        {categories.map((c) => (
-                            <Pressable
-                              key={c.id}
-                              accessibilityRole="button"
-                              accessibilityState={{ selected: prizeType?.id === c.id }}
-                              onPress={() => {
-                                setPrizeType(c);
-                                setTypeOpen(false);
-                              }}
-                            >
-                              <PWBox height={64} selected={prizeType?.id === c.id}>
-                                <View
-                                  style={{
-                                    flexDirection: dir.rowReverse,
-                                    alignItems: 'center',
-                                    justifyContent: 'flex-end',
-                                    gap: s(12),
-                                  }}
-                                >
-                                  <Text
-                                    style={{
-                                      fontFamily: regular,
-                                      fontSize: f(17),
-                                      color: prizeType?.id === c.id ? PW.text : PW.textSelect,
-                                      textAlign: dir.textAlign,
-                                      flexShrink: 1,
-                                    }}
-                                    numberOfLines={2}
-                                  >
-                                    {categoryName(c)}
-                                  </Text>
-                                  <CategoryMedallion category={c} size={40} artSize={30} />
-                                </View>
-                              </PWBox>
-                            </Pressable>
-                          ))}
+                    <PWBox height={64}>
+                      <View
+                        style={{
+                          flexDirection: dir.rowReverse,
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                          gap: s(12),
+                        }}
+                      >
+                        <View style={{ flex: 1, gap: s(4) }}>
+                          <Text
+                            style={{
+                              fontFamily: semibold,
+                              fontSize: f(17),
+                              color: PW.text,
+                              textAlign: dir.textAlign,
+                            }}
+                            numberOfLines={2}
+                          >
+                            {category ? categoryName(category) : ''}
+                          </Text>
+                          <Text
+                            style={{
+                              fontFamily: regular,
+                              fontSize: f(12),
+                              color: PW.textTileSub,
+                              textAlign: dir.textAlign,
+                            }}
+                          >
+                            {wizard.prizeTypeLockedHint}
+                          </Text>
+                        </View>
+                        {category ? <CategoryMedallion category={category} size={40} artSize={30} /> : null}
                       </View>
-                    ) : null}
+                    </PWBox>
                   </View>
                 </View>
 
@@ -658,21 +691,43 @@ export default function CreateCompetitionScreen() {
 
                     <View style={{ gap: s(8) }}>
                       <PWSubLabel label={wizard.deadlineTime} />
-                      <View style={{ gap: s(16) }}>
-                        <View style={{ flexDirection: dir.row, alignItems: 'center', gap: s(13) }}>
-                          <View style={{ flex: 1 }}>
-                            <PWBox height={73} style={{ alignItems: 'center' }}>
-                              <TimeInput value={hour} onChange={setHour} max={12} />
-                            </PWBox>
-                          </View>
-                          <Text style={{ fontFamily: regular, fontSize: f(40), color: PW.text }}>:</Text>
-                          <View style={{ flex: 1 }}>
-                            <PWBox height={73} style={{ alignItems: 'center' }}>
-                              <TimeInput value={minute} onChange={setMinute} max={59} />
-                            </PWBox>
-                          </View>
+                      <PWSegmentedPair
+                        left={{ key: '12', label: wizard.timeFormat12 }}
+                        right={{ key: '24', label: wizard.timeFormat24 }}
+                        selected={timeFormat}
+                        onSelect={(k) => {
+                          setTimeFormat(k as '12' | '24');
+                          setHour('');
+                          setMinute('');
+                          setMeridiem(null);
+                        }}
+                        gap={12}
+                        idleColor={PW.textTimeIdle}
+                      />
+                      <View style={{ flexDirection: dir.row, alignItems: 'flex-end', gap: s(13) }}>
+                        <View style={{ flex: 1, gap: s(8) }}>
+                          <PWSubLabel label={wizard.deadlineHour} />
+                          <PWBox height={73} style={{ alignItems: 'center' }}>
+                            <TimeInput
+                              value={hour}
+                              onChange={setHour}
+                              max={use24Hour ? 23 : 12}
+                              placeholder={use24Hour ? '00' : '12'}
+                            />
+                          </PWBox>
                         </View>
+                        <Text style={{ fontFamily: regular, fontSize: f(40), color: PW.text, marginBottom: s(18) }}>
+                          :
+                        </Text>
+                        <View style={{ flex: 1, gap: s(8) }}>
+                          <PWSubLabel label={wizard.deadlineMinute} />
+                          <PWBox height={73} style={{ alignItems: 'center' }}>
+                            <TimeInput value={minute} onChange={setMinute} max={59} placeholder="00" />
+                          </PWBox>
+                        </View>
+                      </View>
 
+                      {!use24Hour ? (
                         <PWSegmentedPair
                           left={{ key: 'pm', label: wizard.pm }}
                           right={{ key: 'am', label: wizard.am }}
@@ -681,7 +736,7 @@ export default function CreateCompetitionScreen() {
                           gap={12}
                           idleColor={PW.textTimeIdle}
                         />
-                      </View>
+                      ) : null}
                     </View>
                   </View>
                 </View>
@@ -911,10 +966,12 @@ function TimeInput({
   value,
   onChange,
   max,
+  placeholder = '00',
 }: {
   value: string;
   onChange: (v: string) => void;
   max: number;
+  placeholder?: string;
 }) {
   const { f } = usePWScale();
   const { medium } = usePWFonts();
@@ -926,7 +983,7 @@ function TimeInput({
         if (digits === '' || parseInt(digits, 10) <= max) onChange(digits);
       }}
       keyboardType="number-pad"
-      placeholder="00"
+      placeholder={placeholder}
       placeholderTextColor={PW.textTimeIdle}
       style={{
         fontFamily: medium,
