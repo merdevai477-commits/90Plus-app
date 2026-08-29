@@ -19,6 +19,13 @@ export interface SponsorPrizeCtaState {
 }
 
 /**
+ * TEMP while the sponsor is testing the wizard.
+ * `true` keeps the hub CTA as "أضف جائزتك" and always opens create, so they
+ * can publish more than once. Flip to `false` when they say «رجعه زي ما كان».
+ */
+export const ALWAYS_ADD_PRIZE_CTA = true;
+
+/**
  * Latest owned competition for the signed-in sponsor — drives the hub CTA
  * (`add` / `pending` / `winner` / `rejected`).
  */
@@ -81,8 +88,10 @@ export function useSponsorPrizeCta(): SponsorPrizeCtaState {
   );
 
   return {
-    variant: deriveAddPrizeVariant(status, { winnerAwardedAt }),
+    variant: ALWAYS_ADD_PRIZE_CTA
+      ? 'add'
+      : deriveAddPrizeVariant(status, { winnerAwardedAt }),
     competitionId,
-    loading,
+    loading: ALWAYS_ADD_PRIZE_CTA ? false : loading,
   };
 }
