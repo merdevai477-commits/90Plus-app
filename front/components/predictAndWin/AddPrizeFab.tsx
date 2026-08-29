@@ -1,8 +1,8 @@
 /**
  * Sponsor hub CTA — Figma `Component 40` (`953:2463`) state matrix.
  *
- * `add` wide pill: 239×76, radius 53 — label + 34px plus, trailing 78×76 gift
- * cap with 36px icon (SwiftUI trailing padding 72). Review states use flat fills.
+ * `add` wide pill: 239×76, radius 53 — 78px gift cap, label, 34px plus.
+ * Visual order (LTR): gift → text → plus.
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -74,6 +74,20 @@ function AddPrizePrimaryPill({ label }: { label: string }) {
       }}
     >
       <LinearGradient
+        colors={[ADD_GIFT_CAP, ADD_PILL_SOLID]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={{
+          width: s(PILL.giftCapWidth),
+          height: s(PILL.height),
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <IconGiftFill width={s(PILL.gift)} height={s(PILL.gift)} />
+      </LinearGradient>
+
+      <LinearGradient
         colors={[...PW_GRADIENTS.fab]}
         locations={[...PW_GRADIENTS.fabLocations]}
         start={{ x: 0, y: 0.5 }}
@@ -85,8 +99,8 @@ function AddPrizePrimaryPill({ label }: { label: string }) {
           justifyContent: 'center',
           gap: s(2),
           paddingVertical: s(PILL.padV),
-          paddingLeft: s(PILL.padH),
-          paddingRight: s(8),
+          paddingLeft: s(8),
+          paddingRight: s(PILL.padH),
         }}
       >
         <Text
@@ -103,20 +117,6 @@ function AddPrizePrimaryPill({ label }: { label: string }) {
           {label}
         </Text>
         <IconRoundPlus width={s(PILL.plus)} height={s(PILL.plus)} />
-      </LinearGradient>
-
-      <LinearGradient
-        colors={[ADD_GIFT_CAP, ADD_PILL_SOLID]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={{
-          width: s(PILL.giftCapWidth),
-          height: s(PILL.height),
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <IconGiftFill width={s(PILL.gift)} height={s(PILL.gift)} />
       </LinearGradient>
     </View>
   );
