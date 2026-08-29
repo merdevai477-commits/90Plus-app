@@ -5,17 +5,24 @@
  * bottom nav stays visible; detail (`/predict-and-win/[id]`) and create
  * (`/predict-and-win/create`) remain stack routes and hide the bar.
  *
- * **Why `FlatList` and not `FlashList`.** The hub shipped on FlashList and
- * rendered the header block with nothing under it — no cards, and not the
- * empty/error placeholder either, even though the API was returning rows.
- * FlashList v2 paints a cell only after a measurement pre-pass; when that
- * comes back 0 the rows stay in the tree unpainted. This list is at most one
- * 20-row page of fixed-height cards, so `FlatList` is the right tool.
+ * The hub shipped on FlashList, then FlatList, and both could paint the
+ * header with a blank void underneath — no cards and no empty placeholder —
+ * while `GET /competitions` was returning rows. This list is one page of
+ * fixed-height cards, so a `ScrollView` of mapped rows is the reliable tool.
  */
 
 import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CompetitionCard } from '../../components/predictAndWin/CompetitionCard';
@@ -32,13 +39,6 @@ import { ALWAYS_ADD_PRIZE_CTA, useSponsorPrizeCta } from '../../hooks/useSponsor
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
 import type { CompetitionInfo, CompetitionTab } from '../../services/competitions.service';
-
-const keyExtractor = (item: CompetitionInfo) => item.id;
-
-function CardSeparator() {
-  const { s } = usePWScale();
-  return <View style={{ height: s(24) }} />;
-}
 
 export default function PredictAndWinScreen() {
   useScreenFont();
@@ -62,6 +62,8 @@ export default function PredictAndWinScreen() {
     loadMore,
   } = useCompetitions();
 
+  const rows = Array.isArray(items) ? items : [];
+
   const { variant: addPrizeVariant, competitionId, loading: addPrizeLoading } =
     useSponsorPrizeCta();
   const [winnerOpen, setWinnerOpen] = useState(false);
@@ -82,19 +84,10 @@ export default function PredictAndWinScreen() {
     }
   }, [addPrizeVariant, competitionId, goToCreate, router]);
 
-  const renderItem = useCallback(
-    ({ item }: { item: CompetitionInfo }) => (
-      <CompetitionCard
-        competition={item}
-        onPress={() => router.push(`/predict-and-win/${item.id}`)}
-      />
-    ),
-    [router],
-  );
-
   const gap28 = s(28);
   const gap14 = s(14);
   const emptyPadTop = s(60);
+  const cardGap = s(24);
   const bottomPad = insets.bottom + TAB_BAR_HEIGHT + s(24);
 
   const listHeader = useMemo(
@@ -118,34 +111,15 @@ export default function PredictAndWinScreen() {
     [gap28, gap14, tab, changeTab, sort, changeSort, onAddPrizePress, addPrizeVariant, addPrizeLoading],
   );
 
-  const listEmpty = useMemo(
-    () =>
-      loading && items.length === 0 ? (
-        <View style={{ alignItems: 'center', paddingTop: emptyPadTop }}>
-          <ActivityIndicator color={PW.ctaTop} size="large" />
-        </View>
-      ) : items.length === 0 ? (
-        <HubPlaceholder error={error} tab={tab} onRetry={refresh} />
-      ) : null,
-    [loading, items.length, emptyPadTop, error, tab, refresh],
-  );
-
-  const listFooter = useMemo(
-    () =>
-      loadingMore ? (
-        <ActivityIndicator color={PW.ctaTop} style={{ marginTop: gap28 }} />
-      ) : null,
-    [loadingMore, gap28],
-  );
-
-  const listRefreshControl = useMemo(
-    () => <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={PW.vsTop} />,
-    [refreshing, refresh],
-  );
-
-  const contentContainerStyle = useMemo(
-    () => ({ paddingBottom: bottomPad }),
-    [bottomPad],
+  const onScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (!hasMore || loadingMore) return;
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 240) {
+        void loadMore();
+      }
+    },
+    [hasMore, loadingMore, loadMore],
   );
 
   return (
@@ -155,24 +129,41 @@ export default function PredictAndWinScreen() {
         onBell={() => router.push('/notifications')}
       />
 
-      <FlatList
+      <ScrollView
         style={{ flex: 1 }}
-        data={items}
-        extraData={`${tab}:${sort}:${items.length}`}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        ItemSeparatorComponent={CardSeparator}
-        contentContainerStyle={contentContainerStyle}
-        ListHeaderComponent={listHeader}
-        refreshControl={listRefreshControl}
-        onEndReachedThreshold={0.4}
-        onEndReached={hasMore ? loadMore : undefined}
-        ListFooterComponent={listFooter}
-        ListEmptyComponent={listEmpty}
+        contentContainerStyle={{ paddingBottom: bottomPad, flexGrow: 1 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={PW.vsTop} />
+        }
+        onScroll={hasMore ? onScroll : undefined}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
-        initialNumToRender={20}
-        removeClippedSubviews={false}
-      />
+      >
+        {listHeader}
+
+        {loading && rows.length === 0 ? (
+          <View style={{ alignItems: 'center', paddingTop: emptyPadTop }}>
+            <ActivityIndicator color={PW.ctaTop} size="large" />
+          </View>
+        ) : null}
+
+        {!loading && rows.length === 0 ? (
+          <HubPlaceholder error={error} tab={tab} onRetry={refresh} />
+        ) : null}
+
+        {rows.map((item: CompetitionInfo) => (
+          <View key={item.id} style={{ marginBottom: cardGap }}>
+            <CompetitionCard
+              competition={item}
+              onPress={() => router.push(`/predict-and-win/${item.id}`)}
+            />
+          </View>
+        ))}
+
+        {loadingMore ? (
+          <ActivityIndicator color={PW.ctaTop} style={{ marginTop: gap28 }} />
+        ) : null}
+      </ScrollView>
 
       <WinnerPickerModal
         visible={winnerOpen}
@@ -201,7 +192,7 @@ function HubPlaceholder({
   const copy = needsSignIn ? pw.signInState : error ? pw.errorState : pw.empty;
 
   return (
-    <View style={{ alignItems: 'center', gap: s(10), paddingHorizontal: s(40) }}>
+    <View style={{ alignItems: 'center', gap: s(10), paddingHorizontal: s(40), minHeight: s(160) }}>
       <IconGiftFilled width={s(40)} height={s(40)} />
       <Text style={{ fontFamily: bold, fontSize: f(16), color: PW.text, textAlign: 'center' }}>
         {copy.title}

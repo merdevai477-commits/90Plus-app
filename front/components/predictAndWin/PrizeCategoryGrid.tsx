@@ -48,10 +48,11 @@ export function categoryArtSource(category: Pick<PrizeCategoryInfo, 'key' | 'ico
  */
 export function prizeArtSource(competition: {
   prizeImageUrl?: string | null;
-  category: Pick<PrizeCategoryInfo, 'key' | 'icon'>;
+  category?: Pick<PrizeCategoryInfo, 'key' | 'icon'> | null;
 }): ImageSourcePropType {
   const uploaded = competition.prizeImageUrl?.trim();
   if (uploaded && /^https?:\/\//i.test(uploaded)) return { uri: uploaded };
+  if (!competition.category) return CATEGORY_ART.other;
   return categoryArtSource(competition.category);
 }
 

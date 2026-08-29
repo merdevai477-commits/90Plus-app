@@ -43,8 +43,8 @@ const CARD_H = 199;
 function useCardMetrics() {
   const { contentWidth, cardScale } = usePWContentWidth();
   return {
-    width: contentWidth,
-    height: Math.round(CARD_H * cardScale),
+    width: Math.max(1, contentWidth),
+    height: Math.max(160, Math.round(CARD_H * cardScale)),
     c: (designValue: number) => Math.round(designValue * cardScale),
   };
 }
@@ -192,7 +192,17 @@ export function CompetitionCard({
   const { width, height, c } = useCardMetrics();
   const { bold, regular } = usePWFonts();
   const dir = usePWDirection();
-  const sponsor = competition.sponsor;
+  const sponsor = competition.sponsor ?? {
+    id: competition.id,
+    name: competition.prizeName || 'Prize',
+    description: null,
+    logoUrl: null,
+    address: null,
+    hasDelivery: false,
+    socialLinks: null,
+    isVerified: false,
+    isActive: true,
+  };
 
   /**
    * Figma is drawn in Arabic, where the sponsor block sits on the right and the
@@ -238,7 +248,7 @@ export function CompetitionCard({
           // Without a placeholder colour the card flashes the photo in over a
           // transparent hole while Glide decodes on Android.
           placeholderContentFit={competition.prizeImageUrl ? 'cover' : 'contain'}
-          recyclingKey={`${competition.id}:${competition.prizeImageUrl ?? competition.category.key}`}
+          recyclingKey={`${competition.id}:${competition.prizeImageUrl ?? competition.category?.key ?? 'other'}`}
         />
 
         {/* See `PW_GRADIENTS.cardWash` for why this no longer uses a blend

@@ -119,7 +119,11 @@ export function useCompetitions() {
         cursor: append ? cursorRef.current ?? undefined : undefined,
       });
       if (seq !== requestSeq.current) return;
-      setItems((prev) => (append ? [...prev, ...result.items] : result.items));
+      // Passing a non-array to the hub list paints the header and nothing
+      // under it — no cards, and not the empty placeholder either, because
+      // `{ items }.length` is undefined so the empty state never mounts.
+      const page = Array.isArray(result.items) ? result.items : [];
+      setItems((prev) => (append ? [...prev, ...page] : page));
       setNextCursor(result.nextCursor);
       cursorRef.current = result.nextCursor;
       setError(null);
@@ -244,16 +248,20 @@ export function useCompetitions() {
   /**
    * Coming back from a competition detail screen the user may have just
    * entered, so `myEntry` / `participantsCount` on the cards are stale. Skip
-   * the first focus — the auth effect above has already fetched.
+   * the first focus load — the auth effect above has already fetched — but
+   * keep polling: AsS publish happens in a browser, and a one-shot fetch
+   * before approval leaves the hub looking empty until the user pulls.
    */
   const firstFocus = useRef(true);
   useFocusEffect(
     useCallback(() => {
-      if (firstFocus.current) {
-        firstFocus.current = false;
-        return;
-      }
-      void load();
+      if (!firstFocus.current) void load();
+      firstFocus.current = false;
+      if (process.env.NODE_ENV === 'test') return undefined;
+      const poll = setInterval(() => {
+        void load();
+      }, 4000);
+      return () => clearInterval(poll);
     }, [load]),
   );
 
@@ -263,10 +271,12 @@ export function useCompetitions() {
    * the desk published the row.
    */
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (next) => {
+    const subscribe = AppState?.addEventListener;
+    if (typeof subscribe !== 'function') return undefined;
+    const sub = subscribe.call(AppState, 'change', (next: string) => {
       if (next === 'active') void load();
     });
-    return () => sub.remove();
+    return () => sub?.remove?.();
   }, [load]);
 
   return {
