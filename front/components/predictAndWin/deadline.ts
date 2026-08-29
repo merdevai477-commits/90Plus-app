@@ -140,3 +140,87 @@ export function toDateInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
+
+export type DeadlineMeridiem = 'am' | 'pm';
+
+export interface DeadlineClock {
+  hour: number;
+  meridiem: DeadlineMeridiem;
+}
+
+/** Hour+meridiem slots on `day` where `now < deadline < kickoff`. */
+export function listValidDeadlineClocks(
+  day: Date,
+  kickoff: Date,
+  now: Date = new Date(),
+): DeadlineClock[] {
+  const slots: DeadlineClock[] = [];
+  for (const meridiem of ['am', 'pm'] as const) {
+    for (let hour = 1; hour <= 12; hour++) {
+      const at = buildDeadline({ date: day, hour: String(hour), minute: '00', meridiem });
+      if (at && isDeadlineWithinBounds(at, kickoff, now)) {
+        slots.push({ hour, meridiem });
+      }
+    }
+  }
+  return slots;
+}
+
+/** Valid hours (1–12) for one meridiem on the picked day. */
+export function validHoursForMeridiem(
+  day: Date,
+  meridiem: DeadlineMeridiem,
+  kickoff: Date,
+  now: Date = new Date(),
+): number[] {
+  const hours: number[] = [];
+  for (let hour = 1; hour <= 12; hour++) {
+    const at = buildDeadline({ date: day, hour: String(hour), minute: '00', meridiem });
+    if (at && isDeadlineWithinBounds(at, kickoff, now)) {
+      hours.push(hour);
+    }
+  }
+  return hours;
+}
+
+/**
+ * Keeps the sponsor inside legal slots. When the pick is invalid, returns the
+ * latest valid hour before kickoff on that day.
+ */
+export function clampDeadlineClock(
+  day: Date | null,
+  hour: number,
+  meridiem: DeadlineMeridiem,
+  kickoff: Date | null,
+  now: Date = new Date(),
+): DeadlineClock | null {
+  if (!day || !kickoff) return null;
+  const valid = listValidDeadlineClocks(day, kickoff, now);
+  if (valid.length === 0) return null;
+
+  const at = buildDeadline({ date: day, hour: String(hour), minute: '00', meridiem });
+  if (at && isDeadlineWithinBounds(at, kickoff, now)) {
+    return { hour, meridiem };
+  }
+
+  let latest = valid[0];
+  let latestAt = buildDeadline({
+    date: day,
+    hour: String(latest.hour),
+    minute: '00',
+    meridiem: latest.meridiem,
+  })!.getTime();
+  for (const slot of valid) {
+    const slotAt = buildDeadline({
+      date: day,
+      hour: String(slot.hour),
+      minute: '00',
+      meridiem: slot.meridiem,
+    })!.getTime();
+    if (slotAt > latestAt) {
+      latest = slot;
+      latestAt = slotAt;
+    }
+  }
+  return latest;
+}

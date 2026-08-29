@@ -14,11 +14,14 @@ import {
   defaultDeadlineBeforeKickoff,
   deadlineClockParts,
   buildDeadline,
+  clampDeadlineClock,
   isDayAfterKickoff,
   isDeadlineWithinBounds,
+  listValidDeadlineClocks,
   startOfDay,
   startOfToday,
   toDateInputValue,
+  validHoursForMeridiem,
 } from '../deadline';
 
 /** Local wall clock, so these assertions hold in any test-runner timezone. */
@@ -201,5 +204,34 @@ describe('startOfToday / startOfDay', () => {
 
   it('normalises any instant to its own midnight', () => {
     expect(startOfDay(local(2026, 9, 12, 17, 45))).toEqual(local(2026, 9, 12));
+  });
+});
+
+describe('valid deadline clock slots', () => {
+  const day = local(2026, 8, 30);
+  const kickoff = local(2026, 8, 30, 15, 0);
+  const now = local(2026, 8, 30, 10, 0);
+
+  it('lists only hours strictly before kickoff', () => {
+    const pmHours = validHoursForMeridiem(day, 'pm', kickoff, now);
+    expect(pmHours).toEqual([1, 2, 12]);
+    expect(validHoursForMeridiem(day, 'am', kickoff, now)).toEqual([11]);
+  });
+
+  it('clamps an hour past kickoff to the latest legal slot', () => {
+    expect(clampDeadlineClock(day, 3, 'pm', kickoff, now)).toEqual({ hour: 2, meridiem: 'pm' });
+  });
+
+  it('does not include kickoff hour in valid slots', () => {
+    const slots = listValidDeadlineClocks(day, kickoff, now);
+    for (const slot of slots) {
+      const at = buildDeadline({
+        date: day,
+        hour: String(slot.hour),
+        minute: '00',
+        meridiem: slot.meridiem,
+      })!;
+      expect(at.getTime()).toBeLessThan(kickoff.getTime());
+    }
   });
 });

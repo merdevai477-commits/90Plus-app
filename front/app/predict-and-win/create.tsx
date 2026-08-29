@@ -53,19 +53,23 @@ import {
 } from '../../components/predictAndWin/fields';
 import {
   buildDeadline,
+  clampDeadlineClock,
   defaultDeadlineBeforeKickoff,
   deadlineClockParts,
   isDeadlineWithinBounds,
   parseCalendarDay,
   startOfDay,
   startOfToday,
+  validHoursForMeridiem,
 } from '../../components/predictAndWin/deadline';
+import { openGoogleMapsSearch } from '../../components/predictAndWin/maps';
 import { usePWLocalize } from '../../components/predictAndWin/localize';
 import {
   IconCamera,
   IconFacebook,
   IconIdea,
   IconInstagram,
+  IconMapFill,
   IconShoe,
   IconStoreField,
   IconWhatsapp,
@@ -205,7 +209,9 @@ export default function CreateCompetitionScreen() {
       if (!ENFORCE_DEADLINE_RULES) return !!selectedMatch;
       return step2Problem === null;
     }
-    if (phase === 3) return !!storeName.trim() && hasDelivery !== null;
+    if (phase === 3) {
+      return !!storeName.trim() && !!storeAddress.trim() && hasDelivery !== null;
+    }
     return true;
   };
 
@@ -234,6 +240,56 @@ export default function CreateCompetitionScreen() {
     () => (selectedMatch ? new Date(selectedMatch.kickoffIso) : null),
     [selectedMatch],
   );
+
+  const validHoursForSelectedMeridiem = React.useMemo(() => {
+    if (!deadlineDate || !kickoffAt) return [];
+    return validHoursForMeridiem(deadlineDate, meridiem, kickoffAt);
+  }, [deadlineDate, kickoffAt, meridiem]);
+
+  const meridiemDisabledKeys = React.useMemo(() => {
+    if (!deadlineDate || !kickoffAt) return [];
+    const disabled: string[] = [];
+    if (validHoursForMeridiem(deadlineDate, 'pm', kickoffAt).length === 0) disabled.push('pm');
+    if (validHoursForMeridiem(deadlineDate, 'am', kickoffAt).length === 0) disabled.push('am');
+    return disabled;
+  }, [deadlineDate, kickoffAt]);
+
+  const onDeadlineDateChange = useCallback(
+    (date: Date | null) => {
+      setDeadlineDate(date);
+      if (!date || !kickoffAt) return;
+      const clamped = clampDeadlineClock(date, hour, meridiem, kickoffAt);
+      if (clamped) {
+        setHour(clamped.hour);
+        setMeridiem(clamped.meridiem);
+      }
+    },
+    [hour, meridiem, kickoffAt],
+  );
+
+  const onMeridiemChange = useCallback(
+    (key: string) => {
+      const nextMeridiem = key as 'am' | 'pm';
+      if (!deadlineDate || !kickoffAt) {
+        setMeridiem(nextMeridiem);
+        return;
+      }
+      const hours = validHoursForMeridiem(deadlineDate, nextMeridiem, kickoffAt);
+      if (hours.length === 0) return;
+      const nextHour = hours.includes(hour) ? hour : hours[hours.length - 1];
+      setMeridiem(nextMeridiem);
+      setHour(nextHour);
+    },
+    [deadlineDate, kickoffAt, hour],
+  );
+
+  const openMapsForStore = useCallback(async () => {
+    const query = storeAddress.trim() || storeName.trim();
+    const opened = await openGoogleMapsSearch(query);
+    if (!opened) {
+      toast.showError(wizard.pickAddressOnMaps, wizard.mapsOpenFailed);
+    }
+  }, [storeAddress, storeName, toast, wizard.mapsOpenFailed]);
 
   const deadlineIso = (): string | null => deadlineAt()?.toISOString() ?? null;
 
@@ -304,7 +360,7 @@ export default function CreateCompetitionScreen() {
           name: storeName,
           description: storeDescription || null,
           logoUrl: storeImageUrl,
-          address: storeAddress || null,
+          address: storeAddress.trim(),
           hasDelivery: !!hasDelivery,
           socialLinks: {
             facebook: facebook || undefined,
@@ -712,7 +768,7 @@ export default function CreateCompetitionScreen() {
                       <PWSubLabel label={wizard.deadlineDate} />
                       <PWDateField
                         value={deadlineDate}
-                        onChange={setDeadlineDate}
+                        onChange={onDeadlineDateChange}
                         // Business rule, enforced again on the server: the
                         // close time must be in the future and no later than
                         // kickoff. Bounding the picker means the sponsor cannot
@@ -746,14 +802,19 @@ export default function CreateCompetitionScreen() {
                       >
                         {wizard.deadlineHourHint}
                       </Text>
-                      <PWNumberStepper value={hour} onChange={setHour} min={1} max={12} />
+                      <PWNumberStepper
+                        value={hour}
+                        onChange={setHour}
+                        allowedValues={validHoursForSelectedMeridiem}
+                      />
                       <PWSegmentedPair
                         left={{ key: 'pm', label: wizard.pm }}
                         right={{ key: 'am', label: wizard.am }}
                         selected={meridiem}
-                        onSelect={(k) => setMeridiem(k as 'am' | 'pm')}
+                        onSelect={onMeridiemChange}
                         gap={12}
                         idleColor={PW.textTimeIdle}
+                        disabledKeys={meridiemDisabledKeys}
                       />
                     </View>
                   </View>
@@ -845,13 +906,44 @@ export default function CreateCompetitionScreen() {
 
                 <View style={{ gap: s(16), alignItems: dir.alignStart }}>
                   <PWFieldLabel label={wizard.storeAddress} />
-                  <View style={{ width: '100%' }}>
+                  <View style={{ width: '100%', gap: s(10) }}>
                     <PWTextField
                       value={storeAddress}
                       onChangeText={setStoreAddress}
                       placeholder={wizard.storeAddress}
                       icon={<IconStoreField width={s(35)} height={s(35)} />}
                     />
+                    <Pressable
+                      onPress={openMapsForStore}
+                      accessibilityRole="button"
+                      style={{
+                        flexDirection: dir.isRTL ? 'row-reverse' : 'row',
+                        alignItems: 'center',
+                        gap: s(10),
+                        alignSelf: dir.alignStart,
+                      }}
+                    >
+                      <IconMapFill width={s(20)} height={s(20)} />
+                      <Text
+                        style={{
+                          fontFamily: semibold,
+                          fontSize: f(14),
+                          color: '#8a38d8',
+                        }}
+                      >
+                        {wizard.pickAddressOnMaps}
+                      </Text>
+                    </Pressable>
+                    <Text
+                      style={{
+                        fontFamily: regular,
+                        fontSize: f(12),
+                        color: PW.textTileSub,
+                        textAlign: dir.textAlign,
+                      }}
+                    >
+                      {wizard.pickAddressOnMapsHint}
+                    </Text>
                   </View>
                 </View>
 

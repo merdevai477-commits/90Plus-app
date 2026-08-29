@@ -49,6 +49,10 @@ const ERROR_MAP: Record<string, { status: ErrorCodeValue; message: string }> = {
   MATCH_STARTED: { status: ErrorCode.CONFLICT, message: 'بدأت المباراة، التوقع مغلق' },
   INVALID_PREDICTION: { status: ErrorCode.VALIDATION, message: 'التوقع غير صالح' },
   INVALID_SPONSOR: { status: ErrorCode.VALIDATION, message: 'بيانات الراعي غير صالحة' },
+  INVALID_SPONSOR_ADDRESS: {
+    status: ErrorCode.VALIDATION,
+    message: 'عنوان المتجر مطلوب',
+  },
   SPONSOR_DISABLED: { status: ErrorCode.AUTHORIZATION, message: 'حساب الراعي موقوف' },
   SPONSOR_NOT_FOUND: { status: ErrorCode.NOT_FOUND, message: 'الراعي غير موجود' },
   INVALID_PRIZE: { status: ErrorCode.VALIDATION, message: 'بيانات الجائزة غير صالحة' },

@@ -1146,6 +1146,7 @@ export const en = {
       MATCH_STARTED: 'The match has started — predictions are closed',
       INVALID_PREDICTION: 'That prediction is not valid',
       INVALID_SPONSOR: 'Store details are not valid',
+      INVALID_SPONSOR_ADDRESS: 'Store address is required',
       SPONSOR_DISABLED: 'This sponsor account is suspended',
       SPONSOR_NOT_FOUND: 'Sponsor not found',
       INVALID_PRIZE: 'Prize details are not valid',
@@ -1298,6 +1299,10 @@ export const en = {
       storeName: 'Store / brand name',
       storeDescription: 'Store / brand description',
       storeAddress: 'Store / brand address',
+      pickAddressOnMaps: 'Pick address on Google Maps',
+      pickAddressOnMapsHint:
+        'Search for your store on Maps, then paste the address in the field above',
+      mapsOpenFailed: 'Could not open Google Maps',
       deliveryLabel: 'Delivery',
       deliveryAvailable: 'Available',
       deliveryUnavailable: 'Unavailable',

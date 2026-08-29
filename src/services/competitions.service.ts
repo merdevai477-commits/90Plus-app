@@ -495,6 +495,7 @@ async function buildCompetitionData(input: CreateCompetitionInput, sponsorId: st
 /** Sponsor-facing creation. Always lands as DRAFT pending admin review. */
 export async function createCompetition(userId: string, input: CreateCompetitionInput) {
   if (!input.sponsor?.name?.trim()) throw new Error('INVALID_SPONSOR');
+  if (!input.sponsor?.address?.trim()) throw new Error('INVALID_SPONSOR_ADDRESS');
   const sponsor = await upsertOwnedSponsor(userId, input.sponsor);
   if (!sponsor.isActive) throw new Error('SPONSOR_DISABLED');
 

@@ -518,6 +518,7 @@ export function PWNumberStepper({
   min = 1,
   max = 999,
   step = 1,
+  allowedValues,
 }: {
   value: number;
   onChange: (n: number) => void;
@@ -525,15 +526,28 @@ export function PWNumberStepper({
   max?: number;
   /** Increment/decrement stride — cash prizes use 50 EGP steps. */
   step?: number;
+  /** When set, +/- only move within this list (e.g. legal deadline hours). */
+  allowedValues?: number[];
 }) {
   const { s, f } = usePWScale();
   const { semibold } = usePWFonts();
   // Figma `690:1349`: the minus sits on a 46×46 r12 gradient plate with a 28px
   // glyph; the plus is a single 46×46 exported asset that carries its own plate.
   const stride = Math.max(1, step);
+  const sortedAllowed = allowedValues?.slice().sort((a, b) => a - b);
   const btn = (kind: 'minus' | 'plus') => {
-    const next =
-      kind === 'minus' ? Math.max(min, value - stride) : Math.min(max, value + stride);
+    let next = value;
+    if (sortedAllowed && sortedAllowed.length > 0) {
+      const idx = sortedAllowed.indexOf(value);
+      if (kind === 'minus') {
+        next = idx > 0 ? sortedAllowed[idx - 1] : value;
+      } else {
+        next = idx >= 0 && idx < sortedAllowed.length - 1 ? sortedAllowed[idx + 1] : value;
+      }
+    } else {
+      next =
+        kind === 'minus' ? Math.max(min, value - stride) : Math.min(max, value + stride);
+    }
     const disabled = next === value;
     return (
       <Pressable
@@ -591,6 +605,7 @@ export function PWSegmentedPair({
   onSelect,
   gap = 10,
   idleColor = PW.textSegmentIdle,
+  disabledKeys,
 }: {
   left: { key: string; label: string };
   right: { key: string; label: string };
@@ -598,6 +613,7 @@ export function PWSegmentedPair({
   onSelect: (key: string) => void;
   gap?: number;
   idleColor?: string;
+  disabledKeys?: string[];
 }) {
   const { s, f } = usePWScale();
   const { bold, medium } = usePWFonts();
@@ -605,13 +621,17 @@ export function PWSegmentedPair({
 
   const seg = (item: { key: string; label: string }) => {
     const isOn = selected === item.key;
+    const isDisabled = disabledKeys?.includes(item.key) ?? false;
     return (
       <Pressable
         key={item.key}
-        style={{ flex: 1 }}
-        onPress={() => onSelect(item.key)}
+        style={{ flex: 1, opacity: isDisabled ? 0.45 : 1 }}
+        onPress={() => {
+          if (!isDisabled) onSelect(item.key);
+        }}
+        disabled={isDisabled}
         accessibilityRole="button"
-        accessibilityState={{ selected: isOn }}
+        accessibilityState={{ selected: isOn, disabled: isDisabled }}
       >
         <PWBox height={73} selected={isOn} style={{ alignItems: 'center' }}>
           <Text
