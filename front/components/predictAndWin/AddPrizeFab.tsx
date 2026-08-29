@@ -1,8 +1,5 @@
 /**
- * Sponsor hub CTA — Figma `Component 40` (`953:2465`) state matrix.
- *
- * Wide pill: 239×76, radius 53. Add: gift cap + label + plus.
- * Status: dark tinted wash (not solid yellow/red) + gradient label + status icon.
+ * Sponsor hub CTA — every variant is `PILL.width` × `PILL.height` (219×36).
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,7 +16,7 @@ import {
   IconGiftFill,
   IconRoundPlus,
 } from './icons';
-import { PW, PW_GRADIENTS, PW_RADII, usePWFonts, usePWScale } from './theme';
+import { PW, PW_GRADIENTS, usePWFonts, usePWScale } from './theme';
 
 const INSET_SHADOW = 'inset 0px -3px 4px rgba(0,0,0,0.25)';
 
@@ -27,15 +24,15 @@ const INSET_SHADOW = 'inset 0px -3px 4px rgba(0,0,0,0.25)';
 const ADD_PILL_SOLID = '#510D96';
 const ADD_GIFT_CAP = '#3A0A6E';
 
-/** Figma geometry on the 448 artboard. */
+/** Shared CTA size — every variant (add / pending / winner / rejected) uses this. */
 const PILL = {
-  width: 239,
-  height: 76,
+  width: 219,
+  height: 36,
   giftCapWidth: 78,
   compactWidth: 78,
   plus: 34,
   gift: 36,
-  titleSize: 20,
+  titleSize: 10,
   padH: 10,
   padV: 10,
 } as const;
@@ -83,16 +80,33 @@ const STATUS: Record<
   },
 };
 
-function AddPrizePrimaryPill({ label }: { label: string }) {
+function usePillMetrics() {
   const { s, f } = usePWScale();
+  const height = s(PILL.height);
+  const width = s(PILL.width);
+  const inner = Math.max(12, height - s(4));
+  return {
+    s,
+    width,
+    height,
+    radius: height / 2,
+    capWidth: s(PILL.giftCapWidth),
+    gift: Math.min(s(PILL.gift), inner),
+    plus: Math.min(s(PILL.plus), inner),
+    titleSize: f(PILL.titleSize),
+    padH: s(Math.min(PILL.padH, 8)),
+  };
+}
+
+function AddPrizePrimaryPill({ label }: { label: string }) {
   const { semibold } = usePWFonts();
-  const radius = s(PW_RADII.fab);
+  const { width, height, radius, capWidth, gift, plus, titleSize, padH, s } = usePillMetrics();
 
   return (
     <View
       style={{
-        width: s(PILL.width),
-        height: s(PILL.height),
+        width,
+        height,
         borderRadius: radius,
         overflow: 'hidden',
         flexDirection: 'row',
@@ -105,13 +119,13 @@ function AddPrizePrimaryPill({ label }: { label: string }) {
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={{
-          width: s(PILL.giftCapWidth),
-          height: s(PILL.height),
+          width: capWidth,
+          height,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <IconGiftFill width={s(PILL.gift)} height={s(PILL.gift)} />
+        <IconGiftFill width={gift} height={gift} />
       </LinearGradient>
 
       <LinearGradient
@@ -125,15 +139,14 @@ function AddPrizePrimaryPill({ label }: { label: string }) {
           alignItems: 'center',
           justifyContent: 'center',
           gap: s(2),
-          paddingVertical: s(PILL.padV),
-          paddingLeft: s(8),
-          paddingRight: s(PILL.padH),
+          paddingLeft: s(6),
+          paddingRight: padH,
         }}
       >
         <Text
           style={{
             fontFamily: semibold,
-            fontSize: f(PILL.titleSize),
+            fontSize: titleSize,
             color: PW.text,
             flexShrink: 1,
           }}
@@ -143,7 +156,7 @@ function AddPrizePrimaryPill({ label }: { label: string }) {
         >
           {label}
         </Text>
-        <IconRoundPlus width={s(PILL.plus)} height={s(PILL.plus)} />
+        <IconRoundPlus width={plus} height={plus} />
       </LinearGradient>
     </View>
   );
@@ -152,43 +165,19 @@ function AddPrizePrimaryPill({ label }: { label: string }) {
 function StatusCtaPill({
   variant,
   label,
-  compact,
 }: {
   variant: Exclude<AddPrizeButtonVariant, 'add'>;
   label: string;
-  compact: boolean;
 }) {
-  const { s, f } = usePWScale();
   const { semibold } = usePWFonts();
+  const { width, height, radius, capWidth, gift, titleSize, padH } = usePillMetrics();
   const { wash, text, Icon } = STATUS[variant];
-  const radius = s(PW_RADII.fab);
-  const icon = <Icon width={s(PILL.gift)} height={s(PILL.gift)} />;
-
-  if (compact) {
-    return (
-      <LinearGradient
-        colors={[...wash]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={{
-          width: s(PILL.compactWidth),
-          height: s(PILL.height),
-          borderRadius: radius,
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: INSET_SHADOW,
-        }}
-      >
-        {icon}
-      </LinearGradient>
-    );
-  }
 
   return (
     <View
       style={{
-        width: s(PILL.width),
-        height: s(PILL.height),
+        width,
+        height,
         borderRadius: radius,
         overflow: 'hidden',
         flexDirection: 'row',
@@ -202,8 +191,7 @@ function StatusCtaPill({
         end={{ x: 1, y: 0.5 }}
         style={{
           flex: 1,
-          paddingVertical: s(PILL.padV),
-          paddingHorizontal: s(PILL.padH),
+          paddingHorizontal: padH,
           alignItems: 'center',
           justifyContent: 'center',
         }}
@@ -212,7 +200,7 @@ function StatusCtaPill({
           colors={[...text]}
           style={{
             fontFamily: semibold,
-            fontSize: f(PILL.titleSize),
+            fontSize: titleSize,
             textAlign: 'center',
             flexShrink: 1,
           }}
@@ -225,13 +213,13 @@ function StatusCtaPill({
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={{
-          width: s(PILL.giftCapWidth),
-          height: s(PILL.height),
+          width: capWidth,
+          height,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        {icon}
+        <Icon width={gift} height={gift} />
       </LinearGradient>
     </View>
   );
@@ -239,17 +227,15 @@ function StatusCtaPill({
 
 export function AddPrizeButton({
   variant = 'add',
-  compact = false,
   onPress,
   disabled = false,
 }: {
   variant?: AddPrizeButtonVariant;
-  /** 78×76 gift-only pill when the row is too tight for the wide label. */
   compact?: boolean;
   onPress: () => void;
   disabled?: boolean;
 }) {
-  const { s, width: screenW } = usePWScale();
+  const { width } = usePillMetrics();
   const { t } = useTranslation();
   const pw = t.predictAndWin;
 
@@ -266,12 +252,10 @@ export function AddPrizeButton({
     }
   }, [variant, pw]);
 
-  const useCompact = compact || (variant === 'add' && screenW < s(360));
-
   const shellStyle: StyleProp<ViewStyle> = {
     flexShrink: 0,
     opacity: disabled ? 0.65 : 1,
-    width: s(useCompact ? PILL.compactWidth : PILL.width),
+    width,
   };
 
   return (
@@ -287,26 +271,10 @@ export function AddPrizeButton({
         transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
       })}
     >
-      {variant === 'add' && !useCompact ? (
+      {variant === 'add' ? (
         <AddPrizePrimaryPill label={label} />
-      ) : variant === 'add' ? (
-        <LinearGradient
-          colors={[ADD_GIFT_CAP, ADD_PILL_SOLID]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={{
-            width: s(PILL.compactWidth),
-            height: s(PILL.height),
-            borderRadius: s(PW_RADII.fab),
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: INSET_SHADOW,
-          }}
-        >
-          <IconGiftFill width={s(PILL.gift)} height={s(PILL.gift)} />
-        </LinearGradient>
       ) : (
-        <StatusCtaPill variant={variant} label={label} compact={useCompact} />
+        <StatusCtaPill variant={variant} label={label} />
       )}
     </Pressable>
   );
