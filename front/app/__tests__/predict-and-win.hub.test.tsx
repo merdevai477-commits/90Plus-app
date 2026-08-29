@@ -98,18 +98,20 @@ jest.mock('../../utils/logger', () => ({
 }));
 
 const mockList = jest.fn();
+const mockListMine = jest.fn();
 const mockCategories = jest.fn();
 
 jest.mock('../../services/competitions.service', () => ({
   ...jest.requireActual('../../services/competitions.service'),
   CompetitionsService: {
     list: (...args: unknown[]) => mockList(...args),
+    listMine: (...args: unknown[]) => mockListMine(...args),
     getPrizeCategories: (...args: unknown[]) => mockCategories(...args),
   },
 }));
 
 import PredictAndWinScreen from '../(tabs)/predict-and-win';
-import { AddPrizeFab } from '../../components/predictAndWin/AddPrizeFab';
+import { AddPrizeButton, deriveAddPrizeVariant } from '../../components/predictAndWin/AddPrizeFab';
 import { useLanguageStore } from '../../src/i18n/store';
 
 /** A row shaped like `GET /competitions` actually answers. */
@@ -188,6 +190,7 @@ describe('Predict & Win hub', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCategories.mockResolvedValue([]);
+    mockListMine.mockResolvedValue({ sponsor: null, items: [] });
     useLanguageStore.setState({ language: 'en' });
   });
 
@@ -254,13 +257,22 @@ describe('Predict & Win hub', () => {
     await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
   });
 
-  it('pins the add-prize FAB to the physical right edge in Arabic', () => {
+  it('renders the inline add-prize pill with label and button role', () => {
     useLanguageStore.setState({ language: 'ar' });
-    const { getByRole, getByTestId } = render(<AddPrizeFab onPress={() => undefined} />);
-    const strip = getByTestId('pw-add-prize-fab-strip');
-    expect(strip.props.style.alignItems).toBe('flex-end');
-    expect(strip.props.style.direction).toBe('ltr');
-    expect(strip.props.style.paddingRight).toBeGreaterThan(0);
+    const { getByRole, getByText } = render(<AddPrizeButton onPress={() => undefined} />);
+    expect(getByText('أضف جائزتك')).toBeTruthy();
     expect(getByRole('button')).toBeTruthy();
+  });
+
+  it('maps sponsor submission status to CTA variants', () => {
+    expect(deriveAddPrizeVariant('DRAFT')).toBe('pending');
+    expect(deriveAddPrizeVariant('PUBLISHED')).toBe('winner');
+    expect(deriveAddPrizeVariant('LOCKED')).toBe('winner');
+    expect(deriveAddPrizeVariant('SETTLED')).toBe('winner');
+    expect(deriveAddPrizeVariant('SETTLED', { winnerAwardedAt: '2026-08-29T00:00:00.000Z' })).toBe(
+      'add',
+    );
+    expect(deriveAddPrizeVariant('REJECTED')).toBe('rejected');
+    expect(deriveAddPrizeVariant(null)).toBe('add');
   });
 });

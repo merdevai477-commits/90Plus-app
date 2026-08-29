@@ -65,6 +65,14 @@ const ERROR_MAP: Record<string, { status: ErrorCodeValue; message: string }> = {
     status: ErrorCode.VALIDATION,
     message: 'يمكن اختيار مباراة من القائمة اليومية فقط',
   },
+  MATCH_NOT_FINISHED: {
+    status: ErrorCode.CONFLICT,
+    message: 'النتيجة لم تُعتمد بعد',
+  },
+  ENTRY_NOT_FOUND: { status: ErrorCode.NOT_FOUND, message: 'المشارك غير موجود' },
+  ENTRY_NOT_CORRECT: { status: ErrorCode.CONFLICT, message: 'هذا التوقع غير صحيح' },
+  ALREADY_AWARDED: { status: ErrorCode.CONFLICT, message: 'تم تربيح هذا المستخدم مسبقاً' },
+  WINNERS_FULL: { status: ErrorCode.CONFLICT, message: 'اكتمل عدد الفائزين' },
 };
 
 /**
@@ -142,6 +150,41 @@ router.get('/', optionalAuth, async (req, res) => {
       limit,
     });
     res.json({ success: true, data: result });
+  } catch (err) {
+    mapError(req, res, err);
+  }
+});
+
+router.get('/:id/leaderboard', requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) {
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found', { code: 'AUTH_REQUIRED' });
+      return;
+    }
+    const { getOwnerLeaderboard } = await import('../services/competition-award.service');
+    const board = await getOwnerLeaderboard(user.id, param(req.params.id));
+    res.json({ success: true, data: board });
+  } catch (err) {
+    mapError(req, res, err);
+  }
+});
+
+router.post('/:id/award', requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) {
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found', { code: 'AUTH_REQUIRED' });
+      return;
+    }
+    const entryId = typeof req.body?.entryId === 'string' ? req.body.entryId : '';
+    if (!entryId) {
+      sendError(req, res, ErrorCode.VALIDATION, 'entryId required', { code: 'ENTRY_NOT_FOUND' });
+      return;
+    }
+    const { awardWinner } = await import('../services/competition-award.service');
+    const board = await awardWinner(user.id, param(req.params.id), entryId);
+    res.json({ success: true, data: board });
   } catch (err) {
     mapError(req, res, err);
   }

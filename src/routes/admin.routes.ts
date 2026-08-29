@@ -1551,7 +1551,6 @@ router.patch('/competitions/:id', requireAdmin, async (req: Request, res: Respon
 /** Lifecycle transitions. */
 for (const [path, fnName, label] of [
     ['publish', 'publishCompetition', 'publish'],
-    ['reject', 'rejectCompetition', 'reject'],
     ['unpublish', 'unpublishCompetition', 'unpublish'],
     ['cancel', 'cancelCompetition', 'cancel'],
 ] as const) {
@@ -1568,6 +1567,20 @@ for (const [path, fnName, label] of [
         }
     });
 }
+
+router.post('/competitions/:id/reject', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const reason = typeof req.body?.reason === 'string' ? req.body.reason : null;
+        const { rejectCompetition } = await import('../services/competitions.service');
+        const result = await rejectCompetition(id, reason);
+        res.json({ status: 'SUCCESS', data: result });
+    } catch (error: any) {
+        if (competitionError(res, error, 'reject')) return;
+        logger.error('Admin competition reject error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to reject competition');
+    }
+});
 
 /** GET participants / winners for a competition. */
 router.get('/competitions/:id/entries', requireAdmin, async (req: Request, res: Response): Promise<void> => {

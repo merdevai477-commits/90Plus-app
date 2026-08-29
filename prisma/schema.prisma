@@ -120,6 +120,7 @@ model User {
   predictions                   Prediction[]
   ownedSponsors                 Sponsor[]                @relation("OwnedSponsors")
   competitionEntries            CompetitionEntry[]
+  competitionViews              CompetitionView[]
   ownedPredictionGroups         PredictionGroup[]        @relation("OwnedPredictionGroups")
   groupMemberships              GroupMember[]
   groupInvitesSent              GroupInvite[]            @relation("GroupInvitesSent")
@@ -1497,6 +1498,13 @@ model Competition {
   /// Denormalized counter, kept in sync on entry create — backs the "الأكثر
   /// مشاركة" sort without a COUNT() on every list request.
   participantsCount  Int                @default(0)
+  /// Unique viewers of the competition detail (see CompetitionView).
+  viewsCount         Int                @default(0)
+  /// Optional human-review note when status becomes REJECTED.
+  rejectionReason    String?
+  reviewedAt         DateTime?
+  /// Set when the sponsor has filled every winner slot (`winnersCount`).
+  winnerAwardedAt    DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   publishedAt        DateTime?
@@ -1504,6 +1512,8 @@ model Competition {
   sponsor            Sponsor            @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
   category           PrizeCategory      @relation(fields: [categoryId], references: [id])
   entries            CompetitionEntry[]
+  views              CompetitionView[]
+  activities         CompetitionActivity[]
 
   @@index([status, predictionDeadline])
   @@index([apiMatchId])
@@ -1530,6 +1540,10 @@ model CompetitionEntry {
   updatedAt          DateTime    @updatedAt
   /// When this entry was graded. Null while the competition is open.
   settledAt          DateTime?
+  /// When the sponsor confirmed this entry as a winner. Null until award.
+  awardedAt          DateTime?
+  /// When the winner opened the prize-win notification (stops hourly reminders).
+  winnerAckAt        DateTime?
   competition        Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1541,6 +1555,40 @@ model CompetitionEntry {
   @@index([competitionId])
   @@index([competitionId, isCorrect, createdAt])
   @@map("competition_entries")
+}
+
+/// One row per authenticated viewer of a competition detail screen.
+model CompetitionView {
+  id             String      @id @default(uuid())
+  competitionId  String
+  userId         String
+  createdAt      DateTime    @default(now())
+  competition    Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([competitionId, userId])
+  @@index([userId])
+  @@map("competition_views")
+}
+
+enum CompetitionActivityType {
+  APPROVED
+  REJECTED
+  WINNER_AWARDED
+}
+
+/// Audit trail for the /AsS review desk (approve / reject / award).
+model CompetitionActivity {
+  id             String                   @id @default(uuid())
+  type           CompetitionActivityType
+  competitionId  String
+  payload        Json?
+  createdAt      DateTime                 @default(now())
+  competition    Competition              @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([competitionId])
+  @@map("competition_activities")
 }
 
 /// ─── Share & Win ────────────────────────────────────────────────────────────

@@ -297,8 +297,25 @@ export async function getCompetition(id: string, userId?: string | null) {
     },
   });
   if (!competition) throw new Error('COMPETITION_NOT_FOUND');
+  const ownerId = competition.sponsor?.ownerId ?? null;
+  if (userId && ownerId !== userId) {
+    void recordUniqueView(id, userId).catch(() => undefined);
+  }
   const { entries, ...rest } = competition as any;
   return { ...rest, myEntry: entries?.[0] ?? null };
+}
+
+/** Count a unique authenticated viewer once. Owner views are ignored by the caller. */
+async function recordUniqueView(competitionId: string, userId: string): Promise<void> {
+  const created = await prisma.competitionView.createMany({
+    data: { competitionId, userId },
+    skipDuplicates: true,
+  });
+  if (created.count === 0) return;
+  await prisma.competition.update({
+    where: { id: competitionId },
+    data: { viewsCount: { increment: 1 } },
+  });
 }
 
 /**
@@ -555,24 +572,84 @@ export async function updateOwnCompetition(
 }
 
 export async function publishCompetition(id: string) {
-  const competition = await prisma.competition.findUnique({ where: { id } });
+  const competition = await prisma.competition.findUnique({
+    where: { id },
+    include: { sponsor: { select: { ownerId: true, name: true } } },
+  });
   if (!competition) throw new Error('COMPETITION_NOT_FOUND');
   if (competition.status !== 'DRAFT') throw new Error('COMPETITION_NOT_DRAFT');
-  return prisma.competition.update({
+  const published = await prisma.competition.update({
     where: { id },
     data: {
       status: 'PUBLISHED',
       publishedAt: new Date(),
+      reviewedAt: new Date(),
+      rejectionReason: null,
       startAt: competition.startAt ?? new Date(),
     },
+    include: { sponsor: { select: { ownerId: true, name: true } } },
   });
+  const { recordCompetitionActivity, notifySponsorReviewDecision, notifyAssAdmin } =
+    await import('./competition-moderation.service');
+  await recordCompetitionActivity(id, 'APPROVED', {
+    prizeName: published.prizeName,
+    storeName: published.sponsor.name,
+  });
+  await notifySponsorReviewDecision({
+    ownerId: published.sponsor.ownerId,
+    competitionId: id,
+    approved: true,
+    prizeName: published.prizeName,
+  });
+  await notifyAssAdmin({
+    titleKey: 'competitionAdminApprovedTitle',
+    bodyKey: 'competitionAdminApprovedBody',
+    vars: { prize: published.prizeName, store: published.sponsor.name },
+    data: { screen: `/predict-and-win/${id}`, entityId: id, kind: 'competition_admin_approved' },
+    idempotencyKey: `competitionAdminApproved:${id}`,
+  });
+  return published;
 }
 
-export async function rejectCompetition(id: string) {
-  const competition = await prisma.competition.findUnique({ where: { id } });
+export async function rejectCompetition(id: string, reason?: string | null) {
+  const competition = await prisma.competition.findUnique({
+    where: { id },
+    include: { sponsor: { select: { ownerId: true, name: true } } },
+  });
   if (!competition) throw new Error('COMPETITION_NOT_FOUND');
   if (competition.status !== 'DRAFT') throw new Error('COMPETITION_NOT_DRAFT');
-  return prisma.competition.update({ where: { id }, data: { status: 'REJECTED' } });
+  const trimmed = typeof reason === 'string' ? reason.trim().slice(0, 500) : '';
+  const rejected = await prisma.competition.update({
+    where: { id },
+    data: {
+      status: 'REJECTED',
+      reviewedAt: new Date(),
+      rejectionReason: trimmed || null,
+    },
+    include: { sponsor: { select: { ownerId: true, name: true } } },
+  });
+  const { recordCompetitionActivity, notifySponsorReviewDecision, notifyAssAdmin } =
+    await import('./competition-moderation.service');
+  await recordCompetitionActivity(id, 'REJECTED', {
+    prizeName: rejected.prizeName,
+    storeName: rejected.sponsor.name,
+    reason: trimmed || null,
+  });
+  await notifySponsorReviewDecision({
+    ownerId: rejected.sponsor.ownerId,
+    competitionId: id,
+    approved: false,
+    prizeName: rejected.prizeName,
+    reason: trimmed || null,
+  });
+  await notifyAssAdmin({
+    titleKey: 'competitionAdminRejectedTitle',
+    bodyKey: 'competitionAdminRejectedBody',
+    vars: { prize: rejected.prizeName, store: rejected.sponsor.name },
+    data: { screen: `/predict-and-win/${id}`, entityId: id, kind: 'competition_admin_rejected' },
+    idempotencyKey: `competitionAdminRejected:${id}`,
+  });
+  return rejected;
 }
 
 /** Pull a live competition back out of the public list without deleting it. */

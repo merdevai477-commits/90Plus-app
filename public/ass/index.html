@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>90Plus · مراجعة الإعلانات</title>
+    <link rel="stylesheet" href="/ass/ass.css" />
+  </head>
+  <body>
+    <div id="login" class="login-wrap">
+      <div class="login-card">
+        <div class="brand">90Plus</div>
+        <h1>مراجعة الإعلانات</h1>
+        <p class="muted">دخول محدود لفريق المراجعة</p>
+        <form id="login-form" autocomplete="off">
+          <label>
+            اسم المستخدم
+            <input id="username" name="username" type="text" inputmode="text" required />
+          </label>
+          <label>
+            كلمة المرور
+            <input id="password" name="password" type="password" required />
+          </label>
+          <p id="login-error" class="error" hidden></p>
+          <button type="submit" id="login-btn">دخول</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="desk" class="desk" hidden>
+      <header class="topbar">
+        <div>
+          <div class="brand sm">90Plus</div>
+          <h1>مراجعة إعلانات المسابقات</h1>
+        </div>
+        <button type="button" id="logout" class="ghost">خروج</button>
+      </header>
+
+      <nav class="tabs" id="tabs">
+        <button type="button" data-tab="DRAFT" class="active">مراجعة</button>
+        <button type="button" data-tab="PUBLISHED">منشور</button>
+        <button type="button" data-tab="REJECTED">مرفوض</button>
+        <button type="button" data-tab="SETTLED">مكتمل</button>
+        <button type="button" data-tab="activity">نشاط</button>
+      </nav>
+
+      <p id="desk-error" class="error banner" hidden></p>
+      <section id="cards" class="cards"></section>
+      <section id="activity" class="activity" hidden></section>
+    </div>
+
+    <div id="reject-modal" class="modal" hidden>
+      <div class="modal-card">
+        <h2>رفض الإعلان</h2>
+        <p class="muted">السبب اختياري — هيظهر للمعلن في الإشعار لو كتبته.</p>
+        <textarea id="reject-reason" rows="4" maxlength="500" placeholder="سبب الرفض (اختياري)"></textarea>
+        <div class="row">
+          <button type="button" id="reject-cancel" class="ghost">إلغاء</button>
+          <button type="button" id="reject-confirm" class="danger">تأكيد الرفض</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/ass/ass.js" defer></script>
+  </body>
+</html>

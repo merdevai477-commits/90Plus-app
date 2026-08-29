@@ -1,9 +1,10 @@
 /**
  * Settles Predict & Win competitions when their linked match finishes.
  *
- * Grading rule: every entry is marked correct/incorrect, then the correct ones
- * are ranked by earliest `createdAt` and the first `winnersCount` become
- * winners (first correct predictor wins).
+ * Grading rule: every entry is marked correct/incorrect. Correct entries are
+ * ordered by earliest `createdAt` so the sponsor leaderboard can show who
+ * answered first. `isWinner` is **not** stamped here — the sponsor confirms
+ * a winner via `awardWinner`.
  *
  * Safety properties:
  *  - **Atomic claim.** A competition is moved out of `PUBLISHED`/`LOCKED` with a
@@ -89,59 +90,23 @@ export function gradeEntries(
   }));
 }
 
-async function notifyOutcome(
-  graded: GradedEntry[],
-  competition: { id: string; prizeName: string; sponsorName: string },
-  /**
-   * Scopes the idempotency key to one settlement. Without it a re-settled
-   * competition would reuse the first settlement's key and the new winners
-   * would never be told.
-   */
-  settlementKey: string,
-): Promise<void> {
-  let notifyUser: typeof import('./notify.service').notifyUser;
-  let NotificationType: typeof import('./notification.service').NotificationType;
-  try {
-    ({ notifyUser } = await import('./notify.service'));
-    ({ NotificationType } = await import('./notification.service'));
-  } catch (err: any) {
-    logger.warn('[CompetitionResolver] notifications unavailable:', err?.message);
-    return;
-  }
-
-  for (const { entry, rank, isCorrect } of graded) {
-    const won = rank != null;
-    // Losing entrants are told too, so a participant always learns the outcome.
-    await notifyUser({
-      userId: entry.userId,
-      type: NotificationType.PREDICTION_RESULT,
-      title: won ? 'مبروك! ربحت المسابقة 🎉' : 'انتهت المسابقة',
-      message: won
-        ? `توقعك كان صح في مسابقة "${competition.prizeName}" من ${competition.sponsorName}`
-        : isCorrect
-          ? `توقعك كان صح في "${competition.prizeName}" لكن عدد الفائزين اكتمل`
-          : `للأسف توقعك لم يكن صحيحاً في "${competition.prizeName}"`,
-      data: { screen: `/predict-and-win/${competition.id}`, entityId: competition.id },
-      idempotencyKey: `competitionResult:${entry.id}:${settlementKey}`,
-    }).catch((err) => logger.warn('[CompetitionResolver] notify failed:', err?.message));
-  }
-}
-
-/** Applies a grading result to the database in one transaction. */
+/** Applies a grading result. Winners are left unset for the sponsor to confirm. */
 async function persistGrading(competitionId: string, graded: GradedEntry[], settledAt: Date) {
   await prisma.$transaction([
-    // Clear ranks first: the [competitionId, rank] unique index would otherwise
-    // collide with the previous settlement when re-settling.
     prisma.competitionEntry.updateMany({
       where: { competitionId },
-      data: { rank: null, isWinner: false },
+      data: { rank: null, isWinner: false, awardedAt: null, winnerAckAt: null },
     }),
-    ...graded.map(({ entry, isCorrect, rank }) =>
+    ...graded.map(({ entry, isCorrect }) =>
       prisma.competitionEntry.update({
         where: { id: entry.id },
-        data: { isCorrect, isWinner: rank != null, rank, settledAt },
+        data: { isCorrect, isWinner: false, rank: null, settledAt },
       }),
     ),
+    prisma.competition.update({
+      where: { id: competitionId },
+      data: { winnerAwardedAt: null },
+    }),
   ]);
 }
 
@@ -201,15 +166,9 @@ export class CompetitionResolverService {
 
       await persistGrading(id, graded, settledAt);
 
-      const winners = graded.filter((g) => g.rank != null).length;
+      const correct = graded.filter((g) => g.isCorrect).length;
       logger.info(
-        `[CompetitionResolver] settled ${id}: ${competition.entries.length} entries, ${winners} winner(s)`,
-      );
-
-      await notifyOutcome(
-        graded,
-        { id, prizeName: competition.prizeName, sponsorName: competition.sponsor.name },
-        settledAt.toISOString(),
+        `[CompetitionResolver] settled ${id}: ${competition.entries.length} entries, ${correct} correct — awaiting sponsor award`,
       );
     }
   }
@@ -273,23 +232,13 @@ export class CompetitionResolverService {
         settledAt,
         resultHomeScore: homeScore,
         resultAwayScore: awayScore,
+        winnerAwardedAt: null,
       },
     });
 
-    // Keyed on this settlement, so entrants whose outcome changed are told.
-    await notifyOutcome(
-      graded,
-      {
-        id: competitionId,
-        prizeName: competition.prizeName,
-        sponsorName: competition.sponsor.name,
-      },
-      settledAt.toISOString(),
-    );
-
-    const winners = graded.filter((g) => g.rank != null).length;
-    logger.info(`[CompetitionResolver] re-settled ${competitionId}: ${winners} winner(s)`);
-    return { winners, entries: graded.length };
+    const correct = graded.filter((g) => g.isCorrect).length;
+    logger.info(`[CompetitionResolver] re-settled ${competitionId}: ${correct} correct — awaiting sponsor award`);
+    return { winners: 0, entries: graded.length };
   }
 
   static isFinishedStatus(status: string): boolean {

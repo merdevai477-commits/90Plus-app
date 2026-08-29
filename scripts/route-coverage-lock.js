@@ -42,6 +42,8 @@ const PUBLIC_ROUTES = [
   '/privacy',
   '/terms',
   '/api/football',
+  '/login',
+  '/logout',
 ];
 
 // Middleware that provides authentication
@@ -50,6 +52,7 @@ const AUTH_MIDDLEWARE = [
   'optionalAuth',
   'requireKnowledgeExportAuth',
   'requireAdmin',
+  'requireAssSession',
 ];
 
 // Middleware that provides ownership verification

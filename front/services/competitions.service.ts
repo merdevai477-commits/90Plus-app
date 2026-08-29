@@ -91,6 +91,9 @@ export interface CompetitionInfo {
   endAt: string | null;
   isFree: boolean;
   participantsCount: number;
+  viewsCount?: number;
+  winnerAwardedAt?: string | null;
+  rejectionReason?: string | null;
   myEntry: CompetitionEntryInfo | null;
 }
 
@@ -101,6 +104,40 @@ export type CompetitionStatus =
   | 'SETTLED'
   | 'CANCELLED'
   | 'REJECTED';
+
+export interface OwnerLeaderboardCandidate {
+  entryId: string;
+  userId: string;
+  username: string;
+  displayName: string | null;
+  avatar: string | null;
+  predictedHomeScore: number | null;
+  predictedAwayScore: number | null;
+  predictedWinner: string | null;
+  displayRank: number;
+  isWinner: boolean;
+  createdAt: string;
+}
+
+export interface OwnerLeaderboard {
+  competitionId: string;
+  prizeName: string;
+  prizeType: string;
+  sponsorName: string;
+  status: string;
+  resultHomeScore: number | null;
+  resultAwayScore: number | null;
+  matchFinished: boolean;
+  winnersCount: number;
+  awardedCount: number;
+  stats: {
+    wrong: number;
+    correct: number;
+    predictions: number;
+    views: number;
+  };
+  candidates: OwnerLeaderboardCandidate[];
+}
 
 /** True only while the competition is still accepting predictions. */
 export function isEntryOpen(competition: CompetitionInfo): boolean {
@@ -286,6 +323,23 @@ export const CompetitionsService = {
       MatchPoolEntry[]
     >,
 
+  /** Owned competitions for the caller's sponsor profile. */
+  listMine: async (token: string) => {
+    const raw = await authFetch(token, '/mine');
+    const itemsRaw =
+      typeof raw === 'object' && raw !== null && 'items' in (raw as object)
+        ? (raw as { items: unknown }).items
+        : raw;
+    const page = normalizeCompetitionListPage(itemsRaw);
+    return {
+      sponsor:
+        typeof raw === 'object' && raw !== null && 'sponsor' in (raw as object)
+          ? ((raw as { sponsor: { id: string } | null }).sponsor ?? null)
+          : null,
+      items: page.items,
+    };
+  },
+
   list: (
     token: string | null,
     opts: {
@@ -322,4 +376,13 @@ export const CompetitionsService = {
       method: 'POST',
       body: JSON.stringify(payload),
     }) as Promise<CompetitionInfo>,
+
+  getLeaderboard: (token: string, id: string) =>
+    authFetch(token, `/${id}/leaderboard`) as Promise<OwnerLeaderboard>,
+
+  awardWinner: (token: string, id: string, entryId: string) =>
+    authFetch(token, `/${id}/award`, {
+      method: 'POST',
+      body: JSON.stringify({ entryId }),
+    }) as Promise<OwnerLeaderboard>,
 };

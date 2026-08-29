@@ -1,22 +1,5 @@
 /**
- * Hub sort dropdown — Figma `Component 10` (`630:4450`) at y383 on the 404
- * content column.
- *
- * Sort pill: 96×34, gradient #1a1328 (top) → #0c0c0c (bottom), radius 8, gap 8,
- * chevron 24 + SemiBold 12 #b2b2b2, default label "الأحدث".
- *
- * Figma draws the pill only in its closed state, so the open menu reuses the
- * one dropdown treatment the file *does* draw open — the wizard's match
- * selector (`692:1618`): #0c051a panel, 1px #20162a, and a purple tint on the
- * selected row.
- *
- * **Positioning.** The menu is rendered into a `Modal` and placed from the
- * trigger's measured window coordinates rather than as an in-flow sibling.
- * This row lives inside the hub list's `ListHeaderComponent`, whose layout the
- * list caches: an in-flow menu changed the header's height without the cached
- * layout agreeing, so the menu drew far from the pill it belongs to. Measuring
- * at open time sidesteps the list's layout entirely, and the modal backdrop
- * stops the list scrolling out from under the menu.
+ * Hub sort dropdown + sponsor add-prize CTA — Figma `630:4450` + `953:2463`.
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionSort } from '../../services/competitions.service';
 import { COMPETITION_SORTS } from '../../services/competitions.service';
+import { AddPrizeButton, type AddPrizeButtonVariant } from './AddPrizeFab';
 import { IconSortArrow } from './icons';
 import {
   PW,
@@ -56,9 +40,15 @@ interface Anchor {
 export function SortFilterRow({
   sort,
   onSortChange,
+  onAddPrize,
+  addPrizeVariant = 'add',
+  addPrizeLoading = false,
 }: {
   sort: CompetitionSort;
   onSortChange: (sort: CompetitionSort) => void;
+  onAddPrize: () => void;
+  addPrizeVariant?: AddPrizeButtonVariant;
+  addPrizeLoading?: boolean;
 }) {
   const { t } = useTranslation();
   const { s, f } = usePWScale();
@@ -78,6 +68,7 @@ export function SortFilterRow({
     Math.min(s(190), screenW - insets.left - insets.right - s(24)),
   );
   const gap = s(6);
+  const rowGap = s(8);
 
   const openSort = React.useCallback(() => {
     const node = sortRef.current;
@@ -115,6 +106,7 @@ export function SortFilterRow({
   }, []);
 
   const sortOpen = anchor !== null;
+  const useCompactAdd = contentWidth < s(360);
 
   return (
     <View style={{ width: contentWidth, alignSelf: 'center' }}>
@@ -123,9 +115,17 @@ export function SortFilterRow({
           direction: 'ltr',
           flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
+          gap: rowGap,
         }}
       >
+        <AddPrizeButton
+          variant={addPrizeVariant}
+          compact={useCompactAdd}
+          onPress={onAddPrize}
+          disabled={addPrizeLoading}
+        />
+
         <View ref={sortRef} collapsable={false}>
           <Pressable
             onPress={() => {

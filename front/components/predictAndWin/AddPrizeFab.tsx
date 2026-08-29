@@ -1,84 +1,239 @@
 /**
- * "أضف جائزتك" floating action button — Figma `Component 13` (`650:5269`).
+ * Sponsor hub CTA — Figma `Component 40` (`953:2463`) state matrix.
  *
- * The component set has two variants and the sponsor hub (`624:4349`)
- * instantiates the **icon-only** one, `Frame 385`: a 78×76 radius-53 button
- * carrying the 5-stop 90° gradient at 0.81 alpha, a 36px `mingcute:gift-fill`
- * glyph and an `inset 0 -3px 4px rgba(0,0,0,0.25)` shadow. Its position in that
- * frame puts it 33 from the right edge and 46 from the bottom.
+ * `add` wide pill: 239×76, radius 53 — label + 34px plus, trailing 78×76 gift
+ * cap with 36px icon (SwiftUI trailing padding 72). Review states use flat fills.
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
-import { Pressable, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useMemo } from 'react';
+import { Pressable, Text, View, type StyleProp, ViewStyle } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
-import { IconGiftFill } from './icons';
-import { PW_GRADIENTS, PW_RADII, usePWScale } from './theme';
+import type { CompetitionStatus } from '../../services/competitions.service';
+import { IconGiftFill, IconRoundPlus } from './icons';
+import { PW, PW_GRADIENTS, PW_RADII, usePWDirection, usePWFonts, usePWScale } from './theme';
 
 const INSET_SHADOW = 'inset 0px -3px 4px rgba(0,0,0,0.25)';
 
-/** Figma geometry, in 448-artboard units. */
-const FAB = { width: 78, height: 76, icon: 36, right: 46, bottom: 90 } as const;
+/** SwiftUI `Color(red: 0.32, green: 0.03, blue: 0.59)` base + darker gift cap. */
+const ADD_PILL_SOLID = '#510D96';
+const ADD_GIFT_CAP = '#3A0A6E';
 
-export function AddPrizeFab({ onPress, bottom }: { onPress: () => void; bottom?: number }) {
-  const { s } = usePWScale();
-  const insets = useSafeAreaInsets();
-  const { t } = useTranslation();
+/** Figma geometry on the 448 artboard. */
+const PILL = {
+  width: 239,
+  height: 76,
+  giftCapWidth: 78,
+  compactWidth: 78,
+  plus: 34,
+  gift: 36,
+  titleSize: 20,
+  padH: 10,
+  padV: 10,
+} as const;
 
-  const edge = Math.max(s(FAB.right), insets.right + s(8));
-  const bottomOffset = bottom ?? insets.bottom + s(FAB.bottom);
-  const fabSize = Math.max(44, s(FAB.width));
+export type AddPrizeButtonVariant = 'add' | 'pending' | 'winner' | 'rejected';
 
-  /**
-   * Figma pins this control to the physical right in both languages. Absolute
-   * `right:` alone is not enough on devices where native RTL mirroring is still
-   * active — RN swaps `left`/`right` under the hood and the button lands on the
-   * visual left. A full-width LTR strip with `alignItems: 'flex-end'` pins the
-   * pill to the physical right regardless of `I18nManager.isRTL`.
-   */
+export function deriveAddPrizeVariant(
+  status: CompetitionStatus | null,
+  opts?: { winnerAwardedAt?: string | null },
+): AddPrizeButtonVariant {
+  if (!status) return 'add';
+  if (status === 'DRAFT') return 'pending';
+  if (status === 'REJECTED') return 'rejected';
+  if (status === 'PUBLISHED' || status === 'LOCKED') return 'winner';
+  if (status === 'SETTLED' && !opts?.winnerAwardedAt) return 'winner';
+  return 'add';
+}
+
+const VARIANT_STYLE: Record<
+  Exclude<AddPrizeButtonVariant, 'add'>,
+  { bg: string; text: string }
+> = {
+  pending: { bg: '#FFFF00', text: '#5C5C00' },
+  winner: { bg: '#008000', text: '#00CC00' },
+  rejected: { bg: '#FF0000', text: '#D10000' },
+};
+
+function AddPrizePrimaryPill({ label }: { label: string }) {
+  const { s, f } = usePWScale();
+  const { semibold } = usePWFonts();
+  const radius = s(PW_RADII.fab);
+
   return (
     <View
-      pointerEvents="box-none"
-      testID="pw-add-prize-fab-strip"
       style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: bottomOffset,
+        width: s(PILL.width),
+        height: s(PILL.height),
+        borderRadius: radius,
+        overflow: 'hidden',
+        flexDirection: 'row',
         direction: 'ltr',
-        alignItems: 'flex-end',
-        paddingRight: edge,
+        boxShadow: INSET_SHADOW,
       }}
     >
-      <Pressable
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={t.predictAndWin.addPrize}
-        hitSlop={8}
-        style={({ pressed }) => ({
-          opacity: pressed ? 0.9 : 1,
-          transform: [{ scale: pressed ? 0.96 : 1 }],
-        })}
+      <LinearGradient
+        colors={[...PW_GRADIENTS.fab]}
+        locations={[...PW_GRADIENTS.fabLocations]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={{
+          flex: 1,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: s(2),
+          paddingVertical: s(PILL.padV),
+          paddingLeft: s(PILL.padH),
+          paddingRight: s(8),
+        }}
       >
+        <Text
+          style={{
+            fontFamily: semibold,
+            fontSize: f(PILL.titleSize),
+            color: PW.text,
+            flexShrink: 1,
+          }}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+        >
+          {label}
+        </Text>
+        <IconRoundPlus width={s(PILL.plus)} height={s(PILL.plus)} />
+      </LinearGradient>
+
+      <LinearGradient
+        colors={[ADD_GIFT_CAP, ADD_PILL_SOLID]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={{
+          width: s(PILL.giftCapWidth),
+          height: s(PILL.height),
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <IconGiftFill width={s(PILL.gift)} height={s(PILL.gift)} />
+      </LinearGradient>
+    </View>
+  );
+}
+
+export function AddPrizeButton({
+  variant = 'add',
+  compact = false,
+  onPress,
+  disabled = false,
+}: {
+  variant?: AddPrizeButtonVariant;
+  /** 78×76 gift-only pill when the row is too tight for the wide label. */
+  compact?: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  const { s, f, width: screenW } = usePWScale();
+  const { semibold } = usePWFonts();
+  const dir = usePWDirection();
+  const { t } = useTranslation();
+  const pw = t.predictAndWin;
+
+  const label = useMemo(() => {
+    switch (variant) {
+      case 'pending':
+        return pw.addPrizeCta.pending;
+      case 'winner':
+        return pw.addPrizeCta.winner;
+      case 'rejected':
+        return pw.addPrizeCta.rejected;
+      default:
+        return pw.addPrize;
+    }
+  }, [variant, pw]);
+
+  const useCompact =
+    compact || (variant === 'add' && screenW < s(360));
+
+  const shellStyle: StyleProp<ViewStyle> = {
+    flexShrink: 0,
+    opacity: disabled ? 0.65 : 1,
+    ...(useCompact
+      ? { width: s(PILL.compactWidth) }
+      : variant === 'add'
+        ? { width: s(PILL.width) }
+        : { maxWidth: s(PILL.width), minWidth: s(120) }),
+  };
+
+  const statusInnerStyle: ViewStyle = {
+    height: s(PILL.height),
+    paddingVertical: s(PILL.padV),
+    paddingHorizontal: s(PILL.padH),
+    borderRadius: s(PW_RADII.fab),
+    flexDirection: dir.row,
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: INSET_SHADOW,
+    ...(useCompact
+      ? { width: s(PILL.compactWidth) }
+      : { width: s(PILL.width) }),
+  };
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      hitSlop={4}
+      style={({ pressed }) => ({
+        ...shellStyle,
+        transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
+      })}
+    >
+      {variant === 'add' && !useCompact ? (
+        <AddPrizePrimaryPill label={label} />
+      ) : variant === 'add' && useCompact ? (
         <LinearGradient
-          colors={[...PW_GRADIENTS.fab]}
-          locations={[...PW_GRADIENTS.fabLocations]}
+          colors={[ADD_GIFT_CAP, ADD_PILL_SOLID]}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
           style={{
-            width: fabSize,
-            height: Math.max(44, s(FAB.height)),
+            width: s(PILL.compactWidth),
+            height: s(PILL.height),
             borderRadius: s(PW_RADII.fab),
             alignItems: 'center',
             justifyContent: 'center',
             boxShadow: INSET_SHADOW,
           }}
         >
-          <IconGiftFill width={s(FAB.icon)} height={s(FAB.icon)} />
+          <IconGiftFill width={s(PILL.gift)} height={s(PILL.gift)} />
         </LinearGradient>
-      </Pressable>
-    </View>
+      ) : (
+        <View
+          style={{
+            ...statusInnerStyle,
+            backgroundColor: VARIANT_STYLE[variant].bg,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: semibold,
+              fontSize: f(PILL.titleSize),
+              color: VARIANT_STYLE[variant].text,
+              textAlign: 'center',
+              paddingHorizontal: s(4),
+            }}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
+            {label}
+          </Text>
+        </View>
+      )}
+    </Pressable>
   );
 }

@@ -14,20 +14,21 @@
  */
 
 import { useRouter } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AddPrizeFab } from '../../components/predictAndWin/AddPrizeFab';
 import { CompetitionCard } from '../../components/predictAndWin/CompetitionCard';
 import { InfoTiles } from '../../components/predictAndWin/InfoTiles';
 import { PWHeader } from '../../components/predictAndWin/PWHeader';
 import { SortFilterRow } from '../../components/predictAndWin/SortFilterRow';
 import { PredictAndWinTabBar } from '../../components/predictAndWin/TabBar';
+import { WinnerPickerModal } from '../../components/predictAndWin/WinnerPickerModal';
 import { IconGiftFilled } from '../../components/predictAndWin/icons';
 import { PW, usePWFonts, usePWScale } from '../../components/predictAndWin/theme';
 import { TAB_BAR_HEIGHT } from '../../components/navigation/liquidGlassTabBar.constants';
 import { useCompetitions } from '../../hooks/useCompetitions';
+import { useSponsorPrizeCta } from '../../hooks/useSponsorPrizeCta';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
 import type { CompetitionInfo, CompetitionTab } from '../../services/competitions.service';
@@ -61,6 +62,26 @@ export default function PredictAndWinScreen() {
     loadMore,
   } = useCompetitions();
 
+  const { variant: addPrizeVariant, competitionId, loading: addPrizeLoading } =
+    useSponsorPrizeCta();
+  const [winnerOpen, setWinnerOpen] = useState(false);
+
+  const goToCreate = useCallback(() => router.push('/predict-and-win/create'), [router]);
+
+  const onAddPrizePress = useCallback(() => {
+    if (addPrizeVariant === 'add') {
+      goToCreate();
+      return;
+    }
+    if (addPrizeVariant === 'winner') {
+      setWinnerOpen(true);
+      return;
+    }
+    if (competitionId) {
+      router.push(`/predict-and-win/${competitionId}`);
+    }
+  }, [addPrizeVariant, competitionId, goToCreate, router]);
+
   const renderItem = useCallback(
     ({ item }: { item: CompetitionInfo }) => (
       <CompetitionCard
@@ -74,8 +95,7 @@ export default function PredictAndWinScreen() {
   const gap28 = s(28);
   const gap14 = s(14);
   const emptyPadTop = s(60);
-  const bottomPad = insets.bottom + TAB_BAR_HEIGHT + s(140);
-  const fabBottom = insets.bottom + TAB_BAR_HEIGHT + s(16);
+  const bottomPad = insets.bottom + TAB_BAR_HEIGHT + s(24);
 
   const listHeader = useMemo(
     () => (
@@ -85,11 +105,17 @@ export default function PredictAndWinScreen() {
         <View style={{ height: gap14 }} />
         <InfoTiles />
         <View style={{ height: gap28 }} />
-        <SortFilterRow sort={sort} onSortChange={changeSort} />
+        <SortFilterRow
+          sort={sort}
+          onSortChange={changeSort}
+          onAddPrize={onAddPrizePress}
+          addPrizeVariant={addPrizeVariant}
+          addPrizeLoading={addPrizeLoading}
+        />
         <View style={{ height: gap28 }} />
       </View>
     ),
-    [gap28, gap14, tab, changeTab, sort, changeSort],
+    [gap28, gap14, tab, changeTab, sort, changeSort, onAddPrizePress, addPrizeVariant, addPrizeLoading],
   );
 
   const listEmpty = useMemo(
@@ -148,9 +174,10 @@ export default function PredictAndWinScreen() {
         removeClippedSubviews={false}
       />
 
-      <AddPrizeFab
-        onPress={() => router.push('/predict-and-win/create')}
-        bottom={fabBottom}
+      <WinnerPickerModal
+        visible={winnerOpen}
+        competitionId={competitionId}
+        onClose={() => setWinnerOpen(false)}
       />
     </View>
   );

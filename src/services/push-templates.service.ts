@@ -202,7 +202,22 @@ export type PushTemplateKey =
     | 'followedClubTitle'
     | 'followedClubBody'
     | 'followedNationalTeamTitle'
-    | 'followedNationalTeamBody';
+    | 'followedNationalTeamBody'
+    | 'competitionApprovedTitle'
+    | 'competitionApprovedBody'
+    | 'competitionRejectedTitle'
+    | 'competitionRejectedBody'
+    | 'competitionRejectedReasonBody'
+    | 'competitionWinnerTitle'
+    | 'competitionWinnerBody'
+    | 'competitionWinnerRemindTitle'
+    | 'competitionWinnerRemindBody'
+    | 'competitionAdminApprovedTitle'
+    | 'competitionAdminApprovedBody'
+    | 'competitionAdminRejectedTitle'
+    | 'competitionAdminRejectedBody'
+    | 'competitionAdminAwardTitle'
+    | 'competitionAdminAwardBody';
 
 type TemplateMap = Record<PushTemplateKey, string>;
 
@@ -382,6 +397,21 @@ const en: TemplateMap = {
     followedClubBody: 'Notifications for "{name}" are on. You will always receive this team\'s alerts.',
     followedNationalTeamTitle: '🔔 National team notifications enabled',
     followedNationalTeamBody: 'Notifications for "{name}" are on. You will always receive this team\'s alerts.',
+    competitionApprovedTitle: 'Your prize was approved',
+    competitionApprovedBody: '"{prize}" is live — players can see it and enter now.',
+    competitionRejectedTitle: 'Your prize was not approved',
+    competitionRejectedBody: '"{prize}" was declined and will not appear in the app.',
+    competitionRejectedReasonBody: '"{prize}" was declined. Reason: {reason}',
+    competitionWinnerTitle: 'You won a prize!',
+    competitionWinnerBody: 'You won "{prize}" ({prizeType}) from {store}. Open the app to claim it.',
+    competitionWinnerRemindTitle: 'Reminder: you won!',
+    competitionWinnerRemindBody: 'Don\'t forget — you won "{prize}" ({prizeType}) from {store}.',
+    competitionAdminApprovedTitle: 'Prize approved',
+    competitionAdminApprovedBody: '"{prize}" from {store} is now live.',
+    competitionAdminRejectedTitle: 'Prize rejected',
+    competitionAdminRejectedBody: '"{prize}" from {store} was rejected.',
+    competitionAdminAwardTitle: 'Winner awarded',
+    competitionAdminAwardBody: '{winner} won "{prize}" from {store}.',
 };
 
 
@@ -561,6 +591,21 @@ const ar: TemplateMap = {
     followedClubBody: 'تم تفعيل إشعارات نادي "{name}". ستتلقى إشعارات الفريق دائماً.',
     followedNationalTeamTitle: '🔔 تم تفعيل إشعارات المنتخب',
     followedNationalTeamBody: 'تم تفعيل إشعارات منتخب "{name}". ستتلقى إشعارات الفريق دائماً.',
+    competitionApprovedTitle: 'تم قبول جائزتك',
+    competitionApprovedBody: '"{prize}" اتنشرت وهي ظاهرة للاعبين دلوقتي.',
+    competitionRejectedTitle: 'الجائزة مرفوضة',
+    competitionRejectedBody: '"{prize}" اترفضت ومش هتظهر في التطبيق.',
+    competitionRejectedReasonBody: '"{prize}" اترفضت. السبب: {reason}',
+    competitionWinnerTitle: 'مبروك! كسبت الجائزة',
+    competitionWinnerBody: 'كسبت "{prize}" ({prizeType}) من {store}. افتح التطبيق عشان تستلمها.',
+    competitionWinnerRemindTitle: 'تذكير: أنت الفائز',
+    competitionWinnerRemindBody: 'متتنساش — كسبت "{prize}" ({prizeType}) من {store}.',
+    competitionAdminApprovedTitle: 'تم قبول جائزة',
+    competitionAdminApprovedBody: '"{prize}" من {store} اتنشرت.',
+    competitionAdminRejectedTitle: 'تم رفض جائزة',
+    competitionAdminRejectedBody: '"{prize}" من {store} اترفضت.',
+    competitionAdminAwardTitle: 'تم تربيح فائز',
+    competitionAdminAwardBody: '{winner} كسب "{prize}" من {store}.',
 };
 
 const TEMPLATES: Record<SupportedLanguage, TemplateMap> = { en, ar };

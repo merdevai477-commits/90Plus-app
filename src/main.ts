@@ -238,6 +238,7 @@ import knowledgeExportRoutes from './routes/knowledge-export.routes';
 import predictionsRoutes from './routes/predictions.routes';
 import predictionGroupsRoutes from './routes/prediction-groups.routes';
 import competitionsRoutes from './routes/competitions.routes';
+import assRoutes from './routes/ass.routes';
 import coinsRoutes from './routes/coins.routes';
 
 import adminRoutes from './routes/admin.routes';
@@ -427,6 +428,7 @@ app.use(`${API_PREFIX}/i18n`, i18nRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
 app.use(`${API_PREFIX}/prediction-groups`, predictionGroupsRoutes);
 app.use(`${API_PREFIX}/competitions`, competitionsRoutes);
+app.use(`${API_PREFIX}/ass`, assRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
 app.use(`${API_PREFIX}/app`, appVersionRoutes);
 app.use(`${API_PREFIX}/terms`, termsRoutes);
@@ -465,6 +467,16 @@ const publicPath = resolvePublicDir(__dirname);
 logger.info(`📁 Public path: ${publicPath}`);
 logger.info(`📁 Current directory: ${__dirname}`);
 logger.info(`📁 Production mode: ${isProduction}`);
+
+app.get(['/AsS', '/ass'], (_req: Request, res: Response) => {
+    const filePath = path.join(publicPath, 'ass', 'index.html');
+    res.sendFile(filePath, (err) => {
+        if (err) {
+            logger.error('Failed to send AsS page:', err);
+            res.status(500).send('تعذّر تحميل لوحة المراجعة');
+        }
+    });
+});
 
 app.get('/news', (_req: Request, res: Response) => {
     const filePath = resolvePublicFile(__dirname, 'news.html');
@@ -925,6 +937,11 @@ async function startServer() {
                     runShareWinRollover();
                     setInterval(runShareWinRollover, 15 * 60 * 1000).unref?.();
                     logger.info('✅ Share & Win weekly cycle rollover scheduled (every 15m)');
+
+                    const { startWinnerReminderCron } = await import(
+                        './services/competition-award.service'
+                    );
+                    startWinnerReminderCron();
 
                     if (isFreePlan) {
                         logger.warn('⚠️ FOOTBALL_API_PLAN is free/undefined — heavy watchers (league preloader, preload, etc.) disabled to preserve quota. Match + prediction watchers still run with circuit-breaker protection.');

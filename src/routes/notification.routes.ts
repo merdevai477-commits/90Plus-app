@@ -235,6 +235,8 @@ router.put('/read-all', requireAuth, async (req: Request, res: Response): Promis
             where: { userId: user.id, isRead: false },
             data: { isRead: true },
         });
+        const { ackAllPrizeWinsForUser } = await import('../services/competition-award.service');
+        await ackAllPrizeWinsForUser(user.id).catch(() => undefined);
 
         res.json({ status: 'SUCCESS', message: 'تم قراءة جميع الإشعارات' });
     } catch (error: any) {
@@ -495,10 +497,18 @@ router.put('/:id/read', requireAuth, verifyNotificationOwnership, async (req: Re
     try {
         const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
+        const existing = await prisma.notification.findUnique({
+            where: { id },
+            select: { data: true },
+        });
         await prisma.notification.update({
             where: { id },
             data: { isRead: true },
         });
+        if (existing?.data) {
+            const { ackPrizeWinFromNotification } = await import('../services/competition-award.service');
+            await ackPrizeWinFromNotification(existing.data).catch(() => undefined);
+        }
 
         res.json({ status: 'SUCCESS', message: 'تم قراءة الإشعار' });
     } catch (error: any) {
