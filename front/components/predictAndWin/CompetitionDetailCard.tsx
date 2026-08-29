@@ -18,7 +18,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Linking, Pressable, Text, useWindowDimensions, View } from 'react-native';
 
 import TeamBadge from '../common/TeamBadge';
 import { PWGradientText } from './GradientText';
@@ -59,16 +59,40 @@ const CARD_H = 355;
  */
 function useDetailMetrics() {
   const { contentWidth, cardScale } = usePWContentWidth();
+  const { width: winW } = useWindowDimensions();
   const { isRTL } = usePWDirection();
-  const c = (designValue: number) => Math.round(designValue * cardScale);
+  const fallback = Math.max(280, (winW || 360) - 32);
+  const width =
+    Number.isFinite(contentWidth) && contentWidth > 40 ? contentWidth : fallback;
+  const scale =
+    Number.isFinite(cardScale) && cardScale > 0 ? cardScale : width / CARD_W;
+  const c = (designValue: number) => Math.round(designValue * scale);
   return {
-    width: contentWidth,
-    height: Math.round(CARD_H * cardScale),
+    width,
+    height: Math.max(280, Math.round(CARD_H * scale)),
     c,
     /** Mirrors a Figma `left` offset for a child of the given design width. */
     x: (left: number, childWidth: number) =>
-      isRTL ? c(left) : contentWidth - c(left) - c(childWidth),
+      isRTL ? c(left) : width - c(left) - c(childWidth),
   };
+}
+
+function openExternal(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed) return;
+  const href = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  Linking.openURL(href).catch(() => undefined);
+}
+
+function openWhatsapp(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return;
+  const digits = trimmed.replace(/[^\d]/g, '');
+  if (digits.length >= 8 && !/^https?:\/\//i.test(trimmed)) {
+    Linking.openURL(`https://wa.me/${digits}`).catch(() => undefined);
+    return;
+  }
+  openExternal(trimmed);
 }
 
 function Stat({
@@ -128,7 +152,17 @@ export function CompetitionDetailCard({
   const { formatDayMonth, formatTime } = usePWLocalize();
   const { t } = useTranslation();
   const detail = t.predictAndWin.detail;
-  const sponsor = competition.sponsor;
+  const sponsor = competition.sponsor ?? {
+    id: competition.id,
+    name: competition.prizeName || 'Prize',
+    description: null,
+    logoUrl: null,
+    address: null,
+    hasDelivery: false,
+    socialLinks: null,
+    isVerified: false,
+    isActive: true,
+  };
 
   const kickoff = new Date(competition.matchDate);
   // `'ar-EG'` was hardcoded here, so the English build printed Arabic month
@@ -141,21 +175,26 @@ export function CompetitionDetailCard({
     <View style={{ width: 1, height: s(29), backgroundColor: PW.statBorder }} />
   );
 
+  const leftArt = sponsor.logoUrl ? { uri: sponsor.logoUrl } : art;
+  const links = sponsor.socialLinks;
+
   return (
     <View
+      collapsable={false}
       style={[
         styles.card,
         {
           width: cardWidth,
           height: cardHeight,
+          minHeight: 280,
           borderRadius: c(PW_RADII.detail),
           alignSelf: 'center',
         },
       ]}
     >
-      {/* Prize artwork with the tripled blur glow (Figma `640:4817`). */}
+      {/* Brand mark with the tripled blur glow (Figma `640:4817`) — left. */}
       <Image
-        source={art}
+        source={leftArt}
         style={{
           position: 'absolute',
           left: x(26, 78),
@@ -168,7 +207,7 @@ export function CompetitionDetailCard({
         blurRadius={6}
       />
       <Image
-        source={art}
+        source={leftArt}
         style={{
           position: 'absolute',
           left: x(26, 78),
@@ -179,27 +218,25 @@ export function CompetitionDetailCard({
         contentFit="contain"
       />
 
-      {/* Sponsor logo — Figma 101.57×102 at (291,8). */}
-      {sponsor.logoUrl ? (
-        <Image
-          source={{ uri: sponsor.logoUrl }}
-          style={{
-            position: 'absolute',
-            left: x(291, 101.57),
-            top: c(8),
-            width: c(101.57),
-            height: c(102),
-          }}
-          contentFit="contain"
-        />
-      ) : null}
+      {/* Prize photo — Figma 101.57×102 at (291,8). */}
+      <Image
+        source={art}
+        style={{
+          position: 'absolute',
+          left: x(291, 101.57),
+          top: c(8),
+          width: c(101.57),
+          height: c(102),
+        }}
+        contentFit="contain"
+      />
 
       {/* Headline stack — centred, y43, w143. */}
       <View
         style={{
           position: 'absolute',
+          left: Math.round((cardWidth - c(143)) / 2),
           top: c(43),
-          alignSelf: 'center',
           width: c(143),
           gap: s(3),
           alignItems: 'center',
@@ -361,9 +398,33 @@ export function CompetitionDetailCard({
       >
         <Text style={styles.tiny(f(7), '#dfdfdf', medium)}>{detail.socialLinks}</Text>
         <View style={styles.socialRow(s(14))}>
-          <IconFacebook width={s(14)} height={s(14)} />
-          <IconInstagram width={s(14)} height={s(14)} />
-          <IconWhatsapp width={s(14)} height={s(14)} />
+          <Pressable
+            onPress={() => links?.facebook && openExternal(links.facebook)}
+            disabled={!links?.facebook}
+            hitSlop={8}
+            accessibilityRole="link"
+            accessibilityLabel="Facebook"
+          >
+            <IconFacebook width={s(14)} height={s(14)} />
+          </Pressable>
+          <Pressable
+            onPress={() => links?.instagram && openExternal(links.instagram)}
+            disabled={!links?.instagram}
+            hitSlop={8}
+            accessibilityRole="link"
+            accessibilityLabel="Instagram"
+          >
+            <IconInstagram width={s(14)} height={s(14)} />
+          </Pressable>
+          <Pressable
+            onPress={() => links?.whatsapp && openWhatsapp(links.whatsapp)}
+            disabled={!links?.whatsapp}
+            hitSlop={8}
+            accessibilityRole="link"
+            accessibilityLabel="WhatsApp"
+          >
+            <IconWhatsapp width={s(14)} height={s(14)} />
+          </Pressable>
         </View>
       </View>
 

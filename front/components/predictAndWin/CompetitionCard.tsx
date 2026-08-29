@@ -13,11 +13,13 @@
 
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
+import { CompetitionDetailCard } from './CompetitionDetailCard';
+import { usePWLocalize } from './localize';
 import { prizeArtSource } from './PrizeCategoryGrid';
 import { IconLocation, IconPickupPin, IconVespaGreen } from './icons';
 import {
@@ -31,6 +33,26 @@ import {
 } from './theme';
 
 const CARD_H = 199;
+
+function useHubDeadlineRemaining(deadlineIso: string) {
+  const { formatRemaining } = usePWLocalize();
+  const { t } = useTranslation();
+  const endedLabel = t.predictAndWin.card.ended;
+  const [remaining, setRemaining] = useState('—');
+
+  useEffect(() => {
+    const tick = () => {
+      const ms = new Date(deadlineIso).getTime() - Date.now();
+      setRemaining(ms <= 0 ? endedLabel : formatRemaining(ms));
+    };
+    tick();
+    if (process.env.NODE_ENV === 'test') return undefined;
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [deadlineIso, endedLabel, formatRemaining]);
+
+  return remaining;
+}
 
 /**
  * Every inner coordinate on this card is an absolute Figma offset inside the
@@ -52,10 +74,8 @@ function useCardMetrics() {
 }
 
 /**
- * Hub list card. The Figma card uses expo-image, LinearGradient, custom fonts
- * and a Pressable style callback — on some Android devices that paints a
- * 0-height or black-on-black cell, so the hub looked empty while the API had
- * published prizes. This layout is percentage-width + minHeight + system fonts.
+ * Hub list card — Figma `Component 16` variant `Frame 360` (`650:5319`), 404×355.
+ * Compact `Component 14` (`650:5320`) stays as `CompetitionCard` for the wizard preview.
  */
 export function HubPrizeCard({
   competition,
@@ -64,27 +84,24 @@ export function HubPrizeCard({
   competition: CompetitionInfo;
   onPress: () => void;
 }) {
-  const sponsorName = competition.sponsor?.name || competition.prizeName || 'Prize';
-  const prize = competition.prizeName;
-  const match = `${competition.homeTeam} vs ${competition.awayTeam}`;
+  const remaining = useHubDeadlineRemaining(competition.predictionDeadline);
+  const { t } = useTranslation();
+
+  const openMap = () => {
+    const address = competition.sponsor?.address;
+    if (!address) return;
+    const q = encodeURIComponent(address);
+    Linking.openURL(`https://maps.google.com/?q=${q}`).catch(() => undefined);
+  };
 
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={sponsorName}
-      style={hubStyles.card}
-    >
-      <Text style={hubStyles.sponsor} numberOfLines={1}>
-        {sponsorName}
-      </Text>
-      <Text style={hubStyles.prize} numberOfLines={1}>
-        {prize}
-      </Text>
-      <Text style={hubStyles.match} numberOfLines={1}>
-        {match}
-      </Text>
-    </Pressable>
+    <CompetitionDetailCard
+      competition={competition}
+      remaining={remaining}
+      onCtaPress={onPress}
+      ctaLabel={t.predictAndWin.detail.sharePrediction}
+      onOpenMap={openMap}
+    />
   );
 }
 
@@ -382,24 +399,6 @@ export function CompetitionCard({
     </Pressable>
   );
 }
-
-const hubStyles = StyleSheet.create({
-  card: {
-    width: '92%',
-    minHeight: 168,
-    alignSelf: 'center',
-    backgroundColor: '#2B0450',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#4B0989',
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-    justifyContent: 'center',
-  },
-  sponsor: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
-  prize: { color: '#E8D5FF', fontSize: 16, fontWeight: '700', marginTop: 6 },
-  match: { color: '#CBCBCB', fontSize: 13, marginTop: 10 },
-});
 
 const styles = StyleSheet.create({
   // Figma `drop-shadow(0 0 8.95px #360763)`.

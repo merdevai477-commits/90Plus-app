@@ -201,6 +201,7 @@ describe('Predict & Win hub', () => {
 
     await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
     expect(screen.getByText('SPONSOR_TWO')).toBeTruthy();
+    expect(screen.getAllByText('Share your prediction').length).toBeGreaterThan(0);
     expect(lastRequestedTab()).toBe('all');
   });
 
