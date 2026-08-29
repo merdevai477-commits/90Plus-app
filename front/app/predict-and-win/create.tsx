@@ -29,7 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ImageUploadModal } from '../../components/common/ImageUploadModal';
 import { MatchPicker, SelectedMatchHero } from '../../components/predictAndWin/MatchPicker';
-import { PWHeader } from '../../components/predictAndWin/PWHeader';
+import { PWHeader, usePWHeaderOffset } from '../../components/predictAndWin/PWHeader';
 import { PredictionStepper } from '../../components/predictAndWin/PredictionStepper';
 import {
   CategoryMedallion,
@@ -108,6 +108,7 @@ export default function CreateCompetitionScreen() {
   const { contentWidth } = usePWContentWidth();
   const { categoryName, errorMessage, formatDate } = usePWLocalize();
   const insets = useSafeAreaInsets();
+  const headerOffset = usePWHeaderOffset();
   const router = useRouter();
   const toast = useToast();
   const { getToken } = useAuth();
@@ -395,7 +396,7 @@ export default function CreateCompetitionScreen() {
       >
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: insets.bottom + s(40) }}
+          contentContainerStyle={{ paddingTop: headerOffset, paddingBottom: insets.bottom + s(40) }}
         >
           {phase !== 'category' ? (
             <View style={{ paddingTop: s(35) }}>

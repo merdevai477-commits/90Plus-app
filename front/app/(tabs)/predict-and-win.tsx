@@ -27,7 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HubPrizeCard } from '../../components/predictAndWin/CompetitionCard';
 import { InfoTiles } from '../../components/predictAndWin/InfoTiles';
-import { PWHeader } from '../../components/predictAndWin/PWHeader';
+import { PWHeader, usePWHeaderOffset } from '../../components/predictAndWin/PWHeader';
 import { PredictScoreModal } from '../../components/predictAndWin/PredictScoreModal';
 import { SortFilterRow } from '../../components/predictAndWin/SortFilterRow';
 import { PredictAndWinTabBar } from '../../components/predictAndWin/TabBar';
@@ -44,6 +44,7 @@ export default function PredictAndWinScreen() {
   useScreenFont();
   const { s } = usePWScale();
   const insets = useSafeAreaInsets();
+  const headerOffset = usePWHeaderOffset();
   const router = useRouter();
   const { t } = useTranslation();
 
@@ -135,7 +136,7 @@ export default function PredictAndWinScreen() {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingBottom: bottomPad, flexGrow: 1 }}
+        contentContainerStyle={{ paddingTop: headerOffset, paddingBottom: bottomPad, flexGrow: 1 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={PW.vsTop} />
         }

@@ -59,6 +59,11 @@ jest.mock('expo-linear-gradient', () => {
   const RN = jest.requireActual('react-native');
   return { LinearGradient: ({ children, ...p }: any) => R.createElement(RN.View, p, children) };
 });
+jest.mock('expo-blur', () => {
+  const R = jest.requireActual('react');
+  const RN = jest.requireActual('react-native');
+  return { BlurView: ({ children, ...p }: any) => R.createElement(RN.View, p, children) };
+});
 jest.mock('@expo/vector-icons', () => {
   const R = jest.requireActual('react');
   const RN = jest.requireActual('react-native');
@@ -212,7 +217,7 @@ describe('Predict & Win hub', () => {
 
     await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
     expect(screen.getByText('SPONSOR_TWO')).toBeTruthy();
-    expect(screen.getAllByText('Share your prediction').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Predict now').length).toBeGreaterThan(0);
     expect(lastRequestedTab()).toBe('all');
   });
 
@@ -222,7 +227,7 @@ describe('Predict & Win hub', () => {
     render(<PredictAndWinScreen />);
     await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
 
-    fireEvent.press(screen.getAllByText('Share your prediction')[0]);
+    fireEvent.press(screen.getAllByText('Predict now')[0]);
 
     await waitFor(() => expect(screen.getByText('Predict the match result')).toBeTruthy());
     expect(screen.getByText('Confirm prediction')).toBeTruthy();
@@ -251,7 +256,8 @@ describe('Predict & Win hub', () => {
     await waitFor(() => expect(screen.getByText('Waiting for the winner')).toBeTruthy());
     expect(screen.getByText('2')).toBeTruthy();
     expect(screen.getByText('0')).toBeTruthy();
-    expect(screen.queryByText('Share your prediction')).toBeNull();
+    expect(screen.queryByText('Predict now')).toBeNull();
+    expect(screen.queryByText('Social links')).toBeNull();
   });
 
   it('flips the card to waiting without waiting for the predict request', async () => {
@@ -271,7 +277,7 @@ describe('Predict & Win hub', () => {
     render(<PredictAndWinScreen />);
     await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
 
-    fireEvent.press(screen.getByText('Share your prediction'));
+    fireEvent.press(screen.getByText('Predict now'));
     await waitFor(() => expect(screen.getByText('Confirm prediction')).toBeTruthy());
 
     const inputs = screen.getAllByLabelText('score');
@@ -295,6 +301,63 @@ describe('Predict & Win hub', () => {
       rank: null,
       createdAt: new Date().toISOString(),
     });
+  });
+
+  it('greys the CTA when predictions have closed', async () => {
+    const closed = {
+      ...competition('c1', 'SPONSOR_ONE'),
+      predictionDeadline: new Date(Date.now() - 60_000).toISOString(),
+    };
+    mockList.mockResolvedValue({ items: [closed], nextCursor: null });
+
+    render(<PredictAndWinScreen />);
+
+    await waitFor(() => expect(screen.getAllByText('Prediction closed').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Predict now')).toBeNull();
+  });
+
+  it('paints a green CTA when the prediction is correct', async () => {
+    const won = {
+      ...competition('c1', 'SPONSOR_ONE'),
+      status: 'SETTLED' as const,
+      myEntry: {
+        id: 'e1',
+        predictedHomeScore: 2,
+        predictedAwayScore: 0,
+        predictedWinner: null,
+        isCorrect: true,
+        isWinner: true,
+        rank: 1,
+        createdAt: new Date().toISOString(),
+      },
+    };
+    mockList.mockResolvedValue({ items: [won], nextCursor: null });
+
+    render(<PredictAndWinScreen />);
+
+    await waitFor(() => expect(screen.getByText('Correct prediction')).toBeTruthy());
+  });
+
+  it('paints a red CTA when the prediction is wrong', async () => {
+    const lost = {
+      ...competition('c1', 'SPONSOR_ONE'),
+      status: 'SETTLED' as const,
+      myEntry: {
+        id: 'e1',
+        predictedHomeScore: 2,
+        predictedAwayScore: 0,
+        predictedWinner: null,
+        isCorrect: false,
+        isWinner: false,
+        rank: null,
+        createdAt: new Date().toISOString(),
+      },
+    };
+    mockList.mockResolvedValue({ items: [lost], nextCursor: null });
+
+    render(<PredictAndWinScreen />);
+
+    await waitFor(() => expect(screen.getByText('Wrong prediction')).toBeTruthy());
   });
 
   it.each(['today', 'mine', 'sponsored'] as const)(

@@ -4,23 +4,19 @@
  * coloured tint and a top specular so the pill reads as frosted glass.
  */
 
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import React, { useMemo } from 'react';
 import {
-  Platform,
   Pressable,
-  StyleSheet,
   Text,
   View,
   type StyleProp,
   ViewStyle,
 } from 'react-native';
 
-import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionStatus } from '../../services/competitions.service';
 import { PWGradientText } from './GradientText';
+import { GlassCtaShell } from './glassCta';
 import {
   IconCtaCheck,
   IconCtaCross,
@@ -29,12 +25,6 @@ import {
   IconRoundPlus,
 } from './icons';
 import { PW, usePWFonts, usePWScale } from './theme';
-
-const GlassSurface = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-
-const GLASS_PROPS = isLiquidGlassSupported
-  ? { effect: 'clear' as const, interactive: true, colorScheme: 'dark' as const }
-  : { intensity: Platform.OS === 'android' ? 36 : 28, tint: 'dark' as const };
 
 /** Shared CTA size — every variant (add / pending / winner / rejected) uses this. */
 const PILL = {
@@ -93,50 +83,6 @@ const STATUS: Record<
 };
 
 const ADD_TINT = ['rgba(140,40,255,0.42)', 'rgba(81,7,151,0.22)'] as const;
-
-function GlassCtaShell({
-  tint,
-  width,
-  height,
-  radius,
-  children,
-}: {
-  tint: readonly [string, string];
-  width: number;
-  height: number;
-  radius: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <View
-      style={{
-        width,
-        height,
-        borderRadius: radius,
-        overflow: 'hidden',
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: 'rgba(255,255,255,0.38)',
-      }}
-    >
-      <GlassSurface {...(GLASS_PROPS as object)} style={StyleSheet.absoluteFill} />
-      <LinearGradient
-        colors={[...tint]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <LinearGradient
-        colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.08)', 'transparent']}
-        locations={[0, 0.38, 1]}
-        start={{ x: 0.15, y: 0 }}
-        end={{ x: 0.85, y: 1 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      {children}
-    </View>
-  );
-}
 
 function usePillMetrics() {
   const { s, f } = usePWScale();

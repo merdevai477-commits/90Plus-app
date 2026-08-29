@@ -16,12 +16,13 @@
  */
 
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Linking, Pressable, Text, useWindowDimensions, View } from 'react-native';
 
 import TeamBadge from '../common/TeamBadge';
 import { PWGradientText } from './GradientText';
+import { GlassCtaShell } from './glassCta';
+import { hasSponsorSocialLinks, PRIZE_CTA_GLASS, prizeCtaKind } from './prizeCta';
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
 import { prizeArtSource } from './PrizeCategoryGrid';
@@ -40,7 +41,6 @@ import { usePWLocalize } from './localize';
 import {
   PW,
   PW_CONTENT_W,
-  PW_GRADIENTS,
   PW_RADII,
   usePWContentWidth,
   usePWDirection,
@@ -211,11 +211,18 @@ export function CompetitionDetailCard({
   const { t } = useTranslation();
   const detail = t.predictAndWin.detail;
   const entry = competition.myEntry;
-  const waiting =
-    !!entry && (competition.status === 'PUBLISHED' || competition.status === 'LOCKED');
-  const shownCtaLabel = waiting ? detail.waitingForWinner : ctaLabel;
-  const ctaColors = waiting ? PW_GRADIENTS.waitingCta : PW_GRADIENTS.cta;
-  const ctaTextColor = waiting ? '#1A1400' : PW.text;
+  const ctaKind = prizeCtaKind(competition);
+  const shownCtaLabel =
+    ctaKind === 'waiting'
+      ? detail.waitingForWinner
+      : ctaKind === 'ended'
+        ? t.predictAndWin.card.ended
+        : ctaKind === 'correct'
+          ? detail.correctPrediction
+          : ctaKind === 'wrong'
+            ? detail.wrongPrediction
+            : ctaLabel;
+  const ctaLook = PRIZE_CTA_GLASS[ctaKind];
   const sponsor = competition.sponsor ?? {
     id: competition.id,
     name: competition.prizeName || 'Prize',
@@ -241,6 +248,7 @@ export function CompetitionDetailCard({
 
   const leftArt = sponsor.logoUrl ? { uri: sponsor.logoUrl } : art;
   const links = sponsor.socialLinks;
+  const showSocial = hasSponsorSocialLinks(links);
 
   return (
     <View
@@ -439,7 +447,8 @@ export function CompetitionDetailCard({
         <IconVespaDetail width={s(33)} height={s(33) * (19.2565 / 27.5011)} />
       </View>
 
-      {/* Social block — Figma 109×55 at (11,250). */}
+      {/* Social block — Figma 109×55 at (11,250). Hidden when the sponsor left every link empty. */}
+      {showSocial ? (
       <View
         style={{
           position: 'absolute',
@@ -491,6 +500,7 @@ export function CompetitionDetailCard({
           </Pressable>
         </View>
       </View>
+      ) : null}
 
       {/* Match row — Figma 259×68 at (128,128). */}
       <View
@@ -579,12 +589,12 @@ export function CompetitionDetailCard({
         />
       </View>
 
-      {/* CTA — Figma 265.4×47.2 at (128.6,262.3). */}
+      {/* CTA — Figma 265.4×47.2 at (128.6,262.3). Glass tint follows prediction state. */}
       <Pressable
         onPress={onCtaPress}
-        disabled={ctaDisabled && !waiting}
+        disabled={ctaDisabled && ctaKind === 'predict'}
         accessibilityRole="button"
-        accessibilityState={{ disabled: ctaDisabled && !waiting }}
+        accessibilityState={{ disabled: ctaDisabled && ctaKind === 'predict' }}
         accessibilityLabel={shownCtaLabel}
         style={{
           position: 'absolute',
@@ -592,26 +602,27 @@ export function CompetitionDetailCard({
           top: c(262.3),
           width: c(265.4),
           height: c(47.2),
-          // Waiting-for-winner stays fully opaque so the yellow label reads.
-          opacity: ctaDisabled && !waiting ? 0.45 : 1,
+          opacity: ctaDisabled && ctaKind === 'predict' ? 0.45 : 1,
         }}
       >
-        <LinearGradient
-          colors={[...ctaColors]}
-          style={{
-            flex: 1,
-            borderRadius: s(10),
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Text
-            style={{ fontFamily: semibold, fontSize: f(13), color: ctaTextColor }}
-            numberOfLines={1}
-          >
-            {shownCtaLabel}
-          </Text>
-        </LinearGradient>
+        <GlassCtaShell tint={ctaLook.tint} radius={s(10)}>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: s(10) }}>
+            <Text
+              style={{
+                fontFamily: semibold,
+                fontSize: f(ctaKind === 'predict' ? 14 : 13),
+                letterSpacing: ctaKind === 'predict' ? 0.2 : 0,
+                color: ctaLook.text,
+                textAlign: 'center',
+              }}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+            >
+              {shownCtaLabel}
+            </Text>
+          </View>
+        </GlassCtaShell>
       </Pressable>
 
       {/* Wide map button — Figma 379×27 at (12,315). */}

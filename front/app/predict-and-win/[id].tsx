@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CompetitionDetailCard } from '../../components/predictAndWin/CompetitionDetailCard';
 import { PredictScoreModal } from '../../components/predictAndWin/PredictScoreModal';
-import { PWHeader } from '../../components/predictAndWin/PWHeader';
+import { PWHeader, usePWHeaderOffset } from '../../components/predictAndWin/PWHeader';
 import { PWFieldLabel } from '../../components/predictAndWin/fields';
 import { usePWLocalize } from '../../components/predictAndWin/localize';
 import {
@@ -19,7 +19,6 @@ import {
   usePWFonts,
   usePWScale,
 } from '../../components/predictAndWin/theme';
-import { useToast } from '../../contexts/ToastContext';
 import { isEntryOpen } from '../../services/competitions.service';
 import { useCompetition } from '../../hooks/useCompetition';
 import { useTranslation } from '../../src/i18n';
@@ -30,9 +29,9 @@ export default function CompetitionDetailScreen() {
   const { s, f } = usePWScale();
   const { semibold, regular } = usePWFonts();
   const insets = useSafeAreaInsets();
+  const headerOffset = usePWHeaderOffset();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const toast = useToast();
   const { t } = useTranslation();
   const dir = usePWDirection();
   /**
@@ -163,18 +162,15 @@ export default function CompetitionDetailScreen() {
     <View style={{ flex: 1, backgroundColor: PW.screen }}>
       <PWHeader title={t.predictAndWin.title} onBack={() => router.back()} />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + s(40) }}>
-        <View style={{ marginTop: s(28) }}>
+      <ScrollView contentContainerStyle={{ paddingTop: headerOffset, paddingBottom: insets.bottom + s(40) }}>
+        <View style={{ marginTop: s(12) }}>
           <CompetitionDetailCard
             competition={competition}
             remaining={remaining}
             ctaLabel={canEdit && !competition.myEntry ? detail.sharePrediction : ctaLabel}
             ctaDisabled={!canEdit}
             onCtaPress={() => {
-              if (!canEdit) {
-                toast.showError(closedReason, '');
-                return;
-              }
+              if (!canEdit) return;
               setSheetOpen(true);
             }}
             onOpenMap={openMap}
