@@ -29,9 +29,19 @@ export function useSponsorPrizeCta(): SponsorPrizeCtaState {
   const [winnerAwardedAt, setWinnerAwardedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const seq = useRef(0);
+  /**
+   * Clerk's `getToken` is a new function every render. Closing over it in
+   * `refresh` made `useFocusEffect` re-fire forever — the same loop that
+   * hammered `/match-pool`. A 500 from `/mine` then re-rendered the hub and
+   * the cycle became GET /competitions/mine × dozens per second.
+   */
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+  const isSignedInRef = useRef(isSignedIn);
+  isSignedInRef.current = isSignedIn;
 
   const refresh = useCallback(async () => {
-    if (!isSignedIn) {
+    if (!isSignedInRef.current) {
       setCompetitionId(null);
       setStatus(null);
       setWinnerAwardedAt(null);
@@ -42,7 +52,7 @@ export function useSponsorPrizeCta(): SponsorPrizeCtaState {
     const ticket = ++seq.current;
     setLoading(true);
     try {
-      const token = await getClerkBearerToken(getToken, { retries: 2, baseDelayMs: 150 });
+      const token = await getClerkBearerToken(getTokenRef.current, { retries: 2, baseDelayMs: 150 });
       if (!token || ticket !== seq.current) return;
 
       const mine = await CompetitionsService.listMine(token);
@@ -61,7 +71,7 @@ export function useSponsorPrizeCta(): SponsorPrizeCtaState {
     } finally {
       if (ticket === seq.current) setLoading(false);
     }
-  }, [getToken, isSignedIn]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
