@@ -28,6 +28,7 @@ import { useTranslation } from '../../src/i18n';
 import {
   CompetitionsService,
   isEntryOpen,
+  type CompetitionEntryInfo,
   type CompetitionInfo,
 } from '../../services/competitions.service';
 import { PWGradientText } from './GradientText';
@@ -45,7 +46,7 @@ export function PredictScoreModal({
   visible: boolean;
   competition: CompetitionInfo | null;
   onClose: () => void;
-  onSubmitted?: () => void;
+  onSubmitted?: (entry: CompetitionEntryInfo) => void;
 }) {
   const { s, f } = usePWScale();
   const { width: winW } = useWindowDimensions();
@@ -111,7 +112,7 @@ export function PredictScoreModal({
         });
         if (entry) {
           toast.showSuccess(detail.submitted, '');
-          onSubmitted?.();
+          onSubmitted?.(entry);
           onClose();
         }
       } else {
@@ -120,7 +121,7 @@ export function PredictScoreModal({
         });
         if (entry) {
           toast.showSuccess(detail.submitted, '');
-          onSubmitted?.();
+          onSubmitted?.(entry);
           onClose();
         }
       }

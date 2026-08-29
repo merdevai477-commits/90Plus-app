@@ -129,6 +129,64 @@ function Stat({
   );
 }
 
+function TeamSlot({
+  name,
+  logo,
+  colWidth,
+  score,
+  picked,
+}: {
+  name: string;
+  logo: string | null;
+  colWidth: number;
+  score?: number | null;
+  picked?: boolean;
+}) {
+  const { s, f } = usePWScale();
+  const { regular, semibold } = usePWFonts();
+  const hasScore = score != null;
+  return (
+    <View style={{ width: colWidth, gap: s(4), alignItems: 'center' }}>
+      <View>
+        <TeamBadge name={name} logo={logo ?? undefined} size={s(32)} color="transparent" />
+        {hasScore ? (
+          <View
+            style={{
+              position: 'absolute',
+              right: -s(6),
+              top: -s(6),
+              minWidth: s(18),
+              height: s(18),
+              paddingHorizontal: s(4),
+              borderRadius: s(9),
+              backgroundColor: PW.vsTop,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{ fontFamily: semibold, fontSize: f(10), color: PW.text }}>{score}</Text>
+          </View>
+        ) : picked ? (
+          <View
+            style={{
+              position: 'absolute',
+              right: -s(4),
+              top: -s(4),
+              width: s(14),
+              height: s(14),
+              borderRadius: s(7),
+              backgroundColor: PW.vsTop,
+            }}
+          />
+        ) : null}
+      </View>
+      <Text style={styles.tiny(f(9), PW.text, regular)} numberOfLines={1}>
+        {name}
+      </Text>
+    </View>
+  );
+}
+
 export function CompetitionDetailCard({
   competition,
   remaining,
@@ -152,6 +210,12 @@ export function CompetitionDetailCard({
   const { formatDayMonth, formatTime } = usePWLocalize();
   const { t } = useTranslation();
   const detail = t.predictAndWin.detail;
+  const entry = competition.myEntry;
+  const waiting =
+    !!entry && (competition.status === 'PUBLISHED' || competition.status === 'LOCKED');
+  const shownCtaLabel = waiting ? detail.waitingForWinner : ctaLabel;
+  const ctaColors = waiting ? PW_GRADIENTS.waitingCta : PW_GRADIENTS.cta;
+  const ctaTextColor = waiting ? '#1A1400' : PW.text;
   const sponsor = competition.sponsor ?? {
     id: competition.id,
     name: competition.prizeName || 'Prize',
@@ -444,17 +508,13 @@ export function CompetitionDetailCard({
           justifyContent: 'space-between',
         }}
       >
-        <View style={{ width: s(53), gap: s(9), alignItems: 'center' }}>
-          <TeamBadge
-            name={competition.homeTeam}
-            logo={competition.homeTeamLogo ?? undefined}
-            size={s(32)}
-            color="transparent"
-          />
-          <Text style={styles.tiny(f(9), PW.text, regular)} numberOfLines={1}>
-            {competition.homeTeam}
-          </Text>
-        </View>
+        <TeamSlot
+          name={competition.homeTeam}
+          logo={competition.homeTeamLogo}
+          colWidth={s(53)}
+          score={entry?.predictedHomeScore}
+          picked={entry?.predictedWinner === 'home'}
+        />
 
         <View style={{ width: s(64), gap: s(4), alignItems: 'center' }}>
           <Text style={styles.tiny(f(9), '#c2c2c2', medium)} numberOfLines={1}>
@@ -468,17 +528,13 @@ export function CompetitionDetailCard({
           </Text>
         </View>
 
-        <View style={{ width: s(45), gap: s(9), alignItems: 'center' }}>
-          <TeamBadge
-            name={competition.awayTeam}
-            logo={competition.awayTeamLogo ?? undefined}
-            size={s(32)}
-            color="transparent"
-          />
-          <Text style={styles.tiny(f(9), PW.text, regular)} numberOfLines={1}>
-            {competition.awayTeam}
-          </Text>
-        </View>
+        <TeamSlot
+          name={competition.awayTeam}
+          logo={competition.awayTeamLogo}
+          colWidth={s(45)}
+          score={entry?.predictedAwayScore}
+          picked={entry?.predictedWinner === 'away'}
+        />
       </View>
 
       {/* Stats bar — Figma 265.4×47.3 at (128.6,208.1). */}
@@ -526,23 +582,22 @@ export function CompetitionDetailCard({
       {/* CTA — Figma 265.4×47.2 at (128.6,262.3). */}
       <Pressable
         onPress={onCtaPress}
-        disabled={ctaDisabled}
+        disabled={ctaDisabled && !waiting}
         accessibilityRole="button"
-        accessibilityState={{ disabled: ctaDisabled }}
-        accessibilityLabel={ctaLabel}
+        accessibilityState={{ disabled: ctaDisabled && !waiting }}
+        accessibilityLabel={shownCtaLabel}
         style={{
           position: 'absolute',
           left: x(128.6, 265.4),
           top: c(262.3),
           width: c(265.4),
           height: c(47.2),
-          // A closed competition still draws the CTA (Figma has no separate
-          // frame for it) but must not look or behave tappable.
-          opacity: ctaDisabled ? 0.45 : 1,
+          // Waiting-for-winner stays fully opaque so the yellow label reads.
+          opacity: ctaDisabled && !waiting ? 0.45 : 1,
         }}
       >
         <LinearGradient
-          colors={[...PW_GRADIENTS.cta]}
+          colors={[...ctaColors]}
           style={{
             flex: 1,
             borderRadius: s(10),
@@ -551,10 +606,10 @@ export function CompetitionDetailCard({
           }}
         >
           <Text
-            style={{ fontFamily: semibold, fontSize: f(13), color: PW.text }}
+            style={{ fontFamily: semibold, fontSize: f(13), color: ctaTextColor }}
             numberOfLines={1}
           >
-            {ctaLabel}
+            {shownCtaLabel}
           </Text>
         </LinearGradient>
       </Pressable>

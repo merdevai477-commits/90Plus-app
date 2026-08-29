@@ -151,6 +151,11 @@ export const PW_GRADIENTS = {
   sort: [PW.sortTop, PW.sortBottom] as const,
   rail: [PW.railFillStart, PW.railFillEnd] as const,
   accent: [PW.accentTop, PW.accentBottom] as const,
+  /**
+   * Hub CTA after the user has entered — "في انتظار الفائز".
+   * Yellow pair from the pending-sponsor pill (`IconCtaLoading`).
+   */
+  waitingCta: ['#F5E427', '#C4A800'] as const,
   /** Floating action button — `linear-gradient(90deg, …)` at 0.81 alpha. */
   fab: [
     'rgba(81,7,151,0.81)',

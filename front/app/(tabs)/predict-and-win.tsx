@@ -60,6 +60,7 @@ export default function PredictAndWinScreen() {
     changeSort,
     refresh,
     loadMore,
+    applyEntry,
   } = useCompetitions();
 
   const rows = Array.isArray(items) ? items : [];
@@ -176,7 +177,11 @@ export default function PredictAndWinScreen() {
         visible={!!predictTarget}
         competition={predictTarget}
         onClose={() => setPredictTarget(null)}
-        onSubmitted={() => void refresh()}
+        onSubmitted={(entry) => {
+          if (predictTarget) applyEntry(predictTarget.id, entry);
+          setPredictTarget(null);
+          void refresh();
+        }}
       />
 
       <WinnerPickerModal

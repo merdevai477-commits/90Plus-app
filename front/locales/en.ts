@@ -1222,6 +1222,7 @@ export const en = {
       prizesAvailable: 'Prizes available',
       timeLeft: 'Time left',
       sharePrediction: 'Share your prediction',
+      waitingForWinner: 'Waiting for the winner',
       sheetTitle: 'Predict the match result',
       matchResult: 'Match result',
       confirmPrediction: 'Confirm prediction',

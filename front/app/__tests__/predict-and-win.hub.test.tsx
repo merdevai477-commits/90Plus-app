@@ -228,6 +228,31 @@ describe('Predict & Win hub', () => {
     expect(screen.getByText('Match result')).toBeTruthy();
   });
 
+  it('shows a waiting CTA and the predicted scores after the user has entered', async () => {
+    const entered = {
+      ...competition('c1', 'SPONSOR_ONE'),
+      predictionMode: 'EXACT_SCORE' as const,
+      myEntry: {
+        id: 'e1',
+        predictedHomeScore: 2,
+        predictedAwayScore: 0,
+        predictedWinner: null,
+        isCorrect: null,
+        isWinner: false,
+        rank: null,
+        createdAt: new Date().toISOString(),
+      },
+    };
+    mockList.mockResolvedValue({ items: [entered], nextCursor: null });
+
+    render(<PredictAndWinScreen />);
+
+    await waitFor(() => expect(screen.getByText('Waiting for the winner')).toBeTruthy());
+    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.getByText('0')).toBeTruthy();
+    expect(screen.queryByText('Share your prediction')).toBeNull();
+  });
+
   it.each(['today', 'mine', 'sponsored'] as const)(
     'paints the cards after switching to the "%s" tab',
     async (tab) => {

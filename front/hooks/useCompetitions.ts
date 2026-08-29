@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import {
+  CompetitionEntryInfo,
   CompetitionFilter,
   CompetitionInfo,
   CompetitionsService,
@@ -307,6 +308,24 @@ export function useCompetitions() {
     return () => sub?.remove?.();
   }, [load]);
 
+  /**
+   * Stamp a just-submitted prediction onto the visible page so the hub CTA
+   * flips to "في انتظار الفائز" without waiting for the list refetch.
+   */
+  const applyEntry = useCallback((competitionId: string, entry: CompetitionEntryInfo) => {
+    setItems((prev) =>
+      prev.map((row) =>
+        row.id === competitionId
+          ? {
+              ...row,
+              myEntry: entry,
+              participantsCount: row.myEntry ? row.participantsCount : row.participantsCount + 1,
+            }
+          : row,
+      ),
+    );
+  }, []);
+
   return {
     tab,
     filter,
@@ -323,5 +342,6 @@ export function useCompetitions() {
     changeSort,
     refresh,
     loadMore,
+    applyEntry,
   };
 }

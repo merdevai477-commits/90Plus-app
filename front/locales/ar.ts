@@ -1295,6 +1295,7 @@ export const ar = {
       prizesAvailable: 'الجوائز المتاحة',
       timeLeft: 'الوقت المتبقي',
       sharePrediction: 'شارك بتوقعك الان',
+      waitingForWinner: 'في انتظار الفائز',
       sheetTitle: 'توقع نتيجة المباراة',
       matchResult: 'نتيجة المباراة',
       confirmPrediction: 'تأكيد التوقع',
