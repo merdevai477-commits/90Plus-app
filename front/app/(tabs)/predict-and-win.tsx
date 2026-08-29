@@ -25,14 +25,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CompetitionCard } from '../../components/predictAndWin/CompetitionCard';
+import { HubPrizeCard } from '../../components/predictAndWin/CompetitionCard';
 import { InfoTiles } from '../../components/predictAndWin/InfoTiles';
 import { PWHeader } from '../../components/predictAndWin/PWHeader';
 import { SortFilterRow } from '../../components/predictAndWin/SortFilterRow';
 import { PredictAndWinTabBar } from '../../components/predictAndWin/TabBar';
 import { WinnerPickerModal } from '../../components/predictAndWin/WinnerPickerModal';
-import { IconGiftFilled } from '../../components/predictAndWin/icons';
-import { PW, usePWFonts, usePWScale } from '../../components/predictAndWin/theme';
+import { PW, usePWScale } from '../../components/predictAndWin/theme';
 import { TAB_BAR_HEIGHT } from '../../components/navigation/liquidGlassTabBar.constants';
 import { useCompetitions } from '../../hooks/useCompetitions';
 import { ALWAYS_ADD_PRIZE_CTA, useSponsorPrizeCta } from '../../hooks/useSponsorPrizeCta';
@@ -153,7 +152,7 @@ export default function PredictAndWinScreen() {
 
         {rows.map((item: CompetitionInfo) => (
           <View key={item.id} style={{ marginBottom: cardGap }}>
-            <CompetitionCard
+            <HubPrizeCard
               competition={item}
               onPress={() => router.push(`/predict-and-win/${item.id}`)}
             />
@@ -183,8 +182,6 @@ function HubPlaceholder({
   tab: CompetitionTab;
   onRetry: () => void;
 }) {
-  const { s, f } = usePWScale();
-  const { bold, regular, semibold } = usePWFonts();
   const { t } = useTranslation();
   const pw = t.predictAndWin;
 
@@ -192,25 +189,32 @@ function HubPlaceholder({
   const copy = needsSignIn ? pw.signInState : error ? pw.errorState : pw.empty;
 
   return (
-    <View style={{ alignItems: 'center', gap: s(10), paddingHorizontal: s(40), minHeight: s(160) }}>
-      <IconGiftFilled width={s(40)} height={s(40)} />
-      <Text style={{ fontFamily: bold, fontSize: f(16), color: PW.text, textAlign: 'center' }}>
+    <View
+      collapsable={false}
+      style={{
+        alignItems: 'center',
+        minHeight: 180,
+        paddingHorizontal: 32,
+        paddingTop: 24,
+      }}
+    >
+      <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '700', textAlign: 'center' }}>
         {copy.title}
       </Text>
       <Text
         style={{
-          fontFamily: regular,
-          fontSize: f(12),
-          color: PW.textTileSub,
+          color: '#CBCBCB',
+          fontSize: 13,
           textAlign: 'center',
+          marginTop: 8,
         }}
       >
         {copy.subtitle}
       </Text>
 
       {error && !needsSignIn ? (
-        <Pressable onPress={onRetry} hitSlop={8} style={{ marginTop: s(6) }}>
-          <Text style={{ fontFamily: semibold, fontSize: f(13), color: PW.vsTop }}>
+        <Pressable onPress={onRetry} hitSlop={8} style={{ marginTop: 12 }}>
+          <Text style={{ color: '#A44AF9', fontSize: 14, fontWeight: '600' }}>
             {pw.errorState.retry}
           </Text>
         </Pressable>

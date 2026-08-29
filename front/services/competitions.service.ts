@@ -5,8 +5,6 @@
 import { getApiUrl } from '../config/api.config';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 
-const API_URL = getApiUrl();
-
 export interface PrizeCategoryInfo {
   id: string;
   key: string;
@@ -295,7 +293,10 @@ export function normalizeCompetitionListPage(raw: unknown): {
 async function authFetch(token: string | null, path: string, init?: RequestInit) {
   let response: Response;
   try {
-    response = await fetchWithTimeout(`${API_URL}/competitions${path}`, {
+    // Resolve per request — a module-load snapshot can freeze a stale host
+    // (emulator alias, old LAN IP) and the hub then paints an empty list.
+    const base = getApiUrl().replace(/\/$/, '');
+    response = await fetchWithTimeout(`${base}/competitions${path}`, {
       ...init,
       timeout: 20_000,
       headers: {

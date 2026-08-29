@@ -8,15 +8,14 @@
  * the backend really returns end up as text in the rendered tree.
  *
  * That covers the whole path in one go — HTTP → `normalizeCompetitionListPage`
- * → `useCompetitions` state → `FlatList` → `CompetitionCard` — which is exactly
+ * → `useCompetitions` state → `ScrollView` → `HubPrizeCard` — which is exactly
  * the stretch that "the API has rows but the screen is empty" lives in.
  *
  * It needs `npm run dev` up on :3000. When the backend is unreachable the suite
  * skips rather than fails, so CI without a server stays green.
  */
 
-// `competitions.service` captures `getApiUrl()` at module load, so the host has
-// to be set before it is imported. The checked-in `.env` points at the Android
+// Point the client at the local API. The checked-in `.env` uses the Android
 // emulator alias (10.0.2.2), which is not routable from the test runner.
 process.env.EXPO_PUBLIC_API_URL = 'http://localhost:3000/api';
 

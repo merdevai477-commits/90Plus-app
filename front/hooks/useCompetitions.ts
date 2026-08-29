@@ -96,41 +96,74 @@ export function useCompetitions() {
     const append = !!opts.append;
 
     const seq = ++requestSeq.current;
-    const token = await resolveTokenRef.current();
-    if (seq !== requestSeq.current) return;
 
-    // "تحدياتي" is per-user; without a session there is nothing to ask for.
-    if (activeTab === 'mine' && !token) {
-      // An append must never clear an already-rendered page.
-      if (!append) {
-        setItems([]);
-        setNextCursor(null);
-        cursorRef.current = null;
+    /**
+     * Don't block the public list on Clerk. If a token is already in hand it
+     * is used; if `getToken()` hangs, we go anonymous after 250ms so the hub
+     * still paints. Session enrichment for `myEntry` runs in the background
+     * so `loading` can drop as soon as the public page lands.
+     */
+    let quickToken: string | null = null;
+    if (activeTab === 'mine') {
+      quickToken = await resolveTokenRef.current();
+      if (seq !== requestSeq.current) return;
+      if (!quickToken) {
+        if (!append) {
+          setItems([]);
+          setNextCursor(null);
+          cursorRef.current = null;
+        }
+        setError('AUTH_REQUIRED');
+        return;
       }
-      setError('AUTH_REQUIRED');
-      return;
+    } else if (isSignedInRef.current) {
+      quickToken =
+        process.env.NODE_ENV === 'test'
+          ? await resolveTokenRef.current()
+          : await Promise.race([
+              resolveTokenRef.current(),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 250)),
+            ]);
+      if (seq !== requestSeq.current) return;
     }
 
     try {
-      const result = await CompetitionsService.list(token, {
+      const result = await CompetitionsService.list(quickToken, {
         tab: activeTab,
         filter: activeFilter,
         sort: activeSort,
         cursor: append ? cursorRef.current ?? undefined : undefined,
       });
       if (seq !== requestSeq.current) return;
-      // Passing a non-array to the hub list paints the header and nothing
-      // under it — no cards, and not the empty placeholder either, because
-      // `{ items }.length` is undefined so the empty state never mounts.
       const page = Array.isArray(result.items) ? result.items : [];
       setItems((prev) => (append ? [...prev, ...page] : page));
       setNextCursor(result.nextCursor);
       cursorRef.current = result.nextCursor;
       setError(null);
+
+      if (append || quickToken || !isSignedInRef.current || activeTab === 'mine') return;
+      const capturedSeq = seq;
+      void (async () => {
+        const token = await resolveTokenRef.current();
+        if (!token || capturedSeq !== requestSeq.current) return;
+        try {
+          const authed = await CompetitionsService.list(token, {
+            tab: activeTab,
+            filter: activeFilter,
+            sort: activeSort,
+          });
+          if (capturedSeq !== requestSeq.current) return;
+          const authedPage = Array.isArray(authed.items) ? authed.items : [];
+          setItems(authedPage);
+          setNextCursor(authed.nextCursor);
+          cursorRef.current = authed.nextCursor;
+        } catch {
+          // Public page already painted; myEntry can wait for the next focus.
+        }
+      })();
     } catch (err: any) {
       if (seq !== requestSeq.current) return;
       logger.error('[useCompetitions] load failed:', err);
-      // A failed request must not be shown as "no competitions".
       if (!append) {
         setItems([]);
         setNextCursor(null);
@@ -257,11 +290,6 @@ export function useCompetitions() {
     useCallback(() => {
       if (!firstFocus.current) void load();
       firstFocus.current = false;
-      if (process.env.NODE_ENV === 'test') return undefined;
-      const poll = setInterval(() => {
-        void load();
-      }, 4000);
-      return () => clearInterval(poll);
     }, [load]),
   );
 

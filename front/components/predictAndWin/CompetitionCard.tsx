@@ -14,7 +14,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
@@ -22,7 +22,6 @@ import { prizeArtSource } from './PrizeCategoryGrid';
 import { IconLocation, IconPickupPin, IconVespaGreen } from './icons';
 import {
   PW,
-  PW_CONTENT_W,
   PW_GRADIENTS,
   PW_RADII,
   usePWContentWidth,
@@ -31,7 +30,6 @@ import {
   usePWScale,
 } from './theme';
 
-const CARD_W = PW_CONTENT_W;
 const CARD_H = 199;
 
 /**
@@ -42,11 +40,52 @@ const CARD_H = 199;
  */
 function useCardMetrics() {
   const { contentWidth, cardScale } = usePWContentWidth();
+  const { width: winW } = useWindowDimensions();
+  const fallback = Math.max(280, (winW || 360) - 32);
+  const width =
+    Number.isFinite(contentWidth) && contentWidth > 40 ? contentWidth : fallback;
   return {
-    width: Math.max(1, contentWidth),
-    height: Math.max(160, Math.round(CARD_H * cardScale)),
-    c: (designValue: number) => Math.round(designValue * cardScale),
+    width,
+    height: Math.max(168, Math.round(CARD_H * (Number.isFinite(cardScale) && cardScale > 0 ? cardScale : 1))),
+    c: (designValue: number) => Math.round(designValue * (Number.isFinite(cardScale) && cardScale > 0 ? cardScale : 1)),
   };
+}
+
+/**
+ * Hub list card. The Figma card uses expo-image, LinearGradient, custom fonts
+ * and a Pressable style callback — on some Android devices that paints a
+ * 0-height or black-on-black cell, so the hub looked empty while the API had
+ * published prizes. This layout is percentage-width + minHeight + system fonts.
+ */
+export function HubPrizeCard({
+  competition,
+  onPress,
+}: {
+  competition: CompetitionInfo;
+  onPress: () => void;
+}) {
+  const sponsorName = competition.sponsor?.name || competition.prizeName || 'Prize';
+  const prize = competition.prizeName;
+  const match = `${competition.homeTeam} vs ${competition.awayTeam}`;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={sponsorName}
+      style={hubStyles.card}
+    >
+      <Text style={hubStyles.sponsor} numberOfLines={1}>
+        {sponsorName}
+      </Text>
+      <Text style={hubStyles.prize} numberOfLines={1}>
+        {prize}
+      </Text>
+      <Text style={hubStyles.match} numberOfLines={1}>
+        {match}
+      </Text>
+    </Pressable>
+  );
 }
 
 function DeliveryBadge({
@@ -220,14 +259,14 @@ export function CompetitionCard({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={sponsor.name}
-      style={({ pressed }) => [
+      style={[
         styles.shadow,
         {
           width,
           height,
+          minHeight: 168,
           borderRadius: c(PW_RADII.card),
           alignSelf: 'center',
-          opacity: pressed ? 0.94 : 1,
         },
       ]}
     >
@@ -343,6 +382,24 @@ export function CompetitionCard({
     </Pressable>
   );
 }
+
+const hubStyles = StyleSheet.create({
+  card: {
+    width: '92%',
+    minHeight: 168,
+    alignSelf: 'center',
+    backgroundColor: '#2B0450',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#4B0989',
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    justifyContent: 'center',
+  },
+  sponsor: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
+  prize: { color: '#E8D5FF', fontSize: 16, fontWeight: '700', marginTop: 6 },
+  match: { color: '#CBCBCB', fontSize: 13, marginTop: 10 },
+});
 
 const styles = StyleSheet.create({
   // Figma `drop-shadow(0 0 8.95px #360763)`.
