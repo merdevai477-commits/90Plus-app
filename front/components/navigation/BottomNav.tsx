@@ -13,6 +13,9 @@ function resolveActiveIndex(pathname: string | null): number {
   if (p.includes('match-details') || (p.includes('matches') && !p.includes('predict-and-win'))) {
     return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'matches');
   }
+  if (p.includes('reels')) {
+    return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'reels');
+  }
   if (p.includes('chat')) {
     return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'ai');
   }

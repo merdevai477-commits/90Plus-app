@@ -19,6 +19,7 @@ export const TAB_BUBBLE_WIDTHS: Record<LiquidTabItem['id'], number> = {
   matches: 94,
   rank: 68,
   sponsors: 92,
+  reels: 72,
   ai: 58,
   profile: 88,
 };
@@ -85,6 +86,13 @@ export const LIQUID_TAB_ITEMS: LiquidTabItem[] = [
     route: '/(tabs)/predict-and-win',
     accent: '#F59E0B',
     icon: 'sponsors',
+  },
+  {
+    id: 'reels',
+    label: 'Reels',
+    route: '/(tabs)/reels',
+    accent: '#EC4899',
+    icon: 'reels',
   },
   {
     id: 'ai',
