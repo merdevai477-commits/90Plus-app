@@ -53,6 +53,8 @@ import {
 } from '../../components/predictAndWin/fields';
 import {
   buildDeadline,
+  defaultDeadlineBeforeKickoff,
+  deadlineClockParts,
   isDeadlineWithinBounds,
   parseCalendarDay,
   startOfDay,
@@ -95,10 +97,9 @@ const CASH_MAX_EGP = 500_000;
 
 /**
  * TEMP while the sponsor is still testing the wizard.
- * Flip to `true` when they say «طبق القوانين» — Next then requires
- * `now < deadline ≤ kickoff` again.
+ * Flip to `false` only while the sponsor is still testing without deadline rules.
  */
-const ENFORCE_DEADLINE_RULES = false;
+const ENFORCE_DEADLINE_RULES = true;
 
 export default function CreateCompetitionScreen() {
   useScreenFont();
@@ -234,18 +235,7 @@ export default function CreateCompetitionScreen() {
     [selectedMatch],
   );
 
-  const deadlineIso = (): string | null => {
-    const chosen = deadlineAt();
-    if (ENFORCE_DEADLINE_RULES) return chosen?.toISOString() ?? null;
-    if (!kickoffAt) return chosen?.toISOString() ?? null;
-    const now = Date.now();
-    const kick = kickoffAt.getTime();
-    if (kick <= now) return chosen?.toISOString() ?? null;
-    const soon = now + 60_000;
-    const target = chosen?.getTime() ?? kick;
-    const clamped = Math.min(kick, Math.max(soon, target));
-    return new Date(clamped).toISOString();
-  };
+  const deadlineIso = (): string | null => deadlineAt()?.toISOString() ?? null;
 
   /**
    * Why step 2 cannot advance, or `null` when it can.
@@ -280,8 +270,11 @@ export default function CreateCompetitionScreen() {
   const onSelectMatch = useCallback((match: MatchPoolEntry) => {
     setSelectedMatch(match);
     const kickoff = new Date(match.kickoffIso);
-    const matchDay = parseCalendarDay(match.day) ?? startOfDay(kickoff);
-    setDeadlineDate(matchDay);
+    const suggested = defaultDeadlineBeforeKickoff(kickoff);
+    setDeadlineDate(startOfDay(suggested));
+    const clock = deadlineClockParts(suggested);
+    setHour(clock.hour);
+    setMeridiem(clock.meridiem);
   }, []);
 
   const minDeadlineDate = React.useMemo(() => {
@@ -770,7 +763,7 @@ export default function CreateCompetitionScreen() {
                   {/* A disabled CTA with no reason is indistinguishable from a
                       broken one — which is exactly how this read while the pool
                       still served matches that had already kicked off. */}
-                  {ENFORCE_DEADLINE_RULES && step2Problem ? (
+                  {step2Problem ? (
                     <Text
                       style={{
                         fontFamily: regular,

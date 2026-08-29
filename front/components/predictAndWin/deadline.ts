@@ -70,8 +70,8 @@ export function buildDeadline({
 }
 
 /**
- * Mirrors the server's gates: the close time must be in the future and no
- * later than kickoff.
+ * Mirrors the server's gates: the close time must be in the future and
+ * strictly before kickoff — not at kickoff and not after.
  */
 export function isDeadlineWithinBounds(
   deadline: Date | null,
@@ -80,7 +80,23 @@ export function isDeadlineWithinBounds(
 ): boolean {
   if (!deadline || !kickoff) return false;
   const at = deadline.getTime();
-  return at > now.getTime() && at <= kickoff.getTime();
+  return at > now.getTime() && at < kickoff.getTime();
+}
+
+/** Sensible default: one hour before kickoff, but never in the past or at kickoff. */
+export function defaultDeadlineBeforeKickoff(kickoff: Date, now: Date = new Date()): Date {
+  const latest = kickoff.getTime() - 60_000;
+  const preferred = kickoff.getTime() - 60 * 60 * 1000;
+  const target = Math.max(now.getTime() + 60_000, Math.min(preferred, latest));
+  return new Date(Math.min(target, latest));
+}
+
+/** Maps a local `Date` into the wizard's 12-hour stepper fields. */
+export function deadlineClockParts(at: Date): { hour: number; meridiem: 'am' | 'pm' } {
+  const h24 = at.getHours();
+  const meridiem: 'am' | 'pm' = h24 >= 12 ? 'pm' : 'am';
+  const hour = h24 % 12 === 0 ? 12 : h24 % 12;
+  return { hour, meridiem };
 }
 
 /** Parse `YYYY-MM-DD` into local midnight — pool `day` keys are calendar days. */

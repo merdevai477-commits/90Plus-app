@@ -2,7 +2,7 @@
  * Regression tests for step 2's date/time handling.
  *
  * Two bugs live here:
- *  - **Next was always disabled.** The gate is `now < deadline <= kickoff`.
+ *  - **Next was always disabled.** The gate is `now < deadline < kickoff`.
  *    The match pool served fixtures that had already kicked off, so for those
  *    matches the interval was empty and no input could ever satisfy it.
  *  - **Only today could be picked.** The deadline day was assembled through
@@ -11,6 +11,8 @@
  */
 
 import {
+  defaultDeadlineBeforeKickoff,
+  deadlineClockParts,
   buildDeadline,
   isDayAfterKickoff,
   isDeadlineWithinBounds,
@@ -21,6 +23,22 @@ import {
 
 /** Local wall clock, so these assertions hold in any test-runner timezone. */
 const local = (y: number, m: number, d: number, h = 0, min = 0) => new Date(y, m - 1, d, h, min, 0, 0);
+
+describe('defaultDeadlineBeforeKickoff', () => {
+  it('lands at least one minute before kickoff', () => {
+    const now = local(2026, 9, 12, 10, 0);
+    const kickoff = local(2026, 9, 12, 15, 0);
+    const at = defaultDeadlineBeforeKickoff(kickoff, now);
+    expect(at.getTime()).toBeLessThan(kickoff.getTime());
+    expect(at.getTime()).toBeGreaterThan(now.getTime());
+  });
+});
+
+describe('deadlineClockParts', () => {
+  it('maps afternoon wall clock into 12-hour fields', () => {
+    expect(deadlineClockParts(local(2026, 9, 12, 15, 0))).toEqual({ hour: 3, meridiem: 'pm' });
+  });
+});
 
 describe('buildDeadline', () => {
   it('combines the picked day with a 12-hour clock', () => {
@@ -102,9 +120,9 @@ describe('isDeadlineWithinBounds', () => {
       .toBe(true);
   });
 
-  it('accepts a deadline exactly at kickoff', () => {
+  it('rejects a deadline exactly at kickoff', () => {
     const kickoff = local(2026, 9, 12, 22, 0);
-    expect(isDeadlineWithinBounds(kickoff, kickoff, now)).toBe(true);
+    expect(isDeadlineWithinBounds(kickoff, kickoff, now)).toBe(false);
   });
 
   it('rejects a deadline one minute after kickoff', () => {

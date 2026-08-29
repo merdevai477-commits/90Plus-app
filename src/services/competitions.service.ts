@@ -458,8 +458,8 @@ async function buildCompetitionData(input: CreateCompetitionInput, sponsorId: st
   if (!deadline || deadline <= new Date()) throw new Error('INVALID_DEADLINE');
 
   const kickoff = new Date(match.kickoffIso);
-  // Predictions must close by kickoff at the latest.
-  if (deadline > kickoff) throw new Error('DEADLINE_AFTER_KICKOFF');
+  // Predictions must close strictly before kickoff.
+  if (deadline >= kickoff) throw new Error('DEADLINE_AFTER_KICKOFF');
 
   const startAt = toDate(input.startAt ?? null);
   const endAt = toDate(input.endAt ?? null);
@@ -577,7 +577,7 @@ export async function updateOwnCompetition(
   if (patch.predictionDeadline !== undefined) {
     const deadline = toDate(patch.predictionDeadline);
     if (!deadline || deadline <= new Date()) throw new Error('INVALID_DEADLINE');
-    if (deadline > competition.matchDate) throw new Error('DEADLINE_AFTER_KICKOFF');
+    if (deadline >= competition.matchDate) throw new Error('DEADLINE_AFTER_KICKOFF');
     data.predictionDeadline = deadline;
   }
 

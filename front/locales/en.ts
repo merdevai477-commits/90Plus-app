@@ -1269,7 +1269,7 @@ export const en = {
       deadlineDate: 'Close date',
       deadlineTime: 'Close time',
       deadlineHour: 'Hour',
-      deadlineHourHint: 'Hour only — closes at the start of that hour (:00)',
+      deadlineHourHint: 'Must be before kickoff — hour only, closes at :00',
       deadlineMinute: 'Minute',
       timeFormat12: '12-hour',
       timeFormat24: '24-hour',
@@ -1311,7 +1311,7 @@ export const en = {
       submittedSubtitle: 'Our team will review it and publish it soon',
     },
     winnerPicker: {
-      title: 'Winner',
+      title: 'Prediction dashboard',
       close: 'Close',
       wrong: 'Wrong',
       correct: 'Correct',

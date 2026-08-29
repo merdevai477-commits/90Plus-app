@@ -1342,7 +1342,7 @@ export const ar = {
       deadlineDate: 'تاريخ الانتهاء',
       deadlineTime: 'وقت الانتهاء',
       deadlineHour: 'الساعة',
-      deadlineHourHint: 'الساعة فقط — التوقع يقفل في بداية الساعة (:00)',
+      deadlineHourHint: 'قبل بداية المباراة فقط — التوقع يقفل في بداية الساعة (:00)',
       deadlineMinute: 'الدقائق',
       timeFormat12: '12 ساعة',
       timeFormat24: '24 ساعة',
@@ -1383,7 +1383,7 @@ export const ar = {
       submittedSubtitle: 'سيتم مراجعتها من فريقنا ونشرها قريباً',
     },
     winnerPicker: {
-      title: 'الفائز',
+      title: 'لوحة التوقعات',
       close: 'إغلاق',
       wrong: 'الخاطئة',
       correct: 'الصحيحة',

@@ -245,7 +245,7 @@ export function WinnerPickerModal({
                 </Text>
               ) : (
                 <View style={{ width: s(371), alignSelf: 'center', gap: s(8) }}>
-                  {board.candidates.map((c) => (
+                  {board.candidates.slice(0, 4).map((c) => (
                     <Pressable
                       key={c.entryId}
                       onPress={() => setPicked(c)}

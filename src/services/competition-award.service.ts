@@ -77,7 +77,7 @@ export async function getOwnerLeaderboard(
     return t !== 0 ? t : a.id.localeCompare(b.id);
   });
 
-  const candidates: LeaderboardCandidate[] = sorted.map((e, i) => ({
+  const candidates: LeaderboardCandidate[] = sorted.slice(0, 4).map((e, i) => ({
     entryId: e.id,
     userId: e.user.id,
     username: e.user.username,
