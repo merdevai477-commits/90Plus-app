@@ -1,21 +1,19 @@
 /**
- * Hub segmented tab bar — Figma `Component 11` (`636:4598`, 4 variants).
+ * Hub segmented tab bar — Figma `Component 11` / SwiftUI variants (`636:4598`).
  *
- * 404×67 container, bg #0c051a, 1px #1a052d, radius 14, px 16, space-between.
- * Selected tab renders as a 124×38 radius-12 gradient pill (#650eb8 → #360961,
- * SemiBold 14 white); the others are plain Regular 13 #9f9c9c text separated by
- * 1×14 #201537 dividers. A divider collapses when it touches the pill.
+ * 404×67 container, bg #0c051a, 0.5px #1a052d, radius 14, px 16.
+ * Row gap 15; idle = Inter Regular 13 #9f9c9c; active = 124×38 pill radius 12,
+ * #660db8 fill, Inter SemiBold 14 white. No dividers — the pill swaps position
+ * per tab while the visual order stays sponsored → mine → today → all (LTR).
  */
 
-import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionTab } from '../../services/competitions.service';
 import {
   PW,
-  PW_GRADIENTS,
   PW_RADII,
   usePWContentWidth,
   usePWDirection,
@@ -23,11 +21,13 @@ import {
   usePWScale,
 } from './theme';
 
-/**
- * "All" reads first — start of the reading order — in both languages, so it
- * sits on the right in Arabic and the left in English.
- */
-const TABS: CompetitionTab[] = ['all', 'today', 'mine', 'sponsored'];
+/** SwiftUI HStack order (leading → trailing in LTR). */
+const TABS_LTR: CompetitionTab[] = ['sponsored', 'mine', 'today', 'all'];
+
+/** RTL mirrors the same reading order with `row-reverse`. */
+const TABS_RTL: CompetitionTab[] = ['all', 'today', 'mine', 'sponsored'];
+
+const TAB_PILL_BG = '#660DB8';
 
 export function PredictAndWinTabBar({
   active,
@@ -40,7 +40,12 @@ export function PredictAndWinTabBar({
   const { s, f } = usePWScale();
   const { semibold, regular } = usePWFonts();
   const { contentWidth } = usePWContentWidth();
-  const { row } = usePWDirection();
+  const dir = usePWDirection();
+
+  const tabs = useMemo(
+    () => (dir.isRTL ? TABS_RTL : TABS_LTR),
+    [dir.isRTL],
+  );
 
   return (
     <View
@@ -51,88 +56,74 @@ export function PredictAndWinTabBar({
           height: s(67),
           borderRadius: s(PW_RADII.tabBar),
           paddingHorizontal: s(16),
-          flexDirection: row,
+          flexDirection: dir.row,
+          gap: s(15),
         },
       ]}
     >
-      {TABS.map((tab, i) => {
+      {tabs.map((tab) => {
         const isActive = tab === active;
-        const nextIsActive = TABS[i + 1] === active;
-        const showDivider = i < TABS.length - 1 && !isActive && !nextIsActive;
         const label = t.predictAndWin.tabs[tab];
 
-        return (
-          <React.Fragment key={tab}>
-            {isActive ? (
-              // Still announced as a selected tab even though it is not
-              // pressable — otherwise a screen reader reads four labels with
-              // no indication of which one the list is showing.
-              <LinearGradient
-                colors={[...PW_GRADIENTS.tabPill]}
-                accessible
-                accessibilityRole="tab"
-                accessibilityState={{ selected: true }}
+        if (isActive) {
+          return (
+            <View
+              key={tab}
+              accessible
+              accessibilityRole="tab"
+              accessibilityState={{ selected: true }}
+              style={{
+                width: s(124),
+                height: s(38),
+                padding: s(10),
+                borderRadius: s(PW_RADII.pill),
+                backgroundColor: TAB_PILL_BG,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <Text
                 style={{
-                  // Figma's 124 is the Arabic label's width. English labels are
-                  // longer and four fixed-width items overflowed the 404 bar,
-                  // so the pill grows from that width instead of being pinned
-                  // to it and the idle tabs shrink around it.
-                  minWidth: s(96),
-                  flexShrink: 1,
-                  height: s(38),
-                  paddingHorizontal: s(10),
-                  borderRadius: s(PW_RADII.pill),
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  fontFamily: semibold,
+                  fontSize: f(14),
+                  color: PW.text,
+                  textAlign: 'center',
                 }}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
               >
-                <Text
-                  style={{
-                    fontFamily: semibold,
-                    fontSize: f(14),
-                    color: PW.text,
-                    textAlign: 'center',
-                  }}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.75}
-                >
-                  {label}
-                </Text>
-              </LinearGradient>
-            ) : (
-              <Pressable
-                onPress={() => onChange(tab)}
-                // The idle tabs are bare text on a 67-tall bar; without slop
-                // their touch target is the ~17pt glyph box.
-                hitSlop={{ top: 14, bottom: 14, left: 6, right: 6 }}
-                accessibilityRole="tab"
-                accessibilityLabel={label}
-                accessibilityState={{ selected: false }}
-                style={{ flexShrink: 1, paddingHorizontal: s(2) }}
-              >
-                <Text
-                  style={{
-                    fontFamily: regular,
-                    fontSize: f(13),
-                    color: PW.textTabIdle,
-                    textAlign: 'center',
-                  }}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.75}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            )}
+                {label}
+              </Text>
+            </View>
+          );
+        }
 
-            {showDivider ? (
-              <View
-                style={{ width: 1, height: s(14), backgroundColor: PW.tabDivider, flexShrink: 0 }}
-              />
-            ) : null}
-          </React.Fragment>
+        return (
+          <Pressable
+            key={tab}
+            onPress={() => onChange(tab)}
+            hitSlop={{ top: 14, bottom: 14, left: 6, right: 6 }}
+            accessibilityRole="tab"
+            accessibilityLabel={label}
+            accessibilityState={{ selected: false }}
+            style={{ flexShrink: 1, minWidth: 0 }}
+          >
+            <Text
+              style={{
+                fontFamily: regular,
+                fontSize: f(13),
+                color: PW.textTabIdle,
+                textAlign: 'center',
+              }}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+            >
+              {label}
+            </Text>
+          </Pressable>
         );
       })}
     </View>
@@ -143,9 +134,8 @@ const styles = StyleSheet.create({
   bar: {
     alignSelf: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: PW.surface,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: PW.surfaceBorder,
   },
 });
