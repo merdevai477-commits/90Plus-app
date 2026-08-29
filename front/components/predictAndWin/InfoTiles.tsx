@@ -28,10 +28,13 @@ import {
 
 type TileKey = CompetitionFilter;
 
-/** Figma layout order: row 1 = [مئات المشاركين, تحديات اليوم], row 2 = [سهل ومجاني, رعاة موثوقون]. */
+/**
+ * Figma `624:4364` visual order (Arabic, RTL): row 1 right = تحديات اليوم,
+ * left = مئات المشاركين; row 2 right = رعاة موثوقون, left = سهل ومجاني.
+ */
 const ROWS: TileKey[][] = [
-  ['popular', 'daily'],
-  ['free', 'sponsored'],
+  ['daily', 'popular'],
+  ['sponsored', 'free'],
 ];
 
 function TileIcon({ tile, size }: { tile: TileKey; size: number }) {
@@ -79,8 +82,8 @@ export function InfoTiles({
                     borderRadius: s(PW_RADII.tile),
                     // 24 of padding plus a 30 icon leaves ~100pt for text at
                     // the design width, which clipped English titles.
-                    paddingHorizontal: s(14),
-                    gap: s(10),
+                    paddingHorizontal: s(24),
+                    gap: s(12),
                     flexDirection: dir.rowReverse,
                   },
                   isOn && styles.tileActive,

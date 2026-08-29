@@ -75,7 +75,6 @@ export default function PredictAndWinScreen() {
 
   const gap28 = s(28);
   const gap14 = s(14);
-  const gap24 = s(24);
   const emptyPadTop = s(60);
   const bottomPad = insets.bottom + TAB_BAR_HEIGHT + s(140);
   const fabBottom = insets.bottom + TAB_BAR_HEIGHT + s(16);
@@ -87,17 +86,17 @@ export default function PredictAndWinScreen() {
         <PredictAndWinTabBar active={tab} onChange={changeTab} />
         <View style={{ height: gap14 }} />
         <InfoTiles active={filter} onChange={changeFilter} />
-        <View style={{ height: gap24 }} />
+        <View style={{ height: gap28 }} />
         <SortFilterRow
           sort={sort}
           onSortChange={changeSort}
           filter={filter}
           onFilterChange={changeFilter}
         />
-        <View style={{ height: gap24 }} />
+        <View style={{ height: gap28 }} />
       </View>
     ),
-    [gap28, gap14, gap24, tab, changeTab, filter, changeFilter, sort, changeSort],
+    [gap28, gap14, tab, changeTab, filter, changeFilter, sort, changeSort],
   );
 
   const listEmpty = useMemo(
@@ -115,9 +114,9 @@ export default function PredictAndWinScreen() {
   const listFooter = useMemo(
     () =>
       loadingMore ? (
-        <ActivityIndicator color={PW.ctaTop} style={{ marginTop: gap24 }} />
+        <ActivityIndicator color={PW.ctaTop} style={{ marginTop: gap28 }} />
       ) : null,
-    [loadingMore, gap24],
+    [loadingMore, gap28],
   );
 
   const listRefreshControl = useMemo(

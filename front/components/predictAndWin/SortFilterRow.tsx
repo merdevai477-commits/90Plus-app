@@ -141,9 +141,11 @@ export function SortFilterRow({
 
   return (
     <View style={{ width: contentWidth, alignSelf: 'center' }}>
+      {/* Figma pins filter on the physical right and sort to its left in both languages. */}
       <View
         style={{
-          flexDirection: dir.rowReverse,
+          direction: 'ltr',
+          flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'flex-end',
           gap: s(8),

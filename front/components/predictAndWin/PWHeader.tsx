@@ -7,11 +7,12 @@
  * device safe-area inset.
  */
 
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { IconBell } from './icons';
 import { PW, PW_HEADER, usePWDirection, usePWFonts, usePWScale } from './theme';
 
 export function PWHeader({
@@ -60,11 +61,7 @@ export function PWHeader({
         </Text>
 
         <Pressable onPress={onBell} hitSlop={10} accessibilityRole="button" disabled={!onBell}>
-          <MaterialCommunityIcons
-            name="bell-outline"
-            size={s(PW_HEADER.bellSize)}
-            color={PW.text}
-          />
+          <IconBell width={s(PW_HEADER.bellSize)} height={s(PW_HEADER.bellSize * (26.6695 / 24.0004))} />
         </Pressable>
       </View>
     </View>

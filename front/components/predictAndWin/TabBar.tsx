@@ -50,7 +50,7 @@ export function PredictAndWinTabBar({
           width: contentWidth,
           height: s(67),
           borderRadius: s(PW_RADII.tabBar),
-          paddingHorizontal: s(12),
+          paddingHorizontal: s(16),
           flexDirection: row,
         },
       ]}
