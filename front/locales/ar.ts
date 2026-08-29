@@ -1180,7 +1180,7 @@ export const ar = {
     addPrize: 'أضف جائزتك',
     addPrizeCta: {
       pending: 'قيد التنفيذ',
-      winner: 'الفائز',
+      winner: 'تم قبول الجائزة',
       rejected: 'الجائزة مرفوضة',
     },
     sortNewest: 'الأحدث',

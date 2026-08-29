@@ -1,8 +1,8 @@
 /**
- * Sponsor hub CTA — Figma `Component 40` (`953:2463`) state matrix.
+ * Sponsor hub CTA — Figma `Component 40` (`953:2465`) state matrix.
  *
- * `add` wide pill: 239×76, radius 53 — 78px gift cap, label, 34px plus.
- * Visual order (LTR): gift → text → plus.
+ * Wide pill: 239×76, radius 53. Add: gift cap + label + plus.
+ * Status: dark tinted wash (not solid yellow/red) + gradient label + status icon.
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,8 +11,15 @@ import { Pressable, Text, View, type StyleProp, ViewStyle } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionStatus } from '../../services/competitions.service';
-import { IconGiftFill, IconRoundPlus } from './icons';
-import { PW, PW_GRADIENTS, PW_RADII, usePWDirection, usePWFonts, usePWScale } from './theme';
+import { PWGradientText } from './GradientText';
+import {
+  IconCtaCheck,
+  IconCtaCross,
+  IconCtaLoading,
+  IconGiftFill,
+  IconRoundPlus,
+} from './icons';
+import { PW, PW_GRADIENTS, PW_RADII, usePWFonts, usePWScale } from './theme';
 
 const INSET_SHADOW = 'inset 0px -3px 4px rgba(0,0,0,0.25)';
 
@@ -47,13 +54,33 @@ export function deriveAddPrizeVariant(
   return 'add';
 }
 
-const VARIANT_STYLE: Record<
+/**
+ * Figma status fills are a dark wash, not solid yellow/red/green.
+ * Solid fills made "Prize rejected" unreadable (dark red on bright red).
+ */
+const STATUS: Record<
   Exclude<AddPrizeButtonVariant, 'add'>,
-  { bg: string; text: string }
+  {
+    wash: readonly [string, string];
+    text: readonly [string, string];
+    Icon: typeof IconCtaCheck;
+  }
 > = {
-  pending: { bg: '#FFFF00', text: '#5C5C00' },
-  winner: { bg: '#008000', text: '#00CC00' },
-  rejected: { bg: '#FF0000', text: '#D10000' },
+  pending: {
+    wash: ['#3D3D08', '#1F1F04'],
+    text: ['#FFFF00', '#C7C700'],
+    Icon: IconCtaLoading,
+  },
+  winner: {
+    wash: ['#0A3D0A', '#051A05'],
+    text: ['#00CC00', '#00AA00'],
+    Icon: IconCtaCheck,
+  },
+  rejected: {
+    wash: ['#4A0000', '#1A0000'],
+    text: ['#FF6B6B', '#FF3B3B'],
+    Icon: IconCtaCross,
+  },
 };
 
 function AddPrizePrimaryPill({ label }: { label: string }) {
@@ -122,6 +149,94 @@ function AddPrizePrimaryPill({ label }: { label: string }) {
   );
 }
 
+function StatusCtaPill({
+  variant,
+  label,
+  compact,
+}: {
+  variant: Exclude<AddPrizeButtonVariant, 'add'>;
+  label: string;
+  compact: boolean;
+}) {
+  const { s, f } = usePWScale();
+  const { semibold } = usePWFonts();
+  const { wash, text, Icon } = STATUS[variant];
+  const radius = s(PW_RADII.fab);
+  const icon = <Icon width={s(PILL.gift)} height={s(PILL.gift)} />;
+
+  if (compact) {
+    return (
+      <LinearGradient
+        colors={[...wash]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={{
+          width: s(PILL.compactWidth),
+          height: s(PILL.height),
+          borderRadius: radius,
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: INSET_SHADOW,
+        }}
+      >
+        {icon}
+      </LinearGradient>
+    );
+  }
+
+  return (
+    <View
+      style={{
+        width: s(PILL.width),
+        height: s(PILL.height),
+        borderRadius: radius,
+        overflow: 'hidden',
+        flexDirection: 'row',
+        direction: 'ltr',
+        boxShadow: INSET_SHADOW,
+      }}
+    >
+      <LinearGradient
+        colors={[...wash]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={{
+          flex: 1,
+          paddingVertical: s(PILL.padV),
+          paddingHorizontal: s(PILL.padH),
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <PWGradientText
+          colors={[...text]}
+          style={{
+            fontFamily: semibold,
+            fontSize: f(PILL.titleSize),
+            textAlign: 'center',
+            flexShrink: 1,
+          }}
+        >
+          {label}
+        </PWGradientText>
+      </LinearGradient>
+      <LinearGradient
+        colors={[...wash]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={{
+          width: s(PILL.giftCapWidth),
+          height: s(PILL.height),
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {icon}
+      </LinearGradient>
+    </View>
+  );
+}
+
 export function AddPrizeButton({
   variant = 'add',
   compact = false,
@@ -134,9 +249,7 @@ export function AddPrizeButton({
   onPress: () => void;
   disabled?: boolean;
 }) {
-  const { s, f, width: screenW } = usePWScale();
-  const { semibold } = usePWFonts();
-  const dir = usePWDirection();
+  const { s, width: screenW } = usePWScale();
   const { t } = useTranslation();
   const pw = t.predictAndWin;
 
@@ -153,31 +266,12 @@ export function AddPrizeButton({
     }
   }, [variant, pw]);
 
-  const useCompact =
-    compact || (variant === 'add' && screenW < s(360));
+  const useCompact = compact || (variant === 'add' && screenW < s(360));
 
   const shellStyle: StyleProp<ViewStyle> = {
     flexShrink: 0,
     opacity: disabled ? 0.65 : 1,
-    ...(useCompact
-      ? { width: s(PILL.compactWidth) }
-      : variant === 'add'
-        ? { width: s(PILL.width) }
-        : { maxWidth: s(PILL.width), minWidth: s(120) }),
-  };
-
-  const statusInnerStyle: ViewStyle = {
-    height: s(PILL.height),
-    paddingVertical: s(PILL.padV),
-    paddingHorizontal: s(PILL.padH),
-    borderRadius: s(PW_RADII.fab),
-    flexDirection: dir.row,
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: INSET_SHADOW,
-    ...(useCompact
-      ? { width: s(PILL.compactWidth) }
-      : { width: s(PILL.width) }),
+    width: s(useCompact ? PILL.compactWidth : PILL.width),
   };
 
   return (
@@ -195,7 +289,7 @@ export function AddPrizeButton({
     >
       {variant === 'add' && !useCompact ? (
         <AddPrizePrimaryPill label={label} />
-      ) : variant === 'add' && useCompact ? (
+      ) : variant === 'add' ? (
         <LinearGradient
           colors={[ADD_GIFT_CAP, ADD_PILL_SOLID]}
           start={{ x: 0, y: 0.5 }}
@@ -212,27 +306,7 @@ export function AddPrizeButton({
           <IconGiftFill width={s(PILL.gift)} height={s(PILL.gift)} />
         </LinearGradient>
       ) : (
-        <View
-          style={{
-            ...statusInnerStyle,
-            backgroundColor: VARIANT_STYLE[variant].bg,
-          }}
-        >
-          <Text
-            style={{
-              fontFamily: semibold,
-              fontSize: f(PILL.titleSize),
-              color: VARIANT_STYLE[variant].text,
-              textAlign: 'center',
-              paddingHorizontal: s(4),
-            }}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.75}
-          >
-            {label}
-          </Text>
-        </View>
+        <StatusCtaPill variant={variant} label={label} compact={useCompact} />
       )}
     </Pressable>
   );

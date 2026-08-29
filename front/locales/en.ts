@@ -1092,7 +1092,7 @@ export const en = {
     addPrize: 'Add Your Prize',
     addPrizeCta: {
       pending: 'In progress',
-      winner: 'The winner',
+      winner: 'Prize accepted',
       rejected: 'Prize rejected',
     },
     sortNewest: 'Newest',
