@@ -93,6 +93,13 @@ const CASH_MIN_EGP = 100;
 const CASH_STEP_EGP = 50;
 const CASH_MAX_EGP = 500_000;
 
+/**
+ * TEMP while the sponsor is still testing the wizard.
+ * Flip to `true` when they say «طبق القوانين» — Next then requires
+ * `now < deadline ≤ kickoff` again.
+ */
+const ENFORCE_DEADLINE_RULES = false;
+
 export default function CreateCompetitionScreen() {
   useScreenFont();
   const { s, f } = usePWScale();
@@ -192,7 +199,10 @@ export default function CreateCompetitionScreen() {
       if (isCashCategory) return cashAmount >= CASH_MIN_EGP && winnersCount >= 1;
       return !!prizeName.trim() && winnersCount >= 1;
     }
-    if (phase === 2) return step2Problem === null;
+    if (phase === 2) {
+      if (!ENFORCE_DEADLINE_RULES) return !!selectedMatch;
+      return step2Problem === null;
+    }
     if (phase === 3) return !!storeName.trim() && hasDelivery !== null;
     return true;
   };
@@ -212,8 +222,6 @@ export default function CreateCompetitionScreen() {
   const deadlineAt = (): Date | null =>
     buildDeadline({ date: deadlineDate, hour: String(hour), minute: '00', meridiem });
 
-  const deadlineIso = (): string | null => deadlineAt()?.toISOString() ?? null;
-
   /**
    * Kickoff caps the date picker — predictions must close by kickoff.
    * Memoised because it is passed to `PWDateField` as `maximumDate`: a fresh
@@ -224,6 +232,19 @@ export default function CreateCompetitionScreen() {
     () => (selectedMatch ? new Date(selectedMatch.kickoffIso) : null),
     [selectedMatch],
   );
+
+  const deadlineIso = (): string | null => {
+    const chosen = deadlineAt();
+    if (ENFORCE_DEADLINE_RULES) return chosen?.toISOString() ?? null;
+    if (!kickoffAt) return chosen?.toISOString() ?? null;
+    const now = Date.now();
+    const kick = kickoffAt.getTime();
+    if (kick <= now) return chosen?.toISOString() ?? null;
+    const soon = now + 60_000;
+    const target = chosen?.getTime() ?? kick;
+    const clamped = Math.min(kick, Math.max(soon, target));
+    return new Date(clamped).toISOString();
+  };
 
   /**
    * Why step 2 cannot advance, or `null` when it can.
@@ -748,7 +769,7 @@ export default function CreateCompetitionScreen() {
                   {/* A disabled CTA with no reason is indistinguishable from a
                       broken one — which is exactly how this read while the pool
                       still served matches that had already kicked off. */}
-                  {step2Problem ? (
+                  {ENFORCE_DEADLINE_RULES && step2Problem ? (
                     <Text
                       style={{
                         fontFamily: regular,
