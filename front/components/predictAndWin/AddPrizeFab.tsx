@@ -1,11 +1,23 @@
 /**
  * Sponsor hub CTA — every variant is `PILL.width` × `PILL.height` (219×36).
+ * Glass body: LiquidGlass on supported iOS, BlurView elsewhere, plus a
+ * coloured tint and a top specular so the pill reads as frosted glass.
  */
 
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useMemo } from 'react';
-import { Pressable, Text, View, type StyleProp, ViewStyle } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  ViewStyle,
+} from 'react-native';
 
+import { isLiquidGlassSupported, LiquidGlassView } from '../../utils/liquidGlassSafe';
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionStatus } from '../../services/competitions.service';
 import { PWGradientText } from './GradientText';
@@ -16,13 +28,13 @@ import {
   IconGiftFill,
   IconRoundPlus,
 } from './icons';
-import { PW, PW_GRADIENTS, usePWFonts, usePWScale } from './theme';
+import { PW, usePWFonts, usePWScale } from './theme';
 
-const INSET_SHADOW = 'inset 0px -3px 4px rgba(0,0,0,0.25)';
+const GlassSurface = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 
-/** SwiftUI `Color(red: 0.32, green: 0.03, blue: 0.59)` base + darker gift cap. */
-const ADD_PILL_SOLID = '#510D96';
-const ADD_GIFT_CAP = '#3A0A6E';
+const GLASS_PROPS = isLiquidGlassSupported
+  ? { effect: 'clear' as const, interactive: true, colorScheme: 'dark' as const }
+  : { intensity: Platform.OS === 'android' ? 36 : 28, tint: 'dark' as const };
 
 /** Shared CTA size — every variant (add / pending / winner / rejected) uses this. */
 const PILL = {
@@ -58,27 +70,73 @@ export function deriveAddPrizeVariant(
 const STATUS: Record<
   Exclude<AddPrizeButtonVariant, 'add'>,
   {
-    wash: readonly [string, string];
+    tint: readonly [string, string];
     text: readonly [string, string];
     Icon: typeof IconCtaCheck;
   }
 > = {
   pending: {
-    wash: ['#3D3D08', '#1F1F04'],
-    text: ['#FFFF00', '#C7C700'],
+    tint: ['rgba(255,255,0,0.22)', 'rgba(180,180,0,0.10)'],
+    text: ['#FFFF66', '#FFE14D'],
     Icon: IconCtaLoading,
   },
   winner: {
-    wash: ['#0A3D0A', '#051A05'],
-    text: ['#00CC00', '#00AA00'],
+    tint: ['rgba(0,220,80,0.24)', 'rgba(0,120,40,0.12)'],
+    text: ['#7CFF9A', '#3DFF6A'],
     Icon: IconCtaCheck,
   },
   rejected: {
-    wash: ['#4A0000', '#1A0000'],
-    text: ['#FF6B6B', '#FF3B3B'],
+    tint: ['rgba(255,70,70,0.28)', 'rgba(160,0,0,0.14)'],
+    text: ['#FF8A8A', '#FF5C5C'],
     Icon: IconCtaCross,
   },
 };
+
+const ADD_TINT = ['rgba(140,40,255,0.42)', 'rgba(81,7,151,0.22)'] as const;
+
+function GlassCtaShell({
+  tint,
+  width,
+  height,
+  radius,
+  children,
+}: {
+  tint: readonly [string, string];
+  width: number;
+  height: number;
+  radius: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <View
+      style={{
+        width,
+        height,
+        borderRadius: radius,
+        overflow: 'hidden',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(255,255,255,0.38)',
+      }}
+    >
+      <GlassSurface {...(GLASS_PROPS as object)} style={StyleSheet.absoluteFill} />
+      <LinearGradient
+        colors={[...tint]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <LinearGradient
+        colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0.08)', 'transparent']}
+        locations={[0, 0.38, 1]}
+        start={{ x: 0.15, y: 0 }}
+        end={{ x: 0.85, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      {children}
+    </View>
+  );
+}
 
 function usePillMetrics() {
   const { s, f } = usePWScale();
@@ -103,62 +161,53 @@ function AddPrizePrimaryPill({ label }: { label: string }) {
   const { width, height, radius, capWidth, gift, plus, titleSize, padH, s } = usePillMetrics();
 
   return (
-    <View
-      style={{
-        width,
-        height,
-        borderRadius: radius,
-        overflow: 'hidden',
-        flexDirection: 'row',
-        direction: 'ltr',
-        boxShadow: INSET_SHADOW,
-      }}
-    >
-      <LinearGradient
-        colors={[ADD_GIFT_CAP, ADD_PILL_SOLID]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={{
-          width: capWidth,
-          height,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <IconGiftFill width={gift} height={gift} />
-      </LinearGradient>
-
-      <LinearGradient
-        colors={[...PW_GRADIENTS.fab]}
-        locations={[...PW_GRADIENTS.fabLocations]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
+    <GlassCtaShell tint={ADD_TINT} width={width} height={height} radius={radius}>
+      <View
         style={{
           flex: 1,
           flexDirection: 'row',
+          direction: 'ltr',
           alignItems: 'center',
-          justifyContent: 'center',
-          gap: s(2),
-          paddingLeft: s(6),
-          paddingRight: padH,
         }}
       >
-        <Text
+        <View
           style={{
-            fontFamily: semibold,
-            fontSize: titleSize,
-            color: PW.text,
-            flexShrink: 1,
+            width: capWidth,
+            height,
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
         >
-          {label}
-        </Text>
-        <IconRoundPlus width={plus} height={plus} />
-      </LinearGradient>
-    </View>
+          <IconGiftFill width={gift} height={gift} />
+        </View>
+        <View
+          style={{
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: s(2),
+            paddingLeft: s(6),
+            paddingRight: padH,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: semibold,
+              fontSize: titleSize,
+              color: PW.text,
+              flexShrink: 1,
+            }}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+          >
+            {label}
+          </Text>
+          <IconRoundPlus width={plus} height={plus} />
+        </View>
+      </View>
+    </GlassCtaShell>
   );
 }
 
@@ -171,57 +220,50 @@ function StatusCtaPill({
 }) {
   const { semibold } = usePWFonts();
   const { width, height, radius, capWidth, gift, titleSize, padH } = usePillMetrics();
-  const { wash, text, Icon } = STATUS[variant];
+  const { tint, text, Icon } = STATUS[variant];
 
   return (
-    <View
-      style={{
-        width,
-        height,
-        borderRadius: radius,
-        overflow: 'hidden',
-        flexDirection: 'row',
-        direction: 'ltr',
-        boxShadow: INSET_SHADOW,
-      }}
-    >
-      <LinearGradient
-        colors={[...wash]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
+    <GlassCtaShell tint={tint} width={width} height={height} radius={radius}>
+      <View
         style={{
           flex: 1,
-          paddingHorizontal: padH,
+          flexDirection: 'row',
+          direction: 'ltr',
           alignItems: 'center',
-          justifyContent: 'center',
         }}
       >
-        <PWGradientText
-          colors={[...text]}
+        <View
           style={{
-            fontFamily: semibold,
-            fontSize: titleSize,
-            textAlign: 'center',
-            flexShrink: 1,
+            flex: 1,
+            paddingHorizontal: padH,
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          {label}
-        </PWGradientText>
-      </LinearGradient>
-      <LinearGradient
-        colors={[...wash]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={{
-          width: capWidth,
-          height,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Icon width={gift} height={gift} />
-      </LinearGradient>
-    </View>
+          <PWGradientText
+            colors={[...text]}
+            style={{
+              fontFamily: semibold,
+              fontSize: titleSize,
+              textAlign: 'center',
+              flexShrink: 1,
+            }}
+          >
+            {label}
+          </PWGradientText>
+        </View>
+        <View
+          style={{
+            width: capWidth,
+            height,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Icon width={gift} height={gift} />
+        </View>
+      </View>
+    </GlassCtaShell>
   );
 }
 
