@@ -88,7 +88,7 @@ export function SortFilterRow({
   const placement = React.useMemo(() => {
     if (!anchor) return null;
 
-    const preferredLeft = dir.isRTL ? anchor.x : anchor.x + anchor.width - menuWidth;
+    const preferredLeft = anchor.x;
     const minLeft = insets.left + s(8);
     const maxLeft = screenW - insets.right - s(8) - menuWidth;
     const left = Math.min(Math.max(preferredLeft, minLeft), Math.max(minLeft, maxLeft));
@@ -98,7 +98,7 @@ export function SortFilterRow({
     const top = fitsBelow ? below : Math.max(insets.top + s(8), anchor.y - gap - panelHeight);
 
     return { left, top };
-  }, [anchor, dir.isRTL, insets, menuWidth, panelHeight, screenH, screenW, s, gap]);
+  }, [anchor, insets, menuWidth, panelHeight, screenH, screenW, s, gap]);
 
   const onMenuLayout = React.useCallback((e: LayoutChangeEvent) => {
     const h = e.nativeEvent.layout.height;
@@ -119,13 +119,6 @@ export function SortFilterRow({
           gap: rowGap,
         }}
       >
-        <AddPrizeButton
-          variant={addPrizeVariant}
-          compact={useCompactAdd}
-          onPress={onAddPrize}
-          disabled={addPrizeLoading}
-        />
-
         <View ref={sortRef} collapsable={false}>
           <Pressable
             onPress={() => {
@@ -161,6 +154,13 @@ export function SortFilterRow({
             </LinearGradient>
           </Pressable>
         </View>
+
+        <AddPrizeButton
+          variant={addPrizeVariant}
+          compact={useCompactAdd}
+          onPress={onAddPrize}
+          disabled={addPrizeLoading}
+        />
       </View>
 
       <Modal
