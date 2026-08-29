@@ -22,7 +22,7 @@ import { usePWLocalize } from './localize';
 import { PW, PW_GRADIENTS, PW_RADII, usePWDirection, usePWFonts, usePWScale } from './theme';
 
 /** Figma category artwork, keyed by `PrizeCategory.key`. */
-const CATEGORY_ART: Record<string, ImageSourcePropType> = {
+export const CATEGORY_ART: Record<string, ImageSourcePropType> = {
   sportswear: require('../../assets/images/prize-categories/sportswear.png'),
   tickets: require('../../assets/images/prize-categories/tickets.png'),
   cash: require('../../assets/images/prize-categories/cash.png'),
@@ -34,6 +34,26 @@ const CATEGORY_ART: Record<string, ImageSourcePropType> = {
   gaming: require('../../assets/images/prize-categories/gaming.png'),
   other: require('../../assets/images/prize-categories/other.png'),
 };
+
+export function categoryArtSource(category: Pick<PrizeCategoryInfo, 'key' | 'icon'>): ImageSourcePropType {
+  const remote =
+    category.icon && /^https?:\/\//i.test(category.icon.trim()) ? category.icon.trim() : null;
+  if (remote) return { uri: remote };
+  return CATEGORY_ART[category.key] ?? CATEGORY_ART.other;
+}
+
+/**
+ * Prize photo when the sponsor uploaded one; otherwise the same illustration
+ * shown on the category-picker screen.
+ */
+export function prizeArtSource(competition: {
+  prizeImageUrl?: string | null;
+  category: Pick<PrizeCategoryInfo, 'key' | 'icon'>;
+}): ImageSourcePropType {
+  const uploaded = competition.prizeImageUrl?.trim();
+  if (uploaded && /^https?:\/\//i.test(uploaded)) return { uri: uploaded };
+  return categoryArtSource(competition.category);
+}
 
 export function CategoryMedallion({
   category,

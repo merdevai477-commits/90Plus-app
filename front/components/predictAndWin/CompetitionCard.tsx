@@ -18,6 +18,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
+import { prizeArtSource } from './PrizeCategoryGrid';
 import { IconLocation, IconPickupPin, IconVespaGreen } from './icons';
 import {
   PW,
@@ -229,18 +230,16 @@ export function CompetitionCard({
           backgroundColor: PW.detailBg,
         }}
       >
-        {competition.prizeImageUrl ? (
-          <Image
-            source={{ uri: competition.prizeImageUrl }}
-            style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            transition={150}
-            // Without a placeholder colour the card flashes the photo in over a
-            // transparent hole while Glide decodes on Android.
-            placeholderContentFit="cover"
-            recyclingKey={competition.id}
-          />
-        ) : null}
+        <Image
+          source={prizeArtSource(competition)}
+          style={StyleSheet.absoluteFill}
+          contentFit={competition.prizeImageUrl ? 'cover' : 'contain'}
+          transition={150}
+          // Without a placeholder colour the card flashes the photo in over a
+          // transparent hole while Glide decodes on Android.
+          placeholderContentFit={competition.prizeImageUrl ? 'cover' : 'contain'}
+          recyclingKey={`${competition.id}:${competition.prizeImageUrl ?? competition.category.key}`}
+        />
 
         {/* See `PW_GRADIENTS.cardWash` for why this no longer uses a blend
             mode: `mixBlendMode` is a no-op below Android API 29, which hid the

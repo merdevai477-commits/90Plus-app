@@ -23,7 +23,6 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,6 +34,7 @@ import { PredictionStepper } from '../../components/predictAndWin/PredictionStep
 import {
   CategoryMedallion,
   PrizeCategoryGrid,
+  categoryArtSource,
   usePWGridMetrics,
 } from '../../components/predictAndWin/PrizeCategoryGrid';
 import { CompetitionDetailCard } from '../../components/predictAndWin/CompetitionDetailCard';
@@ -129,10 +129,8 @@ export default function CreateCompetitionScreen() {
   const [selectedMatch, setSelectedMatch] = useState<MatchPoolEntry | null>(null);
   /** Calendar day only; the clock below supplies the time. */
   const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
-  const [hour, setHour] = useState('');
-  const [minute, setMinute] = useState('');
-  const [meridiem, setMeridiem] = useState<'am' | 'pm' | null>(null);
-  const [timeFormat, setTimeFormat] = useState<'12' | '24'>('12');
+  const [hour, setHour] = useState(8);
+  const [meridiem, setMeridiem] = useState<'am' | 'pm'>('pm');
 
   // Step 3
   const [storeImageUrl, setStoreImageUrl] = useState<string | null>(null);
@@ -210,11 +208,9 @@ export default function CreateCompetitionScreen() {
     else setPhase(((phase as number) - 1) as Phase);
   };
 
-  const use24Hour = timeFormat === '24';
-
-  /** See `deadline.ts` — local-component assembly, and the server's own gates. */
+  /** Hour-only close time — minutes are always :00. */
   const deadlineAt = (): Date | null =>
-    buildDeadline({ date: deadlineDate, hour, minute, meridiem, use24Hour });
+    buildDeadline({ date: deadlineDate, hour: String(hour), minute: '00', meridiem });
 
   const deadlineIso = (): string | null => deadlineAt()?.toISOString() ?? null;
 
@@ -241,10 +237,8 @@ export default function CreateCompetitionScreen() {
   const step2Problem: string | null = (() => {
     if (!selectedMatch) return wizard.needMatch;
     if (!deadlineDate) return wizard.needDate;
-    const timeMissing = !hour || !minute || (!use24Hour && !meridiem);
-    if (timeMissing) return wizard.needTime;
     const at = deadlineAt();
-    if (!at) return use24Hour ? wizard.needValidTime24 : wizard.needValidTime;
+    if (!at) return wizard.needValidTime;
     if (!isDeadlineWithinBounds(at, kickoffAt)) {
       return at.getTime() <= Date.now()
         ? wizard.deadlineInPast
@@ -477,7 +471,7 @@ export default function CreateCompetitionScreen() {
               {!isCashCategory ? (
                 <>
                   <View style={[gutter, { marginTop: s(37), alignItems: dir.alignStart }]}>
-                    <PWFieldLabel label={wizard.prizeImage} />
+                    <PWFieldLabel label={wizard.prizeImage} optional={wizard.optional} />
                   </View>
                   <Pressable
                     onPress={() => setPickerTarget('prize')}
@@ -501,10 +495,46 @@ export default function CreateCompetitionScreen() {
                         style={{ width: '100%', height: '100%' }}
                         contentFit="cover"
                       />
+                    ) : category ? (
+                      <Image
+                        source={categoryArtSource(category)}
+                        style={{ width: '72%', height: '72%' }}
+                        contentFit="contain"
+                      />
                     ) : (
                       <IconCamera width={s(55)} height={s(49)} />
                     )}
+                    {!prizeImageUrl ? (
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: 'absolute',
+                          right: s(12),
+                          bottom: s(12),
+                          width: s(44),
+                          height: s(44),
+                          borderRadius: s(22),
+                          backgroundColor: 'rgba(0,0,0,0.45)',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <IconCamera width={s(22)} height={s(20)} />
+                      </View>
+                    ) : null}
                   </Pressable>
+                  <Text
+                    style={{
+                      marginTop: s(10),
+                      paddingHorizontal: s(22),
+                      fontFamily: regular,
+                      fontSize: f(12),
+                      color: PW.textTileSub,
+                      textAlign: dir.textAlign,
+                    }}
+                  >
+                    {wizard.prizeImageDefaultHint}
+                  </Text>
                 </>
               ) : (
                 <View style={{ marginTop: s(37), alignItems: 'center', gap: s(12) }}>
@@ -691,52 +721,25 @@ export default function CreateCompetitionScreen() {
 
                     <View style={{ gap: s(8) }}>
                       <PWSubLabel label={wizard.deadlineTime} />
-                      <PWSegmentedPair
-                        left={{ key: '12', label: wizard.timeFormat12 }}
-                        right={{ key: '24', label: wizard.timeFormat24 }}
-                        selected={timeFormat}
-                        onSelect={(k) => {
-                          setTimeFormat(k as '12' | '24');
-                          setHour('');
-                          setMinute('');
-                          setMeridiem(null);
+                      <Text
+                        style={{
+                          fontFamily: regular,
+                          fontSize: f(12),
+                          color: PW.textTileSub,
+                          textAlign: dir.textAlign,
                         }}
+                      >
+                        {wizard.deadlineHourHint}
+                      </Text>
+                      <PWNumberStepper value={hour} onChange={setHour} min={1} max={12} />
+                      <PWSegmentedPair
+                        left={{ key: 'pm', label: wizard.pm }}
+                        right={{ key: 'am', label: wizard.am }}
+                        selected={meridiem}
+                        onSelect={(k) => setMeridiem(k as 'am' | 'pm')}
                         gap={12}
                         idleColor={PW.textTimeIdle}
                       />
-                      <View style={{ flexDirection: dir.row, alignItems: 'flex-end', gap: s(13) }}>
-                        <View style={{ flex: 1, gap: s(8) }}>
-                          <PWSubLabel label={wizard.deadlineHour} />
-                          <PWBox height={73} style={{ alignItems: 'center' }}>
-                            <TimeInput
-                              value={hour}
-                              onChange={setHour}
-                              max={use24Hour ? 23 : 12}
-                              placeholder={use24Hour ? '00' : '12'}
-                            />
-                          </PWBox>
-                        </View>
-                        <Text style={{ fontFamily: regular, fontSize: f(40), color: PW.text, marginBottom: s(18) }}>
-                          :
-                        </Text>
-                        <View style={{ flex: 1, gap: s(8) }}>
-                          <PWSubLabel label={wizard.deadlineMinute} />
-                          <PWBox height={73} style={{ alignItems: 'center' }}>
-                            <TimeInput value={minute} onChange={setMinute} max={59} placeholder="00" />
-                          </PWBox>
-                        </View>
-                      </View>
-
-                      {!use24Hour ? (
-                        <PWSegmentedPair
-                          left={{ key: 'pm', label: wizard.pm }}
-                          right={{ key: 'am', label: wizard.am }}
-                          selected={meridiem}
-                          onSelect={(k) => setMeridiem(k as 'am' | 'pm')}
-                          gap={12}
-                          idleColor={PW.textTimeIdle}
-                        />
-                      ) : null}
                     </View>
                   </View>
                 </View>
@@ -958,41 +961,5 @@ function CategoriesPlaceholder({ failed, onRetry }: { failed: boolean; onRetry: 
         </Pressable>
       ) : null}
     </View>
-  );
-}
-
-/** Two-digit time box — Figma 183×73 with Medium 40 centred digits. */
-function TimeInput({
-  value,
-  onChange,
-  max,
-  placeholder = '00',
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  max: number;
-  placeholder?: string;
-}) {
-  const { f } = usePWScale();
-  const { medium } = usePWFonts();
-  return (
-    <TextInput
-      value={value}
-      onChangeText={(raw: string) => {
-        const digits = raw.replace(/\D/g, '').slice(0, 2);
-        if (digits === '' || parseInt(digits, 10) <= max) onChange(digits);
-      }}
-      keyboardType="number-pad"
-      placeholder={placeholder}
-      placeholderTextColor={PW.textTimeIdle}
-      style={{
-        fontFamily: medium,
-        fontSize: f(40),
-        color: PW.text,
-        textAlign: 'center',
-        width: '100%',
-        padding: 0,
-      }}
-    />
   );
 }

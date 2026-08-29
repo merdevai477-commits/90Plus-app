@@ -24,6 +24,7 @@ import TeamBadge from '../common/TeamBadge';
 import { PWGradientText } from './GradientText';
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
+import { prizeArtSource } from './PrizeCategoryGrid';
 import {
   IconFacebook,
   IconGiftFilled,
@@ -134,6 +135,7 @@ export function CompetitionDetailCard({
   // names and Arabic-Indic digits for every kickoff.
   const day = formatDayMonth(kickoff);
   const time = formatTime(kickoff);
+  const art = prizeArtSource(competition);
 
   const divider = (
     <View style={{ width: 1, height: s(29), backgroundColor: PW.statBorder }} />
@@ -152,34 +154,30 @@ export function CompetitionDetailCard({
       ]}
     >
       {/* Prize artwork with the tripled blur glow (Figma `640:4817`). */}
-      {competition.prizeImageUrl ? (
-        <>
-          <Image
-            source={{ uri: competition.prizeImageUrl }}
-            style={{
-              position: 'absolute',
-              left: x(26, 78),
-              top: c(18),
-              width: c(78),
-              height: c(80),
-              opacity: 0.9,
-            }}
-            contentFit="contain"
-            blurRadius={6}
-          />
-          <Image
-            source={{ uri: competition.prizeImageUrl }}
-            style={{
-              position: 'absolute',
-              left: x(26, 78),
-              top: c(18),
-              width: c(78),
-              height: c(80),
-            }}
-            contentFit="contain"
-          />
-        </>
-      ) : null}
+      <Image
+        source={art}
+        style={{
+          position: 'absolute',
+          left: x(26, 78),
+          top: c(18),
+          width: c(78),
+          height: c(80),
+          opacity: 0.9,
+        }}
+        contentFit="contain"
+        blurRadius={6}
+      />
+      <Image
+        source={art}
+        style={{
+          position: 'absolute',
+          left: x(26, 78),
+          top: c(18),
+          width: c(78),
+          height: c(80),
+        }}
+        contentFit="contain"
+      />
 
       {/* Sponsor logo — Figma 101.57×102 at (291,8). */}
       {sponsor.logoUrl ? (
