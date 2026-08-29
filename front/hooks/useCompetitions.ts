@@ -1,6 +1,7 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
 import {
   CompetitionFilter,
@@ -255,6 +256,18 @@ export function useCompetitions() {
       void load();
     }, [load]),
   );
+
+  /**
+   * Approving a prize happens on the AsS desk in a browser. Coming back to the
+   * app must refetch — otherwise the hub keeps the empty list it loaded before
+   * the desk published the row.
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void load();
+    });
+    return () => sub.remove();
+  }, [load]);
 
   return {
     tab,

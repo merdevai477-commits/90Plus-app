@@ -97,12 +97,24 @@ describe('public surfaces never leak a DRAFT', () => {
   it.each(['all', 'today', 'sponsored'] as const)('tab=%s asks only for public statuses', async (tab) => {
     await listCompetitions({ userId: USER, tab });
     expect(lastWhere().status).toEqual({ in: ['PUBLISHED', 'LOCKED', 'SETTLED'] });
-    expect(lastWhere().OR).toBeUndefined();
+    // `today` uses OR for match-day vs published-today — never for status.
+    if (tab !== 'today') expect(lastWhere().OR).toBeUndefined();
   });
 
   it('an anonymous browse asks only for public statuses', async () => {
     await listCompetitions({ userId: null, tab: 'all' });
     expect(lastWhere().status).toEqual({ in: ['PUBLISHED', 'LOCKED', 'SETTLED'] });
+  });
+
+  it('the today tab includes match-day rows and prizes published today', async () => {
+    await listCompetitions({ userId: null, tab: 'today' });
+    const or = lastWhere().OR;
+    expect(or).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ matchDate: expect.objectContaining({ gte: expect.any(Date) }) }),
+        expect.objectContaining({ publishedAt: expect.objectContaining({ gte: expect.any(Date) }) }),
+      ]),
+    );
   });
 });
 

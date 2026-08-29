@@ -184,11 +184,17 @@ document.getElementById('logout').addEventListener('click', async () => {
   }
 });
 
+function setTab(tab) {
+  STATE.tab = tab;
+  document.querySelectorAll('#tabs button').forEach((b) =>
+    b.classList.toggle('active', b.dataset.tab === tab),
+  );
+}
+
 document.getElementById('tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-tab]');
   if (!btn) return;
-  STATE.tab = btn.dataset.tab;
-  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b === btn));
+  setTab(btn.dataset.tab);
   load();
 });
 
@@ -205,6 +211,7 @@ cardsEl.addEventListener('click', async (e) => {
   btn.disabled = true;
   try {
     await api(`/competitions/${id}/publish`, { method: 'POST', body: '{}' });
+    setTab('PUBLISHED');
     await load();
   } catch (err) {
     deskError.hidden = false;
@@ -230,6 +237,7 @@ document.getElementById('reject-confirm').addEventListener('click', async () => 
     });
     rejectModal.hidden = true;
     STATE.rejectId = null;
+    setTab('REJECTED');
     await load();
   } catch (err) {
     deskError.hidden = false;

@@ -177,7 +177,11 @@ export async function listCompetitions(params: {
 
   if (tab === 'today' || filter === 'daily') {
     const { start, end } = todayBounds();
-    where.matchDate = { gte: start, lte: end };
+    const todayWindow = { gte: start, lte: end };
+    // Match-day challenges *and* ones the desk published today. A prize tied
+    // to tomorrow's kickoff used to vanish from "تحديات اليوم" on the same
+    // afternoon it was approved, which is when people need to see it.
+    where.OR = [{ matchDate: todayWindow }, { publishedAt: todayWindow }];
   }
   if (tab === 'sponsored' || filter === 'sponsored') {
     sponsorWhere.isVerified = true;
@@ -599,6 +603,10 @@ export async function publishCompetition(id: string) {
       reviewedAt: new Date(),
       rejectionReason: null,
       startAt: competition.startAt ?? new Date(),
+      // Admin approval is the trust signal for "تحديات الرعاة", which only
+      // lists verified sponsors. Leaving `isVerified` false hid every newly
+      // approved prize from that tab.
+      sponsor: { update: { isVerified: true } },
     },
     include: { sponsor: { select: { ownerId: true, name: true } } },
   });
