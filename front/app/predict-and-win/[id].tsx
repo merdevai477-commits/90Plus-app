@@ -1,20 +1,17 @@
 /**
- * Competition detail + prediction entry.
- *
- * The card itself is the Figma preview card (`650:5319`, 404×355) whose CTA is
- * "شارك بتوقعك الان". Figma has no dedicated score-entry frame for this feature,
- * so the entry sheet below the card is composed from the same design system
- * (wizard box, segmented pair, primary CTA) rather than invented styling.
+ * Competition detail. Entry happens in the Figma sheet `955:2744`, opened from
+ * the card CTA ("شارك بتوقعك الان"), not as a second form under the card.
  */
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CompetitionDetailCard } from '../../components/predictAndWin/CompetitionDetailCard';
+import { PredictScoreModal } from '../../components/predictAndWin/PredictScoreModal';
 import { PWHeader } from '../../components/predictAndWin/PWHeader';
-import { PWBox, PWFieldLabel, PWPrimaryButton } from '../../components/predictAndWin/fields';
+import { PWFieldLabel } from '../../components/predictAndWin/fields';
 import { usePWLocalize } from '../../components/predictAndWin/localize';
 import {
   PW,
@@ -31,7 +28,7 @@ import { useScreenFont } from '../../utils/fontSetup';
 export default function CompetitionDetailScreen() {
   useScreenFont();
   const { s, f } = usePWScale();
-  const { semibold, regular, medium } = usePWFonts();
+  const { semibold, regular } = usePWFonts();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -44,34 +41,12 @@ export default function CompetitionDetailScreen() {
    * only, so it was surfaced verbatim in English toasts. Both come from the
    * active locale now.
    */
-  const { errorMessage, formatRemaining } = usePWLocalize();
+  const { formatRemaining } = usePWLocalize();
   const detail = t.predictAndWin.detail;
 
-  const { competition, loading, submitting, refresh, predict } = useCompetition(id);
-  const [home, setHome] = useState('');
-  const [away, setAway] = useState('');
-  const [winner, setWinner] = useState<'home' | 'draw' | 'away' | null>(null);
+  const { competition, loading, submitting, refresh } = useCompetition(id);
   const [remaining, setRemaining] = useState('—');
-
-  // Seed the controls from a previously saved prediction exactly once per
-  // (competition, entry). Deriving the value inline instead would make the
-  // fields un-clearable — emptying them would fall straight back to the saved
-  // score. The entry id is part of the key so that an entry *appearing* later
-  // still seeds: signing in while this screen is open re-fetches with a token
-  // and only then does `myEntry` exist, and a competition-id-only key would
-  // have marked the screen seeded during the anonymous read.
-  const seededFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (!competition) return;
-    const entry = competition.myEntry;
-    const key = `${competition.id}:${entry?.id ?? 'none'}`;
-    if (seededFor.current === key) return;
-    seededFor.current = key;
-    if (!entry) return;
-    setHome(entry.predictedHomeScore?.toString() ?? '');
-    setAway(entry.predictedAwayScore?.toString() ?? '');
-    setWinner(entry.predictedWinner ?? null);
-  }, [competition]);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   // The 1s tick is what re-evaluates `isEntryOpen`, so the form closes itself
   // the moment the deadline passes without a refetch. It stops once expired —
@@ -149,8 +124,6 @@ export default function CompetitionDetailScreen() {
   // Single source of truth for "can this user still predict" — mirrors the
   // backend gates (published + before deadline + before kickoff).
   const canEdit = isEntryOpen(competition);
-  const isExact = competition.predictionMode === 'EXACT_SCORE';
-  const selectedWinner = winner ?? competition.myEntry?.predictedWinner ?? null;
 
   /**
    * `DRAFT` and `REJECTED` only reach this screen for the sponsor who owns the
@@ -180,45 +153,6 @@ export default function CompetitionDetailScreen() {
    */
   const ctaLabel = !canEdit ? closedReason : competition.myEntry ? detail.editHint : detail.submit;
 
-  const submit = async () => {
-    // Mirrors the backend gates. Without it the CTA on a closed competition
-    // fires a request the API will always reject.
-    if (!canEdit) {
-      toast.showError(closedReason, '');
-      return;
-    }
-    try {
-      let entry;
-      if (isExact) {
-        // Silent returns here left the user tapping a dead button with no
-        // explanation of what was missing.
-        if (home === '' || away === '') {
-          toast.showError(detail.predictTitle, detail.missingScore);
-          return;
-        }
-        entry = await predict({
-          predictedHomeScore: Number(home),
-          predictedAwayScore: Number(away),
-        });
-      } else {
-        if (!selectedWinner) {
-          toast.showError(detail.predictTitle, detail.missingWinner);
-          return;
-        }
-        entry = await predict({ predictedWinner: selectedWinner });
-      }
-      // `predict` returns null when it dropped the call because one was
-      // already in flight (double-tap). Reporting success there would claim a
-      // prediction was saved when nothing was sent.
-      if (entry) toast.showSuccess(detail.submitted, '');
-    } catch (err: any) {
-      toast.showError(detail.submit, errorMessage(err));
-      // The rejection may be the deadline passing or the competition settling
-      // while the form was open — re-read so the UI stops offering entry.
-      void refresh();
-    }
-  };
-
   const openMap = () => {
     if (!competition.sponsor.address) return;
     const q = encodeURIComponent(competition.sponsor.address);
@@ -236,7 +170,13 @@ export default function CompetitionDetailScreen() {
             remaining={remaining}
             ctaLabel={canEdit && !competition.myEntry ? detail.sharePrediction : ctaLabel}
             ctaDisabled={!canEdit || submitting}
-            onCtaPress={submit}
+            onCtaPress={() => {
+              if (!canEdit) {
+                toast.showError(closedReason, '');
+                return;
+              }
+              setSheetOpen(true);
+            }}
             onOpenMap={openMap}
           />
         </View>
@@ -264,132 +204,33 @@ export default function CompetitionDetailScreen() {
           </View>
         ) : null}
 
-        <View style={{ marginTop: s(28), marginHorizontal: s(22), gap: s(16) }}>
-          <PWFieldLabel label={detail.predictTitle} style={{ alignSelf: dir.alignStart }} />
-
-          {isExact ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: s(13) }}>
-              <View style={{ flex: 1 }}>
-                <PWBox height={73} style={{ alignItems: 'center' }}>
-                  <ScoreInput value={home} onChange={setHome} editable={canEdit} />
-                </PWBox>
-              </View>
-              <Text style={{ fontFamily: medium, fontSize: f(40), color: PW.text }}>:</Text>
-              <View style={{ flex: 1 }}>
-                <PWBox height={73} style={{ alignItems: 'center' }}>
-                  <ScoreInput value={away} onChange={setAway} editable={canEdit} />
-                </PWBox>
-              </View>
-            </View>
-          ) : (
-            /* Three outcomes — a drawn match must be predictable, otherwise a
-               WINNER-mode competition on a draw can never have a winner. */
-            <View style={{ flexDirection: 'row', gap: s(10) }}>
-              {(
-                [
-                  { key: 'home', label: competition.homeTeam },
-                  { key: 'draw', label: detail.draw },
-                  { key: 'away', label: competition.awayTeam },
-                ] as const
-              ).map((option) => {
-                const isOn = selectedWinner === option.key;
-                return (
-                  <Pressable
-                    key={option.key}
-                    style={{ flex: 1 }}
-                    disabled={!canEdit}
-                    onPress={() => setWinner(option.key)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isOn, disabled: !canEdit }}
-                  >
-                    <PWBox height={73} selected={isOn} style={{ alignItems: 'center' }}>
-                      <Text
-                        style={{
-                          fontFamily: isOn ? semibold : medium,
-                          fontSize: f(15),
-                          color: isOn ? PW.text : PW.textSegmentIdle,
-                          textAlign: 'center',
-                        }}
-                        numberOfLines={2}
-                      >
-                        {option.label}
-                      </Text>
-                    </PWBox>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-
-          {canEdit ? (
-            <PWPrimaryButton
-              label={ctaLabel}
-              onPress={submit}
-              disabled={submitting}
-              loading={submitting ? <ActivityIndicator color={PW.text} /> : undefined}
-            />
-          ) : (
+        {competition.rules ? (
+          <View style={{ marginTop: s(28), marginHorizontal: s(22), gap: s(8) }}>
+            <PWFieldLabel label={t.predictAndWin.wizard.rulesLabel} style={{ alignSelf: dir.alignStart }} />
             <Text
               style={{
                 fontFamily: regular,
-                fontSize: f(12),
-                color: PW.textTileSub,
-                textAlign: 'center',
+                fontSize: f(13),
+                lineHeight: f(13) * 1.5,
+                color: PW.textTipBody,
+                textAlign: dir.textAlign,
               }}
             >
-              {closedReason}
+              {competition.rules}
             </Text>
-          )}
-
-          {competition.rules ? (
-            <View style={{ marginTop: s(8), gap: s(8) }}>
-              <PWFieldLabel label={t.predictAndWin.wizard.rulesLabel} style={{ alignSelf: dir.alignStart }} />
-              <Text
-                style={{
-                  fontFamily: regular,
-                  fontSize: f(13),
-                  lineHeight: f(13) * 1.5,
-                  color: PW.textTipBody,
-                  textAlign: dir.textAlign,
-                }}
-              >
-                {competition.rules}
-              </Text>
-            </View>
-          ) : null}
-        </View>
+          </View>
+        ) : null}
       </ScrollView>
-    </View>
-  );
-}
 
-function ScoreInput({
-  value,
-  onChange,
-  editable,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  editable: boolean;
-}) {
-  const { f } = usePWScale();
-  const { medium } = usePWFonts();
-  return (
-    <TextInput
-      value={value}
-      onChangeText={(raw) => onChange(raw.replace(/\D/g, '').slice(0, 2))}
-      editable={editable}
-      keyboardType="number-pad"
-      placeholder="0"
-      placeholderTextColor={PW.textTimeIdle}
-      style={{
-        fontFamily: medium,
-        fontSize: f(40),
-        color: PW.text,
-        textAlign: 'center',
-        width: '100%',
-        padding: 0,
-      }}
-    />
+      <PredictScoreModal
+        visible={sheetOpen}
+        competition={competition}
+        onClose={() => setSheetOpen(false)}
+        onSubmitted={() => {
+          setSheetOpen(false);
+          void refresh();
+        }}
+      />
+    </View>
   );
 }

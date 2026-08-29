@@ -28,6 +28,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HubPrizeCard } from '../../components/predictAndWin/CompetitionCard';
 import { InfoTiles } from '../../components/predictAndWin/InfoTiles';
 import { PWHeader } from '../../components/predictAndWin/PWHeader';
+import { PredictScoreModal } from '../../components/predictAndWin/PredictScoreModal';
 import { SortFilterRow } from '../../components/predictAndWin/SortFilterRow';
 import { PredictAndWinTabBar } from '../../components/predictAndWin/TabBar';
 import { WinnerPickerModal } from '../../components/predictAndWin/WinnerPickerModal';
@@ -37,7 +38,7 @@ import { useCompetitions } from '../../hooks/useCompetitions';
 import { ALWAYS_ADD_PRIZE_CTA, useSponsorPrizeCta } from '../../hooks/useSponsorPrizeCta';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
-import type { CompetitionInfo, CompetitionTab } from '../../services/competitions.service';
+import { isEntryOpen, type CompetitionInfo, type CompetitionTab } from '../../services/competitions.service';
 
 export default function PredictAndWinScreen() {
   useScreenFont();
@@ -66,6 +67,7 @@ export default function PredictAndWinScreen() {
   const { variant: addPrizeVariant, competitionId, loading: addPrizeLoading } =
     useSponsorPrizeCta();
   const [winnerOpen, setWinnerOpen] = useState(false);
+  const [predictTarget, setPredictTarget] = useState<CompetitionInfo | null>(null);
 
   const goToCreate = useCallback(() => router.push('/predict-and-win/create'), [router]);
 
@@ -154,7 +156,13 @@ export default function PredictAndWinScreen() {
           <View key={item.id} style={{ marginBottom: cardGap }}>
             <HubPrizeCard
               competition={item}
-              onPress={() => router.push(`/predict-and-win/${item.id}`)}
+              onPress={() => {
+                if (isEntryOpen(item)) {
+                  setPredictTarget(item);
+                  return;
+                }
+                router.push(`/predict-and-win/${item.id}`);
+              }}
             />
           </View>
         ))}
@@ -163,6 +171,13 @@ export default function PredictAndWinScreen() {
           <ActivityIndicator color={PW.ctaTop} style={{ marginTop: gap28 }} />
         ) : null}
       </ScrollView>
+
+      <PredictScoreModal
+        visible={!!predictTarget}
+        competition={predictTarget}
+        onClose={() => setPredictTarget(null)}
+        onSubmitted={() => void refresh()}
+      />
 
       <WinnerPickerModal
         visible={winnerOpen}

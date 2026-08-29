@@ -601,3 +601,24 @@ export function IconCtaLoading({ width = 36, height = 36, opacity }: PWIconProps
     </Svg>
   );
 }
+
+/** Figma `494:4650` — 36×36 sheet close (`Essentials/close cross`). */
+export function IconSheetClose({ width = 36, height = 36, opacity }: PWIconProps) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 36 36" fill="none" opacity={opacity}>
+      <Path d="M27 9L9 27M27 27L9 9.00002" stroke="#A9A9A9" strokeWidth="3" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Figma `955:2774` — 16×16 `mdi:information-outline`. */
+export function IconInfoOutline({ width = 16, height = 16, opacity }: PWIconProps) {
+  return (
+    <Svg width={width} height={height} viewBox="0 0 16 16" fill="none" opacity={opacity}>
+      <Path
+        d="M7.33333 6H8.66667V4.66667H7.33333M8 13.3333C5.06 13.3333 2.66667 10.94 2.66667 8C2.66667 5.06 5.06 2.66667 8 2.66667C10.94 2.66667 13.3333 5.06 13.3333 8C13.3333 10.94 10.94 13.3333 8 13.3333ZM8 1.33333C7.12452 1.33333 6.25761 1.50577 5.44878 1.8408C4.63994 2.17583 3.90501 2.6669 3.28595 3.28595C2.03571 4.5362 1.33333 6.23189 1.33333 8C1.33333 9.76811 2.03571 11.4638 3.28595 12.714C3.90501 13.3331 4.63994 13.8242 5.44878 14.1592C6.25761 14.4942 7.12452 14.6667 8 14.6667C9.76811 14.6667 11.4638 13.9643 12.714 12.714C13.9643 11.4638 14.6667 9.76811 14.6667 8C14.6667 7.12452 14.4942 6.25761 14.1592 5.44878C13.8242 4.63994 13.3331 3.90501 12.714 3.28595C12.095 2.6669 11.3601 2.17583 10.5512 1.8408C9.74239 1.50577 8.87548 1.33333 8 1.33333ZM7.33333 11.3333H8.66667V7.33333H7.33333V11.3333Z"
+        fill="#5D5D5D"
+      />
+    </Svg>
+  );
+}

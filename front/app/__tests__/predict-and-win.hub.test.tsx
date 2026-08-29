@@ -96,6 +96,15 @@ jest.mock('react-native-svg', () => {
 jest.mock('../../utils/logger', () => ({
   logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() },
 }));
+jest.mock('../../contexts/ToastContext', () => ({
+  useToast: () => ({
+    showToast: jest.fn(),
+    showSuccess: jest.fn(),
+    showError: jest.fn(),
+    showWarning: jest.fn(),
+    showInfo: jest.fn(),
+  }),
+}));
 
 const mockList = jest.fn();
 const mockListMine = jest.fn();
@@ -107,6 +116,7 @@ jest.mock('../../services/competitions.service', () => ({
     list: (...args: unknown[]) => mockList(...args),
     listMine: (...args: unknown[]) => mockListMine(...args),
     getPrizeCategories: (...args: unknown[]) => mockCategories(...args),
+    predict: jest.fn(),
   },
 }));
 
@@ -203,6 +213,19 @@ describe('Predict & Win hub', () => {
     expect(screen.getByText('SPONSOR_TWO')).toBeTruthy();
     expect(screen.getAllByText('Share your prediction').length).toBeGreaterThan(0);
     expect(lastRequestedTab()).toBe('all');
+  });
+
+  it('opens the Figma prediction sheet from the card CTA', async () => {
+    mockList.mockResolvedValue(TWO_ROWS);
+
+    render(<PredictAndWinScreen />);
+    await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
+
+    fireEvent.press(screen.getAllByText('Share your prediction')[0]);
+
+    await waitFor(() => expect(screen.getByText('Predict the match result')).toBeTruthy());
+    expect(screen.getByText('Confirm prediction')).toBeTruthy();
+    expect(screen.getByText('Match result')).toBeTruthy();
   });
 
   it.each(['today', 'mine', 'sponsored'] as const)(
