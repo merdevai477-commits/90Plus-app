@@ -10,12 +10,13 @@ const rejectReason = document.getElementById('reject-reason');
 const STATE = {
   tab: 'DRAFT',
   rejectId: null,
-  timer: null,
+  inflight: null,
 };
 
 async function api(path, opts = {}) {
   const res = await fetch(`/api/ass${path}`, {
     credentials: 'same-origin',
+    cache: 'no-store',
     headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
     ...opts,
   });
@@ -31,15 +32,12 @@ async function api(path, opts = {}) {
 function showLogin() {
   loginEl.hidden = false;
   deskEl.hidden = true;
-  if (STATE.timer) clearInterval(STATE.timer);
 }
 
 function showDesk() {
   loginEl.hidden = true;
   deskEl.hidden = false;
   load();
-  if (STATE.timer) clearInterval(STATE.timer);
-  STATE.timer = setInterval(load, 4000);
 }
 
 function esc(s) {
@@ -126,27 +124,33 @@ function renderActivity(rows) {
 }
 
 async function load() {
+  if (STATE.inflight) return STATE.inflight;
   deskError.hidden = true;
-  try {
-    if (STATE.tab === 'activity') {
-      cardsEl.hidden = true;
-      activityEl.hidden = false;
-      const json = await api('/activity');
-      renderActivity(json.data || []);
-      return;
+  STATE.inflight = (async () => {
+    try {
+      if (STATE.tab === 'activity') {
+        cardsEl.hidden = true;
+        activityEl.hidden = false;
+        const json = await api('/activity');
+        renderActivity(json.data || []);
+        return;
+      }
+      cardsEl.hidden = false;
+      activityEl.hidden = true;
+      const json = await api(`/competitions?status=${encodeURIComponent(STATE.tab)}`);
+      renderCards(json.data || []);
+    } catch (err) {
+      if (err.status === 401) {
+        showLogin();
+        return;
+      }
+      deskError.hidden = false;
+      deskError.textContent = err.message || 'تعذر التحميل';
     }
-    cardsEl.hidden = false;
-    activityEl.hidden = true;
-    const json = await api(`/competitions?status=${encodeURIComponent(STATE.tab)}`);
-    renderCards(json.data || []);
-  } catch (err) {
-    if (err.status === 401) {
-      showLogin();
-      return;
-    }
-    deskError.hidden = false;
-    deskError.textContent = err.message || 'تعذر التحميل';
-  }
+  })().finally(() => {
+    STATE.inflight = null;
+  });
+  return STATE.inflight;
 }
 
 document.getElementById('login-form').addEventListener('submit', async (e) => {
@@ -250,3 +254,7 @@ document.getElementById('reject-confirm').addEventListener('click', async () => 
 api('/me')
   .then(showDesk)
   .catch(showLogin);
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !deskEl.hidden) load();
+});

@@ -470,6 +470,7 @@ logger.info(`📁 Production mode: ${isProduction}`);
 
 app.get(['/AsS', '/ass'], (_req: Request, res: Response) => {
     const filePath = path.join(publicPath, 'ass', 'index.html');
+    res.set('Cache-Control', 'no-store');
     res.sendFile(filePath, (err) => {
         if (err) {
             logger.error('Failed to send AsS page:', err);

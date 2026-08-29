@@ -91,6 +91,7 @@ router.get('/competitions', requireAssSession, async (req: Request, res: Respons
       orderBy: { createdAt: 'desc' },
       take,
     });
+    res.set('Cache-Control', 'private, no-store');
     res.json({ status: 'SUCCESS', data: competitions });
   } catch (err) {
     logger.error('[AsS] list competitions failed:', err);
@@ -116,6 +117,7 @@ router.get('/activity', requireAssSession, async (req: Request, res: Response): 
         },
       },
     });
+    res.set('Cache-Control', 'private, no-store');
     res.json({ status: 'SUCCESS', data: rows });
   } catch (err) {
     logger.error('[AsS] activity failed:', err);
