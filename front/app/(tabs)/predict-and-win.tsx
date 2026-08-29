@@ -48,7 +48,6 @@ export default function PredictAndWinScreen() {
 
   const {
     tab,
-    filter,
     sort,
     items,
     loading,
@@ -57,7 +56,6 @@ export default function PredictAndWinScreen() {
     error,
     hasMore,
     changeTab,
-    changeFilter,
     changeSort,
     refresh,
     loadMore,
@@ -85,18 +83,13 @@ export default function PredictAndWinScreen() {
         <View style={{ height: gap28 }} />
         <PredictAndWinTabBar active={tab} onChange={changeTab} />
         <View style={{ height: gap14 }} />
-        <InfoTiles active={filter} onChange={changeFilter} />
+        <InfoTiles />
         <View style={{ height: gap28 }} />
-        <SortFilterRow
-          sort={sort}
-          onSortChange={changeSort}
-          filter={filter}
-          onFilterChange={changeFilter}
-        />
+        <SortFilterRow sort={sort} onSortChange={changeSort} />
         <View style={{ height: gap28 }} />
       </View>
     ),
-    [gap28, gap14, tab, changeTab, filter, changeFilter, sort, changeSort],
+    [gap28, gap14, tab, changeTab, sort, changeSort],
   );
 
   const listEmpty = useMemo(
@@ -139,7 +132,7 @@ export default function PredictAndWinScreen() {
       <FlatList
         style={{ flex: 1 }}
         data={items}
-        extraData={`${tab}:${filter ?? ''}:${sort}:${items.length}`}
+        extraData={`${tab}:${sort}:${items.length}`}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         ItemSeparatorComponent={CardSeparator}
