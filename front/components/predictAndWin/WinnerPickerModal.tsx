@@ -26,7 +26,11 @@ import {
   type OwnerLeaderboardCandidate,
 } from '../../services/competitions.service';
 import { getClerkBearerToken } from '../../utils/clerkAuthToken';
+import { GlassCtaShell } from './glassCta';
 import { PW, PW_RADII, usePWDirection, usePWFonts, usePWScale } from './theme';
+
+const AWARD_GLASS_TINT = ['rgba(0,220,80,0.32)', 'rgba(0,120,40,0.14)'] as const;
+const PROFILE_GLASS_TINT = ['rgba(140,40,255,0.28)', 'rgba(61,10,179,0.14)'] as const;
 
 function StatTile({
   label,
@@ -82,7 +86,7 @@ export function WinnerPickerModal({
   onClose: () => void;
 }) {
   const { s, f } = usePWScale();
-    const { semibold, regular } = usePWFonts();
+  const { semibold, regular, medium } = usePWFonts();
   const dir = usePWDirection();
   const { t } = useTranslation();
   const w = t.predictAndWin.winnerPicker;
@@ -321,7 +325,7 @@ export function WinnerPickerModal({
           onPress={() => setPicked(null)}
           style={{
             flex: 1,
-            backgroundColor: 'rgba(4,1,10,0.78)',
+            backgroundColor: 'rgba(4,1,10,0.82)',
             alignItems: 'center',
             justifyContent: 'center',
             paddingHorizontal: s(24),
@@ -332,49 +336,116 @@ export function WinnerPickerModal({
             style={{
               width: '100%',
               maxWidth: s(340),
-              backgroundColor: '#12081f',
-              borderRadius: s(PW_RADII.fab),
+              backgroundColor: '#080512',
+              borderRadius: s(28),
               borderWidth: 0.5,
-              borderColor: 'rgba(222,191,252,0.32)',
+              borderColor: 'rgba(222,191,252,0.39)',
               padding: s(22),
-              gap: s(14),
+              gap: s(16),
+              shadowColor: '#590FA0',
+              shadowOpacity: 0.36,
+              shadowRadius: 40,
             }}
           >
-            <Text style={{ fontFamily: semibold, fontSize: f(18), color: '#fff', textAlign: 'center' }}>
+            {picked ? (
+              <View style={{ alignItems: 'center', gap: s(10) }}>
+                {picked.avatar ? (
+                  <Image
+                    source={{ uri: picked.avatar }}
+                    style={{
+                      width: s(64),
+                      height: s(64),
+                      borderRadius: s(32),
+                      borderWidth: 1,
+                      borderColor: 'rgba(222,191,252,0.45)',
+                    }}
+                  />
+                ) : (
+                  <View
+                    style={{
+                      width: s(64),
+                      height: s(64),
+                      borderRadius: s(32),
+                      backgroundColor: 'rgba(128,59,69,0.45)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(222,191,252,0.35)',
+                    }}
+                  />
+                )}
+                <Text style={{ fontFamily: semibold, fontSize: f(20), color: '#fff', textAlign: 'center' }}>
+                  {displayName(picked)}
+                </Text>
+                <Text style={{ fontFamily: medium, fontSize: f(13), color: '#9B8FB0', textAlign: 'center' }}>
+                  @{picked.username}
+                </Text>
+              </View>
+            ) : null}
+
+            <Text
+              style={{
+                fontFamily: regular,
+                fontSize: f(15),
+                lineHeight: f(22),
+                color: '#EDE4F7',
+                textAlign: 'center',
+              }}
+            >
               {picked
                 ? w.confirm
                     .replace('{name}', displayName(picked))
                     .replace('{username}', picked.username)
                 : ''}
             </Text>
+
             <Pressable
               onPress={() => void award()}
               disabled={awarding}
-              style={{
-                backgroundColor: '#008000',
-                borderRadius: s(16),
-                paddingVertical: s(14),
-                alignItems: 'center',
-              }}
+              accessibilityRole="button"
+              accessibilityLabel={w.award}
             >
-              {awarding ? (
-                <ActivityIndicator color="#9EFF9E" />
-              ) : (
-                <Text style={{ fontFamily: semibold, fontSize: f(16), color: '#9EFF9E' }}>{w.award}</Text>
-              )}
+              <GlassCtaShell tint={AWARD_GLASS_TINT} radius={s(16)}>
+                <View
+                  style={{
+                    paddingVertical: s(15),
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: s(48),
+                  }}
+                >
+                  {awarding ? (
+                    <ActivityIndicator color="#7CFF9A" />
+                  ) : (
+                    <Text style={{ fontFamily: semibold, fontSize: f(16), color: '#7CFF9A' }}>
+                      {w.award}
+                    </Text>
+                  )}
+                </View>
+              </GlassCtaShell>
             </Pressable>
+
+            <Pressable onPress={openProfile} accessibilityRole="button" accessibilityLabel={w.viewProfile}>
+              <GlassCtaShell tint={PROFILE_GLASS_TINT} radius={s(16)}>
+                <View
+                  style={{
+                    paddingVertical: s(15),
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: s(48),
+                  }}
+                >
+                  <Text style={{ fontFamily: semibold, fontSize: f(16), color: '#EDE4F7' }}>{w.viewProfile}</Text>
+                </View>
+              </GlassCtaShell>
+            </Pressable>
+
             <Pressable
-              onPress={openProfile}
-              style={{
-                backgroundColor: '#1a0b30',
-                borderRadius: s(16),
-                paddingVertical: s(14),
-                alignItems: 'center',
-                borderWidth: 0.5,
-                borderColor: '#2a1844',
-              }}
+              onPress={() => setPicked(null)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={w.close}
+              style={{ alignItems: 'center', paddingTop: s(4) }}
             >
-              <Text style={{ fontFamily: semibold, fontSize: f(16), color: '#EDE4F7' }}>{w.viewProfile}</Text>
+              <Text style={{ fontFamily: medium, fontSize: f(13), color: '#6B6B6B' }}>{w.close}</Text>
             </Pressable>
           </Pressable>
         </Pressable>
