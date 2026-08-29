@@ -61,6 +61,8 @@ export default function PredictAndWinScreen() {
     refresh,
     loadMore,
     applyEntry,
+    commitEntry,
+    revertEntry,
   } = useCompetitions();
 
   const rows = Array.isArray(items) ? items : [];
@@ -177,11 +179,15 @@ export default function PredictAndWinScreen() {
         visible={!!predictTarget}
         competition={predictTarget}
         onClose={() => setPredictTarget(null)}
-        onSubmitted={(entry) => {
-          if (predictTarget) applyEntry(predictTarget.id, entry);
+        onSubmitted={(entry, id) => {
+          applyEntry(id, entry);
           setPredictTarget(null);
-          void refresh();
         }}
+        onSubmitSettled={(entry, id) => {
+          applyEntry(id, entry);
+          commitEntry(id);
+        }}
+        onSubmitFailed={(id) => revertEntry(id)}
       />
 
       <WinnerPickerModal

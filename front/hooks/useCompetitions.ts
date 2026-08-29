@@ -16,6 +16,33 @@ import { getClerkBearerToken } from '../utils/clerkAuthToken';
 import { logger } from '../utils/logger';
 
 /**
+ * Re-apply in-flight optimistic predictions after a list refetch. Without this
+ * a slower public/authed page can land after Confirm and wipe the yellow CTA
+ * the user already saw.
+ */
+function stampPendingEntries(
+  page: CompetitionInfo[],
+  pending: Record<string, CompetitionEntryInfo>,
+  snapshots: Record<string, CompetitionInfo>,
+): CompetitionInfo[] {
+  if (!Object.keys(pending).length) return page;
+  return page.map((row) => {
+    const entry = pending[row.id];
+    if (!entry) return row;
+    if (row.myEntry) {
+      delete pending[row.id];
+      delete snapshots[row.id];
+      return row;
+    }
+    return {
+      ...row,
+      myEntry: entry,
+      participantsCount: row.participantsCount + 1,
+    };
+  });
+}
+
+/**
  * `undefined` is a meaningful filter value ("no quick filter"), so a load
  * cannot use `opts.filter ?? filter` to fall back — that makes clearing the
  * filter impossible. The override is signalled by the key being present.
@@ -64,6 +91,8 @@ export function useCompetitions() {
    * selection has already superseded.
    */
   const requestSeq = useRef(0);
+  const snapshots = useRef<Record<string, CompetitionInfo>>({});
+  const pendingEntries = useRef<Record<string, CompetitionEntryInfo>>({});
 
   const resolveToken = useCallback(async () => {
     if (!isSignedInRef.current) return null;
@@ -137,7 +166,9 @@ export function useCompetitions() {
       });
       if (seq !== requestSeq.current) return;
       const page = Array.isArray(result.items) ? result.items : [];
-      setItems((prev) => (append ? [...prev, ...page] : page));
+      setItems((prev) =>
+        stampPendingEntries(append ? [...prev, ...page] : page, pendingEntries.current, snapshots.current),
+      );
       setNextCursor(result.nextCursor);
       cursorRef.current = result.nextCursor;
       setError(null);
@@ -155,7 +186,7 @@ export function useCompetitions() {
           });
           if (capturedSeq !== requestSeq.current) return;
           const authedPage = Array.isArray(authed.items) ? authed.items : [];
-          setItems(authedPage);
+          setItems(stampPendingEntries(authedPage, pendingEntries.current, snapshots.current));
           setNextCursor(authed.nextCursor);
           cursorRef.current = authed.nextCursor;
         } catch {
@@ -313,17 +344,30 @@ export function useCompetitions() {
    * flips to "في انتظار الفائز" without waiting for the list refetch.
    */
   const applyEntry = useCallback((competitionId: string, entry: CompetitionEntryInfo) => {
+    pendingEntries.current[competitionId] = entry;
     setItems((prev) =>
-      prev.map((row) =>
-        row.id === competitionId
-          ? {
-              ...row,
-              myEntry: entry,
-              participantsCount: row.myEntry ? row.participantsCount : row.participantsCount + 1,
-            }
-          : row,
-      ),
+      prev.map((row) => {
+        if (row.id !== competitionId) return row;
+        if (!snapshots.current[competitionId]) snapshots.current[competitionId] = row;
+        return {
+          ...row,
+          myEntry: entry,
+          participantsCount: row.myEntry ? row.participantsCount : row.participantsCount + 1,
+        };
+      }),
     );
+  }, []);
+
+  const commitEntry = useCallback((competitionId: string) => {
+    delete snapshots.current[competitionId];
+  }, []);
+
+  const revertEntry = useCallback((competitionId: string) => {
+    const snap = snapshots.current[competitionId];
+    delete pendingEntries.current[competitionId];
+    delete snapshots.current[competitionId];
+    if (!snap) return;
+    setItems((prev) => prev.map((row) => (row.id === competitionId ? snap : row)));
   }, []);
 
   return {
@@ -343,5 +387,7 @@ export function useCompetitions() {
     refresh,
     loadMore,
     applyEntry,
+    commitEntry,
+    revertEntry,
   };
 }

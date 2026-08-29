@@ -122,6 +122,7 @@ jest.mock('../../services/competitions.service', () => ({
 
 import PredictAndWinScreen from '../(tabs)/predict-and-win';
 import { AddPrizeButton, deriveAddPrizeVariant } from '../../components/predictAndWin/AddPrizeFab';
+import { CompetitionsService } from '../../services/competitions.service';
 import { useLanguageStore } from '../../src/i18n/store';
 
 /** A row shaped like `GET /competitions` actually answers. */
@@ -251,6 +252,49 @@ describe('Predict & Win hub', () => {
     expect(screen.getByText('2')).toBeTruthy();
     expect(screen.getByText('0')).toBeTruthy();
     expect(screen.queryByText('Share your prediction')).toBeNull();
+  });
+
+  it('flips the card to waiting without waiting for the predict request', async () => {
+    const row = {
+      ...competition('c1', 'SPONSOR_ONE'),
+      predictionMode: 'EXACT_SCORE' as const,
+    };
+    mockList.mockResolvedValue({ items: [row], nextCursor: null });
+    let settlePredict: (value: unknown) => void = () => undefined;
+    (CompetitionsService.predict as jest.Mock).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          settlePredict = resolve;
+        }),
+    );
+
+    render(<PredictAndWinScreen />);
+    await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('Share your prediction'));
+    await waitFor(() => expect(screen.getByText('Confirm prediction')).toBeTruthy());
+
+    const inputs = screen.getAllByLabelText('score');
+    fireEvent.changeText(inputs[0], '2');
+    fireEvent.changeText(inputs[1], '0');
+    fireEvent.press(screen.getByText('Confirm prediction'));
+
+    await waitFor(() => expect(screen.getByText('Waiting for the winner')).toBeTruthy());
+    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.getByText('0')).toBeTruthy();
+    expect(screen.queryByText('Predict the match result')).toBeNull();
+    expect(CompetitionsService.predict).toHaveBeenCalled();
+
+    settlePredict({
+      id: 'e-real',
+      predictedHomeScore: 2,
+      predictedAwayScore: 0,
+      predictedWinner: null,
+      isCorrect: null,
+      isWinner: false,
+      rank: null,
+      createdAt: new Date().toISOString(),
+    });
   });
 
   it.each(['today', 'mine', 'sponsored'] as const)(

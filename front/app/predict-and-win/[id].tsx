@@ -44,7 +44,7 @@ export default function CompetitionDetailScreen() {
   const { formatRemaining } = usePWLocalize();
   const detail = t.predictAndWin.detail;
 
-  const { competition, loading, submitting, refresh } = useCompetition(id);
+  const { competition, loading, refresh, applyEntry, commitEntry, revertEntry } = useCompetition(id);
   const [remaining, setRemaining] = useState('—');
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -169,7 +169,7 @@ export default function CompetitionDetailScreen() {
             competition={competition}
             remaining={remaining}
             ctaLabel={canEdit && !competition.myEntry ? detail.sharePrediction : ctaLabel}
-            ctaDisabled={!canEdit || submitting}
+            ctaDisabled={!canEdit}
             onCtaPress={() => {
               if (!canEdit) {
                 toast.showError(closedReason, '');
@@ -226,10 +226,15 @@ export default function CompetitionDetailScreen() {
         visible={sheetOpen}
         competition={competition}
         onClose={() => setSheetOpen(false)}
-        onSubmitted={() => {
+        onSubmitted={(entry) => {
+          applyEntry(entry);
           setSheetOpen(false);
-          void refresh();
         }}
+        onSubmitSettled={(entry) => {
+          applyEntry(entry);
+          commitEntry();
+        }}
+        onSubmitFailed={() => revertEntry()}
       />
     </View>
   );

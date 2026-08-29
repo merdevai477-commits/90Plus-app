@@ -39,6 +39,8 @@ export function useCompetition(id: string | undefined) {
    * its spinner.
    */
   const visibleSeq = useRef(0);
+  const snapshot = useRef<CompetitionInfo | null>(null);
+  const pendingEntry = useRef<CompetitionEntryInfo | null>(null);
 
   const resolveToken = useCallback(async () => {
     if (!signedInRef.current) return null;
@@ -68,7 +70,20 @@ export function useCompetition(id: string | undefined) {
         const token = await resolveToken();
         const data = await CompetitionsService.getById(token, id);
         if (seq !== requestSeq.current) return;
-        setCompetition(data);
+        setCompetition(() => {
+          if (pendingEntry.current && !data.myEntry) {
+            return {
+              ...data,
+              myEntry: pendingEntry.current,
+              participantsCount: data.participantsCount + 1,
+            };
+          }
+          if (data.myEntry) {
+            pendingEntry.current = null;
+            snapshot.current = null;
+          }
+          return data;
+        });
         setError(null);
       } catch (err: any) {
         if (seq !== requestSeq.current) return;
@@ -138,5 +153,39 @@ export function useCompetition(id: string | undefined) {
     [id, load],
   );
 
-  return { competition, loading, submitting, error, refresh, predict };
+  const applyEntry = useCallback((entry: CompetitionEntryInfo) => {
+    pendingEntry.current = entry;
+    setCompetition((prev) => {
+      if (!prev) return prev;
+      if (!snapshot.current) snapshot.current = prev;
+      return {
+        ...prev,
+        myEntry: entry,
+        participantsCount: prev.myEntry ? prev.participantsCount : prev.participantsCount + 1,
+      };
+    });
+  }, []);
+
+  const commitEntry = useCallback(() => {
+    snapshot.current = null;
+  }, []);
+
+  const revertEntry = useCallback(() => {
+    pendingEntry.current = null;
+    if (!snapshot.current) return;
+    setCompetition(snapshot.current);
+    snapshot.current = null;
+  }, []);
+
+  return {
+    competition,
+    loading,
+    submitting,
+    error,
+    refresh,
+    predict,
+    applyEntry,
+    commitEntry,
+    revertEntry,
+  };
 }

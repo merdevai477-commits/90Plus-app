@@ -9,9 +9,9 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -42,11 +42,15 @@ export function PredictScoreModal({
   competition,
   onClose,
   onSubmitted,
+  onSubmitSettled,
+  onSubmitFailed,
 }: {
   visible: boolean;
   competition: CompetitionInfo | null;
   onClose: () => void;
-  onSubmitted?: (entry: CompetitionEntryInfo) => void;
+  onSubmitted?: (entry: CompetitionEntryInfo, competitionId: string) => void;
+  onSubmitSettled?: (entry: CompetitionEntryInfo, competitionId: string) => void;
+  onSubmitFailed?: (competitionId: string) => void;
 }) {
   const { s, f } = usePWScale();
   const { width: winW } = useWindowDimensions();
@@ -62,7 +66,9 @@ export function PredictScoreModal({
   const [home, setHome] = useState('');
   const [away, setAway] = useState('');
   const [winner, setWinner] = useState<'home' | 'draw' | 'away' | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+
+  const tokenRef = useRef<string | null>(null);
+  const inFlight = useRef(false);
 
   useEffect(() => {
     if (!competition) return;
@@ -70,7 +76,22 @@ export function PredictScoreModal({
     setHome(entry?.predictedHomeScore?.toString() ?? '');
     setAway(entry?.predictedAwayScore?.toString() ?? '');
     setWinner(entry?.predictedWinner ?? null);
+    inFlight.current = false;
   }, [competition]);
+
+  // Warm the session token while the user types so Confirm does not wait on Clerk.
+  useEffect(() => {
+    if (!visible || !isSignedIn) return;
+    let cancelled = false;
+    void getToken()
+      .then((t) => {
+        if (!cancelled && t) tokenRef.current = t;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, isSignedIn, getToken]);
 
   if (!competition) return null;
 
@@ -78,7 +99,8 @@ export function PredictScoreModal({
   const kickoff = new Date(competition.matchDate);
   const sheetW = Math.min(s(415), Math.max(280, winW - 24));
 
-  const submit = async () => {
+  const submit = () => {
+    if (inFlight.current) return;
     if (!isEntryOpen(competition)) {
       toast.showError(detail.deadlinePassed, '');
       return;
@@ -97,46 +119,63 @@ export function PredictScoreModal({
       toast.showError(detail.sheetTitle, detail.missingWinner);
       return;
     }
-    try {
-      setSubmitting(true);
-      const token = await getToken();
-      if (!token) {
-        onClose();
-        router.push('/auth');
-        return;
-      }
-      if (isExact) {
-        const entry = await CompetitionsService.predict(token, competition.id, {
+
+    inFlight.current = true;
+    const competitionId = competition.id;
+    const optimistic: CompetitionEntryInfo = isExact
+      ? {
+          id: competition.myEntry?.id ?? `local-${competitionId}`,
           predictedHomeScore: Number(home),
           predictedAwayScore: Number(away),
-        });
-        if (entry) {
-          toast.showSuccess(detail.submitted, '');
-          onSubmitted?.(entry);
-          onClose();
+          predictedWinner: null,
+          isCorrect: null,
+          isWinner: false,
+          rank: null,
+          createdAt: competition.myEntry?.createdAt ?? new Date().toISOString(),
         }
-      } else {
-        const entry = await CompetitionsService.predict(token, competition.id, {
+      : {
+          id: competition.myEntry?.id ?? `local-${competitionId}`,
+          predictedHomeScore: null,
+          predictedAwayScore: null,
           predictedWinner: winner!,
-        });
-        if (entry) {
-          toast.showSuccess(detail.submitted, '');
-          onSubmitted?.(entry);
-          onClose();
+          isCorrect: null,
+          isWinner: false,
+          rank: null,
+          createdAt: competition.myEntry?.createdAt ?? new Date().toISOString(),
+        };
+    const prediction = isExact
+      ? { predictedHomeScore: Number(home), predictedAwayScore: Number(away) }
+      : { predictedWinner: winner! };
+
+    Keyboard.dismiss();
+    onSubmitted?.(optimistic, competitionId);
+    onClose();
+    toast.showSuccess(detail.submitted, '');
+
+    void (async () => {
+      try {
+        const token = tokenRef.current ?? (await getToken());
+        if (!token) {
+          onSubmitFailed?.(competitionId);
+          router.push('/auth');
+          return;
         }
+        const entry = await CompetitionsService.predict(token, competitionId, prediction);
+        if (entry) onSubmitSettled?.(entry, competitionId);
+      } catch (err) {
+        onSubmitFailed?.(competitionId);
+        toast.showError(detail.confirmPrediction, errorMessage(err));
+      } finally {
+        inFlight.current = false;
       }
-    } catch (err) {
-      toast.showError(detail.confirmPrediction, errorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
+    })();
   };
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
       onRequestClose={onClose}
       statusBarTranslucent
     >
@@ -310,9 +349,7 @@ export function PredictScoreModal({
             <View style={{ width: '100%', marginTop: s(48), gap: s(6) }}>
               <PWPrimaryButton
                 label={detail.confirmPrediction}
-                onPress={() => void submit()}
-                disabled={submitting}
-                loading={submitting ? <ActivityIndicator color={PW.text} /> : undefined}
+                onPress={submit}
               />
               <View
                 style={{
