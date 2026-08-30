@@ -48,6 +48,8 @@ import {
   unsubscribeSharedLivePulse,
 } from '../../components/Matches/sharedLivePulse';
 import { createObjectRefMemo } from '../../utils/createObjectRefMemo';
+import { matchCardToApiFixture } from '../../utils/matchCardToApiFixture';
+import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
   isCorrect?: boolean | null;
@@ -1742,6 +1744,13 @@ export default function MatchesHubScreenV2() {
   const handleOpenMatchDetails = useCallback(
     (fixture: Fixture) => {
       if (!fixture?.id) return;
+      const id = Number(fixture.id);
+      if (Number.isFinite(id) && id > 0) {
+        const preview = matchCardToApiFixture(fixture, id);
+        if (preview) {
+          useLiveFixtureStore.getState().ingestPreviewIfEmpty(id, preview);
+        }
+      }
       setViewAllLeagueId(null);
       router.push({
         pathname: '/(tabs)/match-details',

@@ -130,35 +130,17 @@ export async function fetchFastSnapshot(
 
   const promise = (async () => {
     try {
-      if (existing?.fixture) {
-        // Always refresh fixture status alongside events. Events-only polls left
-        // NS→1H / HT→2H / 2H→FT stuck until a focused full-bundle fetch.
-        const [fixtureData, eventData] = await Promise.all([
-          ApiFootballService.getFixtureById(fixtureId, { skipCache: true }).catch(
-            () => existing.fixture,
-          ),
-          ApiFootballService.getFixtureEvents(fixtureId, {
-            skipCache: true,
-          }).catch(() => existing.events ?? []),
-        ]);
-        return buildSnapshotFromRaw({
-          fixtureId,
-          fixture: reconcileFixtureWithEvents(
-            fixtureData ?? existing.fixture,
-            eventData ?? [],
-          ),
-          events: eventData ?? [],
-          source: 'http-fast',
-          existing,
-        });
-      }
-
-      let bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId);
+      // Shared backend cache (365-first). Never skipCache here — fresh=1
+      // stampeded 365 and showed empty loading while the first user waited.
+      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId);
       if (bundle.fixture) {
         return buildSnapshotFromRaw({
           fixtureId,
-          fixture: bundle.fixture,
-          events: bundle.events ?? [],
+          fixture: reconcileFixtureWithEvents(
+            bundle.fixture,
+            bundle.events ?? existing?.events ?? [],
+          ),
+          events: bundle.events ?? existing?.events ?? [],
           lineups: bundle.lineups,
           statistics: bundle.statistics,
           venue: bundle.venue,
@@ -167,24 +149,10 @@ export async function fetchFastSnapshot(
         });
       }
 
-      if (fixtureId >= 4_000_000) {
-        if (existing) {
-          return { ...existing, updatedAt: Date.now() };
-        }
-        return null;
+      if (existing?.fixture) {
+        return { ...existing, updatedAt: Date.now() };
       }
-
-      const [fixtureData, eventData] = await Promise.all([
-        ApiFootballService.getFixtureById(fixtureId, { skipCache: true }),
-        ApiFootballService.getFixtureEvents(fixtureId, { skipCache: true }),
-      ]);
-      return buildSnapshotFromRaw({
-        fixtureId,
-        fixture: fixtureData,
-        events: eventData ?? [],
-        source: 'http-fast',
-        existing,
-      });
+      return null;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Fast fetch failed';
       if (existing) {
@@ -213,9 +181,7 @@ export async function fetchScoreSnapshot(
 
   const promise = (async () => {
     try {
-      const fixtureData = await ApiFootballService.getFixtureById(fixtureId, {
-        skipCache: true,
-      });
+      const fixtureData = await ApiFootballService.getFixtureById(fixtureId);
       if (!fixtureData) {
         if (existing) return { ...existing, updatedAt: Date.now() };
         return null;
@@ -296,6 +262,8 @@ export function shouldSkipHttpIngest(
   fetchStartedAt: number,
 ): boolean {
   if (!current) return false;
+
+  if (current.lastSource === 'bootstrap') return false;
 
   if (current.lastWsAppliedAt != null && current.lastWsAppliedAt >= fetchStartedAt) {
     return true;

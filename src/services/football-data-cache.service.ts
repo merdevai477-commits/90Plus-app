@@ -55,11 +55,13 @@ import {
     getScores365WorldCupPhaseFixtures,
     isScores365ExperimentEnabled,
     isScores365ExperimentFixture,
+    resolveApiFixtureIdFor365GameId,
     resolveScores365AppLanguage,
     resolveScores365LangId,
     SCORES365_LEAGUE_ID_OFFSET,
 } from './scores365-experiment.service';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
+import { canQueryApiFootballFixtureId } from '../utils/api-football-identity.util';
 import { readLiveFixtureById } from './live-fixture-cache.service';
 
 /** 365 player career rows are refreshed once a week (stats change slowly). */
@@ -91,7 +93,7 @@ import {
 } from './threeSixFiveScores.service';
 import { redisCacheService } from './redis-cache.service';
 import { buildMomentumPayload, type MomentumApiPayload } from './match-momentum.service';
-import { footballMomentumRedisKey, footballFixtureDetailCacheKeys, footballDetailsLangRedisKey } from '../utils/football-cache-keys.util';
+import { footballMomentumRedisKey, footballFixtureDetailCacheKeys, footballDetailsLangRedisKey, footballDetailsRedisKey } from '../utils/football-cache-keys.util';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import {
@@ -1927,7 +1929,7 @@ class FootballDataCacheService {
 
         await ensureScores365GameMapping(fixtureId);
 
-        if (isScores365ExperimentFixture(fixtureId)) {
+        if (isScores365ExperimentFixture(fixtureId) || isNative365FixtureId(fixtureId)) {
             const from365 = await this.get365LineupsMerged(
                 fixtureId,
                 language,
@@ -1951,13 +1953,8 @@ class FootballDataCacheService {
                 }
                 return from365;
             }
-            // 365 empty — try API-Football for mapped API ids
-            if (
-                fixtureId < SCORES365_LEAGUE_ID_OFFSET &&
-                fixtureId < 4_000_000 &&
-                !isFootballQuotaExhausted() &&
-                footballService.isConfigured()
-            ) {
+            // 365 empty — try API-Football for mapped API ids only (never a 365 gameId).
+            if (this.canQueryApiFootball(fixtureId)) {
                 try {
                     const apiLineups = await footballService.getFixtureLineupsResolved(fixtureId);
                     if (hasLineupData(apiLineups)) {
@@ -1990,6 +1987,11 @@ class FootballDataCacheService {
         if (pendingRequest) {
             logger.debug(`⏳ Waiting for pending lineup request ${fixtureId} (${this.pendingLineupRequests.size} concurrent requests)`);
             return await pendingRequest;
+        }
+
+        if (!this.canQueryApiFootball(fixtureId)) {
+            logger.warn(`[Lineups] fixture=${fixtureId} skip API-Football (365-native or unconfigured)`);
+            return [];
         }
 
         logger.debug(`📡 Fetching lineups for fixture ${fixtureId} (request will be shared with concurrent users)`);
@@ -2074,7 +2076,7 @@ class FootballDataCacheService {
         }
 
         await ensureScores365GameMapping(fixtureId);
-        if (isScores365ExperimentFixture(fixtureId)) {
+        if (isScores365ExperimentFixture(fixtureId) || isNative365FixtureId(fixtureId)) {
             // Primary: team-level 365 `/web/game/stats` (corners, attacks, cards…).
             try {
                 const teamStats = await getScores365ExperimentStatistics(fixtureId);
@@ -2183,6 +2185,11 @@ class FootballDataCacheService {
             return Array.isArray(fullData?.statistics) ? fullData.statistics : [];
         }
 
+        if (!this.canQueryApiFootball(fixtureId)) {
+            logger.warn(`[Stats] fixture=${fixtureId} skip API-Football (365-native or unconfigured)`);
+            return Array.isArray(fullData?.statistics) ? fullData.statistics : [];
+        }
+
         // Fetch from API (+ events-derived fallback for lower-tier leagues)
         logger.debug(`📡 Fetching statistics for fixture ${fixtureId}`);
         let statistics: any[] = [];
@@ -2282,13 +2289,7 @@ class FootballDataCacheService {
                 events = await getScores365ExperimentEvents(fixtureId, true, 'en');
             }
             // API-Football fallback when 365 timeline is empty for a mapped API id.
-            if (
-                !events.length &&
-                fixtureId < SCORES365_LEAGUE_ID_OFFSET &&
-                fixtureId < 4_000_000 &&
-                !isFootballQuotaExhausted() &&
-                footballService.isConfigured()
-            ) {
+            if (!events.length && this.canQueryApiFootball(fixtureId)) {
                 try {
                     const apiEvents = await footballService.getFixtureEvents(fixtureId, {
                         source: 'job',
@@ -2376,6 +2377,11 @@ class FootballDataCacheService {
                 logger.debug(`⏳ Waiting for pending events request ${fixtureId} (${this.pendingEventsRequests.size} concurrent requests)`);
                 return await pendingRequest;
             }
+        }
+
+        if (!this.canQueryApiFootball(fixtureId)) {
+            logger.warn(`[Events] fixture=${fixtureId} skip API-Football (365-native or unconfigured)`);
+            return Array.isArray(fullData?.events) ? fullData.events : [];
         }
 
         // ✅ 4. Create new API request and share it with all concurrent requests
@@ -2557,6 +2563,125 @@ class FootballDataCacheService {
         };
     }
 
+    private canQueryApiFootball(fixtureId: number): boolean {
+        return (
+            canQueryApiFootballFixtureId(fixtureId) &&
+            footballService.isConfigured() &&
+            !isFootballQuotaExhausted()
+        );
+    }
+
+    /** 365 is the primary provider; native gameIds always go there even if the experiment flag is off. */
+    private prefersScores365(fixtureId: number): boolean {
+        return isNative365FixtureId(fixtureId) || isScores365ExperimentEnabled();
+    }
+
+    private async tryScores365DetailsBundle(
+        fixtureId: number,
+        language: string | null | undefined,
+        forceRefresh: boolean,
+    ): Promise<{
+        fixture: any;
+        lineups: any[];
+        statistics: any[];
+        events: any[];
+        venue: any | null;
+        lineupsAvailable?: boolean;
+        lineupsStatus?: string | null;
+    } | null> {
+        if (!this.prefersScores365(fixtureId)) return null;
+        await ensureScores365GameMapping(fixtureId);
+        const experiment = await getScores365ExperimentBundle(
+            fixtureId,
+            resolveScores365AppLanguage(language ?? null),
+            { force: forceRefresh, skipTeamStats: true },
+        );
+        if (!experiment?.fixture) return null;
+
+        let statistics = experiment.statistics ?? [];
+        const events = experiment.events ?? [];
+        if (!hasApiStatistics(statistics) && events.length > 0) {
+            statistics = buildFallbackStatisticsFromEvents(experiment.fixture, events);
+        }
+        const lineups = hasLineupData(experiment.lineups)
+            ? experiment.lineups
+            : await this.get365LineupsMerged(
+                fixtureId,
+                resolveScores365AppLanguage(language ?? null),
+                experiment.lineups,
+                false,
+            );
+        const mergedLineups = hasLineupData(lineups) ? lineups : experiment.lineups;
+        const payload = {
+            fixture: experiment.fixture,
+            lineups: mergedLineups,
+            statistics: statistics ?? [],
+            events,
+            venue: experiment.venue,
+            lineupsAvailable: hasLineupData(mergedLineups) || experiment.lineupsAvailable,
+            lineupsStatus: experiment.lineupsStatus,
+        };
+        const statusShort = experiment.fixture?.fixture?.status?.short ?? '';
+        if (['FT', 'AET', 'PEN'].includes(statusShort)) {
+            void this.updateFixtureFullData(fixtureId, {
+                lineups: payload.lineups,
+                events: payload.events,
+                statistics: payload.statistics,
+                _scores365GameId: (experiment.fixture as any)._scores365GameId,
+                ...((experiment.fixture as any)._lmt
+                    ? { _lmt: (experiment.fixture as any)._lmt }
+                    : {}),
+            });
+        }
+        return payload;
+    }
+
+    private async tryApiFootballDetailsBundle(apiFixtureId: number): Promise<{
+        fixture: any;
+        lineups: any[];
+        statistics: any[];
+        events: any[];
+        venue: any | null;
+        lineupsAvailable?: boolean;
+        lineupsStatus?: string | null;
+    } | null> {
+        if (!this.canQueryApiFootball(apiFixtureId)) return null;
+        try {
+            const [fixture, lineups, statistics, events] = await Promise.all([
+                footballService.getFixtureById(apiFixtureId),
+                footballService.getFixtureLineupsResolved(apiFixtureId),
+                footballService.getFixtureStatistics(apiFixtureId),
+                footballService.getFixtureEvents(apiFixtureId, { source: 'job' }),
+            ]);
+            if (!fixture) return null;
+
+            let venue: any | null = fixture?.fixture?.venue ?? null;
+            const venueId = venue?.id;
+            if (venueId && (!venue?.name || !venue?.city)) {
+                try {
+                    venue = (await footballService.getVenueInfo(venueId)) ?? venue;
+                } catch {
+                    // non-fatal
+                }
+            }
+            return {
+                fixture,
+                lineups: lineups ?? [],
+                statistics: statistics ?? [],
+                events: events ?? [],
+                venue,
+                lineupsAvailable: hasLineupData(lineups),
+                lineupsStatus: null,
+            };
+        } catch (err) {
+            logger.warn(
+                `[Details] API-Football fallback failed fixture=${apiFixtureId}:`,
+                (err as Error)?.message,
+            );
+            return null;
+        }
+    }
+
     private rememberDetailsBundle(cacheKey: string, payload: any): void {
         if (!payload?.fixture) return;
         const status = payload.fixture?.fixture?.status?.short ?? '';
@@ -2571,6 +2696,14 @@ class FootballDataCacheService {
         };
         this.setBoundedCache(this.detailsBundleLocal, cacheKey, entry);
         void redisCacheService.set(cacheKey, entry, this.DETAILS_KEEP_MS);
+        const id = Number(payload.fixture?.fixture?.id);
+        if (Number.isFinite(id) && id > 0) {
+            const unprefixed = footballDetailsRedisKey(id);
+            if (unprefixed !== cacheKey) {
+                this.setBoundedCache(this.detailsBundleLocal, unprefixed, entry);
+                void redisCacheService.set(unprefixed, entry, this.DETAILS_KEEP_MS);
+            }
+        }
     }
 
     private async readCachedDetailsBundle(
@@ -2635,6 +2768,13 @@ class FootballDataCacheService {
                     this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
                 }
                 return cached.data;
+            }
+            const unprefixed = await this.readCachedDetailsBundle(
+                footballDetailsRedisKey(fixtureId),
+            );
+            if (unprefixed?.data?.fixture) {
+                this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
+                return unprefixed.data;
             }
         }
 
@@ -2752,160 +2892,62 @@ class FootballDataCacheService {
             };
         }
 
-        await ensureScores365GameMapping(fixtureId);
+        const langKey = this.detailsBundleCacheKey(fixtureId, options?.language);
         const forceRefresh =
             options?.forceRefresh === true ||
             (isScores365ExperimentFixture(fixtureId) && is365StoreDetailsHotfix());
-        if (isScores365ExperimentFixture(fixtureId)) {
-            let experiment = await getScores365ExperimentBundle(
-                fixtureId,
-                resolveScores365AppLanguage(options?.language ?? null),
-                { force: forceRefresh, skipTeamStats: true },
+
+        const from365 = await this.tryScores365DetailsBundle(
+            fixtureId,
+            options?.language,
+            forceRefresh,
+        );
+        if (from365?.fixture) {
+            logger.debug(`[Details] fixture=${fixtureId} source=365`);
+            this.rememberDetailsBundle(langKey, from365);
+            return from365;
+        }
+
+        let apiId: number | null = this.canQueryApiFootball(fixtureId) ? fixtureId : null;
+        if (!apiId && isNative365FixtureId(fixtureId)) {
+            const mapped = await resolveApiFixtureIdFor365GameId(fixtureId);
+            if (mapped && mapped !== fixtureId && this.canQueryApiFootball(mapped)) {
+                apiId = mapped;
+            }
+        }
+
+        if (apiId) {
+            logger.warn(
+                `[Details] fixture=${fixtureId} 365 miss — API-Football fallback apiId=${apiId}`,
             );
-            if (experiment?.fixture) {
-                let statistics = experiment.statistics ?? [];
-                const events = experiment.events ?? [];
-                if (!hasApiStatistics(statistics) && events.length > 0) {
-                    statistics = buildFallbackStatisticsFromEvents(experiment.fixture, events);
+            const fromApi = await this.tryApiFootballDetailsBundle(apiId);
+            if (fromApi?.fixture) {
+                if (apiId !== fixtureId && fromApi.fixture?.fixture) {
+                    fromApi.fixture.fixture.id = fixtureId;
+                    (fromApi.fixture as any)._scores365GameId = fixtureId;
                 }
-                const lineups = hasLineupData(experiment.lineups)
-                    ? experiment.lineups
-                    : await this.get365LineupsMerged(
-                        fixtureId,
-                        resolveScores365AppLanguage(options?.language ?? null),
-                        experiment.lineups,
-                        false,
-                    );
-                const mergedLineups = hasLineupData(lineups) ? lineups : experiment.lineups;
-                const payload = {
-                    fixture: experiment.fixture,
-                    lineups: mergedLineups,
-                    statistics: statistics ?? [],
-                    events,
-                    venue: experiment.venue,
-                    lineupsAvailable: hasLineupData(mergedLineups) || experiment.lineupsAvailable,
-                    lineupsStatus: experiment.lineupsStatus,
-                };
-                const statusShort = experiment.fixture?.fixture?.status?.short ?? '';
-                if (['FT', 'AET', 'PEN'].includes(statusShort)) {
-                    void this.updateFixtureFullData(fixtureId, {
-                        lineups: payload.lineups,
-                        events: payload.events,
-                        statistics: payload.statistics,
-                        _scores365GameId: (experiment.fixture as any)._scores365GameId,
-                        ...((experiment.fixture as any)._lmt
-                            ? { _lmt: (experiment.fixture as any)._lmt }
-                            : {}),
-                    });
-                }
-                this.rememberDetailsBundle(
-                    this.detailsBundleCacheKey(fixtureId, options?.language),
-                    payload,
-                );
-                return payload;
+                this.rememberDetailsBundle(langKey, fromApi);
+                return fromApi;
             }
         }
 
-        // Synthetic 365 gameIds (stored AS the fixtureId) are far above the
-        // API-Football id range. If we reach here for such an id, the 365
-        // mapping/experiment could not resolve it — never query API-Football
-        // with a 365 gameId (returns 404 or collides with an unrelated match).
-        if (fixtureId >= SCORES365_LEAGUE_ID_OFFSET || fixtureId >= 4_000_000) {
-            if (durableRow) {
-                const fixture = matchCacheService.convertDbMatchToApiFormat(durableRow);
-                const fullData = durableRow.fullData as any;
-                return {
-                    fixture,
-                    lineups: Array.isArray(fullData?.lineups) ? fullData.lineups : [],
-                    statistics: Array.isArray(fullData?.statistics) ? fullData.statistics : [],
-                    events: Array.isArray(fullData?.events) ? fullData.events : [],
-                    venue: fixture.fixture?.venue ?? null,
-                    lineupsAvailable: hasLineupData(fullData?.lineups),
-                    lineupsStatus: fullData?.lineupsStatus ?? null,
-                };
-            }
-            return { fixture: null, lineups: [], statistics: [], events: [], venue: null };
+        if (durableRow) {
+            const fixture = matchCacheService.convertDbMatchToApiFormat(durableRow);
+            const fullData = durableRow.fullData as any;
+            const payload = {
+                fixture,
+                lineups: Array.isArray(fullData?.lineups) ? fullData.lineups : [],
+                statistics: Array.isArray(fullData?.statistics) ? fullData.statistics : [],
+                events: Array.isArray(fullData?.events) ? fullData.events : [],
+                venue: fixture.fixture?.venue ?? null,
+                lineupsAvailable: hasLineupData(fullData?.lineups),
+                lineupsStatus: fullData?.lineupsStatus ?? null,
+            };
+            if (payload.fixture) this.rememberDetailsBundle(langKey, payload);
+            return payload;
         }
 
-        const bundleKey = `details:${fixtureId}`;
-        const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(bundleKey);
-        if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl && !forceRefresh) {
-            return redisCached.data;
-        }
-
-        const [fixture, lineups, statistics, events] = await Promise.all([
-            footballService.getFixtureById(fixtureId),
-            this.getMatchLineups(fixtureId),
-            this.getMatchStatistics(fixtureId),
-            this.getMatchEvents(fixtureId),
-        ]);
-
-        let venue: any | null = fixture?.fixture?.venue ?? null;
-        const venueId = venue?.id;
-        if (venueId && (!venue?.name || !venue?.city)) {
-            try {
-                venue = (await footballService.getVenueInfo(venueId)) ?? venue;
-            } catch {
-                // non-fatal
-            }
-        }
-
-        let payload = {
-            fixture: fixture ?? null,
-            lineups: lineups ?? [],
-            statistics: statistics ?? [],
-            events: events ?? [],
-            venue,
-        };
-
-        // Sparse API payload — remapping may have landed after day allscores; prefer 365.
-        if (
-            (!hasLineupData(payload.lineups) || !hasApiStatistics(payload.statistics)) &&
-            !isScores365ExperimentFixture(fixtureId)
-        ) {
-            await ensureScores365GameMapping(fixtureId);
-            if (isScores365ExperimentFixture(fixtureId)) {
-                const experiment = await getScores365ExperimentBundle(
-                    fixtureId,
-                    resolveScores365AppLanguage(options?.language ?? null),
-                    { force: true },
-                );
-                if (experiment?.fixture) {
-                    const mergedLineups = hasLineupData(experiment.lineups)
-                        ? experiment.lineups
-                        : payload.lineups;
-                    const mergedStats = hasApiStatistics(experiment.statistics)
-                        ? experiment.statistics
-                        : payload.statistics;
-                    const mergedEvents =
-                        experiment.events?.length > 0 ? experiment.events : payload.events;
-                    payload = {
-                        fixture: experiment.fixture,
-                        lineups: mergedLineups,
-                        statistics: mergedStats ?? [],
-                        events: mergedEvents,
-                        venue: experiment.venue ?? payload.venue,
-                    };
-                }
-            }
-        }
-
-        const status = fixture?.fixture?.status?.short ?? payload.fixture?.fixture?.status?.short ?? '';
-        const kickoffMs =
-            typeof fixture?.fixture?.timestamp === 'number'
-                ? fixture.fixture.timestamp * 1000
-                : typeof payload.fixture?.fixture?.timestamp === 'number'
-                  ? payload.fixture.fixture.timestamp * 1000
-                  : null;
-        const ttl = this.detailTtlMs(status, kickoffMs);
-        const cacheEntry: MemoryCacheEntry<any> = {
-            data: payload,
-            timestamp: Date.now(),
-            ttl,
-        };
-        await redisCacheService.set(bundleKey, cacheEntry, this.DETAILS_KEEP_MS);
-
-        return payload;
+        return { fixture: null, lineups: [], statistics: [], events: [], venue: null };
     }
 
     /**
@@ -4210,7 +4252,9 @@ class FootballDataCacheService {
         forceRefresh = false,
     ): Promise<any[]> {
         await ensureScores365GameMapping(fixtureId);
-        if (!isScores365ExperimentFixture(fixtureId)) return [];
+        if (!isScores365ExperimentFixture(fixtureId) && !isNative365FixtureId(fixtureId)) {
+            return [];
+        }
 
         let structured = baseLineups;
         if (!hasLineupData(structured) || forceRefresh) {

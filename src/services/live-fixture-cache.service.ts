@@ -517,7 +517,7 @@ export async function resolveFixtureForClient(
     return { fixture: terminal, source: 'redis-terminal' };
   }
 
-  if (isScores365ExperimentFixture(fixtureId)) {
+  if (isScores365ExperimentFixture(fixtureId) || isNative365FixtureId(fixtureId)) {
     const experimentFixture = await getScores365ExperimentFixture(
       fixtureId,
       resolveScores365AppLanguage(language),
@@ -573,7 +573,10 @@ export async function forceRefreshFixtureNearKickoff(
   language?: string | null,
 ): Promise<{ fixture: FixtureFromAPI; source: LiveFixtureReadSource } | null> {
   try {
-    if (isScores365ExperimentEnabled() && isScores365ExperimentFixture(fixtureId)) {
+    if (
+      (isScores365ExperimentEnabled() && isScores365ExperimentFixture(fixtureId)) ||
+      isNative365FixtureId(fixtureId)
+    ) {
       const experimentFixture = await getScores365ExperimentFixture(
         fixtureId,
         resolveScores365AppLanguage(language),

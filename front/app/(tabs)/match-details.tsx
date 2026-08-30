@@ -64,6 +64,7 @@ import {
 import { useLiveFixture } from '../../hooks/useLiveFixture';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
 import { buildSnapshotFromRaw } from '../../src/store/liveFixtureSync';
+import { findLocalPreviewFixture } from '../../utils/findLocalPreviewFixture';
 import {
   hasApiStatistics,
 } from '../../utils/matchStatsFallback';
@@ -497,9 +498,17 @@ const MatchDetailsScreen = () => {
     }
 
     try {
-      const existing = useLiveFixtureStore.getState().snapshots[fixtureId];
+      let existing = useLiveFixtureStore.getState().snapshots[fixtureId];
+      if (!existing?.fixture) {
+        const preview = await findLocalPreviewFixture(fixtureId);
+        if (preview) {
+          useLiveFixtureStore.getState().ingestPreviewIfEmpty(fixtureId, preview);
+          existing = useLiveFixtureStore.getState().snapshots[fixtureId];
+        }
+      }
       setDetailsFetching(true);
       if (!existing?.fixture) setLoading(true);
+      else setLoading(false);
       setError(null);
 
       await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
@@ -604,6 +613,14 @@ const MatchDetailsScreen = () => {
       ? useLiveFixtureStore.getState().snapshots[fixtureId]
       : null;
     setLoading(!existing?.fixture);
+
+    if (!existing?.fixture && fixtureId) {
+      void findLocalPreviewFixture(fixtureId).then((preview) => {
+        if (!preview) return;
+        useLiveFixtureStore.getState().ingestPreviewIfEmpty(fixtureId, preview);
+        setLoading(false);
+      });
+    }
 
     void loadMatchDetails();
 

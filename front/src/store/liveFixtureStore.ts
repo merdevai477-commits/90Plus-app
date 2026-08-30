@@ -11,6 +11,7 @@ import {
 import { hasApiStatistics } from '../../utils/matchStatsFallback';
 import { hasLineupData, pickBetterLineups } from '../../utils/matchLineupsFallback';
 import type { LiveFixtureSnapshot } from './liveFixtureStore.types';
+import type { Fixture } from '../../services/apiFootball';
 import {
   LIVE_FIXTURE_FINISHED_RETENTION_MS,
   LIVE_FIXTURE_MAX_SNAPSHOTS,
@@ -27,6 +28,8 @@ interface LiveFixtureStoreState {
   unregisterInterest: (fixtureId: number) => void;
   setFocusedFixture: (fixtureId: number | null) => void;
   ingestSnapshot: (snapshot: LiveFixtureSnapshot) => void;
+  /** Paint teams/score instantly from the calendar row before the 365 bundle. */
+  ingestPreviewIfEmpty: (fixtureId: number, fixture: Fixture) => void;
   patchFromWebSocket: (update: MatchUpdatePayload, messageTimestamp: number) => void;
   /** One-shot HTTP warm-up for WS/push paths — never increments interestCounts. */
   ensureSnapshot: (fixtureId: number) => Promise<void>;
@@ -231,6 +234,18 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
       ),
       evictionSchedule: cancelEviction(state.evictionSchedule, snapshot.fixtureId),
     }));
+  },
+
+  ingestPreviewIfEmpty(fixtureId: number, fixture: Fixture) {
+    if (!fixtureId || fixtureId <= 0) return;
+    if (get().snapshots[fixtureId]?.fixture) return;
+    const snap = buildSnapshotFromRaw({
+      fixtureId,
+      fixture,
+      events: [],
+      source: 'bootstrap',
+    });
+    if (snap) get().ingestSnapshot(snap);
   },
 
   patchFromWebSocket(update: MatchUpdatePayload, messageTimestamp: number) {

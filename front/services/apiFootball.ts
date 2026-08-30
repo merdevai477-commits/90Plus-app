@@ -1880,59 +1880,20 @@ export const ApiFootballService = {
           bundle = await fetchBundle(resolved);
         }
       }
-      if (bundle.fixture) return bundle;
-
-      // Avoid hammering /fixtures/:id for unmapped 365 gameIds (404 + wrong collisions).
-      const likely365GameId = fixtureId >= 4_000_000;
-      if (likely365GameId) {
+      if (bundle.fixture) {
+        footballCacheService.cacheMatch(bundle.fixture as any).catch(() => undefined);
         return bundle;
       }
 
-      const [fixture, lineups, statistics, events] = await Promise.all([
-        this.getFixtureById(fixtureId, options),
-        this.getFixtureLineups(fixtureId, options),
-        this.getFixtureStatistics(fixtureId, options),
-        this.getFixtureEvents(fixtureId),
-      ]);
-      let venue: Venue | null = (fixture?.fixture?.venue as Venue) ?? null;
-      if (venue?.id) {
-        venue = (await this.getVenueInfo(venue.id)) ?? venue;
-      }
-      return {
-        fixture,
-        lineups: lineups ?? [],
-        statistics: statistics ?? [],
-        events: events ?? [],
-        venue,
-      };
+      return bundle;
     } catch (error) {
-      logger.warn('Fixture details bundle failed, falling back to parallel fetch:', error);
-      const likely365GameId = fixtureId >= 4_000_000;
-      if (likely365GameId) {
-        return {
-          fixture: null,
-          lineups: [],
-          statistics: [],
-          events: [],
-          venue: null,
-        };
-      }
-      const [fixture, lineups, statistics, events] = await Promise.all([
-        this.getFixtureById(fixtureId, options),
-        this.getFixtureLineups(fixtureId, options),
-        this.getFixtureStatistics(fixtureId, options),
-        this.getFixtureEvents(fixtureId),
-      ]);
-      let venue: Venue | null = (fixture?.fixture?.venue as Venue) ?? null;
-      if (venue?.id) {
-        venue = (await this.getVenueInfo(venue.id)) ?? venue;
-      }
+      logger.warn('Fixture details bundle failed:', error);
       return {
-        fixture,
-        lineups: lineups ?? [],
-        statistics: statistics ?? [],
-        events: events ?? [],
-        venue,
+        fixture: null,
+        lineups: [],
+        statistics: [],
+        events: [],
+        venue: null,
       };
     }
   },

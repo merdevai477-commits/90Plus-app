@@ -7,6 +7,14 @@ import {
 import type { Fixture } from '../../../services/apiFootball';
 import type { LiveFixtureSnapshot } from '../liveFixtureStore.types';
 
+jest.mock('../../../services/apiFootball', () => ({
+  ApiFootballService: {
+    getFixtureDetailsBundle: jest.fn(),
+    getFixtureById: jest.fn(),
+    getFixtureEvents: jest.fn(),
+  },
+}));
+
 function makeFixture(elapsed: number, status: string, home: number, away: number, extra?: number | null): Fixture {
   return {
     fixture: {
@@ -137,9 +145,21 @@ describe('shouldSkipHttpIngest', () => {
     expect(shouldSkipHttpIngest(current, incoming, 100)).toBe(true);
   });
 
+  it('allows HTTP to replace a calendar bootstrap preview', () => {
+    const current = buildSnapshotFromRaw({
+      fixtureId: 1,
+      fixture: makeFixture(0, 'NS', 0, 0),
+      events: [],
+      source: 'bootstrap',
+    })!;
+    const incoming = baseSnapshot(makeFixture(12, '1H', 1, 0));
+    expect(shouldSkipHttpIngest(current, incoming, 100)).toBe(false);
+  });
+
   it('allows HTTP when no fresher WS state exists', () => {
     const current = baseSnapshot(makeFixture(50, '2H', 1, 0));
     current.lastWsAppliedAt = null;
+    current.lastHttpFetchAt = 50;
     const incoming = baseSnapshot(makeFixture(55, '2H', 2, 0));
     expect(shouldSkipHttpIngest(current, incoming, 100)).toBe(false);
   });
