@@ -1372,7 +1372,7 @@ export const ar = {
       storeDescription: 'وصف المتجر / الجهة',
       storeAddress: 'عنوان المتجر / الجهة',
       pickAddressOnMaps: 'اختر العنوان من خرائط Google',
-      pickAddressOnMapsHint: 'ابحث عن موقعك على الخريطة ثم انسخ العنوان في الحقل أعلاه',
+      pickAddressOnMapsHint: 'اكتب لرؤية اقتراحات العنوان، أو افتح خرائط Google وانسخ العنوان هنا',
       mapsOpenFailed: 'تعذر فتح خرائط Google',
       deliveryLabel: 'التوصيل',
       deliveryAvailable: 'متاح',

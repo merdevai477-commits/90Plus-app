@@ -62,6 +62,7 @@ import {
   startOfToday,
   validHoursForMeridiem,
 } from '../../components/predictAndWin/deadline';
+import { PWPlacesAddressField } from '../../components/predictAndWin/PWPlacesAddressField';
 import { openGoogleMapsSearch } from '../../components/predictAndWin/maps';
 import { usePWLocalize } from '../../components/predictAndWin/localize';
 import {
@@ -907,7 +908,7 @@ export default function CreateCompetitionScreen() {
                 <View style={{ gap: s(16), alignItems: dir.alignStart }}>
                   <PWFieldLabel label={wizard.storeAddress} />
                   <View style={{ width: '100%', gap: s(10) }}>
-                    <PWTextField
+                    <PWPlacesAddressField
                       value={storeAddress}
                       onChangeText={setStoreAddress}
                       placeholder={wizard.storeAddress}

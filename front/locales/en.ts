@@ -1301,7 +1301,7 @@ export const en = {
       storeAddress: 'Store / brand address',
       pickAddressOnMaps: 'Pick address on Google Maps',
       pickAddressOnMapsHint:
-        'Search for your store on Maps, then paste the address in the field above',
+        'Type to see address suggestions, or open Google Maps and paste the address here',
       mapsOpenFailed: 'Could not open Google Maps',
       deliveryLabel: 'Delivery',
       deliveryAvailable: 'Available',
