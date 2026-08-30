@@ -1247,7 +1247,7 @@ const MatchDetailsScreen = () => {
           style={styles.playerPhoto}
           contentFit="cover"
           cachePolicy="memory-disk"
-          placeholder={require('../../assets/images/football.png')}
+          placeholder={require('../../assets/images/football.webp')}
         />
         <View style={{ justifyContent: 'center', alignItems: 'center' }}>
           <Text style={styles.playerName} numberOfLines={2}>{player.name}</Text>

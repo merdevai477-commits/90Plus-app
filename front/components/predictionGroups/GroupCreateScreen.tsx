@@ -34,7 +34,7 @@ import { PG, PG_GRADIENTS, usePGFonts } from './theme';
 
 const DESC_MAX = 120;
 const API_URL = getApiUrl();
-const PLACEHOLDER = require('../../assets/images/plear 90Plus.png');
+const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 const ICON_CAMERA = require('../../assets/images/prediction-groups/icon-camera.svg');
 const ICON_EDIT = require('../../assets/images/prediction-groups/icon-edit.svg');
 const ICON_SEARCH = require('../../assets/images/prediction-groups/icon-search.svg');

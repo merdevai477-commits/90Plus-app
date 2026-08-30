@@ -78,7 +78,7 @@ export interface LeaderboardEntry {
 
 
 
-const LOCAL_PLACEHOLDER: ImageSourcePropType = require('../../assets/images/plear 90Plus.png');
+const LOCAL_PLACEHOLDER: ImageSourcePropType = require('../../assets/images/plear 90Plus.jpg');
 
 
 

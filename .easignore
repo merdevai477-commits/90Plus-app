@@ -50,13 +50,15 @@
 /app.json
 /eas.json
 
-# ── Always ignore deps & native (EAS installs / prebuilds) ──────────────────
-**/node_modules/
-**/.expo/
+# Web export / native / deps — never upload (EAS prebuilds & npm installs)
+/android
+/android/**
+/ios
+/ios/**
+**/dist/
+**/dist/**
 **/android/
 **/ios/
-**/dist/
-**/build/
 
 # ── Front local junk ────────────────────────────────────────────────────────
 front/.expo-tmp-export/

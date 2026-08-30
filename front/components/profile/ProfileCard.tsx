@@ -32,9 +32,9 @@ import Svg, {
 } from 'react-native-svg';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const CARD_BACK = require('../../assets/images/profile-card-back.png') as number;
+const CARD_BACK = require('../../assets/images/profile-card-back.jpg') as number;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const ARENA_BG = require('../../assets/images/arena_profile.png') as number;
+const ARENA_BG = require('../../assets/images/arena_profile.jpg') as number;
 
 // ── Animation helpers ────────────────────────────────────────────────────────
 const useSafeLoop = (from: number, to: number, duration: number, easing = Easing.bezier(0.4, 0, 0.2, 1)) => {
@@ -107,7 +107,7 @@ const FONT_EXTRABOLD = 'Inter_800ExtraBold';
 
 const EMOJI_FLAG_REGEX = /[\u{1F1E6}-\u{1F1FF}]/u;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const FALLBACK_FLAG: ImageSourcePropType = require('../../assets/images/football.png');
+const FALLBACK_FLAG: ImageSourcePropType = require('../../assets/images/football.webp');
 
 // ── Component ────────────────────────────────────────────────────────────────
 const ProfileCard = memo(function ProfileCard({

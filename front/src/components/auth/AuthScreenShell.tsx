@@ -21,7 +21,7 @@ import { AuthHeroBlock } from './AuthHeroBlock';
 import { BG_BASE } from '../../../constants/tokens';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const heroImg = require('../../../assets/images/auth-hero.png') as number;
+const heroImg = require('../../../assets/images/auth-hero.jpg') as number;
 
 type Props = {
   heroMode?: 'full' | 'compact' | 'none';

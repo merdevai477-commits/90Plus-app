@@ -11,7 +11,7 @@ import type { GroupMember } from './data';
 import { useTranslation } from '../../src/i18n';
 import { usePGFonts } from './theme';
 
-const PLACEHOLDER = require('../../assets/images/plear 90Plus.png');
+const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 const MEDAL_GOLD = require('../../assets/images/prediction-groups/medal-gold.svg');
 const MEDAL_SILVER = require('../../assets/images/prediction-groups/medal-silver.svg');
 const MEDAL_BRONZE = require('../../assets/images/prediction-groups/medal-bronze.svg');

@@ -59,7 +59,7 @@ import { globalState } from '../../globalState';
 import { useQueryClient } from '@tanstack/react-query';
 
 const ACCENT = '#A855F7';
-const PROFILE_PLACEHOLDER: ImageSourcePropType = require('../../assets/images/plear 90Plus.png');
+const PROFILE_PLACEHOLDER: ImageSourcePropType = require('../../assets/images/plear 90Plus.jpg');
 
 interface PodiumSlot {
   rank: number;
@@ -279,21 +279,21 @@ export default function RankScreen() {
         title: t.rank.competitionNames.kingOfPredictions.title,
         sub: t.rank.competitionNames.kingOfPredictions.sub,
         actionText: t.rank.competitionNames.kingOfPredictions.action,
-        img: require('../../assets/images/football.png') as ImageSourcePropType,
+        img: require('../../assets/images/football.webp') as ImageSourcePropType,
       },
       {
         id: '4',
         title: t.rank.competitionNames.engagementHero.title,
         sub: t.rank.competitionNames.engagementHero.sub,
         actionText: t.rank.competitionNames.engagementHero.action,
-        img: require('../../assets/images/growth.png') as ImageSourcePropType,
+        img: require('../../assets/images/growth.webp') as ImageSourcePropType,
       },
       {
         id: '3',
         title: t.rank.competitionNames.dailyQuiz.title,
         sub: t.rank.competitionNames.dailyQuiz.sub,
         actionText: t.rank.competitionNames.dailyQuiz.action,
-        img: require('../../assets/images/daily-quiz.png') as ImageSourcePropType,
+        img: require('../../assets/images/daily-quiz.webp') as ImageSourcePropType,
       },
       {
         id: '2',
@@ -301,7 +301,7 @@ export default function RankScreen() {
         sub: t.rank.competitionNames.shareAndEarn.sub,
         actionText: t.rank.competitionNames.shareAndEarn.action,
         rewardHint: shareRewardHint(),
-        img: require('../../assets/images/share.png') as ImageSourcePropType,
+        img: require('../../assets/images/share.webp') as ImageSourcePropType,
       },
     ],
     [t, shareRewardHint],
@@ -371,7 +371,7 @@ export default function RankScreen() {
         {/* ── Hero block ── */}
         <View style={s.heroBlock}>
           <Image
-            source={require('../../assets/images/90Plus world cup.png')}
+            source={require('../../assets/images/90Plus world cup.jpg')}
             style={s.heroBgTrophy}
             contentFit="contain"
             cachePolicy="memory-disk"
@@ -428,7 +428,7 @@ export default function RankScreen() {
         <View style={s.bottomContentGroup}>
           <View style={s.arenaBgContainerExtended} pointerEvents="none">
             <Image
-              source={require('../../assets/images/arena.png')}
+              source={require('../../assets/images/arena.jpg')}
               style={s.arenaImgExtended}
               contentFit="cover"
               cachePolicy="memory-disk"

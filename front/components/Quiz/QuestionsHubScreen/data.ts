@@ -52,11 +52,11 @@ export const MAX_CONTENT_WIDTH = 720;
 export const MODE_LOCAL_IMAGE: Partial<Record<QuestionModeId, number>> = {
   'guess-player': require('../../../assets/images/guess-player.jpg'),
   'football-grid': require('../../../assets/images/football-grid.jpg'),
-  'player-connections': require('../../../assets/images/player-connection.png'),
-  'guess-club': require('../../../assets/images/guess-club.png'),
+  'player-connections': require('../../../assets/images/player-connection.webp'),
+  'guess-club': require('../../../assets/images/guess-club.webp'),
   'transfer-puzzle': require('../../../assets/images/transfer-puzzle.jpg'),
-  'top10-challenge': require('../../../assets/images/top-challenge.png'),
-  'football-quiz': require('../../../assets/images/football-quiz.png'),
+  'top10-challenge': require('../../../assets/images/top-challenge.webp'),
+  'football-quiz': require('../../../assets/images/football-quiz.webp'),
 };
 
 export type ChallengeLayout = 'horizontal' | 'vertical';

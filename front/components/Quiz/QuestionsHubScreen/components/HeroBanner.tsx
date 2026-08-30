@@ -41,7 +41,7 @@ import type { QuestionsHubCopy } from '../data';
  * The file is 2988 × 1280 with the neon "?" on the right third and near-black
  * on the left, which is why the copy sits on the leading edge.
  */
-const HERO_IMAGE = require('../../../../assets/images/questions-frame.png');
+const HERO_IMAGE = require('../../../../assets/images/questions-frame.webp');
 
 /** Scrim painted over the artwork so the copy always reads. Leading → trailing. */
 const HERO_SCRIM_COLORS = ['rgba(3,3,3,0.92)', 'rgba(3,3,3,0.55)', 'rgba(3,3,3,0)'] as const;

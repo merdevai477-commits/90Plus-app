@@ -57,7 +57,7 @@ const HEIGHT = 460;
 // Detects regional indicator codepoints used by flag emoji.
 const EMOJI_FLAG_REGEX = /[\u{1F1E6}-\u{1F1FF}]/u;
 
-const FALLBACK_FLAG: ImageSourcePropType = require('../../assets/images/football.png');
+const FALLBACK_FLAG: ImageSourcePropType = require('../../assets/images/football.webp');
 
 const FifaCard = memo(function FifaCard({
     playerImage,

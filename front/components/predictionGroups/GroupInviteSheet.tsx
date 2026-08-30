@@ -35,7 +35,7 @@ import { PG, PG_RADII, PG_SPACING, PG_TYPE, usePGFonts } from './theme';
 
 const API_URL = getApiUrl();
 
-const PLACEHOLDER = require('../../assets/images/plear 90Plus.png');
+const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
 const SheetGlass = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 const SHEET_GLASS_PROPS = isLiquidGlassSupported

@@ -3,7 +3,7 @@ import type { ImageSourcePropType } from 'react-native';
 import type { SponsorPhoneSocialLinks } from './sponsorPhone';
 
 /** Bundled placeholder when the advertiser removes their custom store photo. */
-export const DEFAULT_STORE_LOGO = require('../../assets/images/store.png');
+export const DEFAULT_STORE_LOGO = require('../../assets/images/store.jpg');
 
 export function hasCustomSponsorLogo(logoUrl?: string | null): boolean {
   const uploaded = logoUrl?.trim();

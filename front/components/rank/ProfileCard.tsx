@@ -34,7 +34,7 @@ import { useMyProfileBasics } from '../../hooks/useMyProfileBasics';
 import { useUserRank } from '../../hooks/useUserRank';
 
 const ACCENT = '#A855F7';
-const PROFILE_PLACEHOLDER = require('../../assets/images/plear 90Plus.png');
+const PROFILE_PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
 export interface ProfileCardProps {
   /** Optional override for the user's display name. */

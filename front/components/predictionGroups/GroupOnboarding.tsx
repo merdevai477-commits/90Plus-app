@@ -26,7 +26,7 @@ import { parseGroupCodeFromUrl } from '../../services/predictionGroups.service';
 import { GroupBanBanner } from './GroupBanBanner';
 import { PG, PG_GRADIENTS, usePGFonts } from './theme';
 
-const GROUP_HERO = require('../../assets/images/prediction-groups/hero-stadium.png');
+const GROUP_HERO = require('../../assets/images/prediction-groups/hero-stadium.webp');
 const ICON_PLUS = require('../../assets/images/prediction-groups/icon-plus.svg');
 const ICON_SEARCH = require('../../assets/images/prediction-groups/icon-search.svg');
 const ICON_DOOR = require('../../assets/images/prediction-groups/icon-door-enter.svg');

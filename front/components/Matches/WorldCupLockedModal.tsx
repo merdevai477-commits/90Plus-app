@@ -70,7 +70,7 @@ export function WorldCupLockedModal({ visible, onClose }: WorldCupLockedModalPro
         <View style={s.cardOuter} pointerEvents="box-none">
           <View style={s.heroClip}>
             <Image
-              source={require('../../assets/images/plear 90Plus.png')}
+              source={require('../../assets/images/plear 90Plus.jpg')}
               style={s.heroImg}
               contentFit="cover"
               cachePolicy="memory-disk"
