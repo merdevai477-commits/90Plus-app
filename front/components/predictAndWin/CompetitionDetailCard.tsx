@@ -27,6 +27,7 @@ import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
 import { prizeArtSource } from './PrizeCategoryGrid';
 import { hasSponsorLogo, sponsorLogoSource } from './pwAssets';
+import { sponsorContactLine } from './sponsorPhone';
 import {
   IconFacebook,
   IconGiftFilled,
@@ -249,6 +250,7 @@ export function CompetitionDetailCard({
 
   const leftArt = sponsorLogoSource(sponsor.logoUrl);
   const showSponsorLogo = hasSponsorLogo(sponsor.logoUrl);
+  const contactLine = sponsorContactLine(sponsor);
   const links = sponsor.socialLinks;
   const showSocial = hasSponsorSocialLinks(links);
 
@@ -360,7 +362,7 @@ export function CompetitionDetailCard({
         >
           {sponsor.name}
         </Text>
-        {sponsor.description ? (
+        {contactLine ? (
           <Text
             style={{
               fontFamily: regular,
@@ -370,7 +372,7 @@ export function CompetitionDetailCard({
             }}
             numberOfLines={1}
           >
-            {sponsor.description}
+            {contactLine}
           </Text>
         ) : null}
         {sponsor.address ? (

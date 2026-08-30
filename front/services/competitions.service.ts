@@ -43,7 +43,13 @@ export interface SponsorInfo {
   logoUrl: string | null;
   address: string | null;
   hasDelivery: boolean;
-  socialLinks: { facebook?: string; instagram?: string; whatsapp?: string } | null;
+  socialLinks: {
+    facebook?: string;
+    instagram?: string;
+    whatsapp?: string;
+    phoneCountryId?: string;
+    phoneNational?: string;
+  } | null;
   isVerified: boolean;
   isActive: boolean;
 }
@@ -161,7 +167,13 @@ export interface CreateCompetitionPayload {
     logoUrl?: string | null;
     address?: string | null;
     hasDelivery?: boolean;
-    socialLinks?: { facebook?: string; instagram?: string; whatsapp?: string } | null;
+    socialLinks?: {
+      facebook?: string;
+      instagram?: string;
+      whatsapp?: string;
+      phoneCountryId?: string;
+      phoneNational?: string;
+    } | null;
   };
   categoryId: string;
   prizeName: string;
@@ -346,6 +358,13 @@ export const CompetitionsService = {
       items: page.items,
     };
   },
+
+  /** Save sponsor store profile linked to the signed-in Clerk user. */
+  saveSponsorProfile: (token: string, sponsor: CreateCompetitionPayload['sponsor']) =>
+    authFetch(token, '/mine/sponsor', {
+      method: 'PUT',
+      body: JSON.stringify({ sponsor }),
+    }),
 
   list: (
     token: string | null,

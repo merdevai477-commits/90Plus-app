@@ -1298,8 +1298,10 @@ export const en = {
       storeImage: 'Store / brand image',
       storeChangePhoto: 'Change photo',
       storeDeletePhoto: 'Delete photo',
+      storePhone: 'Store mobile number',
+      storePhonePlaceholder: '10 1234 5678',
+      storePhoneHint: 'Digits without a leading 0 — Egypt +20 is the default',
       storeName: 'Store / brand name',
-      storeDescription: 'Store / brand description',
       storeAddress: 'Store / brand address',
       storeAddressPlaceholder: 'Start typing your store name or street',
       storeAddressSteps:

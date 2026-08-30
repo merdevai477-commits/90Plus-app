@@ -19,6 +19,7 @@ import {
   listCompetitions,
   listMyCompetitions,
   listPrizeCategories,
+  saveOwnedSponsorProfile,
   submitPrediction,
   updateOwnCompetition,
   type CompetitionFilter,
@@ -127,6 +128,23 @@ router.get('/mine', requireAuth, async (req, res) => {
       return;
     }
     res.json({ success: true, data: await listMyCompetitions(user.id) });
+  } catch (err) {
+    mapError(req, res, err);
+  }
+});
+
+/** Persist the signed-in user's sponsor store profile (no competition row). */
+router.put('/mine/sponsor', requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) {
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found', { code: 'AUTH_REQUIRED' });
+      return;
+    }
+    const body = req.body ?? {};
+    const sponsorInput = body.sponsor ?? body;
+    const sponsor = await saveOwnedSponsorProfile(user.id, sponsorInput);
+    res.json({ success: true, data: sponsor });
   } catch (err) {
     mapError(req, res, err);
   }

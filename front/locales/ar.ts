@@ -1370,8 +1370,10 @@ export const ar = {
       storeImage: 'صورة المتجر / الجهة',
       storeChangePhoto: 'تغيير الصورة',
       storeDeletePhoto: 'حذف الصورة',
+      storePhone: 'رقم موبايل المحل',
+      storePhonePlaceholder: '10 1234 5678',
+      storePhoneHint: 'اكتب الرقم بدون صفر في البداية — مصر افتراضيًا +20',
       storeName: 'اسم المتجر / الجهة',
-      storeDescription: 'وصف المتجر / الجهة',
       storeAddress: 'عنوان المتجر / الجهة',
       storeAddressPlaceholder: 'اكتب اسم المحل أو الشارع',
       storeAddressSteps:

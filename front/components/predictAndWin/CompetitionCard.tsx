@@ -22,6 +22,7 @@ import { CompetitionDetailCard } from './CompetitionDetailCard';
 import { usePWLocalize } from './localize';
 import { prizeArtSource } from './PrizeCategoryGrid';
 import { hasSponsorLogo, sponsorLogoSource } from './pwAssets';
+import { sponsorContactLine } from './sponsorPhone';
 import { IconLocation, IconPickupPin, IconVespaGreen } from './icons';
 import {
   PW,
@@ -271,6 +272,7 @@ export function CompetitionCard({
   const blockLeft = flip ? width - c(258) - c(112) : c(258);
   const logoLeft = flip ? width - c(268) - c(91) : c(268);
   const badgeSide = flip ? { right: c(14) } : { left: c(14) };
+  const contactLine = sponsorContactLine(sponsor);
 
   return (
     <Pressable
@@ -356,7 +358,7 @@ export function CompetitionCard({
             >
               {sponsor.name}
             </Text>
-            {sponsor.description ? (
+            {contactLine ? (
               <Text
                 style={{
                   fontFamily: regular,
@@ -366,7 +368,7 @@ export function CompetitionCard({
                 }}
                 numberOfLines={1}
               >
-                {sponsor.description}
+                {contactLine}
               </Text>
             ) : null}
           </View>

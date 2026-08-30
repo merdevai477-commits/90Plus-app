@@ -64,6 +64,14 @@ import {
   validHoursForMeridiem,
 } from '../../components/predictAndWin/deadline';
 import { PWStoreAddressBlock } from '../../components/predictAndWin/PWStoreAddressBlock';
+import { PWStorePhoneField } from '../../components/predictAndWin/PWStorePhoneField';
+import {
+  DEFAULT_SPONSOR_PHONE_COUNTRY_ID,
+  normalizeNationalDigits,
+  parseStoredPhone,
+  sponsorPhoneLine,
+  type SponsorPhoneSocialLinks,
+} from '../../components/predictAndWin/sponsorPhone';
 import { usePWLocalize } from '../../components/predictAndWin/localize';
 import {
   IconCamera,
@@ -149,7 +157,8 @@ export default function CreateCompetitionScreen() {
   // Step 3
   const [storeImageUrl, setStoreImageUrl] = useState<string | null>(null);
   const [storeName, setStoreName] = useState('');
-  const [storeDescription, setStoreDescription] = useState('');
+  const [storePhoneCountryId, setStorePhoneCountryId] = useState(DEFAULT_SPONSOR_PHONE_COUNTRY_ID);
+  const [storePhoneNational, setStorePhoneNational] = useState('');
   const [storeAddress, setStoreAddress] = useState('');
   const [hasDelivery, setHasDelivery] = useState<boolean | null>(null);
   const [facebook, setFacebook] = useState('');
@@ -202,11 +211,13 @@ export default function CreateCompetitionScreen() {
         const sp = mine.sponsor as SponsorInfo | null;
         if (!sp || cancelled) return;
         if (sp.name) setStoreName(sp.name);
-        if (sp.description) setStoreDescription(sp.description);
         if (sp.address) setStoreAddress(sp.address);
         if (sp.logoUrl) setStoreImageUrl(sp.logoUrl);
         setHasDelivery(sp.hasDelivery);
         const links = sp.socialLinks;
+        const phone = parseStoredPhone(links);
+        setStorePhoneCountryId(phone.countryId);
+        setStorePhoneNational(phone.national);
         if (links?.facebook) setFacebook(links.facebook);
         if (links?.instagram) setInstagram(links.instagram);
         if (links?.whatsapp) setWhatsapp(links.whatsapp);
@@ -247,8 +258,52 @@ export default function CreateCompetitionScreen() {
     return true;
   };
 
+  const buildSponsorPayload = useCallback(() => {
+    const national = normalizeNationalDigits(storePhoneNational, storePhoneCountryId);
+    const socialLinks: SponsorPhoneSocialLinks = {
+      facebook: facebook || undefined,
+      instagram: instagram || undefined,
+      whatsapp: whatsapp || undefined,
+    };
+    if (national) {
+      socialLinks.phoneCountryId = storePhoneCountryId;
+      socialLinks.phoneNational = national;
+    }
+    const phoneLine = national ? sponsorPhoneLine(socialLinks) : null;
+    return {
+      name: storeName.trim(),
+      description: phoneLine,
+      logoUrl: storeImageUrl,
+      address: storeAddress.trim(),
+      hasDelivery: !!hasDelivery,
+      socialLinks,
+    };
+  }, [
+    storeName,
+    storePhoneCountryId,
+    storePhoneNational,
+    storeImageUrl,
+    storeAddress,
+    hasDelivery,
+    facebook,
+    instagram,
+    whatsapp,
+  ]);
+
   const goNext = () => {
     if (!canAdvance()) return;
+    if (phase === 3) {
+      void (async () => {
+        try {
+          const token = await getToken();
+          if (token) await CompetitionsService.saveSponsorProfile(token, buildSponsorPayload());
+        } catch {
+          // Best-effort — publish still upserts the same profile.
+        }
+        setPhase(4);
+      })();
+      return;
+    }
     setPhase((p) => (p === 'category' ? 1 : ((p as number) + 1) as Phase));
   };
 
@@ -388,18 +443,7 @@ export default function CreateCompetitionScreen() {
       const token = await getToken();
       if (!token) throw new Error('NOT_AUTHENTICATED');
       await CompetitionsService.create(token, {
-        sponsor: {
-          name: storeName,
-          description: storeDescription || null,
-          logoUrl: storeImageUrl,
-          address: storeAddress.trim(),
-          hasDelivery: !!hasDelivery,
-          socialLinks: {
-            facebook: facebook || undefined,
-            instagram: instagram || undefined,
-            whatsapp: whatsapp || undefined,
-          },
-        },
+        sponsor: buildSponsorPayload(),
         categoryId: category.id,
         prizeName: resolvedPrizeName,
         prizeImageUrl: isCashCategory ? null : prizeImageUrl,
@@ -427,18 +471,22 @@ export default function CreateCompetitionScreen() {
     }
   };
 
+  const previewSocialLinks = buildSponsorPayload().socialLinks;
+  const previewPhoneLine = sponsorPhoneLine(previewSocialLinks);
+
   /** Preview object so step 4 can render the real cards. */
   const preview = {
     id: 'preview',
     sponsor: {
       id: 'preview',
       name: storeName,
-      description: storeDescription || null,
+      description: previewPhoneLine,
       logoUrl: storeImageUrl,
       address: storeAddress || null,
       hasDelivery: !!hasDelivery,
-      socialLinks: null,
+      socialLinks: previewSocialLinks,
       isVerified: false,
+      isActive: true,
     },
     category: category!,
     prizeName: resolvedPrizeName,
@@ -971,13 +1019,15 @@ export default function CreateCompetitionScreen() {
                 </View>
 
                 <View style={{ gap: s(16), alignItems: dir.alignStart }}>
-                  <PWFieldLabel label={wizard.storeDescription} optional={wizard.optional} />
+                  <PWFieldLabel label={wizard.storePhone} optional={wizard.optional} />
                   <View style={{ width: '100%' }}>
-                    <PWTextField
-                      value={storeDescription}
-                      onChangeText={setStoreDescription}
-                      placeholder={wizard.storeDescription}
-                      icon={<IconStoreField width={s(35)} height={s(35)} />}
+                    <PWStorePhoneField
+                      countryId={storePhoneCountryId}
+                      nationalDigits={storePhoneNational}
+                      onCountryChange={setStorePhoneCountryId}
+                      onNationalChange={setStorePhoneNational}
+                      placeholder={wizard.storePhonePlaceholder}
+                      hint={wizard.storePhoneHint}
                     />
                   </View>
                 </View>

@@ -411,7 +411,8 @@ async function upsertOwnedSponsor(userId: string, input: SponsorInput) {
       where: { id: existing.id },
       data: {
         name: input.name,
-        description: input.description ?? existing.description,
+        description:
+          input.description !== undefined ? input.description : existing.description,
         logoUrl: trimmedLogo,
         address: input.address ?? existing.address,
         hasDelivery: input.hasDelivery ?? existing.hasDelivery,
@@ -554,6 +555,13 @@ export async function assertCompetitionOwner(userId: string, competitionId: stri
     throw new Error('FORBIDDEN');
   }
   return competition;
+}
+
+/** Persist sponsor store profile without creating a competition. */
+export async function saveOwnedSponsorProfile(userId: string, input: SponsorInput) {
+  if (!input.name?.trim()) throw new Error('INVALID_SPONSOR');
+  if (!input.address?.trim()) throw new Error('INVALID_SPONSOR_ADDRESS');
+  return upsertOwnedSponsor(userId, input);
 }
 
 /** A sponsor may revise its own competition only while it is still a draft. */
