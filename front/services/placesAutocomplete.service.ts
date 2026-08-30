@@ -1,4 +1,4 @@
-import { getGooglePlacesApiKey } from '../config/googlePlaces';
+import { getGooglePlacesApiKey } from '../components/predictAndWin/googlePlaces';
 
 export interface PlaceSuggestion {
   placeId: string;

@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useDebouncedCallback } from 'use-debounce';
 
-import { hasGooglePlacesApiKey } from '../../config/googlePlaces';
+import { hasGooglePlacesApiKey } from './googlePlaces';
 import {
   fetchPlaceFormattedAddress,
   fetchPlaceSuggestions,

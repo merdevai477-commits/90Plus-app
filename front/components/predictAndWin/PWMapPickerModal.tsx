@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { getGoogleMapsJsApiKey, hasGoogleMapsJsApiKey } from '../../config/googlePlaces';
+import { getGoogleMapsJsApiKey, hasGoogleMapsJsApiKey } from './googlePlaces';
 import { buildMapPickerHtml } from './mapPickerHtml';
 import { PW, usePWDirection, usePWFonts, usePWScale } from './theme';
 

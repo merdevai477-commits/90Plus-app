@@ -5,7 +5,7 @@ export {
   getGoogleMapsJsApiKey,
   hasGooglePlacesApiKey,
   hasGoogleMapsJsApiKey,
-} from '../../config/googlePlaces';
+} from './googlePlaces';
 
 /** Try each URL until one opens — `canOpenURL` is unreliable for https/geo on Android. */
 async function openFirst(urls: string[]): Promise<boolean> {
