@@ -1379,8 +1379,9 @@ export const ar = {
       mapPickerHint: 'اضغط على الخريطة أو حرّك العلامة، ثم أكّد العنوان',
       mapPickerConfirm: 'استخدم هذا العنوان',
       mapPickerMyLocation: 'موقعي',
-      mapPickerNoKey: 'مفتاح خرائط Google غير مضبوط',
-      mapPickerLoadError: 'تعذر تحميل الخريطة — تأكد من تفعيل Maps JavaScript API',
+      mapPickerNoKey: 'أضف مفتاح ويب EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY في front/.env',
+      mapPickerLoadError:
+        'الخريطة تحتاج مفتاح Websites + Maps JavaScript API + Geocoding (مفتاح Android لا يعمل هنا)',
       mapPickerGeoDenied: 'فعّل إذن الموقع للتطبيق من إعدادات الجوال',
       pickAddressOnMaps: 'افتح خرائط Google',
       pasteAddress: 'الصق العنوان',

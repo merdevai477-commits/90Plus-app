@@ -25,6 +25,20 @@ export function getGooglePlacesApiKey(): string {
   return read('EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID') || read('EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS');
 }
 
+/**
+ * Maps JavaScript API key for the in-app WebView picker.
+ * Android/iOS-restricted keys do NOT work here — use a separate web key.
+ */
+export function getGoogleMapsJsApiKey(): string {
+  const web = read('EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY');
+  if (web) return web;
+  return getGooglePlacesApiKey();
+}
+
 export function hasGooglePlacesApiKey(): boolean {
   return getGooglePlacesApiKey().length > 0;
+}
+
+export function hasGoogleMapsJsApiKey(): boolean {
+  return getGoogleMapsJsApiKey().length > 0;
 }

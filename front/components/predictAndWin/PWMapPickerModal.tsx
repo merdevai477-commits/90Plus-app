@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { getGooglePlacesApiKey, hasGooglePlacesApiKey } from '../../config/googlePlaces';
+import { getGoogleMapsJsApiKey, hasGoogleMapsJsApiKey } from '../../config/googlePlaces';
 import { buildMapPickerHtml } from './mapPickerHtml';
 import { PW, usePWDirection, usePWFonts, usePWScale } from './theme';
 
@@ -44,7 +44,7 @@ export function PWMapPickerModal({
   const { s, f } = usePWScale();
   const { semibold, regular, medium } = usePWFonts();
   const dir = usePWDirection();
-  const apiKey = getGooglePlacesApiKey();
+  const apiKey = getGoogleMapsJsApiKey();
   const [preview, setPreview] = useState('');
   const [mapReady, setMapReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +114,7 @@ export function PWMapPickerModal({
           </Pressable>
         </View>
 
-        {!hasGooglePlacesApiKey() ? (
+        {!hasGoogleMapsJsApiKey() ? (
           <Text style={{ color: '#fda4af', textAlign: 'center', padding: s(24), fontFamily: regular }}>
             {labels.noKey}
           </Text>

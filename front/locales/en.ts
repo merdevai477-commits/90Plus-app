@@ -1307,8 +1307,9 @@ export const en = {
       mapPickerHint: 'Tap the map or drag the pin, then confirm the address',
       mapPickerConfirm: 'Use this address',
       mapPickerMyLocation: 'My location',
-      mapPickerNoKey: 'Google Maps API key is not configured',
-      mapPickerLoadError: 'Could not load the map — enable Maps JavaScript API',
+      mapPickerNoKey: 'Add EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY in front/.env',
+      mapPickerLoadError:
+        'Map needs a Websites key + Maps JavaScript API + Geocoding (Android key does not work here)',
       mapPickerGeoDenied: 'Enable location permission for 90Plus in device settings',
       pickAddressOnMaps: 'Open Google Maps',
       pasteAddress: 'Paste address',

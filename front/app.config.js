@@ -27,6 +27,8 @@ module.exports = ({ config }) => {
     process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID?.trim() || '';
   const googlePlacesIosKey =
     process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS?.trim() || '';
+  const googleMapsWebKey =
+    process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY?.trim() || '';
 
   return {
     ...config,
@@ -117,6 +119,7 @@ module.exports = ({ config }) => {
       shareBaseUrl,
       googlePlacesApiKeyAndroid: googlePlacesAndroidKey,
       googlePlacesApiKeyIos: googlePlacesIosKey,
+      googleMapsWebApiKey: googleMapsWebKey,
     },
   };
 };
