@@ -922,6 +922,11 @@ export default function CreateCompetitionScreen() {
                         noKey: wizard.mapPickerNoKey,
                         loadError: wizard.mapPickerLoadError,
                         geoDenied: wizard.mapPickerGeoDenied,
+                        locationPermissionTitle: wizard.mapPickerLocationTitle,
+                        locationPermissionBody: wizard.mapPickerLocationBody,
+                        locationPermissionAllow: wizard.mapPickerLocationAllow,
+                        locationPermissionLater: wizard.mapPickerLocationLater,
+                        openSettings: wizard.mapPickerOpenSettings,
                       },
                     }}
                     onPasteEmpty={onPasteAddressEmpty}

@@ -11,17 +11,7 @@ export function buildMapPickerHtml(apiKey: string, labels: { myLocation: string 
       html, body { margin: 0; height: 100%; background: #080512; }
       #map { width: 100%; height: 100%; }
       #myLoc {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        z-index: 2;
-        padding: 10px 14px;
-        border: none;
-        border-radius: 12px;
-        background: #3d0ab3;
-        color: #fff;
-        font: 600 14px system-ui, sans-serif;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+        display: none;
       }
       #hint {
         position: absolute;
@@ -97,25 +87,15 @@ export function buildMapPickerHtml(apiKey: string, labels: { myLocation: string 
         });
 
         document.getElementById('myLoc').addEventListener('click', function () {
-          if (!navigator.geolocation) {
-            post({ type: 'error', code: 'NO_GEO' });
-            return;
-          }
-          navigator.geolocation.getCurrentPosition(
-            function (pos) {
-              const latLng = {
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-              };
-              setPosition(new google.maps.LatLng(latLng.lat, latLng.lng), true);
-              map.setZoom(16);
-            },
-            function () {
-              post({ type: 'error', code: 'GEO_DENIED' });
-            },
-            { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
-          );
+          post({ type: 'locateMe' });
         });
+
+        window.setMapPosition = function (lat, lng) {
+          if (!map || !marker) return;
+          const latLng = new google.maps.LatLng(lat, lng);
+          setPosition(latLng, true);
+          map.setZoom(16);
+        };
 
         post({ type: 'ready' });
       }

@@ -1382,7 +1382,13 @@ export const ar = {
       mapPickerNoKey: 'أضف مفتاح ويب EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY في front/.env',
       mapPickerLoadError:
         'الخريطة تحتاج مفتاح Websites + Maps JavaScript API + Geocoding (مفتاح Android لا يعمل هنا)',
-      mapPickerGeoDenied: 'فعّل إذن الموقع للتطبيق من إعدادات الجوال',
+      mapPickerGeoDenied: 'فعّل إذن الموقع من إعدادات الجوال ثم أعد المحاولة',
+      mapPickerLocationTitle: 'السماح بالوصول للموقع',
+      mapPickerLocationBody:
+        'نحتاج موقعك لتحديد عنوان المحل على الخريطة. لن نستخدمه إلا لاختيار عنوان المتجر.',
+      mapPickerLocationAllow: 'السماح',
+      mapPickerLocationLater: 'ليس الآن',
+      mapPickerOpenSettings: 'فتح الإعدادات',
       pickAddressOnMaps: 'افتح خرائط Google',
       pasteAddress: 'الصق العنوان',
       pasteAddressEmpty: 'لا يوجد عنوان منسوخ — انسخه من الخرائط أولاً',

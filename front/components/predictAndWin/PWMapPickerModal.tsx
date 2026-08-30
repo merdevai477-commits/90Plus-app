@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   StyleSheet,
@@ -9,12 +10,19 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+import {
+  getCurrentStoreCoordinates,
+  getStoreLocationPermission,
+  openAppSettings,
+  requestStoreLocationPermission,
+} from '../../utils/storeLocationPermission';
 import { getGoogleMapsJsApiKey, hasGoogleMapsJsApiKey } from './googlePlaces';
 import { buildMapPickerHtml } from './mapPickerHtml';
 import { PW, usePWDirection, usePWFonts, usePWScale } from './theme';
 
 type MapPickerMessage =
   | { type: 'ready' }
+  | { type: 'locateMe' }
   | { type: 'address'; address: string; lat: number; lng: number }
   | { type: 'error'; code: string };
 
@@ -28,7 +36,6 @@ export function PWMapPickerModal({
   visible: boolean;
   onClose: () => void;
   onConfirm: (address: string) => void;
-  /** Live updates the parent field while the user moves the pin. */
   onAddressChange?: (address: string) => void;
   labels: {
     title: string;
@@ -39,15 +46,23 @@ export function PWMapPickerModal({
     noKey: string;
     loadError: string;
     geoDenied: string;
+    locationPermissionTitle: string;
+    locationPermissionBody: string;
+    locationPermissionAllow: string;
+    locationPermissionLater: string;
+    openSettings: string;
   };
 }) {
   const { s, f } = usePWScale();
   const { semibold, regular, medium } = usePWFonts();
   const dir = usePWDirection();
+  const webViewRef = useRef<WebView>(null);
+  const permissionPromptedRef = useRef(false);
   const apiKey = getGoogleMapsJsApiKey();
   const [preview, setPreview] = useState('');
   const [mapReady, setMapReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
 
   const html = useMemo(
     () => (apiKey ? buildMapPickerHtml(apiKey, { myLocation: labels.myLocation }) : ''),
@@ -58,6 +73,8 @@ export function PWMapPickerModal({
     setPreview('');
     setMapReady(false);
     setError(null);
+    setLocating(false);
+    permissionPromptedRef.current = false;
   };
 
   const handleClose = () => {
@@ -65,12 +82,68 @@ export function PWMapPickerModal({
     onClose();
   };
 
+  const centerMap = useCallback((lat: number, lng: number) => {
+    webViewRef.current?.injectJavaScript(
+      `window.setMapPosition(${lat}, ${lng}); true;`,
+    );
+  }, []);
+
+  const goToMyLocation = useCallback(async () => {
+    setLocating(true);
+    setError(null);
+    try {
+      const coords = await getCurrentStoreCoordinates();
+      if (!coords) {
+        setError(labels.geoDenied);
+        Alert.alert(labels.locationPermissionTitle, labels.geoDenied, [
+          { text: labels.openSettings, onPress: openAppSettings },
+          { text: labels.locationPermissionLater, style: 'cancel' },
+        ]);
+        return;
+      }
+      centerMap(coords.lat, coords.lng);
+    } catch {
+      setError(labels.geoDenied);
+    } finally {
+      setLocating(false);
+    }
+  }, [centerMap, labels]);
+
+  const promptLocationPermission = useCallback(() => {
+    Alert.alert(labels.locationPermissionTitle, labels.locationPermissionBody, [
+      { text: labels.locationPermissionLater, style: 'cancel' },
+      {
+        text: labels.locationPermissionAllow,
+        onPress: () => {
+          void requestStoreLocationPermission().then((status) => {
+            if (status === 'granted') void goToMyLocation();
+          });
+        },
+      },
+    ]);
+  }, [goToMyLocation, labels]);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (permissionPromptedRef.current) return;
+
+    void getStoreLocationPermission().then((status) => {
+      if (status === 'granted') return;
+      permissionPromptedRef.current = true;
+      promptLocationPermission();
+    });
+  }, [visible, promptLocationPermission]);
+
   const handleMessage = (raw: string) => {
     try {
       const msg = JSON.parse(raw) as MapPickerMessage;
       if (msg.type === 'ready') {
         setMapReady(true);
         setError(null);
+        return;
+      }
+      if (msg.type === 'locateMe') {
+        void goToMyLocation();
         return;
       }
       if (msg.type === 'address') {
@@ -121,12 +194,9 @@ export function PWMapPickerModal({
         ) : (
           <View style={{ flex: 1, marginHorizontal: s(12), borderRadius: s(20), overflow: 'hidden' }}>
             <WebView
+              ref={webViewRef}
               originWhitelist={['*']}
               source={{ html, baseUrl: 'https://90plus.pro' }}
-              geolocationEnabled
-              onGeolocationPermissionsShowPrompt={(event) => {
-                event.nativeEvent.callback(true);
-              }}
               onMessage={(event) => handleMessage(event.nativeEvent.data)}
               style={{ flex: 1, backgroundColor: '#080512' }}
             />
@@ -135,8 +205,42 @@ export function PWMapPickerModal({
                 <ActivityIndicator color="#A44AF9" size="large" />
               </View>
             ) : null}
+            {locating ? (
+              <View
+                style={{
+                  position: 'absolute',
+                  top: s(12),
+                  right: s(12),
+                  padding: s(8),
+                  borderRadius: s(20),
+                  backgroundColor: 'rgba(61,10,179,0.9)',
+                }}
+              >
+                <ActivityIndicator color="#fff" size="small" />
+              </View>
+            ) : null}
           </View>
         )}
+
+        {mapReady ? (
+          <Pressable
+            onPress={() => void goToMyLocation()}
+            style={{
+              alignSelf: dir.alignStart,
+              marginHorizontal: s(20),
+              marginBottom: s(8),
+              paddingVertical: s(10),
+              paddingHorizontal: s(14),
+              borderRadius: s(12),
+              backgroundColor: '#3d0ab3',
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={{ fontFamily: semibold, fontSize: f(14), color: '#fff' }}>
+              {labels.myLocation}
+            </Text>
+          </Pressable>
+        ) : null}
 
         <View style={{ padding: s(16), gap: s(10) }}>
           {error ? (

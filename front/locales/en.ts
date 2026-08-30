@@ -1310,7 +1310,13 @@ export const en = {
       mapPickerNoKey: 'Add EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY in front/.env',
       mapPickerLoadError:
         'Map needs a Websites key + Maps JavaScript API + Geocoding (Android key does not work here)',
-      mapPickerGeoDenied: 'Enable location permission for 90Plus in device settings',
+      mapPickerGeoDenied: 'Enable location in device settings and try again',
+      mapPickerLocationTitle: 'Allow location access',
+      mapPickerLocationBody:
+        'We need your location to place your store on the map. It is only used to pick the store address.',
+      mapPickerLocationAllow: 'Allow',
+      mapPickerLocationLater: 'Not now',
+      mapPickerOpenSettings: 'Open settings',
       pickAddressOnMaps: 'Open Google Maps',
       pasteAddress: 'Paste address',
       pasteAddressEmpty: 'Nothing to paste — copy the address from Maps first',

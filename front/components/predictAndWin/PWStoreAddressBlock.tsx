@@ -10,7 +10,6 @@ import { PW, usePWDirection, usePWFonts, usePWScale } from './theme';
 export function PWStoreAddressBlock({
   value,
   onChangeText,
-  storeName,
   labels,
   onPasteEmpty,
   onPasteDone,
@@ -18,7 +17,6 @@ export function PWStoreAddressBlock({
 }: {
   value: string;
   onChangeText: (t: string) => void;
-  storeName: string;
   labels: {
     fieldPlaceholder: string;
     steps: string;
@@ -31,9 +29,14 @@ export function PWStoreAddressBlock({
       hint: string;
       confirm: string;
       noKey: string;
-      loadError: string;
-      geoDenied: string;
-    };
+    loadError: string;
+    geoDenied: string;
+    locationPermissionTitle: string;
+    locationPermissionBody: string;
+    locationPermissionAllow: string;
+    locationPermissionLater: string;
+    openSettings: string;
+  };
   };
   onPasteEmpty: () => void;
   onPasteDone: () => void;
