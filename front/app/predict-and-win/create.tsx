@@ -282,6 +282,7 @@ export default function CreateCompetitionScreen() {
     [deadlineDate, kickoffAt, hour],
   );
 
+  const onPasteAddressEmpty = useCallback(() => {
     toast.showError(wizard.pasteAddress, wizard.pasteAddressEmpty);
   }, [toast, wizard.pasteAddress, wizard.pasteAddressEmpty]);
 
