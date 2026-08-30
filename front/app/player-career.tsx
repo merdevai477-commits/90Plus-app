@@ -26,7 +26,6 @@ import ApiFootballService, {
 import { ProfileTheme } from '../constants/ProfileTheme';
 import { scores365AthletePhotoCandidates, toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
 import ImageViewerModal from '../components/common/ImageViewerModal';
-import { fetch365PlayerCareerClient } from '../utils/scores365PlayerCareerClient';
 import {
     PlayerSeasonStatsCard,
     parsePlayerStatNumber,
@@ -93,11 +92,7 @@ export default function PlayerCareerScreen() {
             }
             try {
                 logger.debug(`Loading 365 career for athlete ${athleteId}`);
-                let data = await ApiFootballService.get365PlayerCareer(athleteId, language);
-                if (!data?.seasons?.length) {
-                    logger.warn('Backend career empty — using 365 direct fallback');
-                    data = await fetch365PlayerCareerClient(athleteId, language);
-                }
+                const data = await ApiFootballService.get365PlayerCareer(athleteId, language);
                 if (!active) return;
                 if (!data?.seasons?.length) {
                     setError(true);

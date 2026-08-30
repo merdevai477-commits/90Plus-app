@@ -2,10 +2,8 @@
  * Request Queue Service
  * Limits concurrent requests to prevent overloading the server
  * 
- * Issue #6: Excessive Parallel Requests
- * - Max 3 concurrent requests
- * - Queue remaining requests
- * - Automatic retry with exponential backoff
+ * Caps concurrent football proxy calls so the UI is not serialized
+ * behind a few long 365Scores round-trips. Timeouts are not retried.
  */
 
 import { logger } from './logger';
@@ -22,8 +20,8 @@ interface QueuedRequest<T> {
 class RequestQueueService {
   private queue: QueuedRequest<any>[] = [];
   private activeRequests = 0;
-  private readonly MAX_CONCURRENT = 3;
-  private readonly MAX_RETRIES = 2;
+  private readonly MAX_CONCURRENT = 8;
+  private readonly MAX_RETRIES = 1;
   private readonly RETRY_DELAYS = [1000, 2000, 4000]; // Exponential backoff
 
   /**
@@ -123,18 +121,12 @@ class RequestQueueService {
    * Determine if an error is retryable
    */
   private shouldRetry(error: any): boolean {
-    // Retry on network errors, timeouts, and 5xx errors
-    if (error.message?.includes('timeout')) return true;
-    if (error.message?.includes('network')) return true;
-    if (error.message?.includes('fetch')) return true;
+    const message = String(error?.message ?? '');
+    if (message.includes('timeout') || message.includes('timed out')) return false;
     if (error.statusCode && error.statusCode >= 500) return true;
-    
-    // Don't retry on 4xx errors (except 429 rate limit)
-    if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
-      return error.statusCode === 429;
-    }
-
-    return true; // Default to retry
+    if (error.statusCode === 429) return true;
+    if (message.includes('network') || message.includes('Failed to fetch')) return true;
+    return false;
   }
 
   /**

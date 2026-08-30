@@ -852,6 +852,20 @@ function gameCacheKey(gameId: number, langId: number): string {
   return `${gameId}:${langId}`;
 }
 
+function isEnded365Game(game: Scores365Game | null | undefined): boolean {
+  if (!game) return false;
+  if (game.statusGroup === 4) return true;
+  const text = `${game.statusText ?? ''} ${game.shortStatusText ?? ''}`.toLowerCase();
+  return /\b(ended|ft|aet|pen)\b/.test(text) || text.includes('انته');
+}
+
+function resolveGameMemoryTtlMs(game: Scores365Game | null | undefined): number {
+  const envLive = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '8000', 10) || 8_000);
+  if (isEnded365Game(game)) return 30 * 60 * 1000;
+  if (game?.statusGroup === 2) return 60_000;
+  return envLive;
+}
+
 export function interpretScores365GameFetch(
   httpStatus: number,
   game: unknown | null,
@@ -923,15 +937,21 @@ export async function fetchScores365GameById(
   if (!isScores365ExperimentEnabled() && !isNative365FixtureId(gameId)) return null;
 
   const langId = resolveScores365LangId(options?.language);
-  const ttlMs = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '3000', 10) || 3_000);
+  const force = options?.force === true;
   const key = gameCacheKey(gameId, langId);
   const cached = cachedGameByKey.get(key);
+  const lastGood = lastGoodGameByKey.get(lastGoodGameKey(gameId, langId)) ?? null;
+  const ttlMs = resolveGameMemoryTtlMs(cached?.game ?? lastGood);
 
-  if (cached && Date.now() - cached.fetchedAt >= ttlMs * 30) {
-    // Drop long-stale entries so the Map cannot retain forever across langs.
+  if (cached && Date.now() - cached.fetchedAt >= 6 * 60 * 60 * 1000) {
     cachedGameByKey.delete(key);
-  } else if (!options?.force && cached && Date.now() - cached.fetchedAt < ttlMs) {
-    return cached.game ?? lastGoodGameByKey.get(lastGoodGameKey(gameId, langId)) ?? null;
+  } else if (!force && cached && Date.now() - cached.fetchedAt < ttlMs) {
+    return cached.game ?? lastGood;
+  }
+
+  // Finished matches do not need another 365 round-trip; the last good payload is stable.
+  if (!force && lastGood && isEnded365Game(lastGood)) {
+    return lastGood;
   }
 
   if (isWorldCupHistoricalOnlyMode()) {
@@ -1724,12 +1744,14 @@ async function fetch365GamePair(
   appLang: 'ar' | 'en',
   force = false,
 ): Promise<{ structural: Scores365Game | null; localized: Scores365Game | null }> {
-  const structural = await fetchScores365GameById(gameId, { language: 'en', force });
-  if (!structural) return { structural: null, localized: null };
-  const localized =
-    appLang !== 'en'
-      ? await fetchScores365GameById(gameId, { language: appLang, force })
-      : null;
+  if (appLang === 'en') {
+    const structural = await fetchScores365GameById(gameId, { language: 'en', force });
+    return { structural, localized: null };
+  }
+  const [structural, localized] = await Promise.all([
+    fetchScores365GameById(gameId, { language: 'en', force }),
+    fetchScores365GameById(gameId, { language: appLang, force }),
+  ]);
   return { structural, localized };
 }
 
@@ -2657,7 +2679,7 @@ function overlay365LocalizedFixtureNames(
 export async function getScores365ExperimentBundle(
   fixtureId: number,
   language?: string | null,
-  options?: { force?: boolean },
+  options?: { force?: boolean; skipTeamStats?: boolean },
 ): Promise<{
   fixture: FixtureFromAPI | null;
   lineups: any[];
@@ -2707,7 +2729,7 @@ export async function getScores365ExperimentBundle(
     };
     const competitorIds = fixtureOriented365CompetitorIds(game, alignment);
     const langId = resolveScores365LangId(resolveScores365AppLanguage(language));
-    if (competitorIds) {
+    if (competitorIds && options?.skipTeamStats !== true) {
       const teamStatsPayload = await fetchScores365GameTeamStats(game.id, langId, force);
       const fromTeamEndpoint = buildTeamStatisticsFrom365GameStats(
         teamStatsPayload,

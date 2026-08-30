@@ -10,8 +10,8 @@
  * - Local caching as secondary layer for offline access
  * - All data flows through /cached/* endpoints for optimal performance
  * - Circuit breaker pattern to prevent hammering server when down
- * - Request queue to limit concurrent requests (max 3)
- * - Exponential backoff retry strategy
+ * - Request queue to limit concurrent football proxy calls
+ * - Short timeouts; the queue does not retry timeouts
  */
 
 import { getApiUrl } from '../utils/getApiUrl';
@@ -22,7 +22,7 @@ import { circuitBreakerService } from './circuitBreaker.service';
 import { requestQueueService } from './requestQueue.service';
 import { acceptLanguageHeader, getAppLanguageCode } from '../utils/appLanguage';
 
-const DEFAULT_TIMEOUT = 30000; // 30 seconds timeout
+const DEFAULT_TIMEOUT = 12_000;
 
 // Cache for failed rate limit requests to avoid repeated calls
 const rateLimitCache = new Map<string, { timestamp: number; retryAfter: number }>();
@@ -1090,9 +1090,10 @@ interface ProxyResponse<T> {
 /**
  * Fetch data from the backend Football API proxy
  * The backend handles API key management and rate limiting
- * Includes automatic retry on timeout with exponential backoff
+ * Includes a short timeout. Retries are disabled so a slow 365 path cannot
+ * serialize the rest of the app behind 30s × N.
  * Uses circuit breaker to prevent hammering server when down
- * Uses request queue to limit concurrent requests (max 3)
+ * Uses request queue to limit concurrent football proxy calls
  */
 const fetchFromProxy = async <T,>(
   endpoint: string,
@@ -1102,11 +1103,20 @@ const fetchFromProxy = async <T,>(
     body?: any;
     headers?: Record<string, string>;
     retries?: number;
+    timeout?: number;
     fresh?: boolean;
+    priority?: number;
   } = {},
 ): Promise<T> => {
   const baseUrl = getApiUrl();
-  const { method = 'GET', body, headers = {}, retries = 2 } = options;
+  const {
+    method = 'GET',
+    body,
+    headers = {},
+    retries = 0,
+    timeout = DEFAULT_TIMEOUT,
+    priority,
+  } = options;
 
   // Some endpoints are handled at the root /api level (like /matches), while others 
   // are under the /football proxy prefix.
@@ -1172,7 +1182,8 @@ const fetchFromProxy = async <T,>(
               ...headers,
             },
             body: body ? JSON.stringify(body) : undefined,
-          })
+          }),
+          timeout,
         );
 
         if (!response.ok) {
@@ -1290,7 +1301,10 @@ const fetchFromProxy = async <T,>(
   // Wrap with circuit breaker and request queue
   return requestQueueService.enqueue(
     () => circuitBreakerService.execute(circuitKey, fetchFn, fallbackFn),
-    { priority: endpoint.includes('/cached/') ? 10 : 0 } // Prioritize cached endpoints
+    {
+      priority: priority ?? (endpoint.includes('/cached/') ? 10 : 0),
+      maxRetries: 0,
+    },
   );
 };
 
@@ -2103,7 +2117,7 @@ export const ApiFootballService = {
         fetch(url.toString(), {
           headers: { Accept: 'application/json', 'Accept-Language': acceptLanguageHeader() },
         }),
-        90_000,
+        15_000,
       );
       if (!response.ok) {
         logger.warn(`365 career HTTP ${response.status} for athlete ${athleteId}`);
@@ -2742,7 +2756,11 @@ export const ApiFootballService = {
     const q = (query ?? '').trim();
     if (q.length < 2) return empty;
     try {
-      const res = await fetchFromProxy<FootballSearchResults>(`/cached/365/search/all`, { q });
+      const res = await fetchFromProxy<FootballSearchResults>(
+        `/cached/365/search/all`,
+        { q },
+        { timeout: 8_000, retries: 0, priority: 20 },
+      );
       if (!res || !Array.isArray((res as any).clubs)) return empty;
       return {
         clubs: res.clubs ?? [],

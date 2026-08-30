@@ -3005,33 +3005,16 @@ class ThreeSixFiveScoresService {
     rankedCacheKey: string,
     language?: string | null,
   ): Promise<ThreeSixFiveSearchResults | null> {
-    let results = await this.fetchSearchEntities(expansion.queries[0] ?? trimmed, primaryLangId);
-    if (
-      !results.upstreamFailed &&
-      this.searchNeedsExpansion(results, expansion.boostedEntityIds) &&
-      expansion.queries.length > 1
-    ) {
-      const extras = await Promise.all(
-        expansion.queries.slice(1).map((q) => this.fetchSearchEntities(q, primaryLangId)),
-      );
-      results = this.mergeSearchResults([results, ...extras]);
-    }
-
-    if (this.search365Empty(results) && fallbackLangId !== primaryLangId) {
-      let fallback = await this.fetchSearchEntities(expansion.queries[0] ?? trimmed, fallbackLangId);
-      if (
-        !fallback.upstreamFailed &&
-        this.searchNeedsExpansion(fallback, expansion.boostedEntityIds) &&
-        expansion.queries.length > 1
-      ) {
-        const extras = await Promise.all(
-          expansion.queries.slice(1).map((q) => this.fetchSearchEntities(q, fallbackLangId)),
-        );
-        fallback = this.mergeSearchResults([fallback, ...extras]);
-      }
-      if (!this.search365Empty(fallback) || !fallback.upstreamFailed) {
-        results = fallback;
-      }
+    const firstQuery = expansion.queries[0] ?? trimmed;
+    const [primaryRes, fallbackRes] = await Promise.all([
+      this.fetchSearchEntities(firstQuery, primaryLangId),
+      fallbackLangId !== primaryLangId
+        ? this.fetchSearchEntities(firstQuery, fallbackLangId)
+        : Promise.resolve(null),
+    ]);
+    let results = primaryRes;
+    if (this.search365Empty(results) && fallbackRes) {
+      results = fallbackRes;
     }
 
     const competitions = await this.searchCompetitionsLocal(trimmed, expansion.boostedEntityIds, language);
@@ -3203,7 +3186,13 @@ class ThreeSixFiveScoresService {
     }
 
     const path = `/web/search/?${this.commonParams(langId)}&query=${encodeURIComponent(query)}`;
-    const payload = await this.fetchJson<SearchAllPayload>(path, `searchall:${langId}:${query}`, 60_000);
+    const payload = await this.fetchJson<SearchAllPayload>(
+      path,
+      `searchall:${langId}:${query}`,
+      60_000,
+      false,
+      8_000,
+    );
     if (!payload) {
       return { ...emptySearchResults(), upstreamFailed: true };
     }
@@ -3492,7 +3481,8 @@ class ThreeSixFiveScoresService {
       const detailsPayload = await this.fetchJson<{ athletes?: any[]; competitors?: any[]; competitions?: any[] }>(
         `/web/athletes/?${this.commonParams(langId)}&athletes=${athleteId}&fullDetails=true`,
         `player-career-details:${athleteId}`,
-        86_400_000,
+        0,
+        true,
       );
 
       const athlete = detailsPayload?.athletes?.[0] ?? null;
@@ -3667,13 +3657,15 @@ class ThreeSixFiveScoresService {
   ): Promise<Career365Season[]> {
     const seasons: Career365Season[] = [];
     const BATCH = 4;
+    const HOT_SEASON_LIMIT = 8;
+    const defs = seasonDefs.slice(0, HOT_SEASON_LIMIT);
 
     const hasEmbeddedRows = (stats: any): boolean =>
       Array.isArray(stats?.tables) &&
       stats.tables.some((t: any) => Array.isArray(t?.rows) && t.rows.length > 0);
 
-    for (let i = 0; i < seasonDefs.length; i += BATCH) {
-      const batch = seasonDefs.slice(i, i + BATCH);
+    for (let i = 0; i < defs.length; i += BATCH) {
+      const batch = defs.slice(i, i + BATCH);
       const results = await Promise.all(
         batch.map(async (def) => {
           let payload: any = null;

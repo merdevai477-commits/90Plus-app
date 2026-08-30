@@ -497,8 +497,9 @@ const MatchDetailsScreen = () => {
     }
 
     try {
+      const existing = useLiveFixtureStore.getState().snapshots[fixtureId];
       setDetailsFetching(true);
-      setLoading(true);
+      if (!existing?.fixture) setLoading(true);
       setError(null);
 
       await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
@@ -582,7 +583,6 @@ const MatchDetailsScreen = () => {
     setStandingsError(null);
     setFormError(null);
     setDetailsFetching(false);
-    setLoading(true);
     setError(null);
     setLineupsLoading(false);
     setStatsLoading(false);
@@ -594,6 +594,11 @@ const MatchDetailsScreen = () => {
     lmtAutoOpenedRef.current = null;
     loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
+
+    const existing = fixtureId
+      ? useLiveFixtureStore.getState().snapshots[fixtureId]
+      : null;
+    setLoading(!existing?.fixture);
 
     void loadMatchDetails();
 
@@ -648,7 +653,7 @@ const MatchDetailsScreen = () => {
     }
     setLineupsError(null);
     try {
-      const fresh = await ApiFootballService.getFixtureLineups(fixtureId, { skipCache: true });
+      const fresh = await ApiFootballService.getFixtureLineups(fixtureId);
       if (isAuthoritativeLineupData(fresh)) {
         const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
         if (snap) {

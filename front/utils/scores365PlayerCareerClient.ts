@@ -264,9 +264,11 @@ export async function fetch365PlayerCareerClient(
 
   const seasons: Player365CareerSeason[] = [];
   const BATCH = 4;
+  const HOT_SEASON_LIMIT = 8;
+  const defs = seasonDefs.slice(0, HOT_SEASON_LIMIT);
 
-  for (let i = 0; i < seasonDefs.length; i += BATCH) {
-    const batch = seasonDefs.slice(i, i + BATCH);
+  for (let i = 0; i < defs.length; i += BATCH) {
+    const batch = defs.slice(i, i + BATCH);
     const parsed = await Promise.all(
       batch.map(async (def) => {
         let payload: any = null;

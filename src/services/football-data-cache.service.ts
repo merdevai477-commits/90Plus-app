@@ -2521,6 +2521,28 @@ class FootballDataCacheService {
             };
         }
 
+        const durableFull = durableRow?.fullData as any;
+        const durableLineups = Array.isArray(durableFull?.lineups) ? durableFull.lineups : [];
+        const durableEvents = Array.isArray(durableFull?.events) ? durableFull.events : [];
+        if (
+            !options?.forceRefresh &&
+            !is365StoreDetailsHotfix() &&
+            durableRow &&
+            ['FT', 'AET', 'PEN'].includes(durableRow.status ?? '') &&
+            (hasLineupData(durableLineups) || durableEvents.length > 0)
+        ) {
+            const fixture = matchCacheService.convertDbMatchToApiFormat(durableRow);
+            return {
+                fixture,
+                lineups: durableLineups,
+                statistics: Array.isArray(durableFull?.statistics) ? durableFull.statistics : [],
+                events: durableEvents,
+                venue: fixture.fixture?.venue ?? null,
+                lineupsAvailable: hasLineupData(durableLineups),
+                lineupsStatus: durableFull?.lineupsStatus ?? null,
+            };
+        }
+
         await ensureScores365GameMapping(fixtureId);
         const forceRefresh =
             options?.forceRefresh === true ||
@@ -2529,36 +2551,29 @@ class FootballDataCacheService {
             let experiment = await getScores365ExperimentBundle(
                 fixtureId,
                 resolveScores365AppLanguage(options?.language ?? null),
-                { force: forceRefresh },
+                { force: forceRefresh, skipTeamStats: true },
             );
             if (!experiment?.fixture) {
                 experiment = await getScores365ExperimentBundle(
                     fixtureId,
                     resolveScores365AppLanguage(options?.language ?? null),
-                    { force: true },
+                    { force: true, skipTeamStats: true },
                 );
             }
             if (experiment?.fixture) {
-                let statistics = experiment.statistics;
-                if (!hasApiStatistics(statistics)) {
-                    statistics = await this.getMatchStatistics(fixtureId);
-                }
-                let events = experiment.events;
-                if (!events.length || forceRefresh) {
-                    events = await this.getMatchEvents(fixtureId, {
-                        forceRefresh: true,
-                        language: resolveScores365AppLanguage(options?.language ?? null),
-                    });
-                }
-                if (!hasApiStatistics(statistics) && events.length > 0 && experiment.fixture) {
+                let statistics = experiment.statistics ?? [];
+                const events = experiment.events ?? [];
+                if (!hasApiStatistics(statistics) && events.length > 0) {
                     statistics = buildFallbackStatisticsFromEvents(experiment.fixture, events);
                 }
-                const lineups = await this.get365LineupsMerged(
-                    fixtureId,
-                    resolveScores365AppLanguage(options?.language ?? null),
-                    experiment.lineups,
-                    forceRefresh,
-                );
+                const lineups = hasLineupData(experiment.lineups)
+                    ? experiment.lineups
+                    : await this.get365LineupsMerged(
+                        fixtureId,
+                        resolveScores365AppLanguage(options?.language ?? null),
+                        experiment.lineups,
+                        false,
+                    );
                 const mergedLineups = hasLineupData(lineups) ? lineups : experiment.lineups;
                 const payload = {
                     fixture: experiment.fixture,
@@ -2571,7 +2586,7 @@ class FootballDataCacheService {
                 };
                 const statusShort = experiment.fixture?.fixture?.status?.short ?? '';
                 if (['FT', 'AET', 'PEN'].includes(statusShort)) {
-                    await this.updateFixtureFullData(fixtureId, {
+                    void this.updateFixtureFullData(fixtureId, {
                         lineups: payload.lineups,
                         events: payload.events,
                         statistics: payload.statistics,
@@ -4011,52 +4026,14 @@ class FootballDataCacheService {
             ? this.merge365NamesIntoLineups(structured ?? [], named.data, fixtureId)
             : (structured ?? []);
 
-        // — Completeness gate —
         const isConfirmed = (merged as any[]).some((side: any) => side?._lineupsConfirmed);
         const startersHome = (merged[0]?.startXI ?? []).length;
         const startersAway = (merged[1]?.startXI ?? []).length;
 
         if (isConfirmed && (startersHome < 11 || startersAway < 11)) {
             logger.warn(
-                `[365LineupsMerged] fixture=${fixtureId}: confirmed lineup incomplete — home=${startersHome} away=${startersAway} — retrying once`,
+                `[365LineupsMerged] fixture=${fixtureId}: confirmed lineup incomplete — home=${startersHome} away=${startersAway} — serving immediately`,
             );
-            // Retry once with a short delay (avoids caching a stale partial snapshot).
-            await new Promise((r) => setTimeout(r, 3_000));
-            const retryBundle = await getScores365ExperimentBundle(
-                fixtureId,
-                resolveScores365AppLanguage(language),
-                { force: true },
-            );
-            const retryStructured = retryBundle?.lineups;
-            if (hasLineupData(retryStructured)) {
-                let retryNamed = await this.getCached365LineupsWithNames(fixtureId, language);
-                if (!retryNamed.data?.length && appLang !== 'en') {
-                    retryNamed = await this.getCached365LineupsWithNames(fixtureId, 'en');
-                }
-                const retryMerged = retryNamed.data?.length
-                    ? this.merge365NamesIntoLineups(retryStructured!, retryNamed.data, fixtureId)
-                    : retryStructured!;
-                const retryHome = (retryMerged[0]?.startXI ?? []).length;
-                const retryAway = (retryMerged[1]?.startXI ?? []).length;
-                logger.info(
-                    `[365LineupsMerged] fixture=${fixtureId}: retry result — home=${retryHome} away=${retryAway}`,
-                );
-                if (retryHome < 11 || retryAway < 11) {
-                    logger.warn(
-                        `[365LineupsMerged] fixture=${fixtureId}: still incomplete after retry (home=${retryHome}, away=${retryAway}) — marking _incomplete, skipping permanent cache`,
-                        { fixtureId, retryHome, retryAway, ts: new Date().toISOString() },
-                    );
-                    // Mark incomplete in Redis briefly so frontend can show retry state.
-                    await redisCacheService.set(`lineups:${fixtureId}:incomplete`, true, 60_000);
-                    return this.finalize365MergedLineups(
-                        fixtureId,
-                        retryMerged.map((s: any) => ({ ...s, _incomplete: true })),
-                    );
-                }
-                logger.info(`[365LineupsMerged] fixture=${fixtureId}: ✅ retry complete — home=${retryHome} away=${retryAway}`);
-                return this.finalize365MergedLineups(fixtureId, retryMerged);
-            }
-            // Retry did not produce usable data — return original merged (partial) with flag.
             await redisCacheService.set(`lineups:${fixtureId}:incomplete`, true, 60_000);
             return this.finalize365MergedLineups(
                 fixtureId,

@@ -128,7 +128,7 @@ export default function FootballSearchScreen() {
         enabled: canSearch,
         staleTime: 60 * 1000,
         gcTime: 5 * 60 * 1000,
-        retry: 1,
+        retry: false,
         refetchOnWindowFocus: false,
     });
 
