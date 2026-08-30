@@ -33,6 +33,22 @@ module.exports = ({ config }) => {
     android: {
       ...config.android,
       intentFilters,
+      queries: [
+        ...(config.android?.queries ?? []),
+        { package: 'com.google.android.apps.maps' },
+        {
+          intent: {
+            action: 'android.intent.action.VIEW',
+            data: { scheme: 'geo' },
+          },
+        },
+        {
+          intent: {
+            action: 'android.intent.action.VIEW',
+            data: { scheme: 'https', host: 'www.google.com' },
+          },
+        },
+      ],
       ...(googlePlacesAndroidKey
         ? {
             config: {
@@ -47,6 +63,17 @@ module.exports = ({ config }) => {
     },
     ios: {
       ...config.ios,
+      infoPlist: {
+        ...config.ios?.infoPlist,
+        LSApplicationQueriesSchemes: [
+          ...new Set([
+            ...(config.ios?.infoPlist?.LSApplicationQueriesSchemes ?? []),
+            'comgooglemaps',
+            'googlemaps',
+            'maps',
+          ]),
+        ],
+      },
       ...(googlePlacesIosKey
         ? {
             config: {
