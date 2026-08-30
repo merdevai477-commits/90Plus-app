@@ -420,6 +420,18 @@ describe('Predict & Win hub', () => {
     expect(getByRole('button')).toBeTruthy();
   });
 
+  it('renders each sponsor CTA state without overflowing the pill', () => {
+    useLanguageStore.setState({ language: 'ar' });
+    const { getByRole, rerender } = render(
+      <AddPrizeButton variant="pending" onPress={() => undefined} />,
+    );
+    expect(getByRole('button', { name: 'قيد التنفيذ' })).toBeTruthy();
+    rerender(<AddPrizeButton variant="winner" onPress={() => undefined} />);
+    expect(getByRole('button', { name: 'تم قبول الجائزة' })).toBeTruthy();
+    rerender(<AddPrizeButton variant="rejected" onPress={() => undefined} />);
+    expect(getByRole('button', { name: 'الجائزة مرفوضة' })).toBeTruthy();
+  });
+
   it('maps sponsor submission status to CTA variants', () => {
     expect(deriveAddPrizeVariant('DRAFT')).toBe('pending');
     expect(deriveAddPrizeVariant('PUBLISHED')).toBe('winner');

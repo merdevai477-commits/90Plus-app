@@ -35,7 +35,7 @@ import { WinnerPickerModal } from '../../components/predictAndWin/WinnerPickerMo
 import { PW, usePWScale } from '../../components/predictAndWin/theme';
 import { TAB_BAR_HEIGHT } from '../../components/navigation/liquidGlassTabBar.constants';
 import { useCompetitions } from '../../hooks/useCompetitions';
-import { ALWAYS_ADD_PRIZE_CTA, useSponsorPrizeCta } from '../../hooks/useSponsorPrizeCta';
+import { useSponsorPrizeCta } from '../../hooks/useSponsorPrizeCta';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
 import { isEntryOpen, type CompetitionInfo, type CompetitionTab } from '../../services/competitions.service';
@@ -76,7 +76,7 @@ export default function PredictAndWinScreen() {
   const goToCreate = useCallback(() => router.push('/predict-and-win/create'), [router]);
 
   const onAddPrizePress = useCallback(() => {
-    if (ALWAYS_ADD_PRIZE_CTA || addPrizeVariant === 'add') {
+    if (addPrizeVariant === 'add') {
       goToCreate();
       return;
     }

@@ -106,7 +106,6 @@ export function SortFilterRow({
   }, []);
 
   const sortOpen = anchor !== null;
-  const useCompactAdd = contentWidth < s(360);
 
   return (
     <View style={{ width: contentWidth, alignSelf: 'center' }}>
@@ -157,7 +156,6 @@ export function SortFilterRow({
 
         <AddPrizeButton
           variant={addPrizeVariant}
-          compact={useCompactAdd}
           onPress={onAddPrize}
           disabled={addPrizeLoading}
         />

@@ -30,13 +30,12 @@ import { PW, usePWFonts, usePWScale } from './theme';
 const PILL = {
   width: 219,
   height: 36,
-  giftCapWidth: 78,
-  compactWidth: 78,
-  plus: 34,
-  gift: 36,
+  /** Square icon well — matches pill height so the glyph never hangs off the edge. */
+  giftCapWidth: 36,
+  plus: 16,
+  gift: 18,
   titleSize: 10,
-  padH: 10,
-  padV: 10,
+  padH: 8,
 } as const;
 
 export type AddPrizeButtonVariant = 'add' | 'pending' | 'winner' | 'rejected';
@@ -188,6 +187,9 @@ function StatusCtaPill({
         >
           <PWGradientText
             colors={[...text]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
             style={{
               fontFamily: semibold,
               fontSize: titleSize,
@@ -219,7 +221,6 @@ export function AddPrizeButton({
   disabled = false,
 }: {
   variant?: AddPrizeButtonVariant;
-  compact?: boolean;
   onPress: () => void;
   disabled?: boolean;
 }) {
