@@ -60,6 +60,7 @@ import {
     SCORES365_LEAGUE_ID_OFFSET,
 } from './scores365-experiment.service';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
+import { readLiveFixtureById } from './live-fixture-cache.service';
 
 /** 365 player career rows are refreshed once a week (stats change slowly). */
 const CAREER_DB_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -90,7 +91,7 @@ import {
 } from './threeSixFiveScores.service';
 import { redisCacheService } from './redis-cache.service';
 import { buildMomentumPayload, type MomentumApiPayload } from './match-momentum.service';
-import { footballMomentumRedisKey, footballFixtureDetailCacheKeys } from '../utils/football-cache-keys.util';
+import { footballMomentumRedisKey, footballFixtureDetailCacheKeys, footballDetailsLangRedisKey } from '../utils/football-cache-keys.util';
 import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import {
@@ -220,6 +221,11 @@ class FootballDataCacheService {
     private pendingWorldCupByDate = new Map<string, Promise<any[]>>();
     private backgroundRefreshDates = new Set<string>();
     private standingsRefreshes = new Set<string>();
+    private detailsBundleLocal = new Map<string, MemoryCacheEntry<any>>();
+    private pendingDetailsBundles = new Map<string, Promise<any>>();
+    private detailsBackgroundRefresh = new Set<string>();
+    private readonly DETAILS_KEEP_MS = 6 * 60 * 60 * 1000;
+    private readonly DETAILS_UPSTREAM_BUDGET_MS = 2_500;
 
     /** Cap in-process detail caches so finished fixtures cannot grow RAM forever. */
     private readonly MAX_DETAIL_CACHE = 500;
@@ -300,6 +306,9 @@ class FootballDataCacheService {
         this.lineupsCache.delete(fixtureId);
         this.statisticsCache.delete(fixtureId);
         this.eventsCache.delete(fixtureId);
+        for (const key of [...this.detailsBundleLocal.keys()]) {
+            if (key.startsWith(`details:${fixtureId}`)) this.detailsBundleLocal.delete(key);
+        }
         logger.info(
             `[CacheInvalidate] fixture=${fixtureId} reason=${reason} keys=${keys.join(',')}`,
         );
@@ -429,6 +438,27 @@ class FootballDataCacheService {
         const matches = await this.getMatchesByDate(target);
         logger.info(`🔥 Warmed matches-by-date cache for ${target}: ${matches.length} fixtures`);
         return matches.length;
+    }
+
+    /** Keep today's live match-detail payloads hot so opening a game is a cache hit. */
+    async warmLiveMatchDetails(): Promise<void> {
+        try {
+            const rows = await prisma.cachedFixture.findMany({
+                where: {
+                    status: { in: ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] },
+                },
+                select: { fixtureId: true },
+                take: 8,
+                orderBy: { updatedAt: 'desc' },
+            });
+            await Promise.all(
+                rows.map((row) =>
+                    this.getFixtureDetailsBundle(row.fixtureId, { language: 'ar' }).catch(() => null),
+                ),
+            );
+        } catch (err) {
+            logger.warn('[DetailsSWR] warmLiveMatchDetails failed:', (err as Error)?.message);
+        }
     }
 
     /**
@@ -2483,11 +2513,190 @@ class FootballDataCacheService {
         return payload;
     }
 
+    private detailsBundleCacheKey(fixtureId: number, language?: string | null): string {
+        return footballDetailsLangRedisKey(
+            fixtureId,
+            resolveScores365AppLanguage(language ?? null),
+        );
+    }
+
+    private emptyDetailsBundle() {
+        return {
+            fixture: null,
+            lineups: [] as any[],
+            statistics: [] as any[],
+            events: [] as any[],
+            venue: null as any,
+        };
+    }
+
+    private bundleFromDbRow(durableRow: any): {
+        fixture: any;
+        lineups: any[];
+        statistics: any[];
+        events: any[];
+        venue: any;
+        lineupsAvailable: boolean;
+        lineupsStatus: string | null;
+    } | null {
+        if (!durableRow) return null;
+        const fixture = matchCacheService.convertDbMatchToApiFormat(durableRow);
+        if (!fixture) return null;
+        const fullData = durableRow.fullData as any;
+        const lineups = Array.isArray(fullData?.lineups) ? fullData.lineups : [];
+        const events = Array.isArray(fullData?.events) ? fullData.events : [];
+        const statistics = Array.isArray(fullData?.statistics) ? fullData.statistics : [];
+        return {
+            fixture,
+            lineups,
+            statistics,
+            events,
+            venue: fixture.fixture?.venue ?? null,
+            lineupsAvailable: hasLineupData(lineups),
+            lineupsStatus: fullData?.lineupsStatus ?? null,
+        };
+    }
+
+    private rememberDetailsBundle(cacheKey: string, payload: any): void {
+        if (!payload?.fixture) return;
+        const status = payload.fixture?.fixture?.status?.short ?? '';
+        const kickoffMs =
+            typeof payload.fixture?.fixture?.timestamp === 'number'
+                ? payload.fixture.fixture.timestamp * 1000
+                : null;
+        const entry: MemoryCacheEntry<any> = {
+            data: payload,
+            timestamp: Date.now(),
+            ttl: this.detailTtlMs(status, kickoffMs),
+        };
+        this.setBoundedCache(this.detailsBundleLocal, cacheKey, entry);
+        void redisCacheService.set(cacheKey, entry, this.DETAILS_KEEP_MS);
+    }
+
+    private async readCachedDetailsBundle(
+        cacheKey: string,
+    ): Promise<MemoryCacheEntry<any> | null> {
+        const local = this.detailsBundleLocal.get(cacheKey);
+        if (local?.data?.fixture) return local;
+        const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(cacheKey);
+        if (redisCached?.data?.fixture) {
+            this.setBoundedCache(this.detailsBundleLocal, cacheKey, redisCached);
+            return redisCached;
+        }
+        return null;
+    }
+
+    private scheduleDetailsRefresh(
+        fixtureId: number,
+        language: string | null | undefined,
+        cacheKey: string,
+    ): void {
+        if (this.detailsBackgroundRefresh.has(cacheKey)) return;
+        this.detailsBackgroundRefresh.add(cacheKey);
+        void this.buildFreshDetailsBundle(fixtureId, { language, forceRefresh: false })
+            .then((payload) => {
+                if (payload?.fixture) this.rememberDetailsBundle(cacheKey, payload);
+            })
+            .catch((err) => {
+                logger.warn(
+                    `[DetailsSWR] background refresh ${fixtureId} failed:`,
+                    (err as Error)?.message,
+                );
+            })
+            .finally(() => this.detailsBackgroundRefresh.delete(cacheKey));
+    }
+
     /**
-     * Single round-trip bundle for match details screen — fixture, lineups,
-     * statistics, events, and venue in parallel (deduped per sub-resource).
+     * Match details: always paint from last-good cache/DB within milliseconds.
+     * 365/API refresh runs in the background (or up to 2.5s on a true cold miss).
      */
     async getFixtureDetailsBundle(
+        fixtureId: number,
+        options?: { language?: string | null; forceRefresh?: boolean },
+    ): Promise<{
+        fixture: any | null;
+        lineups: any[];
+        statistics: any[];
+        events: any[];
+        venue: any | null;
+        lineupsAvailable?: boolean;
+        lineupsStatus?: string | null;
+    }> {
+        const language = resolveScores365AppLanguage(options?.language ?? null);
+        const cacheKey = this.detailsBundleCacheKey(fixtureId, language);
+        const forceRefresh =
+            options?.forceRefresh === true ||
+            (isScores365ExperimentFixture(fixtureId) && is365StoreDetailsHotfix());
+
+        if (!forceRefresh) {
+            const cached = await this.readCachedDetailsBundle(cacheKey);
+            if (cached?.data?.fixture) {
+                if (Date.now() - cached.timestamp >= cached.ttl) {
+                    this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
+                }
+                return cached.data;
+            }
+        }
+
+        const durableRow = await prisma.cachedFixture.findUnique({
+            where: { fixtureId },
+        });
+        let stub = this.bundleFromDbRow(durableRow);
+        try {
+            const liveFx = await readLiveFixtureById(fixtureId);
+            if (liveFx) {
+                stub = stub
+                    ? { ...stub, fixture: liveFx, venue: liveFx.fixture?.venue ?? stub.venue }
+                    : {
+                          fixture: liveFx,
+                          lineups: [],
+                          statistics: [],
+                          events: [],
+                          venue: liveFx.fixture?.venue ?? null,
+                          lineupsAvailable: false,
+                          lineupsStatus: null,
+                      };
+            }
+        } catch {
+            // Redis live snapshot is optional
+        }
+
+        if (!forceRefresh && stub?.fixture) {
+            this.rememberDetailsBundle(cacheKey, stub);
+            const statusShort =
+                stub.fixture?.fixture?.status?.short ?? durableRow?.status ?? '';
+            const finished = ['FT', 'AET', 'PEN'].includes(statusShort);
+            if (!(finished && (hasLineupData(stub.lineups) || stub.events.length > 0))) {
+                this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
+            }
+            return stub;
+        }
+
+        let freshPromise = this.pendingDetailsBundles.get(cacheKey);
+        if (!freshPromise) {
+            freshPromise = this.buildFreshDetailsBundle(fixtureId, { language, forceRefresh }).finally(
+                () => {
+                    this.pendingDetailsBundles.delete(cacheKey);
+                },
+            );
+            this.pendingDetailsBundles.set(cacheKey, freshPromise);
+        }
+
+        const budget = new Promise<null>((resolve) => {
+            setTimeout(() => resolve(null), this.DETAILS_UPSTREAM_BUDGET_MS).unref?.();
+        });
+        const raced = await Promise.race([freshPromise, budget]);
+        if (raced?.fixture) {
+            this.rememberDetailsBundle(cacheKey, raced);
+            return raced;
+        }
+        void freshPromise.then((payload) => {
+            if (payload?.fixture) this.rememberDetailsBundle(cacheKey, payload);
+        });
+        return stub ?? this.emptyDetailsBundle();
+    }
+
+    private async buildFreshDetailsBundle(
         fixtureId: number,
         options?: { language?: string | null; forceRefresh?: boolean },
     ): Promise<{
@@ -2553,13 +2762,6 @@ class FootballDataCacheService {
                 resolveScores365AppLanguage(options?.language ?? null),
                 { force: forceRefresh, skipTeamStats: true },
             );
-            if (!experiment?.fixture) {
-                experiment = await getScores365ExperimentBundle(
-                    fixtureId,
-                    resolveScores365AppLanguage(options?.language ?? null),
-                    { force: true, skipTeamStats: true },
-                );
-            }
             if (experiment?.fixture) {
                 let statistics = experiment.statistics ?? [];
                 const events = experiment.events ?? [];
@@ -2596,6 +2798,10 @@ class FootballDataCacheService {
                             : {}),
                     });
                 }
+                this.rememberDetailsBundle(
+                    this.detailsBundleCacheKey(fixtureId, options?.language),
+                    payload,
+                );
                 return payload;
             }
         }
@@ -2697,7 +2903,7 @@ class FootballDataCacheService {
             timestamp: Date.now(),
             ttl,
         };
-        await redisCacheService.set(bundleKey, cacheEntry, ttl === Infinity ? 7 * 24 * 60 * 60 * 1000 : ttl);
+        await redisCacheService.set(bundleKey, cacheEntry, this.DETAILS_KEEP_MS);
 
         return payload;
     }

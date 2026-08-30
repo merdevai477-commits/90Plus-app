@@ -1874,7 +1874,7 @@ export const ApiFootballService = {
 
     try {
       let bundle = await fetchBundle(fixtureId);
-      if (!bundle.fixture) {
+      if (!bundle.fixture && fixtureId < 4_000_000) {
         const resolved = await this.resolve365GameToFixtureId(fixtureId);
         if (resolved && resolved !== fixtureId) {
           bundle = await fetchBundle(resolved);

@@ -532,7 +532,12 @@ const MatchDetailsScreen = () => {
       } else {
         // Live fetch returned nothing — fall back to a locally/remotely archived
         // match and ingest it so the screen renders instead of a blank shell.
-        const archived = await matchArchiveService.getArchivedMatch(String(fixtureId));
+        const archived = await Promise.race([
+          matchArchiveService.getArchivedMatch(String(fixtureId)),
+          new Promise<null>((resolve) => {
+            setTimeout(() => resolve(null), 2_500);
+          }),
+        ]);
         if (archived) {
           try {
             const { fixture: archivedFixture, events: archivedEvents } =

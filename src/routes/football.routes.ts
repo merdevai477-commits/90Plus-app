@@ -278,7 +278,7 @@ router.get('/cached/fixture/:id/events', SHARED_CACHE_3S, FootballController.get
 router.get('/cached/fixture/:id/momentum', SHARED_CACHE_3S, FootballController.getCachedMomentum);
 
 // GET /api/football/cached/fixture/:id/details - Full match details bundle (3s TTL for live)
-router.get('/cached/fixture/:id/details', SHARED_CACHE_15S, FootballController.getCachedFixtureDetails);
+router.get('/cached/fixture/:id/details', SHARED_CACHE_30S, FootballController.getCachedFixtureDetails);
 
 // GET /api/football/cached/search - Unified search with caching
 router.get('/cached/search', SHARED_CACHE_5MIN, FootballController.getCachedSearch);

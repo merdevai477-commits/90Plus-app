@@ -105,7 +105,7 @@ class ResponseCache {
                 const filled = await Promise.race([
                     pending,
                     new Promise<CacheEntry>((_, reject) =>
-                        setTimeout(() => reject(new Error('PENDING_TIMEOUT')), 15_000),
+                        setTimeout(() => reject(new Error('PENDING_TIMEOUT')), 2_500),
                     ),
                 ]);
                 return filled;
@@ -150,7 +150,7 @@ class ResponseCache {
                 this.pendingResolvers.delete(key);
                 this.pendingRejectors.delete(key);
             }
-        }, 15000).unref?.();
+        }, 8_000).unref?.();
 
         return true;
     }
@@ -380,11 +380,6 @@ export function responseCacheMiddleware(options: {
             }
             return originalJson(body);
         };
-
-        res.on('close', () => {
-            // If the connection drops before we cache anything, release waiters.
-            responseCache.failFill(req, new Error('RESPONSE_CLOSED'), sharedCache);
-        });
 
         next();
     };

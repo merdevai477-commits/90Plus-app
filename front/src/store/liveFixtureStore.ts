@@ -221,9 +221,6 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
 
   setFocusedFixture(fixtureId: number | null) {
     set({ focusedFixtureId: fixtureId });
-    if (fixtureId) {
-      void get().fetchAndIngestFull(fixtureId);
-    }
   },
 
   ingestSnapshot(snapshot: LiveFixtureSnapshot) {

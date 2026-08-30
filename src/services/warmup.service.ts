@@ -293,6 +293,7 @@ export function startKeepAlivePing(port: number) {
         const { footballDataCacheService } = await import('./football-data-cache.service');
         const today = new Date().toISOString().split('T')[0];
         void footballDataCacheService.warmMatchesByDate(today);
+        void footballDataCacheService.warmLiveMatchDetails();
       } catch {
         /* non-fatal */
       }

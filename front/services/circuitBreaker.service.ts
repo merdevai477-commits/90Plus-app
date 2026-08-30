@@ -66,8 +66,10 @@ class CircuitBreakerService {
       
       return result;
     } catch (error) {
-      // Failure - record it
-      this.recordFailure(key);
+      const message = String((error as Error)?.message ?? '');
+      if (!message.includes('timed out') && !message.includes('timeout')) {
+        this.recordFailure(key);
+      }
       
       // If circuit just opened and fallback available, try it
       const updatedCircuit = this.getCircuit(key);

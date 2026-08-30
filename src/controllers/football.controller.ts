@@ -2545,7 +2545,8 @@ export class FootballController {
         forceRefresh,
       });
       const gameId =
-        (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
+        getScores365GameIdForFixture(fixtureId) ??
+        (isNative365FixtureId(fixtureId) ? fixtureId : null);
 
       res.json({
         status: 'SUCCESS',

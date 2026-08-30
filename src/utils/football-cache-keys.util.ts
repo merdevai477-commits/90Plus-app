@@ -35,6 +35,10 @@ export function footballDetailsRedisKey(fixtureId: number): string {
   return `${FOOTBALL_DETAILS_KEY_PREFIX}${fixtureId}`;
 }
 
+export function footballDetailsLangRedisKey(fixtureId: number, language: string): string {
+  return `${footballDetailsRedisKey(fixtureId)}:${language}`;
+}
+
 /** Detail keys cleared on LIVE→FT / status transitions so TTL alone cannot serve stale bundles. */
 export function footballFixtureDetailCacheKeys(fixtureId: number): string[] {
   return [
@@ -43,5 +47,7 @@ export function footballFixtureDetailCacheKeys(fixtureId: number): string[] {
     footballStatisticsRedisKey(fixtureId),
     footballMomentumRedisKey(fixtureId),
     footballDetailsRedisKey(fixtureId),
+    footballDetailsLangRedisKey(fixtureId, 'ar'),
+    footballDetailsLangRedisKey(fixtureId, 'en'),
   ];
 }
