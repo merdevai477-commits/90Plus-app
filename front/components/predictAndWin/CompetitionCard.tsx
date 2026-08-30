@@ -21,6 +21,7 @@ import type { CompetitionInfo } from '../../services/competitions.service';
 import { CompetitionDetailCard } from './CompetitionDetailCard';
 import { usePWLocalize } from './localize';
 import { prizeArtSource } from './PrizeCategoryGrid';
+import { sponsorLogoSource } from './pwAssets';
 import { IconLocation, IconPickupPin, IconVespaGreen } from './icons';
 import {
   PW,
@@ -320,21 +321,19 @@ export function CompetitionCard({
         />
 
         {/* Sponsor logo — Figma 91×94 at (268,17). */}
-        {sponsor.logoUrl ? (
-          <Image
-            source={{ uri: sponsor.logoUrl }}
-            style={{
-              position: 'absolute',
-              left: logoLeft,
-              top: c(17),
-              width: c(91),
-              height: c(94),
-            }}
-            contentFit="contain"
-            transition={150}
-            recyclingKey={sponsor.id}
-          />
-        ) : null}
+        <Image
+          source={sponsorLogoSource(sponsor.logoUrl)}
+          style={{
+            position: 'absolute',
+            left: logoLeft,
+            top: c(17),
+            width: c(91),
+            height: c(94),
+          }}
+          contentFit="contain"
+          transition={150}
+          recyclingKey={`${sponsor.id}:${sponsor.logoUrl ?? 'default'}`}
+        />
 
         {/* Sponsor block — Figma w112 at (258,120). */}
         <View

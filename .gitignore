@@ -93,6 +93,7 @@ front/assets/images/*.png
 !front/assets/images/guess-player.jpg
 !front/assets/images/transfer-puzzle.jpg
 !front/assets/images/football-grid.jpg
+!front/assets/images/store.png
 
 # Local scratch / design dumps — never ship these
 .asset-backup/

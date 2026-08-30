@@ -37,6 +37,7 @@ import {
   categoryArtSource,
   usePWGridMetrics,
 } from '../../components/predictAndWin/PrizeCategoryGrid';
+import { DEFAULT_STORE_LOGO } from '../../components/predictAndWin/pwAssets';
 import { CompetitionDetailCard } from '../../components/predictAndWin/CompetitionDetailCard';
 import { CompetitionCard } from '../../components/predictAndWin/CompetitionCard';
 import {
@@ -873,7 +874,7 @@ export default function CreateCompetitionScreen() {
                   {storeImageUrl ? (
                     <Image source={{ uri: storeImageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                   ) : (
-                    <IconCamera width={s(49.5)} height={s(44)} />
+                    <Image source={DEFAULT_STORE_LOGO} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                   )}
                 </LinearGradient>
               </Pressable>
