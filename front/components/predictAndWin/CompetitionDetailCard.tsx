@@ -26,7 +26,7 @@ import { hasSponsorSocialLinks, PRIZE_CTA_GLASS, prizeCtaKind } from './prizeCta
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
 import { prizeArtSource } from './PrizeCategoryGrid';
-import { sponsorLogoSource } from './pwAssets';
+import { hasSponsorLogo, sponsorLogoSource } from './pwAssets';
 import {
   IconFacebook,
   IconGiftFilled,
@@ -247,7 +247,8 @@ export function CompetitionDetailCard({
     <View style={{ width: 1, height: s(29), backgroundColor: PW.statBorder }} />
   );
 
-  const leftArt = sponsorLogoSource(sponsor.logoUrl);
+  const sponsorLogo = sponsorLogoSource(sponsor.logoUrl);
+  const showSponsorLogo = hasSponsorLogo(sponsor.logoUrl);
   const links = sponsor.socialLinks;
   const showSocial = hasSponsorSocialLinks(links);
 
@@ -265,31 +266,36 @@ export function CompetitionDetailCard({
         },
       ]}
     >
-      {/* Brand mark with the tripled blur glow (Figma `640:4817`) — left. */}
-      <Image
-        source={leftArt}
-        style={{
-          position: 'absolute',
-          left: x(26, 78),
-          top: c(18),
-          width: c(78),
-          height: c(80),
-          opacity: 0.9,
-        }}
-        contentFit="contain"
-        blurRadius={6}
-      />
-      <Image
-        source={leftArt}
-        style={{
-          position: 'absolute',
-          left: x(26, 78),
-          top: c(18),
-          width: c(78),
-          height: c(80),
-        }}
-        contentFit="contain"
-      />
+      {/* Brand mark — only when the advertiser uploaded a store image. */}
+      {showSponsorLogo && sponsorLogo ? (
+        <>
+          <Image
+            source={sponsorLogo}
+            style={{
+              position: 'absolute',
+              left: x(26, 78),
+              top: c(18),
+              width: c(78),
+              height: c(80),
+              opacity: 0.9,
+            }}
+            contentFit="contain"
+            blurRadius={6}
+          />
+          <Image
+            source={sponsorLogo}
+            style={{
+              position: 'absolute',
+              left: x(26, 78),
+              top: c(18),
+              width: c(78),
+              height: c(80),
+            }}
+            contentFit="contain"
+            cacheKey={sponsor.logoUrl}
+          />
+        </>
+      ) : null}
 
       {/* Prize photo — Figma 101.57×102 at (291,8). */}
       <Image

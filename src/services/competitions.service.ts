@@ -412,7 +412,7 @@ async function upsertOwnedSponsor(userId: string, input: SponsorInput) {
       data: {
         name: input.name,
         description: input.description ?? existing.description,
-        logoUrl: trimmedLogo ?? existing.logoUrl,
+        logoUrl: trimmedLogo,
         address: input.address ?? existing.address,
         hasDelivery: input.hasDelivery ?? existing.hasDelivery,
         socialLinks: (input.socialLinks ?? existing.socialLinks) as Prisma.InputJsonValue,

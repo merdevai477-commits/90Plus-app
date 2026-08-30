@@ -37,7 +37,7 @@ import {
   categoryArtSource,
   usePWGridMetrics,
 } from '../../components/predictAndWin/PrizeCategoryGrid';
-import { DEFAULT_STORE_LOGO } from '../../components/predictAndWin/pwAssets';
+import { hasSponsorLogo } from '../../components/predictAndWin/pwAssets';
 import { CompetitionDetailCard } from '../../components/predictAndWin/CompetitionDetailCard';
 import { CompetitionCard } from '../../components/predictAndWin/CompetitionCard';
 import {
@@ -881,45 +881,81 @@ export default function CreateCompetitionScreen() {
                 <PWFieldLabel label={wizard.storeImage} />
               </View>
 
-              <Pressable
-                onPress={() => setPickerTarget('store')}
-                style={{ alignSelf: 'center', marginTop: s(39) }}
+              <View
+                style={{
+                  alignSelf: 'center',
+                  marginTop: s(39),
+                  flexDirection: dir.isRTL ? 'row-reverse' : 'row',
+                  alignItems: 'center',
+                  gap: s(20),
+                }}
               >
-                <LinearGradient
-                  colors={['#4a078a', '#130224']}
-                  style={{
-                    width: s(126),
-                    height: s(126),
-                    borderRadius: s(118),
-                    borderWidth: 1,
-                    borderColor: '#8a38d8',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    shadowColor: 'rgba(99,50,145,0.89)',
-                    shadowOffset: { width: 0, height: -1 },
-                    shadowOpacity: 1,
-                    shadowRadius: 18,
-                    elevation: 10,
-                  }}
-                >
-                  {storeImageUrl ? (
+                {storeImageUrl ? (
+                  <LinearGradient
+                    colors={['#4a078a', '#130224']}
+                    style={{
+                      width: s(126),
+                      height: s(126),
+                      borderRadius: s(118),
+                      borderWidth: 1,
+                      borderColor: '#8a38d8',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      shadowColor: 'rgba(99,50,145,0.89)',
+                      shadowOffset: { width: 0, height: -1 },
+                      shadowOpacity: 1,
+                      shadowRadius: 18,
+                      elevation: 10,
+                    }}
+                  >
                     <Image
                       source={{ uri: storeImageUrl }}
                       cacheKey={storeImageUrl}
                       style={{ width: '100%', height: '100%' }}
                       contentFit="cover"
                     />
-                  ) : (
-                    <Image
-                      source={DEFAULT_STORE_LOGO}
-                      cacheKey="default-store"
-                      style={{ width: '100%', height: '100%' }}
-                      contentFit="cover"
-                    />
-                  )}
-                </LinearGradient>
-              </Pressable>
+                  </LinearGradient>
+                ) : (
+                  <Pressable onPress={() => setPickerTarget('store')}>
+                    <LinearGradient
+                      colors={['#4a078a', '#130224']}
+                      style={{
+                        width: s(126),
+                        height: s(126),
+                        borderRadius: s(118),
+                        borderWidth: 1,
+                        borderColor: '#8a38d8',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        shadowColor: 'rgba(99,50,145,0.89)',
+                        shadowOffset: { width: 0, height: -1 },
+                        shadowOpacity: 1,
+                        shadowRadius: 18,
+                        elevation: 10,
+                      }}
+                    >
+                      <IconCamera width={s(49.5)} height={s(44)} />
+                    </LinearGradient>
+                  </Pressable>
+                )}
+
+                {storeImageUrl ? (
+                  <View style={{ gap: s(12), alignItems: dir.alignStart }}>
+                    <Pressable onPress={() => setPickerTarget('store')} hitSlop={8}>
+                      <Text style={{ fontFamily: semibold, fontSize: f(14), color: PW.vsTop }}>
+                        {wizard.storeChangePhoto}
+                      </Text>
+                    </Pressable>
+                    <Pressable onPress={() => setStoreImageUrl(null)} hitSlop={8}>
+                      <Text style={{ fontFamily: regular, fontSize: f(13), color: PW.textTileSub }}>
+                        {wizard.storeDeletePhoto}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
 
               <View style={[gutter, { marginTop: s(24), gap: s(26) }]}>
                 <View style={{ gap: s(16), alignItems: dir.alignStart }}>

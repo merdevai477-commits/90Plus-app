@@ -1368,6 +1368,8 @@ export const ar = {
       am: 'صباحًا',
       pm: 'مساءً',
       storeImage: 'صورة المتجر / الجهة',
+      storeChangePhoto: 'تغيير الصورة',
+      storeDeletePhoto: 'حذف الصورة',
       storeName: 'اسم المتجر / الجهة',
       storeDescription: 'وصف المتجر / الجهة',
       storeAddress: 'عنوان المتجر / الجهة',

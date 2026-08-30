@@ -1296,6 +1296,8 @@ export const en = {
       am: 'AM',
       pm: 'PM',
       storeImage: 'Store / brand image',
+      storeChangePhoto: 'Change photo',
+      storeDeletePhoto: 'Delete photo',
       storeName: 'Store / brand name',
       storeDescription: 'Store / brand description',
       storeAddress: 'Store / brand address',
