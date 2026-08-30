@@ -23,11 +23,38 @@ module.exports = ({ config }) => {
 
   // Dev-client autolinking exclusions: see react-native.config.js (EAS_BUILD_PROFILE-aware).
 
+  const googlePlacesAndroidKey =
+    process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_ANDROID?.trim() || '';
+  const googlePlacesIosKey =
+    process.env.EXPO_PUBLIC_GOOGLE_PLACES_API_KEY_IOS?.trim() || '';
+
   return {
     ...config,
     android: {
       ...config.android,
       intentFilters,
+      ...(googlePlacesAndroidKey
+        ? {
+            config: {
+              ...config.android?.config,
+              googleMaps: {
+                ...config.android?.config?.googleMaps,
+                apiKey: googlePlacesAndroidKey,
+              },
+            },
+          }
+        : {}),
+    },
+    ios: {
+      ...config.ios,
+      ...(googlePlacesIosKey
+        ? {
+            config: {
+              ...config.ios?.config,
+              googleMapsApiKey: googlePlacesIosKey,
+            },
+          }
+        : {}),
     },
     ...(projectId
       ? {
@@ -53,6 +80,8 @@ module.exports = ({ config }) => {
         process.env.EXPO_PUBLIC_FOOTBALL_API_BASE ||
         'https://v3.football.api-sports.io',
       shareBaseUrl,
+      googlePlacesApiKeyAndroid: googlePlacesAndroidKey,
+      googlePlacesApiKeyIos: googlePlacesIosKey,
     },
   };
 };

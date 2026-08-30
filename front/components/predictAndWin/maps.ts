@@ -1,5 +1,9 @@
 import { Linking, Platform } from 'react-native';
 
+import { getGooglePlacesApiKey, hasGooglePlacesApiKey } from '../../config/googlePlaces';
+
+export { getGooglePlacesApiKey, hasGooglePlacesApiKey };
+
 /** Opens Google Maps (or Apple Maps on iOS) with a location search query. */
 export async function openGoogleMapsSearch(query: string): Promise<boolean> {
   const encoded = encodeURIComponent(query.trim());
