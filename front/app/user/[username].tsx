@@ -53,6 +53,9 @@ import ContentTabs from '../../components/profile/ContentTabs';
 import { ProfileAnalyticsTab } from '../../components/profile/ProfileAnalyticsTab';
 import { ProfileAchievementsTab } from '../../components/profile/ProfileAchievementsTab';
 import { ProfilePublicMoreModal } from '../../components/profile/ProfilePublicMoreModal';
+import { CoinsInfoModal } from '../../components/common/CoinsInfoModal';
+import { LevelInfoModal } from '../../components/common/LevelInfoModal';
+import { StreakInfoModal } from '../../components/common/StreakInfoModal';
 import { usePublicUserPredictions } from '../../hooks/usePublicUserPredictions';
 import { ProfileErrorBoundary } from '../../components/common/ProfileErrorBoundary';
 import { logger } from '../../utils/logger';
@@ -119,6 +122,20 @@ function UserProfileScreen() {
   const [viewerImageUrl, setViewerImageUrl] = useState('');
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('videos');
+  const [showCoinsInfo, setShowCoinsInfo] = useState(false);
+  const [showLevelInfo, setShowLevelInfo] = useState(false);
+  const [showStreakInfo, setShowStreakInfo] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const tabsOffsetY = useRef(0);
+  const openTabAndScroll = useCallback((tab: string) => {
+    setActiveTab(tab);
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, tabsOffsetY.current - 10),
+        animated: true,
+      });
+    }, 80);
+  }, []);
   const [badgeCount, setBadgeCount] = useState(0);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
@@ -594,6 +611,7 @@ function UserProfileScreen() {
       )}
 
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={s.scroll}
         refreshControl={
@@ -629,6 +647,8 @@ function UserProfileScreen() {
           onSharePress={handleShareProfilePress}
           onBackPress={() => router.back()}
           onMorePress={() => setShowMoreMenu(true)}
+          onLevelPress={() => setShowLevelInfo(true)}
+          onEnergyPress={() => setShowCoinsInfo(true)}
           chooseCountryLabel={t.profile.chooseCountry}
           addClubLabel={t.profile.addYourClub}
           energyLabel={t.profile.energy}
@@ -730,26 +750,28 @@ function UserProfileScreen() {
               icon: PROFILE_ICONS.shield,
               value: userXp,
               label: t.profile.totalXp,
+              onPress: () => setShowLevelInfo(true),
             },
             {
               key: 'streak',
               icon: PROFILE_ICONS.fire,
               value: user.consecutiveLoginDays || 0,
               label: t.profile.longestStreak,
+              onPress: () => setShowStreakInfo(true),
             },
             {
               key: 'rate',
               icon: PROFILE_ICONS.bullseye,
               value: `${Math.round(publicPredictionStats.accuracy <= 1 && publicPredictionStats.accuracy > 0 ? publicPredictionStats.accuracy * 100 : publicPredictionStats.accuracy || 0)}%`,
               label: t.profile.predictionRate,
-              onPress: () => setActiveTab('predictions'),
+              onPress: () => openTabAndScroll('predictions'),
             },
             {
               key: 'achievements',
               icon: PROFILE_ICONS.trophy,
               value: badgeCount,
               label: t.profile.achievements,
-              onPress: () => setActiveTab('achievements'),
+              onPress: () => openTabAndScroll('achievements'),
             },
           ]}
         />
@@ -759,13 +781,19 @@ function UserProfileScreen() {
           title={t.profile.connectWithMe}
         />
 
-        <ContentTabs
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          videoCount={userVideos.length}
-          isOwnProfile={false}
-          showPublicAnalytics
-        />
+        <View
+          onLayout={(e) => {
+            tabsOffsetY.current = e.nativeEvent.layout.y;
+          }}
+        >
+          <ContentTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            videoCount={userVideos.length}
+            isOwnProfile={false}
+            showPublicAnalytics
+          />
+        </View>
 
         <View style={s.contentPanel}>
         {activeTab === 'videos' && (
@@ -859,6 +887,19 @@ function UserProfileScreen() {
         isBlocked={isBlocked}
         onReport={handleReportPress}
         onBlock={handleBlockUser}
+      />
+      <LevelInfoModal
+        visible={showLevelInfo}
+        onClose={() => setShowLevelInfo(false)}
+        level={userLevel}
+      />
+      <StreakInfoModal
+        visible={showStreakInfo}
+        onClose={() => setShowStreakInfo(false)}
+      />
+      <CoinsInfoModal
+        visible={showCoinsInfo}
+        onClose={() => setShowCoinsInfo(false)}
       />
     </View>
   );

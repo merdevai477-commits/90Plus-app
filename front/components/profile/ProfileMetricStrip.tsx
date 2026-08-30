@@ -25,12 +25,13 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
   items,
   variant = 'social',
 }: ProfileMetricStripProps) {
+  const isPerf = variant === 'performance';
   const inner = (
-    <View style={styles.row}>
+    <View style={[styles.row, isPerf && styles.perfRow]}>
       {items.map((item, index) => (
         <React.Fragment key={item.key}>
-          {index > 0 && <View style={styles.divider} />}
-          <MetricCell item={item} />
+          {index > 0 && <View style={[styles.divider, isPerf && styles.perfDivider]} />}
+          <MetricCell item={item} compact={isPerf} />
         </React.Fragment>
       ))}
     </View>
@@ -52,9 +53,9 @@ const ProfileMetricStrip = memo(function ProfileMetricStrip({
   return <View style={[styles.card, styles.socialCard]}>{inner}</View>;
 });
 
-function MetricCell({ item }: { item: ProfileMetricItem }) {
+function MetricCell({ item, compact }: { item: ProfileMetricItem; compact: boolean }) {
   const body = (
-    <View style={styles.cell}>
+    <View style={[styles.cell, compact && styles.perfCell]}>
       <View style={styles.iconBox}>
         <Image source={item.icon} style={styles.icon} contentFit="contain" />
       </View>
@@ -62,17 +63,23 @@ function MetricCell({ item }: { item: ProfileMetricItem }) {
         <Text style={styles.value} numberOfLines={1}>
           {formatProfileStat(item.value)}
         </Text>
-        <Text style={styles.label} numberOfLines={1}>
+        <Text
+          style={[styles.label, compact && styles.perfLabel]}
+          numberOfLines={compact ? 2 : 1}
+        >
           {item.label}
         </Text>
       </View>
     </View>
   );
 
-  if (!item.onPress) return body;
+  if (!item.onPress) {
+    return compact ? <View style={styles.perfHit}>{body}</View> : body;
+  }
 
   return (
     <TouchableOpacity
+      style={compact ? styles.perfHit : undefined}
       onPress={() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         item.onPress?.();
@@ -91,7 +98,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 22,
     borderRadius: 16,
     paddingVertical: 13,
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -104,23 +111,42 @@ const styles = StyleSheet.create({
   },
   performanceCard: {
     marginTop: 12,
+    paddingHorizontal: 8,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 23,
+    gap: 12,
+    width: '100%',
+  },
+  perfRow: {
+    gap: 0,
+    justifyContent: 'space-between',
   },
   divider: {
     width: StyleSheet.hairlineWidth,
     height: 47,
     backgroundColor: '#250A3F',
   },
+  perfDivider: {
+    height: 52,
+    marginHorizontal: 2,
+  },
   cell: {
     width: 56,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+  },
+  perfCell: {
+    width: '100%',
+    minWidth: 0,
+    paddingHorizontal: 2,
+  },
+  perfHit: {
+    flex: 1,
+    minWidth: 0,
   },
   iconBox: {
     width: 28,
@@ -134,11 +160,12 @@ const styles = StyleSheet.create({
   copy: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 2,
+    width: '100%',
   },
   value: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: FONT_BOLD,
     fontWeight: '700',
     textAlign: 'center',
@@ -149,5 +176,10 @@ const styles = StyleSheet.create({
     fontFamily: FONT_MEDIUM,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  perfLabel: {
+    fontSize: 9,
+    lineHeight: 12,
+    minHeight: 24,
   },
 });

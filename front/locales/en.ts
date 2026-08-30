@@ -1371,9 +1371,20 @@ export const en = {
   },
 
   levelInfo: {
-    title: 'Your level',
+    title: 'What is XP?',
     youAreLevel: 'You are Level {level}',
+    rule1: 'XP is experience points — the score you earn across 90Plus.',
+    rule2: 'Predict matches, play the daily quiz, post reels, and log in every day to earn more.',
+    rule3: 'Fill the LVL bar and you level up. The number here is your lifetime total.',
     hype: 'Keep going — every win, quiz, and prediction pushes you closer to the top.',
+    gotIt: 'Got it',
+  },
+
+  streakInfo: {
+    title: 'What is a streak?',
+    rule1: 'A streak is consecutive days you open the app. Miss a day and it resets (unless you have a freeze).',
+    rule2: 'Daily login rewards grow with the streak: 5, 10, 15, 20, 30, 40 XP — then 50 XP from day 7 on.',
+    rule3: 'The number on your profile is your longest streak. Keep logging in to beat it and earn more XP.',
     gotIt: 'Got it',
   },
 

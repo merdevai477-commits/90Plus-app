@@ -158,56 +158,58 @@ const ProfileHero = memo(function ProfileHero({
         </View>
 
         <View style={styles.identityRow}>
-          <TouchableOpacity
-            style={styles.levelChip}
-            onPress={onLevelPress}
-            disabled={!onLevelPress}
-            activeOpacity={0.85}
-          >
-            <View style={styles.levelPill}>
-              <Text style={styles.lvlWord}>LVL</Text>
-              <Text style={styles.lvlNum}>{level}</Text>
-            </View>
-            <View style={styles.xpBlock}>
-              <View style={styles.xpTrack}>
-                <LinearGradient
-                  colors={['#5E2990', '#A047F6']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.xpFill, { width: `${Math.round(fillPct * 100)}%` }]}
-                />
+          <View style={styles.identityWing}>
+            <TouchableOpacity
+              style={styles.levelChip}
+              onPress={onLevelPress}
+              disabled={!onLevelPress}
+              activeOpacity={0.85}
+            >
+              <View style={styles.levelPill}>
+                <Text style={styles.lvlWord}>LVL</Text>
+                <Text style={styles.lvlNum}>{level}</Text>
               </View>
-              <Text style={styles.xpCaption} numberOfLines={1}>
-                {formatProfileStat(xp)} / {formatProfileStat(nextLevelXp)} XP
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <SideSlot
-            emptyLabel={chooseCountryLabel}
-            filled={hasCountry}
-            editable={isOwnProfile}
-            onPress={onCountryPress}
-          >
-            {hasCountry ? (
-              <>
-                {countryFlagUri ? (
-                  <Image
-                    source={{ uri: countryFlagUri }}
-                    style={styles.flagImage}
-                    contentFit="cover"
+              <View style={styles.xpBlock}>
+                <View style={styles.xpTrack}>
+                  <LinearGradient
+                    colors={['#5E2990', '#A047F6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[styles.xpFill, { width: `${Math.round(fillPct * 100)}%` }]}
                   />
-                ) : (
-                  <Text style={styles.flag}>{countryFlag?.trim() || '🏳️'}</Text>
-                )}
-                {!!countryLabel?.trim() && (
-                  <Text style={styles.slotCaption} numberOfLines={1}>
-                    {countryLabel}
-                  </Text>
-                )}
-              </>
-            ) : null}
-          </SideSlot>
+                </View>
+                <Text style={styles.xpCaption} numberOfLines={1}>
+                  {formatProfileStat(xp)} / {formatProfileStat(nextLevelXp)} XP
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <SideSlot
+              emptyLabel={chooseCountryLabel}
+              filled={hasCountry}
+              editable={isOwnProfile}
+              onPress={onCountryPress}
+            >
+              {hasCountry ? (
+                <>
+                  {countryFlagUri ? (
+                    <Image
+                      source={{ uri: countryFlagUri }}
+                      style={styles.flagImage}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <Text style={styles.flag}>{countryFlag?.trim() || '🏳️'}</Text>
+                  )}
+                  {!!countryLabel?.trim() && (
+                    <Text style={styles.slotCaption} numberOfLines={1}>
+                      {countryLabel}
+                    </Text>
+                  )}
+                </>
+              ) : null}
+            </SideSlot>
+          </View>
 
           <TouchableOpacity
             style={[styles.avatarWrap, { width: avatarSize, height: avatarSize }]}
@@ -247,53 +249,55 @@ const ProfileHero = memo(function ProfileHero({
             )}
           </TouchableOpacity>
 
-          <SideSlot
-            emptyLabel={addClubLabel}
-            filled={hasClub}
-            editable={isOwnProfile}
-            onPress={onClubPress}
-          >
-            {hasClub ? (
-              <>
-                {clubLogo ? (
-                  <Image
-                    source={{ uri: clubLogo } as ImageSourcePropType}
-                    style={styles.clubLogo}
-                    contentFit="contain"
-                  />
-                ) : (
-                  <Ionicons name="football-outline" size={22} color="#D8AEFF" />
-                )}
-                {!!clubName?.trim() && (
-                  <Text style={styles.slotCaption} numberOfLines={1}>
-                    {clubName}
-                  </Text>
-                )}
-              </>
-            ) : null}
-          </SideSlot>
-
-          {energyValue != null ? (
-            <TouchableOpacity
-              style={styles.energyChip}
-              onPress={onEnergyPress}
-              disabled={!onEnergyPress}
-              activeOpacity={0.85}
+          <View style={[styles.identityWing, styles.identityWingEnd]}>
+            <SideSlot
+              emptyLabel={addClubLabel}
+              filled={hasClub}
+              editable={isOwnProfile}
+              onPress={onClubPress}
             >
-              <View style={styles.energyRow}>
-                <Image source={PROFILE_ICONS.energy} style={styles.energyIcon} />
-                <Text style={styles.energyValue}>{formatProfileStat(energyValue)}</Text>
-              </View>
-              <Image
-                source={PROFILE_ICONS.energyLine}
-                style={styles.energyLine}
-                contentFit="fill"
-              />
-              <Text style={styles.energyLabel}>{energyLabel}</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.energySpacer} />
-          )}
+              {hasClub ? (
+                <>
+                  {clubLogo ? (
+                    <Image
+                      source={{ uri: clubLogo } as ImageSourcePropType}
+                      style={styles.clubLogo}
+                      contentFit="contain"
+                    />
+                  ) : (
+                    <Ionicons name="football-outline" size={22} color="#D8AEFF" />
+                  )}
+                  {!!clubName?.trim() && (
+                    <Text style={styles.slotCaption} numberOfLines={1}>
+                      {clubName}
+                    </Text>
+                  )}
+                </>
+              ) : null}
+            </SideSlot>
+
+            {energyValue != null ? (
+              <TouchableOpacity
+                style={styles.energyChip}
+                onPress={onEnergyPress}
+                disabled={!onEnergyPress}
+                activeOpacity={0.85}
+              >
+                <View style={styles.energyRow}>
+                  <Image source={PROFILE_ICONS.energy} style={styles.energyIcon} />
+                  <Text style={styles.energyValue}>{formatProfileStat(energyValue)}</Text>
+                </View>
+                <Image
+                  source={PROFILE_ICONS.energyLine}
+                  style={styles.energyLine}
+                  contentFit="fill"
+                />
+                <Text style={styles.energyLabel} numberOfLines={1}>
+                  {energyLabel}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         <TouchableOpacity
@@ -334,7 +338,7 @@ function SideSlot({
   onPress?: () => void;
   children: React.ReactNode;
 }) {
-  if (!filled && !editable) return <View style={styles.slotSpacer} />;
+  if (!filled && !editable) return null;
   return (
     <TouchableOpacity
       style={[styles.sideSlot, filled ? styles.sideSlotFilled : styles.sideSlotEmpty]}
@@ -372,7 +376,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
   },
   nav: {
     flexDirection: 'row',
@@ -411,11 +415,21 @@ const styles = StyleSheet.create({
   identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 2,
+    gap: 6,
+  },
+  identityWing: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 4,
+  },
+  identityWingEnd: {
+    justifyContent: 'flex-end',
   },
   levelChip: {
-    width: 83,
+    width: 74,
     height: 75,
     borderRadius: 11,
     backgroundColor: ProfileTheme.colors.profileChip,
@@ -427,7 +441,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    width: 65,
+    width: 58,
     height: 24,
     backgroundColor: '#010602',
     borderWidth: 0.5,
@@ -452,7 +466,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   xpTrack: {
-    width: 64,
+    width: 56,
     height: 6,
     borderRadius: 53,
     backgroundColor: '#4A474E',
@@ -468,7 +482,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   sideSlot: {
-    width: 67,
+    width: 58,
     height: 77,
     borderRadius: 11,
     alignItems: 'center',
@@ -484,8 +498,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   slotSpacer: {
-    width: 67,
-    height: 77,
+    width: 0,
+    height: 0,
   },
   flag: {
     fontSize: 22,
@@ -501,7 +515,7 @@ const styles = StyleSheet.create({
   },
   slotCaption: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -549,8 +563,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   energyChip: {
-    width: 77,
+    width: 68,
     height: 60,
+    flexShrink: 0,
     borderRadius: 11,
     backgroundColor: ProfileTheme.colors.profileChip,
     alignItems: 'center',
@@ -558,8 +573,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   energySpacer: {
-    width: 77,
-    height: 60,
+    width: 0,
+    height: 0,
   },
   energyRow: {
     flexDirection: 'row',
@@ -582,7 +597,7 @@ const styles = StyleSheet.create({
   },
   energyLabel: {
     color: '#8C8C8C',
-    fontSize: 12,
+    fontSize: 11,
   },
   nameBlock: {
     alignItems: 'center',

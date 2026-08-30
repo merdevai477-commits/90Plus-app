@@ -28,6 +28,7 @@ import { useXp } from '../../contexts/XpContext';
 import { useCoins } from '../../contexts/CoinsContext';
 import { CoinsInfoModal } from '../../components/common/CoinsInfoModal';
 import { LevelInfoModal } from '../../components/common/LevelInfoModal';
+import { StreakInfoModal } from '../../components/common/StreakInfoModal';
 import { getUserBadges } from '../../services/rankingsService';
 import { resolveCountryDisplayName, isMeaningfulCountryFlag } from '../../utils/countryDisplay';
 import { useLevelUpCelebrationOnFocus } from '../../hooks/useLevelUpCelebrationOnFocus';
@@ -339,6 +340,17 @@ function OwnProfileScreen() {
   useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('videos');
+  const scrollRef = useRef<ScrollView>(null);
+  const tabsOffsetY = useRef(0);
+  const openTabAndScroll = useCallback((tab: string) => {
+    setActiveTab(tab);
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, tabsOffsetY.current - 10),
+        animated: true,
+      });
+    }, 80);
+  }, []);
   const [isOffline, setIsOffline] = useState(false);
   const { isSignedIn, getToken } = useAuth();
   const getTokenRef = useRef(getToken);
@@ -662,6 +674,7 @@ function OwnProfileScreen() {
   const [badgeCount, setBadgeCount] = useState(0);
   const [showCoinsInfo, setShowCoinsInfo] = useState(false);
   const [showLevelInfo, setShowLevelInfo] = useState(false);
+  const [showStreakInfo, setShowStreakInfo] = useState(false);
   const [addLinkOpen, setAddLinkOpen] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const addLinkPlatform = addLinkOpen;
@@ -1858,6 +1871,7 @@ function OwnProfileScreen() {
       )}
 
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -1957,20 +1971,21 @@ function OwnProfileScreen() {
               icon: PROFILE_ICONS.fire,
               value: Math.max(loginStreak.longest, userData?.consecutiveLoginDays || 0),
               label: t.profile.longestStreak,
+              onPress: () => setShowStreakInfo(true),
             },
             {
               key: 'rate',
               icon: PROFILE_ICONS.bullseye,
               value: `${(predictionStats?.accuracy ?? 0) <= 1 && (predictionStats?.accuracy ?? 0) > 0 ? Math.round((predictionStats?.accuracy ?? 0) * 100) : Math.round(predictionStats?.accuracy || 0)}%`,
               label: t.profile.predictionRate,
-              onPress: () => setActiveTab('predictions'),
+              onPress: () => openTabAndScroll('predictions'),
             },
             {
               key: 'achievements',
               icon: PROFILE_ICONS.trophy,
               value: badgeCount,
               label: t.profile.achievements,
-              onPress: () => setActiveTab('achievements'),
+              onPress: () => openTabAndScroll('achievements'),
             },
           ]}
         />
@@ -1982,13 +1997,19 @@ function OwnProfileScreen() {
           onAddLink={setAddLinkPlatform}
         />
 
-        <ContentTabs
-          activeTab={activeTab === 'saved' ? 'videos' : activeTab}
-          onTabChange={setActiveTab}
-          videoCount={myVideos.length}
-          savedCount={followStats.savedReelsCount ?? 0}
-          isOwnProfile={true}
-        />
+        <View
+          onLayout={(e) => {
+            tabsOffsetY.current = e.nativeEvent.layout.y;
+          }}
+        >
+          <ContentTabs
+            activeTab={activeTab === 'saved' ? 'videos' : activeTab}
+            onTabChange={setActiveTab}
+            videoCount={myVideos.length}
+            savedCount={followStats.savedReelsCount ?? 0}
+            isOwnProfile={true}
+          />
+        </View>
 
         <View style={styles.contentPanel}>
           {activeTab === 'videos' && (
@@ -2038,6 +2059,10 @@ function OwnProfileScreen() {
         visible={showLevelInfo}
         onClose={() => setShowLevelInfo(false)}
         level={level || userData?.level || 1}
+      />
+      <StreakInfoModal
+        visible={showStreakInfo}
+        onClose={() => setShowStreakInfo(false)}
       />
       <CoinsInfoModal
         visible={showCoinsInfo}
