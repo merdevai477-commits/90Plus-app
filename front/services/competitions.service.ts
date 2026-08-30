@@ -341,7 +341,7 @@ export const CompetitionsService = {
     return {
       sponsor:
         typeof raw === 'object' && raw !== null && 'sponsor' in (raw as object)
-          ? ((raw as { sponsor: { id: string } | null }).sponsor ?? null)
+          ? ((raw as { sponsor: SponsorInfo | null }).sponsor ?? null)
           : null,
       items: page.items,
     };

@@ -403,6 +403,8 @@ export async function submitPrediction(
 }
 
 async function upsertOwnedSponsor(userId: string, input: SponsorInput) {
+  const trimmedLogo =
+    typeof input.logoUrl === 'string' && input.logoUrl.trim() ? input.logoUrl.trim() : null;
   const existing = await prisma.sponsor.findFirst({ where: { ownerId: userId } });
   if (existing) {
     return prisma.sponsor.update({
@@ -410,7 +412,7 @@ async function upsertOwnedSponsor(userId: string, input: SponsorInput) {
       data: {
         name: input.name,
         description: input.description ?? existing.description,
-        logoUrl: input.logoUrl ?? existing.logoUrl,
+        logoUrl: trimmedLogo ?? existing.logoUrl,
         address: input.address ?? existing.address,
         hasDelivery: input.hasDelivery ?? existing.hasDelivery,
         socialLinks: (input.socialLinks ?? existing.socialLinks) as Prisma.InputJsonValue,
@@ -422,7 +424,7 @@ async function upsertOwnedSponsor(userId: string, input: SponsorInput) {
       ownerId: userId,
       name: input.name,
       description: input.description ?? null,
-      logoUrl: input.logoUrl ?? null,
+      logoUrl: trimmedLogo,
       address: input.address ?? null,
       hasDelivery: input.hasDelivery ?? false,
       socialLinks: (input.socialLinks ?? undefined) as Prisma.InputJsonValue,

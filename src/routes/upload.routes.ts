@@ -843,6 +843,14 @@ router.post(
       const quotaOk = await checkQuota(user.id, file.buffer.length, req, res);
       if (!quotaOk) return;
 
+      const existingSponsor =
+        kind === 'sponsor'
+          ? await prisma.sponsor.findFirst({
+              where: { ownerId: user.id },
+              select: { logoUrl: true },
+            })
+          : null;
+
       const safeName = sanitizeOriginalName(file.originalname, `competition-${kind}`);
       const result = await r2MediaStorage.uploadPublic(
         'competitions',
@@ -865,6 +873,19 @@ router.post(
       }
 
       await incrementQuota(user.id, file.buffer.length);
+
+      if (kind === 'sponsor') {
+        const oldKey = r2MediaStorage.keyFromPublicUrl(existingSponsor?.logoUrl);
+        if (oldKey && oldKey !== result.key) {
+          r2MediaStorage.deleteObject(oldKey).catch((err: unknown) =>
+            logger.warn('[upload/competition-asset] Old sponsor logo delete failed:', err),
+          );
+        }
+        await prisma.sponsor.updateMany({
+          where: { ownerId: user.id },
+          data: { logoUrl: result.url },
+        });
+      }
 
       // Same envelope as every other upload route, so the shared
       // `useImageUpload` client reads `url` without a special case.

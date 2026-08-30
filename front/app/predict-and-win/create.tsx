@@ -89,6 +89,7 @@ import {
   CompetitionsService,
   MatchPoolEntry,
   PrizeCategoryInfo,
+  type SponsorInfo,
 } from '../../services/competitions.service';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
@@ -186,6 +187,37 @@ export default function CreateCompetitionScreen() {
       cancelled = true;
     };
   }, [categoriesNonce]);
+
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
+  /** Reuse the sponsor profile on repeat wizard runs so a new upload replaces the old logo. */
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await getTokenRef.current();
+        if (!token || cancelled) return;
+        const mine = await CompetitionsService.listMine(token);
+        const sp = mine.sponsor as SponsorInfo | null;
+        if (!sp || cancelled) return;
+        if (sp.name) setStoreName(sp.name);
+        if (sp.description) setStoreDescription(sp.description);
+        if (sp.address) setStoreAddress(sp.address);
+        if (sp.logoUrl) setStoreImageUrl(sp.logoUrl);
+        setHasDelivery(sp.hasDelivery);
+        const links = sp.socialLinks;
+        if (links?.facebook) setFacebook(links.facebook);
+        if (links?.instagram) setInstagram(links.instagram);
+        if (links?.whatsapp) setWhatsapp(links.whatsapp);
+      } catch {
+        // First-time sponsors have no profile yet — wizard still works.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /**
    * The pool loads only while step 2 is on screen. See `useMatchPool` for why
@@ -872,9 +904,19 @@ export default function CreateCompetitionScreen() {
                   }}
                 >
                   {storeImageUrl ? (
-                    <Image source={{ uri: storeImageUrl }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                    <Image
+                      source={{ uri: storeImageUrl }}
+                      cacheKey={storeImageUrl}
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="cover"
+                    />
                   ) : (
-                    <Image source={DEFAULT_STORE_LOGO} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                    <Image
+                      source={DEFAULT_STORE_LOGO}
+                      cacheKey="default-store"
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="cover"
+                    />
                   )}
                 </LinearGradient>
               </Pressable>

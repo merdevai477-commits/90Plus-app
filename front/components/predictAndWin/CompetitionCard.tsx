@@ -332,6 +332,7 @@ export function CompetitionCard({
           }}
           contentFit="contain"
           transition={150}
+          cacheKey={sponsor.logoUrl ?? 'default'}
           recyclingKey={`${sponsor.id}:${sponsor.logoUrl ?? 'default'}`}
         />
 

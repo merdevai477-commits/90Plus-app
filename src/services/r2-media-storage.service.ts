@@ -8,6 +8,7 @@
  *  Fix 10 – Cache-Control headers on uploads
  */
 
+import { randomUUID } from 'crypto';
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -46,13 +47,17 @@ function getPublicBaseUrl(): string {
 
 function buildObjectKey(bucket: R2MediaBucket, userId: string, fileName: string): string {
   const safeName = fileName.replace(/[^\w.-]+/g, '_').slice(0, 120);
-  return `${bucket}/${userId}/${Date.now()}_${safeName}`;
+  return `${bucket}/${userId}/${Date.now()}_${randomUUID().slice(0, 8)}_${safeName}`;
 }
 
 /** Cache-Control header per bucket type (Fix 10) */
 function cacheControlFor(bucket: R2MediaBucket): string {
   if (bucket === 'reels' || bucket === 'videos') {
     return 'private, max-age=3600';
+  }
+  // Sponsor logos and prize photos can change — avoid immutable CDN pinning.
+  if (bucket === 'competitions') {
+    return 'public, max-age=86400';
   }
   return 'public, max-age=31536000, immutable';
 }
@@ -123,7 +128,14 @@ export class R2MediaStorageService {
     }
   }
 
-  // ── Delete ──────────────────────────────────────────────────────────────────
+  /** Map a public CDN URL back to the R2 object key, when it lives on our bucket. */
+  keyFromPublicUrl(url: string | null | undefined): string | null {
+    const trimmed = url?.trim();
+    if (!trimmed || !this.publicBaseUrl) return null;
+    const prefix = `${this.publicBaseUrl}/`;
+    if (!trimmed.startsWith(prefix)) return null;
+    return trimmed.slice(prefix.length);
+  }
 
   async deleteObject(key: string): Promise<boolean> {
     if (!key) return true;
