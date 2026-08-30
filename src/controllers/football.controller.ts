@@ -18,6 +18,7 @@ import { buildScores365LmtEmbedHtml } from '../utils/scores365-lmt-html';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
 import { isHistoricalHttpDbOnlyEnabled } from '../config/football-reliability-rollout.config';
 import { getWorldCupLeagueId, getWorldCupSeason } from '../config/world-cup-only-mode.config';
+import { isScores365OnlyMode } from '../config/scores365-only-mode.config';
 import {
   calendarDateRangeBounds,
   calendarTodayKey,
@@ -515,8 +516,8 @@ export class FootballController {
         return;
       }
 
-      if (!footballService.isConfigured()) {
-        if (isScores365ExperimentEnabled()) {
+      if (!footballService.isConfigured() || isScores365OnlyMode()) {
+        if (isScores365ExperimentEnabled() || isScores365OnlyMode()) {
           res.json({
             status: 'SUCCESS',
             results: 0,

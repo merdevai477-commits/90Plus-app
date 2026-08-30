@@ -62,6 +62,7 @@ import {
 } from './scores365-experiment.service';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { canQueryApiFootballFixtureId } from '../utils/api-football-identity.util';
+import { isScores365OnlyMode } from '../config/scores365-only-mode.config';
 import { readLiveFixtureById } from './live-fixture-cache.service';
 
 /** 365 player career rows are refreshed once a week (stats change slowly). */
@@ -720,7 +721,7 @@ class FootballDataCacheService {
             if (fromDb.length > 0) {
                 if (isToday) {
                     const merged = await this.mergeCalendarWithLiveSources(fromDb);
-                    if (!isWorldCupOnlyMode() && !(await this.isTodayApiFresh(dateString))) {
+                    if (!isScores365OnlyMode() && !isWorldCupOnlyMode() && !(await this.isTodayApiFresh(dateString))) {
                         void this.refreshMatchesByDateFromApi(dateString, cacheKey, responseTtl);
                     }
                     logger.debug(`📦 [${dateString}] ${merged.length} matches from DB + live merge (fast path)`);
@@ -1084,6 +1085,10 @@ class FootballDataCacheService {
         responseTtl: number,
         mergeLive: boolean,
     ): Promise<any[]> {
+        if (isScores365OnlyMode()) {
+            logger.debug(`📦 [${dateString}] API-Football calendar fetch skipped (365-only mode)`);
+            return mergeLive ? this.mergeCalendarWithLiveSources([]) : [];
+        }
         if (isWorldCupOnlyMode()) {
             logSkippingNonWorldCup(`matches-by-date API fetch ${dateString}`);
             return [];
@@ -1126,6 +1131,7 @@ class FootballDataCacheService {
         cacheKey: string,
         responseTtl: number,
     ): void {
+        if (isScores365OnlyMode()) return;
         if (isWorldCupOnlyMode()) {
             logSkippingNonWorldCup(`matches-by-date background refresh ${dateString}`);
             return;
@@ -2565,6 +2571,7 @@ class FootballDataCacheService {
 
     private canQueryApiFootball(fixtureId: number): boolean {
         return (
+            !isScores365OnlyMode() &&
             canQueryApiFootballFixtureId(fixtureId) &&
             footballService.isConfigured() &&
             !isFootballQuotaExhausted()

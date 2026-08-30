@@ -1,7 +1,4 @@
 import { useEffect, useState } from 'react';
-import { agentDebugLog } from '../utils/agentDebugLog';
-
-let activeSecondTickCount = 0;
 
 /**
  * Re-renders the calling component once per second while `active` is true.
@@ -14,19 +11,7 @@ export function useSecondTick(active: boolean): void {
 
   useEffect(() => {
     if (!active) return;
-    activeSecondTickCount += 1;
-    // #region agent log
-    agentDebugLog(
-      'useSecondTick.ts:active',
-      'second tick started',
-      { activeCount: activeSecondTickCount },
-      'H-C',
-    );
-    // #endregion
     const id = setInterval(() => setTick((n) => (n + 1) % 60), 1000);
-    return () => {
-      clearInterval(id);
-      activeSecondTickCount = Math.max(0, activeSecondTickCount - 1);
-    };
+    return () => clearInterval(id);
   }, [active]);
 }

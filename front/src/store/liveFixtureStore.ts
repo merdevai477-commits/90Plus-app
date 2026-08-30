@@ -17,7 +17,6 @@ import {
   LIVE_FIXTURE_MAX_SNAPSHOTS,
   LIVE_FIXTURE_UPCOMING_GRACE_MS,
 } from './liveFixtureStore.types';
-import { agentDebugLog } from '../../utils/agentDebugLog';
 
 interface LiveFixtureStoreState {
   snapshots: Record<number, LiveFixtureSnapshot>;
@@ -191,15 +190,6 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
       evictionSchedule: cancelEviction(state.evictionSchedule, fixtureId),
     });
     if (prev === 0) {
-      // #region agent log
-      agentDebugLog(
-        'liveFixtureStore.ts:registerInterest',
-        'registerInterest first ref (deferred fetch)',
-        { fixtureId },
-        'H-A',
-        'post-fix-v2',
-      );
-      // #endregion
       // Defer HTTP to the global poll loop — eager fetch here stampedes
       // AsyncStorage (score-only) or /details (365 ids) and blocks the UI.
     }
@@ -280,7 +270,6 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
     const existing = get().snapshots[fixtureId] ?? null;
     const startedAt = Date.now();
     const includeEvents = options?.includeEvents !== false;
-    const fetchType = includeEvents ? 'full-bundle' : 'score-only';
 
     // Score-only list poll: never stampede /details for 365 rows with calendar data.
     if (
@@ -297,21 +286,6 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
     const snapshot = includeEvents
       ? await fetchFastSnapshot(fixtureId, existing)
       : await fetchScoreSnapshot(fixtureId, existing);
-    // #region agent log
-    agentDebugLog(
-      'liveFixtureStore.ts:fetchAndIngestFast',
-      'fast ingest done',
-      {
-        fixtureId,
-        fetchType,
-        durationMs: Date.now() - startedAt,
-        hasSnapshot: !!snapshot,
-        revision: snapshot?.revision,
-      },
-      'H-A',
-      'post-fix',
-    );
-    // #endregion
     if (!snapshot) return;
 
     const current = get().snapshots[fixtureId];

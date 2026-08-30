@@ -1749,37 +1749,18 @@ export const ApiFootballService = {
       }
     }
 
-    // Native 365 game ids are not API-Football fixtures. Hitting `/fixtures/:id`
-    // throws ApiFootballError and toasts on screens that never asked for it.
-    if (fixtureId >= 4_000_000) {
-      try {
-        const bundle = await fetchFromProxy<{ fixture?: Fixture }>(
-          `/cached/fixture/${fixtureId}/details`,
-          {},
-          options?.skipCache ? { fresh: true } : {},
-        );
-        const fixture = bundle && !Array.isArray(bundle) ? bundle.fixture ?? null : null;
-        if (fixture && !options?.skipCache) {
-          footballCacheService.cacheMatch(fixture as any).catch(() => undefined);
-        }
-        return fixture;
-      } catch {
-        return null;
-      }
-    }
-    
+    // All fixture lookups go through the backend 365-first cached details bundle.
+    // Avoids direct /fixtures/:id API-Football calls that duplicate work and time out.
     try {
-      const fixtures = await fetchFromProxy<Fixture[]>(
-        `/fixtures/${fixtureId}`,
+      const bundle = await fetchFromProxy<{ fixture?: Fixture }>(
+        `/cached/fixture/${fixtureId}/details`,
         {},
         options?.skipCache ? { fresh: true } : {},
       );
-      const fixture = fixtures && fixtures.length > 0 ? fixtures[0] : null;
-
+      const fixture = bundle && !Array.isArray(bundle) ? bundle.fixture ?? null : null;
       if (fixture && !options?.skipCache) {
-        footballCacheService.cacheMatch(fixture as any).catch(console.error);
+        footballCacheService.cacheMatch(fixture as any).catch(() => undefined);
       }
-
       return fixture;
     } catch (error) {
       console.error('Error fetching fixture by ID:', error);

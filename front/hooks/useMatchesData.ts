@@ -33,7 +33,6 @@ import {
 } from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { overlaySnapshotsOnCalendar } from '../utils/overlaySnapshotsOnCalendar';
-import { agentDebugLog } from '../utils/agentDebugLog';
 import { matchCardToApiFixture } from '../utils/matchCardToApiFixture';
 import { mergeTodayCalendarWithLiveFeed } from '../utils/mergeTodayCalendarWithLiveFeed';
 import { dateFromLocalKey } from '../utils/safeDate';
@@ -439,20 +438,7 @@ export const useMatchesData = (
   }, [pauseBackgroundRefresh]);
 
   // Group matches by league, then country (reuse league groups — no double group)
-  const groupedMatches = useMemo(() => {
-    const t0 = Date.now();
-    const result = groupMatchesByLeague(matches);
-    const leagueMs = Date.now() - t0;
-    // #region agent log
-    agentDebugLog(
-      'useMatchesData.ts:grouping',
-      're-group matches',
-      { matchCount: matches.length, leagueGroupCount: result.length, leagueMs },
-      'H-B',
-    );
-    // #endregion
-    return result;
-  }, [matches]);
+  const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
   const countryGroups = useMemo(
     () => groupMatchesByCountry(matches, groupedMatches),
     [matches, groupedMatches],
