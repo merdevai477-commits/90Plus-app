@@ -139,7 +139,30 @@ export function initSentry(): void {
       }
 
       const exceptionValue = event.exception?.values?.[0]?.value;
+      const eventMessage = event.message ?? '';
+      const combined = `${exceptionValue ?? ''} ${eventMessage}`.trim();
+
       if (isSignedOutClerkError(exceptionValue)) {
+        return null;
+      }
+
+      if (/cannot read property 'scrolltoend' of null/i.test(combined)) {
+        return null;
+      }
+
+      if (/push token sync failed after retries/i.test(combined)) {
+        return null;
+      }
+
+      if (/video load failed.*(unknownhost|unable to resolve host|no address associated)/i.test(combined)) {
+        return null;
+      }
+
+      if (/multiple <clerkprovider>/i.test(combined)) {
+        return null;
+      }
+
+      if (/pausing an activity that is not the current activity/i.test(combined)) {
         return null;
       }
       
@@ -178,6 +201,11 @@ export function initSentry(): void {
       'Failed to create conversation',
       'Backend rejected token sync',
       'Infinite render loop',
+      'Push token sync failed after retries',
+      "Cannot read property 'scrollToEnd' of null",
+      "You've added multiple <ClerkProvider>",
+      'Pausing an activity that is not the current activity',
+      'Video load failed',
     ],
   });
   

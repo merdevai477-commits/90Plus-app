@@ -32,7 +32,9 @@ import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppKeyboardProvider } from '@/utils/keyboardControllerSafe';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, StatusBar, I18nManager, Linking, StyleSheet, Text } from 'react-native';
+import { View, StatusBar, I18nManager, Linking, StyleSheet, Text, InteractionManager } from 'react-native';
+import { enableFreeze } from 'react-native-screens';
+import { isFlashListScrollRaceError } from '../components/chat/safeFlashListScroll';
 import { SettingsProvider } from "../contexts/SettingsContext";
 import { LanguageProvider } from "../contexts/LanguageContext";
 import { CoinsProvider } from "../contexts/CoinsContext";
@@ -84,9 +86,19 @@ type GlobalErrorUtils = {
 };
 const globalErrorUtils = (globalThis as typeof globalThis & { ErrorUtils?: GlobalErrorUtils })
   .ErrorUtils;
+try {
+  enableFreeze(false);
+} catch {
+  /* react-native-screens optional */
+}
+
 if (globalErrorUtils?.getGlobalHandler && globalErrorUtils?.setGlobalHandler) {
   const originalHandler = globalErrorUtils.getGlobalHandler();
   globalErrorUtils.setGlobalHandler((error, isFatal) => {
+    if (isFlashListScrollRaceError(error)) {
+      logger.warn('[GlobalErrorHandler] Ignored FlashList scroll race:', error.message);
+      return;
+    }
     logger.error('[GlobalErrorHandler] Caught unhandled exception:', {
       error: error?.message ?? String(error),
       isFatal,
@@ -541,9 +553,16 @@ function PreloadInitializer({ children }: { children: React.ReactNode }) {
       }
     };
 
-    void run();
+    let startTimer: ReturnType<typeof setTimeout> | null = null;
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      startTimer = setTimeout(() => {
+        void run();
+      }, 1500);
+    });
 
     return () => {
+      interactionHandle.cancel?.();
+      if (startTimer) clearTimeout(startTimer);
       cancelled = true;
       if (cleanupTimer) clearTimeout(cleanupTimer);
       if (!isSignedIn) {
@@ -818,71 +837,68 @@ function RootLayout() {
   }
 
   return (
-    <ErrorBoundary onError={handleError} onGoHome={handleGoHome}>
+    <OtaPendingReloadGate>
       {!clerkPublishableKey ? (
         <ClerkKeyMissingScreen />
       ) : (
-      <OtaPendingReloadGate>
-      <TamaguiProvider config={config} defaultTheme="dark">
-        <BootReadyProvider>
-        <ClerkProvider
-          publishableKey={clerkPublishableKey}
-          tokenCache={tokenCache}
-        >
-          <HideSplashWhenReady fontsReady={fontsReady} />
-          <SentryUserTracker />
-          <QueryClientProvider client={queryClient}>
-            <OtaUpdateBootstrap />
-            <FootballCacheEpochBootstrap />
-            <PushNotificationSetup />
-            <PushRegistrationReportBootstrap />
-            <LanguageInitializer>
-              <LanguageProvider>
-                <SettingsProvider>
-                  <CoinsProvider>
-                    <XpProvider>
-                    <VideosProvider>
-                      <ToastProvider>
-                        <ProfessionalToastProvider>
-                          <GestureHandlerRootView style={{ flex: 1 }}>
-                            <SafeAreaProvider>
-                              <AppKeyboardProvider>
-                              <View style={{ flex: 1, backgroundColor: '#000' }}>
-                                <GlobalOfflineBanner />
-                                <StatusBar
-                                  barStyle="light-content"
-                                  backgroundColor="#000"
-                                />
-                                <ClerkGate>
-                                  <ClerkTokenWarmup />
-                                  <PushTokenSyncBootstrap />
-                                  <GlobalNotificationTrayBridge />
-                                  <WebSocketInitializer>
-                                    <PreloadInitializer>
-                                      <RootLayoutNav />
-                                    </PreloadInitializer>
-                                  </WebSocketInitializer>
-                                </ClerkGate>
-                                <LevelUpModal />
-                              </View>
-                              </AppKeyboardProvider>
-                            </SafeAreaProvider>
-                          </GestureHandlerRootView>
-                        </ProfessionalToastProvider>
-                      </ToastProvider>
-                    </VideosProvider>
-                    </XpProvider>
-                  </CoinsProvider>
-                </SettingsProvider>
-              </LanguageProvider>
-            </LanguageInitializer>
-          </QueryClientProvider>
+        <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
+          <ErrorBoundary onError={handleError} onGoHome={handleGoHome}>
+            <TamaguiProvider config={config} defaultTheme="dark">
+              <BootReadyProvider>
+                <HideSplashWhenReady fontsReady={fontsReady} />
+                <SentryUserTracker />
+                <QueryClientProvider client={queryClient}>
+                  <OtaUpdateBootstrap />
+                  <FootballCacheEpochBootstrap />
+                  <PushNotificationSetup />
+                  <PushRegistrationReportBootstrap />
+                  <LanguageInitializer>
+                    <LanguageProvider>
+                      <SettingsProvider>
+                        <CoinsProvider>
+                          <XpProvider>
+                            <VideosProvider>
+                              <ToastProvider>
+                                <ProfessionalToastProvider>
+                                  <GestureHandlerRootView style={{ flex: 1 }}>
+                                    <SafeAreaProvider>
+                                      <AppKeyboardProvider>
+                                        <View style={{ flex: 1, backgroundColor: '#000' }}>
+                                          <GlobalOfflineBanner />
+                                          <StatusBar
+                                            barStyle="light-content"
+                                            backgroundColor="#000"
+                                          />
+                                          <ClerkGate>
+                                            <ClerkTokenWarmup />
+                                            <PushTokenSyncBootstrap />
+                                            <GlobalNotificationTrayBridge />
+                                            <WebSocketInitializer>
+                                              <PreloadInitializer>
+                                                <RootLayoutNav />
+                                              </PreloadInitializer>
+                                            </WebSocketInitializer>
+                                          </ClerkGate>
+                                          <LevelUpModal />
+                                        </View>
+                                      </AppKeyboardProvider>
+                                    </SafeAreaProvider>
+                                  </GestureHandlerRootView>
+                                </ProfessionalToastProvider>
+                              </ToastProvider>
+                            </VideosProvider>
+                          </XpProvider>
+                        </CoinsProvider>
+                      </SettingsProvider>
+                    </LanguageProvider>
+                  </LanguageInitializer>
+                </QueryClientProvider>
+              </BootReadyProvider>
+            </TamaguiProvider>
+          </ErrorBoundary>
         </ClerkProvider>
-        </BootReadyProvider>
-      </TamaguiProvider>
-      </OtaPendingReloadGate>
       )}
-    </ErrorBoundary>
+    </OtaPendingReloadGate>
   );
 }
 

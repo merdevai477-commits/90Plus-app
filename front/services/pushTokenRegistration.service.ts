@@ -39,13 +39,6 @@ async function resolveAuthToken(
     return getClerkBearerToken(getAuthToken, { retries: 5, baseDelayMs: 400 });
 }
 
-function isTransientPushFailure(reason?: string): boolean {
-    const msg = (reason ?? '').toLowerCase();
-    return /network request failed|failed to fetch|networkerror|network error|timeout|offline|internet/.test(
-        msg,
-    );
-}
-
 function ownershipLabel(): string {
     const o = Constants.appOwnership;
     if (o === 'expo' || o === 'standalone' || o === 'guest') return o;
@@ -463,26 +456,6 @@ async function registerTokenWithBackend(
         }
 
         await persistPendingPushToken(pushToken);
-        const unexpectedHttp =
-            (typeof result.statusCode === 'number' && result.statusCode >= 500) ||
-            (!!result.errorCode && result.errorCode !== 'NETWORK_ERROR');
-        if (unexpectedHttp && !isTransientPushFailure(result.reason)) {
-            try {
-                const Sentry = await import('@sentry/react-native');
-                Sentry.captureMessage('Push token sync failed after retries', {
-                    level: 'warning',
-                    tags: { component: 'PushNotifications', action: 'syncToken' },
-                    extra: {
-                        tokenPrefix: pushToken.substring(0, 20),
-                        statusCode: result.statusCode,
-                        errorCode: result.errorCode,
-                        reason: result.reason,
-                    },
-                });
-            } catch {
-                /* Sentry may not be initialized */
-            }
-        }
         pushTrace('[PUSH TRACE] EXIT → reason: registerPushToken failed after retries');
         return false;
     } catch (err: unknown) {
@@ -495,21 +468,6 @@ async function registerTokenWithBackend(
             return registerTokenWithBackend(authToken, pushToken, attempt + 1);
         }
         await persistPendingPushToken(pushToken);
-        if (!isTransientPushFailure(msg)) {
-            try {
-                const Sentry = await import('@sentry/react-native');
-                Sentry.captureMessage('Push token sync failed after retries', {
-                    level: 'warning',
-                    tags: { component: 'PushNotifications', action: 'syncToken' },
-                    extra: {
-                        tokenPrefix: pushToken.substring(0, 20),
-                        reason: msg,
-                    },
-                });
-            } catch {
-                /* Sentry may not be initialized */
-            }
-        }
         pushTrace('[PUSH TRACE] EXIT → reason: registerPushToken failed after retries');
         return false;
     }
