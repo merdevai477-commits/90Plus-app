@@ -13,6 +13,7 @@ import { WebView } from 'react-native-webview';
 import {
   getCurrentStoreCoordinates,
   getStoreLocationPermission,
+  isNativeLocationAvailable,
   openAppSettings,
   requestStoreLocationPermission,
 } from '../../utils/storeLocationPermission';
@@ -92,6 +93,14 @@ export function PWMapPickerModal({
     setLocating(true);
     setError(null);
     try {
+      const nativeAvailable = await isNativeLocationAvailable();
+      if (!nativeAvailable) {
+        webViewRef.current?.injectJavaScript(
+          'window.requestWebGeolocation && window.requestWebGeolocation(); true;',
+        );
+        return;
+      }
+
       const coords = await getCurrentStoreCoordinates();
       if (!coords) {
         setError(labels.geoDenied);
@@ -127,10 +136,13 @@ export function PWMapPickerModal({
     if (!visible) return;
     if (permissionPromptedRef.current) return;
 
-    void getStoreLocationPermission().then((status) => {
-      if (status === 'granted') return;
-      permissionPromptedRef.current = true;
-      promptLocationPermission();
+    void isNativeLocationAvailable().then((native) => {
+      if (!native) return;
+      return getStoreLocationPermission().then((status) => {
+        if (status === 'granted') return;
+        permissionPromptedRef.current = true;
+        promptLocationPermission();
+      });
     });
   }, [visible, promptLocationPermission]);
 
@@ -197,6 +209,10 @@ export function PWMapPickerModal({
               ref={webViewRef}
               originWhitelist={['*']}
               source={{ html, baseUrl: 'https://90plus.pro' }}
+              geolocationEnabled
+              onGeolocationPermissionsShowPrompt={(event) => {
+                event.nativeEvent.callback(true);
+              }}
               onMessage={(event) => handleMessage(event.nativeEvent.data)}
               style={{ flex: 1, backgroundColor: '#080512' }}
             />

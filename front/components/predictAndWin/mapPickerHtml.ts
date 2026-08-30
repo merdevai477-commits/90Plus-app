@@ -97,6 +97,22 @@ export function buildMapPickerHtml(apiKey: string, labels: { myLocation: string 
           map.setZoom(16);
         };
 
+        window.requestWebGeolocation = function () {
+          if (!navigator.geolocation) {
+            post({ type: 'error', code: 'NO_GEO' });
+            return;
+          }
+          navigator.geolocation.getCurrentPosition(
+            function (pos) {
+              window.setMapPosition(pos.coords.latitude, pos.coords.longitude);
+            },
+            function () {
+              post({ type: 'error', code: 'GEO_DENIED' });
+            },
+            { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+          );
+        };
+
         post({ type: 'ready' });
       }
 
