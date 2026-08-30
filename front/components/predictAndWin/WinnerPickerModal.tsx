@@ -8,7 +8,7 @@
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -99,39 +99,53 @@ export function WinnerPickerModal({
   const [picked, setPicked] = useState<OwnerLeaderboardCandidate | null>(null);
   const [awarding, setAwarding] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!competitionId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const token = await getClerkBearerToken(getToken, { retries: 2, baseDelayMs: 150 });
-      if (!token) throw new Error('AUTH_REQUIRED');
-      setBoard(await CompetitionsService.getLeaderboard(token, competitionId));
-    } catch {
-      setError(t.predictAndWin.errors.GENERIC);
-    } finally {
-      setLoading(false);
-    }
-  }, [competitionId, getToken, t.predictAndWin.errors.GENERIC]);
+  /**
+   * Clerk's `getToken` is a new function every render. Closing over it in
+   * `load` made this effect re-fire forever — spinner ↔ content ↔ spinner.
+   */
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+  const genericErrorRef = useRef(t.predictAndWin.errors.GENERIC);
+  genericErrorRef.current = t.predictAndWin.errors.GENERIC;
 
   useEffect(() => {
-    if (visible && competitionId) {
-      setPicked(null);
-      void load();
-    }
-  }, [visible, competitionId, load]);
+    if (!visible || !competitionId) return;
+
+    let cancelled = false;
+    setPicked(null);
+    setLoading(true);
+    setError(null);
+    setBoard(null);
+
+    void (async () => {
+      try {
+        const token = await getClerkBearerToken(getTokenRef.current, { retries: 2, baseDelayMs: 150 });
+        if (!token) throw new Error('AUTH_REQUIRED');
+        const data = await CompetitionsService.getLeaderboard(token, competitionId);
+        if (!cancelled) setBoard(data);
+      } catch {
+        if (!cancelled) setError(genericErrorRef.current);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, competitionId]);
 
   const award = async () => {
     if (!competitionId || !picked) return;
     setAwarding(true);
     try {
-      const token = await getClerkBearerToken(getToken, { retries: 2, baseDelayMs: 150 });
+      const token = await getClerkBearerToken(getTokenRef.current, { retries: 2, baseDelayMs: 150 });
       if (!token) return;
       const next = await CompetitionsService.awardWinner(token, competitionId, picked.entryId);
       setBoard(next);
       setPicked(null);
     } catch {
-      setError(t.predictAndWin.errors.GENERIC);
+      setError(genericErrorRef.current);
     } finally {
       setAwarding(false);
     }
