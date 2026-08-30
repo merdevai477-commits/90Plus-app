@@ -26,7 +26,7 @@ import { hasSponsorSocialLinks, PRIZE_CTA_GLASS, prizeCtaKind } from './prizeCta
 import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
 import { prizeArtSource } from './PrizeCategoryGrid';
-import { hasSponsorLogo, sponsorLogoSource } from './pwAssets';
+import { shouldShowSponsorLogo, sponsorLogoSource } from './pwAssets';
 import { sponsorContactLine } from './sponsorPhone';
 import {
   IconFacebook,
@@ -248,8 +248,8 @@ export function CompetitionDetailCard({
     <View style={{ width: 1, height: s(29), backgroundColor: PW.statBorder }} />
   );
 
-  const leftArt = sponsorLogoSource(sponsor.logoUrl);
-  const showSponsorLogo = hasSponsorLogo(sponsor.logoUrl);
+  const leftArt = sponsorLogoSource(sponsor.logoUrl, sponsor.socialLinks);
+  const showSponsorLogo = shouldShowSponsorLogo(sponsor.logoUrl, sponsor.socialLinks);
   const contactLine = sponsorContactLine(sponsor);
   const links = sponsor.socialLinks;
   const showSocial = hasSponsorSocialLinks(links);
@@ -294,7 +294,7 @@ export function CompetitionDetailCard({
               height: c(80),
             }}
             contentFit="contain"
-            cacheKey={sponsor.logoUrl}
+            cacheKey={sponsor.logoUrl ?? (sponsor.socialLinks?.storeLogoDefault ? 'default-store' : 'none')}
           />
         </>
       ) : null}

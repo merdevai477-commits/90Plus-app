@@ -21,7 +21,7 @@ import type { CompetitionInfo } from '../../services/competitions.service';
 import { CompetitionDetailCard } from './CompetitionDetailCard';
 import { usePWLocalize } from './localize';
 import { prizeArtSource } from './PrizeCategoryGrid';
-import { hasSponsorLogo, sponsorLogoSource } from './pwAssets';
+import { shouldShowSponsorLogo, sponsorLogoSource, usesDefaultStoreLogo } from './pwAssets';
 import { sponsorContactLine } from './sponsorPhone';
 import { IconLocation, IconPickupPin, IconVespaGreen } from './icons';
 import {
@@ -323,9 +323,9 @@ export function CompetitionCard({
         />
 
         {/* Sponsor logo — Figma 91×94 at (268,17). Hidden until the advertiser uploads one. */}
-        {hasSponsorLogo(sponsor.logoUrl) ? (
+        {shouldShowSponsorLogo(sponsor.logoUrl, sponsor.socialLinks) ? (
           <Image
-            source={sponsorLogoSource(sponsor.logoUrl)!}
+            source={sponsorLogoSource(sponsor.logoUrl, sponsor.socialLinks)!}
             style={{
               position: 'absolute',
               left: logoLeft,
@@ -335,8 +335,8 @@ export function CompetitionCard({
             }}
             contentFit="contain"
             transition={150}
-            cacheKey={sponsor.logoUrl}
-            recyclingKey={`${sponsor.id}:${sponsor.logoUrl}`}
+            cacheKey={sponsor.logoUrl ?? (usesDefaultStoreLogo(sponsor.socialLinks) ? 'default-store' : 'none')}
+            recyclingKey={`${sponsor.id}:${sponsor.logoUrl ?? (usesDefaultStoreLogo(sponsor.socialLinks) ? 'default' : 'none')}`}
           />
         ) : null}
 

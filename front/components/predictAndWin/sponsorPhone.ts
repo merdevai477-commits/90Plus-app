@@ -8,6 +8,8 @@ export type SponsorPhoneSocialLinks = {
   whatsapp?: string;
   phoneCountryId?: string;
   phoneNational?: string;
+  /** True when the advertiser removed a custom logo — show bundled `store.png`. */
+  storeLogoDefault?: boolean;
 };
 
 /** ISO 3166-1 alpha-2 → country calling code (without +). */

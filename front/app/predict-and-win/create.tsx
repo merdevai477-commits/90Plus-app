@@ -37,7 +37,7 @@ import {
   categoryArtSource,
   usePWGridMetrics,
 } from '../../components/predictAndWin/PrizeCategoryGrid';
-import { hasSponsorLogo } from '../../components/predictAndWin/pwAssets';
+import { DEFAULT_STORE_LOGO } from '../../components/predictAndWin/pwAssets';
 import { CompetitionDetailCard } from '../../components/predictAndWin/CompetitionDetailCard';
 import { CompetitionCard } from '../../components/predictAndWin/CompetitionCard';
 import {
@@ -156,6 +156,7 @@ export default function CreateCompetitionScreen() {
 
   // Step 3
   const [storeImageUrl, setStoreImageUrl] = useState<string | null>(null);
+  const [useDefaultStoreLogo, setUseDefaultStoreLogo] = useState(false);
   const [storeName, setStoreName] = useState('');
   const [storePhoneCountryId, setStorePhoneCountryId] = useState(DEFAULT_SPONSOR_PHONE_COUNTRY_ID);
   const [storePhoneNational, setStorePhoneNational] = useState('');
@@ -212,9 +213,15 @@ export default function CreateCompetitionScreen() {
         if (!sp || cancelled) return;
         if (sp.name) setStoreName(sp.name);
         if (sp.address) setStoreAddress(sp.address);
-        if (sp.logoUrl) setStoreImageUrl(sp.logoUrl);
-        setHasDelivery(sp.hasDelivery);
         const links = sp.socialLinks;
+        if (sp.logoUrl) {
+          setStoreImageUrl(sp.logoUrl);
+          setUseDefaultStoreLogo(false);
+        } else if (links?.storeLogoDefault) {
+          setStoreImageUrl(null);
+          setUseDefaultStoreLogo(true);
+        }
+        setHasDelivery(sp.hasDelivery);
         const phone = parseStoredPhone(links);
         setStorePhoneCountryId(phone.countryId);
         setStorePhoneNational(phone.national);
@@ -269,6 +276,9 @@ export default function CreateCompetitionScreen() {
       socialLinks.phoneCountryId = storePhoneCountryId;
       socialLinks.phoneNational = national;
     }
+    if (!storeImageUrl && useDefaultStoreLogo) {
+      socialLinks.storeLogoDefault = true;
+    }
     const phoneLine = national ? sponsorPhoneLine(socialLinks) : null;
     return {
       name: storeName.trim(),
@@ -283,6 +293,7 @@ export default function CreateCompetitionScreen() {
     storePhoneCountryId,
     storePhoneNational,
     storeImageUrl,
+    useDefaultStoreLogo,
     storeAddress,
     hasDelivery,
     facebook,
@@ -470,6 +481,8 @@ export default function CreateCompetitionScreen() {
       toast.showError(wizard.publish, errorMessage(err));
     }
   };
+
+  const showStoreImage = storeImageUrl || useDefaultStoreLogo;
 
   const previewSocialLinks = buildSponsorPayload().socialLinks;
   const previewPhoneLine = sponsorPhoneLine(previewSocialLinks);
@@ -938,7 +951,7 @@ export default function CreateCompetitionScreen() {
                   gap: s(20),
                 }}
               >
-                {storeImageUrl ? (
+                {showStoreImage ? (
                   <LinearGradient
                     colors={['#4a078a', '#130224']}
                     style={{
@@ -957,12 +970,21 @@ export default function CreateCompetitionScreen() {
                       elevation: 10,
                     }}
                   >
-                    <Image
-                      source={{ uri: storeImageUrl }}
-                      cacheKey={storeImageUrl}
-                      style={{ width: '100%', height: '100%' }}
-                      contentFit="cover"
-                    />
+                    {storeImageUrl ? (
+                      <Image
+                        source={{ uri: storeImageUrl }}
+                        cacheKey={storeImageUrl}
+                        style={{ width: '100%', height: '100%' }}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <Image
+                        source={DEFAULT_STORE_LOGO}
+                        cacheKey="default-store"
+                        style={{ width: '100%', height: '100%' }}
+                        contentFit="cover"
+                      />
+                    )}
                   </LinearGradient>
                 ) : (
                   <Pressable onPress={() => setPickerTarget('store')}>
@@ -989,14 +1011,20 @@ export default function CreateCompetitionScreen() {
                   </Pressable>
                 )}
 
-                {storeImageUrl ? (
+                {showStoreImage ? (
                   <View style={{ gap: s(12), alignItems: dir.alignStart }}>
                     <Pressable onPress={() => setPickerTarget('store')} hitSlop={8}>
                       <Text style={{ fontFamily: semibold, fontSize: f(14), color: PW.vsTop }}>
                         {wizard.storeChangePhoto}
                       </Text>
                     </Pressable>
-                    <Pressable onPress={() => setStoreImageUrl(null)} hitSlop={8}>
+                    <Pressable
+                      onPress={() => {
+                        setStoreImageUrl(null);
+                        setUseDefaultStoreLogo(true);
+                      }}
+                      hitSlop={8}
+                    >
                       <Text style={{ fontFamily: regular, fontSize: f(13), color: PW.textTileSub }}>
                         {wizard.storeDeletePhoto}
                       </Text>
@@ -1130,7 +1158,10 @@ export default function CreateCompetitionScreen() {
           onClose={() => setPickerTarget(null)}
           onSuccess={(url) => {
             if (pickerTarget === 'prize') setPrizeImageUrl(url);
-            else if (pickerTarget === 'store') setStoreImageUrl(url);
+            else if (pickerTarget === 'store') {
+              setStoreImageUrl(url);
+              setUseDefaultStoreLogo(false);
+            }
             setPickerTarget(null);
           }}
           /**

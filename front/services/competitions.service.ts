@@ -49,6 +49,7 @@ export interface SponsorInfo {
     whatsapp?: string;
     phoneCountryId?: string;
     phoneNational?: string;
+    storeLogoDefault?: boolean;
   } | null;
   isVerified: boolean;
   isActive: boolean;
@@ -173,6 +174,7 @@ export interface CreateCompetitionPayload {
       whatsapp?: string;
       phoneCountryId?: string;
       phoneNational?: string;
+      storeLogoDefault?: boolean;
     } | null;
   };
   categoryId: string;
