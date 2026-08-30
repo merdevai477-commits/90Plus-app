@@ -122,6 +122,13 @@ export function parseStoredPhone(links?: SponsorPhoneSocialLinks | null): {
   return { countryId, national };
 }
 
+export function isStorePhoneValid(countryId: string, nationalDigits: string): boolean {
+  const digits = normalizeNationalDigits(nationalDigits, countryId);
+  if (!digits) return true;
+  if (countryId === 'egypt') return digits.length === 10 && digits.startsWith('1');
+  return digits.length >= 8 && digits.length <= 15;
+}
+
 export function sponsorContactLine(sponsor: {
   description?: string | null;
   socialLinks?: SponsorPhoneSocialLinks | null;

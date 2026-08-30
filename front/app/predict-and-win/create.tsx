@@ -70,6 +70,7 @@ import {
   normalizeNationalDigits,
   parseStoredPhone,
   sponsorPhoneLine,
+  isStorePhoneValid,
   type SponsorPhoneSocialLinks,
 } from '../../components/predictAndWin/sponsorPhone';
 import { usePWLocalize } from '../../components/predictAndWin/localize';
@@ -134,6 +135,8 @@ export default function CreateCompetitionScreen() {
   const [categories, setCategories] = useState<PrizeCategoryInfo[]>([]);
   const [category, setCategory] = useState<PrizeCategoryInfo | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [sponsorProfileLoading, setSponsorProfileLoading] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'prize' | 'store' | null>(null);
   const publishInFlight = useRef(false);
 
@@ -204,6 +207,7 @@ export default function CreateCompetitionScreen() {
   /** Reuse the sponsor profile on repeat wizard runs so a new upload replaces the old logo. */
   useEffect(() => {
     let cancelled = false;
+    setSponsorProfileLoading(true);
     void (async () => {
       try {
         const token = await getTokenRef.current();
@@ -230,6 +234,8 @@ export default function CreateCompetitionScreen() {
         if (links?.whatsapp) setWhatsapp(links.whatsapp);
       } catch {
         // First-time sponsors have no profile yet — wizard still works.
+      } finally {
+        if (!cancelled) setSponsorProfileLoading(false);
       }
     })();
     return () => {
@@ -260,7 +266,13 @@ export default function CreateCompetitionScreen() {
       return step2Problem === null;
     }
     if (phase === 3) {
-      return !!storeName.trim() && !!storeAddress.trim() && hasDelivery !== null;
+      return (
+        !!storeName.trim() &&
+        !!storeAddress.trim() &&
+        hasDelivery !== null &&
+        isStorePhoneValid(storePhoneCountryId, storePhoneNational) &&
+        !savingProfile
+      );
     }
     return true;
   };
@@ -301,17 +313,30 @@ export default function CreateCompetitionScreen() {
     whatsapp,
   ]);
 
+  const step3PhoneProblem: string | null = (() => {
+    if (!storePhoneNational.trim()) return null;
+    if (!isStorePhoneValid(storePhoneCountryId, storePhoneNational)) {
+      return wizard.storePhoneInvalid;
+    }
+    return null;
+  })();
+
   const goNext = () => {
     if (!canAdvance()) return;
     if (phase === 3) {
       void (async () => {
+        setSavingProfile(true);
         try {
           const token = await getToken();
-          if (token) await CompetitionsService.saveSponsorProfile(token, buildSponsorPayload());
-        } catch {
-          // Best-effort — publish still upserts the same profile.
+          if (!token) throw new Error('NOT_AUTHENTICATED');
+          await CompetitionsService.saveSponsorProfile(token, buildSponsorPayload());
+          toast.showSuccess(wizard.profileSavedTitle, wizard.profileSavedSubtitle);
+          setPhase(4);
+        } catch (err: unknown) {
+          toast.showError(wizard.profileSaveFailed, errorMessage(err));
+        } finally {
+          setSavingProfile(false);
         }
-        setPhase(4);
       })();
       return;
     }
@@ -1120,8 +1145,37 @@ export default function CreateCompetitionScreen() {
                   </View>
                 </View>
 
-                <View style={{ marginTop: s(82) }}>
-                  <PWPrimaryButton label={wizard.next} onPress={goNext} disabled={!canAdvance()} />
+                <View style={{ marginTop: s(82), gap: s(10) }}>
+                  {sponsorProfileLoading ? (
+                    <Text
+                      style={{
+                        fontFamily: regular,
+                        fontSize: f(12),
+                        color: PW.textTileSub,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {wizard.profileLoading}
+                    </Text>
+                  ) : null}
+                  {step3PhoneProblem ? (
+                    <Text
+                      style={{
+                        fontFamily: regular,
+                        fontSize: f(12),
+                        color: PW.textTileSub,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {step3PhoneProblem}
+                    </Text>
+                  ) : null}
+                  <PWPrimaryButton
+                    label={savingProfile ? wizard.savingProfile : wizard.next}
+                    onPress={goNext}
+                    disabled={!canAdvance()}
+                    loading={savingProfile ? <ActivityIndicator color={PW.text} /> : undefined}
+                  />
                 </View>
               </View>
             </>

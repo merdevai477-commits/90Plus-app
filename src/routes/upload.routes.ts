@@ -847,7 +847,7 @@ router.post(
         kind === 'sponsor'
           ? await prisma.sponsor.findFirst({
               where: { ownerId: user.id },
-              select: { logoUrl: true },
+              select: { logoUrl: true, socialLinks: true },
             })
           : null;
 
@@ -883,7 +883,15 @@ router.post(
         }
         await prisma.sponsor.updateMany({
           where: { ownerId: user.id },
-          data: { logoUrl: result.url },
+          data: {
+            logoUrl: result.url,
+            socialLinks: {
+              ...(typeof existingSponsor?.socialLinks === 'object' && existingSponsor.socialLinks !== null
+                ? (existingSponsor.socialLinks as Record<string, unknown>)
+                : {}),
+              storeLogoDefault: false,
+            },
+          },
         });
       }
 

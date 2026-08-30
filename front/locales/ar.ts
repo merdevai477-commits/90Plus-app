@@ -1410,6 +1410,12 @@ export const ar = {
       edit: 'تعديل الجائزة',
       submittedTitle: 'تم إرسال جائزتك',
       submittedSubtitle: 'سيتم مراجعتها من فريقنا ونشرها قريباً',
+      profileSavedTitle: 'تم حفظ بيانات المحل',
+      profileSavedSubtitle: 'ستظهر تلقائياً في المسابقات القادمة',
+      profileSaveFailed: 'تعذر حفظ بيانات المحل — تحقق من الاتصال وحاول مرة أخرى',
+      profileLoading: 'جاري تحميل بيانات محلك…',
+      savingProfile: 'جاري الحفظ…',
+      storePhoneInvalid: 'رقم الموبايل غير مكتمل — لمصر: 10 أرقام بعد 01',
     },
     winnerPicker: {
       title: 'لوحة التوقعات',

@@ -1339,6 +1339,12 @@ export const en = {
       edit: 'Edit prize',
       submittedTitle: 'Your prize was submitted',
       submittedSubtitle: 'Our team will review it and publish it soon',
+      profileSavedTitle: 'Store details saved',
+      profileSavedSubtitle: 'They will load automatically for your next prizes',
+      profileSaveFailed: 'Could not save store details — check your connection and try again',
+      profileLoading: 'Loading your store profile…',
+      savingProfile: 'Saving…',
+      storePhoneInvalid: 'Incomplete mobile number — for Egypt use 10 digits after 01',
     },
     winnerPicker: {
       title: 'Prediction dashboard',
