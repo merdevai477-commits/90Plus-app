@@ -23,7 +23,7 @@ export interface SponsorPrizeCtaState {
  * `true` keeps the hub CTA as "أضف جائزتك" and always opens create, so they
  * can publish more than once. Flip to `false` when they say «رجعه زي ما كان».
  */
-export const ALWAYS_ADD_PRIZE_CTA = false;
+export const ALWAYS_ADD_PRIZE_CTA = true;
 
 /**
  * Latest owned competition for the signed-in sponsor — drives the hub CTA
