@@ -33,6 +33,11 @@ module.exports = ({ config }) => {
     android: {
       ...config.android,
       intentFilters,
+      permissions: [
+        ...(config.android?.permissions ?? []),
+        'android.permission.ACCESS_FINE_LOCATION',
+        'android.permission.ACCESS_COARSE_LOCATION',
+      ],
       queries: [
         ...(config.android?.queries ?? []),
         { package: 'com.google.android.apps.maps' },
@@ -73,6 +78,9 @@ module.exports = ({ config }) => {
             'maps',
           ]),
         ],
+        NSLocationWhenInUseUsageDescription:
+          config.ios?.infoPlist?.NSLocationWhenInUseUsageDescription ??
+          'يستخدم 90Plus موقعك لتحديد عنوان المتجر على الخريطة.',
       },
       ...(googlePlacesIosKey
         ? {

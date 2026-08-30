@@ -908,17 +908,22 @@ export default function CreateCompetitionScreen() {
                   <PWStoreAddressBlock
                     value={storeAddress}
                     onChangeText={setStoreAddress}
-                    storeName={storeName}
                     labels={{
-                      field: wizard.storeAddress,
                       fieldPlaceholder: wizard.storeAddressPlaceholder,
                       steps: wizard.storeAddressSteps,
-                      pickOnMaps: wizard.pickAddressOnMaps,
+                      pickOnMap: wizard.pickOnMap,
                       pasteAddress: wizard.pasteAddress,
+                      mapPicker: {
+                        title: wizard.mapPickerTitle,
+                        close: t.common.close,
+                        myLocation: wizard.mapPickerMyLocation,
+                        hint: wizard.mapPickerHint,
+                        confirm: wizard.mapPickerConfirm,
+                        noKey: wizard.mapPickerNoKey,
+                        loadError: wizard.mapPickerLoadError,
+                        geoDenied: wizard.mapPickerGeoDenied,
+                      },
                     }}
-                    onMapsOpenFailed={() =>
-                      toast.showError(wizard.pickAddressOnMaps, wizard.mapsOpenFailed)
-                    }
                     onPasteEmpty={onPasteAddressEmpty}
                     onPasteDone={onPasteAddressDone}
                     icon={<IconStoreField width={s(35)} height={s(35)} />}

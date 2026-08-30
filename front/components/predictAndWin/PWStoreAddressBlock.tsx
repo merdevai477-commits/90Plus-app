@@ -1,10 +1,10 @@
 import * as Clipboard from 'expo-clipboard';
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { PWMapPickerModal } from './PWMapPickerModal';
 import { PWPlacesAddressField } from './PWPlacesAddressField';
 import { IconMapFill } from './icons';
-import { openGoogleMapsSearch } from './maps';
 import { PW, usePWDirection, usePWFonts, usePWScale } from './theme';
 
 export function PWStoreAddressBlock({
@@ -12,7 +12,6 @@ export function PWStoreAddressBlock({
   onChangeText,
   storeName,
   labels,
-  onMapsOpenFailed,
   onPasteEmpty,
   onPasteDone,
   icon,
@@ -21,13 +20,21 @@ export function PWStoreAddressBlock({
   onChangeText: (t: string) => void;
   storeName: string;
   labels: {
-    field: string;
     fieldPlaceholder: string;
     steps: string;
-    pickOnMaps: string;
+    pickOnMap: string;
     pasteAddress: string;
+    mapPicker: {
+      title: string;
+      close: string;
+      myLocation: string;
+      hint: string;
+      confirm: string;
+      noKey: string;
+      loadError: string;
+      geoDenied: string;
+    };
   };
-  onMapsOpenFailed: () => void;
   onPasteEmpty: () => void;
   onPasteDone: () => void;
   icon?: React.ReactNode;
@@ -35,12 +42,7 @@ export function PWStoreAddressBlock({
   const { s, f } = usePWScale();
   const { semibold, regular, medium } = usePWFonts();
   const dir = usePWDirection();
-
-  const openMaps = useCallback(async () => {
-    const query = value.trim() || storeName.trim();
-    const opened = await openGoogleMapsSearch(query);
-    if (!opened) onMapsOpenFailed();
-  }, [value, storeName, onMapsOpenFailed]);
+  const [mapOpen, setMapOpen] = useState(false);
 
   const pasteFromClipboard = useCallback(async () => {
     const text = (await Clipboard.getStringAsync()).trim();
@@ -51,6 +53,15 @@ export function PWStoreAddressBlock({
     onChangeText(text);
     onPasteDone();
   }, [onChangeText, onPasteEmpty, onPasteDone]);
+
+  const confirmMapAddress = useCallback(
+    (address: string) => {
+      onChangeText(address);
+      setMapOpen(false);
+      onPasteDone();
+    },
+    [onChangeText, onPasteDone],
+  );
 
   return (
     <View style={{ width: '100%', gap: s(10) }}>
@@ -82,18 +93,21 @@ export function PWStoreAddressBlock({
         }}
       >
         <Pressable
-          onPress={() => void openMaps()}
+          onPress={() => setMapOpen(true)}
           accessibilityRole="button"
           style={{
             flexDirection: dir.isRTL ? 'row-reverse' : 'row',
             alignItems: 'center',
             gap: s(8),
-            paddingVertical: s(6),
+            paddingVertical: s(8),
+            paddingHorizontal: s(12),
+            borderRadius: s(10),
+            backgroundColor: '#3d0ab3',
           }}
         >
           <IconMapFill width={s(18)} height={s(18)} />
-          <Text style={{ fontFamily: semibold, fontSize: f(13), color: '#8a38d8' }}>
-            {labels.pickOnMaps}
+          <Text style={{ fontFamily: semibold, fontSize: f(13), color: '#fff' }}>
+            {labels.pickOnMap}
           </Text>
         </Pressable>
 
@@ -101,7 +115,7 @@ export function PWStoreAddressBlock({
           onPress={() => void pasteFromClipboard()}
           accessibilityRole="button"
           style={{
-            paddingVertical: s(6),
+            paddingVertical: s(8),
             paddingHorizontal: s(12),
             borderRadius: s(10),
             borderWidth: 1,
@@ -114,6 +128,14 @@ export function PWStoreAddressBlock({
           </Text>
         </Pressable>
       </View>
+
+      <PWMapPickerModal
+        visible={mapOpen}
+        onClose={() => setMapOpen(false)}
+        onConfirm={confirmMapAddress}
+        onAddressChange={onChangeText}
+        labels={labels.mapPicker}
+      />
     </View>
   );
 }
