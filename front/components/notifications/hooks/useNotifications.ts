@@ -3,15 +3,12 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { DailySpinService, NotificationService, type SocialNotification } from '../../../src/services/authService';
-import { useHomeStore } from '../../../src/store/home.store';
 import { cacheService, CACHE_KEYS, CACHE_TTL } from '../../../services/cacheService';
 import { useNotificationEvents } from '../../../hooks/useWebSocket';
 
 const ITEMS_PER_PAGE = 20;
 /** Skip full refetch on focus if we loaded recently. */
 const FOCUS_REFETCH_THROTTLE_MS = 45_000;
-/** Cap local match-store rows merged into the inbox list. */
-const MAX_LOCAL_MATCH_NOTIFICATIONS = 30;
 /** Hard cap on merged list size shown in the UI. */
 const MAX_MERGED_NOTIFICATIONS = 200;
 
@@ -31,11 +28,6 @@ export function useNotifications() {
 
   const [canSpin, setCanSpin] = useState(false);
   const [spinTimeRemaining, setSpinTimeRemaining] = useState<{ hours: number; minutes: number } | null>(null);
-
-  const { notifications: matchNotifications, clearNotifications: clearMatchNotifications } = useHomeStore();
-
-  const matchNotificationsRef = useRef(matchNotifications);
-  matchNotificationsRef.current = matchNotifications;
 
   const lastFetchAtRef = useRef(0);
   const hasLoadedRef = useRef(false);
@@ -96,8 +88,7 @@ export function useNotifications() {
 
         if (pageNum === 1) {
           lastFetchAtRef.current = Date.now();
-          const localUnread = matchNotificationsRef.current.filter(n => !n.read).length;
-          setUnreadCount((backendUnread ?? 0) + localUnread);
+          setUnreadCount(backendUnread ?? 0);
         }
 
         if (pageNum === 1) {
@@ -132,35 +123,13 @@ export function useNotifications() {
     loadNotifications(page + 1, true);
   }, [isLoading, isRefreshing, isLoadingMore, hasMore, loadNotifications, page]);
 
-  const allNotifications = useMemo(() => {
-    const localSlice = matchNotifications.slice(0, MAX_LOCAL_MATCH_NOTIFICATIONS);
-    const convertedMatchNotifications: SocialNotification[] = localSlice.map(mn => {
-      let createdAt = mn.time;
-      const parsed = new Date(mn.time);
-      if (isNaN(parsed.getTime())) {
-        createdAt = new Date().toISOString();
-      }
-      return {
-        id: mn.id,
-        type: 'MATCH_UPDATE' as const,
-        title: mn.title,
-        message: mn.message,
-        isRead: mn.read,
-        createdAt,
-        data: mn.fixtureId ? { matchId: mn.fixtureId } : undefined,
-      };
-    });
-
-    const merged = [...backendNotifications, ...convertedMatchNotifications];
-    const deduped = new Map<string, SocialNotification>();
-    for (const item of merged) {
-      if (!deduped.has(item.id)) deduped.set(item.id, item);
-    }
-
-    return Array.from(deduped.values())
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, MAX_MERGED_NOTIFICATIONS);
-  }, [backendNotifications, matchNotifications]);
+  const allNotifications = useMemo(
+    () =>
+      [...backendNotifications]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, MAX_MERGED_NOTIFICATIONS),
+    [backendNotifications],
+  );
 
   const appStateRef = useRef(AppState.currentState);
   useEffect(() => {
@@ -222,7 +191,6 @@ export function useNotifications() {
   return {
     notifications: allNotifications,
     backendNotifications,
-    matchNotifications,
 
     page,
     hasMore,
@@ -240,7 +208,6 @@ export function useNotifications() {
 
     loadNotifications,
     refreshNotifications,
-    clearMatchNotifications,
     setBackendNotifications,
     setUnreadCount,
     setHasMore,

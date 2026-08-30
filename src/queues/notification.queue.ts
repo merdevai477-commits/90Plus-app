@@ -241,7 +241,7 @@ async function runReEngagementJob(): Promise<void> {
             title: msg.title,
             message: msg.message,
             type: 'RE_ENGAGEMENT',
-            data: { type: 'RE_ENGAGEMENT', screen: '/(tabs)/Home' },
+            data: { type: 'RE_ENGAGEMENT', screen: '/(tabs)/matches' },
           })
         )
       );

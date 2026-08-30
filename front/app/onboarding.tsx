@@ -26,7 +26,6 @@ import Animated, {
     FadeIn,
 } from 'react-native-reanimated';
 import { globalState } from '../globalState';
-import { useHomeStore } from '../src/store/home.store';
 import { useTranslation } from '../src/i18n';
 import { clubLogoService } from '../services/clubLogoService';
 import { useSettings } from '../contexts/SettingsContext';
@@ -78,7 +77,6 @@ export default function OnboardingScreen() {
 
                     try {
                         globalState.setUserType('diamond');
-                        useHomeStore.getState().setUserMode('diamond');
                     } catch (stateError) {
                         console.error('Error updating global state:', stateError);
                     }

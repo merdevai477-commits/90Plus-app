@@ -1785,7 +1785,7 @@ export default function MatchesHubScreenV2() {
   );
 
   // Open the full match-details screen for a fixture. Mirrors the params
-  // shape used everywhere else in the app (Home.tsx, team-profile.tsx) so
+  // shape used everywhere else in the app (matches tab, team-profile.tsx) so
   // match-details.tsx finds exactly what it expects:
   //   - fixtureId is the only field actually used to fetch real data
   //     (events, lineups, statistics, fixture details, standings, venue)

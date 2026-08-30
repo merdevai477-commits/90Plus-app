@@ -57,7 +57,6 @@ import {
 import { useNotifications } from '../components/notifications/hooks/useNotifications';
 import { useAuth } from '@clerk/clerk-expo';
 import { NotificationService, type SocialNotification } from '../src/services/authService';
-import { useHomeStore } from '../src/store/home.store';
 import { syncExpoPushTokenIfGranted } from '../src/hooks/usePushNotifications';
 import { logger } from '../utils/logger';
 import { toastManager } from '../services/toastManager';
@@ -639,7 +638,6 @@ export default function NotificationsScreen() {
         spinTimeRemaining,
         checkSpinStatus,
     } = useNotifications();
-    const { clearNotifications: clearMatchNotifications } = useHomeStore();
 
     const params = useLocalSearchParams<{ openLuckyWheel?: string }>();
     const [showLuckyWheel, setShowLuckyWheel] = useState(false);
@@ -713,7 +711,6 @@ export default function NotificationsScreen() {
                     prev.map((n) => ({ ...n, isRead: true })),
                 );
                 setUnreadCount(0);
-                clearMatchNotifications();
                 toastManager.showSuccess(
                     t.notifications.markAllRead,
                     '',
@@ -726,7 +723,7 @@ export default function NotificationsScreen() {
                 duration: 2500,
             });
         }
-    }, [getToken, setBackendNotifications, setUnreadCount, clearMatchNotifications, t]);
+    }, [getToken, setBackendNotifications, setUnreadCount, t]);
 
     const handleLuckyWheelPress = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

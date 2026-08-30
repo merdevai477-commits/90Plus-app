@@ -129,8 +129,6 @@ export default function SettingsScreen() {
       AuthService.clearMemoryCache();
       const { rankingsService } = await import('../../services/rankingsService');
       rankingsService.clearMemoryCache();
-      const { useHomeStore } = await import('../../src/store/home.store');
-      useHomeStore.getState().clearUserData();
       const { websocketClient } = await import('../../services/websocketClient');
       websocketClient.disconnect();
       const { cacheService } = await import('../../services/cacheService');
@@ -168,8 +166,6 @@ export default function SettingsScreen() {
       AuthService.clearMemoryCache();
       const { rankingsService } = await import('../../services/rankingsService');
       rankingsService.clearMemoryCache();
-      const { useHomeStore } = await import('../../src/store/home.store');
-      useHomeStore.getState().clearUserData();
       const { websocketClient } = await import('../../services/websocketClient');
       websocketClient.disconnect();
       const { cacheService } = await import('../../services/cacheService');

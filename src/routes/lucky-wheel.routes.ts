@@ -169,7 +169,7 @@ router.post('/spin', requireAuth, async (req: Request, res: Response): Promise<v
             title: prize.coins >= 50 ? '🎉 يا سلام! جائزة كبيرة!' : '🎡 لفيت العجلة!',
             message: `مبروك! ربحت ${prize.coins} تذكرة من عجلة الحظ اليومية 🎁`,
             type: 'LUCKY_WHEEL',
-            data: { type: 'LUCKY_WHEEL', coinsWon: prize.coins, prizeIndex: prize.index, screen: '/(tabs)/Home' },
+                data: { type: 'LUCKY_WHEEL', coinsWon: prize.coins, prizeIndex: prize.index, screen: '/notifications', openLuckyWheel: 'true' },
         }).catch(() => {});
 
         res.json({

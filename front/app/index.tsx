@@ -3,7 +3,6 @@ import React, { useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 import { BootSplashScreen } from '../components/splash/BootSplashScreen';
 import { globalState } from '../globalState';
-import { useHomeStore } from '../src/store/home.store';
 import { logger } from '../services/logger';
 
 export default function Index() {
@@ -14,7 +13,6 @@ export default function Index() {
     if (!isSignedIn) return;
     try {
       globalState.setUserType('diamond');
-      useHomeStore.getState().setUserMode('diamond');
     } catch (err) {
       logger.warn('[Index] State update error:', err);
     }

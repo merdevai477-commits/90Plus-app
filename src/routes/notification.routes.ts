@@ -632,7 +632,7 @@ router.post('/test-push', requireAuth, async (req: Request, res: Response): Prom
                 type: 'LUCKY_WHEEL',
                 title: '🎡 عجلة الحظ جاهزة!',
                 body: 'حظك النهارده ينتظرك، العب دلوقتي!',
-                data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/Home', openLuckyWheel: 'true' },
+                data: { type: 'LUCKY_WHEEL', screen: '/notifications', openLuckyWheel: 'true' },
             });
         }
         if (type === 'all' || type === 'match_goal') {
@@ -656,7 +656,7 @@ router.post('/test-push', requireAuth, async (req: Request, res: Response): Prom
                 type: 'RE_ENGAGEMENT',
                 title: '⚽ الكرة بتنادي عليك!',
                 body: 'رجع التطبيق وشوف أحدث مباريات وتوقعات النهارده 🔥',
-                data: { type: 'RE_ENGAGEMENT', screen: '/(tabs)/Home' },
+                data: { type: 'RE_ENGAGEMENT', screen: '/(tabs)/matches' },
             });
         }
 

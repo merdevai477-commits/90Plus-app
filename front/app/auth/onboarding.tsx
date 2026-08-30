@@ -25,7 +25,6 @@ import Animated, {
     FadeIn,
 } from 'react-native-reanimated';
 import { globalState } from '../../globalState';
-import { useHomeStore } from '../../src/store/home.store';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTranslation } from '../../src/i18n';
 
@@ -67,7 +66,6 @@ export default function OnboardingScreen() {
             }
             
             globalState.setUserType('diamond');
-            useHomeStore.getState().setUserMode('diamond');
             router.replace('/(tabs)/matches');
         }
     }, [step, selectedClub, selectedCountry, selectedLeagues, addFavoriteLeague]);

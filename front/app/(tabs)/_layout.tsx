@@ -195,7 +195,6 @@ export default function TabLayout() {
             href: null,
           }}
         />
-        <Tabs.Screen name="Home" options={{ href: null }} />
         <Tabs.Screen name="settings" options={{ href: null }} />
         <Tabs.Screen name="privacy-settings" options={{ href: null }} />
         <Tabs.Screen name="my-reports" options={{ href: null }} />
