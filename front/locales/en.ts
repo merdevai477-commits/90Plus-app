@@ -1299,7 +1299,13 @@ export const en = {
       storeName: 'Store / brand name',
       storeDescription: 'Store / brand description',
       storeAddress: 'Store / brand address',
-      pickAddressOnMaps: 'Pick address on Google Maps',
+      storeAddressPlaceholder: 'Start typing your store name or street',
+      storeAddressSteps:
+        '1. Type here and pick a suggestion — easiest.\n2. Or on Maps: find your place → Copy address → Paste address.',
+      pickAddressOnMaps: 'Open Google Maps',
+      pasteAddress: 'Paste address',
+      pasteAddressEmpty: 'Nothing to paste — copy the address from Maps first',
+      pasteAddressDone: 'Address pasted',
       pickAddressOnMapsHint:
         'Type to see address suggestions, or open Google Maps and paste the address here',
       mapsOpenFailed: 'Could not open Google Maps',

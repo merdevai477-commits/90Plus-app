@@ -62,15 +62,13 @@ import {
   startOfToday,
   validHoursForMeridiem,
 } from '../../components/predictAndWin/deadline';
-import { PWPlacesAddressField } from '../../components/predictAndWin/PWPlacesAddressField';
-import { openGoogleMapsSearch } from '../../components/predictAndWin/maps';
+import { PWStoreAddressBlock } from '../../components/predictAndWin/PWStoreAddressBlock';
 import { usePWLocalize } from '../../components/predictAndWin/localize';
 import {
   IconCamera,
   IconFacebook,
   IconIdea,
   IconInstagram,
-  IconMapFill,
   IconShoe,
   IconStoreField,
   IconWhatsapp,
@@ -284,13 +282,12 @@ export default function CreateCompetitionScreen() {
     [deadlineDate, kickoffAt, hour],
   );
 
-  const openMapsForStore = useCallback(async () => {
-    const query = storeAddress.trim() || storeName.trim();
-    const opened = await openGoogleMapsSearch(query);
-    if (!opened) {
-      toast.showError(wizard.pickAddressOnMaps, wizard.mapsOpenFailed);
-    }
-  }, [storeAddress, storeName, toast, wizard.mapsOpenFailed]);
+    toast.showError(wizard.pasteAddress, wizard.pasteAddressEmpty);
+  }, [toast, wizard.pasteAddress, wizard.pasteAddressEmpty]);
+
+  const onPasteAddressDone = useCallback(() => {
+    toast.showSuccess(wizard.pasteAddress, wizard.pasteAddressDone);
+  }, [toast, wizard.pasteAddress, wizard.pasteAddressDone]);
 
   const deadlineIso = (): string | null => deadlineAt()?.toISOString() ?? null;
 
@@ -907,45 +904,24 @@ export default function CreateCompetitionScreen() {
 
                 <View style={{ gap: s(16), alignItems: dir.alignStart }}>
                   <PWFieldLabel label={wizard.storeAddress} />
-                  <View style={{ width: '100%', gap: s(10) }}>
-                    <PWPlacesAddressField
-                      value={storeAddress}
-                      onChangeText={setStoreAddress}
-                      placeholder={wizard.storeAddress}
-                      icon={<IconStoreField width={s(35)} height={s(35)} />}
-                    />
-                    <Pressable
-                      onPress={openMapsForStore}
-                      accessibilityRole="button"
-                      style={{
-                        flexDirection: dir.isRTL ? 'row-reverse' : 'row',
-                        alignItems: 'center',
-                        gap: s(10),
-                        alignSelf: dir.alignStart,
-                      }}
-                    >
-                      <IconMapFill width={s(20)} height={s(20)} />
-                      <Text
-                        style={{
-                          fontFamily: semibold,
-                          fontSize: f(14),
-                          color: '#8a38d8',
-                        }}
-                      >
-                        {wizard.pickAddressOnMaps}
-                      </Text>
-                    </Pressable>
-                    <Text
-                      style={{
-                        fontFamily: regular,
-                        fontSize: f(12),
-                        color: PW.textTileSub,
-                        textAlign: dir.textAlign,
-                      }}
-                    >
-                      {wizard.pickAddressOnMapsHint}
-                    </Text>
-                  </View>
+                  <PWStoreAddressBlock
+                    value={storeAddress}
+                    onChangeText={setStoreAddress}
+                    storeName={storeName}
+                    labels={{
+                      field: wizard.storeAddress,
+                      fieldPlaceholder: wizard.storeAddressPlaceholder,
+                      steps: wizard.storeAddressSteps,
+                      pickOnMaps: wizard.pickAddressOnMaps,
+                      pasteAddress: wizard.pasteAddress,
+                    }}
+                    onMapsOpenFailed={() =>
+                      toast.showError(wizard.pickAddressOnMaps, wizard.mapsOpenFailed)
+                    }
+                    onPasteEmpty={onPasteAddressEmpty}
+                    onPasteDone={onPasteAddressDone}
+                    icon={<IconStoreField width={s(35)} height={s(35)} />}
+                  />
                 </View>
 
                 <View style={{ gap: s(16), alignItems: dir.alignStart }}>
