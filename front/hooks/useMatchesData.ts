@@ -33,6 +33,8 @@ import {
 } from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { overlaySnapshotsOnCalendar } from '../utils/overlaySnapshotsOnCalendar';
+import { agentDebugLog } from '../utils/agentDebugLog';
+import { matchCardToApiFixture } from '../utils/matchCardToApiFixture';
 import { mergeTodayCalendarWithLiveFeed } from '../utils/mergeTodayCalendarWithLiveFeed';
 import { dateFromLocalKey } from '../utils/safeDate';
 import { sortCountryGroupsForMatches } from '../utils/matchesCountrySort';
@@ -375,6 +377,18 @@ export const useMatchesData = (
   useRegisterLiveFixtures(
     pauseBackgroundRefresh || !isToday ? [] : pollFixtureIds,
   );
+
+  // Paint live rows from calendar data instantly — no per-fixture HTTP stampede.
+  useEffect(() => {
+    if (pauseBackgroundRefresh || !isToday || pollFixtureIds.length === 0) return;
+    const store = useLiveFixtureStore.getState();
+    for (const id of pollFixtureIds) {
+      const match = calendarMatches.find((m) => parseInt(m.id, 10) === id);
+      if (!match) continue;
+      const preview = matchCardToApiFixture(match, id);
+      if (preview) store.ingestPreviewIfEmpty(id, preview);
+    }
+  }, [pollIdsKey, calendarMatches, pauseBackgroundRefresh, isToday]);
   
   // Stale-while-revalidate: show disk cache immediately when date changes
   useEffect(() => {
@@ -425,7 +439,20 @@ export const useMatchesData = (
   }, [pauseBackgroundRefresh]);
 
   // Group matches by league, then country (reuse league groups — no double group)
-  const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
+  const groupedMatches = useMemo(() => {
+    const t0 = Date.now();
+    const result = groupMatchesByLeague(matches);
+    const leagueMs = Date.now() - t0;
+    // #region agent log
+    agentDebugLog(
+      'useMatchesData.ts:grouping',
+      're-group matches',
+      { matchCount: matches.length, leagueGroupCount: result.length, leagueMs },
+      'H-B',
+    );
+    // #endregion
+    return result;
+  }, [matches]);
   const countryGroups = useMemo(
     () => groupMatchesByCountry(matches, groupedMatches),
     [matches, groupedMatches],

@@ -30,6 +30,9 @@ const inFlightFast = new Map<number, Promise<LiveFixtureSnapshot | null>>();
 const inFlightScore = new Map<number, Promise<LiveFixtureSnapshot | null>>();
 const inFlightFull = new Map<number, Promise<LiveFixtureSnapshot | null>>();
 
+/** Native 365 game ids — score poll must not hit /details (same as getFixtureById). */
+const NATIVE_365_FIXTURE_ID_MIN = 4_000_000;
+
 export function derivePhase(statusShort: string): LiveFixturePhase {
   if (FINISHED_STATUS_SHORTS.has(statusShort)) return 'finished';
   if (LIVE_STATUS_SHORTS.has(statusShort)) return 'live';
@@ -181,7 +184,18 @@ export async function fetchScoreSnapshot(
 
   const promise = (async () => {
     try {
-      const fixtureData = await ApiFootballService.getFixtureById(fixtureId);
+      // List score poll for 365 ids: getFixtureById still routes to /details.
+      // Calendar bootstrap + WS own live rows — skip per-fixture HTTP here.
+      if (fixtureId >= NATIVE_365_FIXTURE_ID_MIN) {
+        if (existing?.fixture) {
+          return { ...existing, updatedAt: Date.now() };
+        }
+        return null;
+      }
+
+      const fixtureData = await ApiFootballService.getFixtureById(fixtureId, {
+        skipOffline: true,
+      });
       if (!fixtureData) {
         if (existing) return { ...existing, updatedAt: Date.now() };
         return null;

@@ -9,6 +9,7 @@ import {
 } from '../src/store/liveFixtureStore.types';
 import { logger } from '../utils/logger';
 import { isLiveStoppage } from '../components/Matches/leagueApiUtils';
+import { agentDebugLog } from '../utils/agentDebugLog';
 
 const MAX_CONCURRENT_FAST = 6;
 /** Wait after connect before trusting WS and suspending HTTP polls (avoids flap). */
@@ -63,6 +64,7 @@ export function useLiveFixtureSync(): void {
         return;
       }
       pollRunningRef.current = true;
+      const pollStartedAt = Date.now();
       try {
         tickRef.current += 1;
         const state = useLiveFixtureStore.getState();
@@ -84,6 +86,20 @@ export function useLiveFixtureSync(): void {
         if (focusedId && tickRef.current % LIVE_FIXTURE_FULL_BUNDLE_EVERY_N === 0) {
           void useLiveFixtureStore.getState().fetchAndIngestFull(focusedId);
         }
+        // #region agent log
+        agentDebugLog(
+          'useLiveFixtureSync.ts:pollTick',
+          'poll tick complete',
+          {
+            targetCount: targets.length,
+            batchSize: batch.length,
+            durationMs: Date.now() - pollStartedAt,
+            skipped: false,
+          },
+          'H-F',
+          'post-fix-v2',
+        );
+        // #endregion
       } finally {
         pollRunningRef.current = false;
       }
@@ -128,8 +144,7 @@ export function useLiveFixtureSync(): void {
         clearTrustTimer();
         // Reconcile silently if we just came back from disconnect.
         if (isReconnect) {
-          logger.debug('[LiveFixtureSync] WS reconnect — silent reconcile fetch');
-          void useLiveFixtureStore.getState().refreshInterestedLive();
+          logger.debug('[LiveFixtureSync] WS reconnect — WS patches will reconcile scores');
         }
         trustTimerRef.current = setTimeout(() => {
           wsTrustedRef.current = true;
@@ -149,8 +164,8 @@ export function useLiveFixtureSync(): void {
     });
 
     const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active') {
-        void useLiveFixtureStore.getState().refreshInterestedLive();
+      if (next === 'active' && !wsTrustedRef.current) {
+        void pollTickRef.current();
       }
     });
 

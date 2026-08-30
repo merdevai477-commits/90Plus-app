@@ -4,6 +4,7 @@ import { MatchEventMonitor } from '../services/matchEventMonitor';
 import { MatchFavoritesStorage } from '../storage/matchFavorites.storage';
 import { isRateLimitError } from '../../services/apiFootball';
 import { logger } from '../services/logger';
+import { websocketClient } from '../../services/websocketClient';
 import { useLiveFixtureStore } from '../store/liveFixtureStore';
 
 const POLLING_INTERVAL = 45000; // 45 seconds
@@ -44,7 +45,7 @@ export const useMatchEventsMonitor = () => {
             await MatchEventMonitor.monitorMatches(liveFixtureIds);
             syncFavoriteInterest(liveFixtureIds);
 
-            if (liveFixtureIds.length > 0) {
+            if (liveFixtureIds.length > 0 && !websocketClient.isConnected()) {
                 await useLiveFixtureStore.getState().refreshInterestedLive();
             }
         } catch (error) {

@@ -1719,22 +1719,25 @@ export const ApiFootballService = {
    * ✅ Uses offline storage first (no token needed)
    * ✅ Cached based on match status
    */
-  async getFixtureById(fixtureId: number, options?: { skipCache?: boolean }): Promise<Fixture | null> {
+  async getFixtureById(
+    fixtureId: number,
+    options?: { skipCache?: boolean; skipOffline?: boolean },
+  ): Promise<Fixture | null> {
     // ✅ 1. Check offline storage first (permanent, no token needed)
-    const { offlineDataService } = await import('./offlineDataService');
-    if (!options?.skipCache) {
-    const offlineMatch = await offlineDataService.getFinishedMatch(fixtureId);
-    if (offlineMatch) {
-      console.log(`📦 Match ${fixtureId} from offline storage`);
-      // Convert to Fixture format
-      return {
-        fixture: offlineMatch.fixture,
-        teams: offlineMatch.teams,
-        league: offlineMatch.league,
-        goals: offlineMatch.goals,
-        score: offlineMatch.score,
-      } as Fixture;
-    }
+    if (!options?.skipCache && !options?.skipOffline) {
+      const { offlineDataService } = await import('./offlineDataService');
+      const offlineMatch = await offlineDataService.getFinishedMatch(fixtureId);
+      if (offlineMatch) {
+        console.log(`📦 Match ${fixtureId} from offline storage`);
+        // Convert to Fixture format
+        return {
+          fixture: offlineMatch.fixture,
+          teams: offlineMatch.teams,
+          league: offlineMatch.league,
+          goals: offlineMatch.goals,
+          score: offlineMatch.score,
+        } as Fixture;
+      }
     }
 
     // ✅ 2. Try cache first (skip during live polling for fresh scores)

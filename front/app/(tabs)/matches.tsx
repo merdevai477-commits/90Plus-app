@@ -50,6 +50,7 @@ import {
 import { createObjectRefMemo } from '../../utils/createObjectRefMemo';
 import { matchCardToApiFixture } from '../../utils/matchCardToApiFixture';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
+import { agentDebugLog } from '../../utils/agentDebugLog';
 type UserPredictionEntry = {
   type: 'home' | 'draw' | 'away';
   isCorrect?: boolean | null;
@@ -982,6 +983,19 @@ const LeagueCard = memo(function LeagueCard({
 });
 
 export default function MatchesHubScreenV2() {
+  const matchesRenderCountRef = useRef(0);
+  matchesRenderCountRef.current += 1;
+  // #region agent log
+  if (matchesRenderCountRef.current <= 30 || matchesRenderCountRef.current % 10 === 0) {
+    agentDebugLog(
+      'matches.tsx:MatchesHubScreenV2',
+      'matches screen render',
+      { renderCount: matchesRenderCountRef.current },
+      'H-D',
+      'post-fix',
+    );
+  }
+  // #endregion
   useScreenFont();
   useMatchEventsMonitor();
   const params = useLocalSearchParams();

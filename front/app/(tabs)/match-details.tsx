@@ -76,6 +76,7 @@ import {
   with365ImageSize,
 } from '../../utils/scores365AthletePhoto';
 import { prefetchImageUrls } from '../../utils/prefetchMatchAssets';
+import { agentDebugLog } from '../../utils/agentDebugLog';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
 import { MatchFavoritesStorage } from '../../src/storage/matchFavorites.storage';
 import { toastManager } from '../../services/toastManager';
@@ -185,6 +186,8 @@ function resolveFormResult(
 }
 
 const MatchDetailsScreen = () => {
+  const detailsRenderCountRef = useRef(0);
+  detailsRenderCountRef.current += 1;
   useScreenFont();
   const router = useRouter();
   const isFocused = useIsFocused();
@@ -224,6 +227,22 @@ const MatchDetailsScreen = () => {
   const fixtureId = Number.isFinite(parsedFixtureId) && parsedFixtureId > 0 ? parsedFixtureId : 0;
 
   const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
+  // #region agent log
+  if (detailsRenderCountRef.current <= 30 || detailsRenderCountRef.current % 5 === 0) {
+    agentDebugLog(
+      'match-details.tsx:MatchDetailsScreen',
+      'match details render',
+      {
+        renderCount: detailsRenderCountRef.current,
+        fixtureId,
+        revision: snapshot?.revision,
+        phase: snapshot?.phase,
+      },
+      'H-E',
+      'post-fix',
+    );
+  }
+  // #endregion
   const fixture = snapshot?.fixture ?? null;
   const events = snapshot?.events ?? [];
   const statistics = snapshot?.statistics ?? [];
