@@ -247,7 +247,7 @@ export function CompetitionDetailCard({
     <View style={{ width: 1, height: s(29), backgroundColor: PW.statBorder }} />
   );
 
-  const sponsorLogo = sponsorLogoSource(sponsor.logoUrl);
+  const leftArt = sponsorLogoSource(sponsor.logoUrl);
   const showSponsorLogo = hasSponsorLogo(sponsor.logoUrl);
   const links = sponsor.socialLinks;
   const showSocial = hasSponsorSocialLinks(links);
@@ -267,10 +267,10 @@ export function CompetitionDetailCard({
       ]}
     >
       {/* Brand mark — only when the advertiser uploaded a store image. */}
-      {showSponsorLogo && sponsorLogo ? (
+      {showSponsorLogo && leftArt ? (
         <>
           <Image
-            source={sponsorLogo}
+            source={leftArt}
             style={{
               position: 'absolute',
               left: x(26, 78),
@@ -283,7 +283,7 @@ export function CompetitionDetailCard({
             blurRadius={6}
           />
           <Image
-            source={sponsorLogo}
+            source={leftArt}
             style={{
               position: 'absolute',
               left: x(26, 78),
