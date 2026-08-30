@@ -19,6 +19,7 @@
     "lint": "expo lint",
     "lint:fix": "eslint --fix .",
     "test": "jest",
+    "test:stampede": "jest matchesStampede.guard",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "check:console": "node scripts/check-console-logs.js",

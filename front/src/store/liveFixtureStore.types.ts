@@ -43,6 +43,8 @@ export const MATCHES_LIST_KICKOFF_INTEREST_MS = 10 * 60 * 1000;
 export const MATCHES_LIST_OVERDUE_KICKOFF_MS = 105 * 60 * 1000;
 /** Cap overdue stale polls so we don't fan out on a stuck calendar day. */
 export const MATCHES_LIST_STALE_OVERDUE_CAP = 15;
+/** Live fixtures off-screen still polled (score-only) when not in viewport. */
+export const MATCHES_LIST_BACKGROUND_LIVE_CAP = 5;
 
 export const LIVE_STATUS_SHORTS = new Set([
   '1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP',

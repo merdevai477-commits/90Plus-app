@@ -9,6 +9,7 @@
  */
 
 import { logger } from './logger';
+import { isAbortError } from '../utils/isAbortError';
 
 interface CircuitState {
   failures: number;
@@ -67,7 +68,11 @@ class CircuitBreakerService {
       return result;
     } catch (error) {
       const message = String((error as Error)?.message ?? '');
-      if (!message.includes('timed out') && !message.includes('timeout')) {
+      if (
+        !isAbortError(error) &&
+        !message.includes('timed out') &&
+        !message.includes('timeout')
+      ) {
         this.recordFailure(key);
       }
       

@@ -6,6 +6,7 @@ import type {
   Venue,
 } from '../../services/apiFootball';
 import { ApiFootballService } from '../../services/apiFootball';
+import { isAbortError } from '../../utils/isAbortError';
 import { reconcileFixtureWithEvents } from '../../utils/matchDetailsLiveSync';
 import {
   buildFallbackStatisticsFromEvents,
@@ -26,12 +27,62 @@ import {
   LIVE_STATUS_SHORTS,
 } from './liveFixtureStore.types';
 
-const inFlightFast = new Map<number, Promise<LiveFixtureSnapshot | null>>();
-const inFlightScore = new Map<number, Promise<LiveFixtureSnapshot | null>>();
-const inFlightFull = new Map<number, Promise<LiveFixtureSnapshot | null>>();
+type InFlightEntry<T> = {
+  promise: Promise<T>;
+  abort: () => void;
+  generation: number;
+};
+
+const inFlightFast = new Map<number, InFlightEntry<LiveFixtureSnapshot | null>>();
+const inFlightScore = new Map<number, InFlightEntry<LiveFixtureSnapshot | null>>();
+const inFlightFull = new Map<number, InFlightEntry<LiveFixtureSnapshot | null>>();
+
+let generationCounter = 0;
 
 /** Native 365 game ids — score poll must not hit /details (same as getFixtureById). */
 const NATIVE_365_FIXTURE_ID_MIN = 4_000_000;
+
+function abortEntry<T>(map: Map<number, InFlightEntry<T>>, fixtureId: number): void {
+  const entry = map.get(fixtureId);
+  if (!entry) return;
+  entry.abort();
+  map.delete(fixtureId);
+}
+
+/** Cancel all in-flight HTTP fetches for a fixture (network-level abort). */
+export function cancelFixtureHttpFetches(fixtureId: number): void {
+  if (!fixtureId || fixtureId <= 0) return;
+  abortEntry(inFlightFast, fixtureId);
+  abortEntry(inFlightScore, fixtureId);
+  abortEntry(inFlightFull, fixtureId);
+}
+
+function runCancellable<T>(
+  map: Map<number, InFlightEntry<T>>,
+  fixtureId: number,
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const existing = map.get(fixtureId);
+  if (existing) return existing.promise;
+
+  const controller = new AbortController();
+  const generation = ++generationCounter;
+
+  const promise = run(controller.signal).finally(() => {
+    const current = map.get(fixtureId);
+    if (current?.generation === generation) {
+      map.delete(fixtureId);
+    }
+  });
+
+  map.set(fixtureId, {
+    promise,
+    generation,
+    abort: () => controller.abort(),
+  });
+
+  return promise;
+}
 
 export function derivePhase(statusShort: string): LiveFixturePhase {
   if (FINISHED_STATUS_SHORTS.has(statusShort)) return 'finished';
@@ -128,14 +179,9 @@ export async function fetchFastSnapshot(
   fixtureId: number,
   existing?: LiveFixtureSnapshot | null,
 ): Promise<LiveFixtureSnapshot | null> {
-  const pending = inFlightFast.get(fixtureId);
-  if (pending) return pending;
-
-  const promise = (async () => {
+  return runCancellable(inFlightFast, fixtureId, async (signal) => {
     try {
-      // Shared backend cache (365-first). Never skipCache here — fresh=1
-      // stampeded 365 and showed empty loading while the first user waited.
-      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId);
+      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, { signal });
       if (bundle.fixture) {
         return buildSnapshotFromRaw({
           fixtureId,
@@ -157,18 +203,17 @@ export async function fetchFastSnapshot(
       }
       return null;
     } catch (err) {
+      if (isAbortError(err)) {
+        if (existing) return { ...existing, updatedAt: Date.now() };
+        return null;
+      }
       const message = err instanceof Error ? err.message : 'Fast fetch failed';
       if (existing) {
         return { ...existing, lastFetchError: message, updatedAt: Date.now() };
       }
       return null;
-    } finally {
-      inFlightFast.delete(fixtureId);
     }
-  })();
-
-  inFlightFast.set(fixtureId, promise);
-  return promise;
+  });
 }
 
 /**
@@ -179,13 +224,8 @@ export async function fetchScoreSnapshot(
   fixtureId: number,
   existing?: LiveFixtureSnapshot | null,
 ): Promise<LiveFixtureSnapshot | null> {
-  const pending = inFlightScore.get(fixtureId);
-  if (pending) return pending;
-
-  const promise = (async () => {
+  return runCancellable(inFlightScore, fixtureId, async (signal) => {
     try {
-      // List score poll for 365 ids: getFixtureById still routes to /details.
-      // Calendar bootstrap + WS own live rows — skip per-fixture HTTP here.
       if (fixtureId >= NATIVE_365_FIXTURE_ID_MIN) {
         if (existing?.fixture) {
           return { ...existing, updatedAt: Date.now() };
@@ -195,6 +235,7 @@ export async function fetchScoreSnapshot(
 
       const fixtureData = await ApiFootballService.getFixtureById(fixtureId, {
         skipOffline: true,
+        signal,
       });
       if (!fixtureData) {
         if (existing) return { ...existing, updatedAt: Date.now() };
@@ -211,32 +252,26 @@ export async function fetchScoreSnapshot(
         existing,
       });
     } catch (err) {
+      if (isAbortError(err)) {
+        if (existing) return { ...existing, updatedAt: Date.now() };
+        return null;
+      }
       const message = err instanceof Error ? err.message : 'Score fetch failed';
       if (existing) {
         return { ...existing, lastFetchError: message, updatedAt: Date.now() };
       }
       return null;
-    } finally {
-      inFlightScore.delete(fixtureId);
     }
-  })();
-
-  inFlightScore.set(fixtureId, promise);
-  return promise;
+  });
 }
 
 export async function fetchFullSnapshot(
   fixtureId: number,
   existing?: LiveFixtureSnapshot | null,
 ): Promise<LiveFixtureSnapshot | null> {
-  const pending = inFlightFull.get(fixtureId);
-  if (pending) return pending;
-
-  const promise = (async () => {
+  return runCancellable(inFlightFull, fixtureId, async (signal) => {
     try {
-      // Use cached bundle on first open. A second full English round-trip
-      // just because events are empty used to add another 10–20s before paint.
-      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId);
+      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, { signal });
       let venue: Venue | null = bundle.venue ?? null;
       if (!venue && bundle.fixture?.fixture?.venue) {
         venue = bundle.fixture.fixture.venue as Venue;
@@ -252,18 +287,17 @@ export async function fetchFullSnapshot(
         existing,
       });
     } catch (err) {
+      if (isAbortError(err)) {
+        if (existing) return { ...existing, updatedAt: Date.now() };
+        return null;
+      }
       const message = err instanceof Error ? err.message : 'Full fetch failed';
       if (existing) {
         return { ...existing, lastFetchError: message, updatedAt: Date.now() };
       }
       return null;
-    } finally {
-      inFlightFull.delete(fixtureId);
     }
-  })();
-
-  inFlightFull.set(fixtureId, promise);
-  return promise;
+  });
 }
 
 /**

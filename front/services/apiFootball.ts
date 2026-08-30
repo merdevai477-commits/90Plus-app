@@ -20,7 +20,11 @@ import { cacheService, CACHE_TTL } from './cacheService';
 import { logger } from './logger';
 import { circuitBreakerService } from './circuitBreaker.service';
 import { requestQueueService } from './requestQueue.service';
+import { detailsRequestGate } from './detailsRequestGate';
 import { acceptLanguageHeader, getAppLanguageCode } from '../utils/appLanguage';
+import { isAbortError } from '../utils/isAbortError';
+
+export { isAbortError };
 
 const DEFAULT_TIMEOUT = 12_000;
 
@@ -159,26 +163,42 @@ export const isRateLimitError = (error: unknown): boolean => {
   return false;
 };
 
-const withTimeout = async <T>(promise: Promise<T>, timeout = DEFAULT_TIMEOUT): Promise<T> => {
+async function fetchWithSignal(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  options: { timeout?: number; signal?: AbortSignal } = {},
+): Promise<Response> {
+  const timeout = options.timeout ?? DEFAULT_TIMEOUT;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-  try {
-    const result = await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        controller.signal.addEventListener('abort', () => {
-          reject(new ApiFootballError('Request timed out - please check your connection'));
-        });
-      }),
-    ]);
-    clearTimeout(timeoutId);
-    return result;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
+  const onExternalAbort = () => controller.abort();
+  if (options.signal) {
+    if (options.signal.aborted) {
+      clearTimeout(timeoutId);
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    options.signal.addEventListener('abort', onExternalAbort);
   }
-};
+
+  try {
+    const response = await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    if (options.signal) {
+      options.signal.removeEventListener('abort', onExternalAbort);
+    }
+  }
+}
 
 export interface Player365CareerCompetition {
   competitionId: number | null;
@@ -1106,6 +1126,7 @@ const fetchFromProxy = async <T,>(
     timeout?: number;
     fresh?: boolean;
     priority?: number;
+    signal?: AbortSignal;
   } = {},
 ): Promise<T> => {
   const baseUrl = getApiUrl();
@@ -1116,6 +1137,7 @@ const fetchFromProxy = async <T,>(
     retries = 0,
     timeout = DEFAULT_TIMEOUT,
     priority,
+    signal,
   } = options;
 
   // Some endpoints are handled at the root /api level (like /matches), while others 
@@ -1172,8 +1194,9 @@ const fetchFromProxy = async <T,>(
           await new Promise(resolve => setTimeout(resolve, delay));
         }
 
-        const response = await withTimeout(
-          fetch(url.toString(), {
+        const response = await fetchWithSignal(
+          url.toString(),
+          {
             method,
             headers: {
               'Accept': 'application/json',
@@ -1182,8 +1205,8 @@ const fetchFromProxy = async <T,>(
               ...headers,
             },
             body: body ? JSON.stringify(body) : undefined,
-          }),
-          timeout,
+          },
+          { timeout, signal },
         );
 
         if (!response.ok) {
@@ -1251,6 +1274,10 @@ const fetchFromProxy = async <T,>(
         return data.response as T;
       } catch (error) {
         lastError = error as Error;
+
+        if (isAbortError(error)) {
+          throw error;
+        }
         
         // Handle rate limit errors - return empty array instead of throwing
         if (isRateLimitError(error)) {
@@ -1299,13 +1326,29 @@ const fetchFromProxy = async <T,>(
   };
 
   // Wrap with circuit breaker and request queue
-  return requestQueueService.enqueue(
-    () => circuitBreakerService.execute(circuitKey, fetchFn, fallbackFn),
-    {
-      priority: priority ?? (endpoint.includes('/cached/') ? 10 : 0),
-      maxRetries: 0,
-    },
-  );
+  const enqueueRequest = () =>
+    requestQueueService.enqueue(
+      () => circuitBreakerService.execute(circuitKey, fetchFn, fallbackFn),
+      {
+        priority: priority ?? (endpoint.includes('/cached/') ? 10 : 0),
+        maxRetries: 0,
+      },
+    );
+
+  if (endpoint.includes('/details')) {
+    let gatePriority = priority ?? 0;
+    const fixtureMatch = endpoint.match(/\/fixture\/(\d+)\/details/);
+    if (fixtureMatch) {
+      const fixtureId = Number(fixtureMatch[1]);
+      const { useLiveFixtureStore } = await import('../src/store/liveFixtureStore');
+      if (useLiveFixtureStore.getState().focusedFixtureId === fixtureId) {
+        gatePriority = Math.max(gatePriority, 100);
+      }
+    }
+    return detailsRequestGate.enqueue(enqueueRequest, { priority: gatePriority, signal });
+  }
+
+  return enqueueRequest();
 };
 
 export const ApiFootballService = {
@@ -1721,7 +1764,7 @@ export const ApiFootballService = {
    */
   async getFixtureById(
     fixtureId: number,
-    options?: { skipCache?: boolean; skipOffline?: boolean },
+    options?: { skipCache?: boolean; skipOffline?: boolean; signal?: AbortSignal },
   ): Promise<Fixture | null> {
     // ✅ 1. Check offline storage first (permanent, no token needed)
     if (!options?.skipCache && !options?.skipOffline) {
@@ -1755,7 +1798,10 @@ export const ApiFootballService = {
       const bundle = await fetchFromProxy<{ fixture?: Fixture }>(
         `/cached/fixture/${fixtureId}/details`,
         {},
-        options?.skipCache ? { fresh: true } : {},
+        {
+          ...(options?.skipCache ? { fresh: true } : {}),
+          signal: options?.signal,
+        },
       );
       const fixture = bundle && !Array.isArray(bundle) ? bundle.fixture ?? null : null;
       if (fixture && !options?.skipCache) {
@@ -1763,6 +1809,7 @@ export const ApiFootballService = {
       }
       return fixture;
     } catch (error) {
+      if (isAbortError(error)) return null;
       console.error('Error fetching fixture by ID:', error);
       return null;
     }
@@ -1831,7 +1878,7 @@ export const ApiFootballService = {
    */
   async getFixtureDetailsBundle(
     fixtureId: number,
-    options?: { skipCache?: boolean; language?: 'ar' | 'en' },
+    options?: { skipCache?: boolean; language?: 'ar' | 'en'; signal?: AbortSignal },
   ): Promise<{
     fixture: Fixture | null;
     lineups: Lineup[];
@@ -1844,7 +1891,10 @@ export const ApiFootballService = {
       const raw = await fetchFromProxy<any>(
         `/cached/fixture/${id}/details`,
         langParams,
-        options?.skipCache ? { fresh: true } : {},
+        {
+          ...(options?.skipCache ? { fresh: true } : {}),
+          signal: options?.signal,
+        },
       );
       const bundle = raw?.response ?? raw;
       return {
@@ -1871,6 +1921,15 @@ export const ApiFootballService = {
 
       return bundle;
     } catch (error) {
+      if (isAbortError(error)) {
+        return {
+          fixture: null,
+          lineups: [],
+          statistics: [],
+          events: [],
+          venue: null,
+        };
+      }
       logger.warn('Fixture details bundle failed:', error);
       return {
         fixture: null,

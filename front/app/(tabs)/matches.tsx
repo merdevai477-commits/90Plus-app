@@ -322,6 +322,7 @@ const MatchRow = memo(function MatchRow({
   onOpenDetails,
   worldCupCard,
   clockEnabled = true,
+  onFixtureVisibility,
 }: {
   fixture: Fixture;
   showPreds: boolean;
@@ -335,6 +336,8 @@ const MatchRow = memo(function MatchRow({
   worldCupCard?: { logoSource: ImageSource; leagueName: string };
   /** When false, skip 1Hz tick (row off-screen). */
   clockEnabled?: boolean;
+  /** Ref-based mount visibility — drives viewport-scoped registerInterest. */
+  onFixtureVisibility?: (fixtureId: number, visible: boolean) => void;
 }) {
   const predictionEntry = predictedMatches[fixture.id];
   const existingPrediction = predictionEntry?.type ?? null;
@@ -343,6 +346,14 @@ const MatchRow = memo(function MatchRow({
   const homeName = getTeamDisplayName(fixture.home, language);
   const awayName = getTeamDisplayName(fixture.away, language);
   const sharedLivePulse = getSharedLivePulse();
+
+  useEffect(() => {
+    if (!onFixtureVisibility) return;
+    const id = parseInt(fixture.id, 10);
+    if (!Number.isFinite(id) || id <= 0) return;
+    onFixtureVisibility(id, true);
+    return () => onFixtureVisibility(id, false);
+  }, [fixture.id, onFixtureVisibility]);
 
   // Live MM:SS clock: tick every second only while this row is in normal play
   // and visible in the FlashList viewport.
@@ -1076,10 +1087,49 @@ export default function MatchesHubScreenV2() {
   const wcEnrichCorners =
     wcFetchEnabled && (filter === 'WorldCup' || filter === 'Live');
 
+  const visibleFixtureIdsRef = useRef(new Set<number>());
+  const interestSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [interestRevision, setInterestRevision] = useState(0);
+
+  const scheduleInterestSync = useCallback(() => {
+    if (interestSyncTimerRef.current) return;
+    interestSyncTimerRef.current = setTimeout(() => {
+      interestSyncTimerRef.current = null;
+      setInterestRevision((r) => r + 1);
+    }, 100);
+  }, []);
+
+  const handleFixtureVisibility = useCallback(
+    (fixtureId: number, visible: boolean) => {
+      const set = visibleFixtureIdsRef.current;
+      if (visible) set.add(fixtureId);
+      else set.delete(fixtureId);
+      scheduleInterestSync();
+    },
+    [scheduleInterestSync],
+  );
+
+  const visibleFixtureIds = useMemo(() => {
+    void interestRevision;
+    return Array.from(visibleFixtureIdsRef.current);
+  }, [interestRevision]);
+
+  useEffect(() => {
+    return () => {
+      if (interestSyncTimerRef.current) {
+        clearTimeout(interestSyncTimerRef.current);
+      }
+    };
+  }, []);
+
   // Real matches data from backend — pause polling/WS when WC hook owns live updates
   const { groupedMatches, countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(
     selectedDate,
-    { pauseBackgroundRefresh: wcTabActive },
+    {
+      pauseBackgroundRefresh: wcTabActive,
+      visibleFixtureIds,
+      interestRevision,
+    },
   );
 
   const {
@@ -1776,6 +1826,7 @@ export default function MatchesHubScreenV2() {
           isSubscribing={subscribingFixtureId === fixture.id}
           onToggleSubscription={handleToggleSubscription}
           onOpenDetails={handleOpenMatchDetails}
+          onFixtureVisibility={handleFixtureVisibility}
         />
       );
     },
@@ -1787,6 +1838,7 @@ export default function MatchesHubScreenV2() {
       subscribingFixtureId,
       handleToggleSubscription,
       handleOpenMatchDetails,
+      handleFixtureVisibility,
     ],
   );
 

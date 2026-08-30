@@ -27,6 +27,7 @@ import type { LiveFixtureSnapshot } from '../src/store/liveFixtureStore.types';
 import {
   LIVE_FIXTURE_CALENDAR_POLL_MS,
   MATCHES_LIST_INTEREST_CAP,
+  MATCHES_LIST_BACKGROUND_LIVE_CAP,
   MATCHES_LIST_KICKOFF_INTEREST_MS,
   MATCHES_LIST_OVERDUE_KICKOFF_MS,
   MATCHES_LIST_STALE_OVERDUE_CAP,
@@ -60,6 +61,10 @@ export interface UseMatchesDataResult {
 export interface UseMatchesDataOptions {
   /** Pause calendar refresh when another hook owns the matches tab (e.g. WC filter). */
   pauseBackgroundRefresh?: boolean;
+  /** Fixture IDs currently mounted in visible list rows. */
+  visibleFixtureIds?: number[];
+  /** Bumps when visible set changes — re-syncs registerInterest. */
+  interestRevision?: number;
 }
 
 // Cache key generator
@@ -210,6 +215,42 @@ function pickMatchesListInterestIds(matches: Match[], cap = MATCHES_LIST_INTERES
   return out;
 }
 
+/** Viewport rows first; off-screen live capped for score-only background poll. */
+function buildRegisterInterestIds(
+  pollIds: number[],
+  visibleIds: number[],
+  matches: Match[],
+): number[] {
+  const visibleSet = new Set(visibleIds);
+  const matchById = new Map(
+    matches
+      .map((m) => {
+        const id = parseInt(m.id, 10);
+        return Number.isFinite(id) && id > 0 ? ([id, m] as const) : null;
+      })
+      .filter((row): row is readonly [number, Match] => row != null),
+  );
+
+  const viewportInterest = pollIds.filter((id) => visibleSet.has(id));
+
+  const backgroundLive: number[] = [];
+  for (const id of pollIds) {
+    if (visibleSet.has(id)) continue;
+    if (matchById.get(id)?.status !== 'live') continue;
+    backgroundLive.push(id);
+    if (backgroundLive.length >= MATCHES_LIST_BACKGROUND_LIVE_CAP) break;
+  }
+
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const id of [...viewportInterest, ...backgroundLive]) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 function listOverlaySnapshotsEqual(
   a: Record<number, LiveFixtureSnapshot>,
   b: Record<number, LiveFixtureSnapshot>,
@@ -323,7 +364,7 @@ export const useMatchesData = (
   selectedDate: Date,
   options: UseMatchesDataOptions = {},
 ): UseMatchesDataResult => {
-  const { pauseBackgroundRefresh = false } = options;
+  const { pauseBackgroundRefresh = false, visibleFixtureIds = [], interestRevision = 0 } = options;
   const dateString = formatLocalDateKey(selectedDate);
   const memoryBoot = memoryCache.get(dateString);
   const [calendarMatches, setCalendarMatches] = useState<Match[]>(() => memoryBoot?.data ?? []);
@@ -345,7 +386,13 @@ export const useMatchesData = (
     () => pickMatchesListInterestIds(calendarMatches),
     [calendarMatches],
   );
+  const registerInterestIds = useMemo(
+    () => buildRegisterInterestIds(pollFixtureIds, visibleFixtureIds, calendarMatches),
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- interestRevision tracks visible ref updates
+    [pollFixtureIds, visibleFixtureIds, calendarMatches, interestRevision],
+  );
   const pollIdsKey = pollFixtureIds.join(',');
+  const registerIdsKey = registerInterestIds.join(',');
 
   // Subscribe only to interested snapshots — avoids remapping England→Chile on every WS tick.
   // Zustand v5's useBoundStore ignores equalityFn; useStoreWithEqualityFn caches getSnapshot
@@ -374,7 +421,7 @@ export const useMatchesData = (
     [calendarMatches, overlaySnapshots],
   );
   useRegisterLiveFixtures(
-    pauseBackgroundRefresh || !isToday ? [] : pollFixtureIds,
+    pauseBackgroundRefresh || !isToday ? [] : registerInterestIds,
   );
 
   // Paint live rows from calendar data instantly — no per-fixture HTTP stampede.
@@ -768,6 +815,7 @@ export const useMatchesData = (
     let trustTimer: ReturnType<typeof setTimeout> | null = null;
     let intervalId: ReturnType<typeof setInterval> | null = null;
     let wasConnected = websocketClient.isConnected();
+    const appStateRef = { current: AppState.currentState };
 
     const clearTrustTimer = () => {
       if (trustTimer) {
@@ -782,7 +830,7 @@ export const useMatchesData = (
       }
     };
     const startPoll = () => {
-      if (intervalId || wsTrusted) return;
+      if (intervalId || wsTrusted || AppState.currentState !== 'active') return;
       intervalId = setInterval(() => {
         if (!wsTrusted) void refreshLiveFeedOnly();
       }, LIVE_FEED_REFRESH_MS);
@@ -807,8 +855,21 @@ export const useMatchesData = (
         clearTrustTimer();
         wsTrusted = false;
         logger.debug('[useMatchesData] WS down — resuming live-feed HTTP poll');
+        if (AppState.currentState === 'active') {
+          void refreshLiveFeedOnly();
+        }
+        startPoll();
+      }
+    });
+
+    const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      const wasBg = /inactive|background/.test(appStateRef.current);
+      appStateRef.current = next;
+      if (next === 'active' && wasBg) {
         void refreshLiveFeedOnly();
         startPoll();
+      } else if (next !== 'active') {
+        clearPoll();
       }
     });
 
@@ -819,6 +880,7 @@ export const useMatchesData = (
       unsub();
       clearTrustTimer();
       clearPoll();
+      appStateSub.remove();
     };
   }, [pauseBackgroundRefresh, isToday, isPastDate, refreshLiveFeedOnly]);
 

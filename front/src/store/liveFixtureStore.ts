@@ -3,6 +3,7 @@ import type { MatchUpdatePayload } from '../../services/websocketClient';
 import {
   applyWebSocketToFixture,
   buildSnapshotFromRaw,
+  cancelFixtureHttpFetches,
   fetchFastSnapshot,
   fetchScoreSnapshot,
   fetchFullSnapshot,
@@ -92,6 +93,7 @@ async function runOneShotFetch(get: StoreGetter, fixtureId: number): Promise<voi
 
   let inFlight = oneShotFetchInFlight.get(fixtureId);
   if (!inFlight) {
+    cancelFixtureHttpFetches(fixtureId);
     inFlight = get()
       .fetchAndIngestFast(fixtureId, { includeEvents: false })
       .finally(() => {
@@ -204,6 +206,7 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
     const interestCounts = { ...state.interestCounts };
     if (nextCount <= 0) {
       delete interestCounts[fixtureId];
+      cancelFixtureHttpFetches(fixtureId);
     } else {
       interestCounts[fixtureId] = nextCount;
     }

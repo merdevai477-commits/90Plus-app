@@ -90,17 +90,9 @@ export function useLiveFixtureSync(): void {
     };
     pollTickRef.current = pollTick;
 
-    // Seed: poll until WS proves stable (or if already disconnected).
-    if (!websocketClient.isConnected()) {
-      void pollTick();
-    }
-    const pollId = setInterval(() => {
-      void pollTickRef.current();
-    }, LIVE_FIXTURE_FAST_POLL_MS);
-
-    const sweepId = setInterval(() => {
-      useLiveFixtureStore.getState().sweepEvictions();
-    }, LIVE_FIXTURE_SWEEP_MS);
+    let pollId: ReturnType<typeof setInterval> | null = null;
+    let roomSyncId: ReturnType<typeof setInterval> | null = null;
+    const appStateRef = { current: AppState.currentState };
 
     const syncRooms = () => {
       const targets = new Set(useLiveFixtureStore.getState().getPollTargetIds());
@@ -118,8 +110,39 @@ export function useLiveFixtureSync(): void {
       }
     };
 
-    syncRooms();
-    const roomSyncId = setInterval(syncRooms, LIVE_FIXTURE_FAST_POLL_MS);
+    const clearPollIntervals = () => {
+      if (pollId) {
+        clearInterval(pollId);
+        pollId = null;
+      }
+      if (roomSyncId) {
+        clearInterval(roomSyncId);
+        roomSyncId = null;
+      }
+    };
+
+    const startPollIntervals = () => {
+      if (AppState.currentState !== 'active') return;
+      if (!pollId) {
+        pollId = setInterval(() => {
+          void pollTickRef.current();
+        }, LIVE_FIXTURE_FAST_POLL_MS);
+      }
+      if (!roomSyncId) {
+        syncRooms();
+        roomSyncId = setInterval(syncRooms, LIVE_FIXTURE_FAST_POLL_MS);
+      }
+    };
+
+    // Seed: poll until WS proves stable (or if already disconnected).
+    if (!websocketClient.isConnected() && AppState.currentState === 'active') {
+      void pollTick();
+    }
+    startPollIntervals();
+
+    const sweepId = setInterval(() => {
+      useLiveFixtureStore.getState().sweepEvictions();
+    }, LIVE_FIXTURE_SWEEP_MS);
 
     const unsubConnection = websocketClient.subscribeConnectionState((connected) => {
       if (connected) {
@@ -148,8 +171,13 @@ export function useLiveFixtureSync(): void {
     });
 
     const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'active' && !wsTrustedRef.current) {
+      const wasBg = /inactive|background/.test(appStateRef.current);
+      appStateRef.current = next;
+      if (next === 'active' && wasBg) {
         void pollTickRef.current();
+        startPollIntervals();
+      } else if (next !== 'active') {
+        clearPollIntervals();
       }
     });
 
@@ -157,9 +185,8 @@ export function useLiveFixtureSync(): void {
       unsubWs();
       unsubConnection();
       clearTrustTimer();
-      clearInterval(pollId);
+      clearPollIntervals();
       clearInterval(sweepId);
-      clearInterval(roomSyncId);
       appStateSub.remove();
       for (const id of subscribedRoomsRef.current) {
         websocketClient.unsubscribeFromRoom(`match:${id}`);

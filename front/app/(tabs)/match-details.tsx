@@ -64,6 +64,7 @@ import {
 import { useLiveFixture } from '../../hooks/useLiveFixture';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
 import { buildSnapshotFromRaw } from '../../src/store/liveFixtureSync';
+import { isAbortError } from '../../utils/isAbortError';
 import { findLocalPreviewFixture } from '../../utils/findLocalPreviewFixture';
 import {
   hasApiStatistics,
@@ -572,8 +573,12 @@ const MatchDetailsScreen = () => {
 
       setLoading(false);
       setDetailsFetching(false);
-    } catch (err: any) {
-      setError(err?.message || t.matchDetails.loadDetailsFailed);
+    } catch (err: unknown) {
+      if (isAbortError(err)) {
+        setDetailsFetching(false);
+        return;
+      }
+      setError(err instanceof Error ? err.message : t.matchDetails.loadDetailsFailed);
       setLoading(false);
       setDetailsFetching(false);
     }
