@@ -160,11 +160,14 @@ export function usePushNotifications(): PushNotificationState {
                         type === 'MENTION' ||
                         type === 'COMMENT_LIKE');
                 if (data.reelId && opensComments) {
+                    const parentId =
+                        typeof data.parentCommentId === 'string' ? data.parentCommentId : undefined;
                     r.push({
                         pathname: '/(tabs)/reels',
                         params: {
                             reelId: data.reelId,
-                            commentId: data.commentId,
+                            commentId: parentId || data.commentId,
+                            highlightReplyId: parentId ? data.commentId : undefined,
                             autoOpenComments: 'true',
                         },
                     });

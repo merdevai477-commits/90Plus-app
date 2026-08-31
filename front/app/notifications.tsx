@@ -764,11 +764,14 @@ export default function NotificationsScreen() {
                     case 'MENTION':
                     case 'COMMENT_LIKE':
                         if (data.reelId && data.commentId) {
+                            const parentId =
+                                typeof data.parentCommentId === 'string' ? data.parentCommentId : undefined;
                             router.push({
                                 pathname: '/(tabs)/reels',
                                 params: {
                                     reelId: data.reelId,
-                                    commentId: data.commentId,
+                                    commentId: parentId || data.commentId,
+                                    highlightReplyId: parentId ? data.commentId : undefined,
                                     autoOpenComments: 'true',
                                 },
                             });

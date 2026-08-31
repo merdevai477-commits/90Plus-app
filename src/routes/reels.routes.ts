@@ -1344,9 +1344,14 @@ router.get('/comments/:commentId/replies', requireAuth, async (req: Request, res
         const currentUser = clerkUserId
             ? await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true } })
             : null;
+        const blockedUserIds = currentUser?.id ? await getBlockedUserIdsForUser(currentUser.id) : [];
 
         const replies = await prisma.comment.findMany({
-            where: { parentId: commentIdStr },
+            where: {
+                parentId: commentIdStr,
+                isDeleted: false,
+                ...(blockedUserIds.length > 0 ? { userId: { notIn: blockedUserIds } } : {}),
+            },
             take: Math.min(parseInt(limit as string), 50),
             orderBy: { createdAt: 'asc' },
             select: {

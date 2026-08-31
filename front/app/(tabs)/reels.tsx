@@ -303,11 +303,12 @@ const DoubleTapLikeAnimation: React.FC<{
 
 // Main Reels Feed Component
 const ReelsFeed: React.FC = () => {
-  const params = useLocalSearchParams<{ reelId?: string; commentId?: string; autoOpenComments?: string; startFrom?: string }>();
+  const params = useLocalSearchParams<{ reelId?: string; commentId?: string; highlightReplyId?: string; autoOpenComments?: string; startFrom?: string }>();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showComments, setShowComments] = useState(false);
   const [selectedReelId, setSelectedReelId] = useState<string>('');
   const [highlightCommentId, setHighlightCommentId] = useState<string | null>(null);
+  const [highlightReplyId, setHighlightReplyId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Network & Error States (Requirements: Critical Priority #1, #2, #3)
@@ -820,6 +821,7 @@ const ReelsFeed: React.FC = () => {
 
         if (params.commentId && params.autoOpenComments === 'true') {
           setHighlightCommentId(params.commentId);
+          setHighlightReplyId(params.highlightReplyId ?? null);
           setShowComments(true);
         }
       }, 500);
@@ -873,6 +875,7 @@ const ReelsFeed: React.FC = () => {
   }, [
     params.reelId,
     params.commentId,
+    params.highlightReplyId,
     params.autoOpenComments,
     reels,
     isInitialLoading,
@@ -1708,12 +1711,14 @@ const ReelsFeed: React.FC = () => {
         onClose={() => {
           setShowComments(false);
           setHighlightCommentId(null);
+          setHighlightReplyId(null);
         }}
         reelId={selectedReelId}
         comments={commentsForModal} // ✅ Use memoized comments
         onAddComment={(comment) => handleAddComment(selectedReelId, comment)}
         onToggleLike={(commentId) => handleToggleCommentLike(selectedReelId, commentId)}
         highlightCommentId={highlightCommentId}
+        highlightReplyId={highlightReplyId}
       />
 
       {/* Unified Report System */}

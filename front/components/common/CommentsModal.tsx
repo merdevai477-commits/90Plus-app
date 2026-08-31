@@ -129,7 +129,10 @@ interface CommentsModalProps {
     comments: Comment[];
     onAddComment?: (comment: Comment) => void;
     onToggleLike?: (commentId: string) => void;
+    /** Top-level comment to scroll to (use parent id for reply notifications). */
     highlightCommentId?: string | null;
+    /** Nested reply to expand/highlight after opening. */
+    highlightReplyId?: string | null;
 }
 
 export default function CommentsModal({
@@ -139,7 +142,8 @@ export default function CommentsModal({
     comments = [],
     onAddComment,
     onToggleLike,
-    highlightCommentId
+    highlightCommentId,
+    highlightReplyId,
 }: CommentsModalProps) {
     const [newComment, setNewComment] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -277,13 +281,16 @@ export default function CommentsModal({
         [],
     );
 
-    // ✅ Get effective comments - prioritize props, fallback to loaded
+    // Prefer API-loaded comments over stale local props (VideosContext only stores top-level comments).
     const getEffectiveComments = useCallback((): Comment[] => {
+        if (loadedCommentsRef.current.length > 0) {
+            return loadedCommentsRef.current;
+        }
         if (comments && comments.length > 0) {
             return comments;
         }
-        return loadedCommentsRef.current;
-    }, [comments]);
+        return [];
+    }, [comments, loadedCommentsVersion]);
 
     // ✅ Get current comment IDs as string for comparison
     const getCurrentCommentIds = useCallback((): string => {
@@ -325,6 +332,7 @@ export default function CommentsModal({
         // Reset when modal closes - only reset refs, NOT state
         if (!visible) {
             loadedReelIdRef.current = null;
+            loadedCommentsRef.current = [];
             // ✅ Don't call any setState here - just reset refs
             return;
         }
@@ -333,14 +341,7 @@ export default function CommentsModal({
             return;
         }
 
-        // If comments are provided as props, mark as loaded
-        const propsComments = commentsPropRef.current;
-        if (propsComments && propsComments.length > 0) {
-            loadedReelIdRef.current = reelId;
-            return;
-        }
-
-        // Only load if we haven't loaded comments for this reel yet
+        // Always refresh from API when opening — local props omit replies/repliesCount.
         if (loadedReelIdRef.current === reelId) {
             return;
         }
@@ -389,15 +390,17 @@ export default function CommentsModal({
     // Scroll to highlighted comment when modal opens or highlightCommentId changes
     // ✅ Use ref to avoid dependency on commentsWithReplies array (prevents infinite loop)
     const highlightCommentIdRef = useRef<string | null | undefined>(highlightCommentId);
+    const highlightReplyIdRef = useRef<string | null | undefined>(highlightReplyId);
     const hasScrolledRef = useRef(false);
 
     useEffect(() => {
         highlightCommentIdRef.current = highlightCommentId;
-        // Reset scroll flag when highlightCommentId changes
-        if (highlightCommentId) {
+        highlightReplyIdRef.current = highlightReplyId;
+        // Reset scroll flag when highlight targets change
+        if (highlightCommentId || highlightReplyId) {
             hasScrolledRef.current = false;
         }
-    }, [highlightCommentId]);
+    }, [highlightCommentId, highlightReplyId]);
 
     // Reset scroll flag when modal closes
     useEffect(() => {
@@ -472,48 +475,7 @@ export default function CommentsModal({
 
     }, [visible, comments, loadedCommentsVersion, getEffectiveComments, getCurrentCommentIds]);
 
-    // ✅ Separate effect to handle scroll after commentsWithReplies updates
-    // Use a separate ref to track when comments are ready for scrolling
     const commentsReadyForScrollRef = useRef(false);
-
-    useEffect(() => {
-        // Only attempt scroll when modal is visible and comments are loaded
-        if (!visible || !highlightCommentIdRef.current) {
-            commentsReadyForScrollRef.current = false;
-            return;
-        }
-
-        // Wait for comments to be ready
-        if (commentsWithRepliesRef.current.length === 0) {
-            commentsReadyForScrollRef.current = false;
-            return;
-        }
-
-        // Only scroll once per highlightCommentId change
-        if (hasScrolledRef.current || commentsReadyForScrollRef.current) {
-            return;
-        }
-
-        const commentIndex = commentsWithRepliesRef.current.findIndex(c => c.id === highlightCommentIdRef.current);
-        if (commentIndex >= 0 && commentsListRef.current) {
-            commentsReadyForScrollRef.current = true;
-            hasScrolledRef.current = true;
-
-            // Use setTimeout to ensure the list is fully rendered
-            setTimeout(() => {
-                try {
-                    commentsListRef.current?.scrollToIndex({
-                        index: commentIndex,
-                        animated: true,
-                        viewPosition: 0.5 // Center the comment
-                    });
-                } catch (error) {
-                    // Fallback if scrollToIndex fails
-                    console.warn('Failed to scroll to comment:', error);
-                }
-            }, 300);
-        }
-    }, [visible, commentsWithReplies]); // ✅ Depend on visible and commentsWithReplies
 
     // Shake animation for limit warning
     const triggerShake = () => {
@@ -863,6 +825,81 @@ export default function CommentsModal({
             loadReplies(commentId);
         }
     }, [commentsWithReplies, haptic, loadReplies]);
+
+    // Scroll/highlight after replies are loaded (e.g. from reply notification deep link).
+    useEffect(() => {
+        if (!visible) {
+            commentsReadyForScrollRef.current = false;
+            return;
+        }
+
+        const scrollTargetId = highlightCommentIdRef.current;
+        const replyTargetId = highlightReplyIdRef.current;
+        if (!scrollTargetId && !replyTargetId) {
+            commentsReadyForScrollRef.current = false;
+            return;
+        }
+
+        if (commentsWithRepliesRef.current.length === 0) {
+            commentsReadyForScrollRef.current = false;
+            return;
+        }
+
+        if (hasScrolledRef.current || commentsReadyForScrollRef.current) {
+            return;
+        }
+
+        let parentCommentId = scrollTargetId ?? null;
+        if (!parentCommentId && replyTargetId) {
+            const parent = commentsWithRepliesRef.current.find(c =>
+                c.replies?.some(r => r.id === replyTargetId),
+            );
+            parentCommentId = parent?.id ?? null;
+        }
+
+        if (!parentCommentId) {
+            return;
+        }
+
+        const runScroll = () => {
+            const list = commentsWithRepliesRef.current;
+            const parentIndex = list.findIndex(c => c.id === parentCommentId);
+            if (parentIndex < 0 || !commentsListRef.current) return;
+
+            commentsReadyForScrollRef.current = true;
+            hasScrolledRef.current = true;
+
+            setTimeout(() => {
+                try {
+                    commentsListRef.current?.scrollToIndex({
+                        index: parentIndex,
+                        animated: true,
+                        viewPosition: 0.35,
+                    });
+                } catch (error) {
+                    console.warn('Failed to scroll to comment:', error);
+                }
+            }, 300);
+        };
+
+        const parent = commentsWithRepliesRef.current.find(c => c.id === parentCommentId);
+        const needsFullReplies =
+            !!replyTargetId ||
+            (parent?.repliesCount ?? 0) > (parent?.replies?.length ?? 0);
+
+        if (parent && needsFullReplies) {
+            void loadReplies(parentCommentId).finally(runScroll);
+            return;
+        }
+
+        if (parent && !parent.showReplies) {
+            setCommentsWithReplies(prev =>
+                prev.map(c => (c.id === parentCommentId ? { ...c, showReplies: true } : c)),
+            );
+        }
+
+        runScroll();
+    }, [visible, commentsWithReplies, loadReplies]);
 
     const currentUser = globalState.userProfile;
     const currentUserAvatar = currentUser?.avatar || 'https://ui-avatars.com/api/?name=User&background=22c55e&color=fff';
@@ -1261,8 +1298,8 @@ export default function CommentsModal({
                     </View>
                 </TouchableOpacity>
 
-                {/* Replies Section — show whenever replies are loaded */}
-                {item.replies && item.replies.length > 0 && (
+                {/* Replies Section — only when expanded */}
+                {item.showReplies && item.replies && item.replies.length > 0 && (
                     <View style={styles.repliesContainer}>
                         {item.replies.map(reply => renderReply(reply, item.id))}
                     </View>
