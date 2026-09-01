@@ -67,6 +67,7 @@ import { captureException } from "../services/sentry.service";
 import { SentryUserTracker } from "../components/SentryUserTracker";
 import { useNavigationTracking } from "../hooks/useNavigationTracking";
 import { BootSplashScreen } from "../components/splash/BootSplashScreen";
+import { StaticAppSplash } from "../components/splash/StaticAppSplash";
 import { BootReadyProvider, useBootReady } from "../contexts/BootReadyContext";
 import { PushNotificationSetup } from "../src/hooks/usePushNotifications";
 import {
@@ -830,10 +831,10 @@ function RootLayout() {
     return () => clearTimeout(t);
   }, [fontsLoaded]);
 
-  // Solid brand color if native splash drops before fonts are ready — avoids a
-  // blank white frame on iOS release builds.
+  // Show the JS splash immediately so we are not stuck on the stale native splash
+  // from an older Android/iOS build until fonts and Clerk finish loading.
   if (!fontsReady) {
-    return <View style={{ flex: 1, backgroundColor: '#0d0529' }} />;
+    return <StaticAppSplash />;
   }
 
   return (

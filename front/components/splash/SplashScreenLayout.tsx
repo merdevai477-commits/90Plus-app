@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, View, type ViewStyle, type StyleProp } from 'react-native';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import Animated from 'react-native-reanimated';
 
 /** Matches Figma splash (node 1007:2693) base fill. */
@@ -19,6 +20,14 @@ interface SplashScreenLayoutProps {
  */
 export function SplashScreenLayout({ children, logoAnimatedStyle }: SplashScreenLayoutProps) {
   const LogoWrap = logoAnimatedStyle ? Animated.View : View;
+
+  // Hand off from the native splash (old APK assets) to the JS splash immediately.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   return (
     <View style={styles.container}>
