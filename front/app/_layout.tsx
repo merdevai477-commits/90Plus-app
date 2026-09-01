@@ -833,7 +833,7 @@ function RootLayout() {
   // Solid brand color if native splash drops before fonts are ready — avoids a
   // blank white frame on iOS release builds.
   if (!fontsReady) {
-    return <View style={{ flex: 1, backgroundColor: '#4A148C' }} />;
+    return <View style={{ flex: 1, backgroundColor: '#0d0529' }} />;
   }
 
   return (

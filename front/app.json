@@ -188,12 +188,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/90Plus.png",
-          "imageWidth": 200,
+          "image": "./assets/images/splash/splash-logo.png",
+          "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#4A148C",
+          "backgroundColor": "#0d0529",
           "dark": {
-            "backgroundColor": "#4A148C"
+            "backgroundColor": "#0d0529"
           }
         }
       ],
