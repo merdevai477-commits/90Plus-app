@@ -23,7 +23,8 @@ import {
 } from './AuthTokens';
 import { TEXT_PRIMARY } from '../../../constants/tokens';
 
-import { AUTH_V2_ASSETS } from './authV2Assets';
+const googleIcon = require('../../../assets/images/auth/icon-google.svg');
+const appleIcon = require('../../../assets/images/auth/icon-apple.svg');
 
 export function AuthPanelHeader({
   title,
@@ -110,7 +111,7 @@ export function AuthSocialButtons({
         {googleLoading ? (
           <ActivityIndicator color={TEXT_PRIMARY} size="small" />
         ) : (
-          <Image source={AUTH_V2_ASSETS.iconGoogle} style={styles.socialIcon} contentFit="contain" />
+          <Image source={googleIcon} style={styles.socialIcon} contentFit="contain" />
         )}
       </TouchableOpacity>
       <TouchableOpacity
@@ -122,7 +123,7 @@ export function AuthSocialButtons({
         {appleLoading ? (
           <ActivityIndicator color={TEXT_PRIMARY} size="small" />
         ) : (
-          <Image source={AUTH_V2_ASSETS.iconApple} style={styles.socialIcon} contentFit="contain" />
+          <Image source={appleIcon} style={styles.socialIcon} contentFit="contain" />
         )}
       </TouchableOpacity>
     </View>
