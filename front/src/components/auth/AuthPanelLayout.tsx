@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 48,
     gap: 6,
   },
   main: {

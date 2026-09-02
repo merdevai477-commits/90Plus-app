@@ -198,7 +198,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <AuthScreenShell showHeroOverlay={false}>
+    <AuthScreenShell>
       <AuthPanelLayout
         header={<AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />}
         form={

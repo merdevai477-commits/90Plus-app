@@ -7,69 +7,35 @@ import {
   Platform,
   StyleSheet,
   useWindowDimensions,
-  type ImageStyle,
-  type ViewStyle,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { AuthHeroBlock } from './AuthHeroBlock';
 import {
   AUTH_PANEL_BG,
   AUTH_PANEL_BORDER,
   AUTH_PANEL_DARK,
 } from './AuthTokens';
 import { AUTH_V2_ASSETS } from './authV2Assets';
+import { getAuthLayoutMetrics } from './authLayoutMetrics';
 
 type Props = {
   children: React.ReactNode;
-  /** Show dynamic logo/text overlay — off when hero PNG already includes branding. */
-  showHeroOverlay?: boolean;
 };
 
-/** Figma hero frame height (node 1015:3722). */
-const HERO_HEIGHT = 391;
-/** Panel overlaps hero bottom edge. */
-const PANEL_OVERLAP = 56;
-
-const rootStyle: ViewStyle = { flex: 1, backgroundColor: '#000' };
-
-export function AuthScreenShell({
-  children,
-  showHeroOverlay = false,
-}: Props) {
+/**
+ * Full Figma auth screen shell (448×1154):
+ * - Hero image 391px tall (composite PNG with branding)
+ * - Panel 408px wide, overlaps hero by 27px, rounded 40, purple tint
+ */
+export function AuthScreenShell({ children }: Props) {
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
-  const heroHeight = Math.min(HERO_HEIGHT, Math.round(height * 0.36));
-
-  const bgimgAssetStyle: ImageStyle = {
-    width: '100%',
-    height: '100%',
-  };
+  const { width, height } = useWindowDimensions();
+  const { heroHeight, panelOverlap, horizontalInset, panelPaddingX } =
+    getAuthLayoutMetrics(width, height);
 
   return (
-    <View style={rootStyle}>
+    <View style={styles.root}>
       <StatusBar style="light" />
-
-      <View style={{ height: heroHeight, width: '100%' }}>
-        <ImageBackground
-          source={AUTH_V2_ASSETS.hero}
-          style={StyleSheet.absoluteFill}
-          imageStyle={bgimgAssetStyle}
-          resizeMode="cover"
-        >
-          <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.75)']}
-            locations={[0.5, 0.75, 1]}
-            style={StyleSheet.absoluteFill}
-          />
-          {showHeroOverlay ? (
-            <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 20 }}>
-              <AuthHeroBlock />
-            </View>
-          ) : null}
-        </ImageBackground>
-      </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -80,17 +46,31 @@ export function AuthScreenShell({
           showsVerticalScrollIndicator={false}
           bounces={false}
           contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingBottom: Math.max(insets.bottom, 16) + 32,
-              marginTop: -PANEL_OVERLAP,
-            },
+            styles.scroll,
+            { paddingBottom: Math.max(insets.bottom, 16) + 24 },
           ]}
         >
-          <View style={styles.panelOuter}>
+          <View style={[styles.heroWrap, { height: heroHeight }]}>
+            <ImageBackground
+              source={AUTH_V2_ASSETS.hero}
+              style={StyleSheet.absoluteFill}
+              resizeMode="cover"
+            />
+          </View>
+
+          <View
+            style={[
+              styles.panelOuter,
+              {
+                marginTop: -panelOverlap,
+                marginHorizontal: horizontalInset,
+                paddingHorizontal: panelPaddingX,
+              },
+            ]}
+          >
             <View style={styles.panelDark} />
             <View style={styles.panelTint} />
-            <View style={styles.panelInner}>{children}</View>
+            <View style={styles.panelBody}>{children}</View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -99,16 +79,27 @@ export function AuthScreenShell({
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  scrollContent: {
+  root: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  flex: {
+    flex: 1,
+  },
+  scroll: {
     flexGrow: 1,
-    paddingHorizontal: 20,
+  },
+  heroWrap: {
+    width: '100%',
+    overflow: 'hidden',
   },
   panelOuter: {
     borderRadius: 40,
     borderWidth: 0.5,
     borderColor: AUTH_PANEL_BORDER,
     overflow: 'hidden',
+    paddingTop: 44,
+    paddingBottom: 28,
   },
   panelDark: {
     ...StyleSheet.absoluteFillObject,
@@ -118,9 +109,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: AUTH_PANEL_BG,
   },
-  panelInner: {
-    paddingHorizontal: 20,
-    paddingTop: 36,
-    paddingBottom: 24,
+  panelBody: {
+    width: '100%',
   },
 });
