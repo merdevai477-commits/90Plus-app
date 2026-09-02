@@ -1267,7 +1267,16 @@ function buildPlayerConnectionsDataRaw(
   return out;
 }
 
-function buildRoundFromFootballData(
+/**
+ * A round composed from the football data alone, with no model in the loop.
+ *
+ * Exported for tests: this is where "the mode has no round today" is decided,
+ * and the decision has to be reached QUICKLY and return `null` rather than
+ * looping or emitting a half-built board. A round that cannot be built is a
+ * state the app is expected to show a message for; a build that never returns
+ * is a hang, and the two are indistinguishable from the device.
+ */
+export function buildRoundFromFootballData(
   mode: AiQuestionsMode,
   language: QuizLanguage,
   refreshDateYmd: string,

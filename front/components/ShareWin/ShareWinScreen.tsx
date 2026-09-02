@@ -35,12 +35,14 @@
 
 import React, { useCallback, useMemo } from 'react';
 import {
+  Pressable,
   RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -49,6 +51,7 @@ import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
 import type { ShareWinLastWinner } from '../../services/shareWin.service';
 
+import { SW_ASSET } from './assets';
 import HeroHeader from './components/HeroHeader';
 import LastWinnerCard from './components/LastWinnerCard';
 import LuckyWheelCard from './components/LuckyWheelCard';
@@ -100,6 +103,63 @@ export default function ShareWinScreen() {
   const handleViewFullRanking = useCallback(() => {
     router.push('/share-win/leaderboard');
   }, [router]);
+
+  /**
+   * LEAVING SHARE & WIN.
+   *
+   * This route is a root Stack screen with `headerShown: false` and no tab bar,
+   * and the page draws its own chrome — so without this there was no back
+   * control anywhere on it. Its own sub-screen (the full ranking) has always
+   * had one; this page did not.
+   *
+   * It matters most for the case the referral link exists for: the deep-link
+   * handler lands a friend HERE (`router.push('/share-win')` in
+   * app/_layout.tsx), which on a cold start makes it the first screen in the
+   * stack — so `router.back()` alone has nothing to pop, and the fallback puts
+   * them into the app proper instead of leaving them stranded on a page they
+   * cannot exit.
+   */
+  const handleLeave = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)/matches');
+  }, [router]);
+
+  /** Same control on every state of the page — loading, error and ready. */
+  const backButton = (
+    <Pressable
+      onPress={handleLeave}
+      hitSlop={12}
+      accessibilityRole="button"
+      accessibilityLabel={copy.close}
+      testID="share-win-back"
+      style={({ pressed }) => [
+        sw.pageBackButton,
+        {
+          top: insets.top + s(12),
+          // Mirrors on RTL so it never sits under the hardware gesture edge.
+          ...(language === 'ar'
+            ? { right: Math.max(insets.right, s(22)) }
+            : { left: Math.max(insets.left, s(22)) }),
+        },
+        pressed && { opacity: 0.7 },
+      ]}
+    >
+      <Image
+        source={SW_ASSET.chevronRight}
+        style={{
+          width: s(24),
+          height: s(24),
+          // The asset points right; a back control points the other way.
+          transform: [{ scaleX: language === 'ar' ? 1 : -1 }],
+        }}
+        contentFit="contain"
+        transition={0}
+      />
+    </Pressable>
+  );
 
   const handleViewStory = useCallback(
     (winner: ShareWinLastWinner) => {
@@ -153,6 +213,7 @@ export default function ShareWinScreen() {
         >
           <ShareWinSkeleton />
         </ScrollView>
+        {backButton}
       </View>
     );
   }
@@ -172,11 +233,14 @@ export default function ShareWinScreen() {
             <Text style={sw.stateButtonText}>{copy.retry}</Text>
           </TouchableOpacity>
         </View>
+        {backButton}
       </View>
     );
   }
 
-  if (!overview) return <View style={sw.root} />;
+  // The brief gap between "loaded" and "has data". It gets the back control
+  // too, so there is no frame of this screen without a way out.
+  if (!overview) return <View style={sw.root}>{backButton}</View>;
 
   // ── Ready ─────────────────────────────────────────────────────────────────
   return (
@@ -221,6 +285,7 @@ export default function ShareWinScreen() {
         />
       </ScrollView>
 
+      {backButton}
     </View>
   );
 }

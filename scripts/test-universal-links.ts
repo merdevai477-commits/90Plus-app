@@ -6,6 +6,8 @@
  *   UNIVERSAL_LINKS_BASE_URL=http://localhost:3000 npm run test:universal-links
  */
 
+import { AASA_ACTIVE_PATHS } from '../src/config/appleAppSite';
+
 const BASE_URL = (process.env.UNIVERSAL_LINKS_BASE_URL ?? 'https://90plus.pro').replace(
   /\/$/,
   '',
@@ -17,7 +19,13 @@ const PATHS = [
 ] as const;
 
 const EXPECTED_BUNDLE = 'com.mhmdsh1892.ninetyplusapp';
-const EXPECTED_PATHS = ['/reels/*', '/@*', '/groups/join/*'];
+/*
+ * Read from the config the server actually serves, so this validator can never
+ * pass while a newly claimed path (e.g. the Share & Earn '/invite/*') is
+ * missing from production. A hardcoded copy here is exactly how /invite/* went
+ * unnoticed: the checker only ever asked about the paths it already knew.
+ */
+const EXPECTED_PATHS: string[] = [...AASA_ACTIVE_PATHS];
 
 interface CheckResult {
   label: string;

@@ -10,6 +10,21 @@
  * Runs as `setupFiles` (before the test framework and before the module
  * registry is touched), not `setupFilesAfterEnv`, which would be too late.
  */
+/*
+ * `front/__mocks__/react-native.ts` is a ROOT manual mock, which jest applies
+ * to every suite automatically — no jest.mock() call needed. It exports four
+ * things (Platform, NativeModules, I18nManager) for the i18n unit tests, so
+ * under it `StyleSheet`, `View` and every other export are undefined.
+ *
+ * That is fine for the node-environment suites, and fatal here: a component
+ * with `StyleSheet.create` at module scope throws while it is being imported,
+ * so NOTHING in this config could actually render. It went unnoticed because
+ * the only suite using it was opt-in and skipped without its live token.
+ *
+ * Render tests get the real React Native.
+ */
+jest.unmock('react-native');
+
 const RN = require('react-native');
 
 const subscription = { remove: () => {} };

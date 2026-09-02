@@ -1159,7 +1159,19 @@ export default function QuizHubScreen() {
      * never hang forever. It is a recovery affordance, not a second loading UI.
      */
     return (
-      <GameLoadingState topInset={contentTopInset}>
+      <GameLoadingState
+        topInset={contentTopInset}
+        /*
+         * The way OUT of the daily quiz while it is still loading.
+         *
+         * This branch covers "the pack is being generated" as well as a plain
+         * slow fetch, and generation is minutes of backend work. Without an
+         * arrow here the player sat on a bare spinner with nothing to tap —
+         * reported as "the Daily Quiz has no back button".
+         */
+        onBack={goBackToQuestionsHub}
+        backAccessibilityLabel={t.quiz.backToQuestions}
+      >
         {isPackPreparing && packPreparingTooLong ? (
           <TouchableOpacity
             style={styles.retryButton}
@@ -1277,7 +1289,13 @@ export default function QuizHubScreen() {
   if (!currentQuestion) {
     if (loadingQuestions || isFetching) {
       // Same shared spinner as above and as every other mode.
-      return <GameLoadingState topInset={contentTopInset} />;
+      return (
+        <GameLoadingState
+          topInset={contentTopInset}
+          onBack={goBackToQuestionsHub}
+          backAccessibilityLabel={t.quiz.backToQuestions}
+        />
+      );
     }
 
     const allDone =

@@ -353,6 +353,20 @@ function createStyles(scale: number, fontScale: number, language: string) {
     },
     /** Children bring their own top spacing, so the spinner never double-gaps. */
     loadingExtras: { alignItems: 'center' },
+    /**
+     * The escape hatch pinned over the spinner — see GameLoadingState.
+     *
+     * Absolutely positioned so adding it cannot move the spinner, which stays
+     * centred on the page exactly where it has always been. It sits on the
+     * same leading edge and the same `contentTop` offset as the real header's
+     * back arrow, so the arrow does not jump when the round finishes loading
+     * and GameScreenHeader takes over.
+     */
+    loadingBack: {
+      position: 'absolute',
+      left: s(GAME_LAYOUT.gutter),
+      zIndex: 5,
+    },
   });
 }
 
@@ -400,18 +414,51 @@ export function useGameChromeStyles(): {
  * header would occupy, so it sits exactly where the mode screens put it.
  * `children` is for anything a specific screen must add BELOW the spinner (the
  * daily pack's "preparing…" retry button) — never a second spinner.
+ *
+ * ── THE BACK ARROW IS NOT OPTIONAL ───────────────────────────────────────────
+ * `onBack` draws the same arrow, in the same place, as GameScreenHeader.
+ *
+ * This screen used to render the spinner ALONE. Every game mode swaps its whole
+ * header out for this component while the round loads, so for as long as the
+ * request was in flight there was no back arrow, no title and nothing to tap:
+ * the hardware back button is the only way out on Android and there is none at
+ * all on iOS. A round that took a long time — or a request that never came back
+ * — was therefore indistinguishable from the app freezing, which is exactly how
+ * "Bingo hangs" and "the Daily Quiz has no back button" were both reported.
+ *
+ * Callers pass their own back handler because the two families of screen unwind
+ * differently (goBackToQuestionsHub vs. the mode screen's router.back), but no
+ * caller should omit it: a loading state with no way out is a trap.
  */
 export function GameLoadingState({
   topInset = 0,
+  onBack,
+  backAccessibilityLabel = 'Back',
   children,
 }: {
   topInset?: number;
+  /** Leaves the screen while the round is still loading. */
+  onBack?: () => void;
+  backAccessibilityLabel?: string;
   children?: React.ReactNode;
 }) {
-  const { styles } = useGameChromeStyles();
+  const { styles, metrics } = useGameChromeStyles();
 
   return (
     <View style={[styles.loadingRoot, { paddingTop: topInset }]}>
+      {onBack ? (
+        <TouchableOpacity
+          style={[styles.loadingBack, { top: topInset }]}
+          onPress={onBack}
+          activeOpacity={0.84}
+          accessibilityRole="button"
+          accessibilityLabel={backAccessibilityLabel}
+          testID="game-loading-back"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <BackArrowIcon size={metrics.s(38)} />
+        </TouchableOpacity>
+      ) : null}
       <ActivityIndicator size="large" color={GAME_COLOR.accent} />
       {children ? <View style={styles.loadingExtras}>{children}</View> : null}
     </View>

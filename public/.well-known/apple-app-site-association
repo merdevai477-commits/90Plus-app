@@ -5,7 +5,10 @@
         "appIDs": ["337M3TRC5C.com.mhmdsh1892.ninetyplusapp"],
         "components": [
           { "/": "/reels/*" },
-          { "/": "/@*" }
+          { "/": "/@*" },
+          { "/": "/groups/join/*" },
+          { "/": "/invite/*" },
+          { "/": "/ref/*" }
         ]
       }
     ]
