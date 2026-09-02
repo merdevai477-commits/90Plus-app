@@ -12,7 +12,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { CircleUserRound, Mail, Lock, ShieldCheck, X } from 'lucide-react-native';
+import { ShieldCheck, X } from 'lucide-react-native';
+import { AUTH_V2_ASSETS } from '@/src/components/auth/authV2Assets';
 import {
   AuthScreenShell,
   AuthTextField,
@@ -198,73 +199,75 @@ export default function RegisterScreen() {
     <AuthScreenShell>
       <AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />
 
-      <View style={styles.fields}>
-        <AuthTextField
-          icon={CircleUserRound}
-          placeholder={copy.fullName}
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="words"
-          autoCorrect={false}
-          isRTL={isRTL}
-          filled
-        />
-        <AuthTextField
-          icon={Mail}
-          placeholder={copy.email}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={email}
-          onChangeText={setEmail}
-          isRTL={isRTL}
-          containerStyle={styles.fieldGap}
-        />
-        <AuthTextField
-          icon={Lock}
-          placeholder={copy.password}
-          secureTextEntry
-          secureToggle
-          value={password}
-          onChangeText={setPassword}
-          isRTL={isRTL}
-          containerStyle={styles.fieldGap}
-        />
+      <View style={styles.formBlock}>
+        <View style={styles.fields}>
+          <AuthTextField
+            iconSource={AUTH_V2_ASSETS.iconUser}
+            placeholder={copy.fullName}
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+            autoCorrect={false}
+            isRTL={isRTL}
+            filled
+          />
+          <AuthTextField
+            iconSource={AUTH_V2_ASSETS.iconEmail}
+            placeholder={copy.email}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={email}
+            onChangeText={setEmail}
+            isRTL={isRTL}
+          />
+          <AuthTextField
+            iconSource={AUTH_V2_ASSETS.iconLock}
+            placeholder={copy.password}
+            secureTextEntry
+            secureToggle
+            value={password}
+            onChangeText={setPassword}
+            isRTL={isRTL}
+          />
+        </View>
+
+        {!showVerification && (
+          <AuthTermsConsent
+            checked={terms}
+            onToggle={toggleTerms}
+            isRTL={isRTL}
+            tCommon={tCommon}
+          />
+        )}
       </View>
 
-      {!showVerification && (
-        <AuthTermsConsent
-          checked={terms}
-          onToggle={toggleTerms}
-          isRTL={isRTL}
-          tCommon={tCommon}
+      <View style={styles.ctaBlock}>
+        <AuthPrimaryButton
+          label={copy.submit}
+          loadingLabel={copy.submitting}
+          loading={isSubmitting}
+          onPress={submit}
         />
-      )}
+        <AuthDivider label={copy.divider} />
+      </View>
 
-      <AuthPrimaryButton
-        label={copy.submit}
-        loadingLabel={copy.submitting}
-        loading={isSubmitting}
-        onPress={submit}
-        style={styles.submitGap}
-      />
+      <View style={styles.bottomBlock}>
+        <AuthSocialButtons
+          onGoogle={handleGooglePress}
+          onApple={handleApplePress}
+          loading={!!oauthLoading}
+          googleLoading={oauthLoading === 'google'}
+          appleLoading={oauthLoading === 'apple'}
+        />
 
-      <AuthDivider label={copy.divider} />
-
-      <AuthSocialButtons
-        onGoogle={handleGooglePress}
-        onApple={handleApplePress}
-        loading={!!oauthLoading}
-        googleLoading={oauthLoading === 'google'}
-        appleLoading={oauthLoading === 'apple'}
-      />
-
-      <AuthFooterLink
-        muted={copy.footerMuted}
-        link={copy.footerLink}
-        onPress={() => router.push('/auth/login')}
-        isRTL={isRTL}
-      />
+        <AuthFooterLink
+          muted={copy.footerMuted}
+          link={copy.footerLink}
+          onPress={() => router.push('/auth/login')}
+          isRTL={isRTL}
+        />
+      </View>
 
       <RegisterEmailVerificationModal
         visible={showVerification}
@@ -282,9 +285,10 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
+  formBlock: { width: '100%' },
   fields: { gap: 16, width: '100%' },
-  fieldGap: { marginTop: 0 },
-  submitGap: { marginTop: 42 },
+  ctaBlock: { marginTop: 55, width: '100%' },
+  bottomBlock: { marginTop: 42, width: '100%' },
   modalOverlay: { flex: 1 },
   modalBackdrop: {
     flex: 1,

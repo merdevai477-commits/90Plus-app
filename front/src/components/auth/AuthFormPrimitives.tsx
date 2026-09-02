@@ -23,8 +23,7 @@ import {
 } from './AuthTokens';
 import { TEXT_PRIMARY } from '../../../constants/tokens';
 
-const googleIcon = require('../../../assets/images/auth/icon-google.svg');
-const appleIcon = require('../../../assets/images/auth/icon-apple.svg');
+import { AUTH_V2_ASSETS } from './authV2Assets';
 
 export function AuthPanelHeader({
   title,
@@ -111,7 +110,7 @@ export function AuthSocialButtons({
         {googleLoading ? (
           <ActivityIndicator color={TEXT_PRIMARY} size="small" />
         ) : (
-          <Image source={googleIcon} style={styles.socialIcon} contentFit="contain" />
+          <Image source={AUTH_V2_ASSETS.iconGoogle} style={styles.socialIcon} contentFit="contain" />
         )}
       </TouchableOpacity>
       <TouchableOpacity
@@ -123,7 +122,7 @@ export function AuthSocialButtons({
         {appleLoading ? (
           <ActivityIndicator color={TEXT_PRIMARY} size="small" />
         ) : (
-          <Image source={appleIcon} style={styles.socialIcon} contentFit="contain" />
+          <Image source={AUTH_V2_ASSETS.iconApple} style={styles.socialIcon} contentFit="contain" />
         )}
       </TouchableOpacity>
     </View>
@@ -169,6 +168,8 @@ export const AuthTermsConsent = memo(function AuthTermsConsent({
   isRTL: boolean;
   tCommon: TermsCopy;
 }) {
+  const ageLine = tCommon.registerAgreementAfterLinks.replace(/^[،,\s]+/, '');
+
   return (
     <TouchableOpacity activeOpacity={1} onPress={onToggle} style={[styles.termsRow, isRTL && styles.termsRowRtl]}>
       <View style={[styles.termsTextWrap, isRTL && styles.termsTextWrapRtl]}>
@@ -191,7 +192,10 @@ export const AuthTermsConsent = memo(function AuthTermsConsent({
           >
             {tCommon.registerPrivacyLink}
           </Text>
-          {tCommon.registerAgreementAfterLinks}
+          {isRTL ? '،' : ','}
+        </Text>
+        <Text style={[styles.termsLine, styles.termsSecondLine, isRTL && styles.termsLineRtl]}>
+          {ageLine}
         </Text>
       </View>
       <View style={[styles.checkbox, checked && styles.checkboxOn]}>
@@ -238,7 +242,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 22,
-    marginVertical: 41,
+    marginTop: 41,
     width: '100%',
   },
   dividerLine: {
@@ -319,6 +323,9 @@ const styles = StyleSheet.create({
   termsLineRtl: {
     textAlign: 'right',
     writingDirection: 'rtl',
+  },
+  termsSecondLine: {
+    marginTop: 2,
   },
   termsLink: {
     color: AUTH_ACCENT,

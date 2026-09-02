@@ -7,18 +7,21 @@ import {
   TextInputProps,
   ViewStyle,
   Platform,
+  type ImageSourcePropType,
 } from 'react-native';
+import { Image } from 'expo-image';
 import type { LucideIcon } from 'lucide-react-native';
-import { Eye, EyeOff } from 'lucide-react-native';
 import {
   AUTH_INPUT_BG,
   AUTH_INPUT_BORDER,
   AUTH_INPUT_PLACEHOLDER,
 } from './AuthTokens';
 import { TEXT_PRIMARY } from '../../../constants/tokens';
+import { AUTH_V2_ASSETS } from './authV2Assets';
 
 type Props = TextInputProps & {
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  iconSource?: ImageSourcePropType;
   secureToggle?: boolean;
   containerStyle?: ViewStyle;
   isRTL?: boolean;
@@ -27,6 +30,7 @@ type Props = TextInputProps & {
 
 export function AuthTextField({
   icon: Icon,
+  iconSource,
   secureToggle,
   containerStyle,
   secureTextEntry,
@@ -37,6 +41,7 @@ export function AuthTextField({
 }: Props) {
   const [hide, setHide] = useState(true);
   const isSecure = !!(secureToggle && (secureTextEntry ?? true));
+  const trailingIcon = iconSource;
 
   return (
     <View
@@ -49,15 +54,9 @@ export function AuthTextField({
     >
       {secureToggle ? (
         <Pressable hitSlop={10} onPress={() => setHide((h) => !h)} style={styles.iconSlot}>
-          {hide ? (
-            <Eye color={AUTH_INPUT_PLACEHOLDER} size={22} strokeWidth={1.75} />
-          ) : (
-            <EyeOff color={AUTH_INPUT_PLACEHOLDER} size={22} strokeWidth={1.75} />
-          )}
+          <Image source={AUTH_V2_ASSETS.iconEye} style={styles.iconImage} contentFit="contain" />
         </Pressable>
-      ) : (
-        <View style={styles.iconSlot} />
-      )}
+      ) : null}
 
       <TextInput
         {...rest}
@@ -72,7 +71,11 @@ export function AuthTextField({
       />
 
       <View style={styles.iconSlot}>
-        <Icon color={AUTH_INPUT_PLACEHOLDER} size={22} strokeWidth={1.75} />
+        {trailingIcon ? (
+          <Image source={trailingIcon} style={styles.iconImage} contentFit="contain" />
+        ) : Icon ? (
+          <Icon color={AUTH_INPUT_PLACEHOLDER} size={22} strokeWidth={1.75} />
+        ) : null}
       </View>
     </View>
   );
@@ -101,6 +104,10 @@ const styles = StyleSheet.create({
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconImage: {
+    width: 24,
+    height: 24,
   },
   input: {
     flex: 1,
