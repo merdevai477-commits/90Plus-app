@@ -1,12 +1,12 @@
 /**
- * CompCard — Figma rank competition tile (204×269, node 1005:2558).
- * Layout tokens from SwiftUI export: paddingTop 134, gap 14 / 4 / 2.
+ * CompCard — Figma rank competition tile (node 1005:2558).
+ * Size control: front/components/rank/compCardMetrics.ts → COMP_CARD_SCALE
  */
 
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { LucideIcon } from 'lucide-react-native';
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   ImageSourcePropType,
   Pressable,
@@ -18,9 +18,9 @@ import {
 } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
+import { getCompCardMetrics } from './compCardMetrics';
 
-export const COMP_CARD_WIDTH = 204;
-export const COMP_CARD_HEIGHT = 269;
+export { COMP_CARD_HEIGHT, COMP_CARD_SCALE, COMP_CARD_WIDTH, getCompCardMetrics } from './compCardMetrics';
 
 const CTA_PURPLE = '#8C5CF5';
 const CARD_BORDER = '#2E1F50';
@@ -50,6 +50,8 @@ const CompCard: React.FC<CompCardProps> = ({
 }) => {
   const { t, isRTL } = useTranslation();
   const ctaLabel = actionText ?? t.rank.playNow;
+  const m = useMemo(() => getCompCardMetrics(), []);
+  const s = useMemo(() => createStyles(m), [m]);
 
   return (
     <Pressable
@@ -79,7 +81,7 @@ const CompCard: React.FC<CompCardProps> = ({
               {title}
             </Text>
             {TitleIcon ? (
-              <TitleIcon size={24} color="#fff" strokeWidth={2} style={s.titleIcon} />
+              <TitleIcon size={m.titleIconSize} color="#fff" strokeWidth={2} style={s.titleIcon} />
             ) : null}
           </View>
           <Text style={s.sub} numberOfLines={3}>
@@ -91,7 +93,7 @@ const CompCard: React.FC<CompCardProps> = ({
           <Text style={s.ctaText} numberOfLines={1}>
             {ctaLabel}
           </Text>
-          {CtaIcon ? <CtaIcon size={16} color="#fff" strokeWidth={2.5} /> : null}
+          {CtaIcon ? <CtaIcon size={m.ctaIconSize} color="#fff" strokeWidth={2.5} /> : null}
         </View>
       </View>
     </Pressable>
@@ -100,77 +102,79 @@ const CompCard: React.FC<CompCardProps> = ({
 
 export default CompCard;
 
-const s = StyleSheet.create({
-  card: {
-    width: COMP_CARD_WIDTH,
-    height: COMP_CARD_HEIGHT,
-    borderRadius: 16,
-    borderWidth: 0.5,
-    borderColor: CARD_BORDER,
-    overflow: 'hidden',
-    backgroundColor: '#12081F',
-  },
-  content: {
-    flex: 1,
-    paddingTop: 134,
-    paddingBottom: 16,
-    paddingHorizontal: 12,
-    gap: 14,
-    justifyContent: 'flex-end',
-  },
-  textBlock: {
-    gap: 4,
-    alignItems: 'center',
-    width: '100%',
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-    width: '100%',
-  },
-  titleRowRtl: {
-    flexDirection: 'row-reverse',
-  },
-  titleIcon: {
-    flexShrink: 0,
-  },
-  title: {
-    flexShrink: 1,
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 26,
-  },
-  sub: {
-    color: SUBTITLE_GRAY,
-    fontSize: 12,
-    fontWeight: '500',
-    textAlign: 'center',
-    lineHeight: 17,
-    width: '100%',
-  },
-  cta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    width: 128,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 36,
-    gap: 4,
-    backgroundColor: CTA_PURPLE,
-  },
-  ctaRtl: {
-    flexDirection: 'row-reverse',
-  },
-  ctaText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
-    flexShrink: 1,
-  },
-});
+function createStyles(m: ReturnType<typeof getCompCardMetrics>) {
+  return StyleSheet.create({
+    card: {
+      width: m.width,
+      height: m.height,
+      borderRadius: m.borderRadius,
+      borderWidth: 0.5,
+      borderColor: CARD_BORDER,
+      overflow: 'hidden',
+      backgroundColor: '#12081F',
+    },
+    content: {
+      flex: 1,
+      paddingTop: m.paddingTop,
+      paddingBottom: m.paddingBottom,
+      paddingHorizontal: m.paddingHorizontal,
+      gap: m.contentGap,
+      justifyContent: 'flex-end',
+    },
+    textBlock: {
+      gap: m.textGap,
+      alignItems: 'center',
+      width: '100%',
+    },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: m.titleGap,
+      width: '100%',
+    },
+    titleRowRtl: {
+      flexDirection: 'row-reverse',
+    },
+    titleIcon: {
+      flexShrink: 0,
+    },
+    title: {
+      flexShrink: 1,
+      color: '#fff',
+      fontSize: m.titleFontSize,
+      fontWeight: '700',
+      textAlign: 'center',
+      lineHeight: m.titleLineHeight,
+    },
+    sub: {
+      color: SUBTITLE_GRAY,
+      fontSize: m.subFontSize,
+      fontWeight: '500',
+      textAlign: 'center',
+      lineHeight: m.subLineHeight,
+      width: '100%',
+    },
+    cta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      alignSelf: 'center',
+      width: m.ctaWidth,
+      paddingVertical: m.ctaPaddingV,
+      paddingHorizontal: m.ctaPaddingH,
+      borderRadius: m.ctaRadius,
+      gap: m.ctaGap,
+      backgroundColor: CTA_PURPLE,
+    },
+    ctaRtl: {
+      flexDirection: 'row-reverse',
+    },
+    ctaText: {
+      color: '#fff',
+      fontSize: m.ctaFontSize,
+      fontWeight: '700',
+      flexShrink: 1,
+    },
+  });
+}

@@ -30,12 +30,11 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import CompCard, { COMP_CARD_WIDTH } from '../../components/rank/CompCard';
+import CompCard from '../../components/rank/CompCard';
 import LeaderboardModal, {
   LeaderboardEntry,
 } from '../../components/rank/LeaderboardModal';
@@ -166,7 +165,6 @@ export default function RankScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
-  const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { t } = useTranslation();
   const appLanguage = useLanguageStore((s) => s.language);
@@ -322,13 +320,6 @@ export default function RankScreen() {
     [competitions],
   );
 
-  const compCardWidth = useMemo(() => {
-    const gridPadding = 14;
-    const gap = 12;
-    const calculated = Math.floor((screenWidth - gridPadding * 2 - gap) / 2);
-    return Math.min(COMP_CARD_WIDTH, calculated);
-  }, [screenWidth]);
-
   // ── Podium (ranks 1, 2, 3 — visual order: 2 → 1 → 3) ──
   const podiumSlots = useMemo<readonly PodiumSlot[]>(() => {
     const find = (rank: number) => players.find(p => p.rank === rank);
@@ -433,7 +424,6 @@ export default function RankScreen() {
                 <CompCard
                   key={c.id}
                   {...c}
-                  style={{ width: compCardWidth }}
                   onPress={() => handleCompetitionPress(c.id)}
                 />
               ))}
