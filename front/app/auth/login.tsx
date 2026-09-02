@@ -13,11 +13,14 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { Mail, Lock, ShieldCheck, X } from 'lucide-react-native';
+import { ShieldCheck, X } from 'lucide-react-native';
+import { AUTH_V2_ASSETS } from '@/src/components/auth/authV2Assets';
 import {
   AuthScreenShell,
   AuthTextField,
   AuthPanelHeader,
+  AuthPanelLayout,
+  AuthFormFields,
   AuthPrimaryButton,
   AuthDivider,
   AuthSocialButtons,
@@ -290,60 +293,69 @@ export default function LoginScreen() {
 
   return (
     <AuthScreenShell>
-      <AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />
+      <AuthPanelLayout
+        variant="login"
+        header={<AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />}
+        form={
+          <>
+            <AuthFormFields>
+              <AuthTextField
+                iconSource={AUTH_V2_ASSETS.iconEmail}
+                placeholder={copy.email}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={email}
+                onChangeText={setEmail}
+                isRTL={isRTL}
+              />
+              <AuthTextField
+                iconSource={AUTH_V2_ASSETS.iconLock}
+                placeholder={copy.password}
+                secureTextEntry
+                secureToggle
+                value={password}
+                onChangeText={setPassword}
+                isRTL={isRTL}
+              />
+            </AuthFormFields>
 
-      <View style={styles.fields}>
-        <AuthTextField
-          icon={Mail}
-          placeholder={copy.email}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={email}
-          onChangeText={setEmail}
-          isRTL={isRTL}
-        />
-        <AuthTextField
-          icon={Lock}
-          placeholder={copy.password}
-          secureToggle
-          value={password}
-          onChangeText={setPassword}
-          isRTL={isRTL}
-          containerStyle={styles.fieldGap}
-        />
-      </View>
-
-      <AuthTermsConsent
-        checked={terms}
-        onToggle={toggleTerms}
-        isRTL={isRTL}
-        tCommon={tCommon}
-      />
-
-      <AuthPrimaryButton
-        label={copy.submit}
-        loadingLabel={tCommon.loggingIn}
-        loading={isSubmitting}
-        onPress={submit}
-        style={styles.submitGap}
-      />
-
-      <AuthDivider label={copy.divider} />
-
-      <AuthSocialButtons
-        onGoogle={handleGooglePress}
-        onApple={handleApplePress}
-        loading={!!oauthLoading}
-        googleLoading={oauthLoading === 'google'}
-        appleLoading={oauthLoading === 'apple'}
-      />
-
-      <AuthFooterLink
-        muted={copy.footerMuted}
-        link={copy.footerLink}
-        onPress={() => router.replace('/auth')}
-        isRTL={isRTL}
+            <AuthTermsConsent
+              checked={terms}
+              onToggle={toggleTerms}
+              isRTL={isRTL}
+              tCommon={tCommon}
+            />
+          </>
+        }
+        cta={
+          <>
+            <AuthPrimaryButton
+              label={copy.submit}
+              loadingLabel={tCommon.loggingIn}
+              loading={isSubmitting}
+              onPress={submit}
+            />
+            <AuthDivider label={copy.divider} />
+          </>
+        }
+        social={
+          <>
+            <AuthSocialButtons
+              onGoogle={handleGooglePress}
+              onApple={handleApplePress}
+              loading={!!oauthLoading}
+              googleLoading={oauthLoading === 'google'}
+              appleLoading={oauthLoading === 'apple'}
+            />
+            <AuthFooterLink
+              muted={copy.footerMuted}
+              link={copy.footerLink}
+              onPress={() => router.replace('/auth')}
+              isRTL={isRTL}
+            />
+          </>
+        }
       />
 
       <Modal visible={showVerification} transparent animationType="fade" statusBarTranslucent>
@@ -432,9 +444,6 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  fields: { gap: 16, width: '100%' },
-  fieldGap: { marginTop: 0 },
-  submitGap: { marginTop: 42 },
   modalOverlay: { flex: 1 },
   modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
   modalCard: {

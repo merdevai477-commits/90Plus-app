@@ -200,6 +200,7 @@ export default function RegisterScreen() {
   return (
     <AuthScreenShell>
       <AuthPanelLayout
+        variant="signup"
         header={<AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />}
         form={
           <>

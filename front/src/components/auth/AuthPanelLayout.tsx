@@ -1,15 +1,19 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 
-/** Figma panel body spacing (node 1015:3722 SwiftUI export). */
+/** Figma panel body spacing — signup 1015:3722, login 1017:3880. */
 export const AUTH_PANEL_GAP = {
-  main: 55,
+  /** Signup: 3 fields → larger gap before CTA. Login: 2 fields → 42. */
+  mainSignup: 55,
+  mainLogin: 42,
   form: 18,
   fields: 16,
   terms: 8,
   action: 42,
   cta: 41,
   social: 14,
+  headerSignup: 6,
+  headerLogin: 8,
 } as const;
 
 type Props = {
@@ -17,18 +21,40 @@ type Props = {
   form: React.ReactNode;
   cta: React.ReactNode;
   social: React.ReactNode;
+  /** Login Figma uses tighter main gap (42) than signup (55). */
+  variant?: 'signup' | 'login';
 };
 
 /**
- * Mirrors the Figma panel ZStack layout:
- * header → VStack(55) { form VStack(18), action VStack(42) { cta VStack(41), social VStack(14) } }
+ * Mirrors the Figma panel layout:
+ * header → VStack(main) { form VStack(18), action VStack(42) { cta VStack(41), social VStack(14) } }
  */
-export function AuthPanelLayout({ header, form, cta, social }: Props) {
+export function AuthPanelLayout({
+  header,
+  form,
+  cta,
+  social,
+  variant = 'signup',
+}: Props) {
+  const isLogin = variant === 'login';
+
   return (
     <View style={styles.root}>
-      <View style={styles.header}>{header}</View>
+      <View
+        style={[
+          styles.header,
+          { gap: isLogin ? AUTH_PANEL_GAP.headerLogin : AUTH_PANEL_GAP.headerSignup },
+        ]}
+      >
+        {header}
+      </View>
 
-      <View style={styles.main}>
+      <View
+        style={[
+          styles.main,
+          { gap: isLogin ? AUTH_PANEL_GAP.mainLogin : AUTH_PANEL_GAP.mainSignup },
+        ]}
+      >
         <View style={styles.formSection}>{form}</View>
 
         <View style={styles.actionSection}>
@@ -51,11 +77,8 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 48,
-    gap: 6,
   },
-  main: {
-    gap: AUTH_PANEL_GAP.main,
-  },
+  main: {},
   formSection: {
     gap: AUTH_PANEL_GAP.form,
   },
