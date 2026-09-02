@@ -35,7 +35,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import CompCard from '../../components/rank/CompCard';
+import CompCard, { COMP_CARD_WIDTH } from '../../components/rank/CompCard';
 import LeaderboardModal, {
   LeaderboardEntry,
 } from '../../components/rank/LeaderboardModal';
@@ -325,7 +325,8 @@ export default function RankScreen() {
   const compCardWidth = useMemo(() => {
     const gridPadding = 14;
     const gap = 12;
-    return Math.floor((screenWidth - gridPadding * 2 - gap) / 2);
+    const calculated = Math.floor((screenWidth - gridPadding * 2 - gap) / 2);
+    return Math.min(COMP_CARD_WIDTH, calculated);
   }, [screenWidth]);
 
   // ── Podium (ranks 1, 2, 3 — visual order: 2 → 1 → 3) ──
@@ -754,7 +755,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     gap: 16,
     marginTop: 4,
-    marginBottom: 4,
   },
   compRow: {
     flexDirection: 'row',

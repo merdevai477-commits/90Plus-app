@@ -1,5 +1,6 @@
 /**
- * CompCard — Figma rank competition tile (node 1005:2558, 204×269).
+ * CompCard — Figma rank competition tile (204×269, node 1005:2558).
+ * Layout tokens from SwiftUI export: paddingTop 134, gap 14 / 4 / 2.
  */
 
 import { Image } from 'expo-image';
@@ -18,10 +19,12 @@ import {
 
 import { useTranslation } from '../../src/i18n';
 
-const ACCENT = '#8B5CF6';
+export const COMP_CARD_WIDTH = 204;
+export const COMP_CARD_HEIGHT = 269;
+
+const CTA_PURPLE = '#8C5CF5';
 const CARD_BORDER = '#2E1F50';
-const CARD_HEIGHT = 269;
-const FOOTER_MIN_HEIGHT = 135;
+const SUBTITLE_GRAY = '#9E9E9E';
 
 export interface CompCardProps {
   img: ImageSourcePropType;
@@ -63,38 +66,33 @@ const CompCard: React.FC<CompCardProps> = ({
       />
 
       <LinearGradient
-        colors={['transparent', 'rgba(3,0,8,0.35)', 'rgba(3,0,8,0.88)']}
-        locations={[0.42, 0.68, 1]}
+        colors={['transparent', 'rgba(3,0,8,0.25)', 'rgba(3,0,8,0.82)']}
+        locations={[0.45, 0.72, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
 
-      <View style={s.footer}>
+      <View style={s.content}>
         <View style={s.textBlock}>
           <View style={[s.titleRow, isRTL && s.titleRowRtl]}>
             <Text style={s.title} numberOfLines={2}>
               {title}
             </Text>
             {TitleIcon ? (
-              <TitleIcon size={22} color="#fff" strokeWidth={2} style={s.titleIcon} />
+              <TitleIcon size={24} color="#fff" strokeWidth={2} style={s.titleIcon} />
             ) : null}
           </View>
-          <Text style={s.sub} numberOfLines={2}>
+          <Text style={s.sub} numberOfLines={3}>
             {sub}
           </Text>
         </View>
 
-        <LinearGradient
-          colors={[ACCENT, '#3B266B']}
-          style={[s.cta, isRTL && s.ctaRtl]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-        >
+        <View style={[s.cta, isRTL && s.ctaRtl]}>
           <Text style={s.ctaText} numberOfLines={1}>
             {ctaLabel}
           </Text>
           {CtaIcon ? <CtaIcon size={16} color="#fff" strokeWidth={2.5} /> : null}
-        </LinearGradient>
+        </View>
       </View>
     </Pressable>
   );
@@ -104,24 +102,21 @@ export default CompCard;
 
 const s = StyleSheet.create({
   card: {
-    height: CARD_HEIGHT,
+    width: COMP_CARD_WIDTH,
+    height: COMP_CARD_HEIGHT,
     borderRadius: 16,
     borderWidth: 0.5,
     borderColor: CARD_BORDER,
     overflow: 'hidden',
     backgroundColor: '#12081F',
   },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    minHeight: FOOTER_MIN_HEIGHT,
-    paddingTop: 12,
+  content: {
+    flex: 1,
+    paddingTop: 134,
     paddingBottom: 16,
     paddingHorizontal: 12,
-    justifyContent: 'flex-end',
     gap: 14,
+    justifyContent: 'flex-end',
   },
   textBlock: {
     gap: 4,
@@ -132,7 +127,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 2,
     width: '100%',
   },
   titleRowRtl: {
@@ -144,18 +139,17 @@ const s = StyleSheet.create({
   title: {
     flexShrink: 1,
     color: '#fff',
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 26,
   },
   sub: {
-    color: '#9D9D9D',
+    color: SUBTITLE_GRAY,
     fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 16,
-    minHeight: 32,
+    lineHeight: 17,
     width: '100%',
   },
   cta: {
@@ -163,12 +157,12 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-    minWidth: 128,
-    maxWidth: '100%',
+    width: 128,
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     borderRadius: 36,
     gap: 4,
+    backgroundColor: CTA_PURPLE,
   },
   ctaRtl: {
     flexDirection: 'row-reverse',
