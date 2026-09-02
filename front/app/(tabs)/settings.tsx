@@ -35,7 +35,6 @@ import {
 import { useSettings } from '../../contexts/SettingsContext';
 import { useVideos } from '../../contexts/VideosContext';
 import { useRouter } from 'expo-router';
-import { globalState } from '../../globalState';
 import { useAuth } from '@clerk/clerk-expo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LanguagePickerModal from '../../components/common/LanguagePickerModal';
@@ -118,28 +117,22 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = async () => {
+    if (isLoggingOut) return;
     setIsLoggingOut(true);
     try {
-      toastManager.showInfo(tSettings.loggingOutTitle, tSettings.loggingOutDetail);
-      await clearVideos();
-      await globalState.logout();
-      const { CoinsService } = await import('../../services/coins.service');
-      CoinsService.clearCurrentUser();
-      const { AuthService } = await import('../../src/services/authService');
-      AuthService.clearMemoryCache();
-      const { rankingsService } = await import('../../services/rankingsService');
-      rankingsService.clearMemoryCache();
       const { websocketClient } = await import('../../services/websocketClient');
-      websocketClient.disconnect();
-      const { cacheService } = await import('../../services/cacheService');
-      await cacheService.clearAll();
-      await AsyncStorage.removeItem('@username_setup_complete');
-      await AsyncStorage.removeItem('@user_profile');
-      await AsyncStorage.removeItem('@90plus_age_verified');
-      await signOut();
+      const { performFastLogout } = await import('../../utils/logoutSession');
+
+      await performFastLogout({
+        signOut,
+        clearVideos,
+        disconnectWebSocket: () => websocketClient.disconnect(),
+      });
+
       router.replace('/auth');
       toastManager.showSuccess(tSettings.logoutSuccess, tSettings.logoutSuccessDetail);
     } catch {
+      router.replace('/auth');
       toastManager.showError(tSettings.logoutFailed, tSettings.logoutFailedDetail);
     } finally {
       setIsLoggingOut(false);
@@ -157,21 +150,15 @@ export default function SettingsScreen() {
       const token = await getToken();
       if (!token) throw new Error('Not authenticated');
       await AccountDeletionService.deleteAccount(token);
-      await clearVideos();
-      await signOut();
-      await globalState.logout();
-      const { CoinsService } = await import('../../services/coins.service');
-      CoinsService.clearCurrentUser();
-      const { AuthService } = await import('../../src/services/authService');
-      AuthService.clearMemoryCache();
-      const { rankingsService } = await import('../../services/rankingsService');
-      rankingsService.clearMemoryCache();
+
       const { websocketClient } = await import('../../services/websocketClient');
-      websocketClient.disconnect();
-      const { cacheService } = await import('../../services/cacheService');
-      await cacheService.clearAll();
-      await AsyncStorage.removeItem('@username_setup_complete');
-      await AsyncStorage.removeItem('@user_profile');
+      const { performFastLogout } = await import('../../utils/logoutSession');
+      await performFastLogout({
+        signOut,
+        clearVideos,
+        disconnectWebSocket: () => websocketClient.disconnect(),
+      });
+
       router.replace('/auth');
       toastManager.showSuccess(tSettings.deleteAccountSuccess, tSettings.deleteAccountSuccessDetail);
     } catch {
