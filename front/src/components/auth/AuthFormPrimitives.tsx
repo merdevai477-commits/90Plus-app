@@ -8,17 +8,16 @@ import {
   ActivityIndicator,
   type ViewStyle,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Check } from 'lucide-react-native';
 import { LEGAL_URLS, openLegalUrl } from '@/config/legal.config';
 import {
   AUTH_ACCENT,
-  AUTH_BUTTON_GRADIENT_END,
-  AUTH_BUTTON_GRADIENT_START,
+  AUTH_BUTTON_SOLID,
   AUTH_CHECKBOX_BG,
   AUTH_CHECKBOX_BORDER,
   AUTH_DIVIDER_LINE,
+  AUTH_DIVIDER_TEXT,
   AUTH_SOCIAL_BG,
   AUTH_SOCIAL_BORDER,
   AUTH_TEXT_MUTED,
@@ -37,10 +36,10 @@ export function AuthPanelHeader({
   subtitle: string;
 }) {
   return (
-    <View style={styles.panelHeader}>
+    <>
       <Text style={styles.panelTitle}>{title}</Text>
       <Text style={styles.panelSubtitle}>{subtitle}</Text>
-    </View>
+    </>
   );
 }
 
@@ -65,21 +64,14 @@ export function AuthPrimaryButton({
       onPress={onPress}
       disabled={disabled || loading}
       style={[
-        styles.primaryWrap,
+        styles.primaryBtn,
         (disabled || loading) && { opacity: 0.6 },
         style,
       ]}
     >
-      <LinearGradient
-        colors={[AUTH_BUTTON_GRADIENT_START, AUTH_BUTTON_GRADIENT_END]}
-        style={styles.primaryBtn}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-      >
-        <Text style={styles.primaryTxt}>
-          {loading ? (loadingLabel ?? label) : label}
-        </Text>
-      </LinearGradient>
+      <Text style={styles.primaryTxt}>
+        {loading ? (loadingLabel ?? label) : label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -226,11 +218,6 @@ export const AuthTermsConsent = memo(function AuthTermsConsent({
 AuthTermsConsent.displayName = 'AuthTermsConsent';
 
 const styles = StyleSheet.create({
-  panelHeader: {
-    alignItems: 'center',
-    marginBottom: 24,
-    gap: 6,
-  },
   panelTitle: {
     fontSize: 26,
     fontWeight: '700',
@@ -242,15 +229,13 @@ const styles = StyleSheet.create({
     color: AUTH_TEXT_SUBTITLE,
     textAlign: 'center',
   },
-  primaryWrap: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    width: '100%',
-  },
   primaryBtn: {
     height: 56,
+    borderRadius: 16,
+    backgroundColor: AUTH_BUTTON_SOLID,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
   },
   primaryTxt: {
     fontSize: 16,
@@ -261,7 +246,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 22,
-    marginTop: 41,
     width: '100%',
   },
   dividerLine: {
@@ -272,7 +256,7 @@ const styles = StyleSheet.create({
   dividerTxt: {
     fontSize: 14,
     fontWeight: '500',
-    color: AUTH_TEXT_MUTED,
+    color: AUTH_DIVIDER_TEXT,
   },
   socialRow: {
     flexDirection: 'row',
@@ -301,8 +285,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    marginTop: 14,
-    paddingBottom: 8,
+    paddingBottom: 4,
   },
   footerRowRtl: {
     flexDirection: 'row-reverse',
@@ -323,7 +306,6 @@ const styles = StyleSheet.create({
     gap: 8,
     width: '100%',
     minHeight: 42,
-    marginTop: 18,
   },
   termsRowRtl: {
     flexDirection: 'row-reverse',
