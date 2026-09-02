@@ -168,6 +168,12 @@ type TermsCopy = {
   registerAgreementAfterLinks: string;
 };
 
+const TERMS_FONT_SIZE = 16;
+const TERMS_LINE_HEIGHT = 20;
+const TERMS_LINE_GAP = 2;
+const TERMS_CHECKBOX_SIZE = 24;
+const TERMS_ROW_MIN_HEIGHT = 42;
+
 export const AuthTermsConsent = memo(function AuthTermsConsent({
   checked,
   onToggle,
@@ -182,7 +188,11 @@ export const AuthTermsConsent = memo(function AuthTermsConsent({
   const ageLine = tCommon.registerAgreementAfterLinks.replace(/^[،,\s]+/, '');
 
   return (
-    <TouchableOpacity activeOpacity={1} onPress={onToggle} style={[styles.termsRow, isRTL && styles.termsRowRtl]}>
+    <TouchableOpacity
+      activeOpacity={1}
+      onPress={onToggle}
+      style={[styles.termsRow, isRTL && styles.termsRowRtl]}
+    >
       <View style={[styles.termsTextWrap, isRTL && styles.termsTextWrapRtl]}>
         <Text style={[styles.termsLine, isRTL && styles.termsLineRtl]}>
           {tCommon.registerAgreementPrefix}{' '}
@@ -205,12 +215,11 @@ export const AuthTermsConsent = memo(function AuthTermsConsent({
           </Text>
           {isRTL ? '،' : ','}
         </Text>
-        <Text style={[styles.termsLine, styles.termsSecondLine, isRTL && styles.termsLineRtl]}>
-          {ageLine}
-        </Text>
+        <Text style={[styles.termsLine, isRTL && styles.termsLineRtl]}>{ageLine}</Text>
       </View>
+
       <View style={[styles.checkbox, checked && styles.checkboxOn]}>
-        {checked ? <Check size={16} color="#fff" strokeWidth={3} /> : null}
+        {checked ? <Check size={14} color="#fff" strokeWidth={2.5} /> : null}
       </View>
     </TouchableOpacity>
   );
@@ -305,7 +314,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 8,
     width: '100%',
-    minHeight: 42,
+    minHeight: TERMS_ROW_MIN_HEIGHT,
   },
   termsRowRtl: {
     flexDirection: 'row-reverse',
@@ -313,36 +322,34 @@ const styles = StyleSheet.create({
   termsTextWrap: {
     flex: 1,
     minWidth: 0,
+    gap: TERMS_LINE_GAP,
   },
   termsTextWrapRtl: {
     alignItems: 'flex-end',
   },
   termsLine: {
-    fontSize: 16,
-    lineHeight: 30,
+    fontSize: TERMS_FONT_SIZE,
+    lineHeight: TERMS_LINE_HEIGHT,
     color: AUTH_TEXT_MUTED,
   },
   termsLineRtl: {
     textAlign: 'right',
     writingDirection: 'rtl',
   },
-  termsSecondLine: {
-    marginTop: 12,
-  },
   termsLink: {
     color: AUTH_ACCENT,
-    textDecorationLine: 'underline',
+    fontSize: TERMS_FONT_SIZE,
+    lineHeight: TERMS_LINE_HEIGHT,
   },
   checkbox: {
-    width: 24,
-    height: 24,
+    width: TERMS_CHECKBOX_SIZE,
+    height: TERMS_CHECKBOX_SIZE,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: AUTH_CHECKBOX_BORDER,
     backgroundColor: AUTH_CHECKBOX_BG,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
     flexShrink: 0,
   },
   checkboxOn: {
