@@ -200,9 +200,6 @@
             "image": "./assets/images/splash/splash-logo.png",
             "imageWidth": 220,
             "resizeMode": "contain",
-            "drawable": {
-              "icon": "./assets/images/splash/splash-logo.png"
-            },
             "dark": {
               "backgroundColor": "#0d0529"
             }
