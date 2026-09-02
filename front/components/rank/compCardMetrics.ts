@@ -50,8 +50,8 @@ const FIGMA = {
   ctaWidth: 128,
   ctaPaddingV: 10,
   ctaPaddingH: 18,
-  ctaFontSize: 344,
-  ctaIconSize: 236,
+  ctaFontSize: 14,
+  ctaIconSize: 16,
   ctaRadius: 36,
   ctaGap: 4,
 } as const;

@@ -30,7 +30,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,7 +39,6 @@ import {
   COMP_GRID_COLUMN_GAP,
   COMP_GRID_PADDING,
   COMP_GRID_ROW_GAP,
-  getCompGridCardWidth,
 } from '../../components/rank/compCardMetrics';
 import LeaderboardModal, {
   LeaderboardEntry,
@@ -172,7 +170,6 @@ export default function RankScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
-  const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { t } = useTranslation();
   const appLanguage = useLanguageStore((s) => s.language);
@@ -331,11 +328,6 @@ export default function RankScreen() {
     [competitions],
   );
 
-  const compCardWidth = useMemo(
-    () => getCompGridCardWidth(screenWidth),
-    [screenWidth],
-  );
-
   // ── Podium (ranks 1, 2, 3 — visual order: 2 → 1 → 3) ──
   const podiumSlots = useMemo<readonly PodiumSlot[]>(() => {
     const find = (rank: number) => players.find(p => p.rank === rank);
@@ -437,12 +429,12 @@ export default function RankScreen() {
           {competitionRows.map((row, rowIndex) => (
             <View key={`comp-row-${rowIndex}`} style={s.compRow}>
               {row.map((c) => (
-                <CompCard
-                  key={c.id}
-                  {...c}
-                  layoutWidth={compCardWidth}
-                  onPress={() => handleCompetitionPress(c.id)}
-                />
+                <View key={c.id} style={s.compCardSlot}>
+                  <CompCard
+                    {...c}
+                    onPress={() => handleCompetitionPress(c.id)}
+                  />
+                </View>
               ))}
             </View>
           ))}
@@ -766,6 +758,10 @@ const s = StyleSheet.create({
   compRow: {
     flexDirection: 'row',
     gap: COMP_GRID_COLUMN_GAP,
+  },
+  compCardSlot: {
+    flex: 1,
+    minWidth: 0,
   },
 
   bottomContentGroup: {

@@ -6,7 +6,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { LucideIcon } from 'lucide-react-native';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ImageSourcePropType,
   Pressable,
@@ -42,8 +42,6 @@ export interface CompCardProps {
   ctaIcon?: LucideIcon;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
-  /** عرض الكارت في الشبكة — null = يستخدم compCardMetrics الافتراضي */
-  layoutWidth?: number;
 }
 
 const CompCard: React.FC<CompCardProps> = ({
@@ -55,21 +53,25 @@ const CompCard: React.FC<CompCardProps> = ({
   ctaIcon: CtaIcon,
   onPress,
   style,
-  layoutWidth,
 }) => {
   const { t, isRTL } = useTranslation();
   const ctaLabel = actionText ?? t.rank.playNow;
+  const [slotWidth, setSlotWidth] = useState(0);
+
   const m = useMemo(
-    () =>
-      layoutWidth != null
-        ? getCompCardMetricsForLayout(layoutWidth)
-        : getCompCardMetrics(),
-    [layoutWidth],
+    () => (slotWidth > 0 ? getCompCardMetricsForLayout(slotWidth) : getCompCardMetrics()),
+    [slotWidth],
   );
   const s = useMemo(() => createStyles(m), [m]);
 
   return (
     <Pressable
+      onLayout={(event) => {
+        const nextWidth = Math.round(event.nativeEvent.layout.width);
+        if (nextWidth > 0 && nextWidth !== slotWidth) {
+          setSlotWidth(nextWidth);
+        }
+      }}
       onPress={onPress}
       style={({ pressed }) => [s.card, style, pressed && { opacity: 0.92 }]}
       accessibilityRole="button"
@@ -120,7 +122,7 @@ export default CompCard;
 function createStyles(m: ReturnType<typeof getCompCardMetrics>) {
   return StyleSheet.create({
     card: {
-      width: m.width,
+      width: '100%',
       height: m.height,
       borderRadius: m.borderRadius,
       borderWidth: 0.5,
