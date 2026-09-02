@@ -12,12 +12,16 @@ import {
   StyleSheet,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
 
 const ACCENT = '#8B5CF6';
 const CARD_BORDER = '#2E1F50';
+const CARD_HEIGHT = 269;
+const FOOTER_MIN_HEIGHT = 135;
 
 export interface CompCardProps {
   img: ImageSourcePropType;
@@ -28,6 +32,7 @@ export interface CompCardProps {
   titleIcon?: LucideIcon;
   ctaIcon?: LucideIcon;
   onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
 }
 
 const CompCard: React.FC<CompCardProps> = ({
@@ -35,10 +40,10 @@ const CompCard: React.FC<CompCardProps> = ({
   title,
   sub,
   actionText,
-  rewardHint,
   titleIcon: TitleIcon,
   ctaIcon: CtaIcon,
   onPress,
+  style,
 }) => {
   const { t, isRTL } = useTranslation();
   const ctaLabel = actionText ?? t.rank.playNow;
@@ -46,38 +51,42 @@ const CompCard: React.FC<CompCardProps> = ({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [s.card, pressed && { opacity: 0.92 }]}
+      style={({ pressed }) => [s.card, style, pressed && { opacity: 0.92 }]}
       accessibilityRole="button"
       accessibilityLabel={title}
     >
-      <Image source={img} style={StyleSheet.absoluteFill} contentFit="cover" />
-      <LinearGradient
-        colors={['transparent', 'rgba(3,0,8,0.55)', 'rgba(3,0,8,0.92)']}
-        locations={[0.35, 0.72, 1]}
+      <Image
+        source={img}
         style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        contentPosition="top"
       />
 
-      <View style={s.content}>
+      <LinearGradient
+        colors={['transparent', 'rgba(3,0,8,0.35)', 'rgba(3,0,8,0.88)']}
+        locations={[0.42, 0.68, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
+      <View style={s.footer}>
         <View style={s.textBlock}>
           <View style={[s.titleRow, isRTL && s.titleRowRtl]}>
-            <Text style={s.title} numberOfLines={1}>
+            <Text style={s.title} numberOfLines={2}>
               {title}
             </Text>
-            {TitleIcon ? <TitleIcon size={24} color="#fff" strokeWidth={2} /> : null}
+            {TitleIcon ? (
+              <TitleIcon size={22} color="#fff" strokeWidth={2} style={s.titleIcon} />
+            ) : null}
           </View>
-          <Text style={s.sub} numberOfLines={3}>
+          <Text style={s.sub} numberOfLines={2}>
             {sub}
           </Text>
-          {rewardHint ? (
-            <Text style={s.rewardHint} numberOfLines={2}>
-              {rewardHint}
-            </Text>
-          ) : null}
         </View>
 
         <LinearGradient
           colors={[ACCENT, '#3B266B']}
-          style={s.cta}
+          style={[s.cta, isRTL && s.ctaRtl]}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
         >
@@ -95,69 +104,79 @@ export default CompCard;
 
 const s = StyleSheet.create({
   card: {
-    flex: 1,
-    height: 269,
+    height: CARD_HEIGHT,
     borderRadius: 16,
     borderWidth: 0.5,
     borderColor: CARD_BORDER,
     overflow: 'hidden',
     backgroundColor: '#12081F',
   },
-  content: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    paddingTop: 134,
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    minHeight: FOOTER_MIN_HEIGHT,
+    paddingTop: 12,
     paddingBottom: 16,
     paddingHorizontal: 12,
+    justifyContent: 'flex-end',
     gap: 14,
   },
   textBlock: {
     gap: 4,
     alignItems: 'center',
+    width: '100%',
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    gap: 4,
+    width: '100%',
   },
   titleRowRtl: {
     flexDirection: 'row-reverse',
   },
+  titleIcon: {
+    flexShrink: 0,
+  },
   title: {
+    flexShrink: 1,
     color: '#fff',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
+    lineHeight: 22,
   },
   sub: {
     color: '#9D9D9D',
     fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 17,
-  },
-  rewardHint: {
-    color: '#C084FC',
-    fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 2,
+    lineHeight: 16,
+    minHeight: 32,
+    width: '100%',
   },
   cta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-    width: 128,
+    minWidth: 128,
+    maxWidth: '100%',
     paddingVertical: 10,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     borderRadius: 36,
     gap: 4,
+  },
+  ctaRtl: {
+    flexDirection: 'row-reverse',
   },
   ctaText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+    flexShrink: 1,
   },
 });

@@ -30,6 +30,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -165,6 +166,7 @@ export default function RankScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { t } = useTranslation();
   const appLanguage = useLanguageStore((s) => s.language);
@@ -320,6 +322,12 @@ export default function RankScreen() {
     [competitions],
   );
 
+  const compCardWidth = useMemo(() => {
+    const gridPadding = 14;
+    const gap = 12;
+    return Math.floor((screenWidth - gridPadding * 2 - gap) / 2);
+  }, [screenWidth]);
+
   // ── Podium (ranks 1, 2, 3 — visual order: 2 → 1 → 3) ──
   const podiumSlots = useMemo<readonly PodiumSlot[]>(() => {
     const find = (rank: number) => players.find(p => p.rank === rank);
@@ -424,6 +432,7 @@ export default function RankScreen() {
                 <CompCard
                   key={c.id}
                   {...c}
+                  style={{ width: compCardWidth }}
                   onPress={() => handleCompetitionPress(c.id)}
                 />
               ))}
@@ -744,10 +753,12 @@ const s = StyleSheet.create({
   compGrid: {
     paddingHorizontal: 14,
     gap: 16,
-    marginTop: 8,
+    marginTop: 4,
+    marginBottom: 4,
   },
   compRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     gap: 12,
   },
 
