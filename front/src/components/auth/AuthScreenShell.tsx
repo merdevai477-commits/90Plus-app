@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
 import { AuthHeroBlock } from './AuthHeroBlock';
 import { AUTH_PANEL_BG, AUTH_PANEL_BORDER } from './AuthTokens';
@@ -23,23 +22,17 @@ type Props = {
   showHero?: boolean;
 };
 
+/** Figma hero frame height (node 1015:3722). */
 const HERO_HEIGHT = 391;
-const PANEL_OVERLAP = 56;
+/** Panel overlaps hero bottom edge. */
+const PANEL_OVERLAP = 48;
 
 const rootStyle: ViewStyle = { flex: 1, backgroundColor: '#000' };
-
-const fillV: ViewStyle = {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-};
 
 export function AuthScreenShell({ children, showHero = true }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const heroHeight = Math.min(height * 0.36, HERO_HEIGHT);
+  const heroHeight = Math.min(HERO_HEIGHT, height * 0.34);
 
   const bgimgAssetStyle: ImageStyle = {
     height: '108%',
@@ -58,9 +51,9 @@ export function AuthScreenShell({ children, showHero = true }: Props) {
           resizeMode="cover"
         >
           <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.95)']}
-            locations={[0.58, 0.82, 1]}
-            style={fillV}
+            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.92)']}
+            locations={[0.55, 0.8, 1]}
+            style={StyleSheet.absoluteFill}
           />
           {showHero ? (
             <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 20 }}>
@@ -86,8 +79,7 @@ export function AuthScreenShell({ children, showHero = true }: Props) {
           ]}
         >
           <View style={styles.panelOuter}>
-            <BlurView intensity={12} tint="dark" style={fillV} />
-            <View style={[fillV, { backgroundColor: AUTH_PANEL_BG }]} />
+            <View style={styles.panelFill} />
             <View style={styles.panelInner}>{children}</View>
           </View>
         </ScrollView>
@@ -107,11 +99,14 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: AUTH_PANEL_BORDER,
     overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.8)',
+  },
+  panelFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: AUTH_PANEL_BG,
   },
   panelInner: {
     paddingHorizontal: 20,
-    paddingTop: 38,
+    paddingTop: 32,
     paddingBottom: 28,
   },
 });

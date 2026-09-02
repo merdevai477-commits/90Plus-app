@@ -13,6 +13,7 @@ import { Image } from 'expo-image';
 import type { LucideIcon } from 'lucide-react-native';
 import {
   AUTH_INPUT_BG,
+  AUTH_INPUT_BG_FILLED,
   AUTH_INPUT_BORDER,
   AUTH_INPUT_PLACEHOLDER,
 } from './AuthTokens';
@@ -94,7 +95,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   wrapFilled: {
-    backgroundColor: '#04020c',
+    backgroundColor: AUTH_INPUT_BG_FILLED,
   },
   wrapRtl: {
     flexDirection: 'row-reverse',

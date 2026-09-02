@@ -8,18 +8,19 @@ import {
   ActivityIndicator,
   type ViewStyle,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Check } from 'lucide-react-native';
 import { LEGAL_URLS, openLegalUrl } from '@/config/legal.config';
 import {
   AUTH_ACCENT,
-  AUTH_BUTTON_GRADIENT_END,
+  AUTH_BUTTON_SOLID,
   AUTH_CHECKBOX_BG,
   AUTH_CHECKBOX_BORDER,
+  AUTH_DIVIDER_LINE,
   AUTH_SOCIAL_BG,
   AUTH_SOCIAL_BORDER,
   AUTH_TEXT_MUTED,
+  AUTH_TEXT_SUBTITLE,
 } from './AuthTokens';
 import { TEXT_PRIMARY } from '../../../constants/tokens';
 
@@ -61,18 +62,15 @@ export function AuthPrimaryButton({
       activeOpacity={0.92}
       onPress={onPress}
       disabled={disabled || loading}
-      style={[styles.primaryWrap, (disabled || loading) && { opacity: 0.6 }, style]}
+      style={[
+        styles.primaryBtn,
+        (disabled || loading) && { opacity: 0.6 },
+        style,
+      ]}
     >
-      <LinearGradient
-        colors={[AUTH_ACCENT, AUTH_BUTTON_GRADIENT_END]}
-        style={styles.primaryBtn}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-      >
-        <Text style={styles.primaryTxt}>
-          {loading ? (loadingLabel ?? label) : label}
-        </Text>
-      </LinearGradient>
+      <Text style={styles.primaryTxt}>
+        {loading ? (loadingLabel ?? label) : label}
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -142,12 +140,23 @@ export function AuthFooterLink({
   isRTL?: boolean;
 }) {
   return (
-    <Pressable style={styles.footer} onPress={onPress}>
-      <Text style={[styles.footerRow, isRTL && styles.footerRowRtl]}>
-        <Text style={styles.footerMuted}>{muted} </Text>
-        <Text style={styles.footerLink}>{link}</Text>
-      </Text>
-    </Pressable>
+    <View style={[styles.footerRow, isRTL && styles.footerRowRtl]}>
+      {isRTL ? (
+        <>
+          <Pressable onPress={onPress} hitSlop={8}>
+            <Text style={styles.footerLink}>{link}</Text>
+          </Pressable>
+          <Text style={styles.footerMuted}>{muted}</Text>
+        </>
+      ) : (
+        <>
+          <Text style={styles.footerMuted}>{muted} </Text>
+          <Pressable onPress={onPress} hitSlop={8}>
+            <Text style={styles.footerLink}>{link}</Text>
+          </Pressable>
+        </>
+      )}
+    </View>
   );
 }
 
@@ -210,7 +219,7 @@ AuthTermsConsent.displayName = 'AuthTermsConsent';
 const styles = StyleSheet.create({
   panelHeader: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 24,
     gap: 6,
   },
   panelTitle: {
@@ -221,18 +230,16 @@ const styles = StyleSheet.create({
   },
   panelSubtitle: {
     fontSize: 19,
-    color: '#a2a2a2',
+    color: AUTH_TEXT_SUBTITLE,
     textAlign: 'center',
-  },
-  primaryWrap: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    width: '100%',
   },
   primaryBtn: {
     height: 56,
+    borderRadius: 16,
+    backgroundColor: AUTH_BUTTON_SOLID,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
   },
   primaryTxt: {
     fontSize: 16,
@@ -249,7 +256,7 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(87, 87, 87, 0.5)',
+    backgroundColor: AUTH_DIVIDER_LINE,
   },
   dividerTxt: {
     fontSize: 14,
@@ -271,20 +278,20 @@ const styles = StyleSheet.create({
     borderColor: AUTH_SOCIAL_BORDER,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
   },
   socialIcon: {
     width: 24,
     height: 24,
   },
-  footer: {
-    marginTop: 14,
-    alignItems: 'center',
-    paddingBottom: 8,
-  },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
+    marginTop: 14,
+    paddingBottom: 8,
   },
   footerRowRtl: {
     flexDirection: 'row-reverse',
@@ -304,6 +311,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 8,
     width: '100%',
+    minHeight: 42,
     marginTop: 18,
   },
   termsRowRtl: {
@@ -318,7 +326,7 @@ const styles = StyleSheet.create({
   },
   termsLine: {
     fontSize: 16,
-    lineHeight: 22,
+    lineHeight: 30,
     color: AUTH_TEXT_MUTED,
   },
   termsLineRtl: {
@@ -326,7 +334,7 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
   termsSecondLine: {
-    marginTop: 2,
+    marginTop: 12,
   },
   termsLink: {
     color: AUTH_ACCENT,
@@ -336,7 +344,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 6,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: AUTH_CHECKBOX_BORDER,
     backgroundColor: AUTH_CHECKBOX_BG,
     alignItems: 'center',
