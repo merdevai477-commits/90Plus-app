@@ -1908,6 +1908,7 @@ function OwnProfileScreen() {
           onCountryPress={() => setIsCountryModalVisible(true)}
           onClubPress={() => setIsClubModalVisible(true)}
           onSharePress={handleSharePress}
+          onSettingsPress={() => router.push('/(tabs)/settings')}
           onMorePress={handleMorePress}
           onLevelPress={() => setShowLevelInfo(true)}
           onEnergyPress={() => setShowCoinsInfo(true)}

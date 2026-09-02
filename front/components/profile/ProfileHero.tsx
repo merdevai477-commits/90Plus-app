@@ -46,6 +46,7 @@ export interface ProfileHeroProps {
   onCountryPress?: () => void;
   onClubPress?: () => void;
   onSharePress?: () => void;
+  onSettingsPress?: () => void;
   onMorePress?: () => void;
   onBackPress?: () => void;
   onLevelPress?: () => void;
@@ -81,6 +82,7 @@ const ProfileHero = memo(function ProfileHero({
   onCountryPress,
   onClubPress,
   onSharePress,
+  onSettingsPress,
   onMorePress,
   onBackPress,
   onLevelPress,
@@ -136,9 +138,23 @@ const ProfileHero = memo(function ProfileHero({
                 activeOpacity={0.8}
                 style={styles.navCircleBtn}
                 accessibilityRole="button"
+                accessibilityLabel="Share profile"
               >
                 <View style={styles.navCircleIcon}>
                   <Ionicons name="share-outline" size={24} color="#fff" />
+                </View>
+              </TouchableOpacity>
+            ) : null}
+            {onSettingsPress ? (
+              <TouchableOpacity
+                onPress={onSettingsPress}
+                activeOpacity={0.8}
+                style={styles.navCircleBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Settings"
+              >
+                <View style={styles.navCircleIcon}>
+                  <Ionicons name="settings-outline" size={24} color="#fff" />
                 </View>
               </TouchableOpacity>
             ) : null}
