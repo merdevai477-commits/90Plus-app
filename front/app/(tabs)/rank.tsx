@@ -19,7 +19,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { ChevronRight, Trophy } from 'lucide-react-native';
+import { ChevronRight, Crown, Gift, HelpCircle, Share2, Trophy, Zap } from 'lucide-react-native';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ImageSourcePropType,
@@ -279,21 +279,18 @@ export default function RankScreen() {
         title: t.rank.competitionNames.kingOfPredictions.title,
         sub: t.rank.competitionNames.kingOfPredictions.sub,
         actionText: t.rank.competitionNames.kingOfPredictions.action,
-        img: require('../../assets/images/football.webp') as ImageSourcePropType,
+        img: require('../../assets/images/rank/comp-predictions.png') as ImageSourcePropType,
+        titleIcon: Crown,
+        ctaIcon: Crown,
       },
       {
         id: '4',
         title: t.rank.competitionNames.engagementHero.title,
         sub: t.rank.competitionNames.engagementHero.sub,
         actionText: t.rank.competitionNames.engagementHero.action,
-        img: require('../../assets/images/growth.webp') as ImageSourcePropType,
-      },
-      {
-        id: '3',
-        title: t.rank.competitionNames.dailyQuiz.title,
-        sub: t.rank.competitionNames.dailyQuiz.sub,
-        actionText: t.rank.competitionNames.dailyQuiz.action,
-        img: require('../../assets/images/daily-quiz.webp') as ImageSourcePropType,
+        img: require('../../assets/images/rank/comp-engagement.png') as ImageSourcePropType,
+        titleIcon: Zap,
+        ctaIcon: Zap,
       },
       {
         id: '2',
@@ -301,10 +298,26 @@ export default function RankScreen() {
         sub: t.rank.competitionNames.shareAndEarn.sub,
         actionText: t.rank.competitionNames.shareAndEarn.action,
         rewardHint: shareRewardHint(),
-        img: require('../../assets/images/share.webp') as ImageSourcePropType,
+        img: require('../../assets/images/rank/comp-share.png') as ImageSourcePropType,
+        titleIcon: Gift,
+        ctaIcon: Share2,
+      },
+      {
+        id: '3',
+        title: t.rank.competitionNames.dailyQuiz.title,
+        sub: t.rank.competitionNames.dailyQuiz.sub,
+        actionText: t.rank.competitionNames.dailyQuiz.action,
+        img: require('../../assets/images/rank/comp-quiz.png') as ImageSourcePropType,
+        titleIcon: HelpCircle,
+        ctaIcon: HelpCircle,
       },
     ],
     [t, shareRewardHint],
+  );
+
+  const competitionRows = useMemo(
+    () => [competitions.slice(0, 2), competitions.slice(2, 4)],
+    [competitions],
   );
 
   // ── Podium (ranks 1, 2, 3 — visual order: 2 → 1 → 3) ──
@@ -403,23 +416,20 @@ export default function RankScreen() {
           <ProfileCard />
         </View>
 
-        {/* ── Competitions carousel ── */}
-        <View style={s.secHead}>
-          <Text style={[s.secTitle, { fontFamily: fontExtraBold }]}>{t.rank.allCompetitions}</Text>
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.hScroll}
-        >
-          {competitions.map(c => (
-            <CompCard
-              key={c.id}
-              {...c}
-              onPress={() => handleCompetitionPress(c.id)}
-            />
+        {/* ── Competitions grid (Figma 2×2) ── */}
+        <View style={s.compGrid}>
+          {competitionRows.map((row, rowIndex) => (
+            <View key={`comp-row-${rowIndex}`} style={s.compRow}>
+              {row.map((c) => (
+                <CompCard
+                  key={c.id}
+                  {...c}
+                  onPress={() => handleCompetitionPress(c.id)}
+                />
+              ))}
+            </View>
           ))}
-        </ScrollView>
+        </View>
 
         {/* ── World Cup banner ── */}
         <WCCard />
@@ -730,6 +740,16 @@ const s = StyleSheet.create({
   },
 
   hScroll: { paddingHorizontal: 16, gap: 12 },
+
+  compGrid: {
+    paddingHorizontal: 14,
+    gap: 16,
+    marginTop: 8,
+  },
+  compRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
 
   bottomContentGroup: {
     marginTop: 10,

@@ -1,19 +1,13 @@
 /**
- * CompCard
- *
- * Horizontally-scrolled competition card on the Rank screen. Wraps a glass
- * surface (LiquidGlass on iOS, BlurView elsewhere) inside a Pressable so the
- * press feedback works alongside the native interactive layer.
+ * CompCard — Figma rank competition tile (node 1005:2558, 204×269).
  */
 
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { BlurView } from 'expo-blur';
-import { Play } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import type { LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import {
-  Image,
   ImageSourcePropType,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -22,7 +16,8 @@ import {
 
 import { useTranslation } from '../../src/i18n';
 
-const ACCENT = '#A855F7';
+const ACCENT = '#8B5CF6';
+const CARD_BORDER = '#2E1F50';
 
 export interface CompCardProps {
   img: ImageSourcePropType;
@@ -30,6 +25,8 @@ export interface CompCardProps {
   sub: string;
   actionText?: string;
   rewardHint?: string;
+  titleIcon?: LucideIcon;
+  ctaIcon?: LucideIcon;
   onPress?: () => void;
 }
 
@@ -39,57 +36,57 @@ const CompCard: React.FC<CompCardProps> = ({
   sub,
   actionText,
   rewardHint,
+  titleIcon: TitleIcon,
+  ctaIcon: CtaIcon,
   onPress,
 }) => {
-  const CardWrapper = isLiquidGlassSupported ? LiquidGlassView : BlurView;
-  const wrapperProps = isLiquidGlassSupported
-    ? { effect: 'clear' as const, interactive: true }
-    : { intensity: 12, tint: 'dark' as const };
-
-  const { t } = useTranslation();
-  const cta: string = actionText ?? t.rank.playNow;
-  // Only apply manual press feedback on the non-LiquidGlass path so we
-  // don't double up the visual response on iOS.
-  const useManualFeedback = !(isLiquidGlassSupported && Platform.OS === 'ios');
+  const { t, isRTL } = useTranslation();
+  const ctaLabel = actionText ?? t.rank.playNow;
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        useManualFeedback && pressed ? { opacity: 0.85 } : null,
-      ]}
+      style={({ pressed }) => [s.card, pressed && { opacity: 0.92 }]}
       accessibilityRole="button"
       accessibilityLabel={title}
     >
-      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <CardWrapper {...(wrapperProps as any)} style={s.compCard}>
-        <View style={s.iconGlowAmbient} />
-        <View style={s.compIconArea}>
-          <Image source={img} style={s.compImg} resizeMode="contain" />
-        </View>
-        <Text style={s.compTitle} numberOfLines={2}>
-          {title}
-        </Text>
-        <Text style={s.compSub} numberOfLines={2}>
-          {sub}
-        </Text>
-        {/* Reserved unconditionally — only the "Share & Earn" card actually
-            has a reward hint, but every card must claim the same vertical
-            space for it or that one card alone grows taller than the rest. */}
-        <View style={s.rewardHintSlot}>
+      <Image source={img} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <LinearGradient
+        colors={['transparent', 'rgba(3,0,8,0.55)', 'rgba(3,0,8,0.92)']}
+        locations={[0.35, 0.72, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={s.content}>
+        <View style={s.textBlock}>
+          <View style={[s.titleRow, isRTL && s.titleRowRtl]}>
+            <Text style={s.title} numberOfLines={1}>
+              {title}
+            </Text>
+            {TitleIcon ? <TitleIcon size={24} color="#fff" strokeWidth={2} /> : null}
+          </View>
+          <Text style={s.sub} numberOfLines={3}>
+            {sub}
+          </Text>
           {rewardHint ? (
             <Text style={s.rewardHint} numberOfLines={2}>
               {rewardHint}
             </Text>
           ) : null}
         </View>
-        <View style={s.livePill}>
-          <Play size={12} color={ACCENT} fill={ACCENT} />
-          <Text style={s.liveTxt} numberOfLines={1}>
-            {cta}
+
+        <LinearGradient
+          colors={[ACCENT, '#3B266B']}
+          style={s.cta}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+        >
+          <Text style={s.ctaText} numberOfLines={1}>
+            {ctaLabel}
           </Text>
-        </View>
-      </CardWrapper>
+          {CtaIcon ? <CtaIcon size={16} color="#fff" strokeWidth={2.5} /> : null}
+        </LinearGradient>
+      </View>
     </Pressable>
   );
 };
@@ -97,84 +94,70 @@ const CompCard: React.FC<CompCardProps> = ({
 export default CompCard;
 
 const s = StyleSheet.create({
-  compCard: {
-    width: 180,
-    borderRadius: 30,
-    padding: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderWidth: 1.2,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    alignItems: 'center',
+  card: {
+    flex: 1,
+    height: 269,
+    borderRadius: 16,
+    borderWidth: 0.5,
+    borderColor: CARD_BORDER,
     overflow: 'hidden',
-    // Every card now claims identical vertical space for every element
-    // (icon, 2-line title, 2-line subtitle, reward-hint slot, button), so
-    // this height falls out of that content rather than needing to be a
-    // guessed fixed number — all cards in the carousel end up equal.
-    minHeight: 245,
+    backgroundColor: '#12081F',
   },
-  compIconArea: {
-    width: 120,
-    height: 110,
-    justifyContent: 'center',
+  content: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingTop: 134,
+    paddingBottom: 16,
+    paddingHorizontal: 12,
+    gap: 14,
+  },
+  textBlock: {
+    gap: 4,
     alignItems: 'center',
-    marginBottom: 10,
-    zIndex: 2,
   },
-  compImg: { width: 115, height: 115 },
-  iconGlowAmbient: {
-    position: 'absolute',
-    top: -160,
-    width: 70,
-    height: 70,
-    backgroundColor: ACCENT,
-    borderRadius: 35,
-    opacity: 0.3,
-    zIndex: 1,
-    transform: [{ scale: 2 }],
-  },
-  compTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  compSub: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 11,
-    textAlign: 'center',
-    lineHeight: 16,
-    marginBottom: 8,
-    minHeight: 32,
-  },
-  /** Fixed-height slot so cards without a hint match cards that have one. */
-  rewardHintSlot: {
-    minHeight: 26,
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    gap: 2,
+  },
+  titleRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  title: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  sub: {
+    color: '#9D9D9D',
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 17,
   },
   rewardHint: {
     color: '#C084FC',
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '700',
     textAlign: 'center',
-    paddingHorizontal: 4,
+    marginTop: 2,
   },
-  livePill: {
+  cta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 1)',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 1)',
-    // Same pill width across every card regardless of label length ("Test
-    // Now" vs "Share Now" vs longer Arabic strings) — content can still grow
-    // past it, but short labels no longer look like different-sized buttons.
-    minWidth: 116,
+    alignSelf: 'center',
+    width: 128,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 36,
+    gap: 4,
   },
-  liveTxt: { color: ACCENT, fontWeight: '800', fontSize: 12 },
+  ctaText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });
