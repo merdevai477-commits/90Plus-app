@@ -149,7 +149,7 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <AuthScreenShell showHero={false}>
+    <AuthScreenShell showHeroOverlay={false}>
       <Text style={styles.heroTitle}>
         {step === 'email' ? 'Forgot password' : 'Verify and reset'}
       </Text>

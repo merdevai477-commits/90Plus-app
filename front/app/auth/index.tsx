@@ -196,7 +196,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <AuthScreenShell>
+    <AuthScreenShell showHeroOverlay={false}>
       <AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />
 
       <View style={styles.formBlock}>

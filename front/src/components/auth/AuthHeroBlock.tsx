@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from '@/src/i18n';
 import { AUTH_V2_ASSETS } from './authV2Assets';
 

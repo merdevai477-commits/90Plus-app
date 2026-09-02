@@ -289,7 +289,7 @@ export default function LoginScreen() {
           : tCommon.loginMfaEmailHint;
 
   return (
-    <AuthScreenShell>
+    <AuthScreenShell showHeroOverlay={false}>
       <AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />
 
       <View style={styles.fields}>

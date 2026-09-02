@@ -1,5 +1,6 @@
 /** Figma auth screen tokens (nodes 1015:3722, 1017:3880). */
 export const AUTH_PANEL_BG = 'rgba(117, 69, 227, 0.08)';
+export const AUTH_PANEL_DARK = 'rgba(8, 4, 18, 0.96)';
 export const AUTH_PANEL_BORDER = '#a855f7';
 export const AUTH_INPUT_BG = 'rgba(0, 0, 0, 0.56)';
 export const AUTH_INPUT_BG_FILLED = '#04020c';
@@ -12,5 +13,6 @@ export const AUTH_SOCIAL_BORDER = '#170e2d';
 export const AUTH_CHECKBOX_BG = '#0a0618';
 export const AUTH_CHECKBOX_BORDER = '#868686';
 export const AUTH_ACCENT = '#8c5cf5';
-export const AUTH_BUTTON_SOLID = '#8c5cf5';
+export const AUTH_BUTTON_GRADIENT_START = '#8c5cf5';
+export const AUTH_BUTTON_GRADIENT_END = '#5b21b6';
 export const AUTH_DIVIDER_LINE = 'rgba(87, 87, 87, 0.5)';

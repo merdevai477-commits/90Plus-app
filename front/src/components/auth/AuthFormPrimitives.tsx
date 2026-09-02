@@ -8,12 +8,14 @@ import {
   ActivityIndicator,
   type ViewStyle,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Check } from 'lucide-react-native';
 import { LEGAL_URLS, openLegalUrl } from '@/config/legal.config';
 import {
   AUTH_ACCENT,
-  AUTH_BUTTON_SOLID,
+  AUTH_BUTTON_GRADIENT_END,
+  AUTH_BUTTON_GRADIENT_START,
   AUTH_CHECKBOX_BG,
   AUTH_CHECKBOX_BORDER,
   AUTH_DIVIDER_LINE,
@@ -63,14 +65,21 @@ export function AuthPrimaryButton({
       onPress={onPress}
       disabled={disabled || loading}
       style={[
-        styles.primaryBtn,
+        styles.primaryWrap,
         (disabled || loading) && { opacity: 0.6 },
         style,
       ]}
     >
-      <Text style={styles.primaryTxt}>
-        {loading ? (loadingLabel ?? label) : label}
-      </Text>
+      <LinearGradient
+        colors={[AUTH_BUTTON_GRADIENT_START, AUTH_BUTTON_GRADIENT_END]}
+        style={styles.primaryBtn}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+      >
+        <Text style={styles.primaryTxt}>
+          {loading ? (loadingLabel ?? label) : label}
+        </Text>
+      </LinearGradient>
     </TouchableOpacity>
   );
 }
@@ -233,13 +242,15 @@ const styles = StyleSheet.create({
     color: AUTH_TEXT_SUBTITLE,
     textAlign: 'center',
   },
+  primaryWrap: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    width: '100%',
+  },
   primaryBtn: {
     height: 56,
-    borderRadius: 16,
-    backgroundColor: AUTH_BUTTON_SOLID,
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
   },
   primaryTxt: {
     fontSize: 16,
