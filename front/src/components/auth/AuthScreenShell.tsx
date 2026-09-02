@@ -30,7 +30,7 @@ type Props = {
 export function AuthScreenShell({ children }: Props) {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const { heroHeight, panelOverlap, horizontalInset, panelPaddingX } =
+  const { heroHeight, panelOverlap, panelDropOffset, horizontalInset, panelPaddingX } =
     getAuthLayoutMetrics(width, height);
 
   return (
@@ -62,7 +62,7 @@ export function AuthScreenShell({ children }: Props) {
             style={[
               styles.panelOuter,
               {
-                marginTop: -panelOverlap,
+                marginTop: -panelOverlap + panelDropOffset,
                 marginHorizontal: horizontalInset,
                 paddingHorizontal: panelPaddingX,
               },
@@ -94,11 +94,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   panelOuter: {
-    borderRadius: 40,
+    borderRadius: 50,
     borderWidth: 0.5,
     borderColor: AUTH_PANEL_BORDER,
     overflow: 'hidden',
-    paddingTop: 44,
+    paddingTop: 40,
     paddingBottom: 28,
   },
   panelDark: {
