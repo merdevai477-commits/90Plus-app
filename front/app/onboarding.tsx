@@ -64,7 +64,7 @@ export default function OnboardingScreen() {
                         Alert.alert(
                             t.onboardingFlow.authError,
                             t.onboardingFlow.pleaseLoginAgain,
-                            [{ text: t.onboardingFlow.okay, onPress: () => router.replace('/auth') }],
+                            [{ text: t.onboardingFlow.okay, onPress: () => router.replace('/auth/login') }],
                         );
                         return;
                     }

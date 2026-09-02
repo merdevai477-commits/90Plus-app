@@ -129,10 +129,10 @@ export default function SettingsScreen() {
         disconnectWebSocket: () => websocketClient.disconnect(),
       });
 
-      router.replace('/auth');
+      router.replace('/auth/login');
       toastManager.showSuccess(tSettings.logoutSuccess, tSettings.logoutSuccessDetail);
     } catch {
-      router.replace('/auth');
+      router.replace('/auth/login');
       toastManager.showError(tSettings.logoutFailed, tSettings.logoutFailedDetail);
     } finally {
       setIsLoggingOut(false);
@@ -159,7 +159,7 @@ export default function SettingsScreen() {
         disconnectWebSocket: () => websocketClient.disconnect(),
       });
 
-      router.replace('/auth');
+      router.replace('/auth/login');
       toastManager.showSuccess(tSettings.deleteAccountSuccess, tSettings.deleteAccountSuccessDetail);
     } catch {
       toastManager.showError(tSettings.deleteAccountFailed, tSettings.deleteAccountFailedDetail);

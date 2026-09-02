@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -25,7 +25,6 @@ import {
   AuthDivider,
   AuthSocialButtons,
   AuthFooterLink,
-  AuthTermsConsent,
   OtpInput,
   MIN_PASSWORD_LENGTH,
   normalizeAuthEmail,
@@ -57,7 +56,6 @@ export default function LoginScreen() {
   const { t, isRTL } = useTranslation();
   const tCommon = t.common;
 
-  const [terms, setTerms] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,8 +80,6 @@ export default function LoginScreen() {
     footerLink: isRTL ? 'إنشاء حساب' : 'Sign up',
   };
 
-  const toggleTerms = useCallback(() => setTerms((v) => !v), []);
-
   useEffect(() => {
     return () => {
       if (resendIntervalRef.current) {
@@ -95,16 +91,8 @@ export default function LoginScreen() {
 
   const { startGoogle, startApple } = useOAuthFlow({
     onError: () => setOauthLoading(null),
-    legalAccepted: terms,
+    legalAccepted: true,
   });
-
-  const requireTerms = (): boolean => {
-    if (!terms) {
-      Alert.alert('Notice', tCommon.registerMustAgree);
-      return false;
-    }
-    return true;
-  };
 
   const startResendCooldown = () => {
     if (resendIntervalRef.current) {
@@ -175,7 +163,6 @@ export default function LoginScreen() {
 
   const handleGooglePress = async (): Promise<void> => {
     if (oauthLoading) return;
-    if (!requireTerms()) return;
     setOauthLoading('google');
     try {
       await startGoogle();
@@ -186,7 +173,6 @@ export default function LoginScreen() {
 
   const handleApplePress = async (): Promise<void> => {
     if (oauthLoading) return;
-    if (!requireTerms()) return;
     setOauthLoading('apple');
     try {
       await startApple();
@@ -196,7 +182,6 @@ export default function LoginScreen() {
   };
 
   const submit = async () => {
-    if (!requireTerms()) return;
     const normalizedEmail = normalizeAuthEmail(email);
     if (!normalizedEmail.includes('@') || password.length < MIN_PASSWORD_LENGTH) {
       Alert.alert(tCommon.alert, tCommon.loginCouldNotComplete);
@@ -297,36 +282,27 @@ export default function LoginScreen() {
         variant="login"
         header={<AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />}
         form={
-          <>
-            <AuthFormFields>
-              <AuthTextField
-                iconSource={AUTH_V2_ASSETS.iconEmail}
-                placeholder={copy.email}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={email}
-                onChangeText={setEmail}
-                isRTL={isRTL}
-              />
-              <AuthTextField
-                iconSource={AUTH_V2_ASSETS.iconLock}
-                placeholder={copy.password}
-                secureTextEntry
-                secureToggle
-                value={password}
-                onChangeText={setPassword}
-                isRTL={isRTL}
-              />
-            </AuthFormFields>
-
-            <AuthTermsConsent
-              checked={terms}
-              onToggle={toggleTerms}
+          <AuthFormFields>
+            <AuthTextField
+              iconSource={AUTH_V2_ASSETS.iconEmail}
+              placeholder={copy.email}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={email}
+              onChangeText={setEmail}
               isRTL={isRTL}
-              tCommon={tCommon}
             />
-          </>
+            <AuthTextField
+              iconSource={AUTH_V2_ASSETS.iconLock}
+              placeholder={copy.password}
+              secureTextEntry
+              secureToggle
+              value={password}
+              onChangeText={setPassword}
+              isRTL={isRTL}
+            />
+          </AuthFormFields>
         }
         cta={
           <>

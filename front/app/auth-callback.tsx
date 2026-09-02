@@ -19,7 +19,7 @@ export default function AuthCallbackScreen() {
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.replace('/auth');
+        router.replace('/auth/login');
       }
     }, 8000);
     return () => clearTimeout(t);

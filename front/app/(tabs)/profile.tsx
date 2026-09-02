@@ -390,7 +390,7 @@ function OwnProfileScreen() {
   // Optimization: Prevent guest access - redirect to auth
   useEffect(() => {
     if (!isSignedIn) {
-      router.replace('/auth');
+      router.replace('/auth/login');
     }
   }, [isSignedIn]);
 
@@ -1836,7 +1836,7 @@ function OwnProfileScreen() {
             }}
             onPress={() => {
               logger.debug('[ProfileScreen] Navigating to auth');
-              router.replace('/auth');
+              router.replace('/auth/login');
             }}
           >
             <Text style={{ color: ProfileTheme.colors.textPrimary, fontWeight: 'bold', fontSize: 16 }}>
