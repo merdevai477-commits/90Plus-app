@@ -919,10 +919,14 @@ async function startServer() {
                     });
                     logger.info('✅ Daily quiz pack cron scheduled (00:00 UTC)');
 
-                    const { startWorldCupNewsRefreshCron } = await import(
-                        './services/world-cup-news-cron.service'
-                    );
-                    startWorldCupNewsRefreshCron();
+                    if (process.env.WORLD_CUP_NEWS_ENABLED === 'true') {
+                        const { startWorldCupNewsRefreshCron } = await import(
+                            './services/world-cup-news-cron.service'
+                        );
+                        startWorldCupNewsRefreshCron();
+                    } else {
+                        logger.info('📰 World Cup news cron disabled (WORLD_CUP_NEWS_ENABLED≠true)');
+                    }
 
                     // ✅ Share & Win — archive finished weekly cycles with their final
                     // ranks. Rollover is also lazy on every read/write, so this only

@@ -3,8 +3,7 @@
  *
  * Aggregates the Rank features:
  * - profile strip (real user data via ProfileCard)
- * - competitions carousel
- * - World Cup news banner (opens 90plus.pro/news)
+ * - competitions 2×2 grid
  * - Top Players podium + lower leaderboard from `/api/reels/rankings/top-players`
  * - full Top-11 leaderboard modal
  *
@@ -47,7 +46,6 @@ import PodiumCard from '../../components/rank/PodiumCard';
 import ProfileCard from '../../components/rank/ProfileCard';
 import RankHeader from '../../components/rank/RankHeader';
 import { BoardRowSkeleton, PodiumSkeleton } from '../../components/rank/RankSkeletons';
-import WCCard from '../../components/rank/WCCard';
 import { APP_BG } from '../../constants/ui';
 import { prefetchDailyQuiz } from '../../hooks/useDailyQuiz';
 import { useAppShareReward } from '../../hooks/useAppShareReward';
@@ -440,9 +438,6 @@ export default function RankScreen() {
           ))}
         </View>
 
-        {/* ── World Cup banner ── */}
-        <WCCard />
-
         {/* ── Top players ── */}
         <View style={s.bottomContentGroup}>
           <View style={s.arenaBgContainerExtended} pointerEvents="none">
@@ -754,6 +749,7 @@ const s = StyleSheet.create({
     paddingHorizontal: COMP_GRID_PADDING,
     gap: COMP_GRID_ROW_GAP,
     marginTop: 4,
+    marginBottom: 20,
   },
   compRow: {
     flexDirection: 'row',
@@ -765,8 +761,8 @@ const s = StyleSheet.create({
   },
 
   bottomContentGroup: {
-    marginTop: 10,
-    paddingTop: 40,
+    marginTop: 4,
+    paddingTop: 28,
     position: 'relative',
     paddingBottom: 20,
     overflow: 'hidden',
