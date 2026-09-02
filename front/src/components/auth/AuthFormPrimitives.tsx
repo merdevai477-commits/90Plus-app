@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Platform,
   type ViewStyle,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -27,6 +28,42 @@ import { TEXT_PRIMARY } from '../../../constants/tokens';
 
 const googleIcon = require('../../../assets/images/auth/icon-google.svg');
 const appleIcon = require('../../../assets/images/auth/icon-apple.svg');
+
+const SOCIAL_BTN_HEIGHT = 54;
+const SOCIAL_BTN_RADIUS = 12;
+const SOCIAL_BTN_PADDING_H = 24;
+const SOCIAL_BTN_PADDING_V = 10;
+const SOCIAL_ICON_SIZE = 24;
+const SOCIAL_ROW_GAP = 16;
+
+function AuthSocialButton({
+  onPress,
+  disabled,
+  loading,
+  icon,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  icon: number;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={onPress}
+      disabled={disabled || loading}
+      style={[styles.socialBtnOuter, (disabled || loading) && { opacity: 0.6 }]}
+    >
+      <View style={styles.socialBtnInner}>
+        {loading ? (
+          <ActivityIndicator color={TEXT_PRIMARY} size="small" />
+        ) : (
+          <Image source={icon} style={styles.socialIcon} contentFit="contain" />
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
 
 export function AuthPanelHeader({
   title,
@@ -101,30 +138,18 @@ export function AuthSocialButtons({
 }) {
   return (
     <View style={styles.socialRow}>
-      <TouchableOpacity
-        activeOpacity={0.9}
-        style={[styles.socialBtn, loading && { opacity: 0.6 }]}
+      <AuthSocialButton
         onPress={onGoogle}
         disabled={loading}
-      >
-        {googleLoading ? (
-          <ActivityIndicator color={TEXT_PRIMARY} size="small" />
-        ) : (
-          <Image source={googleIcon} style={styles.socialIcon} contentFit="contain" />
-        )}
-      </TouchableOpacity>
-      <TouchableOpacity
-        activeOpacity={0.9}
-        style={[styles.socialBtn, loading && { opacity: 0.6 }]}
+        loading={googleLoading}
+        icon={googleIcon}
+      />
+      <AuthSocialButton
         onPress={onApple}
         disabled={loading}
-      >
-        {appleLoading ? (
-          <ActivityIndicator color={TEXT_PRIMARY} size="small" />
-        ) : (
-          <Image source={appleIcon} style={styles.socialIcon} contentFit="contain" />
-        )}
-      </TouchableOpacity>
+        loading={appleLoading}
+        icon={appleIcon}
+      />
     </View>
   );
 }
@@ -170,7 +195,7 @@ type TermsCopy = {
 
 const TERMS_FONT_SIZE = 16;
 const TERMS_LINE_HEIGHT = 20;
-const TERMS_LINE_GAP = 2;
+const TERMS_LINE_GAP = 1;
 const TERMS_CHECKBOX_SIZE = 24;
 const TERMS_ROW_MIN_HEIGHT = 42;
 
@@ -269,25 +294,31 @@ const styles = StyleSheet.create({
   },
   socialRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: SOCIAL_ROW_GAP,
     width: '100%',
-    height: 54,
+    height: SOCIAL_BTN_HEIGHT,
   },
-  socialBtn: {
+  socialBtnOuter: {
     flex: 1,
-    height: 54,
-    borderRadius: 12,
-    backgroundColor: AUTH_SOCIAL_BG,
-    borderWidth: 0.5,
+    height: SOCIAL_BTN_HEIGHT,
+    borderRadius: SOCIAL_BTN_RADIUS,
+    borderWidth: Platform.OS === 'ios' ? 0.5 : StyleSheet.hairlineWidth,
     borderColor: AUTH_SOCIAL_BORDER,
+    backgroundColor: AUTH_SOCIAL_BG,
+    overflow: 'hidden',
+  },
+  socialBtnInner: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
+    paddingHorizontal: SOCIAL_BTN_PADDING_H,
+    paddingVertical: SOCIAL_BTN_PADDING_V,
+    gap: 10,
   },
   socialIcon: {
-    width: 24,
-    height: 24,
+    width: SOCIAL_ICON_SIZE,
+    height: SOCIAL_ICON_SIZE,
   },
   footerRow: {
     flexDirection: 'row',
