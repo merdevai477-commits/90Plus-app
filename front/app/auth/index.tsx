@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   View,
   Text,
-  Pressable,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -13,28 +12,27 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { CircleUserRound, Mail, Lock, Apple, ShieldCheck, X, Check } from 'lucide-react-native';
+import { CircleUserRound, Mail, Lock, ShieldCheck, X } from 'lucide-react-native';
 import {
   AuthScreenShell,
   AuthTextField,
-  AUTH_ACCENT,
+  AuthPanelHeader,
+  AuthPrimaryButton,
+  AuthDivider,
+  AuthSocialButtons,
+  AuthFooterLink,
+  AuthTermsConsent,
   OtpInput,
   type OtpInputHandle,
   MIN_PASSWORD_LENGTH,
   normalizeAuthEmail,
 } from '@/src/components/auth';
 import { useOAuthFlow } from '@/src/components/auth/useOAuthFlow';
-import { LEGAL_URLS, openLegalUrl } from '@/config/legal.config';
 import {
   TEXT_PRIMARY,
   TEXT_MUTED,
-  TEXT_SECONDARY,
   PURPLE_PRIMARY,
   PURPLE_SOFT,
-  PURPLE_GLOW,
-  BG_BASE,
-  BORDER_ARENA,
-  RADIUS_LG,
 } from '@/constants/tokens';
 import { useAuth, useSignUp } from '@clerk/clerk-expo';
 import { useTranslation } from '@/src/i18n';
@@ -58,6 +56,19 @@ export default function RegisterScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<null | 'google' | 'apple'>(null);
   const completingAuthRef = useRef(false);
+
+  const copy = {
+    title: isRTL ? 'إنشاء حساب' : 'Create account',
+    subtitle: isRTL ? 'مرحبا بك' : 'Welcome',
+    fullName: isRTL ? 'الاسم كامل' : 'Full name',
+    email: isRTL ? 'البريد الإلكتروني' : 'Email',
+    password: isRTL ? 'كلمة المرور' : 'Password',
+    submit: isRTL ? 'إنشاء حساب' : 'Sign up',
+    submitting: isRTL ? 'جاري الإنشاء...' : 'Creating...',
+    divider: isRTL ? 'أو المتابعة باستخدام' : 'Or continue with',
+    footerMuted: isRTL ? 'لديك حساب بالفعل؟' : "Already have an account?",
+    footerLink: isRTL ? 'تسجيل الدخول' : 'Log in',
+  };
 
   const recordSignupAgeAttestation = async (): Promise<void> => {
     const token = await waitForClerkToken(getToken);
@@ -184,37 +195,45 @@ export default function RegisterScreen() {
   };
 
   return (
-    <AuthScreenShell heroMode="full" panelOffset={-55}>
-      <AuthTextField
-        icon={CircleUserRound}
-        placeholder="Full Name"
-        value={name}
-        onChangeText={setName}
-        autoCapitalize="words"
-        autoCorrect={false}
-      />
-      <AuthTextField
-        icon={Mail}
-        placeholder="Email"
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoCorrect={false}
-        value={email}
-        onChangeText={setEmail}
-        containerStyle={styles.gapTop}
-      />
-      <AuthTextField
-        icon={Lock}
-        placeholder="Password"
-        secureTextEntry
-        secureToggle
-        value={password}
-        onChangeText={setPassword}
-        containerStyle={StyleSheet.flatten([styles.gapTop, styles.passwordField])}
-      />
+    <AuthScreenShell>
+      <AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />
+
+      <View style={styles.fields}>
+        <AuthTextField
+          icon={CircleUserRound}
+          placeholder={copy.fullName}
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+          autoCorrect={false}
+          isRTL={isRTL}
+          filled
+        />
+        <AuthTextField
+          icon={Mail}
+          placeholder={copy.email}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          value={email}
+          onChangeText={setEmail}
+          isRTL={isRTL}
+          containerStyle={styles.fieldGap}
+        />
+        <AuthTextField
+          icon={Lock}
+          placeholder={copy.password}
+          secureTextEntry
+          secureToggle
+          value={password}
+          onChangeText={setPassword}
+          isRTL={isRTL}
+          containerStyle={styles.fieldGap}
+        />
+      </View>
 
       {!showVerification && (
-        <RegisterTermsConsent
+        <AuthTermsConsent
           checked={terms}
           onToggle={toggleTerms}
           isRTL={isRTL}
@@ -222,62 +241,30 @@ export default function RegisterScreen() {
         />
       )}
 
-      <TouchableOpacity
-        style={[styles.primaryWrap, isSubmitting && { opacity: 0.6 }]}
-        activeOpacity={0.92}
+      <AuthPrimaryButton
+        label={copy.submit}
+        loadingLabel={copy.submitting}
+        loading={isSubmitting}
         onPress={submit}
-        disabled={isSubmitting}
-      >
-        <LinearGradient
-          colors={[AUTH_ACCENT, '#5b21b6']}
-          style={styles.primary}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-        >
-          <Text style={styles.primaryTxt}>{isSubmitting ? 'Creating...' : 'Sign Up'}</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+        style={styles.submitGap}
+      />
 
-      <Divider />
+      <AuthDivider label={copy.divider} />
 
-      <View style={styles.socialRow}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={[styles.social, oauthLoading && { opacity: 0.6 }]}
-          onPress={handleGooglePress}
-          disabled={!!oauthLoading}
-        >
-          {oauthLoading === 'google' ? (
-            <ActivityIndicator color={TEXT_PRIMARY} size="small" />
-          ) : (
-            <>
-              <Text style={styles.googleG}>G</Text>
-              <Text style={styles.socialTxt} numberOfLines={1}>Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={[styles.social, oauthLoading && { opacity: 0.6 }]}
-          onPress={handleApplePress}
-          disabled={!!oauthLoading}
-        >
-          {oauthLoading === 'apple' ? (
-            <ActivityIndicator color={TEXT_PRIMARY} size="small" />
-          ) : (
-            <>
-              <Apple color={TEXT_PRIMARY} size={20} />
-              <Text style={styles.socialTxt} numberOfLines={1}>Apple</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+      <AuthSocialButtons
+        onGoogle={handleGooglePress}
+        onApple={handleApplePress}
+        loading={!!oauthLoading}
+        googleLoading={oauthLoading === 'google'}
+        appleLoading={oauthLoading === 'apple'}
+      />
 
-      <Pressable style={styles.footer} onPress={() => router.push('/auth/login')}>
-        <Text style={styles.footerMuted}>
-          Already have an account? <Text style={styles.linkBold}>Login</Text>
-        </Text>
-      </Pressable>
+      <AuthFooterLink
+        muted={copy.footerMuted}
+        link={copy.footerLink}
+        onPress={() => router.push('/auth/login')}
+        isRTL={isRTL}
+      />
 
       <RegisterEmailVerificationModal
         visible={showVerification}
@@ -294,106 +281,11 @@ export default function RegisterScreen() {
   );
 }
 
-function Divider() {
-  return (
-    <View style={styles.divWrap}>
-      <View style={styles.divLine} />
-      <Text style={styles.divTxt}>or continue with</Text>
-      <View style={styles.divLine} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  gapTop: { marginTop: 12 },
-  passwordField: { marginBottom: 10 },
-  termsPressable: {
-    width: '100%',
-    marginTop: 28,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.035)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  termsRow: {
-    width: '100%',
-    flexDirection: 'row',
-    flexWrap: 'nowrap',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  termsRowRtl: {
-    flexDirection: 'row-reverse',
-  },
-  termsRowActive: {
-    backgroundColor: 'rgba(124,58,237,0.1)',
-    borderColor: 'rgba(124,58,237,0.35)',
-  },
-  termsTextWrap: {
-    flex: 1,
-    flexShrink: 1,
-    minWidth: 0,
-    paddingLeft: 2,
-  },
-  termsTextWrapRtl: {
-    paddingLeft: 0,
-    paddingRight: 2,
-  },
-  termsCheckBox: {
-    width: 24,
-    height: 24,
-    flexShrink: 0,
-    marginTop: 2,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  termsCheckBoxOn: {
-    borderColor: AUTH_ACCENT,
-    backgroundColor: AUTH_ACCENT,
-  },
-  termsLine: {
-    fontSize: 13.5,
-    color: 'rgba(255,255,255,0.78)',
-    lineHeight: 21,
-    fontWeight: '400',
-    letterSpacing: 0.15,
-  },
-  termsLineRtl: {
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  termsLink: {
-    color: AUTH_ACCENT,
-    fontSize: 13.5,
-    fontWeight: '600',
-    lineHeight: 21,
-    textDecorationLine: 'underline',
-    textDecorationColor: 'rgba(124,58,237,0.5)',
-  },
-  primaryWrap: { marginTop: 22, borderRadius: 14, overflow: 'hidden' },
-  primary: { paddingVertical: 16, alignItems: 'center' },
-  primaryTxt: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
-  divWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 22, gap: 12 },
-  divLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)' },
-  divTxt: { fontSize: 12, color: TEXT_MUTED, fontWeight: '600' },
-  socialRow: { flexDirection: 'row', gap: 10 },
-  social: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 14, paddingVertical: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  googleG: { fontSize: 18, fontWeight: '800', color: '#4285F4' },
-  socialTxt: { fontSize: 14, fontWeight: '700', color: TEXT_SECONDARY },
-  footer: { marginTop: 5, alignItems: 'center', paddingBottom: 12 },
-  footerMuted: { fontSize: 14, color: TEXT_MUTED },
-  linkBold: { color: AUTH_ACCENT, fontWeight: '800' },
-
-  // ── Verification Modal ────────────────────────────────────────────────
-  modalOverlay: {
-    flex: 1,
-  },
+  fields: { gap: 16, width: '100%' },
+  fieldGap: { marginTop: 0 },
+  submitGap: { marginTop: 42 },
+  modalOverlay: { flex: 1 },
   modalBackdrop: {
     flex: 1,
     justifyContent: 'center',
@@ -413,7 +305,6 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
     alignItems: 'center',
     overflow: 'hidden',
-    // Depth shadow
     shadowColor: '#7c3aed',
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.3,
@@ -472,13 +363,10 @@ const styles = StyleSheet.create({
     color: PURPLE_SOFT,
     fontWeight: '700',
   },
-
   otpRow: {
     marginBottom: 24,
     justifyContent: 'center',
   },
-
-  // Verify button
   verifyWrap: {
     width: '100%',
     borderRadius: 14,
@@ -495,8 +383,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: TEXT_PRIMARY,
   },
-
-  // Resend
   resendRow: {
     width: '100%',
     minHeight: 40,
@@ -513,59 +399,6 @@ const styles = StyleSheet.create({
     minWidth: 220,
   },
 });
-
-type RegisterTermsCopy = {
-  registerAgreementPrefix: string;
-  registerTermsLink: string;
-  registerPrivacyLink: string;
-  registerAgreementAfterLinks: string;
-};
-
-const RegisterTermsConsent = memo(function RegisterTermsConsent({
-  checked,
-  onToggle,
-  isRTL,
-  tCommon,
-}: {
-  checked: boolean;
-  onToggle: () => void;
-  isRTL: boolean;
-  tCommon: RegisterTermsCopy;
-}) {
-  return (
-    <TouchableOpacity
-      activeOpacity={1}
-      onPress={onToggle}
-      style={[styles.termsPressable, checked && styles.termsRowActive]}
-    >
-      <View style={[styles.termsRow, isRTL && styles.termsRowRtl]}>
-        <View style={[styles.termsCheckBox, checked && styles.termsCheckBoxOn]}>
-          {checked ? <Check size={15} color="#fff" strokeWidth={3} /> : null}
-        </View>
-        <View style={[styles.termsTextWrap, isRTL && styles.termsTextWrapRtl]}>
-          <Text style={[styles.termsLine, isRTL && styles.termsLineRtl]}>
-            {tCommon.registerAgreementPrefix}{' '}
-            <Text
-              style={styles.termsLink}
-              onPress={() => { void openLegalUrl(LEGAL_URLS.terms); }}
-            >
-              {tCommon.registerTermsLink}
-            </Text>
-            {isRTL ? ' و' : ' & '}
-            <Text
-              style={styles.termsLink}
-              onPress={() => { void openLegalUrl(LEGAL_URLS.privacy); }}
-            >
-              {tCommon.registerPrivacyLink}
-            </Text>
-            {tCommon.registerAgreementAfterLinks}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-});
-RegisterTermsConsent.displayName = 'RegisterTermsConsent';
 
 const RegisterEmailVerificationModal = memo(function RegisterEmailVerificationModal({
   visible,
@@ -647,7 +480,6 @@ const RegisterEmailVerificationModal = memo(function RegisterEmailVerificationMo
         return;
       }
 
-      // `result` is the fresh SignUp resource — hook `signUp` may lag one render behind.
       const reportedMissing = result.missingFields ?? signUp.missingFields ?? [];
       const freshMissing =
         reportedMissing.length > 0

@@ -1,26 +1,35 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  Pressable,
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   Modal,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
-import { Mail, Lock, Apple, ShieldCheck, X } from 'lucide-react-native';
-import { AuthScreenShell, AuthTextField, AUTH_ACCENT, OtpInput } from '@/src/components/auth';
+import { Mail, Lock, ShieldCheck, X } from 'lucide-react-native';
+import {
+  AuthScreenShell,
+  AuthTextField,
+  AuthPanelHeader,
+  AuthPrimaryButton,
+  AuthDivider,
+  AuthSocialButtons,
+  AuthFooterLink,
+  AuthTermsConsent,
+  OtpInput,
+  MIN_PASSWORD_LENGTH,
+  normalizeAuthEmail,
+} from '@/src/components/auth';
 import { useOAuthFlow } from '@/src/components/auth/useOAuthFlow';
 import {
   attemptSignInSecondFactor,
-  MIN_PASSWORD_LENGTH,
-  normalizeAuthEmail,
   prepareSignInSecondFactor,
   resolveSecondFactor,
   signInNeedsVerification,
@@ -29,7 +38,6 @@ import {
 import {
   TEXT_PRIMARY,
   TEXT_MUTED,
-  TEXT_SECONDARY,
   PURPLE_PRIMARY,
   PURPLE_SOFT,
 } from '@/constants/tokens';
@@ -43,9 +51,10 @@ export default function LoginScreen() {
   const router = useRouter();
   const { signIn, setActive, isLoaded } = useSignIn();
   const { getToken } = useAuth();
-  const { t } = useTranslation();
+  const { t, isRTL } = useTranslation();
   const tCommon = t.common;
 
+  const [terms, setTerms] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,6 +68,19 @@ export default function LoginScreen() {
   const resendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completingAuthRef = useRef(false);
 
+  const copy = {
+    title: isRTL ? 'تسجيل الدخول' : 'Log in',
+    subtitle: isRTL ? 'مرحبا بعودتك' : 'Welcome back',
+    email: isRTL ? 'البريد الإلكتروني' : 'Email',
+    password: isRTL ? 'كلمة المرور' : 'Password',
+    submit: isRTL ? 'تسجيل الدخول' : 'Log in',
+    divider: isRTL ? 'أو المتابعة باستخدام' : 'Or continue with',
+    footerMuted: isRTL ? 'ليس لديك حساب؟' : "Don't have an account?",
+    footerLink: isRTL ? 'إنشاء حساب' : 'Sign up',
+  };
+
+  const toggleTerms = useCallback(() => setTerms((v) => !v), []);
+
   useEffect(() => {
     return () => {
       if (resendIntervalRef.current) {
@@ -70,8 +92,16 @@ export default function LoginScreen() {
 
   const { startGoogle, startApple } = useOAuthFlow({
     onError: () => setOauthLoading(null),
-    legalAccepted: true,
+    legalAccepted: terms,
   });
+
+  const requireTerms = (): boolean => {
+    if (!terms) {
+      Alert.alert('Notice', tCommon.registerMustAgree);
+      return false;
+    }
+    return true;
+  };
 
   const startResendCooldown = () => {
     if (resendIntervalRef.current) {
@@ -142,6 +172,7 @@ export default function LoginScreen() {
 
   const handleGooglePress = async (): Promise<void> => {
     if (oauthLoading) return;
+    if (!requireTerms()) return;
     setOauthLoading('google');
     try {
       await startGoogle();
@@ -152,6 +183,7 @@ export default function LoginScreen() {
 
   const handleApplePress = async (): Promise<void> => {
     if (oauthLoading) return;
+    if (!requireTerms()) return;
     setOauthLoading('apple');
     try {
       await startApple();
@@ -161,12 +193,10 @@ export default function LoginScreen() {
   };
 
   const submit = async () => {
+    if (!requireTerms()) return;
     const normalizedEmail = normalizeAuthEmail(email);
     if (!normalizedEmail.includes('@') || password.length < MIN_PASSWORD_LENGTH) {
-      Alert.alert(
-        tCommon.alert,
-        tCommon.loginCouldNotComplete,
-      );
+      Alert.alert(tCommon.alert, tCommon.loginCouldNotComplete);
       return;
     }
     if (!isLoaded || !signIn) return;
@@ -184,7 +214,6 @@ export default function LoginScreen() {
       }
 
       if (signInNeedsVerification(result.status)) {
-        // Prefer hook `signIn` — Clerk populates supportedSecondFactors on the live resource.
         const factor = resolveSecondFactor(signIn);
         await openVerificationStep(factor);
         return;
@@ -260,94 +289,62 @@ export default function LoginScreen() {
           : tCommon.loginMfaEmailHint;
 
   return (
-    <AuthScreenShell heroMode="compact" panelOffset={60}>
-      <Text style={styles.subMuted}>Sign in to keep your picks, alerts, and AI history in sync.</Text>
+    <AuthScreenShell>
+      <AuthPanelHeader title={copy.title} subtitle={copy.subtitle} />
 
-      <AuthTextField
-        icon={Mail}
-        placeholder="Email"
-        keyboardType="email-address"
-        autoCapitalize="none"
-        autoCorrect={false}
-        value={email}
-        onChangeText={setEmail}
-        containerStyle={styles.mt}
+      <View style={styles.fields}>
+        <AuthTextField
+          icon={Mail}
+          placeholder={copy.email}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          value={email}
+          onChangeText={setEmail}
+          isRTL={isRTL}
+        />
+        <AuthTextField
+          icon={Lock}
+          placeholder={copy.password}
+          secureToggle
+          value={password}
+          onChangeText={setPassword}
+          isRTL={isRTL}
+          containerStyle={styles.fieldGap}
+        />
+      </View>
+
+      <AuthTermsConsent
+        checked={terms}
+        onToggle={toggleTerms}
+        isRTL={isRTL}
+        tCommon={tCommon}
       />
-      <AuthTextField
-        icon={Lock}
-        placeholder="Password"
-        secureToggle
-        value={password}
-        onChangeText={setPassword}
-        containerStyle={styles.gap}
-      />
 
-      <Pressable hitSlop={8} style={styles.forgot} onPress={() => router.push('/auth/forgot-password')}>
-        <Text style={styles.forgotTxt}>Forgot password?</Text>
-      </Pressable>
-
-      <TouchableOpacity
-        style={[styles.primaryWrap, isSubmitting && { opacity: 0.6 }]}
-        activeOpacity={0.92}
+      <AuthPrimaryButton
+        label={copy.submit}
+        loadingLabel={tCommon.loggingIn}
+        loading={isSubmitting}
         onPress={submit}
-        disabled={isSubmitting}
-      >
-        <LinearGradient
-          colors={[AUTH_ACCENT, '#5b21b6']}
-          style={styles.primary}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-        >
-          <Text style={styles.primaryTxt}>
-            {isSubmitting ? tCommon.loggingIn : 'Login'}
-          </Text>
-        </LinearGradient>
-      </TouchableOpacity>
+        style={styles.submitGap}
+      />
 
-      <View style={styles.divWrap}>
-        <View style={styles.divLine} />
-        <Text style={styles.divTxt}>or continue with</Text>
-        <View style={styles.divLine} />
-      </View>
+      <AuthDivider label={copy.divider} />
 
-      <View style={styles.socialRow}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={[styles.social, oauthLoading && { opacity: 0.6 }]}
-          onPress={handleGooglePress}
-          disabled={!!oauthLoading}
-        >
-          {oauthLoading === 'google' ? (
-            <ActivityIndicator color={TEXT_PRIMARY} size="small" />
-          ) : (
-            <>
-              <Text style={styles.googleG}>G</Text>
-              <Text style={styles.socialTxt}>Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={[styles.social, oauthLoading && { opacity: 0.6 }]}
-          onPress={handleApplePress}
-          disabled={!!oauthLoading}
-        >
-          {oauthLoading === 'apple' ? (
-            <ActivityIndicator color={TEXT_PRIMARY} size="small" />
-          ) : (
-            <>
-              <Apple color={TEXT_PRIMARY} size={20} />
-              <Text style={styles.socialTxt}>Apple</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+      <AuthSocialButtons
+        onGoogle={handleGooglePress}
+        onApple={handleApplePress}
+        loading={!!oauthLoading}
+        googleLoading={oauthLoading === 'google'}
+        appleLoading={oauthLoading === 'apple'}
+      />
 
-      <Pressable style={styles.footer} onPress={() => router.replace('/auth')}>
-        <Text style={styles.footerMuted}>
-          Don&apos;t have an account? <Text style={styles.linkBold}>Sign up</Text>
-        </Text>
-      </Pressable>
+      <AuthFooterLink
+        muted={copy.footerMuted}
+        link={copy.footerLink}
+        onPress={() => router.replace('/auth')}
+        isRTL={isRTL}
+      />
 
       <Modal visible={showVerification} transparent animationType="fade" statusBarTranslucent>
         <KeyboardAvoidingView
@@ -435,24 +432,9 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  subMuted: { marginTop: 9, marginBottom: 20, fontSize: 14, color: TEXT_SECONDARY, lineHeight: 20, textAlign: 'left' },
-  mt: { marginTop: 4 },
-  gap: { marginTop: 12 },
-  forgot: { alignSelf: 'flex-end', marginTop: 10 },
-  forgotTxt: { fontSize: 13, fontWeight: '700', color: AUTH_ACCENT },
-  primaryWrap: { marginTop: 22, borderRadius: 14, overflow: 'hidden' },
-  primary: { paddingVertical: 16, alignItems: 'center' },
-  primaryTxt: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
-  divWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 22, gap: 12 },
-  divLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)' },
-  divTxt: { fontSize: 12, color: TEXT_MUTED, fontWeight: '600' },
-  socialRow: { flexDirection: 'row', gap: 10 },
-  social: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 14, backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  googleG: { fontSize: 18, fontWeight: '800', color: '#4285F4' },
-  socialTxt: { fontSize: 14, fontWeight: '700', color: TEXT_SECONDARY },
-  footer: { marginTop: 20, alignItems: 'center', paddingBottom: 16 },
-  footerMuted: { fontSize: 14, color: TEXT_MUTED },
-  linkBold: { color: AUTH_ACCENT, fontWeight: '800' },
+  fields: { gap: 16, width: '100%' },
+  fieldGap: { marginTop: 0 },
+  submitGap: { marginTop: 42 },
   modalOverlay: { flex: 1 },
   modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
   modalCard: {
