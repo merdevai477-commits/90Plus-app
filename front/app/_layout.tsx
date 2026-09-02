@@ -350,7 +350,6 @@ function RootLayoutNav() {
   );
 }
 
-import { LevelUpModal } from "../components/common/LevelUpModal";
 import { Image } from "expo-image";
 import { CLUBS } from "../data/clubs";
 import { BRANDS } from "../data/brands";
@@ -880,7 +879,6 @@ function RootLayout() {
                                               </PreloadInitializer>
                                             </WebSocketInitializer>
                                           </ClerkGate>
-                                          <LevelUpModal />
                                         </View>
                                       </AppKeyboardProvider>
                                     </SafeAreaProvider>
