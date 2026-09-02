@@ -18,9 +18,15 @@ import {
 } from 'react-native';
 
 import { useTranslation } from '../../src/i18n';
-import { getCompCardMetrics } from './compCardMetrics';
+import { getCompCardMetrics, getCompCardMetricsForLayout } from './compCardMetrics';
 
-export { COMP_CARD_HEIGHT, COMP_CARD_SCALE, COMP_CARD_WIDTH, getCompCardMetrics } from './compCardMetrics';
+export {
+  COMP_CARD_HEIGHT,
+  COMP_CARD_SCALE,
+  COMP_CARD_WIDTH,
+  getCompCardMetrics,
+  getCompCardMetricsForLayout,
+} from './compCardMetrics';
 
 const CTA_PURPLE = '#8C5CF5';
 const CARD_BORDER = '#2E1F50';
@@ -36,6 +42,8 @@ export interface CompCardProps {
   ctaIcon?: LucideIcon;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
+  /** عرض الكارت في الشبكة — null = يستخدم compCardMetrics الافتراضي */
+  layoutWidth?: number;
 }
 
 const CompCard: React.FC<CompCardProps> = ({
@@ -47,10 +55,17 @@ const CompCard: React.FC<CompCardProps> = ({
   ctaIcon: CtaIcon,
   onPress,
   style,
+  layoutWidth,
 }) => {
   const { t, isRTL } = useTranslation();
   const ctaLabel = actionText ?? t.rank.playNow;
-  const m = useMemo(() => getCompCardMetrics(), []);
+  const m = useMemo(
+    () =>
+      layoutWidth != null
+        ? getCompCardMetricsForLayout(layoutWidth)
+        : getCompCardMetrics(),
+    [layoutWidth],
+  );
   const s = useMemo(() => createStyles(m), [m]);
 
   return (

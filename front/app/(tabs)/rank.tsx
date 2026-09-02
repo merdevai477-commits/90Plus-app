@@ -30,11 +30,18 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import CompCard from '../../components/rank/CompCard';
+import {
+  COMP_GRID_COLUMN_GAP,
+  COMP_GRID_PADDING,
+  COMP_GRID_ROW_GAP,
+  getCompGridCardWidth,
+} from '../../components/rank/compCardMetrics';
 import LeaderboardModal, {
   LeaderboardEntry,
 } from '../../components/rank/LeaderboardModal';
@@ -165,6 +172,7 @@ export default function RankScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { t } = useTranslation();
   const appLanguage = useLanguageStore((s) => s.language);
@@ -272,6 +280,9 @@ export default function RankScreen() {
     [insets.top, insets.bottom],
   );
 
+  // Figma 2×2 order (left → right, top → bottom):
+  // Row 1: ملك التوقعات | بطل التفاعل
+  // Row 2: شارك واربح | الأسئلة اليومية
   const competitions = useMemo(
     () => [
       {
@@ -318,6 +329,11 @@ export default function RankScreen() {
   const competitionRows = useMemo(
     () => [competitions.slice(0, 2), competitions.slice(2, 4)],
     [competitions],
+  );
+
+  const compCardWidth = useMemo(
+    () => getCompGridCardWidth(screenWidth),
+    [screenWidth],
   );
 
   // ── Podium (ranks 1, 2, 3 — visual order: 2 → 1 → 3) ──
@@ -424,6 +440,7 @@ export default function RankScreen() {
                 <CompCard
                   key={c.id}
                   {...c}
+                  layoutWidth={compCardWidth}
                   onPress={() => handleCompetitionPress(c.id)}
                 />
               ))}
@@ -742,14 +759,13 @@ const s = StyleSheet.create({
   hScroll: { paddingHorizontal: 16, gap: 12 },
 
   compGrid: {
-    paddingHorizontal: 14,
-    gap: 16,
+    paddingHorizontal: COMP_GRID_PADDING,
+    gap: COMP_GRID_ROW_GAP,
     marginTop: 4,
   },
   compRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
+    gap: COMP_GRID_COLUMN_GAP,
   },
 
   bottomContentGroup: {
