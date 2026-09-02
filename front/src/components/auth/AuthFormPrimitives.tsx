@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import {
   AUTH_TEXT_SUBTITLE,
 } from './AuthTokens';
 import { TEXT_PRIMARY } from '../../../constants/tokens';
+import { useAuthScale } from './authLayoutMetrics';
 
 const googleIcon = require('../../../assets/images/auth/icon-google.svg');
 const appleIcon = require('../../../assets/images/auth/icon-apple.svg');
@@ -47,6 +48,8 @@ function AuthSocialButton({
   loading?: boolean;
   icon: number;
 }) {
+  const styles = useAuthPrimitiveStyles();
+
   return (
     <TouchableOpacity
       activeOpacity={0.9}
@@ -72,6 +75,8 @@ export function AuthPanelHeader({
   title: string;
   subtitle: string;
 }) {
+  const styles = useAuthPrimitiveStyles();
+
   return (
     <>
       <Text style={styles.panelTitle}>{title}</Text>
@@ -95,6 +100,8 @@ export function AuthPrimaryButton({
   disabled?: boolean;
   style?: ViewStyle;
 }) {
+  const styles = useAuthPrimitiveStyles();
+
   return (
     <TouchableOpacity
       activeOpacity={0.92}
@@ -114,6 +121,8 @@ export function AuthPrimaryButton({
 }
 
 export function AuthDivider({ label }: { label: string }) {
+  const styles = useAuthPrimitiveStyles();
+
   return (
     <View style={styles.divider}>
       <View style={styles.dividerLine} />
@@ -136,6 +145,8 @@ export function AuthSocialButtons({
   googleLoading?: boolean;
   appleLoading?: boolean;
 }) {
+  const styles = useAuthPrimitiveStyles();
+
   return (
     <View style={styles.socialRow}>
       <AuthSocialButton
@@ -165,6 +176,8 @@ export function AuthFooterLink({
   onPress: () => void;
   isRTL?: boolean;
 }) {
+  const styles = useAuthPrimitiveStyles();
+
   return (
     <View style={[styles.footerRow, isRTL && styles.footerRowRtl]}>
       {isRTL ? (
@@ -210,6 +223,8 @@ export const AuthTermsConsent = memo(function AuthTermsConsent({
   isRTL: boolean;
   tCommon: TermsCopy;
 }) {
+  const styles = useAuthPrimitiveStyles();
+  const { s } = useAuthScale();
   const ageLine = tCommon.registerAgreementAfterLinks.replace(/^[،,\s]+/, '');
 
   return (
@@ -244,42 +259,67 @@ export const AuthTermsConsent = memo(function AuthTermsConsent({
       </View>
 
       <View style={[styles.checkbox, checked && styles.checkboxOn]}>
-        {checked ? <Check size={14} color="#fff" strokeWidth={2.5} /> : null}
+        {checked ? <Check size={s(14)} color="#fff" strokeWidth={2.5} /> : null}
       </View>
     </TouchableOpacity>
   );
 });
 AuthTermsConsent.displayName = 'AuthTermsConsent';
 
-const styles = StyleSheet.create({
+/**
+ * Every number below is a Figma DESIGN unit, converted at render time by the
+ * shell's scale (./authLayoutMetrics). Before this the panel was hard-coded in
+ * design units while the hero scaled with the screen, so the two disagreed
+ * about how big the phone was — the source of the pre-login layout problems on
+ * iPhone. Sizes go through `s()`, type through `f()`.
+ *
+ * Note the touch-target floor on the primary button and the social row: at the
+ * minimum scale (0.8) 56 → 45 and 54 → 43, so the social buttons are pinned to
+ * 44 rather than allowed to fall under the accessibility minimum.
+ */
+const MIN_TOUCH_TARGET = 44;
+
+function useAuthPrimitiveStyles() {
+  const { s, f, scale, fontScale } = useAuthScale();
+
+  return useMemo(
+    () => createAuthPrimitiveStyles(s, f),
+    // `s`/`f` are new closures each render; the multipliers are what change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scale, fontScale],
+  );
+}
+
+function createAuthPrimitiveStyles(s: (v: number) => number, f: (v: number) => number) {
+  return StyleSheet.create({
   panelTitle: {
-    fontSize: 26,
+    fontSize: f(26),
     fontWeight: '700',
     color: '#fff',
     textAlign: 'center',
   },
   panelSubtitle: {
-    fontSize: 19,
+    fontSize: f(19),
     color: AUTH_TEXT_SUBTITLE,
     textAlign: 'center',
   },
   primaryBtn: {
-    height: 56,
-    borderRadius: 16,
+    height: Math.max(s(56), MIN_TOUCH_TARGET),
+    borderRadius: s(16),
     backgroundColor: AUTH_BUTTON_SOLID,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
   },
   primaryTxt: {
-    fontSize: 16,
+    fontSize: f(16),
     fontWeight: '700',
     color: '#fff',
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 22,
+    gap: s(22),
     width: '100%',
   },
   dividerLine: {
@@ -288,20 +328,20 @@ const styles = StyleSheet.create({
     backgroundColor: AUTH_DIVIDER_LINE,
   },
   dividerTxt: {
-    fontSize: 14,
+    fontSize: f(14),
     fontWeight: '500',
     color: AUTH_DIVIDER_TEXT,
   },
   socialRow: {
     flexDirection: 'row',
-    gap: SOCIAL_ROW_GAP,
+    gap: s(SOCIAL_ROW_GAP),
     width: '100%',
-    height: SOCIAL_BTN_HEIGHT,
+    height: Math.max(s(SOCIAL_BTN_HEIGHT), MIN_TOUCH_TARGET),
   },
   socialBtnOuter: {
     flex: 1,
-    height: SOCIAL_BTN_HEIGHT,
-    borderRadius: SOCIAL_BTN_RADIUS,
+    height: Math.max(s(SOCIAL_BTN_HEIGHT), MIN_TOUCH_TARGET),
+    borderRadius: s(SOCIAL_BTN_RADIUS),
     borderWidth: Platform.OS === 'ios' ? 0.5 : StyleSheet.hairlineWidth,
     borderColor: AUTH_SOCIAL_BORDER,
     backgroundColor: AUTH_SOCIAL_BG,
@@ -312,40 +352,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: SOCIAL_BTN_PADDING_H,
-    paddingVertical: SOCIAL_BTN_PADDING_V,
-    gap: 10,
+    paddingHorizontal: s(SOCIAL_BTN_PADDING_H),
+    paddingVertical: s(SOCIAL_BTN_PADDING_V),
+    gap: s(10),
   },
   socialIcon: {
-    width: SOCIAL_ICON_SIZE,
-    height: SOCIAL_ICON_SIZE,
+    width: s(SOCIAL_ICON_SIZE),
+    height: s(SOCIAL_ICON_SIZE),
   },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingBottom: 4,
+    gap: s(4),
+    paddingBottom: s(4),
   },
   footerRowRtl: {
     flexDirection: 'row-reverse',
   },
   footerMuted: {
-    fontSize: 14,
+    fontSize: f(14),
     fontWeight: '500',
     color: AUTH_TEXT_MUTED,
   },
   footerLink: {
-    fontSize: 14,
+    fontSize: f(14),
     fontWeight: '600',
     color: AUTH_ACCENT,
   },
   termsRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: s(8),
     width: '100%',
-    minHeight: TERMS_ROW_MIN_HEIGHT,
+    minHeight: Math.max(s(TERMS_ROW_MIN_HEIGHT), MIN_TOUCH_TARGET),
   },
   termsRowRtl: {
     flexDirection: 'row-reverse',
@@ -353,14 +393,14 @@ const styles = StyleSheet.create({
   termsTextWrap: {
     flex: 1,
     minWidth: 0,
-    gap: TERMS_LINE_GAP,
+    gap: s(TERMS_LINE_GAP),
   },
   termsTextWrapRtl: {
     alignItems: 'flex-end',
   },
   termsLine: {
-    fontSize: TERMS_FONT_SIZE,
-    lineHeight: TERMS_LINE_HEIGHT,
+    fontSize: f(TERMS_FONT_SIZE),
+    lineHeight: f(TERMS_LINE_HEIGHT),
     color: AUTH_TEXT_MUTED,
   },
   termsLineRtl: {
@@ -369,13 +409,13 @@ const styles = StyleSheet.create({
   },
   termsLink: {
     color: AUTH_ACCENT,
-    fontSize: TERMS_FONT_SIZE,
-    lineHeight: TERMS_LINE_HEIGHT,
+    fontSize: f(TERMS_FONT_SIZE),
+    lineHeight: f(TERMS_LINE_HEIGHT),
   },
   checkbox: {
-    width: TERMS_CHECKBOX_SIZE,
-    height: TERMS_CHECKBOX_SIZE,
-    borderRadius: 6,
+    width: s(TERMS_CHECKBOX_SIZE),
+    height: s(TERMS_CHECKBOX_SIZE),
+    borderRadius: s(6),
     borderWidth: 1,
     borderColor: AUTH_CHECKBOX_BORDER,
     backgroundColor: AUTH_CHECKBOX_BG,
@@ -387,4 +427,5 @@ const styles = StyleSheet.create({
     borderColor: AUTH_ACCENT,
     backgroundColor: AUTH_ACCENT,
   },
-});
+  });
+}

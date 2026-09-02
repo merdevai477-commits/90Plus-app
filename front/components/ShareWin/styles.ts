@@ -1047,6 +1047,31 @@ function buildStyles(scale: DesignScale, language: string) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+
+    /**
+     * The Share & Win page's own back control.
+     *
+     * Pinned to the WINDOW rather than the scroll content, because this page is
+     * long (wheel → ranking → prizes → share card → last winner → stats) and a
+     * control that scrolls away is not a way out. Absolute, so adding it cannot
+     * shift the hero the Figma frame positions.
+     *
+     * `/share-win` is where the referral deep link lands, so this is the first
+     * screen a friend arriving from a shared invite sees — it had nothing to
+     * tap and no tab bar to fall back to.
+     */
+    pageBackButton: {
+      position: 'absolute',
+      width: s(40),
+      height: s(40),
+      borderRadius: s(20),
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(10, 6, 24, 0.62)',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: 'rgba(255,255,255,0.16)',
+      zIndex: 20,
+    },
     lbListContent: {
       width: s(371),
       alignSelf: 'center',

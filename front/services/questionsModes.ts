@@ -1,6 +1,27 @@
 import { getApiUrl } from '../config/api.config';
+import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import { safeJsonParse } from '../utils/safeJsonParse';
 import type { Language } from '../src/i18n';
+
+/**
+ * EVERY REQUEST ON THIS SERVICE IS BOUNDED.
+ *
+ * These calls were plain `fetch`, which has no timeout of its own on either
+ * platform. A request that never came back left `loading` true forever, and
+ * the screen behind it renders nothing but a spinner — so a stalled session
+ * fetch WAS the reported freeze. There is no amount of backend hardening that
+ * makes an unbounded client request safe: a dropped connection or a proxy that
+ * holds the socket open is enough.
+ *
+ * The session call gets the longest budget because the server may still be
+ * finishing today's round when it is asked; it answers "not ready" fast, but a
+ * cold start is genuinely slow. The rest are quick reads and writes.
+ */
+const SESSION_TIMEOUT_MS = 25_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+/** Thrown as this reason code when a request outlives its budget. */
+export const REQUEST_TIMEOUT_REASON = 'QUESTIONS_REQUEST_TIMEOUT';
 
 export type QuestionModeId =
   | 'guess-player'
@@ -322,15 +343,34 @@ function normalizeLanguage(lang: Language): 'ar' | 'en' {
   return lang === 'en' ? 'en' : 'ar';
 }
 
-async function authFetch(path: string, token: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${getApiUrl()}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
+async function authFetch(
+  path: string,
+  token: string,
+  init?: RequestInit & { timeout?: number },
+): Promise<Response> {
+  try {
+    return await fetchWithTimeout(`${getApiUrl()}${path}`, {
+      ...init,
+      timeout: init?.timeout ?? DEFAULT_TIMEOUT_MS,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (err: unknown) {
+    /*
+     * `fetchWithTimeout` reports an expired budget as "Request timeout after
+     * Nms". Renaming it to a stable reason code here keeps the callers' error
+     * contract intact: every failure they surface is a CODE the screen can map
+     * to a sentence, never a raw message.
+     */
+    const message = err instanceof Error ? err.message : '';
+    if (/^Request timeout after/.test(message) || (err as { name?: string })?.name === 'AbortError') {
+      throw new Error(REQUEST_TIMEOUT_REASON);
+    }
+    throw err;
+  }
 }
 
 function makeModeSummary(
@@ -600,7 +640,9 @@ export const QuestionsModesService = {
     language: Language,
   ): Promise<QuestionModeSession> {
     const lang = normalizeLanguage(language);
-    const res = await authFetch(`/quiz/questions/modes/${modeId}/session?language=${lang}`, token);
+    const res = await authFetch(`/quiz/questions/modes/${modeId}/session?language=${lang}`, token, {
+      timeout: SESSION_TIMEOUT_MS,
+    });
     const json = await safeJsonParse<QuestionModeSessionResponse>(res, { status: 'ERROR' });
 
     if (res.status === 401) {

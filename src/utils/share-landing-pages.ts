@@ -21,9 +21,18 @@ const LANDING_STYLES = `
     body.ready .download { display: block; }
 `;
 
-/** Intent opens the app; fallback reloads this landing page (not the store). */
-function buildAndroidIntentUrl(deepPath: string, landingFallbackUrl: string): string {
-  const fallback = encodeURIComponent(landingFallbackUrl);
+/**
+ * Android App Link intent.
+ *
+ * `S.browser_fallback_url` is where Chrome sends the user when the package is
+ * NOT installed. It used to be this same landing page, which meant a phone
+ * without 90Plus bounced: page → intent → page → intent … The share never
+ * reached the Play Store and the user never left the website. It is the store
+ * listing now, so "app missing" resolves in one hop to somewhere they can
+ * actually install from.
+ */
+function buildAndroidIntentUrl(deepPath: string, storeFallbackUrl: string = PLAY_STORE_URL): string {
+  const fallback = encodeURIComponent(storeFallbackUrl);
   return `intent://${deepPath}#Intent;scheme=ninetyplus;package=${ANDROID_PACKAGE};S.browser_fallback_url=${fallback};end`;
 }
 
@@ -39,7 +48,8 @@ type ContentLandingOptions = {
 };
 
 function buildSmartLandingPage(options: ContentLandingOptions): string {
-  const intentUrl = buildAndroidIntentUrl(options.deepPath, options.ogUrl);
+  // Fallback is the Play Store, never this page — see buildAndroidIntentUrl.
+  const intentUrl = buildAndroidIntentUrl(options.deepPath);
   const intentHref = intentUrl.replace(/"/g, '&quot;');
 
   return `<!DOCTYPE html>
@@ -53,12 +63,26 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
   <meta property="og:url" content="${options.ogUrl}">
   <style>${LANDING_STYLES}</style>
   <script>
+    /*
+     * This page is only ever REACHED when the OS did not hand the link to the
+     * app itself. On iOS that means the universal link was not claimed (app not
+     * installed, or an in-app browser such as Instagram/Facebook that strips
+     * universal links); on Android, that the App Link was not verified.
+     *
+     * So: try the custom scheme once — which still works from in-app browsers
+     * and is what carries the referral code — and if we are still on this page
+     * a moment later, send the user to their platform's STORE. Sitting on the
+     * website is the one outcome a share must never end in.
+     */
     (function() {
       var customScheme = ${JSON.stringify(options.customSchemeUrl)};
       var intentUrl = ${JSON.stringify(intentUrl)};
+      var appStoreUrl = ${JSON.stringify(APP_STORE_URL)};
       var ua = navigator.userAgent || '';
       var isAndroid = /Android/i.test(ua);
-      var isIOS = /iPhone|iPad|iPod/i.test(ua);
+      var isIOS = /iPhone|iPad|iPod/i.test(ua) ||
+        // iPadOS 13+ reports itself as a Mac; the touch points give it away.
+        (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
 
       function showDownloadLanding() {
         document.body.classList.add('ready');
@@ -70,6 +94,8 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
 
       function tryOpenApp() {
         if (isAndroid) {
+          // The intent's own browser_fallback_url is the Play Store, so a
+          // missing app resolves in one hop without coming back here.
           window.location.href = intentUrl;
           setTimeout(function() {
             if (!appLikelyOpened()) showDownloadLanding();
@@ -80,18 +106,17 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
           var start = Date.now();
           window.location.href = customScheme;
           setTimeout(function() {
-            if (!appLikelyOpened() && Date.now() - start < 3000) {
-              showDownloadLanding();
-            }
+            if (appLikelyOpened() || Date.now() - start >= 3000) return;
+            // Still here: the app is not installed. Reveal the card (so the
+            // back button lands somewhere sensible) and go to the App Store.
+            showDownloadLanding();
+            window.location.replace(appStoreUrl);
           }, 1600);
           return;
         }
+        // Desktop: there is no store to send them to, so offer both.
         showDownloadLanding();
       }
-
-      document.addEventListener('visibilitychange', function() {
-        if (document.hidden) return;
-      });
 
       tryOpenApp();
     })();
@@ -117,7 +142,7 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
 /** App invite — try open app; if missing, stay on landing page with store links */
 export function buildAppInviteLandingPage(): string {
   const landingUrl = `${SHARE_BASE_URL}/`;
-  const intentUrl = buildAndroidIntentUrl('open', landingUrl);
+  const intentUrl = buildAndroidIntentUrl('open');
   const intentHref = intentUrl.replace(/"/g, '&quot;');
 
   return `<!DOCTYPE html>
@@ -134,9 +159,11 @@ export function buildAppInviteLandingPage(): string {
     (function() {
       var intentUrl = ${JSON.stringify(intentUrl)};
       var customScheme = 'ninetyplus://';
+      var appStoreUrl = ${JSON.stringify(APP_STORE_URL)};
       var ua = navigator.userAgent || '';
       var isAndroid = /Android/i.test(ua);
-      var isIOS = /iPhone|iPad|iPod/i.test(ua);
+      var isIOS = /iPhone|iPad|iPod/i.test(ua) ||
+        (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
 
       function showDownloadLanding() {
         document.body.classList.add('ready');
@@ -148,6 +175,7 @@ export function buildAppInviteLandingPage(): string {
 
       function tryOpenApp() {
         if (isAndroid) {
+          // Intent fallback is the Play Store — see buildAndroidIntentUrl.
           window.location.href = intentUrl;
           setTimeout(function() {
             if (!appLikelyOpened()) showDownloadLanding();
@@ -158,9 +186,9 @@ export function buildAppInviteLandingPage(): string {
           var start = Date.now();
           window.location.href = customScheme;
           setTimeout(function() {
-            if (!appLikelyOpened() && Date.now() - start < 3000) {
-              showDownloadLanding();
-            }
+            if (appLikelyOpened() || Date.now() - start >= 3000) return;
+            showDownloadLanding();
+            window.location.replace(appStoreUrl);
           }, 1600);
           return;
         }

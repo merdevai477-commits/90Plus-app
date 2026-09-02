@@ -39,6 +39,17 @@ import {
 
 type PlayableModeId = Exclude<QuestionModeId, 'football-quiz'>;
 
+/**
+ * How long to wait for Clerk to report whether there is a session before
+ * treating the silence as "not signed in".
+ *
+ * Nothing else in this hook can run until `isLoaded` flips, so an SDK that
+ * never resolves (offline cold start, Clerk outage) used to hold the screen on
+ * a spinner with no arrow and no retry — indistinguishable from a freeze.
+ * Generous enough that a slow network still signs the user in normally.
+ */
+const CLERK_READY_TIMEOUT_MS = 12_000;
+
 export function isPlayableQuestionMode(mode: string): mode is PlayableModeId {
   return (
     mode === 'guess-player' ||
@@ -126,14 +137,40 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
     return session.questions[session.currentIndex] ?? null;
   }, [session]);
 
+  /**
+   * Bumped to re-run the loader. `reload()` is what the loading state's
+   * "Try Again" and the error state's retry both call, so a round that failed
+   * or stalled can be re-requested without leaving and re-entering the screen.
+   */
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const reload = useCallback(() => setReloadNonce((nonce) => nonce + 1), []);
+
   useEffect(() => {
     let mounted = true;
 
-    // Clerk hasn't resolved yet. Stay in the loading state rather than falling
-    // through to the offline bank and then flashing the API round a beat later.
+    /*
+     * Clerk hasn't resolved yet. Stay in the loading state rather than falling
+     * through to the offline bank and then flashing the API round a beat later.
+     *
+     * BOUNDED, though. `isLoaded` staying false is a real failure mode (no
+     * network on a cold start, a Clerk outage) and it used to park the screen
+     * on an unescapable spinner forever, because nothing else in this hook
+     * runs until Clerk reports in. After CLERK_READY_TIMEOUT_MS the wait is
+     * called a failure and the screen shows its error state — which has a
+     * retry and a way out — instead of spinning indefinitely.
+     */
     if (isLoaded !== true) {
       setLoading(true);
-      return;
+      const timer = setTimeout(() => {
+        if (!mounted) return;
+        setError('AUTH_REQUIRED');
+        setSession(null);
+        setLoading(false);
+      }, CLERK_READY_TIMEOUT_MS);
+      return () => {
+        mounted = false;
+        clearTimeout(timer);
+      };
     }
 
     setLoading(true);
@@ -237,7 +274,7 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
     return () => {
       mounted = false;
     };
-  }, [isLoaded, isSignedIn, language, modeId]);
+  }, [isLoaded, isSignedIn, language, modeId, reloadNonce]);
 
   /**
    * Send ONE answer. `idsOverride` exists for the auto-submitting board modes:
@@ -633,6 +670,7 @@ export function useQuestionModeSession(modeId: PlayableModeId, language: Languag
 
   return {
     loading,
+    reload,
     error,
     session,
     currentQuestion,

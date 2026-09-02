@@ -71,6 +71,8 @@ import {
 } from 'lucide-react-native';
 
 import { useQuestionModeSession } from '../../hooks/useQuestionModeSession';
+import { REQUEST_TIMEOUT_REASON } from '../../services/questionsModes';
+import { QUESTIONS_HUB_ROUTE } from './quizNavigation';
 import { useTranslation, type Language } from '../../src/i18n';
 import { useLanguageStore } from '../../src/i18n/store';
 import { useDesignScale, type DesignScale } from '../../utils/responsive';
@@ -100,6 +102,15 @@ import {
   QUIZ_FIGMA_ACTION_GRAD_END,
   QUIZ_FIGMA_ACTION_GRAD_START,
 } from './quiz.constants';
+
+/**
+ * How long the shared spinner may sit alone before the screen admits the wait
+ * is not normal and offers a retry beneath it.
+ *
+ * Shorter than the session request's own 25s budget on purpose: the player
+ * should be given a choice BEFORE the request gives up, not after.
+ */
+const LOADING_STALL_MS = 12_000;
 
 type PlayableModeId =
   | 'guess-player'
@@ -431,6 +442,27 @@ function createStyles(scale: number, fontScale: number, language: string) {
       color: GAME_COLOR.textPrimary,
     },
     stateGutter: { paddingHorizontal: s(GAME_LAYOUT.gutter) },
+
+    /**
+     * The "this is taking a while" block under the loading spinner. It is a
+     * recovery affordance, NOT a second loading UI — no spinner of its own, and
+     * it only appears once the wait has stopped being reasonable.
+     */
+    loadingStall: {
+      marginTop: s(24),
+      alignSelf: 'stretch',
+      maxWidth: s(404),
+      alignItems: 'center',
+      gap: s(12),
+      paddingHorizontal: s(GAME_LAYOUT.gutter),
+    },
+    loadingStallText: {
+      fontFamily: font(500),
+      fontSize: f(15),
+      lineHeight: f(21),
+      color: GAME_COLOR.textMuted,
+      textAlign: 'center',
+    },
   });
 }
 
@@ -602,9 +634,35 @@ function describeSessionFailure(reason: string | null, language: 'ar' | 'en'): s
     case 'QUESTIONS_CHALLENGE_NOT_FOUND':
     case 'MODE_NOT_FOUND':
       return ar ? 'هذا الوضع غير متاح حاليًا.' : 'This mode is not available right now.';
+    /*
+     * The request outlived its budget (services/questionsModes.ts). This is a
+     * CONNECTION problem, not a content one — saying "today's challenge isn't
+     * available" would send the player away from a round that is probably fine.
+     */
+    case REQUEST_TIMEOUT_REASON:
+    case 'SESSION_LOAD_FAILED':
+      return ar
+        ? 'تعذّر الوصول للخادم. تحقّق من اتصالك وحاول مرة أخرى.'
+        : "We couldn't reach the server. Check your connection and try again.";
     default:
       return ar ? 'تعذر تحميل التحدي' : 'Unable to load challenge';
   }
+}
+
+/**
+ * Reasons worth offering a RETRY for: the round may well load on a second
+ * attempt. A mode that genuinely has no round today is not one of them — the
+ * player is better served going back and picking another mode than tapping
+ * retry against a state that cannot change until tomorrow.
+ */
+function isRetryableFailure(reason: string | null): boolean {
+  return (
+    reason === REQUEST_TIMEOUT_REASON ||
+    reason === 'SESSION_LOAD_FAILED' ||
+    reason === 'GENERATION_IN_PROGRESS' ||
+    reason === 'AUTH_REQUIRED' ||
+    (reason?.startsWith('API_ERROR_') ?? false)
+  );
 }
 
 export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId }) {
@@ -615,6 +673,7 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
 
   const {
     loading,
+    reload,
     error,
     session,
     currentQuestion,
@@ -648,6 +707,39 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
      * grading or API logic.
      */
   } = useQuestionModeSession(modeId, language);
+
+  /**
+   * LEAVING THIS SCREEN — the one exit every state uses.
+   *
+   * `router.back()` alone is wrong when this route was not pushed: opening
+   * `quiz/football-bingo` from a notification or a deep link makes it the first
+   * screen in the stack, so there is nothing to pop and the tap does nothing —
+   * a back arrow that silently refuses to go back reads as a frozen screen.
+   * Falling through to the Questions hub gives the player somewhere real to
+   * land, exactly like goBackToQuestionsHub does for the Football Quiz.
+   */
+  const leaveMode = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace(QUESTIONS_HUB_ROUTE);
+  }, [router]);
+
+  /**
+   * Flips true once the round has been loading longer than a player will sit
+   * through. It only ADDS a retry beneath the spinner — it never cancels the
+   * request, which may still be about to land.
+   */
+  const [loadingTooLong, setLoadingTooLong] = useState(false);
+  useEffect(() => {
+    if (!loading) {
+      setLoadingTooLong(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setLoadingTooLong(true), LOADING_STALL_MS);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   // ENTRY ANIMATION — the shared question transition (./gameMotion), replayed
   // on every question change. Football Quiz runs the identical one.
@@ -789,8 +881,51 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
   );
 
   if (loading) {
-    // The one shared spinner — see GameLoadingState in ./gameChrome.tsx.
-    return <GameLoadingState topInset={contentTopInset} />;
+    /*
+     * The one shared spinner — see GameLoadingState in ./gameChrome.tsx.
+     *
+     * It now carries a back arrow and, once the wait stops being reasonable, a
+     * retry. Both are here because this branch is the ONLY thing on screen
+     * while a round loads: with neither, a mode whose round is slow to build
+     * (Football Bingo needs enough clubs per country; the AI round for a
+     * sparsely-covered competition is the slowest of them) looked exactly like
+     * the app hanging, with no arrow and nothing to tap.
+     */
+    return (
+      <GameLoadingState
+        topInset={contentTopInset}
+        onBack={leaveMode}
+        backAccessibilityLabel={language === 'ar' ? 'رجوع' : 'Go Back'}
+      >
+        {loadingTooLong ? (
+          <View style={styles.loadingStall}>
+            <Text style={styles.loadingStallText}>
+              {language === 'ar'
+                ? 'التحدي يستغرق وقتًا أطول من المعتاد.'
+                : 'This challenge is taking longer than usual.'}
+            </Text>
+            <TouchableOpacity
+              style={styles.stateAction}
+              onPress={reload}
+              activeOpacity={0.88}
+              accessibilityRole="button"
+              testID="questions-mode-loading-retry"
+            >
+              <LinearGradient
+                colors={[QUIZ_FIGMA_ACTION_GRAD_START, QUIZ_FIGMA_ACTION_GRAD_END]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.stateActionFill}
+              >
+                <Text style={styles.stateActionText}>
+                  {language === 'ar' ? 'إعادة المحاولة' : 'Try Again'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </GameLoadingState>
+    );
   }
 
   if (error || !session || !currentQuestion) {
@@ -808,11 +943,43 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
       <View style={styles.stateCard}>
         <Text style={styles.stateTitle}>{headerTitle}</Text>
         <Text style={styles.stateBody}>{message}</Text>
+
+        {/*
+          A failure the round can recover from gets a retry FIRST — a dropped
+          connection or a round that was still being written a moment ago
+          usually loads on the second ask, and sending the player back to the
+          hub to re-enter the same mode is the long way round to the same call.
+          A mode that has no round today gets no retry: see isRetryableFailure.
+        */}
+        {isRetryableFailure(error) ? (
+          <TouchableOpacity
+            style={styles.stateAction}
+            onPress={reload}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            testID="questions-mode-error-retry"
+          >
+            <LinearGradient
+              colors={[QUIZ_FIGMA_ACTION_GRAD_START, QUIZ_FIGMA_ACTION_GRAD_END]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.stateActionFill}
+            >
+              <Text style={styles.stateActionText}>
+                {language === 'ar' ? 'إعادة المحاولة' : 'Try Again'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        ) : null}
+
         <TouchableOpacity
           style={styles.stateAction}
-          onPress={() => router.back()}
+          // Never a bare router.back(): this route can be the first screen in
+          // the stack — see leaveMode.
+          onPress={leaveMode}
           activeOpacity={0.88}
           accessibilityRole="button"
+          testID="questions-mode-error-back"
         >
           <LinearGradient
             colors={[QUIZ_FIGMA_ACTION_GRAD_START, QUIZ_FIGMA_ACTION_GRAD_END]}
@@ -957,7 +1124,10 @@ export default function QuestionsModeScreen({ modeId }: { modeId: PlayableModeId
       >
         <GameScreenHeader
           title={headerTitle}
-          onBack={() => router.back()}
+          // `leaveMode`, not a bare router.back() — a mode opened from a deep
+          // link or a notification has nothing to pop, and an arrow that does
+          // nothing is worse than no arrow at all.
+          onBack={leaveMode}
           stats={<GlobalQuizStats />}
           backAccessibilityLabel={language === 'ar' ? 'رجوع' : 'Back'}
         />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   TextInput,
@@ -20,12 +20,23 @@ import {
 } from './AuthTokens';
 import { TEXT_PRIMARY } from '../../../constants/tokens';
 import { AUTH_V2_ASSETS } from './authV2Assets';
+import { useAuthScale } from './authLayoutMetrics';
 
+/**
+ * Figma DESIGN units — converted at render time by the shell's scale, like
+ * every other measurement on these screens. A field fixed at 62pt on a 320pt
+ * iPhone SE takes the same room it does on a 440pt Pro Max, which is what left
+ * three of them plus the terms row filling the panel and pushing Sign Up off
+ * the fold on small phones.
+ */
 const FIELD_HEIGHT = 62;
 const FIELD_RADIUS = 16;
 const FIELD_PADDING_H = 24;
 const FIELD_PADDING_V = 10;
 const ICON_GAP = 10;
+const ICON_SIZE = 24;
+/** Never let a field fall below the accessibility touch minimum. */
+const MIN_FIELD_HEIGHT = 48;
 
 type Props = TextInputProps & {
   icon?: LucideIcon;
@@ -47,6 +58,8 @@ export function AuthTextField({
   style,
   ...rest
 }: Props) {
+  const styles = useFieldStyles();
+  const { s } = useAuthScale();
   const [hide, setHide] = useState(true);
   const isSecure = !!(secureToggle && (secureTextEntry ?? true));
   const trailingIcon = iconSource;
@@ -92,7 +105,7 @@ export function AuthTextField({
           {trailingIcon ? (
             <Image source={trailingIcon} style={styles.iconImage} contentFit="contain" />
           ) : Icon ? (
-            <Icon color={AUTH_INPUT_PLACEHOLDER} size={22} strokeWidth={1.75} />
+            <Icon color={AUTH_INPUT_PLACEHOLDER} size={s(22)} strokeWidth={1.75} />
           ) : null}
         </View>
       </View>
@@ -100,10 +113,25 @@ export function AuthTextField({
   );
 }
 
-const styles = StyleSheet.create({
+function useFieldStyles() {
+  const { s, f, scale, fontScale } = useAuthScale();
+
+  return useMemo(
+    () => createFieldStyles(s, f),
+    // `s`/`f` are new closures each render; the multipliers are what change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scale, fontScale],
+  );
+}
+
+function createFieldStyles(s: (v: number) => number, f: (v: number) => number) {
+  const fieldHeight = Math.max(s(FIELD_HEIGHT), MIN_FIELD_HEIGHT);
+  const iconSize = s(ICON_SIZE);
+
+  return StyleSheet.create({
   shell: {
-    height: FIELD_HEIGHT,
-    borderRadius: FIELD_RADIUS,
+    height: fieldHeight,
+    borderRadius: s(FIELD_RADIUS),
     borderWidth: Platform.OS === 'ios' ? 0.5 : StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
@@ -117,30 +145,30 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: FIELD_PADDING_H,
-    paddingVertical: FIELD_PADDING_V,
-    gap: ICON_GAP,
-    minHeight: FIELD_HEIGHT - 1,
+    paddingHorizontal: s(FIELD_PADDING_H),
+    paddingVertical: s(FIELD_PADDING_V),
+    gap: s(ICON_GAP),
+    minHeight: fieldHeight - 1,
   },
   rowRtl: {
     flexDirection: 'row-reverse',
   },
   iconSlot: {
-    width: 24,
-    height: 24,
+    width: iconSize,
+    height: iconSize,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   iconImage: {
-    width: 24,
-    height: 24,
+    width: iconSize,
+    height: iconSize,
   },
   input: {
     flex: 1,
     minWidth: 0,
     color: TEXT_PRIMARY,
-    fontSize: 17,
+    fontSize: f(17),
     fontWeight: '500',
     paddingVertical: 0,
     margin: 0,
@@ -157,4 +185,5 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     writingDirection: 'ltr',
   },
-});
+  });
+}
