@@ -13,13 +13,16 @@ import { isLiveStoppage } from '../components/Matches/leagueApiUtils';
 const MAX_CONCURRENT_FAST = 6;
 /** Wait after connect before trusting WS and suspending HTTP polls (avoids flap). */
 const WS_TRUST_DEBOUNCE_MS = 2500;
+/** Focused live timeline refresh while WS owns score/clock (events are not on WS). */
+const LIVE_FIXTURE_EVENTS_POLL_MS = 15_000;
 
 /**
  * Single global owner of live fixture HTTP polling and WebSocket patching.
  * Mount once in the tabs layout.
  *
  * Polling is the fallback: when WS has been stably connected for WS_TRUST_DEBOUNCE_MS,
- * per-fixture HTTP polls are suspended. On disconnect they resume immediately.
+ * per-fixture HTTP polls are suspended (except stoppage details + focused events).
+ * On disconnect they resume immediately.
  */
 export function useLiveFixtureSync(): void {
   const tickRef = useRef(0);
@@ -31,6 +34,7 @@ export function useLiveFixtureSync(): void {
   const wasConnectedRef = useRef(websocketClient.isConnected());
   const trustTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTickRef = useRef<() => Promise<void>>(async () => {});
+  const lastFocusedEventsAtRef = useRef(0);
 
   useEffect(() => {
     const clearTrustTimer = () => {
@@ -44,6 +48,18 @@ export function useLiveFixtureSync(): void {
       useLiveFixtureStore.getState().patchFromWebSocket(update, Date.now());
     });
 
+    const maybeRefreshFocusedEvents = async () => {
+      const state = useLiveFixtureStore.getState();
+      const focusedId = state.focusedFixtureId;
+      if (focusedId == null) return;
+      const snap = state.snapshots[focusedId];
+      if (!snap || snap.phase !== 'live') return;
+      const now = Date.now();
+      if (now - lastFocusedEventsAtRef.current < LIVE_FIXTURE_EVENTS_POLL_MS) return;
+      lastFocusedEventsAtRef.current = now;
+      await state.fetchAndIngestEvents(focusedId);
+    };
+
     const pollTick = async () => {
       if (wsTrustedRef.current) {
         const state = useLiveFixtureStore.getState();
@@ -54,7 +70,8 @@ export function useLiveFixtureSync(): void {
           return isLiveStoppage(st.short, st.elapsed, st.extra);
         });
         if (!needsStoppagePoll) {
-          logger.debug('[LiveFixtureSync] HTTP poll skipped — WS trusted healthy');
+          // Score/clock from WS; keep focused live timeline fresh via /events only.
+          await maybeRefreshFocusedEvents();
           return;
         }
       }

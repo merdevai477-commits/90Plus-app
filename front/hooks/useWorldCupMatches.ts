@@ -3,11 +3,11 @@ import { Match } from '../components/Matches/matchCardUtils';
 import {
   fetchWorldCupMatchesByDate,
   fetchWorldCupMatchesByPhase,
-  fetchLiveMatches,
   formatLocalDateKey,
   getLocalTodayKey,
 } from '../components/Matches/leagueApiUtils';
 import { ApiFootballService } from '../services/apiFootball';
+import { ensureLiveFeed } from '../services/liveFeedOwner';
 import { logger } from '../utils/logger';
 import { useLiveFixtureStore } from '../src/store/liveFixtureStore';
 import { LIVE_FIXTURE_CALENDAR_POLL_MS } from '../src/store/liveFixtureStore.types';
@@ -209,7 +209,7 @@ export function useWorldCupMatches(
     const finalizeList = async (raw: Match[]): Promise<Match[]> => {
       let list = raw;
       if (isToday && phaseMode === 'date') {
-        const liveFeed = await fetchLiveMatches();
+        const liveFeed = await ensureLiveFeed();
         list = mergeWorldCupCalendarWithLiveFeed(list, liveFeed, leagueId);
       }
       list = list.filter((m) => isWorldCupMatchRow(m, leagueId));

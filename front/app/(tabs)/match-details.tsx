@@ -338,7 +338,6 @@ const MatchDetailsScreen = () => {
   const lmtAutoOpenedRef = useRef<number | null>(null);
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lineupsTabRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -875,26 +874,9 @@ const MatchDetailsScreen = () => {
     void loadStatsIfNeeded(true);
   }, [loadStatsIfNeeded]);
 
-  // Retry stats every 45s while live (lower-tier leagues often publish late)
-  useEffect(() => {
-    if (statsPollingRef.current) {
-      clearInterval(statsPollingRef.current);
-      statsPollingRef.current = null;
-    }
-    if (!isLive() || !fixtureId || activeTab !== 'stats') return;
-
-    statsPollingRef.current = setInterval(() => {
-      loadedTabsRef.current.delete('stats');
-      loadStatsIfNeeded(true).catch(() => {});
-    }, 5_000);
-
-    return () => {
-      if (statsPollingRef.current) {
-        clearInterval(statsPollingRef.current);
-        statsPollingRef.current = null;
-      }
-    };
-  }, [fixtureId, isLive, activeTab, loadStatsIfNeeded]);
+  // Stats come from the liveFixtureStore details bundle. Live score/clock use WS;
+  // events refresh (useLiveFixtureSync) rebuilds stats-from-events when needed.
+  // Do not poll /details every 5s from this tab.
 
   const loadFormIfNeeded = useCallback(async (force = false) => {
     if (!fixture) return;

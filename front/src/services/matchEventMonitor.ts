@@ -1,6 +1,7 @@
-import ApiFootballService, { FixtureEvent, Fixture, isRateLimitError } from '../../services/apiFootball';
+import ApiFootballService, { FixtureEvent, isRateLimitError } from '../../services/apiFootball';
 import { MatchEventStorage, EventSnapshot } from '../storage/matchEventStorage';
 import { logger } from '../../services/logger';
+import { ensureLiveFeed } from '../../services/liveFeedOwner';
 
 export interface MatchEvent {
     fixtureId: string;
@@ -197,13 +198,13 @@ export const MatchEventMonitor = {
         if (favoritedIds.length === 0) return [];
 
         try {
-            // Fetch all live fixtures
-            const liveFixtures = await ApiFootballService.getLiveFixtures();
+            // Shared live-feed owner (TTL + single poll) — not a separate /fixtures/live loop.
+            const liveMatches = await ensureLiveFeed();
 
-            // Filter to only favorited ones
-            const liveFavorited = liveFixtures
-                .filter((f: Fixture) => favoritedIds.includes(String(f.fixture.id)))
-                .map((f: Fixture) => f.fixture.id);
+            const liveFavorited = liveMatches
+                .filter((m) => favoritedIds.includes(String(m.id)))
+                .map((m) => Number(m.id))
+                .filter((id) => Number.isFinite(id) && id > 0);
 
             return liveFavorited;
         } catch (error) {

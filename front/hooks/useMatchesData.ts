@@ -9,13 +9,11 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { Match } from '../components/Matches/matchCardUtils';
 import {
   fetchMatchesByDate,
-  fetchLiveMatches,
   getLocalTodayKey,
   formatLocalDateKey,
 } from '../components/Matches/leagueApiUtils';
 import { cacheService, MATCHES_CALENDAR_DISK_TTL_MS } from '../services/cacheService';
 import { logger } from '../utils/logger';
-import { websocketClient } from '../services/websocketClient';
 import { useLanguageStore } from '../src/i18n/store';
 import { prefetchFootballTranslations } from '../src/stores/footballTranslationStore';
 import { collectNamesFromMatches } from '../utils/footballNamePrefetch';
@@ -38,9 +36,7 @@ import { matchCardToApiFixture } from '../utils/matchCardToApiFixture';
 import { mergeTodayCalendarWithLiveFeed } from '../utils/mergeTodayCalendarWithLiveFeed';
 import { dateFromLocalKey } from '../utils/safeDate';
 import { sortCountryGroupsForMatches } from '../utils/matchesCountrySort';
-
-/** Wait after WS connect before suspending live HTTP poll (matches useLiveFixtureSync). */
-const WS_TRUST_DEBOUNCE_MS = 2500;
+import { ensureLiveFeed, subscribeLiveFeed } from '../services/liveFeedOwner';
 
 import type { GroupedMatches, CountryGroup } from './matchesData.types';
 
@@ -98,8 +94,6 @@ const BACKGROUND_REFRESH_THROTTLE = LIVE_FIXTURE_CALENDAR_POLL_MS;
 
 /** Throttle logo/name prefetch so live-feed merges don't stampede the network. */
 const PREFETCH_THROTTLE_MS = 30_000;
-/** Live feed alone — faster than full-day calendar refresh. */
-const LIVE_FEED_REFRESH_MS = 15_000;
 /** When calendar rows are overdue NS, force a fresh day fetch (throttled). */
 const STALE_CALENDAR_REFRESH_MS = 20_000;
 let lastPrefetchAt = 0;
@@ -125,7 +119,7 @@ async function fetchTodayMatchesWithLiveFeed(
   options?: { fresh?: boolean },
 ): Promise<Match[]> {
   const byDatePromise = fetchMatchesByDate(date, options);
-  const livePromise = fetchLiveMatches();
+  const livePromise = ensureLiveFeed({ force: options?.fresh === true });
 
   // Paint live rows as soon as the live endpoint returns — don't wait for the
   // full day calendar (often slower) so the Live tab feels instant.
@@ -731,20 +725,6 @@ export const useMatchesData = (
     }
   }, []);
 
-  /** Live-only refresh — lightweight vs full calendar (~200KB). */
-  const refreshLiveFeedOnly = useCallback(async () => {
-    try {
-      const liveFeed = await fetchLiveMatches();
-      if (liveFeed.length === 0) return;
-      prefetchLiveMatchAssets(liveFeed);
-      setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
-      setLoading(false);
-      setIsDataStale(false);
-    } catch {
-      /* best-effort */
-    }
-  }, []);
-
   // ✅ FIXED: Use ref to prevent infinite loop
   // fetchData is memoized with useCallback, but we use ref for extra safety
   const fetchDataRef = useRef(fetchData);
@@ -797,82 +777,22 @@ export const useMatchesData = (
     };
   }, [pauseBackgroundRefresh, dateString, isToday, isPastDate, fetchDataInBackground]);
 
-  // Live feed poll — HTTP fallback only when WS is not stably connected.
+  // Live feed — subscribe to the canonical owner (single poll + TTL cache).
   useEffect(() => {
     if (pauseBackgroundRefresh || !isToday || isPastDate) return;
 
-    let wsTrusted = false;
-    let trustTimer: ReturnType<typeof setTimeout> | null = null;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    let wasConnected = websocketClient.isConnected();
-    const appStateRef = { current: AppState.currentState };
-
-    const clearTrustTimer = () => {
-      if (trustTimer) {
-        clearTimeout(trustTimer);
-        trustTimer = null;
-      }
-    };
-    const clearPoll = () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-    const startPoll = () => {
-      if (intervalId || wsTrusted || AppState.currentState !== 'active') return;
-      intervalId = setInterval(() => {
-        if (!wsTrusted) void refreshLiveFeedOnly();
-      }, LIVE_FEED_REFRESH_MS);
-    };
-
-    const unsub = websocketClient.subscribeConnectionState((connected) => {
-      if (connected) {
-        const isReconnect = !wasConnected;
-        wasConnected = true;
-        clearTrustTimer();
-        if (isReconnect) {
-          logger.debug('[useMatchesData] WS reconnect — silent live-feed reconcile');
-          void refreshLiveFeedOnly();
-        }
-        trustTimer = setTimeout(() => {
-          wsTrusted = true;
-          clearPoll();
-          logger.debug('[useMatchesData] WS trusted — suspending live-feed HTTP poll');
-        }, WS_TRUST_DEBOUNCE_MS);
-      } else {
-        wasConnected = false;
-        clearTrustTimer();
-        wsTrusted = false;
-        logger.debug('[useMatchesData] WS down — resuming live-feed HTTP poll');
-        if (AppState.currentState === 'active') {
-          void refreshLiveFeedOnly();
-        }
-        startPoll();
-      }
+    const unsub = subscribeLiveFeed((liveFeed) => {
+      if (liveFeed.length === 0) return;
+      prefetchLiveMatchAssets(liveFeed);
+      setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+      setLoading(false);
+      setIsDataStale(false);
     });
-
-    const appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      const wasBg = /inactive|background/.test(appStateRef.current);
-      appStateRef.current = next;
-      if (next === 'active' && wasBg) {
-        void refreshLiveFeedOnly();
-        startPoll();
-      } else if (next !== 'active') {
-        clearPoll();
-      }
-    });
-
-    // Poll until WS proves stable (including the trust-debounce window after connect).
-    startPoll();
 
     return () => {
       unsub();
-      clearTrustTimer();
-      clearPoll();
-      appStateSub.remove();
     };
-  }, [pauseBackgroundRefresh, isToday, isPastDate, refreshLiveFeedOnly]);
+  }, [pauseBackgroundRefresh, isToday, isPastDate]);
 
   // Calendar still shows UPCOMING after kickoff+FT window — bypass day cache.
   useEffect(() => {

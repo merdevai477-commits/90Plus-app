@@ -33,9 +33,18 @@ type InFlightEntry<T> = {
   generation: number;
 };
 
-const inFlightFast = new Map<number, InFlightEntry<LiveFixtureSnapshot | null>>();
+type DetailsBundle = {
+  fixture: Fixture | null;
+  lineups: Lineup[];
+  statistics: TeamStatistics[];
+  events: FixtureEvent[];
+  venue: Venue | null;
+};
+
+/** Shared across fast + full — both hit GET /cached/fixture/:id/details. */
+const inFlightDetailsBundle = new Map<number, InFlightEntry<DetailsBundle | null>>();
 const inFlightScore = new Map<number, InFlightEntry<LiveFixtureSnapshot | null>>();
-const inFlightFull = new Map<number, InFlightEntry<LiveFixtureSnapshot | null>>();
+const inFlightEvents = new Map<number, InFlightEntry<LiveFixtureSnapshot | null>>();
 
 let generationCounter = 0;
 
@@ -52,9 +61,9 @@ function abortEntry<T>(map: Map<number, InFlightEntry<T>>, fixtureId: number): v
 /** Cancel all in-flight HTTP fetches for a fixture (network-level abort). */
 export function cancelFixtureHttpFetches(fixtureId: number): void {
   if (!fixtureId || fixtureId <= 0) return;
-  abortEntry(inFlightFast, fixtureId);
+  abortEntry(inFlightDetailsBundle, fixtureId);
   abortEntry(inFlightScore, fixtureId);
-  abortEntry(inFlightFull, fixtureId);
+  abortEntry(inFlightEvents, fixtureId);
 }
 
 function runCancellable<T>(
@@ -82,6 +91,20 @@ function runCancellable<T>(
   });
 
   return promise;
+}
+
+/**
+ * One concurrent GET /details per fixture. Fast and full builders share this promise.
+ */
+function fetchSharedDetailsBundle(fixtureId: number): Promise<DetailsBundle | null> {
+  return runCancellable(inFlightDetailsBundle, fixtureId, async (signal) => {
+    try {
+      return await ApiFootballService.getFixtureDetailsBundle(fixtureId, { signal });
+    } catch (err) {
+      if (isAbortError(err)) return null;
+      throw err;
+    }
+  });
 }
 
 export function derivePhase(statusShort: string): LiveFixturePhase {
@@ -179,41 +202,39 @@ export async function fetchFastSnapshot(
   fixtureId: number,
   existing?: LiveFixtureSnapshot | null,
 ): Promise<LiveFixtureSnapshot | null> {
-  return runCancellable(inFlightFast, fixtureId, async (signal) => {
-    try {
-      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, { signal });
-      if (bundle.fixture) {
-        return buildSnapshotFromRaw({
-          fixtureId,
-          fixture: reconcileFixtureWithEvents(
-            bundle.fixture,
-            bundle.events ?? existing?.events ?? [],
-          ),
-          events: bundle.events ?? existing?.events ?? [],
-          lineups: bundle.lineups,
-          statistics: bundle.statistics,
-          venue: bundle.venue,
-          source: 'http-fast',
-          existing,
-        });
-      }
+  try {
+    const bundle = await fetchSharedDetailsBundle(fixtureId);
+    if (bundle?.fixture) {
+      return buildSnapshotFromRaw({
+        fixtureId,
+        fixture: reconcileFixtureWithEvents(
+          bundle.fixture,
+          bundle.events ?? existing?.events ?? [],
+        ),
+        events: bundle.events ?? existing?.events ?? [],
+        lineups: bundle.lineups,
+        statistics: bundle.statistics,
+        venue: bundle.venue,
+        source: 'http-fast',
+        existing,
+      });
+    }
 
-      if (existing?.fixture) {
-        return { ...existing, updatedAt: Date.now() };
-      }
-      return null;
-    } catch (err) {
-      if (isAbortError(err)) {
-        if (existing) return { ...existing, updatedAt: Date.now() };
-        return null;
-      }
-      const message = err instanceof Error ? err.message : 'Fast fetch failed';
-      if (existing) {
-        return { ...existing, lastFetchError: message, updatedAt: Date.now() };
-      }
+    if (existing?.fixture) {
+      return { ...existing, updatedAt: Date.now() };
+    }
+    return null;
+  } catch (err) {
+    if (isAbortError(err)) {
+      if (existing) return { ...existing, updatedAt: Date.now() };
       return null;
     }
-  });
+    const message = err instanceof Error ? err.message : 'Fast fetch failed';
+    if (existing) {
+      return { ...existing, lastFetchError: message, updatedAt: Date.now() };
+    }
+    return null;
+  }
 }
 
 /**
@@ -269,31 +290,87 @@ export async function fetchFullSnapshot(
   fixtureId: number,
   existing?: LiveFixtureSnapshot | null,
 ): Promise<LiveFixtureSnapshot | null> {
-  return runCancellable(inFlightFull, fixtureId, async (signal) => {
+  try {
+    const bundle = await fetchSharedDetailsBundle(fixtureId);
+    if (!bundle) {
+      if (existing) return { ...existing, updatedAt: Date.now() };
+      return null;
+    }
+    let venue: Venue | null = bundle.venue ?? null;
+    if (!venue && bundle.fixture?.fixture?.venue) {
+      venue = bundle.fixture.fixture.venue as Venue;
+    }
+    return buildSnapshotFromRaw({
+      fixtureId,
+      fixture: bundle.fixture,
+      events: bundle.events ?? [],
+      lineups: bundle.lineups,
+      statistics: bundle.statistics,
+      venue,
+      source: 'http-full',
+      existing,
+    });
+  } catch (err) {
+    if (isAbortError(err)) {
+      if (existing) return { ...existing, updatedAt: Date.now() };
+      return null;
+    }
+    const message = err instanceof Error ? err.message : 'Full fetch failed';
+    if (existing) {
+      return { ...existing, lastFetchError: message, updatedAt: Date.now() };
+    }
+    return null;
+  }
+}
+
+/**
+ * Events-only refresh for focused live matches when WS is trusted
+ * (score/clock come from WS; timeline needs HTTP).
+ */
+export async function fetchEventsSnapshot(
+  fixtureId: number,
+  existing?: LiveFixtureSnapshot | null,
+): Promise<LiveFixtureSnapshot | null> {
+  return runCancellable(inFlightEvents, fixtureId, async () => {
     try {
-      const bundle = await ApiFootballService.getFixtureDetailsBundle(fixtureId, { signal });
-      let venue: Venue | null = bundle.venue ?? null;
-      if (!venue && bundle.fixture?.fixture?.venue) {
-        venue = bundle.fixture.fixture.venue as Venue;
+      const events = await ApiFootballService.getFixtureEvents(fixtureId);
+      if (!existing?.fixture) {
+        return null;
+      }
+      const prev = existing.events ?? [];
+      if (
+        events.length === prev.length &&
+        events.length > 0 &&
+        events[events.length - 1]?.time?.elapsed === prev[prev.length - 1]?.time?.elapsed &&
+        events[events.length - 1]?.type === prev[prev.length - 1]?.type &&
+        events[events.length - 1]?.detail === prev[prev.length - 1]?.detail &&
+        events[events.length - 1]?.player?.id === prev[prev.length - 1]?.player?.id
+      ) {
+        return existing;
+      }
+      if (events.length === 0 && prev.length === 0) {
+        return existing;
       }
       return buildSnapshotFromRaw({
         fixtureId,
-        fixture: bundle.fixture,
-        events: bundle.events ?? [],
-        lineups: bundle.lineups,
-        statistics: bundle.statistics,
-        venue,
-        source: 'http-full',
+        fixture: existing.fixture,
+        events,
+        lineups: existing.lineups,
+        statistics: existing.statistics,
+        venue: existing.venue,
+        source: 'http-fast',
         existing,
       });
     } catch (err) {
       if (isAbortError(err)) {
-        if (existing) return { ...existing, updatedAt: Date.now() };
-        return null;
+        return existing ?? null;
       }
-      const message = err instanceof Error ? err.message : 'Full fetch failed';
       if (existing) {
-        return { ...existing, lastFetchError: message, updatedAt: Date.now() };
+        return {
+          ...existing,
+          lastFetchError: err instanceof Error ? err.message : 'Events fetch failed',
+          updatedAt: Date.now(),
+        };
       }
       return null;
     }

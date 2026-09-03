@@ -7,10 +7,11 @@ import {
   fetchFastSnapshot,
   fetchScoreSnapshot,
   fetchFullSnapshot,
+  fetchEventsSnapshot,
   shouldSkipHttpIngest,
 } from './liveFixtureSync';
 import { hasApiStatistics } from '../../utils/matchStatsFallback';
-import { hasLineupData, pickBetterLineups } from '../../utils/matchLineupsFallback';
+import { pickBetterLineups } from '../../utils/matchLineupsFallback';
 import type { LiveFixtureSnapshot } from './liveFixtureStore.types';
 import type { Fixture } from '../../services/apiFootball';
 import {
@@ -36,6 +37,8 @@ interface LiveFixtureStoreState {
   ensureSnapshot: (fixtureId: number) => Promise<void>;
   fetchAndIngestFast: (fixtureId: number, options?: { includeEvents?: boolean }) => Promise<void>;
   fetchAndIngestFull: (fixtureId: number) => Promise<void>;
+  /** Events-only HTTP refresh (used when WS owns score/clock). */
+  fetchAndIngestEvents: (fixtureId: number) => Promise<void>;
   refreshInterestedLive: () => Promise<void>;
   getPollTargetIds: () => number[];
   sweepEvictions: () => void;
@@ -320,6 +323,37 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
           existing: current,
         });
         if (merged) get().ingestSnapshot(merged);
+      }
+      return;
+    }
+    get().ingestSnapshot(snapshot);
+  },
+
+  async fetchAndIngestEvents(fixtureId: number) {
+    const existing = get().snapshots[fixtureId] ?? null;
+    if (!existing?.fixture) return;
+    const startedAt = Date.now();
+    const snapshot = await fetchEventsSnapshot(fixtureId, existing);
+    if (!snapshot || snapshot === existing) return;
+
+    const current = get().snapshots[fixtureId];
+    if (shouldSkipHttpIngest(current, snapshot, startedAt)) {
+      // Still merge newer events when WS owns the score clock.
+      if (current && snapshot.events.length > current.events.length) {
+        const merged = buildSnapshotFromRaw({
+          fixtureId,
+          fixture: current.fixture,
+          events: snapshot.events,
+          lineups: current.lineups,
+          statistics: current.statistics,
+          venue: current.venue,
+          source: 'http-fast',
+          existing: current,
+        });
+        if (merged) {
+          merged.lastWsAppliedAt = current.lastWsAppliedAt;
+          get().ingestSnapshot(merged);
+        }
       }
       return;
     }

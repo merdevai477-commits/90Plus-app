@@ -287,7 +287,7 @@ export function MatchMomentumGraph(props: Props) {
     return () => {
       cancelled = true;
     };
-  }, [props.fixtureId, props.events.length, props.matchElapsed, props.finished]);
+  }, [props.fixtureId, props.events.length, props.finished]);
 
   // Prefer API series when loaded; if API marks unavailable (null), fall back to local build.
   const series = remote === undefined ? localSeries : remote ?? localSeries;

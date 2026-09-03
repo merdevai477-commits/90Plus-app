@@ -91,6 +91,9 @@ const ITEM_SEPARATOR_10 = () => <View style={{ height: 10 }} />;
 const FILTERS = ['All', 'Live', 'Upcoming', 'Favorite', 'WorldCup', 'Finished'] as const;
 type MatchFilter = (typeof FILTERS)[number];
 
+/** Flip to true to show prediction buttons and enable /predictions network sync. */
+const MATCHES_SHOW_PREDS = false;
+
 /** Local midnight — calendar/filter sync uses device timezone. */
 function startOfLocalDay(d: Date = new Date()): Date {
   const x = new Date(d);
@@ -749,7 +752,7 @@ function LeagueAllMatchesModal({
     ({ item }: { item: Fixture }) => (
       <MatchRow
         fixture={item}
-        showPreds={false}
+        showPreds={MATCHES_SHOW_PREDS}
         onPredict={onPredict}
         submittingId={submittingId}
         predictedMatches={predictedMatches}
@@ -948,7 +951,7 @@ const LeagueCard = memo(function LeagueCard({
               <MatchRow
                 key={fixture.id ?? `f-${i}`}
                 fixture={fixture}
-                showPreds={false}
+                showPreds={MATCHES_SHOW_PREDS}
                 onPredict={onPredict}
                 submittingId={submittingId}
                 predictedMatches={predictedMatches}
@@ -1174,6 +1177,7 @@ export default function MatchesHubScreenV2() {
   }, [userId]);
 
   useEffect(() => {
+    if (!MATCHES_SHOW_PREDS) return;
     if (!PRED_CACHE_KEY || !TICKETS_CACHE_KEY) return;
     let cancelled = false;
     (async () => {
@@ -1196,6 +1200,7 @@ export default function MatchesHubScreenV2() {
 
   // Load tickets count and existing predictions after first paint (server sync).
   useEffect(() => {
+    if (!MATCHES_SHOW_PREDS) return;
     if (!PRED_CACHE_KEY || !TICKETS_CACHE_KEY) return;
     let cancelled = false;
     const task = InteractionManager.runAfterInteractions(() => {
@@ -1818,7 +1823,7 @@ export default function MatchesHubScreenV2() {
       return (
         <MatchRow
           fixture={fixture}
-          showPreds={false}
+          showPreds={MATCHES_SHOW_PREDS}
           onPredict={handlePredict}
           submittingId={submittingId}
           predictedMatches={predictedMatches}
