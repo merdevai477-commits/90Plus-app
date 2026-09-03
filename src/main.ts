@@ -386,6 +386,31 @@ app.get(`${API_PREFIX}/health`, async (_req: Request, res: Response) => {
                     return null;
                 }
             })(),
+            providers: await (async () => {
+                try {
+                    const { getQuotaStatus } = await import('./services/api-football-quota.service');
+                    const { getQuotaExhaustedUntilMs } = await import('./services/football.service');
+                    const quota = await getQuotaStatus(getQuotaExhaustedUntilMs());
+                    return {
+                        apiFootball: {
+                            status: quota.status,
+                            dailyUsed: quota.used,
+                            dailyLimit: quota.dailyLimit,
+                            jobUsed: quota.jobUsed,
+                            jobLimit: quota.jobLimit,
+                            remaining: quota.remaining,
+                            resetAt: quota.resetAt.toISOString(),
+                            redisAvailable: quota.redisAvailable,
+                        },
+                        scores365: { status: 'active' as const },
+                    };
+                } catch {
+                    return {
+                        apiFootball: { status: 'disabled' as const },
+                        scores365: { status: 'active' as const },
+                    };
+                }
+            })(),
         });
     } catch (error: any) {
         res.status(200).json({

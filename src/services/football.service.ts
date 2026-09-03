@@ -20,6 +20,13 @@ import {
   isAllowedApiFootballParams,
   isWorldCupOnlyMode,
 } from '../config/world-cup-only-mode.config';
+import {
+  canCallApiFootball,
+  recordApiFootballCall,
+  reconcileFromProviderRemaining,
+  resolveQuotaPurpose,
+  type ApiFootballQuotaPurpose,
+} from './api-football-quota.service';
 
 interface ApiResponse<T> {
   get: string;
@@ -121,9 +128,14 @@ function markAccountSuspended(): void {
   quotaExhaustedUntil = Date.now() + SUSPENDED_COOLDOWN_MS;
 }
 
-/** For background jobs — skip work when API-Football quota is exhausted. */
+/** For background jobs — skip work when API-Football breaker is tripped. */
 export function isFootballQuotaExhausted(): boolean {
   return isQuotaExhausted();
+}
+
+/** In-memory breaker deadline (ms since epoch); 0 if inactive. Used by /api/health. */
+export function getQuotaExhaustedUntilMs(): number {
+  return quotaExhaustedUntil;
 }
 
 class FootballService {
@@ -139,16 +151,16 @@ class FootballService {
   private pendingApiRequests = new Map<string, Promise<any>>();
   private defaultCallSource: FootballApiCallSource = 'internal';
 
-  // Rate limiting: 300 requests per minute for Pro plan
+  // Rate limiting: Free plan = 10 requests/minute (API-Football ToS)
   private requestCount = 0;
   private windowStart = Date.now();
-  private readonly maxRequests = 300;
+  private readonly maxRequests = 10;
   private readonly windowMs = 60 * 1000;
-  private readonly minDelay = 200; // 200ms between requests (Pro plan)
+  private readonly minDelay = 6000; // 6s between requests — stay under 10/min
   private lastRequestTime = 0;
 
-  // Pro Plan allows any date range
-  private readonly isPro = true;
+  // Free plan — do not assume Pro date ranges
+  private readonly isPro = false;
 
   constructor() {
     const apiKey = process.env.FOOTBALL_API_KEY;
@@ -419,7 +431,7 @@ class FootballService {
   async fetchFromApi<T>(
     endpoint: string,
     params: Record<string, any> = {},
-    options: { source?: FootballApiCallSource } = {},
+    options: { source?: FootballApiCallSource; purpose?: ApiFootballQuotaPurpose } = {},
   ): Promise<T> {
     if (!this.isConfigured()) {
       throw new FootballApiError('Football API not configured');
@@ -435,6 +447,7 @@ class FootballService {
 
     const cacheKey = url.pathname + url.search;
     const callSource = options.source ?? this.defaultCallSource;
+    const purpose = resolveQuotaPurpose(callSource, options.purpose);
     footballMetrics.recordEndpointAccess(cacheKey, callSource);
 
     const pending = this.pendingApiRequests.get(cacheKey);
@@ -443,11 +456,28 @@ class FootballService {
       return pending as Promise<T>;
     }
 
-    const promise = this.fetchFromApiOnce<T>(cacheKey, url, endpoint, params, callSource).finally(() => {
+    const promise = this.fetchFromApiOnce<T>(
+      cacheKey,
+      url,
+      endpoint,
+      params,
+      callSource,
+      purpose,
+    ).finally(() => {
       this.pendingApiRequests.delete(cacheKey);
     });
     this.pendingApiRequests.set(cacheKey, promise);
     return promise;
+  }
+
+  private async serveStaleOrEmpty<T>(cacheKey: string): Promise<T> {
+    const stale = await this.getStaleCachedData(cacheKey);
+    if (stale !== null) {
+      footballMetrics.recordStaleFallback(cacheKey);
+      return stale as T;
+    }
+    await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
+    return [] as T;
   }
 
   private async fetchFromApiOnce<T>(
@@ -456,6 +486,7 @@ class FootballService {
     endpoint: string,
     params: Record<string, any>,
     callSource: FootballApiCallSource,
+    purpose: ApiFootballQuotaPurpose,
   ): Promise<T> {
     const ttl = this.getCacheTTL(endpoint, params);
 
@@ -468,34 +499,20 @@ class FootballService {
 
     if (isQuotaExhausted()) {
       logger.debug(`⏭️  Skipping API call (quota exhausted until ${new Date(quotaExhaustedUntil).toISOString()}): ${cacheKey}`);
-      const stale = await this.getStaleCachedData(cacheKey);
-      if (stale !== null) {
-        footballMetrics.recordStaleFallback(cacheKey);
-        return stale as T;
-      }
-      await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
-      return [] as T;
+      return this.serveStaleOrEmpty<T>(cacheKey);
+    }
+
+    if (!(await canCallApiFootball(purpose))) {
+      return this.serveStaleOrEmpty<T>(cacheKey);
     }
 
     if (isWorldCupOnlyMode()) {
       if (!isAllowedApiFootballParams(endpoint, params)) {
-        const stale = await this.getStaleCachedData(cacheKey);
-        if (stale !== null) {
-          footballMetrics.recordStaleFallback(cacheKey);
-          return stale as T;
-        }
-        await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
-        return [] as T;
+        return this.serveStaleOrEmpty<T>(cacheKey);
       }
       const fixtureAllowed = await assertWorldCupFixtureApiAllowed(endpoint, params);
       if (!fixtureAllowed) {
-        const stale = await this.getStaleCachedData(cacheKey);
-        if (stale !== null) {
-          footballMetrics.recordStaleFallback(cacheKey);
-          return stale as T;
-        }
-        await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
-        return [] as T;
+        return this.serveStaleOrEmpty<T>(cacheKey);
       }
     }
 
@@ -520,6 +537,11 @@ class FootballService {
       clearTimeout(timeoutId);
       this.requestCount++;
       this.lastRequestTime = Date.now();
+      // Count only after the call was actually dispatched.
+      await recordApiFootballCall(purpose);
+      void reconcileFromProviderRemaining(
+        response.headers.get('x-ratelimit-requests-remaining'),
+      );
 
       if (!response.ok) {
         if (response.status === 429) {
@@ -528,13 +550,7 @@ class FootballService {
           markQuotaExhausted(isNaN(retryAfterSec as number) ? undefined : retryAfterSec);
           logger.warn(`⚠️ API-Football 429 Too Many Requests — pausing outbound calls until ${new Date(quotaExhaustedUntil).toISOString()}`);
           footballMetrics.recordApiFailure(Date.now() - apiStartTime, cacheKey, callSource);
-          const stale = await this.getStaleCachedData(cacheKey);
-          if (stale !== null) {
-            footballMetrics.recordStaleFallback(cacheKey);
-            return stale as T;
-          }
-          await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
-          return [] as T;
+          return this.serveStaleOrEmpty<T>(cacheKey);
         }
 
         throw new FootballApiError(
@@ -561,13 +577,7 @@ class FootballService {
             `⚠️ API-Football daily quota exhausted — pausing outbound calls until ${new Date(quotaExhaustedUntil).toISOString()}`,
           );
           footballMetrics.recordApiFailure(Date.now() - apiStartTime, cacheKey, callSource);
-          const stale = await this.getStaleCachedData(cacheKey);
-          if (stale !== null) {
-            footballMetrics.recordStaleFallback(cacheKey);
-            return stale as T;
-          }
-          await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
-          return [] as T;
+          return this.serveStaleOrEmpty<T>(cacheKey);
         }
 
         if (isAccountSuspendedError(errors)) {
@@ -579,13 +589,7 @@ class FootballService {
             );
           }
           footballMetrics.recordApiFailure(Date.now() - apiStartTime, cacheKey, callSource);
-          const stale = await this.getStaleCachedData(cacheKey);
-          if (stale !== null) {
-            footballMetrics.recordStaleFallback(cacheKey);
-            return stale as T;
-          }
-          await this.setCachedData(cacheKey, [], 5 * 60 * 1000, false);
-          return [] as T;
+          return this.serveStaleOrEmpty<T>(cacheKey);
         }
 
         logger.error('❌ Football API Errors:', data.errors);
@@ -648,14 +652,14 @@ class FootballService {
     status?: string;
     id?: number;
     ids?: string;
-  } = {}, options: { source?: FootballApiCallSource } = {}): Promise<any[]> {
+  } = {}, options: { source?: FootballApiCallSource; purpose?: ApiFootballQuotaPurpose } = {}): Promise<any[]> {
     return this.fetchFromApi<any[]>('/fixtures', params, options);
   }
 
   /**
    * Get live fixtures
    */
-  async getLiveFixtures(options: { source?: FootballApiCallSource } = {}): Promise<any[]> {
+  async getLiveFixtures(options: { source?: FootballApiCallSource; purpose?: ApiFootballQuotaPurpose } = {}): Promise<any[]> {
     if (isWorldCupOnlyMode()) {
       const fixtures = await this.getFixtures(
         {
@@ -671,9 +675,9 @@ class FootballService {
   }
 
   /**
-   * Get a single fixture by ID
+   * Get a single fixture by id
    */
-  async getFixtureById(fixtureId: number, options: { source?: FootballApiCallSource } = {}): Promise<any | null> {
+  async getFixtureById(fixtureId: number, options: { source?: FootballApiCallSource; purpose?: ApiFootballQuotaPurpose } = {}): Promise<any | null> {
     const fixtures = await this.getFixtures({ id: fixtureId }, options);
     return fixtures && fixtures.length > 0 ? fixtures[0] : null;
   }

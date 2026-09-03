@@ -14,6 +14,7 @@ import { PredictionResolverService } from './prediction-resolver.service';
 import { logger } from '../utils/logger';
 import { withSyncLeaderLease } from './football-sync-leader.service';
 import { isFootballQuotaExhausted } from './football.service';
+import { isPurposeAllowed } from './api-football-quota.service';
 import {
     writeLiveFixturesSnapshot,
     writeTerminalFixtureSnapshot,
@@ -165,7 +166,7 @@ class LiveFixtureSyncService {
             try {
                 const fixtures = await footballService.getFixtures(
                     { ids: chunk.join('-') },
-                    { source: 'job' },
+                    { source: 'job', purpose: 'verify-finished' },
                 );
                 if (!Array.isArray(fixtures)) continue;
 
@@ -205,7 +206,7 @@ class LiveFixtureSyncService {
      * for calendar sync or the user opening match details.
      */
     private async probeNearKickoffNsFixtures(): Promise<FixtureFromAPI[]> {
-        if (isFootballQuotaExhausted()) return [];
+        if (isFootballQuotaExhausted() || !isPurposeAllowed('probe-kickoff')) return [];
 
         const nowSec = Math.floor(Date.now() / 1000);
         const windowBefore = 20 * 60;
@@ -236,7 +237,7 @@ class LiveFixtureSyncService {
                 const chunk = ids.slice(i, i + 20);
                 const fixtures = await footballService.getFixtures(
                     { ids: chunk.join('-') },
-                    { source: 'job' },
+                    { source: 'job', purpose: 'probe-kickoff' },
                 );
                 if (!Array.isArray(fixtures)) continue;
                 for (const fixture of fixtures) {
@@ -471,13 +472,17 @@ class LiveFixtureSyncService {
 
     private async syncOnceAsLeader(signal: AbortSignal): Promise<void> {
         signal.throwIfAborted();
-        if (isFootballQuotaExhausted()) {
-            logger.debug('[LiveFixtureSync] API quota pause — continuing from cached snapshots');
+        // Allowlist: live-sync is barred from API-Football — never wipe Redis with [].
+        if (isFootballQuotaExhausted() || !isPurposeAllowed('live-sync')) {
+            logger.debug('[LiveFixtureSync] API quota/allowlist pause — continuing from cached snapshots');
             await this.syncFromCachedSnapshots();
             return;
         }
 
-        const liveFixturesRaw: FixtureFromAPI[] = await footballService.getLiveFixtures({ source: 'job' });
+        const liveFixturesRaw: FixtureFromAPI[] = await footballService.getLiveFixtures({
+            source: 'job',
+            purpose: 'live-sync',
+        });
         let liveFixtures: FixtureFromAPI[] = isWorldCupOnlyMode()
             ? (filterWorldCupFixtures(liveFixturesRaw) as FixtureFromAPI[])
             : liveFixturesRaw;
