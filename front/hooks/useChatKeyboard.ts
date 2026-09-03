@@ -65,7 +65,7 @@ export function useChatKeyboard<TItem>({
       if (!hasMessages || !mountedRef.current) return;
       const run = () => {
         if (!mountedRef.current) return;
-        safeFlashListScrollToEnd(listRef.current, animated);
+        safeFlashListScrollToEnd(listRef.current, animated, { itemCount: messageCount });
       };
       const outer = requestAnimationFrame(() => {
         const inner = requestAnimationFrame(run);

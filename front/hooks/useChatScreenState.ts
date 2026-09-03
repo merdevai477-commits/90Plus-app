@@ -92,8 +92,10 @@ export function useChatScreenState({
 
   const safeScrollToEnd = useCallback((animated: boolean) => {
     if (!mountedRef.current) return;
-    safeFlashListScrollToEnd(listRef.current, animated);
-  }, []);
+    safeFlashListScrollToEnd(listRef.current, animated, {
+      itemCount: displayMessages.length,
+    });
+  }, [displayMessages.length]);
 
   const listContentStyle = useMemo(
     () => ({

@@ -163,7 +163,9 @@ export function ChatMessageList({
           contentSizeRafRef.current = requestAnimationFrame(() => {
             contentSizeRafRef.current = null;
             if (!mountedRef.current) return;
-            safeFlashListScrollToEnd(listRef.current, false);
+            safeFlashListScrollToEnd(listRef.current, false, {
+              itemCount: displayMessages.length,
+            });
           });
         }}
         ListFooterComponent={

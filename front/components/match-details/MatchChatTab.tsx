@@ -612,9 +612,10 @@ export function MatchChatTab({
 
   useEffect(() => {
     if (!nearBottomLatest.current || messages.length === 0) return;
+    const compactCount = Math.min(messages.length, COMPACT_VISIBLE);
     const id = requestAnimationFrame(() => {
-      safeFlashListScrollToEnd(listRef.current, false);
-      if (expanded) safeFlashListScrollToEnd(fullListRef.current, false);
+      safeFlashListScrollToEnd(listRef.current, false, { itemCount: compactCount });
+      if (expanded) safeFlashListScrollToEnd(fullListRef.current, false, { itemCount: messages.length });
     });
     return () => cancelAnimationFrame(id);
   }, [messages.length, expanded]);
@@ -966,7 +967,9 @@ export function MatchChatTab({
           style={styles.newChip}
           onPress={() => {
             clearUnseen();
-            safeFlashListScrollToEnd(list === 'full' ? fullListRef.current : listRef.current, true);
+            safeFlashListScrollToEnd(list === 'full' ? fullListRef.current : listRef.current, true, {
+              itemCount: data.length,
+            });
           }}
         >
           <Text style={styles.newChipText}>{md.chatNewMessages}</Text>

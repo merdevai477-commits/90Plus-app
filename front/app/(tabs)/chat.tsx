@@ -217,8 +217,8 @@ export default function ChatScreen() {
     listRef: screen.listRef,
 
     hasMessages: screen.hasMessages,
-
-    messageCount: messages.length,
+    // FlashList renders `screen.displayMessages` (= messages.slice(1)).
+    messageCount: screen.displayMessages.length,
 
   });
 
