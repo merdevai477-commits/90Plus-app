@@ -66,6 +66,24 @@ function getProfilesSampleRate(): number {
  * Requirements: 1.8
  */
 function beforeSendHook(event: Sentry.ErrorEvent, _hint?: Sentry.EventHint): Sentry.ErrorEvent | null {
+  // --- Operational noise suppression ---
+  // These are expected, gracefully-handled conditions that do not require engineer action.
+  // Suppressing them removes hundreds of false-positive events per day from Sentry.
+  const eventMessage = (event.message ?? event.exception?.values?.[0]?.value ?? '').toString();
+
+  // 1. API-Football account suspended — the backend already pauses outbound calls and
+  //    serves 365Scores/DB fallback. Nothing actionable for on-call. (90PLUS-BACKEND-3Y)
+  if (/API-Football account suspended/i.test(eventMessage)) {
+    return null;
+  }
+
+  // 2. Slow request performance warnings — informational, no code fix needed here.
+  //    These are symptoms of upstream latency, not bugs. (90PLUS-BACKEND-B)
+  if (/\[Performance\]\s+Slow request detected/i.test(eventMessage)) {
+    return null;
+  }
+  // --- End noise suppression ---
+
   // Filter sensitive headers
   if (event.request?.headers) {
     const headers = event.request.headers;

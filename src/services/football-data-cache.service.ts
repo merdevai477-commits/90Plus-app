@@ -2287,55 +2287,80 @@ class FootballDataCacheService {
         // 365Scores — single shared upstream fetch; never API-Football quota.
         await ensureScores365GameMapping(fixtureId);
         if (isScores365ExperimentFixture(fixtureId) || isNative365FixtureId(fixtureId)) {
-            let events = await getScores365ExperimentEvents(fixtureId, forceRefresh, language);
-            if (!events.length) {
-                events = await getScores365ExperimentEvents(fixtureId, true, language);
+            // In-flight deduplication for 365-path — mirrors the API-Football pendingEventsRequests
+            // pattern below. Prevents N concurrent requests for the same fixture all hitting
+            // 365Scores simultaneously (which was the root cause of 12s+ responses).
+            // Fixes 90PLUS-BACKEND-B.
+            if (!forceRefresh) {
+                const pending365 = this.pendingEventsRequests.get(fixtureId);
+                if (pending365) {
+                    logger.debug(`[365Events] waiting for in-flight request ${fixtureId}`);
+                    return await pending365;
+                }
             }
-            if (!events.length && language !== 'en') {
-                events = await getScores365ExperimentEvents(fixtureId, true, 'en');
-            }
-            // API-Football fallback when 365 timeline is empty for a mapped API id.
-            if (!events.length && this.canQueryApiFootball(fixtureId)) {
-                try {
-                    const apiEvents = await footballService.getFixtureEvents(fixtureId, {
-                        source: 'job',
-                    });
-                    if (Array.isArray(apiEvents) && apiEvents.length > 0) {
+
+            const events365Promise = (async () => {
+                let events = await getScores365ExperimentEvents(fixtureId, forceRefresh, language);
+                if (!events.length) {
+                    events = await getScores365ExperimentEvents(fixtureId, true, language);
+                }
+                if (!events.length && language !== 'en') {
+                    events = await getScores365ExperimentEvents(fixtureId, true, 'en');
+                }
+                // API-Football fallback when 365 timeline is empty for a mapped API id.
+                if (!events.length && this.canQueryApiFootball(fixtureId)) {
+                    try {
+                        const apiEvents = await footballService.getFixtureEvents(fixtureId, {
+                            source: 'job',
+                        });
+                        if (Array.isArray(apiEvents) && apiEvents.length > 0) {
+                            logger.warn(
+                                `[Events] fixture=${fixtureId} reason=365_empty_api_fallback count=${apiEvents.length}`,
+                            );
+                            events = apiEvents;
+                        } else {
+                            logger.warn(
+                                `[Events] fixture=${fixtureId} reason=upstream_empty source=365+api count=0`,
+                            );
+                        }
+                    } catch (err) {
                         logger.warn(
-                            `[Events] fixture=${fixtureId} reason=365_empty_api_fallback count=${apiEvents.length}`,
-                        );
-                        events = apiEvents;
-                    } else {
-                        logger.warn(
-                            `[Events] fixture=${fixtureId} reason=upstream_empty source=365+api count=0`,
+                            `[Events] fixture=${fixtureId} reason=api_fallback_failed:`,
+                            (err as Error)?.message,
                         );
                     }
-                } catch (err) {
+                } else if (!events.length) {
+                    const mapped = getScores365GameIdForFixture(fixtureId);
                     logger.warn(
-                        `[Events] fixture=${fixtureId} reason=api_fallback_failed:`,
-                        (err as Error)?.message,
+                        `[Events] fixture=${fixtureId} reason=${mapped ? 'upstream_empty' : 'unmapped'} source=365 count=0`,
                     );
                 }
-            } else if (!events.length) {
-                const mapped = getScores365GameIdForFixture(fixtureId);
-                logger.warn(
-                    `[Events] fixture=${fixtureId} reason=${mapped ? 'upstream_empty' : 'unmapped'} source=365 count=0`,
+                // Raised default from 3s → 8s to reduce upstream hammering on empty results.
+                // Override via SCORES365_CACHE_MS env var if needed.
+                const ttl = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '8000', 10) || 8_000);
+                if (events.length > 0) {
+                    const cacheEntry: MemoryCacheEntry<any> = {
+                        data: events,
+                        timestamp: Date.now(),
+                        ttl,
+                    };
+                    this.setBoundedCache(this.eventsCache, fixtureId, cacheEntry);
+                    await redisCacheService.set(`events:${fixtureId}`, cacheEntry, ttl);
+                }
+                logger.debug(
+                    `[365Events] fixture=${fixtureId} source=365 count=${events.length}`,
                 );
+                return events;
+            })();
+
+            if (!forceRefresh) {
+                this.pendingEventsRequests.set(fixtureId, events365Promise);
             }
-            const ttl = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '3000', 10) || 3_000);
-            if (events.length > 0) {
-                const cacheEntry: MemoryCacheEntry<any> = {
-                    data: events,
-                    timestamp: Date.now(),
-                    ttl,
-                };
-                this.setBoundedCache(this.eventsCache, fixtureId, cacheEntry);
-                await redisCacheService.set(`events:${fixtureId}`, cacheEntry, ttl);
+            try {
+                return await events365Promise;
+            } finally {
+                this.pendingEventsRequests.delete(fixtureId);
             }
-            logger.debug(
-                `[365Events] fixture=${fixtureId} source=365 count=${events.length}`,
-            );
-            return events;
         }
 
         const redisKey = `events:${fixtureId}`;

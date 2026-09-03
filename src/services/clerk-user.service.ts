@@ -225,30 +225,35 @@ export class ClerkUserService {
 
                 logger.info(`[findOrCreateUser] ✅ User created: ${user.username} (${user.id})`);
             } catch (createError: any) {
-                logger.error(`[findOrCreateUser] ❌ Failed to create user:`, {
-                    error: createError.message,
-                    code: createError.code,
-                    clerkUserId,
-                });
-                
-                // ✅ If unique constraint fails, try to find existing user
+                // P2002 = race condition: another concurrent request already created this user.
+                // This is expected behaviour — log as warn (NOT error) so it never fires in Sentry.
+                // Fixes 90PLUS-BACKEND-Z and 90PLUS-BACKEND-W.
                 if (createError.code === 'P2002') {
-                    logger.warn(`[findOrCreateUser] ⚠️ User already exists, fetching...`);
+                    logger.warn(`[findOrCreateUser] Race condition on create — re-fetching existing user`, {
+                        clerkUserId,
+                    });
                     try {
                         user = await Promise.race([
                             prisma.user.findUnique({
                                 where: { clerkUserId },
                             }),
                             new Promise((_, reject) =>
-                                setTimeout(() => reject(new Error('Database query timeout')), 3000) // ✅ Reduced from 10000ms
+                                setTimeout(() => reject(new Error('Database query timeout')), 3000)
                             )
                         ]) as any;
                         if (user) return user;
                     } catch (findError: any) {
-                        logger.error(`[findOrCreateUser] ❌ Failed to find existing user:`, findError);
+                        logger.error(`[findOrCreateUser] ❌ Failed to re-fetch after P2002:`, findError);
                         throw new Error(`Database connection failed: ${findError.message}`);
                     }
                 }
+
+                // Only log as error for genuinely unexpected failures
+                logger.error(`[findOrCreateUser] ❌ Failed to create user:`, {
+                    error: createError.message,
+                    code: createError.code,
+                    clerkUserId,
+                });
                 
                 throw new Error(`Failed to create user in database: ${createError.message}`);
             }
