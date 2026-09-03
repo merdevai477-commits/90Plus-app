@@ -1073,9 +1073,10 @@ export default function MatchesHubScreenV2() {
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
 
   const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
-  // Always fetch date-scoped WC when the feature is on so the WorldCup chip
-  // can appear/hide from match availability (not only when that tab is open).
-  const wcFetchEnabled = !!worldCupEnabled;
+  // Fetch WC fixtures only when a WC-related tab is active (not on every mount).
+  const wcFetchEnabled =
+    !!worldCupEnabled &&
+    (filter === 'WorldCup' || filter === 'Upcoming' || filter === 'Live');
   // World Cup tab is date-scoped so empty days (and post-final) hide the chip.
   // Live/Upcoming still use tournament-wide phases for their own lists.
   const wcPhaseMode =
@@ -1084,8 +1085,7 @@ export default function MatchesHubScreenV2() {
       : filter === 'Live'
         ? 'live'
         : 'date';
-  const wcEnrichCorners =
-    wcFetchEnabled && (filter === 'WorldCup' || filter === 'Live');
+  const wcEnrichCorners = wcFetchEnabled && filter === 'WorldCup';
 
   const visibleFixtureIdsRef = useRef(new Set<number>());
   const interestSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1123,7 +1123,7 @@ export default function MatchesHubScreenV2() {
   }, []);
 
   // Real matches data from backend — pause polling/WS when WC hook owns live updates
-  const { groupedMatches, countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(
+  const { countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(
     selectedDate,
     {
       pauseBackgroundRefresh: wcTabActive,
@@ -1194,40 +1194,43 @@ export default function MatchesHubScreenV2() {
     };
   }, [PRED_CACHE_KEY, TICKETS_CACHE_KEY]);
 
-  // Load tickets count and existing predictions on mount (server sync)
+  // Load tickets count and existing predictions after first paint (server sync).
   useEffect(() => {
     if (!PRED_CACHE_KEY || !TICKETS_CACHE_KEY) return;
-    const loadPredictionsData = async () => {
-      try {
-        const token = await getTokenRef.current();
-        if (!token) return;
-        const [remaining, userPreds] = await Promise.all([
-          PredictionsService.getRemainingPredictions(token),
-          PredictionsService.getUserPredictions(token),
-        ]);
-        // Only trust a real server value — never overwrite cached tickets with
-        // a fabricated fallback (remaining.ok === false means the fetch failed).
-        if (remaining.ok !== false) {
-          setTicketsRemaining(remaining.remaining);
-          cacheService.set(TICKETS_CACHE_KEY, remaining.remaining, 24 * 60 * 60 * 1000).catch(() => {});
+    let cancelled = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      void (async () => {
+        try {
+          const token = await getTokenRef.current();
+          if (!token || cancelled) return;
+          const [remaining, userPreds] = await Promise.all([
+            PredictionsService.getRemainingPredictions(token),
+            PredictionsService.getUserPredictions(token),
+          ]);
+          if (cancelled) return;
+          if (remaining.ok !== false) {
+            setTicketsRemaining(remaining.remaining);
+            cacheService.set(TICKETS_CACHE_KEY, remaining.remaining, 24 * 60 * 60 * 1000).catch(() => {});
+          }
+          const map: Record<string, UserPredictionEntry> = {};
+          Object.entries(userPreds.predictionsMap).forEach(([matchId, pred]) => {
+            map[matchId] = {
+              type: pred.prediction.type,
+              isCorrect: pred.isCorrect ?? null,
+              coinsWon: pred.coinsWon,
+            };
+          });
+          setPredictedMatches(map);
+          cacheService.set(PRED_CACHE_KEY, map, 24 * 60 * 60 * 1000).catch(() => {});
+        } catch {
+          // silently fail — cached values stay visible
         }
-        // Build map of matchId -> predictionType from existing predictions
-        const map: Record<string, UserPredictionEntry> = {};
-        Object.entries(userPreds.predictionsMap).forEach(([matchId, pred]) => {
-          map[matchId] = {
-            type: pred.prediction.type,
-            isCorrect: pred.isCorrect ?? null,
-            coinsWon: pred.coinsWon,
-          };
-        });
-        setPredictedMatches(map);
-        // Persist reconciled state — 24h TTL covers a full ticket cycle.
-        cacheService.set(PRED_CACHE_KEY, map, 24 * 60 * 60 * 1000).catch(() => {});
-      } catch {
-        // silently fail — cached values stay visible
-      }
+      })();
+    });
+    return () => {
+      cancelled = true;
+      task.cancel();
     };
-    loadPredictionsData();
   }, [PRED_CACHE_KEY, TICKETS_CACHE_KEY]);
 
   // Reset bell state when the signed-in user changes.
@@ -1235,23 +1238,26 @@ export default function MatchesHubScreenV2() {
     setSubscribedFixtures(new Set());
   }, [userId]);
 
-  // Hydrate bell state from the backend on mount / userId change.
+  // Hydrate bell state from the backend after first paint.
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const token = await getTokenRef.current();
-        if (!token) return;
-        const ids = await MatchSubscriptionsService.listIds(token);
-        if (cancelled) return;
-        setSubscribedFixtures(new Set(Array.from(ids).map((n) => String(n))));
-      } catch {
-        // non-fatal
-      }
-    })();
+    const task = InteractionManager.runAfterInteractions(() => {
+      void (async () => {
+        try {
+          const token = await getTokenRef.current();
+          if (!token || cancelled) return;
+          const ids = await MatchSubscriptionsService.listIds(token);
+          if (cancelled) return;
+          setSubscribedFixtures(new Set(Array.from(ids).map((n) => String(n))));
+        } catch {
+          // non-fatal
+        }
+      })();
+    });
     return () => {
       cancelled = true;
+      task.cancel();
     };
   }, [userId]);
 
@@ -1327,36 +1333,7 @@ export default function MatchesHubScreenV2() {
     setFilter(filterForCalendarDay(today));
   }, []);
 
-  // Convert groupedMatches from hook to LeagueGroup format for the UI
-  const groups = useMemo((): LeagueGroup[] => {
-    const allGroups: LeagueGroup[] = groupedMatches.map(g => ({
-      id: String(g.leagueId),
-      league: g.leagueName,
-      leagueCountry: g.matches[0]?.league?.country,
-      leagueLogo: g.leagueLogo || '',
-      fixtures: g.matches.map(matchToFixture),
-    }));
-
-    // Apply filter
-    if (filter === 'Live') {
-      return allGroups.map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.live) })).filter(g => g.fixtures.length > 0);
-    }
-    if (filter === 'Upcoming') {
-      return allGroups.map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.status === 'UPCOMING') })).filter(g => g.fixtures.length > 0);
-    }
-    if (filter === 'Finished') {
-      return allGroups.map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.status === 'FT') })).filter(g => g.fixtures.length > 0);
-    }
-    if (filter === 'All') {
-      return allGroups
-        .map(g => ({ ...g, fixtures: g.fixtures.filter(f => f.status !== 'FT') }))
-        .filter(g => g.fixtures.length > 0);
-    }
-    return allGroups;
-  }, [groupedMatches, filter]);
-
-  // Filter helper applied to a Match list. Mirrors the per-fixture predicates
-  // used in the legacy `groups` memo so both views stay perfectly in sync.
+  // Filter helper applied to a Match list.
   const matchPassesFilter = useCallback(
     (m: Match): boolean => {
       if (filter === 'Live') return m.status === 'live';
@@ -1485,9 +1462,22 @@ export default function MatchesHubScreenV2() {
     return { ...base, fixtures };
   }, [filter, worldCupEnabled, worldCupLeagueGroups, fixturePassesFilter]);
 
+  const hasWorldCupInCalendar = useMemo(
+    () =>
+      matches.some(
+        (m) =>
+          m.league?.id === worldCupLeagueId &&
+          !isMisTaggedWorldCupLeagueName(m.league?.name ?? '') &&
+          isSameLocalDay(m.fixtureDate, selectedDate),
+      ),
+    [matches, worldCupLeagueId, selectedDate],
+  );
+
   const hasWorldCupMatchesForDate = useMemo(
-    () => worldCupMatches.some((m) => isSameLocalDay(m.fixtureDate, selectedDate)),
-    [worldCupMatches, selectedDate],
+    () =>
+      hasWorldCupInCalendar ||
+      worldCupMatches.some((m) => isSameLocalDay(m.fixtureDate, selectedDate)),
+    [hasWorldCupInCalendar, worldCupMatches, selectedDate],
   );
 
   const showWorldCupTab =
@@ -1513,6 +1503,19 @@ export default function MatchesHubScreenV2() {
   ]);
 
   const wcTabLocked = worldCupLocked && !worldCupEnabled;
+
+  const findFixtureInCountryGroups = useCallback(
+    (fixtureId: string): Fixture | undefined => {
+      for (const cg of filteredCountryGroups) {
+        for (const league of cg.leagues) {
+          const match = league.matches.find((m) => m.id === fixtureId);
+          if (match) return matchToFixture(match);
+        }
+      }
+      return undefined;
+    },
+    [filteredCountryGroups],
+  );
 
   // Handle prediction submission
   //
@@ -1556,10 +1559,7 @@ export default function MatchesHubScreenV2() {
       fixtureDetails = matchToFixture(fromList);
     }
     if (!fixtureDetails) {
-      for (const g of groups) {
-        const found = g.fixtures.find(f => f.id === fixtureId);
-        if (found) { fixtureDetails = found; break; }
-      }
+      fixtureDetails = findFixtureInCountryGroups(fixtureId);
     }
 
     // Build next state (for persistence) and apply optimistic updates.
@@ -1709,7 +1709,7 @@ export default function MatchesHubScreenV2() {
     } finally {
       setSubmittingId(null);
     }
-  }, [ticketsRemaining, predictedMatches, groups, getToken, userId, PRED_CACHE_KEY, TICKETS_CACHE_KEY, t]);
+  }, [ticketsRemaining, predictedMatches, findFixtureInCountryGroups, matches, worldCupMatches, getToken, userId, PRED_CACHE_KEY, TICKETS_CACHE_KEY, t]);
 
   // Toggle match-start push notification for a fixture (the bell icon).
   // Optimistic: flip the bell immediately, roll back on API failure.
@@ -1897,12 +1897,8 @@ export default function MatchesHubScreenV2() {
     ],
   );
 
-  // The currently-open "View All" league (resolved from `groups` so the
-  // modal renders in the LeagueGroup shape it already expects).
   const viewAllLeagueGroup = useMemo<LeagueGroup | null>(() => {
     if (!viewAllLeagueId) return null;
-    const fromGroups = groups.find(g => g.id === viewAllLeagueId);
-    if (fromGroups) return fromGroups;
     for (const cg of filteredCountryGroups) {
       for (const league of cg.leagues) {
         if (String(league.leagueId) === viewAllLeagueId) {
@@ -1917,7 +1913,7 @@ export default function MatchesHubScreenV2() {
       }
     }
     return null;
-  }, [viewAllLeagueId, groups, filteredCountryGroups]);
+  }, [viewAllLeagueId, filteredCountryGroups]);
 
   // ─── Calendar grid (driven by selectedDate — always in sync) ──────────────
   // `calendarGrid` is the array of cells to render. Each cell is either a

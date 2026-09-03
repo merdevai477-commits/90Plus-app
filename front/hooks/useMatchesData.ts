@@ -469,6 +469,8 @@ export const useMatchesData = (
 
     [todayKey, yesterdayKey].forEach((key) => {
       if (memoryCache.has(key)) return;
+      // fetchData already loads today — avoid a duplicate calendar+live round-trip.
+      if (key === todayKey && dateString === todayKey) return;
       const date = key === todayKey ? new Date() : yesterday;
       const load =
         key === todayKey
@@ -482,7 +484,7 @@ export const useMatchesData = (
         }
       }).catch(() => {});
     });
-  }, [pauseBackgroundRefresh]);
+  }, [pauseBackgroundRefresh, dateString]);
 
   // Group matches by league, then country (reuse league groups — no double group)
   const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
@@ -752,20 +754,8 @@ export const useMatchesData = (
     fetchDataRef.current();
   }, [dateString, isToday, isPastDate]);
 
-  // Paint live rows immediately on today — don't wait for the full-day calendar.
-  useEffect(() => {
-    if (pauseBackgroundRefresh || !isToday || isPastDate) return;
-    let cancelled = false;
-    void fetchLiveMatches().then((liveFeed) => {
-      if (cancelled || liveFeed.length === 0) return;
-      prefetchLiveMatchAssets(liveFeed);
-      setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [pauseBackgroundRefresh, isToday, isPastDate, dateString]);
+  // Live scores for today are merged inside fetchTodayMatchesWithLiveFeed /
+  // refreshTodayInBackground — no separate mount-time live fetch (avoids duplicate API calls).
 
   // Calendar refresh only — live scores via useLiveFixtureSync + Zustand store.
   // Pause while backgrounded; resume + silent refetch on foreground.

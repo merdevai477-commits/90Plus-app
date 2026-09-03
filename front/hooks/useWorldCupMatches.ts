@@ -205,21 +205,9 @@ export function useWorldCupMatches(
 
     if (!hasDataRef.current) setLoading(true);
     setError(null);
-    try {
-      let list: Match[];
-      if (phaseMode === 'upcoming') {
-        list = await fetchWorldCupMatchesByPhase('upcoming');
-      } else if (phaseMode === 'finished') {
-        list = await fetchWorldCupMatchesByPhase('finished');
-      } else if (phaseMode === 'live') {
-        list = await fetchWorldCupMatchesByPhase('live');
-      } else if (phaseMode === 'all') {
-        list = await fetchWorldCupMatchesByPhase('all');
-      } else {
-        list = await fetchWorldCupMatchesByDate(selectedDate, {
-          skipDiskCache: true,
-        });
-      }
+
+    const finalizeList = async (raw: Match[]): Promise<Match[]> => {
+      let list = raw;
       if (isToday && phaseMode === 'date') {
         const liveFeed = await fetchLiveMatches();
         list = mergeWorldCupCalendarWithLiveFeed(list, liveFeed, leagueId);
@@ -246,9 +234,42 @@ export function useWorldCupMatches(
           }
         }
       }
+      return list;
+    };
+
+    const publishList = (list: Match[]) => {
       memoryCache.set(memKey, { data: list, ts: Date.now() });
       setCalendarMatches(list);
       hasDataRef.current = list.length > 0;
+    };
+
+    try {
+      let list: Match[];
+      if (phaseMode === 'upcoming') {
+        list = await fetchWorldCupMatchesByPhase('upcoming');
+      } else if (phaseMode === 'finished') {
+        list = await fetchWorldCupMatchesByPhase('finished');
+      } else if (phaseMode === 'live') {
+        list = await fetchWorldCupMatchesByPhase('live');
+      } else if (phaseMode === 'all') {
+        list = await fetchWorldCupMatchesByPhase('all');
+      } else {
+        const cached = await fetchWorldCupMatchesByDate(selectedDate);
+        if (cached.length > 0) {
+          const painted = await finalizeList(cached);
+          publishList(painted);
+          setLoading(false);
+          fetchingRef.current = false;
+          void fetchWorldCupMatchesByDate(selectedDate, { skipDiskCache: true })
+            .then((fresh) => finalizeList(fresh))
+            .then(publishList)
+            .catch(() => {});
+          return;
+        }
+        list = await fetchWorldCupMatchesByDate(selectedDate, { skipDiskCache: true });
+      }
+      list = await finalizeList(list);
+      publishList(list);
     } catch (e) {
       logger.warn('useWorldCupMatches failed:', e);
       setError('load_failed');
