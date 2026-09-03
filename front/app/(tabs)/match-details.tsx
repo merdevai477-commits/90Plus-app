@@ -93,6 +93,7 @@ import {
 } from '../../utils/standingsHelpers';
 import { getPeriodStartTimestamp } from '../../src/store/liveFixtureSelectors';
 import { safeParseDate, safeToISOString } from '../../utils/safeDate';
+import { fixturesToTeamFixtures } from '../../utils/scores365Adapters';
 
 const { width, height } = Dimensions.get('window');
 
@@ -512,67 +513,79 @@ const MatchDetailsScreen = () => {
       else setLoading(false);
       setError(null);
 
-      await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
-      const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
+      const ingestFull = async () => {
+        await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
+        const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
 
-      if (snap?.fixture) {
-        const details = snap.fixture;
-        const finishedStatuses = ['FT', 'AET', 'PEN'];
-        const statusShort = details.fixture?.status?.short;
-        if (statusShort && finishedStatuses.includes(statusShort)) {
-          Promise.allSettled([
-            Promise.resolve(snap.lineups ?? []),
-            Promise.resolve(snap.statistics ?? []),
-            Promise.resolve(snap.events ?? []),
-          ]).then(([lineupsRes, statsRes, eventsRes]) => {
-            // Archiving is best-effort; never let it surface as a screen error.
-            void matchArchiveService
-              .archiveMatchFromData(
-                details,
-                lineupsRes.status === 'fulfilled' ? lineupsRes.value : [],
-                statsRes.status === 'fulfilled' ? statsRes.value : [],
-                eventsRes.status === 'fulfilled' ? eventsRes.value : [],
-              )
-              .catch(() => {});
-          }).catch(() => {});
-        }
-        if (isAuthoritativeLineupData(snap.lineups)) loadedTabsRef.current.add('lineups');
-        if (hasApiStatistics(snap.statistics)) loadedTabsRef.current.add('stats');
-        if (snap.venue) loadedTabsRef.current.add('stadium');
-      } else {
-        // Live fetch returned nothing — fall back to a locally/remotely archived
-        // match and ingest it so the screen renders instead of a blank shell.
-        const archived = await Promise.race([
-          matchArchiveService.getArchivedMatch(String(fixtureId)),
-          new Promise<null>((resolve) => {
-            setTimeout(() => resolve(null), 2_500);
-          }),
-        ]);
-        if (archived) {
-          try {
-            const { fixture: archivedFixture, events: archivedEvents } =
-              buildFixtureFromArchive(archived);
-            const snapshotFromArchive = buildSnapshotFromRaw({
-              fixtureId,
-              fixture: archivedFixture,
-              events: archivedEvents,
-              source: 'http-full',
-            });
-            if (snapshotFromArchive) {
-              useLiveFixtureStore.getState().ingestSnapshot(snapshotFromArchive);
-            } else {
+        if (snap?.fixture) {
+          const details = snap.fixture;
+          const finishedStatuses = ['FT', 'AET', 'PEN'];
+          const statusShort = details.fixture?.status?.short;
+          if (statusShort && finishedStatuses.includes(statusShort)) {
+            Promise.allSettled([
+              Promise.resolve(snap.lineups ?? []),
+              Promise.resolve(snap.statistics ?? []),
+              Promise.resolve(snap.events ?? []),
+            ]).then(([lineupsRes, statsRes, eventsRes]) => {
+              void matchArchiveService
+                .archiveMatchFromData(
+                  details,
+                  lineupsRes.status === 'fulfilled' ? lineupsRes.value : [],
+                  statsRes.status === 'fulfilled' ? statsRes.value : [],
+                  eventsRes.status === 'fulfilled' ? eventsRes.value : [],
+                )
+                .catch(() => {});
+            }).catch(() => {});
+          }
+          if (isAuthoritativeLineupData(snap.lineups)) loadedTabsRef.current.add('lineups');
+          if (hasApiStatistics(snap.statistics)) loadedTabsRef.current.add('stats');
+          if (snap.venue) loadedTabsRef.current.add('stadium');
+        } else {
+          const archived = await Promise.race([
+            matchArchiveService.getArchivedMatch(String(fixtureId)),
+            new Promise<null>((resolve) => {
+              setTimeout(() => resolve(null), 2_500);
+            }),
+          ]);
+          if (archived) {
+            try {
+              const { fixture: archivedFixture, events: archivedEvents } =
+                buildFixtureFromArchive(archived);
+              const snapshotFromArchive = buildSnapshotFromRaw({
+                fixtureId,
+                fixture: archivedFixture,
+                events: archivedEvents,
+                source: 'http-full',
+              });
+              if (snapshotFromArchive) {
+                useLiveFixtureStore.getState().ingestSnapshot(snapshotFromArchive);
+              } else {
+                setError(t.matchDetails.loadDetailsFailed);
+              }
+            } catch {
               setError(t.matchDetails.loadDetailsFailed);
             }
-          } catch {
-            setError(t.matchDetails.loadDetailsFailed);
           }
         }
-        // No archive and no live data: leave `fixture` null. The render path
-        // shows a dedicated "match unavailable" empty state (not a blank shell).
+
+        setLoading(false);
+        setDetailsFetching(false);
+      };
+
+      if (existing?.fixture) {
+        void ingestFull().catch((err: unknown) => {
+          if (isAbortError(err)) {
+            setDetailsFetching(false);
+            return;
+          }
+          setError(err instanceof Error ? err.message : t.matchDetails.loadDetailsFailed);
+          setLoading(false);
+          setDetailsFetching(false);
+        });
+        return;
       }
 
-      setLoading(false);
-      setDetailsFetching(false);
+      await ingestFull();
     } catch (err: unknown) {
       if (isAbortError(err)) {
         setDetailsFetching(false);
@@ -892,16 +905,42 @@ const MatchDetailsScreen = () => {
     try {
       if (is365Fixture && fixtureId) {
         const form365 = await ApiFootballService.get365MatchForm(fixtureId);
-        if (form365) {
-          setHomeLastFixtures(form365.home);
-          setAwayLastFixtures(form365.away);
-          setH2hFixtures(form365.h2h);
+        const homeFrom365 = form365?.home ?? [];
+        const awayFrom365 = form365?.away ?? [];
+        const h2hFrom365 = form365?.h2h ?? [];
+        if (homeFrom365.length || awayFrom365.length || h2hFrom365.length) {
+          setHomeLastFixtures(homeFrom365);
+          setAwayLastFixtures(awayFrom365);
+          setH2hFixtures(h2hFrom365);
           setForm365TeamIds({
-            home: form365.homeCompetitorId ?? undefined,
-            away: form365.awayCompetitorId ?? undefined,
+            home: form365?.homeCompetitorId ?? undefined,
+            away: form365?.awayCompetitorId ?? undefined,
           });
           return;
         }
+
+        const homeId = form365?.homeCompetitorId ?? fixture.teams.home.id;
+        const awayId = form365?.awayCompetitorId ?? fixture.teams.away.id;
+        const [homeMatches, awayMatches] = await Promise.all([
+          ApiFootballService.getCompetitor365Matches(homeId),
+          ApiFootballService.getCompetitor365Matches(awayId),
+        ]);
+        const homeLast = fixturesToTeamFixtures(homeMatches.finished, 5);
+        const awayLast = fixturesToTeamFixtures(awayMatches.finished, 5);
+        const h2hFromComp = fixturesToTeamFixtures(
+          homeMatches.finished.filter(
+            (f) => f.teams?.home?.id === awayId || f.teams?.away?.id === awayId,
+          ),
+          10,
+        );
+        if (homeLast.length || awayLast.length || h2hFromComp.length) {
+          setHomeLastFixtures(homeLast);
+          setAwayLastFixtures(awayLast);
+          setH2hFixtures(h2hFromComp);
+          setForm365TeamIds({ home: homeId, away: awayId });
+          return;
+        }
+
         setFormError(t.matchDetails.loadFormFailed || t.matchDetails.noPreviousMatches);
         loadedTabsRef.current.delete('form');
         return;
@@ -910,12 +949,16 @@ const MatchDetailsScreen = () => {
       const awayId = fixture.teams.away.id;
       const leagueId = fixture.league.id;
       const season = fixture.league.season;
-      const [homeRes, awayRes] = await Promise.allSettled([
+      const [homeRes, awayRes, h2hRes] = await Promise.allSettled([
         ApiFootballService.getTeamLastFixtures(homeId, 5, { leagueId, season }),
         ApiFootballService.getTeamLastFixtures(awayId, 5, { leagueId, season }),
+        ApiFootballService.getHeadToHead(homeId, awayId, 10),
       ]);
       if (homeRes.status === 'fulfilled') setHomeLastFixtures(homeRes.value);
       if (awayRes.status === 'fulfilled') setAwayLastFixtures(awayRes.value);
+      if (h2hRes.status === 'fulfilled') {
+        setH2hFixtures(fixturesToTeamFixtures(h2hRes.value, 10));
+      }
     } catch {
       setFormError(t.matchDetails.loadFormFailed || t.common.retry);
       loadedTabsRef.current.delete('form');
@@ -944,9 +987,14 @@ const MatchDetailsScreen = () => {
       const non365CompetitionId = scores365CompetitionIdFromLeagueId(fixture.league?.id);
       if (is365Fixture) {
         // Non-WC leagues must pass their 365 competitionId; WC omits it (defaults).
-        const result365 = await ApiFootballService.get365StandingsGrouped(
+        let result365 = await ApiFootballService.get365StandingsGrouped(
           non365CompetitionId ?? undefined,
         );
+        if (!result365.available && non365CompetitionId != null) {
+          result365 = await ApiFootballService.get365StandingsGrouped(non365CompetitionId, {
+            force: true,
+          });
+        }
         if (result365.available) {
           const homeTeam = { id: fixture.teams.home.id, name: fixture.teams.home.name };
           const awayTeam = { id: fixture.teams.away.id, name: fixture.teams.away.name };
@@ -963,19 +1011,13 @@ const MatchDetailsScreen = () => {
             setStandingsSeasonUsed(fixture.league.season);
             return;
           }
-          // 365 returned standings but neither team is in a group table
-          // (e.g. knockout stage) — fall through to the league standings path.
         }
-        // Synthetic 365 leagues have no API-Football leagueId — don't query it
-        // with a namespaced id; just show "standings unavailable".
+        // Namespaced 365 leagues have no API-Football leagueId.
         if (non365CompetitionId != null) {
           setStandingsUnavailable(true);
           return;
         }
-        if (is365Fixture) {
-          setStandingsUnavailable(true);
-          return;
-        }
+        // World Cup / league.id === 1: fall through to API-Football standings.
       }
       const preferFresh = force || isLive() || isFinishedMatch();
       const result = await ApiFootballService.getLeagueStandingsGrouped(

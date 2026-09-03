@@ -2143,21 +2143,23 @@ export const ApiFootballService = {
   /**
    * 365Scores — World Cup group standings (all groups).
    */
-  async get365StandingsGrouped(competitionId?: number): Promise<{
+  async get365StandingsGrouped(
+    competitionId?: number,
+    options?: { force?: boolean },
+  ): Promise<{
     groups: import('../utils/standingsHelpers').StandingsGroup[];
     available: boolean;
   }> {
     try {
       const baseUrl = getApiUrl();
-      const url = new URL(
-        competitionId != null
-          ? `${baseUrl}/football/cached/365/standings`
-          : `${baseUrl}/football/cached/365/standings`,
-      );
+      const url = new URL(`${baseUrl}/football/cached/365/standings`);
       if (competitionId != null) {
         url.searchParams.set('competitions', String(competitionId));
       }
       url.searchParams.set('language', getAppLanguageCode());
+      if (options?.force) {
+        url.searchParams.set('force', '1');
+      }
       const response = await withTimeout(
         fetch(url.toString(), {
           headers: { Accept: 'application/json', 'Accept-Language': acceptLanguageHeader() },

@@ -3684,13 +3684,20 @@ class FootballDataCacheService {
         return threeSixFiveScoresService.getLineupsWithNames(gameId, language);
     }
 
+    private durable365StandingsSeason(competitionId: number): number {
+        return competitionId === getScores365CompetitionId()
+            ? getWorldCupSeason()
+            : new Date().getUTCFullYear();
+    }
+
     async getCached365Standings(
         competitionId?: number,
         language?: string | null,
+        options?: { force?: boolean },
     ): Promise<ThreeSixFiveResult<ThreeSixFiveStandingRow[]>> {
         const resolvedCompetitionId = competitionId ?? getScores365CompetitionId();
         const resolvedLanguage = resolveScores365AppLanguage(language);
-        const season = getWorldCupSeason();
+        const season = this.durable365StandingsSeason(resolvedCompetitionId);
         let durableRaw: ThreeSixFiveStandingRow[] | null = null;
         let durableUpdatedAt: Date | null = null;
         try {
@@ -3725,7 +3732,12 @@ class FootballDataCacheService {
                 : { data: null, source: null };
         }
 
-        if (durableRaw?.length && durableUpdatedAt && isStandingsSwrEnabled()) {
+        if (
+            !options?.force &&
+            durableRaw?.length &&
+            durableUpdatedAt &&
+            isStandingsSwrEnabled()
+        ) {
             const age = Date.now() - durableUpdatedAt.getTime();
             if (age <= standingsFreshMs()) {
                 return { data: durableRaw, source: '365scores' };
@@ -3844,6 +3856,182 @@ class FootballDataCacheService {
             return { data: null, source: null };
         }
         return threeSixFiveScoresService.getHeadToHeadForm(gameId, language);
+    }
+
+    /**
+     * Match-details form: H2H first, then competitor finished matches when
+     * recentGames are empty or the fixture is unmapped.
+     */
+    async getCached365FixtureForm(
+        fixtureId: number,
+        language?: string | null,
+    ): Promise<ThreeSixFiveResult<ThreeSixFiveHeadToHeadForm> & { scores365GameId?: number | null }> {
+        const gameId =
+            (await ensureScores365GameMapping(fixtureId)) ??
+            getScores365GameIdForFixture(fixtureId);
+
+        let form: ThreeSixFiveHeadToHeadForm | null = null;
+        let source: '365scores' | null = null;
+        if (gameId) {
+            const h2h = await this.getCached365HeadToHeadForm(gameId, language);
+            form = h2h.data;
+            source = h2h.source;
+            if (!form) {
+                const retry = await this.getCached365HeadToHeadForm(gameId, language);
+                form = retry.data;
+                source = retry.source ?? source;
+            }
+        }
+
+        const ids = await this.resolve365FormCompetitorIds(fixtureId, form);
+        const homeEmpty = !(form?.home?.recentGames?.length);
+        const awayEmpty = !(form?.away?.recentGames?.length);
+        const meetingsEmpty = !(form?.meetings?.length);
+
+        if ((homeEmpty || awayEmpty || meetingsEmpty) && (ids.home || ids.away)) {
+            const [homePack, awayPack] = await Promise.all([
+                ids.home
+                    ? this.recent365GamesForCompetitor(ids.home, language)
+                    : Promise.resolve({ games: [] as unknown[], finished: [] as ThreeSixFiveCompetitorMatches['finished'] }),
+                ids.away
+                    ? this.recent365GamesForCompetitor(ids.away, language)
+                    : Promise.resolve({ games: [] as unknown[], finished: [] as ThreeSixFiveCompetitorMatches['finished'] }),
+            ]);
+
+            let meetings = form?.meetings ?? [];
+            if (meetingsEmpty && ids.home && ids.away) {
+                meetings = homePack.finished
+                    .filter(
+                        (f) =>
+                            f.teams?.home?.id === ids.away ||
+                            f.teams?.away?.id === ids.away,
+                    )
+                    .slice(0, 10)
+                    .map((f) => this.apiFixtureToRecent365Game(f)) as typeof meetings;
+            }
+
+            form = {
+                home: ids.home
+                    ? {
+                          teamId: ids.home,
+                          teamName:
+                              form?.home?.teamName ||
+                              this.competitorNameFromFinished(homePack.finished, ids.home) ||
+                              '—',
+                          recentGames: (homeEmpty
+                              ? homePack.games
+                              : form?.home?.recentGames ?? []) as any,
+                      }
+                    : form?.home ?? null,
+                away: ids.away
+                    ? {
+                          teamId: ids.away,
+                          teamName:
+                              form?.away?.teamName ||
+                              this.competitorNameFromFinished(awayPack.finished, ids.away) ||
+                              '—',
+                          recentGames: (awayEmpty
+                              ? awayPack.games
+                              : form?.away?.recentGames ?? []) as any,
+                      }
+                    : form?.away ?? null,
+                meetings,
+                homeCompetitorId: ids.home,
+                awayCompetitorId: ids.away,
+            };
+            source = source ?? '365scores';
+        }
+
+        const hasAnything =
+            (form?.home?.recentGames?.length ?? 0) > 0 ||
+            (form?.away?.recentGames?.length ?? 0) > 0 ||
+            (form?.meetings?.length ?? 0) > 0;
+        if (!hasAnything) {
+            return { data: null, source, scores365GameId: gameId };
+        }
+        return { data: form, source: source ?? '365scores', scores365GameId: gameId };
+    }
+
+    private apiFixtureToRecent365Game(f: {
+        fixture: { id: number; date: string };
+        league?: { id?: number; name?: string | null };
+        teams: {
+            home: { id: number; name: string };
+            away: { id: number; name: string };
+        };
+        goals?: { home: number | null; away: number | null };
+    }) {
+        const leagueId = f.league?.id ?? 0;
+        const competitionId =
+            leagueId >= SCORES365_LEAGUE_ID_OFFSET
+                ? leagueId - SCORES365_LEAGUE_ID_OFFSET
+                : 0;
+        return {
+            id: f.fixture.id,
+            startTime: f.fixture.date,
+            statusGroup: 4,
+            competitionId,
+            competitionDisplayName: f.league?.name ?? undefined,
+            homeCompetitor: {
+                id: f.teams.home.id,
+                name: f.teams.home.name,
+                score: f.goals?.home ?? 0,
+            },
+            awayCompetitor: {
+                id: f.teams.away.id,
+                name: f.teams.away.name,
+                score: f.goals?.away ?? 0,
+            },
+        };
+    }
+
+    private competitorNameFromFinished(
+        finished: ThreeSixFiveCompetitorMatches['finished'],
+        competitorId: number,
+    ): string | null {
+        for (const f of finished) {
+            if (f.teams?.home?.id === competitorId) return f.teams.home.name;
+            if (f.teams?.away?.id === competitorId) return f.teams.away.name;
+        }
+        return null;
+    }
+
+    private async recent365GamesForCompetitor(
+        competitorId: number,
+        language?: string | null,
+    ): Promise<{
+        games: ReturnType<FootballDataCacheService['apiFixtureToRecent365Game']>[];
+        finished: ThreeSixFiveCompetitorMatches['finished'];
+    }> {
+        const result = await this.getCached365CompetitorMatches(competitorId, language);
+        const finished = result.data?.finished ?? [];
+        return {
+            games: finished.slice(0, 8).map((f) => this.apiFixtureToRecent365Game(f)),
+            finished,
+        };
+    }
+
+    private async resolve365FormCompetitorIds(
+        fixtureId: number,
+        form: ThreeSixFiveHeadToHeadForm | null,
+    ): Promise<{ home: number | null; away: number | null }> {
+        let home = form?.homeCompetitorId ?? form?.home?.teamId ?? null;
+        let away = form?.awayCompetitorId ?? form?.away?.teamId ?? null;
+        if (home && away) return { home, away };
+        try {
+            const row = await prisma.cachedFixture.findUnique({
+                where: { fixtureId },
+                select: { homeTeamId: true, awayTeamId: true, fullData: true },
+            });
+            const full = row?.fullData as {
+                teams?: { home?: { id?: number }; away?: { id?: number } };
+            } | null;
+            home = home || row?.homeTeamId || full?.teams?.home?.id || null;
+            away = away || row?.awayTeamId || full?.teams?.away?.id || null;
+        } catch {
+            // Mapping / DB miss is fine — competitor fallback just stays empty.
+        }
+        return { home: home || null, away: away || null };
     }
 
     // ─── 365 competitor (club / national team) profile wrappers ───────────────

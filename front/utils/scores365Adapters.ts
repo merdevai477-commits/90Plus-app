@@ -1,4 +1,4 @@
-import type { Standing, TeamFixture } from '../services/apiFootball';
+import type { Fixture, Standing, TeamFixture } from '../services/apiFootball';
 import type { StandingsGroup } from './standingsHelpers';
 import { SCORES365_LEAGUE_ID_OFFSET } from '../constants/worldCup';
 
@@ -104,6 +104,28 @@ export function map365RecentGamesToTeamFixtures(
         },
       } as TeamFixture;
     });
+}
+
+/** Map API / competitor Fixture rows onto the Form tab TeamFixture shape. */
+export function fixturesToTeamFixtures(fixtures: Fixture[], limit = 5): TeamFixture[] {
+  return (fixtures ?? []).slice(0, limit).map((f) => ({
+    fixture: {
+      id: f.fixture.id,
+      date: f.fixture.date,
+      timestamp: f.fixture.timestamp,
+      status: {
+        long: f.fixture.status?.long ?? '',
+        short: f.fixture.status?.short ?? '',
+      },
+    },
+    league: {
+      id: f.league?.id ?? 0,
+      name: f.league?.name ?? '',
+      logo: f.league?.logo ?? '',
+    },
+    teams: f.teams,
+    goals: f.goals,
+  }));
 }
 
 /** Map 365 standings rows → StandingsGroup[] for the standings tab. */

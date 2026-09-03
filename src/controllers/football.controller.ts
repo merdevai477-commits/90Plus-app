@@ -2576,7 +2576,11 @@ export class FootballController {
       const rawCompetition = typeof rawQuery === 'string' ? rawQuery.trim() : '';
       const parsedCompetition = rawCompetition ? parseInt(rawCompetition, 10) : NaN;
       const competitionId = Number.isFinite(parsedCompetition) ? parsedCompetition : undefined;
-      const result = await footballDataCacheService.getCached365Standings(competitionId, language);
+      const forceRaw = String(req.query.force ?? '').toLowerCase();
+      const force = forceRaw === '1' || forceRaw === 'true';
+      const result = await footballDataCacheService.getCached365Standings(competitionId, language, {
+        force,
+      });
       if (!result.data?.length) {
         res.status(503).json({
           status: 'ERROR',
@@ -2606,30 +2610,9 @@ export class FootballController {
         res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
         return;
       }
-      const gameId =
-        (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
-      if (!gameId) {
-        res.status(404).json({ status: 'ERROR', message: '365Scores game not mapped for this fixture' });
-        return;
-      }
       const language = resolveAppLanguage(req);
-      const result = await footballDataCacheService.getCached365HeadToHeadForm(gameId, language);
+      const result = await footballDataCacheService.getCached365FixtureForm(fixtureId, language);
       if (!result.data) {
-        await ensureScores365GameMapping(fixtureId);
-        const retryGameId =
-          (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
-        if (retryGameId) {
-          const retry = await footballDataCacheService.getCached365HeadToHeadForm(retryGameId, language);
-          if (retry.data) {
-            res.json({
-              status: 'SUCCESS',
-              source: retry.source,
-              response: retry.data,
-              _meta: { scores365GameId: retryGameId, fixtureId },
-            });
-            return;
-          }
-        }
         res.status(503).json({
           status: 'ERROR',
           message: '365Scores form unavailable',
@@ -2641,7 +2624,7 @@ export class FootballController {
         status: 'SUCCESS',
         source: result.source,
         response: result.data,
-        _meta: { scores365GameId: gameId, fixtureId },
+        _meta: { scores365GameId: result.scores365GameId ?? null, fixtureId },
       });
     } catch (error) {
       FootballController.handleError(res, error);
