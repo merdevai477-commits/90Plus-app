@@ -344,6 +344,10 @@ function RootLayoutNav() {
       />
       <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       <Stack.Screen name="push-diagnostics" options={{ title: 'Push Diagnostics' }} />
+      <Stack.Screen
+        name="momentum-performance-lab"
+        options={{ title: 'Momentum Lab', headerShown: true }}
+      />
       <Stack.Screen name="+not-found" options={{ headerShown: false }} />
     </Stack>
   );

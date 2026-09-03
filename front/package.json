@@ -43,6 +43,7 @@
     "@react-native-masked-view/masked-view": "0.3.2",
     "@sentry/react-native": "~7.11.0",
     "@shopify/flash-list": "~2.1.0",
+    "@shopify/react-native-skia": "2.4.18",
     "@tamagui/animations-react-native": "^2.0.0-rc.42",
     "@tamagui/config": "^2.0.0-rc.42",
     "@tamagui/core": "^2.0.0-rc.42",
