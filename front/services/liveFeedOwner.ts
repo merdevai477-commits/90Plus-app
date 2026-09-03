@@ -12,6 +12,8 @@ import { logger } from '../utils/logger';
 
 /** Align under Matches calendar live-feed poll (15s). */
 export const LIVE_FEED_OWNER_POLL_MS = 15_000;
+/** @deprecated Alias kept for Fast Refresh / older call sites — prefer LIVE_FEED_OWNER_POLL_MS. */
+export const LIVE_FEED_REFRESH_MS = LIVE_FEED_OWNER_POLL_MS;
 /** Serve cached live feed within this window to collapse WC/monitor/calendar hits. */
 export const LIVE_FEED_CACHE_TTL_MS = 12_000;
 const WS_TRUST_DEBOUNCE_MS = 2_500;
