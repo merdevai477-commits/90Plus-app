@@ -2,19 +2,20 @@
  * RankHeader
  *
  * Floating header for the Rank tab. Centered brand pill matches Matches /
- * Predict & Win (90 + purple PLUS chip + screen title). Live coin balance
- * sits on the trailing edge. Glass via glassProps.header.
+ * Predict & Win (90 + purple PLUS chip + screen title). Search (users) on the
+ * leading edge; live coin balance on the trailing edge.
  */
 
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { BlurView, type BlurTint } from 'expo-blur';
-import { Crown, Zap } from 'lucide-react-native';
+import { Crown, Search, Zap } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useCoins } from '../../contexts/CoinsContext';
 import { useTranslation } from '../../src/i18n';
 import { glassProps } from '../../constants/ui';
+import AdvancedSearchBar from '../common/AdvancedSearchBar';
 import { CoinsInfoModal } from '../common/CoinsInfoModal';
 import { FeatureInfoModal } from '../common/FeatureInfoModal';
 
@@ -30,6 +31,7 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
   const { t } = useTranslation();
   const [showCoinsInfo, setShowCoinsInfo] = React.useState(false);
   const [showRankInfo, setShowRankInfo] = React.useState(false);
+  const [showUserSearch, setShowUserSearch] = React.useState(false);
 
   const display: string = loading ? '—' : String(coins);
 
@@ -38,9 +40,19 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
     { paddingTop: Math.max(topInset, 10) + 10 },
   ];
 
-  const content = (
+  const headerChrome = (
     <>
-      <View style={s.sideSlot} />
+      <View style={[s.sideSlot, s.sideSlotStart]}>
+        <Pressable
+          style={s.searchBtn}
+          onPress={() => setShowUserSearch(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t.rank.a11ySearchUsers}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Search size={20} color="#e9d5ff" />
+        </Pressable>
+      </View>
 
       <Pressable
         style={s.logoPill}
@@ -66,6 +78,22 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
           <Text style={s.coinTxt}>{display}</Text>
         </Pressable>
       </View>
+    </>
+  );
+
+  const headerShell = isLiquidGlassSupported ? (
+    <LiquidGlassView {...glassProps.header} style={shellStyle}>
+      {headerChrome}
+    </LiquidGlassView>
+  ) : (
+    <BlurView intensity={15} tint={blurTint} style={shellStyle}>
+      {headerChrome}
+    </BlurView>
+  );
+
+  return (
+    <>
+      {headerShell}
 
       <CoinsInfoModal
         visible={showCoinsInfo}
@@ -81,21 +109,15 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
         hype={t.rankInfo.hype}
         gotItLabel={t.rankInfo.gotIt}
       />
+
+      {/* Outside the header shell so the overlay covers the full screen. */}
+      <AdvancedSearchBar
+        visible={showUserSearch}
+        onClose={() => setShowUserSearch(false)}
+        initialTab="users"
+        onResultSelect={() => setShowUserSearch(false)}
+      />
     </>
-  );
-
-  if (isLiquidGlassSupported) {
-    return (
-      <LiquidGlassView {...glassProps.header} style={shellStyle}>
-        {content}
-      </LiquidGlassView>
-    );
-  }
-
-  return (
-    <BlurView intensity={15} tint={blurTint} style={shellStyle}>
-      {content}
-    </BlurView>
   );
 };
 
@@ -120,8 +142,21 @@ const s = StyleSheet.create({
   sideSlot: {
     flex: 1,
   },
+  sideSlotStart: {
+    alignItems: 'flex-start',
+  },
   sideSlotEnd: {
     alignItems: 'flex-end',
+  },
+  searchBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: 'rgba(168,85,247,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   logoPill: {
     flexDirection: 'row',

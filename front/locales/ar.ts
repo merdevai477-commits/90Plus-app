@@ -2070,6 +2070,7 @@ export const ar = {
     // Accessibility
     a11yProfileCard: 'افتح ملفي الشخصي',
     a11yCoinChip: 'رصيدك من الكوينز',
+    a11ySearchUsers: 'بحث عن مستخدمين',
 
     // Competition cards
     competitionNames: {

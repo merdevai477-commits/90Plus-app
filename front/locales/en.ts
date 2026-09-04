@@ -2115,6 +2115,7 @@ export const en = {
     // Accessibility
     a11yProfileCard: 'Open my profile',
     a11yCoinChip: 'Your coin balance',
+    a11ySearchUsers: 'Search users',
 
     // Competition cards
     competitionNames: {

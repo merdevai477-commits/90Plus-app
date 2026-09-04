@@ -74,15 +74,18 @@ interface AdvancedSearchBarProps {
   onResultSelect: (result: SearchResult) => void;
   onClose: () => void;
   visible: boolean;
+  /** Opens on this tab when the modal becomes visible (default: all). */
+  initialTab?: SearchTab;
 }
 
 const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   onResultSelect,
   onClose,
-  visible
+  visible,
+  initialTab = 'all',
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<SearchTab>('all');
+  const [activeTab, setActiveTab] = useState<SearchTab>(initialTab);
   const [searchResults, setSearchResults] = useState<{
     users: SearchResult[];
     reels: SearchResult[];
@@ -158,6 +161,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   useEffect(() => {
     if (visible && !hasLoadedRef.current) {
       hasLoadedRef.current = true;
+      setActiveTab(initialTab);
       loadRecentSearchesRef.current();
       loadTrendingHashtagsRef.current();
       // Auto-focus search input
@@ -168,7 +172,7 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
       setSearchQuery('');
       setSearchResults({ users: [], reels: [], hashtags: [] });
     }
-  }, [visible]); // Only depend on visible
+  }, [visible, initialTab]); // Only depend on visible / opening tab
 
   // Generate suggestions based on query
   useEffect(() => {
