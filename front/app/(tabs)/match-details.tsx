@@ -69,7 +69,8 @@ import { findLocalPreviewFixture } from '../../utils/findLocalPreviewFixture';
 import {
   hasApiStatistics,
 } from '../../utils/matchStatsFallback';
-import { hasLineupData, isAuthoritativeLineupData } from '../../utils/matchLineupsFallback';
+import { hasLineupData, isAuthoritativeLineupData, pickBetterLineups } from '../../utils/matchLineupsFallback';
+import { addBreadcrumb, captureMessage } from '../../services/sentry.service';
 import { sortPlayersByGrid } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
 import {
@@ -330,6 +331,7 @@ const MatchDetailsScreen = () => {
 
   const [lineupFetchAttempts, setLineupFetchAttempts] = useState(0);
   const [venueLoading, setVenueLoading] = useState(false);
+  /** Max silent background retries while lineups tab is open (live matches). */
   const MAX_LINEUP_AUTO_RETRIES = 4;
 
   const loadedTabsRef = useRef<Set<string>>(new Set());
@@ -356,6 +358,13 @@ const MatchDetailsScreen = () => {
       ? ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(short)
       : snapshot?.phase === 'finished';
   }, [fixture, snapshot?.phase]);
+
+  const isPreKickoff = useCallback(() => {
+    const short = fixture?.fixture?.status?.short;
+    const kickoffSec = fixture?.fixture?.timestamp;
+    if (kickoffSec && kickoffSec * 1000 > Date.now()) return true;
+    return short === 'NS' || short === 'TBD';
+  }, [fixture?.fixture?.status?.short, fixture?.fixture?.timestamp]);
 
   // Hydrate per-match push subscription (same source as Matches screen bell).
   useEffect(() => {
@@ -691,20 +700,23 @@ const MatchDetailsScreen = () => {
       setLineupsLoading(true);
     }
     setLineupsError(null);
+    addBreadcrumb('lineups fetch started', 'match-details.lineups', 'info', {
+      fixtureId,
+      force,
+      attempt: lineupFetchAttempts,
+    });
     try {
       const fresh = await ApiFootballService.getFixtureLineups(fixtureId);
-      if (isAuthoritativeLineupData(fresh)) {
+      if (hasLineupData(fresh)) {
         const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
         if (snap) {
           useLiveFixtureStore.getState().ingestSnapshot({
             ...snap,
-            lineups: fresh,
+            lineups: pickBetterLineups(snap.lineups, fresh) ?? fresh,
             revision: snap.revision + 1,
             updatedAt: Date.now(),
           });
         }
-      } else {
-        await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
       }
 
       let data = useLiveFixtureStore.getState().snapshots[fixtureId]?.lineups ?? [];
@@ -715,11 +727,15 @@ const MatchDetailsScreen = () => {
       if (isAuthoritativeLineupData(data)) {
         setLineupFetchAttempts(0);
         loadedTabsRef.current.add('lineups');
+        addBreadcrumb('lineups fetch authoritative', 'match-details.lineups', 'info', {
+          fixtureId,
+        });
       } else if (hasLineupData(data)) {
-        setLineupFetchAttempts((n) => n + 1);
-        loadedTabsRef.current.delete('lineups');
+        // Show provisional lineups immediately; background retries upgrade silently.
+        loadedTabsRef.current.add('lineups');
+        setLineupFetchAttempts((n) => Math.min(n + 1, MAX_LINEUP_AUTO_RETRIES));
       } else {
-        setLineupFetchAttempts((n) => n + 1);
+        setLineupFetchAttempts((n) => Math.min(n + 1, MAX_LINEUP_AUTO_RETRIES));
         loadedTabsRef.current.delete('lineups');
       }
     } catch (err: any) {
@@ -742,7 +758,17 @@ const MatchDetailsScreen = () => {
     } finally {
       setLineupsLoading(false);
     }
-  }, [fixtureId, t?.matchDetails?.loadLineupsFailed]);
+  }, [fixtureId, t?.matchDetails?.loadLineupsFailed, lineupFetchAttempts]);
+
+  // Cap exhausted — surface in Sentry once per fixture session.
+  useEffect(() => {
+    if (lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES) return;
+    if (isAuthoritativeLineupData(lineups)) return;
+    captureMessage(
+      `[MatchDetails] lineups retry cap (${MAX_LINEUP_AUTO_RETRIES}) fixture=${fixtureId}`,
+      'warning',
+    );
+  }, [lineupFetchAttempts, lineups, fixtureId]);
 
   const retryLineups = useCallback(() => {
     setLineupFetchAttempts(0);
@@ -884,8 +910,10 @@ const MatchDetailsScreen = () => {
     if (!force) loadedTabsRef.current.add('form');
     setFormLoading(true);
     setFormError(null);
+    addBreadcrumb('H2H form fetch started', 'match-details.h2h', 'info', { fixtureId });
     try {
       if (is365Fixture && fixtureId) {
+        const formStarted = Date.now();
         const form365 = await ApiFootballService.get365MatchForm(fixtureId);
         const homeFrom365 = form365?.home ?? [];
         const awayFrom365 = form365?.away ?? [];
@@ -898,11 +926,22 @@ const MatchDetailsScreen = () => {
             home: form365?.homeCompetitorId ?? undefined,
             away: form365?.awayCompetitorId ?? undefined,
           });
+          addBreadcrumb('H2H form loaded via /form', 'match-details.h2h', 'info', {
+            fixtureId,
+            latencyMs: Date.now() - formStarted,
+          });
           return;
         }
 
-        const homeId = form365?.homeCompetitorId ?? fixture.teams.home.id;
-        const awayId = form365?.awayCompetitorId ?? fixture.teams.away.id;
+        // /form already ran server-side competitor fallback — skip duplicate parallel pair.
+        if (form365) {
+          setFormError(t.matchDetails.loadFormFailed || t.matchDetails.noPreviousMatches);
+          loadedTabsRef.current.delete('form');
+          return;
+        }
+
+        const homeId = fixture.teams.home.id;
+        const awayId = fixture.teams.away.id;
         const [homeMatches, awayMatches] = await Promise.all([
           ApiFootballService.getCompetitor365Matches(homeId),
           ApiFootballService.getCompetitor365Matches(awayId),
@@ -1568,7 +1607,9 @@ const MatchDetailsScreen = () => {
       // not-yet-started matches keep the "not available yet / retry" wording.
       const subtext = isFinishedMatch()
         ? t.matchDetails.lineupsNoData
-        : t.matchDetails.lineupsUnavailable;
+        : isPreKickoff()
+          ? t.matchDetails.lineupsNotAnnounced
+          : t.matchDetails.lineupsUnavailable;
       return (
         <View style={styles.emptyState}>
           <Ionicons name="people-outline" size={64} color="#333" />

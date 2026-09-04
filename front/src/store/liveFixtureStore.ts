@@ -12,6 +12,7 @@ import {
 } from './liveFixtureSync';
 import { hasApiStatistics } from '../../utils/matchStatsFallback';
 import { pickBetterLineups } from '../../utils/matchLineupsFallback';
+import { mergeFixtureEvents } from '../../utils/mergeFixtureEvents';
 import type { LiveFixtureSnapshot } from './liveFixtureStore.types';
 import type { Fixture } from '../../services/apiFootball';
 import {
@@ -67,10 +68,14 @@ function applyWebSocketPatch(
   existing: LiveFixtureSnapshot,
 ): void {
   const patchedFixture = applyWebSocketToFixture(existing, update);
+  const mergedEvents =
+    update.newEvents?.length
+      ? mergeFixtureEvents(existing.events, update.newEvents)
+      : existing.events;
   const next = buildSnapshotFromRaw({
     fixtureId,
     fixture: patchedFixture,
-    events: existing.events,
+    events: mergedEvents,
     lineups: existing.lineups,
     statistics: existing.statistics,
     venue: existing.venue,

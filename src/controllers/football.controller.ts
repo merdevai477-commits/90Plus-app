@@ -3023,6 +3023,7 @@ export class FootballController {
           live: live.length,
           upcoming: upcoming.length,
           finished: finished.length,
+          cacheHit: result.cacheHit === true,
         },
       });
     } catch (error) {

@@ -219,6 +219,19 @@ export class LiveMatchIngestorService {
             status: result.snapshot.status,
             minute: result.snapshot.elapsed ?? undefined,
         });
+
+        if (result.freshEvents.length > 0) {
+            void import('./live-fixture-event-push.service').then(({ pushLiveFixtureEventDelta }) =>
+                pushLiveFixtureEventDelta(fixtureId, {
+                    forceRefresh: true,
+                    homeScore: result.snapshot.homeScore,
+                    awayScore: result.snapshot.awayScore,
+                    status: result.snapshot.status,
+                    minute: result.snapshot.elapsed ?? undefined,
+                    reason: 'ingestor_fresh',
+                }),
+            );
+        }
     }
 
     private static async checkFavoritedFixtures(signal?: AbortSignal): Promise<void> {

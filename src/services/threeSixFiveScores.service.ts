@@ -174,6 +174,8 @@ export type ThreeSixFiveDataSource = '365scores';
 export interface ThreeSixFiveResult<T> {
   data: T | null;
   source: ThreeSixFiveDataSource | null;
+  /** True when served from Redis without upstream pagination. */
+  cacheHit?: boolean;
 }
 
 export type ThreeSixFiveMatchPhase = 'upcoming' | 'live' | 'finished';
@@ -1072,9 +1074,14 @@ export function selectCompetitionFixturesBatch(
   };
 }
 
-class ThreeSixFiveScoresService {
+export class ThreeSixFiveScoresService {
   private lastUpstreamFetch = new Map<string, number>();
   private inFlight = new Map<string, Promise<unknown>>();
+  /** Coalesce concurrent competitor-matches fetches (Form tab + /form fallback). */
+  private pendingCompetitorMatches = new Map<
+    string,
+    Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorMatches>>
+  >();
   private liveSubscriptions = new Map<number, { expiresAt: number }>();
   private livePollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -1992,6 +1999,11 @@ class ThreeSixFiveScoresService {
    * Fixtures are synthesized into the app Fixture shape and persisted to CachedFixture
    * (Postgres) in the background so calendar/detail screens stay consistent.
    */
+  /** TTL when competitor has live fixtures (short — scores change). */
+  static readonly COMPETITOR_MATCHES_LIVE_TTL_MS = 60_000;
+  /** TTL when no live fixtures — H2H/history stable for hours intra-match. */
+  static readonly COMPETITOR_MATCHES_FINISHED_TTL_MS = 12 * 60 * 60 * 1000;
+
   async getCompetitorMatches(
     competitorId: number,
     language?: string | null,
@@ -2003,8 +2015,36 @@ class ThreeSixFiveScoresService {
       const langId = resolveScores365LangId(language);
       const cacheKey = `365:competitor:${competitorId}:matches:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFiveCompetitorMatches>(cacheKey);
-      if (cached) return { data: cached, source: '365scores' };
+      if (cached) return { data: cached, source: '365scores', cacheHit: true };
 
+      const pending = this.pendingCompetitorMatches.get(cacheKey);
+      if (pending) {
+        logger.debug(`[365Scores] coalescing in-flight competitor-matches ${competitorId}`);
+        return pending;
+      }
+
+      const fetchPromise = this.fetchCompetitorMatchesUpstream(competitorId, langId, cacheKey);
+      this.pendingCompetitorMatches.set(cacheKey, fetchPromise);
+      try {
+        return await fetchPromise;
+      } finally {
+        this.pendingCompetitorMatches.delete(cacheKey);
+      }
+    } catch (err: unknown) {
+      logger.error(
+        `[365Scores] getCompetitorMatches(${competitorId}) failed:`,
+        (err as Error)?.message,
+      );
+      return { data: null, source: null };
+    }
+  }
+
+  private async fetchCompetitorMatchesUpstream(
+    competitorId: number,
+    langId: number,
+    cacheKey: string,
+  ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorMatches>> {
+    try {
       const { games, competitionMeta } = await this.fetchCompetitorGames(competitorId, langId);
       if (!games.length) return { data: null, source: null };
 
@@ -2033,12 +2073,15 @@ class ThreeSixFiveScoresService {
         competitionMeta,
       );
 
-      const ttlMs = live.length > 0 ? 60_000 : 300_000;
+      const ttlMs =
+        live.length > 0
+          ? ThreeSixFiveScoresService.COMPETITOR_MATCHES_LIVE_TTL_MS
+          : ThreeSixFiveScoresService.COMPETITOR_MATCHES_FINISHED_TTL_MS;
       await redisCacheService.set(cacheKey, result, ttlMs);
-      return { data: result, source: '365scores' };
+      return { data: result, source: '365scores', cacheHit: false };
     } catch (err: unknown) {
       logger.error(
-        `[365Scores] getCompetitorMatches(${competitorId}) failed:`,
+        `[365Scores] fetchCompetitorMatchesUpstream(${competitorId}) failed:`,
         (err as Error)?.message,
       );
       return { data: null, source: null };

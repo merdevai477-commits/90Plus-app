@@ -748,6 +748,7 @@ export const ar = {
     formation: 'التشكيلة',
     noLineups: 'التشكيلات غير متاحة',
     lineupsUnavailable: 'التشكيلة لسه مش متاحة، جرّب تاني بعد شوية.',
+    lineupsNotAnnounced: 'التشكيلة لسه ما اتعلنتش — ارجع قبل بداية المباراة.',
     lineupsNoData: 'التشكيلة غير متاحة لهذه المباراة لعدم توفر البيانات من مزوّد الخدمة.',
     lineupsLoadingRetry: 'جاري البحث عن التشكيلات…',
     retry: 'إعادة المحاولة',

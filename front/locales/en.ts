@@ -522,6 +522,7 @@ export const en = {
     formation: 'Formation',
     noLineups: 'Lineups not available',
     lineupsUnavailable: 'Lineup not available yet — check back a bit later.',
+    lineupsNotAnnounced: 'Lineups not yet announced — check closer to kickoff.',
     lineupsNoData: 'Lineups are not available for this match due to missing data from the provider.',
     lineupsLoadingRetry: 'Checking for lineups…',
     retry: 'Retry',

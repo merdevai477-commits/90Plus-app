@@ -53,6 +53,8 @@ class LiveFixtureSyncService {
     private finishingInFlight = new Set<number>();
     private droppedFromLiveIds = new Set<number>();
     private warmedLiveIds = new Set<number>();
+    /** Throttle non-score event WS pushes (cards/subs) — max one delta / 8s per fixture. */
+    private lastEventPushAt = new Map<number, number>();
 
     start(): void {
         if (!process.env.FOOTBALL_API_KEY) {
@@ -88,6 +90,7 @@ class LiveFixtureSyncService {
         this.previouslyLiveIds.clear();
         this.finishingInFlight.clear();
         this.warmedLiveIds.clear();
+        this.lastEventPushAt.clear();
         logger.info('🔴 Live fixture sync stopped');
     }
 
@@ -144,6 +147,10 @@ class LiveFixtureSyncService {
             this.warmedLiveIds.delete(fixtureId);
 
             this.broadcastMatchUpdate(fixtureId, homeScore, awayScore, status, elapsed);
+
+            void import('./live-fixture-event-push.service').then(({ resetPushedEventsForFixture }) =>
+                resetPushedEventsForFixture(fixtureId),
+            );
 
             LiveMatchIngestorService.triggerFixtureIngest(fixtureId);
 
@@ -428,6 +435,28 @@ class LiveFixtureSyncService {
             if (changed) {
                 this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed, extra });
                 this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed, extra);
+
+                const forceEvents = scoreChanged || statusChanged;
+                const nowMs = Date.now();
+                const lastPush = this.lastEventPushAt.get(id) ?? 0;
+                if (forceEvents || nowMs - lastPush >= 8_000) {
+                    this.lastEventPushAt.set(id, nowMs);
+                    void import('./live-fixture-event-push.service').then(({ pushLiveFixtureEventDelta }) =>
+                        pushLiveFixtureEventDelta(id, {
+                            forceRefresh: forceEvents,
+                            homeScore,
+                            awayScore,
+                            status,
+                            minute: elapsed ?? undefined,
+                            extra,
+                            reason: forceEvents
+                                ? scoreChanged
+                                    ? 'score_change'
+                                    : 'status_change'
+                                : 'live_tick',
+                        }),
+                    );
+                }
             }
 
             // Re-ingest favorited live fixtures every tick so cards/VAR are

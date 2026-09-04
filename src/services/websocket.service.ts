@@ -92,6 +92,30 @@ export interface FollowPayload {
     action: 'follow' | 'unfollow';
 }
 
+/** Timeline event shape pushed with match_update.newEvents (API-Football compatible). */
+export interface WsFixtureEvent {
+    time: {
+        elapsed: number;
+        extra: number | null;
+    };
+    team: {
+        id: number;
+        name: string;
+        logo?: string;
+    };
+    player: {
+        id: number;
+        name: string;
+    };
+    assist: {
+        id: number | null;
+        name: string | null;
+    };
+    type: string;
+    detail: string;
+    comments: string | null;
+}
+
 /**
  * Match Update Payload
  * Requirements: 21.5
@@ -104,6 +128,8 @@ export interface MatchUpdatePayload {
     minute?: number;
     /** Injury/stoppage minutes; null clears stoppage on FT. */
     extra?: number | null;
+    /** Newly detected timeline events (goals/cards/subs) — primary live delivery path. */
+    newEvents?: WsFixtureEvent[];
 }
 
 /**

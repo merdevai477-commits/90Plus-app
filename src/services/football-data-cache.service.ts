@@ -4172,7 +4172,41 @@ class FootballDataCacheService {
         competitorId: number,
         language?: string | null,
     ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorMatches>> {
-        return threeSixFiveScoresService.getCompetitorMatches(competitorId, language);
+        const startedAt = Date.now();
+        try {
+            const result = await threeSixFiveScoresService.getCompetitorMatches(competitorId, language);
+            const { addBreadcrumb, captureMessage } = await import('../config/sentry.config');
+            addBreadcrumb(
+                'H2H competitor-matches lookup',
+                'match-details.h2h',
+                'info',
+                {
+                    competitorId,
+                    cacheHit: result.cacheHit === true,
+                    latencyMs: Date.now() - startedAt,
+                    finished: result.data?.finished?.length ?? 0,
+                },
+            );
+            if (!result.data) {
+                captureMessage(
+                    `[MatchDetails] competitor-matches empty/failed id=${competitorId}`,
+                    'warning',
+                );
+            } else if (!result.cacheHit && Date.now() - startedAt > 3_000) {
+                captureMessage(
+                    `[MatchDetails] competitor-matches slow (${Date.now() - startedAt}ms) id=${competitorId}`,
+                    'warning',
+                );
+            }
+            return result;
+        } catch (err: unknown) {
+            const { captureException } = await import('../config/sentry.config');
+            captureException(err instanceof Error ? err : new Error(String(err)), {
+                competitorId,
+                path: 'getCached365CompetitorMatches',
+            });
+            throw err;
+        }
     }
 
     async getCached365CompetitorTransfers(
@@ -4628,6 +4662,13 @@ class FootballDataCacheService {
                 `[365LineupsMerged] fixture=${fixtureId}: confirmed lineup incomplete — home=${startersHome} away=${startersAway} — serving immediately`,
             );
             await redisCacheService.set(`lineups:${fixtureId}:incomplete`, true, 60_000);
+            void import('../config/sentry.config').then(({ addBreadcrumb }) =>
+                addBreadcrumb('lineups incomplete served', 'match-details.lineups', 'warning', {
+                    fixtureId,
+                    startersHome,
+                    startersAway,
+                }),
+            );
             return this.finalize365MergedLineups(
                 fixtureId,
                 merged.map((s: any) => ({ ...s, _incomplete: true })),

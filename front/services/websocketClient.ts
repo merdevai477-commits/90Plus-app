@@ -108,6 +108,8 @@ export interface MatchUpdatePayload {
   status: string;
   minute?: number;
   extra?: number | null;
+  /** Newly detected timeline events pushed over WS (primary live delivery). */
+  newEvents?: import('../services/apiFootball').FixtureEvent[];
 }
 
 /**

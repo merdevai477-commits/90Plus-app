@@ -9,11 +9,14 @@ import {
 } from '../src/store/liveFixtureStore.types';
 import { logger } from '../utils/logger';
 import { isLiveStoppage } from '../components/Matches/leagueApiUtils';
+import { addBreadcrumb, captureMessage } from '../services/sentry.service';
 
 const MAX_CONCURRENT_FAST = 6;
 /** Wait after connect before trusting WS and suspending HTTP polls (avoids flap). */
 const WS_TRUST_DEBOUNCE_MS = 2500;
-/** Focused live timeline refresh while WS owns score/clock (events are not on WS). */
+/** Focused live timeline reconciliation while WS owns score/clock (events also on WS). */
+const LIVE_FIXTURE_EVENTS_RECONCILE_MS = 60_000;
+/** Fallback reconciliation when WS is not trusted. */
 const LIVE_FIXTURE_EVENTS_POLL_MS = 15_000;
 
 /**
@@ -45,6 +48,12 @@ export function useLiveFixtureSync(): void {
     };
 
     const unsubWs = websocketClient.subscribeToAllMatchUpdates((update: MatchUpdatePayload) => {
+      if (update.newEvents?.length) {
+        addBreadcrumb('WS match_event received', 'match-details.events', 'info', {
+          fixtureId: update.matchId,
+          count: update.newEvents.length,
+        });
+      }
       useLiveFixtureStore.getState().patchFromWebSocket(update, Date.now());
     });
 
@@ -55,9 +64,25 @@ export function useLiveFixtureSync(): void {
       const snap = state.snapshots[focusedId];
       if (!snap || snap.phase !== 'live') return;
       const now = Date.now();
-      if (now - lastFocusedEventsAtRef.current < LIVE_FIXTURE_EVENTS_POLL_MS) return;
+      const intervalMs = wsTrustedRef.current
+        ? LIVE_FIXTURE_EVENTS_RECONCILE_MS
+        : LIVE_FIXTURE_EVENTS_POLL_MS;
+      if (now - lastFocusedEventsAtRef.current < intervalMs) return;
       lastFocusedEventsAtRef.current = now;
+      addBreadcrumb('events poll fired', 'match-details.events', 'info', {
+        fixtureId: focusedId,
+        wsTrusted: wsTrustedRef.current,
+        reconcileMs: intervalMs,
+      });
+      const pollStarted = Date.now();
       await state.fetchAndIngestEvents(focusedId);
+      const pollMs = Date.now() - pollStarted;
+      if (pollMs > 5_000) {
+        captureMessage(
+          `[MatchDetails] events poll slow (${pollMs}ms) fixture=${focusedId}`,
+          'warning',
+        );
+      }
     };
 
     const pollTick = async () => {

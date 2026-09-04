@@ -115,6 +115,7 @@ export interface MatchUpdatePayload {
   status: string;
   minute?: number;
   extra?: number | null;
+  newEvents?: import('../services/apiFootball').FixtureEvent[];
 }
 
 /**
