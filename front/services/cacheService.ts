@@ -21,6 +21,9 @@ const MAX_CACHE_ENTRIES = 50;
 /** Keep the matches calendar on disk across app kills — scores overlay separately. */
 export const MATCHES_CALENDAR_DISK_TTL_MS = 6 * 60 * 60 * 1000;
 
+/** Past-date calendar disk TTL — capped so stale schedules do not live forever (C3). */
+export const MATCHES_PAST_DISK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 function logicalKeyFromStorageKey(storageKey: string): string {
   return storageKey.startsWith(CACHE_PREFIX) ? storageKey.slice(CACHE_PREFIX.length) : storageKey;
 }
@@ -681,9 +684,9 @@ class CacheService {
 
   /**
    * Cache matches for a specific date.
-   * Past dates are cached for 30 days (matches are finished - permanent).
-   * Today's matches are cached for 5 minutes (matches may be live).
-   * Future dates are cached for 2 hours.
+   * Past dates are cached for 7 days (C3).
+   * Today's matches use MATCHES_CALENDAR_DISK_TTL_MS.
+   * Future dates are cached for 3 days.
    */
   async cacheMatchesByDate(dateString: string, matches: any[], ttl?: number): Promise<void> {
     const key = `${CACHE_KEYS.MATCHES}_${dateString}`;
@@ -698,8 +701,7 @@ class CacheService {
       const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       
       if (dateString < todayKey) {
-        // Past dates - permanent cache (matches are finished, never change)
-        cacheTTL = Number.MAX_SAFE_INTEGER;
+        cacheTTL = MATCHES_PAST_DISK_TTL_MS;
       } else if (dateString === todayKey) {
         // Calendar snapshot — live scores come from the live feed / WS overlay.
         cacheTTL = MATCHES_CALENDAR_DISK_TTL_MS;

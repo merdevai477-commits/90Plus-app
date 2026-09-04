@@ -5,7 +5,7 @@
 
 import { Fixture, ApiFootballService, MAJOR_LEAGUES } from '../../services/apiFootball';
 import { Match, LeagueInfo, TeamInfo } from './matchCardUtils';
-import { cacheService } from '../../services/cacheService';
+import { cacheService, MATCHES_PAST_DISK_TTL_MS } from '../../services/cacheService';
 import { logger } from '../../utils/logger';
 import { getApiUrl } from '../../config/api.config';
 import { getAppLanguageCode, acceptLanguageHeader } from '../../utils/appLanguage';
@@ -389,7 +389,7 @@ let inFlightLiveMatches: Promise<Match[]> | null = null;
 
 /**
  * Fetches matches for a specific date directly from backend API.
- * Uses caching: past dates cached for 30 days (permanent), today for 5 min, future for 2 hours.
+ * Uses caching: past dates capped at 7 days (C3), today/future use cacheService defaults.
  * ✅ FIX: Always return cached data for past dates without re-fetching
  * ✅ OPTIMIZED: Backend has permanent cache for finished matches
  * ✅ INTEGRATED: Direct backend API integration
@@ -443,7 +443,7 @@ const fetchMatchesByDateImpl = async (
       await cacheService.cacheMatchesByDate(
         dateString,
         matches,
-        isPastDate ? Number.MAX_SAFE_INTEGER : undefined,
+        isPastDate ? MATCHES_PAST_DISK_TTL_MS : undefined,
       );
     }
     return matches;
@@ -479,7 +479,7 @@ const fetchMatchesByDateFromNetwork = async (
     await cacheService.cacheMatchesByDate(
       dateString,
       matches,
-      isPastDate ? Number.MAX_SAFE_INTEGER : undefined,
+      isPastDate ? MATCHES_PAST_DISK_TTL_MS : undefined,
     );
     logger.debug(
       `💾 Cached ${matches.length} matches for ${dateString} from backend (permanent: ${isPastDate})`,

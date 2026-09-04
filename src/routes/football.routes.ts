@@ -5,6 +5,10 @@ import {
   calendarTodayKey,
   offsetCalendarDateKey,
 } from '../utils/calendar-day-bounds.util';
+import {
+  isDatePastInAllOffsets,
+  isDateTodayInAnyOffset,
+} from '../utils/matches-date-ttl.util';
 
 // Shared public cache TTLs for football data (no userId in key — same response for all users)
 const SHARED_CACHE_3S   = responseCacheMiddleware({ ttl: 3   * 1000, sharedCache: true });
@@ -101,14 +105,13 @@ router.get('/fixtures/optimized', SHARED_CACHE_8S, FootballController.getOptimiz
 // These endpoints use PostgreSQL for permanent storage
 // ============================================
 
-// GET /api/football/cached/matches/:date — TTL by date (today 8s for live scores)
+// GET /api/football/cached/matches/:date — TTL by date (today 60s; any UTC offset −12..+14)
 router.get('/cached/matches/:date', (req, res, next) => {
   const dateParam = req.params.date as string;
-  const today = new Date().toISOString().split('T')[0];
-  if (dateParam < today) {
+  if (isDatePastInAllOffsets(dateParam)) {
     return SHARED_CACHE_24H(req, res, next);
   }
-  if (dateParam === today) {
+  if (isDateTodayInAnyOffset(dateParam)) {
     return SHARED_CACHE_60S(req, res, next);
   }
   return SHARED_CACHE_5MIN(req, res, next);
@@ -117,11 +120,10 @@ router.get('/cached/matches/:date', (req, res, next) => {
 // GET /api/football/cached/league/:leagueId/matches/:date — per-league fixtures (incl. lower tiers)
 router.get('/cached/league/:leagueId/matches/:date', (req, res, next) => {
   const dateParam = req.params.date as string;
-  const today = new Date().toISOString().split('T')[0];
-  if (dateParam < today) {
+  if (isDatePastInAllOffsets(dateParam)) {
     return SHARED_CACHE_24H(req, res, next);
   }
-  if (dateParam === today) {
+  if (isDateTodayInAnyOffset(dateParam)) {
     return SHARED_CACHE_60S(req, res, next);
   }
   return SHARED_CACHE_5MIN(req, res, next);

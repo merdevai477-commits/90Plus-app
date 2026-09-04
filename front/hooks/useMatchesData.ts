@@ -12,7 +12,7 @@ import {
   getLocalTodayKey,
   formatLocalDateKey,
 } from '../components/Matches/leagueApiUtils';
-import { cacheService, MATCHES_CALENDAR_DISK_TTL_MS } from '../services/cacheService';
+import { cacheService, MATCHES_CALENDAR_DISK_TTL_MS, MATCHES_PAST_DISK_TTL_MS } from '../services/cacheService';
 import { logger } from '../utils/logger';
 import { useLanguageStore } from '../src/i18n/store';
 import { prefetchFootballTranslations } from '../src/stores/footballTranslationStore';
@@ -40,6 +40,7 @@ import { matchCardToApiFixture } from '../utils/matchCardToApiFixture';
 import { mergeTodayCalendarWithLiveFeed } from '../utils/mergeTodayCalendarWithLiveFeed';
 import { dateFromLocalKey } from '../utils/safeDate';
 import { ensureLiveFeed, subscribeLiveFeed } from '../services/liveFeedOwner';
+import { shouldApplyCalendarGeneration } from '../utils/calendarGeneration';
 
 import type { GroupedMatches, CountryGroup } from './matchesData.types';
 
@@ -295,12 +296,29 @@ export const useMatchesData = (
   const [isDataStale, setIsDataStale] = useState<boolean>(false);
   const isFetchingRef = useRef(false);
   const calendarLenRef = useRef(0);
+  /** Bumps on date change so stale async writers cannot overwrite the active calendar (C2). */
+  const calendarGenRef = useRef(0);
   const language = useLanguageStore((s) => s.language);
   calendarLenRef.current = calendarMatches.length;
 
   const today = getLocalTodayKey();
   const isToday = dateString === today;
   const isPastDate = dateString < today;
+
+  useEffect(() => {
+    calendarGenRef.current += 1;
+  }, [dateString]);
+
+  const applyCalendarMatches = useCallback(
+    (
+      generation: number,
+      next: Match[] | ((prev: Match[]) => Match[]),
+    ) => {
+      if (!shouldApplyCalendarGeneration(generation, calendarGenRef.current)) return;
+      setCalendarMatches(next);
+    },
+    [],
+  );
 
   // Interest from calendar only (before overlay) so WS updates don't widen the set.
   const pollFixtureIds = useMemo(
@@ -361,9 +379,10 @@ export const useMatchesData = (
   // Stale-while-revalidate: show disk cache immediately when date changes
   useEffect(() => {
     let cancelled = false;
+    const generation = calendarGenRef.current;
     const memoryCached = memoryCache.get(dateString);
     if (memoryCached?.data?.length) {
-      setCalendarMatches(memoryCached.data);
+      applyCalendarMatches(generation, memoryCached.data);
       setLoading(false);
     } else {
       setLoading(true);
@@ -372,14 +391,15 @@ export const useMatchesData = (
     const cacheKey = getMatchesCacheKey(dateString);
     cacheService.get<Match[]>(cacheKey, true).then((cached) => {
       if (cancelled || !cached?.length) return;
+      if (!shouldApplyCalendarGeneration(generation, calendarGenRef.current)) return;
       evictOldestIfNeeded(memoryCache);
       memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
-      setCalendarMatches(cached);
+      applyCalendarMatches(generation, cached);
       setLoading(false);
     }).catch(() => {});
 
     return () => { cancelled = true; };
-  }, [dateString]);
+  }, [dateString, applyCalendarMatches]);
 
   // Prefetch today + yesterday in background for instant tab switches
   useEffect(() => {
@@ -402,7 +422,7 @@ export const useMatchesData = (
         if (data.length > 0) {
           evictOldestIfNeeded(memoryCache);
           memoryCache.set(key, { data, timestamp: Date.now() });
-          cacheService.set(getMatchesCacheKey(key), data, key === todayKey ? MATCHES_CALENDAR_DISK_TTL_MS : Number.MAX_SAFE_INTEGER).catch(() => {});
+          cacheService.set(getMatchesCacheKey(key), data, key === todayKey ? MATCHES_CALENDAR_DISK_TTL_MS : MATCHES_PAST_DISK_TTL_MS).catch(() => {});
         }
       }).catch(() => {});
     });
@@ -438,6 +458,7 @@ export const useMatchesData = (
     async (forceRefresh = false) => {
       if (isFetchingRef.current && !forceRefresh) return;
       isFetchingRef.current = true;
+      const generation = calendarGenRef.current;
 
       setError(null);
 
@@ -448,7 +469,7 @@ export const useMatchesData = (
           evictOldestIfNeeded(memoryCache);
           memoryCache.set(dateString, { data, timestamp: Date.now() });
           const ttl = isPastDate
-            ? Number.MAX_SAFE_INTEGER
+            ? MATCHES_PAST_DISK_TTL_MS
             : isToday
               ? MATCHES_CALENDAR_DISK_TTL_MS
               : 3 * 24 * 60 * 60 * 1000;
@@ -459,14 +480,14 @@ export const useMatchesData = (
           void fetchTodayMatchesWithLiveFeed(
             selectedDate,
             (liveFeed) => {
-              setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+              applyCalendarMatches(generation, (prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
               setLoading(false);
               setIsDataStale(false);
             },
             { fresh: true },
           )
             .then((merged) => {
-              setCalendarMatches(merged);
+              applyCalendarMatches(generation, merged);
               setIsDataStale(false);
               maybePrefetchMatchAssets(merged);
               return persistCalendar(merged);
@@ -479,7 +500,7 @@ export const useMatchesData = (
           const memoryCached = memoryCache.get(dateString);
           if (memoryCached?.data?.length) {
             logger.debug(`📦 Memory cache hit for ${dateString}`);
-            setCalendarMatches(memoryCached.data);
+            applyCalendarMatches(generation, memoryCached.data);
             setLoading(false);
             maybePrefetchMatchAssets(memoryCached.data);
 
@@ -505,9 +526,13 @@ export const useMatchesData = (
             logger.debug(`📦 AsyncStorage cache hit for ${dateString}`, {
               cachedCount: cached.length,
             });
+            if (!shouldApplyCalendarGeneration(generation, calendarGenRef.current)) {
+              isFetchingRef.current = false;
+              return;
+            }
             evictOldestIfNeeded(memoryCache);
             memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
-            setCalendarMatches(cached);
+            applyCalendarMatches(generation, cached);
             setLoading(false);
             maybePrefetchMatchAssets(cached);
 
@@ -535,7 +560,7 @@ export const useMatchesData = (
 
         if (isToday) {
           fetchedMatches = await fetchTodayMatchesWithLiveFeed(selectedDate, (liveFeed) => {
-            setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+            applyCalendarMatches(generation, (prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
             setLoading(false);
             setIsDataStale(false);
           });
@@ -545,7 +570,7 @@ export const useMatchesData = (
           fetchedMatches = await fetchMatchesByDate(selectedDate);
         }
 
-        setCalendarMatches(fetchedMatches);
+        applyCalendarMatches(generation, fetchedMatches);
         setIsDataStale(false);
         maybePrefetchMatchAssets(fetchedMatches);
         await persistCalendar(fetchedMatches);
@@ -562,22 +587,24 @@ export const useMatchesData = (
           rawMessage.toLowerCase().includes('date value out of bounds')
             ? 'Failed to load matches'
             : rawMessage;
-        setCalendarMatches((prev) => {
-          if (prev.length > 0) {
-            setIsDataStale(true);
-            setError(null);
+        if (shouldApplyCalendarGeneration(generation, calendarGenRef.current)) {
+          setCalendarMatches((prev) => {
+            if (prev.length > 0) {
+              setIsDataStale(true);
+              setError(null);
+              return prev;
+            }
+            setError(errorMessage);
             return prev;
-          }
-          setError(errorMessage);
-          return prev;
-        });
+          });
+        }
         logger.error('Error fetching matches data:', err);
       } finally {
         setLoading(false);
         isFetchingRef.current = false;
       }
     },
-    [dateString, selectedDate, isToday, isPastDate]
+    [dateString, selectedDate, isToday, isPastDate, applyCalendarMatches]
   );
 
   // Preload upcoming days in background
@@ -624,6 +651,7 @@ export const useMatchesData = (
     isPastFlag: boolean
   ) => {
     if (isPastFlag) return;
+    const generation = calendarGenRef.current;
 
     // ✅ Throttle: skip if refreshed recently
     const lastFetch = lastBackgroundFetch.get(dateStr) || 0;
@@ -640,14 +668,15 @@ export const useMatchesData = (
         ? await fetchTodayMatchesWithLiveFeed(
             date,
             (liveFeed) => {
-              setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+              applyCalendarMatches(generation, (prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
               setIsDataStale(false);
             },
             { fresh: true },
           )
         : await fetchMatchesByDate(date, { fresh: true });
 
-      setCalendarMatches(fetchedMatches);
+      if (!shouldApplyCalendarGeneration(generation, calendarGenRef.current)) return;
+      applyCalendarMatches(generation, fetchedMatches);
       setIsDataStale(false); // background refresh succeeded
 
       const cacheTTL = isTodayFlag ? MATCHES_CALENDAR_DISK_TTL_MS : 3 * 24 * 60 * 60 * 1000;
@@ -658,10 +687,12 @@ export const useMatchesData = (
       await cacheService.set(cacheKey, fetchedMatches, cacheTTL);
     } catch (err) {
       // Fix ERR-3: mark data as stale so UI can show a subtle indicator
-      setIsDataStale(true);
+      if (shouldApplyCalendarGeneration(generation, calendarGenRef.current)) {
+        setIsDataStale(true);
+      }
       logger.warn('Background refresh failed:', err);
     }
-  }, []);
+  }, [applyCalendarMatches]);
 
   // ✅ FIXED: Use ref to prevent infinite loop
   // fetchData is memoized with useCallback, but we use ref for extra safety
@@ -718,11 +749,12 @@ export const useMatchesData = (
   // Live feed — subscribe to the canonical owner (single poll + TTL cache).
   useEffect(() => {
     if (pauseBackgroundRefresh || !isToday || isPastDate) return;
+    const generation = calendarGenRef.current;
 
     const unsub = subscribeLiveFeed((liveFeed) => {
       if (liveFeed.length === 0) return;
       prefetchLiveMatchAssets(liveFeed);
-      setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+      applyCalendarMatches(generation, (prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
       setLoading(false);
       setIsDataStale(false);
     });
@@ -730,7 +762,7 @@ export const useMatchesData = (
     return () => {
       unsub();
     };
-  }, [pauseBackgroundRefresh, isToday, isPastDate]);
+  }, [pauseBackgroundRefresh, isToday, isPastDate, applyCalendarMatches, dateString]);
 
   // Calendar still shows UPCOMING after kickoff+FT window — bypass day cache.
   useEffect(() => {
@@ -740,18 +772,19 @@ export const useMatchesData = (
     const now = Date.now();
     if (now - lastStaleCalendarRefreshAt < STALE_CALENDAR_REFRESH_MS) return;
     lastStaleCalendarRefreshAt = now;
+    const generation = calendarGenRef.current;
     void fetchTodayMatchesWithLiveFeed(selectedDate, (liveFeed) => {
-      setCalendarMatches((prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+      applyCalendarMatches(generation, (prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
       setLoading(false);
     }, { fresh: true })
       .then((merged) => {
-        setCalendarMatches(merged);
+        applyCalendarMatches(generation, merged);
         setIsDataStale(false);
         evictOldestIfNeeded(memoryCache);
         memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
       })
       .catch(() => undefined);
-  }, [calendarMatches, pauseBackgroundRefresh, isToday, isPastDate, selectedDate, dateString]);
+  }, [calendarMatches, pauseBackgroundRefresh, isToday, isPastDate, selectedDate, dateString, applyCalendarMatches]);
 
   const refetch = useCallback(async () => {
     await fetchData(true);
