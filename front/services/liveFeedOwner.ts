@@ -160,6 +160,11 @@ export async function ensureLiveFeed(options?: { force?: boolean }): Promise<Mat
   return fetchAndStore(options?.force === true);
 }
 
+/** True once WS has been connected long enough to own live updates (A7). */
+export function isLiveFeedWsTrusted(): boolean {
+  return wsTrusted;
+}
+
 export function getLiveFeedSnapshot(): Match[] {
   return lastPayload;
 }

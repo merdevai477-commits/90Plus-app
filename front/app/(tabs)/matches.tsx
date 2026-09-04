@@ -38,6 +38,7 @@ import {
   isMisTaggedWorldCupLeagueName,
   WC_2026_OFFICIAL_LOGO,
 } from '../../constants/worldCup';
+import { getAppFeaturesPollPeriodMs } from '../../utils/appFeaturesPoll';
 import type { ImageSource } from 'expo-image';
 import { resolveLiveMinuteLabel, resolveLiveSecondsLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
 import { useSecondTick } from '../../hooks/useSecondTick';
@@ -87,6 +88,11 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 // invalidate cell types on every render and tank performance.
 const ITEM_SEPARATOR_8 = () => <View style={{ height: 8 }} />;
 const ITEM_SEPARATOR_10 = () => <View style={{ height: 10 }} />;
+
+/** Collapsed CountryAccordion header (padding 12×2 + label + borders) — P2-9/B2. */
+const MATCHES_COUNTRY_ESTIMATED_ITEM_SIZE = 56;
+/** LeagueCard row used by the World Cup FlashList branch. */
+const MATCHES_LEAGUE_ESTIMATED_ITEM_SIZE = 72;
 
 const FILTERS = ['All', 'Live', 'Upcoming', 'Favorite', 'WorldCup', 'Finished'] as const;
 type MatchFilter = (typeof FILTERS)[number];
@@ -1037,14 +1043,19 @@ export default function MatchesHubScreenV2() {
     // Poll for the server unlock flag. Far from kickoff we check every 30s; in
     // the final 2 minutes we tighten to 5s so the World Cup tab opens right on
     // time (server flag stays the single source of truth — no client/tab desync).
+    // A6: re-evaluate cadence every tick against unlockAtMs so the 5s mode cannot
+    // latch after unlock (was previously stuck at 5s forever once entered).
     let id: ReturnType<typeof setInterval> | null = null;
+    const clear = () => {
+      if (id) {
+        clearInterval(id);
+        id = null;
+      }
+    };
     const schedule = () => {
+      clear();
       const unlock = useAppFeaturesStore.getState().unlockAtMs;
-      const left = getWorldCupTimeLeft(Date.now(), unlock);
-      const secondsLeft = left.days * 86400 + left.hours * 3600 + left.mins * 60 + left.secs;
-      const tight = secondsLeft <= 120;
-      const period = tight ? 5_000 : 30_000;
-      if (id) clearInterval(id);
+      const period = getAppFeaturesPollPeriodMs(Date.now(), unlock);
       id = setInterval(() => {
         const now = Date.now();
         const unlockMs = useAppFeaturesStore.getState().unlockAtMs;
@@ -1054,14 +1065,14 @@ export default function MatchesHubScreenV2() {
         if (remSecs <= 120 || now >= unlockMs) {
           void useAppFeaturesStore.getState().hydrate(true);
         }
-        // Re-arm at the tighter cadence once we enter the final 2 minutes.
-        if (!tight && remSecs <= 120) schedule();
+        const nextPeriod = getAppFeaturesPollPeriodMs(now, unlockMs);
+        if (nextPeriod !== period) {
+          schedule();
+        }
       }, period);
     };
     schedule();
-    return () => {
-      if (id) clearInterval(id);
-    };
+    return clear;
   }, []);
 
   // Tickets (remaining predictions)
@@ -2171,6 +2182,7 @@ export default function MatchesHubScreenV2() {
           keyExtractor={g => g.id}
           renderItem={renderLeagueCard}
           ItemSeparatorComponent={ITEM_SEPARATOR_10}
+          estimatedItemSize={MATCHES_LEAGUE_ESTIMATED_ITEM_SIZE}
           drawDistance={250}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
           showsVerticalScrollIndicator={false}
@@ -2182,6 +2194,7 @@ export default function MatchesHubScreenV2() {
           data={[] as CountryGroup[]}
           keyExtractor={() => 'favorite-placeholder'}
           renderItem={() => null}
+          estimatedItemSize={MATCHES_COUNTRY_ESTIMATED_ITEM_SIZE}
           drawDistance={250}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
           showsVerticalScrollIndicator={false}
@@ -2197,6 +2210,7 @@ export default function MatchesHubScreenV2() {
           data={filteredCountryGroups}
           keyExtractor={cg => cg.country}
           renderItem={renderCountryAccordion}
+          estimatedItemSize={MATCHES_COUNTRY_ESTIMATED_ITEM_SIZE}
           drawDistance={250}
           ItemSeparatorComponent={ITEM_SEPARATOR_8}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}

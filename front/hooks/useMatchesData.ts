@@ -39,8 +39,9 @@ import {
 import { matchCardToApiFixture } from '../utils/matchCardToApiFixture';
 import { mergeTodayCalendarWithLiveFeed } from '../utils/mergeTodayCalendarWithLiveFeed';
 import { dateFromLocalKey } from '../utils/safeDate';
-import { ensureLiveFeed, subscribeLiveFeed } from '../services/liveFeedOwner';
+import { ensureLiveFeed, subscribeLiveFeed, isLiveFeedWsTrusted } from '../services/liveFeedOwner';
 import { shouldApplyCalendarGeneration } from '../utils/calendarGeneration';
+import { shouldForceLiveFeedFetch } from '../utils/liveFeedForceGate';
 
 import type { GroupedMatches, CountryGroup } from './matchesData.types';
 
@@ -123,7 +124,12 @@ async function fetchTodayMatchesWithLiveFeed(
   options?: { fresh?: boolean },
 ): Promise<Match[]> {
   const byDatePromise = fetchMatchesByDate(date, options);
-  const livePromise = ensureLiveFeed({ force: options?.fresh === true });
+  // A7: when WS owns live scores, honor the 12s live-feed TTL instead of force-busting.
+  const forceLive = shouldForceLiveFeedFetch(
+    options?.fresh === true,
+    isLiveFeedWsTrusted(),
+  );
+  const livePromise = ensureLiveFeed({ force: forceLive });
 
   // Paint live rows as soon as the live endpoint returns — don't wait for the
   // full day calendar (often slower) so the Live tab feels instant.
