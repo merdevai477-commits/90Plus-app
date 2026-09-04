@@ -1969,12 +1969,14 @@ class FootballDataCacheService {
             // P1-7: do not escalate empty lineups for latched terminal fixtures.
             if (await isTerminalLatched(fixtureId)) {
                 const empty: any[] = from365 ?? [];
+                // Never bury an empty lineup behind FINISHED TTL — providers often
+                // publish XI shortly after FT / after NS→LIVE cache busts.
                 const cacheEntry: MemoryCacheEntry<any> = {
                     data: empty,
                     timestamp: Date.now(),
-                    ttl: this.TTL.FINISHED,
+                    ttl: this.TTL.EMPTY,
                 };
-                await redisCacheService.set(redisKey, cacheEntry, this.TTL.FINISHED);
+                await redisCacheService.set(redisKey, cacheEntry, this.TTL.EMPTY);
                 this.setBoundedCache(this.lineupsCache, fixtureId, cacheEntry);
                 logger.debug(`[Lineups] fixture=${fixtureId} skip upstream (terminal latched)`);
                 return empty;
@@ -2020,15 +2022,16 @@ class FootballDataCacheService {
                 }
             }
             logger.warn(`[Lineups] fixture=${fixtureId} reason=upstream_empty source=365`);
-            // P1-7: backoff live empty upstream polls; terminal statuses use finished TTL.
+            // P1-7: backoff live empty upstream polls; never latch empty lineups
+            // under FINISHED TTL (6h) — that hid XI for whole sessions after LIVE→FT.
             if (isFinished || TERMINAL_LATCH_STATUSES.includes(dbMatch?.status ?? '')) {
                 const empty = from365 ?? [];
                 const cacheEntry: MemoryCacheEntry<any> = {
                     data: empty,
                     timestamp: Date.now(),
-                    ttl: this.TTL.FINISHED,
+                    ttl: this.TTL.EMPTY,
                 };
-                await redisCacheService.set(redisKey, cacheEntry, this.TTL.FINISHED);
+                await redisCacheService.set(redisKey, cacheEntry, this.TTL.EMPTY);
                 this.setBoundedCache(this.lineupsCache, fixtureId, cacheEntry);
             } else if (isLive) {
                 const { nextBackoffMs } = await recordEmptyUpstreamResult(fixtureId);

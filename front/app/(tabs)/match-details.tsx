@@ -709,28 +709,32 @@ const MatchDetailsScreen = () => {
       const fresh = await ApiFootballService.getFixtureLineups(fixtureId);
       if (hasLineupData(fresh)) {
         const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
-        if (snap) {
-          useLiveFixtureStore.getState().ingestSnapshot({
-            ...snap,
+        if (snap?.fixture) {
+          const merged = buildSnapshotFromRaw({
+            fixtureId,
+            fixture: snap.fixture,
+            events: snap.events ?? [],
             lineups: pickBetterLineups(snap.lineups, fresh) ?? fresh,
-            revision: snap.revision + 1,
-            updatedAt: Date.now(),
+            statistics: snap.statistics,
+            venue: snap.venue,
+            source: 'http-full',
+            existing: snap,
           });
+          if (merged) {
+            useLiveFixtureStore.getState().ingestSnapshot(merged);
+          }
         }
       }
 
-      let data = useLiveFixtureStore.getState().snapshots[fixtureId]?.lineups ?? [];
-      if (!isAuthoritativeLineupData(data) && isAuthoritativeLineupData(fresh)) {
-        data = fresh;
-      }
+      const data = useLiveFixtureStore.getState().snapshots[fixtureId]?.lineups ?? [];
 
-      if (isAuthoritativeLineupData(data)) {
+      if (isAuthoritativeLineupData(data) || isAuthoritativeLineupData(fresh)) {
         setLineupFetchAttempts(0);
         loadedTabsRef.current.add('lineups');
         addBreadcrumb('lineups fetch authoritative', 'match-details.lineups', 'info', {
           fixtureId,
         });
-      } else if (hasLineupData(data)) {
+      } else if (hasLineupData(data) || hasLineupData(fresh)) {
         // Show provisional lineups immediately; background retries upgrade silently.
         loadedTabsRef.current.add('lineups');
         setLineupFetchAttempts((n) => Math.min(n + 1, MAX_LINEUP_AUTO_RETRIES));
@@ -1167,22 +1171,21 @@ const MatchDetailsScreen = () => {
     return () => clearInterval(interval);
   }, [fixtureId, isLive, activeTab, loadStandingsIfNeeded]);
 
-  // If lineups tab is hidden, fall back to events so no orphan active state.
-  useEffect(() => {
-    if (!hasLineupData(lineups) && activeTab === 'lineups') {
-      setActiveTab('events');
-    }
-  }, [lineups, activeTab]);
+  // Keep Lineups tab selectable even while data is loading — never bounce the
+  // user back to Events mid-fetch (that made lineups feel "missing" forever).
 
-  // Poll lineups in the background for non-finished matches so the tab can
-  // appear as soon as the provider publishes a lineup (tab stays hidden until then).
+  // Warm lineups for every match (including finished). Tab used to stay hidden
+  // until data existed while finished matches skipped preload → chicken-and-egg.
   useEffect(() => {
-    if (!fixtureId || !fixture || hasLineupData(lineups) || isFinishedMatch()) return;
+    if (!fixtureId || !fixture || hasLineupData(lineups)) return;
 
     if (lineupsPreloadedForRef.current !== fixtureId) {
       lineupsPreloadedForRef.current = fixtureId;
       void loadLineupsIfNeeded(true);
     }
+
+    // Finished matches: one-shot fetch only (no polling).
+    if (isFinishedMatch()) return;
 
     const intervalMs = isLive() ? 15_000 : 30_000;
     const interval = setInterval(() => {
@@ -2245,9 +2248,7 @@ const MatchDetailsScreen = () => {
     { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },
     { key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const },
   ];
-  const tabs = baseTabs.filter(
-    (tab) => tab.key !== 'lineups' || hasLineupData(lineups),
-  );
+  const tabs = baseTabs;
 
   const hasLmtWidget = Boolean(lmtInfo?.widgetUrl);
   // Pitch / Score toggle only while the match is live — same as NS (no toggle).
