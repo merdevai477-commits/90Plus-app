@@ -1127,6 +1127,8 @@ const fetchFromProxy = async <T,>(
     fresh?: boolean;
     priority?: number;
     signal?: AbortSignal;
+    /** Skip the shared football request queue (interactive search). */
+    bypassQueue?: boolean;
   } = {},
 ): Promise<T> => {
   const baseUrl = getApiUrl();
@@ -1138,6 +1140,7 @@ const fetchFromProxy = async <T,>(
     timeout = DEFAULT_TIMEOUT,
     priority,
     signal,
+    bypassQueue = false,
   } = options;
 
   // Some endpoints are handled at the root /api level (like /matches), while others 
@@ -1327,13 +1330,15 @@ const fetchFromProxy = async <T,>(
 
   // Wrap with circuit breaker and request queue
   const enqueueRequest = () =>
-    requestQueueService.enqueue(
-      () => circuitBreakerService.execute(circuitKey, fetchFn, fallbackFn),
-      {
-        priority: priority ?? (endpoint.includes('/cached/') ? 10 : 0),
-        maxRetries: 0,
-      },
-    );
+    bypassQueue
+      ? circuitBreakerService.execute(circuitKey, fetchFn, fallbackFn)
+      : requestQueueService.enqueue(
+          () => circuitBreakerService.execute(circuitKey, fetchFn, fallbackFn),
+          {
+            priority: priority ?? (endpoint.includes('/cached/') ? 10 : 0),
+            maxRetries: 0,
+          },
+        );
 
   if (endpoint.includes('/details')) {
     let gatePriority = priority ?? 0;
@@ -1350,6 +1355,13 @@ const fetchFromProxy = async <T,>(
 
   return enqueueRequest();
 };
+
+// Client memory cache for football search — repeat queries are instant.
+const FOOTBALL_SEARCH_MEMORY_TTL_MS = 5 * 60_000;
+const footballSearchMemoryCache = new Map<
+  string,
+  { at: number; data: FootballSearchResults }
+>();
 
 export const ApiFootballService = {
   /**
@@ -2761,20 +2773,38 @@ export const ApiFootballService = {
     };
     const q = (query ?? '').trim();
     if (q.length < 2) return empty;
+
+    const cacheKey = q.toLowerCase();
+    const cached = footballSearchMemoryCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < FOOTBALL_SEARCH_MEMORY_TTL_MS) {
+      return cached.data;
+    }
+
     try {
       const res = await fetchFromProxy<FootballSearchResults>(
         `/cached/365/search/all`,
         { q },
-        { timeout: 8_000, retries: 0, priority: 20 },
+        {
+          timeout: 6_000,
+          retries: 0,
+          priority: 100,
+          bypassQueue: true,
+        },
       );
       if (!res || !Array.isArray((res as any).clubs)) return empty;
-      return {
+      const data: FootballSearchResults = {
         clubs: res.clubs ?? [],
         nationalTeams: res.nationalTeams ?? [],
         players: res.players ?? [],
         coaches: res.coaches ?? [],
         competitions: res.competitions ?? [],
       };
+      footballSearchMemoryCache.set(cacheKey, { at: Date.now(), data });
+      if (footballSearchMemoryCache.size > 80) {
+        const oldest = footballSearchMemoryCache.keys().next().value;
+        if (oldest) footballSearchMemoryCache.delete(oldest);
+      }
+      return data;
     } catch (error) {
       console.error('Error searching 365 entities:', error);
       return empty;

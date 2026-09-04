@@ -18,7 +18,7 @@ import {
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Search, X, Clock, ChevronRight } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -37,7 +37,7 @@ import TeamBadge from '../components/common/TeamBadge';
 import CachedAthletePhoto from '../components/common/CachedAthletePhoto';
 import { pushPlayerCareer } from '../utils/openPlayerProfile';
 
-const DEBOUNCE_MS = 280;
+const DEBOUNCE_MS = 150;
 
 function useDebouncedValue(value: string, delay: number): string {
     const [debounced, setDebounced] = useState(value);
@@ -126,10 +126,13 @@ export default function FootballSearchScreen() {
         queryKey: ['football-search-365', debounced, language],
         queryFn: () => ApiFootballService.searchFootball365(debounced),
         enabled: canSearch,
-        staleTime: 60 * 1000,
-        gcTime: 5 * 60 * 1000,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 15 * 60 * 1000,
         retry: false,
         refetchOnWindowFocus: false,
+        // Keep the last results on screen while the next keystroke fetches —
+        // stops the list from flashing empty between characters.
+        placeholderData: keepPreviousData,
     });
 
     const results = searchQ.data;
@@ -236,10 +239,14 @@ export default function FootballSearchScreen() {
 
     const showIdle = query.trim().length === 0;
     const showMinHint = query.trim().length === 1;
-    const showSearching = canSearch && (searchQ.isFetching || searchQ.isLoading);
+    // Only block the list on a true cold start — while refetching, keep the
+    // previous results visible so typing never blanks the screen.
+    const showSearching =
+        canSearch && (searchQ.isLoading || searchQ.isFetching) && !results;
+    const showRefreshing = canSearch && searchQ.isFetching && !!results;
     const showEmpty =
         canSearch && !searchQ.isFetching && !searchQ.isLoading && !searchQ.isError && total === 0;
-    const showError = canSearch && searchQ.isError && !searchQ.isFetching;
+    const showError = canSearch && searchQ.isError && !searchQ.isFetching && !results;
 
     const idleHint = useMemo(
         () => (recent.length === 0 ? t.searchScreen.startSub : null),
@@ -337,6 +344,12 @@ export default function FootballSearchScreen() {
                     </View>
                 ) : null}
 
+                {showRefreshing ? (
+                    <View style={styles.refreshingRow}>
+                        <ActivityIndicator size="small" color={Colors.purpleSoft} />
+                    </View>
+                ) : null}
+
                 {showError ? (
                     <View style={styles.emptyIdle}>
                         <Text style={styles.emptyTitle}>{t.searchScreen.errorTitle}</Text>
@@ -351,7 +364,7 @@ export default function FootballSearchScreen() {
                     </View>
                 ) : null}
 
-                {canSearch && !showSearching && results ? (
+                {canSearch && results ? (
                     <>
                         <SectionHeader title={t.searchScreen.sectionClubs} count={results.clubs.length} />
                         {results.clubs.map((c) => (
@@ -565,5 +578,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: Spacing['4xl'],
         gap: Spacing.md,
+    },
+    refreshingRow: {
+        alignItems: 'center',
+        paddingVertical: Spacing.xs,
     },
 });

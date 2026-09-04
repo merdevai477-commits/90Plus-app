@@ -3049,19 +3049,25 @@ export class ThreeSixFiveScoresService {
     language?: string | null,
   ): Promise<ThreeSixFiveSearchResults | null> {
     const firstQuery = expansion.queries[0] ?? trimmed;
-    const [primaryRes, fallbackRes] = await Promise.all([
+
+    // Primary 365 hit + local competitions in parallel. Only hit the
+    // fallback language when the primary language returns nothing — that
+    // cuts cold-path latency roughly in half for the common case.
+    const [primaryRes, competitions] = await Promise.all([
       this.fetchSearchEntities(firstQuery, primaryLangId),
-      fallbackLangId !== primaryLangId
-        ? this.fetchSearchEntities(firstQuery, fallbackLangId)
-        : Promise.resolve(null),
+      this.searchCompetitionsLocal(trimmed, expansion.boostedEntityIds, language),
     ]);
-    let results = primaryRes;
-    if (this.search365Empty(results) && fallbackRes) {
-      results = fallbackRes;
+
+    let results: SearchEntitiesFetch = primaryRes;
+    if (this.search365Empty(results) && fallbackLangId !== primaryLangId) {
+      results = await this.fetchSearchEntities(firstQuery, fallbackLangId);
     }
 
-    const competitions = await this.searchCompetitionsLocal(trimmed, expansion.boostedEntityIds, language);
-    results = { ...this.withSearchDefaults(results), competitions, upstreamFailed: results.upstreamFailed };
+    results = {
+      ...this.withSearchDefaults(results),
+      competitions,
+      upstreamFailed: results.upstreamFailed,
+    };
 
     if (this.searchIsEmpty(results) && results.upstreamFailed) {
       return null;
