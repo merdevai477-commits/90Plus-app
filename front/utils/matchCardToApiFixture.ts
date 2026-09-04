@@ -63,20 +63,24 @@ export function matchCardToApiFixture(
   input: Match | MatchPreviewSeed,
   fixtureId?: number,
 ): Fixture | null {
-  const id = Number(fixtureId ?? input.id);
+  // `Match` carries the nested shape and calendar rows carry the flat one; both
+  // are read through the seed's optional fields rather than narrowed per branch.
+  const seed = input as MatchPreviewSeed;
+
+  const id = Number(fixtureId ?? seed.id);
   if (!Number.isFinite(id) || id <= 0) return null;
 
-  const homeName = input.homeTeam?.name ?? input.home ?? 'Home';
-  const awayName = input.awayTeam?.name ?? input.away ?? 'Away';
-  const homeLogo = input.homeTeam?.logo ?? input.homeLogo ?? '';
-  const awayLogo = input.awayTeam?.logo ?? input.awayLogo ?? '';
-  const homeScore = input.score?.home ?? input.homeScore ?? null;
-  const awayScore = input.score?.away ?? input.awayScore ?? null;
-  const iso = input.fixtureDate ?? input.matchDate ?? '';
+  const homeName = seed.homeTeam?.name ?? seed.home ?? 'Home';
+  const awayName = seed.awayTeam?.name ?? seed.away ?? 'Away';
+  const homeLogo = seed.homeTeam?.logo ?? seed.homeLogo ?? '';
+  const awayLogo = seed.awayTeam?.logo ?? seed.awayLogo ?? '';
+  const homeScore = seed.score?.home ?? seed.homeScore ?? null;
+  const awayScore = seed.score?.away ?? seed.awayScore ?? null;
+  const iso = seed.fixtureDate ?? seed.matchDate ?? '';
   const timestamp =
-    toUnixSeconds(input.startTimestamp) ||
+    toUnixSeconds(seed.startTimestamp) ||
     (iso ? Math.floor(new Date(iso).getTime() / 1000) || 0 : 0);
-  const short = statusShortFromPreview(input);
+  const short = statusShortFromPreview(seed);
 
   return {
     fixture: {
@@ -90,18 +94,18 @@ export function matchCardToApiFixture(
       status: {
         long: short,
         short,
-        elapsed: input.elapsed ?? null,
-        extra: input.extra ?? null,
+        elapsed: seed.elapsed ?? null,
+        extra: seed.extra ?? null,
       },
     },
     league: {
-      id: input.league?.id ?? input.leagueId ?? 0,
-      name: input.league?.name ?? input.leagueName ?? '',
-      country: input.league?.country ?? input.leagueCountry ?? '',
-      logo: input.league?.logo ?? input.leagueLogo ?? '',
-      flag: input.league?.countryFlag ?? null,
+      id: seed.league?.id ?? seed.leagueId ?? 0,
+      name: seed.league?.name ?? seed.leagueName ?? '',
+      country: seed.league?.country ?? seed.leagueCountry ?? '',
+      logo: seed.league?.logo ?? seed.leagueLogo ?? '',
+      flag: seed.league?.countryFlag ?? null,
       season: 0,
-      round: input.league?.round ?? '',
+      round: seed.league?.round ?? '',
     },
     teams: {
       home: { id: 0, name: homeName, logo: homeLogo, winner: null },

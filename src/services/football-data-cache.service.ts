@@ -194,6 +194,9 @@ export function mergeFixtureProviders(baseFixtures: any[], overlays: any[]): any
     );
 }
 
+/** Distinguishes "the wait ran out" from a genuine empty lineup result. */
+const LINEUP_BUDGET_LAPSED = Symbol('lineup-budget-lapsed');
+
 class FootballDataCacheService {
     /** Hot in-process cache for matches-by-date (avoids Redis round-trip per request). */
     private matchesByDateLocal = new Map<string, { data: any[]; expiresAt: number }>();
@@ -278,6 +281,12 @@ class FootballDataCacheService {
     };
 
     private readonly liveDetailWarmInFlight = new Map<number, Promise<void>>();
+
+    /** One upstream lineup resolution per fixture, shared by all concurrent readers. */
+    private readonly lineupResolveInFlight = new Map<number, Promise<any[]>>();
+
+    /** How long a reader waits on a cold lineup resolution before giving up on it. */
+    private readonly LINEUP_RESPONSE_BUDGET_MS = 4_000;
 
     /** Graduated detail TTL: live/near-kickoff seconds, finished hours, else upcoming. */
     private detailTtlMs(
@@ -1849,12 +1858,16 @@ class FootballDataCacheService {
      * Get match lineups
      * ✅ Request deduplication: If 1000 users request the same lineups, only 1 API call is made
      * ✅ Finished matches: permanently stored in DB, shared for all users, no API call
+     *
+     * 365 never publishes an XI for most fixtures outside the top leagues, so an
+     * empty set is the correct answer rather than a miss. `cacheUsable` rejects it
+     * either way, which is why it gets its own read path: otherwise every reader
+     * repeats a round trip that regularly costs 5–10s and returns nothing.
      */
     async getMatchLineups(
         fixtureId: number,
         options?: { forceRefresh?: boolean; language?: string | null },
     ): Promise<any[]> {
-        const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'];
         const forceRefresh =
             options?.forceRefresh === true ||
             (isScores365ExperimentFixture(fixtureId) && is365StoreDetailsHotfix());
@@ -1870,31 +1883,87 @@ class FootballDataCacheService {
             return true;
         };
 
-        if (!forceRefresh) {
-            const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
-            if (
-                redisCached &&
-                Date.now() - redisCached.timestamp < redisCached.ttl &&
-                cacheUsable(redisCached.data)
-            ) {
-                logger.debug(`📦 Lineups ${fixtureId} from Redis cache (shared for all users)`);
-                this.setBoundedCache(this.lineupsCache, fixtureId, redisCached);
-                return redisCached.data;
-            }
-
-            const cached = this.lineupsCache.get(fixtureId);
-            if (
-                cached &&
-                Date.now() - cached.timestamp < cached.ttl &&
-                cacheUsable(cached.data)
-            ) {
-                logger.debug(`📦 Lineups ${fixtureId} from memory cache (shared for all users)`);
-                return cached.data;
-            }
-        } else {
+        if (forceRefresh) {
             await redisCacheService.del(redisKey);
             this.lineupsCache.delete(fixtureId);
+        } else {
+            const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
+            if (redisCached) this.setBoundedCache(this.lineupsCache, fixtureId, redisCached);
+
+            const cached = redisCached ?? this.lineupsCache.get(fixtureId);
+            const fresh = !!cached && Date.now() - cached.timestamp < cached.ttl;
+
+            if (cached && fresh && cacheUsable(cached.data)) {
+                logger.debug(`📦 Lineups ${fixtureId} from cache (shared for all users)`);
+                return cached.data;
+            }
+            if (cached && !hasLineupData(cached.data)) {
+                // Once the empty answer expires the refresh runs out of band, so a
+                // late-published XI lands in cache for the client's next poll
+                // instead of making this request wait on the provider.
+                if (!fresh) this.refreshLineupsInBackground(fixtureId, language);
+                return [];
+            }
         }
+
+        return await this.resolveMatchLineupsShared(fixtureId, language, forceRefresh);
+    }
+
+    /**
+     * Shares one upstream resolution between concurrent readers and caps how long
+     * any of them waits on it. A cold 365 lineup call can outlast the app's own
+     * request budget, so past the cap we hand back an empty XI and let the
+     * resolution finish into the cache for the next poll.
+     */
+    private async resolveMatchLineupsShared(
+        fixtureId: number,
+        language: 'ar' | 'en',
+        forceRefresh: boolean,
+    ): Promise<any[]> {
+        let shared = this.lineupResolveInFlight.get(fixtureId);
+        if (!shared) {
+            shared = this.resolveMatchLineups(fixtureId, language, forceRefresh).finally(() => {
+                this.lineupResolveInFlight.delete(fixtureId);
+            });
+            this.lineupResolveInFlight.set(fixtureId, shared);
+        }
+
+        let budgetTimer: ReturnType<typeof setTimeout> | undefined;
+        const budgetLapsed = new Promise<typeof LINEUP_BUDGET_LAPSED>((resolve) => {
+            budgetTimer = setTimeout(
+                () => resolve(LINEUP_BUDGET_LAPSED),
+                this.LINEUP_RESPONSE_BUDGET_MS,
+            );
+        });
+
+        try {
+            const settled = await Promise.race([
+                shared.catch(() => [] as any[]),
+                budgetLapsed,
+            ]);
+            if (settled === LINEUP_BUDGET_LAPSED) {
+                logger.warn(`[Lineups] fixture=${fixtureId} reason=response_budget_exceeded`);
+                return [];
+            }
+            return settled;
+        } finally {
+            if (budgetTimer) clearTimeout(budgetTimer);
+        }
+    }
+
+    /** Refreshes an expired empty lineup entry without blocking the caller. */
+    private refreshLineupsInBackground(fixtureId: number, language: 'ar' | 'en'): void {
+        if (this.lineupResolveInFlight.has(fixtureId)) return;
+        void this.resolveMatchLineupsShared(fixtureId, language, true).catch(() => undefined);
+    }
+
+    private async resolveMatchLineups(
+        fixtureId: number,
+        language: 'ar' | 'en',
+        forceRefresh: boolean,
+    ): Promise<any[]> {
+        const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'];
+        const redisKey = `lineups:${fixtureId}`;
 
         const dbMatch = await prisma.cachedFixture.findUnique({
             where: { fixtureId },
