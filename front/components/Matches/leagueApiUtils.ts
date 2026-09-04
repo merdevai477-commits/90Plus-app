@@ -458,7 +458,7 @@ const fetchMatchesByDateFromNetwork = async (
 ): Promise<Match[]> => {
   const apiUrl = getApiUrl();
   const response = await fetchJsonWithTimeout(
-    `${apiUrl}/football/cached/matches/${dateString}`,
+    `${apiUrl}/football/cached/matches/${dateString}?view=list`,
   );
 
   if (!response.ok) {

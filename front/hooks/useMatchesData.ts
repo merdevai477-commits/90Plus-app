@@ -17,7 +17,6 @@ import { logger } from '../utils/logger';
 import { useLanguageStore } from '../src/i18n/store';
 import { prefetchFootballTranslations } from '../src/stores/footballTranslationStore';
 import { collectNamesFromMatches } from '../utils/footballNamePrefetch';
-import { getCountryFlagUri } from '../utils/countryFlagUri';
 import { prefetchMatchAssets } from '../utils/prefetchMatchAssets';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { useLiveFixtureStore } from '../src/store/liveFixtureStore';
@@ -31,11 +30,15 @@ import {
   MATCHES_LIST_STALE_OVERDUE_CAP,
 } from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
-import { overlaySnapshotsOnCalendar } from '../utils/overlaySnapshotsOnCalendar';
+import { overlaySnapshotsOnCalendarDetailed } from '../utils/overlaySnapshotsOnCalendar';
+import {
+  groupMatchesByLeague,
+  groupMatchesByCountry,
+  groupMatchesByCountryIncremental,
+} from '../utils/matchesGrouping';
 import { matchCardToApiFixture } from '../utils/matchCardToApiFixture';
 import { mergeTodayCalendarWithLiveFeed } from '../utils/mergeTodayCalendarWithLiveFeed';
 import { dateFromLocalKey } from '../utils/safeDate';
-import { sortCountryGroupsForMatches } from '../utils/matchesCountrySort';
 import { ensureLiveFeed, subscribeLiveFeed } from '../services/liveFeedOwner';
 
 import type { GroupedMatches, CountryGroup } from './matchesData.types';
@@ -276,82 +279,6 @@ function listOverlaySnapshotsEqual(
 const EMPTY_OVERLAY_SNAPSHOTS: Record<number, LiveFixtureSnapshot> = Object.freeze({});
 
 /**
- * Groups matches by country, then by league within each country.
- * Pass pre-built league groups to avoid re-grouping the same match list.
- * Order: continental → top 5 → Arab (alpha) → rest (alpha).
- */
-const groupMatchesByCountry = (
-  matches: Match[],
-  leagueGroups?: GroupedMatches[],
-): CountryGroup[] => {
-  const groups = leagueGroups ?? groupMatchesByLeague(matches);
-  const countryMap = new Map<string, { flag: string | null; leagues: GroupedMatches[] }>();
-
-  for (const group of groups) {
-    const firstMatch = group.matches[0];
-    const country = firstMatch?.league?.country || 'World';
-    const flag = firstMatch?.league?.countryFlag || null;
-
-    if (!countryMap.has(country)) {
-      countryMap.set(country, { flag, leagues: [] });
-    }
-    countryMap.get(country)!.leagues.push(group);
-  }
-
-  const raw = Array.from(countryMap.entries()).map(([country, data]) => ({
-    country,
-    countryFlag: getCountryFlagUri(country, data.flag),
-    leagues: data.leagues,
-  }));
-
-  return sortCountryGroupsForMatches(raw);
-};
-
-/**
- * Groups matches by league
- */
-const groupMatchesByLeague = (matches: Match[]): GroupedMatches[] => {
-  const groupsMap = new Map<number, GroupedMatches>();
-
-  matches.forEach((match) => {
-    const leagueId = match.league?.id || 0;
-    const leagueName = match.league?.name || 'Unknown League';
-    const leagueLogo = match.league?.logo;
-
-    if (!groupsMap.has(leagueId)) {
-      groupsMap.set(leagueId, {
-        leagueId,
-        leagueName,
-        leagueLogo,
-        matches: [],
-      });
-    }
-
-    groupsMap.get(leagueId)!.matches.push(match);
-  });
-
-  // Convert to array and sort matches within each league
-  const groups = Array.from(groupsMap.values());
-  
-  // Sort matches: Live first, then by time
-  groups.forEach((group) => {
-    group.matches.sort((a, b) => {
-      // Live matches first
-      if (a.status === 'live' && b.status !== 'live') return -1;
-      if (b.status === 'live' && a.status !== 'live') return 1;
-      
-      // Then by time (upcoming/finished)
-      if (a.fixtureDate && b.fixtureDate) {
-        return new Date(a.fixtureDate).getTime() - new Date(b.fixtureDate).getTime();
-      }
-      return 0;
-    });
-  });
-
-  return groups;
-};
-
-/**
  * Custom hook for matches data with single API request and caching
  */
 export const useMatchesData = (
@@ -410,10 +337,11 @@ export const useMatchesData = (
     listOverlaySnapshotsEqual,
   );
 
-  const matches = useMemo(
-    () => overlaySnapshotsOnCalendar(calendarMatches, overlaySnapshots),
+  const overlayResult = useMemo(
+    () => overlaySnapshotsOnCalendarDetailed(calendarMatches, overlaySnapshots),
     [calendarMatches, overlaySnapshots],
   );
+  const matches = overlayResult.rows;
   useRegisterLiveFixtures(
     pauseBackgroundRefresh || !isToday ? [] : registerInterestIds,
   );
@@ -480,12 +408,22 @@ export const useMatchesData = (
     });
   }, [pauseBackgroundRefresh, dateString]);
 
-  // Group matches by league, then country (reuse league groups — no double group)
+  // Group matches by league, then country — incremental when few rows changed (P1-5).
+  const countryGroupsPrevRef = useRef<CountryGroup[] | null>(null);
+  // Reset incremental cache when the calendar date identity set changes.
+  useEffect(() => {
+    countryGroupsPrevRef.current = null;
+  }, [dateString]);
   const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
-  const countryGroups = useMemo(
-    () => groupMatchesByCountry(matches, groupedMatches),
-    [matches, groupedMatches],
-  );
+  const countryGroups = useMemo(() => {
+    const next = groupMatchesByCountryIncremental(
+      matches,
+      overlayResult.changedIds,
+      countryGroupsPrevRef.current,
+    );
+    countryGroupsPrevRef.current = next;
+    return next;
+  }, [matches, overlayResult.changedIds, groupedMatches]);
 
   useEffect(() => {
     if (matches.length === 0 || language !== 'ar') return;

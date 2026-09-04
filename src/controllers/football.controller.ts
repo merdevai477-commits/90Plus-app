@@ -1880,8 +1880,10 @@ export class FootballController {
       }
 
       const matches = await footballDataCacheService.getMatchesByDate(dateString);
+      const view = typeof req.query.view === 'string' ? req.query.view.toLowerCase() : '';
       // List endpoint: never ship detail blobs (events/lineups/stats/fullData).
-      const response = matches.map((fixture: Record<string, unknown>) => {
+      // ?view=list (P0-2): further project to MatchRow fields only.
+      const trimmed = matches.map((fixture: Record<string, unknown>) => {
         if (!fixture || typeof fixture !== 'object') return fixture;
         const {
           events: _e,
@@ -1893,10 +1895,16 @@ export class FootballController {
         } = fixture as Record<string, unknown>;
         return rest;
       });
+      const response =
+        view === 'list'
+          ? (await import('../utils/matches-list-projection.util')).projectMatchesForListView(
+              trimmed,
+            )
+          : trimmed;
 
       const elapsedMs = Date.now() - startedAt;
       logger.info(
-        `[Perf] getCachedMatchesByDate date=${dateString} results=${response.length} elapsedMs=${elapsedMs}`,
+        `[Perf] getCachedMatchesByDate date=${dateString} results=${response.length} view=${view || 'full'} elapsedMs=${elapsedMs}`,
       );
 
       res.json({
@@ -1907,6 +1915,7 @@ export class FootballController {
           date: dateString,
           cached: true,
           elapsedMs,
+          view: view === 'list' ? 'list' : 'full',
         },
       });
     } catch (error) {
