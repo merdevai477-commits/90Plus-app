@@ -89,10 +89,8 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ITEM_SEPARATOR_8 = () => <View style={{ height: 8 }} />;
 const ITEM_SEPARATOR_10 = () => <View style={{ height: 10 }} />;
 
-/** Collapsed CountryAccordion header (padding 12×2 + label + borders) — P2-9/B2. */
-const MATCHES_COUNTRY_ESTIMATED_ITEM_SIZE = 56;
-/** LeagueCard row used by the World Cup FlashList branch. */
-const MATCHES_LEAGUE_ESTIMATED_ITEM_SIZE = 72;
+// P2-9/B2: FlashList v2 auto-measures (no estimatedItemSize). Measured collapsed
+// CountryAccordion ≈56px; LeagueCard ≈72px — useful if we ever pin layout hints.
 
 const FILTERS = ['All', 'Live', 'Upcoming', 'Favorite', 'WorldCup', 'Finished'] as const;
 type MatchFilter = (typeof FILTERS)[number];
@@ -2182,7 +2180,6 @@ export default function MatchesHubScreenV2() {
           keyExtractor={g => g.id}
           renderItem={renderLeagueCard}
           ItemSeparatorComponent={ITEM_SEPARATOR_10}
-          estimatedItemSize={MATCHES_LEAGUE_ESTIMATED_ITEM_SIZE}
           drawDistance={250}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
           showsVerticalScrollIndicator={false}
@@ -2194,7 +2191,6 @@ export default function MatchesHubScreenV2() {
           data={[] as CountryGroup[]}
           keyExtractor={() => 'favorite-placeholder'}
           renderItem={() => null}
-          estimatedItemSize={MATCHES_COUNTRY_ESTIMATED_ITEM_SIZE}
           drawDistance={250}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
           showsVerticalScrollIndicator={false}
@@ -2210,7 +2206,6 @@ export default function MatchesHubScreenV2() {
           data={filteredCountryGroups}
           keyExtractor={cg => cg.country}
           renderItem={renderCountryAccordion}
-          estimatedItemSize={MATCHES_COUNTRY_ESTIMATED_ITEM_SIZE}
           drawDistance={250}
           ItemSeparatorComponent={ITEM_SEPARATOR_8}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
