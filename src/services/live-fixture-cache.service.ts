@@ -11,8 +11,10 @@ import {
   FOOTBALL_API_LIVE_FIXTURE_KEY_PREFIX,
   FOOTBALL_API_LIVE_MATCHES_KEY,
   FOOTBALL_LIVE_MATCHES_KEY,
+  FOOTBALL_FIXTURE_TERMINAL_LATCHED_KEY_PREFIX,
+  FOOTBALL_FIXTURE_TERMINAL_CORRECTION_KEY_PREFIX,
 } from '../utils/football-cache-keys.util';
-import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES } from './match-cache.service';
+import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES, TERMINAL_LATCH_STATUSES } from './match-cache.service';
 import prisma from '../lib/prisma';
 import { asTerminalFinishedFixture } from '../utils/fixture-terminal.util';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
@@ -22,10 +24,21 @@ export const FOOTBALL_LIVE_FIXTURE_KEY_PREFIX = 'football:live_fixture:';
 export const FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX = 'football:fixture_terminal:';
 
 const LIVE_LIST_TTL_SEC = Math.max(
-    70,
-    Math.ceil((parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '5000', 10) || 5_000) / 1000) + 20,
+  70,
+  Math.ceil((parseInt(process.env.FOOTBALL_LIVE_SYNC_MS || '5000', 10) || 5_000) / 1000) + 20,
 );
 const LIVE_FIXTURE_TTL_SEC = LIVE_LIST_TTL_SEC;
+
+/** Snapshot tombstone TTL — short so a corrected-back-to-live fixture can reappear. */
+const TERMINAL_FIXTURE_TTL_SEC = 600;
+/** Latch TTL — suppress repeat LIVE→FT invalidation for a full day (P1-3). */
+const TERMINAL_LATCH_TTL_SEC = 24 * 60 * 60;
+/** Max one post-match correction re-invalidate per fixture per 6h. */
+const TERMINAL_CORRECTION_TTL_SEC = 6 * 60 * 60;
+
+const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
+const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
+const TERMINAL_LATCH_STATUSES_SET = new Set(TERMINAL_LATCH_STATUSES);
 
 /** Redis TTL for the allscores-replaced 365 live list — must outlive the ~20s tick. */
 export function scores365LiveListTtlSec(): number {
@@ -44,10 +57,7 @@ function isScores365OwnedLiveRow(fixture: FixtureFromAPI): boolean {
   const id = fixture?.fixture?.id;
   return typeof id === 'number' && isNative365FixtureId(id);
 }
-const TERMINAL_FIXTURE_TTL_SEC = 600;
 
-const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
-const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
 const NS_LIKE_STATUSES = new Set(['NS', 'TBD', 'PST']);
 /** Force upstream refresh when still NS-like from T−20m through kickoff+3h. */
 const NS_KICKOFF_REFRESH_BEFORE_MS = 20 * 60 * 1000;
@@ -126,6 +136,65 @@ function parseFixtureList(raw: string | null): FixtureFromAPI[] {
 
 function terminalFixtureKey(fixtureId: number): string {
   return `${FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX}${fixtureId}`;
+}
+
+function terminalLatchedKey(fixtureId: number): string {
+  return `${FOOTBALL_FIXTURE_TERMINAL_LATCHED_KEY_PREFIX}${fixtureId}`;
+}
+
+function terminalCorrectionKey(fixtureId: number): string {
+  return `${FOOTBALL_FIXTURE_TERMINAL_CORRECTION_KEY_PREFIX}${fixtureId}`;
+}
+
+/** True if fixture has been latched as terminal (24h suppress window). */
+export async function isTerminalLatched(fixtureId: number): Promise<boolean> {
+  const redis = getRedisClient();
+  if (!redis || !Number.isFinite(fixtureId)) return false;
+  try {
+    const v = await redis.get(terminalLatchedKey(fixtureId));
+    return v != null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Acquire the one-shot terminal latch (SET NX).
+ * Returns true if this caller is the first to latch (should invalidate once).
+ * If already latched, optionally allows a correction re-invalidate once per 6h.
+ */
+export async function tryAcquireTerminalInvalidate(
+  fixtureId: number,
+): Promise<'first' | 'skip' | 'correction'> {
+  const redis = getRedisClient();
+  if (!redis) return 'first'; // no Redis → keep prior behavior (invalidate)
+  try {
+    const acquired = await redis.set(
+      terminalLatchedKey(fixtureId),
+      '1',
+      'EX',
+      TERMINAL_LATCH_TTL_SEC,
+      'NX',
+    );
+    if (acquired === 'OK') return 'first';
+
+    const correction = await redis.set(
+      terminalCorrectionKey(fixtureId),
+      '1',
+      'EX',
+      TERMINAL_CORRECTION_TTL_SEC,
+      'NX',
+    );
+    if (correction === 'OK') return 'correction';
+    return 'skip';
+  } catch (err) {
+    logger.warn(`[LiveFixtureCache] tryAcquireTerminalInvalidate failed for ${fixtureId}:`, err);
+    return 'first';
+  }
+}
+
+export function isTerminalLatchStatus(status: string | null | undefined): boolean {
+  return !!status && TERMINAL_LATCH_STATUSES_SET.has(status);
 }
 
 async function suppressTerminalTombstones(
@@ -386,10 +455,17 @@ export async function writeTerminalFixtureSnapshot(
     // Remove the legacy per-fixture key during migration without touching the other provider.
     pipeline.del(liveFixtureKey(id));
     await pipeline.exec();
-    // Drop stale detail bundles so FT clients do not keep serving LIVE-TTL lineups/events/stats.
+
+    // P1-3: invalidate detail caches at most once (or once per 6h for corrections).
+    const invalidateMode = await tryAcquireTerminalInvalidate(id);
+    if (invalidateMode === 'skip') {
+      logger.debug(`[LiveFixtureCache] skip repeat LIVE→FT invalidate fixture=${id}`);
+      return;
+    }
+    const reason = invalidateMode === 'correction' ? 'LIVE→FT-correction' : 'LIVE→FT';
     void import('./football-data-cache.service')
       .then(({ footballDataCacheService }) =>
-        footballDataCacheService.invalidateFixtureDetailCaches(id, 'LIVE→FT'),
+        footballDataCacheService.invalidateFixtureDetailCaches(id, reason),
       )
       .catch((err) =>
         logger.warn(`[LiveFixtureCache] detail invalidate failed for ${id}:`, err),

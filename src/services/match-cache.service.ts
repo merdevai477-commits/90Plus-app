@@ -19,6 +19,12 @@ import prisma from '../lib/prisma'; // ✅ Use centralized singleton
 // Status codes for finished matches
 const FINISHED_STATUSES = ['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO'];
 
+/**
+ * Truly final statuses for terminal latching / storm suppression (P1-3).
+ * PST (postponed) is intentionally excluded — the match may still be played later.
+ */
+const TERMINAL_LATCH_STATUSES = ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'];
+
 // Status codes for live matches
 const LIVE_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'];
 
@@ -183,6 +189,11 @@ class MatchCacheService {
      */
     isFinishedStatus(status: string): boolean {
         return FINISHED_STATUSES.includes(status);
+    }
+
+    /** True for statuses that should latch terminal invalidation (excludes PST). */
+    isTerminalLatchStatus(status: string): boolean {
+        return TERMINAL_LATCH_STATUSES.includes(status);
     }
 
     /**
@@ -390,9 +401,18 @@ class MatchCacheService {
                 for (const fixture of chunk) {
                     this.dbFixtureIds.add(fixture.fixture.id);
                     if (fetchDetails && this.isFinishedStatus(fixture.fixture.status.short)) {
-                        this.fetchAndStoreMatchDetails(fixture.fixture.id).catch((error) => {
-                            logger.error(`Failed to fetch match details for fixture ${fixture.fixture.id}:`, error);
-                        });
+                        // P1-7: skip detail storm for already-latched terminal fixtures.
+                        void import('./live-fixture-cache.service')
+                            .then(async ({ isTerminalLatched }) => {
+                                if (await isTerminalLatched(fixture.fixture.id)) return;
+                                await this.fetchAndStoreMatchDetails(fixture.fixture.id);
+                            })
+                            .catch((error) => {
+                                logger.error(
+                                    `Failed to fetch match details for fixture ${fixture.fixture.id}:`,
+                                    error,
+                                );
+                            });
                     }
                 }
             } catch (error) {
@@ -879,4 +899,4 @@ class MatchCacheService {
 }
 
 export const matchCacheService = new MatchCacheService();
-export { MatchCacheService, FixtureFromAPI, FINISHED_STATUSES, LIVE_STATUSES };
+export { MatchCacheService, FixtureFromAPI, FINISHED_STATUSES, LIVE_STATUSES, TERMINAL_LATCH_STATUSES };

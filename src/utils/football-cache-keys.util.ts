@@ -9,6 +9,10 @@ export const FOOTBALL_LIVE_FIXTURE_KEY_PREFIX = 'football:live_fixture:';
 export const FOOTBALL_API_LIVE_FIXTURE_KEY_PREFIX = 'football:live_fixture:api-football:';
 export const FOOTBALL_365_LIVE_FIXTURE_KEY_PREFIX = 'football:live_fixture:365:';
 export const FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX = 'football:fixture_terminal:';
+/** One-shot latch: suppress repeat LIVE→FT detail invalidation for 24h (P1-3). */
+export const FOOTBALL_FIXTURE_TERMINAL_LATCHED_KEY_PREFIX = 'football:fixture_terminal_latched:';
+/** Rate-limit post-match correction re-checks (P1-3). */
+export const FOOTBALL_FIXTURE_TERMINAL_CORRECTION_KEY_PREFIX = 'football:fixture_terminal_correction:';
 export const FOOTBALL_EVENTS_KEY_PREFIX = 'events:';
 export const FOOTBALL_MOMENTUM_KEY_PREFIX = 'momentum:';
 export const FOOTBALL_LINEUPS_KEY_PREFIX = 'lineups:';

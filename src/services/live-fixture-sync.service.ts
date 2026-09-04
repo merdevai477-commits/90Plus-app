@@ -8,7 +8,7 @@
 
 import prisma from '../lib/prisma';
 import { footballService } from './football.service';
-import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES } from './match-cache.service';
+import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES, TERMINAL_LATCH_STATUSES } from './match-cache.service';
 import { WebSocketService } from './websocket.service';
 import { PredictionResolverService } from './prediction-resolver.service';
 import { logger } from '../utils/logger';
@@ -30,6 +30,7 @@ import {
 
 const LIVE_STATUSES_SET = new Set(LIVE_STATUSES);
 const FINISHED_STATUSES_SET = new Set(FINISHED_STATUSES);
+const TERMINAL_LATCH_STATUSES_SET = new Set(TERMINAL_LATCH_STATUSES);
 const NS_KICKOFF_PROBE_LIMIT = Math.max(
     5,
     Math.min(parseInt(process.env.LIVE_NS_KICKOFF_PROBE_MAX || '15', 10) || 15, 30),
@@ -98,7 +99,7 @@ class LiveFixtureSyncService {
         elapsed: number | null,
         extra?: number | null,
     ): void {
-        const isFinished = ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(status);
+        const isFinished = TERMINAL_LATCH_STATUSES_SET.has(status);
         WebSocketService.sendMatchUpdate(fixtureId, {
             matchId: fixtureId,
             homeScore,

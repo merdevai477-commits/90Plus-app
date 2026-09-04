@@ -23,10 +23,18 @@ jest.mock('../../lib/prisma', () => ({
 
 jest.mock('../match-cache.service', () => ({
   LIVE_STATUSES: ['1H', '2H', 'HT', 'LIVE'],
-  FINISHED_STATUSES: ['FT', 'AET', 'PEN'],
+  FINISHED_STATUSES: ['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO'],
+  TERMINAL_LATCH_STATUSES: ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'],
   matchCacheService: {
     convertDbMatchToApiFormat: jest.fn(),
     upsertFixtures: jest.fn(async () => 0),
+  },
+}));
+
+const invalidateFixtureDetailCaches = jest.fn(async () => undefined);
+jest.mock('../football-data-cache.service', () => ({
+  footballDataCacheService: {
+    invalidateFixtureDetailCaches,
   },
 }));
 
@@ -64,6 +72,12 @@ function redisHarness(initial: Record<string, string> = {}) {
     values,
     client: {
       get: jest.fn(async (key: string) => values.get(key) ?? null),
+      set: jest.fn(async (key: string, value: string, ...args: unknown[]) => {
+        const nx = args.includes('NX');
+        if (nx && values.has(key)) return null;
+        values.set(key, value);
+        return 'OK';
+      }),
       pipeline: jest.fn(pipeline),
     },
   };
@@ -203,5 +217,63 @@ describe('provider-owned live fixture snapshots', () => {
       fixture: converted,
       source: 'db',
     });
+  });
+});
+
+describe('terminal latch (P1-3)', () => {
+  beforeEach(() => {
+    mockedGetRedisClient.mockReset();
+    invalidateFixtureDetailCaches.mockClear();
+  });
+
+  it('invalidates detail caches only on the first LIVE→FT write', async () => {
+    const {
+      writeTerminalFixtureSnapshot,
+      isTerminalLatched,
+    } = require('../live-fixture-cache.service');
+    const redis = redisHarness();
+    mockedGetRedisClient.mockReturnValue(redis.client as any);
+    const ft = fixture(4732070, 'FT', 'api-football');
+
+    await writeTerminalFixtureSnapshot(ft);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(invalidateFixtureDetailCaches).toHaveBeenCalledTimes(1);
+    expect(invalidateFixtureDetailCaches).toHaveBeenCalledWith(4732070, 'LIVE→FT');
+    await expect(isTerminalLatched(4732070)).resolves.toBe(true);
+
+    // Second write may take the one-shot 6h correction slot.
+    invalidateFixtureDetailCaches.mockClear();
+    await writeTerminalFixtureSnapshot(ft);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(invalidateFixtureDetailCaches).toHaveBeenCalledTimes(1);
+    expect(invalidateFixtureDetailCaches).toHaveBeenCalledWith(4732070, 'LIVE→FT-correction');
+
+    // Third write must be fully suppressed.
+    invalidateFixtureDetailCaches.mockClear();
+    await writeTerminalFixtureSnapshot(ft);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(invalidateFixtureDetailCaches).not.toHaveBeenCalled();
+  });
+
+  it('allows one correction invalidate after latch within a separate 6h window', async () => {
+    const { writeTerminalFixtureSnapshot } = require('../live-fixture-cache.service');
+    const redis = redisHarness({
+      'football:fixture_terminal_latched:99': '1',
+    });
+    mockedGetRedisClient.mockReturnValue(redis.client as any);
+
+    await writeTerminalFixtureSnapshot(fixture(99, 'FT', 'api-football'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(invalidateFixtureDetailCaches).toHaveBeenCalledWith(99, 'LIVE→FT-correction');
+
+    invalidateFixtureDetailCaches.mockClear();
+    await writeTerminalFixtureSnapshot(fixture(99, 'FT', 'api-football'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(invalidateFixtureDetailCaches).not.toHaveBeenCalled();
   });
 });

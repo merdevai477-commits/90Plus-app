@@ -27,7 +27,8 @@ import { hasLineupData, isAuthoritativeLineupData, buildFallbackLineupsFromEvent
 import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
 import { footballService, isFootballQuotaExhausted } from './football.service';
-import { matchCacheService } from './match-cache.service';
+import { matchCacheService, TERMINAL_LATCH_STATUSES } from './match-cache.service';
+import { isTerminalLatched } from './live-fixture-cache.service';
 import { playerCacheService } from './player-cache.service';
 import { leagueCacheService } from './league-cache.service';
 import {
@@ -1224,7 +1225,7 @@ class FootballDataCacheService {
     private async mergeTerminalSnapshotsOntoCalendar(apiMatches: any[]): Promise<any[]> {
         if (!apiMatches.length) return apiMatches;
 
-        const finishedStatuses = new Set(['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO']);
+        const finishedStatuses = new Set(TERMINAL_LATCH_STATUSES);
         const nsLike = new Set(['NS', 'TBD', 'PST']);
         const now = Date.now();
         const staleIds: number[] = [];
@@ -1959,6 +1960,19 @@ class FootballDataCacheService {
                 }
                 return from365;
             }
+            // P1-7: do not escalate empty lineups for latched terminal fixtures.
+            if (await isTerminalLatched(fixtureId)) {
+                const empty: any[] = from365 ?? [];
+                const cacheEntry: MemoryCacheEntry<any> = {
+                    data: empty,
+                    timestamp: Date.now(),
+                    ttl: this.TTL.FINISHED,
+                };
+                await redisCacheService.set(redisKey, cacheEntry, this.TTL.FINISHED);
+                this.setBoundedCache(this.lineupsCache, fixtureId, cacheEntry);
+                logger.debug(`[Lineups] fixture=${fixtureId} skip upstream (terminal latched)`);
+                return empty;
+            }
             // 365 empty — try API-Football for mapped API ids only (never a 365 gameId).
             if (this.canQueryApiFootball(fixtureId)) {
                 try {
@@ -1986,6 +2000,17 @@ class FootballDataCacheService {
                 }
             }
             logger.warn(`[Lineups] fixture=${fixtureId} reason=upstream_empty source=365`);
+            // Cache empty for terminal statuses so retries don't storm.
+            if (isFinished || TERMINAL_LATCH_STATUSES.includes(dbMatch?.status ?? '')) {
+                const empty = from365 ?? [];
+                const cacheEntry: MemoryCacheEntry<any> = {
+                    data: empty,
+                    timestamp: Date.now(),
+                    ttl: this.TTL.FINISHED,
+                };
+                await redisCacheService.set(redisKey, cacheEntry, this.TTL.FINISHED);
+                this.setBoundedCache(this.lineupsCache, fixtureId, cacheEntry);
+            }
             return from365 ?? [];
         }
 
@@ -2300,6 +2325,34 @@ class FootballDataCacheService {
             }
 
             const events365Promise = (async () => {
+                // P1-7: latched terminal fixtures — never escalate empty 365 results.
+                if (await isTerminalLatched(fixtureId)) {
+                    const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(
+                        `events:${fixtureId}`,
+                    );
+                    if (redisCached && Date.now() - redisCached.timestamp < redisCached.ttl) {
+                        return Array.isArray(redisCached.data) ? redisCached.data : [];
+                    }
+                    const mem = this.eventsCache.get(fixtureId);
+                    if (mem && Date.now() - mem.timestamp < mem.ttl) {
+                        return Array.isArray(mem.data) ? mem.data : [];
+                    }
+                    if (Array.isArray(fullData?.events)) {
+                        return fullData.events;
+                    }
+                    const emptyEntry: MemoryCacheEntry<any> = {
+                        data: [],
+                        timestamp: Date.now(),
+                        ttl: this.TTL.FINISHED,
+                    };
+                    this.setBoundedCache(this.eventsCache, fixtureId, emptyEntry);
+                    await redisCacheService.set(`events:${fixtureId}`, emptyEntry, this.TTL.FINISHED);
+                    logger.debug(
+                        `[365Events] fixture=${fixtureId} skip upstream (terminal latched)`,
+                    );
+                    return [];
+                }
+
                 let events = await getScores365ExperimentEvents(fixtureId, forceRefresh, language);
                 if (!events.length) {
                     events = await getScores365ExperimentEvents(fixtureId, true, language);
@@ -2337,8 +2390,13 @@ class FootballDataCacheService {
                 }
                 // Raised default from 3s → 8s to reduce upstream hammering on empty results.
                 // Override via SCORES365_CACHE_MS env var if needed.
-                const ttl = Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '8000', 10) || 8_000);
-                if (events.length > 0) {
+                const statusShort = dbMatch?.status ?? '';
+                const isTerminal = TERMINAL_LATCH_STATUSES.includes(statusShort);
+                const ttl = isTerminal
+                    ? this.TTL.FINISHED
+                    : Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '8000', 10) || 8_000);
+                // P1-7: cache empty results for terminal fixtures so the storm cannot repeat.
+                if (events.length > 0 || isTerminal) {
                     const cacheEntry: MemoryCacheEntry<any> = {
                         data: events,
                         timestamp: Date.now(),
@@ -2837,8 +2895,10 @@ class FootballDataCacheService {
             this.rememberDetailsBundle(cacheKey, stub);
             const statusShort =
                 stub.fixture?.fixture?.status?.short ?? durableRow?.status ?? '';
-            const finished = ['FT', 'AET', 'PEN'].includes(statusShort);
-            if (!(finished && (hasLineupData(stub.lineups) || stub.events.length > 0))) {
+            const finished = TERMINAL_LATCH_STATUSES.includes(statusShort);
+            if (finished && (await isTerminalLatched(fixtureId))) {
+                // P1-7: never schedule background refresh for latched terminal fixtures.
+            } else if (!(finished && (hasLineupData(stub.lineups) || stub.events.length > 0))) {
                 this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
             }
             return stub;
