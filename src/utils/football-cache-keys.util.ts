@@ -13,6 +13,8 @@ export const FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX = 'football:fixture_terminal:'
 export const FOOTBALL_FIXTURE_TERMINAL_LATCHED_KEY_PREFIX = 'football:fixture_terminal_latched:';
 /** Rate-limit post-match correction re-checks (P1-3). */
 export const FOOTBALL_FIXTURE_TERMINAL_CORRECTION_KEY_PREFIX = 'football:fixture_terminal_correction:';
+/** Consecutive upstream_empty streak for live fixtures (P1-7 backoff). */
+export const FOOTBALL_EMPTY_UPSTREAM_STREAK_KEY_PREFIX = 'football:empty_streak:';
 export const FOOTBALL_EVENTS_KEY_PREFIX = 'events:';
 export const FOOTBALL_MOMENTUM_KEY_PREFIX = 'momentum:';
 export const FOOTBALL_LINEUPS_KEY_PREFIX = 'lineups:';

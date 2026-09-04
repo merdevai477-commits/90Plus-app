@@ -5,6 +5,7 @@
 
 import { getRedisClient } from '../lib/redis';
 import { logger } from '../utils/logger';
+import { clearEmptyUpstreamBackoff } from './empty-upstream-backoff.service';
 import {
   FOOTBALL_365_LIVE_FIXTURE_KEY_PREFIX,
   FOOTBALL_365_LIVE_MATCHES_KEY,
@@ -455,6 +456,8 @@ export async function writeTerminalFixtureSnapshot(
     // Remove the legacy per-fixture key during migration without touching the other provider.
     pipeline.del(liveFixtureKey(id));
     await pipeline.exec();
+
+    await clearEmptyUpstreamBackoff(id);
 
     // P1-3: invalidate detail caches at most once (or once per 6h for corrections).
     const invalidateMode = await tryAcquireTerminalInvalidate(id);
