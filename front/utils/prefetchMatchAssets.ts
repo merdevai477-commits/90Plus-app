@@ -2,6 +2,24 @@ import { Match } from '../components/Matches/matchCardUtils';
 import { Image } from 'expo-image';
 import { getCountryFlagUri } from './countryFlagUri';
 
+/**
+ * Warming dozens of images at once starves the concurrent data requests on the
+ * same connection pool, so a lineups screen ends up waiting on headshots.
+ */
+const PREFETCH_BATCH_SIZE = 8;
+
+function prefetchInBatches(urls: string[]): void {
+  if (urls.length === 0) return;
+  void (async () => {
+    for (let i = 0; i < urls.length; i += PREFETCH_BATCH_SIZE) {
+      await Image.prefetch(urls.slice(i, i + PREFETCH_BATCH_SIZE), 'memory-disk').catch(() => {});
+      if (i + PREFETCH_BATCH_SIZE < urls.length) {
+        await new Promise<void>((r) => setTimeout(r, 50));
+      }
+    }
+  })();
+}
+
 /** Prefetch team logos on the Home screen match carousel. */
 export function prefetchHomeMatchLogos(
   matches: ReadonlyArray<{ homeLogo?: string; awayLogo?: string }>,
@@ -12,10 +30,7 @@ export function prefetchHomeMatchLogos(
     if (m.homeLogo) urls.add(m.homeLogo);
     if (m.awayLogo) urls.add(m.awayLogo);
   }
-  const list = Array.from(urls).slice(0, 40);
-  if (list.length > 0) {
-    Image.prefetch(list, 'memory-disk').catch(() => {});
-  }
+  prefetchInBatches(Array.from(urls).slice(0, 40));
 }
 
 export function prefetchVideoThumbnails(thumbnails: string[]): void {
@@ -34,9 +49,7 @@ export function prefetchImageUrls(urls: Array<string | null | undefined>, cap = 
   const unique = Array.from(
     new Set(urls.filter((u): u is string => typeof u === 'string' && u.length > 0)),
   ).slice(0, cap);
-  if (unique.length > 0) {
-    Image.prefetch(unique, 'memory-disk').catch(() => {});
-  }
+  prefetchInBatches(unique);
 }
 
 /** Prefetch team/league logos + fast country flags after matches load.
@@ -61,17 +74,5 @@ export function prefetchMatchAssets(matches: Match[]): void {
     push(getCountryFlagUri(m.league?.country ?? '', m.league?.countryFlag));
   }
 
-  const list = urls.slice(0, 64);
-  if (list.length === 0) return;
-
-  const batchSize = 8;
-  void (async () => {
-    for (let i = 0; i < list.length; i += batchSize) {
-      const batch = list.slice(i, i + batchSize);
-      await Image.prefetch(batch, 'memory-disk').catch(() => {});
-      if (i + batchSize < list.length) {
-        await new Promise<void>((r) => setTimeout(r, 50));
-      }
-    }
-  })();
+  prefetchInBatches(urls.slice(0, 64));
 }
