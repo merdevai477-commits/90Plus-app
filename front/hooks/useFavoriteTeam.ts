@@ -7,11 +7,16 @@
  * when the user is signed in.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
-import { TeamFavoritesStorage } from '../src/storage/teamFavorites.storage';
-import { TeamsService } from '../src/services/authService';
+import {
+    TeamFavoritesStorage,
+    type StoredFollowedTeam,
+} from '../src/storage/teamFavorites.storage';
+import { TeamsService, type FollowedTeam } from '../src/services/authService';
 import { logger } from '../utils/logger';
+import { toastManager } from '../services/toastManager';
+import { useTranslation } from '../src/i18n';
 
 export interface FollowTeamInput {
     id: number;
@@ -24,17 +29,41 @@ export interface FollowTeamInput {
 
 interface UseFavoriteTeamResult {
     followedTeamIds: string[];
+    followedTeams: StoredFollowedTeam[];
     isFollowing: (teamId: number | string) => boolean;
     toggleFollow: (team: FollowTeamInput) => Promise<void>;
     pending: boolean;
     loading: boolean;
 }
 
+function toStored(team: FollowTeamInput | FollowedTeam): StoredFollowedTeam {
+    if ('apiTeamId' in team) {
+        return {
+            apiTeamId: team.apiTeamId,
+            teamName: team.teamName || `Team ${team.apiTeamId}`,
+            teamLogo: team.teamLogo ?? null,
+            country: team.country ?? null,
+        };
+    }
+    return {
+        apiTeamId: team.id,
+        teamName: team.name || `Team ${team.id}`,
+        teamLogo: team.logo ?? null,
+        country: team.country ?? null,
+    };
+}
+
 export const useFavoriteTeam = (): UseFavoriteTeamResult => {
-    const [followedTeamIds, setFollowedTeamIds] = useState<string[]>([]);
+    const [followedTeams, setFollowedTeams] = useState<StoredFollowedTeam[]>([]);
     const [loading, setLoading] = useState(true);
     const [pending, setPending] = useState(false);
     const { getToken, isSignedIn } = useAuth();
+    const { t } = useTranslation();
+
+    const followedTeamIds = useMemo(
+        () => followedTeams.map((team) => String(team.apiTeamId)),
+        [followedTeams],
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -43,15 +72,21 @@ export const useFavoriteTeam = (): UseFavoriteTeamResult => {
                 const token = isSignedIn ? await getToken() : null;
                 if (token) {
                     const serverTeams = await TeamsService.getFollowed(token);
-                    const serverIds = serverTeams.map((t) => String(t.apiTeamId));
-                    await TeamFavoritesStorage.setFavorites(serverIds);
-                    if (!cancelled) setFollowedTeamIds(serverIds);
+                    const stored = serverTeams.map((row) => toStored(row));
+                    await TeamFavoritesStorage.setTeams(stored);
+                    if (!cancelled) setFollowedTeams(stored);
                     return;
                 }
-                const local = await TeamFavoritesStorage.getFavorites();
-                if (!cancelled) setFollowedTeamIds(local);
+                const local = await TeamFavoritesStorage.getTeams();
+                if (!cancelled) setFollowedTeams(local);
             } catch (error) {
                 logger.error('Error loading followed teams:', error);
+                try {
+                    const local = await TeamFavoritesStorage.getTeams();
+                    if (!cancelled) setFollowedTeams(local);
+                } catch {
+                    /* ignore */
+                }
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -63,27 +98,32 @@ export const useFavoriteTeam = (): UseFavoriteTeamResult => {
     }, [getToken, isSignedIn]);
 
     const isFollowing = useCallback(
-        (teamId: number | string): boolean => followedTeamIds.includes(String(teamId)),
-        [followedTeamIds],
+        (teamId: number | string): boolean =>
+            followedTeams.some((team) => String(team.apiTeamId) === String(teamId)),
+        [followedTeams],
     );
 
     const toggleFollow = useCallback(
         async (team: FollowTeamInput) => {
             const teamId = String(team.id);
-            const currentlyFollowing = followedTeamIds.includes(teamId);
-            const snapshot = followedTeamIds;
+            const currentlyFollowing = followedTeams.some(
+                (row) => String(row.apiTeamId) === teamId,
+            );
+            const snapshot = followedTeams;
+            const nextRow = toStored(team);
 
-            // Optimistic update.
             setPending(true);
-            setFollowedTeamIds((prev) =>
-                currentlyFollowing ? prev.filter((id) => id !== teamId) : [...prev, teamId],
+            setFollowedTeams((prev) =>
+                currentlyFollowing
+                    ? prev.filter((row) => String(row.apiTeamId) !== teamId)
+                    : [...prev.filter((row) => String(row.apiTeamId) !== teamId), nextRow],
             );
 
             try {
                 if (currentlyFollowing) {
                     await TeamFavoritesStorage.removeFavorite(teamId);
                 } else {
-                    await TeamFavoritesStorage.addFavorite(teamId);
+                    await TeamFavoritesStorage.addFavorite(teamId, nextRow);
                 }
 
                 const token = isSignedIn ? await getToken() : null;
@@ -101,12 +141,24 @@ export const useFavoriteTeam = (): UseFavoriteTeamResult => {
                         throw new Error(result.error || 'follow_request_failed');
                     }
                 }
+
+                if (!currentlyFollowing) {
+                    const toastTitle =
+                        t.matches.screen.followedToFavoritesTitle ?? 'Added to Favorites';
+                    const toastBody = (
+                        t.matches.screen.followedToFavoritesBody ??
+                        '"{name}" was added to your Favorites tab.'
+                    ).replace('{name}', team.name || nextRow.teamName);
+                    toastManager.showSuccess(toastTitle, toastBody, {
+                        position: 'top',
+                        duration: 2400,
+                    });
+                }
             } catch (error) {
                 logger.warn('Failed to sync team follow — rolling back:', error);
-                // Roll back optimistic UI + local storage.
-                setFollowedTeamIds(snapshot);
+                setFollowedTeams(snapshot);
                 try {
-                    await TeamFavoritesStorage.setFavorites(snapshot);
+                    await TeamFavoritesStorage.setTeams(snapshot);
                 } catch (storageErr) {
                     logger.error('Failed to roll back followed teams storage:', storageErr);
                 }
@@ -114,8 +166,8 @@ export const useFavoriteTeam = (): UseFavoriteTeamResult => {
                 setPending(false);
             }
         },
-        [followedTeamIds, getToken, isSignedIn],
+        [followedTeams, getToken, isSignedIn, t],
     );
 
-    return { followedTeamIds, isFollowing, toggleFollow, pending, loading };
+    return { followedTeamIds, followedTeams, isFollowing, toggleFollow, pending, loading };
 };

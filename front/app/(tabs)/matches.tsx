@@ -25,6 +25,8 @@ import { useScreenFont } from '../../utils/fontSetup';
 import { useMatchEventsMonitor } from '../../src/hooks/useMatchEventsMonitor';
 import type { Match } from '../../components/Matches/matchCardUtils';
 import { CountryAccordion } from '../../components/Matches/CountryAccordion';
+import FavoritesTab from '../../components/Matches/FavoritesTab';
+import { useFavoritesFeed, type FavoritesListFixture } from '../../hooks/useFavoritesFeed';
 import type { CountryGroup } from '../../hooks/useMatchesData';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { fetchLeagueMatchesByDate } from '../../components/Matches/leagueApiUtils';
@@ -1028,6 +1030,12 @@ export default function MatchesHubScreenV2() {
   const router = useRouter();
   const { getToken, userId } = useAuth();
   const { t: tObj, translate: t } = useTranslation();
+  const {
+    followedTeams,
+    notifiedMatches,
+    loading: favoritesFeedLoading,
+    refreshNotified,
+  } = useFavoritesFeed();
 
   // Clerk's getToken returns a NEW function reference on every render — store
   // it in a ref so effects don't re-fire on every parent re-render.
@@ -1035,6 +1043,10 @@ export default function MatchesHubScreenV2() {
   useEffect(() => {
     getTokenRef.current = getToken;
   }, [getToken]);
+
+  useEffect(() => {
+    if (filter === 'Favorite') void refreshNotified();
+  }, [filter, refreshNotified]);
 
   useEffect(() => {
     void useAppFeaturesStore.getState().hydrate(true);
@@ -1763,7 +1775,19 @@ export default function MatchesHubScreenV2() {
             awayTeamLogo: fixture.awayLogo,
             leagueName: fixture.leagueName,
           });
-          await MatchFavoritesStorage.addFavorite(String(fixture.id));
+          await MatchFavoritesStorage.addFavorite(String(fixture.id), {
+            homeTeam: fixture.home,
+            awayTeam: fixture.away,
+            homeTeamLogo: fixture.homeLogo,
+            awayTeamLogo: fixture.awayLogo,
+            matchDate: fixture.matchDate || new Date().toISOString(),
+            leagueName: fixture.leagueName,
+            leagueLogo: fixture.leagueLogo,
+            status: fixture.status,
+            statusShort: fixture.statusShort,
+          });
+          await refreshNotified();
+          setFilter('Favorite');
           toastManager.showSuccess(
             t('matches.bell.subscribedTitle'),
             t('matches.bell.subscribedMessage'),
@@ -1772,6 +1796,7 @@ export default function MatchesHubScreenV2() {
         } else {
           await MatchSubscriptionsService.unsubscribe(token, fixture.id);
           await MatchFavoritesStorage.removeFavorite(String(fixture.id));
+          await refreshNotified();
           toastManager.showInfo(
             t('matches.bell.unsubscribedTitle'),
             t('matches.bell.unsubscribedMessage'),
@@ -1795,7 +1820,7 @@ export default function MatchesHubScreenV2() {
         setSubscribingFixtureId(null);
       }
     },
-    [userId, getToken, t],
+    [userId, getToken, t, refreshNotified],
   );
 
   // Open the full match-details screen for a fixture. Mirrors the params
@@ -1854,6 +1879,43 @@ export default function MatchesHubScreenV2() {
       handleOpenMatchDetails,
       handleFixtureVisibility,
     ],
+  );
+
+  const renderFavoriteFixture = useCallback(
+    (fixture: FavoritesListFixture) => (
+      <MatchRow
+        fixture={fixture as Fixture}
+        showPreds={MATCHES_SHOW_PREDS}
+        onPredict={handlePredict}
+        submittingId={submittingId}
+        predictedMatches={predictedMatches}
+        isSubscribed={subscribedFixtures.has(fixture.id)}
+        isSubscribing={subscribingFixtureId === fixture.id}
+        onToggleSubscription={handleToggleSubscription}
+        onOpenDetails={handleOpenMatchDetails}
+        onFixtureVisibility={handleFixtureVisibility}
+      />
+    ),
+    [
+      handlePredict,
+      submittingId,
+      predictedMatches,
+      subscribedFixtures,
+      subscribingFixtureId,
+      handleToggleSubscription,
+      handleOpenMatchDetails,
+      handleFixtureVisibility,
+    ],
+  );
+
+  const handleOpenFavoriteTeam = useCallback(
+    (team: { apiTeamId: number }) => {
+      router.push({
+        pathname: '/team-profile' as any,
+        params: { id: String(team.apiTeamId) },
+      });
+    },
+    [router],
   );
 
   // Open the full-list bottom sheet for a league when the user taps
@@ -2187,19 +2249,14 @@ export default function MatchesHubScreenV2() {
           ListEmptyComponent={listEmptyNode}
         />
       ) : filter === 'Favorite' ? (
-        <FlashList
-          data={[] as CountryGroup[]}
-          keyExtractor={() => 'favorite-placeholder'}
-          renderItem={() => null}
-          drawDistance={250}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={listHeaderNode}
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Text style={styles.emptyTxt}>{t('matches.screen.favoritesComingSoon')}</Text>
-            </View>
-          }
+        <FavoritesTab
+          followedTeams={followedTeams}
+          notifiedMatches={notifiedMatches}
+          loading={favoritesFeedLoading}
+          headerOffset={Math.max(insets.top, 10) + 60}
+          listHeader={listHeaderNode}
+          renderFixture={renderFavoriteFixture}
+          onOpenTeam={handleOpenFavoriteTeam}
         />
       ) : (
         <FlashList
