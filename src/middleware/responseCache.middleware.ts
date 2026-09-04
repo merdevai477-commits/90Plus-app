@@ -64,9 +64,9 @@ class ResponseCache {
     }
 
     /**
-     * Generate ETag from data
+     * Generate ETag from data (synchronous — used on cache MISS before send).
      */
-    private generateETag(data: any): string {
+    generateETag(data: any): string {
         const str = JSON.stringify(data);
         return crypto.createHash('md5').update(str).digest('hex');
     }
@@ -363,14 +363,17 @@ export function responseCacheMiddleware(options: {
                 : ttl;
 
             if (shouldCache) {
-                // Cache asynchronously without blocking response
-                responseCache.set(req, body, effectiveTtl, sharedCache).then((etag) => {
-                    res.setHeader('ETag', `"${etag}"`);
-                    res.setHeader('X-Cache', isEmptyPayload ? 'MISS-EMPTY' : 'MISS');
-                    const maxAge = effectiveTtl ?? 5 * 60 * 1000;
-                    res.setHeader('Cache-Control', `${sharedCache ? 'public' : 'private'}, max-age=${Math.floor(maxAge / 1000)}`);
-                }).catch(() => {
-                    // Ignore cache errors, don't block response
+                // P1-4: compute ETag + set headers BEFORE sending the body.
+                // Redis write stays async/non-blocking.
+                const etag = responseCache.generateETag(body);
+                const maxAge = effectiveTtl ?? 5 * 60 * 1000;
+                res.setHeader('ETag', `"${etag}"`);
+                res.setHeader('X-Cache', isEmptyPayload ? 'MISS-EMPTY' : 'MISS');
+                res.setHeader(
+                    'Cache-Control',
+                    `${sharedCache ? 'public' : 'private'}, max-age=${Math.floor(maxAge / 1000)}`,
+                );
+                responseCache.set(req, body, effectiveTtl, sharedCache).catch(() => {
                     responseCache.failFill(req, new Error('CACHE_SET_FAILED'), sharedCache);
                 });
             } else {
@@ -395,6 +398,9 @@ export async function clearResponseCache(pattern?: string): Promise<void> {
 export function getResponseCacheMemorySize(): number {
     return responseCache.size();
 }
+
+/** Expose for tests and sync ETag computation on MISS. */
+export { responseCache };
 
 export default responseCacheMiddleware;
 
