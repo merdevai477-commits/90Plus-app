@@ -1,8 +1,8 @@
 /**
  * RankHeader
  *
- * Floating header for the Rank tab. Displays the 90PLUS brand pill on the
- * leading edge and the live coin balance (from CoinsContext) on the trailing
+ * Floating header for the Rank tab. Displays the centered "90plus rank"
+ * brand pill and the live coin balance (from CoinsContext) on the trailing
  * edge. Glass matches Matches / Quiz via glassProps.header.
  */
 
@@ -20,6 +20,7 @@ import { FeatureInfoModal } from '../common/FeatureInfoModal';
 
 const ACCENT = '#A855F7';
 const blurTint: BlurTint = 'dark';
+const TITLE = '90plus rank';
 
 interface RankHeaderProps {
   topInset: number;
@@ -40,27 +41,28 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
 
   const content = (
     <>
+      <View style={s.sideSlot} />
+
       <Pressable
-        style={s.logoPillSmall}
+        style={s.titlePill}
         onPress={() => setShowRankInfo(true)}
         accessibilityRole="button"
         accessibilityLabel={t.rankInfo.title}
       >
-        <Text style={s.logo90Small}>90</Text>
-        <View style={s.plusChipSmall}>
-          <Text style={s.logoPlusSmall}>PLUS</Text>
-        </View>
+        <Text style={s.titleText}>{TITLE}</Text>
       </Pressable>
 
-      <Pressable
-        style={s.coinChip}
-        onPress={() => setShowCoinsInfo(true)}
-        accessibilityRole="button"
-        accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
-      >
-        <Zap size={13} color={ACCENT} fill={ACCENT} />
-        <Text style={s.coinTxt}>{display}</Text>
-      </Pressable>
+      <View style={[s.sideSlot, s.sideSlotEnd]}>
+        <Pressable
+          style={s.coinChip}
+          onPress={() => setShowCoinsInfo(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`${t.rank.a11yCoinChip}: ${display}`}
+        >
+          <Zap size={13} color={ACCENT} fill={ACCENT} />
+          <Text style={s.coinTxt}>{display}</Text>
+        </Pressable>
+      </View>
 
       <CoinsInfoModal
         visible={showCoinsInfo}
@@ -105,41 +107,35 @@ const s = StyleSheet.create({
     zIndex: 100,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.05)',
     backgroundColor: 'transparent',
   },
-  logoPillSmall: {
+  /** Equal flex sides keep the title optically centered. */
+  sideSlot: {
+    flex: 1,
+  },
+  sideSlotEnd: {
+    alignItems: 'flex-end',
+  },
+  titlePill: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
-    gap: 5,
   },
-  logo90Small: {
+  titleText: {
     color: '#fff',
     fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-  plusChipSmall: {
-    backgroundColor: ACCENT,
-    borderRadius: 5,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  logoPlusSmall: {
-    color: '#fff',
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.8,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   coinChip: {
     flexDirection: 'row',
