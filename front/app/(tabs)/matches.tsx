@@ -1030,12 +1030,6 @@ export default function MatchesHubScreenV2() {
   const router = useRouter();
   const { getToken, userId } = useAuth();
   const { t: tObj, translate: t } = useTranslation();
-  const {
-    followedTeams,
-    notifiedMatches,
-    loading: favoritesFeedLoading,
-    refreshNotified,
-  } = useFavoritesFeed();
 
   // Clerk's getToken returns a NEW function reference on every render — store
   // it in a ref so effects don't re-fire on every parent re-render.
@@ -1043,10 +1037,6 @@ export default function MatchesHubScreenV2() {
   useEffect(() => {
     getTokenRef.current = getToken;
   }, [getToken]);
-
-  useEffect(() => {
-    if (filter === 'Favorite') void refreshNotified();
-  }, [filter, refreshNotified]);
 
   useEffect(() => {
     void useAppFeaturesStore.getState().hydrate(true);
@@ -1094,7 +1084,19 @@ export default function MatchesHubScreenV2() {
 
   // Bell (match-start push) subscription state
   const [subscribedFixtures, setSubscribedFixtures] = useState<Set<string>>(() => new Set());
+  const [subscriptionsReady, setSubscriptionsReady] = useState(() => !userId);
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
+
+  const {
+    followedTeams,
+    notifiedMatches,
+    loading: favoritesFeedLoading,
+    refreshNotified,
+  } = useFavoritesFeed(subscribedFixtures, subscriptionsReady);
+
+  useEffect(() => {
+    if (filter === 'Favorite') void refreshNotified();
+  }, [filter, refreshNotified]);
 
   const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
   // Fetch WC fixtures only when a WC-related tab is active (not on every mount).
@@ -1262,11 +1264,15 @@ export default function MatchesHubScreenV2() {
   // Reset bell state when the signed-in user changes.
   useEffect(() => {
     setSubscribedFixtures(new Set());
+    setSubscriptionsReady(!userId);
   }, [userId]);
 
   // Hydrate bell state from the backend after first paint.
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setSubscriptionsReady(true);
+      return;
+    }
     let cancelled = false;
     const task = InteractionManager.runAfterInteractions(() => {
       void (async () => {
@@ -1278,6 +1284,8 @@ export default function MatchesHubScreenV2() {
           setSubscribedFixtures(new Set(Array.from(ids).map((n) => String(n))));
         } catch {
           // non-fatal
+        } finally {
+          if (!cancelled) setSubscriptionsReady(true);
         }
       })();
     });

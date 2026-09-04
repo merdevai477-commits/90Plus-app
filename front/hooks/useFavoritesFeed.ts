@@ -3,7 +3,7 @@
  * live-first 5 upcoming / 5 finished slice (max 10 total).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Competitor365Matches, Fixture as ApiFixture } from '../services/apiFootball';
 import { useFavoriteTeam } from './useFavoriteTeam';
 import {
@@ -135,30 +135,88 @@ export function sliceTeamFavoriteMatches(data: Competitor365Matches): ApiFixture
     return [...live, ...rest];
 }
 
-export function useFavoritesFeed(): {
+export type LeagueFixtureGroup = {
+    key: string;
+    leagueName: string;
+    leagueLogo?: string;
+    fixtures: FavoritesListFixture[];
+};
+
+/** Group sliced fixtures under championship headers (matches-page look). */
+export function groupFixturesByLeague(fixtures: FavoritesListFixture[]): LeagueFixtureGroup[] {
+    const order: string[] = [];
+    const map = new Map<string, LeagueFixtureGroup>();
+    for (const fixture of fixtures) {
+        const key = String(fixture.leagueId ?? fixture.leagueName ?? 'league');
+        let group = map.get(key);
+        if (!group) {
+            group = {
+                key,
+                leagueName: fixture.leagueName || 'League',
+                leagueLogo: fixture.leagueLogo,
+                fixtures: [],
+            };
+            map.set(key, group);
+            order.push(key);
+        } else if (!group.leagueLogo && fixture.leagueLogo) {
+            group.leagueLogo = fixture.leagueLogo;
+        }
+        group.fixtures.push(fixture);
+    }
+    return order.map((k) => map.get(k)!);
+}
+
+export function useFavoritesFeed(
+    subscribedFixtureIds?: ReadonlySet<string>,
+    subscriptionsReady = false,
+): {
     followedTeams: StoredFollowedTeam[];
     notifiedMatches: StoredFavoriteMatch[];
     loading: boolean;
     refreshNotified: () => Promise<void>;
 } {
     const { followedTeams, loading: teamsLoading } = useFavoriteTeam();
-    const [notifiedMatches, setNotifiedMatches] = useState<StoredFavoriteMatch[]>([]);
+    const [storedMatches, setStoredMatches] = useState<StoredFavoriteMatch[]>([]);
     const [notifiedLoading, setNotifiedLoading] = useState(true);
 
     const refreshNotified = useCallback(async () => {
         try {
             const active = await MatchFavoritesStorage.getActiveMatches();
-            setNotifiedMatches(active);
+            if (!subscriptionsReady) {
+                // Keep local snapshot until server bell ids hydrate — never prune early.
+                setStoredMatches(active);
+                return;
+            }
+            if (!subscribedFixtureIds || subscribedFixtureIds.size === 0) {
+                for (const match of active) {
+                    void MatchFavoritesStorage.removeFavorite(match.id);
+                }
+                setStoredMatches([]);
+                return;
+            }
+            const keep: StoredFavoriteMatch[] = [];
+            for (const match of active) {
+                if (subscribedFixtureIds.has(match.id)) keep.push(match);
+                else void MatchFavoritesStorage.removeFavorite(match.id);
+            }
+            setStoredMatches(keep);
         } catch {
-            setNotifiedMatches([]);
+            setStoredMatches([]);
         } finally {
             setNotifiedLoading(false);
         }
-    }, []);
+    }, [subscribedFixtureIds, subscriptionsReady]);
 
     useEffect(() => {
         void refreshNotified();
     }, [refreshNotified]);
+
+    const notifiedMatches = useMemo(() => {
+        // Only paint cards after hydrate, and only for fixtures with the bell on.
+        if (!subscriptionsReady) return [];
+        if (!subscribedFixtureIds || subscribedFixtureIds.size === 0) return [];
+        return storedMatches.filter((m) => subscribedFixtureIds.has(m.id));
+    }, [storedMatches, subscribedFixtureIds, subscriptionsReady]);
 
     return {
         followedTeams,

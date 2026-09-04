@@ -7,7 +7,8 @@
  * `enabled` flag so we never call every endpoint on every render.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useState } from 'react';
 import ApiFootballService, {
     type Competitor365Info,
     type Competitor365Matches,
@@ -17,6 +18,7 @@ import ApiFootballService, {
     type Competitor365Coach,
     type Standing365Row,
 } from '../services/apiFootball';
+import { CompetitorMatchesCache } from '../src/storage/competitorMatches.cache';
 
 const FIVE_MIN = 5 * 60 * 1000;
 
@@ -44,13 +46,71 @@ export function useCompetitorInfo(competitorId: number, enabled = true) {
 export function useCompetitorMatches(competitorId: number, enabled = true) {
     return useQuery<Competitor365Matches, Error>({
         queryKey: competitorKey(competitorId, 'matches'),
-        queryFn: () => ApiFootballService.getCompetitor365Matches(competitorId),
+        queryFn: async () => {
+            const data = await ApiFootballService.getCompetitor365Matches(competitorId);
+            void CompetitorMatchesCache.write(competitorId, data);
+            return data;
+        },
         enabled: enabled && competitorId > 0,
-        staleTime: 60 * 1000,
-        gcTime: FIVE_MIN,
+        staleTime: 90 * 1000,
+        gcTime: FIVE_MIN * 6,
         retry: 1,
         refetchOnWindowFocus: false,
     });
+}
+
+/** Favorites accordion: disk placeholder + shared RQ key with profile matches. */
+export function useFavoriteCompetitorMatches(competitorId: number, enabled = true) {
+    const [disk, setDisk] = useState<Competitor365Matches | undefined>(undefined);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (!competitorId || competitorId <= 0) {
+            setDisk(undefined);
+            return;
+        }
+        void CompetitorMatchesCache.read(competitorId).then((cached) => {
+            if (!cancelled && cached) setDisk(cached);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [competitorId]);
+
+    return useQuery<Competitor365Matches, Error>({
+        queryKey: competitorKey(competitorId, 'matches'),
+        queryFn: async () => {
+            const data = await ApiFootballService.getCompetitor365Matches(competitorId);
+            void CompetitorMatchesCache.write(competitorId, data);
+            return data;
+        },
+        enabled: enabled && competitorId > 0,
+        staleTime: 90 * 1000,
+        gcTime: FIVE_MIN * 6,
+        retry: 1,
+        refetchOnWindowFocus: false,
+        placeholderData: disk,
+    });
+}
+
+/** Warm the shared matches query on press-in so expand feels instant. */
+export function usePrefetchFavoriteCompetitorMatches() {
+    const queryClient = useQueryClient();
+    return useCallback(
+        (competitorId: number) => {
+            if (!competitorId || competitorId <= 0) return;
+            void queryClient.prefetchQuery({
+                queryKey: competitorKey(competitorId, 'matches'),
+                queryFn: async () => {
+                    const data = await ApiFootballService.getCompetitor365Matches(competitorId);
+                    void CompetitorMatchesCache.write(competitorId, data);
+                    return data;
+                },
+                staleTime: 90 * 1000,
+            });
+        },
+        [queryClient],
+    );
 }
 
 export function useCompetitorTransfers(competitorId: number, enabled = true) {

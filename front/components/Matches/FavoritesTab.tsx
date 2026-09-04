@@ -1,11 +1,12 @@
 /**
  * FavoritesTab — followed teams (league-style accordion) + active bell matches.
  *
- * Team match payloads load only when a row is expanded (lazy). Each team shows
- * live-first, then ≤5 upcoming and ≤5 finished, hard-capped at 10.
+ * Notified match cards only render for real bell subscriptions.
+ * Team rows mirror CountryAccordion / LeagueSection chrome: club logo + name,
+ * championship groups when expanded, MatchRow cards identical to Matches.
  */
 
-import React, { memo, useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -16,19 +17,25 @@ import {
     Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { ChevronDown, ChevronUp, Bell } from 'lucide-react-native';
+import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { FlashList } from '@shopify/flash-list';
-import { useCompetitorMatches } from '../../hooks/useTeamProfile';
+import {
+    useFavoriteCompetitorMatches,
+    usePrefetchFavoriteCompetitorMatches,
+} from '../../hooks/useTeamProfile';
 import {
     apiFixtureToListFixture,
+    groupFixturesByLeague,
     sliceTeamFavoriteMatches,
     storedMatchToListFixture,
     type FavoritesListFixture,
 } from '../../hooks/useFavoritesFeed';
 import type { StoredFollowedTeam } from '../../src/storage/teamFavorites.storage';
 import type { StoredFavoriteMatch } from '../../src/storage/matchFavorites.storage';
+import { CompetitorMatchesCache } from '../../src/storage/competitorMatches.cache';
 import { useTranslation } from '../../src/i18n';
 import { useRegisterLiveFixtures } from '../../hooks/useLiveFixture';
+import { getLeagueDisplayName } from '../../utils/i18nHelpers';
 
 const ANIMATE_TOGGLE = Platform.OS === 'ios';
 
@@ -47,6 +54,61 @@ export interface FavoritesTabProps {
     onOpenTeam?: (team: StoredFollowedTeam) => void;
 }
 
+const LeagueMatchBlock = memo(function LeagueMatchBlock({
+    leagueName,
+    leagueLogo,
+    fixtures,
+    renderFixture,
+    showChevron = false,
+    expanded = true,
+}: {
+    leagueName: string;
+    leagueLogo?: string;
+    fixtures: FavoritesListFixture[];
+    renderFixture: (fixture: FavoritesListFixture) => React.ReactNode;
+    showChevron?: boolean;
+    expanded?: boolean;
+}) {
+    const { language } = useTranslation();
+    const title = getLeagueDisplayName(leagueName, language) || leagueName;
+
+    return (
+        <View style={styles.leagueSection}>
+            <View style={styles.leagueHeader}>
+                {leagueLogo ? (
+                    <Image
+                        source={{ uri: leagueLogo }}
+                        style={styles.leagueLogo}
+                        contentFit="contain"
+                        cachePolicy="memory-disk"
+                        transition={0}
+                    />
+                ) : (
+                    <View style={[styles.leagueLogo, styles.placeholderLogo]} />
+                )}
+                <Text style={styles.leagueName} numberOfLines={1}>
+                    {title}
+                </Text>
+                <Text style={styles.matchCount}>{fixtures.length}</Text>
+                {showChevron ? (
+                    expanded ? (
+                        <ChevronUp size={14} color="rgba(255,255,255,0.4)" />
+                    ) : (
+                        <ChevronDown size={14} color="rgba(255,255,255,0.4)" />
+                    )
+                ) : null}
+            </View>
+            {expanded ? (
+                <View style={styles.matchesContainer}>
+                    {fixtures.map((fixture) => (
+                        <View key={fixture.id}>{renderFixture(fixture)}</View>
+                    ))}
+                </View>
+            ) : null}
+        </View>
+    );
+});
+
 const TeamFavoriteRow = memo(function TeamFavoriteRow({
     team,
     renderFixture,
@@ -57,11 +119,34 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
     onOpenTeam?: (team: StoredFollowedTeam) => void;
 }) {
     const [expanded, setExpanded] = useState(false);
-    const matchesQ = useCompetitorMatches(team.apiTeamId, expanded);
+    const [diskFixtures, setDiskFixtures] = useState<FavoritesListFixture[]>([]);
+    const prefetch = usePrefetchFavoriteCompetitorMatches();
+    const matchesQ = useFavoriteCompetitorMatches(team.apiTeamId, expanded);
+
+    useEffect(() => {
+        let cancelled = false;
+        void CompetitorMatchesCache.read(team.apiTeamId).then((cached) => {
+            if (cancelled || !cached) return;
+            setDiskFixtures(sliceTeamFavoriteMatches(cached).map(apiFixtureToListFixture));
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [team.apiTeamId]);
+
     const fixtures = useMemo(() => {
-        if (!matchesQ.data) return [] as FavoritesListFixture[];
-        return sliceTeamFavoriteMatches(matchesQ.data).map(apiFixtureToListFixture);
-    }, [matchesQ.data]);
+        if (matchesQ.data) {
+            return sliceTeamFavoriteMatches(matchesQ.data).map(apiFixtureToListFixture);
+        }
+        return diskFixtures;
+    }, [matchesQ.data, diskFixtures]);
+
+    const leagueGroups = useMemo(() => groupFixturesByLeague(fixtures), [fixtures]);
+
+    const headlineCompetition = useMemo(() => {
+        const first = fixtures.find((f) => f.status === 'LIVE') ?? fixtures[0];
+        return first?.leagueName || team.country || null;
+    }, [fixtures, team.country]);
 
     const liveIds = useMemo(
         () =>
@@ -71,7 +156,7 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
                 .filter((id) => Number.isFinite(id) && id > 0),
         [fixtures],
     );
-    useRegisterLiveFixtures(liveIds);
+    useRegisterLiveFixtures(expanded ? liveIds : []);
 
     const toggle = useCallback(() => {
         if (ANIMATE_TOGGLE) {
@@ -80,14 +165,22 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
         setExpanded((v) => !v);
     }, []);
 
+    const onPressIn = useCallback(() => {
+        prefetch(team.apiTeamId);
+    }, [prefetch, team.apiTeamId]);
+
+    const showSpinner = expanded && matchesQ.isLoading && fixtures.length === 0;
+    const matchCount = fixtures.length;
+
     return (
-        <View style={styles.teamCard}>
+        <View style={styles.teamContainer}>
             <TouchableOpacity
                 style={styles.teamHeader}
                 onPress={toggle}
+                onPressIn={onPressIn}
                 onLongPress={() => onOpenTeam?.(team)}
                 delayLongPress={280}
-                activeOpacity={0.75}
+                activeOpacity={0.7}
             >
                 {team.teamLogo ? (
                     <Image
@@ -96,38 +189,44 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
                         contentFit="contain"
                         cachePolicy="memory-disk"
                         transition={0}
+                        priority="high"
                     />
                 ) : (
-                    <View style={[styles.teamLogo, styles.logoPlaceholder]} />
+                    <View style={[styles.teamLogo, styles.placeholderLogo]} />
                 )}
                 <View style={styles.teamTitleWrap}>
                     <Text style={styles.teamName} numberOfLines={1}>
                         {team.teamName}
                     </Text>
-                    {team.country ? (
-                        <Text style={styles.teamCountry} numberOfLines={1}>
-                            {team.country}
+                    {headlineCompetition ? (
+                        <Text style={styles.teamSub} numberOfLines={1}>
+                            {headlineCompetition}
                         </Text>
                     ) : null}
                 </View>
+                {matchCount > 0 ? <Text style={styles.totalBadge}>{matchCount}</Text> : null}
                 {expanded ? (
-                    <ChevronUp size={16} color="rgba(255,255,255,0.45)" />
+                    <ChevronUp size={16} color="rgba(255,255,255,0.5)" />
                 ) : (
-                    <ChevronDown size={16} color="rgba(255,255,255,0.45)" />
+                    <ChevronDown size={16} color="rgba(255,255,255,0.5)" />
                 )}
             </TouchableOpacity>
 
             {expanded ? (
-                <View style={styles.matchesWrap}>
-                    {matchesQ.isLoading ? (
+                <View style={styles.leaguesWrapper}>
+                    {showSpinner ? (
                         <ActivityIndicator color="#a855f7" style={{ marginVertical: 16 }} />
-                    ) : fixtures.length === 0 ? (
+                    ) : leagueGroups.length === 0 ? (
                         <Text style={styles.emptyMatches}>—</Text>
                     ) : (
-                        fixtures.map((fixture) => (
-                            <View key={fixture.id} style={styles.matchSlot}>
-                                {renderFixture(fixture)}
-                            </View>
+                        leagueGroups.map((group) => (
+                            <LeagueMatchBlock
+                                key={group.key}
+                                leagueName={group.leagueName}
+                                leagueLogo={group.leagueLogo}
+                                fixtures={group.fixtures}
+                                renderFixture={renderFixture}
+                            />
                         ))
                     )}
                 </View>
@@ -184,14 +283,15 @@ export default function FavoritesTab({
             if (item.type === 'notified') {
                 const fixture = storedMatchToListFixture(item.match);
                 return (
-                    <View style={styles.notifiedCard}>
-                        <View style={styles.notifiedBadge}>
-                            <Bell size={12} color="#e9d5ff" fill="#a855f7" />
-                            <Text style={styles.notifiedBadgeTxt}>
-                                {t.matches.screen.favoritesNotifiedBadge}
-                            </Text>
-                        </View>
-                        {renderFixture(fixture)}
+                    <View style={styles.teamContainer}>
+                        <LeagueMatchBlock
+                            leagueName={fixture.leagueName || item.match.leagueName || 'Match'}
+                            leagueLogo={fixture.leagueLogo || item.match.leagueLogo}
+                            fixtures={[fixture]}
+                            renderFixture={renderFixture}
+                            showChevron
+                            expanded
+                        />
                     </View>
                 );
             }
@@ -248,81 +348,98 @@ const styles = StyleSheet.create({
         letterSpacing: 0.4,
         textTransform: 'uppercase',
     },
-    teamCard: {
+    teamContainer: {
         borderRadius: 14,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
-        backgroundColor: 'rgba(12,10,20,0.85)',
         overflow: 'hidden',
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
     },
     teamHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
-        paddingHorizontal: 12,
+        paddingHorizontal: 14,
         paddingVertical: 12,
+        gap: 10,
     },
     teamLogo: {
         width: 28,
         height: 28,
-        borderRadius: 6,
+        borderRadius: 8,
     },
-    logoPlaceholder: {
-        backgroundColor: 'rgba(255,255,255,0.08)',
+    placeholderLogo: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
     },
     teamTitleWrap: {
         flex: 1,
         minWidth: 0,
     },
     teamName: {
-        color: '#fff',
-        fontSize: 14,
+        flexShrink: 1,
+        fontSize: 15,
         fontWeight: '700',
+        color: '#FFFFFF',
     },
-    teamCountry: {
+    teamSub: {
+        marginTop: 2,
+        fontSize: 12,
+        fontWeight: '500',
         color: 'rgba(255,255,255,0.45)',
-        fontSize: 11,
-        marginTop: 1,
     },
-    matchesWrap: {
+    totalBadge: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.5)',
+        backgroundColor: 'rgba(255,255,255,0.08)',
         paddingHorizontal: 8,
-        paddingBottom: 10,
-        gap: 6,
+        paddingVertical: 2,
+        borderRadius: 10,
+        overflow: 'hidden',
     },
-    matchSlot: {
-        marginBottom: 2,
+    leaguesWrapper: {
+        paddingHorizontal: 8,
+        paddingBottom: 8,
+    },
+    leagueSection: {
+        marginTop: 4,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255,255,255,0.02)',
+        overflow: 'hidden',
+    },
+    leagueHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        gap: 8,
+    },
+    leagueLogo: {
+        width: 20,
+        height: 20,
+        borderRadius: 4,
+    },
+    leagueName: {
+        flex: 1,
+        fontSize: 13,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.85)',
+    },
+    matchCount: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.4)',
+        marginEnd: 4,
+    },
+    matchesContainer: {
+        paddingHorizontal: 4,
+        paddingBottom: 6,
+        gap: 4,
     },
     emptyMatches: {
         color: 'rgba(255,255,255,0.35)',
         textAlign: 'center',
         paddingVertical: 12,
         fontSize: 13,
-    },
-    notifiedCard: {
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: 'rgba(168,85,247,0.28)',
-        backgroundColor: 'rgba(20,10,35,0.9)',
-        paddingTop: 8,
-        paddingBottom: 6,
-        paddingHorizontal: 8,
-    },
-    notifiedBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 5,
-        alignSelf: 'flex-start',
-        marginBottom: 6,
-        marginLeft: 4,
-        backgroundColor: 'rgba(168,85,247,0.18)',
-        borderRadius: 10,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-    },
-    notifiedBadgeTxt: {
-        color: '#e9d5ff',
-        fontSize: 11,
-        fontWeight: '700',
     },
     emptyWrap: {
         alignItems: 'center',
