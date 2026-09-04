@@ -10,7 +10,11 @@ import {
 } from '../config/world-cup-only-mode.config';
 import { matchCacheService } from './match-cache.service';
 import type { FixtureFromAPI } from './match-cache.service';
-import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
+import {
+  buildFallbackStatisticsFromEvents,
+  hasApiStatistics,
+  hasRichStatistics,
+} from '../utils/match-stats-fallback';
 import { buildScores365AthletePhotoUrl, buildScores365CoachPhotoUrl } from '../utils/scores365-athlete-photo';
 import { findCoachInLineup } from './coach-lookup.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
@@ -119,6 +123,8 @@ interface Scores365Competitor {
   lineups?: {
     status?: string;
     formation?: string;
+    /** False when 365 has names only: every `yardFormation.line` is then a placeholder. */
+    hasFieldPositions?: boolean;
     members?: Scores365LineupMember[];
   };
   color?: string;
@@ -130,7 +136,10 @@ interface Scores365LineupMember {
   status: number;
   statusText?: string;
   competitorId?: number;
-  formation?: { id?: number; shortName?: string };
+  /** Role on the pitch, e.g. "Centre Back", "Attacking Midfield". */
+  formation?: { id?: number; name?: string; shortName?: string };
+  /** Coarse position: 1 goalkeeper, 2 defender, 3 midfielder, 4 attacker. */
+  position?: { id?: number; name?: string; shortName?: string };
   yardFormation?: { line?: number; fieldPosition?: number; fieldLine?: number; fieldSide?: number };
   ranking?: number;
   stats?: Array<{ type?: number; value?: string }>;
@@ -768,21 +777,21 @@ function scores365GameStatsUrl(gameId: number, langId: number): string {
 
 let cachedTeamStatsByKey = new Map<string, { fetchedAt: number; payload: Scores365TeamStatsPayload | null }>();
 const TEAM_STATS_TTL_MS = 20_000;
+/** Keep a stale team-stats payload servable this long while refreshes fail. */
+const TEAM_STATS_STALE_KEEP_MS = 6 * 60 * 60 * 1000;
+let inFlightTeamStatsFetch = new Map<string, Promise<Scores365TeamStatsPayload | null>>();
 
-async function fetchScores365GameTeamStats(
+async function fetchScores365GameTeamStatsOnce(
   gameId: number,
   langId: number,
-  force = false,
+  timeoutMs: number,
 ): Promise<Scores365TeamStatsPayload | null> {
   const key = `${gameId}:${langId}`;
   const cached = cachedTeamStatsByKey.get(key);
-  if (!force && cached && Date.now() - cached.fetchedAt < TEAM_STATS_TTL_MS) {
-    return cached.payload;
-  }
   try {
     const res = await fetch(scores365GameStatsUrl(gameId, langId), {
       headers: scores365FetchHeaders(langId),
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) {
       logger.warn(`[Scores365Stats] HTTP ${res.status} for game ${gameId}`);
@@ -800,6 +809,40 @@ async function fetchScores365GameTeamStats(
     );
     return cached?.payload ?? null;
   }
+}
+
+/**
+ * Team-level 365 stats with stale-while-revalidate: once a payload exists, callers
+ * get it immediately and the refresh runs out of band. Only a cold key waits on 365,
+ * and background (`force`) callers always wait for the real answer.
+ */
+async function fetchScores365GameTeamStats(
+  gameId: number,
+  langId: number,
+  force = false,
+): Promise<Scores365TeamStatsPayload | null> {
+  const key = `${gameId}:${langId}`;
+  const cached = cachedTeamStatsByKey.get(key);
+  const ageMs = cached ? Date.now() - cached.fetchedAt : Infinity;
+  if (!force && cached && ageMs < TEAM_STATS_TTL_MS) {
+    return cached.payload;
+  }
+
+  let refresh = inFlightTeamStatsFetch.get(key);
+  if (!refresh) {
+    refresh = fetchScores365GameTeamStatsOnce(
+      gameId,
+      langId,
+      force ? GAME_FETCH_TIMEOUT_BACKGROUND_MS : GAME_FETCH_TIMEOUT_REQUEST_MS,
+    ).finally(() => {
+      inFlightTeamStatsFetch.delete(key);
+    });
+    inFlightTeamStatsFetch.set(key, refresh);
+  }
+
+  if (force) return refresh;
+  if (cached?.payload && ageMs < TEAM_STATS_STALE_KEEP_MS) return cached.payload;
+  return refresh;
 }
 
 /** Map 365 home/away competitor ids onto fixture home/away after optional swap. */
@@ -876,13 +919,57 @@ export function interpretScores365GameFetch(
   return 'transient';
 }
 
-async function fetchScores365GameOnce(gameId: number, langId: number): Promise<Scores365Game | null> {
+function positiveEnvMs(name: string, fallback: number): number {
+  const raw = parseInt(process.env[name] || '', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+}
+
+/**
+ * Request-path budget for a cold 365 game fetch (no last-good payload yet). Past it
+ * the caller gets `null` and the fetch keeps running into the cache for the next read.
+ */
+const GAME_REQUEST_BUDGET_MS = positiveEnvMs('SCORES365_GAME_REQUEST_BUDGET_MS', 4_000);
+/** Socket timeout for request-path fetches; anything slower is a throttled upstream. */
+const GAME_FETCH_TIMEOUT_REQUEST_MS = positiveEnvMs('SCORES365_GAME_FETCH_TIMEOUT_MS', 6_000);
+/** Background warmers/ingestors can afford to wait longer for a slow 365 answer. */
+const GAME_FETCH_TIMEOUT_BACKGROUND_MS = positiveEnvMs(
+  'SCORES365_GAME_FETCH_TIMEOUT_BACKGROUND_MS',
+  12_000,
+);
+
+const GAME_BUDGET_LAPSED = Symbol('scores365-game-budget-lapsed');
+
+/** Resolve with `fallback` once `budgetMs` passes; the underlying promise keeps running. */
+async function settleWithinBudget<T>(
+  promise: Promise<T>,
+  budgetMs: number,
+  fallback: T,
+): Promise<{ value: T; lapsed: boolean }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const lapsed = new Promise<typeof GAME_BUDGET_LAPSED>((resolve) => {
+    timer = setTimeout(() => resolve(GAME_BUDGET_LAPSED), budgetMs);
+    timer.unref?.();
+  });
+  try {
+    const settled = await Promise.race([promise.catch(() => fallback), lapsed]);
+    if (settled === GAME_BUDGET_LAPSED) return { value: fallback, lapsed: true };
+    return { value: settled as T, lapsed: false };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function fetchScores365GameOnce(
+  gameId: number,
+  langId: number,
+  timeoutMs: number = GAME_FETCH_TIMEOUT_BACKGROUND_MS,
+): Promise<Scores365Game | null> {
   const staleKey = lastGoodGameKey(gameId, langId);
   const lastGood = lastGoodGameByKey.get(staleKey) ?? null;
   try {
     const res = await fetch(scores365GameUrl(gameId, langId), {
       headers: scores365FetchHeaders(langId),
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (interpretScores365GameFetch(res.status, res.ok ? {} : null) === 'gone' && !res.ok) {
       lastGoodGameByKey.delete(staleKey);
@@ -972,14 +1059,34 @@ export async function fetchScores365GameById(
     if (isHistorical) return null;
   }
 
-  const inFlight = inFlightGameFetch.get(key);
-  if (inFlight) return inFlight;
+  let refresh = inFlightGameFetch.get(key);
+  if (!refresh) {
+    refresh = fetchScores365GameOnce(
+      gameId,
+      langId,
+      force ? GAME_FETCH_TIMEOUT_BACKGROUND_MS : GAME_FETCH_TIMEOUT_REQUEST_MS,
+    ).finally(() => {
+      inFlightGameFetch.delete(key);
+    });
+    inFlightGameFetch.set(key, refresh);
+  }
 
-  const promise = fetchScores365GameOnce(gameId, langId).finally(() => {
-    inFlightGameFetch.delete(key);
-  });
-  inFlightGameFetch.set(key, promise);
-  return promise;
+  // Background callers (warmers, ingestors) asked for fresh data and can wait for it.
+  if (force) return refresh;
+
+  // Stale-while-revalidate: a request-path caller never waits on 365 once any good
+  // payload exists. The refresh above lands in cache for the next read.
+  if (lastGood) return lastGood;
+
+  // Cold miss: wait a bounded time so a throttled upstream cannot hold the HTTP
+  // response hostage; the fetch keeps running into the cache regardless.
+  const { value, lapsed } = await settleWithinBudget(refresh, GAME_REQUEST_BUDGET_MS, null);
+  if (lapsed) {
+    logger.warn(
+      `[Scores365Experiment] game ${gameId} lang=${langId} reason=request_budget_exceeded budgetMs=${GAME_REQUEST_BUDGET_MS}`,
+    );
+  }
+  return value;
 }
 
 /** Back-compat: default experiment gameId. */
@@ -2082,14 +2189,75 @@ function resolveLineupAthleteId(
   return memberId;
 }
 
-function posFrom365(shortName?: string): string | null {
+export function posFrom365(shortName?: string | null): string | null {
   if (!shortName) return null;
   const s = shortName.toLowerCase();
-  if (s.includes('goalkeeper') || s.includes('حارس')) return 'G';
-  if (s.includes('back') || s.includes('defender') || s.includes('دفاع') || s.includes('مداف')) return 'D';
+  if (s.includes('goalkeeper') || s.includes('keeper') || s.includes('حارس')) return 'G';
+  // "Defensive Midfield" is a midfielder, so the midfield check runs before the defence one.
   if (s.includes('mid') || s.includes('وسط')) return 'M';
-  if (s.includes('forward') || s.includes('attacker') || s.includes('هجوم') || s.includes('مهاج')) return 'F';
+  if (s.includes('back') || s.includes('defen') || s.includes('دفاع') || s.includes('مداف')) return 'D';
+  if (
+    s.includes('forward') ||
+    s.includes('attack') ||
+    s.includes('striker') ||
+    s.includes('wing') ||
+    s.includes('هجوم') ||
+    s.includes('مهاج')
+  ) {
+    return 'F';
+  }
   return null;
+}
+
+const POSITION_ID_TO_POS: Record<number, string> = { 1: 'G', 2: 'D', 3: 'M', 4: 'F' };
+
+/** Coarse position id from 365 beats parsing the role label; the label is the fallback. */
+function posFrom365Member(member: Scores365LineupMember): string | null {
+  const byId = member.position?.id != null ? POSITION_ID_TO_POS[member.position.id] : undefined;
+  if (byId) return byId;
+  return (
+    posFrom365(member.position?.name ?? member.position?.shortName) ??
+    posFrom365(member.formation?.shortName ?? member.formation?.name)
+  );
+}
+
+const POS_SORT_ORDER: Record<string, number> = { G: 0, D: 1, M: 2, F: 3 };
+
+/**
+ * True when the starters' `yardFormation` describes real pitch rows. 365 marks
+ * name-only lineups with `hasFieldPositions: false` and parks everyone on line 1,
+ * which would otherwise render eleven players in a single row.
+ */
+export function lineupHasFieldPositions(
+  lineups: { hasFieldPositions?: boolean } | null | undefined,
+  starters: Array<{ yardFormation?: { line?: number } }>,
+): boolean {
+  if (lineups?.hasFieldPositions === true) return true;
+  const lines = new Set<number>();
+  for (const m of starters) {
+    if (typeof m.yardFormation?.line === 'number') lines.add(m.yardFormation.line);
+  }
+  return lines.size >= 2;
+}
+
+/**
+ * Build a formation label such as `3-5-2` from coarse positions when 365 sends an
+ * empty `formation`. Returns null unless exactly one goalkeeper and every other
+ * starter has a known outfield position.
+ */
+export function deriveFormationFromPositions(
+  positions: Array<string | null | undefined>,
+): string | null {
+  if (positions.length < 7) return null;
+  const counts = { G: 0, D: 0, M: 0, F: 0 };
+  for (const pos of positions) {
+    if (pos !== 'G' && pos !== 'D' && pos !== 'M' && pos !== 'F') return null;
+    counts[pos] += 1;
+  }
+  if (counts.G !== 1) return null;
+  const segments = [counts.D, counts.M, counts.F].filter((n) => n > 0);
+  if (segments.length < 2) return null;
+  return segments.join('-');
 }
 
 const STAT_GOALS = 27;
@@ -2296,14 +2464,24 @@ export function mapScores365Lineups(
           : buildScores365CoachPhotoUrl(coachAthleteId, 80)
         : null;
 
-    const starters = allMembers
-      .filter((m) => STARTER_STATUSES.has(m.status))
-      .sort((a, b) => {
+    const starterMembers = allMembers.filter((m) => STARTER_STATUSES.has(m.status));
+    const fieldPositions = lineupHasFieldPositions(side.lineups, starterMembers);
+    const starters = starterMembers.sort((a, b) => {
+      if (fieldPositions) {
         const al = a.yardFormation?.line ?? 99;
         const bl = b.yardFormation?.line ?? 99;
         if (al !== bl) return al - bl;
         return (a.yardFormation?.fieldPosition ?? 0) - (b.yardFormation?.fieldPosition ?? 0);
-      });
+      }
+      // Name-only lineups: order by coarse position so GK → DEF → MID → FWD reads naturally.
+      const ap = POS_SORT_ORDER[posFrom365Member(a) ?? ''] ?? 9;
+      const bp = POS_SORT_ORDER[posFrom365Member(b) ?? ''] ?? 9;
+      if (ap !== bp) return ap - bp;
+      return (a.yardFormation?.fieldPosition ?? 0) - (b.yardFormation?.fieldPosition ?? 0);
+    });
+    const explicitFormation = side.lineups.formation?.trim() || null;
+    const formation =
+      explicitFormation ?? deriveFormationFromPositions(starters.map((m) => posFrom365Member(m)));
 
     // Completeness warning — fire BEFORE returning so it always appears in logs.
     if (lineupsConfirmed && starters.length < 11) {
@@ -2326,13 +2504,18 @@ export function mapScores365Lineups(
         name: coachMeta?.name ?? coachMeta?.shortName ?? null,
         photo: coachPhoto,
       },
-      formation: side.lineups.formation ?? null,
+      formation,
+      /** False when the pitch rows are inferred from positions rather than 365 field data. */
+      _hasFieldPositions: fieldPositions,
+      _formationDerived: explicitFormation == null && formation != null,
       startXI: starters.map((m) => {
         const meta = lookupMember(lookup, m.id);
         const matchStats = memberMatchStatsFromLineup(m);
         const athleteId = resolveLineupAthleteId(game, sideLabel, m.id, meta);
+        // A grid string for every starter on "line 1" is not a layout; leave it null so
+        // the client falls back to position-based rows.
         const grid =
-          m.yardFormation?.line != null && m.yardFormation?.fieldPosition != null
+          fieldPositions && m.yardFormation?.line != null && m.yardFormation?.fieldPosition != null
             ? `${m.yardFormation.line}:${m.yardFormation.fieldPosition}`
             : null;
         // Use raw name from lineup member if metadata lookup missed — never '—' here.
@@ -2349,7 +2532,7 @@ export function mapScores365Lineups(
             scores365MemberId: m.id,
             name: resolvedName ?? `#${m.id}`,
             number: meta?.jerseyNumber ?? 0,
-            pos: posFrom365(m.formation?.shortName),
+            pos: posFrom365Member(m),
             grid,
             fieldLine: m.yardFormation?.fieldLine ?? null,
             fieldSide: m.yardFormation?.fieldSide ?? null,
@@ -2375,7 +2558,7 @@ export function mapScores365Lineups(
               scores365MemberId: m.id,
               name: meta?.name ?? meta?.shortName ?? `#${m.id}`,
               number: meta?.jerseyNumber ?? 0,
-              pos: posFrom365(m.formation?.shortName),
+              pos: posFrom365Member(m),
               grid: null,
               photo: buildScores365AthletePhotoUrl(athleteId, 80, meta?.imageVersion ?? null),
               rating: matchStats.rating,
@@ -2581,11 +2764,49 @@ export async function getScores365ExperimentEvents(
     scores.away,
   );
   if (!validated.length && !(game.events?.length)) {
-    logger.warn(
+    logger.debug(
       `[365Events] fixture=${fixtureId} reason=upstream_empty gameId=${gameId} rawEvents=0`,
     );
   }
-  return validated;
+  return withSyntheticGoals(fixtureId, validated, base, scores);
+}
+
+/**
+ * Leagues without a 365 event feed still show a score; fill the goals in from the
+ * score-delta log so the events tab is not empty while the board says 2-1.
+ */
+async function withSyntheticGoals(
+  fixtureId: number,
+  events: any[],
+  base: FixtureFromAPI,
+  scores: { home: number | null; away: number | null },
+): Promise<any[]> {
+  const totalGoals = (scores.home ?? 0) + (scores.away ?? 0);
+  if (totalGoals <= 0) return events;
+  const homeId = base.teams.home?.id;
+  const awayId = base.teams.away?.id;
+  if (!homeId || !awayId) return events;
+  try {
+    const { mergeSyntheticGoalsIntoEvents } = await import('./synthetic-goals.service');
+    const merged = await mergeSyntheticGoalsIntoEvents(
+      fixtureId,
+      events,
+      {
+        home: { id: homeId, name: base.teams.home.name, logo: (base.teams.home as any).logo ?? '' },
+        away: { id: awayId, name: base.teams.away.name, logo: (base.teams.away as any).logo ?? '' },
+      },
+      scores,
+    );
+    if (merged.synthesized > 0) {
+      logger.debug(
+        `[365Events] fixture=${fixtureId} synthesized=${merged.synthesized} goals from score deltas`,
+      );
+    }
+    return merged.events;
+  } catch (err) {
+    logger.debug(`[365Events] fixture=${fixtureId} synthetic merge skipped: ${(err as Error)?.message}`);
+    return events;
+  }
 }
 
 export async function getScores365ExperimentFixture(
@@ -2714,12 +2935,24 @@ export async function getScores365ExperimentBundle(
   lineupsAvailable: boolean;
   /** Raw 365 lineups status text (e.g. "Confirmed", "Probable") when present. */
   lineupsStatus: string | null;
+  /**
+   * `true` when 365 publishes events for this match, `false` when goals exist but the
+   * provider has no event feed (events are then score-delta goals), `null` at 0-0.
+   */
+  eventsFeedAvailable: boolean | null;
   source: 'scores365-experiment';
 } | null> {
   const gameId = (await ensureScores365GameMapping(fixtureId)) ?? getScores365GameIdForFixture(fixtureId);
   if (!gameId) return null;
 
   const force = options?.force === true;
+  const langId = resolveScores365LangId(resolveScores365AppLanguage(language));
+  // Team stats only need the gameId, so they ride alongside the game fetch instead of
+  // after it — rich possession/shots land in the bundle without adding latency.
+  const teamStatsPromise: Promise<Scores365TeamStatsPayload | null> =
+    options?.skipTeamStats === true
+      ? Promise.resolve(null)
+      : fetchScores365GameTeamStats(gameId, langId, force).catch(() => null);
   const core = await resolve365ExperimentCore(fixtureId, gameId, language, { force });
   if (!core) return null;
 
@@ -2742,19 +2975,28 @@ export async function getScores365ExperimentBundle(
     fixture.goals.home,
     fixture.goals.away,
   );
+  const eventsFeedAvailable = events.length > 0
+    ? true
+    : (fixture.goals.home ?? 0) + (fixture.goals.away ?? 0) > 0
+      ? false
+      : null;
+  events = await withSyntheticGoals(fixtureId, events, base, {
+    home: fixture.goals.home,
+    away: fixture.goals.away,
+  });
 
   const lineupData = mapScores365Lineups(game, base, alignment);
 
   let statistics = (base as any).statistics ?? [];
-  if (!hasApiStatistics(statistics)) {
+  // Events-only stats from an older row are a placeholder; the team endpoint beats them.
+  if (!hasRichStatistics(statistics)) {
     const teamRefs = {
       home: { id: base.teams.home?.id ?? 0, name: base.teams.home?.name ?? 'Home', logo: (base.teams.home as any)?.logo ?? '' },
       away: { id: base.teams.away?.id ?? 0, name: base.teams.away?.name ?? 'Away', logo: (base.teams.away as any)?.logo ?? '' },
     };
     const competitorIds = fixtureOriented365CompetitorIds(game, alignment);
-    const langId = resolveScores365LangId(resolveScores365AppLanguage(language));
     if (competitorIds && options?.skipTeamStats !== true) {
-      const teamStatsPayload = await fetchScores365GameTeamStats(game.id, langId, force);
+      const teamStatsPayload = await teamStatsPromise;
       const fromTeamEndpoint = buildTeamStatisticsFrom365GameStats(
         teamStatsPayload,
         teamRefs,
@@ -2793,6 +3035,7 @@ export async function getScores365ExperimentBundle(
     venue: fixture.fixture.venue ?? null,
     lineupsAvailable,
     lineupsStatus: game.lineupsStatusText ?? null,
+    eventsFeedAvailable,
     source: 'scores365-experiment',
   };
 }
@@ -2953,6 +3196,12 @@ const SYNTHETIC_LIVE_CONCURRENCY = (() => {
   return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 12) : 4;
 })();
 const liveDetailWarms = new Map<number, Promise<void>>();
+/** Last successful detail warm per fixture; the loop skips anything warmed more recently. */
+const liveDetailWarmedAt = new Map<number, number>();
+const LIVE_DETAIL_WARM_MIN_INTERVAL_MS = (() => {
+  const raw = parseInt(process.env.SCORES365_LIVE_DETAIL_WARM_INTERVAL_MS || '15000', 10);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 15_000;
+})();
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -3071,6 +3320,35 @@ async function sync365SyntheticLiveSnapshotsAsLeader(
       );
     })
     .map((mapped) => mapped.fixture.id);
+
+  // Score moved since the durable row was written: record score-delta goals so
+  // fixtures without a 365 event feed still list their goals. Idempotent per goal.
+  const scoreMoved = mappedFixtures.filter((mapped) => {
+    const previous = dbByFixtureId.get(mapped.fixture.id);
+    if (!previous) return false;
+    const short = mapped.fixture?.status?.short ?? '';
+    if (!liveSet.has(short)) return false;
+    return (
+      (previous.homeScore ?? 0) !== (mapped.goals.home ?? 0) ||
+      (previous.awayScore ?? 0) !== (mapped.goals.away ?? 0)
+    );
+  });
+  if (scoreMoved.length > 0) {
+    void import('./synthetic-goals.service')
+      .then(async ({ reconcileSyntheticGoals }) => {
+        for (const mapped of scoreMoved) {
+          const previous = dbByFixtureId.get(mapped.fixture.id)!;
+          await reconcileSyntheticGoals(
+            mapped.fixture.id,
+            { home: previous.homeScore ?? 0, away: previous.awayScore ?? 0 },
+            { home: mapped.goals.home, away: mapped.goals.away },
+            mapped.fixture.status.elapsed ?? null,
+            mapped.fixture.status.extra ?? null,
+          );
+        }
+      })
+      .catch(() => undefined);
+  }
   if (changedIds.length > 0) {
     const favorites = await prisma.favoriteMatch.findMany({
       where: { apiMatchId: { in: changedIds }, notifiedEnd: false },
@@ -3123,7 +3401,12 @@ async function sync365SyntheticLiveSnapshotsAsLeader(
     return score(b) - score(a);
   });
 
-  const detailIds = detailCandidates.slice(0, LIVE_DETAIL_MAX);
+  // The refresh loop runs every few seconds; details warmed moments ago are still fresh
+  // and the request path is stale-while-revalidate anyway, so skip them.
+  const warmCutoff = Date.now() - LIVE_DETAIL_WARM_MIN_INTERVAL_MS;
+  const detailIds = detailCandidates
+    .filter((id) => (liveDetailWarmedAt.get(id) ?? 0) < warmCutoff)
+    .slice(0, LIVE_DETAIL_MAX);
   if (detailIds.length > 0) {
     try {
       const { footballDataCacheService } = await import('./football-data-cache.service');
@@ -3133,19 +3416,21 @@ async function sync365SyntheticLiveSnapshotsAsLeader(
         const warm = Promise.allSettled([
           footballDataCacheService.getMatchLineups(fixtureId),
           footballDataCacheService.getMatchStatistics(fixtureId),
-          footballDataCacheService.getMatchEvents(fixtureId, {
-            forceRefresh: true,
-            language: lang,
-          }),
+          // Not forced: the game payload was just refreshed by this very loop.
+          footballDataCacheService.getMatchEvents(fixtureId, { language: lang }),
         ]).then(() => undefined);
         liveDetailWarms.set(fixtureId, warm);
         try {
           await warm;
+          liveDetailWarmedAt.set(fixtureId, Date.now());
         } finally {
           if (liveDetailWarms.get(fixtureId) === warm) liveDetailWarms.delete(fixtureId);
         }
       });
-      logger.info(
+      for (const [id, at] of liveDetailWarmedAt) {
+        if (at < Date.now() - 6 * 60 * 60 * 1000) liveDetailWarmedAt.delete(id);
+      }
+      logger.debug(
         `[365Live] warmed lineups/stats/events for ${detailIds.length} live synthetic fixtures`,
       );
     } catch (err: unknown) {

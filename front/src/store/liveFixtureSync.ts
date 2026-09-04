@@ -11,6 +11,7 @@ import { reconcileFixtureWithEvents } from '../../utils/matchDetailsLiveSync';
 import {
   buildFallbackStatisticsFromEvents,
   hasApiStatistics,
+  hasRichStatistics,
 } from '../../utils/matchStatsFallback';
 import {
   hasLineupData,
@@ -39,6 +40,8 @@ type DetailsBundle = {
   statistics: TeamStatistics[];
   events: FixtureEvent[];
   venue: Venue | null;
+  lineupsAvailable?: boolean | null;
+  eventsFeedAvailable?: boolean | null;
 };
 
 /** Shared across fast + full — both hit GET /cached/fixture/:id/details. */
@@ -118,8 +121,19 @@ function resolveStatistics(
   fixture: Fixture,
   events: FixtureEvent[],
   statistics: TeamStatistics[] | null | undefined,
+  existing?: LiveFixtureSnapshot | null,
 ): { statistics: TeamStatistics[] | null; statsFromEvents: boolean } {
   if (hasApiStatistics(statistics)) {
+    // A bundle refresh may carry only goals/cards counts while `/statistics` already gave
+    // us possession and shots; never trade the rich set for the poorer one.
+    if (
+      !hasRichStatistics(statistics) &&
+      existing &&
+      !existing.statsFromEvents &&
+      hasRichStatistics(existing.statistics)
+    ) {
+      return { statistics: existing.statistics ?? [], statsFromEvents: false };
+    }
     return { statistics: statistics ?? [], statsFromEvents: false };
   }
   if (events.length > 0) {
@@ -159,6 +173,8 @@ export function buildSnapshotFromRaw(params: {
   source: LiveFixtureSource;
   existing?: LiveFixtureSnapshot | null;
   lastFetchError?: string | null;
+  eventsFeedAvailable?: boolean | null;
+  lineupsAvailable?: boolean | null;
 }): LiveFixtureSnapshot | null {
   if (!params.fixture) return null;
 
@@ -168,6 +184,7 @@ export function buildSnapshotFromRaw(params: {
     reconciled,
     params.events,
     params.statistics ?? params.existing?.statistics,
+    params.existing,
   );
   const lineups = resolveLineups(
     reconciled,
@@ -195,6 +212,13 @@ export function buildSnapshotFromRaw(params: {
     lastSource: params.source,
     phase: derivePhase(statusShort),
     lastFetchError: params.lastFetchError ?? null,
+    // Real events in hand always mean the feed exists, whatever the flag says.
+    eventsFeedAvailable: params.events.some((event) => event && !event._synthetic)
+      ? true
+      : params.eventsFeedAvailable ?? params.existing?.eventsFeedAvailable ?? null,
+    lineupsAvailable: hasLineupData(lineups)
+      ? true
+      : params.lineupsAvailable ?? params.existing?.lineupsAvailable ?? null,
   };
 }
 
@@ -217,6 +241,8 @@ export async function fetchFastSnapshot(
         venue: bundle.venue,
         source: 'http-fast',
         existing,
+        eventsFeedAvailable: bundle.eventsFeedAvailable,
+        lineupsAvailable: bundle.lineupsAvailable,
       });
     }
 
@@ -309,6 +335,8 @@ export async function fetchFullSnapshot(
       venue,
       source: 'http-full',
       existing,
+      eventsFeedAvailable: bundle.eventsFeedAvailable,
+      lineupsAvailable: bundle.lineupsAvailable,
     });
   } catch (err) {
     if (isAbortError(err)) {

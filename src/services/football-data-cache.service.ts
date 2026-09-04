@@ -61,6 +61,7 @@ import {
     getScores365WorldCupPhaseFixtures,
     isScores365ExperimentEnabled,
     isScores365ExperimentFixture,
+    posFrom365,
     resolveApiFixtureIdFor365GameId,
     resolveScores365AppLanguage,
     resolveScores365LangId,
@@ -101,7 +102,11 @@ import {
 import { redisCacheService } from './redis-cache.service';
 import { buildMomentumPayload, type MomentumApiPayload } from './match-momentum.service';
 import { footballMomentumRedisKey, footballFixtureDetailCacheKeys, footballDetailsLangRedisKey, footballDetailsRedisKey } from '../utils/football-cache-keys.util';
-import { buildFallbackStatisticsFromEvents, hasApiStatistics } from '../utils/match-stats-fallback';
+import {
+    buildFallbackStatisticsFromEvents,
+    hasApiStatistics,
+    hasRichStatistics,
+} from '../utils/match-stats-fallback';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import {
     calendarDayBounds,
@@ -196,6 +201,7 @@ export function mergeFixtureProviders(baseFixtures: any[], overlays: any[]): any
 
 /** Distinguishes "the wait ran out" from a genuine empty lineup result. */
 const LINEUP_BUDGET_LAPSED = Symbol('lineup-budget-lapsed');
+const STATS_BUDGET_LAPSED = Symbol('stats-budget-lapsed');
 
 class FootballDataCacheService {
     /** Hot in-process cache for matches-by-date (avoids Redis round-trip per request). */
@@ -287,6 +293,16 @@ class FootballDataCacheService {
 
     /** How long a reader waits on a cold lineup resolution before giving up on it. */
     private readonly LINEUP_RESPONSE_BUDGET_MS = 4_000;
+
+    /** One upstream 365 statistics resolution per fixture, shared by all concurrent readers. */
+    private readonly statsResolveInFlight = new Map<number, Promise<any[]>>();
+
+    /** How long a reader waits on a cold statistics resolution before settling for stale/empty. */
+    private readonly STATS_RESPONSE_BUDGET_MS = 3_000;
+
+    /** Empty live stats are retried on this cadence; finished fixtures without stats stay quiet longer. */
+    private readonly STATS_EMPTY_LIVE_TTL_MS = 20_000;
+    private readonly STATS_EMPTY_FINISHED_TTL_MS = 10 * 60 * 1000;
 
     /** Graduated detail TTL: live/near-kickoff seconds, finished hours, else upcoming. */
     private detailTtlMs(
@@ -1993,10 +2009,17 @@ class FootballDataCacheService {
             return hasLineupData(fullData?.lineups) ? fullData.lineups : [];
         }
 
+        // Rows mapped before grid data existed must be refreshed; rows that 365 itself
+        // published without field positions are complete as they are.
         const dbLineupsHaveGrid = (lineups: unknown) =>
             Array.isArray(lineups) &&
-            lineups.some((row: { startXI?: Array<{ player?: { grid?: string | null } }> }) =>
-                row.startXI?.some((p) => p.player?.grid != null),
+            lineups.some(
+                (row: {
+                    _hasFieldPositions?: boolean;
+                    startXI?: Array<{ player?: { grid?: string | null } }>;
+                }) =>
+                    row._hasFieldPositions === false ||
+                    row.startXI?.some((p) => p.player?.grid != null),
             );
 
         if (
@@ -2196,7 +2219,10 @@ class FootballDataCacheService {
     /**
      * Get match statistics
      */
-    async getMatchStatistics(fixtureId: number): Promise<any[]> {
+    async getMatchStatistics(
+        fixtureId: number,
+        options?: { forceRefresh?: boolean; language?: string | null },
+    ): Promise<any[]> {
         const dbMatch = await prisma.cachedFixture.findUnique({
             where: { fixtureId },
             select: { status: true, fullData: true, matchDate: true, leagueId: true },
@@ -2212,78 +2238,7 @@ class FootballDataCacheService {
 
         await ensureScores365GameMapping(fixtureId);
         if (isScores365ExperimentFixture(fixtureId) || isNative365FixtureId(fixtureId)) {
-            // Primary: team-level 365 `/web/game/stats` (corners, attacks, cards…).
-            try {
-                const teamStats = await getScores365ExperimentStatistics(fixtureId);
-                if (hasApiStatistics(teamStats)) {
-                    const cacheEntry: MemoryCacheEntry<any> = {
-                        data: teamStats,
-                        timestamp: Date.now(),
-                        ttl: this.TTL.LIVE_MATCH,
-                    };
-                    await redisCacheService.set(
-                        `statistics:${fixtureId}`,
-                        cacheEntry,
-                        this.TTL.LIVE_MATCH,
-                    );
-                    this.setBoundedCache(this.statisticsCache, fixtureId, cacheEntry);
-                    return teamStats;
-                }
-            } catch (err) {
-                logger.warn(
-                    `[Stats365] fixture=${fixtureId} team-stats failed: ${
-                        err instanceof Error ? err.message : String(err)
-                    }`,
-                );
-            }
-
-            // Secondary: aggregate from player-level lineup stats (no corners).
-            if (fullData?.teams) {
-                const named = await this.getCached365LineupsWithNames(fixtureId);
-                if (named.data?.length) {
-                    const aggregated = buildTeamStatisticsFrom365Players(
-                        named.data,
-                        fullData.teams,
-                    );
-                    if (hasApiStatistics(aggregated)) {
-                        const cacheEntry: MemoryCacheEntry<any> = {
-                            data: aggregated,
-                            timestamp: Date.now(),
-                            ttl: this.TTL.LIVE_MATCH,
-                        };
-                        await redisCacheService.set(
-                            `statistics:${fixtureId}`,
-                            cacheEntry,
-                            this.TTL.LIVE_MATCH,
-                        );
-                        this.setBoundedCache(this.statisticsCache, fixtureId, cacheEntry);
-                        return aggregated;
-                    }
-                }
-            }
-
-            // Fallback: events-derived stats (shots/possession not derivable here).
-            // Use cached events — avoid forceRefresh to break the blocking chain.
-            const events = await this.getMatchEvents(fixtureId, { forceRefresh: false });
-            if (events.length > 0 && fullData?.teams && fullData?.goals) {
-                const derived = buildFallbackStatisticsFromEvents(
-                    { teams: fullData.teams, goals: fullData.goals },
-                    events,
-                );
-                if (hasApiStatistics(derived)) {
-                    const cacheEntry: MemoryCacheEntry<any> = {
-                        data: derived,
-                        timestamp: Date.now(),
-                        ttl: this.TTL.LIVE_MATCH,
-                    };
-                    await redisCacheService.set(`statistics:${fixtureId}`, cacheEntry, this.TTL.LIVE_MATCH);
-                    this.setBoundedCache(this.statisticsCache, fixtureId, cacheEntry);
-                    return derived;
-                }
-            }
-            // Events empty or no team data — return explicit unavailable marker.
-            logger.info(`[Stats365] fixture=${fixtureId}: events empty or teams missing — statistics unavailable yet`);
-            return [];
+            return this.get365Statistics(fixtureId, dbMatch, options);
         }
 
         // Check Redis cache first, then memory cache
@@ -2382,6 +2337,224 @@ class FootballDataCacheService {
         return statistics;
     }
 
+    private is365FixtureFinished(
+        dbMatch: { status: string; matchDate: Date } | null,
+    ): boolean {
+        return (
+            !!dbMatch &&
+            (['FT', 'AET', 'PEN'].includes(dbMatch.status) ||
+                this.isStaleLiveOnPastDay(dbMatch.status, dbMatch.matchDate))
+        );
+    }
+
+    /**
+     * 365 statistics read path: cache first (memory, then Redis), stale-while-revalidate,
+     * one upstream resolution shared by every concurrent reader, and a hard cap on how
+     * long any reader waits on a cold resolution. A throttled 365 must never turn the
+     * stats tab into a 20s spinner.
+     */
+    private async get365Statistics(
+        fixtureId: number,
+        dbMatch: { status: string; fullData: unknown; matchDate: Date } | null,
+        options?: { forceRefresh?: boolean; language?: string | null },
+    ): Promise<any[]> {
+        const redisKey = `statistics:${fixtureId}`;
+        const forceRefresh = options?.forceRefresh === true;
+        const fullData = dbMatch?.fullData as any;
+
+        if (forceRefresh) {
+            await redisCacheService.del(redisKey);
+            this.statisticsCache.delete(fixtureId);
+            return this.await365StatisticsWithinBudget(fixtureId, dbMatch, options?.language, true, []);
+        }
+
+        if (this.is365FixtureFinished(dbMatch) && hasRichStatistics(fullData?.statistics)) {
+            return fullData.statistics;
+        }
+
+        let cached = this.statisticsCache.get(fixtureId) ?? null;
+        if (!cached || Date.now() - cached.timestamp >= cached.ttl) {
+            const fromRedis = await redisCacheService.get<MemoryCacheEntry<any>>(redisKey);
+            if (fromRedis && (!cached || fromRedis.timestamp > cached.timestamp)) {
+                cached = fromRedis;
+                this.setBoundedCache(this.statisticsCache, fixtureId, fromRedis);
+            }
+        }
+
+        if (cached) {
+            const usable = hasApiStatistics(cached.data) ? cached.data : [];
+            if (Date.now() - cached.timestamp < cached.ttl) return usable;
+            // Expired: revalidate out of band and hand back what we have right now.
+            this.start365StatisticsResolve(fixtureId, dbMatch, options?.language, false);
+            return usable;
+        }
+
+        return this.await365StatisticsWithinBudget(fixtureId, dbMatch, options?.language, false, []);
+    }
+
+    private start365StatisticsResolve(
+        fixtureId: number,
+        dbMatch: { status: string; fullData: unknown; matchDate: Date } | null,
+        language: string | null | undefined,
+        force: boolean,
+    ): Promise<any[]> {
+        let shared = this.statsResolveInFlight.get(fixtureId);
+        if (!shared) {
+            shared = this.resolve365Statistics(fixtureId, dbMatch, language, force)
+                .catch((err) => {
+                    logger.warn(
+                        `[Stats365] fixture=${fixtureId} resolve failed: ${
+                            err instanceof Error ? err.message : String(err)
+                        }`,
+                    );
+                    return [] as any[];
+                })
+                .finally(() => {
+                    this.statsResolveInFlight.delete(fixtureId);
+                });
+            this.statsResolveInFlight.set(fixtureId, shared);
+        }
+        return shared;
+    }
+
+    private async await365StatisticsWithinBudget(
+        fixtureId: number,
+        dbMatch: { status: string; fullData: unknown; matchDate: Date } | null,
+        language: string | null | undefined,
+        force: boolean,
+        fallback: any[],
+    ): Promise<any[]> {
+        const shared = this.start365StatisticsResolve(fixtureId, dbMatch, language, force);
+        let budgetTimer: ReturnType<typeof setTimeout> | undefined;
+        const budgetLapsed = new Promise<typeof STATS_BUDGET_LAPSED>((resolve) => {
+            budgetTimer = setTimeout(() => resolve(STATS_BUDGET_LAPSED), this.STATS_RESPONSE_BUDGET_MS);
+            budgetTimer.unref?.();
+        });
+        try {
+            const settled = await Promise.race([shared, budgetLapsed]);
+            if (settled === STATS_BUDGET_LAPSED) {
+                logger.warn(`[Stats365] fixture=${fixtureId} reason=response_budget_exceeded`);
+                return fallback;
+            }
+            return settled;
+        } finally {
+            if (budgetTimer) clearTimeout(budgetTimer);
+        }
+    }
+
+    /**
+     * The actual 365 statistics resolution: team-level `/web/game/stats` first
+     * (possession, shots, corners…), then player aggregation, then events-derived
+     * counts. Whatever comes back — including nothing — lands in cache so the next
+     * reader (and the bundle) shares it.
+     */
+    private async resolve365Statistics(
+        fixtureId: number,
+        dbMatch: { status: string; fullData: unknown; matchDate: Date } | null,
+        language: string | null | undefined,
+        force: boolean,
+    ): Promise<any[]> {
+        const fullData = dbMatch?.fullData as any;
+        const isFinished = this.is365FixtureFinished(dbMatch);
+        let statistics: any[] = [];
+
+        try {
+            const teamStats = await getScores365ExperimentStatistics(fixtureId, { force, language });
+            if (hasApiStatistics(teamStats)) statistics = teamStats;
+        } catch (err) {
+            logger.warn(
+                `[Stats365] fixture=${fixtureId} team-stats failed: ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+            );
+        }
+
+        if (!hasApiStatistics(statistics) && fullData?.teams) {
+            const named = await this.getCached365LineupsWithNames(fixtureId);
+            if (named.data?.length) {
+                const aggregated = buildTeamStatisticsFrom365Players(named.data, fullData.teams);
+                if (hasApiStatistics(aggregated)) statistics = aggregated;
+            }
+        }
+
+        if (!hasApiStatistics(statistics) && fullData?.teams && fullData?.goals) {
+            // Cached events only — a forced refresh here would rebuild the blocking chain.
+            const events = await this.getMatchEvents(fixtureId, { forceRefresh: false });
+            if (events.length > 0) {
+                const derived = buildFallbackStatisticsFromEvents(
+                    { teams: fullData.teams, goals: fullData.goals },
+                    events,
+                );
+                if (hasApiStatistics(derived)) statistics = derived;
+            }
+        }
+
+        await this.store365Statistics(fixtureId, statistics, isFinished);
+        if (!hasApiStatistics(statistics)) {
+            logger.info(`[Stats365] fixture=${fixtureId}: statistics unavailable yet`);
+        }
+        return statistics;
+    }
+
+    /** Latest cached statistics (fresh or stale) without touching upstream. */
+    private async peek365Statistics(fixtureId: number): Promise<any[] | null> {
+        const memory = this.statisticsCache.get(fixtureId);
+        if (memory && hasApiStatistics(memory.data)) return memory.data;
+        try {
+            const fromRedis = await redisCacheService.get<MemoryCacheEntry<any>>(
+                `statistics:${fixtureId}`,
+            );
+            if (fromRedis && hasApiStatistics(fromRedis.data)) {
+                this.setBoundedCache(this.statisticsCache, fixtureId, fromRedis);
+                return fromRedis.data;
+            }
+        } catch {
+            // Redis is optional here.
+        }
+        return null;
+    }
+
+    /** Let the bundle's team stats feed the shared cache without downgrading a richer entry. */
+    private mirror365BundleStatistics(
+        fixtureId: number,
+        statistics: any[],
+        isFinished: boolean,
+    ): void {
+        if (!hasApiStatistics(statistics)) return;
+        const cached = this.statisticsCache.get(fixtureId);
+        if (!hasRichStatistics(statistics) && cached && hasRichStatistics(cached.data)) return;
+        void this.store365Statistics(fixtureId, statistics, isFinished).catch(() => undefined);
+    }
+
+    /** Shared `statistics:${fixtureId}` writer for `/statistics`, the bundle, and the warmer. */
+    async store365Statistics(
+        fixtureId: number,
+        statistics: any[],
+        isFinished: boolean,
+    ): Promise<void> {
+        const usable = hasApiStatistics(statistics);
+        const rich = hasRichStatistics(statistics);
+        const ttl = !usable
+            ? (isFinished ? this.STATS_EMPTY_FINISHED_TTL_MS : this.STATS_EMPTY_LIVE_TTL_MS)
+            : isFinished && rich
+                ? this.TTL.FINISHED
+                : this.TTL.LIVE_MATCH;
+        const cacheEntry: MemoryCacheEntry<any> = {
+            data: usable ? statistics : [],
+            timestamp: Date.now(),
+            ttl,
+        };
+        this.setBoundedCache(this.statisticsCache, fixtureId, cacheEntry);
+        try {
+            await redisCacheService.set(`statistics:${fixtureId}`, cacheEntry, ttl);
+        } catch {
+            // Memory copy still serves this process.
+        }
+        if (isFinished && rich) {
+            void this.updateFixtureFullData(fixtureId, { statistics }).catch(() => undefined);
+        }
+    }
+
     /**
      * Get match events (goals, cards, substitutions)
      * ✅ Request deduplication: If 1000 users request the same events, only 1 API call is made
@@ -2462,6 +2635,20 @@ class FootballDataCacheService {
                 if (!isTerminal) {
                     const eventsBackoff = await shouldSkipEmptyUpstreamPoll(fixtureId);
                     if (eventsBackoff.skip) {
+                        // Keep whatever the last resolve produced instead of blanking the tab
+                        // while the empty-upstream backoff runs, and overlay any goal the live
+                        // sync recorded since — feed-less leagues must not wait out the backoff.
+                        const mem = this.eventsCache.get(fixtureId);
+                        const redisCached = Array.isArray(mem?.data)
+                            ? null
+                            : await redisCacheService.get<MemoryCacheEntry<any>>(`events:${fixtureId}`);
+                        const lastKnown: any[] = Array.isArray(mem?.data)
+                            ? mem.data
+                            : Array.isArray(redisCached?.data)
+                              ? redisCached.data
+                              : [];
+                        const overlaid = await this.overlaySyntheticGoals(fixtureId, lastKnown);
+                        if (overlaid.length > 0) return overlaid;
                         const ttlMs = eventsBackoff.nextRetryInMs ?? 60_000;
                         const emptyEntry: MemoryCacheEntry<any> = {
                             data: [],
@@ -2474,15 +2661,14 @@ class FootballDataCacheService {
                     }
                 }
 
+                // The 365 game payload is stale-while-revalidate: an empty answer already has a
+                // background refresh in flight, so forcing extra upstream round-trips here only
+                // held the response for 12-24s. Events come from the EN structural payload, so
+                // the language does not change them either.
                 let events = await getScores365ExperimentEvents(fixtureId, forceRefresh, language);
-                if (!events.length) {
-                    events = await getScores365ExperimentEvents(fixtureId, true, language);
-                }
-                if (!events.length && language !== 'en') {
-                    events = await getScores365ExperimentEvents(fixtureId, true, 'en');
-                }
+                const hasProviderEvents = events.some((event: any) => event?._synthetic !== true);
                 // API-Football fallback when 365 timeline is empty for a mapped API id.
-                if (!events.length && this.canQueryApiFootball(fixtureId)) {
+                if (!hasProviderEvents && this.canQueryApiFootball(fixtureId)) {
                     try {
                         const apiEvents = await footballService.getFixtureEvents(fixtureId, {
                             source: 'job',
@@ -2494,7 +2680,7 @@ class FootballDataCacheService {
                             );
                             events = apiEvents;
                         } else {
-                            logger.warn(
+                            logger.debug(
                                 `[Events] fixture=${fixtureId} reason=upstream_empty source=365+api count=0`,
                             );
                         }
@@ -2504,18 +2690,19 @@ class FootballDataCacheService {
                             (err as Error)?.message,
                         );
                     }
-                } else if (!events.length) {
+                } else if (!hasProviderEvents) {
                     const mapped = getScores365GameIdForFixture(fixtureId);
-                    logger.warn(
-                        `[Events] fixture=${fixtureId} reason=${mapped ? 'upstream_empty' : 'unmapped'} source=365 count=0`,
+                    logger.debug(
+                        `[Events] fixture=${fixtureId} reason=${mapped ? 'upstream_empty' : 'unmapped'} source=365 provider=0 synthetic=${events.length}`,
                     );
                 }
+                const providerEventCount = events.filter((event: any) => event?._synthetic !== true).length;
                 // Raised default from 3s → 8s to reduce upstream hammering on empty results.
                 // Override via SCORES365_CACHE_MS env var if needed.
                 const ttl = isTerminal
                     ? this.TTL.FINISHED
                     : Math.max(2_000, parseInt(process.env.SCORES365_CACHE_MS || '8000', 10) || 8_000);
-                if (events.length > 0) {
+                if (providerEventCount > 0) {
                     await recordNonEmptyUpstreamResult(fixtureId);
                     const cacheEntry: MemoryCacheEntry<any> = {
                         data: events,
@@ -2762,6 +2949,36 @@ class FootballDataCacheService {
         };
     }
 
+    /**
+     * Re-merge score-delta goals into a cached events list. Provider goals win; when the
+     * feed has none, the synthetic set is rebuilt from the live snapshot's current score.
+     */
+    private async overlaySyntheticGoals(fixtureId: number, events: any[]): Promise<any[]> {
+        const provider = events.filter((event: any) => event?._synthetic !== true);
+        try {
+            const { feedHasGoalEvents, mergeSyntheticGoalsIntoEvents } = await import(
+                './synthetic-goals.service'
+            );
+            if (feedHasGoalEvents(provider)) return provider;
+            const live = await readLiveFixtureById(fixtureId);
+            const home = live?.teams?.home;
+            const away = live?.teams?.away;
+            if (!home?.id || !away?.id) return events;
+            const merged = await mergeSyntheticGoalsIntoEvents(
+                fixtureId,
+                provider,
+                {
+                    home: { id: home.id, name: home.name ?? 'Home', logo: (home as any).logo ?? '' },
+                    away: { id: away.id, name: away.name ?? 'Away', logo: (away as any).logo ?? '' },
+                },
+                { home: live?.goals?.home ?? null, away: live?.goals?.away ?? null },
+            );
+            return merged.events;
+        } catch {
+            return events;
+        }
+    }
+
     private bundleFromDbRow(durableRow: any): {
         fixture: any;
         lineups: any[];
@@ -2817,21 +3034,30 @@ class FootballDataCacheService {
         venue: any | null;
         lineupsAvailable?: boolean;
         lineupsStatus?: string | null;
+        eventsFeedAvailable?: boolean | null;
     } | null> {
         if (!this.prefersScores365(fixtureId)) return null;
         await ensureScores365GameMapping(fixtureId);
         const experiment = await getScores365ExperimentBundle(
             fixtureId,
             resolveScores365AppLanguage(language ?? null),
-            { force: forceRefresh, skipTeamStats: true },
+            { force: forceRefresh },
         );
         if (!experiment?.fixture) return null;
 
+        const statusShort = experiment.fixture?.fixture?.status?.short ?? '';
+        const finished = ['FT', 'AET', 'PEN'].includes(statusShort);
         let statistics = experiment.statistics ?? [];
         const events = experiment.events ?? [];
+        if (!hasRichStatistics(statistics)) {
+            // The warmer or `/statistics` may already hold the rich payload.
+            const shared = await this.peek365Statistics(fixtureId);
+            if (hasRichStatistics(shared)) statistics = shared as any[];
+        }
         if (!hasApiStatistics(statistics) && events.length > 0) {
             statistics = buildFallbackStatisticsFromEvents(experiment.fixture, events);
         }
+        this.mirror365BundleStatistics(fixtureId, statistics, finished);
         const lineups = hasLineupData(experiment.lineups)
             ? experiment.lineups
             : await this.get365LineupsMerged(
@@ -2849,9 +3075,9 @@ class FootballDataCacheService {
             venue: experiment.venue,
             lineupsAvailable: hasLineupData(mergedLineups) || experiment.lineupsAvailable,
             lineupsStatus: experiment.lineupsStatus,
+            eventsFeedAvailable: experiment.eventsFeedAvailable,
         };
-        const statusShort = experiment.fixture?.fixture?.status?.short ?? '';
-        if (['FT', 'AET', 'PEN'].includes(statusShort)) {
+        if (finished) {
             void this.updateFixtureFullData(fixtureId, {
                 lineups: payload.lineups,
                 events: payload.events,
@@ -2988,6 +3214,7 @@ class FootballDataCacheService {
         venue: any | null;
         lineupsAvailable?: boolean;
         lineupsStatus?: string | null;
+        eventsFeedAvailable?: boolean | null;
     }> {
         const language = resolveScores365AppLanguage(options?.language ?? null);
         const cacheKey = this.detailsBundleCacheKey(fixtureId, language);
@@ -3083,6 +3310,7 @@ class FootballDataCacheService {
         venue: any | null;
         lineupsAvailable?: boolean;
         lineupsStatus?: string | null;
+        eventsFeedAvailable?: boolean | null;
     }> {
         const durableRow = await prisma.cachedFixture.findUnique({
             where: { fixtureId },
@@ -4645,7 +4873,9 @@ class FootballDataCacheService {
                     name: hit.name || p.name,
                     photo: keepStructuredPhoto ? p.photo : (hit.imageUrl ?? p.photo ?? null),
                     number: hit.jerseyNumber ?? p.number,
-                    pos: hit.position?.charAt(0) ?? p.pos,
+                    // The structured mapper already resolved G/D/M/F; the named feed's
+                    // label may be localized, so only parse it when nothing else exists.
+                    pos: p.pos ?? posFrom365(hit.position) ?? null,
                     fieldLine: p.fieldLine ?? null,
                     fieldSide: p.fieldSide ?? null,
                     grid: p.grid ?? null,
@@ -4721,10 +4951,11 @@ class FootballDataCacheService {
 
         let structured = baseLineups;
         if (!hasLineupData(structured) || forceRefresh) {
+            // Lineups only need the game payload; team stats would just be another 365 call.
             const bundle = await getScores365ExperimentBundle(
                 fixtureId,
                 resolveScores365AppLanguage(language),
-                { force: forceRefresh },
+                { force: forceRefresh, skipTeamStats: true },
             );
             structured = bundle?.lineups;
         }

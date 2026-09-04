@@ -15,9 +15,11 @@ import {
   pitchPercentToContainer,
 } from '../common/FootballPitchSvg';
 import {
+  buildFormationColumns,
+  distinctGridLines,
   groupPlayersByGridLine,
-  hasGridLayoutData,
-  sortPlayersByGrid,
+  hasAbsoluteFieldData,
+  resolveFormationLabel,
 } from '../../utils/lineupGrid';
 import { ratingBadgeColor } from '../../utils/lineupMatchState';
 
@@ -53,7 +55,8 @@ interface Player {
 }
 
 interface FootballFieldProps {
-  formation: string;
+  /** Provider formation; may be empty — the pitch then derives rows from positions. */
+  formation: string | null | undefined;
   players: Player[];
   teamColor?: string;
   teamName: string;
@@ -143,35 +146,23 @@ export const FootballField: React.FC<FootballFieldProps> = ({
   const pitchH = Math.min(Math.round(fieldWidth / LINEUP_PITCH_ASPECT), MAX_PITCH_HEIGHT);
   const fieldHeight = pitchH + FIELD_PAD_Y * 2;
 
-  const useAbsoluteGrid = players.some(
-    (p) => p.fieldLine != null && p.fieldSide != null,
+  // Absolute coordinates, then multi-line grids, then formation/position rows. A grid
+  // that parks every starter on one line is not a layout and falls through.
+  const useAbsoluteGrid = useMemo(() => hasAbsoluteFieldData(players), [players]);
+  const useRowGrid = useMemo(
+    () => !useAbsoluteGrid && distinctGridLines(players) >= 2,
+    [useAbsoluteGrid, players],
   );
-  const useRowGrid = !useAbsoluteGrid && hasGridLayoutData(players);
 
-  const formationRows = useMemo(
-    () => formation.split('-').map(Number).filter((n) => Number.isFinite(n) && n > 0),
-    [formation],
+  const formationLabel = useMemo(
+    () => resolveFormationLabel(formation, players).label,
+    [formation, players],
   );
-  const allRows = useMemo(() => [1, ...formationRows], [formationRows]);
 
-  const formationColumns = useMemo(() => {
-    const columns: Player[][] = [];
-    let playerIndex = 0;
-    const ordered = sortPlayersByGrid(players);
-
-    allRows.forEach((rowCount) => {
-      const colPlayers = ordered.slice(playerIndex, playerIndex + rowCount);
-      if (colPlayers.length > 0) columns.push(colPlayers);
-      playerIndex += rowCount;
-    });
-
-    if (playerIndex < ordered.length) {
-      const tail = ordered.slice(playerIndex);
-      if (columns.length === 0) columns.push(tail);
-      else columns[columns.length - 1] = [...columns[columns.length - 1], ...tail];
-    }
-    return columns;
-  }, [players, allRows]);
+  const formationColumns = useMemo(
+    () => buildFormationColumns(players, formation),
+    [players, formation],
+  );
 
   const placed = useMemo(() => {
     if (useAbsoluteGrid) return placeFromApiGrid(players);
@@ -215,7 +206,7 @@ export const FootballField: React.FC<FootballFieldProps> = ({
           />
         </View>
 
-        <Text style={styles.formationLabel}>{formation}</Text>
+        {formationLabel ? <Text style={styles.formationLabel}>{formationLabel}</Text> : null}
         <Text style={styles.teamNameLabel} numberOfLines={1}>
           {teamName}
         </Text>

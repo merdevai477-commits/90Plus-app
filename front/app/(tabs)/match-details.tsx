@@ -16,7 +16,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent, Fixture, Standing } from '../../services/apiFootball';
+import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent, Fixture, Lineup, Standing } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus, getLocalizedStatType, getLocalizedEventLabel } from '../../utils/i18nHelpers';
 import { prefetchFootballTranslations } from '../../src/stores/footballTranslationStore';
@@ -68,10 +68,11 @@ import { isAbortError } from '../../utils/isAbortError';
 import { findLocalPreviewFixture } from '../../utils/findLocalPreviewFixture';
 import {
   hasApiStatistics,
+  hasRichStatistics,
 } from '../../utils/matchStatsFallback';
 import { hasLineupData, isAuthoritativeLineupData, pickBetterLineups } from '../../utils/matchLineupsFallback';
 import { addBreadcrumb, captureMessage } from '../../services/sentry.service';
-import { sortPlayersByGrid } from '../../utils/lineupGrid';
+import { resolveFormationLabel, sortPlayersForPitch } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
 import {
   buildScores365CoachPhotoUrl,
@@ -99,6 +100,15 @@ import { fixturesToTeamFixtures } from '../../utils/scores365Adapters';
 const { width, height } = Dimensions.get('window');
 
 const LIVE_MATCH_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] as const;
+const EMPTY_EVENTS: FixtureEvent[] = [];
+const EMPTY_STATISTICS: TeamStatistics[] = [];
+const EMPTY_LINEUPS: Lineup[] = [];
+/** Stats tab refresh while live + focused (backend answers from cache). */
+const STATS_LIVE_POLL_MS = 35_000;
+/** Lineups tab: one scheduler — live cadence, then backoff after repeated empty answers. */
+const LINEUPS_LIVE_POLL_MS = 20_000;
+const LINEUPS_LIVE_BACKOFF_MS = 60_000;
+const LINEUPS_EMPTY_RESULTS_BEFORE_BACKOFF = 4;
 const FINISHED_MATCH_STATUSES = ['FT', 'AET', 'PEN'] as const;
 
 interface MatchDetailsParams {
@@ -228,11 +238,22 @@ const MatchDetailsScreen = () => {
 
   const snapshot = useLiveFixture(fixtureId > 0 ? fixtureId : null, { focused: true });
   const fixture = snapshot?.fixture ?? null;
-  const events = snapshot?.events ?? [];
-  const statistics = snapshot?.statistics ?? [];
+  // Stable empties: a fresh `[]` per render made every effect keyed on these arrays
+  // re-arm its timers on each render (lineups scheduler, photo prefetch, ...).
+  const events = snapshot?.events ?? EMPTY_EVENTS;
+  const statistics = snapshot?.statistics ?? EMPTY_STATISTICS;
   const statsFromEvents = snapshot?.statsFromEvents ?? false;
-  const lineups = snapshot?.lineups ?? [];
+  const lineups = snapshot?.lineups ?? EMPTY_LINEUPS;
   const venue = snapshot?.venue ?? null;
+  // Backend verdict when present; otherwise infer from what we hold (real events → feed
+  // exists; only score-delta goals, or goals with no events at all → no feed).
+  const eventsFeedAvailable = useMemo<boolean | null>(() => {
+    if (events.some((event) => event && !event._synthetic)) return true;
+    if (events.some((event) => event?._synthetic)) return false;
+    if (typeof snapshot?.eventsFeedAvailable === 'boolean') return snapshot.eventsFeedAvailable;
+    return null;
+  }, [events, snapshot?.eventsFeedAvailable]);
+  const lineupsAvailable = snapshot?.lineupsAvailable ?? null;
 
   const homeTeamName = fixture?.teams?.home?.name ?? '';
   const awayTeamName = fixture?.teams?.away?.name ?? '';
@@ -252,8 +273,9 @@ const MatchDetailsScreen = () => {
       name: e.player?.name ?? '',
       minute: formatMinute(e.time?.elapsed, e.time?.extra),
     });
+    // Score-delta goals carry no scorer; the header list would show blank rows.
     const isGoal = (e: FixtureEvent) =>
-      e.type === 'Goal' && e.detail !== 'Missed Penalty';
+      e.type === 'Goal' && e.detail !== 'Missed Penalty' && !e._synthetic && !!e.player?.name;
     return {
       home: events.filter((e) => isGoal(e) && e.team?.id === homeId).map(toScorer),
       away: events.filter((e) => isGoal(e) && e.team?.id === awayId).map(toScorer),
@@ -339,7 +361,14 @@ const MatchDetailsScreen = () => {
   /** Kept for Fast Refresh safety — previously used to auto-open Tracking tab. */
   const lmtAutoOpenedRef = useRef<number | null>(null);
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lineupsTabRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const statsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lineupsInFlightRef = useRef(false);
+  const lastLineupAttemptAtRef = useRef(0);
+  /** Fixture whose lineup retry cap was already reported to Sentry. */
+  const lineupCapReportedForRef = useRef<number | null>(null);
+  /** Mirror of the bundle's `lineupsAvailable` for use inside callbacks. */
+  const lineupsAvailableRef = useRef<boolean | null>(null);
+  lineupsAvailableRef.current = lineupsAvailable;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -634,6 +663,8 @@ const MatchDetailsScreen = () => {
     lmtAutoOpenedRef.current = null;
     loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
+    lineupsInFlightRef.current = false;
+    lastLineupAttemptAtRef.current = 0;
 
     const existing = fixtureId
       ? useLiveFixtureStore.getState().snapshots[fixtureId]
@@ -694,7 +725,13 @@ const MatchDetailsScreen = () => {
       return;
     }
 
-    const showLoading = !hasLineupData(snapLineups);
+    if (lineupsInFlightRef.current) return;
+    lineupsInFlightRef.current = true;
+    lastLineupAttemptAtRef.current = Date.now();
+
+    // The bundle already said the provider has no lineups: render the empty state at
+    // once instead of a spinner, while the scheduler keeps checking in the background.
+    const showLoading = !hasLineupData(snapLineups) && lineupsAvailableRef.current !== false;
     if (!force) loadedTabsRef.current.add('lineups');
     if (showLoading) {
       setLineupsLoading(true);
@@ -706,7 +743,9 @@ const MatchDetailsScreen = () => {
       attempt: lineupFetchAttempts,
     });
     try {
-      const fresh = await ApiFootballService.getFixtureLineups(fixtureId);
+      const fresh = await ApiFootballService.getFixtureLineups(fixtureId, {
+        is365: is365Fixture,
+      });
       if (hasLineupData(fresh)) {
         const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
         if (snap?.fixture) {
@@ -760,14 +799,18 @@ const MatchDetailsScreen = () => {
       setLineupFetchAttempts((n) => n + 1);
       loadedTabsRef.current.delete('lineups');
     } finally {
+      lineupsInFlightRef.current = false;
       setLineupsLoading(false);
     }
-  }, [fixtureId, t?.matchDetails?.loadLineupsFailed, lineupFetchAttempts]);
+  }, [fixtureId, is365Fixture, t?.matchDetails?.loadLineupsFailed, lineupFetchAttempts]);
 
-  // Cap exhausted — surface in Sentry once per fixture session.
+  // Cap exhausted — surface in Sentry once per fixture (the previous effect fired on
+  // every render after the cap: 121 warnings from one device in 85 minutes).
   useEffect(() => {
     if (lineupFetchAttempts < MAX_LINEUP_AUTO_RETRIES) return;
     if (isAuthoritativeLineupData(lineups)) return;
+    if (lineupCapReportedForRef.current === fixtureId) return;
+    lineupCapReportedForRef.current = fixtureId;
     captureMessage(
       `[MatchDetails] lineups retry cap (${MAX_LINEUP_AUTO_RETRIES}) fixture=${fixtureId}`,
       'warning',
@@ -780,29 +823,6 @@ const MatchDetailsScreen = () => {
     void loadLineupsIfNeeded(true);
   }, [loadLineupsIfNeeded]);
 
-  // Lineups may be published shortly before kickoff — refresh every 60s while live + tab open
-  useEffect(() => {
-    if (lineupsPollingRef.current) {
-      clearInterval(lineupsPollingRef.current);
-      lineupsPollingRef.current = null;
-    }
-    if (!isLive() || !fixtureId || activeTab !== 'lineups' || !isFocused) return;
-
-    lineupsPollingRef.current = setInterval(async () => {
-      try {
-        loadedTabsRef.current.delete('lineups');
-        await loadLineupsIfNeeded(true);
-      } catch { /* silent */ }
-    }, 15_000);
-
-    return () => {
-      if (lineupsPollingRef.current) {
-        clearInterval(lineupsPollingRef.current);
-        lineupsPollingRef.current = null;
-      }
-    };
-  }, [fixtureId, isLive, activeTab, isFocused, loadLineupsIfNeeded]);
-
   // Drop stale lineup errors once we have data again (e.g. after player profile pop).
   useEffect(() => {
     if (isFocused && hasLineupData(lineups) && lineupsError) {
@@ -810,32 +830,42 @@ const MatchDetailsScreen = () => {
     }
   }, [isFocused, lineups, lineupsError]);
 
-  // Auto-retry lineups while the tab is open (capped — then show empty state + manual retry).
-  // Live matches keep retrying (lineups can appear late); non-live matches (weak
-  // leagues / lower divisions that never publish lineups) get a single quick
-  // attempt so the user sees the empty state fast instead of a long spinner.
+  // One lineups scheduler for the open tab (replaces the 15s poller + 8s auto-retry that
+  // together hammered `/lineups` for matches that have none):
+  //   - live: first attempt at once, then every 20s; after 4 empty answers back off to 60s
+  //     (lineups can still be published late, so never stop completely while live);
+  //   - not live: a single attempt, then the empty state with a manual retry.
+  // Authoritative lineups stop it; a provisional set keeps it running so it can upgrade.
   useEffect(() => {
-    if (lineupsTabRetryRef.current) {
-      clearInterval(lineupsTabRetryRef.current);
-      lineupsTabRetryRef.current = null;
+    if (lineupsPollingRef.current) {
+      clearInterval(lineupsPollingRef.current);
+      lineupsPollingRef.current = null;
     }
     if (activeTab !== 'lineups' || !fixtureId || lineupsError || !isFocused) return;
     if (isAuthoritativeLineupData(lineups)) return;
-    const maxAttempts = isLive() ? MAX_LINEUP_AUTO_RETRIES : 1;
-    if (lineupFetchAttempts >= maxAttempts) return;
+    const live = isLive();
+    if (!live && lineupFetchAttempts >= 1) return;
 
+    const intervalMs =
+      lineupFetchAttempts >= LINEUPS_EMPTY_RESULTS_BEFORE_BACKOFF
+        ? LINEUPS_LIVE_BACKOFF_MS
+        : LINEUPS_LIVE_POLL_MS;
     const tick = () => {
-      if (!lineupsLoading && lineupFetchAttempts < maxAttempts) {
-        void loadLineupsIfNeeded(true);
-      }
+      if (lineupsInFlightRef.current) return;
+      loadedTabsRef.current.delete('lineups');
+      void loadLineupsIfNeeded(true);
     };
-    tick();
-    lineupsTabRetryRef.current = setInterval(tick, isLive() ? 8_000 : 4_000);
+    // Each completed attempt re-runs this effect; only fire at once when the previous
+    // attempt is older than the cadence, otherwise just re-arm the timer.
+    if (Date.now() - lastLineupAttemptAtRef.current >= intervalMs) tick();
+    if (!live) return;
+
+    lineupsPollingRef.current = setInterval(tick, intervalMs);
 
     return () => {
-      if (lineupsTabRetryRef.current) {
-        clearInterval(lineupsTabRetryRef.current);
-        lineupsTabRetryRef.current = null;
+      if (lineupsPollingRef.current) {
+        clearInterval(lineupsPollingRef.current);
+        lineupsPollingRef.current = null;
       }
     };
   }, [
@@ -843,9 +873,7 @@ const MatchDetailsScreen = () => {
     fixtureId,
     lineups,
     lineupsError,
-    lineupsLoading,
     lineupFetchAttempts,
-    isFinishedMatch,
     isLive,
     isFocused,
     loadLineupsIfNeeded,
@@ -869,12 +897,20 @@ const MatchDetailsScreen = () => {
     prefetchImageUrls(urls);
   }, [lineups, resolveCoachPhoto, resolveLineupPlayerPhoto]);
 
+  /**
+   * Stats tab: the details bundle is the first source, but it may hold nothing or only
+   * goals/cards counts (events-derived). `/cached/fixture/:id/statistics` has the rich
+   * possession/shots/corners set for many more leagues, so pull it whenever the bundle
+   * came up short and merge it into the shared snapshot. Last-good stats stay on screen
+   * while a refresh runs.
+   */
   const loadStatsIfNeeded = useCallback(async (force = false) => {
     if (!fixtureId) return;
 
     const snap = useLiveFixtureStore.getState().snapshots[fixtureId];
     const snapStats = snap?.statistics ?? [];
-    if (!force && (hasApiStatistics(snapStats) || snap?.statsFromEvents)) {
+    const alreadyRich = hasRichStatistics(snapStats) && !snap?.statsFromEvents;
+    if (!force && alreadyRich) {
       loadedTabsRef.current.add('stats');
       return;
     }
@@ -884,14 +920,45 @@ const MatchDetailsScreen = () => {
     if (showLoading) setStatsLoading(true);
     setStatsError(null);
     try {
-      await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
-      const freshSnap = useLiveFixtureStore.getState().snapshots[fixtureId];
-      const data = freshSnap?.statistics ?? [];
-      if (isLive() && !hasApiStatistics(data) && !freshSnap?.statsFromEvents) {
+      if (!snap?.fixture) {
+        await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
+      }
+      const afterBundle = useLiveFixtureStore.getState().snapshots[fixtureId];
+      const bundleStats = afterBundle?.statistics ?? [];
+      const bundleShort = !hasRichStatistics(bundleStats) || afterBundle?.statsFromEvents;
+
+      if (afterBundle?.fixture && (force || bundleShort)) {
+        const fresh = await ApiFootballService.getFixtureStatistics(fixtureId);
+        const upgrade =
+          hasRichStatistics(fresh) ||
+          (hasApiStatistics(fresh) && (!hasApiStatistics(bundleStats) || afterBundle.statsFromEvents));
+        if (upgrade) {
+          const current = useLiveFixtureStore.getState().snapshots[fixtureId] ?? afterBundle;
+          const merged = buildSnapshotFromRaw({
+            fixtureId,
+            fixture: current.fixture,
+            events: current.events ?? [],
+            lineups: current.lineups,
+            statistics: fresh,
+            venue: current.venue,
+            source: 'http-full',
+            existing: current,
+          });
+          if (merged) useLiveFixtureStore.getState().ingestSnapshot(merged);
+        }
+      }
+
+      const finalSnap = useLiveFixtureStore.getState().snapshots[fixtureId];
+      const data = finalSnap?.statistics ?? [];
+      if (isLive() && !hasApiStatistics(data) && !finalSnap?.statsFromEvents) {
         loadedTabsRef.current.delete('stats');
       }
     } catch (err: any) {
-      setStatsError(err?.message || t.matchDetails.loadStatsFailed);
+      const current = useLiveFixtureStore.getState().snapshots[fixtureId];
+      // Only surface the error when there is nothing to show; otherwise keep last-good.
+      if (!hasApiStatistics(current?.statistics) && !current?.statsFromEvents) {
+        setStatsError(err?.message || t.matchDetails.loadStatsFailed);
+      }
       loadedTabsRef.current.delete('stats');
     } finally {
       setStatsLoading(false);
@@ -904,9 +971,26 @@ const MatchDetailsScreen = () => {
     void loadStatsIfNeeded(true);
   }, [loadStatsIfNeeded]);
 
-  // Stats come from the liveFixtureStore details bundle. Live score/clock use WS;
-  // events refresh (useLiveFixtureSync) rebuilds stats-from-events when needed.
-  // Do not poll /details every 5s from this tab.
+  // Live stats change every minute; one poller while the tab is open and focused. The
+  // backend serves `/statistics` from cache (stale-while-revalidate), so this is cheap.
+  useEffect(() => {
+    if (statsPollingRef.current) {
+      clearInterval(statsPollingRef.current);
+      statsPollingRef.current = null;
+    }
+    if (!isLive() || !fixtureId || activeTab !== 'stats' || !isFocused) return;
+
+    statsPollingRef.current = setInterval(() => {
+      void loadStatsIfNeeded(true);
+    }, STATS_LIVE_POLL_MS);
+
+    return () => {
+      if (statsPollingRef.current) {
+        clearInterval(statsPollingRef.current);
+        statsPollingRef.current = null;
+      }
+    };
+  }, [fixtureId, isLive, activeTab, isFocused, loadStatsIfNeeded]);
 
   const loadFormIfNeeded = useCallback(async (force = false) => {
     if (!fixture) return;
@@ -1334,6 +1418,29 @@ const MatchDetailsScreen = () => {
         LIVE_MATCH_STATUSES.includes(
           (fixture?.fixture?.status?.short ?? '') as (typeof LIVE_MATCH_STATUSES)[number],
         ) || isLive();
+      const totalGoals = (fixture?.goals?.home ?? 0) + (fixture?.goals?.away ?? 0);
+
+      // Goals on the board but nothing to list: the provider has no event feed for this
+      // competition. Say so instead of spinning on "waiting for the first event" forever.
+      // Live matches rely on the backend verdict (a feed can lag the score by a minute).
+      if ((finished && totalGoals > 0) || ((live || finished) && eventsFeedAvailable === false)) {
+        return (
+          <View style={styles.emptyState}>
+            <View style={styles.eventsWaitingIcon}>
+              <Ionicons name="information-circle-outline" size={36} color={PURPLE_SOFT} />
+            </View>
+            <Text style={styles.emptyStateText}>
+              {t.matchDetails.eventsFeedUnavailable ||
+                'Event details are not provided for this competition'}
+            </Text>
+            <Text style={styles.emptyStateSubtext}>
+              {live
+                ? (t.matchDetails.eventsUpdatingAuto || 'Updating automatically')
+                : (t.matchDetails.eventsNoneRecorded || t.matchDetails.noEvents)}
+            </Text>
+          </View>
+        );
+      }
 
       if (!finished) {
         return (
@@ -1410,6 +1517,15 @@ const MatchDetailsScreen = () => {
         />
         <View style={styles.eventsContainer}>
           <Text style={styles.sectionTitle}>{t.matchDetails.matchEvents}</Text>
+          {eventsFeedAvailable === false ? (
+            <View style={styles.eventsFeedNotice}>
+              <Ionicons name="information-circle-outline" size={16} color={PURPLE_SOFT} />
+              <Text style={styles.eventsFeedNoticeText}>
+                {t.matchDetails.eventsFeedUnavailableHint ||
+                  'Goals are shown from the score only, without player names'}
+              </Text>
+            </View>
+          ) : null}
           {sortedEvents.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="football-outline" size={48} color="#333" />
@@ -1424,6 +1540,8 @@ const MatchDetailsScreen = () => {
 
             const eventColor = getMatchEventColor(event.type, event.detail);
             const isSubstitution = event.type === 'subst';
+            const isSynthetic = event._synthetic === true;
+            const minuteKnown = !isSynthetic || event._minuteKnown !== false;
 
             return (
               <View
@@ -1434,8 +1552,10 @@ const MatchDetailsScreen = () => {
                 ]}
               >
                 <View style={styles.eventTime}>
-                  <Text style={styles.eventTimeText}>{`${event.time.elapsed}'`}</Text>
-                  {!!event.time.extra && (
+                  <Text style={styles.eventTimeText}>
+                    {minuteKnown ? `${event.time.elapsed}'` : '—'}
+                  </Text>
+                  {minuteKnown && !!event.time.extra && (
                     <Text style={styles.eventExtraTime}>{`+${event.time.extra}'`}</Text>
                   )}
                 </View>
@@ -1445,7 +1565,19 @@ const MatchDetailsScreen = () => {
                 </View>
 
                 <View style={styles.eventDetails}>
-                  {isSubstitution ? (
+                  {isSynthetic ? (
+                    <>
+                      <Text style={styles.eventPlayer}>
+                        {(t.matchDetails.goalFor || 'Goal for {team}').replace(
+                          '{team}',
+                          getTeamDisplayName(event.team.name, language),
+                        )}
+                      </Text>
+                      <Text style={styles.eventSyntheticTag}>
+                        {t.matchDetails.eventDetailsUnavailable || 'Details unavailable'}
+                      </Text>
+                    </>
+                  ) : isSubstitution ? (
                     <>
                       {!!event.assist?.name && (
                         <View style={styles.subEventRow}>
@@ -1594,8 +1726,12 @@ const MatchDetailsScreen = () => {
       // Only keep showing the spinner while auto-retry is actually running:
       // live matches always poll; non-finished matches retry until the cap.
       // Finished matches with no data must fall through to the empty state
-      // immediately so the user never gets stuck on an infinite spinner.
-      const stillRetrying = lineupFetchAttempts < (isLive() ? MAX_LINEUP_AUTO_RETRIES : 1);
+      // immediately so the user never gets stuck on an infinite spinner. When the
+      // bundle already said the provider has no lineups, skip the spinner entirely —
+      // the scheduler keeps checking quietly in the background.
+      const stillRetrying =
+        lineupsAvailable !== false &&
+        lineupFetchAttempts < (isLive() ? MAX_LINEUP_AUTO_RETRIES : 1);
       if (stillRetrying) {
         return (
           <View style={styles.emptyState}>
@@ -1652,7 +1788,6 @@ const MatchDetailsScreen = () => {
         />
         <View style={styles.lineupsContainer}>
           {visibleLineups.map((lineup, index) => {
-            const formation = lineup.formation || '4-4-2';
             const startingXI = lineup.startXI || [];
             const substitutes = lineup.substitutes || [];
             const teamId = lineup.team?.id;
@@ -1664,7 +1799,7 @@ const MatchDetailsScreen = () => {
               teamId,
             );
 
-            const fieldPlayers = sortPlayersByGrid(
+            const fieldPlayers = sortPlayersForPitch(
               pitchPlayers.map((player) => ({
                 ...player,
                 photo: resolveLineupPlayerPhoto(
@@ -1673,6 +1808,9 @@ const MatchDetailsScreen = () => {
                 ) || undefined,
               })),
             );
+            // Provider formation when it fits the XI, else derived from positions —
+            // never a made-up default that contradicts the pitch.
+            const formation = resolveFormationLabel(lineup.formation, fieldPlayers).label;
 
             return (
               <View key={index} style={styles.teamLineupContainer}>
@@ -1682,9 +1820,11 @@ const MatchDetailsScreen = () => {
                     <Text style={styles.teamName} numberOfLines={2}>
                       {getTeamDisplayName(lineup.team.name, language)}
                     </Text>
-                    <Text style={styles.formationText}>
-                      {t.matchDetails.formation}: {formation}
-                    </Text>
+                    {formation ? (
+                      <Text style={styles.formationText}>
+                        {t.matchDetails.formation}: {formation}
+                      </Text>
+                    ) : null}
                   </View>
                   <View style={styles.coachBlock}>
                     {(() => {
@@ -3185,6 +3325,29 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 11,
     fontStyle: 'italic',
+  },
+  eventSyntheticTag: {
+    color: TEXT_MUTED,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  eventsFeedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(168,85,247,0.10)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(168,85,247,0.28)',
+  },
+  eventsFeedNoticeText: {
+    flex: 1,
+    color: TEXT_MUTED,
+    fontSize: 12,
+    lineHeight: 17,
   },
   subEventRow: {
     flexDirection: 'row',

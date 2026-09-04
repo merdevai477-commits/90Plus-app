@@ -56,3 +56,19 @@ export function hasApiStatistics(data: TeamStatistics[] | null | undefined): boo
   if (!data?.length) return false;
   return data.some((row) => Array.isArray(row.statistics) && row.statistics.length > 0);
 }
+
+/** Stat types the events-derived fallback can produce on its own. */
+const EVENT_DERIVED_STAT_TYPES = new Set(['goals', 'yellow cards', 'red cards', 'substitutions']);
+
+/**
+ * True when the payload holds provider statistics (possession, shots, corners…)
+ * rather than only the goals/cards/subs counts we can derive from events.
+ */
+export function hasRichStatistics(data: TeamStatistics[] | null | undefined): boolean {
+  if (!hasApiStatistics(data)) return false;
+  return (data ?? []).some((row) =>
+    (row.statistics ?? []).some(
+      (stat) => !EVENT_DERIVED_STAT_TYPES.has(String(stat?.type ?? '').trim().toLowerCase()),
+    ),
+  );
+}

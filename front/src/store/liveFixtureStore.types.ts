@@ -25,6 +25,14 @@ export interface LiveFixtureSnapshot {
   lastSource: LiveFixtureSource;
   phase: LiveFixturePhase;
   lastFetchError: string | null;
+  /**
+   * Backend verdict on the provider's event feed: `true` real events exist, `false` goals
+   * happened but the provider publishes none (events are score-delta goals), `null`/absent
+   * unknown (0-0 or older backend).
+   */
+  eventsFeedAvailable?: boolean | null;
+  /** Backend verdict on lineups: `false` means the provider has none yet — no spinner. */
+  lineupsAvailable?: boolean | null;
 }
 
 export const LIVE_FIXTURE_FAST_POLL_MS = 5_000;

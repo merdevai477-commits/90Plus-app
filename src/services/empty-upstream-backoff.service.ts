@@ -65,7 +65,8 @@ export async function shouldSkipEmptyUpstreamPoll(
   if (now >= state.nextAllowedAt) return { skip: false, streak: state.streak };
 
   const nextRetryInMs = Math.max(0, state.nextAllowedAt - now);
-  logger.info(
+  // Fires on every poll of a quiet fixture (~3/s in production); not worth info level.
+  logger.debug(
     `[EmptyBackoff] fixture=${fixtureId} streak=${state.streak} nextRetryInMs=${nextRetryInMs} action=skip`,
   );
   return { skip: true, streak: state.streak, nextRetryInMs };

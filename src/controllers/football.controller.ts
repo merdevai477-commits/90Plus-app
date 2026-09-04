@@ -13,6 +13,7 @@ import {
 } from '../services/live-fixture-cache.service';
 import { getScores365GameIdForFixture, ensureScores365GameMapping, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId } from '../services/scores365-experiment.service';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
+import { resolveEventsFeedAvailability } from '../services/synthetic-goals.service';
 import type { Scores365LmtWidgetInfo } from '../services/scores365-experiment.service';
 import { buildScores365LmtEmbedHtml } from '../utils/scores365-lmt-html';
 import { threeSixFiveScoresService } from '../services/threeSixFiveScores.service';
@@ -892,6 +893,7 @@ export class FootballController {
           status: 'SUCCESS',
           results: events?.length ?? 0,
           response: events ?? [],
+          _meta: { eventsFeedAvailable: resolveEventsFeedAvailability(events ?? []) },
         });
         return;
       } catch (fetchError: any) {
@@ -2499,6 +2501,8 @@ export class FootballController {
         status: 'SUCCESS',
         results: events?.length || 0,
         response: events || [],
+        // false = goals exist but the provider has no event feed (score-delta goals only)
+        _meta: { eventsFeedAvailable: resolveEventsFeedAvailability(events ?? []) },
       });
     } catch (error) {
       FootballController.handleError(res, error);

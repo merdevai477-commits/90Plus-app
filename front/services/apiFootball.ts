@@ -527,6 +527,10 @@ export interface FixtureEvent {
   type: string;
   detail: string;
   comments: string | null;
+  /** Goal inferred from a score change because the provider has no event feed. */
+  _synthetic?: boolean;
+  /** False when a synthetic goal's minute is unknown (inferred after the fact). */
+  _minuteKnown?: boolean;
 }
 
 export type FixtureMomentumPayload = {
@@ -1665,13 +1669,19 @@ export const ApiFootballService = {
    */
   async getFixtureLineups(
     fixtureId: number,
-    options?: { skipCache?: boolean },
+    options?: { skipCache?: boolean; is365?: boolean },
   ): Promise<Lineup[]> {
     const { convertFixturePlayersToLineups, hasLineupData } = await import(
       '../utils/matchLineupsFallback'
     );
 
+    // 365-sourced matches have no API-Football fixture behind them: the legacy
+    // `/fixtures/:id/lineups` + `/players` fallbacks can only 404 or come back empty,
+    // and they tripled the request count for every match without lineups.
+    const is365Native = fixtureId >= 4_000_000 || options?.is365 === true;
+
     const resolveFromDirect = async (fresh = false): Promise<Lineup[]> => {
+      if (is365Native) return [];
       const fetchOpts = fresh ? { fresh: true } : {};
       let lineups = await fetchFromProxy<Lineup[]>(
         `/fixtures/${fixtureId}/lineups`,
@@ -1915,6 +1925,10 @@ export const ApiFootballService = {
     statistics: TeamStatistics[];
     events: FixtureEvent[];
     venue: Venue | null;
+    /** Backend verdict: false = provider has no lineups for this match (yet). */
+    lineupsAvailable?: boolean | null;
+    /** Backend verdict: false = goals exist but the provider publishes no event feed. */
+    eventsFeedAvailable?: boolean | null;
   }> {
     const langParams = options?.language ? { language: options.language } : {};
     const fetchBundle = async (id: number) => {
@@ -1933,6 +1947,10 @@ export const ApiFootballService = {
         statistics: bundle?.statistics ?? [],
         events: bundle?.events ?? [],
         venue: bundle?.venue ?? null,
+        lineupsAvailable:
+          typeof bundle?.lineupsAvailable === 'boolean' ? bundle.lineupsAvailable : null,
+        eventsFeedAvailable:
+          typeof bundle?.eventsFeedAvailable === 'boolean' ? bundle.eventsFeedAvailable : null,
       };
     };
 

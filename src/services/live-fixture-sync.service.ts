@@ -436,6 +436,21 @@ class LiveFixtureSyncService {
                 this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed, extra });
                 this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed, extra);
 
+                if (scoreChanged) {
+                    // Leagues without an event feed still get goals on the events tab.
+                    void import('./synthetic-goals.service')
+                        .then(({ reconcileSyntheticGoals }) =>
+                            reconcileSyntheticGoals(
+                                id,
+                                prev ? { home: prev.homeScore, away: prev.awayScore } : null,
+                                { home: homeScore, away: awayScore },
+                                elapsed,
+                                extra,
+                            ),
+                        )
+                        .catch(() => undefined);
+                }
+
                 const forceEvents = scoreChanged || statusChanged;
                 const nowMs = Date.now();
                 const lastPush = this.lastEventPushAt.get(id) ?? 0;

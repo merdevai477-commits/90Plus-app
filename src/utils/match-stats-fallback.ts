@@ -10,6 +10,23 @@ export function hasApiStatistics(data: unknown): boolean {
   });
 }
 
+/** Stat types the events-derived fallback below can produce on its own. */
+const EVENTS_ONLY_STAT_TYPES = new Set(['Goals', 'Yellow Cards', 'Red Cards', 'Substitutions']);
+
+/**
+ * True when the payload carries something a plain event feed cannot provide
+ * (possession, shots, corners…). Events-only stats are a placeholder worth
+ * replacing, not a result worth caching for hours.
+ */
+export function hasRichStatistics(data: unknown): boolean {
+  if (!hasApiStatistics(data)) return false;
+  return (data as Array<{ statistics?: Array<{ type?: unknown }> }>).some((row) =>
+    (row.statistics ?? []).some(
+      (stat) => typeof stat?.type === 'string' && !EVENTS_ONLY_STAT_TYPES.has(stat.type),
+    ),
+  );
+}
+
 export function buildFallbackStatisticsFromEvents(
   fixture: {
     teams: {
