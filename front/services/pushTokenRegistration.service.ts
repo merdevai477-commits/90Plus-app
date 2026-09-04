@@ -137,7 +137,9 @@ async function setupAndroidChannels(Notifications: NotificationsModule): Promise
         enableVibrate: true,
         showBadge: true,
         lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        sound: 'default' as const,
+        // `true` = system default. The string "default" is treated as a custom
+        // asset name and throws "Custom sound 'default' not found".
+        sound: true,
     };
 
     await Notifications.setNotificationChannelAsync('default', {
