@@ -17,8 +17,9 @@ import {
     Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { ChevronDown, ChevronUp } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Heart, Search } from 'lucide-react-native';
 import { FlashList } from '@shopify/flash-list';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
     useFavoriteCompetitorMatches,
     usePrefetchFavoriteCompetitorMatches,
@@ -42,7 +43,8 @@ const ANIMATE_TOGGLE = Platform.OS === 'ios';
 type ListRow =
     | { type: 'section'; id: string; title: string }
     | { type: 'notified'; id: string; match: StoredFavoriteMatch }
-    | { type: 'team'; id: string; team: StoredFollowedTeam };
+    | { type: 'team'; id: string; team: StoredFollowedTeam }
+    | { type: 'cta'; id: string };
 
 export interface FavoritesTabProps {
     followedTeams: StoredFollowedTeam[];
@@ -52,7 +54,36 @@ export interface FavoritesTabProps {
     listHeader?: React.ReactElement | null;
     renderFixture: (fixture: FavoritesListFixture) => React.ReactNode;
     onOpenTeam?: (team: StoredFollowedTeam) => void;
+    onChooseFavoriteTeam?: () => void;
 }
+
+function ChooseFavoriteTeamCta({ onPress, label }: { onPress: () => void; label: string }) {
+    return (
+        <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={onPress}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            style={styles.ctaOuter}
+        >
+            <LinearGradient
+                colors={['#8B5CF6', '#6D28D9']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.ctaGradient}
+            >
+                <View style={styles.ctaIconWrap}>
+                    <Heart size={18} color="#fff" fill="#fff" />
+                </View>
+                <Text style={styles.ctaLabel} numberOfLines={2}>
+                    {label}
+                </Text>
+                <Search size={18} color="rgba(255,255,255,0.9)" />
+            </LinearGradient>
+        </TouchableOpacity>
+    );
+}
+
 
 const LeagueMatchBlock = memo(function LeagueMatchBlock({
     leagueName,
@@ -243,8 +274,11 @@ export default function FavoritesTab({
     listHeader,
     renderFixture,
     onOpenTeam,
+    onChooseFavoriteTeam,
 }: FavoritesTabProps) {
     const { t } = useTranslation();
+    const chooseLabel =
+        t.matches.screen.favoritesChooseTeamCta ?? 'Choose your favorite team now';
 
     const rows = useMemo<ListRow[]>(() => {
         const out: ListRow[] = [];
@@ -267,9 +301,13 @@ export default function FavoritesTab({
             for (const team of followedTeams) {
                 out.push({ type: 'team', id: `t-${team.apiTeamId}`, team });
             }
+        } else if (!loading && onChooseFavoriteTeam && notifiedMatches.length > 0) {
+            // Notified matches exist but no followed club yet — keep a pick-team CTA in-list.
+            out.push({ type: 'section', id: 'sec-teams', title: t.matches.screen.favoritesTeamsSection });
+            out.push({ type: 'cta', id: 'cta-choose-team' });
         }
         return out;
-    }, [followedTeams, notifiedMatches, t]);
+    }, [followedTeams, notifiedMatches, loading, onChooseFavoriteTeam, t]);
 
     const renderItem = useCallback(
         ({ item }: { item: ListRow }) => {
@@ -279,6 +317,11 @@ export default function FavoritesTab({
                         <Text style={styles.sectionTitle}>{item.title}</Text>
                     </View>
                 );
+            }
+            if (item.type === 'cta') {
+                return onChooseFavoriteTeam ? (
+                    <ChooseFavoriteTeamCta onPress={onChooseFavoriteTeam} label={chooseLabel} />
+                ) : null;
             }
             if (item.type === 'notified') {
                 const fixture = storedMatchToListFixture(item.match);
@@ -303,7 +346,7 @@ export default function FavoritesTab({
                 />
             );
         },
-        [onOpenTeam, renderFixture, t],
+        [onOpenTeam, onChooseFavoriteTeam, chooseLabel, renderFixture, t],
     );
 
     const empty = !loading && rows.length === 0;
@@ -325,8 +368,17 @@ export default function FavoritesTab({
             ListEmptyComponent={
                 empty ? (
                     <View style={styles.emptyWrap}>
+                        <View style={styles.emptyIconRing}>
+                            <Heart size={28} color="#c4b5fd" />
+                        </View>
                         <Text style={styles.emptyTitle}>{t.matches.screen.favoritesEmptyTitle}</Text>
                         <Text style={styles.emptySub}>{t.matches.screen.favoritesEmptyBody}</Text>
+                        {onChooseFavoriteTeam ? (
+                            <ChooseFavoriteTeamCta
+                                onPress={onChooseFavoriteTeam}
+                                label={chooseLabel}
+                            />
+                        ) : null}
                     </View>
                 ) : loading ? (
                     <ActivityIndicator color="#a855f7" style={{ marginTop: 40 }} />
@@ -445,7 +497,18 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 48,
         paddingHorizontal: 24,
-        gap: 8,
+        gap: 10,
+    },
+    emptyIconRing: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(139,92,246,0.16)',
+        borderWidth: 1,
+        borderColor: 'rgba(196,181,253,0.28)',
+        marginBottom: 6,
     },
     emptyTitle: {
         color: '#fff',
@@ -458,5 +521,40 @@ const styles = StyleSheet.create({
         fontSize: 13,
         textAlign: 'center',
         lineHeight: 19,
+        marginBottom: 8,
+    },
+    ctaOuter: {
+        width: '100%',
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginTop: 4,
+        shadowColor: '#7C3AED',
+        shadowOpacity: 0.35,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 6,
+    },
+    ctaGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 15,
+        paddingHorizontal: 16,
+        minHeight: 56,
+    },
+    ctaIconWrap: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255,255,255,0.18)',
+    },
+    ctaLabel: {
+        flex: 1,
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '800',
+        letterSpacing: 0.2,
     },
 });

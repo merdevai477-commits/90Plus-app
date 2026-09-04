@@ -2275,6 +2275,7 @@ export default function MatchesHubScreenV2() {
           listHeader={listHeaderNode}
           renderFixture={renderFavoriteFixture}
           onOpenTeam={handleOpenFavoriteTeam}
+          onChooseFavoriteTeam={() => router.push('/search' as any)}
         />
       ) : (
         <FlashList

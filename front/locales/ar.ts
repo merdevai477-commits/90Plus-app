@@ -594,6 +594,7 @@ export const ar = {
       favoritesEmptyTitle: 'لا مفضلات بعد',
       favoritesEmptyBody:
         'تابع نادياً من بروفايله، أو اضغط جرس المباراة — هتظهر هنا في المفضلة.',
+      favoritesChooseTeamCta: 'اختار فريقك المفضل دلوقتي',
       favoritesTeamsSection: 'الفرق المتابَعة',
       favoritesNotifiedSection: 'تنبيهات المباريات',
       favoritesNotifiedBadge: 'إشعار مفعّل',

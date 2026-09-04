@@ -773,6 +773,7 @@ export const en = {
       favoritesEmptyTitle: 'No favorites yet',
       favoritesEmptyBody:
         'Follow a club from its profile, or tap the bell on a match card — they show up here.',
+      favoritesChooseTeamCta: 'Choose your favorite team now',
       favoritesTeamsSection: 'Followed teams',
       favoritesNotifiedSection: 'Match alerts',
       favoritesNotifiedBadge: 'Notified',
