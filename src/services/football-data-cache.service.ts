@@ -107,6 +107,7 @@ import {
     hasApiStatistics,
     hasRichStatistics,
 } from '../utils/match-stats-fallback';
+import { resolveEventsFeedAvailability } from './synthetic-goals.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
 import {
     calendarDayBounds,
@@ -293,6 +294,8 @@ class FootballDataCacheService {
 
     /** How long a reader waits on a cold lineup resolution before giving up on it. */
     private readonly LINEUP_RESPONSE_BUDGET_MS = 4_000;
+    /** Max wait for the named-lineup enrichment before serving the structured XI as is. */
+    private readonly LINEUP_ENRICHMENT_BUDGET_MS = 1_500;
 
     /** One upstream 365 statistics resolution per fixture, shared by all concurrent readers. */
     private readonly statsResolveInFlight = new Map<number, Promise<any[]>>();
@@ -1959,6 +1962,8 @@ class FootballDataCacheService {
             ]);
             if (settled === LINEUP_BUDGET_LAPSED) {
                 logger.warn(`[Lineups] fixture=${fixtureId} reason=response_budget_exceeded`);
+                const last = this.lineupsCache.get(fixtureId);
+                if (last && hasLineupData(last.data)) return last.data;
                 return [];
             }
             return settled;
@@ -2514,6 +2519,25 @@ class FootballDataCacheService {
         return null;
     }
 
+    /** Let the details bundle feed `/lineups` so a slow named-enrichment path cannot return []. */
+    private mirror365BundleLineups(
+        fixtureId: number,
+        lineups: any[],
+        isFinished: boolean,
+    ): void {
+        if (!hasLineupData(lineups)) return;
+        const cached = this.lineupsCache.get(fixtureId);
+        if (isAuthoritativeLineupData(cached?.data) && !isAuthoritativeLineupData(lineups)) return;
+        const ttl = isFinished ? this.TTL.FINISHED : this.TTL.LIVE_MATCH;
+        const cacheEntry: MemoryCacheEntry<any> = {
+            data: lineups,
+            timestamp: Date.now(),
+            ttl,
+        };
+        this.setBoundedCache(this.lineupsCache, fixtureId, cacheEntry);
+        void redisCacheService.set(`lineups:${fixtureId}`, cacheEntry, ttl).catch(() => undefined);
+    }
+
     /** Let the bundle's team stats feed the shared cache without downgrading a richer entry. */
     private mirror365BundleStatistics(
         fixtureId: number,
@@ -3067,6 +3091,7 @@ class FootballDataCacheService {
                 false,
             );
         const mergedLineups = hasLineupData(lineups) ? lineups : experiment.lineups;
+        this.mirror365BundleLineups(fixtureId, mergedLineups, finished);
         const payload = {
             fixture: experiment.fixture,
             lineups: mergedLineups,
@@ -3137,9 +3162,98 @@ class FootballDataCacheService {
         }
     }
 
+    private isLiveDetailsStatus(status: string | null | undefined): boolean {
+        return ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(status ?? '');
+    }
+
+    /** Fixture-only payload with no XI / stats / events — not last-good, must not poison Redis. */
+    private isHollowDetailsBundle(payload: any): boolean {
+        if (!payload?.fixture) return true;
+        return (
+            !hasLineupData(payload.lineups) &&
+            !hasApiStatistics(payload.statistics) &&
+            !(Array.isArray(payload.events) && payload.events.length > 0)
+        );
+    }
+
+    /**
+     * Fill gaps in a details payload from the dedicated lineups/stats/events caches so the
+     * first paint is not empty while `/statistics` or `/lineups` already have the data.
+     */
+    private async enrichDetailsFromDedicatedCaches(fixtureId: number, payload: any): Promise<any> {
+        if (!payload) return payload;
+        let lineups = payload.lineups ?? [];
+        let statistics = payload.statistics ?? [];
+        let events = Array.isArray(payload.events) ? payload.events : [];
+
+        if (!hasLineupData(lineups)) {
+            const mem = this.lineupsCache.get(fixtureId);
+            if (mem && hasLineupData(mem.data)) {
+                lineups = mem.data;
+            } else {
+                try {
+                    const fromRedis = await redisCacheService.get<MemoryCacheEntry<any>>(
+                        `lineups:${fixtureId}`,
+                    );
+                    if (fromRedis && hasLineupData(fromRedis.data)) {
+                        this.setBoundedCache(this.lineupsCache, fixtureId, fromRedis);
+                        lineups = fromRedis.data;
+                    }
+                } catch {
+                    // Redis is optional.
+                }
+            }
+        }
+
+        if (!hasRichStatistics(statistics)) {
+            const shared = await this.peek365Statistics(fixtureId);
+            if (
+                hasRichStatistics(shared) ||
+                (hasApiStatistics(shared) && !hasApiStatistics(statistics))
+            ) {
+                statistics = shared as any[];
+            }
+        }
+
+        if (events.length === 0) {
+            const mem = this.eventsCache.get(fixtureId);
+            if (Array.isArray(mem?.data) && mem.data.length > 0) {
+                events = mem.data;
+            } else {
+                try {
+                    const fromRedis = await redisCacheService.get<MemoryCacheEntry<any>>(
+                        `events:${fixtureId}`,
+                    );
+                    if (Array.isArray(fromRedis?.data) && fromRedis.data.length > 0) {
+                        this.setBoundedCache(this.eventsCache, fixtureId, fromRedis);
+                        events = fromRedis.data;
+                    }
+                } catch {
+                    // Redis is optional.
+                }
+            }
+        }
+
+        events = await this.overlaySyntheticGoals(fixtureId, events);
+        const goals = payload.fixture?.goals;
+        return {
+            ...payload,
+            lineups,
+            statistics,
+            events,
+            lineupsAvailable: hasLineupData(lineups) || payload.lineupsAvailable === true,
+            eventsFeedAvailable:
+                payload.eventsFeedAvailable ??
+                resolveEventsFeedAvailability(events, goals ? { home: goals.home, away: goals.away } : null),
+        };
+    }
+
     private rememberDetailsBundle(cacheKey: string, payload: any): void {
         if (!payload?.fixture) return;
         const status = payload.fixture?.fixture?.status?.short ?? '';
+        // A live fixture-only stub would sit in Redis for DETAILS_KEEP_MS and hide the
+        // real 365 bundle from every subsequent first paint.
+        if (this.isHollowDetailsBundle(payload) && this.isLiveDetailsStatus(status)) return;
         const kickoffMs =
             typeof payload.fixture?.fixture?.timestamp === 'number'
                 ? payload.fixture.fixture.timestamp * 1000
@@ -3184,7 +3298,9 @@ class FootballDataCacheService {
         language: string | null | undefined,
         cacheKey: string,
     ): void {
-        if (this.detailsBackgroundRefresh.has(cacheKey)) return;
+        if (this.detailsBackgroundRefresh.has(cacheKey) || this.pendingDetailsBundles.has(cacheKey)) {
+            return;
+        }
         this.detailsBackgroundRefresh.add(cacheKey);
         void this.buildFreshDetailsBundle(fixtureId, { language, forceRefresh: false })
             .then((payload) => {
@@ -3225,17 +3341,29 @@ class FootballDataCacheService {
         if (!forceRefresh) {
             const cached = await this.readCachedDetailsBundle(cacheKey);
             if (cached?.data?.fixture) {
-                if (Date.now() - cached.timestamp >= cached.ttl) {
-                    this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
+                const enriched = await this.enrichDetailsFromDedicatedCaches(
+                    fixtureId,
+                    cached.data,
+                );
+                if (!this.isHollowDetailsBundle(enriched)) {
+                    if (Date.now() - cached.timestamp >= cached.ttl) {
+                        this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
+                    }
+                    return enriched;
                 }
-                return cached.data;
             }
             const unprefixed = await this.readCachedDetailsBundle(
                 footballDetailsRedisKey(fixtureId),
             );
             if (unprefixed?.data?.fixture) {
-                this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
-                return unprefixed.data;
+                const enriched = await this.enrichDetailsFromDedicatedCaches(
+                    fixtureId,
+                    unprefixed.data,
+                );
+                if (!this.isHollowDetailsBundle(enriched)) {
+                    this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
+                    return enriched;
+                }
             }
         }
 
@@ -3261,8 +3389,11 @@ class FootballDataCacheService {
         } catch {
             // Redis live snapshot is optional
         }
+        if (stub?.fixture) {
+            stub = await this.enrichDetailsFromDedicatedCaches(fixtureId, stub);
+        }
 
-        if (!forceRefresh && stub?.fixture) {
+        if (!forceRefresh && stub?.fixture && !this.isHollowDetailsBundle(stub)) {
             this.rememberDetailsBundle(cacheKey, stub);
             const statusShort =
                 stub.fixture?.fixture?.status?.short ?? durableRow?.status ?? '';
@@ -3290,11 +3421,14 @@ class FootballDataCacheService {
         });
         const raced = await Promise.race([freshPromise, budget]);
         if (raced?.fixture) {
-            this.rememberDetailsBundle(cacheKey, raced);
-            return raced;
+            const enriched = await this.enrichDetailsFromDedicatedCaches(fixtureId, raced);
+            this.rememberDetailsBundle(cacheKey, enriched);
+            return enriched;
         }
-        void freshPromise.then((payload) => {
-            if (payload?.fixture) this.rememberDetailsBundle(cacheKey, payload);
+        void freshPromise.then(async (payload) => {
+            if (!payload?.fixture) return;
+            const enriched = await this.enrichDetailsFromDedicatedCaches(fixtureId, payload);
+            this.rememberDetailsBundle(cacheKey, enriched);
         });
         return stub ?? this.emptyDetailsBundle();
     }
@@ -4961,12 +5095,33 @@ class FootballDataCacheService {
         }
         if (!hasLineupData(structured)) return [];
 
+        // The named enrichment (localized names, shirt numbers) is two more 365 calls on a
+        // cold cache and used to push the whole `/lineups` answer past its 4s budget — the
+        // client then got [] although the structured XI was ready in 0.5s. Give it a short
+        // window; past that, serve the structured lineups and let the enrichment land in
+        // its own Redis cache for the next poll.
         const appLang = resolveScores365AppLanguage(language);
-        let named = await this.getCached365LineupsWithNames(fixtureId, language);
-        if (!named.data?.length && appLang !== 'en') {
-            named = await this.getCached365LineupsWithNames(fixtureId, 'en');
+        const namedPromise = (async () => {
+            let result = await this.getCached365LineupsWithNames(fixtureId, language);
+            if (!result.data?.length && appLang !== 'en') {
+                result = await this.getCached365LineupsWithNames(fixtureId, 'en');
+            }
+            return result;
+        })().catch(() => ({ data: null, source: null }) as ThreeSixFiveResult<ThreeSixFiveLineupPlayer[]>);
+        let enrichmentTimer: ReturnType<typeof setTimeout> | undefined;
+        const enrichmentBudget = new Promise<null>((resolve) => {
+            enrichmentTimer = setTimeout(() => resolve(null), this.LINEUP_ENRICHMENT_BUDGET_MS);
+            enrichmentTimer.unref?.();
+        });
+        const named = await Promise.race([namedPromise, enrichmentBudget]).finally(() => {
+            if (enrichmentTimer) clearTimeout(enrichmentTimer);
+        });
+        if (named === null) {
+            logger.debug(
+                `[365LineupsMerged] fixture=${fixtureId}: named enrichment past ${this.LINEUP_ENRICHMENT_BUDGET_MS}ms — serving structured XI`,
+            );
         }
-        const merged = named.data?.length
+        const merged = named?.data?.length
             ? this.merge365NamesIntoLineups(structured ?? [], named.data, fixtureId)
             : (structured ?? []);
 

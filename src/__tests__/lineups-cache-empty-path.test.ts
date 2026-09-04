@@ -159,4 +159,30 @@ describe('getMatchLineups empty-result handling', () => {
       jest.useRealTimers();
     }
   });
+
+  it('returns last-good lineups when a stale refresh outlasts the budget', async () => {
+    const xi = [
+      {
+        team: { id: 1, name: 'Home' },
+        _source: 'scores365-experiment',
+        startXI: Array.from({ length: 11 }, (_, i) => ({
+          player: { id: i + 1, name: `P${i}` },
+        })),
+        substitutes: [],
+      },
+    ];
+    const entry = { data: xi, timestamp: Date.now() - 60_000, ttl: 1_000 };
+    redisStore.set('lineups:4778474', entry);
+    service.lineupsCache.set(4778474, entry);
+
+    jest.useFakeTimers();
+    try {
+      get365Lineups.mockImplementation(() => new Promise<any[]>(() => undefined));
+      const pending = service.getMatchLineups(4778474);
+      await jest.advanceTimersByTimeAsync(service.LINEUP_RESPONSE_BUDGET_MS + 10);
+      await expect(pending).resolves.toEqual(xi);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
