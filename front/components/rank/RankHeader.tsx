@@ -1,9 +1,9 @@
 /**
  * RankHeader
  *
- * Floating header for the Rank tab. Displays the centered "90plus rank"
- * brand pill and the live coin balance (from CoinsContext) on the trailing
- * edge. Glass matches Matches / Quiz via glassProps.header.
+ * Floating header for the Rank tab. Centered brand pill matches Matches /
+ * Predict & Win (90 + purple PLUS chip + screen title). Live coin balance
+ * sits on the trailing edge. Glass via glassProps.header.
  */
 
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
@@ -20,7 +20,6 @@ import { FeatureInfoModal } from '../common/FeatureInfoModal';
 
 const ACCENT = '#A855F7';
 const blurTint: BlurTint = 'dark';
-const TITLE = '90plus rank';
 
 interface RankHeaderProps {
   topInset: number;
@@ -44,12 +43,16 @@ const RankHeader: React.FC<RankHeaderProps> = ({ topInset }) => {
       <View style={s.sideSlot} />
 
       <Pressable
-        style={s.titlePill}
+        style={s.logoPill}
         onPress={() => setShowRankInfo(true)}
         accessibilityRole="button"
         accessibilityLabel={t.rankInfo.title}
       >
-        <Text style={s.titleText}>{TITLE}</Text>
+        <Text style={s.logo90}>90</Text>
+        <View style={s.plusChip}>
+          <Text style={s.logoPlus}>PLUS</Text>
+        </View>
+        <Text style={s.pillTitle}>rank</Text>
       </Pressable>
 
       <View style={[s.sideSlot, s.sideSlotEnd]}>
@@ -113,29 +116,48 @@ const s = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.05)',
     backgroundColor: 'transparent',
   },
-  /** Equal flex sides keep the title optically centered. */
+  /** Equal flex sides keep the brand pill optically centered. */
   sideSlot: {
     flex: 1,
   },
   sideSlotEnd: {
     alignItems: 'flex-end',
   },
-  titlePill: {
+  logoPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
+    gap: 5,
   },
-  titleText: {
+  logo90: {
     color: '#fff',
     fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  plusChip: {
+    backgroundColor: ACCENT,
+    borderRadius: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  logoPlus: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  pillTitle: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 0.2,
+    letterSpacing: -0.2,
+    marginLeft: 2,
   },
   coinChip: {
     flexDirection: 'row',
