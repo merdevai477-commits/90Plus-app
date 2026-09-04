@@ -2064,6 +2064,24 @@ function lookupMember(lookup: MemberLookup, id: number, rawName?: string): Score
   return lookup.byId.get(id) ?? (rawName ? lookup.byNormName.get(normaliseNameKey(rawName)) : undefined);
 }
 
+/**
+ * `competitor.lineups.members[].id` is a per-game roster row id, not an athlete id.
+ * Career, match report, and headshot endpoints only accept `game.members[].athleteId`.
+ */
+function resolveLineupAthleteId(
+  game: Scores365Game,
+  sideLabel: string,
+  memberId: number,
+  meta: Scores365Member | undefined,
+): number {
+  const athleteId = meta?.athleteId;
+  if (athleteId != null && athleteId > 0) return athleteId;
+  logger.warn(
+    `[Scores365Lineups] game ${game.id} ${sideLabel}: member id=${memberId} name="${meta?.name ?? '?'}" has no athleteId in game.members — player screens will be unavailable`,
+  );
+  return memberId;
+}
+
 function posFrom365(shortName?: string): string | null {
   if (!shortName) return null;
   const s = shortName.toLowerCase();
@@ -2312,6 +2330,7 @@ export function mapScores365Lineups(
       startXI: starters.map((m) => {
         const meta = lookupMember(lookup, m.id);
         const matchStats = memberMatchStatsFromLineup(m);
+        const athleteId = resolveLineupAthleteId(game, sideLabel, m.id, meta);
         const grid =
           m.yardFormation?.line != null && m.yardFormation?.fieldPosition != null
             ? `${m.yardFormation.line}:${m.yardFormation.fieldPosition}`
@@ -2325,14 +2344,16 @@ export function mapScores365Lineups(
         }
         return {
           player: {
-            id: m.id,
+            id: athleteId,
+            athleteId,
+            scores365MemberId: m.id,
             name: resolvedName ?? `#${m.id}`,
             number: meta?.jerseyNumber ?? 0,
             pos: posFrom365(m.formation?.shortName),
             grid,
             fieldLine: m.yardFormation?.fieldLine ?? null,
             fieldSide: m.yardFormation?.fieldSide ?? null,
-            photo: buildScores365AthletePhotoUrl(m.id, 80),
+            photo: buildScores365AthletePhotoUrl(athleteId, 80, meta?.imageVersion ?? null),
             rating: matchStats.rating,
             goals: matchStats.goals,
             assists: matchStats.assists,
@@ -2346,14 +2367,17 @@ export function mapScores365Lineups(
         .map((m) => {
           const meta = lookupMember(lookup, m.id);
           const matchStats = memberMatchStatsFromLineup(m);
+          const athleteId = resolveLineupAthleteId(game, sideLabel, m.id, meta);
           return {
             player: {
-              id: m.id,
+              id: athleteId,
+              athleteId,
+              scores365MemberId: m.id,
               name: meta?.name ?? meta?.shortName ?? `#${m.id}`,
               number: meta?.jerseyNumber ?? 0,
               pos: posFrom365(m.formation?.shortName),
               grid: null,
-              photo: buildScores365AthletePhotoUrl(m.id, 80),
+              photo: buildScores365AthletePhotoUrl(athleteId, 80, meta?.imageVersion ?? null),
               rating: matchStats.rating,
               goals: matchStats.goals,
               assists: matchStats.assists,

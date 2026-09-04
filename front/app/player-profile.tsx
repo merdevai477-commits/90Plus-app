@@ -608,6 +608,7 @@ export default function PlayerProfileScreen() {
     const [loadingTransfers, setLoadingTransfers] = useState(false);
     const [matchReport365, setMatchReport365] = useState<MatchReport365 | null>(null);
     const [career365, setCareer365] = useState<Player365Career | null>(null);
+    const [athleteId365, setAthleteId365] = useState(contextAthleteId);
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
@@ -617,7 +618,8 @@ export default function PlayerProfileScreen() {
         setLoading(!routeShell);
         setError(null);
         setTransfers([]);
-    }, [playerId, routeShell]);
+        setAthleteId365(contextAthleteId);
+    }, [playerId, routeShell, contextAthleteId]);
 
     useEffect(() => {
         loadPlayerData();
@@ -643,8 +645,20 @@ export default function PlayerProfileScreen() {
         ]).start();
     }, [playerId, contextSeason, contextTeamId, seasonYear, forceFreshStats, is365Source, contextFixtureId]);
 
+    /** Match report, bio and career in one round trip instead of three chained ones. */
+    const fetch365PlayerBundle = async (athleteId: number) => {
+        const [report, info, career] = await Promise.all([
+            contextFixtureId
+                ? ApiFootballService.get365PlayerMatchReport(contextFixtureId, athleteId)
+                : Promise.resolve(null),
+            ApiFootballService.get365PlayerInfo(athleteId),
+            ApiFootballService.get365PlayerCareer(athleteId, language),
+        ]);
+        return { report, info, career };
+    };
+
     const load365PlayerData = async () => {
-        if (!contextAthleteId || !contextFixtureId) {
+        if (!contextAthleteId) {
             setError(t.playerProfile.playerNotFound);
             setLoading(false);
             return;
@@ -653,168 +667,101 @@ export default function PlayerProfileScreen() {
         try {
             setLoading(true);
             setError(null);
-            let report = await ApiFootballService.get365PlayerMatchReport(
-                contextFixtureId,
-                contextAthleteId,
-            );
-            if ((!report || (report.stats?.length ?? 0) === 0) && language === 'ar') {
-                report = await ApiFootballService.get365PlayerMatchReport(
+
+            let athleteId = contextAthleteId;
+            let { report, info, career } = await fetch365PlayerBundle(athleteId);
+
+            // Older cached lineups handed us a per-game roster id, which no 365
+            // player endpoint accepts — recover the real athlete by name.
+            if (!report && !info && !career && params.name) {
+                const recovered = await ApiFootballService.resolve365AthleteIdByName(
+                    params.name,
+                    params.teamName,
+                );
+                if (recovered && recovered !== athleteId) {
+                    athleteId = recovered;
+                    ({ report, info, career } = await fetch365PlayerBundle(athleteId));
+                }
+            }
+            setAthleteId365(athleteId);
+
+            // Arabic match reports are occasionally published without stat rows.
+            if (
+                contextFixtureId &&
+                (!report || (report.stats?.length ?? 0) === 0) &&
+                language === 'ar'
+            ) {
+                const english = await ApiFootballService.get365PlayerMatchReport(
                     contextFixtureId,
-                    contextAthleteId,
+                    athleteId,
                     'en',
                 );
-            }
-            if (!report) {
-                setMatchReport365(null);
-                // Still enrich from athlete info/career so nationality, club, DOB,
-                // height, and photo resolve even when the match report is missing.
-                if (contextAthleteId > 0) {
-                    const shell =
-                        player ??
-                        buildShellFromParams(params, contextAthleteId, contextTeamId);
-                    if (shell) setPlayer(shell);
-
-                    const info = await ApiFootballService.get365PlayerInfo(contextAthleteId);
-                    if (info) {
-                        setPlayer((prev) => {
-                            if (!prev) return prev;
-                            return {
-                                ...prev,
-                                player: {
-                                    ...prev.player,
-                                    nationality:
-                                        (typeof info.nationality === 'string' && info.nationality) ||
-                                        prev.player.nationality,
-                                      photo:
-                                        (typeof info.photo === 'string' &&
-                                          preferScores365AthletesPhotoUrl(info.photo)) ||
-                                        (typeof info.imageUrl === 'string' &&
-                                          preferScores365AthletesPhotoUrl(info.imageUrl)) ||
-                                        prev.player.photo,
-                                },
-                                statistics: prev.statistics.map((s) => ({
-                                    ...s,
-                                    team: {
-                                        ...s.team,
-                                        name:
-                                            (typeof info.club === 'string' && info.club) ||
-                                            s.team.name,
-                                    },
-                                    games: {
-                                        ...s.games,
-                                        position:
-                                            (typeof info.position === 'string' && info.position) ||
-                                            s.games.position,
-                                    },
-                                })),
-                            };
-                        });
-                    }
-                    const career = await ApiFootballService.get365PlayerCareer(
-                        contextAthleteId,
-                        language,
-                    );
-                    if (career) {
-                        setCareer365(career);
-                        setPlayer((prev) => {
-                            if (!prev) return prev;
-                            return {
-                                ...prev,
-                                player: {
-                                    ...prev.player,
-                                    photo:
-                                        preferScores365AthletesPhotoUrl(career.profile.imageUrl) ||
-                                        prev.player.photo,
-                                    birth: {
-                                        ...prev.player.birth,
-                                        date: career.profile.dateOfBirth || prev.player.birth?.date,
-                                    },
-                                    height: career.profile.height || prev.player.height,
-                                    nationality: career.profile.nationality || prev.player.nationality,
-                                },
-                            };
-                        });
-                    } else if (!player && !shell) {
-                        setError(t.playerProfile.playerNotFound);
-                    }
-                } else if (!player) {
-                    setError(t.playerProfile.playerNotFound);
-                }
-                return;
+                if (english && (english.stats?.length ?? 0) > 0) report = english;
             }
 
             setMatchReport365(report);
-            const shell = buildShellFromParams(
-                { ...params, id: String(report.athleteId), name: report.name },
-                report.athleteId,
-                contextTeamId,
-            );
-            if (shell) {
-                shell.player.name = report.name || shell.player.name;
-                shell.player.photo =
-                    preferScores365AthletesPhotoUrl(report.imageUrl ?? params.photo ?? shell.player.photo) ??
-                    report.imageUrl ??
-                    params.photo ??
-                    shell.player.photo;
-                if (report.position) {
-                    shell.statistics = shell.statistics.map((s) => ({
-                        ...s,
-                        games: { ...s.games, position: report.position },
-                    }));
-                }
-                setPlayer(shell);
+            setCareer365(career);
+
+            const base =
+                (report &&
+                    buildShellFromParams(
+                        { ...params, id: String(report.athleteId), name: report.name },
+                        report.athleteId,
+                        contextTeamId,
+                    )) ||
+                player ||
+                buildShellFromParams(params, athleteId, contextTeamId);
+
+            if (!base) {
+                if (!player) setError(t.playerProfile.playerNotFound);
+                return;
             }
 
-            // Optional enrichment — athleteId already known from lineup context.
-            const info = await ApiFootballService.get365PlayerInfo(report.athleteId);
-            if (info) {
-                setPlayer((prev) => {
-                    if (!prev) return prev;
-                    return {
-                        ...prev,
-                        player: {
-                            ...prev.player,
-                            nationality:
-                                (typeof info.nationality === 'string' && info.nationality) ||
-                                prev.player.nationality,
-                        },
-                        statistics: prev.statistics.map((s) => ({
-                            ...s,
-                            team: {
-                                ...s.team,
-                                name:
-                                    (typeof info.club === 'string' && info.club) ||
-                                    s.team.name,
-                            },
-                            games: {
-                                ...s.games,
-                                position:
-                                    (typeof info.position === 'string' && info.position) ||
-                                    s.games.position,
-                            },
-                        })),
-                    };
-                });
-            }
-            const career = await ApiFootballService.get365PlayerCareer(report.athleteId, language);
-            if (career) {
-                setCareer365(career);
-                setPlayer((prev) => {
-                    if (!prev) return prev;
-                    return {
-                        ...prev,
-                        player: {
-                            ...prev.player,
-                            birth: {
-                                ...prev.player.birth,
-                                date: career.profile.dateOfBirth || prev.player.birth?.date,
-                            },
-                            height: career.profile.height || prev.player.height,
-                            nationality: career.profile.nationality || prev.player.nationality,
-                        },
-                    };
-                });
-            }
+            const infoPhoto =
+                (typeof info?.photo === 'string' && preferScores365AthletesPhotoUrl(info.photo)) ||
+                (typeof info?.imageUrl === 'string' &&
+                    preferScores365AthletesPhotoUrl(info.imageUrl)) ||
+                undefined;
+            const reportPhoto = report
+                ? preferScores365AthletesPhotoUrl(
+                      report.imageUrl ?? params.photo ?? base.player.photo,
+                  ) ??
+                  report.imageUrl ??
+                  params.photo
+                : undefined;
+            const position =
+                report?.position ||
+                (typeof info?.position === 'string' ? info.position : undefined);
+
+            setPlayer({
+                ...base,
+                player: {
+                    ...base.player,
+                    name: report?.name || base.player.name,
+                    photo:
+                        reportPhoto ||
+                        infoPhoto ||
+                        preferScores365AthletesPhotoUrl(career?.profile.imageUrl) ||
+                        base.player.photo,
+                    birth: {
+                        ...base.player.birth,
+                        date: career?.profile.dateOfBirth || base.player.birth?.date,
+                    },
+                    height: career?.profile.height || base.player.height,
+                    nationality:
+                        career?.profile.nationality ||
+                        (typeof info?.nationality === 'string' ? info.nationality : null) ||
+                        base.player.nationality,
+                },
+                statistics: base.statistics.map((s) => ({
+                    ...s,
+                    team: {
+                        ...s.team,
+                        name: (typeof info?.club === 'string' && info.club) || s.team.name,
+                    },
+                    games: { ...s.games, position: position || s.games.position },
+                })),
+            });
         } catch (err: unknown) {
             logger.error('Failed to load 365 player report:', err);
             if (!player) {
@@ -1149,7 +1096,7 @@ export default function PlayerProfileScreen() {
                                         </Text>
                                     </View>
                                 )}
-                                {is365Source && contextAthleteId > 0 && (
+                                {is365Source && athleteId365 > 0 && (
                                     <TouchableOpacity
                                         activeOpacity={0.85}
                                         style={styles.careerButtonWrap}
@@ -1157,8 +1104,8 @@ export default function PlayerProfileScreen() {
                                             router.push({
                                                 pathname: '/player-career' as any,
                                                 params: {
-                                                    athleteId: String(contextAthleteId),
-                                                    id: String(contextAthleteId),
+                                                    athleteId: String(athleteId365),
+                                                    id: String(athleteId365),
                                                     name: heroPlayer.name,
                                                     photo: heroPlayer.photo ?? params.photo ?? '',
                                                     teamName: params.teamName ?? '',

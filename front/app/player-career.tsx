@@ -69,7 +69,12 @@ export default function PlayerCareerScreen() {
         teamLogo?: string;
     };
 
-    const athleteId = parseRouteInt(params.athleteId ?? params.id);
+    const routeAthleteId = parseRouteInt(params.athleteId ?? params.id);
+    const routeName = Array.isArray(params.name) ? params.name[0] : params.name;
+    const routeTeamName = Array.isArray(params.teamName) ? params.teamName[0] : params.teamName;
+
+    const [resolvedAthleteId, setResolvedAthleteId] = useState(routeAthleteId);
+    const athleteId = resolvedAthleteId || routeAthleteId;
 
     const [career, setCareer] = useState<Player365Career | null>(null);
     const [loading, setLoading] = useState(true);
@@ -85,14 +90,26 @@ export default function PlayerCareerScreen() {
     useEffect(() => {
         let active = true;
         (async () => {
-            if (!athleteId) {
+            if (!routeAthleteId) {
                 setError(true);
                 setLoading(false);
                 return;
             }
             try {
-                logger.debug(`Loading 365 career for athlete ${athleteId}`);
-                const data = await ApiFootballService.get365PlayerCareer(athleteId, language);
+                logger.debug(`Loading 365 career for athlete ${routeAthleteId}`);
+                let data = await ApiFootballService.get365PlayerCareer(routeAthleteId, language);
+                // Older cached lineups handed us a per-game roster id, which no 365
+                // player endpoint accepts — recover the real athlete by name.
+                if (!data?.seasons?.length && routeName) {
+                    const recovered = await ApiFootballService.resolve365AthleteIdByName(
+                        routeName,
+                        routeTeamName,
+                    );
+                    if (recovered && recovered !== routeAthleteId) {
+                        data = await ApiFootballService.get365PlayerCareer(recovered, language);
+                        if (active && data?.seasons?.length) setResolvedAthleteId(recovered);
+                    }
+                }
                 if (!active) return;
                 if (!data?.seasons?.length) {
                     setError(true);
@@ -112,7 +129,7 @@ export default function PlayerCareerScreen() {
         return () => {
             active = false;
         };
-    }, [athleteId, language]);
+    }, [routeAthleteId, routeName, routeTeamName, language]);
 
     useEffect(() => {
         if (!loading) {

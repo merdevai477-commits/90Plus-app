@@ -11,6 +11,26 @@ export function hasLineupData(lineups: unknown): boolean {
   });
 }
 
+/**
+ * Lineups cached before the athleteId fix carry the per-game roster row id in
+ * `player.id`, which no 365 player endpoint accepts. Detect them so they are
+ * refreshed instead of served — otherwise career, match report, and headshots
+ * stay broken for the lifetime of the cache entry.
+ */
+export function is365LineupIdMappingStale(lineups: unknown): boolean {
+  if (!Array.isArray(lineups) || lineups.length === 0) return false;
+  return lineups.some((row) => {
+    const l = row as {
+      _source?: string;
+      startXI?: Array<{ player?: { athleteId?: number } }>;
+      substitutes?: Array<{ player?: { athleteId?: number } }>;
+    };
+    if (l._source !== 'scores365-experiment' && l._source !== '365scores') return false;
+    const roster = [...(l.startXI ?? []), ...(l.substitutes ?? [])];
+    return roster.some((entry) => (entry?.player?.athleteId ?? 0) <= 0);
+  });
+}
+
 /** Full 365/API lineups — not partial squads inferred from goal/card events. */
 export function isAuthoritativeLineupData(lineups: unknown): boolean {
   if (!Array.isArray(lineups) || lineups.length === 0) return false;

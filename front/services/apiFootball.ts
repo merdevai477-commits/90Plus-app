@@ -163,6 +163,24 @@ export const isRateLimitError = (error: unknown): boolean => {
   return false;
 };
 
+/** Bound a bare `fetch(...)` promise so a stalled 365 round trip cannot hang a screen. */
+const withTimeout = async <T,>(promise: Promise<T>, timeout = DEFAULT_TIMEOUT): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new ApiFootballError('Request timed out - please check your connection')),
+          timeout,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 async function fetchWithSignal(
   input: RequestInfo | URL,
   init: RequestInit = {},
@@ -2683,10 +2701,18 @@ export const ApiFootballService = {
     try {
       const res = await fetchFromProxy<Competitor365Matches>(
         `/cached/365/competitor/${competitorId}/matches`,
+        {},
+        // Cold 365 pagination regularly needs more than the default budget; a
+        // timeout here surfaces as a red LogBox error and an empty team card.
+        { timeout: 20_000 },
       );
       return res && Array.isArray((res as any).finished) ? res : empty;
     } catch (error) {
-      console.error('Error fetching 365 competitor matches:', error);
+      if (isAbortError(error)) {
+        logger.debug(`365 competitor matches aborted for ${competitorId}`);
+      } else {
+        logger.warn('Error fetching 365 competitor matches:', error);
+      }
       return empty;
     }
   },
@@ -2809,6 +2835,30 @@ export const ApiFootballService = {
       console.error('Error searching 365 entities:', error);
       return empty;
     }
+  },
+
+  /**
+   * Recover a usable 365 athleteId when the one we were handed resolves to nothing
+   * (old cached lineups stored the per-game roster row id instead).
+   */
+  async resolve365AthleteIdByName(
+    name: string,
+    clubName?: string | null,
+  ): Promise<number | null> {
+    const q = (name ?? '').trim();
+    if (q.length < 2) return null;
+    const results = await this.searchFootball365(q);
+    const candidates = results.players ?? [];
+    if (candidates.length === 0) return null;
+    const club = (clubName ?? '').trim().toLowerCase();
+    const sameClub = club
+      ? candidates.find((p) => (p.clubName ?? '').trim().toLowerCase() === club)
+      : undefined;
+    const exactName = candidates.find(
+      (p) => p.name.trim().toLowerCase() === q.toLowerCase(),
+    );
+    const hit = sameClub ?? exactName ?? candidates[0];
+    return hit?.athleteId && hit.athleteId > 0 ? hit.athleteId : null;
   },
 
   async getAthlete365Profile(athleteId: number): Promise<Athlete365Profile | null> {

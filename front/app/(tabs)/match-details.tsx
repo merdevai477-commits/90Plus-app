@@ -1719,7 +1719,12 @@ const MatchDetailsScreen = () => {
                   onPlayerPress={(player) => {
                     if (player.id) {
                       openPlayerProfile(
-                        { id: player.id, name: player.name, photo: player.photo },
+                        {
+                          id: player.id,
+                          athleteId: (player as { athleteId?: number }).athleteId,
+                          name: player.name,
+                          photo: player.photo,
+                        },
                         lineup.team,
                       );
                     }

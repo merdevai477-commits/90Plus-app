@@ -23,7 +23,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { hasLineupData, isAuthoritativeLineupData, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
+import { hasLineupData, isAuthoritativeLineupData, is365LineupIdMappingStale, buildFallbackLineupsFromEvents } from '../utils/lineups-fallback';
 import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
 import { footballService, isFootballQuotaExhausted } from './football.service';
@@ -1863,6 +1863,7 @@ class FootballDataCacheService {
 
         const cacheUsable = (data: unknown): boolean => {
             if (!hasLineupData(data)) return false;
+            if (is365LineupIdMappingStale(data)) return false;
             if (isScores365ExperimentFixture(fixtureId)) {
                 return isAuthoritativeLineupData(data);
             }
@@ -1933,6 +1934,7 @@ class FootballDataCacheService {
             !forceRefresh &&
             isFinished &&
             hasLineupData(fullData?.lineups) &&
+            !is365LineupIdMappingStale(fullData.lineups) &&
             (!isScores365ExperimentFixture(fixtureId) || dbLineupsHaveGrid(fullData.lineups))
         ) {
             logger.debug(`📦 Lineups ${fixtureId} from DB fullData (shared for all users, no API call)`);
@@ -2704,7 +2706,9 @@ class FootballDataCacheService {
         const fixture = matchCacheService.convertDbMatchToApiFormat(durableRow);
         if (!fixture) return null;
         const fullData = durableRow.fullData as any;
-        const lineups = Array.isArray(fullData?.lineups) ? fullData.lineups : [];
+        const durableLineups = Array.isArray(fullData?.lineups) ? fullData.lineups : [];
+        // Drop pre-athleteId lineups so the bundle refreshes instead of latching them.
+        const lineups = is365LineupIdMappingStale(durableLineups) ? [] : durableLineups;
         const events = Array.isArray(fullData?.events) ? fullData.events : [];
         const statistics = Array.isArray(fullData?.statistics) ? fullData.statistics : [];
         return {
@@ -2866,9 +2870,14 @@ class FootballDataCacheService {
         cacheKey: string,
     ): Promise<MemoryCacheEntry<any> | null> {
         const local = this.detailsBundleLocal.get(cacheKey);
-        if (local?.data?.fixture) return local;
+        if (local?.data?.fixture && !is365LineupIdMappingStale(local.data.lineups)) return local;
+        if (local) this.detailsBundleLocal.delete(cacheKey);
         const redisCached = await redisCacheService.get<MemoryCacheEntry<any>>(cacheKey);
         if (redisCached?.data?.fixture) {
+            if (is365LineupIdMappingStale(redisCached.data.lineups)) {
+                await redisCacheService.del(cacheKey);
+                return null;
+            }
             this.setBoundedCache(this.detailsBundleLocal, cacheKey, redisCached);
             return redisCached;
         }
@@ -4539,19 +4548,24 @@ class FootballDataCacheService {
         const enrich = (entry: { player?: Record<string, unknown> }) => {
             const p = entry.player;
             if (!p) return entry;
+            // `p.id` already carries the athleteId from the structured mapper; the raw
+            // roster row id survives as `scores365MemberId` for the member-side join.
+            const memberId = (p.scores365MemberId ?? p.id) as number;
             const hit =
-                byMemberId.get(p.id as number) ??
+                byMemberId.get(memberId) ??
                 byAthleteId.get(p.id as number) ??
                 byName.get(norm(p.name as string)) ??
                 byShortName.get(norm(p.name as string));
             if (!hit) {
                 // Log the join miss — never silently drop the player.
                 logger.warn(
-                    `[Lineups365Join] fixture=${fixtureId ?? '?'} memberId=${p.id} name="${p.name}" — no match in named lineup (athleteId/name join miss); rendering with partial data`,
+                    `[Lineups365Join] fixture=${fixtureId ?? '?'} memberId=${memberId} name="${p.name}" — no match in named lineup (athleteId/name join miss); rendering with partial data`,
                 );
                 // Return the player as-is — preserve whatever name/data we already have.
                 return entry;
             }
+            const keepStructuredPhoto =
+                hit.athleteId > 0 && p.athleteId === hit.athleteId && typeof p.photo === 'string';
             return {
                 ...entry,
                 player: {
@@ -4560,7 +4574,7 @@ class FootballDataCacheService {
                     athleteId: hit.athleteId,
                     scores365MemberId: hit.memberId,
                     name: hit.name || p.name,
-                    photo: hit.imageUrl ?? p.photo ?? null,
+                    photo: keepStructuredPhoto ? p.photo : (hit.imageUrl ?? p.photo ?? null),
                     number: hit.jerseyNumber ?? p.number,
                     pos: hit.position?.charAt(0) ?? p.pos,
                     fieldLine: p.fieldLine ?? null,
