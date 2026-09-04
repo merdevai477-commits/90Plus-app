@@ -3,7 +3,7 @@
  * live-first 5 upcoming / 5 finished slice (max 10 total).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Competitor365Matches, Fixture as ApiFixture } from '../services/apiFootball';
 import { useFavoriteTeam } from './useFavoriteTeam';
 import {
@@ -166,28 +166,54 @@ export function groupFixturesByLeague(fixtures: FavoritesListFixture[]): LeagueF
     return order.map((k) => map.get(k)!);
 }
 
-export function useFavoritesFeed(
-    subscribedFixtureIds?: ReadonlySet<string>,
-    subscriptionsReady = false,
-): {
+export type UseFavoritesFeedResult = {
     followedTeams: StoredFollowedTeam[];
     notifiedMatches: StoredFavoriteMatch[];
     loading: boolean;
     refreshNotified: () => Promise<void>;
-} {
+};
+
+async function noopRefresh(): Promise<void> {
+    /* stable fallback so callers never hit undefined.refreshNotified */
+}
+
+/**
+ * @param subscribedIdsKey Stable comma-joined fixture ids (avoid Set identity churn).
+ * @param subscriptionsReady True after server bell list has hydrated (or guest).
+ */
+export function useFavoritesFeed(
+    subscribedIdsKey = '',
+    subscriptionsReady = false,
+): UseFavoritesFeedResult {
     const { followedTeams, loading: teamsLoading } = useFavoriteTeam();
     const [storedMatches, setStoredMatches] = useState<StoredFavoriteMatch[]>([]);
     const [notifiedLoading, setNotifiedLoading] = useState(true);
 
+    const subscribedFixtureIds = useMemo(() => {
+        if (!subscribedIdsKey) return new Set<string>();
+        return new Set(
+            subscribedIdsKey
+                .split(',')
+                .map((id) => id.trim())
+                .filter(Boolean),
+        );
+    }, [subscribedIdsKey]);
+
+    const subscribedRef = useRef(subscribedFixtureIds);
+    const readyRef = useRef(subscriptionsReady);
+    subscribedRef.current = subscribedFixtureIds;
+    readyRef.current = subscriptionsReady;
+
     const refreshNotified = useCallback(async () => {
         try {
             const active = await MatchFavoritesStorage.getActiveMatches();
-            if (!subscriptionsReady) {
-                // Keep local snapshot until server bell ids hydrate — never prune early.
+            const ready = readyRef.current;
+            const ids = subscribedRef.current;
+            if (!ready) {
                 setStoredMatches(active);
                 return;
             }
-            if (!subscribedFixtureIds || subscribedFixtureIds.size === 0) {
+            if (ids.size === 0) {
                 for (const match of active) {
                     void MatchFavoritesStorage.removeFavorite(match.id);
                 }
@@ -196,7 +222,7 @@ export function useFavoritesFeed(
             }
             const keep: StoredFavoriteMatch[] = [];
             for (const match of active) {
-                if (subscribedFixtureIds.has(match.id)) keep.push(match);
+                if (ids.has(match.id)) keep.push(match);
                 else void MatchFavoritesStorage.removeFavorite(match.id);
             }
             setStoredMatches(keep);
@@ -205,23 +231,22 @@ export function useFavoritesFeed(
         } finally {
             setNotifiedLoading(false);
         }
-    }, [subscribedFixtureIds, subscriptionsReady]);
+    }, []);
 
     useEffect(() => {
         void refreshNotified();
-    }, [refreshNotified]);
+    }, [refreshNotified, subscribedIdsKey, subscriptionsReady]);
 
     const notifiedMatches = useMemo(() => {
-        // Only paint cards after hydrate, and only for fixtures with the bell on.
         if (!subscriptionsReady) return [];
-        if (!subscribedFixtureIds || subscribedFixtureIds.size === 0) return [];
+        if (subscribedFixtureIds.size === 0) return [];
         return storedMatches.filter((m) => subscribedFixtureIds.has(m.id));
     }, [storedMatches, subscribedFixtureIds, subscriptionsReady]);
 
     return {
-        followedTeams,
+        followedTeams: followedTeams ?? [],
         notifiedMatches,
-        loading: teamsLoading || notifiedLoading,
-        refreshNotified,
+        loading: Boolean(teamsLoading || notifiedLoading),
+        refreshNotified: refreshNotified ?? noopRefresh,
     };
 }

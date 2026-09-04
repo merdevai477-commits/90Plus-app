@@ -1087,16 +1087,26 @@ export default function MatchesHubScreenV2() {
   const [subscriptionsReady, setSubscriptionsReady] = useState(() => !userId);
   const [subscribingFixtureId, setSubscribingFixtureId] = useState<string | null>(null);
 
-  const {
-    followedTeams,
-    notifiedMatches,
-    loading: favoritesFeedLoading,
-    refreshNotified,
-  } = useFavoritesFeed(subscribedFixtures, subscriptionsReady);
+  const subscribedIdsKey = useMemo(
+    () => Array.from(subscribedFixtures).sort().join(','),
+    [subscribedFixtures],
+  );
+
+  const favoritesFeed = useFavoritesFeed(subscribedIdsKey, subscriptionsReady);
+  const followedTeams = favoritesFeed.followedTeams;
+  const notifiedMatches = favoritesFeed.notifiedMatches;
+  const favoritesFeedLoading = favoritesFeed.loading;
+  const refreshNotifiedRef = useRef(favoritesFeed.refreshNotified);
+  refreshNotifiedRef.current = favoritesFeed.refreshNotified;
+
+  const refreshNotified = useCallback(async () => {
+    const fn = refreshNotifiedRef.current;
+    if (typeof fn === 'function') await fn();
+  }, []);
 
   useEffect(() => {
     if (filter === 'Favorite') void refreshNotified();
-  }, [filter, refreshNotified]);
+  }, [filter, refreshNotified, subscribedIdsKey, subscriptionsReady]);
 
   const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
   // Fetch WC fixtures only when a WC-related tab is active (not on every mount).
