@@ -6,32 +6,30 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
-  FlatList,
-  Image,
   ActivityIndicator,
   ScrollView,
-  Dimensions,
   KeyboardAvoidingView,
+  Modal,
   Platform,
 } from 'react-native';
-import { 
-  Search, 
-  X, 
+import { Image } from 'expo-image';
+import {
+  Search,
+  X,
   Users,
   BadgeCheck,
   Code,
-  Video,
   Hash,
   Clock,
   TrendingUp,
-  Play
+  Play,
+  ChevronRight,
 } from 'lucide-react-native';
-import { useFadeIn, useSlideIn, usePulse } from '../Matches/Animations';
+import { useFadeIn, useSlideIn } from '../Matches/Animations';
 import { useHapticFeedback } from '../Matches/HapticFeedback';
 import { useAuth } from '@clerk/clerk-expo';
 import { AuthService, SearchUserResult, ReelsService } from '../../src/services/authService';
 import { router } from 'expo-router';
-import MiniProfileCard from '../profile/MiniProfileCard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -39,7 +37,7 @@ import * as Haptics from 'expo-haptics';
 import { useTranslation } from '../../src/i18n';
 import { PURPLE_PRIMARY, PURPLE_SOFT } from '../../constants/tokens';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const AVATAR_PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
 // Cache for search results (5 minutes TTL)
 const searchCache = new Map<string, { results: any; timestamp: number }>();
@@ -102,7 +100,6 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
   const haptic = useHapticFeedback();
   const fadeAnim = useFadeIn(300);
   const slideAnim = useSlideIn('down', 300);
-  const pulseAnim = usePulse(1, 1.05, 1000);
   const searchInputRef = useRef<TextInput>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -444,274 +441,275 @@ const AdvancedSearchBar: React.FC<AdvancedSearchBarProps> = ({
 
   if (!visible) return null;
 
+  const tabLabel = (tab: SearchTab) => {
+    if (tab === 'all') return tSearch.tabAll;
+    if (tab === 'users') return tSearch.tabUsers;
+    if (tab === 'reels') return tSearch.tabReels;
+    return tSearch.tabHashtags;
+  };
+
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardRoot}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      presentationStyle="overFullScreen"
+      onRequestClose={onClose}
     >
-    <Animated.View 
-      style={[
-        styles.container,
-        {
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }]
-        }
-      ]}
-    >
-      <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
-      <LinearGradient
-        colors={['rgba(0,0,0,0.98)', 'rgba(0,0,0,0.95)']}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
-            <Search size={20} color={PURPLE_PRIMARY} />
-            <TextInput
-              ref={searchInputRef}
-              style={styles.searchInput}
-              value={searchQuery}
-              onChangeText={handleSearch}
-              placeholder={tSearch.placeholder}
-              placeholderTextColor="#666"
-              autoFocus
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={handleClear} style={styles.clearButton}>
-                <X size={16} color="#666" />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-        
-        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-          <X size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Tabs */}
-      {searchQuery.length > 0 && (
-        <View style={styles.tabsContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
-            {(['all', 'users', 'reels', 'hashtags'] as SearchTab[]).map((tab) => (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.tab, activeTab === tab && styles.tabActive]}
-                onPress={() => {
-                  setActiveTab(tab);
-                  haptic.selection();
-                }}
-                activeOpacity={0.7}
-              >
-                <LinearGradient
-                  colors={activeTab === tab 
-                    ? [PURPLE_PRIMARY, PURPLE_SOFT]
-                    : ['transparent', 'transparent']
-                  }
-                  style={styles.tabGradient}
-                >
-                  <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                    {tab === 'all' ? 'الكل' : tab === 'users' ? 'لاعبين' : tab === 'reels' ? 'فيديوهات' : 'هاشتاجات'}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Content */}
-      <ScrollView 
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.keyboardRoot}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Loading */}
-        {isSearching && (
-          <View style={styles.loadingContainer}>
-            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-              <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
-            </Animated.View>
-            <Text style={styles.loadingText}>جاري البحث...</Text>
-          </View>
-        )}
+        <Animated.View
+          style={[
+            styles.container,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          <BlurView intensity={90} tint="dark" style={StyleSheet.absoluteFill} />
+          <LinearGradient
+            colors={['rgba(8,4,18,0.98)', 'rgba(5,1,13,0.98)']}
+            style={StyleSheet.absoluteFill}
+          />
 
-        {/* Search Suggestions */}
-        {showSuggestions && (
-          <View style={styles.suggestionsContainer}>
-            <Text style={styles.suggestionsTitle}>اقتراحات</Text>
-            {suggestions.map((suggestion, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.suggestionItem}
-                onPress={() => handleSuggestionSelect(suggestion)}
-                activeOpacity={0.7}
-              >
-                <Search size={16} color={PURPLE_PRIMARY} />
-                <Text style={styles.suggestionText}>{suggestion}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* Results */}
-        {!isSearching && hasResults && (
-          <View style={styles.resultsContainer}>
-            {filteredResults.map((item) => (
-                  <TouchableOpacity
-                    key={item.id}
-                style={styles.resultItem}
-                    onPress={() => handleResultSelect(item)}
-                    activeOpacity={0.8}
-                  >
-                {item.type === 'profile' ? (
-                  <View style={styles.profileResult}>
-                    <MiniProfileCard
-                      playerImage={item.image}
-                      countryFlag={item.data?.countryFlag || '🇪🇬'}
-                      position={item.data?.position || 'RW'}
-                      clubLogo={item.data?.clubLogo}
-                    />
-                    <View style={styles.profileInfo}>
-                      <View style={styles.profileHeader}>
-                        <Text style={styles.profileName} numberOfLines={1}>
-                          {item.title}
-                        </Text>
-                        {item.data?.isVerified && <BadgeCheck size={14} color={PURPLE_PRIMARY} />}
-                        {item.data?.isDeveloper && <Code size={12} color="#3b82f6" />}
-                      </View>
-                      <Text style={styles.profileUsername} numberOfLines={1}>
-                        {item.subtitle}
-                      </Text>
-                    </View>
-                  </View>
-                ) : item.type === 'reel' ? (
-                  <View style={styles.reelResult}>
-                    <Image source={{ uri: item.image }} style={styles.reelThumbnail} />
-                    <View style={styles.reelInfo}>
-                      <Text style={styles.reelTitle} numberOfLines={2}>
-                        {item.title}
-                      </Text>
-                      <Text style={styles.reelSubtitle} numberOfLines={1}>
-                        {item.subtitle}
-                      </Text>
-                    </View>
-                    <Play size={20} color={PURPLE_PRIMARY} />
-                  </View>
-                ) : (
-                  <View style={styles.hashtagResult}>
-                    <Hash size={24} color={PURPLE_PRIMARY} />
-                    <View style={styles.hashtagInfo}>
-                      <Text style={styles.hashtagTitle}>{item.title}</Text>
-                      <Text style={styles.hashtagSubtitle}>{item.subtitle}</Text>
-                    </View>
-                  </View>
+          <View style={styles.header}>
+            <View style={styles.searchContainer}>
+              <View style={styles.searchInputContainer}>
+                <Search size={20} color={PURPLE_PRIMARY} />
+                <TextInput
+                  ref={searchInputRef}
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChangeText={handleSearch}
+                  placeholder={tSearch.placeholder}
+                  placeholderTextColor="#666"
+                  autoFocus
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={handleClear} style={styles.clearButton} hitSlop={8}>
+                    <X size={16} color="#666" />
+                  </TouchableOpacity>
                 )}
+              </View>
+            </View>
+
+            <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={8}>
+              <X size={22} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {searchQuery.length > 0 && (
+            <View style={styles.tabsContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
+                {(['all', 'users', 'reels', 'hashtags'] as SearchTab[]).map((tab) => (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[styles.tab, activeTab === tab && styles.tabActive]}
+                    onPress={() => {
+                      setActiveTab(tab);
+                      haptic.selection();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <LinearGradient
+                      colors={
+                        activeTab === tab
+                          ? [PURPLE_PRIMARY, PURPLE_SOFT]
+                          : ['transparent', 'transparent']
+                      }
+                      style={styles.tabGradient}
+                    >
+                      <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                        {tabLabel(tab)}
+                      </Text>
+                    </LinearGradient>
                   </TouchableOpacity>
                 ))}
+              </ScrollView>
             </View>
-        )}
+          )}
 
-        {/* No Results */}
-        {!isSearching && searchQuery.length > 0 && !hasResults && (
-          <View style={styles.noResultsContainer}>
-            <Search size={48} color="#666" />
-            <Text style={styles.noResultsText}>لا توجد نتائج</Text>
-            <Text style={styles.noResultsSubtext}>
-              جرب البحث بكلمات مختلفة
-            </Text>
-          </View>
-        )}
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {isSearching && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
+                <Text style={styles.loadingText}>{tSearch.searching}</Text>
+              </View>
+            )}
 
-        {/* Recent Searches */}
-        {showRecentSearches && (
-          <View style={styles.recentContainer}>
-            <View style={styles.recentHeader}>
-              <Text style={styles.recentTitle}>البحث الأخير</Text>
-              <TouchableOpacity onPress={handleClearRecent}>
-                <Text style={styles.clearRecentText}>مسح</Text>
-              </TouchableOpacity>
-            </View>
-            {recentSearches.map((search, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.recentItem}
-                onPress={() => handleSuggestionSelect(search)}
-                activeOpacity={0.7}
-              >
-                <Clock size={16} color="#666" />
-                <Text style={styles.recentText}>{search}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+            {showSuggestions && (
+              <View style={styles.suggestionsContainer}>
+                {suggestions.map((suggestion, index) => (
+                  <TouchableOpacity
+                    key={`${suggestion}-${index}`}
+                    style={styles.suggestionItem}
+                    onPress={() => handleSuggestionSelect(suggestion)}
+                    activeOpacity={0.7}
+                  >
+                    <Search size={16} color={PURPLE_PRIMARY} />
+                    <Text style={styles.suggestionText}>{suggestion}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
-        {/* Trending Hashtags */}
-        {showTrending && (
-          <View style={styles.trendingContainer}>
-            <View style={styles.trendingHeader}>
-              <TrendingUp size={20} color={PURPLE_PRIMARY} />
-              <Text style={styles.trendingTitle}>الهاشتاجات الشائعة</Text>
-            </View>
-            <View style={styles.trendingGrid}>
-              {trendingHashtags.slice(0, 10).map((hashtag) => (
-                <TouchableOpacity
-                  key={hashtag.id}
-                  style={styles.trendingItem}
-                  onPress={() => handleSuggestionSelect(`#${hashtag.name}`)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.trendingText}>#{hashtag.name}</Text>
-                  <Text style={styles.trendingCount}>{hashtag.reelCount}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
+            {!isSearching && hasResults && (
+              <View style={styles.resultsContainer}>
+                {filteredResults.map((item) => (
+                  <TouchableOpacity
+                    key={`${item.type}-${item.id}`}
+                    style={styles.resultItem}
+                    onPress={() => handleResultSelect(item)}
+                    activeOpacity={0.75}
+                  >
+                    {item.type === 'profile' ? (
+                      <View style={styles.profileResult}>
+                        <Image
+                          source={item.image ? { uri: item.image } : AVATAR_PLACEHOLDER}
+                          style={styles.avatar}
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                          transition={120}
+                        />
+                        <View style={styles.profileInfo}>
+                          <View style={styles.profileHeader}>
+                            <Text style={styles.profileName} numberOfLines={1}>
+                              {item.title}
+                            </Text>
+                            {item.data?.isVerified ? <BadgeCheck size={14} color={PURPLE_PRIMARY} /> : null}
+                            {item.data?.isDeveloper ? <Code size={12} color="#3b82f6" /> : null}
+                          </View>
+                          <Text style={styles.profileUsername} numberOfLines={1}>
+                            {item.subtitle}
+                          </Text>
+                        </View>
+                        <ChevronRight size={18} color="rgba(255,255,255,0.35)" />
+                      </View>
+                    ) : item.type === 'reel' ? (
+                      <View style={styles.reelResult}>
+                        <Image
+                          source={{ uri: item.image }}
+                          style={styles.reelThumbnail}
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                        />
+                        <View style={styles.reelInfo}>
+                          <Text style={styles.reelTitle} numberOfLines={2}>
+                            {item.title}
+                          </Text>
+                          <Text style={styles.reelSubtitle} numberOfLines={1}>
+                            {item.subtitle}
+                          </Text>
+                        </View>
+                        <Play size={18} color={PURPLE_PRIMARY} />
+                      </View>
+                    ) : (
+                      <View style={styles.hashtagResult}>
+                        <View style={styles.hashtagIcon}>
+                          <Hash size={18} color={PURPLE_PRIMARY} />
+                        </View>
+                        <View style={styles.hashtagInfo}>
+                          <Text style={styles.hashtagTitle}>{item.title}</Text>
+                          <Text style={styles.hashtagSubtitle}>{item.subtitle}</Text>
+                        </View>
+                        <ChevronRight size={18} color="rgba(255,255,255,0.35)" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
-        {/* Empty State */}
-        {!isSearching && searchQuery.length === 0 && !showRecentSearches && !showTrending && (
-          <View style={styles.emptyContainer}>
-            <Users size={48} color="#666" />
-            <Text style={styles.emptyText}>ابدأ البحث</Text>
-            <Text style={styles.emptySubtext}>
-              ابحث عن لاعبين، فيديوهات، أو هاشتاجات
-            </Text>
-      </View>
-        )}
-      </ScrollView>
-    </Animated.View>
-    </KeyboardAvoidingView>
+            {!isSearching && searchQuery.length > 0 && !hasResults && !showSuggestions && (
+              <View style={styles.noResultsContainer}>
+                <Search size={40} color="#555" />
+                <Text style={styles.noResultsText}>{tSearch.noResults}</Text>
+              </View>
+            )}
+
+            {showRecentSearches && (
+              <View style={styles.recentContainer}>
+                <View style={styles.recentHeader}>
+                  <Text style={styles.recentTitle}>{tSearch.recentSearches}</Text>
+                  <TouchableOpacity onPress={handleClearRecent}>
+                    <Text style={styles.clearRecentText}>{tSearch.clear}</Text>
+                  </TouchableOpacity>
+                </View>
+                {recentSearches.map((search, index) => (
+                  <TouchableOpacity
+                    key={`${search}-${index}`}
+                    style={styles.recentItem}
+                    onPress={() => handleSuggestionSelect(search)}
+                    activeOpacity={0.7}
+                  >
+                    <Clock size={16} color="#666" />
+                    <Text style={styles.recentText}>{search}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {showTrending && (
+              <View style={styles.trendingContainer}>
+                <View style={styles.trendingHeader}>
+                  <TrendingUp size={18} color={PURPLE_PRIMARY} />
+                  <Text style={styles.trendingTitle}>{tSearch.trending}</Text>
+                </View>
+                <View style={styles.trendingGrid}>
+                  {trendingHashtags.slice(0, 10).map((hashtag) => (
+                    <TouchableOpacity
+                      key={hashtag.id}
+                      style={styles.trendingItem}
+                      onPress={() => handleSuggestionSelect(`#${hashtag.name}`)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.trendingText}>#{hashtag.name}</Text>
+                      <Text style={styles.trendingCount}>{hashtag.reelCount}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {!isSearching && searchQuery.length === 0 && !showRecentSearches && !showTrending && (
+              <View style={styles.emptyContainer}>
+                <Users size={44} color="#555" />
+                <Text style={styles.emptyText}>{tSearch.tabUsers}</Text>
+                <Text style={styles.emptySubtext}>{tSearch.placeholder}</Text>
+              </View>
+            )}
+          </ScrollView>
+        </Animated.View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
   keyboardRoot: {
     flex: 1,
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1000,
   },
   container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1000,
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    paddingTop: 60,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 56,
+    paddingBottom: 12,
+    gap: 10,
   },
   searchContainer: {
     flex: 1,
@@ -719,49 +717,44 @@ const styles = StyleSheet.create({
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 25,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 2,
-    borderColor: PURPLE_PRIMARY + '40',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.35)',
   },
   searchInput: {
     flex: 1,
     color: '#fff',
     fontSize: 16,
     marginLeft: 10,
+    paddingVertical: 0,
   },
   clearButton: {
     padding: 4,
-    borderRadius: 12,
   },
   closeButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   tabsContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 10,
   },
   tabsScroll: {
     gap: 8,
   },
   tab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
     borderRadius: 20,
     marginRight: 8,
     overflow: 'hidden',
   },
-  tabActive: {
-    shadowColor: PURPLE_PRIMARY,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 5,
-  },
+  tabActive: {},
   tabGradient: {
     borderRadius: 20,
     paddingHorizontal: 16,
@@ -774,7 +767,7 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: '#0a0a0a',
-    fontWeight: 'bold',
+    fontWeight: '800',
   },
   content: {
     flex: 1,
@@ -786,18 +779,12 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   loadingText: {
-    color: '#666',
-    fontSize: 16,
+    color: '#888',
+    fontSize: 14,
     marginTop: 10,
   },
   suggestionsContainer: {
-    paddingVertical: 16,
-  },
-  suggestionsTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 12,
+    paddingVertical: 8,
   },
   suggestionItem: {
     flexDirection: 'row',
@@ -813,58 +800,71 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   resultsContainer: {
-    paddingVertical: 8,
+    paddingVertical: 4,
+    paddingBottom: 24,
   },
   resultItem: {
-    marginBottom: 12,
-    borderRadius: 16,
+    marginBottom: 8,
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   profileResult: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     gap: 12,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   profileInfo: {
     flex: 1,
+    minWidth: 0,
   },
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   profileName: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
+    flexShrink: 1,
   },
   profileUsername: {
-    color: '#888',
-    fontSize: 14,
+    color: '#999',
+    fontSize: 13,
   },
   reelResult: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: 10,
     gap: 12,
   },
   reelThumbnail: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 10,
     backgroundColor: '#333',
   },
   reelInfo: {
     flex: 1,
+    minWidth: 0,
   },
   reelTitle: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   reelSubtitle: {
     color: '#888',
@@ -873,17 +873,25 @@ const styles = StyleSheet.create({
   hashtagResult: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 12,
     gap: 12,
+  },
+  hashtagIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(168,85,247,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   hashtagInfo: {
     flex: 1,
   },
   hashtagTitle: {
     color: PURPLE_PRIMARY,
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
   },
   hashtagSubtitle: {
     color: '#888',
@@ -896,18 +904,12 @@ const styles = StyleSheet.create({
   },
   noResultsText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 15,
-    marginBottom: 8,
-  },
-  noResultsSubtext: {
-    color: '#666',
-    fontSize: 14,
-    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 14,
   },
   recentContainer: {
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
   recentHeader: {
     flexDirection: 'row',
@@ -917,12 +919,13 @@ const styles = StyleSheet.create({
   },
   recentTitle: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
   },
   clearRecentText: {
     color: PURPLE_PRIMARY,
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '600',
   },
   recentItem: {
     flexDirection: 'row',
@@ -938,7 +941,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   trendingContainer: {
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
   trendingHeader: {
     flexDirection: 'row',
@@ -948,8 +951,8 @@ const styles = StyleSheet.create({
   },
   trendingTitle: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
   },
   trendingGrid: {
     flexDirection: 'row',
@@ -957,9 +960,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   trendingItem: {
-    backgroundColor: 'rgba(50, 205, 50, 0.15)',
+    backgroundColor: 'rgba(168,85,247,0.12)',
     borderRadius: 20,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
@@ -967,7 +970,7 @@ const styles = StyleSheet.create({
   },
   trendingText: {
     color: PURPLE_PRIMARY,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   trendingCount: {
@@ -978,17 +981,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
+    paddingHorizontal: 24,
   },
   emptyText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 15,
-    marginBottom: 8,
+    fontSize: 17,
+    fontWeight: '700',
+    marginTop: 14,
+    marginBottom: 6,
   },
   emptySubtext: {
     color: '#666',
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
   },
 });

@@ -3277,6 +3277,7 @@ export const en = {
     noResults: 'No results found',
     recentSearches: 'Recent searches',
     trending: 'Trending now',
+    clear: 'Clear',
   },
 
   // ── Settings screen — full translation surface ───────────────────────
