@@ -9,6 +9,7 @@ import dotenv from 'dotenv';
 import cron from 'node-cron';
 import prisma, { startKeepAlive, stopKeepAlive } from './lib/prisma';
 import { logger } from './utils/logger';
+import { basicHealthCheck } from './middleware/health-check.middleware';
 import { WebSocketService } from './services/websocket.service';
 import { performanceMiddleware } from './middleware/performance.middleware';
 import { backgroundPreloadService } from './services/background-preload.service';
@@ -45,6 +46,10 @@ initializeSentry(app);
 // Trust proxy - Required for Railway and other reverse proxies
 // This allows Express to correctly identify the client's IP from X-Forwarded-For header
 app.set('trust proxy', true);
+
+// Liveness probe — keep-alive (warmup.service) and platform checks hit GET /health.
+// /api/health remains the detailed readiness payload further below.
+app.get('/health', basicHealthCheck);
 
 // ============================================
 // MUX WEBHOOK — raw body MUST be registered before express.json()
@@ -819,7 +824,8 @@ async function startServer() {
             logger.info('🚀 90Plus Backend is running! ');
             logger.info(`📍 Server: http://0.0.0.0:${PORT}`);
             logger.info(`📍 API: http://0.0.0.0:${PORT}${API_PREFIX}`);
-            logger.info(`📍 Health: http://0.0.0.0:${PORT}${API_PREFIX}/health`);
+            logger.info(`📍 Health: http://0.0.0.0:${PORT}/health`);
+            logger.info(`📍 API health: http://0.0.0.0:${PORT}${API_PREFIX}/health`);
             logger.info(`📍 WebSocket: ws://0.0.0.0:${PORT}`);
             logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 

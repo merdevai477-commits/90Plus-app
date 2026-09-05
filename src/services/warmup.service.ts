@@ -258,9 +258,16 @@ export const warmupService = new WarmupService();
 
 let keepAlivePingInterval: NodeJS.Timeout | null = null;
 
+/** Liveness path the in-process ping hits. Must stay registered in main.ts. */
+export const KEEP_ALIVE_HEALTH_PATH = '/health';
+
+export function keepAliveUrl(port: number): string {
+  return `http://localhost:${port}${KEEP_ALIVE_HEALTH_PATH}`;
+}
+
 /**
- * Start keep-alive ping to prevent cold starts
- * Pings the server every 5 minutes
+ * Start keep-alive ping to prevent cold starts.
+ * Hits GET /health (lightweight, no DB) every 60 seconds.
  */
 export function startKeepAlivePing(port: number) {
   if (keepAlivePingInterval) {
@@ -275,7 +282,7 @@ export function startKeepAlivePing(port: number) {
 
   const ping = async () => {
     try {
-      const response = await fetch(`http://localhost:${port}/health`);
+      const response = await fetch(keepAliveUrl(port));
       if (response.ok) {
         logger.debug('✅ Keep-alive ping successful');
       } else {

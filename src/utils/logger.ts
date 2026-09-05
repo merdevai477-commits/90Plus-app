@@ -7,6 +7,7 @@
  */
 
 import * as Sentry from '@sentry/node';
+import { allowSentryReport } from './sentry-report-limiter';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -50,6 +51,10 @@ class SentryTransport {
     }
 
     try {
+      const sentryLevel = level === 'error' ? 'error' : 'warn';
+      if (!allowSentryReport(sentryLevel, String(message), metadata)) {
+        return;
+      }
       if (level === 'error') {
         // For error level, capture as exception
         // Create an Error object from the message string
