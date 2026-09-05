@@ -950,6 +950,12 @@ async function startServer() {
                     });
                     logger.info('✅ Daily quiz pack cron scheduled (00:00 UTC)');
 
+                    // Quiz-renewal push is DB + Expo only — not API-Football quota.
+                    // Previously gated behind FOOTBALL_API_PLAN=pro, so free-plan
+                    // production never scheduled it even after BACKEND-2V was diagnosed.
+                    const { startDailyQuizNotifier } = await import('./services/daily-quiz-notifier.service');
+                    startDailyQuizNotifier();
+
                     if (process.env.WORLD_CUP_NEWS_ENABLED === 'true') {
                         const { startWorldCupNewsRefreshCron } = await import(
                             './services/world-cup-news-cron.service'
@@ -995,10 +1001,6 @@ async function startServer() {
                         // ✅ Start cooldown expiry notifier (hourly check)
                         const { startCooldownExpiryNotifier } = await import('./services/cooldown-expiry-notifier.service');
                         startCooldownExpiryNotifier();
-
-                        // ✅ Start daily quiz renewal notifier (daily at 9 AM Egypt)
-                        const { startDailyQuizNotifier } = await import('./services/daily-quiz-notifier.service');
-                        startDailyQuizNotifier();
 
                         // ✅ Start AI coach 12-hour check-in (opt-in, twice daily)
                         const { startAICheckinNotifier } = await import('./services/ai-checkin-notifier.service');

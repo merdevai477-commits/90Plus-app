@@ -23,6 +23,31 @@ function isoDateUTC(): string {
     return new Date().toISOString().slice(0, 10);
 }
 
+export const QUIZ_ATTEMPT_ACTIVE_WINDOW_DAYS = 7;
+
+/** QuizAttempt has `completedAt`, not `createdAt` (BACKEND-2V). */
+export function quizAttemptActiveSinceWhere(since: Date) {
+    return { completedAt: { gte: since } };
+}
+
+/**
+ * Distinct user ids with a completed quiz attempt in the active window.
+ * Throws on Prisma/schema errors so the cron cannot swallow them as "nobody to notify".
+ */
+export async function findRecentQuizAttemptUserIds(since: Date): Promise<string[]> {
+    try {
+        const recentQuizUsers = await prisma.quizAttempt.findMany({
+            where: quizAttemptActiveSinceWhere(since),
+            select: { userId: true },
+            distinct: ['userId'],
+        });
+        return recentQuizUsers.map((q) => q.userId);
+    } catch (error) {
+        logger.error('[DailyQuiz] QuizAttempt lookup failed (will not skip notifications silently):', error);
+        throw error;
+    }
+}
+
 /**
  * Find users who should be notified about the new daily quiz.
  * Targets users who:
@@ -30,22 +55,13 @@ function isoDateUTC(): string {
  *  - Participated in at least one quiz in the last 7 days (active quiz users)
  *  - Are not banned/deleted
  */
-async function getEligibleQuizUsers(): Promise<Array<{ id: string; expoPushToken: string; settings: unknown }>> {
+export async function getEligibleQuizUsers(): Promise<Array<{ id: string; expoPushToken: string; settings: unknown }>> {
     const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - QUIZ_ATTEMPT_ACTIVE_WINDOW_DAYS);
 
-    // Find users who attempted a quiz in the last 7 days
-    const recentQuizUsers = await (prisma as any).quizAttempt.findMany({
-        where: {
-            createdAt: { gte: sevenDaysAgo },
-        },
-        select: { userId: true },
-        distinct: ['userId'],
-    }).catch(() => [] as Array<{ userId: string }>);
+    const userIds = await findRecentQuizAttemptUserIds(sevenDaysAgo);
 
-    if (recentQuizUsers.length === 0) return [];
-
-    const userIds = recentQuizUsers.map((q: { userId: string }) => q.userId);
+    if (userIds.length === 0) return [];
 
     const users = await prisma.user.findMany({
         where: {
