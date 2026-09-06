@@ -16,7 +16,7 @@
  *       <ShareCard/>                  referral link, copy, channels, hint
  *       <LastWinnerCard/>             rank 1 of the last closed cycle
  *       <StatsBar/>                   LAST SECTION of the page content —
- *                                     friends · participations · rank. In normal flow,
+ *                                     friends · confirmed shares · rank. In normal flow,
  *                                     not a footer and not pinned.
  *
  * ── WHERE THE NUMBERS COME FROM ──────────────────────────────────────────────
@@ -278,6 +278,7 @@ export default function ShareWinScreen() {
             above it (Figma 186:108 at y=2615, last winner ending at 2571). */}
         <StatsBar
           participants={overview.participants}
+          shares={overview.shareCount}
           rank={overview.rank}
         />
       </ScrollView>

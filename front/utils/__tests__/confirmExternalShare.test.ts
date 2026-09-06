@@ -4,6 +4,7 @@ import {
   confirmExternalShare,
   isCopyShareActivity,
   SHARE_HANDOFF_MS,
+  watchShareHandoff,
 } from '../confirmExternalShare';
 
 jest.mock('react-native', () => ({
@@ -54,6 +55,24 @@ describe('isCopyShareActivity', () => {
     expect(isCopyShareActivity('com.apple.UIKit.activity.CopyToPasteboard')).toBe(true);
     expect(isCopyShareActivity('net.whatsapp.WhatsApp.ShareExtension')).toBe(false);
     expect(isCopyShareActivity(null)).toBe(false);
+  });
+});
+
+describe('watchShareHandoff', () => {
+  it('counts a real destination app, not the share-sheet overlay', () => {
+    let listener: ((state: string) => void) | undefined;
+    appState.addEventListener.mockImplementation((_event: string, cb: (state: string) => void) => {
+      listener = cb;
+      return { remove: jest.fn() };
+    });
+
+    const watch = watchShareHandoff();
+    expect(watch.didLeave()).toBe(false);
+    listener?.('inactive');
+    expect(watch.didLeave()).toBe(false);
+    listener?.('background');
+    expect(watch.didLeave()).toBe(true);
+    watch.stop();
   });
 });
 

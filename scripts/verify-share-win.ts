@@ -117,7 +117,7 @@ async function main() {
   const mo = await getShareWinOverview(mohamed.id, { now: NOW });
   check('mohamed participants', mo.participants, 5);
   check('mohamed shares', mo.shareCount, 4);
-  check('mohamed score = 5*50 + 4*10', mo.score, 290);
+  check('mohamed score = participants×3 (shares do not add points)', mo.score, 15);
   check('mohamed rank', mo.rank, 1);
   check('referral link', mo.referralLink.endsWith(`/invite/${code}`), true);
 
@@ -138,23 +138,21 @@ async function main() {
   check('firstScoredAt is stamped by syncStanding', moStanding.firstScoredAt !== null, true);
 
   const board = await getLeaderboard(cycle.id, 10);
-  check('board order by participants', board.map((r) => r.participants), [5, 1]);
+  check('board order by confirmed shares, not link visits', board.map((r) => r.shares), [4, 0]);
+  check('visits do not outrank shares', board.map((r) => r.participants), [5, 1]);
   check('board ranks are 1..n', board.map((r) => r.rank), [1, 2]);
 
-  // ── Tie-break determinism ────────────────────────────────────────────────
+  // ── Tie-break: same share count, earlier confirmed share wins ─────────────
   const tieA = await makeUser('tieA');
   const tieB = await makeUser('tieB');
-  const tA = await makeUser('tArefr');
-  const tB = await makeUser('tBrefr');
-  await claimReferral(tA.id, await ensureReferralCode(tieA.id), NOW);
-  await new Promise((r) => setTimeout(r, 1100)); // B reaches the same score later
-  await claimReferral(tB.id, await ensureReferralCode(tieB.id), NOW);
+  await recordShare(tieA.id, 'whatsapp', new Date(NOW.getTime() + 40_000));
+  await recordShare(tieB.id, 'whatsapp', new Date(NOW.getTime() + 41_200));
 
   const rankA = (await getShareWinOverview(tieA.id, { now: NOW })).rank;
   const rankB = (await getShareWinOverview(tieB.id, { now: NOW })).rank;
   const rankAhmed = (await getShareWinOverview(ahmed.id, { now: NOW })).rank;
-  check('three-way tie resolves to distinct ranks', [rankAhmed, rankA, rankB], [2, 3, 4]);
-  check('earlier scorer ranks higher', rankAhmed < rankA && rankA < rankB, true);
+  check('share count outranks a later visit-only standing', [rankA, rankB, rankAhmed], [2, 3, 4]);
+  check('earlier confirmed share ranks higher on a tie', rankA < rankB, true);
   const boardRanks = (await getLeaderboard(cycle.id, 10)).map((r) => r.rank);
   check('leaderboard ranks match per-user ranks', boardRanks, [1, 2, 3, 4]);
   check('rank is stable across repeated reads', (await getShareWinOverview(tieA.id, { now: NOW })).rank, rankA);
@@ -170,7 +168,7 @@ async function main() {
   });
   check('final rank 1 is mohamed', winnerRow?.userId, mohamed.id);
   check('winner participants archived', winnerRow?.participantCount, 5);
-  check('winner score archived', winnerRow?.score, 290);
+  check('winner score archived', winnerRow?.score, 15);
 
   const lastWinner = await getLastWinner();
   check('getLastWinner resolves', lastWinner?.username, mohamed.username);

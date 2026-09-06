@@ -5,9 +5,7 @@
  * everything else and sits 44pt below the last-winner section in the same
  * 404pt column. See `statsBar` in ../styles.ts for the Figma coordinates.
  *
- * Invited friends · participation count · rank this week. All three are read
- * straight from `/share-win/me`; the app never computes a rank.
- * A brand-new user renders 0 / 0 / their real tail rank — no blank slots.
+ * Invited friends · confirmed shares this week · rank this week.
  */
 
 import React, { memo } from 'react';
@@ -22,10 +20,11 @@ import GradientText from './GradientText';
 
 interface StatsBarProps {
   participants: number;
+  shares: number;
   rank: number;
 }
 
-const StatsBar = memo(function StatsBar({ participants, rank }: StatsBarProps) {
+const StatsBar = memo(function StatsBar({ participants, shares, rank }: StatsBarProps) {
   const { sw, metrics } = useShareWinStyles();
   const { t, language } = useTranslation();
   const copy = t.shareWin;
@@ -51,7 +50,7 @@ const StatsBar = memo(function StatsBar({ participants, rank }: StatsBarProps) {
       <View style={[sw.statsCol, { width: s(80) }]}>
         <Text style={sw.statsLabel}>{copy.statsShares}</Text>
         <GradientText colors={SW_GRADIENT.purpleText} style={sw.statsValue}>
-          {formatNumber(participants, language)}
+          {formatNumber(shares, language)}
         </GradientText>
       </View>
       <Image source={SW_ASSET.gift} style={sw.statsIcon} contentFit="contain" transition={0} />

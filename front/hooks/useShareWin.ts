@@ -25,7 +25,7 @@ import { toastManager } from '../services/toastManager';
 import { useTranslation } from '../src/i18n';
 import { getClerkBearerToken } from '../utils/clerkAuthToken';
 import { logger } from '../utils/logger';
-import { confirmExternalShare, isCopyShareActivity } from '../utils/confirmExternalShare';
+import { confirmExternalShare, isCopyShareActivity, watchShareHandoff } from '../utils/confirmExternalShare';
 import {
   clearPendingReferral,
   getPendingReferral,
@@ -113,6 +113,7 @@ export function useShareWin() {
       const code = query.data?.referralCode;
       if (!code) return;
 
+      const handoff = watchShareHandoff();
       try {
         const payload = buildReferralSharePayload(code, lang);
         const result = await Share.share(
@@ -127,10 +128,19 @@ export function useShareWin() {
         // or the pasteboard activity is a cancel / copy, not a share.
         if (Platform.OS === 'ios') {
           if (!result.activityType || isCopyShareActivity(result.activityType)) return;
+        } else {
+          // Android fires sharedAction on cancel. Opening the sheet can set
+          // `inactive` without leaving — only a real app switch counts.
+          if (!handoff.didLeave()) {
+            const left = await confirmExternalShare(800, ['background']);
+            if (!left) return;
+          }
         }
         await trackShare(channel);
       } catch (error) {
         logger.debug('[ShareWin] Share sheet dismissed:', error);
+      } finally {
+        handoff.stop();
       }
     },
     [query.data?.referralCode, trackShare],

@@ -242,7 +242,7 @@ async function seed() {
 
   const board = await prisma.shareWinStanding.findMany({
     where: { cycleId: current.id },
-    orderBy: [{ participantCount: 'desc' }, { firstScoredAt: 'asc' }],
+    orderBy: [{ shareCount: 'desc' }, { firstScoredAt: 'asc' }],
     take: 5,
     select: { participantCount: true, shareCount: true, score: true, user: { select: { displayName: true } } },
   });

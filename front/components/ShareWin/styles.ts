@@ -627,13 +627,20 @@ function buildStyles(scale: DesignScale, language: string) {
     boardScoreGroup: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: s(2),
+      justifyContent: 'flex-end',
+      flexShrink: 0,
+      paddingLeft: s(8),
+      gap: s(4),
+    },
+    boardScoreValue: {
+      fontFamily: font(400),
+      color: SW_COLOR.white,
     },
     boardScoreXp: {
       fontFamily: font(600),
       fontSize: f(16),
       color: SW_COLOR.purple,
+      flexShrink: 0,
     },
     boardEmpty: {
       fontFamily: font(400),

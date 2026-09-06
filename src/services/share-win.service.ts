@@ -1,21 +1,23 @@
 /**
  * Share & Win — شارك واربح
  *
- * Weekly referral competition. Every user gets a unique referral code; sharing
- * it and converting friends into registered users raises their participation
- * count. Each week is ranked by that count and archived independently.
+ * Weekly referral competition. Every user gets a unique referral code. Sharing
+ * it to a real destination (WhatsApp, the OS share sheet, …) raises their
+ * share count. Each week is ranked by that count — not by link visits — and
+ * archived independently.
  *
  * ── Invariants this module guarantees ────────────────────────────────────────
  *  • The database is the source of truth. Nothing the client sends can change
  *    a share count, participant count or rank directly.
- *  • Weekly rank is participation count (successful referrals), never XP.
+ *  • Weekly rank is confirmed share count (a real handoff to another app),
+ *    never link visits and never XP.
  *  • A user can be attributed to at most ONE referrer, ever
  *    (`share_win_referrals.referredUserId` is UNIQUE — races lose on the index,
  *    not on a read-then-write check).
  *  • Self-referral, already-attributed users and pre-existing accounts are
  *    rejected before a referral row is written.
  *  • Closing a cycle never deletes anything: standings keep `finalRank` so
- *    "who won week N, with how many participants" stays answerable forever.
+ *    "who won week N, with how many confirmed shares" stays answerable forever.
  */
 
 import { Prisma, ShareWinCycleStatus, type ShareWinCycle } from '@prisma/client';
@@ -29,7 +31,7 @@ import { awardXp, XP_VALUES } from './xp.service';
 
 /** Each successful referral conversion is worth +3 weekly points. */
 export const SCORE_PER_PARTICIPANT = 3;
-/** Share-only actions do not contribute to the weekly leaderboard. */
+/** Share-only actions are what the weekly leaderboard ranks by. */
 export const SCORE_PER_SHARE = 0;
 
 /**
@@ -237,7 +239,7 @@ export async function closeCycle(cycleId: string, now = new Date()): Promise<voi
           "id",
           ROW_NUMBER() OVER (
             ORDER BY
-              "participantCount" DESC,
+              "shareCount" DESC,
               COALESCE("firstScoredAt", 'infinity'::timestamp) ASC,
               "userId" ASC
           )::int AS rank
@@ -273,7 +275,7 @@ async function syncStanding(
   ]);
 
   const score = computeScore(participantCount, shareCount);
-  const hasScore = score > 0;
+  const hasShare = shareCount > 0;
 
   await tx.shareWinStanding.upsert({
     where: { cycleId_userId: { cycleId, userId } },
@@ -283,22 +285,22 @@ async function syncStanding(
       shareCount,
       participantCount,
       score,
-      firstScoredAt: hasScore ? now : null,
-      lastScoredAt: hasScore ? now : null,
+      firstScoredAt: hasShare ? now : null,
+      lastScoredAt: hasShare ? now : null,
     },
     update: {
       shareCount,
       participantCount,
       score,
-      lastScoredAt: hasScore ? now : undefined,
+      lastScoredAt: hasShare ? now : undefined,
       // firstScoredAt is deliberately untouched here — it is the tie-breaker
       // and must keep its original value once set.
     },
   });
 
-  // Stamp firstScoredAt only while it is still null. Done as raw SQL because
-  // Prisma cannot express "set only if currently NULL" in an update.
-  if (hasScore) {
+  // Stamp firstScoredAt on the first confirmed share. Rank is share-count, so
+  // a referral conversion must not start the clock.
+  if (hasShare) {
     await tx.$executeRaw`
       UPDATE "share_win_standings"
       SET "firstScoredAt" = ${now}
@@ -479,7 +481,7 @@ export async function claimReferral(
  * A single user's rank, without loading the leaderboard.
  *
  * Counts only the rows that strictly outrank them, using the same tuple the
- * leaderboard sorts by: participants ↓, earliest scorer ↑, id ↑.
+ * leaderboard sorts by: shares ↓, earliest confirmed share ↑, id ↑.
  *
  * The user's own row is joined in rather than passed as parameters. That is
  * deliberate: binding `firstScoredAt` as a parameter makes the driver send a
@@ -498,11 +500,11 @@ async function getRankFor(cycleId: string, userId: string): Promise<number | nul
       ON me."cycleId" = s."cycleId" AND me."userId" = ${userId}
     WHERE s."cycleId" = ${cycleId}
       AND (
-        -s."participantCount",
+        -s."shareCount",
         COALESCE(s."firstScoredAt", 'infinity'::timestamp),
         s."userId"
       ) < (
-        -me."participantCount",
+        -me."shareCount",
         COALESCE(me."firstScoredAt", 'infinity'::timestamp),
         me."userId"
       )
@@ -591,7 +593,7 @@ export async function getLeaderboard(
   const standings = await prisma.shareWinStanding.findMany({
     where: { cycleId },
     orderBy: [
-      { participantCount: 'desc' },
+      { shareCount: 'desc' },
       { firstScoredAt: 'asc' },
       { userId: 'asc' },
     ],

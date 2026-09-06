@@ -1044,7 +1044,7 @@ export const en = {
     titleRest: ' & Win',
     subtitle: 'Share the app with your friends and win great prizes!',
     perShareLead: 'Ranking is based on ',
-    perSharePoints: 'participations',
+    perSharePoints: 'real shares',
     perShareXp: 'XP',
 
     // Lucky wheel card
@@ -1066,7 +1066,7 @@ export const en = {
     leaderboardEmpty: 'No ranking yet — be the first to share!',
     leaderboardCompetitors: '{count} competing this week',
     leaderboardEnd: 'You have reached the end',
-    boardUnit: 'friends',
+    boardUnit: 'shares',
     close: 'Close',
     backToRank: 'Back to Rank',
 
@@ -1082,8 +1082,8 @@ export const en = {
     channelInstagram: 'Instagram',
     channelWhatsapp: 'WhatsApp',
     channelSnapchat: 'Snapchat',
-    referralHintLead: 'Each friend who joins counts as ',
-    referralHintXp: 'a participation',
+    referralHintLead: 'A share counts only when you send it to ',
+    referralHintXp: 'WhatsApp, Facebook or similar',
     linkCopied: 'Link copied',
     linkCopiedDetail: 'Paste it in a chat — a share counts when you send it',
     copyFailed: 'Could not copy the link',

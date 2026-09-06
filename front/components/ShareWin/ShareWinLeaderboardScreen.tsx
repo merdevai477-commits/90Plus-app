@@ -21,8 +21,8 @@
  *   • stable userId keys, de-duplicated in the hook
  *   • windowing tuned down from the defaults for low-end Android
  *
- * Rank is server-computed from participation count; this screen only paginates
- * and formats. Rows show how many friends joined, never XP.
+ * Rank is server-computed from confirmed share count; this screen only
+ * paginates and formats. Rows show shares, never link visits or XP.
  * =============================================================================
  */
 
@@ -94,7 +94,7 @@ export default function ShareWinLeaderboardScreen() {
         key: entry.userId,
         entry,
         name: displayNameOf(entry),
-        scoreLabel: formatNumber(entry.participants, language),
+        scoreLabel: formatNumber(entry.shares, language),
         isMe: entry.userId === me?.userId,
       })),
     [entries, language, me?.userId],
@@ -268,7 +268,7 @@ export default function ShareWinLeaderboardScreen() {
             username={me.username}
             name={displayNameOf(me)}
             avatar={me.avatar}
-            scoreLabel={formatNumber(me.participants, language)}
+            scoreLabel={formatNumber(me.shares, language)}
             scoreUnit={copy.boardUnit}
             tierIndex={me.rank - 1}
             isCurrentUser

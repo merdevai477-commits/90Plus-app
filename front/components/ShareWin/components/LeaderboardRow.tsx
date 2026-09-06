@@ -22,7 +22,7 @@ export interface LeaderboardRowProps {
   avatar: string | null;
   /** Pre-formatted so no Intl work happens during scroll. */
   scoreLabel: string;
-  /** Unit next to the count — participations, not XP. */
+  /** Unit next to the count — confirmed shares, not link visits. */
   scoreUnit: string;
   /** Visual tier index — clamped by the caller (0-4 in Figma). */
   tierIndex: number;
@@ -100,7 +100,7 @@ const LeaderboardRow = memo(function LeaderboardRow({
       <View style={sw.boardScoreGroup}>
         <Text
           style={[
-            sw.boardName,
+            sw.boardScoreValue,
             {
               fontSize: f(tier.score),
               color: tier.lead ? SW_COLOR.purpleBright : SW_COLOR.scoreTint,
