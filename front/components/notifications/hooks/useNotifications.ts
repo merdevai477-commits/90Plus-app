@@ -6,11 +6,11 @@ import { NotificationService, type SocialNotification } from '../../../src/servi
 import { cacheService, CACHE_KEYS, CACHE_TTL } from '../../../services/cacheService';
 import { useNotificationEvents } from '../../../hooks/useWebSocket';
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 12;
 /** Skip full refetch on focus if we loaded recently. */
 const FOCUS_REFETCH_THROTTLE_MS = 45_000;
-/** Hard cap on merged list size shown in the UI. */
-const MAX_MERGED_NOTIFICATIONS = 200;
+/** Cap list size so the inbox stays snappy. */
+const MAX_MERGED_NOTIFICATIONS = 96;
 
 export function useNotifications() {
   const { getToken, userId } = useAuth();

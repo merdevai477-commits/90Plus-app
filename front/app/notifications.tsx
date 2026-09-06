@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -10,8 +10,7 @@ import {
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
+import { Image } from 'expo-image';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -40,6 +39,7 @@ import BottomNav from '@/components/navigation/BottomNav';
 import {
     TEXT_PRIMARY,
     TEXT_MUTED,
+    TEXT_SECONDARY,
     GOLD_PRIMARY,
     BLUE_PRIMARY,
     PURPLE_SOFT,
@@ -78,23 +78,23 @@ type Kind =
     | 'gift'
     | 'lucky';
 
-const KIND_META: Record<Kind, { Icon: LucideIcon; color: string }> = {
-    match: { Icon: Trophy, color: GOLD_PRIMARY },
-    quiz: { Icon: Sparkles, color: PURPLE_SOFT },
-    social: { Icon: Users, color: BLUE_PRIMARY },
-    system: { Icon: Bell, color: TEXT_MUTED },
-    like: { Icon: Heart, color: '#ef4444' },
-    comment: { Icon: MessageCircle, color: BLUE_PRIMARY },
-    mention: { Icon: AtSign, color: PURPLE_SOFT },
-    moderation: { Icon: Shield, color: '#fcd34d' },
-    report: { Icon: Flag, color: '#fb923c' },
-    avatar: { Icon: UserCircle, color: BLUE_PRIMARY },
-    ai: { Icon: Bot, color: PURPLE_PRIMARY },
-    leaderboard: { Icon: TrendingUp, color: GOLD_PRIMARY },
-    levelup: { Icon: Award, color: '#22c55e' },
-    video: { Icon: Video, color: PURPLE_SOFT },
-    gift: { Icon: Gift, color: '#ec4899' },
-    lucky: { Icon: Sparkles, color: GOLD_PRIMARY },
+const KIND_META: Record<Kind, { Icon: LucideIcon; color: string; tint: string }> = {
+    match: { Icon: Trophy, color: GOLD_PRIMARY, tint: 'rgba(245,197,24,0.16)' },
+    quiz: { Icon: Sparkles, color: PURPLE_SOFT, tint: 'rgba(167,139,250,0.16)' },
+    social: { Icon: Users, color: BLUE_PRIMARY, tint: 'rgba(59,130,246,0.16)' },
+    system: { Icon: Bell, color: TEXT_MUTED, tint: 'rgba(255,255,255,0.08)' },
+    like: { Icon: Heart, color: '#ef4444', tint: 'rgba(239,68,68,0.16)' },
+    comment: { Icon: MessageCircle, color: BLUE_PRIMARY, tint: 'rgba(59,130,246,0.16)' },
+    mention: { Icon: AtSign, color: PURPLE_SOFT, tint: 'rgba(167,139,250,0.16)' },
+    moderation: { Icon: Shield, color: '#fcd34d', tint: 'rgba(252,211,77,0.14)' },
+    report: { Icon: Flag, color: '#fb923c', tint: 'rgba(251,146,60,0.16)' },
+    avatar: { Icon: UserCircle, color: BLUE_PRIMARY, tint: 'rgba(59,130,246,0.16)' },
+    ai: { Icon: Bot, color: PURPLE_PRIMARY, tint: 'rgba(124,58,237,0.16)' },
+    leaderboard: { Icon: TrendingUp, color: GOLD_PRIMARY, tint: 'rgba(245,197,24,0.16)' },
+    levelup: { Icon: Award, color: '#22c55e', tint: 'rgba(34,197,94,0.16)' },
+    video: { Icon: Video, color: PURPLE_SOFT, tint: 'rgba(167,139,250,0.16)' },
+    gift: { Icon: Gift, color: '#ec4899', tint: 'rgba(236,72,153,0.16)' },
+    lucky: { Icon: Sparkles, color: GOLD_PRIMARY, tint: 'rgba(245,197,24,0.16)' },
 };
 
 function mapTypeToKind(type: SocialNotification['type']): Kind {
@@ -153,6 +153,71 @@ function mapTypeToKind(type: SocialNotification['type']): Kind {
     }
 }
 
+function kindLabelFor(
+    type: SocialNotification['type'],
+    n: ReturnType<typeof useTranslation>['t']['notifications'],
+): string {
+    switch (type) {
+        case 'LIKE':
+        case 'COMMENT_LIKE':
+            return n.kindLike;
+        case 'COMMENT':
+        case 'REPLY':
+            return n.kindComment;
+        case 'MENTION':
+            return n.kindMention;
+        case 'FOLLOW':
+        case 'FOLLOW_ACTIVITY':
+            return n.kindFollow;
+        case 'SHARE':
+            return n.kindShare;
+        case 'MATCH_GOAL':
+            return n.kindGoal;
+        case 'MATCH_START':
+            return n.kindKickoff;
+        case 'MATCH_END':
+            return n.kindFullTime;
+        case 'MATCH_YELLOW_CARD':
+        case 'MATCH_RED_CARD':
+            return n.kindCard;
+        case 'PREDICTION_RESULT':
+            return n.kindPrediction;
+        case 'MATCH_UPDATE':
+        case 'MATCH_FAVORITE':
+        case 'MATCH_HALFTIME':
+            return n.kindMatch;
+        case 'DAILY_QUIZ_RENEWED':
+            return n.kindQuiz;
+        case 'LEVEL_UP':
+            return n.kindLevel;
+        case 'GIFT':
+        case 'COIN_MILESTONE':
+        case 'MILESTONE':
+        case 'ACHIEVEMENT':
+        case 'QUIZ_REWARD':
+            return n.kindGift;
+        case 'LUCKY_WHEEL':
+        case 'LUCKY_WHEEL_RENEWED':
+            return n.kindLucky;
+        case 'VIDEO_PROCESSED':
+            return n.kindVideo;
+        case 'LEADERBOARD_TOP10':
+        case 'LEADERBOARD_TOP3':
+            return n.kindLeaderboard;
+        case 'REPORT_SUBMITTED':
+        case 'REPORT_RESOLVED':
+            return n.kindReport;
+        case 'MODERATION_ALERT':
+            return n.kindModeration;
+        case 'AVATAR_UPLOAD':
+            return n.kindAvatar;
+        case 'AI_CHECKIN':
+            return n.kindAi;
+        default:
+            return n.kindSystem;
+    }
+}
+
 function formatRelativeTime(iso: string, t: ReturnType<typeof useTranslation>['t']): string {
     const date = new Date(iso);
     if (isNaN(date.getTime())) return '—';
@@ -168,15 +233,7 @@ function formatRelativeTime(iso: string, t: ReturnType<typeof useTranslation>['t
     return date.toLocaleDateString();
 }
 
-// ─── Liquid Glass Header (pinned) — skip blur on Android for perf ──────────
-const useGlassHeader = Platform.OS !== 'android' && isLiquidGlassSupported;
-const HeaderGlass: any = useGlassHeader ? LiquidGlassView : Platform.OS === 'ios' ? BlurView : View;
-const headerGlassProps: any = useGlassHeader
-    ? { effect: 'clear', interactive: true }
-    : Platform.OS === 'ios'
-      ? { intensity: 22, tint: 'dark' }
-      : {};
-
+// ─── Pinned header — solid surface (blur is too expensive on this screen) ──
 type HeaderProps = {
     unreadCount: number;
     total: number;
@@ -205,10 +262,14 @@ const NotificationsHeader = React.memo(function NotificationsHeader({
     backLabel,
 }: HeaderProps) {
     return (
-        <HeaderGlass
-            {...headerGlassProps}
-            style={[headerStyles.container, { paddingTop: topInset + 8 }]}
-        >
+        <View style={[headerStyles.container, { paddingTop: topInset + 8 }]}>
+            <LinearGradient
+                colors={['rgba(124,58,237,0.22)', 'rgba(10,6,18,0.96)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+            />
             <View style={headerStyles.inner}>
                 <TouchableOpacity
                     onPress={onBack}
@@ -251,7 +312,7 @@ const NotificationsHeader = React.memo(function NotificationsHeader({
                 )}
             </View>
             <View style={headerStyles.hairline} />
-        </HeaderGlass>
+        </View>
     );
 });
 
@@ -264,7 +325,7 @@ const headerStyles = StyleSheet.create({
         left: 0,
         right: 0,
         zIndex: 50,
-        backgroundColor: Platform.OS === 'android' ? 'rgba(6,4,10,0.92)' : 'rgba(6,4,10,0.5)',
+        backgroundColor: 'rgba(8,5,16,0.97)',
     },
     inner: {
         minHeight: HEADER_BODY_HEIGHT,
@@ -344,25 +405,53 @@ type NotificationRowProps = {
     item: SocialNotification;
     onPress: (item: SocialNotification) => void;
     relativeTime: string;
+    kindLabel: string;
 };
+
+function actorAvatarOf(item: SocialNotification): string | undefined {
+    const data = item.data as Record<string, unknown> | undefined;
+    const url = data?.actorAvatar || data?.followerAvatar || data?.avatar;
+    return typeof url === 'string' && url.startsWith('http') ? url : undefined;
+}
 
 const NotificationRow = React.memo(function NotificationRow({
     item,
     onPress,
     relativeTime,
+    kindLabel,
 }: NotificationRowProps) {
     const kind = mapTypeToKind(item.type);
-    const { Icon, color } = KIND_META[kind];
+    const { Icon, color, tint } = KIND_META[kind];
+    const avatar = actorAvatarOf(item);
+    const unread = !item.isRead;
+
     return (
         <TouchableOpacity
-            activeOpacity={0.85}
+            activeOpacity={0.86}
             onPress={() => onPress(item)}
-            style={[styles.card, !item.isRead && styles.cardUnread]}
+            style={[styles.card, unread && styles.cardUnread]}
+            accessibilityRole="button"
+            accessibilityLabel={`${kindLabel}. ${item.title}`}
         >
-            <View style={[styles.iconWrap, { borderColor: `${color}44` }]}>
-                <Icon size={18} color={color} strokeWidth={2.2} />
+            <View style={[styles.accent, { backgroundColor: color }]} />
+            <View style={[styles.iconWrap, { backgroundColor: tint, borderColor: `${color}55` }]}>
+                {avatar ? (
+                    <Image source={{ uri: avatar }} style={styles.avatar} contentFit="cover" />
+                ) : (
+                    <Icon size={18} color={color} strokeWidth={2.2} />
+                )}
             </View>
             <View style={styles.cardMid}>
+                <View style={styles.chipRow}>
+                    <View style={[styles.chip, { backgroundColor: tint, borderColor: `${color}44` }]}>
+                        <Text style={[styles.chipTxt, { color }]} numberOfLines={1}>
+                            {kindLabel}
+                        </Text>
+                    </View>
+                    <Text style={styles.time} numberOfLines={1}>
+                        {relativeTime}
+                    </Text>
+                </View>
                 <Text style={styles.cardTitle} numberOfLines={1}>
                     {item.title}
                 </Text>
@@ -370,10 +459,7 @@ const NotificationRow = React.memo(function NotificationRow({
                     {item.message}
                 </Text>
             </View>
-            <View style={styles.cardRight}>
-                <Text style={styles.time}>{relativeTime}</Text>
-                {!item.isRead ? <View style={styles.dot} /> : null}
-            </View>
+            {unread ? <View style={styles.dot} /> : <View style={styles.dotSpacer} />}
         </TouchableOpacity>
     );
 });
@@ -436,11 +522,11 @@ export default function NotificationsScreen() {
         handleLoadMore,
         isLoadingMore,
         hasMore,
+        unreadCount,
     } = useNotifications();
 
     const params = useLocalSearchParams<{ openLuckyWheel?: string }>();
     const [showLuckyWheel, setShowLuckyWheel] = useState(false);
-    const loadingToastShownRef = useRef(false);
 
     useEffect(() => {
         if (params.openLuckyWheel === 'true') {
@@ -455,27 +541,6 @@ export default function NotificationsScreen() {
         }, [getToken]),
     );
 
-    // Toast feedback for loading state — only if first-load is taking a moment
-    useEffect(() => {
-        if (isLoading && notifications.length === 0 && !loadingToastShownRef.current) {
-            loadingToastShownRef.current = true;
-            const timer = setTimeout(() => {
-                if (isLoading) {
-                    toastManager.showLoading(
-                        t.notifications.loading,
-                        '',
-                        { position: 'top' },
-                    );
-                }
-            }, 400);
-            return () => clearTimeout(timer);
-        }
-        if (!isLoading && loadingToastShownRef.current) {
-            toastManager.hideLoading();
-            loadingToastShownRef.current = false;
-        }
-    }, [isLoading, notifications.length, t.notifications]);
-
     // Error toast feedback
     useEffect(() => {
         if (error && notifications.length === 0) {
@@ -486,11 +551,6 @@ export default function NotificationsScreen() {
             );
         }
     }, [error, notifications.length, t.notifications]);
-
-    const unreadCount = useMemo(
-        () => notifications.filter((n) => !n.isRead).length,
-        [notifications],
-    );
 
     const handleBack = useCallback(() => {
         Haptics.selectionAsync();
@@ -645,17 +705,39 @@ export default function NotificationsScreen() {
     }, [isLoading, error, refreshNotifications, t]);
 
     const listFooter = useMemo(() => {
-        if (!hasMore || notifications.length === 0) return null;
+        if (notifications.length === 0) return null;
+        if (!hasMore) {
+            return (
+                <Text style={styles.caughtUp}>{t.notifications.inboxCaughtUp}</Text>
+            );
+        }
         return (
-            <View style={styles.loadMoreBtn}>
-                {isLoadingMore ? (
-                    <ActivityIndicator color={PURPLE_SOFT} />
-                ) : (
-                    <Text style={styles.loadMoreTxt}>{t.notifications.loadMore}</Text>
-                )}
-            </View>
+            <TouchableOpacity
+                onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    handleLoadMore();
+                }}
+                disabled={isLoadingMore}
+                activeOpacity={0.88}
+                style={styles.loadMoreWrap}
+                accessibilityRole="button"
+                accessibilityLabel={t.notifications.loadMore}
+            >
+                <LinearGradient
+                    colors={['#8B5CF6', '#513690']}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={styles.loadMoreBtn}
+                >
+                    {isLoadingMore ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <Text style={styles.loadMoreTxt}>{t.notifications.loadMore}</Text>
+                    )}
+                </LinearGradient>
+            </TouchableOpacity>
         );
-    }, [hasMore, notifications.length, isLoadingMore, t.notifications.loadMore]);
+    }, [hasMore, notifications.length, isLoadingMore, handleLoadMore, t.notifications]);
 
     const keyExtractor = useCallback((item: SocialNotification) => item.id, []);
 
@@ -665,6 +747,7 @@ export default function NotificationsScreen() {
                 item={item}
                 onPress={handleNotificationTap}
                 relativeTime={formatRelativeTime(item.createdAt, t)}
+                kindLabel={kindLabelFor(item.type, t.notifications)}
             />
         ),
         [handleNotificationTap, t],
@@ -709,8 +792,7 @@ export default function NotificationsScreen() {
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={listEmpty}
                     ListFooterComponent={listFooter}
-                    onEndReached={handleLoadMore}
-                    onEndReachedThreshold={0.4}
+                    extraData={`${isLoadingMore}-${hasMore}`}
                     refreshControl={
                         <RefreshControl
                             refreshing={isRefreshing}
@@ -720,7 +802,7 @@ export default function NotificationsScreen() {
                             progressBackgroundColor={BG_BASE}
                         />
                     }
-                    drawDistance={280}
+                    drawDistance={80}
                 />
             </View>
             <BottomNav />
@@ -733,28 +815,61 @@ const styles = StyleSheet.create({
     scroll: { flex: 1 },
     card: {
         flexDirection: 'row',
-        alignItems: 'flex-start',
-        padding: 12,
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        paddingStart: 0,
         marginBottom: 10,
         borderRadius: RADIUS_LG,
         borderWidth: 1,
         borderColor: BORDER_ARENA,
-        backgroundColor: 'rgba(16,12,26,0.9)',
+        backgroundColor: 'rgba(16,12,28,0.94)',
+        overflow: 'hidden',
     },
     cardUnread: {
-        borderColor: 'rgba(124,58,237,0.35)',
-        backgroundColor: 'rgba(34,22,52,0.85)',
+        borderColor: 'rgba(139,92,246,0.45)',
+        backgroundColor: 'rgba(42,24,72,0.92)',
+    },
+    accent: {
+        width: 3,
+        alignSelf: 'stretch',
+        marginEnd: 10,
+        borderTopRightRadius: 2,
+        borderBottomRightRadius: 2,
     },
     iconWrap: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
+        width: 44,
+        height: 44,
+        borderRadius: 14,
         borderWidth: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(8,6,14,0.82)',
+        overflow: 'hidden',
     },
-    cardMid: { flex: 1, marginHorizontal: 10 },
+    avatar: {
+        width: 44,
+        height: 44,
+    },
+    cardMid: { flex: 1, marginHorizontal: 10, minWidth: 0 },
+    chipRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        marginBottom: 4,
+    },
+    chip: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 999,
+        borderWidth: 1,
+        maxWidth: '70%',
+    },
+    chipTxt: {
+        fontSize: 10,
+        fontWeight: '800',
+        letterSpacing: 0.3,
+    },
     cardTitle: {
         fontSize: 14,
         fontWeight: '800',
@@ -762,19 +877,27 @@ const styles = StyleSheet.create({
         letterSpacing: -0.2,
     },
     cardBody: {
-        marginTop: 4,
+        marginTop: 3,
         fontSize: 13,
         lineHeight: 18,
-        color: TEXT_MUTED,
+        color: TEXT_SECONDARY,
     },
-    cardRight: { alignItems: 'flex-end', minWidth: 52 },
-    time: { fontSize: 11, fontWeight: '600', color: TEXT_MUTED },
+    time: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: TEXT_MUTED,
+        flexShrink: 0,
+    },
     dot: {
-        marginTop: 8,
         width: 8,
         height: 8,
         borderRadius: 4,
         backgroundColor: PURPLE_SOFT,
+        marginStart: 4,
+    },
+    dotSpacer: {
+        width: 8,
+        marginStart: 4,
     },
     errorWrap: {
         alignItems: 'center',
@@ -834,19 +957,40 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         lineHeight: 18,
     },
+    loadMoreWrap: {
+        marginTop: 6,
+        marginBottom: 18,
+        borderRadius: 16,
+        shadowColor: '#6B2EF7',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.55,
+        shadowRadius: 10,
+        ...Platform.select({
+            android: { elevation: 8 },
+            default: {},
+        }),
+    },
     loadMoreBtn: {
-        marginTop: 8,
-        marginBottom: 16,
-        paddingVertical: 14,
+        height: 54,
+        borderRadius: 16,
         alignItems: 'center',
-        borderRadius: RADIUS_LG,
-        borderWidth: 1,
-        borderColor: 'rgba(167,139,250,0.25)',
-        backgroundColor: 'rgba(124,58,237,0.08)',
+        justifyContent: 'center',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: '#4703E3',
+        overflow: 'hidden',
     },
     loadMoreTxt: {
-        color: PURPLE_SOFT,
-        fontSize: 13,
+        color: '#FFFFFF',
+        fontSize: 16,
         fontWeight: '700',
+        letterSpacing: 0.2,
+    },
+    caughtUp: {
+        marginTop: 8,
+        marginBottom: 20,
+        textAlign: 'center',
+        color: TEXT_MUTED,
+        fontSize: 12,
+        fontWeight: '600',
     },
 });
