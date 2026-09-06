@@ -14,6 +14,7 @@ import {
 } from '../components/Matches/leagueApiUtils';
 import { cacheService, MATCHES_CALENDAR_DISK_TTL_MS, MATCHES_PAST_DISK_TTL_MS } from '../services/cacheService';
 import { logger } from '../utils/logger';
+import { isAbortError } from '../utils/isAbortError';
 import { useLanguageStore } from '../src/i18n/store';
 import { prefetchFootballTranslations } from '../src/stores/footballTranslationStore';
 import { collectNamesFromMatches } from '../utils/footballNamePrefetch';
@@ -588,23 +589,35 @@ export const useMatchesData = (
           elapsedMs: typeof performance !== 'undefined' && performance.now ? Math.round(performance.now()) : undefined,
         });
       } catch (err) {
-        const rawMessage = err instanceof Error ? err.message : 'Failed to load matches';
-        const errorMessage =
-          rawMessage.toLowerCase().includes('date value out of bounds')
-            ? 'Failed to load matches'
-            : rawMessage;
-        if (shouldApplyCalendarGeneration(generation, calendarGenRef.current)) {
-          setCalendarMatches((prev) => {
-            if (prev.length > 0) {
+        if (isAbortError(err)) {
+          logger.debug('[useMatchesData] Fetch aborted (app background or timeout)');
+          if (shouldApplyCalendarGeneration(generation, calendarGenRef.current)) {
+            if (calendarLenRef.current > 0) {
               setIsDataStale(true);
               setError(null);
-              return prev;
+            } else {
+              setError('load_failed');
             }
-            setError(errorMessage);
-            return prev;
-          });
+          }
+        } else {
+          const rawMessage = err instanceof Error ? err.message : 'Failed to load matches';
+          const errorMessage =
+            rawMessage.toLowerCase().includes('date value out of bounds')
+              ? 'Failed to load matches'
+              : rawMessage;
+          if (shouldApplyCalendarGeneration(generation, calendarGenRef.current)) {
+            setCalendarMatches((prev) => {
+              if (prev.length > 0) {
+                setIsDataStale(true);
+                setError(null);
+                return prev;
+              }
+              setError(errorMessage);
+              return prev;
+            });
+          }
+          logger.error('Error fetching matches data:', err);
         }
-        logger.error('Error fetching matches data:', err);
       } finally {
         setLoading(false);
         isFetchingRef.current = false;
@@ -692,6 +705,10 @@ export const useMatchesData = (
       evictOldestIfNeeded(lastBackgroundFetch);
       await cacheService.set(cacheKey, fetchedMatches, cacheTTL);
     } catch (err) {
+      if (isAbortError(err)) {
+        logger.debug('[useMatchesData] Background refresh aborted');
+        return;
+      }
       // Fix ERR-3: mark data as stale so UI can show a subtle indicator
       if (shouldApplyCalendarGeneration(generation, calendarGenRef.current)) {
         setIsDataStale(true);

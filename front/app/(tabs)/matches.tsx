@@ -2185,6 +2185,8 @@ export default function MatchesHubScreenV2() {
       return t('matches.screen.loadFailed');
     }
     if (listError === 'Failed to load matches') return t('matches.screen.loadFailed');
+    const lower = listError.toLowerCase();
+    if (lower.includes('abort')) return t('matches.screen.loadFailed');
     return listError;
   }, [listError, t]);
 

@@ -7,6 +7,8 @@ import { Fixture, ApiFootballService, MAJOR_LEAGUES } from '../../services/apiFo
 import { Match, LeagueInfo, TeamInfo } from './matchCardUtils';
 import { cacheService, MATCHES_PAST_DISK_TTL_MS } from '../../services/cacheService';
 import { logger } from '../../utils/logger';
+import { abortAfterForegroundMs } from '../../utils/abortAfterForegroundMs';
+import { isAbortError } from '../../utils/isAbortError';
 import { getApiUrl } from '../../config/api.config';
 import { getAppLanguageCode, acceptLanguageHeader } from '../../utils/appLanguage';
 import { safeFormatMatchTime } from '../../utils/safeDate';
@@ -27,7 +29,7 @@ const MATCH_FETCH_TIMEOUT_MS = 12_000;
 
 async function fetchJsonWithTimeout(url: string): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), MATCH_FETCH_TIMEOUT_MS);
+  const cancelTimeout = abortAfterForegroundMs(controller, MATCH_FETCH_TIMEOUT_MS);
   try {
     return await fetch(url, {
       method: 'GET',
@@ -35,7 +37,7 @@ async function fetchJsonWithTimeout(url: string): Promise<Response> {
       signal: controller.signal,
     });
   } finally {
-    clearTimeout(timeoutId);
+    cancelTimeout();
   }
 }
 
@@ -338,10 +340,11 @@ const fetchMatchesByDateImpl = async (
   try {
     return await fetchMatchesByDateFromNetwork(dateString, isPastDate);
   } catch (error) {
-    logger.warn(`Direct backend call failed, falling back:`, error);
-    if ((error as Error)?.name === 'AbortError') {
+    if (isAbortError(error)) {
+      logger.debug(`Matches fetch aborted for ${dateString}`);
       throw error;
     }
+    logger.warn(`Direct backend call failed, falling back:`, error);
   }
 
   try {
@@ -558,10 +561,11 @@ const fetchLiveMatchesImpl = async (): Promise<Match[]> => {
       return mapFixturesToMatches(fixtures);
     }
   } catch (error) {
-    logger.warn(`Direct backend call failed, falling back to ApiFootballService:`, error);
-    if ((error as Error)?.name === 'AbortError') {
+    if (isAbortError(error)) {
+      logger.debug('Live fixtures fetch aborted');
       return [];
     }
+    logger.warn(`Direct backend call failed, falling back to ApiFootballService:`, error);
   }
 
   const fixtures = await ApiFootballService.getLiveFixtures();

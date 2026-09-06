@@ -1487,7 +1487,7 @@ export const ApiFootballService = {
       const fixtures = await this.getFixturesByDate(targetDate);
       return fixtures.filter(f => majorLeagueIds.includes(f.league.id));
     } catch (error) {
-      if (__DEV__) {
+      if (__DEV__ && !isAbortError(error)) {
         console.error('Error fetching major leagues fixtures:', error);
       }
       return [];
