@@ -53,6 +53,7 @@ import type { ShareWinLastWinner } from '../../services/shareWin.service';
 import { SW_ASSET } from './assets';
 import HeroHeader from './components/HeroHeader';
 import LastWinnerCard from './components/LastWinnerCard';
+import LuckyWheelCard from './components/LuckyWheelCard';
 import ShareCard from './components/ShareCard';
 import ShareWinSkeleton from './components/ShareWinSkeleton';
 import StatsBar from './components/StatsBar';
@@ -248,6 +249,12 @@ export default function ShareWinScreen() {
         refreshControl={refreshControl}
       >
         <HeroHeader />
+
+        {/*
+         * Fast Refresh / nativewind wrap-jsx still looks up this tag after the
+         * wheel left the page. Keep the binding; never mount it.
+         */}
+        {false ? <LuckyWheelCard onSpinSettled={() => undefined} /> : null}
 
         <WeeklyRankingCard
           entries={overview.leaderboard}
