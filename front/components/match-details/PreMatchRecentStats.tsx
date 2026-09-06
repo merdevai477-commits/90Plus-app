@@ -1,10 +1,24 @@
 /**
- * Pre-kickoff Statistics tab: last-N averages + trends, with a colored banner
- * so users do not confuse this with live match stats (possession / passes).
+ * Pre-kickoff Statistics tab: last-N averages + trends on a 90Plus
+ * liquid-glass surface (purple / electric blue / gold).
  */
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { GlassWrapper, glassProps } from '../../constants/ui';
+import { isLiquidGlassSupported } from '../../utils/liquidGlassSafe';
+import {
+  BLUE_ELECTRIC,
+  GLASS_BORDER_BOTTOM,
+  GLASS_BORDER_SIDE,
+  GLASS_BORDER_TOP,
+  GOLD_PRIMARY,
+  PURPLE_GLOW,
+  PURPLE_SOFT,
+  TEXT_MUTED,
+  TEXT_PRIMARY,
+  TEXT_SECONDARY,
+} from '../../constants/tokens';
 import {
   formatPenaltyPair,
   formatStatAverage,
@@ -15,13 +29,6 @@ import {
   type RecentTeamAverages,
   type RecentTrend,
 } from '../../utils/recentTeamFormStats';
-
-const CARD_BORDER = '#2d0652';
-const ROW_LINE = '#2a2a2a';
-const HOME_PILL_BG = '#ffffff';
-const HOME_PILL_TEXT = '#111111';
-const AWAY_PILL_BG = '#dc2626';
-const AWAY_PILL_TEXT = '#ffffff';
 
 type AvgKey = keyof RecentFormAveragesNumbers;
 
@@ -38,14 +45,27 @@ function ValuePill({
     <View
       style={[
         styles.valueSlot,
-        highlight && (side === 'home' ? styles.pillHome : styles.pillAway),
+        highlight
+          ? side === 'home'
+            ? styles.pillHome
+            : styles.pillAway
+          : styles.pillIdle,
       ]}
     >
+      {highlight ? (
+        <LinearGradient
+          colors={
+            side === 'home'
+              ? ['rgba(167,139,250,0.55)', 'rgba(124,58,237,0.22)']
+              : ['rgba(96,165,250,0.50)', 'rgba(59,130,246,0.20)']
+          }
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
       <Text
-        style={[
-          styles.valueText,
-          highlight && (side === 'home' ? styles.pillHomeText : styles.pillAwayText),
-        ]}
+        style={[styles.valueText, highlight && styles.valueTextOn]}
         numberOfLines={1}
       >
         {value}
@@ -178,14 +198,16 @@ export function PreMatchRecentStats({
   const homeCs = enrichment?.home.trends.cleanSheets ?? homeScore.cleanSheets;
   const awayCs = enrichment?.away.trends.cleanSheets ?? awayScore.cleanSheets;
 
+  const lastLabel = columnLabel.replace('{n}', String(lastN));
+
   const avgRow = (
     key: AvgKey,
-    label: string,
+    rowLabel: string,
     mode: 'higher' | 'lower',
   ) => (
     <CompareRow
       key={key}
-      label={label}
+      label={rowLabel}
       homeValue={formatStatAverage(homeAvg[key])}
       awayValue={formatStatAverage(awayAvg[key])}
       homeNum={numOrNull(homeAvg[key])}
@@ -195,128 +217,177 @@ export function PreMatchRecentStats({
   );
 
   return (
-    <View style={styles.card}>
+    <View style={styles.cardOuter}>
+      <GlassWrapper {...(glassProps.card as object)} style={StyleSheet.absoluteFill} />
       <LinearGradient
-        colors={['#7c3aed', '#4c1d95']}
+        colors={['rgba(124,58,237,0.16)', 'rgba(59,130,246,0.08)', 'rgba(10,6,18,0.20)']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.banner}
-      >
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={styles.banner}>
+        <LinearGradient
+          colors={['rgba(124,58,237,0.38)', 'rgba(59,130,246,0.22)', 'rgba(91,33,182,0.16)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.goldHairline} />
         <Text style={styles.bannerTitle}>{bannerTitle}</Text>
         <Text style={styles.bannerHint}>{bannerHint}</Text>
-      </LinearGradient>
-
-      <Text style={styles.title}>{title}</Text>
-      <View style={styles.namesRow}>
-        <Text style={[styles.teamName, styles.teamNameHome]} numberOfLines={1}>
-          {homeName}
-        </Text>
-        <Text style={[styles.teamName, styles.teamNameAway]} numberOfLines={1}>
-          {awayName}
-        </Text>
-      </View>
-      <View style={styles.columnHeaders}>
-        <Text style={styles.columnLabel}>{columnLabel.replace('{n}', String(lastN))}</Text>
-        <Text style={styles.columnLabel}>{columnLabel.replace('{n}', String(lastN))}</Text>
       </View>
 
-      {avgRow('goalsFor', labels.goalsScored, 'higher')}
-      {avgRow('goalsAgainst', labels.goalsConceded, 'lower')}
-      {showXg ? avgRow('xg', labels.expectedGoals, 'higher') : null}
-      {showXga ? avgRow('xga', labels.expectedGoalsAgainst, 'lower') : null}
-      {showShots ? avgRow('shots', labels.shots, 'higher') : null}
-      {showSot ? avgRow('shotsOnTarget', labels.shotsOnTarget, 'higher') : null}
-      {showCorners ? avgRow('corners', labels.corners, 'higher') : null}
-      {showCards ? avgRow('cards', labels.cards, 'lower') : null}
-      {showPens ? (
+      <View style={styles.body}>
+        <Text style={styles.title}>{title}</Text>
+        <View style={styles.namesRow}>
+          <Text style={[styles.teamName, styles.teamNameHome]} numberOfLines={1}>
+            {homeName}
+          </Text>
+          <Text style={[styles.teamName, styles.teamNameAway]} numberOfLines={1}>
+            {awayName}
+          </Text>
+        </View>
+        <View style={styles.columnHeaders}>
+          <Text style={styles.columnLabel}>{lastLabel}</Text>
+          <Text style={styles.columnLabel}>{lastLabel}</Text>
+        </View>
+
+        {avgRow('goalsFor', labels.goalsScored, 'higher')}
+        {avgRow('goalsAgainst', labels.goalsConceded, 'lower')}
+        {showXg ? avgRow('xg', labels.expectedGoals, 'higher') : null}
+        {showXga ? avgRow('xga', labels.expectedGoalsAgainst, 'lower') : null}
+        {showShots ? avgRow('shots', labels.shots, 'higher') : null}
+        {showSot ? avgRow('shotsOnTarget', labels.shotsOnTarget, 'higher') : null}
+        {showCorners ? avgRow('corners', labels.corners, 'higher') : null}
+        {showCards ? avgRow('cards', labels.cards, 'lower') : null}
+        {showPens ? (
+          <CompareRow
+            label={labels.penalties}
+            homeValue={homePens ?? '—'}
+            awayValue={awayPens ?? '—'}
+            homeNum={numOrNull((homeAvg.penaltiesScored ?? 0) + (homeAvg.penaltiesWon ?? 0))}
+            awayNum={numOrNull((awayAvg.penaltiesScored ?? 0) + (awayAvg.penaltiesWon ?? 0))}
+            mode="higher"
+          />
+        ) : null}
+
+        <View style={styles.trendsHead}>
+          <LinearGradient
+            colors={['transparent', PURPLE_SOFT, BLUE_ELECTRIC, 'transparent']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.trendsRule}
+          />
+          <Text style={styles.trendsTitle}>{labels.trendsTitle}</Text>
+          <LinearGradient
+            colors={['transparent', BLUE_ELECTRIC, PURPLE_SOFT, 'transparent']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.trendsRule}
+          />
+        </View>
         <CompareRow
-          label={labels.penalties}
-          homeValue={homePens ?? '—'}
-          awayValue={awayPens ?? '—'}
-          homeNum={numOrNull((homeAvg.penaltiesScored ?? 0) + (homeAvg.penaltiesWon ?? 0))}
-          awayNum={numOrNull((awayAvg.penaltiesScored ?? 0) + (awayAvg.penaltiesWon ?? 0))}
+          label={labels.won}
+          homeValue={formatTrendValue(homeWins)}
+          awayValue={formatTrendValue(awayWins)}
+          homeNum={homeWins.pct}
+          awayNum={awayWins.pct}
           mode="higher"
         />
-      ) : null}
-
-      <Text style={styles.trendsTitle}>{labels.trendsTitle}</Text>
-      <CompareRow
-        label={labels.won}
-        homeValue={formatTrendValue(homeWins)}
-        awayValue={formatTrendValue(awayWins)}
-        homeNum={homeWins.pct}
-        awayNum={awayWins.pct}
-        mode="higher"
-      />
-      <CompareRow
-        label={labels.btts}
-        homeValue={formatTrendValue(homeBtts)}
-        awayValue={formatTrendValue(awayBtts)}
-        homeNum={homeBtts.pct}
-        awayNum={awayBtts.pct}
-        mode="higher"
-      />
-      <CompareRow
-        label={labels.over25}
-        homeValue={formatTrendValue(homeOver)}
-        awayValue={formatTrendValue(awayOver)}
-        homeNum={homeOver.pct}
-        awayNum={awayOver.pct}
-        mode="higher"
-      />
-      <CompareRow
-        label={labels.winOrDraw}
-        homeValue={formatTrendValue(homeDc)}
-        awayValue={formatTrendValue(awayDc)}
-        homeNum={homeDc.pct}
-        awayNum={awayDc.pct}
-        mode="higher"
-      />
-      <CompareRow
-        label={labels.cleanSheets}
-        homeValue={formatTrendValue(homeCs)}
-        awayValue={formatTrendValue(awayCs)}
-        homeNum={homeCs.pct}
-        awayNum={awayCs.pct}
-        mode="higher"
-      />
+        <CompareRow
+          label={labels.btts}
+          homeValue={formatTrendValue(homeBtts)}
+          awayValue={formatTrendValue(awayBtts)}
+          homeNum={homeBtts.pct}
+          awayNum={awayBtts.pct}
+          mode="higher"
+        />
+        <CompareRow
+          label={labels.over25}
+          homeValue={formatTrendValue(homeOver)}
+          awayValue={formatTrendValue(awayOver)}
+          homeNum={homeOver.pct}
+          awayNum={awayOver.pct}
+          mode="higher"
+        />
+        <CompareRow
+          label={labels.winOrDraw}
+          homeValue={formatTrendValue(homeDc)}
+          awayValue={formatTrendValue(awayDc)}
+          homeNum={homeDc.pct}
+          awayNum={awayDc.pct}
+          mode="higher"
+        />
+        <CompareRow
+          label={labels.cleanSheets}
+          homeValue={formatTrendValue(homeCs)}
+          awayValue={formatTrendValue(awayCs)}
+          homeNum={homeCs.pct}
+          awayNum={awayCs.pct}
+          mode="higher"
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
+  cardOuter: {
     width: '100%',
     borderRadius: 24,
-    borderWidth: 0.5,
-    borderColor: CARD_BORDER,
     overflow: 'hidden',
-    backgroundColor: '#07040d',
+    borderWidth: 1,
+    borderTopColor: GLASS_BORDER_TOP,
+    borderLeftColor: GLASS_BORDER_SIDE,
+    borderRightColor: GLASS_BORDER_SIDE,
+    borderBottomColor: GLASS_BORDER_BOTTOM,
+    backgroundColor: isLiquidGlassSupported ? 'transparent' : 'rgba(12,8,22,0.72)',
+    shadowColor: PURPLE_GLOW,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    elevation: 10,
   },
   banner: {
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 4,
+    paddingTop: 16,
+    paddingBottom: 14,
+    overflow: 'hidden',
+  },
+  goldHairline: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: GOLD_PRIMARY,
+    opacity: 0.9,
   },
   bannerTitle: {
-    color: '#fff',
+    color: TEXT_PRIMARY,
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
+    letterSpacing: 0.2,
   },
   bannerHint: {
-    color: 'rgba(255,255,255,0.82)',
+    color: TEXT_SECONDARY,
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',
+    marginTop: 6,
+  },
+  body: {
+    paddingBottom: 8,
   },
   title: {
-    color: '#fff',
+    color: TEXT_PRIMARY,
     fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
     marginTop: 16,
-    marginBottom: 4,
+    marginBottom: 8,
   },
   namesRow: {
     flexDirection: 'row',
@@ -327,75 +398,93 @@ const styles = StyleSheet.create({
   },
   teamName: {
     flex: 1,
-    color: '#e5e7eb',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   teamNameHome: {
+    color: PURPLE_SOFT,
     textAlign: 'left',
   },
   teamNameAway: {
+    color: BLUE_ELECTRIC,
     textAlign: 'right',
   },
   columnHeaders: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    marginBottom: 4,
+    paddingHorizontal: 14,
+    marginBottom: 6,
   },
   columnLabel: {
-    color: '#9ca3af',
-    fontSize: 12,
-    fontWeight: '600',
+    color: GOLD_PRIMARY,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    opacity: 0.85,
+  },
+  trendsHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 4,
+  },
+  trendsRule: {
+    flex: 1,
+    height: 1,
   },
   trendsTitle: {
-    color: '#fff',
-    fontSize: 16,
+    color: TEXT_PRIMARY,
+    fontSize: 15,
     fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 4,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 11,
+    paddingVertical: 10,
     paddingHorizontal: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: ROW_LINE,
+    borderTopColor: 'rgba(255,255,255,0.08)',
     gap: 6,
   },
   rowLabel: {
     flex: 1,
-    color: '#fff',
+    color: TEXT_PRIMARY,
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
   },
   valueSlot: {
-    minWidth: 64,
-    maxWidth: 88,
+    minWidth: 68,
+    maxWidth: 96,
     paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
   },
-  valueText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
+  pillIdle: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderColor: 'rgba(255,255,255,0.10)',
   },
   pillHome: {
-    backgroundColor: HOME_PILL_BG,
-  },
-  pillHomeText: {
-    color: HOME_PILL_TEXT,
+    backgroundColor: 'rgba(124,58,237,0.22)',
+    borderColor: 'rgba(167,139,250,0.55)',
   },
   pillAway: {
-    backgroundColor: AWAY_PILL_BG,
+    backgroundColor: 'rgba(59,130,246,0.20)',
+    borderColor: 'rgba(96,165,250,0.50)',
   },
-  pillAwayText: {
-    color: AWAY_PILL_TEXT,
+  valueText: {
+    color: TEXT_MUTED,
+    fontSize: 13,
+    fontWeight: '700',
+    zIndex: 1,
+  },
+  valueTextOn: {
+    color: TEXT_PRIMARY,
   },
 });
