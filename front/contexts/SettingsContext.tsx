@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useLanguageStore, Language } from '../src/i18n';
+import { processPendingSync } from '../src/i18n/syncService';
 import { useAuth } from '@clerk/clerk-expo';
 import { getApiUrl } from '../config/api.config';
 import { logger } from '../services/logger';
@@ -145,6 +146,24 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       setSettings((prev) => ({ ...prev, language: i18nLanguage }));
     }
   }, [i18nLanguage, loading]);
+
+  // Flush a pending language PATCH once the user is signed in so push copy
+  // matches the in-app language even if the first sync ran without a token.
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await getToken();
+        if (!cancelled && token) await processPendingSync(token);
+      } catch (e) {
+        logger.warn('Pending language sync failed', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, isSignedIn, getToken]);
 
   // Sync settings to backend whenever they change (debounce could be added here)
   useEffect(() => {

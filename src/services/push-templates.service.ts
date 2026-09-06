@@ -640,7 +640,7 @@ export function localizeMatchVarDetail(
 ): string {
     const raw = (detail || '').trim();
     if (!raw) return raw;
-    const lang = language === 'ar' ? 'ar' : 'en';
+    const lang = normalizeSupportedLanguage(language);
     if (lang !== 'ar') return raw;
 
     const key = raw.toLowerCase();

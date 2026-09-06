@@ -1,4 +1,4 @@
-import { mapScores365Events } from '../scores365-experiment.service';
+import { mapScores365Events, overlay365LocalizedRosterNames } from '../scores365-experiment.service';
 
 const baseFixture = {
   fixture: { id: 900001, date: '2026-06-01T18:00:00Z', status: { short: 'FT', long: 'Finished', elapsed: 90 } },
@@ -91,5 +91,57 @@ describe('mapScores365Events', () => {
 
     expect(events[0].detail).toBe('Own Goal');
     expect(events[0].team.id).toBe(100);
+  });
+});
+
+describe('overlay365LocalizedRosterNames', () => {
+  it('overlays localized athlete, assist, team, and coach names by id', () => {
+    const events = [
+      {
+        type: 'Goal',
+        team: { id: 100, name: 'Home FC' },
+        player: { id: 10, name: 'Scorer' },
+        assist: { id: 11, name: 'Assist' },
+      },
+    ];
+    const lineups = [
+      {
+        team: { id: 100, name: 'Home FC' },
+        coach: { id: 99, name: 'Coach En' },
+        startXI: [
+          {
+            player: {
+              id: 501,
+              athleteId: 501,
+              scores365MemberId: 10,
+              name: 'Scorer One',
+            },
+          },
+        ],
+        substitutes: [],
+      },
+    ];
+    const localized = {
+      members: [
+        { id: 10, athleteId: 501, name: 'الهداف', shortName: 'هداف' },
+        { id: 11, athleteId: 502, name: 'صانع اللعب', shortName: 'صانع' },
+        { id: 30, athleteId: 99, name: 'المدرب', shortName: 'مدرب' },
+      ],
+      homeCompetitor: { id: 1, name: 'الأهلي' },
+      awayCompetitor: { id: 2, name: 'الزمالك' },
+    } as any;
+
+    const overlayed = overlay365LocalizedRosterNames(
+      { events, lineups },
+      localized,
+      { home: { id: 100, name: 'الأهلي' }, away: { id: 200, name: 'الزمالك' } },
+    );
+
+    expect(overlayed.events?.[0].player.name).toBe('الهداف');
+    expect(overlayed.events?.[0].assist.name).toBe('صانع اللعب');
+    expect(overlayed.events?.[0].team.name).toBe('الأهلي');
+    expect(overlayed.lineups?.[0].startXI[0].player.name).toBe('الهداف');
+    expect(overlayed.lineups?.[0].coach.name).toBe('المدرب');
+    expect(overlayed.lineups?.[0].team.name).toBe('الأهلي');
   });
 });

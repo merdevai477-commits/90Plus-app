@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useMemo } from 'react';
+import { useAuth } from '@clerk/clerk-expo';
 import { useLanguageStore } from './store';
 import { useFootballTranslationStore } from '../stores/footballTranslationStore';
 import { safeParseDate } from '../../utils/safeDate';
@@ -100,6 +101,7 @@ export function useTranslation(): UseTranslationReturn {
   const isRTL = useLanguageStore(state => state.isRTL);
   const isLoading = useLanguageStore(state => state.isLoading);
   const storeSetLanguage = useLanguageStore(state => state.setLanguage);
+  const { getToken, isSignedIn } = useAuth();
   // Re-render when auto-translated football names arrive from the API cache.
   const footballTranslationRevision = useFootballTranslationStore(state => state.revision);
 
@@ -125,15 +127,16 @@ export function useTranslation(): UseTranslationReturn {
    * Requirements: 6.2 - No app restart required
    */
   const setLanguage = useCallback(async (lang: Language): Promise<void> => {
-    // Update store immediately (triggers UI update)
     await storeSetLanguage(lang);
-    
-    // Sync to backend in background (don't await to keep UI responsive)
-    // Token will be handled by the sync service
-    syncToBackend(lang, null).catch(error => {
-      console.warn('Background sync failed:', error);
-    });
-  }, [storeSetLanguage]);
+    void (async () => {
+      try {
+        const token = isSignedIn ? await getToken() : null;
+        await syncToBackend(lang, token);
+      } catch (error) {
+        console.warn('Background language sync failed:', error);
+      }
+    })();
+  }, [storeSetLanguage, getToken, isSignedIn]);
 
   /**
    * Get a specific translation by dot-notation key

@@ -31,6 +31,8 @@ import {
     parsePlayerStatNumber,
 } from '../components/player/PlayerSeasonStatsCard';
 import { useTranslation } from '../src/i18n';
+import { getTeamDisplayName } from '../utils/i18nHelpers';
+import TeamBadge from '../components/common/TeamBadge';
 import { logger } from '../utils/logger';
 
 if (
@@ -352,14 +354,21 @@ export default function PlayerCareerScreen() {
                                     <Text style={styles.sectionLabel}>{pc.transfers}</Text>
                                     {profile.transfers!.slice(0, 8).map((tr, idx) => (
                                         <View key={`${tr.competitorId}-${tr.date}-${idx}`} style={styles.transferRow}>
-                                            <Text style={styles.transferClub} numberOfLines={1}>
-                                                {tr.competitorName || '—'}
-                                            </Text>
-                                            <Text style={styles.transferMeta} numberOfLines={1}>
-                                                {[tr.date?.slice(0, 10), tr.transferTitle, tr.price]
-                                                    .filter(Boolean)
-                                                    .join(' · ')}
-                                            </Text>
+                                            <TeamBadge
+                                                name={tr.competitorName || '—'}
+                                                size={32}
+                                                logo={tr.competitorLogo || undefined}
+                                            />
+                                            <View style={styles.transferText}>
+                                                <Text style={styles.transferClub} numberOfLines={1}>
+                                                    {getTeamDisplayName(tr.competitorName || '—', language)}
+                                                </Text>
+                                                <Text style={styles.transferMeta} numberOfLines={1}>
+                                                    {[tr.date?.slice(0, 10), tr.transferTitle, tr.price]
+                                                        .filter(Boolean)
+                                                        .join(' · ')}
+                                                </Text>
+                                            </View>
                                         </View>
                                     ))}
                                 </View>
@@ -972,6 +981,9 @@ const styles = StyleSheet.create({
     detailLabel: { color: ProfileTheme.colors.textTertiary, fontSize: 11, marginTop: 4 },
     transferList: { marginTop: 12, gap: 8 },
     transferRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
         backgroundColor: ProfileTheme.colors.glass,
         borderRadius: 12,
         borderWidth: 1,
@@ -979,6 +991,7 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 12,
     },
+    transferText: { flex: 1, minWidth: 0 },
     transferClub: { color: '#fff', fontSize: 14, fontWeight: '700' },
     transferMeta: { color: ProfileTheme.colors.textTertiary, fontSize: 12, marginTop: 2 },
 });

@@ -1300,9 +1300,18 @@ export default function PlayerProfileScreen() {
                                                     {tr.transferTitle || tr.price || ''}
                                                 </Text>
                                             </View>
-                                            <Text style={styles.transferTeamName} numberOfLines={1}>
-                                                {tr.competitorName || '—'}
-                                            </Text>
+                                            <View style={styles.transferTeams}>
+                                                <View style={styles.transferTeam}>
+                                                    <TeamBadge
+                                                        name={tr.competitorName || '—'}
+                                                        size={32}
+                                                        logo={tr.competitorLogo || undefined}
+                                                    />
+                                                    <Text style={styles.transferTeamName} numberOfLines={1}>
+                                                        {getTeamDisplayName(tr.competitorName || '—', language)}
+                                                    </Text>
+                                                </View>
+                                            </View>
                                         </View>
                                     </View>
                                 ))}

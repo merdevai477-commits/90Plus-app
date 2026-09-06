@@ -2379,8 +2379,14 @@ const MatchDetailsScreen = () => {
           rank: '#',
           team: t.matchDetails.team,
           played: t.matchDetails.standingsPlayed,
+          goalsFor: t.matchDetails.standingsGoalsFor,
+          goalsAgainst: t.matchDetails.standingsGoalsAgainst,
+          goalsForShort: t.matchDetails.standingsGoalsForShort,
+          goalsAgainstShort: t.matchDetails.standingsGoalsAgainstShort,
           goalDiff: t.matchDetails.standingsGoalDiff,
+          goalDiffShort: t.matchDetails.standingsGoalDiffShort,
           points: t.matchDetails.standingsPoints,
+          pointsShort: t.matchDetails.standingsPointsShort,
         }}
         onPressTeam={openStandingTeamProfile}
       />

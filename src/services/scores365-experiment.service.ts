@@ -2751,13 +2751,16 @@ export async function getScores365ExperimentEvents(
     return [];
   }
 
-  const { game, base, alignment } = core;
-  const events = mapScores365Events(game, base, alignment);
+  const { game, gameLocalized, base, alignment } = core;
+  const namedBase = gameLocalized
+    ? overlay365LocalizedFixtureNames(base, gameLocalized, alignment)
+    : base;
+  const events = mapScores365Events(game, namedBase, alignment);
   const scores = resolve365Scores(game, alignment);
   const validated = validate365MappedEvents(
     fixtureId,
     game,
-    base,
+    namedBase,
     alignment,
     events,
     scores.home,
@@ -2768,7 +2771,14 @@ export async function getScores365ExperimentEvents(
       `[365Events] fixture=${fixtureId} reason=upstream_empty gameId=${gameId} rawEvents=0`,
     );
   }
-  return withSyntheticGoals(fixtureId, validated, base, scores);
+  const merged = await withSyntheticGoals(fixtureId, validated, namedBase, scores);
+  return (
+    overlay365LocalizedRosterNames(
+      { events: merged },
+      gameLocalized,
+      namedBase.teams,
+    ).events ?? merged
+  );
 }
 
 /**
@@ -2851,17 +2861,20 @@ export async function getScores365ExperimentStatistics(
   });
   if (!core) return [];
 
-  const { game, base, alignment } = core;
+  const { game, gameLocalized, base, alignment } = core;
+  const namedBase = gameLocalized
+    ? overlay365LocalizedFixtureNames(base, gameLocalized, alignment)
+    : base;
   const teamRefs = {
     home: {
-      id: base.teams.home?.id ?? 0,
-      name: base.teams.home?.name ?? 'Home',
-      logo: (base.teams.home as any)?.logo ?? '',
+      id: namedBase.teams.home?.id ?? 0,
+      name: namedBase.teams.home?.name ?? 'Home',
+      logo: (namedBase.teams.home as any)?.logo ?? '',
     },
     away: {
-      id: base.teams.away?.id ?? 0,
-      name: base.teams.away?.name ?? 'Away',
-      logo: (base.teams.away as any)?.logo ?? '',
+      id: namedBase.teams.away?.id ?? 0,
+      name: namedBase.teams.away?.name ?? 'Away',
+      logo: (namedBase.teams.away as any)?.logo ?? '',
     },
   };
 
@@ -2873,7 +2886,7 @@ export async function getScores365ExperimentStatistics(
     if (hasApiStatistics(fromTeam)) return fromTeam as any[];
   }
 
-  const lineupData = mapScores365Lineups(game, base, alignment);
+  const lineupData = mapScores365Lineups(game, namedBase, alignment);
   const playersWithSide = [
     ...(lineupData[0]?.startXI ?? []).map((l: any) => ({ side: 'home' as const, stats: l.player._stats365 })),
     ...(lineupData[0]?.substitutes ?? []).map((l: any) => ({ side: 'home' as const, stats: l.player._stats365 })),
@@ -2883,10 +2896,10 @@ export async function getScores365ExperimentStatistics(
   const fromPlayers = buildTeamStatisticsFrom365Players(playersWithSide, teamRefs);
   if (hasApiStatistics(fromPlayers)) return fromPlayers as any[];
 
-  const events = mapScores365Events(game, base, alignment);
-  if (events.length > 0 && base.teams && (base as any).goals) {
+  const events = mapScores365Events(game, namedBase, alignment);
+  if (events.length > 0 && namedBase.teams && (namedBase as any).goals) {
     return buildFallbackStatisticsFromEvents(
-      { teams: base.teams as any, goals: (base as any).goals },
+      { teams: namedBase.teams as any, goals: (namedBase as any).goals },
       events,
     ) as any[];
   }
@@ -2918,6 +2931,131 @@ function overlay365LocalizedFixtureNames(
       ...fixture.league,
       name: resolve365LeagueDisplayName(localized, fixture.league.name),
     },
+  };
+}
+
+function localizedPersonName(member: {
+  name?: string | null;
+  shortName?: string | null;
+}): string | undefined {
+  const full = member.name?.trim();
+  const short = member.shortName?.trim();
+  return full || short || undefined;
+}
+
+function indexLocalized365People(localized: Scores365Game): {
+  byMemberId: Map<number, string>;
+  byAthleteId: Map<number, string>;
+} {
+  const byMemberId = new Map<number, string>();
+  const byAthleteId = new Map<number, string>();
+  const ingest = (m: {
+    id?: number;
+    athleteId?: number;
+    name?: string;
+    shortName?: string;
+  } | undefined) => {
+    if (!m) return;
+    const name = localizedPersonName(m);
+    if (!name) return;
+    if (m.id != null && m.id > 0) byMemberId.set(m.id, name);
+    if (m.athleteId != null && m.athleteId > 0) byAthleteId.set(m.athleteId, name);
+  };
+  for (const m of localized.members ?? []) ingest(m);
+  return { byMemberId, byAthleteId };
+}
+
+function pickLocalized365Name(
+  index: { byMemberId: Map<number, string>; byAthleteId: Map<number, string> },
+  ...ids: Array<number | null | undefined>
+): string | undefined {
+  for (const id of ids) {
+    if (id == null || id <= 0) continue;
+    const fromMember = index.byMemberId.get(id);
+    if (fromMember) return fromMember;
+    const fromAthlete = index.byAthleteId.get(id);
+    if (fromAthlete) return fromAthlete;
+  }
+  return undefined;
+}
+
+export type Overlay365Teams = {
+  home?: { id?: number; name?: string } | null;
+  away?: { id?: number; name?: string } | null;
+};
+
+function teamNameByApiId(teams?: Overlay365Teams | null): Map<number, string> {
+  const map = new Map<number, string>();
+  const homeName = teams?.home?.name?.trim();
+  const awayName = teams?.away?.name?.trim();
+  if (teams?.home?.id != null && homeName) map.set(teams.home.id, homeName);
+  if (teams?.away?.id != null && awayName) map.set(teams.away.id, awayName);
+  return map;
+}
+
+/**
+ * Overlay Arabic (or other langId) person/team names from the localized 365
+ * game onto events, lineups, and stats. Structural mapping stays on the EN game.
+ */
+export function overlay365LocalizedRosterNames<
+  T extends { events?: any[]; lineups?: any[]; statistics?: any[] },
+>(
+  payload: T,
+  localized: Scores365Game | null | undefined,
+  teams?: Overlay365Teams | null,
+): T {
+  if (!localized) return payload;
+  const people = indexLocalized365People(localized);
+  const teamNames = teamNameByApiId(teams);
+
+  const overlayTeam = (team: any) => {
+    if (!team) return team;
+    const next = team.id != null ? teamNames.get(team.id) : undefined;
+    return next && next !== team.name ? { ...team, name: next } : team;
+  };
+
+  const overlayPerson = (person: any) => {
+    if (!person) return person;
+    const next = pickLocalized365Name(
+      people,
+      person.id,
+      person.athleteId,
+      person.scores365MemberId,
+    );
+    return next && next !== person.name ? { ...person, name: next } : person;
+  };
+
+  const events = payload.events?.map((ev) => ({
+    ...ev,
+    team: overlayTeam(ev.team),
+    player: overlayPerson(ev.player),
+    assist: overlayPerson(ev.assist),
+  }));
+
+  const lineups = payload.lineups?.map((side) => ({
+    ...side,
+    team: overlayTeam(side.team),
+    coach: overlayPerson(side.coach),
+    startXI: (side.startXI ?? []).map((row: any) => ({
+      ...row,
+      player: overlayPerson(row?.player),
+    })),
+    substitutes: (side.substitutes ?? []).map((row: any) => ({
+      ...row,
+      player: overlayPerson(row?.player),
+    })),
+  }));
+
+  const statistics = payload.statistics?.map((row) => ({
+    ...row,
+    team: overlayTeam(row.team),
+  }));
+
+  return {
+    ...payload,
+    ...(events ? { events } : {}),
+    ...(lineups ? { lineups } : {}),
+    ...(statistics ? { statistics } : {}),
   };
 }
 
@@ -2965,11 +3103,11 @@ export async function getScores365ExperimentBundle(
     fixture = overlay365LocalizedFixtureNames(fixture, gameLocalized, alignment);
   }
 
-  let events = mapScores365Events(game, base, alignment);
+  let events = mapScores365Events(game, fixture, alignment);
   events = validate365MappedEvents(
     fixtureId,
     game,
-    base,
+    fixture,
     alignment,
     events,
     fixture.goals.home,
@@ -2980,19 +3118,28 @@ export async function getScores365ExperimentBundle(
     : (fixture.goals.home ?? 0) + (fixture.goals.away ?? 0) > 0
       ? false
       : null;
-  events = await withSyntheticGoals(fixtureId, events, base, {
+  events = await withSyntheticGoals(fixtureId, events, fixture, {
     home: fixture.goals.home,
     away: fixture.goals.away,
   });
 
-  const lineupData = mapScores365Lineups(game, base, alignment);
+  let lineupData = mapScores365Lineups(game, fixture, alignment);
+  if (gameLocalized) {
+    const overlayed = overlay365LocalizedRosterNames(
+      { events, lineups: lineupData },
+      gameLocalized,
+      fixture.teams,
+    );
+    events = overlayed.events ?? events;
+    lineupData = overlayed.lineups ?? lineupData;
+  }
 
   let statistics = (base as any).statistics ?? [];
   // Events-only stats from an older row are a placeholder; the team endpoint beats them.
   if (!hasRichStatistics(statistics)) {
     const teamRefs = {
-      home: { id: base.teams.home?.id ?? 0, name: base.teams.home?.name ?? 'Home', logo: (base.teams.home as any)?.logo ?? '' },
-      away: { id: base.teams.away?.id ?? 0, name: base.teams.away?.name ?? 'Away', logo: (base.teams.away as any)?.logo ?? '' },
+      home: { id: fixture.teams.home?.id ?? 0, name: fixture.teams.home?.name ?? 'Home', logo: (fixture.teams.home as any)?.logo ?? '' },
+      away: { id: fixture.teams.away?.id ?? 0, name: fixture.teams.away?.name ?? 'Away', logo: (fixture.teams.away as any)?.logo ?? '' },
     };
     const competitorIds = fixtureOriented365CompetitorIds(game, alignment);
     if (competitorIds && options?.skipTeamStats !== true) {
@@ -3021,6 +3168,15 @@ export async function getScores365ExperimentBundle(
         statistics = buildFallbackStatisticsFromEvents(fixture, events);
       }
     }
+  }
+
+  if (gameLocalized && statistics.length > 0) {
+    statistics =
+      overlay365LocalizedRosterNames(
+        { statistics },
+        gameLocalized,
+        fixture.teams,
+      ).statistics ?? statistics;
   }
 
   const lineupsAvailable = lineupData.some(

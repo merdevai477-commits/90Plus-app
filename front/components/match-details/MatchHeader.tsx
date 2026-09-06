@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -88,12 +88,20 @@ function PulsingDot({ color = LIVE_RED }: { color?: string }): React.ReactElemen
   );
 }
 
-function TeamLogo({ name, uri }: { name: string; uri?: string }): React.ReactElement {
+function TeamLogo({
+  name,
+  uri,
+  size,
+}: {
+  name: string;
+  uri?: string;
+  size: number;
+}): React.ReactElement {
   if (uri) {
     return (
       <Image
         source={{ uri }}
-        style={styles.teamLogoImg}
+        style={{ width: size, height: size }}
         contentFit="contain"
         transition={150}
         cachePolicy="memory-disk"
@@ -102,8 +110,15 @@ function TeamLogo({ name, uri }: { name: string; uri?: string }): React.ReactEle
     );
   }
   return (
-    <View style={styles.teamAvatar}>
-      <Text style={styles.teamAvatarText}>{name.slice(0, 2).toUpperCase()}</Text>
+    <View
+      style={[
+        styles.teamAvatar,
+        { width: size, height: size, borderRadius: size / 2 },
+      ]}
+    >
+      <Text style={[styles.teamAvatarText, { fontSize: Math.round(size * 0.2) }]}>
+        {name.slice(0, 2).toUpperCase()}
+      </Text>
     </View>
   );
 }
@@ -205,6 +220,13 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
     ? specialBadgeText
     : (kickoffStatusLabel || kickoffTime || vsLabel);
 
+  const { width: screenWidth } = useWindowDimensions();
+  const compact = screenWidth < 380;
+  const logoSize = compact ? 64 : screenWidth < 430 ? 76 : 90;
+  const scoreFont = compact ? 32 : screenWidth < 430 ? 38 : 44;
+  const teamNameSize = compact ? 14 : 18;
+  const leagueMaxWidth = Math.min(compact ? 148 : 180, Math.max(108, screenWidth * 0.4));
+  const scoreAreaMin = compact ? 108 : 124;
   const homeScorers = scorers?.home?.filter((s) => s.name) ?? [];
   const awayScorers = scorers?.away?.filter((s) => s.name) ?? [];
   const showScorers = homeScorers.length > 0 || awayScorers.length > 0;
@@ -214,7 +236,11 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
       colors={['#0c051a', '#07040d']}
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
-      style={[styles.wrap, isStoppage && styles.wrapStoppage]}
+      style={[
+        styles.wrap,
+        isStoppage && styles.wrapStoppage,
+        compact && { paddingHorizontal: 12 },
+      ]}
     >
       <View style={styles.teamsRow}>
         <TouchableOpacity
@@ -224,21 +250,21 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           activeOpacity={0.7}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <TeamLogo name={homeTeam} uri={homeLogo} />
-          <Text style={styles.teamName} numberOfLines={2}>
+          <TeamLogo name={homeTeam} uri={homeLogo} size={logoSize} />
+          <Text style={[styles.teamName, { fontSize: teamNameSize, maxWidth: compact ? 96 : 118 }]} numberOfLines={2}>
             {homeTeam}
           </Text>
         </TouchableOpacity>
 
-        <View style={styles.scoreArea}>
+        <View style={[styles.scoreArea, { minWidth: scoreAreaMin }]}>
           {league ? (
             <LinearGradient
               colors={['rgba(95,13,173,0.55)', 'rgba(42,6,75,0.55)']}
               start={{ x: 0.5, y: 0 }}
               end={{ x: 0.5, y: 1 }}
-              style={styles.leaguePill}
+              style={[styles.leaguePill, { maxWidth: leagueMaxWidth }]}
             >
-              <Text style={styles.leaguePillText} numberOfLines={1}>
+              <Text style={styles.leaguePillText} numberOfLines={2}>
                 {league}
               </Text>
             </LinearGradient>
@@ -251,9 +277,25 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
               {specialBadgeText}
             </Text>
           ) : (
-            <Text style={styles.scoreNum}>
-              {`${homeScore || '0'} - ${awayScore || '0'}`}
-            </Text>
+            <View style={styles.scoreRow}>
+              <Text
+                style={[styles.scoreNum, { fontSize: scoreFont, lineHeight: scoreFont + 6 }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {homeScore || '0'}
+              </Text>
+              <Text style={[styles.scoreDash, { fontSize: Math.round(scoreFont * 0.72) }]}>—</Text>
+              <Text
+                style={[styles.scoreNum, { fontSize: scoreFont, lineHeight: scoreFont + 6 }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {awayScore || '0'}
+              </Text>
+            </View>
           )}
 
           <View style={styles.statusRow}>
@@ -270,11 +312,19 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
             </Text>
           </View>
           {hasPenaltyScore ? (
-            <Text style={styles.penaltyLine} numberOfLines={1}>
-              {`(${String(penaltyHome)} - ${String(penaltyAway)} ${
-                statusLabel && short !== 'FT' ? statusLabel : penaltiesShortLabel
-              })`}
-            </Text>
+            <View style={styles.penaltyRow}>
+              <Text style={styles.penaltyLine} numberOfLines={1}>
+                {`(${String(penaltyHome)}`}
+              </Text>
+              <Text style={styles.penaltyLine} numberOfLines={1}>
+                {' - '}
+              </Text>
+              <Text style={styles.penaltyLine} numberOfLines={1}>
+                {`${String(penaltyAway)} ${
+                  statusLabel && short !== 'FT' ? statusLabel : penaltiesShortLabel
+                })`}
+              </Text>
+            </View>
           ) : null}
         </View>
 
@@ -285,8 +335,8 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
           activeOpacity={0.7}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <TeamLogo name={awayTeam} uri={awayLogo} />
-          <Text style={styles.teamName} numberOfLines={2}>
+          <TeamLogo name={awayTeam} uri={awayLogo} size={logoSize} />
+          <Text style={[styles.teamName, { fontSize: teamNameSize, maxWidth: compact ? 96 : 118 }]} numberOfLines={2}>
             {awayTeam}
           </Text>
         </TouchableOpacity>
@@ -340,11 +390,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  teamCol: { flex: 1, alignItems: 'center', gap: 8 },
-  teamLogoImg: { width: 90, height: 90 },
+  teamCol: { flex: 1, minWidth: 0, alignItems: 'center', gap: 8 },
   teamAvatar: {
-    width: 90,
-    height: 90,
     borderRadius: 45,
     backgroundColor: 'rgba(124,58,237,0.2)',
     borderWidth: 1.5,
@@ -360,12 +407,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     maxWidth: 118,
   },
-  scoreArea: { alignItems: 'center', justifyContent: 'space-between', minWidth: 112, gap: 6 },
+  scoreArea: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minWidth: 124,
+    flexShrink: 0,
+    gap: 6,
+  },
   leaguePill: {
-    height: 30,
+    minHeight: 30,
     minWidth: 96,
-    maxWidth: 130,
+    maxWidth: 160,
     paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 41,
     borderWidth: 1,
     borderColor: '#370565',
@@ -379,6 +433,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    gap: 6,
+  },
   scoreNum: {
     color: TEXT_PRIMARY,
     fontSize: 44,
@@ -386,6 +447,15 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     lineHeight: 50,
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+    flexShrink: 0,
+  },
+  scoreDash: {
+    color: TEXT_PRIMARY,
+    fontWeight: '600',
+    lineHeight: 36,
+    textAlign: 'center',
+    flexShrink: 0,
   },
   statusRow: {
     flexDirection: 'row',
@@ -407,11 +477,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textAlign: 'center',
   },
+  penaltyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 2,
+  },
   penaltyLine: {
     color: '#b363ff',
     fontSize: 12,
     fontWeight: '700',
-    marginTop: 2,
     fontVariant: ['tabular-nums'],
   },
   scorersRow: {
