@@ -10,14 +10,13 @@
  *   <View>                            screen shell (safe area via insets —
  *                                     RN's SafeAreaView is a no-op on Android)
  *     <ScrollView>
- *       <HeroHeader/>                 "شارك واربح" + "كل مشاركة = نقاط XP"
- *       <LuckyWheelCard/>             the daily-spin wheel, spun in place
+ *       <HeroHeader/>                 "شارك واربح" + ranking-by-shares line
  *       <WeeklyRankingCard/>          countdown + top 5 + full-ranking pill
  *       <WeeklyPrizes/>               cycle prize carousel
- *       <ShareCard/>                  referral link, copy, channels, XP hint
+ *       <ShareCard/>                  referral link, copy, channels, hint
  *       <LastWinnerCard/>             rank 1 of the last closed cycle
  *       <StatsBar/>                   LAST SECTION of the page content —
- *                                     friends · points · rank. In normal flow,
+ *                                     friends · participations · rank. In normal flow,
  *                                     not a footer and not pinned.
  *
  * ── WHERE THE NUMBERS COME FROM ──────────────────────────────────────────────
@@ -54,7 +53,6 @@ import type { ShareWinLastWinner } from '../../services/shareWin.service';
 import { SW_ASSET } from './assets';
 import HeroHeader from './components/HeroHeader';
 import LastWinnerCard from './components/LastWinnerCard';
-import LuckyWheelCard from './components/LuckyWheelCard';
 import ShareCard from './components/ShareCard';
 import ShareWinSkeleton from './components/ShareWinSkeleton';
 import StatsBar from './components/StatsBar';
@@ -94,11 +92,6 @@ export default function ShareWinScreen() {
   const scrollBottomPadding = insets.bottom + s(PAGE_END_GAP);
   /** Applied here rather than via SafeAreaView, which is a no-op on Android. */
   const scrollTopPadding = insets.top;
-
-  /** Stats move when the wheel pays out, so refresh once it settles. */
-  const handleSpinSettled = useCallback(() => {
-    void refetch();
-  }, [refetch]);
 
   const handleViewFullRanking = useCallback(() => {
     router.push('/share-win/leaderboard');
@@ -256,8 +249,6 @@ export default function ShareWinScreen() {
       >
         <HeroHeader />
 
-        <LuckyWheelCard onSpinSettled={handleSpinSettled} />
-
         <WeeklyRankingCard
           entries={overview.leaderboard}
           cycleEndAt={overview.cycle.endAt}
@@ -280,7 +271,6 @@ export default function ShareWinScreen() {
             above it (Figma 186:108 at y=2615, last winner ending at 2571). */}
         <StatsBar
           participants={overview.participants}
-          score={overview.score}
           rank={overview.rank}
         />
       </ScrollView>

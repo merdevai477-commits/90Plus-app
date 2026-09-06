@@ -23,7 +23,7 @@ interface ProfileSpinAndWinProps {
 }
 
 /**
- * Profile "لف واربح" — same daily-spin wheel as Share & Win.
+ * Profile "لف واربح" — daily-spin lucky wheel.
  * Visible only while the account can still spin (server 24h cooldown).
  * After a real win, the button hides as soon as the popup is dismissed,
  * and stays gone until the next spin window.

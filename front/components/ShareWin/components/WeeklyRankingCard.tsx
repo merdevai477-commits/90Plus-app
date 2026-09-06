@@ -98,7 +98,8 @@ const WeeklyRankingCard = memo(function WeeklyRankingCard({
                 username={entry.username}
                 name={displayNameOf(entry)}
                 avatar={entry.avatar}
-                scoreLabel={formatNumber(entry.score, language)}
+                scoreLabel={formatNumber(entry.participants, language)}
+                scoreUnit={copy.boardUnit}
                 tierIndex={index}
               />
             ))

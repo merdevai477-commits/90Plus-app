@@ -46,8 +46,8 @@ export function formatNumber(value: number, language: Language): string {
 }
 
 /**
- * Score with its XP suffix, matching the Figma leaderboard rows: the number and
- * the "XP" are separate text runs because they have different sizes/colours.
+ * Participation count shown on ranking rows. The number and unit are separate
+ * text runs because they have different sizes/colours.
  */
 export function formatScore(value: number, language: Language): string {
   return formatNumber(value, language);

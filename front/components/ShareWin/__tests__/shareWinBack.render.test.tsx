@@ -33,17 +33,10 @@ jest.mock('../../../utils/enhancedNetworkService', () => ({
   },
 }));
 
-/*
- * The lucky wheel spins on reanimated, whose native worklets runtime does not
- * exist under jest. The wheel is not what is under test — the page's back
- * control is — so the card is replaced by a placeholder.
- */
-jest.mock('../components/LuckyWheelCard', () => {
-  const ReactLocal = require('react');
-  const { View: V } = require('react-native');
+jest.mock('../../../src/i18n', () => {
+  const { en } = require('../../../locales/en');
   return {
-    __esModule: true,
-    default: () => ReactLocal.createElement(V, { testID: 'lucky-wheel' }),
+    useTranslation: () => ({ t: en, language: 'en' }),
   };
 });
 

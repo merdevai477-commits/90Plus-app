@@ -22,6 +22,8 @@ export interface LeaderboardRowProps {
   avatar: string | null;
   /** Pre-formatted so no Intl work happens during scroll. */
   scoreLabel: string;
+  /** Unit next to the count — participations, not XP. */
+  scoreUnit: string;
   /** Visual tier index — clamped by the caller (0-4 in Figma). */
   tierIndex: number;
   /** Highlight treatment for the signed-in user's own row. */
@@ -37,6 +39,7 @@ const LeaderboardRow = memo(function LeaderboardRow({
   name,
   avatar,
   scoreLabel,
+  scoreUnit,
   tierIndex,
   isCurrentUser = false,
   solid = false,
@@ -61,7 +64,7 @@ const LeaderboardRow = memo(function LeaderboardRow({
         isCurrentUser && sw.boardRowMine,
       ]}
       accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={`${rank}. ${name} — ${scoreLabel} XP`}
+      accessibilityLabel={`${rank}. ${name} — ${scoreLabel} ${scoreUnit}`}
     >
       <View style={[sw.boardRowLeft, !medal && sw.boardRowLeftNumbered]}>
         {medal ? (
@@ -106,7 +109,7 @@ const LeaderboardRow = memo(function LeaderboardRow({
         >
           {scoreLabel}
         </Text>
-        <Text style={sw.boardScoreXp}>XP</Text>
+        <Text style={sw.boardScoreXp}>{scoreUnit}</Text>
       </View>
     </Pressable>
   );

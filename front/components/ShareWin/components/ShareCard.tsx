@@ -1,7 +1,7 @@
 /**
  * "شارك الان واربح" card — Figma node 163:154.
  *
- * Referral link + copy button, the four channel tiles, and the XP hint.
+ * Referral link + copy button, the four channel tiles, and the ranking hint.
  * Channel handling follows the convention already used by reels/ReelItem:
  * try the app's own share URL, fall back to the OS share sheet, and only
  * record the share once it actually went out.
@@ -166,7 +166,7 @@ const ShareCard = memo(function ShareCard({
           ))}
         </View>
 
-        {/* "كل صديق يسجل من رابطك يمنحك XP" */}
+        {/* Ranking is by friends who join, not XP. */}
         <View style={sw.hintRow}>
           {/* Two runs, not nested Text — a masked gradient is a View and
               cannot live inside <Text>. They sit flush, as one sentence. */}

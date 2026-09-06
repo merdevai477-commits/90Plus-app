@@ -1,7 +1,7 @@
 /**
  * Share & Win hero — Figma node 119:625.
- * "شارك" in purple + " واربح" in white, subtitle, then "كل مشاركة = نقاط XP"
- * where both value words carry the #9E78F7 → #460BCB gradient.
+ * "شارك" in purple + " واربح" in white, then the ranking rule:
+ * standings follow participation count, not XP.
  */
 
 import React, { memo } from 'react';
@@ -34,14 +34,6 @@ const HeroHeader = memo(function HeroHeader() {
             style={sw.heroPerShareValue}
           >
             {copy.perSharePoints}
-          </GradientText>
-          <Text style={sw.heroPerShareLead}>{' '}</Text>
-          <GradientText
-            colors={SW_GRADIENT.heroXp}
-            horizontal
-            style={sw.heroPerShareValue}
-          >
-            {copy.perShareXp}
           </GradientText>
         </View>
       </View>

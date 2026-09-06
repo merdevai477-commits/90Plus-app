@@ -21,7 +21,8 @@
  *   • stable userId keys, de-duplicated in the hook
  *   • windowing tuned down from the defaults for low-end Android
  *
- * Rank and score are server-computed; this screen only paginates and formats.
+ * Rank is server-computed from participation count; this screen only paginates
+ * and formats. Rows show how many friends joined, never XP.
  * =============================================================================
  */
 
@@ -93,7 +94,7 @@ export default function ShareWinLeaderboardScreen() {
         key: entry.userId,
         entry,
         name: displayNameOf(entry),
-        scoreLabel: formatNumber(entry.score, language),
+        scoreLabel: formatNumber(entry.participants, language),
         isMe: entry.userId === me?.userId,
       })),
     [entries, language, me?.userId],
@@ -115,12 +116,13 @@ export default function ShareWinLeaderboardScreen() {
         name={item.name}
         avatar={item.entry.avatar}
         scoreLabel={item.scoreLabel}
+        scoreUnit={copy.boardUnit}
         tierIndex={index}
         isCurrentUser={item.isMe}
         onPress={handleOpenProfile}
       />
     ),
-    [handleOpenProfile],
+    [copy.boardUnit, handleOpenProfile],
   );
 
   const keyExtractor = useCallback((item: Row) => item.key, []);
@@ -266,7 +268,8 @@ export default function ShareWinLeaderboardScreen() {
             username={me.username}
             name={displayNameOf(me)}
             avatar={me.avatar}
-            scoreLabel={formatNumber(me.score, language)}
+            scoreLabel={formatNumber(me.participants, language)}
+            scoreUnit={copy.boardUnit}
             tierIndex={me.rank - 1}
             isCurrentUser
             solid

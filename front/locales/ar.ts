@@ -1129,8 +1129,8 @@ export const ar = {
     titleHighlight: 'شارك',
     titleRest: ' واربح',
     subtitle: 'شارك التطبيق مع أصدقائك واربح جوائز رائعة!',
-    perShareLead: 'كل مشاركة = ',
-    perSharePoints: 'نقاط',
+    perShareLead: 'الترتيب حسب ',
+    perSharePoints: 'عدد مرات المشاركة',
     perShareXp: 'XP',
 
     // بطاقة عجلة الحظ
@@ -1152,6 +1152,7 @@ export const ar = {
     leaderboardEmpty: 'لا يوجد ترتيب بعد — كن أول المشاركين!',
     leaderboardCompetitors: '{count} مشارك هذا الأسبوع',
     leaderboardEnd: 'وصلت لنهاية الترتيب',
+    boardUnit: 'مشاركة',
     close: 'إغلاق',
 
     // الجوائز الأسبوعية
@@ -1166,8 +1167,8 @@ export const ar = {
     channelInstagram: 'إنستغرام',
     channelWhatsapp: 'واتساب',
     channelSnapchat: 'سناب شات',
-    referralHintLead: 'كل صديق يسجل من رابطك يمنحك ',
-    referralHintXp: 'XP',
+    referralHintLead: 'كل صديق يسجل من رابطك يحسب ',
+    referralHintXp: 'مشاركة',
     linkCopied: 'تم نسخ الرابط',
     linkCopiedDetail: 'شاركه مع أصدقائك واربح نقاط',
     copyFailed: 'تعذّر نسخ الرابط',

@@ -2,12 +2,13 @@
  * Share & Win — شارك واربح
  *
  * Weekly referral competition. Every user gets a unique referral code; sharing
- * it and converting friends into registered users earns cycle score, and each
- * week is ranked and archived independently.
+ * it and converting friends into registered users raises their participation
+ * count. Each week is ranked by that count and archived independently.
  *
  * ── Invariants this module guarantees ────────────────────────────────────────
  *  • The database is the source of truth. Nothing the client sends can change
- *    a share count, participant count, score or rank directly.
+ *    a share count, participant count or rank directly.
+ *  • Weekly rank is participation count (successful referrals), never XP.
  *  • A user can be attributed to at most ONE referrer, ever
  *    (`share_win_referrals.referredUserId` is UNIQUE — races lose on the index,
  *    not on a read-then-write check).
@@ -237,7 +238,6 @@ export async function closeCycle(cycleId: string, now = new Date()): Promise<voi
           ROW_NUMBER() OVER (
             ORDER BY
               "participantCount" DESC,
-              "score" DESC,
               COALESCE("firstScoredAt", 'infinity'::timestamp) ASC,
               "userId" ASC
           )::int AS rank
@@ -479,7 +479,7 @@ export async function claimReferral(
  * A single user's rank, without loading the leaderboard.
  *
  * Counts only the rows that strictly outrank them, using the same tuple the
- * leaderboard sorts by: participants ↓, score ↓, earliest scorer ↑, id ↑.
+ * leaderboard sorts by: participants ↓, earliest scorer ↑, id ↑.
  *
  * The user's own row is joined in rather than passed as parameters. That is
  * deliberate: binding `firstScoredAt` as a parameter makes the driver send a
@@ -499,12 +499,10 @@ async function getRankFor(cycleId: string, userId: string): Promise<number | nul
     WHERE s."cycleId" = ${cycleId}
       AND (
         -s."participantCount",
-        -s."score",
         COALESCE(s."firstScoredAt", 'infinity'::timestamp),
         s."userId"
       ) < (
         -me."participantCount",
-        -me."score",
         COALESCE(me."firstScoredAt", 'infinity'::timestamp),
         me."userId"
       )
@@ -594,7 +592,6 @@ export async function getLeaderboard(
     where: { cycleId },
     orderBy: [
       { participantCount: 'desc' },
-      { score: 'desc' },
       { firstScoredAt: 'asc' },
       { userId: 'asc' },
     ],
