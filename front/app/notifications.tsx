@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     View,
     Text,
@@ -12,7 +12,7 @@ import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import type { LucideIcon } from 'lucide-react-native';
@@ -438,7 +438,16 @@ export default function NotificationsScreen() {
         hasMore,
     } = useNotifications();
 
+    const params = useLocalSearchParams<{ openLuckyWheel?: string }>();
+    const [showLuckyWheel, setShowLuckyWheel] = useState(false);
     const loadingToastShownRef = useRef(false);
+
+    useEffect(() => {
+        if (params.openLuckyWheel === 'true') {
+            setShowLuckyWheel(false);
+            router.replace('/(tabs)/profile');
+        }
+    }, [params.openLuckyWheel, router]);
 
     useFocusEffect(
         useCallback(() => {
