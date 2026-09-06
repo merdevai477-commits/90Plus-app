@@ -842,28 +842,32 @@ function buildStyles(scale: DesignScale, language: string) {
       textAlign: 'center',
     },
     hintRow: {
-      height: s(45),
+      minHeight: s(45),
       borderRadius: s(SW_RADIUS.hint),
       borderWidth: 1,
       borderColor: SW_COLOR.rowBorder,
       backgroundColor: SW_COLOR.rowBg,
-      opacity: 0.8,
-      paddingHorizontal: s(20),
+      paddingVertical: s(10),
+      paddingHorizontal: s(14),
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: s(12),
+      gap: s(10),
     },
     hintText: {
+      flex: 1,
       fontFamily: font(400),
-      fontSize: f(16),
+      fontSize: f(13),
+      lineHeight: f(18),
       color: SW_COLOR.fieldText,
     },
-    /** Lead copy + the gradient "XP" read as one sentence — no gap between. */
-    hintTextRun: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flexShrink: 1,
+    hintEmphasis: {
+      fontFamily: font(600),
+      color: SW_COLOR.purpleBright,
+    },
+    hintGift: {
+      width: s(20),
+      height: s(20),
+      flexShrink: 0,
     },
 
     /* ── Last winner (node 196:111) — gap 24 ───────────────────────────── */
@@ -1070,7 +1074,7 @@ function buildStyles(scale: DesignScale, language: string) {
       backgroundColor: 'rgba(10, 6, 24, 0.62)',
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: 'rgba(255,255,255,0.16)',
-      zIndex: 20,
+      zIndex: 40,
     },
     lbListContent: {
       width: s(371),

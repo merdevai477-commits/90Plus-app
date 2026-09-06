@@ -44,7 +44,7 @@ export function computeScore(participantCount: number, shareCount: number): numb
 // ─── Anti-abuse limits ──────────────────────────────────────────────────────
 
 /** Ignore share taps fired faster than this — double-taps, retries, replays. */
-const SHARE_MIN_INTERVAL_MS = 2_000;
+const SHARE_MIN_INTERVAL_MS = 5_000;
 /** Hard ceiling on counted shares per user per day. */
 const SHARE_DAILY_LIMIT = 200;
 /**

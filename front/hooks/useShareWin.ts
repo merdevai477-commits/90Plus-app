@@ -25,6 +25,7 @@ import { toastManager } from '../services/toastManager';
 import { useTranslation } from '../src/i18n';
 import { getClerkBearerToken } from '../utils/clerkAuthToken';
 import { logger } from '../utils/logger';
+import { confirmExternalShare, isCopyShareActivity } from '../utils/confirmExternalShare';
 import {
   clearPendingReferral,
   getPendingReferral,
@@ -77,12 +78,12 @@ export function useShareWin() {
    * backend enforces its own cooldown, so calling it on every share is safe.
    */
   const trackShare = useCallback(
-    async (channel: ShareChannel) => {
+    async (channel: ShareChannel): Promise<boolean> => {
       const token = await getClerkBearerToken(getTokenRef.current);
-      if (!token) return;
+      if (!token) return false;
 
       const result = await recordShareEvent(token, channel);
-      if (result) {
+      if (result?.counted) {
         await queryClient.invalidateQueries({ queryKey: SHARE_WIN_QUERY_KEY });
       } else {
         logger.debug('[ShareWin] Share not recorded — will reconcile on next load');
@@ -97,6 +98,8 @@ export function useShareWin() {
       } catch (error) {
         logger.debug('[ShareWin] App-share XP claim skipped:', error);
       }
+
+      return Boolean(result?.counted);
     },
     [handleXpEvents, queryClient, refreshXp],
   );
@@ -120,6 +123,11 @@ export function useShareWin() {
         );
 
         if (result.action !== Share.sharedAction) return;
+        // iOS reports a completed share with an activity type. A missing type
+        // or the pasteboard activity is a cancel / copy, not a share.
+        if (Platform.OS === 'ios') {
+          if (!result.activityType || isCopyShareActivity(result.activityType)) return;
+        }
         await trackShare(channel);
       } catch (error) {
         logger.debug('[ShareWin] Share sheet dismissed:', error);
@@ -128,7 +136,7 @@ export function useShareWin() {
     [query.data?.referralCode, trackShare],
   );
 
-  /** Copy the referral link. Counts as a share — the link is now out there. */
+  /** Copy the referral link so the user can paste it. Copying is not a share. */
   const copyReferralLink = useCallback(async () => {
     const link = query.data?.referralLink;
     if (!link) return;
@@ -139,12 +147,11 @@ export function useShareWin() {
         t.shareWin?.linkCopied ?? 'Link copied',
         t.shareWin?.linkCopiedDetail ?? '',
       );
-      await trackShare('copy_link');
     } catch (error) {
       logger.warn('[ShareWin] Copy failed:', error);
       toastManager.showError(t.common?.error ?? 'Error', t.shareWin?.copyFailed ?? '');
     }
-  }, [query.data?.referralLink, t, trackShare]);
+  }, [query.data?.referralLink, t]);
 
   return {
     overview: query.data ?? null,

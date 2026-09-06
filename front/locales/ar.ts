@@ -1154,6 +1154,7 @@ export const ar = {
     leaderboardEnd: 'وصلت لنهاية الترتيب',
     boardUnit: 'مشاركة',
     close: 'إغلاق',
+    backToRank: 'رجوع للرانك',
 
     // الجوائز الأسبوعية
     prizesTitle: 'الجوائز الأسبوعية',
@@ -1167,10 +1168,10 @@ export const ar = {
     channelInstagram: 'إنستغرام',
     channelWhatsapp: 'واتساب',
     channelSnapchat: 'سناب شات',
-    referralHintLead: 'كل صديق يسجل من رابطك يحسب ',
+    referralHintLead: 'كل صديق يسجّل من رابطك يُحسب ',
     referralHintXp: 'مشاركة',
     linkCopied: 'تم نسخ الرابط',
-    linkCopiedDetail: 'شاركه مع أصدقائك واربح نقاط',
+    linkCopiedDetail: 'الصقه في محادثة — الشير يتحسب لما تبعت الرابط',
     copyFailed: 'تعذّر نسخ الرابط',
     shareFailed: 'تعذّر تسجيل المشاركة — سنحاول لاحقاً',
 

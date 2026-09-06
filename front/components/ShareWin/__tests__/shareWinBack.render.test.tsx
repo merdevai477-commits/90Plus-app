@@ -33,6 +33,15 @@ jest.mock('../../../utils/enhancedNetworkService', () => ({
   },
 }));
 
+jest.mock('../components/LuckyWheelCard', () => {
+  const ReactLocal = require('react');
+  const { View: V } = require('react-native');
+  return {
+    __esModule: true,
+    default: () => ReactLocal.createElement(V, { testID: 'lucky-wheel' }),
+  };
+});
+
 jest.mock('../../../src/i18n', () => {
   const { en } = require('../../../locales/en');
   return {
@@ -130,7 +139,7 @@ describe('the back control', () => {
     expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 
-  it('lands a deep-linked visitor in the app instead of a dead end', () => {
+  it('lands a deep-linked visitor on Rank instead of a dead end', () => {
     // Cold start from a shared invite: Share & Win is the first screen.
     mockRouter.canGoBack.mockReturnValue(false);
     render(<ShareWinScreen />);
@@ -138,7 +147,7 @@ describe('the back control', () => {
     fireEvent.press(screen.getByTestId('share-win-back'));
 
     expect(mockRouter.back).not.toHaveBeenCalled();
-    expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/matches');
+    expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/rank');
   });
 
   it('is labelled for screen readers', () => {

@@ -118,7 +118,7 @@ export default function ShareWinScreen() {
       router.back();
       return;
     }
-    router.replace('/(tabs)/matches');
+    router.replace('/(tabs)/rank');
   }, [router]);
 
   /** Same control on every state of the page — loading, error and ready. */
@@ -127,7 +127,7 @@ export default function ShareWinScreen() {
       onPress={handleLeave}
       hitSlop={12}
       accessibilityRole="button"
-      accessibilityLabel={copy.close}
+      accessibilityLabel={copy.backToRank ?? copy.close}
       testID="share-win-back"
       style={({ pressed }) => [
         sw.pageBackButton,

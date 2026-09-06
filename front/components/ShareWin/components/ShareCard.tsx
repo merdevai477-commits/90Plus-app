@@ -15,11 +15,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { buildReferralSharePayload } from '../../../constants/shareLinks';
 import { useTranslation } from '../../../src/i18n';
 import type { ShareChannel } from '../../../hooks/useShareWin';
+import { confirmExternalShare } from '../../../utils/confirmExternalShare';
 import { logger } from '../../../utils/logger';
 import { SW_ASSET } from '../assets';
 import { compactLink } from '../data';
 import { SW_GRADIENT, useShareWinStyles } from '../styles';
-import GradientText from './GradientText';
 
 interface ShareCardProps {
   referralCode: string;
@@ -54,8 +54,11 @@ const ShareCard = memo(function ShareCard({
         try {
           if (await Linking.canOpenURL(schemeUrl)) {
             await Linking.openURL(schemeUrl);
-            onShared(channel);
-            return;
+            // Only count if the user actually left this app for the channel.
+            if (await confirmExternalShare()) {
+              onShared(channel);
+              return;
+            }
           }
         } catch (error) {
           logger.debug(`[ShareWin] ${channel} scheme unavailable:`, error);
@@ -166,21 +169,14 @@ const ShareCard = memo(function ShareCard({
           ))}
         </View>
 
-        {/* Ranking is by friends who join, not XP. */}
         <View style={sw.hintRow}>
-          {/* Two runs, not nested Text — a masked gradient is a View and
-              cannot live inside <Text>. They sit flush, as one sentence. */}
-          <View style={sw.hintTextRun}>
-            <Text style={sw.hintText} numberOfLines={1}>
-              {copy.referralHintLead}
-            </Text>
-            <GradientText colors={SW_GRADIENT.purpleText} style={sw.hintText}>
-              {copy.referralHintXp}
-            </GradientText>
-          </View>
+          <Text style={sw.hintText}>
+            {copy.referralHintLead}
+            <Text style={sw.hintEmphasis}>{copy.referralHintXp}</Text>
+          </Text>
           <Image
             source={SW_ASSET.gift}
-            style={{ width: s(24), height: s(24) }}
+            style={sw.hintGift}
             contentFit="contain"
             transition={0}
           />

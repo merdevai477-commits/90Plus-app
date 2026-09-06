@@ -1068,6 +1068,7 @@ export const en = {
     leaderboardEnd: 'You have reached the end',
     boardUnit: 'friends',
     close: 'Close',
+    backToRank: 'Back to Rank',
 
     // Weekly prizes
     prizesTitle: 'Weekly Prizes',
@@ -1081,10 +1082,10 @@ export const en = {
     channelInstagram: 'Instagram',
     channelWhatsapp: 'WhatsApp',
     channelSnapchat: 'Snapchat',
-    referralHintLead: 'Every friend who signs up with your link counts as ',
+    referralHintLead: 'Each friend who joins counts as ',
     referralHintXp: 'a participation',
     linkCopied: 'Link copied',
-    linkCopiedDetail: 'Share it with your friends and earn points',
+    linkCopiedDetail: 'Paste it in a chat — a share counts when you send it',
     copyFailed: 'Could not copy the link',
     shareFailed: 'Could not record the share — we will retry later',
 
