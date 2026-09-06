@@ -26,7 +26,7 @@
  */
 
 import React, { memo, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -58,6 +58,9 @@ import GradientText from './GradientText';
 interface LuckyWheelCardProps {
   /** Fired once the wheel has settled, so the page can refresh its stats. */
   onSpinSettled?: (outcome: SpinOutcome) => void;
+  /** True while a spin animation is in flight (wind-up through settle). */
+  onBusyChange?: (busy: boolean) => void;
+  style?: StyleProp<ViewStyle>;
 }
 
 /** Silver→indigo gradient used by the two lit prize labels in Figma. */
@@ -81,7 +84,11 @@ const SETTLE_TURNS = 5;
 /** Degrees the wheel overshoots and springs back at the very end. */
 const RECOIL_DEG = 4;
 
-const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWheelCardProps) {
+const LuckyWheelCard = memo(function LuckyWheelCard({
+  onSpinSettled,
+  onBusyChange,
+  style,
+}: LuckyWheelCardProps) {
   const { sw, metrics } = useShareWinStyles();
   const { t } = useTranslation();
   const copy = t.shareWin;
@@ -126,6 +133,7 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
     (outcome: SpinOutcome) => {
       if (!mounted.current) return;
       spinGuardRef.current = false;
+      onBusyChange?.(false);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       finishSpin();
       onSpinSettled?.(outcome);
@@ -137,7 +145,7 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
         outcome.source === 'offline' ? copy.spinWonOfflineDetail : copy.spinWonDetail,
       );
     },
-    [copy.spinWonDetail, copy.spinWonOfflineDetail, copy.spinWonTitle, finishSpin, onSpinSettled],
+    [copy.spinWonDetail, copy.spinWonOfflineDetail, copy.spinWonTitle, finishSpin, onBusyChange, onSpinSettled],
   );
 
   /** Cancels a spin that never got a result to land on (offline/locked path
@@ -145,11 +153,12 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
   const stopIdle = useCallback(() => {
     if (!mounted.current) return;
     spinGuardRef.current = false;
+    onBusyChange?.(false);
     cancelAnimation(rotation);
     cancelAnimation(pointerTilt);
     pointerTilt.value = withTiming(0, { duration: 200 });
     finishSpin();
-  }, [finishSpin, pointerTilt, rotation]);
+  }, [finishSpin, onBusyChange, pointerTilt, rotation]);
 
   /** A real 24h cooldown — stop gracefully and say exactly when to come back. */
   const stopForCooldown = useCallback(
@@ -168,6 +177,7 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
   const handleSpin = useCallback(async () => {
     if (spinGuardRef.current || isSpinning || !canSpin) return;
     spinGuardRef.current = true;
+    onBusyChange?.(true);
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -208,6 +218,7 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
     if (!mounted.current) return;
     if (attempt.status === 'locked') {
       spinGuardRef.current = false;
+      onBusyChange?.(false);
       return;
     }
     if (attempt.status === 'cooldown') {
@@ -268,11 +279,13 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
     canSpin,
     hubScale,
     isSpinning,
+    onBusyChange,
     pointerTilt,
     rotation,
     settleComplete,
     spin,
     stopForCooldown,
+    stopIdle,
   ]);
 
   /**
@@ -296,7 +309,7 @@ const LuckyWheelCard = memo(function LuckyWheelCard({ onSpinSettled }: LuckyWhee
       : copy.wheelCta;
 
   return (
-    <View style={[sw.card, sw.wheelCard]}>
+    <View style={[sw.card, sw.wheelCard, style]}>
       <View style={sw.wheelHeader}>
         <Text style={sw.cardTitle}>{copy.wheelTitle}</Text>
         <Text style={sw.cardSubtitle}>{copy.wheelSubtitle}</Text>
