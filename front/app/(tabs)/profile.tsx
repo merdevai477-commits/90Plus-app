@@ -17,6 +17,7 @@ import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
 import ProfileBioCard from '../../components/profile/ProfileBioCard';
 import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
 import ProfileSpinAndWin from '../../components/profile/ProfileSpinAndWin';
+import SpinAndWinButton from '../../components/profile/SpinAndWinButton';
 import { ProfileAddLinkModal } from '../../components/profile/ProfileAddLinkModal';
 import { ProfileMoreMenuModal } from '../../components/profile/ProfileMoreMenuModal';
 import ProfileMediaChoiceSheet from '../../components/profile/ProfileMediaChoiceSheet';
@@ -678,6 +679,7 @@ function OwnProfileScreen() {
   const [showStreakInfo, setShowStreakInfo] = useState(false);
   const [addLinkOpen, setAddLinkOpen] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showLuckyWheel, setShowLuckyWheel] = useState(false);
   const addLinkPlatform = addLinkOpen;
   const setAddLinkPlatform = useCallback((platform?: unknown) => {
     if (platform === null || platform === false) {
@@ -1992,7 +1994,16 @@ function OwnProfileScreen() {
           ]}
         />
 
-        <ProfileSpinAndWin />
+        <ProfileSpinAndWin
+          visible={showLuckyWheel}
+          onClose={() => setShowLuckyWheel(false)}
+          button={
+            <SpinAndWinButton
+              label={t.profile.spinAndWinCta}
+              onPress={() => setShowLuckyWheel(true)}
+            />
+          }
+        />
 
         <ProfileConnectCard
           links={socialLinks}
@@ -2892,7 +2903,7 @@ function OwnProfileScreen() {
 export default function ProfileScreenWithBoundary() {
   return (
     <ProfileErrorBoundary>
-      <OwnProfileScreen />
+      <OwnProfileScreen key="spin-win-v2" />
     </ProfileErrorBoundary>
   );
 }

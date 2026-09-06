@@ -15,7 +15,12 @@ import LuckyWheelCard from '../ShareWin/components/LuckyWheelCard';
 import { useDailySpin } from '../../hooks/useDailySpin';
 import { useTranslation } from '../../src/i18n';
 import { runSafeModalClose } from '../../utils/safeModalClose';
-import SpinAndWinButton from './SpinAndWinButton';
+
+interface ProfileSpinAndWinProps {
+  visible: boolean;
+  onClose: () => void;
+  button: React.ReactNode;
+}
 
 /**
  * Profile "لف واربح" — same daily-spin wheel as Share & Win.
@@ -23,10 +28,13 @@ import SpinAndWinButton from './SpinAndWinButton';
  * After a real win, the button hides as soon as the popup is dismissed,
  * and stays gone until the next spin window.
  */
-const ProfileSpinAndWin = memo(function ProfileSpinAndWin() {
+const ProfileSpinAndWin = memo(function ProfileSpinAndWin({
+  visible,
+  onClose,
+  button,
+}: ProfileSpinAndWinProps) {
   const { t } = useTranslation();
   const { status, canSpin, reloadStatus } = useDailySpin();
-  const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [wonThisWindow, setWonThisWindow] = useState(false);
   const wonRef = useRef(false);
@@ -46,20 +54,15 @@ const ProfileSpinAndWin = memo(function ProfileSpinAndWin() {
 
   const showButton = !!status?.canSpin && !wonThisWindow;
 
-  const openWheel = useCallback(() => {
-    wonRef.current = false;
-    setVisible(true);
-  }, []);
-
   const closeWheel = useCallback(() => {
     if (busy) return;
     runSafeModalClose(() => {
-      setVisible(false);
+      onClose();
       setBusy(false);
       if (wonRef.current) setWonThisWindow(true);
       void reloadStatus();
     });
-  }, [busy, reloadStatus]);
+  }, [busy, onClose, reloadStatus]);
 
   const handleSettled = useCallback(() => {
     wonRef.current = true;
@@ -69,9 +72,7 @@ const ProfileSpinAndWin = memo(function ProfileSpinAndWin() {
 
   return (
     <>
-      {showButton ? (
-        <SpinAndWinButton label={t.profile.spinAndWinCta} onPress={openWheel} />
-      ) : null}
+      {showButton ? button : null}
 
       <Modal
         visible={visible}
