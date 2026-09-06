@@ -2661,6 +2661,44 @@ export class FootballController {
   }
 
   /**
+   * GET /api/football/cached/365/fixture/:id/recent-averages
+   * Last-N per-team averages (365Scores) for the pre-kickoff Statistics tab.
+   */
+  static async getCached365RecentFormAverages(req: Request, res: Response): Promise<void> {
+    try {
+      const fixtureId = parseInt(ensureString(req.params.id));
+      if (isNaN(fixtureId)) {
+        res.status(400).json({ status: 'ERROR', message: 'Invalid fixture ID' });
+        return;
+      }
+      const lastRaw = parseInt(ensureString(req.query.last as string | undefined), 10);
+      const last = Number.isFinite(lastRaw) ? lastRaw : 4;
+      const language = resolveAppLanguage(req);
+      const result = await footballDataCacheService.getCached365RecentFormAverages(
+        fixtureId,
+        language,
+        last,
+      );
+      if (!result.data) {
+        res.status(503).json({
+          status: 'ERROR',
+          message: '365Scores recent averages unavailable',
+          source: result.source,
+        });
+        return;
+      }
+      res.json({
+        status: 'SUCCESS',
+        source: result.source,
+        response: result.data,
+        _meta: { scores365GameId: result.scores365GameId ?? null, fixtureId },
+      });
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
    * GET /api/football/cached/365/game/:gameId/resolve
    * Map a 365Scores gameId → fixtureId for match-details navigation.
    */

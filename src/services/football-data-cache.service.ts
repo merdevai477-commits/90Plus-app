@@ -66,6 +66,7 @@ import {
     resolveApiFixtureIdFor365GameId,
     resolveScores365AppLanguage,
     resolveScores365LangId,
+    fetchScores365GameTeamStats,
     SCORES365_LEAGUE_ID_OFFSET,
 } from './scores365-experiment.service';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
@@ -110,6 +111,16 @@ import {
 } from '../utils/match-stats-fallback';
 import { resolveEventsFeedAvailability } from './synthetic-goals.service';
 import { buildTeamStatisticsFrom365Players } from '../utils/scores365-player-stats';
+import type { Scores365TeamStatsPayload } from '../utils/scores365-team-stats';
+import {
+    buildRecentFormSide,
+    mapPool,
+    pickLastFinishedGames,
+    uniqueRecentGameIds,
+    type RecentFormAveragesPayload,
+    type RecentFormGame,
+    RECENT_FORM_AVERAGES_LAST_DEFAULT,
+} from '../utils/recent-form-averages';
 import {
     calendarDayBounds,
     calendarDateFromKickoff,
@@ -4521,6 +4532,103 @@ class FootballDataCacheService {
             return { data: null, source, scores365GameId: gameId };
         }
         return { data: form, source: source ?? '365scores', scores365GameId: gameId };
+    }
+
+    private async getCachedFinished365GameStats(
+        gameId: number,
+    ): Promise<Scores365TeamStatsPayload | null> {
+        const redisKey = `365:finished-game-stats:v1:${gameId}`;
+        const cached = await redisCacheService.get<Scores365TeamStatsPayload>(redisKey);
+        if (cached?.statistics?.length) return cached;
+
+        const payload = await fetchScores365GameTeamStats(
+            gameId,
+            resolveScores365LangId('en'),
+            false,
+        );
+        if (payload?.statistics?.length) {
+            await redisCacheService.set(redisKey, payload, 6 * 60 * 60 * 1000);
+        }
+        return payload;
+    }
+
+    /**
+     * Pre-kickoff Statistics tab: last-N score averages + optional 365 team-stat
+     * averages (shots/xG/corners). Never calls API-Football.
+     */
+    async getCached365RecentFormAverages(
+        fixtureId: number,
+        language?: string | null,
+        last = RECENT_FORM_AVERAGES_LAST_DEFAULT,
+    ): Promise<ThreeSixFiveResult<RecentFormAveragesPayload> & { scores365GameId?: number | null }> {
+        const windowSize = Math.max(3, Math.min(5, last || RECENT_FORM_AVERAGES_LAST_DEFAULT));
+        const redisKey = `365:recent-form-averages:v2:${fixtureId}:${windowSize}`;
+        const cached = await redisCacheService.get<RecentFormAveragesPayload>(redisKey);
+        if (cached?.home && cached?.away) {
+            return { data: cached, source: '365scores' };
+        }
+
+        const formResult = await this.getCached365FixtureForm(fixtureId, language);
+        const form = formResult.data;
+        if (!form) {
+            return { data: null, source: formResult.source, scores365GameId: formResult.scores365GameId };
+        }
+
+        const homeId = form.homeCompetitorId ?? form.home?.teamId ?? 0;
+        const awayId = form.awayCompetitorId ?? form.away?.teamId ?? 0;
+        const homeGames = pickLastFinishedGames(
+            (form.home?.recentGames ?? []) as RecentFormGame[],
+            windowSize,
+        );
+        const awayGames = pickLastFinishedGames(
+            (form.away?.recentGames ?? []) as RecentFormGame[],
+            windowSize,
+        );
+        const gameIds = uniqueRecentGameIds(homeGames, awayGames, windowSize * 2);
+        const statsByGame = new Map<number, Scores365TeamStatsPayload | null>();
+        const deadline = Date.now() + 8_000;
+
+        await mapPool(gameIds, 3, async (gameId) => {
+            if (Date.now() > deadline) {
+                statsByGame.set(gameId, null);
+                return null;
+            }
+            const payload = await this.getCachedFinished365GameStats(gameId);
+            statsByGame.set(gameId, payload);
+            return payload;
+        });
+
+        const statsGames = gameIds.filter((id) => Boolean(statsByGame.get(id)?.statistics?.length)).length;
+        const payload: RecentFormAveragesPayload = {
+            last: windowSize,
+            home: buildRecentFormSide(
+                homeGames,
+                homeId,
+                form.home?.teamName || '—',
+                statsByGame,
+                windowSize,
+            ),
+            away: buildRecentFormSide(
+                awayGames,
+                awayId,
+                form.away?.teamName || '—',
+                statsByGame,
+                windowSize,
+            ),
+            statsGames,
+            statsComplete: gameIds.length === 0 || statsGames === gameIds.length,
+        };
+
+        if (payload.home.games > 0 || payload.away.games > 0) {
+            const ttlMs = payload.statsComplete ? 30 * 60 * 1000 : 5 * 60 * 1000;
+            await redisCacheService.set(redisKey, payload, ttlMs);
+        }
+
+        return {
+            data: payload,
+            source: formResult.source ?? '365scores',
+            scores365GameId: formResult.scores365GameId,
+        };
     }
 
     private apiFixtureToRecent365Game(f: {

@@ -58,9 +58,14 @@ const TEAM_STAT_NAME_MAP: Record<string, string> = {
   offsides: 'Offsides',
   'goalkeeper saves': 'Goalkeeper Saves',
   'expected goals': 'expected_goals',
+  'expected goals against': 'expected_goals_against',
+  xga: 'expected_goals_against',
   'passes completed': 'Passes accurate',
   'total passes': 'Total passes',
   substitutions: 'Substitutions',
+  'penalties scored': 'Penalties Scored',
+  'penalties won': 'Penalties Won',
+  penalties: 'Penalties Scored',
 };
 
 function resolveApiType(row: Scores365TeamStatRow): string | null {
@@ -173,4 +178,72 @@ export function buildTeamStatisticsFrom365GameStats(
     { team: teams.home, statistics: homeRows },
     { team: teams.away, statistics: awayRows },
   ];
+}
+
+export type CompetitorNumericStats = {
+  shots: number | null;
+  shotsOnTarget: number | null;
+  corners: number | null;
+  yellowCards: number | null;
+  redCards: number | null;
+  xg: number | null;
+  xga: number | null;
+  penaltiesScored: number | null;
+  penaltiesWon: number | null;
+};
+
+const EMPTY_COMPETITOR_STATS: CompetitorNumericStats = {
+  shots: null,
+  shotsOnTarget: null,
+  corners: null,
+  yellowCards: null,
+  redCards: null,
+  xg: null,
+  xga: null,
+  penaltiesScored: null,
+  penaltiesWon: null,
+};
+
+function toFiniteNumber(raw: unknown): number | null {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  const s = raw == null ? '' : String(raw).trim();
+  if (!s) return null;
+  const m = s.match(/-?\d+(?:\.\d+)?/);
+  if (!m) return null;
+  const n = parseFloat(m[0]);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Pull the numeric team-stat slice for one competitor from `/web/game/stats`.
+ * Missing metrics stay `null` so averages skip them instead of treating them as 0.
+ */
+export function extractCompetitorNumericStats(
+  payload: Scores365TeamStatsPayload | null | undefined,
+  competitorId: number,
+): CompetitorNumericStats {
+  const out: CompetitorNumericStats = { ...EMPTY_COMPETITOR_STATS };
+  if (!competitorId || !Array.isArray(payload?.statistics)) return out;
+
+  for (const row of payload.statistics) {
+    if (Number(row.competitorId) !== competitorId) continue;
+    const apiType = resolveApiType(row);
+    if (!apiType) continue;
+    const n = toFiniteNumber(row.value);
+    if (n == null) continue;
+    const key = apiType.toLowerCase();
+    if (apiType === 'Total Shots') out.shots = n;
+    else if (apiType === 'Shots on Goal') out.shotsOnTarget = n;
+    else if (apiType === 'Corner Kicks') out.corners = n;
+    else if (apiType === 'Yellow Cards') out.yellowCards = n;
+    else if (apiType === 'Red Cards') out.redCards = n;
+    else if (apiType === 'expected_goals') out.xg = n;
+    else if (apiType === 'expected_goals_against') out.xga = n;
+    else if (apiType === 'Penalties Won') out.penaltiesWon = n;
+    else if (apiType === 'Penalties Scored') out.penaltiesScored = n;
+    else if (key.includes('penalty') && key.includes('won')) out.penaltiesWon = n;
+    else if (key.includes('penalty')) out.penaltiesScored = n;
+  }
+
+  return out;
 }

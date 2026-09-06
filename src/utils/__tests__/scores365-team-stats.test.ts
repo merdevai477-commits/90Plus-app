@@ -1,4 +1,4 @@
-import { buildTeamStatisticsFrom365GameStats } from '../scores365-team-stats';
+import { buildTeamStatisticsFrom365GameStats, extractCompetitorNumericStats } from '../scores365-team-stats';
 
 describe('buildTeamStatisticsFrom365GameStats', () => {
   const teams = {
@@ -48,5 +48,22 @@ describe('buildTeamStatisticsFrom365GameStats', () => {
     expect(
       buildTeamStatisticsFrom365GameStats(payload, teams, { home: 1, away: 2 }),
     ).toEqual([]);
+  });
+});
+
+describe('extractCompetitorNumericStats', () => {
+  it('extracts shots and xG and leaves missing metrics null', () => {
+    const payload = {
+      statistics: [
+        { id: 3, name: 'Total Shots', competitorId: 1, value: '12' },
+        { id: 76, name: 'Expected Goals', competitorId: 1, value: '1.42' },
+        { id: 8, name: 'Corners', competitorId: 2, value: '5' },
+      ],
+    };
+    const mine = extractCompetitorNumericStats(payload, 1);
+    expect(mine.shots).toBe(12);
+    expect(mine.xg).toBe(1.42);
+    expect(mine.corners).toBeNull();
+    expect(mine.shotsOnTarget).toBeNull();
   });
 });

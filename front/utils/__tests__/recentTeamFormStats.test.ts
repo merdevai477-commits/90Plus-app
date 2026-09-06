@@ -1,4 +1,9 @@
-import { summarizeRecentTeamForm } from '../recentTeamFormStats';
+import {
+  summarizeRecentTeamForm,
+  summarizeRecentTeamAverages,
+  formatStatAverage,
+  pickHighlightSide,
+} from '../recentTeamFormStats';
 import type { TeamFixture } from '../../services/apiFootball';
 
 function row(
@@ -51,5 +56,36 @@ describe('summarizeRecentTeamForm', () => {
     const fixtures = [row(1, 2, 1, 0), row(1, 3, 2, 0), row(1, 4, 3, 0)];
     expect(summarizeRecentTeamForm(fixtures, { id: 1 }, 2).played).toBe(2);
     expect(summarizeRecentTeamForm(fixtures, { id: 1 }, 2).form).toBe('WW');
+  });
+});
+
+describe('summarizeRecentTeamAverages', () => {
+  it('computes last-4 averages and trends from scores', () => {
+    const fixtures = [
+      row(10, 20, 2, 1),
+      row(30, 10, 0, 0),
+      row(10, 40, 3, 2),
+      row(50, 10, 4, 1),
+    ];
+    const summary = summarizeRecentTeamAverages(fixtures, { id: 10, name: 'Home' }, 4);
+    expect(summary.played).toBe(4);
+    expect(summary.avgGoalsFor).toBeCloseTo((2 + 0 + 3 + 1) / 4);
+    expect(summary.avgGoalsAgainst).toBeCloseTo((1 + 0 + 2 + 4) / 4);
+    expect(summary.btts).toEqual({ count: 3, pct: 75 });
+    expect(summary.over25).toEqual({ count: 3, pct: 75 });
+    expect(summary.winOrDraw).toEqual({ count: 3, pct: 75 });
+    expect(summary.cleanSheets).toEqual({ count: 1, pct: 25 });
+  });
+});
+
+describe('pickHighlightSide / formatStatAverage', () => {
+  it('highlights the better side and formats decimals like the reference UI', () => {
+    expect(pickHighlightSide(1.75, 2.5, 'higher')).toBe('away');
+    expect(pickHighlightSide(1.75, 1.5, 'lower')).toBe('away');
+    expect(pickHighlightSide(1.99, 1.24, 'higher')).toBe('home');
+    expect(formatStatAverage(1.75)).toBe('1.75');
+    expect(formatStatAverage(2.5)).toBe('2.5');
+    expect(formatStatAverage(16)).toBe('16');
+    expect(formatStatAverage(null)).toBe('—');
   });
 });

@@ -182,6 +182,11 @@ router.get('/cached/h2h', SHARED_CACHE_24H, FootballController.getCachedH2H);
 // 365Scores World Cup enrichment (secondary source — athleteId from lineups)
 router.get('/cached/365/standings', SHARED_CACHE_5MIN, FootballController.getCached365Standings);
 router.get('/cached/365/fixture/:id/form', SHARED_CACHE_1H, FootballController.getCached365FixtureForm);
+router.get(
+  '/cached/365/fixture/:id/recent-averages',
+  SHARED_CACHE_1H,
+  FootballController.getCached365RecentFormAverages,
+);
 router.get('/cached/365/game/:gameId/resolve', SHARED_CACHE_1H, FootballController.resolve365GameFixture);
 // SportRadar LMT (live pitch tracker) — default HTML preview; ?format=json for API
 router.get('/cached/365/game/:gameId/lmt', FootballController.getCached365GameLmt);

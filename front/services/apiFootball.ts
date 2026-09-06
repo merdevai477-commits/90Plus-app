@@ -2088,6 +2088,31 @@ export const ApiFootballService = {
     }
   },
 
+  async get365RecentFormAverages(
+    fixtureId: number,
+    last = 4,
+  ): Promise<import('../utils/recentTeamFormStats').RecentFormAveragesPayload | null> {
+    try {
+      const baseUrl = getApiUrl();
+      const url = new URL(`${baseUrl}/football/cached/365/fixture/${fixtureId}/recent-averages`);
+      url.searchParams.set('language', getAppLanguageCode());
+      url.searchParams.set('last', String(last));
+      const response = await withTimeout(
+        fetch(url.toString(), {
+          headers: { Accept: 'application/json', 'Accept-Language': acceptLanguageHeader() },
+        }),
+        15_000,
+      );
+      if (!response.ok) return null;
+      const json = (await response.json()) as {
+        response?: import('../utils/recentTeamFormStats').RecentFormAveragesPayload;
+      };
+      return json.response ?? null;
+    } catch {
+      return null;
+    }
+  },
+
   async get365PlayerMatchReport(
     fixtureId: number,
     athleteId: number,

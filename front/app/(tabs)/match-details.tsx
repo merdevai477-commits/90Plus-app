@@ -27,7 +27,7 @@ import { TeamToggle } from '../../components/match-details/TeamToggle';
 import { MatchDetailsTopBar } from '../../components/match-details/MatchDetailsTopBar';
 import { MatchChatTab } from '../../components/match-details/MatchChatTab';
 import { MatchStatsCompare } from '../../components/match-details/MatchStatsCompare';
-import { RecentFormStatsCompare } from '../../components/match-details/RecentFormStatsCompare';
+import { PreMatchRecentStats } from '../../components/match-details/PreMatchRecentStats';
 import CachedAthletePhoto from '../../components/common/CachedAthletePhoto';
 import { BG_BASE,
   GLASS_BORDER_SIDE,
@@ -97,7 +97,7 @@ import {
 import { getPeriodStartTimestamp } from '../../src/store/liveFixtureSelectors';
 import { safeParseDate, safeToISOString } from '../../utils/safeDate';
 import { fixturesToTeamFixtures } from '../../utils/scores365Adapters';
-import { summarizeRecentTeamForm } from '../../utils/recentTeamFormStats';
+import { summarizeRecentTeamAverages, type RecentFormAveragesPayload } from '../../utils/recentTeamFormStats';
 
 const { width, height } = Dimensions.get('window');
 
@@ -218,6 +218,7 @@ const MatchDetailsScreen = () => {
     home?: number;
     away?: number;
   }>({});
+  const [recentFormAverages, setRecentFormAverages] = useState<RecentFormAveragesPayload | null>(null);
   const [standingsGroups, setStandingsGroups] = useState<StandingsGroup[]>([]);
   const [standingsSeasonUsed, setStandingsSeasonUsed] = useState<number | null>(null);
   const [standingsUnavailable, setStandingsUnavailable] = useState(false);
@@ -361,6 +362,7 @@ const MatchDetailsScreen = () => {
   const loadedTabsRef = useRef<Set<string>>(new Set());
   const lineupsPreloadedForRef = useRef<number | null>(null);
   const statsFormAttemptedRef = useRef<number | null>(null);
+  const recentAveragesAttemptedRef = useRef<number | null>(null);
   /** Kept for Fast Refresh safety — previously used to auto-open Tracking tab. */
   const lmtAutoOpenedRef = useRef<number | null>(null);
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -667,6 +669,8 @@ const MatchDetailsScreen = () => {
     loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
     statsFormAttemptedRef.current = null;
+    recentAveragesAttemptedRef.current = null;
+    setRecentFormAverages(null);
     lineupsInFlightRef.current = false;
     lastLineupAttemptAtRef.current = 0;
 
@@ -996,24 +1000,6 @@ const MatchDetailsScreen = () => {
     };
   }, [fixtureId, isLive, activeTab, isFocused, loadStatsIfNeeded]);
 
-  useEffect(() => {
-    if (activeTab !== 'stats' || !isFocused || !fixtureId) return;
-    if (statistics.length > 0 || statsFromEvents) return;
-    if (homeLastFixtures.length > 0 || awayLastFixtures.length > 0) return;
-    if (statsFormAttemptedRef.current === fixtureId) return;
-    statsFormAttemptedRef.current = fixtureId;
-    void loadFormIfNeeded(false, { skipApiFootball: true });
-  }, [
-    activeTab,
-    isFocused,
-    fixtureId,
-    statistics.length,
-    statsFromEvents,
-    homeLastFixtures.length,
-    awayLastFixtures.length,
-    loadFormIfNeeded,
-  ]);
-
   const loadFormIfNeeded = useCallback(async (force = false, options?: { skipApiFootball?: boolean }) => {
     if (!fixture) return;
     if (!force && loadedTabsRef.current.has('form')) return;
@@ -1118,6 +1104,39 @@ const MatchDetailsScreen = () => {
       setFormLoading(false);
     }
   }, [fixtureId, fixture, is365Fixture, t?.matchDetails, t?.common]);
+
+  useEffect(() => {
+    if (activeTab !== 'stats' || !isFocused || !fixtureId) return;
+    if (!isPreKickoff() && hasRichStatistics(statistics)) return;
+    if (homeLastFixtures.length > 0 || awayLastFixtures.length > 0) return;
+    if (statsFormAttemptedRef.current === fixtureId) return;
+    statsFormAttemptedRef.current = fixtureId;
+    void loadFormIfNeeded(false, { skipApiFootball: true });
+  }, [
+    activeTab,
+    isFocused,
+    fixtureId,
+    statistics,
+    homeLastFixtures.length,
+    awayLastFixtures.length,
+    loadFormIfNeeded,
+    isPreKickoff,
+  ]);
+
+  useEffect(() => {
+    if (activeTab !== 'stats' || !isFocused || !fixtureId) return;
+    if (!isPreKickoff() && hasRichStatistics(statistics)) return;
+    if (recentAveragesAttemptedRef.current === fixtureId) return;
+    recentAveragesAttemptedRef.current = fixtureId;
+    let cancelled = false;
+    void (async () => {
+      const data = await ApiFootballService.get365RecentFormAverages(fixtureId, 4);
+      if (!cancelled && data) setRecentFormAverages(data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isFocused, fixtureId, statistics, isPreKickoff]);
 
   const loadStandingsIfNeeded = useCallback(async (force = false) => {
     if (!fixture) return;
@@ -1980,12 +1999,46 @@ const MatchDetailsScreen = () => {
 
   // Render Statistics Tab
   const renderStatistics = () => {
-    const hasStats = statistics.length > 0 || statsFromEvents;
-    if (statsLoading && !hasStats) {
-      return <StatsSkeleton shimmerX={shimmerX} />;
+    const showLiveMatchStats = !isPreKickoff() && hasRichStatistics(statistics);
+    const hasAnyMatchStats = statistics.length > 0 || statsFromEvents;
+
+    if (showLiveMatchStats) {
+      return (
+        <ScrollView
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {statsFromEvents ? (
+            <Text style={styles.statsPartialNote}>
+              {t.matchDetails.statsFromEvents || 'Partial stats derived from match events'}
+            </Text>
+          ) : null}
+          <MatchStatsCompare
+            statistics={statistics}
+            language={language}
+            title={
+              t.matchDetails.statsComparison ||
+              t.matchDetails.statistics ||
+              'Statistics Comparison'
+            }
+            possessionLabelLines={[
+              t.matchDetails.possessionLine1 || 'Possession',
+              t.matchDetails.possessionLine2 || '',
+            ]}
+            dangerousAttacksLabelLines={[
+              t.matchDetails.dangerousAttacksLine1 || 'Dangerous',
+              t.matchDetails.dangerousAttacksLine2 || 'Attacks',
+            ]}
+            attacksLabel={
+              t.matchDetails.statTypes?.attacks || 'Attacks'
+            }
+          />
+        </ScrollView>
+      );
     }
 
-    if (statsError) {
+    if (!isPreKickoff() && statsError && homeLastFixtures.length === 0 && !recentFormAverages) {
       return (
         <View style={styles.emptyState}>
           <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
@@ -1997,105 +2050,97 @@ const MatchDetailsScreen = () => {
       );
     }
 
-    if (statistics.length === 0) {
-      const homeSummary = summarizeRecentTeamForm(
-        homeLastFixtures,
-        {
-          id: form365TeamIds.home ?? fixture?.teams.home.id,
-          name: homeTeamName,
-        },
-        5,
-      );
-      const awaySummary = summarizeRecentTeamForm(
-        awayLastFixtures,
-        {
-          id: form365TeamIds.away ?? fixture?.teams.away.id,
-          name: awayTeamName,
-        },
-        5,
-      );
-      const recentPlayed = Math.max(homeSummary.played, awaySummary.played);
-      if (formLoading && recentPlayed === 0) {
-        return <StatsSkeleton shimmerX={shimmerX} />;
-      }
-      if (recentPlayed > 0) {
-        const title = (t.matchDetails.recentFormStatsTitle || t.matchDetails.last5Matches || 'Last {n} matches')
-          .replace('{n}', String(recentPlayed));
-        return (
-          <ScrollView
-            style={{ flex: 1 }}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-          >
-            <RecentFormStatsCompare
-              title={title}
-              hint={
-                t.matchDetails.recentFormStatsHint ||
-                'This match has no live stats — showing each team’s recent form.'
-              }
-              homeName={getTeamDisplayName(homeTeamName, language)}
-              awayName={getTeamDisplayName(awayTeamName, language)}
-              home={homeSummary}
-              away={awaySummary}
-              labels={{
-                wins: t.teamProfile?.wins || t.matchDetails.wins || 'Wins',
-                draws: t.teamProfile?.draws || t.matchDetails.draws || 'Draws',
-                losses: t.teamProfile?.losses || t.matchDetails.losses || 'Losses',
-                goalsFor: t.teamProfile?.goalsFor || t.matchDetails.goalsFor || 'Goals For',
-                goalsAgainst: t.teamProfile?.goalsAgainst || t.matchDetails.goalsAgainst || 'Goals Against',
-              }}
-            />
-          </ScrollView>
-        );
-      }
+    const teamHome = {
+      id: form365TeamIds.home ?? fixture?.teams.home.id,
+      name: homeTeamName,
+    };
+    const teamAway = {
+      id: form365TeamIds.away ?? fixture?.teams.away.id,
+      name: awayTeamName,
+    };
+    const homeSummary = summarizeRecentTeamAverages(homeLastFixtures, teamHome, 4);
+    const awaySummary = summarizeRecentTeamAverages(awayLastFixtures, teamAway, 4);
+    const recentPlayed = Math.max(
+      homeSummary.played,
+      awaySummary.played,
+      recentFormAverages?.home.games ?? 0,
+      recentFormAverages?.away.games ?? 0,
+    );
+
+    if (formLoading && recentPlayed === 0) {
+      return <StatsSkeleton shimmerX={shimmerX} />;
+    }
+
+    if (recentPlayed > 0) {
       return (
-        <View style={styles.emptyState}>
-          <Ionicons name="stats-chart-outline" size={64} color="#333" />
-          <Text style={styles.emptyStateText}>{t.matchDetails.noStats || 'Statistics not available'}</Text>
-          <Text style={styles.emptyStateSubtext}>
-            {isLive()
-              ? (t.matchDetails.statsLiveRetry || 'Stats may appear later for this league. Retrying…')
-              : (t.matchDetails.statsLeagueLimited || 'Full statistics are not provided for this competition.')}
-          </Text>
-          <TouchableOpacity style={styles.retryButton} onPress={retryStats}>
-            <Text style={styles.retryButtonText}>{t.matchDetails.retry}</Text>
-          </TouchableOpacity>
-        </View>
+        <ScrollView
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <PreMatchRecentStats
+            lastN={recentFormAverages?.last ?? 4}
+            bannerTitle={
+              t.matchDetails.recentAveragesBanner ||
+              t.matchDetails.recentFormStatsTitle ||
+              'Last 4 matches stats'
+            }
+            bannerHint={
+              t.matchDetails.recentAveragesBannerHint ||
+              t.matchDetails.recentFormStatsHint ||
+              'These numbers are each team’s recent form.'
+            }
+            title={t.matchDetails.recentFormStatsTitle || 'Average stats'}
+            columnLabel={t.matchDetails.lastNMatchesColumn || 'Last {n} matches'}
+            homeName={getTeamDisplayName(homeTeamName, language)}
+            awayName={getTeamDisplayName(awayTeamName, language)}
+            homeScore={homeSummary}
+            awayScore={awaySummary}
+            enrichment={recentFormAverages}
+            labels={{
+              goalsScored: t.matchDetails.goalsScoredAvg || t.matchDetails.goalsFor || 'Goals scored',
+              goalsConceded:
+                t.matchDetails.goalsConcededAvg || t.matchDetails.goalsAgainst || 'Goals conceded',
+              expectedGoals:
+                t.matchDetails.statTypes?.expectedGoals || 'Expected Goals (xG)',
+              expectedGoalsAgainst:
+                t.matchDetails.expectedGoalsAgainst || 'Expected goals against (xGA)',
+              shots: t.matchDetails.shots || t.matchDetails.statTypes?.totalShots || 'Shots',
+              shotsOnTarget:
+                t.matchDetails.shotsOnGoal || t.matchDetails.statTypes?.shotsOnGoal || 'Shots on target',
+              corners: t.matchDetails.corners || t.matchDetails.statTypes?.cornerKicks || 'Corners',
+              cards: t.matchDetails.cardsAvg || t.matchDetails.yellowCards || 'Cards',
+              penalties:
+                t.matchDetails.penaltiesScoredWon || t.matchDetails.statTypes?.penalties || 'Penalties',
+              won: t.matchDetails.wonTheMatch || t.teamProfile?.wins || 'Won',
+              btts: t.matchDetails.bothTeamsScored || 'Both teams scored',
+              over25: t.matchDetails.over25Goals || 'Over 2.5 goals',
+              winOrDraw: t.matchDetails.winOrDraw || 'Win or draw',
+              cleanSheets: t.teamProfile?.cleanSheets || 'Clean sheets',
+              trendsTitle: t.matchDetails.recentTrendsTitle || 'Trends',
+            }}
+          />
+        </ScrollView>
       );
     }
 
+    if (!isPreKickoff() && statsLoading && !hasAnyMatchStats) {
+      return <StatsSkeleton shimmerX={shimmerX} />;
+    }
+
     return (
-      <ScrollView
-        style={{ flex: 1 }}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {statsFromEvents ? (
-          <Text style={styles.statsPartialNote}>
-            {t.matchDetails.statsFromEvents || 'Partial stats derived from match events'}
-          </Text>
-        ) : null}
-        <MatchStatsCompare
-          statistics={statistics}
-          language={language}
-          title={
-            t.matchDetails.statsComparison ||
-            t.matchDetails.statistics ||
-            'Statistics Comparison'
-          }
-          possessionLabelLines={[
-            t.matchDetails.possessionLine1 || 'Possession',
-            t.matchDetails.possessionLine2 || '',
-          ]}
-          dangerousAttacksLabelLines={[
-            t.matchDetails.dangerousAttacksLine1 || 'Dangerous',
-            t.matchDetails.dangerousAttacksLine2 || 'Attacks',
-          ]}
-          attacksLabel={
-            t.matchDetails.statTypes?.attacks || 'Attacks'
-          }
-        />
-      </ScrollView>
+      <View style={styles.emptyState}>
+        <Ionicons name="stats-chart-outline" size={64} color="#333" />
+        <Text style={styles.emptyStateText}>{t.matchDetails.noStats || 'Statistics not available'}</Text>
+        <Text style={styles.emptyStateSubtext}>
+          {isLive()
+            ? (t.matchDetails.statsLiveRetry || 'Stats may appear later for this league. Retrying…')
+            : (t.matchDetails.statsLeagueLimited || 'Full statistics are not provided for this competition.')}
+        </Text>
+        <TouchableOpacity style={styles.retryButton} onPress={retryStats}>
+          <Text style={styles.retryButtonText}>{t.matchDetails.retry}</Text>
+        </TouchableOpacity>
+      </View>
     );
   };
 

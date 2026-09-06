@@ -816,7 +816,7 @@ async function fetchScores365GameTeamStatsOnce(
  * get it immediately and the refresh runs out of band. Only a cold key waits on 365,
  * and background (`force`) callers always wait for the real answer.
  */
-async function fetchScores365GameTeamStats(
+export async function fetchScores365GameTeamStats(
   gameId: number,
   langId: number,
   force = false,
