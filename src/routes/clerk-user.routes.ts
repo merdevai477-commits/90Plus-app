@@ -15,6 +15,7 @@ import { getUserLanguage, renderPushTemplate } from '../services/push-templates.
 import { getBlockRelation } from '../services/block.service';
 import { followCountsFromPrisma } from '../utils/follow-count.utils';
 import { AuditService } from '../services/audit.service';
+import { OnboardingService } from '../services/onboarding.service';
 
 const router = Router();
 
@@ -105,6 +106,25 @@ router.get(
 
         logger.info(`[/clerk/me] ✅ User data loaded: ${user.username} (${user.id})`);
 
+        let country = user.country;
+        let countryFlag = user.countryFlag;
+        try {
+            const seeded = await OnboardingService.maybeSeedCountryForNewUser({
+                clerkUserId,
+                userId: user.id,
+                country: user.country,
+                countryFlag: user.countryFlag,
+                createdAt: user.createdAt,
+                req,
+            });
+            if (seeded) {
+                country = seeded.id;
+                countryFlag = seeded.flag;
+            }
+        } catch (seedErr) {
+            logger.warn('[/clerk/me] country seed skipped:', (seedErr as Error)?.message ?? seedErr);
+        }
+
         const userData = {
             id: user.id,
             clerkUserId: user.clerkUserId,
@@ -121,8 +141,8 @@ router.get(
             isDeveloper: user.isDeveloper,
             favoriteTeam: user.favoriteTeam,
             position: user.position,
-            countryFlag: user.countryFlag,
-            country: user.country,
+            countryFlag,
+            country,
             age: user.age,
             height: user.height,
             weight: user.weight,
@@ -131,6 +151,7 @@ router.get(
             brandLogo: user.brandLogo,
             socialLinks: (user as any).socialLinks || [],
             consecutiveLoginDays: (user as any).consecutiveLoginDays || 0,
+            teamOnboardingCompleted: Boolean(user.teamOnboardingCompletedAt),
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
         };

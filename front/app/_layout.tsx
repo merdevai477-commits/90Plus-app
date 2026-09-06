@@ -278,7 +278,10 @@ function RootLayoutNav() {
     <Stack screenOptions={STACK_SCREEN_OPTIONS}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
-      <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="onboarding"
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
       <Stack.Screen 
         name="blocked" 
         options={{ 

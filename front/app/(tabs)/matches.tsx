@@ -8,6 +8,7 @@ import { Bell, ChevronDown, Calendar, Search, X, ChevronLeft, ChevronRight, Cale
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
+import { useTeamOnboardingGate } from '../../hooks/useTeamOnboardingGate';
 import { FlashList } from '@shopify/flash-list';
 import { TEXT_PRIMARY, PURPLE_PRIMARY, LIVE_RED } from '../../constants/tokens';
 import { APP_BG } from '../../constants/ui';
@@ -1029,6 +1030,7 @@ export default function MatchesHubScreenV2() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { getToken, userId } = useAuth();
+  useTeamOnboardingGate();
   const { t: tObj, translate: t } = useTranslation();
 
   // Clerk's getToken returns a NEW function reference on every render — store

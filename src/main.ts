@@ -237,6 +237,7 @@ import uploadRoutes from './routes/upload.routes';
 import notificationRoutes from './routes/notification.routes';
 import matchesRoutes from './routes/matches.routes';
 import teamsRoutes from './routes/teams.routes';
+import onboardingRoutes from './routes/onboarding.routes';
 import dailySpinRoutes from './routes/daily-spin.routes';
 import footballRoutes from './routes/football.routes';
 import knowledgeExportRoutes from './routes/knowledge-export.routes';
@@ -449,6 +450,7 @@ app.use(`${API_PREFIX}/upload`, uploadRoutes);
 app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 app.use(`${API_PREFIX}/matches`, matchesRoutes);
 app.use(`${API_PREFIX}/teams`, teamsRoutes);
+app.use(`${API_PREFIX}/onboarding`, onboardingRoutes);
 app.use(`${API_PREFIX}/daily-spin`, dailySpinRoutes);
 app.use(`${API_PREFIX}/football`, footballRoutes);
 // INTERNAL ONLY — Football Knowledge Factory season-aware export (API key auth)

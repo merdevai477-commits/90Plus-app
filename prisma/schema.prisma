@@ -32,6 +32,8 @@ model User {
   settings                      Json?                    @default("{}")
   position                      String?
   countryFlag                   String?
+  /// Set when the one-time teams onboarding (Favorites seed) is finished or skipped.
+  teamOnboardingCompletedAt     DateTime?
   location                      String?
   age                           Int?
   height                        Int?

@@ -115,6 +115,9 @@ export interface UserProfile {
     // FIFA Card fields
     position: string | null;
     countryFlag: string | null;
+    country?: string | null;
+    clubLogo?: string | null;
+    teamOnboardingCompleted?: boolean;
     age: number | null;
     height: number | null;
     weight: number | null;

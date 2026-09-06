@@ -4,6 +4,7 @@ import type { Router } from 'expo-router';
 import { fetchAgeStatus } from '../../hooks/useAgeVerification';
 import { AuthService } from '@/src/services/authService';
 import { waitForClerkToken } from './authSession';
+import { needsTeamOnboarding } from '../../utils/teamOnboarding';
 
 export const AGE_VERIFIED_KEY = '@90plus_age_verified';
 
@@ -12,9 +13,10 @@ type GetToken = () => Promise<string | null>;
 async function routeFromAgeStatus(
   router: Router,
   status: Awaited<ReturnType<typeof fetchAgeStatus>>,
+  user?: { teamOnboardingCompleted?: boolean | null } | null,
 ): Promise<void> {
   if (!status.ok || !status.ageVerified) {
-    router.replace('/(tabs)/matches');
+    router.replace(needsTeamOnboarding(user) ? '/onboarding' : '/(tabs)/matches');
     return;
   }
 
@@ -25,7 +27,7 @@ async function routeFromAgeStatus(
     return;
   }
 
-  router.replace('/(tabs)/matches');
+  router.replace(needsTeamOnboarding(user) ? '/onboarding' : '/(tabs)/matches');
 }
 
 /** Route to matches after sign-in — waits for JWT + backend user sync when possible. */
@@ -41,25 +43,33 @@ export async function navigateAfterAuth(
       // client-sync failure self-heals on the next matches focus — we only alert to
       // explain a transient hiccup, never block entry.
       try {
-        await AuthService.syncUserWithBackend(token);
+        const user = await AuthService.syncUserWithBackend(token);
+        try {
+          const status = await fetchAgeStatus(token);
+          await routeFromAgeStatus(router, status, user);
+          return;
+        } catch {
+          router.replace(needsTeamOnboarding(user) ? '/onboarding' : '/(tabs)/matches');
+          return;
+        }
       } catch {
         try {
           await new Promise((r) => setTimeout(r, 1200));
-          await AuthService.syncUserWithBackend(token);
+          const user = await AuthService.syncUserWithBackend(token);
+          try {
+            const status = await fetchAgeStatus(token);
+            await routeFromAgeStatus(router, status, user);
+            return;
+          } catch {
+            router.replace(needsTeamOnboarding(user) ? '/onboarding' : '/(tabs)/matches');
+            return;
+          }
         } catch {
           Alert.alert(
             'Connection issue',
             'Signed in, but we could not sync your profile. Pull to refresh or try again.',
           );
         }
-      }
-
-      try {
-        const status = await fetchAgeStatus(token);
-        await routeFromAgeStatus(router, status);
-        return;
-      } catch {
-        // fall through to local age flag
       }
     }
   }
