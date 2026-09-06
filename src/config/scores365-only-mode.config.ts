@@ -1,9 +1,12 @@
 /**
- * When true, match calendar/details/live reads use 365Scores only.
- * API-Football upstream is not queried for fixture data (DB/Redis cache still served).
+ * When true, 365Scores owns calendar + live ticks. Periodic API-Football
+ * calendar/live-sync jobs stay off so the ~98/day quota is not burned.
  *
- * Set SCORES365_ONLY_MODE=false to re-enable API-Football fallbacks.
- * When unset, defaults to on while SCORES365_EXPERIMENT_ENABLED is on.
+ * Last-resort API-Football rescue (details miss, empty 365 feed, missing live
+ * Redis snapshot) still runs via quota purpose `fallback` even when this is on.
+ *
+ * Set SCORES365_ONLY_MODE=false only to re-enable background API-Football
+ * calendar refresh. When unset, defaults to on while SCORES365_EXPERIMENT_ENABLED is on.
  */
 function readExperimentEnabled(env: NodeJS.ProcessEnv): boolean {
   const raw = env.SCORES365_EXPERIMENT_ENABLED?.trim();

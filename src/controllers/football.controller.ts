@@ -10,6 +10,8 @@ import prisma from '../lib/prisma';
 import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
+  shouldRescueLiveListFromApiFootball,
+  writeLiveFixturesSnapshot,
 } from '../services/live-fixture-cache.service';
 import { getScores365GameIdForFixture, ensureScores365GameMapping, isScores365ExperimentEnabled, isScores365ExperimentFixture, resolveApiFixtureIdFor365GameId, fetchScores365GameById, registerScores365FixtureMapping, getScores365LmtWidgetForFixtureId, getScores365LmtWidgetForGameId } from '../services/scores365-experiment.service';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
@@ -20,6 +22,7 @@ import { threeSixFiveScoresService } from '../services/threeSixFiveScores.servic
 import { isHistoricalHttpDbOnlyEnabled } from '../config/football-reliability-rollout.config';
 import { getWorldCupLeagueId, getWorldCupSeason } from '../config/world-cup-only-mode.config';
 import { isScores365OnlyMode } from '../config/scores365-only-mode.config';
+import { API_FOOTBALL_FALLBACK_CALL } from '../services/api-football-quota.service';
 import {
   calendarDateRangeBounds,
   calendarTodayKey,
@@ -517,7 +520,19 @@ export class FootballController {
         return;
       }
 
-      if (!footballService.isConfigured() || isScores365OnlyMode()) {
+      if (!shouldRescueLiveListFromApiFootball(redisLive.source)) {
+        res.json({
+          status: 'SUCCESS',
+          results: 0,
+          response: [],
+          cached: true,
+          source: redisLive.source === 'redis' ? 'redis-sync' : 'scores365-experiment',
+          language,
+        });
+        return;
+      }
+
+      if (!footballService.isConfigured()) {
         if (isScores365ExperimentEnabled() || isScores365OnlyMode()) {
           res.json({
             status: 'SUCCESS',
@@ -536,20 +551,21 @@ export class FootballController {
         return;
       }
 
-      logger.debug('📡 Fetching live fixtures from API (Redis sync empty)');
+      logger.warn('📡 Live Redis snapshot missing — API-Football fallback');
       let fixtures: any[] = [];
       try {
-        fixtures = await footballService.getLiveFixtures();
+        fixtures = await footballService.getLiveFixtures(API_FOOTBALL_FALLBACK_CALL);
       } catch (fetchError: any) {
         if (fetchError?.name === 'FootballApiError' || fetchError?.message?.includes('timed out') || fetchError?.message?.includes('timeout')) {
           logger.warn('getLiveFixtures: first attempt failed, retrying once...', fetchError?.message);
-          fixtures = await footballService.getLiveFixtures();
+          fixtures = await footballService.getLiveFixtures(API_FOOTBALL_FALLBACK_CALL);
         } else {
           throw fetchError;
         }
       }
 
       if (fixtures.length > 0) {
+        await writeLiveFixturesSnapshot(fixtures);
         const { matchCacheService } = await import('../services/match-cache.service');
         matchCacheService.upsertFixtures(fixtures).catch((err) => {
           logger.warn('getLiveFixtures: DB upsert failed (non-fatal):', err);

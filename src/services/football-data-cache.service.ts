@@ -27,6 +27,7 @@ import { hasLineupData, isAuthoritativeLineupData, is365LineupIdMappingStale, bu
 import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
 import { footballService, isFootballQuotaExhausted } from './football.service';
+import { API_FOOTBALL_FALLBACK_CALL } from './api-football-quota.service';
 import { matchCacheService, TERMINAL_LATCH_STATUSES } from './match-cache.service';
 import { isTerminalLatched } from './live-fixture-cache.service';
 import {
@@ -2093,14 +2094,18 @@ class FootballDataCacheService {
                 this.setBoundedCache(this.lineupsCache, fixtureId, cacheEntry);
                 return empty;
             }
-            // 365 empty — try API-Football for mapped API ids only (never a 365 gameId).
-            if (this.canQueryApiFootball(fixtureId)) {
+            // 365 empty — last-resort API-Football for mapped API ids only (never a 365 gameId).
+            const lineupsApiId = await this.resolveApiFootballFallbackId(fixtureId);
+            if (lineupsApiId) {
                 try {
-                    const apiLineups = await footballService.getFixtureLineupsResolved(fixtureId);
+                    const apiLineups = await footballService.getFixtureLineups(
+                        lineupsApiId,
+                        API_FOOTBALL_FALLBACK_CALL,
+                    );
                     if (hasLineupData(apiLineups)) {
                         await recordNonEmptyUpstreamResult(fixtureId);
                         logger.warn(
-                            `[Lineups] fixture=${fixtureId} reason=365_empty_api_fallback`,
+                            `[Lineups] fixture=${fixtureId} reason=365_empty_api_fallback apiId=${lineupsApiId}`,
                         );
                         const kickoffMs = dbMatch?.matchDate?.getTime() ?? null;
                         const ttl = this.detailTtlMs(dbMatch?.status, kickoffMs);
@@ -2691,16 +2696,20 @@ class FootballDataCacheService {
                 // the language does not change them either.
                 let events = await getScores365ExperimentEvents(fixtureId, forceRefresh, language);
                 const hasProviderEvents = events.some((event: any) => event?._synthetic !== true);
-                // API-Football fallback when 365 timeline is empty for a mapped API id.
-                if (!hasProviderEvents && this.canQueryApiFootball(fixtureId)) {
+                const eventsApiId = !hasProviderEvents
+                    ? await this.resolveApiFootballFallbackId(fixtureId)
+                    : null;
+                // Last-resort API-Football when 365 timeline is empty for a mapped API id.
+                if (eventsApiId) {
                     try {
-                        const apiEvents = await footballService.getFixtureEvents(fixtureId, {
-                            source: 'job',
-                        });
+                        const apiEvents = await footballService.getFixtureEvents(
+                            eventsApiId,
+                            API_FOOTBALL_FALLBACK_CALL,
+                        );
                         if (Array.isArray(apiEvents) && apiEvents.length > 0) {
                             await recordNonEmptyUpstreamResult(fixtureId);
                             logger.warn(
-                                `[Events] fixture=${fixtureId} reason=365_empty_api_fallback count=${apiEvents.length}`,
+                                `[Events] fixture=${fixtureId} reason=365_empty_api_fallback apiId=${eventsApiId} count=${apiEvents.length}`,
                             );
                             events = apiEvents;
                         } else {
@@ -3034,11 +3043,21 @@ class FootballDataCacheService {
 
     private canQueryApiFootball(fixtureId: number): boolean {
         return (
-            !isScores365OnlyMode() &&
             canQueryApiFootballFixtureId(fixtureId) &&
             footballService.isConfigured() &&
             !isFootballQuotaExhausted()
         );
+    }
+
+    /** Mapped API-Football id for a 365 miss/empty rescue. Native 365 ids never go upstream. */
+    private async resolveApiFootballFallbackId(fixtureId: number): Promise<number | null> {
+        if (this.canQueryApiFootball(fixtureId)) return fixtureId;
+        if (!isNative365FixtureId(fixtureId)) return null;
+        const mapped = await resolveApiFixtureIdFor365GameId(fixtureId);
+        if (mapped && mapped !== fixtureId && this.canQueryApiFootball(mapped)) {
+            return mapped;
+        }
+        return null;
     }
 
     /** 365 is the primary provider; native gameIds always go there even if the experiment flag is off. */
@@ -3128,22 +3147,14 @@ class FootballDataCacheService {
         if (!this.canQueryApiFootball(apiFixtureId)) return null;
         try {
             const [fixture, lineups, statistics, events] = await Promise.all([
-                footballService.getFixtureById(apiFixtureId),
-                footballService.getFixtureLineupsResolved(apiFixtureId),
-                footballService.getFixtureStatistics(apiFixtureId),
-                footballService.getFixtureEvents(apiFixtureId, { source: 'job' }),
+                footballService.getFixtureById(apiFixtureId, API_FOOTBALL_FALLBACK_CALL),
+                footballService.getFixtureLineups(apiFixtureId, API_FOOTBALL_FALLBACK_CALL),
+                footballService.getFixtureStatistics(apiFixtureId, API_FOOTBALL_FALLBACK_CALL),
+                footballService.getFixtureEvents(apiFixtureId, API_FOOTBALL_FALLBACK_CALL),
             ]);
             if (!fixture) return null;
 
-            let venue: any | null = fixture?.fixture?.venue ?? null;
-            const venueId = venue?.id;
-            if (venueId && (!venue?.name || !venue?.city)) {
-                try {
-                    venue = (await footballService.getVenueInfo(venueId)) ?? venue;
-                } catch {
-                    // non-fatal
-                }
-            }
+            const venue: any | null = fixture?.fixture?.venue ?? null;
             return {
                 fixture,
                 lineups: lineups ?? [],
@@ -3506,13 +3517,7 @@ class FootballDataCacheService {
             return from365;
         }
 
-        let apiId: number | null = this.canQueryApiFootball(fixtureId) ? fixtureId : null;
-        if (!apiId && isNative365FixtureId(fixtureId)) {
-            const mapped = await resolveApiFixtureIdFor365GameId(fixtureId);
-            if (mapped && mapped !== fixtureId && this.canQueryApiFootball(mapped)) {
-                apiId = mapped;
-            }
-        }
+        const apiId = await this.resolveApiFootballFallbackId(fixtureId);
 
         if (apiId) {
             logger.warn(

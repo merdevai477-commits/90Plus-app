@@ -54,9 +54,10 @@ describe('api-football-quota.service (P0-1)', () => {
     expect(resolveQuotaPurpose(undefined, 'verify-finished')).toBe('verify-finished');
   });
 
-  it('allowlists only verify-finished and user', () => {
+  it('allowlists verify-finished, user, and 365-failure fallback', () => {
     expect(isPurposeAllowed('verify-finished')).toBe(true);
     expect(isPurposeAllowed('user')).toBe(true);
+    expect(isPurposeAllowed('fallback')).toBe(true);
     expect(isPurposeAllowed('live-sync')).toBe(false);
     expect(isPurposeAllowed('calendar-sync')).toBe(false);
     expect(isPurposeAllowed('warmup')).toBe(false);
@@ -120,8 +121,9 @@ describe('api-football-quota.service (P0-1)', () => {
     mockedGetRedisClient.mockReturnValue(redis as any);
 
     await expect(canCallApiFootball('verify-finished')).resolves.toBe(false);
-    // user purpose does not consume job budget
+    // user and 365-fallback do not consume job budget
     await expect(canCallApiFootball('user')).resolves.toBe(true);
+    await expect(canCallApiFootball('fallback')).resolves.toBe(true);
   });
 
   it('recordApiFootballCall increments global and job counters', async () => {

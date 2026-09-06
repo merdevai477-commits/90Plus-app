@@ -20,6 +20,7 @@ import prisma from '../lib/prisma';
 import { asTerminalFinishedFixture } from '../utils/fixture-terminal.util';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { SCORES365_LEAGUE_ID_OFFSET as SYNTHETIC_365_LEAGUE_OFFSET } from '../utils/scores365-league-id.util';
+import { API_FOOTBALL_FALLBACK_CALL } from './api-football-quota.service';
 
 export const FOOTBALL_LIVE_FIXTURE_KEY_PREFIX = 'football:live_fixture:';
 export const FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX = 'football:fixture_terminal:';
@@ -683,7 +684,7 @@ export async function forceRefreshFixtureNearKickoff(
       return null;
     }
 
-    const fresh = await footballService.getFixtureById(fixtureId, { source: 'job' });
+    const fresh = await footballService.getFixtureById(fixtureId, API_FOOTBALL_FALLBACK_CALL);
     if (!fresh?.fixture?.id) {
       logger.warn(
         `[LiveFixtureCache] near-kickoff NS refresh empty fixture=${fixtureId} reason=upstream_empty`,
@@ -720,6 +721,14 @@ export async function forceRefreshFixtureNearKickoff(
 /**
  * Live list for clients — prefer sync Redis payload; filter to currently-live statuses.
  */
+export function shouldRescueLiveListFromApiFootball(
+  source: 'redis' | 'scores365-experiment' | null,
+): boolean {
+  // A present Redis/365 snapshot (even empty) means 365 answered. Only rescue when
+  // the live key is gone — typically TTL expiry during a 365 outage.
+  return source == null;
+}
+
 export async function resolveLiveFixturesForClient(
   language?: string | null,
 ): Promise<{

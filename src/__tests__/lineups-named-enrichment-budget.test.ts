@@ -86,6 +86,7 @@ jest.mock('../services/football.service', () => ({
   footballService: {
     isConfigured: jest.fn(() => false),
     getFixtureLineupsResolved: jest.fn(async () => []),
+    getFixtureLineups: jest.fn(async () => []),
   },
   isFootballQuotaExhausted: jest.fn(() => false),
 }));

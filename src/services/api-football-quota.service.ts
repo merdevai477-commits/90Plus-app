@@ -4,8 +4,9 @@
  * Persists counters in Redis so Railway redeploys cannot reset the budget.
  * Fail-closed when Redis is unavailable (an uncounted call risks the key).
  *
- * Allowlist model: high-frequency jobs are barred entirely. The 98/day budget
- * is reserved for deliberate low-volume calls (primarily finished-match verify).
+ * Allowlist model: high-frequency jobs (live-sync, calendar, warmup) are barred.
+ * The 98/day budget is reserved for finished-match verify, user reads, and
+ * last-resort 365Scores failure rescue (`fallback`).
  */
 
 import { getRedisClient } from '../lib/redis';
@@ -16,6 +17,7 @@ import type { FootballApiCallSource } from '../utils/football-metrics';
 export type ApiFootballQuotaPurpose =
   | 'verify-finished'
   | 'user'
+  | 'fallback'
   | 'live-sync'
   | 'calendar-sync'
   | 'warmup'
@@ -23,6 +25,12 @@ export type ApiFootballQuotaPurpose =
   | 'job'
   | 'internal'
   | 'unknown';
+
+/** Last-resort 365 outage / miss — counts against the 98 daily pool, not the job cap. */
+export const API_FOOTBALL_FALLBACK_CALL = {
+  source: 'internal' as const,
+  purpose: 'fallback' as const,
+};
 
 export const API_FOOTBALL_DAILY_LIMIT = 98;
 export const API_FOOTBALL_JOB_LIMIT = 20;
@@ -34,6 +42,7 @@ const QUOTA_KEY_TTL_SEC = 26 * 60 * 60;
 const ALLOWED_PURPOSES: ReadonlySet<ApiFootballQuotaPurpose> = new Set([
   'verify-finished',
   'user',
+  'fallback',
 ]);
 
 let warnedApproachingDay: string | null = null;

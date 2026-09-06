@@ -13,6 +13,7 @@ import {
   replace365LiveFixturesSnapshot,
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
+  shouldRescueLiveListFromApiFootball,
   writeLiveFixturesSnapshot,
 } from '../live-fixture-cache.service';
 
@@ -275,5 +276,11 @@ describe('terminal latch (P1-3)', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(invalidateFixtureDetailCaches).not.toHaveBeenCalled();
+  });
+
+  it('rescues live list from API-Football only when Redis snapshot is missing', () => {
+    expect(shouldRescueLiveListFromApiFootball(null)).toBe(true);
+    expect(shouldRescueLiveListFromApiFootball('redis')).toBe(false);
+    expect(shouldRescueLiveListFromApiFootball('scores365-experiment')).toBe(false);
   });
 });

@@ -121,6 +121,7 @@ jest.mock('../services/football.service', () => ({
     isConfigured: jest.fn(() => false),
     getFixtureById: jest.fn(async () => null),
     getFixtureLineupsResolved: jest.fn(async () => []),
+    getFixtureLineups: jest.fn(async () => []),
     getFixtureEvents: jest.fn(async () => []),
     getFixtureStatistics: jest.fn(async () => []),
   },

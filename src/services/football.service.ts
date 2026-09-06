@@ -28,6 +28,11 @@ import {
   type ApiFootballQuotaPurpose,
 } from './api-football-quota.service';
 
+export type FootballApiCallOptions = {
+  source?: FootballApiCallSource;
+  purpose?: ApiFootballQuotaPurpose;
+};
+
 interface ApiResponse<T> {
   get: string;
   parameters: Record<string, any>;
@@ -431,7 +436,7 @@ class FootballService {
   async fetchFromApi<T>(
     endpoint: string,
     params: Record<string, any> = {},
-    options: { source?: FootballApiCallSource; purpose?: ApiFootballQuotaPurpose } = {},
+    options: FootballApiCallOptions = {},
   ): Promise<T> {
     if (!this.isConfigured()) {
       throw new FootballApiError('Football API not configured');
@@ -652,14 +657,14 @@ class FootballService {
     status?: string;
     id?: number;
     ids?: string;
-  } = {}, options: { source?: FootballApiCallSource; purpose?: ApiFootballQuotaPurpose } = {}): Promise<any[]> {
+  } = {}, options: FootballApiCallOptions = {}): Promise<any[]> {
     return this.fetchFromApi<any[]>('/fixtures', params, options);
   }
 
   /**
    * Get live fixtures
    */
-  async getLiveFixtures(options: { source?: FootballApiCallSource; purpose?: ApiFootballQuotaPurpose } = {}): Promise<any[]> {
+  async getLiveFixtures(options: FootballApiCallOptions = {}): Promise<any[]> {
     if (isWorldCupOnlyMode()) {
       const fixtures = await this.getFixtures(
         {
@@ -677,7 +682,7 @@ class FootballService {
   /**
    * Get a single fixture by id
    */
-  async getFixtureById(fixtureId: number, options: { source?: FootballApiCallSource; purpose?: ApiFootballQuotaPurpose } = {}): Promise<any | null> {
+  async getFixtureById(fixtureId: number, options: FootballApiCallOptions = {}): Promise<any | null> {
     const fixtures = await this.getFixtures({ id: fixtureId }, options);
     return fixtures && fixtures.length > 0 ? fixtures[0] : null;
   }
@@ -758,8 +763,8 @@ class FootballService {
   /**
    * Get lineups for a specific fixture
    */
-  async getFixtureLineups(fixtureId: number): Promise<any[]> {
-    return this.fetchFromApi<any[]>('/fixtures/lineups', { fixture: fixtureId });
+  async getFixtureLineups(fixtureId: number, options: FootballApiCallOptions = {}): Promise<any[]> {
+    return this.fetchFromApi<any[]>('/fixtures/lineups', { fixture: fixtureId }, options);
   }
 
   /**
@@ -817,8 +822,8 @@ class FootballService {
   /**
    * Get team statistics for a specific fixture
    */
-  async getFixtureStatistics(fixtureId: number): Promise<any[]> {
-    return this.fetchFromApi<any[]>('/fixtures/statistics', { fixture: fixtureId });
+  async getFixtureStatistics(fixtureId: number, options: FootballApiCallOptions = {}): Promise<any[]> {
+    return this.fetchFromApi<any[]>('/fixtures/statistics', { fixture: fixtureId }, options);
   }
 
   /**
@@ -826,7 +831,7 @@ class FootballService {
    */
   async getFixtureEvents(
     fixtureId: number,
-    options: { source?: FootballApiCallSource } = {},
+    options: FootballApiCallOptions = {},
   ): Promise<any[]> {
     return this.fetchFromApi<any[]>('/fixtures/events', { fixture: fixtureId }, options);
   }
