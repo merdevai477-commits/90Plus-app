@@ -433,14 +433,33 @@ describe('Predict & Win hub', () => {
   });
 
   it('maps sponsor submission status to CTA variants', () => {
+    const now = Date.parse('2026-09-07T12:00:00.000Z');
+    const hoursAgo = (hours: number) => new Date(now - hours * 60 * 60 * 1000).toISOString();
+
     expect(deriveAddPrizeVariant('DRAFT')).toBe('pending');
     expect(deriveAddPrizeVariant('PUBLISHED')).toBe('winner');
     expect(deriveAddPrizeVariant('LOCKED')).toBe('winner');
     expect(deriveAddPrizeVariant('SETTLED')).toBe('winner');
-    expect(deriveAddPrizeVariant('SETTLED', { winnerAwardedAt: '2026-08-29T00:00:00.000Z' })).toBe(
-      'add',
-    );
     expect(deriveAddPrizeVariant('REJECTED')).toBe('rejected');
     expect(deriveAddPrizeVariant(null)).toBe('add');
+
+    expect(
+      deriveAddPrizeVariant('REJECTED', { reviewedAt: hoursAgo(1), now }),
+    ).toBe('rejected');
+    expect(
+      deriveAddPrizeVariant('REJECTED', { reviewedAt: hoursAgo(25), now }),
+    ).toBe('add');
+    expect(
+      deriveAddPrizeVariant('PUBLISHED', { publishedAt: hoursAgo(1), now }),
+    ).toBe('winner');
+    expect(
+      deriveAddPrizeVariant('PUBLISHED', { publishedAt: hoursAgo(25), now }),
+    ).toBe('add');
+    expect(
+      deriveAddPrizeVariant('SETTLED', {
+        publishedAt: hoursAgo(25),
+        now,
+      }),
+    ).toBe('add');
   });
 });

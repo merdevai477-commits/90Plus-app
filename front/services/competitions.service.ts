@@ -100,6 +100,11 @@ export interface CompetitionInfo {
   viewsCount?: number;
   winnerAwardedAt?: string | null;
   rejectionReason?: string | null;
+  /** Set when an admin publishes the competition. */
+  publishedAt?: string | null;
+  /** Set when an admin accepts or rejects the draft. */
+  reviewedAt?: string | null;
+  createdAt?: string;
   myEntry: CompetitionEntryInfo | null;
 }
 
@@ -240,6 +245,8 @@ const KNOWN_ERROR_CODES = new Set([
   'CATEGORY_NOT_FOUND',
   'INVALID_POOL_DATE',
   'MATCH_NOT_IN_POOL',
+  'COMPETITION_PENDING',
+  'CREATE_COOLDOWN',
   'NETWORK',
   'NOT_AUTHENTICATED',
 ]);

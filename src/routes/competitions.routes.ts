@@ -55,6 +55,14 @@ const ERROR_MAP: Record<string, { status: ErrorCodeValue; message: string }> = {
     message: 'عنوان المتجر مطلوب',
   },
   SPONSOR_DISABLED: { status: ErrorCode.AUTHORIZATION, message: 'حساب الراعي موقوف' },
+  COMPETITION_PENDING: {
+    status: ErrorCode.CONFLICT,
+    message: 'لديك إعلان قيد المراجعة',
+  },
+  CREATE_COOLDOWN: {
+    status: ErrorCode.RATE_LIMIT,
+    message: 'يمكنك رفع إعلان جديد بعد 24 ساعة من قبول أو رفض الإعلان السابق',
+  },
   SPONSOR_NOT_FOUND: { status: ErrorCode.NOT_FOUND, message: 'الراعي غير موجود' },
   INVALID_PRIZE: { status: ErrorCode.VALIDATION, message: 'بيانات الجائزة غير صالحة' },
   INVALID_CASH_AMOUNT: {

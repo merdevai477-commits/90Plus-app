@@ -495,12 +495,55 @@ async function buildCompetitionData(input: CreateCompetitionInput, sponsorId: st
   };
 }
 
+/** After admin accept or reject, the sponsor may submit a new ad once this elapses. */
+export const SPONSOR_CREATE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+export type SponsorCreateGateRow = {
+  status: 'DRAFT' | 'PUBLISHED' | 'LOCKED' | 'SETTLED' | 'CANCELLED' | 'REJECTED';
+  reviewedAt: Date | null;
+  publishedAt: Date | null;
+  createdAt: Date;
+};
+
+/**
+ * Clock start for the 24h recreate window: review time on reject/cancel,
+ * publish time on accept. `createdAt` covers legacy rows missing those stamps.
+ */
+export function sponsorCreateDecisionAt(row: SponsorCreateGateRow): Date | null {
+  if (row.status === 'DRAFT') return null;
+  if (row.status === 'REJECTED' || row.status === 'CANCELLED') {
+    return row.reviewedAt ?? row.createdAt;
+  }
+  return row.publishedAt ?? row.reviewedAt ?? row.createdAt;
+}
+
+/** Throws `COMPETITION_PENDING` or `CREATE_COOLDOWN` when a new ad is not allowed. */
+export function assertSponsorCanCreateCompetition(
+  latest: SponsorCreateGateRow | null,
+  now: Date = new Date(),
+): void {
+  if (!latest) return;
+  if (latest.status === 'DRAFT') throw new Error('COMPETITION_PENDING');
+  const decisionAt = sponsorCreateDecisionAt(latest);
+  if (!decisionAt) return;
+  if (now.getTime() - decisionAt.getTime() < SPONSOR_CREATE_COOLDOWN_MS) {
+    throw new Error('CREATE_COOLDOWN');
+  }
+}
+
 /** Sponsor-facing creation. Always lands as DRAFT pending admin review. */
 export async function createCompetition(userId: string, input: CreateCompetitionInput) {
   if (!input.sponsor?.name?.trim()) throw new Error('INVALID_SPONSOR');
   if (!input.sponsor?.address?.trim()) throw new Error('INVALID_SPONSOR_ADDRESS');
   const sponsor = await upsertOwnedSponsor(userId, input.sponsor);
   if (!sponsor.isActive) throw new Error('SPONSOR_DISABLED');
+
+  const latest = await prisma.competition.findFirst({
+    where: { sponsorId: sponsor.id },
+    orderBy: { createdAt: 'desc' },
+    select: { status: true, reviewedAt: true, publishedAt: true, createdAt: true },
+  });
+  assertSponsorCanCreateCompetition(latest);
 
   const data = await buildCompetitionData(input, sponsor.id);
   return prisma.competition.create({

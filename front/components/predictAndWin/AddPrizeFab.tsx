@@ -40,16 +40,42 @@ const PILL = {
 
 export type AddPrizeButtonVariant = 'add' | 'pending' | 'winner' | 'rejected';
 
+/** Matches the server `SPONSOR_CREATE_COOLDOWN_MS` gate on POST /competitions. */
+export const ADD_PRIZE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+function parseStamp(iso?: string | null): number | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+export interface AddPrizeVariantOpts {
+  reviewedAt?: string | null;
+  publishedAt?: string | null;
+  createdAt?: string | null;
+  now?: number;
+}
+
+/**
+ * Accept/reject starts a 24h window. Until it elapses the CTA stays
+ * "Prize accepted" / "Prize rejected"; afterwards it returns to "Add Your Prize".
+ * A live DRAFT stays pending until review.
+ */
 export function deriveAddPrizeVariant(
   status: CompetitionStatus | null,
-  opts?: { winnerAwardedAt?: string | null },
+  opts?: AddPrizeVariantOpts,
 ): AddPrizeButtonVariant {
   if (!status) return 'add';
   if (status === 'DRAFT') return 'pending';
-  if (status === 'REJECTED') return 'rejected';
-  if (status === 'PUBLISHED' || status === 'LOCKED') return 'winner';
-  if (status === 'SETTLED' && !opts?.winnerAwardedAt) return 'winner';
-  return 'add';
+
+  const rejected = status === 'REJECTED' || status === 'CANCELLED';
+  const decisionMs = rejected
+    ? parseStamp(opts?.reviewedAt) ?? parseStamp(opts?.createdAt)
+    : parseStamp(opts?.publishedAt) ?? parseStamp(opts?.reviewedAt) ?? parseStamp(opts?.createdAt);
+  const now = opts?.now ?? Date.now();
+  const cooling = decisionMs == null || now - decisionMs < ADD_PRIZE_COOLDOWN_MS;
+  if (!cooling) return 'add';
+  return rejected ? 'rejected' : 'winner';
 }
 
 /**

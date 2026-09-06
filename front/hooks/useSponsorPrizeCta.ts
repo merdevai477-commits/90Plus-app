@@ -26,7 +26,9 @@ export function useSponsorPrizeCta(): SponsorPrizeCtaState {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [competitionId, setCompetitionId] = useState<string | null>(null);
   const [status, setStatus] = useState<CompetitionStatus | null>(null);
-  const [winnerAwardedAt, setWinnerAwardedAt] = useState<string | null>(null);
+  const [reviewedAt, setReviewedAt] = useState<string | null>(null);
+  const [publishedAt, setPublishedAt] = useState<string | null>(null);
+  const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const seq = useRef(0);
   /**
@@ -44,7 +46,9 @@ export function useSponsorPrizeCta(): SponsorPrizeCtaState {
     if (!isSignedInRef.current) {
       setCompetitionId(null);
       setStatus(null);
-      setWinnerAwardedAt(null);
+      setReviewedAt(null);
+      setPublishedAt(null);
+      setCreatedAt(null);
       setLoading(false);
       return;
     }
@@ -61,12 +65,16 @@ export function useSponsorPrizeCta(): SponsorPrizeCtaState {
       const latest = mine.items[0];
       setCompetitionId(latest?.id ?? null);
       setStatus((latest?.status as CompetitionStatus) ?? null);
-      setWinnerAwardedAt(latest?.winnerAwardedAt ?? null);
+      setReviewedAt(latest?.reviewedAt ?? null);
+      setPublishedAt(latest?.publishedAt ?? null);
+      setCreatedAt(latest?.createdAt ?? null);
     } catch {
       if (ticket === seq.current) {
         setCompetitionId(null);
         setStatus(null);
-        setWinnerAwardedAt(null);
+        setReviewedAt(null);
+        setPublishedAt(null);
+        setCreatedAt(null);
       }
     } finally {
       if (ticket === seq.current) setLoading(false);
@@ -81,7 +89,11 @@ export function useSponsorPrizeCta(): SponsorPrizeCtaState {
   );
 
   return {
-    variant: deriveAddPrizeVariant(status, { winnerAwardedAt }),
+    variant: deriveAddPrizeVariant(status, {
+      reviewedAt,
+      publishedAt,
+      createdAt,
+    }),
     competitionId,
     loading,
   };

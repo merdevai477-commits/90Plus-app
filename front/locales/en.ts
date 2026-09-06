@@ -1194,6 +1194,8 @@ export const en = {
       CATEGORY_NOT_FOUND: 'That prize category no longer exists',
       INVALID_POOL_DATE: 'Invalid date',
       MATCH_NOT_IN_POOL: 'Pick a match from the daily list',
+      COMPETITION_PENDING: 'Your prize is still under review',
+      CREATE_COOLDOWN: 'You can add another prize 24 hours after the last one is accepted or rejected',
       MATCH_NOT_FINISHED: 'The match result is not in yet',
       ENTRY_NOT_FOUND: 'That participant was not found',
       ENTRY_NOT_CORRECT: 'That prediction is not correct',

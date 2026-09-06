@@ -1266,6 +1266,8 @@ export const ar = {
       CATEGORY_NOT_FOUND: 'فئة الجائزة غير موجودة',
       INVALID_POOL_DATE: 'تاريخ غير صالح',
       MATCH_NOT_IN_POOL: 'يمكن اختيار مباراة من القائمة اليومية فقط',
+      COMPETITION_PENDING: 'جائزتك ما زالت قيد المراجعة',
+      CREATE_COOLDOWN: 'يمكنك رفع إعلان جديد بعد 24 ساعة من قبول أو رفض الإعلان السابق',
       MATCH_NOT_FINISHED: 'النتيجة لم تُعتمد بعد',
       ENTRY_NOT_FOUND: 'المشارك غير موجود',
       ENTRY_NOT_CORRECT: 'هذا التوقع غير صحيح',
