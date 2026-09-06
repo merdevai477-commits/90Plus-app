@@ -70,7 +70,7 @@ import {
   hasApiStatistics,
   hasRichStatistics,
 } from '../../utils/matchStatsFallback';
-import { hasLineupData, isAuthoritativeLineupData, pickBetterLineups } from '../../utils/matchLineupsFallback';
+import { hasLineupData, isAuthoritativeLineupData, pickBetterLineups, shouldShowLineupsTab } from '../../utils/matchLineupsFallback';
 import { addBreadcrumb, captureMessage } from '../../services/sentry.service';
 import { resolveFormationLabel, sortPlayersForPitch } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
@@ -1255,11 +1255,8 @@ const MatchDetailsScreen = () => {
     return () => clearInterval(interval);
   }, [fixtureId, isLive, activeTab, loadStandingsIfNeeded]);
 
-  // Keep Lineups tab selectable even while data is loading — never bounce the
-  // user back to Events mid-fetch (that made lineups feel "missing" forever).
-
-  // Warm lineups for every match (including finished). Tab used to stay hidden
-  // until data existed while finished matches skipped preload → chicken-and-egg.
+  // Warm lineups in the background so the tab can appear as soon as 365 or
+  // API-Football publishes an XI. The tab itself stays hidden until then.
   useEffect(() => {
     if (!fixtureId || !fixture || hasLineupData(lineups)) return;
 
@@ -1285,6 +1282,14 @@ const MatchDetailsScreen = () => {
     if (activeTab !== 'lineups' || !fixture) return;
     void loadVenueIfNeeded();
   }, [activeTab, fixture?.fixture?.id, loadVenueIfNeeded]);
+
+  const showLineupsTab = shouldShowLineupsTab(lineups);
+
+  useEffect(() => {
+    if (activeTab === 'lineups' && !showLineupsTab) {
+      setActiveTab('events');
+    }
+  }, [activeTab, showLineupsTab]);
 
   // Reset Pitch/Score to score when match is not live (NS / FT) — must run before
   // any early returns so hook order stays stable across loading/error states.
@@ -2388,7 +2393,9 @@ const MatchDetailsScreen = () => {
   const baseTabs = [
     { key: 'events', label: t.matchDetails.eventsShort || t.matchDetails.events, icon: 'football' as const },
     { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
-    { key: 'lineups', label: t.matchDetails.lineupsShort || t.matchDetails.lineups, icon: 'people' as const },
+    ...(showLineupsTab
+      ? [{ key: 'lineups', label: t.matchDetails.lineupsShort || t.matchDetails.lineups, icon: 'people' as const }]
+      : []),
     { key: 'chats', label: t.matchDetails.chats || 'Chats', icon: 'chatbubbles' as const },
     { key: 'form', label: t.matchDetails.form, icon: 'trending-up' as const },
     { key: 'standings', label: t.matchDetails.standings || 'Table', icon: 'list' as const },

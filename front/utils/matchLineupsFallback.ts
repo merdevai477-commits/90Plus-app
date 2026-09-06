@@ -34,6 +34,11 @@ export function isAuthoritativeLineupData(lineups: Lineup[] | null | undefined):
   });
 }
 
+/** Hide the Lineups tab unless 365 or API-Football actually published an XI. */
+export function shouldShowLineupsTab(lineups: Lineup[] | null | undefined): boolean {
+  return isAuthoritativeLineupData(lineups);
+}
+
 function countStartingPlayers(lineups: Lineup[] | null | undefined): number {
   if (!lineups?.length) return 0;
   return lineups.reduce((sum, row) => sum + (row.startXI?.length ?? 0), 0);
