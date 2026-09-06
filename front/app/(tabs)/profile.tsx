@@ -16,6 +16,8 @@ import ProfileHero from '../../components/profile/ProfileHero';
 import ProfileMetricStrip from '../../components/profile/ProfileMetricStrip';
 import ProfileBioCard from '../../components/profile/ProfileBioCard';
 import ProfileConnectCard from '../../components/profile/ProfileConnectCard';
+import SpinAndWinButton from '../../components/profile/SpinAndWinButton';
+import LuckyWheelModal from '../../components/common/LuckyWheelModal';
 import { ProfileAddLinkModal } from '../../components/profile/ProfileAddLinkModal';
 import { ProfileMoreMenuModal } from '../../components/profile/ProfileMoreMenuModal';
 import ProfileMediaChoiceSheet from '../../components/profile/ProfileMediaChoiceSheet';
@@ -677,6 +679,7 @@ function OwnProfileScreen() {
   const [showStreakInfo, setShowStreakInfo] = useState(false);
   const [addLinkOpen, setAddLinkOpen] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showLuckyWheel, setShowLuckyWheel] = useState(false);
   const addLinkPlatform = addLinkOpen;
   const setAddLinkPlatform = useCallback((platform?: unknown) => {
     if (platform === null || platform === false) {
@@ -1991,6 +1994,11 @@ function OwnProfileScreen() {
           ]}
         />
 
+        <SpinAndWinButton
+          label={t.profile.spinAndWinCta}
+          onPress={() => setShowLuckyWheel(true)}
+        />
+
         <ProfileConnectCard
           links={socialLinks}
           isOwnProfile
@@ -2069,6 +2077,12 @@ function OwnProfileScreen() {
         visible={showCoinsInfo}
         onClose={() => setShowCoinsInfo(false)}
       />
+      {showLuckyWheel ? (
+        <LuckyWheelModal
+          visible
+          onClose={() => setShowLuckyWheel(false)}
+        />
+      ) : null}
       <ProfileAddLinkModal
         visible={!!addLinkPlatform}
         onClose={() => setAddLinkPlatform(null)}

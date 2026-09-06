@@ -2321,6 +2321,7 @@ export const en = {
     addBio: 'Add a short bio',
     aboutMe: 'About me',
     connectWithMe: 'Connect with me',
+    spinAndWinCta: 'Spin & Win',
     energy: 'Energy',
     totalXp: 'Total XP',
     longestStreak: 'Longest streak',

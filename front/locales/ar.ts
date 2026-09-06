@@ -2277,6 +2277,7 @@ export const ar = {
     addBio: 'أضف نبذة عنك',
     aboutMe: 'نبذة عني',
     connectWithMe: 'تواصل معي',
+    spinAndWinCta: 'لف واربح',
     energy: 'الطاقة',
     totalXp: 'إجمالي الـ XP',
     longestStreak: 'أطول سلسلة',
