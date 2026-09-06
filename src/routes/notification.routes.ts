@@ -632,7 +632,7 @@ router.post('/test-push', requireAuth, async (req: Request, res: Response): Prom
                 type: 'LUCKY_WHEEL',
                 title: '🎡 عجلة الحظ جاهزة!',
                 body: 'حظك النهارده ينتظرك، العب دلوقتي!',
-                data: { type: 'LUCKY_WHEEL', screen: '/notifications', openLuckyWheel: 'true' },
+                data: { type: 'LUCKY_WHEEL', screen: '/(tabs)/profile' },
             });
         }
         if (type === 'all' || type === 'match_goal') {

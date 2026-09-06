@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
     View,
     Text,
@@ -12,7 +12,7 @@ import { FlashList } from '@shopify/flash-list';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import type { LucideIcon } from 'lucide-react-native';
@@ -29,8 +29,6 @@ import {
     MessageSquare,
     CheckCheck,
     Gift,
-    Clock,
-    ChevronRight,
     Flag,
     UserCircle,
     Bot,
@@ -61,7 +59,6 @@ import { syncExpoPushTokenIfGranted } from '../src/hooks/usePushNotifications';
 import { logger } from '../utils/logger';
 import { toastManager } from '../services/toastManager';
 import { useTranslation } from '../src/i18n';
-import LuckyWheelModal from '../components/common/LuckyWheelModal';
 
 type Kind =
     | 'match'
@@ -342,201 +339,6 @@ const headerStyles = StyleSheet.create({
     },
 });
 
-// ─── Lucky Wheel pinned card ───────────────────────────────────────────────
-type LuckyWheelPinnedProps = {
-    canSpin: boolean;
-    timeRemaining: { hours: number; minutes: number } | null;
-    onPress: () => void;
-    readyTitle: string;
-    readySub: string;
-    lockedTitle: string;
-    lockedSub: string;
-};
-
-const LuckyWheelPinned = React.memo(function LuckyWheelPinned({
-    canSpin,
-    timeRemaining,
-    onPress,
-    readyTitle,
-    readySub,
-    lockedTitle,
-    lockedSub,
-}: LuckyWheelPinnedProps) {
-    const gradientColors: readonly [string, string, string] = canSpin
-        ? ['rgba(245,197,24,0.32)', 'rgba(124,58,237,0.26)', 'rgba(59,130,246,0.18)']
-        : ['rgba(124,58,237,0.18)', 'rgba(76,29,149,0.12)', 'rgba(30,20,50,0.18)'];
-
-    const timerText = timeRemaining
-        ? `${String(timeRemaining.hours).padStart(2, '0')}:${String(timeRemaining.minutes).padStart(2, '0')}`
-        : '--:--';
-
-    return (
-        <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={onPress}
-            style={[
-                luckyStyles.wrap,
-                {
-                    borderColor: canSpin ? 'rgba(245,197,24,0.45)' : 'rgba(167,139,250,0.28)',
-                    shadowColor: canSpin ? GOLD_PRIMARY : PURPLE_PRIMARY,
-                },
-            ]}
-        >
-            <LinearGradient
-                colors={gradientColors}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-            />
-            {/* Solid overlay — avoid BlurView/LiquidGlass (expensive on open + scroll) */}
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(8,6,14,0.35)' }]} />
-
-            <View style={luckyStyles.row}>
-                <View
-                    style={[
-                        luckyStyles.iconWrap,
-                        {
-                            backgroundColor: canSpin
-                                ? 'rgba(245,197,24,0.22)'
-                                : 'rgba(124,58,237,0.22)',
-                            borderColor: canSpin
-                                ? 'rgba(245,197,24,0.5)'
-                                : 'rgba(167,139,250,0.4)',
-                        },
-                    ]}
-                >
-                    <Gift
-                        size={22}
-                        color={canSpin ? GOLD_PRIMARY : PURPLE_SOFT}
-                        strokeWidth={2.2}
-                    />
-                </View>
-
-                <View style={luckyStyles.body}>
-                    <View style={luckyStyles.titleRow}>
-                        <Text style={luckyStyles.title} numberOfLines={1}>
-                            {canSpin ? readyTitle : lockedTitle}
-                        </Text>
-                        {canSpin ? (
-                            <View style={luckyStyles.pulseDot} />
-                        ) : null}
-                    </View>
-                    <Text style={luckyStyles.sub} numberOfLines={1}>
-                        {canSpin ? readySub : lockedSub}
-                    </Text>
-                </View>
-
-                {canSpin ? (
-                    <View style={luckyStyles.cta}>
-                        <Text style={luckyStyles.ctaTxt}>SPIN</Text>
-                        <ChevronRight size={14} color="#1a0f00" strokeWidth={2.6} />
-                    </View>
-                ) : (
-                    <View style={luckyStyles.timerWrap}>
-                        <Clock size={10} color={TEXT_MUTED} strokeWidth={2.2} />
-                        <Text style={luckyStyles.timerTxt}>{timerText}</Text>
-                    </View>
-                )}
-            </View>
-        </TouchableOpacity>
-    );
-});
-
-const luckyStyles = StyleSheet.create({
-    wrap: {
-        borderRadius: RADIUS_LG,
-        overflow: 'hidden',
-        borderWidth: 1,
-        marginBottom: 14,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.35,
-        shadowRadius: 14,
-        elevation: 6,
-    },
-    row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 14,
-        gap: 12,
-    },
-    iconWrap: {
-        width: 46,
-        height: 46,
-        borderRadius: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-    },
-    body: { flex: 1, minWidth: 0 },
-    titleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    title: {
-        fontSize: 14,
-        fontWeight: '800',
-        color: TEXT_PRIMARY,
-        letterSpacing: -0.2,
-        flexShrink: 1,
-    },
-    sub: {
-        marginTop: 3,
-        fontSize: 12,
-        color: 'rgba(255,255,255,0.72)',
-        fontWeight: '500',
-    },
-    pulseDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: GOLD_PRIMARY,
-        shadowColor: GOLD_PRIMARY,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
-        shadowRadius: 6,
-        elevation: 4,
-    },
-    cta: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 3,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 999,
-        backgroundColor: GOLD_PRIMARY,
-        shadowColor: GOLD_PRIMARY,
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.6,
-        shadowRadius: 8,
-        elevation: 6,
-    },
-    ctaTxt: {
-        fontSize: 11,
-        fontWeight: '900',
-        color: '#1a0f00',
-        letterSpacing: 0.8,
-    },
-    timerWrap: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 999,
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-    },
-    timerTxt: {
-        fontSize: 11,
-        fontWeight: '800',
-        color: 'rgba(255,255,255,0.75)',
-        fontVariant: ['tabular-nums'],
-        letterSpacing: 0.3,
-    },
-});
-
 // ─── Row (memoized for FlashList) ─────────────────────────────────────────
 type NotificationRowProps = {
     item: SocialNotification;
@@ -634,22 +436,9 @@ export default function NotificationsScreen() {
         handleLoadMore,
         isLoadingMore,
         hasMore,
-        canSpin,
-        spinTimeRemaining,
-        checkSpinStatus,
     } = useNotifications();
 
-    const params = useLocalSearchParams<{ openLuckyWheel?: string }>();
-    const [showLuckyWheel, setShowLuckyWheel] = useState(false);
     const loadingToastShownRef = useRef(false);
-    const openLuckyWheelHandledRef = useRef(false);
-
-    useEffect(() => {
-        if (params.openLuckyWheel === 'true' && !openLuckyWheelHandledRef.current) {
-            openLuckyWheelHandledRef.current = true;
-            setShowLuckyWheel(true);
-        }
-    }, [params.openLuckyWheel]);
 
     useFocusEffect(
         useCallback(() => {
@@ -724,11 +513,6 @@ export default function NotificationsScreen() {
             });
         }
     }, [getToken, setBackendNotifications, setUnreadCount, t]);
-
-    const handleLuckyWheelPress = useCallback(() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        setShowLuckyWheel(true);
-    }, []);
 
     const handleNotificationTap = useCallback(
         async (notif: SocialNotification) => {
@@ -807,6 +591,10 @@ export default function NotificationsScreen() {
                             router.push('/(tabs)/matches');
                         }
                         break;
+                    case 'LUCKY_WHEEL':
+                    case 'LUCKY_WHEEL_RENEWED':
+                        router.push('/(tabs)/profile');
+                        break;
                     default:
                         break;
                 }
@@ -818,21 +606,6 @@ export default function NotificationsScreen() {
     );
 
     const bottomPad = Math.max(insets.bottom, 16) + 56 + 32;
-
-    const listHeader = useMemo(
-        () => (
-            <LuckyWheelPinned
-                canSpin={canSpin}
-                timeRemaining={spinTimeRemaining}
-                onPress={handleLuckyWheelPress}
-                readyTitle={t.notifications.luckyWheelReady}
-                readySub={t.notifications.tapToWin}
-                lockedTitle={t.home?.wheelLocked || t.luckyWheel?.locked || t.common.unavailable}
-                lockedSub={t.notifications.wheelAvailableIn}
-            />
-        ),
-        [canSpin, spinTimeRemaining, handleLuckyWheelPress, t],
-    );
 
     const listEmpty = useMemo(() => {
         if (isLoading) return <NotificationSkeleton />;
@@ -925,7 +698,6 @@ export default function NotificationsScreen() {
                         paddingBottom: bottomPad + SECTION_GAP,
                     }}
                     showsVerticalScrollIndicator={false}
-                    ListHeaderComponent={listHeader}
                     ListEmptyComponent={listEmpty}
                     ListFooterComponent={listFooter}
                     onEndReached={handleLoadMore}
@@ -943,17 +715,6 @@ export default function NotificationsScreen() {
                 />
             </View>
             <BottomNav />
-
-            {showLuckyWheel ? (
-                <LuckyWheelModal
-                    visible
-                    onClose={() => {
-                        setShowLuckyWheel(false);
-                        checkSpinStatus();
-                    }}
-                    onCoinsWon={() => { }}
-                />
-            ) : null}
         </View>
     );
 }

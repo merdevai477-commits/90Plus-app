@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
-import { DailySpinService, NotificationService, type SocialNotification } from '../../../src/services/authService';
+import { NotificationService, type SocialNotification } from '../../../src/services/authService';
 import { cacheService, CACHE_KEYS, CACHE_TTL } from '../../../services/cacheService';
 import { useNotificationEvents } from '../../../hooks/useWebSocket';
 
@@ -26,28 +26,11 @@ export function useNotifications() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  const [canSpin, setCanSpin] = useState(false);
-  const [spinTimeRemaining, setSpinTimeRemaining] = useState<{ hours: number; minutes: number } | null>(null);
-
   const lastFetchAtRef = useRef(0);
   const hasLoadedRef = useRef(false);
   const loadNotificationsRef = useRef<(pageNum?: number, append?: boolean, forceRefresh?: boolean) => Promise<void>>(
     async () => undefined,
   );
-
-  const checkSpinStatus = useCallback(async () => {
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const status = await DailySpinService.getStatus(token);
-      if (status) {
-        setCanSpin(status.canSpin);
-        setSpinTimeRemaining(status.timeRemaining);
-      }
-    } catch (error) {
-      console.error('Error checking spin status:', error);
-    }
-  }, [getToken]);
 
   const loadNotifications = useCallback(
     async (pageNum: number = 1, append: boolean = false, forceRefresh: boolean = false) => {
@@ -160,8 +143,7 @@ export function useNotifications() {
     if (hasLoadedRef.current) return;
     hasLoadedRef.current = true;
     loadNotificationsRef.current(1, false, false);
-    checkSpinStatus();
-  }, [checkSpinStatus]);
+  }, []);
 
   useNotificationEvents(notification => {
     setBackendNotifications(prev => {
@@ -201,10 +183,6 @@ export function useNotifications() {
     isLoadingMore,
     error,
     unreadCount,
-
-    canSpin,
-    spinTimeRemaining,
-    checkSpinStatus,
 
     loadNotifications,
     refreshNotifications,

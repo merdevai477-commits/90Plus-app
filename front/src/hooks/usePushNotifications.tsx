@@ -112,7 +112,7 @@ export function usePushNotifications(): PushNotificationState {
             const r = routerRef.current;
 
             if (type === 'LUCKY_WHEEL') {
-                r.push({ pathname: '/notifications', params: { openLuckyWheel: 'true' } });
+                r.push('/(tabs)/profile');
             } else if (type === 'MATCH_GOAL' || type === 'MATCH_UPDATE' || type === 'MATCH_START' || type === 'MATCH_END' || type === 'MATCH_HALFTIME' || type?.includes('MATCH')) {
                 if (data.matchId || data.fixtureId) {
                     const fId = String(data.matchId || data.fixtureId);
@@ -224,7 +224,7 @@ export function usePushNotifications(): PushNotificationState {
             } else if (type === 'DAILY_QUIZ_RENEWED' || type === 'QUIZ_REWARD') {
                 r.push('/(tabs)/quiz' as any);
             } else if (type === 'LUCKY_WHEEL_RENEWED') {
-                r.push({ pathname: '/notifications', params: { openLuckyWheel: 'true' } });
+                r.push('/(tabs)/profile');
             } else if (type === 'COOLDOWN_EXPIRED') {
                 r.push('/(tabs)/profile' as any);
             } else if (data.screen) {
