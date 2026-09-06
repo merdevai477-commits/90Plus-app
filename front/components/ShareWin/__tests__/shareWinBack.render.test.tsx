@@ -150,6 +150,14 @@ describe('the back control', () => {
     expect(back.props.accessibilityRole).toBe('button');
     expect(back.props.accessibilityLabel).toBeTruthy();
   });
+
+  it('keeps scrollTopPadding in ScrollView styles so Fast Refresh does not crash', () => {
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
+    const source = fs.readFileSync(path.join(__dirname, '..', 'ShareWinScreen.tsx'), 'utf8');
+    expect(source).toMatch(/const scrollTopPadding/);
+    expect(source).toMatch(/paddingTop:\s*scrollTopPadding/);
+  });
 });
 
 describe('the referral link the page hands out', () => {

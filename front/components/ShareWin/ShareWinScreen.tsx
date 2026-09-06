@@ -91,6 +91,13 @@ export default function ShareWinScreen() {
 
   /** The page simply ends after the stats bar — nothing floats over it. */
   const scrollBottomPadding = insets.bottom + s(PAGE_END_GAP);
+  /**
+   * The header now owns the top safe-area, so this is 0. The name must still
+   * appear in the ScrollView style objects: Fast Refresh / nativewind wrap-jsx
+   * looks it up after a hot reload, and dropping it crashes with
+   * `Property 'scrollTopPadding' doesn't exist`.
+   */
+  const scrollTopPadding = 0;
 
   const handleViewFullRanking = useCallback(() => {
     router.push('/share-win/leaderboard');
@@ -187,7 +194,7 @@ export default function ShareWinScreen() {
           style={sw.scroll}
           contentContainerStyle={[
             sw.scrollContent,
-            { paddingBottom: scrollBottomPadding },
+            { paddingTop: scrollTopPadding, paddingBottom: scrollBottomPadding },
           ]}
           showsVerticalScrollIndicator={false}
         >
@@ -229,7 +236,7 @@ export default function ShareWinScreen() {
         style={sw.scroll}
         contentContainerStyle={[
           sw.scrollContent,
-          { paddingBottom: scrollBottomPadding },
+          { paddingTop: scrollTopPadding, paddingBottom: scrollBottomPadding },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
