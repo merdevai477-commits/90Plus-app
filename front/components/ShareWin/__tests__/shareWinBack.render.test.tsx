@@ -2,15 +2,9 @@
  * SHARE & WIN — the way off the page the referral link lands on.
  * =============================================================================
  *
- * `/share-win` is a root Stack screen with `headerShown: false` and no tab bar,
- * and it draws all of its own chrome. It had no back control anywhere on it —
- * while its own sub-screen, the full ranking, has always had one.
- *
- * It matters most for the flow the link exists for. `handleDeepLink` in
- * app/_layout.tsx pushes a friend arriving from a shared invite straight here,
- * and on a cold start that makes Share & Win the FIRST screen in the stack:
- * `router.back()` has nothing to pop, so the fallback has to put them into the
- * app rather than leave them on a page they cannot leave.
+ * `/share-win` is a root Stack screen with `headerShown: false` and no tab bar.
+ * The back control must always open Rank — `router.back()` can land on Matches
+ * from tab history, and a cold-start invite has nothing to pop.
  *
  *   npx jest -c jest.render.config.js shareWinBack.render
  */
@@ -130,17 +124,16 @@ describe('the back control', () => {
     expect(screen.getByTestId('share-win-back')).toBeTruthy();
   });
 
-  it('pops the stack when the page was pushed', () => {
+  it('always opens Rank, even when the stack can pop', () => {
     render(<ShareWinScreen />);
 
     fireEvent.press(screen.getByTestId('share-win-back'));
 
-    expect(mockRouter.back).toHaveBeenCalledTimes(1);
-    expect(mockRouter.replace).not.toHaveBeenCalled();
+    expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/rank');
+    expect(mockRouter.back).not.toHaveBeenCalled();
   });
 
   it('lands a deep-linked visitor on Rank instead of a dead end', () => {
-    // Cold start from a shared invite: Share & Win is the first screen.
     mockRouter.canGoBack.mockReturnValue(false);
     render(<ShareWinScreen />);
 

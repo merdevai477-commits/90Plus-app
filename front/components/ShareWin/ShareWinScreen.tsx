@@ -91,68 +91,53 @@ export default function ShareWinScreen() {
 
   /** The page simply ends after the stats bar — nothing floats over it. */
   const scrollBottomPadding = insets.bottom + s(PAGE_END_GAP);
-  /** Applied here rather than via SafeAreaView, which is a no-op on Android. */
-  const scrollTopPadding = insets.top;
 
   const handleViewFullRanking = useCallback(() => {
     router.push('/share-win/leaderboard');
   }, [router]);
 
   /**
-   * LEAVING SHARE & WIN.
-   *
-   * This route is a root Stack screen with `headerShown: false` and no tab bar,
-   * and the page draws its own chrome — so without this there was no back
-   * control anywhere on it. Its own sub-screen (the full ranking) has always
-   * had one; this page did not.
-   *
-   * It matters most for the case the referral link exists for: the deep-link
-   * handler lands a friend HERE (`router.push('/share-win')` in
-   * app/_layout.tsx), which on a cold start makes it the first screen in the
-   * stack — so `router.back()` alone has nothing to pop, and the fallback puts
-   * them into the app proper instead of leaving them stranded on a page they
-   * cannot exit.
+   * Always Rank. `router.back()` can land on Matches (tab history) or nowhere
+   * at all after a cold-start invite link — this page is entered from Rank.
    */
   const handleLeave = useCallback(() => {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
     router.replace('/(tabs)/rank');
   }, [router]);
 
-  /** Same control on every state of the page — loading, error and ready. */
-  const backButton = (
-    <Pressable
-      onPress={handleLeave}
-      hitSlop={12}
-      accessibilityRole="button"
-      accessibilityLabel={copy.backToRank ?? copy.close}
-      testID="share-win-back"
-      style={({ pressed }) => [
-        sw.pageBackButton,
+  /** Same header on every state — loading, error and ready. */
+  const pageHeader = (
+    <View
+      style={[
+        sw.pageHeader,
         {
-          top: insets.top + s(12),
-          // Mirrors on RTL so it never sits under the hardware gesture edge.
-          ...(language === 'ar'
-            ? { right: Math.max(insets.right, s(22)) }
-            : { left: Math.max(insets.left, s(22)) }),
+          paddingTop: insets.top + s(8),
+          paddingLeft: Math.max(insets.left, s(16)),
+          paddingRight: Math.max(insets.right, s(16)),
+          flexDirection: language === 'ar' ? 'row-reverse' : 'row',
         },
-        pressed && { opacity: 0.7 },
       ]}
     >
-      <Image
-        source={SW_ASSET.chevronRight}
-        style={{
-          width: s(24),
-          height: s(24),
-          // The asset points right; a back control points the other way.
-          transform: [{ scaleX: language === 'ar' ? 1 : -1 }],
-        }}
-        contentFit="contain"
-        transition={0}
-      />
-    </Pressable>
+      <Pressable
+        onPress={handleLeave}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel={copy.backToRank ?? copy.close}
+        testID="share-win-back"
+        style={({ pressed }) => [sw.pageBackButton, pressed && { opacity: 0.7 }]}
+      >
+        <Image
+          source={SW_ASSET.chevronRight}
+          style={{
+            width: s(22),
+            height: s(22),
+            tintColor: '#FFFFFF',
+            transform: [{ scaleX: language === 'ar' ? 1 : -1 }],
+          }}
+          contentFit="contain"
+          transition={0}
+        />
+      </Pressable>
+    </View>
   );
 
   const handleViewStory = useCallback(
@@ -197,17 +182,17 @@ export default function ShareWinScreen() {
   if (isLoading && !overview) {
     return (
       <View style={sw.root}>
+        {pageHeader}
         <ScrollView
           style={sw.scroll}
           contentContainerStyle={[
-          sw.scrollContent,
-          { paddingTop: scrollTopPadding, paddingBottom: scrollBottomPadding },
-        ]}
+            sw.scrollContent,
+            { paddingBottom: scrollBottomPadding },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           <ShareWinSkeleton />
         </ScrollView>
-        {backButton}
       </View>
     );
   }
@@ -216,6 +201,7 @@ export default function ShareWinScreen() {
   if (isError && !overview) {
     return (
       <View style={sw.root}>
+        {pageHeader}
         <View style={sw.stateWrap}>
           <Text style={sw.stateTitle}>{copy.errorTitle}</Text>
           <Text style={sw.stateBody}>{copy.errorBody}</Text>
@@ -227,24 +213,24 @@ export default function ShareWinScreen() {
             <Text style={sw.stateButtonText}>{copy.retry}</Text>
           </TouchableOpacity>
         </View>
-        {backButton}
       </View>
     );
   }
 
   // The brief gap between "loaded" and "has data". It gets the back control
   // too, so there is no frame of this screen without a way out.
-  if (!overview) return <View style={sw.root}>{backButton}</View>;
+  if (!overview) return <View style={sw.root}>{pageHeader}</View>;
 
   // ── Ready ─────────────────────────────────────────────────────────────────
   return (
     <View style={sw.root}>
+      {pageHeader}
       <ScrollView
         style={sw.scroll}
         contentContainerStyle={[
-            sw.scrollContent,
-            { paddingTop: scrollTopPadding, paddingBottom: scrollBottomPadding },
-          ]}
+          sw.scrollContent,
+          { paddingBottom: scrollBottomPadding },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
@@ -282,8 +268,6 @@ export default function ShareWinScreen() {
           rank={overview.rank}
         />
       </ScrollView>
-
-      {backButton}
     </View>
   );
 }

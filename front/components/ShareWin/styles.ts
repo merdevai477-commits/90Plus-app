@@ -252,10 +252,7 @@ function buildStyles(scale: DesignScale, language: string) {
       width: s(300),
       alignItems: 'center',
       gap: s(16),
-      // Figma: status bar occupies y=0..62, hero starts at y=100 — so the gap
-      // below the status bar is 38. The safe-area inset is applied separately
-      // as scroll padding, so this is purely that gap.
-      marginTop: s(38),
+      marginTop: s(12),
     },
     heroTitle: {
       fontFamily: font(700),
@@ -1060,28 +1057,25 @@ function buildStyles(scale: DesignScale, language: string) {
     },
 
     /**
-     * The Share & Win page's own back control.
-     *
-     * Pinned to the WINDOW rather than the scroll content, because this page is
-     * long (wheel → ranking → prizes → share card → last winner → stats) and a
-     * control that scrolls away is not a way out. Absolute, so adding it cannot
-     * shift the hero the Figma frame positions.
-     *
-     * `/share-win` is where the referral deep link lands, so this is the first
-     * screen a friend arriving from a shared invite sees — it had nothing to
-     * tap and no tab bar to fall back to.
+     * Fixed top bar (not in the scroll) so the way back to Rank never scrolls
+     * off. This route has no native header and no tab bar.
      */
+    pageHeader: {
+      width: '100%',
+      minHeight: s(48),
+      flexDirection: 'row',
+      alignItems: 'center',
+      zIndex: 40,
+    },
     pageBackButton: {
-      position: 'absolute',
-      width: s(40),
-      height: s(40),
-      borderRadius: s(20),
+      width: s(44),
+      height: s(44),
+      borderRadius: s(22),
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(10, 6, 24, 0.62)',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: 'rgba(255,255,255,0.16)',
-      zIndex: 40,
+      backgroundColor: 'rgba(255,255,255,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.22)',
     },
     lbListContent: {
       width: s(371),
