@@ -805,6 +805,37 @@ async function startServer() {
                 logger.warn('Could not start keep-alive ping (non-fatal):', pingErr);
             } 
 
+                // Daily quiz packs and question challenges are independent of
+                // the Football API plan and must refresh on every backend boot.
+                const { ensureDailyPacksForToday } = await import('./services/quiz-daily.service');
+                ensureDailyPacksForToday().catch((err) =>
+                    logger.error('Quiz pack warmup failed:', err),
+                );
+                const { regenerateDailyQuestionsChallenges } = await import(
+                    './services/questions-challenges.service'
+                );
+                const { ensureQuizEntityDataset } = await import(
+                    './services/quiz-team-roster-sync.service'
+                );
+
+                const warmQuestions = async () => {
+                    await ensureQuizEntityDataset();
+                    await regenerateDailyQuestionsChallenges();
+                };
+                warmQuestions().catch((err) =>
+                    logger.error('Questions challenges warmup failed:', err),
+                );
+                cron.schedule('0 0 * * *', () => {
+                    logger.info('⏰ Cron: Generating daily quiz packs (ar + en)...');
+                    ensureDailyPacksForToday().catch((err) =>
+                        logger.error('Daily quiz pack cron error:', err),
+                    );
+                    warmQuestions().catch((err) =>
+                        logger.error('Daily questions challenges cron error:', err),
+                    );
+                }, { timezone: 'UTC' });
+                logger.info('✅ Daily quiz pack cron scheduled (00:00 UTC)');
+
                 // Start match watcher for push notifications
                 if (process.env.FOOTBALL_API_KEY) {
                     const { logWorldCupOnlyModeStartup } = await import(
@@ -876,48 +907,6 @@ async function startServer() {
                     } catch (queueErr) {
                         logger.warn('Failed to initialise notification queues (non-fatal):', queueErr);
                     }
-
-                    // Daily quiz packs are independent of Football API plan — always warm + cron.
-                    const { ensureDailyPacksForToday } = await import('./services/quiz-daily.service');
-                    ensureDailyPacksForToday().catch((err) =>
-                        logger.error('Quiz pack warmup failed:', err),
-                    );
-                    const { regenerateDailyQuestionsChallenges } = await import(
-                        './services/questions-challenges.service'
-                    );
-                    const { ensureQuizEntityDataset } = await import(
-                        './services/quiz-team-roster-sync.service'
-                    );
-
-                    /*
-                     * Questions rounds are authored over the football entity pool, so the
-                     * pool has to exist BEFORE generation runs. Nothing used to refresh it:
-                     * the cron regenerated rounds against an empty TeamPlayer table, every
-                     * mode failed to generate, and old rows were recycled forward instead.
-                     *
-                     * ensureQuizEntityDataset is a no-op (and costs no API quota) whenever
-                     * the pool is already healthy.
-                     */
-                    const warmQuestions = async () => {
-                        await ensureQuizEntityDataset();
-                        await regenerateDailyQuestionsChallenges();
-                    };
-                    warmQuestions().catch((err) =>
-                        logger.error('Questions challenges warmup failed:', err),
-                    );
-                    cron.schedule('0 0 * * *', () => {
-                        logger.info('⏰ Cron: Generating daily quiz packs (ar + en)...');
-                        ensureDailyPacksForToday().catch((err) =>
-                            logger.error('Daily quiz pack cron error:', err),
-                        );
-                        // Runs at 00:00 UTC — the same moment the API-Football daily
-                        // quota resets, so a pool starved by yesterday's quota refills
-                        // before the day's rounds are authored.
-                        warmQuestions().catch((err) =>
-                            logger.error('Daily questions challenges cron error:', err),
-                        );
-                    });
-                    logger.info('✅ Daily quiz pack cron scheduled (00:00 UTC)');
 
                     const { startWorldCupNewsRefreshCron } = await import(
                         './services/world-cup-news-cron.service'
