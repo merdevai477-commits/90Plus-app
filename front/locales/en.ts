@@ -529,6 +529,9 @@ export const en = {
     noStats: 'Statistics not available',
     statsLiveRetry: 'Stats may appear later for this league. Retrying automatically…',
     statsLeagueLimited: 'Full statistics are not provided for this competition.',
+    recentFormStatsTitle: 'Last {n} matches',
+    recentFormStatsHint:
+      'This match has no live stats — showing each team’s recent form from 365Scores.',
     statsFromEvents: 'Partial stats derived from match events',
     noEvents: 'No events available',
     eventsWaitingLive: 'Waiting for the first event…',

@@ -27,6 +27,7 @@ import { TeamToggle } from '../../components/match-details/TeamToggle';
 import { MatchDetailsTopBar } from '../../components/match-details/MatchDetailsTopBar';
 import { MatchChatTab } from '../../components/match-details/MatchChatTab';
 import { MatchStatsCompare } from '../../components/match-details/MatchStatsCompare';
+import { RecentFormStatsCompare } from '../../components/match-details/RecentFormStatsCompare';
 import CachedAthletePhoto from '../../components/common/CachedAthletePhoto';
 import { BG_BASE,
   GLASS_BORDER_SIDE,
@@ -96,6 +97,7 @@ import {
 import { getPeriodStartTimestamp } from '../../src/store/liveFixtureSelectors';
 import { safeParseDate, safeToISOString } from '../../utils/safeDate';
 import { fixturesToTeamFixtures } from '../../utils/scores365Adapters';
+import { summarizeRecentTeamForm } from '../../utils/recentTeamFormStats';
 
 const { width, height } = Dimensions.get('window');
 
@@ -358,6 +360,7 @@ const MatchDetailsScreen = () => {
 
   const loadedTabsRef = useRef<Set<string>>(new Set());
   const lineupsPreloadedForRef = useRef<number | null>(null);
+  const statsFormAttemptedRef = useRef<number | null>(null);
   /** Kept for Fast Refresh safety — previously used to auto-open Tracking tab. */
   const lmtAutoOpenedRef = useRef<number | null>(null);
   const lineupsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -663,6 +666,7 @@ const MatchDetailsScreen = () => {
     lmtAutoOpenedRef.current = null;
     loadedTabsRef.current = new Set();
     lineupsPreloadedForRef.current = null;
+    statsFormAttemptedRef.current = null;
     lineupsInFlightRef.current = false;
     lastLineupAttemptAtRef.current = 0;
 
@@ -992,10 +996,28 @@ const MatchDetailsScreen = () => {
     };
   }, [fixtureId, isLive, activeTab, isFocused, loadStatsIfNeeded]);
 
-  const loadFormIfNeeded = useCallback(async (force = false) => {
+  useEffect(() => {
+    if (activeTab !== 'stats' || !isFocused || !fixtureId) return;
+    if (statistics.length > 0 || statsFromEvents) return;
+    if (homeLastFixtures.length > 0 || awayLastFixtures.length > 0) return;
+    if (statsFormAttemptedRef.current === fixtureId) return;
+    statsFormAttemptedRef.current = fixtureId;
+    void loadFormIfNeeded(false, { skipApiFootball: true });
+  }, [
+    activeTab,
+    isFocused,
+    fixtureId,
+    statistics.length,
+    statsFromEvents,
+    homeLastFixtures.length,
+    awayLastFixtures.length,
+    loadFormIfNeeded,
+  ]);
+
+  const loadFormIfNeeded = useCallback(async (force = false, options?: { skipApiFootball?: boolean }) => {
     if (!fixture) return;
     if (!force && loadedTabsRef.current.has('form')) return;
-    if (!force) loadedTabsRef.current.add('form');
+    if (!force && !options?.skipApiFootball) loadedTabsRef.current.add('form');
     setFormLoading(true);
     setFormError(null);
     addBreadcrumb('H2H form fetch started', 'match-details.h2h', 'info', { fixtureId });
@@ -1014,6 +1036,7 @@ const MatchDetailsScreen = () => {
             home: form365?.homeCompetitorId ?? undefined,
             away: form365?.awayCompetitorId ?? undefined,
           });
+          loadedTabsRef.current.add('form');
           addBreadcrumb('H2H form loaded via /form', 'match-details.h2h', 'info', {
             fixtureId,
             latencyMs: Date.now() - formStarted,
@@ -1047,11 +1070,31 @@ const MatchDetailsScreen = () => {
           setAwayLastFixtures(awayLast);
           setH2hFixtures(h2hFromComp);
           setForm365TeamIds({ home: homeId, away: awayId });
+          loadedTabsRef.current.add('form');
           return;
         }
 
         setFormError(t.matchDetails.loadFormFailed || t.matchDetails.noPreviousMatches);
         loadedTabsRef.current.delete('form');
+        return;
+      }
+      if (options?.skipApiFootball) {
+        if (fixtureId) {
+          const form365 = await ApiFootballService.get365MatchForm(fixtureId);
+          const homeFrom365 = form365?.home ?? [];
+          const awayFrom365 = form365?.away ?? [];
+          const h2hFrom365 = form365?.h2h ?? [];
+          if (homeFrom365.length || awayFrom365.length || h2hFrom365.length) {
+            setHomeLastFixtures(homeFrom365);
+            setAwayLastFixtures(awayFrom365);
+            setH2hFixtures(h2hFrom365);
+            setForm365TeamIds({
+              home: form365?.homeCompetitorId ?? undefined,
+              away: form365?.awayCompetitorId ?? undefined,
+            });
+            loadedTabsRef.current.add('form');
+          }
+        }
         return;
       }
       const homeId = fixture.teams.home.id;
@@ -1955,6 +1998,56 @@ const MatchDetailsScreen = () => {
     }
 
     if (statistics.length === 0) {
+      const homeSummary = summarizeRecentTeamForm(
+        homeLastFixtures,
+        {
+          id: form365TeamIds.home ?? fixture?.teams.home.id,
+          name: homeTeamName,
+        },
+        5,
+      );
+      const awaySummary = summarizeRecentTeamForm(
+        awayLastFixtures,
+        {
+          id: form365TeamIds.away ?? fixture?.teams.away.id,
+          name: awayTeamName,
+        },
+        5,
+      );
+      const recentPlayed = Math.max(homeSummary.played, awaySummary.played);
+      if (formLoading && recentPlayed === 0) {
+        return <StatsSkeleton shimmerX={shimmerX} />;
+      }
+      if (recentPlayed > 0) {
+        const title = (t.matchDetails.recentFormStatsTitle || t.matchDetails.last5Matches || 'Last {n} matches')
+          .replace('{n}', String(recentPlayed));
+        return (
+          <ScrollView
+            style={{ flex: 1 }}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
+            <RecentFormStatsCompare
+              title={title}
+              hint={
+                t.matchDetails.recentFormStatsHint ||
+                'This match has no live stats — showing each team’s recent form.'
+              }
+              homeName={getTeamDisplayName(homeTeamName, language)}
+              awayName={getTeamDisplayName(awayTeamName, language)}
+              home={homeSummary}
+              away={awaySummary}
+              labels={{
+                wins: t.teamProfile?.wins || t.matchDetails.wins || 'Wins',
+                draws: t.teamProfile?.draws || t.matchDetails.draws || 'Draws',
+                losses: t.teamProfile?.losses || t.matchDetails.losses || 'Losses',
+                goalsFor: t.teamProfile?.goalsFor || t.matchDetails.goalsFor || 'Goals For',
+                goalsAgainst: t.teamProfile?.goalsAgainst || t.matchDetails.goalsAgainst || 'Goals Against',
+              }}
+            />
+          </ScrollView>
+        );
+      }
       return (
         <View style={styles.emptyState}>
           <Ionicons name="stats-chart-outline" size={64} color="#333" />

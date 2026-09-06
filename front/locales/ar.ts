@@ -764,6 +764,8 @@ export const ar = {
     noStats: 'الإحصائيات غير متاحة',
     statsLiveRetry: 'قد تظهر الإحصائيات لاحقاً لهذا الدوري. جاري إعادة المحاولة…',
     statsLeagueLimited: 'الإحصائيات الكاملة غير متوفرة لهذه البطولة.',
+    recentFormStatsTitle: 'آخر {n} مباريات',
+    recentFormStatsHint: 'إحصائيات هذه المباراة غير متاحة — نعرض أداء كل فريق في آخر مبارياته من 365.',
     statsFromEvents: 'إحصائيات جزئية مستخرجة من أحداث المباراة',
     noEvents: 'الأحداث غير متاحة',
     eventsWaitingLive: 'بانتظار أول حدث…',
