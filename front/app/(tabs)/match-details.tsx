@@ -46,6 +46,7 @@ import { FootballField } from '../../components/match-details/FootballField';
 import { MatchStandingsTable } from '../../components/match-details/MatchStandingsTable';
 import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
+import { MatchKickoffHighlights } from '../../components/match-details/MatchKickoffHighlights';
 import { MatchLmtWebView } from '../../components/match-details/MatchLmtWebView';
 import { fetchFixtureLmt, type Scores365LmtInfo } from '../../services/lmt.service';
 import { applySubstitutionsToPitch } from '../../utils/lineupMatchState';
@@ -72,6 +73,7 @@ import {
   hasRichStatistics,
 } from '../../utils/matchStatsFallback';
 import { hasLineupData, isAuthoritativeLineupData, pickBetterLineups, shouldShowLineupsTab } from '../../utils/matchLineupsFallback';
+import { extractMatchKickoffInfo } from '../../utils/extractMatchKickoffInfo';
 import { addBreadcrumb, captureMessage } from '../../services/sentry.service';
 import { resolveFormationLabel, sortPlayersForPitch } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
@@ -1298,7 +1300,8 @@ const MatchDetailsScreen = () => {
     if (activeTab !== 'events' || !fixtureId || events.length > 0) return;
     if (isFinishedMatch()) return;
     void useLiveFixtureStore.getState().fetchAndIngestFast(fixtureId, { includeEvents: true });
-  }, [activeTab, fixtureId, events.length, isFinishedMatch]);
+    void loadVenueIfNeeded();
+  }, [activeTab, fixtureId, events.length, isFinishedMatch, loadVenueIfNeeded]);
 
   // Reload stats when match reaches HT or full time
   useEffect(() => {
@@ -1497,18 +1500,45 @@ const MatchDetailsScreen = () => {
 
   // Render Events Tab
   const renderEvents = () => {
+    const finished = isFinishedMatch();
+    if (!finished && events.length === 0) {
+      const info = extractMatchKickoffInfo({ fixture, venue });
+      return (
+        <ScrollView
+          style={{ flex: 1 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <MatchKickoffHighlights
+            info={info}
+            title={t.matchDetails.highlightsTitle || t.matchDetails.matchInfo || 'Match information'}
+            autoUpdateTitle={t.matchDetails.highlightsAutoUpdate || 'Updates automatically with the first event'}
+            autoUpdateHint={
+              t.matchDetails.highlightsAutoUpdateHint ||
+              'This tab switches to Events as soon as the first event appears.'
+            }
+            refereeLabel={t.matchDetails.referee || 'Referee'}
+            staffLabel={t.matchDetails.matchStaff || 'Officials'}
+            stadiumLabel={t.matchDetails.stadium || 'Stadium'}
+            capacityLabel={t.matchDetails.capacity || 'Capacity'}
+            broadcastLabel={t.matchDetails.broadcastChannel || 'Broadcast'}
+            emptyHint={
+              isLive()
+                ? (t.matchDetails.eventsWaitingLive || 'Waiting for the first event…')
+                : (t.matchDetails.beforeMatch || t.matchDetails.eventsBeforeKickoff)
+            }
+          />
+        </ScrollView>
+      );
+    }
     if (detailsFetching && events.length === 0) {
       return <EventsSkeleton shimmerX={shimmerX} />;
     }
     if (events.length === 0) {
-      const finished = isFinishedMatch();
       const live = isLive();
       const totalGoals = (fixture?.goals?.home ?? 0) + (fixture?.goals?.away ?? 0);
 
-      // Goals on the board but nothing to list: the provider has no event feed for this
-      // competition. Say so instead of spinning on "waiting for the first event" forever.
-      // Live matches rely on the backend verdict (a feed can lag the score by a minute).
-      if ((finished && totalGoals > 0) || ((live || finished) && eventsFeedAvailable === false)) {
+      if ((totalGoals > 0) || eventsFeedAvailable === false) {
         return (
           <View style={styles.emptyState}>
             <View style={styles.eventsWaitingIcon}>
@@ -1523,37 +1553,6 @@ const MatchDetailsScreen = () => {
                 ? (t.matchDetails.eventsUpdatingAuto || 'Updating automatically')
                 : (t.matchDetails.eventsNoneRecorded || t.matchDetails.noEvents)}
             </Text>
-          </View>
-        );
-      }
-
-      if (!finished) {
-        return (
-          <View style={styles.emptyState}>
-            <View style={styles.eventsWaitingIcon}>
-              <Ionicons name="football-outline" size={36} color={PURPLE_SOFT} />
-            </View>
-            <Text style={styles.emptyStateText}>
-              {live
-                ? (t.matchDetails.eventsWaitingLive || 'Waiting for the first event…')
-                : (t.matchDetails.eventsBeforeKickoff || 'Events will appear once the match starts')}
-            </Text>
-            {live ? (
-              <>
-                <ActivityIndicator
-                  style={{ marginTop: 18 }}
-                  size="small"
-                  color={PURPLE_PRIMARY}
-                />
-                <Text style={styles.emptyStateSubtext}>
-                  {t.matchDetails.eventsUpdatingAuto || 'Updating automatically'}
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.emptyStateSubtext}>
-                {t.matchDetails.beforeMatch}
-              </Text>
-            )}
           </View>
         );
       }
@@ -2553,7 +2552,14 @@ const MatchDetailsScreen = () => {
   }
 
   const baseTabs = [
-    { key: 'events', label: t.matchDetails.eventsShort || t.matchDetails.events, icon: 'football' as const },
+    {
+      key: 'events',
+      label:
+        events.length === 0 && !isFinishedMatch()
+          ? (t.matchDetails.highlightsShort || 'Highlights')
+          : (t.matchDetails.eventsShort || t.matchDetails.events),
+      icon: 'football' as const,
+    },
     { key: 'stats', label: t.matchDetails.statistics, icon: 'stats-chart' as const },
     ...(showLineupsTab
       ? [{ key: 'lineups', label: t.matchDetails.lineupsShort || t.matchDetails.lineups, icon: 'people' as const }]

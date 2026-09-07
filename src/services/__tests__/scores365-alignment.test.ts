@@ -78,4 +78,25 @@ describe('mapScores365ToApiFootballFixture alignment fallback', () => {
       widgetType: 'LMT',
     });
   });
+
+  it('maps venue capacity, referee, and broadcast channels', async () => {
+    const fixture = await mapScores365ToApiFootballFixture(
+      {
+        ...game,
+        venue: { id: 1023, name: 'Anfield', capacity: 61276 },
+        officials: [{ name: 'Thomas Bramall' }],
+        tvNetworks: [{ name: 'beIN Sport Max 1 HD', countryId: 131 }],
+      } as typeof game,
+      mismatchedDbBase,
+      4711944,
+    );
+    expect(fixture?.fixture.referee).toBe('Thomas Bramall');
+    expect(fixture?.fixture.venue).toMatchObject({
+      id: 1023,
+      name: 'Anfield',
+      capacity: 61276,
+    });
+    expect((fixture as { _officials?: string[] } | null)?._officials).toEqual(['Thomas Bramall']);
+    expect((fixture as { _tvNetworks?: string[] } | null)?._tvNetworks).toEqual(['beIN Sport Max 1 HD']);
+  });
 });

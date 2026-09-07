@@ -25,6 +25,11 @@ import {
 import { calendarTodayKey, calendarDateFromKickoff } from '../utils/calendar-day-bounds.util';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
+import {
+  map365OfficialNames,
+  map365VenueFields,
+  pick365BroadcastNames,
+} from '../utils/scores365-match-info.util';
 import { coerceAllScoresLiveStatus } from '../utils/scores365-live-identity.util';
 import { withSyncLeaderLease } from './football-sync-leader.service';
 import {
@@ -97,7 +102,16 @@ interface Scores365Game {
   awayCompetitor?: Scores365Competitor;
   events?: Scores365Event[];
   members?: Scores365Member[];
-  venue?: { id?: number; name?: string; shortName?: string; capacity?: number };
+  venue?: {
+    id?: number;
+    name?: string;
+    shortName?: string;
+    capacity?: number;
+    attendance?: number;
+    googlePlaceId?: string;
+  };
+  officials?: Array<{ id?: number; name?: string; countryId?: number }>;
+  tvNetworks?: Array<{ id?: number; name?: string; countryId?: number; type?: number }>;
   hasStats?: boolean;
   promotedPredictions?: { predictions?: Scores365PromotedPrediction[] };
   /** SportRadar embeds (LMT pitch tracker, momentum, …). */
@@ -1661,6 +1675,13 @@ export function synthesizeBaseFrom365Game(
   const homeScore = normalize365Score(home?.score);
   const awayScore = normalize365Score(away?.score);
   const round = resolve365FixtureRound(game);
+  const venue = map365VenueFields(game.venue);
+  const officials = map365OfficialNames(game.officials);
+  const preferredTvCountry = parseInt(process.env.SCORES365_USER_COUNTRY_ID || '131', 10);
+  const tvNetworks = pick365BroadcastNames(
+    game.tvNetworks,
+    Number.isFinite(preferredTvCountry) ? preferredTvCountry : 131,
+  );
   // Synthetic base is always non-swapped (teams taken straight from the 365 game).
   const { extratime, penalty } = resolve365ExtraAndPenalty(
     game,
@@ -1672,15 +1693,18 @@ export function synthesizeBaseFrom365Game(
   return {
     fixture: {
       id: fixtureId,
-      referee: null,
+      referee: officials[0] ?? null,
       timezone: 'UTC',
       date: kickoff,
       timestamp: Math.floor(new Date(kickoff).getTime() / 1000),
       periods: { first: null, second: null },
       venue: {
-        id: game.venue?.id ?? null,
-        name: game.venue?.name ?? null,
-        city: null,
+        id: venue.id,
+        name: venue.name,
+        city: venue.city,
+        capacity: venue.capacity,
+        attendance: venue.attendance,
+        image: venue.image,
       },
       status: {
         long: status.long,
@@ -1721,7 +1745,9 @@ export function synthesizeBaseFrom365Game(
       extratime: extratime ?? { home: null, away: null },
       penalty: penalty ?? { home: null, away: null },
     },
-  };
+    ...(officials.length ? { _officials: officials } : {}),
+    ...(tvNetworks.length ? { _tvNetworks: tvNetworks } : {}),
+  } as unknown as FixtureFromAPI;
 }
 
 export async function loadWorldCupDbFixtures(leagueId: number, season: number) {
@@ -2646,6 +2672,21 @@ export async function mapScores365ToApiFootballFixture(
   });
   const lmtWidget = pickLmtWidget(game);
   const lmtPartnerId = lmtWidget ? partnerIdFromWidget(lmtWidget) : null;
+  const mappedVenue = map365VenueFields(game.venue);
+  const officials = map365OfficialNames(game.officials);
+  const preferredTvCountry = parseInt(process.env.SCORES365_USER_COUNTRY_ID || '131', 10);
+  const tvNetworks = pick365BroadcastNames(
+    game.tvNetworks,
+    Number.isFinite(preferredTvCountry) ? preferredTvCountry : 131,
+  );
+  const officialsFromBase = Array.isArray((base as { _officials?: string[] })._officials)
+    ? ((base as { _officials?: string[] })._officials as string[])
+    : [];
+  const tvFromBase = Array.isArray((base as { _tvNetworks?: string[] })._tvNetworks)
+    ? ((base as { _tvNetworks?: string[] })._tvNetworks as string[])
+    : [];
+  const nextOfficials = officials.length ? officials : officialsFromBase;
+  const nextTvNetworks = tvNetworks.length ? tvNetworks : tvFromBase;
 
   return {
     ...base,
@@ -2658,8 +2699,11 @@ export async function mapScores365ToApiFootballFixture(
     fixture: {
       ...base.fixture,
       id: fixtureId,
+      referee: officials[0] ?? base.fixture.referee ?? null,
+      timezone: base.fixture.timezone,
       date: kickoff,
       timestamp: Math.floor(new Date(kickoff).getTime() / 1000),
+      periods: base.fixture.periods,
       status: {
         long: status.long,
         short: status.short,
@@ -2667,14 +2711,15 @@ export async function mapScores365ToApiFootballFixture(
         extra: status.extra ?? null,
       },
       venue: {
-        id: game.venue?.id ?? base.fixture.venue?.id ?? null,
-        name: game.venue?.name ?? base.fixture.venue?.name ?? null,
-        city: base.fixture.venue?.city ?? null,
-        image: game.venue?.id
-          ? `https://imagecache.365scores.com/image/upload/f_jpg,w_800,h_450,c_fill,q_auto:eco/v1/Venues/${game.venue.id}`
-          : (base.fixture.venue?.id
-              ? `https://imagecache.365scores.com/image/upload/f_jpg,w_800,h_450,c_fill,q_auto:eco/v1/Venues/${base.fixture.venue.id}`
-              : null),
+        id: mappedVenue.id ?? base.fixture.venue?.id ?? null,
+        name: mappedVenue.name ?? base.fixture.venue?.name ?? null,
+        city: mappedVenue.city ?? base.fixture.venue?.city ?? null,
+        capacity: mappedVenue.capacity ?? (base.fixture.venue as { capacity?: number | null } | undefined)?.capacity ?? null,
+        attendance:
+          mappedVenue.attendance ??
+          (base.fixture.venue as { attendance?: number | null } | undefined)?.attendance ??
+          null,
+        image: mappedVenue.image ?? (base.fixture.venue as { image?: string | null } | undefined)?.image ?? null,
       },
     },
     goals: {
@@ -2743,7 +2788,9 @@ export async function mapScores365ToApiFootballFixture(
         }
       : {}),
     ...(crowdPrediction ? { _crowdPrediction: crowdPrediction } : {}),
-  } as FixtureFromAPI;
+    ...(nextOfficials.length ? { _officials: nextOfficials } : {}),
+    ...(nextTvNetworks.length ? { _tvNetworks: nextTvNetworks } : {}),
+  } as unknown as FixtureFromAPI;
 }
 
 export async function getScores365ExperimentEvents(

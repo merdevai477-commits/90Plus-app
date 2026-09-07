@@ -341,6 +341,9 @@ export interface Fixture {
       id: number | null;
       name: string | null;
       city: string | null;
+      capacity?: number | null;
+      attendance?: number | null;
+      image?: string | null;
     };
     status: {
       long: string;
@@ -395,6 +398,8 @@ export interface Fixture {
       away: number | null;
     };
   };
+  _officials?: string[];
+  _tvNetworks?: string[];
 }
 
 export interface Match {
