@@ -24,14 +24,14 @@ import { useLiveFixtureStore } from '../src/store/liveFixtureStore';
 import type { LiveFixtureSnapshot } from '../src/store/liveFixtureStore.types';
 import {
   LIVE_FIXTURE_CALENDAR_POLL_MS,
-  MATCHES_LIST_INTEREST_CAP,
   MATCHES_LIST_BACKGROUND_LIVE_CAP,
-  MATCHES_LIST_KICKOFF_INTEREST_MS,
-  MATCHES_LIST_OVERDUE_KICKOFF_MS,
-  MATCHES_LIST_STALE_OVERDUE_CAP,
 } from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { overlaySnapshotsOnCalendarDetailed } from '../utils/overlaySnapshotsOnCalendar';
+import {
+  isStaleUpcomingOnCalendar,
+  pickMatchesListInterestIds,
+} from '../utils/matchesListInterest';
 import {
   groupMatchesByLeague,
   groupMatchesByCountry,
@@ -150,77 +150,7 @@ async function fetchTodayMatchesWithLiveFeed(
   return mergeTodayCalendarWithLiveFeed(byDate, liveFeed);
 }
 
-/**
- * Poll fixtures that are live, near kickoff, or overdue (calendar still NS after FT).
- */
-function isStaleUpcomingOnCalendar(match: Match, now = Date.now()): boolean {
-  if (match.status !== 'upcoming' && match.status !== 'NS' && match.status !== 'TBD') {
-    return false;
-  }
-  if (!match.fixtureDate) return false;
-  const kickoff = Date.parse(match.fixtureDate);
-  if (!Number.isFinite(kickoff)) return false;
-  return now - kickoff >= MATCHES_LIST_OVERDUE_KICKOFF_MS;
-}
-
-function shouldPollFixtureOnMatchesList(match: Match, now = Date.now()): boolean {
-  if (match.status === 'live') return true;
-  if (match.status === 'finished') return false;
-  if (isStaleUpcomingOnCalendar(match, now)) return true;
-  if (!match.fixtureDate) return false;
-  const kickoff = new Date(match.fixtureDate).getTime();
-  if (Number.isNaN(kickoff)) return false;
-  const delta = kickoff - now;
-  return delta <= MATCHES_LIST_KICKOFF_INTEREST_MS && delta >= 0;
-}
-
 /** All live + overdue stale + near-kickoff NS (capped). */
-function pickMatchesListInterestIds(matches: Match[], cap = MATCHES_LIST_INTEREST_CAP): number[] {
-  const now = Date.now();
-  const live: { id: number; kickoff: number }[] = [];
-  const stale: { id: number; kickoff: number }[] = [];
-  const near: { id: number; kickoff: number }[] = [];
-
-  for (const m of matches) {
-    if (!shouldPollFixtureOnMatchesList(m, now)) continue;
-    const id = parseInt(m.id, 10);
-    if (!Number.isFinite(id) || id <= 0) continue;
-    const kickoff = m.fixtureDate ? Date.parse(m.fixtureDate) : 0;
-    const row = { id, kickoff: Number.isFinite(kickoff) ? kickoff : 0 };
-    if (m.status === 'live') live.push(row);
-    else if (isStaleUpcomingOnCalendar(m, now)) stale.push(row);
-    else near.push(row);
-  }
-
-  live.sort((a, b) => a.kickoff - b.kickoff);
-  stale.sort((a, b) => b.kickoff - a.kickoff);
-  near.sort((a, b) => a.kickoff - b.kickoff);
-
-  const out: number[] = [];
-  const seen = new Set<number>();
-  for (const row of live) {
-    if (seen.has(row.id)) continue;
-    seen.add(row.id);
-    out.push(row.id);
-  }
-  let staleAdded = 0;
-  for (const row of stale) {
-    if (seen.has(row.id)) continue;
-    if (staleAdded >= MATCHES_LIST_STALE_OVERDUE_CAP) break;
-    seen.add(row.id);
-    out.push(row.id);
-    staleAdded += 1;
-  }
-  for (const row of near) {
-    if (seen.has(row.id)) continue;
-    if (out.length >= live.length + MATCHES_LIST_STALE_OVERDUE_CAP + cap) break;
-    seen.add(row.id);
-    out.push(row.id);
-  }
-  return out;
-}
-
-/** Viewport rows first; off-screen live capped for score-only background poll. */
 function buildRegisterInterestIds(
   pollIds: number[],
   visibleIds: number[],

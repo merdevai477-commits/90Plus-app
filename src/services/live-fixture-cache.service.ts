@@ -18,6 +18,7 @@ import {
 import { matchCacheService, FixtureFromAPI, LIVE_STATUSES, FINISHED_STATUSES, TERMINAL_LATCH_STATUSES } from './match-cache.service';
 import prisma from '../lib/prisma';
 import { asTerminalFinishedFixture } from '../utils/fixture-terminal.util';
+import { isStaleMappedInPlayClock } from '../utils/scores365-live-identity.util';
 import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import { SCORES365_LEAGUE_ID_OFFSET as SYNTHETIC_365_LEAGUE_OFFSET } from '../utils/scores365-league-id.util';
 import { API_FOOTBALL_FALLBACK_CALL } from './api-football-quota.service';
@@ -345,23 +346,36 @@ export async function replace365LiveFixturesSnapshot(liveFixtures: FixtureFromAP
   const redis = getRedisClient();
   if (!redis) return;
 
+  const staleTerminal: FixtureFromAPI[] = [];
   const incomingLive = liveFixtures
     .filter((fixture) => fixture?.fixture?.id != null)
-    .map((fixture) => {
+    .flatMap((fixture) => {
       const short = fixture.fixture?.status?.short ?? '';
-      if (LIVE_STATUSES_SET.has(short)) return fixture;
-      // allscores already classified this as live (statusGroup 3); do not drop it as FT.
-      return {
-        ...fixture,
-        fixture: {
-          ...fixture.fixture,
-          status: {
-            ...fixture.fixture.status,
-            short: 'LIVE',
-            long: fixture.fixture.status?.long || 'In Progress',
+      const stale = isStaleMappedInPlayClock({
+        statusShort: LIVE_STATUSES_SET.has(short) ? short : '2H',
+        elapsed: fixture.fixture?.status?.elapsed ?? null,
+        extra: fixture.fixture?.status?.extra ?? null,
+        kickoffIso: fixture.fixture?.date,
+      });
+      if (stale) {
+        staleTerminal.push(asTerminalFinishedFixture(fixture));
+        return [];
+      }
+      if (LIVE_STATUSES_SET.has(short)) return [fixture];
+      // Premature FT while 365 still has a real in-play clock — keep it on the live list.
+      return [
+        {
+          ...fixture,
+          fixture: {
+            ...fixture.fixture,
+            status: {
+              ...fixture.fixture.status,
+              short: 'LIVE',
+              long: fixture.fixture.status?.long || 'In Progress',
+            },
           },
         },
-      };
+      ];
     });
   const incomingIds = new Set(
     incomingLive.map((fixture) => fixture?.fixture?.id).filter((id): id is number => id != null),
@@ -375,7 +389,11 @@ export async function replace365LiveFixturesSnapshot(liveFixtures: FixtureFromAP
       redis.get(FOOTBALL_API_LIVE_MATCHES_KEY),
     ]);
     const existing = parseFixtureList(existingRaw);
-    const droppedForDb: FixtureFromAPI[] = [];
+    const droppedForDb: FixtureFromAPI[] = [...staleTerminal];
+
+    for (const terminal of staleTerminal) {
+      await writeTerminalFixtureSnapshot(terminal, '365');
+    }
 
     for (const previous of existing) {
       const id = previous?.fixture?.id;

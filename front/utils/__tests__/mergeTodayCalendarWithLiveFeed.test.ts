@@ -9,7 +9,7 @@ function makeMatch(overrides: Partial<Match> & { id: string }): Match {
     status: 'upcoming',
     time: '20:00',
     league: { id: 1, name: 'Liga', logo: '', country: 'Spain' },
-    fixtureDate: '2026-08-24T17:00:00.000Z',
+    fixtureDate: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
     ...overrides,
   };
 }
@@ -46,5 +46,31 @@ describe('mergeTodayCalendarWithLiveFeed', () => {
     const merged = mergeTodayCalendarWithLiveFeed(calendar, liveFeed);
     expect(merged.find((row) => row.id === '1')?.status).toBe('finished');
     expect(merged.find((row) => row.id === '1')?.statusShort).toBe('FT');
+  });
+
+  it('finishes a stuck 90+15 live row even when it is the only live match', () => {
+    const calendar = [
+      makeMatch({
+        id: '1',
+        status: 'live',
+        statusShort: '2H',
+        elapsed: 90,
+        extra: 15,
+        score: { home: 2, away: 4 },
+      }),
+    ];
+    const liveFeed = [
+      makeMatch({
+        id: '1',
+        status: 'live',
+        statusShort: '2H',
+        elapsed: 90,
+        extra: 15,
+        score: { home: 2, away: 4 },
+      }),
+    ];
+    const merged = mergeTodayCalendarWithLiveFeed(calendar, liveFeed);
+    expect(merged[0].status).toBe('finished');
+    expect(merged[0].statusShort).toBe('FT');
   });
 });

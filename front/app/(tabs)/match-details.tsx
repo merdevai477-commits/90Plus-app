@@ -96,6 +96,7 @@ import {
 } from '../../utils/standingsHelpers';
 import { getPeriodStartTimestamp } from '../../src/store/liveFixtureSelectors';
 import { safeParseDate, safeToISOString } from '../../utils/safeDate';
+import { isStaleInPlayClock } from '../../utils/staleMatchClock';
 import { fixturesToTeamFixtures } from '../../utils/scores365Adapters';
 import { summarizeRecentTeamAverages, type RecentFormAveragesPayload } from '../../utils/recentTeamFormStats';
 
@@ -380,6 +381,16 @@ const MatchDetailsScreen = () => {
   const isLive = useCallback(() => {
     if (!fixture) return snapshot?.phase === 'live';
     const short = fixture.fixture?.status?.short;
+    if (
+      isStaleInPlayClock({
+        statusShort: short,
+        elapsed: fixture.fixture?.status?.elapsed,
+        extra: fixture.fixture?.status?.extra,
+        kickoffIso: fixture.fixture?.date,
+      })
+    ) {
+      return false;
+    }
     if (!short) return snapshot?.phase === 'live';
     return LIVE_MATCH_STATUSES.includes(
       short as (typeof LIVE_MATCH_STATUSES)[number],
@@ -388,6 +399,16 @@ const MatchDetailsScreen = () => {
 
   const isFinishedMatch = useCallback(() => {
     const short = fixture?.fixture?.status?.short;
+    if (
+      isStaleInPlayClock({
+        statusShort: short,
+        elapsed: fixture?.fixture?.status?.elapsed,
+        extra: fixture?.fixture?.status?.extra,
+        kickoffIso: fixture?.fixture?.date,
+      })
+    ) {
+      return true;
+    }
     return short
       ? ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(short)
       : snapshot?.phase === 'finished';
@@ -1481,10 +1502,7 @@ const MatchDetailsScreen = () => {
     }
     if (events.length === 0) {
       const finished = isFinishedMatch();
-      const live =
-        LIVE_MATCH_STATUSES.includes(
-          (fixture?.fixture?.status?.short ?? '') as (typeof LIVE_MATCH_STATUSES)[number],
-        ) || isLive();
+      const live = isLive();
       const totalGoals = (fixture?.goals?.home ?? 0) + (fixture?.goals?.away ?? 0);
 
       // Goals on the board but nothing to list: the provider has no event feed for this

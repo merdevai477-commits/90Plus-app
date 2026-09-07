@@ -119,7 +119,7 @@ class FootballCalendarSyncService {
                 where: {
                     status: { in: ['NS', 'TBD', '1H', '2H', 'HT', 'LIVE', 'ET', 'BT', 'P', 'INT'] },
                     matchTimestamp: {
-                        gte: nowSec - 30 * 60,
+                        gte: nowSec - 3 * 60 * 60,
                         lte: nowSec + 25 * 60,
                     },
                 },

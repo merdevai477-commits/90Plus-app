@@ -152,6 +152,47 @@ describe('classifyScores365MatchStatus', () => {
     expect(result.extra).toBe(2);
   });
 
+  it('maps stuck 90+15 second half to FT even when text still says 2nd Half', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '2nd Half',
+        shortStatusText: '2nd Half',
+        gameTime: 90,
+        gameTimeDisplay: '90+15',
+      }),
+    );
+    expect(result.short).toBe('FT');
+    expect(result.extra).toBeNull();
+  });
+
+  it('maps second-half gameTime 105 to FT', () => {
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '2nd Half',
+        shortStatusText: '2nd Half',
+        gameTime: 105,
+      }),
+    );
+    expect(result.short).toBe('FT');
+  });
+
+  it('maps 2H still live 125+ minutes after kickoff to FT', () => {
+    const startTime = new Date(Date.now() - 130 * 60 * 1000).toISOString();
+    const result = classifyScores365MatchStatus(
+      game({
+        statusGroup: 3,
+        statusText: '2nd Half',
+        shortStatusText: '2nd Half',
+        gameTime: 90,
+        gameTimeDisplay: '90+4',
+        startTime,
+      }),
+    );
+    expect(result.short).toBe('FT');
+  });
+
   it('maps finished after extra time to AET', () => {
     const result = classifyScores365MatchStatus(
       game({ statusGroup: 4, statusText: 'After Extra Time', shortStatusText: 'AET', gameTime: 120 }),

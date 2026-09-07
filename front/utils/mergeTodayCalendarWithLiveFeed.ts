@@ -1,6 +1,28 @@
 import type { Match } from '../components/Matches/matchCardUtils';
+import { isStaleInPlayClock } from './staleMatchClock';
 
 const TERMINAL_STATUS_SHORT = new Set(['FT', 'AET', 'PEN', 'ABD', 'AWD', 'WO', 'CANC']);
+
+function finishStaleLiveRow(row: Match): Match {
+  if (row.status !== 'live') return row;
+  if (
+    !isStaleInPlayClock({
+      statusShort: row.statusShort ?? 'LIVE',
+      elapsed: row.elapsed,
+      extra: row.extra,
+      kickoffIso: row.fixtureDate,
+    })
+  ) {
+    return row;
+  }
+  return {
+    ...row,
+    status: 'finished',
+    statusShort: TERMINAL_STATUS_SHORT.has(row.statusShort ?? '') ? row.statusShort! : 'FT',
+    extra: null,
+    minute: undefined,
+  };
+}
 
 /**
  * Merge today's date-indexed calendar with the global live feed.
@@ -8,11 +30,13 @@ const TERMINAL_STATUS_SHORT = new Set(['FT', 'AET', 'PEN', 'ABD', 'AWD', 'WO', '
  * both promotions (NS → live) and demotions (stale live → finished).
  */
 export function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Match[]): Match[] {
-  const liveIds = new Set(liveFeed.filter((row) => row.status === 'live').map((row) => row.id));
+  const liveRows = liveFeed.map(finishStaleLiveRow).filter((row) => row.status === 'live');
+  const liveIds = new Set(liveRows.map((row) => row.id));
   const map = new Map<string, Match>();
   const demoteMissingLive = liveIds.size > 0;
 
-  for (const row of calendar) {
+  for (const raw of calendar) {
+    const row = finishStaleLiveRow(raw);
     if (demoteMissingLive && row.status === 'live' && !liveIds.has(row.id)) {
       const statusShort =
         row.statusShort && TERMINAL_STATUS_SHORT.has(row.statusShort) ? row.statusShort : 'FT';
@@ -26,8 +50,7 @@ export function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Matc
     }
   }
 
-  for (const liveRow of liveFeed) {
-    if (liveRow.status !== 'live') continue;
+  for (const liveRow of liveRows) {
     const existing = map.get(liveRow.id);
     map.set(
       liveRow.id,

@@ -218,7 +218,7 @@ class LiveFixtureSyncService {
 
         const nowSec = Math.floor(Date.now() / 1000);
         const windowBefore = 20 * 60;
-        const windowAfter = 90 * 60;
+        const windowAfter = 3 * 60 * 60;
         try {
             const candidates = await prisma.cachedFixture.findMany({
                 where: {

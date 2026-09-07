@@ -47,8 +47,10 @@ export const LIVE_FIXTURE_CALENDAR_POLL_MS = 45_000;
 export const MATCHES_LIST_INTEREST_CAP = 20;
 /** Upcoming kickoff window for list interest (ms before kickoff). */
 export const MATCHES_LIST_KICKOFF_INTEREST_MS = 10 * 60 * 1000;
-/** Calendar row still NS/upcoming this long after kickoff → stale; poll for FT. */
-export const MATCHES_LIST_OVERDUE_KICKOFF_MS = 105 * 60 * 1000;
+/** Still NS/upcoming this long after kickoff → refresh the calendar day. */
+export const MATCHES_LIST_OVERDUE_KICKOFF_MS = 2 * 60 * 1000;
+/** Keep polling NS rows after kickoff so delayed starts appear on Live. */
+export const MATCHES_LIST_NS_AFTER_KICKOFF_MS = 3 * 60 * 60 * 1000;
 /** Cap overdue stale polls so we don't fan out on a stuck calendar day. */
 export const MATCHES_LIST_STALE_OVERDUE_CAP = 15;
 /** Live fixtures off-screen still polled (score-only) when not in viewport. */

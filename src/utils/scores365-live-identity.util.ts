@@ -49,16 +49,104 @@ export function isHotAllScoresPersistItem(
   return nowMs - start <= 8 * 60 * 60 * 1000;
 }
 
-/** 365 allscores live set — statusGroup 3 wins over our classifier. */
+const REGULAR_MAX_STOPPAGE = 15;
+const STALE_2H_AGE_MIN = 125;
+const LIVE_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
+const FINISHED_SHORTS = new Set(['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO']);
+
+function parseStoppageFromDisplay(display?: string | null, minute?: number | null): number | null {
+  const raw = (display ?? '').trim();
+  if (!raw) return null;
+  const plusMatch = raw.match(/(\d+)\s*\+\s*(\d+)/);
+  if (plusMatch) {
+    const n = Number(plusMatch[2]);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), REGULAR_MAX_STOPPAGE) : null;
+  }
+  const barePlus = raw.match(/^\+?\s*(\d+)\s*'?$/);
+  if (barePlus && minute != null && (minute === 45 || minute === 90 || minute === 105 || minute === 120)) {
+    const n = Number(barePlus[1]);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), REGULAR_MAX_STOPPAGE) : null;
+  }
+  return null;
+}
+
+export type Stale365ClockRaw = {
+  statusGroup?: number;
+  gameTime?: number;
+  gameTimeDisplay?: string;
+  startTime?: string;
+  statusText?: string;
+  shortStatusText?: string;
+};
+
+/**
+ * 365 can stay statusGroup=3 with a stuck `90+15` / gameTime 105 after FT.
+ * Do not treat those as live, and do not coerce classifier FT back to 2H.
+ */
+export function isStale365InPlayClock(raw?: Stale365ClockRaw | null, nowMs = Date.now()): boolean {
+  if (!raw) return false;
+  const hay = `${raw.statusText ?? ''} ${raw.shortStatusText ?? ''} ${raw.gameTimeDisplay ?? ''}`.toLowerCase();
+  if (
+    hay.includes('extra time') ||
+    hay.includes('extra-time') ||
+    hay.includes('penalt') ||
+    hay.includes('shootout')
+  ) {
+    return false;
+  }
+  const minute = raw.gameTime != null && raw.gameTime >= 0 ? Math.floor(raw.gameTime) : null;
+  const extra = parseStoppageFromDisplay(raw.gameTimeDisplay, minute);
+  if (minute != null && minute >= 90 + REGULAR_MAX_STOPPAGE) return true;
+  if (minute != null && minute >= 90 && extra != null && extra >= REGULAR_MAX_STOPPAGE) return true;
+  const kick = raw.startTime ? Date.parse(raw.startTime) : Number.NaN;
+  return (
+    Number.isFinite(kick) &&
+    nowMs - kick >= STALE_2H_AGE_MIN * 60_000 &&
+    minute != null &&
+    minute >= 90
+  );
+}
+
+/** Client-mapped fixture clocks (elapsed/extra) — same cap as the matches list. */
+export function isStaleMappedInPlayClock(opts: {
+  statusShort?: string | null;
+  elapsed?: number | null;
+  extra?: number | null;
+  kickoffIso?: string | null;
+  nowMs?: number;
+}): boolean {
+  const s = (opts.statusShort ?? '').trim().toUpperCase();
+  if (s !== '1H' && s !== '2H' && s !== 'LIVE' && s !== 'FT') return false;
+  const elapsed = opts.elapsed;
+  const extra = opts.extra;
+  if (s === '1H' && elapsed != null && elapsed > 60) return true;
+  if (s === '2H' || s === 'LIVE' || s === 'FT') {
+    if (elapsed != null && elapsed >= 90 + REGULAR_MAX_STOPPAGE) return true;
+    if (elapsed != null && elapsed >= 90 && extra != null && extra >= REGULAR_MAX_STOPPAGE) {
+      return true;
+    }
+  }
+  if (!opts.kickoffIso) return false;
+  const kick = Date.parse(opts.kickoffIso);
+  if (!Number.isFinite(kick)) return false;
+  const ageMin = ((opts.nowMs ?? Date.now()) - kick) / 60_000;
+  return (
+    (s === '2H' || s === 'LIVE' || s === 'FT') &&
+    ageMin >= STALE_2H_AGE_MIN &&
+    elapsed != null &&
+    elapsed >= 90
+  );
+}
+
+/** 365 allscores live set — statusGroup 3 wins unless the clock is stuck past FT. */
 export function isAllScoresLiveItem(item: {
   phase?: string;
-  raw?: { statusGroup?: number };
+  raw?: Stale365ClockRaw;
 }): boolean {
+  if (isStale365InPlayClock(item.raw)) return false;
   if (item.raw?.statusGroup === 3) return true;
   return item.phase === 'live';
 }
-
-const LIVE_SHORTS = new Set(['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
 
 export function coerceAllScoresLiveStatus<
   T extends {
@@ -68,15 +156,30 @@ export function coerceAllScoresLiveStatus<
   },
 >(
   fixture: T,
-  raw?: {
-    statusGroup?: number;
+  raw?: Stale365ClockRaw & {
     statusText?: string;
     shortStatusText?: string;
     gameTime?: number;
   },
 ): T {
   const short = fixture.fixture?.status?.short ?? '';
+  const finishStale = (): T => ({
+    ...fixture,
+    fixture: {
+      ...fixture.fixture,
+      status: {
+        ...fixture.fixture?.status,
+        short: 'FT',
+        long: 'Match Finished',
+        elapsed: 90,
+        extra: null,
+      },
+    },
+  });
+
+  if (isStale365InPlayClock(raw)) return finishStale();
   if (LIVE_SHORTS.has(short)) return fixture;
+  if (FINISHED_SHORTS.has(short) && raw?.statusGroup !== 3) return fixture;
   if (raw?.statusGroup !== 3) return fixture;
 
   const minute = raw.gameTime != null && raw.gameTime >= 0 ? Math.floor(raw.gameTime) : null;

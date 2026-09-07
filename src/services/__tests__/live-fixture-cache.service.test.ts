@@ -171,6 +171,35 @@ describe('provider-owned live fixture snapshots', () => {
     expect(redis.values.has(`${FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX}${id}`)).toBe(false);
   });
 
+  it('REPLACE drops a stuck 90+15 clock instead of remapping it to LIVE', async () => {
+    const id = 4_633_359;
+    const redis = redisHarness({
+      [FOOTBALL_365_LIVE_MATCHES_KEY]: JSON.stringify([
+        {
+          fixture: { id, status: { short: '2H', elapsed: 90, extra: 4 } },
+          league: { id: 0 },
+          provider: '365',
+        },
+      ]),
+    });
+    mockedGetRedisClient.mockReturnValue(redis.client as any);
+
+    await replace365LiveFixturesSnapshot([
+      {
+        ...fixture(id, '2H', '365'),
+        fixture: {
+          id,
+          status: { short: '2H', long: 'Second Half', elapsed: 90, extra: 15 },
+          date: new Date(Date.now() - 130 * 60 * 1000).toISOString(),
+        },
+      } as any,
+    ]);
+
+    const next365 = JSON.parse(redis.values.get(FOOTBALL_365_LIVE_MATCHES_KEY) ?? '[]') as any[];
+    expect(next365).toHaveLength(0);
+    expect(redis.values.has(`${FOOTBALL_FIXTURE_TERMINAL_KEY_PREFIX}${id}`)).toBe(true);
+  });
+
   it('keeps a current 365 live row even if a leftover terminal tombstone exists', async () => {
     const id = 4_633_358;
     const redis = redisHarness({

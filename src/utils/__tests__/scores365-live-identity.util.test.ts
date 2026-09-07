@@ -85,6 +85,21 @@ describe('isAllScoresLiveItem', () => {
     expect(isAllScoresLiveItem({ phase: 'live', raw: { statusGroup: 2 } })).toBe(true);
     expect(isAllScoresLiveItem({ phase: 'upcoming', raw: { statusGroup: 2 } })).toBe(false);
   });
+
+  it('does not treat a stuck 90+15 statusGroup-3 clock as live', () => {
+    expect(
+      isAllScoresLiveItem({
+        phase: 'finished',
+        raw: {
+          statusGroup: 3,
+          statusText: '2nd Half',
+          shortStatusText: '2nd Half',
+          gameTime: 90,
+          gameTimeDisplay: '90+15',
+        },
+      }),
+    ).toBe(false);
+  });
 });
 
 describe('coerceAllScoresLiveStatus', () => {
@@ -99,5 +114,20 @@ describe('coerceAllScoresLiveStatus', () => {
       gameTime: 77,
     });
     expect(coerced.fixture.status.short).toBe('2H');
+  });
+
+  it('does not coerce a stuck 90+15 FT classification back to 2H', () => {
+    const fixture = {
+      fixture: { status: { short: 'FT', long: 'Match Finished', elapsed: 90, extra: 15 } },
+    };
+    const coerced = coerceAllScoresLiveStatus(fixture, {
+      statusGroup: 3,
+      statusText: '2nd Half',
+      shortStatusText: '2nd Half',
+      gameTime: 90,
+      gameTimeDisplay: '90+15',
+    });
+    expect(coerced.fixture.status.short).toBe('FT');
+    expect(coerced.fixture.status.extra).toBeNull();
   });
 });

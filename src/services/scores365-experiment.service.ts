@@ -1402,14 +1402,26 @@ export function classifyScores365MatchStatus(
     return withExtra('FT', 'Match Finished', 90, null);
   }
 
-  // 365 may keep statusGroup=3 with a stuck `90+N` display after full time.
-  // When stoppage hits the parser cap (15) without live indicators, treat as FT.
+  // 365 may keep statusGroup=3 with a stuck `90+N` / `2nd Half` after full time.
+  // Display clamps stoppage at 15, so 90+15 (or gameTime >= 105) is FT unless ET.
   if (
     statusGroup === 3 &&
-    minute === 90 &&
-    stoppageFromDisplay != null &&
-    stoppageFromDisplay >= 15 &&
-    !has('live', '1st', '2nd', 'first', 'second', 'الأول', 'الثاني')
+    ((minute != null && minute >= 105) ||
+      (minute != null &&
+        minute >= 90 &&
+        stoppageFromDisplay != null &&
+        stoppageFromDisplay >= 15))
+  ) {
+    return withExtra('FT', 'Match Finished', 90, null);
+  }
+
+  const kickoffMs = game.startTime ? Date.parse(game.startTime) : NaN;
+  if (
+    statusGroup === 3 &&
+    Number.isFinite(kickoffMs) &&
+    Date.now() - kickoffMs >= 125 * 60 * 1000 &&
+    minute != null &&
+    minute >= 90
   ) {
     return withExtra('FT', 'Match Finished', 90, null);
   }
@@ -1421,7 +1433,7 @@ export function classifyScores365MatchStatus(
   if (statusGroup !== 3 && minute != null && minute >= 90) {
     return withExtra('FT', 'Match Finished', 90);
   }
-  if (minute != null && minute > 105) {
+  if (minute != null && minute >= 105) {
     return withExtra('FT', 'Match Finished', 90);
   }
 

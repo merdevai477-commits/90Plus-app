@@ -12,6 +12,7 @@ import { isAbortError } from '../../utils/isAbortError';
 import { getApiUrl } from '../../config/api.config';
 import { getAppLanguageCode, acceptLanguageHeader } from '../../utils/appLanguage';
 import { safeFormatMatchTime } from '../../utils/safeDate';
+import { isStaleInPlayClock } from '../../utils/staleMatchClock';
 import {
   MAX_LEAD_SEC,
   isLiveStoppage,
@@ -48,6 +49,7 @@ export const mapFixtureStatus = (
   statusShort: string,
   elapsed?: number | null,
   extra?: number | null,
+  kickoffIso?: string | null,
 ): 'live' | 'upcoming' | 'finished' => {
   // Keep aligned with backend LIVE_STATUSES / is365Live (INT + SUSP stay "live"
   // so the client keeps polling until play resumes or the match ends).
@@ -58,20 +60,19 @@ export const mapFixtureStatus = (
     return 'finished';
   }
 
-  // Stale 365 rows: impossible stoppage → treat as finished.
   if (
-    elapsed != null &&
-    elapsed > 105 &&
-    (statusShort === '2H' || statusShort === '1H')
+    isStaleInPlayClock({
+      statusShort,
+      elapsed,
+      extra,
+      kickoffIso,
+    })
   ) {
     return 'finished';
   }
 
   if (liveStatuses.includes(statusShort)) {
     return 'live';
-  }
-  if (finishedStatuses.includes(statusShort)) {
-    return 'finished';
   }
   return 'upcoming';
 };
@@ -253,7 +254,12 @@ export const mapFixtureToMatch = (fixture: Fixture): Match => {
       home: fixture.goals.home ?? 0,
       away: fixture.goals.away ?? 0,
     },
-    status: mapFixtureStatus(fixture.fixture.status.short, fixture.fixture.status.elapsed),
+    status: mapFixtureStatus(
+      fixture.fixture.status.short,
+      fixture.fixture.status.elapsed,
+      fixture.fixture.status.extra,
+      fixture.fixture.date,
+    ),
     statusShort: fixture.fixture.status.short,
     elapsed: fixture.fixture.status.elapsed ?? null,
     extra: fixture.fixture.status.extra ?? null,

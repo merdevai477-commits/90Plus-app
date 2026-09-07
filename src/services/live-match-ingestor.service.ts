@@ -29,9 +29,9 @@ import {
     NS_LIKE_STATUSES,
 } from './match-events/match-event-normalizer';
 
-/** Force API refresh from 20 min before kickoff through 15 min after while still NS-like. */
+/** Force API refresh from 20 min before kickoff through 3h after while still NS-like. */
 const FORCE_REFRESH_BEFORE_MS = 20 * 60 * 1000;
-const FORCE_REFRESH_AFTER_MS = 15 * 60 * 1000;
+const FORCE_REFRESH_AFTER_MS = 3 * 60 * 60 * 1000;
 
 function pollIntervalMs(): number {
     const fromEnv = parseInt(

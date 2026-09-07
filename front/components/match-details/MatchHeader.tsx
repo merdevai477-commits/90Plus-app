@@ -15,6 +15,7 @@ import {
   resolveLiveMinuteLabel,
   resolveLiveSecondsLabel,
 } from '../../components/Matches/leagueApiUtils';
+import { isStaleInPlayClock } from '../../utils/staleMatchClock';
 import { useSecondTick } from '../../hooks/useSecondTick';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import {
@@ -156,13 +157,21 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   const isHalftime = short === 'HT';
   const isNotPlayed = NOT_PLAYED_STATUSES.includes(short);
   const isPaused = PAUSED_STATUSES.includes(short);
+  const staleLive = isStaleInPlayClock({
+    statusShort: short,
+    elapsed,
+    extra: stoppage,
+    kickoffIso: fixtureDate,
+  });
   const isLive =
+    !staleLive &&
     !isNotPlayed &&
     !isPaused &&
     (LIVE_STATUSES.includes(short) || (status === 'live' && !isHalftime));
   const isFinished =
-    !isNotPlayed &&
-    (FINISHED_STATUSES.includes(short) || (status === 'finished' && !isPaused));
+    staleLive ||
+    (!isNotPlayed &&
+      (FINISHED_STATUSES.includes(short) || (status === 'finished' && !isPaused)));
   const isStoppage = isLive && isLiveStoppage(short, elapsed, stoppage);
   const hasPenaltyScore =
     penaltyHome != null &&
