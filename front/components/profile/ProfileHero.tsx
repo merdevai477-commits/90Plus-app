@@ -12,13 +12,14 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ProfileTheme } from '../../constants/ProfileTheme';
-import { PROFILE_ICONS } from './profileV2Assets';
+import { PROFILE_STADIUM_COVER, PROFILE_ICONS } from './profileV2Assets';
 import VerifiedBadge from './VerifiedBadge';
 import DeveloperBadge from './DeveloperBadge';
 import { formatProfileStat } from './formatProfileStat';
 import { isMeaningfulCountryFlag } from '../../utils/countryDisplay';
 import { getCountryFlagUri } from '../../utils/countryFlagUri';
 
+const COVER_HEIGHT = 420;
 const AVATAR_SIZE = 101;
 
 export interface ProfileHeroProps {
@@ -93,14 +94,25 @@ const ProfileHero = memo(function ProfileHero({
   const hasClub = !!(clubLogo || clubName?.trim());
   const fillPct = Math.max(0, Math.min(1, progressPct > 1 ? progressPct / 100 : progressPct));
   const countryFlagUri = getCountryFlagUri(countryLabel || '', countryFlag, 80);
+  const heroHeight = actionBelowName ? COVER_HEIGHT + 72 : COVER_HEIGHT;
 
   return (
-    <LinearGradient
-      colors={['#1A0B33', '#0B0614', ProfileTheme.colors.profileBg]}
-      locations={[0, 0.55, 1]}
-      style={styles.wrap}
-      testID="profile-hero"
-    >
+    <View style={[styles.wrap, { height: heroHeight }]} testID="profile-hero">
+      <View style={styles.coverHit} pointerEvents="none" testID="profile-cover">
+        <Image
+          source={PROFILE_STADIUM_COVER}
+          style={styles.cover}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          priority="high"
+        />
+        <LinearGradient
+          colors={['rgba(75,14,133,0)', 'rgba(3,3,3,0.38)', 'rgba(3,3,3,0.92)']}
+          locations={[0, 0.55, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
+
       <View style={[styles.overlay, { paddingTop: topInset + 8 }]} pointerEvents="box-none">
         <View style={styles.nav}>
           {onBackPress ? (
@@ -316,7 +328,7 @@ const ProfileHero = memo(function ProfileHero({
 
         {actionBelowName ? <View style={styles.actionBelowName}>{actionBelowName}</View> : null}
       </View>
-    </LinearGradient>
+    </View>
   );
 });
 
@@ -359,17 +371,25 @@ export default ProfileHero;
 
 const styles = StyleSheet.create({
   wrap: {
+    height: COVER_HEIGHT,
     backgroundColor: ProfileTheme.colors.profileBg,
-    paddingBottom: 8,
+  },
+  coverHit: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  cover: {
+    width: '100%',
+    height: '100%',
   },
   overlay: {
+    flex: 1,
     paddingHorizontal: 8,
   },
   nav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 55,
   },
   navRight: {
     flexDirection: 'row',

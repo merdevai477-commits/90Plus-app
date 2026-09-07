@@ -1,5 +1,5 @@
 /**
- * Profile hero no longer has a cover photo (user-uploaded or stadium default).
+ * Stadium backdrop is decorative only — users cannot change a cover photo.
  *
  *   npx jest -c jest.render.config.js profileHeroCover.render
  */
@@ -16,8 +16,8 @@ jest.mock('../../../src/i18n', () => {
 
 import ProfileHero from '../ProfileHero';
 
-describe('ProfileHero cover photo', () => {
-  it('renders identity without a cover photo control', () => {
+describe('ProfileHero stadium backdrop', () => {
+  it('shows the fixed stadium image and no cover-change control', () => {
     render(
       <ProfileHero
         topInset={0}
@@ -36,6 +36,9 @@ describe('ProfileHero cover photo', () => {
     expect(screen.getByText('Alex')).toBeTruthy();
     expect(screen.getByText('@alex')).toBeTruthy();
     expect(screen.getByTestId('profile-hero')).toBeTruthy();
-    expect(screen.queryByTestId('profile-cover')).toBeNull();
+    const cover = screen.getByTestId('profile-cover');
+    expect(cover).toBeTruthy();
+    expect(cover.props.pointerEvents).toBe('none');
+    expect(cover.props.accessibilityRole).not.toBe('button');
   });
 });
