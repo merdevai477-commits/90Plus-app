@@ -172,9 +172,23 @@ function createStyles(scale: number, fontScale: number, language: string) {
     avatarRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'flex-end',
+      justifyContent: 'space-between',
       marginBottom: s(38),
-      marginRight: s(HUB_GUTTER),
+      marginHorizontal: s(HUB_GUTTER),
+    },
+    hubBackButton: {
+      width: s(44),
+      height: s(44),
+      borderRadius: s(22),
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(255,255,255,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.22)',
+    },
+    streakCluster: {
+      flexDirection: 'row',
+      alignItems: 'center',
     },
     streakBadge: {
       width: s(39),

@@ -19,16 +19,18 @@
  */
 
 import React, { memo } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
+import Svg, { Path } from 'react-native-svg';
 
 import {
   HERO_XP_GRADIENT,
   HERO_XP_GRADIENT_END,
   HERO_XP_GRADIENT_LOCATIONS,
   HERO_XP_GRADIENT_START,
+  HUB_COLOR,
   useQuestionsHubStyles,
 } from '../styles';
 import { QuizFlameIcon } from '../../QuizFlameIcon';
@@ -49,6 +51,21 @@ const HERO_SCRIM_LOCATIONS = [0, 0.45, 1] as const;
 
 /** Flame glyph inside the circular coin badge. Figma: 32 inside a 39 circle. */
 const FLAME_ICON_SIZE = 32;
+
+/** Same stroke as gameChrome BackArrowIcon — kept local so the hub does not load reanimated. */
+function HubBackArrow({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 38 38" fill="none">
+      <Path
+        d="M18.4375 25.75L11.6875 19L18.4375 12.25M12.625 19H26.3125"
+        stroke={color}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /* Gradient text helpers                                                      */
@@ -115,34 +132,52 @@ function HeroXpGradientText({ children }: { children: string }) {
 function HeroBanner({
   coins,
   copy,
+  onBack,
   onPressCoins,
 }: {
   coins: number;
   copy: QuestionsHubCopy;
+  onBack: () => void;
   /** Optional tap handler for the coin pill. */
   onPressCoins?: () => void;
 }) {
-  const { hub } = useQuestionsHubStyles();
+  const { hub, metrics } = useQuestionsHubStyles();
+  const { s } = metrics;
   const language = useLanguageStore((state) => state.language);
   const isRtl = language === 'ar';
 
   return (
     <>
-      {/* ── Coin / streak cluster ───────────────────────────────────────── */}
+      {/* ── Back to Rank + coin / streak cluster ──────────────────────── */}
       <View style={hub.avatarRow}>
-        <View style={hub.streakBadge}>
-          <QuizFlameIcon size={FLAME_ICON_SIZE} />
-        </View>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={hub.streakPill}
-          onPress={onPressCoins}
-          disabled={!onPressCoins}
+        <Pressable
+          onPress={onBack}
+          hitSlop={12}
           accessibilityRole="button"
-          accessibilityLabel={`${coins}`}
+          accessibilityLabel={copy.backToRank}
+          testID="questions-hub-back"
+          style={({ pressed }) => [hub.hubBackButton, pressed && { opacity: 0.7 }]}
         >
-          <StreakGradientText>{coins.toLocaleString()}</StreakGradientText>
-        </TouchableOpacity>
+          <View style={{ transform: [{ scaleX: isRtl ? -1 : 1 }] }}>
+            <HubBackArrow size={s(28)} color={HUB_COLOR.textPrimary} />
+          </View>
+        </Pressable>
+
+        <View style={hub.streakCluster}>
+          <View style={hub.streakBadge}>
+            <QuizFlameIcon size={FLAME_ICON_SIZE} />
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={hub.streakPill}
+            onPress={onPressCoins}
+            disabled={!onPressCoins}
+            accessibilityRole="button"
+            accessibilityLabel={`${coins}`}
+          >
+            <StreakGradientText>{coins.toLocaleString()}</StreakGradientText>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── Hero card ───────────────────────────────────────────────────── */}

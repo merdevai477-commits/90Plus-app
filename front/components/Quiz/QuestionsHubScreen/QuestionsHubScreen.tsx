@@ -11,7 +11,7 @@
  *   <SafeAreaView>                     screen shell + safe area
  *     <LinearGradient>                 page backdrop  → styles.ts HUB_SCREEN_GRADIENT
  *     <ScrollView>
- *       <HeroBanner/>                  coin pill + hero card
+ *       <HeroBanner/>                  back to Rank + coin pill + hero card
  *       <SectionHeader/>               "Choose Challenge Type" + rule
  *       <ChallengeGrid/>               the eight mode cards
  *       <StatsCard><BottomNavigation/> level, XP, answered, total XP
@@ -38,6 +38,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+
+import { goBackToRank } from '../quizNavigation';
 
 import { useQuestionsModes } from '../../../hooks/useQuestionsModes';
 import { useTranslation } from '../../../src/i18n';
@@ -141,7 +143,7 @@ export default function QuestionsHubScreen() {
           />
         }
       >
-        <HeroBanner coins={coins} copy={copy} />
+        <HeroBanner coins={coins} copy={copy} onBack={goBackToRank} />
 
         <SectionHeader title={copy.sectionTitle} isRtl={isArabic} loading={isFetching} />
 

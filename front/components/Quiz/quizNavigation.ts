@@ -27,6 +27,9 @@ import { router } from 'expo-router';
 /** The Questions hub — front/app/(tabs)/quiz.tsx. */
 export const QUESTIONS_HUB_ROUTE = '/(tabs)/quiz' as const;
 
+/** Rank tab — the competition grid that opens Share & Win and Questions. */
+export const RANK_TAB_ROUTE = '/(tabs)/rank' as const;
+
 /**
  * Returns from a game screen to the Questions hub.
  *
@@ -40,4 +43,12 @@ export function goBackToQuestionsHub(): void {
     return;
   }
   router.replace(QUESTIONS_HUB_ROUTE);
+}
+
+/**
+ * Leaves the Questions hub for Rank. Always Rank — `router.back()` can land
+ * on Matches from tab history, and the hub is entered from the Rank grid.
+ */
+export function goBackToRank(): void {
+  router.replace(RANK_TAB_ROUTE);
 }

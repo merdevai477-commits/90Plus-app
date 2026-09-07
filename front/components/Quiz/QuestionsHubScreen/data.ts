@@ -89,6 +89,7 @@ export interface QuestionsHubCopy {
   sectionTitle: string;
   answeredLabel: string;
   questionsXpLabel: string;
+  backToRank: string;
 }
 
 export interface QuestionsHubLayout {
@@ -126,6 +127,7 @@ export function getQuestionsHubCopy(language: Language): QuestionsHubCopy {
      * promised they were the same, which is why the two never matched.
      */
     questionsXpLabel: isArabic ? 'نقاط الأسئلة' : 'Questions XP',
+    backToRank: isArabic ? 'رجوع للرانك' : 'Back to Rank',
   };
 }
 
