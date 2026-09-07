@@ -1,304 +1,275 @@
 import React, { useCallback, useState } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    Switch,
-    ActivityIndicator,
-    Alert,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Switch,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS } from '../reels/constants';
-import { getApiUrl } from '../../config/api.config';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '../../src/i18n';
 import { logger } from '../../services/logger';
-
-interface NotificationPreferences {
-    matchGoals: boolean;
-    matchStart: boolean;
-    matchEnd: boolean;
-    matchHalftime: boolean;
-    matchCards: boolean;
-    matchSubs: boolean;
-    matchVar: boolean;
-    matchLineups: boolean;
-    leagueMatches: boolean;
-    socialFollow: boolean;
-    socialLike: boolean;
-    socialComment: boolean;
-    socialReply: boolean;
-    socialMention: boolean;
-    socialShare: boolean;
-    predictionResults: boolean;
-    luckyWheel: boolean;
-    gifts: boolean;
-    dailyQuiz: boolean;
-    cooldown: boolean;
-    levelUp: boolean;
-    reportUpdates: boolean;
-    avatarUpload: boolean;
-    videoProcessed: boolean;
-    leaderboard: boolean;
-    aiCoach: boolean;
-}
-
-const DEFAULT_PREFS: NotificationPreferences = {
-    matchGoals: true,
-    matchStart: true,
-    matchEnd: true,
-    matchHalftime: true,
-    matchCards: true,
-    matchSubs: true,
-    matchVar: true,
-    matchLineups: true,
-    leagueMatches: true,
-    socialFollow: true,
-    socialLike: true,
-    socialComment: true,
-    socialReply: true,
-    socialMention: true,
-    socialShare: true,
-    predictionResults: true,
-    luckyWheel: true,
-    gifts: true,
-    dailyQuiz: true,
-    cooldown: true,
-    levelUp: true,
-    reportUpdates: true,
-    avatarUpload: true,
-    videoProcessed: true,
-    leaderboard: true,
-    // Opt-in by design — surprise AI pushes feel spammy.
-    aiCoach: false,
-};
-
-async function fetchPreferences(token: string): Promise<NotificationPreferences> {
-    const res = await fetch(`${getApiUrl()}/notifications/preferences`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error('NOTIF_PREFS_FETCH_FAILED');
-    const data = await res.json();
-    return data.data.preferences;
-}
-
-async function updatePreferences(token: string, updates: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
-    const res = await fetch(`${getApiUrl()}/notifications/preferences`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-    });
-    if (!res.ok) throw new Error('NOTIF_PREFS_UPDATE_FAILED');
-    const data = await res.json();
-    return data.data.preferences;
-}
+import { canMakeAuthenticatedRequests } from '../../utils/clerkAuthToken';
+import {
+  BG_BASE,
+  TEXT_PRIMARY,
+  TEXT_MUTED,
+  PURPLE_SOFT,
+  BORDER_ARENA,
+  RADIUS_LG,
+} from '../../constants/tokens';
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  NOTIFICATION_PREFS_QUERY_KEY,
+  fetchNotificationPreferences,
+  updateNotificationPreferences,
+  type NotificationPreferences,
+} from './notificationPreferencesApi';
 
 interface SwitchRowProps {
-    label: string;
-    subtitle: string;
-    value: boolean;
-    field: keyof NotificationPreferences;
-    onToggle: (field: keyof NotificationPreferences, value: boolean) => void;
-    loading: boolean;
+  label: string;
+  subtitle: string;
+  value: boolean;
+  field: keyof NotificationPreferences;
+  onToggle: (field: keyof NotificationPreferences, value: boolean) => void;
 }
 
-function SwitchRow({ label, subtitle, value, field, onToggle, loading }: SwitchRowProps) {
-    return (
-        <View style={styles.row}>
-            <View style={styles.rowText}>
-                <Text style={styles.rowLabel} numberOfLines={1}>{label}</Text>
-                <Text style={styles.rowSubtitle} numberOfLines={2}>{subtitle}</Text>
-            </View>
-            {loading ? (
-                <ActivityIndicator size="small" color={COLORS.neonGreen} />
-            ) : (
-                <Switch
-                    value={value}
-                    onValueChange={(v) => onToggle(field, v)}
-                    trackColor={{ false: '#1a1a1a', true: `${COLORS.neonGreen}40` }}
-                    thumbColor={value ? COLORS.neonGreen : '#666'}
-                />
-            )}
-        </View>
-    );
+function SwitchRow({ label, subtitle, value, field, onToggle }: SwitchRowProps) {
+  return (
+    <View style={styles.row}>
+      <View style={styles.rowText}>
+        <Text style={styles.rowLabel} numberOfLines={1}>{label}</Text>
+        <Text style={styles.rowSubtitle} numberOfLines={2}>{subtitle}</Text>
+      </View>
+      <Switch
+        value={value}
+        onValueChange={(v) => onToggle(field, v)}
+        trackColor={{ false: 'rgba(255,255,255,0.12)', true: 'rgba(124,58,237,0.55)' }}
+        thumbColor={value ? '#f4f4f5' : 'rgba(255,255,255,0.35)'}
+        ios_backgroundColor="rgba(255,255,255,0.12)"
+        accessibilityLabel={label}
+      />
+    </View>
+  );
 }
 
-function SectionHeader({ title, icon }: { title: string; icon: string }) {
-    return (
-        <View style={styles.sectionHeader}>
-            <Ionicons name={icon as any} size={18} color={COLORS.neonGreen} />
-            <Text style={styles.sectionTitle}>{title}</Text>
-        </View>
-    );
+function SectionHeader({ title, icon }: { title: string; icon: keyof typeof Ionicons.glyphMap }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Ionicons name={icon} size={16} color={PURPLE_SOFT} />
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+  );
 }
 
 export default function NotificationPreferencesScreen() {
-    const { getToken } = useAuth();
-    const { t } = useTranslation();
-    const queryClient = useQueryClient();
-    const [loadingField, setLoadingField] = useState<keyof NotificationPreferences | null>(null);
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { t } = useTranslation();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const [pendingField, setPendingField] = useState<keyof NotificationPreferences | null>(null);
 
-    const { data: prefs, isLoading } = useQuery({
-        queryKey: ['notification-preferences'],
-        queryFn: async () => {
-            const token = await getToken();
-            if (!token) throw new Error('NOT_AUTHENTICATED');
-            return fetchPreferences(token);
-        },
-        placeholderData: DEFAULT_PREFS,
-    });
+  const authed = canMakeAuthenticatedRequests(isLoaded, isSignedIn === true);
 
-    const mutation = useMutation({
-        mutationFn: async (updates: Partial<NotificationPreferences>) => {
-            const token = await getToken();
-            if (!token) throw new Error('NOT_AUTHENTICATED');
-            return updatePreferences(token, updates);
-        },
-        onMutate: async (updates) => {
-            // Optimistic update
-            await queryClient.cancelQueries({ queryKey: ['notification-preferences'] });
-            const previous = queryClient.getQueryData<NotificationPreferences>(['notification-preferences']);
-            queryClient.setQueryData<NotificationPreferences>(['notification-preferences'], (old) => ({
-                ...(old || DEFAULT_PREFS),
-                ...updates,
-            }));
-            return { previous };
-        },
-        onError: (err, _updates, context) => {
-            // Rollback
-            if (context?.previous) {
-                queryClient.setQueryData(['notification-preferences'], context.previous);
-            }
-            logger.error('Failed to update notification preferences:', err);
-            Alert.alert(t.common.error, t.notifications.prefUpdateError);
-        },
-        onSettled: () => {
-            setLoadingField(null);
-            queryClient.invalidateQueries({ queryKey: ['notification-preferences'] });
-        },
-    });
+  const { data: prefs } = useQuery({
+    queryKey: NOTIFICATION_PREFS_QUERY_KEY,
+    queryFn: () => fetchNotificationPreferences(getToken),
+    enabled: authed,
+    placeholderData: DEFAULT_NOTIFICATION_PREFS,
+    staleTime: 60_000,
+  });
 
-    const handleToggle = useCallback((field: keyof NotificationPreferences, value: boolean) => {
-        setLoadingField(field);
-        mutation.mutate({ [field]: value });
-    }, [mutation]);
+  const mutation = useMutation({
+    mutationFn: (updates: Partial<NotificationPreferences>) =>
+      updateNotificationPreferences(getToken, updates),
+    onMutate: async (updates) => {
+      await queryClient.cancelQueries({ queryKey: NOTIFICATION_PREFS_QUERY_KEY });
+      const previous = queryClient.getQueryData<NotificationPreferences>(NOTIFICATION_PREFS_QUERY_KEY);
+      queryClient.setQueryData<NotificationPreferences>(NOTIFICATION_PREFS_QUERY_KEY, (old) => ({
+        ...(old || DEFAULT_NOTIFICATION_PREFS),
+        ...updates,
+      }));
+      return { previous };
+    },
+    onError: (err, _updates, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(NOTIFICATION_PREFS_QUERY_KEY, context.previous);
+      }
+      logger.error('Failed to update notification preferences:', err);
+      Alert.alert(t.common.error, t.notifications.prefUpdateError);
+    },
+    onSettled: () => {
+      setPendingField(null);
+      queryClient.invalidateQueries({ queryKey: NOTIFICATION_PREFS_QUERY_KEY });
+    },
+  });
 
-    const current = prefs || DEFAULT_PREFS;
+  const handleToggle = useCallback((field: keyof NotificationPreferences, value: boolean) => {
+    if (pendingField) return;
+    setPendingField(field);
+    mutation.mutate({ [field]: value });
+  }, [mutation, pendingField]);
 
-    if (isLoading) {
-        return (
-            <View style={styles.container}>
-                <LinearGradient colors={[COLORS.deepBlack, '#1a1a1a']} style={StyleSheet.absoluteFillObject} />
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={COLORS.neonGreen} />
-                </View>
-            </View>
-        );
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
     }
+    router.replace('/(tabs)/settings');
+  }, [router]);
 
-    return (
-        <View style={styles.container}>
-            <Stack.Screen
-                options={{
-                    headerShown: true,
-                    title: t.notifications.preferencesTitle,
-                    headerStyle: { backgroundColor: COLORS.deepBlack },
-                    headerTintColor: COLORS.white,
-                    headerTitleStyle: { fontWeight: 'bold' },
-                }}
-            />
-            <LinearGradient colors={[COLORS.deepBlack, '#1a1a1a']} style={StyleSheet.absoluteFillObject} />
+  const current = prefs || DEFAULT_NOTIFICATION_PREFS;
+  const tn = t.notifications;
 
-            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+  return (
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
+        <TouchableOpacity
+          onPress={goBack}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={tn.a11yBack}
+          testID="notif-prefs-back"
+          style={styles.backBtn}
+        >
+          <Ionicons name="chevron-back" size={24} color={TEXT_PRIMARY} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle} numberOfLines={1}>{tn.preferencesTitle}</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
-                {/* Match Section */}
-                <View style={styles.section}>
-                    <SectionHeader title={t.notifications.sectionMatch} icon="football-outline" />
-                    <View style={styles.card}>
-                        <SwitchRow label={t.notifications.prefMatchStart} subtitle={t.notifications.prefMatchStartSub} value={current.matchStart} field="matchStart" onToggle={handleToggle} loading={loadingField === 'matchStart'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefMatchGoals} subtitle={t.notifications.prefMatchGoalsSub} value={current.matchGoals} field="matchGoals" onToggle={handleToggle} loading={loadingField === 'matchGoals'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefMatchCards} subtitle={t.notifications.prefMatchCardsSub} value={current.matchCards} field="matchCards" onToggle={handleToggle} loading={loadingField === 'matchCards'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefMatchVar} subtitle={t.notifications.prefMatchVarSub} value={current.matchVar} field="matchVar" onToggle={handleToggle} loading={loadingField === 'matchVar'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefMatchEnd} subtitle={t.notifications.prefMatchEndSub} value={current.matchEnd} field="matchEnd" onToggle={handleToggle} loading={loadingField === 'matchEnd'} />
-                    </View>
-                </View>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={styles.hint}>{tn.prefScreenHint}</Text>
 
-                {/* Social Section */}
-                <View style={styles.section}>
-                    <SectionHeader title={t.notifications.sectionSocial} icon="people-outline" />
-                    <View style={styles.card}>
-                        <SwitchRow label={t.notifications.prefFollow} subtitle={t.notifications.prefFollowSub} value={current.socialFollow} field="socialFollow" onToggle={handleToggle} loading={loadingField === 'socialFollow'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefLike} subtitle={t.notifications.prefLikeSub} value={current.socialLike} field="socialLike" onToggle={handleToggle} loading={loadingField === 'socialLike'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefComment} subtitle={t.notifications.prefCommentSub} value={current.socialComment} field="socialComment" onToggle={handleToggle} loading={loadingField === 'socialComment'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefReply} subtitle={t.notifications.prefReplySub} value={current.socialReply} field="socialReply" onToggle={handleToggle} loading={loadingField === 'socialReply'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefMention} subtitle={t.notifications.prefMentionSub} value={current.socialMention} field="socialMention" onToggle={handleToggle} loading={loadingField === 'socialMention'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefShare} subtitle={t.notifications.prefShareSub} value={current.socialShare} field="socialShare" onToggle={handleToggle} loading={loadingField === 'socialShare'} />
-                    </View>
-                </View>
-
-                {/* General Section */}
-                <View style={styles.section}>
-                    <SectionHeader title={t.notifications.sectionGeneral} icon="gift-outline" />
-                    <View style={styles.card}>
-                        <SwitchRow label={t.notifications.prefPrediction} subtitle={t.notifications.prefPredictionSub} value={current.predictionResults} field="predictionResults" onToggle={handleToggle} loading={loadingField === 'predictionResults'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefLuckyWheel} subtitle={t.notifications.prefLuckyWheelSub} value={current.luckyWheel} field="luckyWheel" onToggle={handleToggle} loading={loadingField === 'luckyWheel'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefGifts} subtitle={t.notifications.prefGiftsSub} value={current.gifts} field="gifts" onToggle={handleToggle} loading={loadingField === 'gifts'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefDailyQuiz} subtitle={t.notifications.prefDailyQuizSub} value={current.dailyQuiz} field="dailyQuiz" onToggle={handleToggle} loading={loadingField === 'dailyQuiz'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefCooldown} subtitle={t.notifications.prefCooldownSub} value={current.cooldown} field="cooldown" onToggle={handleToggle} loading={loadingField === 'cooldown'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefLevelUp} subtitle={t.notifications.prefLevelUpSub} value={current.levelUp} field="levelUp" onToggle={handleToggle} loading={loadingField === 'levelUp'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefLeaderboard} subtitle={t.notifications.prefLeaderboardSub} value={current.leaderboard} field="leaderboard" onToggle={handleToggle} loading={loadingField === 'leaderboard'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefReportUpdates} subtitle={t.notifications.prefReportUpdatesSub} value={current.reportUpdates} field="reportUpdates" onToggle={handleToggle} loading={loadingField === 'reportUpdates'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefAvatarUpload} subtitle={t.notifications.prefAvatarUploadSub} value={current.avatarUpload} field="avatarUpload" onToggle={handleToggle} loading={loadingField === 'avatarUpload'} />
-                        <View style={styles.divider} />
-                        <SwitchRow label={t.notifications.prefVideoProcessed} subtitle={t.notifications.prefVideoProcessedSub} value={current.videoProcessed} field="videoProcessed" onToggle={handleToggle} loading={loadingField === 'videoProcessed'} />
-                    </View>
-                </View>
-
-                {/* AI Coach Section (opt-in) */}
-                <View style={styles.section}>
-                    <SectionHeader title={t.notifications.sectionAi} icon="sparkles-outline" />
-                    <View style={styles.card}>
-                        <SwitchRow label={t.notifications.prefAiCoach} subtitle={t.notifications.prefAiCoachSub} value={current.aiCoach} field="aiCoach" onToggle={handleToggle} loading={loadingField === 'aiCoach'} />
-                    </View>
-                </View>
-
-            </ScrollView>
+        <View style={styles.section}>
+          <SectionHeader title={tn.sectionMatch} icon="football-outline" />
+          <View style={styles.card}>
+            <SwitchRow label={tn.prefMatchStart} subtitle={tn.prefMatchStartSub} value={current.matchStart} field="matchStart" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefMatchGoals} subtitle={tn.prefMatchGoalsSub} value={current.matchGoals} field="matchGoals" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefHalftime} subtitle={tn.prefHalftimeSub} value={current.matchHalftime} field="matchHalftime" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefMatchCards} subtitle={tn.prefMatchCardsSub} value={current.matchCards} field="matchCards" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefMatchVar} subtitle={tn.prefMatchVarSub} value={current.matchVar} field="matchVar" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefMatchSubs} subtitle={tn.prefMatchSubsSub} value={current.matchSubs} field="matchSubs" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefMatchLineups} subtitle={tn.prefMatchLineupsSub} value={current.matchLineups} field="matchLineups" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefMatchEnd} subtitle={tn.prefMatchEndSub} value={current.matchEnd} field="matchEnd" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefLeague} subtitle={tn.prefLeagueSub} value={current.leagueMatches} field="leagueMatches" onToggle={handleToggle} />
+          </View>
         </View>
-    );
+
+        <View style={styles.section}>
+          <SectionHeader title={tn.sectionSocial} icon="people-outline" />
+          <View style={styles.card}>
+            <SwitchRow label={tn.prefFollow} subtitle={tn.prefFollowSub} value={current.socialFollow} field="socialFollow" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefLike} subtitle={tn.prefLikeSub} value={current.socialLike} field="socialLike" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefComment} subtitle={tn.prefCommentSub} value={current.socialComment} field="socialComment" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefReply} subtitle={tn.prefReplySub} value={current.socialReply} field="socialReply" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefMention} subtitle={tn.prefMentionSub} value={current.socialMention} field="socialMention" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefShare} subtitle={tn.prefShareSub} value={current.socialShare} field="socialShare" onToggle={handleToggle} />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title={tn.sectionGeneral} icon="gift-outline" />
+          <View style={styles.card}>
+            <SwitchRow label={tn.prefPrediction} subtitle={tn.prefPredictionSub} value={current.predictionResults} field="predictionResults" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefLuckyWheel} subtitle={tn.prefLuckyWheelSub} value={current.luckyWheel} field="luckyWheel" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefGifts} subtitle={tn.prefGiftsSub} value={current.gifts} field="gifts" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefDailyQuiz} subtitle={tn.prefDailyQuizSub} value={current.dailyQuiz} field="dailyQuiz" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefCooldown} subtitle={tn.prefCooldownSub} value={current.cooldown} field="cooldown" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefLevelUp} subtitle={tn.prefLevelUpSub} value={current.levelUp} field="levelUp" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefLeaderboard} subtitle={tn.prefLeaderboardSub} value={current.leaderboard} field="leaderboard" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefReportUpdates} subtitle={tn.prefReportUpdatesSub} value={current.reportUpdates} field="reportUpdates" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefAvatarUpload} subtitle={tn.prefAvatarUploadSub} value={current.avatarUpload} field="avatarUpload" onToggle={handleToggle} />
+            <View style={styles.divider} />
+            <SwitchRow label={tn.prefVideoProcessed} subtitle={tn.prefVideoProcessedSub} value={current.videoProcessed} field="videoProcessed" onToggle={handleToggle} />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title={tn.sectionAi} icon="sparkles-outline" />
+          <View style={styles.card}>
+            <SwitchRow label={tn.prefAiCoach} subtitle={tn.prefAiCoachSub} value={current.aiCoach} field="aiCoach" onToggle={handleToggle} />
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.deepBlack },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    content: { padding: 16, paddingBottom: 40 },
-    section: { marginBottom: 24 },
-    sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
-    sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.white },
-    card: { backgroundColor: '#111', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-    row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
-    rowText: { flex: 1, marginEnd: 12 },
-    rowLabel: { fontSize: 15, fontWeight: '600', color: COLORS.white, marginBottom: 2 },
-    rowSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
-    divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.05)', marginHorizontal: 16 },
+  container: { flex: 1, backgroundColor: BG_BASE },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: BORDER_ARENA,
+  },
+  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+  },
+  headerSpacer: { width: 44 },
+  content: { padding: 16, paddingBottom: 48 },
+  hint: {
+    fontSize: 13,
+    color: TEXT_MUTED,
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  section: { marginBottom: 22 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8, marginStart: 4 },
+  sectionTitle: { fontSize: 13, fontWeight: '800', color: PURPLE_SOFT, letterSpacing: 0.4 },
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.045)',
+    borderRadius: RADIUS_LG,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER_ARENA,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 58,
+  },
+  rowText: { flex: 1, marginEnd: 12 },
+  rowLabel: { fontSize: 15, fontWeight: '600', color: TEXT_PRIMARY, marginBottom: 2 },
+  rowSubtitle: { fontSize: 12, color: TEXT_MUTED, lineHeight: 16 },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.06)', marginHorizontal: 14 },
 });

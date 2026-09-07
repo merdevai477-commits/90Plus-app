@@ -1827,6 +1827,7 @@ export const en = {
     // Notification preferences screen keys
     prefUpdateError: 'Failed to update settings, please try again',
     preferencesTitle: 'Notification Settings',
+    prefScreenHint: 'Each switch controls that type of push. Turn off anything you don’t want.',
     sectionMatch: 'Matches',
     prefMatchGoals: 'Goals',
     prefMatchGoalsSub: 'Instant alert when a goal is scored',
@@ -3363,7 +3364,7 @@ export const en = {
 
     // Notifications group
     notificationPreferences: 'Notification preferences',
-    notificationPreferencesSub: 'Goals, predictions, reels, and more',
+    notificationPreferencesSub: 'Choose which push alerts to receive',
     notificationInbox: 'Notification inbox',
     notificationInboxSub: 'View alerts and history',
     matchReminders: 'Match reminders',
@@ -3387,6 +3388,10 @@ export const en = {
     // Data group
     clearCache: 'Clear cache',
     currentSize: 'Current size: {size}',
+    cacheSizePending: 'Measuring…',
+    osPushDenied: 'Push alerts are off on this device',
+    osPushDeniedSub: 'Allow notifications in system settings, then pick types below.',
+    osPushOpenSettings: 'Open system settings',
     managePermissions: 'Manage permissions',
     managePermissionsSub: 'Control app permissions',
     blockedUsers: 'Blocked users',
@@ -3424,7 +3429,7 @@ export const en = {
 
     // Footer
     madeWith: 'Made with ❤️ for football fans',
-    copyright: '© 2024 90Plus. All rights reserved.',
+    copyright: '© 2026 90Plus. All rights reserved.',
 
     // Toast / inline messages
     settingsUpdateFailedNotifications: 'Could not update notification settings',

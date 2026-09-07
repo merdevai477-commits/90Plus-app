@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import BottomNav from '@/components/navigation/BottomNav';
+import { TAB_BAR_HEIGHT } from '@/components/navigation/liquidGlassTabBar.constants';
 import { useTranslation } from '../../src/i18n';
 import {
   BG_BASE,
@@ -38,7 +39,7 @@ export function MainShell({
   const insets = useSafeAreaInsets();
   const { t, language } = useTranslation();
   const isRtl = language === 'ar';
-  const bottomPad = Math.max(insets.bottom, 16) + 56 + 32;
+  const bottomPad = Math.max(insets.bottom, 16) + TAB_BAR_HEIGHT + 56;
   const topPad = insets.top + 12;
   const label = backLabel ?? t.common?.back ?? 'Back';
 

@@ -1897,6 +1897,7 @@ export const ar = {
     // Notification preferences screen keys
     prefUpdateError: 'فشل تحديث الإعدادات، حاول مرة أخرى',
     preferencesTitle: 'إعدادات الإشعارات',
+    prefScreenHint: 'كل مفتاح يتحكم في نوع تنبيه. اقفل اللي مش عايزه يستلم.',
     sectionMatch: 'المباريات',
     prefMatchGoals: 'الأهداف',
     prefMatchGoalsSub: 'إشعار فوري عند تسجيل هدف',
@@ -3279,7 +3280,7 @@ export const ar = {
     sectionAccount: 'الحساب',
 
     notificationPreferences: 'تفضيلات الإشعارات',
-    notificationPreferencesSub: 'أهداف، توقعات، ريلز، والمزيد',
+    notificationPreferencesSub: 'اختَر أي تنبيهات تريد استلامها',
     notificationInbox: 'صندوق الإشعارات',
     notificationInboxSub: 'عرض التنبيهات والسجل',
     matchReminders: 'تنبيهات المباريات',
@@ -3301,6 +3302,10 @@ export const ar = {
 
     clearCache: 'مسح الذاكرة المؤقتة',
     currentSize: 'الحجم الحالي: {size}',
+    cacheSizePending: 'جارٍ القياس…',
+    osPushDenied: 'الإشعارات مقفولة على الجهاز',
+    osPushDeniedSub: 'اسمح بالإشعارات من إعدادات النظام، ثم اختَر الأنواع من هنا.',
+    osPushOpenSettings: 'فتح إعدادات النظام',
     managePermissions: 'إدارة الأذونات',
     managePermissionsSub: 'تحكم في أذونات التطبيق',
     blockedUsers: 'المستخدمون المحظورون',
@@ -3334,7 +3339,7 @@ export const ar = {
     deleting: 'جاري الحذف...',
 
     madeWith: 'صُنع بـ ❤️ لعشاق كرة القدم',
-    copyright: '© 2024 90Plus. جميع الحقوق محفوظة.',
+    copyright: '© 2026 90Plus. جميع الحقوق محفوظة.',
 
     settingsUpdateFailedNotifications: 'تعذّر تحديث إعدادات الإشعارات',
     settingsUpdateFailedMatch: 'تعذّر تحديث إشعارات المباريات',

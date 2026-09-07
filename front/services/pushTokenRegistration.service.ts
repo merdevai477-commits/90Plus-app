@@ -123,6 +123,23 @@ export function isPushRegistrationAvailable(): boolean {
     return !!loadNotifications() && Device.isDevice;
 }
 
+/** OS permission for the Settings / prefs banners. Never throws. */
+export async function getOsNotificationPermissionStatus(): Promise<
+    'granted' | 'denied' | 'undetermined' | 'unavailable'
+> {
+    const Notifications = loadNotifications();
+    if (!Notifications) return 'unavailable';
+    try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status === 'granted' || status === 'denied' || status === 'undetermined') {
+            return status;
+        }
+        return 'denied';
+    } catch {
+        return 'unavailable';
+    }
+}
+
 let channelsReady = false;
 
 async function setupAndroidChannels(Notifications: NotificationsModule): Promise<void> {
