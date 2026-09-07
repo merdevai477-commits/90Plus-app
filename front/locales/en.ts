@@ -14,6 +14,7 @@ export const en = {
     delete: 'Delete',
     done: 'Done',
     close: 'Close',
+    back: 'Back',
     unknown: 'Unknown',
     unavailable: 'Unavailable',
     // New common keys
@@ -3347,6 +3348,7 @@ export const en = {
   settingsScreen: {
     title: 'Settings',
     subtitle: 'Control your preferences and app behavior',
+    backToProfile: 'Back to Profile',
     loading: 'Loading settings...',
     heroEyebrow: 'CONTROL CENTER',
     heroTitle: 'Alerts & app behavior',

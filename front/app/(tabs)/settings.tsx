@@ -5,7 +5,7 @@
  * via the i18n hook. Layout stays LTR for all languages; only copy changes.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -224,22 +224,38 @@ export default function SettingsScreen() {
     return lang;
   };
 
+  const goToProfile = useCallback(() => {
+    router.replace('/(tabs)/profile');
+  }, [router]);
+
+  const shellBack = {
+    onBackPress: goToProfile,
+    backLabel: tSettings.backToProfile ?? tCommon.back ?? tCommon.close,
+    backTestID: 'settings-back',
+  } as const;
+
   // ── Loading ───────────────────────────────────────────────────────────────
 
   if (contextLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#000" />
-        <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
-        <Text style={styles.loadingText}>{tSettings.loading}</Text>
-      </View>
+      <MainShell title={tSettings.title} subtitle={tSettings.subtitle} {...shellBack}>
+        <View style={styles.loadingContainer}>
+          <StatusBar barStyle="light-content" backgroundColor="#000" />
+          <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
+          <Text style={styles.loadingText}>{tSettings.loading}</Text>
+        </View>
+      </MainShell>
     );
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <MainShell title={tSettings.title} subtitle={tSettings.subtitle}>
+    <MainShell
+      title={tSettings.title}
+      subtitle={tSettings.subtitle}
+      {...shellBack}
+    >
       {/* Hero banner */}
       <View style={styles.hero}>
         <LinearGradient

@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import BottomNav from '@/components/navigation/BottomNav';
+import { useTranslation } from '../../src/i18n';
 import {
   BG_BASE,
   TEXT_PRIMARY,
@@ -20,13 +21,26 @@ type Props = {
   subtitle?: string;
   children?: React.ReactNode;
   onBackPress?: () => void;
+  backLabel?: string;
+  backTestID?: string;
   headerRight?: React.ReactNode;
 };
 
-export function MainShell({ title, subtitle, children, onBackPress, headerRight }: Props) {
+export function MainShell({
+  title,
+  subtitle,
+  children,
+  onBackPress,
+  backLabel,
+  backTestID = 'main-shell-back',
+  headerRight,
+}: Props) {
   const insets = useSafeAreaInsets();
+  const { t, language } = useTranslation();
+  const isRtl = language === 'ar';
   const bottomPad = Math.max(insets.bottom, 16) + 56 + 32;
   const topPad = insets.top + 12;
+  const label = backLabel ?? t.common?.back ?? 'Back';
 
   return (
     <View style={styles.root}>
@@ -54,12 +68,18 @@ export function MainShell({ title, subtitle, children, onBackPress, headerRight 
                 onPress={onBackPress}
                 hitSlop={12}
                 activeOpacity={0.75}
-                style={styles.backRow}
+                style={[styles.backRow, isRtl && styles.backRowRtl]}
                 accessibilityRole="button"
-                accessibilityLabel="Go back"
+                accessibilityLabel={label}
+                testID={backTestID}
               >
-                <ChevronLeft color={TEXT_MUTED} size={22} strokeWidth={2.2} />
-                <Text style={styles.backTxt}>Back</Text>
+                <ChevronLeft
+                  color={TEXT_MUTED}
+                  size={22}
+                  strokeWidth={2.2}
+                  style={isRtl ? { transform: [{ scaleX: -1 }] } : undefined}
+                />
+                <Text style={styles.backTxt}>{label}</Text>
               </TouchableOpacity>
             ) : null}
             <Text style={styles.title}>{title}</Text>
@@ -100,6 +120,13 @@ const styles = StyleSheet.create({
     marginLeft: -4,
     paddingVertical: 4,
     paddingRight: 12,
+  },
+  backRowRtl: {
+    flexDirection: 'row-reverse',
+    marginLeft: 0,
+    marginRight: -4,
+    paddingRight: 0,
+    paddingLeft: 12,
   },
   backTxt: {
     fontSize: 15,

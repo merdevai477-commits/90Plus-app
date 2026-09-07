@@ -14,6 +14,7 @@ export const ar = {
     delete: 'حذف',
     done: 'تم',
     close: 'إغلاق',
+    back: 'رجوع',
     unknown: 'غير معروف',
     unavailable: 'غير متاح',
     // New common keys
@@ -3265,6 +3266,7 @@ export const ar = {
   settingsScreen: {
     title: 'الإعدادات',
     subtitle: 'تحكّم في تفضيلاتك وسلوك التطبيق',
+    backToProfile: 'رجوع للبروفايل',
     loading: 'جاري تحميل الإعدادات...',
     heroEyebrow: 'مركز التحكم',
     heroTitle: 'التنبيهات وسلوك التطبيق',
