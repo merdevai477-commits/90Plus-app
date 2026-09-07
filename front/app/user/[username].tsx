@@ -626,7 +626,6 @@ function UserProfileScreen() {
       >
         <ProfileHero
           topInset={insets.top}
-          coverUri={user.coverImage}
           avatarUri={user.avatar}
           name={user.displayName || user.username}
           username={user.username}
@@ -642,7 +641,6 @@ function UserProfileScreen() {
           countryLabel={resolveCountryDisplayName(user.country || user.location, user.countryFlag)}
           clubLogo={showFullProfile ? user.clubLogo : null}
           clubName={showFullProfile ? user.favoriteTeam : null}
-          onCoverPress={user.coverImage ? () => openPhotoViewer(user.coverImage) : undefined}
           onAvatarPress={user.avatar ? () => openPhotoViewer(user.avatar) : undefined}
           onSharePress={handleShareProfilePress}
           onBackPress={() => router.back()}

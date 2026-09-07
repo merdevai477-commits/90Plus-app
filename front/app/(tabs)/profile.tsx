@@ -334,9 +334,6 @@ const completionStyles = StyleSheet.create({
   },
 });
 
-const DEFAULT_COVER_IMAGE =
-  'https://images.unsplash.com/photo-1522778119026-d647f0565c6a?q=80&w=2070&auto=format&fit=crop';
-
 function OwnProfileScreen() {
   useScreenFont();
   useLevelUpCelebrationOnFocus();
@@ -559,7 +556,6 @@ function OwnProfileScreen() {
 
   // UX Fix 1+2: Image preview + cross-platform action sheet state
   const [previewUri, setPreviewUri] = useState<string | null>(null);
-  const [previewType, setPreviewType] = useState<'avatar' | 'cover'>('avatar');
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [pendingUploadFn, setPendingUploadFn] = useState<(() => void) | null>(null);
   const [androidSheetVisible, setAndroidSheetVisible] = useState(false);
@@ -567,9 +563,8 @@ function OwnProfileScreen() {
 
   // UX Fix 3: Cooldown block modal state
   const [cooldownBlockVisible, setCooldownBlockVisible] = useState(false);
-  const [cooldownBlockType, setCooldownBlockType] = useState<'avatar' | 'cover' | 'reel'>('avatar');
+  const [cooldownBlockType, setCooldownBlockType] = useState<'avatar' | 'reel'>('avatar');
   const [mediaChoiceVisible, setMediaChoiceVisible] = useState(false);
-  const [mediaChoiceKind, setMediaChoiceKind] = useState<'avatar' | 'cover'>('avatar');
   const handleCooldownBlockClose = useCallback(() => {
     setCooldownBlockVisible(false);
   }, []);
@@ -618,7 +613,6 @@ function OwnProfileScreen() {
   // Loading states for profile operations
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [avatarUploadProgress, setAvatarUploadProgress] = useState(0);
-  const [isCoverUploading, setIsCoverUploading] = useState(false);
 
   // Subscribe to real-time server-side avatar upload progress.
   // The backend emits 'avatar:progress' events as the upload moves through
@@ -657,13 +651,6 @@ function OwnProfileScreen() {
   const [isQRModalVisible, setIsQRModalVisible] = useState(false);
   const [isTasksModalVisible, setIsTasksModalVisible] = useState(false);
   const [isCompletionDetailVisible, setIsCompletionDetailVisible] = useState(false);
-
-  // Cover image state
-  const [coverImage, setCoverImageState] = useState<string | null>(globalState.localCover || null);
-  const setCoverImage = (image: string | null) => {
-    setCoverImageState(image);
-    globalState.setLocalCover(image || undefined);
-  };
 
   // Video Management State
   const [isDeleteMode, setIsDeleteMode] = useState(false);
@@ -841,11 +828,10 @@ function OwnProfileScreen() {
   useEffect(() => {
     const urls = [
       localImage || cachedUserData?.avatar,
-      coverImage || cachedUserData?.coverImage,
     ].filter((u): u is string => typeof u === 'string' && u.startsWith('http'));
     if (urls.length === 0) return;
     void Promise.all(urls.map((uri) => Image.prefetch(uri).catch(() => undefined)));
-  }, [localImage, coverImage, cachedUserData?.avatar, cachedUserData?.coverImage]);
+  }, [localImage, cachedUserData?.avatar]);
 
   // Predictions store — hydrate from cache on mount for instant analytics
   const predictionStats = usePredictionsStore((s) => s.stats);
@@ -899,7 +885,6 @@ function OwnProfileScreen() {
       clerkUser?.id ?? '',
       userData.username,
       userData.avatar ?? '',
-      userData.coverImage ?? '',
       userData.countryFlag ?? '',
       userData.country ?? '',
       userData.position ?? '',
@@ -964,11 +949,8 @@ function OwnProfileScreen() {
       setLocalImage(userData.avatar);
       globalState.setLocalAvatar(userData.avatar);
     }
-    if (userData.coverImage) {
-      setCoverImage(userData.coverImage);
-    }
     globalState.username = userData.username;
-  }, [userData?.avatar, userData?.coverImage, userData?.username]);
+  }, [userData?.avatar, userData?.username]);
 
   // Ref to store refreshCache to avoid dependency issues
   const refreshCacheRef = useRef(refreshCache);
@@ -1029,145 +1011,6 @@ function OwnProfileScreen() {
     return () => unsubscribe();
   }, []);
 
-  // Optimization: Memoize cover press handler
-  const handleCoverPress = useCallback(() => {
-    setMediaChoiceKind('cover');
-    setMediaChoiceVisible(true);
-  }, []);
-
-  const handleCoverUpload = async () => {
-    if (!userData) {
-      toastManager.showError(t.common.error, t.profile.userDataNotAvailable);
-      return;
-    }
-
-    // UX Fix 3: Check cooldown BEFORE opening picker
-    if (cooldowns && !cooldowns.cover.canChange) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      setCooldownBlockType('cover');
-      setCooldownBlockVisible(true);
-      return;
-    }
-
-    // UX Fix 2: Cross-platform action sheet
-    showImageSourceSheet(
-      {
-        title: t.profile.coverImageTitle,
-        hasExistingImage: !!userData.coverImage,
-        onGallery: () => _pickCoverFromGallery(),
-        onCamera: () => _pickCoverFromCamera(),
-        labels: {
-          gallery: t.profile.chooseFromGallery,
-          camera: t.profile.takePhoto,
-          remove: t.profile.removePhoto,
-          cancel: t.profile.cancel,
-        },
-      },
-      setAndroidSheetVisible,
-      setAndroidSheetOptions,
-    );
-  };
-
-  const _pickCoverFromGallery = async () => {
-    isPickerActiveRef.current = true;
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.8,
-      });
-      if (result.canceled) return;
-      const imageUri = result.assets[0]?.uri;
-      if (!imageUri) return;
-      await _prepareCoverPreview(imageUri);
-    } finally {
-      isPickerActiveRef.current = false;
-    }
-  };
-
-  const _pickCoverFromCamera = async () => {
-    const hasCamera = await requestCameraPermission();
-    if (!hasCamera) return;
-    isPickerActiveRef.current = true;
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.8,
-      });
-      if (result.canceled) return;
-      const imageUri = result.assets[0]?.uri;
-      if (!imageUri) return;
-      await _prepareCoverPreview(imageUri);
-    } finally {
-      isPickerActiveRef.current = false;
-    }
-  };
-
-  const _prepareCoverPreview = async (imageUri: string) => {
-    let finalUri = imageUri;
-    try {
-      const compressed = await compressImage(imageUri, {
-        maxWidth: 1280,
-        maxHeight: 720,
-        quality: 0.58,
-        skipProbe: true,
-      });
-      finalUri = compressed.uri;
-    } catch {
-      finalUri = imageUri;
-    }
-    // UX Fix 1: Show preview before uploading
-    setPreviewUri(finalUri);
-    setPreviewType('cover');
-    setPendingUploadFn(() => () => _executeCoverUpload(finalUri));
-    setIsPreviewVisible(true);
-  };
-
-  const _executeCoverUpload = async (finalUri: string) => {
-    if (!userData) return;
-    const originalCover = userData.coverImage;
-    setCoverImage(finalUri);
-    setImageUploadMessage(t.profile.uploading);
-    setIsCoverUploading(true);
-    try {
-      const token = await getToken();
-      if (!token) {
-        setCoverImage(originalCover || null);
-        toastManager.showAuthError();
-        return;
-      }
-      const uploadResult = await uploadImage(finalUri, {
-        endpoint: '/upload/cover',
-        fieldName: 'file',
-        maxRetries: 1,
-        timeoutMs: 40_000,
-      });
-      if (uploadResult.success && uploadResult.url) {
-        setCoverImage(uploadResult.url);
-        globalState.setLocalCover(uploadResult.url);
-        await updateCachedUserData({ coverImage: uploadResult.url });
-        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-        toastManager.showUploadSuccess('image');
-      } else {
-        setCoverImage(originalCover || null);
-        const errorMessage = uploadResult.error || t.profile.coverUploadFailed;
-        if (isCooldownApiError(uploadResult.data)) {
-          toastManager.showWarning(t.profile.waitABit, errorMessage);
-        } else {
-          toastManager.showUploadError('image');
-        }
-      }
-    } catch (err: any) {
-      logger.error('Cover upload exception:', err);
-      setCoverImage(originalCover || null);
-      toastManager.showError(t.common.error, t.profile.coverUploadFailed || t.profile.coverUploadFailedFallback);
-    } finally {
-      setIsCoverUploading(false);
-    }
-  };
   const handleImageUpload = async () => {
     if (!userData) {
       toastManager.showError(t.common.error, t.profile.userDataNotAvailable);
@@ -1208,7 +1051,6 @@ function OwnProfileScreen() {
       handleImageUpload();
       return;
     }
-    setMediaChoiceKind('avatar');
     setMediaChoiceVisible(true);
   };
 
@@ -1291,7 +1133,6 @@ function OwnProfileScreen() {
     } catch { finalUri = imageUri; }
     // UX Fix 1: Show preview before uploading
     setPreviewUri(finalUri);
-    setPreviewType('avatar');
     setPendingUploadFn(() => () => _executeAvatarUpload(finalUri));
     setIsPreviewVisible(true);
   };
@@ -1889,7 +1730,6 @@ function OwnProfileScreen() {
       >
         <ProfileHero
           topInset={insets.top}
-          coverUri={coverImage}
           avatarUri={localImage || userData?.avatar || null}
           name={userData?.displayName || userData?.username || 'User'}
           username={userData?.username || 'user'}
@@ -1906,7 +1746,6 @@ function OwnProfileScreen() {
           clubLogo={displayClubLogo}
           clubName={userData?.favoriteTeam || null}
           isAvatarUploading={isAvatarUploading}
-          onCoverPress={handleCoverPress}
           onAvatarPress={handleAvatarPress}
           onCountryPress={() => setIsCountryModalVisible(true)}
           onClubPress={() => setIsClubModalVisible(true)}
@@ -2171,9 +2010,9 @@ function OwnProfileScreen() {
       <ImagePreviewModal
         visible={isPreviewVisible}
         imageUri={previewUri}
-        type={previewType}
-        isUploading={previewType === 'avatar' ? isAvatarUploading : isCoverUploading}
-        uploadProgress={previewType === 'avatar' ? avatarUploadProgress : 0}
+        type="avatar"
+        isUploading={isAvatarUploading}
+        uploadProgress={avatarUploadProgress}
         onConfirm={() => {
           setIsPreviewVisible(false);
           if (pendingUploadFn) pendingUploadFn();
@@ -2193,22 +2032,16 @@ function OwnProfileScreen() {
 
       <ProfileMediaChoiceSheet
         visible={mediaChoiceVisible}
-        title={
-          mediaChoiceKind === 'avatar' ? t.profile.avatarImageTitle : t.profile.coverImage
-        }
+        title={t.profile.avatarImageTitle}
         subtitle={t.profile.whatToDo}
         onView={() => {
-          const url =
-            mediaChoiceKind === 'avatar'
-              ? localImage || userData?.avatar || ''
-              : coverImage || DEFAULT_COVER_IMAGE;
+          const url = localImage || userData?.avatar || '';
           if (!url) return;
           setViewerImageUrl(url);
           setIsImageViewerVisible(true);
         }}
         onChange={() => {
-          if (mediaChoiceKind === 'avatar') handleImageUpload();
-          else handleCoverUpload();
+          handleImageUpload();
         }}
         onClose={() => setMediaChoiceVisible(false)}
       />
@@ -2218,7 +2051,6 @@ function OwnProfileScreen() {
         visible={cooldownBlockVisible}
         cooldown={
           cooldownBlockType === 'avatar' ? cooldowns?.avatar ?? null
-          : cooldownBlockType === 'cover' ? cooldowns?.cover ?? null
           : cooldowns?.reelUpload ?? null
         }
         type={cooldownBlockType}

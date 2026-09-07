@@ -1,4 +1,3 @@
-export const PROFILE_STADIUM_COVER = require('../../assets/images/profile-v2/stadium-cover.jpg');
 export const PROFILE_BIO_BALL = require('../../assets/images/profile-v2/bio-ball.jpg');
 
 export const PROFILE_ICONS = {

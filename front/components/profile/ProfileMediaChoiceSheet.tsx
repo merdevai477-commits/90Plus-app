@@ -23,7 +23,7 @@ export interface ProfileMediaChoiceSheetProps {
 }
 
 /**
- * Purple glass sheet replacing native Alert for avatar/cover actions.
+ * Purple glass sheet replacing native Alert for avatar actions.
  */
 export function ProfileMediaChoiceSheet({
   visible,
