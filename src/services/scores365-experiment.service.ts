@@ -30,6 +30,7 @@ import {
   map365VenueFields,
   pick365BroadcastNames,
 } from '../utils/scores365-match-info.util';
+import { resolveVenueImage } from './stadium-image.service';
 import { coerceAllScoresLiveStatus } from '../utils/scores365-live-identity.util';
 import { withSyncLeaderLease } from './football-sync-leader.service';
 import {
@@ -3241,6 +3242,19 @@ export async function getScores365ExperimentBundle(
   const lineupsAvailable = lineupData.some(
     (side: any) => Array.isArray(side?.startXI) && side.startXI.length > 0,
   );
+
+  const venue = fixture.fixture.venue as
+    | { id?: number | null; name?: string | null; image?: string | null }
+    | null
+    | undefined;
+  if (venue && !venue.image) {
+    venue.image = await resolveVenueImage({
+      venueId: venue.id,
+      venueName: venue.name,
+      country: fixture.league?.country ?? null,
+      fast: true,
+    });
+  }
 
   return {
     fixture,

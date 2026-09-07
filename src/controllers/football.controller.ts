@@ -7,6 +7,7 @@ import { logger } from '../utils/logger';
 import { getFootballMetrics } from '../utils/football-metrics';
 import { resolveAppLanguage } from '../utils/app-language.util';
 import prisma from '../lib/prisma';
+import { getStadiumImage as lookupStadiumImage } from '../services/stadium-image.service';
 import {
   resolveFixtureForClient,
   resolveLiveFixturesForClient,
@@ -464,6 +465,41 @@ export class FootballController {
       };
 
       res.status(isConfigured ? 200 : 503).json(health);
+    } catch (error) {
+      FootballController.handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /api/football/stadium-image?name=Anfield
+   * GET /api/football/stadium-image?team=Liverpool[&country=England]
+   * Full cache → Wikipedia flow (awaits on miss). Highlights uses getStadiumImageFast instead.
+   */
+  static async getStadiumImage(req: Request, res: Response): Promise<void> {
+    try {
+      const name = String(req.query.name ?? '').trim();
+      const team = String(req.query.team ?? '').trim();
+      const country = String(req.query.country ?? '').trim() || undefined;
+      if (!name && !team) {
+        res.status(400).json({
+          status: 'ERROR',
+          message: 'name or team is required',
+        });
+        return;
+      }
+      const input = name || team;
+      const imageUrl = await lookupStadiumImage(input, {
+        isTeamName: Boolean(team) && !name,
+        country,
+      });
+      res.json({
+        status: 'SUCCESS',
+        response: {
+          imageUrl,
+          name: input,
+          isTeamName: Boolean(team) && !name,
+        },
+      });
     } catch (error) {
       FootballController.handleError(res, error);
     }

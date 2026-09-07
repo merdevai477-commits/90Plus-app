@@ -1235,6 +1235,35 @@ model CachedTeam {
   @@map("cached_teams")
 }
 
+/// Wikipedia/365 stadium photos, keyed by a normalized name. `found=false` is a
+/// negative cache so we do not retry stadiums with no available image.
+model StadiumImage {
+  id                    String   @id @default(uuid())
+  stadiumNameNormalized String   @unique
+  originalName          String
+  imageUrl              String?
+  thumbnailUrl          String?
+  latitude              Float?
+  longitude             Float?
+  source                String   @default("wikipedia")
+  found                 Boolean
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("stadium_images")
+}
+
+/// Self-growing team → stadium name map (Wikipedia infobox / CachedTeam seed).
+model TeamStadiumMap {
+  id                 String   @id @default(uuid())
+  teamNameNormalized String   @unique
+  stadiumName        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("team_stadium_map")
+}
+
 model CachedH2H {
   id           String   @id @default(uuid())
   team1Id      Int

@@ -29,6 +29,10 @@ const router = Router();
 // ============================================
 router.get('/health', FootballController.getHealth);
 
+// GET /api/football/stadium-image?name=Anfield  or  ?team=Liverpool
+// Awaits Wikipedia on cache miss (debug / reuse). Match Highlights uses the fast path.
+router.get('/stadium-image', FootballController.getStadiumImage);
+
 // ============================================
 // GET /api/football/leagues
 // Get all available leagues
