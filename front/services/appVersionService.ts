@@ -37,20 +37,9 @@ export function getCurrentAppVersion(): string {
     }
 }
 
-/** Marketing version plus native build (iOS buildNumber / Android versionCode). */
+/** Marketing version shown in Settings (no native build number). */
 export function getAppVersionLabel(): string {
-    const version = getCurrentAppVersion();
-    let build: string | null = null;
-    try {
-        const nativeBuild = Application.nativeBuildVersion;
-        build = nativeBuild ? String(nativeBuild) : null;
-    } catch {
-        build = null;
-    }
-    if (build && build !== version) {
-        return `${version} (${build})`;
-    }
-    return version;
+    return getCurrentAppVersion();
 }
 
 /**

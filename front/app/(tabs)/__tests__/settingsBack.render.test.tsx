@@ -36,7 +36,7 @@ jest.mock('@clerk/clerk-expo', () => ({
 }));
 
 jest.mock('../../../services/appVersionService', () => ({
-  getAppVersionLabel: () => '1.1.0 (114)',
+  getAppVersionLabel: () => '1.1.0',
   getCurrentAppVersion: () => '1.1.0',
 }));
 
@@ -170,7 +170,7 @@ describe('the Settings back control', () => {
 describe('Settings version and push entry', () => {
   it('shows the native app version instead of a hardcoded 1.0.0', () => {
     renderSettings();
-    expect(screen.getByText('1.1.0 (114)')).toBeTruthy();
+    expect(screen.getByText('1.1.0')).toBeTruthy();
     expect(screen.queryByText('1.0.0')).toBeNull();
   });
 
