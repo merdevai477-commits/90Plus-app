@@ -24,6 +24,14 @@ import {
   isUnverifiedStadiumCdnUrl,
 } from '../../utils/fetchStadiumImage';
 
+/**
+ * Kept in module scope so Fast Refresh does not crash with
+ * `Property 'STADIUM_PLACEHOLDER' doesn't exist` after the Highlights hero
+ * stopped using a real stadium photo as the miss fallback.
+ * Branded logo only — never a venue photograph.
+ */
+const STADIUM_PLACEHOLDER = require('../../assets/images/splash/splash-logo.png');
+
 type Row = {
   key: string;
   label: string;
@@ -104,6 +112,7 @@ function StadiumHero({ uri, stadiumName }: { uri: string | null; stadiumName: st
   return (
     <ExpoImage
       source={{ uri: remote }}
+      placeholder={STADIUM_PLACEHOLDER}
       style={styles.hero}
       contentFit="cover"
       cachePolicy="memory-disk"
