@@ -25,9 +25,7 @@ import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Rect, Stop } from
 import {
   isLiveStoppage,
   resolveLiveMinuteLabel,
-  resolveLiveSecondsLabel,
 } from '../Matches/leagueApiUtils';
-import { useSecondTick } from '../../hooks/useSecondTick';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import { useTranslation } from '../../src/i18n';
 import { useMatchLiveChat } from '../../hooks/useMatchLiveChat';
@@ -395,23 +393,15 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
   const isStoppage = isLive && isLiveStoppage(short, summary.elapsed, summary.stoppage);
 
   const clockActive = isLive && !isStoppage && !isHalftime;
-  useSecondTick(clockActive);
   const anchoredStart = useAnchoredPeriodStart(
     summary.clockAnchorKey,
     short,
     summary.elapsed,
     summary.startTimestamp,
   );
-  const secondsLabel = clockActive
-    ? resolveLiveSecondsLabel(short, summary.elapsed, {
-        startTimestamp: anchoredStart,
-        extra: summary.stoppage,
-      })
-    : undefined;
   const minuteLabel =
-    secondsLabel ??
     resolveLiveMinuteLabel(short, summary.elapsed, {
-      startTimestamp: anchoredStart,
+      startTimestamp: clockActive ? anchoredStart : undefined,
       extra: summary.stoppage,
     }) ??
     (isLive ? short || summary.liveLabel || 'LIVE' : '');

@@ -44,8 +44,7 @@ import {
 } from '../../constants/worldCup';
 import { getAppFeaturesPollPeriodMs } from '../../utils/appFeaturesPoll';
 import type { ImageSource } from 'expo-image';
-import { resolveLiveMinuteLabel, resolveLiveSecondsLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
-import { useSecondTick } from '../../hooks/useSecondTick';
+import { resolveLiveMinuteLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import {
   getSharedLivePulse,
@@ -332,7 +331,6 @@ const MatchRow = memo(function MatchRow({
   onToggleSubscription,
   onOpenDetails,
   worldCupCard,
-  clockEnabled = true,
   onFixtureVisibility,
 }: {
   fixture: Fixture;
@@ -345,8 +343,6 @@ const MatchRow = memo(function MatchRow({
   onToggleSubscription: (fixture: Fixture, subscribe: boolean) => void;
   onOpenDetails: (fixture: Fixture) => void;
   worldCupCard?: { logoSource: ImageSource; leagueName: string };
-  /** When false, skip 1Hz tick (row off-screen). */
-  clockEnabled?: boolean;
   /** Ref-based mount visibility — drives viewport-scoped registerInterest. */
   onFixtureVisibility?: (fixtureId: number, visible: boolean) => void;
 }) {
@@ -366,28 +362,16 @@ const MatchRow = memo(function MatchRow({
     return () => onFixtureVisibility(id, false);
   }, [fixture.id, onFixtureVisibility]);
 
-  // Live MM:SS clock: tick every second only while this row is in normal play
-  // and visible in the FlashList viewport.
+  // Live minute only — no MM:SS tick. Stoppage still uses 90+4' styling.
   const shortUpper = (fixture.statusShort ?? '').toUpperCase();
   const inStoppage = isLiveStoppage(fixture.statusShort, fixture.elapsed, fixture.extra);
   const isHalfTimeStatus = shortUpper === 'HT' || shortUpper === 'BT';
-  const liveInPlay =
-    !!fixture.live &&
-    ['1H', '2H', 'ET', 'LIVE', 'INT'].includes(shortUpper) &&
-    !inStoppage;
-  useSecondTick(liveInPlay && clockEnabled);
   const anchoredStart = useAnchoredPeriodStart(
     fixture.id,
     fixture.statusShort,
     fixture.elapsed,
     fixture.startTimestamp,
   );
-  const liveClock = liveInPlay
-    ? resolveLiveSecondsLabel(fixture.statusShort, fixture.elapsed, {
-        startTimestamp: anchoredStart,
-        extra: fixture.extra,
-      })
-    : undefined;
 
   useEffect(() => {
     if (!fixture.live) return;
@@ -481,8 +465,7 @@ const MatchRow = memo(function MatchRow({
             {fixture.live ? (
               <View style={styles.liveMetaCol}>
                 <Text style={[styles.minuteTxtLive, inStoppage && styles.minuteTxtStoppage]}>
-                  {liveClock ??
-                    fixture.minute ??
+                  {fixture.minute ??
                     resolveLiveMinuteLabel(fixture.statusShort, fixture.elapsed, {
                       startTimestamp: anchoredStart,
                       extra: fixture.extra,

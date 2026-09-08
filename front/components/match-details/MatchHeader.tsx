@@ -13,10 +13,8 @@ import {
   formatMatchTime,
   isLiveStoppage,
   resolveLiveMinuteLabel,
-  resolveLiveSecondsLabel,
 } from '../../components/Matches/leagueApiUtils';
 import { isStaleInPlayClock } from '../../utils/staleMatchClock';
-import { useSecondTick } from '../../hooks/useSecondTick';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import {
   LIVE_RED,
@@ -189,13 +187,9 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
     return time || '--:--';
   }, [fixtureDate, time]);
 
-  // Tick every second only while a live match is in normal play (not stoppage,
-  // HT, or a paused/terminal state) so the seconds clock animates smoothly.
+  // Minute-only live clock (no MM:SS). Anchor still fills gaps when elapsed is missing.
   const clockActive = isLive && !isStoppage && !isHalftime;
-  useSecondTick(clockActive);
 
-  // Prefer API periods; otherwise synthesize once and keep ticking so minutes
-  // can advance between slow API elapsed updates (Scores365 has null periods).
   const anchoredStart = useAnchoredPeriodStart(
     clockAnchorKey,
     short,
@@ -203,18 +197,9 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
     startTimestamp,
   );
 
-  // Computed every render (the second-tick forces a re-render) so the MM:SS
-  // clock advances. Falls back to the minute-only label outside normal play.
-  const secondsLabel = clockActive
-    ? resolveLiveSecondsLabel(short, elapsed, {
-        startTimestamp: anchoredStart,
-        extra: stoppage,
-      })
-    : undefined;
   const minuteLabel =
-    secondsLabel ??
     resolveLiveMinuteLabel(short, elapsed, {
-      startTimestamp: anchoredStart,
+      startTimestamp: clockActive ? anchoredStart : undefined,
       extra: stoppage,
     }) ??
     (isLive ? short || liveLabel : '');
