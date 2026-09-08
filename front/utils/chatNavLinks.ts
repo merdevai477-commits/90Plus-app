@@ -1,3 +1,6 @@
+import { build365CompetitorLogo } from './scores365Adapters';
+import { buildScores365AthletePhotoUrl } from './scores365AthletePhoto';
+
 export type ChatNavLinkType = 'player' | 'club' | 'match' | 'matches';
 
 export type ChatNavLink = {
@@ -10,6 +13,30 @@ export type ChatNavLink = {
   teamName?: string | null;
   teamId?: number | string | null;
 };
+
+export type ChatNavAvatar =
+  | { kind: 'player'; uri: string }
+  | { kind: 'club'; uri: string }
+  | { kind: 'icon' };
+
+function httpUrl(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  return /^https?:\/\//i.test(s) ? s : null;
+}
+
+/** Headshot / crest for the chat CTA, with a 365Scores fallback from the entity id. */
+export function resolveChatNavAvatar(link: ChatNavLink): ChatNavAvatar {
+  if (link.type === 'player') {
+    const uri = httpUrl(link.photo) || (link.id ? buildScores365AthletePhotoUrl(link.id, 80) : null);
+    if (uri) return { kind: 'player', uri };
+  }
+  if (link.type === 'club') {
+    const uri = httpUrl(link.logo) || (link.id ? build365CompetitorLogo(link.id) : null);
+    if (uri) return { kind: 'club', uri };
+  }
+  return { kind: 'icon' };
+}
 
 const NAV_MARKER_RE = /\n?<!--90plus-nav:([\s\S]*?)-->\s*$/;
 
@@ -43,8 +70,8 @@ export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
       ...(id ? { id } : {}),
       label,
       ...(query ? { query } : {}),
-      photo: typeof item.photo === 'string' ? item.photo : null,
-      logo: typeof item.logo === 'string' ? item.logo : null,
+      photo: httpUrl(item.photo),
+      logo: httpUrl(item.logo),
       teamName: typeof item.teamName === 'string' ? item.teamName : null,
       teamId: item.teamId == null ? null : (item.teamId as number | string),
     });

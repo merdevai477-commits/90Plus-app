@@ -1,10 +1,12 @@
 import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, ChevronRight, Trophy, User, CalendarDays, CircleDot } from 'lucide-react-native';
+import { ChevronRight, Trophy, User, CalendarDays, CircleDot } from 'lucide-react-native';
 import { useTranslation } from '../../src/i18n';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
-import type { ChatNavLink } from '../../utils/chatNavLinks';
+import { resolveChatNavAvatar, type ChatNavLink } from '../../utils/chatNavLinks';
+import CachedAthletePhoto from '../common/CachedAthletePhoto';
+import TeamBadge from '../common/TeamBadge';
 import { isArabicText } from './chatTextUtils';
 import { chatColors } from './chatTheme';
 
@@ -23,12 +25,33 @@ const AR = {
   matchesSub: 'صفحة المباريات في 90Plus',
 };
 
+const AVATAR_SIZE = 40;
+
 function iconFor(type: ChatNavLink['type']) {
   const color = '#F5F3FF';
   if (type === 'player') return <User size={17} color={color} strokeWidth={2.2} />;
   if (type === 'club') return <Trophy size={17} color={color} strokeWidth={2.2} />;
   if (type === 'match') return <CircleDot size={17} color={color} strokeWidth={2.2} />;
   return <CalendarDays size={17} color={color} strokeWidth={2.2} />;
+}
+
+function NavAvatar({ link }: { link: ChatNavLink }) {
+  const media = resolveChatNavAvatar(link);
+  if (media.kind === 'player') {
+    return (
+      <View style={styles.avatarWrap} pointerEvents="none">
+        <CachedAthletePhoto uri={media.uri} size={AVATAR_SIZE} recyclingKey={link.id ?? media.uri} />
+      </View>
+    );
+  }
+  if (media.kind === 'club') {
+    return (
+      <View style={styles.avatarWrap} pointerEvents="none">
+        <TeamBadge name={link.label} logo={media.uri} size={AVATAR_SIZE} color="transparent" />
+      </View>
+    );
+  }
+  return <View style={styles.iconWrap}>{iconFor(link.type)}</View>;
 }
 
 function isNamed(label: string, type: ChatNavLink['type']): boolean {
@@ -73,7 +96,7 @@ function copyFor(link: ChatNavLink, language: string, t: { chat: Record<string, 
           : link.type === 'match'
             ? AR.matchSub
             : AR.matchesSub;
-    return { title, subtitle, rtl: true };
+    return { title, subtitle };
   }
   const title =
     named ||
@@ -92,7 +115,7 @@ function copyFor(link: ChatNavLink, language: string, t: { chat: Record<string, 
         : link.type === 'match'
           ? t.chat.navCtaMatch
           : t.chat.navCtaMatches;
-  return { title, subtitle, rtl: false };
+  return { title, subtitle };
 }
 
 export function ChatNavLinks({ links }: Props) {
@@ -120,10 +143,11 @@ export function ChatNavLinks({ links }: Props) {
         return;
       }
       if (link.type === 'player' && link.id) {
+        const avatar = resolveChatNavAvatar(link);
         pushPlayerCareer(router, {
           athleteId: link.id,
           name: link.label,
-          photo: link.photo,
+          photo: avatar.kind === 'player' ? avatar.uri : link.photo,
           teamName: link.teamName,
           teamId: link.teamId,
         });
@@ -147,50 +171,43 @@ export function ChatNavLinks({ links }: Props) {
     <View style={styles.wrap}>
       {primary.map((link) => {
         const copy = copyFor(link, language, t as { chat: Record<string, string> });
-        const Chevron = copy.rtl ? ChevronLeft : ChevronRight;
         return (
           <Pressable
             key={`${link.type}:${link.id ?? link.query ?? link.label}`}
             onPress={() => onPress(link)}
-            style={({ pressed }) => [
-              styles.row,
-              copy.rtl && styles.rowRtl,
-              pressed && styles.pressed,
-            ]}
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel={`${copy.title}. ${copy.subtitle}`}
           >
-            <View style={styles.iconWrap}>{iconFor(link.type)}</View>
+            <NavAvatar link={link} />
             <View style={styles.textCol}>
-              <Text style={[styles.title, copy.rtl && styles.rtlText]} numberOfLines={1}>
+              <Text style={styles.title} numberOfLines={1}>
                 {copy.title}
               </Text>
-              <Text style={[styles.subtitle, copy.rtl && styles.rtlText]} numberOfLines={1}>
+              <Text style={styles.subtitle} numberOfLines={1}>
                 {copy.subtitle}
               </Text>
             </View>
             <View style={styles.arrowWrap}>
-              <Chevron size={16} color="#F5F3FF" strokeWidth={2.6} />
+              <ChevronRight size={16} color="#F5F3FF" strokeWidth={2.6} />
             </View>
           </Pressable>
         );
       })}
       {extraMatches.map((link) => {
-        const rtl = language === 'ar' || isArabicText(link.label);
-        const Chevron = rtl ? ChevronLeft : ChevronRight;
         return (
           <Pressable
             key={`${link.type}:${link.id ?? link.label}`}
             onPress={() => onPress(link)}
-            style={({ pressed }) => [styles.compact, rtl && styles.rowRtl, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.compact, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel={link.label}
           >
             {iconFor('match')}
-            <Text style={[styles.compactLabel, rtl && styles.rtlText]} numberOfLines={1}>
+            <Text style={styles.compactLabel} numberOfLines={1}>
               {link.label}
             </Text>
-            <Chevron size={16} color={chatColors.accentSoft} strokeWidth={2.4} />
+            <ChevronRight size={16} color={chatColors.accentSoft} strokeWidth={2.4} />
           </Pressable>
         );
       })}
@@ -206,22 +223,27 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+    flexWrap: 'nowrap',
     alignItems: 'center',
     gap: 10,
     minHeight: 52,
     paddingVertical: 8,
     paddingHorizontal: 4,
   },
-  rowRtl: {
-    flexDirection: 'row-reverse',
-  },
   pressed: {
     opacity: 0.88,
   },
+  avatarWrap: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   iconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(124,58,237,0.45)',
@@ -267,9 +289,5 @@ const styles = StyleSheet.create({
     color: '#EDE9FE',
     fontSize: 13,
     fontWeight: '600',
-  },
-  rtlText: {
-    textAlign: 'right',
-    writingDirection: 'rtl',
   },
 });

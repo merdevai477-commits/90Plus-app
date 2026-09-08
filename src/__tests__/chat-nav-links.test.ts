@@ -26,8 +26,18 @@ describe('chat-nav-links', () => {
     );
     expect(links).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'player', id: 42, label: 'Salah' }),
-        expect.objectContaining({ type: 'club', id: 1015, label: 'Al Ahly' }),
+        expect.objectContaining({
+          type: 'player',
+          id: 42,
+          label: 'Salah',
+          photo: 'https://img/salah.png',
+        }),
+        expect.objectContaining({
+          type: 'club',
+          id: 1015,
+          label: 'Al Ahly',
+          logo: expect.stringContaining('/Competitors/1015'),
+        }),
       ]),
     );
   });
@@ -87,5 +97,15 @@ describe('chat-nav-links', () => {
   it('does not attach football CTAs to diet questions', () => {
     const links = extractChatNavLinks([], [], 'ar', 'اقترح نظام أكل مناسب');
     expect(links).toEqual([]);
+  });
+
+  it('builds a 365Scores headshot when the payload has an athleteId but no imageUrl', () => {
+    const links = extractChatNavLinks(
+      [JSON.stringify({ source: '365scores_profile', athleteId: 4576, name: 'Mohamed Salah' })],
+      ['search_player'],
+      'en',
+    );
+    const player = links.find((l) => l.type === 'player');
+    expect(player?.photo).toContain('/Athletes/4576');
   });
 });

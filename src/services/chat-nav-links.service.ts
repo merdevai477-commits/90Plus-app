@@ -1,3 +1,5 @@
+import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
+
 export type ChatNavLinkType = 'player' | 'club' | 'match' | 'matches';
 
 export type ChatNavLink = {
@@ -27,6 +29,24 @@ function asLabel(v: unknown, fallback = ''): string {
   return s || fallback;
 }
 
+function httpUrl(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  return /^https?:\/\//i.test(s) ? s : null;
+}
+
+function firstHttpUrl(...candidates: unknown[]): string | null {
+  for (const c of candidates) {
+    const u = httpUrl(c);
+    if (u) return u;
+  }
+  return null;
+}
+
+function competitorLogoUrl(competitorId: number): string {
+  return `https://imagecache.365scores.com/image/upload/f_png,w_80,h_80,c_limit,q_auto:eco,dpr_2/v1/Competitors/${competitorId}`;
+}
+
 export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
   if (!Array.isArray(raw)) return [];
   const out: ChatNavLink[] = [];
@@ -43,8 +63,8 @@ export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
       ...(id ? { id } : {}),
       label,
       ...(query ? { query } : {}),
-      photo: typeof item.photo === 'string' ? item.photo : null,
-      logo: typeof item.logo === 'string' ? item.logo : null,
+      photo: httpUrl(item.photo),
+      logo: httpUrl(item.logo),
       teamName: typeof item.teamName === 'string' ? item.teamName : null,
       teamId: item.teamId == null ? null : (item.teamId as number | string),
     });
@@ -77,7 +97,17 @@ function addLink(map: Map<string, ChatNavLink>, link: ChatNavLink): void {
     map.set(key, link);
     return;
   }
-  if (!prev.id && link.id) map.set(key, { ...prev, ...link });
+  map.set(key, {
+    ...prev,
+    ...link,
+    id: link.id ?? prev.id,
+    photo: link.photo || prev.photo,
+    logo: link.logo || prev.logo,
+    query: link.query || prev.query,
+    teamName: link.teamName || prev.teamName,
+    teamId: link.teamId ?? prev.teamId,
+    label: link.label && link.label !== link.type ? link.label : prev.label,
+  });
 }
 
 function collectFixtures(node: unknown, into: unknown[]): void {
@@ -173,6 +203,9 @@ export function extractChatNavLinks(
     const hits = isRecord(parsed.hits) ? parsed.hits : null;
     const profile = isRecord(parsed.profile) ? parsed.profile : null;
     const best = isRecord(parsed.best) ? parsed.best : null;
+    const playerNode = isRecord(parsed.player) ? parsed.player : null;
+    const playerHit = firstRecord(hits?.players);
+    const clubHit = firstRecord(hits?.clubs);
 
     const athleteId =
       positiveId(parsed.athleteId) ||
@@ -180,17 +213,28 @@ export function extractChatNavLinks(
       positiveId(best?.athleteId) ||
       positiveId(best?.id) ||
       positiveId(firstRecord(parsed.suggestions)?.athleteId) ||
-      positiveId(firstRecord(hits?.players)?.athleteId);
+      positiveId(playerHit?.athleteId);
     const playerName = asLabel(
-      parsed.name ?? parsed.resolvedAs ?? best?.name ?? firstRecord(hits?.players)?.name,
+      parsed.name ?? parsed.resolvedAs ?? best?.name ?? playerHit?.name,
     );
+    const imageVersion =
+      positiveId(profile?.imageVersion) ||
+      positiveId(playerNode?.imageVersion) ||
+      positiveId(playerHit?.imageVersion);
     if (athleteId) {
       addLink(map, {
         type: 'player',
         id: athleteId,
         label: playerName || playerFallback,
-        photo: typeof profile?.imageUrl === 'string' ? profile.imageUrl : null,
-        teamName: asLabel(parsed.club ?? firstRecord(hits?.players)?.club) || null,
+        photo:
+          firstHttpUrl(
+            profile?.imageUrl,
+            parsed.imageUrl,
+            playerNode?.imageUrl,
+            playerHit?.imageUrl,
+            playerHit?.photo,
+          ) ?? buildScores365AthletePhotoUrl(athleteId, 80, imageVersion),
+        teamName: asLabel(parsed.club ?? playerHit?.club) || null,
         teamId: parsed.teamId == null ? null : (parsed.teamId as number | string),
       });
     } else if (parsed.source === '365scores_profile') {
@@ -198,6 +242,7 @@ export function extractChatNavLinks(
         type: 'player',
         label: playerName || playerFallback,
         query: playerName || query,
+        photo: firstHttpUrl(profile?.imageUrl, parsed.imageUrl, playerNode?.imageUrl),
       });
     }
 
@@ -206,25 +251,29 @@ export function extractChatNavLinks(
         ? null
         : positiveId(parsed.competitorId) ||
           (best?.type === 'player' ? null : positiveId(best?.id)) ||
-          positiveId(firstRecord(hits?.clubs)?.competitorId) ||
+          positiveId(clubHit?.competitorId) ||
           positiveId(firstRecord(hits?.nationalTeams)?.competitorId);
     const clubName = asLabel(
       parsed.teamName ??
         (parsed.source === '365scores_profile' ? '' : parsed.name) ??
         best?.name ??
-        firstRecord(hits?.clubs)?.name,
+        clubHit?.name,
     );
     if (competitorId) {
       addLink(map, {
         type: 'club',
         id: competitorId,
         label: clubName || clubFallback,
+        logo:
+          firstHttpUrl(parsed.logo, parsed.imageUrl, clubHit?.logo, clubHit?.imageUrl) ??
+          competitorLogoUrl(competitorId),
       });
     } else if (parsed.source === '365scores_team') {
       addLink(map, {
         type: 'club',
         label: clubName || clubFallback,
         query: clubName || query,
+        logo: firstHttpUrl(parsed.logo, parsed.imageUrl),
       });
     }
 

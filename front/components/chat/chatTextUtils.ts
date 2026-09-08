@@ -1,12 +1,12 @@
 import { TextStyle } from 'react-native';
 
-const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
+const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g;
 
 /** True when a meaningful share of non-whitespace chars are Arabic script. */
 export function isArabicText(text: string): boolean {
   const stripped = text.replace(/\s/g, '');
   if (!stripped.length) return false;
-  const arabicCount = (stripped.match(ARABIC_RE) ?? []).length;
+  const arabicCount = stripped.match(ARABIC_RE)?.length ?? 0;
   return arabicCount / stripped.length >= 0.3;
 }
 
