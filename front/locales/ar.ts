@@ -3186,6 +3186,10 @@ export const ar = {
     navGoMatch: 'روح لتفاصيل المباراة في 90Plus',
     navGoMatchNamed: 'روح لمباراة {name} في 90Plus',
     navGoMatches: 'روح لصفحة المباريات في 90Plus',
+    navCtaPlayer: 'بروفايل اللاعب في 90Plus',
+    navCtaClub: 'بروفايل الفريق في 90Plus',
+    navCtaMatch: 'تفاصيل المباراة في 90Plus',
+    navCtaMatches: 'صفحة المباريات في 90Plus',
 
     exportUserLabel: 'أنت',
     exportAiLabel: '90Plus AI',

@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Sparkles } from 'lucide-react-native';
 import { useTranslation } from '../../src/i18n';
 import { chatColors } from './chatTheme';
+import { isArabicText } from './chatTextUtils';
 
 type Status = 'thinking' | 'done' | 'error';
 
@@ -57,12 +58,11 @@ function buildSteps(message: string, th: Record<string, string>): string[] {
 }
 
 function ThinkingDots() {
-  const [n, setN] = useState(1);
-  useEffect(() => {
-    const timer = setInterval(() => setN((v) => (v % 3) + 1), 380);
-    return () => clearInterval(timer);
-  }, []);
-  return <Text style={styles.dots}>{'.'.repeat(n)}</Text>;
+  return (
+    <Text style={styles.dots} accessibilityElementsHidden>
+      ...
+    </Text>
+  );
 }
 
 export function ThinkingIndicator({
@@ -72,7 +72,7 @@ export function ThinkingIndicator({
 }: ThinkingIndicatorProps) {
   const { t, language } = useTranslation();
   const th = t.chat.thinking as Record<string, string>;
-  const isAr = language === 'ar';
+  const isAr = isArabicText(lastMessage ?? '') || language === 'ar';
   const [currentStep, setCurrentStep] = useState(0);
   const quote = clipQuote(lastMessage ?? '');
   const steps = useMemo(() => buildSteps(lastMessage ?? '', th), [lastMessage, th]);
@@ -90,21 +90,24 @@ export function ThinkingIndicator({
       -1,
       true,
     );
-    shimmer.value = withRepeat(
-      withTiming(1, { duration: 1400, easing: Easing.linear }),
-      -1,
-      false,
-    );
+    if (Platform.OS !== 'android') {
+      shimmer.value = withRepeat(
+        withTiming(1, { duration: 1400, easing: Easing.linear }),
+        -1,
+        false,
+      );
+    }
   }, [status, pulse, shimmer]);
 
   const pulseStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(pulse.value, [0.45, 1], [0.55, 1]),
-    transform: [{ scale: interpolate(pulse.value, [0.45, 1], [0.96, 1.05]) }],
+    opacity: interpolate(pulse.value, [0.45, 1], [0.7, 1]),
   }));
 
-  const shimmerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(shimmer.value, [0, 1], [-80, 180]) }],
-  }));
+  const shimmerStyle = useAnimatedStyle(() =>
+    Platform.OS === 'android'
+      ? { opacity: 0 }
+      : { transform: [{ translateX: interpolate(shimmer.value, [0, 1], [-80, 180]) }] },
+  );
 
   useEffect(() => {
     if (!isThinking) return;
@@ -163,13 +166,11 @@ export function ThinkingIndicator({
 
         <View style={styles.steps}>
           {steps.map((step, i) => {
-            if (i > currentStep) return null;
             const active = i === currentStep;
             return (
-              <Animated.View
+              <View
                 key={`${step}-${i}`}
-                entering={FadeIn.duration(180)}
-                style={[styles.stepRow, isAr && styles.stepRowRtl]}
+                style={[styles.stepRow, isAr && styles.stepRowRtl, i > currentStep && styles.stepHidden]}
               >
                 <View style={[styles.dot, active ? styles.dotActive : styles.dotPast]} />
                 <Text
@@ -182,7 +183,7 @@ export function ThinkingIndicator({
                 >
                   {step}
                 </Text>
-              </Animated.View>
+              </View>
             );
           })}
         </View>
@@ -304,6 +305,9 @@ const styles = StyleSheet.create({
   },
   stepPast: {
     color: 'rgba(255,255,255,0.42)',
+  },
+  stepHidden: {
+    opacity: 0,
   },
   rtlText: {
     textAlign: 'right',

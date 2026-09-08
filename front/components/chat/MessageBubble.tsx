@@ -8,7 +8,6 @@ import React, {
 } from 'react';
 import {
   View, Text, Pressable, StyleSheet, Platform, TextStyle, useWindowDimensions,
-  type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import Animated, {
@@ -23,8 +22,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
 import { useTranslation } from '../../src/i18n';
 
 import { Colors } from '../../constants/theme';
@@ -85,20 +82,13 @@ function renderInline(text: string): React.ReactNode {
   });
 }
 
-const TABLE_MIN_COL_WIDTH = 88;
-const TABLE_CATEGORY_MAX = 148;
-const TABLE_DETAIL_MAX = 340;
-const TABLE_SCROLL_STEP = 120;
+const TABLE_MIN_COL_WIDTH = 72;
 
-function colMinWidth(text: string, isHeader: boolean, colIndex: number, colCount: number): number {
+function colMinWidth(text: string, isHeader: boolean): number {
   const stripped = text.replace(/\*\*/g, '').trim();
   const len = stripped.length;
-  const base = isHeader ? 96 : 84;
-  const computed = Math.max(base, len * 6.5 + 36);
-  if (colCount > 1 && colIndex === 0) {
-    return Math.min(computed, TABLE_CATEGORY_MAX);
-  }
-  return Math.min(computed, TABLE_DETAIL_MAX);
+  const base = isHeader ? 78 : 68;
+  return Math.max(base, Math.min(len * 7.2 + 28, 220));
 }
 
 function TableCellText({
@@ -128,172 +118,103 @@ function MarkdownTable({
 }) {
   const scrollRef = useRef<ScrollView>(null);
   const colCount = headers.length;
-  const scrollViewportWidth = Math.max(220, bubbleMaxWidth - 28);
-
-  const [scrollX, setScrollX] = useState(0);
-  const [contentWidth, setContentWidth] = useState(0);
+  const scrollViewportWidth = Math.max(180, Math.round(bubbleMaxWidth - 24));
 
   const colWidths = useMemo(() => {
-    const widths = headers.map((h, i) => {
-      let max = colMinWidth(h, true, i, colCount);
+    const raw = headers.map((h, i) => {
+      let max = colMinWidth(h, true);
       for (const row of rows) {
-        const cell = row[i] ?? '';
-        max = Math.max(max, colMinWidth(cell, false, i, colCount));
+        max = Math.max(max, colMinWidth(row[i] ?? '', false));
       }
       return Math.max(max, TABLE_MIN_COL_WIDTH);
     });
-    return widths;
-  }, [headers, rows, colCount]);
+    const total = raw.reduce((a, b) => a + b, 0);
+    if (colCount <= 3 && total <= scrollViewportWidth * 1.2) {
+      if (total < scrollViewportWidth) {
+        const extra = (scrollViewportWidth - total) / colCount;
+        return raw.map((w) => w + extra);
+      }
+      const scale = scrollViewportWidth / total;
+      return raw.map((w) => Math.max(64, w * scale));
+    }
+    return raw;
+  }, [headers, rows, colCount, scrollViewportWidth]);
 
   const tableIntrinsicWidth = colWidths.reduce((a, b) => a + b, 0);
-  const isOverflow = tableIntrinsicWidth > scrollViewportWidth + 4;
-  const maxScrollX = Math.max(0, contentWidth - scrollViewportWidth);
-  const canScrollLeft = isOverflow && scrollX > 8;
-  const canScrollRight = isOverflow && scrollX < maxScrollX - 8;
+  const isOverflow = tableIntrinsicWidth > scrollViewportWidth + 6;
 
-  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setScrollX(e.nativeEvent.contentOffset.x);
-  }, []);
-
-  const onContentSizeChange = useCallback((w: number) => {
-    setContentWidth(w);
-  }, []);
-
-  const scrollBy = useCallback(
-    (delta: number) => {
-      Haptics.selectionAsync();
-      const next = Math.max(0, Math.min(maxScrollX, scrollX + delta));
-      scrollRef.current?.scrollTo({ x: next, animated: true });
-      setScrollX(next);
-    },
-    [maxScrollX, scrollX],
+  const tableGrid = (
+    <View style={[s.table, { width: isOverflow ? tableIntrinsicWidth : scrollViewportWidth }]}>
+      <View style={s.tableHead}>
+        {headers.map((h, hi) => (
+          <View
+            key={hi}
+            style={[
+              s.tableCell,
+              { width: colWidths[hi], minWidth: colWidths[hi] },
+              hi === 0 && s.tableCellFirst,
+              hi === colCount - 1 && s.tableCellLast,
+            ]}
+          >
+            <TableCellText text={h} style={s.tableHeadText} />
+          </View>
+        ))}
+      </View>
+      {rows.map((row, ri) => (
+        <View
+          key={ri}
+          style={[
+            s.tableRow,
+            ri % 2 === 1 && s.tableRowAlt,
+            ri === rows.length - 1 && s.tableRowLast,
+          ]}
+        >
+          {headers.map((_, ci) => {
+            const cell = row[ci] ?? '—';
+            return (
+              <View
+                key={ci}
+                style={[
+                  s.tableCell,
+                  { width: colWidths[ci], minWidth: colWidths[ci] },
+                  ci === 0 && s.tableCellFirst,
+                  ci === colCount - 1 && s.tableCellLast,
+                ]}
+              >
+                <TableCellText text={cell} style={s.tableCellText} />
+              </View>
+            );
+          })}
+        </View>
+      ))}
+    </View>
   );
+
+  if (!isOverflow) {
+    return <View style={s.tableBlock}>{tableGrid}</View>;
+  }
 
   return (
     <View style={s.tableBlock}>
-      {isOverflow && scrollHint ? (
+      {scrollHint ? (
         <View style={s.tableHintRow}>
-          <ChevronLeft size={14} color="rgba(167,139,250,0.9)" strokeWidth={2.5} />
           <Text style={s.tableHint}>{scrollHint}</Text>
-          <ChevronRight size={14} color="rgba(167,139,250,0.9)" strokeWidth={2.5} />
         </View>
       ) : null}
-
       <View style={[s.tableScrollShell, { width: scrollViewportWidth }]}>
-        {canScrollLeft ? (
-          <LinearGradient
-            colors={['rgba(12,6,22,0.95)', 'rgba(12,6,22,0)']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={s.tableFadeLeft}
-            pointerEvents="none"
-          />
-        ) : null}
-        {canScrollRight ? (
-          <LinearGradient
-            colors={['rgba(12,6,22,0)', 'rgba(12,6,22,0.95)']}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={s.tableFadeRight}
-            pointerEvents="none"
-          />
-        ) : null}
-
-        {canScrollLeft ? (
-          <Pressable
-            style={s.tableArrowLeft}
-            onPress={() => scrollBy(-TABLE_SCROLL_STEP)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Scroll table left"
-          >
-            <View style={s.tableArrowBtn}>
-              <ChevronLeft size={18} color="#fff" strokeWidth={2.5} />
-            </View>
-          </Pressable>
-        ) : null}
-        {canScrollRight ? (
-          <Pressable
-            style={s.tableArrowRight}
-            onPress={() => scrollBy(TABLE_SCROLL_STEP)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Scroll table right"
-          >
-            <View style={s.tableArrowBtn}>
-              <ChevronRight size={18} color="#fff" strokeWidth={2.5} />
-            </View>
-          </Pressable>
-        ) : null}
-
         <ScrollView
           ref={scrollRef}
           horizontal
-          nestedScrollEnabled
+          nestedScrollEnabled={false}
           directionalLockEnabled
-          decelerationRate="normal"
-          showsHorizontalScrollIndicator
-          persistentScrollbar={Platform.OS === 'android'}
-          overScrollMode="always"
-          bounces
-          scrollEventThrottle={16}
-          onScroll={onScroll}
-          onContentSizeChange={onContentSizeChange}
+          decelerationRate="fast"
+          showsHorizontalScrollIndicator={false}
+          overScrollMode="never"
+          bounces={false}
           style={s.tableScroll}
-          contentContainerStyle={[
-            s.tableScrollContent,
-            { minWidth: tableIntrinsicWidth, paddingRight: 12 },
-          ]}
+          contentContainerStyle={s.tableScrollContent}
         >
-          <View style={[s.table, { width: tableIntrinsicWidth }]}>
-            <LinearGradient
-              colors={['rgba(124,58,237,0.55)', 'rgba(76,29,149,0.45)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={s.tableHead}
-            >
-              {headers.map((h, hi) => (
-                <View
-                  key={hi}
-                  style={[
-                    s.tableCell,
-                    { width: colWidths[hi], minWidth: colWidths[hi] },
-                    hi === 0 && s.tableCellFirst,
-                    hi === colCount - 1 && s.tableCellLast,
-                  ]}
-                >
-                  <TableCellText text={h} style={s.tableHeadText} />
-                </View>
-              ))}
-            </LinearGradient>
-            {rows.map((row, ri) => (
-              <View
-                key={ri}
-                style={[
-                  s.tableRow,
-                  ri % 2 === 1 && s.tableRowAlt,
-                  ri === rows.length - 1 && s.tableRowLast,
-                ]}
-              >
-                {headers.map((_, ci) => {
-                  const cell = row[ci] ?? '—';
-                  return (
-                    <View
-                      key={ci}
-                      style={[
-                        s.tableCell,
-                        { width: colWidths[ci], minWidth: colWidths[ci] },
-                        ci === 0 && s.tableCellFirst,
-                        ci === colCount - 1 && s.tableCellLast,
-                      ]}
-                    >
-                      <TableCellText text={cell} style={s.tableCellText} />
-                    </View>
-                  );
-                })}
-              </View>
-            ))}
-          </View>
+          {tableGrid}
         </ScrollView>
       </View>
     </View>
@@ -449,11 +370,7 @@ export const TypingIndicator = React.memo(() => {
 export const AIMessageBubble = React.memo(function AIMessageBubble({ message, index = 0, isHistory = false }: MessageBubbleProps) {
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
-  const { maxWidth, minWidth } = useBubbleMaxWidth(width);
-  const prevId = useRef<string | null>(null);
-  const initialText = useRef<string | null>(null);
-  const [visible, setVisible] = useState('');
-  const [done, setDone] = useState(false);
+  const { maxWidth } = useBubbleMaxWidth(width);
 
   const tsOp = useSharedValue(0);
   const tsStyle = useAnimatedStyle(() => ({ opacity: tsOp.value }));
@@ -465,73 +382,44 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
   const parsed = useMemo(() => decodeChatNavMarker(message.text ?? ''), [message.text]);
   const sourceText = parsed.text;
   const navLinks = message.navLinks?.length ? message.navLinks : parsed.navLinks;
-
-  useEffect(() => {
-    let mounted = true;
-    const full = sourceText;
-    if (prevId.current !== message.id) { prevId.current = message.id; initialText.current = null; }
-    if (initialText.current === null) initialText.current = full;
-
-    if (isHistory) {
-      setVisible(full);
-      setDone(true);
-      return () => { mounted = false; };
-    }
-
-    if (initialText.current === '') {
-      setVisible(full);
-      setDone(true);
-      return () => { mounted = false; };
-    }
-
-    setVisible(''); setDone(false);
-    if (!full) { setDone(true); return () => { mounted = false; }; }
-
-    let idx = 0;
-    const len = full.length;
-    const step = len > 2000 ? 12 : len > 1000 ? 8 : len > 500 ? 5 : 3;
-    const iv = len > 1000 ? 6 : 10;
-    const timer = setInterval(() => {
-      if (!mounted) return;
-      idx = Math.min(len, idx + step);
-      setVisible(full.slice(0, idx));
-      if (idx >= len) { clearInterval(timer); setDone(true); }
-    }, iv);
-    return () => { mounted = false; clearInterval(timer); };
-  }, [message.id, isHistory, sourceText]);
-
-  const display = done ? sourceText : visible;
-  const isStreaming = initialText.current === '' && sourceText !== '' && !done;
-  const showCursor = !isHistory && (isStreaming || (!done && initialText.current !== ''));
+  const showCursor = !isHistory && !!message.isStreaming;
   const content = useMemo(
-    () => renderMarkdown(display, t.chat.tableScrollHint, maxWidth),
-    [display, t.chat.tableScrollHint, maxWidth],
+    () => renderMarkdown(sourceText, t.chat.tableScrollHint, maxWidth),
+    [sourceText, t.chat.tableScrollHint, maxWidth],
   );
+  const enter = Platform.OS === 'android'
+    ? FadeIn.duration(140)
+    : FadeIn.withInitialValues({ transform: [{ translateX: -20 }], opacity: 0 })
+        .springify().stiffness(180).damping(14).delay(index * 40);
 
   return (
-    <Animated.View
-      entering={FadeIn.withInitialValues({ transform: [{ translateX: -20 }], opacity: 0 })
-        .springify().stiffness(180).damping(14).delay(index * 40)}
-      style={s.aiRow}
-    >
-      <View style={[s.aiBubbleWrap, { width: maxWidth, maxWidth, alignSelf: 'flex-start' }]}>
-        <Pressable onPress={onPress} accessibilityRole="text">
-          <View style={s.aiBubble}>
+    <Animated.View entering={enter} style={s.aiRow}>
+      <View style={[s.aiBubbleWrap, { maxWidth, width: '100%', alignSelf: 'flex-start' }]}>
+        <View style={s.aiBubble} collapsable={false}>
+          {Platform.OS === 'ios' ? (
             <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
-            <LinearGradient
-              colors={['rgba(124,58,237,0.12)', 'rgba(76,29,149,0.06)']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-            <View style={s.aiBubbleTopHighlight} pointerEvents="none" />
+          ) : (
+            <View style={s.aiBubbleAndroidFill} />
+          )}
+          <LinearGradient
+            colors={['rgba(124,58,237,0.16)', 'rgba(76,29,149,0.08)']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <View style={s.aiBubbleTopHighlight} pointerEvents="none" />
+          <Pressable onPress={onPress} accessibilityRole="text">
             <View style={s.aiBubbleInner}>
               {content}
               {showCursor && <StreamCursor />}
             </View>
-          </View>
-        </Pressable>
-        {navLinks.length ? <ChatNavLinks links={navLinks} /> : null}
+          </Pressable>
+          {navLinks.length ? (
+            <View style={s.ctaFooter}>
+              <ChatNavLinks links={navLinks} />
+            </View>
+          ) : null}
+        </View>
         <Animated.Text style={[s.aiTs, tsStyle]}>{message.time}</Animated.Text>
       </View>
     </Animated.View>
@@ -575,8 +463,12 @@ export const UserMessageBubble = React.memo(function UserMessageBubble({
   return (
     <>
       <Animated.View
-        entering={FadeIn.withInitialValues({ transform: [{ translateX: 20 }], opacity: 0 })
-          .springify().stiffness(180).damping(14).delay(index * 40)}
+        entering={
+          Platform.OS === 'android'
+            ? FadeIn.duration(120)
+            : FadeIn.withInitialValues({ transform: [{ translateX: 20 }], opacity: 0 })
+                .springify().stiffness(180).damping(14).delay(index * 40)
+        }
         style={s.userRow}
       >
         <View style={[s.userBubbleWrap, { maxWidth, minWidth, alignSelf: 'flex-end' }]}>
@@ -631,9 +523,10 @@ const s = StyleSheet.create({
     borderRadius: 18,
     borderTopLeftRadius: 4,
     borderBottomLeftRadius: 4,
-    borderWidth: 0.5,
-    borderColor: 'rgba(167,139,250,0.35)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(167,139,250,0.32)',
     overflow: 'hidden',
+    backgroundColor: 'rgba(16,8,28,0.94)',
     ...Platform.select({
       ios: {
         shadowColor: '#7C3AED',
@@ -641,8 +534,19 @@ const s = StyleSheet.create({
         shadowOpacity: 0.18,
         shadowRadius: 10,
       },
-      android: { elevation: 3 },
+      android: { elevation: 0 },
     }),
+  },
+  aiBubbleAndroidFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(18,10,32,0.96)',
+  },
+  ctaFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(167,139,250,0.22)',
+    paddingHorizontal: 10,
+    paddingBottom: 6,
+    backgroundColor: 'rgba(88,28,135,0.18)',
   },
   aiBubbleTopHighlight: {
     position: 'absolute',
@@ -690,7 +594,7 @@ const s = StyleSheet.create({
         shadowOpacity: 0.4,
         shadowRadius: 14,
       },
-      android: { elevation: 6 },
+      android: { elevation: 0 },
     }),
   },
   userBubbleInnerBorder: {
@@ -896,24 +800,15 @@ const s = StyleSheet.create({
     flexGrow: 0,
   },
   table: {
-    borderRadius: 14,
+    borderRadius: 12,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.4)',
-    backgroundColor: 'rgba(8,4,18,0.72)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-      },
-      android: { elevation: 4 },
-    }),
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(167,139,250,0.35)',
+    backgroundColor: 'rgba(10,6,20,0.9)',
   },
   tableHead: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(124,58,237,0.28)',
+    backgroundColor: 'rgba(124,58,237,0.38)',
   },
   tableRow: {
     flexDirection: 'row',

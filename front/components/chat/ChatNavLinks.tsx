@@ -5,18 +5,30 @@ import { ChevronLeft, ChevronRight, Trophy, User, CalendarDays, CircleDot } from
 import { useTranslation } from '../../src/i18n';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import type { ChatNavLink } from '../../utils/chatNavLinks';
+import { isArabicText } from './chatTextUtils';
 import { chatColors } from './chatTheme';
 
 type Props = {
   links: ChatNavLink[];
 };
 
+const AR = {
+  playerTitle: 'اللاعب',
+  clubTitle: 'الفريق',
+  matchTitle: 'المباراة',
+  matchesTitle: 'المباريات',
+  playerSub: 'بروفايل اللاعب في 90Plus',
+  clubSub: 'بروفايل الفريق في 90Plus',
+  matchSub: 'تفاصيل المباراة في 90Plus',
+  matchesSub: 'صفحة المباريات في 90Plus',
+};
+
 function iconFor(type: ChatNavLink['type']) {
   const color = '#F5F3FF';
-  if (type === 'player') return <User size={18} color={color} strokeWidth={2.2} />;
-  if (type === 'club') return <Trophy size={18} color={color} strokeWidth={2.2} />;
-  if (type === 'match') return <CircleDot size={18} color={color} strokeWidth={2.2} />;
-  return <CalendarDays size={18} color={color} strokeWidth={2.2} />;
+  if (type === 'player') return <User size={17} color={color} strokeWidth={2.2} />;
+  if (type === 'club') return <Trophy size={17} color={color} strokeWidth={2.2} />;
+  if (type === 'match') return <CircleDot size={17} color={color} strokeWidth={2.2} />;
+  return <CalendarDays size={17} color={color} strokeWidth={2.2} />;
 }
 
 function isNamed(label: string, type: ChatNavLink['type']): boolean {
@@ -40,34 +52,52 @@ function isNamed(label: string, type: ChatNavLink['type']): boolean {
   return !generic.has(v);
 }
 
+function copyFor(link: ChatNavLink, language: string, t: { chat: Record<string, string> }) {
+  const named = isNamed(link.label, link.type) ? link.label.trim() : '';
+  const preferAr = language === 'ar' || isArabicText(named || link.label);
+  if (preferAr) {
+    const title =
+      named ||
+      (link.type === 'player'
+        ? AR.playerTitle
+        : link.type === 'club'
+          ? AR.clubTitle
+          : link.type === 'match'
+            ? AR.matchTitle
+            : AR.matchesTitle);
+    const subtitle =
+      link.type === 'player'
+        ? AR.playerSub
+        : link.type === 'club'
+          ? AR.clubSub
+          : link.type === 'match'
+            ? AR.matchSub
+            : AR.matchesSub;
+    return { title, subtitle, rtl: true };
+  }
+  const title =
+    named ||
+    (link.type === 'player'
+      ? t.chat.navOpenPlayer
+      : link.type === 'club'
+        ? t.chat.navOpenClub
+        : link.type === 'match'
+          ? t.chat.navOpenMatch
+          : t.chat.navOpenMatches);
+  const subtitle =
+    link.type === 'player'
+      ? t.chat.navCtaPlayer
+      : link.type === 'club'
+        ? t.chat.navCtaClub
+        : link.type === 'match'
+          ? t.chat.navCtaMatch
+          : t.chat.navCtaMatches;
+  return { title, subtitle, rtl: false };
+}
+
 export function ChatNavLinks({ links }: Props) {
   const router = useRouter();
   const { t, language } = useTranslation();
-  const isAr = language === 'ar';
-  const Chevron = isAr ? ChevronLeft : ChevronRight;
-
-  const actionTitle = useCallback(
-    (link: ChatNavLink) => {
-      const named = isNamed(link.label, link.type) ? link.label.trim() : '';
-      if (link.type === 'player') {
-        return named
-          ? (t.chat.navGoPlayerNamed as string).replace('{name}', named)
-          : t.chat.navGoPlayer;
-      }
-      if (link.type === 'club') {
-        return named
-          ? (t.chat.navGoClubNamed as string).replace('{name}', named)
-          : t.chat.navGoClub;
-      }
-      if (link.type === 'match') {
-        return named
-          ? (t.chat.navGoMatchNamed as string).replace('{name}', named)
-          : t.chat.navGoMatch;
-      }
-      return t.chat.navGoMatches;
-    },
-    [t],
-  );
 
   const onPress = useCallback(
     (link: ChatNavLink) => {
@@ -114,121 +144,126 @@ export function ChatNavLinks({ links }: Props) {
   const primary = links.filter((l) => !extraMatches.includes(l));
 
   return (
-    <View style={[styles.wrap, isAr && styles.wrapRtl]}>
+    <View style={styles.wrap}>
       {primary.map((link) => {
-        const title = actionTitle(link);
+        const copy = copyFor(link, language, t as { chat: Record<string, string> });
+        const Chevron = copy.rtl ? ChevronLeft : ChevronRight;
         return (
           <Pressable
             key={`${link.type}:${link.id ?? link.query ?? link.label}`}
             onPress={() => onPress(link)}
-            style={({ pressed }) => [styles.card, isAr && styles.cardRtl, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.row,
+              copy.rtl && styles.rowRtl,
+              pressed && styles.pressed,
+            ]}
             accessibilityRole="button"
-            accessibilityLabel={title}
+            accessibilityLabel={`${copy.title}. ${copy.subtitle}`}
           >
             <View style={styles.iconWrap}>{iconFor(link.type)}</View>
             <View style={styles.textCol}>
-              <Text style={[styles.hint, isAr && styles.rtlText]}>{t.chat.navMoreInfoHint}</Text>
-              <Text style={[styles.action, isAr && styles.rtlText]} numberOfLines={2}>
-                {title}
+              <Text style={[styles.title, copy.rtl && styles.rtlText]} numberOfLines={1}>
+                {copy.title}
+              </Text>
+              <Text style={[styles.subtitle, copy.rtl && styles.rtlText]} numberOfLines={1}>
+                {copy.subtitle}
               </Text>
             </View>
             <View style={styles.arrowWrap}>
-              <Chevron size={18} color="#F5F3FF" strokeWidth={2.6} />
+              <Chevron size={16} color="#F5F3FF" strokeWidth={2.6} />
             </View>
           </Pressable>
         );
       })}
-      {extraMatches.map((link) => (
-        <Pressable
-          key={`${link.type}:${link.id ?? link.label}`}
-          onPress={() => onPress(link)}
-          style={({ pressed }) => [styles.compact, isAr && styles.cardRtl, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel={link.label}
-        >
-          {iconFor('match')}
-          <Text style={[styles.compactLabel, isAr && styles.rtlText]} numberOfLines={1}>
-            {link.label}
-          </Text>
-          <Chevron size={16} color={chatColors.accentSoft} strokeWidth={2.4} />
-        </Pressable>
-      ))}
+      {extraMatches.map((link) => {
+        const rtl = language === 'ar' || isArabicText(link.label);
+        const Chevron = rtl ? ChevronLeft : ChevronRight;
+        return (
+          <Pressable
+            key={`${link.type}:${link.id ?? link.label}`}
+            onPress={() => onPress(link)}
+            style={({ pressed }) => [styles.compact, rtl && styles.rowRtl, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={link.label}
+          >
+            {iconFor('match')}
+            <Text style={[styles.compactLabel, rtl && styles.rtlText]} numberOfLines={1}>
+              {link.label}
+            </Text>
+            <Chevron size={16} color={chatColors.accentSoft} strokeWidth={2.4} />
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    marginTop: 12,
-    gap: 8,
+    marginTop: 2,
+    gap: 6,
     alignSelf: 'stretch',
   },
-  wrapRtl: {
-    alignItems: 'stretch',
-  },
-  card: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    minHeight: 62,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: 'rgba(124,58,237,0.22)',
-    borderWidth: 1,
-    borderColor: 'rgba(196,181,253,0.42)',
+    minHeight: 52,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
-  cardRtl: {
+  rowRtl: {
     flexDirection: 'row-reverse',
   },
   pressed: {
-    opacity: 0.86,
-    transform: [{ scale: 0.985 }],
+    opacity: 0.88,
   },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(124,58,237,0.55)',
+    backgroundColor: 'rgba(124,58,237,0.45)',
+    flexShrink: 0,
   },
   textCol: {
     flex: 1,
-    gap: 2,
+    minWidth: 0,
+    gap: 1,
   },
-  hint: {
-    color: 'rgba(237,233,254,0.72)',
-    fontSize: 11,
+  title: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  subtitle: {
+    color: 'rgba(216,180,254,0.88)',
+    fontSize: 12,
     fontWeight: '600',
   },
-  action: {
-    color: '#F5F3FF',
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
   arrowWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    flexShrink: 0,
   },
   compact: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     minHeight: 40,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     borderRadius: 12,
     backgroundColor: 'rgba(124,58,237,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.28)',
   },
   compactLabel: {
     flex: 1,
+    minWidth: 0,
     color: '#EDE9FE',
     fontSize: 13,
     fontWeight: '600',

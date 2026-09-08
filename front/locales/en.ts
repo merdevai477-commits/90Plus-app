@@ -3266,6 +3266,10 @@ export const en = {
     navGoMatch: 'Open match details in 90Plus',
     navGoMatchNamed: 'Open {name} in 90Plus',
     navGoMatches: 'Open the matches page in 90Plus',
+    navCtaPlayer: 'Player profile in 90Plus',
+    navCtaClub: 'Club profile in 90Plus',
+    navCtaMatch: 'Match details in 90Plus',
+    navCtaMatches: 'Matches page in 90Plus',
 
     exportUserLabel: 'You',
     exportAiLabel: '90Plus AI',

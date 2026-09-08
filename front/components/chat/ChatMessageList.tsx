@@ -151,12 +151,19 @@ export function ChatMessageList({
         drawDistance={CHAT_DRAW_DISTANCE}
         removeClippedSubviews={Platform.OS === 'android' ? false : undefined}
         onContentSizeChange={() => {
-          // Only stick to the bottom when the user is already there (or the
-          // keyboard just opened). Don't force-scroll just because a reply is
-          // streaming — that fights the user when they scroll up or pan a
-          // horizontal table mid-stream.
           if (!isNearBottomRef.current && !keyboardVisible) return;
           if (!mountedRef.current || displayMessages.length === 0) return;
+          if (Platform.OS === 'android') {
+            if (contentSizeRafRef.current != null) return;
+            contentSizeRafRef.current = requestAnimationFrame(() => {
+              contentSizeRafRef.current = null;
+              if (!mountedRef.current) return;
+              safeFlashListScrollToEnd(listRef.current, false, {
+                itemCount: displayMessages.length,
+              });
+            });
+            return;
+          }
           if (contentSizeRafRef.current != null) {
             cancelAnimationFrame(contentSizeRafRef.current);
           }

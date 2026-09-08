@@ -73,8 +73,10 @@ export function useChatKeyboard<TItem>({
       });
       scrollRafRef.current.push(outer);
       if (Platform.OS === 'android') {
-        scrollTimersRef.current.push(setTimeout(run, 120));
-        scrollTimersRef.current.push(setTimeout(run, 280));
+        if (!isKeyboardControllerActive) {
+          scrollTimersRef.current.push(setTimeout(run, 160));
+        }
+        return;
       }
     },
     [hasMessages, listRef],
@@ -92,14 +94,16 @@ export function useChatKeyboard<TItem>({
     (e?: KeyboardEvent) => {
       keyboardVisibleRef.current = true;
       setKeyboardVisible(true);
-      // Always tick — native pan/resize can happen with an unchanged height,
-      // and Yoga will not relayout until some React state changes.
-      setLayoutEpoch((n) => n + 1);
+      if (Platform.OS !== 'android' || !isKeyboardControllerActive) {
+        setLayoutEpoch((n) => n + 1);
+      }
       const fromEvent = heightFromEvent(e);
       if (fromEvent > 0) {
         setHeightIfValid(fromEvent);
       }
-      scrollToEndRef.current(false);
+      if (Platform.OS !== 'android' || !isKeyboardControllerActive) {
+        scrollToEndRef.current(false);
+      }
     },
     [setHeightIfValid],
   );
@@ -110,7 +114,9 @@ export function useChatKeyboard<TItem>({
     keyboardVisibleRef.current = false;
     setKeyboardVisible(false);
     setKeyboardHeight(0);
-    setLayoutEpoch((n) => n + 1);
+    if (Platform.OS !== 'android' || !isKeyboardControllerActive) {
+      setLayoutEpoch((n) => n + 1);
+    }
   }, [clearSyncTimers]);
 
   const applyKeyboardOpenRef = useRef(applyKeyboardOpen);
@@ -173,11 +179,15 @@ export function useChatKeyboard<TItem>({
     // set keyboardHeight on Android — lift is iOS-only.
     keyboardVisibleRef.current = true;
     setKeyboardVisible(true);
-    setLayoutEpoch((n) => n + 1);
+    if (Platform.OS !== 'android' || !isKeyboardControllerActive) {
+      setLayoutEpoch((n) => n + 1);
+    }
     if (Platform.OS === 'ios') {
       scheduleHeightSync();
     }
-    scrollToEndRef.current(true);
+    if (Platform.OS !== 'android' || !isKeyboardControllerActive) {
+      scrollToEndRef.current(true);
+    }
   }, [scheduleHeightSync]);
 
   const syncKeyboardHeight = useCallback(() => {
