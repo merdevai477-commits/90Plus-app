@@ -73,4 +73,19 @@ describe('chat-nav-links', () => {
       expect.objectContaining({ type: 'match', id: 88, label: 'Ahly vs Zamalek' }),
     ]);
   });
+
+  it('always emits a player CTA even without an athleteId', () => {
+    const links = extractChatNavLinks([], ['search_player'], 'ar', 'صلاح بيلعب فين');
+    expect(links.some((l) => l.type === 'player')).toBe(true);
+  });
+
+  it('always emits a matches-page CTA from the user question', () => {
+    const links = extractChatNavLinks([], [], 'ar', 'مباريات النهاردة');
+    expect(links.some((l) => l.type === 'matches')).toBe(true);
+  });
+
+  it('does not attach football CTAs to diet questions', () => {
+    const links = extractChatNavLinks([], [], 'ar', 'اقترح نظام أكل مناسب');
+    expect(links).toEqual([]);
+  });
 });

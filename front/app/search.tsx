@@ -16,7 +16,7 @@ import {
     Keyboard,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Search, X, Clock, ChevronRight } from 'lucide-react-native';
@@ -106,15 +106,22 @@ function PlayerRow({ item, onPress }: { item: SearchAthlete365; onPress: () => v
 
 export default function FootballSearchScreen() {
     const router = useRouter();
+    const params = useLocalSearchParams<{ q?: string | string[] }>();
     const insets = useSafeAreaInsets();
     const { t, language } = useTranslation();
     const { trigger } = useHaptic();
     const inputRef = useRef<TextInput>(null);
+    const initialQuery = typeof params.q === 'string' ? params.q : Array.isArray(params.q) ? params.q[0] : '';
 
-    const [query, setQuery] = useState('');
+    const [query, setQuery] = useState(initialQuery ?? '');
     const [recent, setRecent] = useState<string[]>([]);
     const debounced = useDebouncedValue(query.trim(), DEBOUNCE_MS);
     const canSearch = debounced.length >= 2;
+
+    useEffect(() => {
+        const next = (initialQuery ?? '').trim();
+        if (next) setQuery(next);
+    }, [initialQuery]);
 
     useEffect(() => {
         RecentSearchStorage.getRecent().then(setRecent);

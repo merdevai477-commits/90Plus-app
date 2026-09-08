@@ -448,7 +448,12 @@ export async function runFootballAgent(
   const allToolPayloads: string[] = [];
 
   const finish = (text: string): RunFootballAgentResult => {
-    const navLinks = extractChatNavLinks(allToolPayloads, toolsUsed, params.language);
+    const navLinks = extractChatNavLinks(
+      allToolPayloads,
+      toolsUsed,
+      params.language,
+      params.userMessage,
+    );
     return { fullText: text, usedModel: model, toolsUsed, navLinks };
   };
 

@@ -517,8 +517,9 @@ function withChatNav(
     toolsUsed: string[],
     payloads: string[] | undefined,
     language: 'ar' | 'en',
+    userMessage?: string,
 ) {
-    const navLinks = extractChatNavLinks(payloads ?? [], toolsUsed, language);
+    const navLinks = extractChatNavLinks(payloads ?? [], toolsUsed, language, userMessage);
     return { stored: encodeChatNavMarker(text, navLinks), navLinks };
 }
 
@@ -765,12 +766,19 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 language: cacheLang,
             });
             if (playerCached?.answer) {
+                const { stored, navLinks } = withChatNav(
+                    playerCached.answer,
+                    ['search_player'],
+                    [],
+                    messageLanguage,
+                    trimmedMessage,
+                );
                 sendToken(playerCached.answer);
                 await appendMessage(
                     userId,
                     targetConversation.id,
                     'assistant',
-                    playerCached.answer,
+                    stored,
                     playerCached.usedModel ?? undefined,
                 );
                 const conversationTitle = await maybeAutoTitleConversation(
@@ -791,6 +799,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     playerInfoSource: playerCached.source,
                     ...(conversationTitle ? { conversationTitle } : {}),
                     ...(suggestions.length ? { suggestions } : {}),
+                    ...(navLinks.length ? { navLinks } : {}),
                 });
                 return;
             }
@@ -876,6 +885,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                         deterministic.toolsUsed,
                         deterministic.payloads,
                         messageLanguage,
+                        trimmedMessage,
                     );
                     sendToken(deterministic.text);
                     await appendMessage(
@@ -943,12 +953,19 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 CHAT_ANSWER_CACHE_TTL_MS,
             );
             if (cached?.answer && !clientClosed) {
+                const { stored, navLinks } = withChatNav(
+                    cached.answer,
+                    [],
+                    [],
+                    messageLanguage,
+                    trimmedMessage,
+                );
                 sendToken(cached.answer);
                 await appendMessage(
                     userId,
                     targetConversation.id,
                     'assistant',
-                    cached.answer,
+                    stored,
                     cached.usedModel ?? undefined,
                 );
                 const conversationTitle = await maybeAutoTitleConversation(
@@ -962,6 +979,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     resetAt: await getResetTimeForUser(userId),
                     cached: true,
                     ...(conversationTitle ? { conversationTitle } : {}),
+                    ...(navLinks.length ? { navLinks } : {}),
                 });
                 return;
             }
@@ -1091,6 +1109,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                         deterministic.toolsUsed,
                         deterministic.payloads,
                         messageLanguage,
+                        trimmedMessage,
                     );
                     sendToken(deterministic.text);
                     await appendMessage(
@@ -1130,11 +1149,28 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
         // ─── Persist assistant reply ────────────────────────────────────────
         try {
+            const extraPayloads: string[] = [];
+            if (footballCtx?.playerMeta?.athleteId) {
+                extraPayloads.push(
+                    JSON.stringify({
+                        source: '365scores_profile',
+                        athleteId: footballCtx.playerMeta.athleteId,
+                        name: footballCtx.playerMeta.displayName,
+                    }),
+                );
+            }
+            const { stored, navLinks } = withChatNav(
+                fullText,
+                extraPayloads.length ? ['search_player'] : [],
+                extraPayloads,
+                messageLanguage,
+                trimmedMessage,
+            );
             await appendMessage(
                 userId,
                 targetConversation.id,
                 'assistant',
-                fullText,
+                stored,
                 usedProvider.model,
             );
 
@@ -1191,6 +1227,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 ...(conversationTitle ? { conversationTitle } : {}),
                 ...(suggestions.length ? { suggestions } : {}),
                 ...(footballCtx?.sources?.length ? { dataSources: footballCtx.sources } : {}),
+                ...(navLinks.length ? { navLinks } : {}),
             });
         } catch (err: any) {
             logger.error('[chat] post-stream housekeeping failed:', err?.message ?? err);

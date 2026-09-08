@@ -22,6 +22,7 @@ import { setChatSessionActive } from '../utils/chatSessionState';
 import { useLanguageStore } from '../src/i18n/store';
 import {
   decodeChatNavMarker,
+  inferChatNavLinksFromQuestion,
   sanitizeChatNavLinks,
   stripChatNavMarker,
   type ChatNavLink,
@@ -548,9 +549,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       const data = await res.json() as {
         messages: Array<{ id: string; role: 'user' | 'ai'; text: string; createdAt: string }>;
       };
-      const loaded: Message[] = [
-        ...getInitialMessages(),
-        ...(data.messages ?? []).map(m => {
+      const lang = useLanguageStore.getState().language === 'ar' ? 'ar' : 'en';
+      const rows = (data.messages ?? []).map(m => {
           const parsed = m.role === 'ai' ? decodeChatNavMarker(m.text) : { text: m.text, navLinks: [] as ChatNavLink[] };
           return {
             id: m.id,
@@ -559,7 +559,18 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
             time: formatTime(m.createdAt),
             navLinks: parsed.navLinks.length ? parsed.navLinks : undefined,
           };
-        }),
+        });
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (row.role !== 'ai' || row.navLinks?.length) continue;
+        const prev = rows[i - 1];
+        if (prev?.role !== 'user') continue;
+        const inferred = inferChatNavLinksFromQuestion(prev.text, lang);
+        if (inferred.length) row.navLinks = inferred;
+      }
+      const loaded: Message[] = [
+        ...getInitialMessages(),
+        ...rows,
       ];
 
       if (!replaceLocal && isProtectedSession()) {
@@ -926,7 +937,11 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
             // long the typing renderer takes to drain.
             if (usedModel && activeAssistantMessageIdRef.current) {
               const targetId = activeAssistantMessageIdRef.current;
-              const navLinks = sanitizeChatNavLinks(doneEvent.navLinks);
+              let navLinks = sanitizeChatNavLinks(doneEvent.navLinks);
+              if (!navLinks.length) {
+                const lang = useLanguageStore.getState().language === 'ar' ? 'ar' : 'en';
+                navLinks = inferChatNavLinksFromQuestion(trimmed, lang);
+              }
               setMessages(prev =>
                 prev.map(m =>
                   m.id === targetId
@@ -934,9 +949,13 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
                     : m,
                 ),
               );
-            } else if (doneEvent.navLinks && activeAssistantMessageIdRef.current) {
+            } else if (activeAssistantMessageIdRef.current) {
               const targetId = activeAssistantMessageIdRef.current;
-              const navLinks = sanitizeChatNavLinks(doneEvent.navLinks);
+              let navLinks = sanitizeChatNavLinks(doneEvent.navLinks);
+              if (!navLinks.length) {
+                const lang = useLanguageStore.getState().language === 'ar' ? 'ar' : 'en';
+                navLinks = inferChatNavLinksFromQuestion(trimmed, lang);
+              }
               if (navLinks.length) {
                 setMessages(prev =>
                   prev.map(m => (m.id === targetId ? { ...m, navLinks } : m)),
