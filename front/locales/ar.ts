@@ -468,6 +468,9 @@ export const ar = {
     filterFinished: 'منتهية',
     allCompetitions: 'كل البطولات',
 
+    // كروت المباريات — الأحد أولاً زي Date#getDay
+    weekdayShort: ['حد', 'اتنين', 'تلات', 'اربع', 'خميس', 'جمعه', 'سبت'],
+
     // Squad groups
     goalkeepers: 'حراس المرمى',
     defenders: 'المدافعون',

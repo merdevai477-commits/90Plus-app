@@ -138,6 +138,7 @@ export default function MatchesTab({ matches, language, t, onOpenMatch }: Matche
                             key={fx.fixture?.id}
                             fixture={fx}
                             language={language}
+                            weekdayShort={t.teamProfile.weekdayShort}
                             showVenue
                             onPress={() => fx.fixture?.id && onOpenMatch(fx.fixture.id)}
                         />

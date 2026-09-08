@@ -297,6 +297,7 @@ export interface Player365Career {
     dateOfBirth?: string | null;
     height?: string | null;
     imageUrl: string | null;
+    clubLogo?: string | null;
     transfers?: Player365Transfer[];
   };
   seasons: Player365CareerSeason[];

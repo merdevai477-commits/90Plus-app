@@ -128,3 +128,19 @@ export function computeStatsFromFixtures(
         form: form.slice(0, 6),
     };
 }
+
+/**
+ * Club-profile match date: weekday + short calendar date.
+ * `weekdayShort` is Sunday-first to match `Date#getDay()` (حد، اتنين، … / Sun, Mon, …).
+ */
+export function formatMatchCardDate(
+    date: Date | null,
+    weekdayShort?: readonly string[] | null,
+): string {
+    if (!date || Number.isNaN(date.getTime())) return '';
+    const short = date.toLocaleDateString([], { day: '2-digit', month: 'short' });
+    if (!weekdayShort || weekdayShort.length < 7) return short;
+    const weekday = weekdayShort[date.getDay()];
+    if (!weekday) return short;
+    return `${weekday} · ${short}`;
+}

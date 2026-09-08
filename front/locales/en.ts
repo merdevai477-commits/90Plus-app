@@ -363,6 +363,9 @@ export const en = {
     filterFinished: 'Finished',
     allCompetitions: 'All Competitions',
 
+    // Match cards — Sunday-first (Date#getDay)
+    weekdayShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+
     // Squad groups
     goalkeepers: 'Goalkeepers',
     defenders: 'Defenders',

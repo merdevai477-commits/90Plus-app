@@ -36,6 +36,7 @@ import {
   type PlayerStatRow,
 } from '../utils/playerStatsAggregate';
 import { preferScores365AthletesPhotoUrl, toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
+import { getCountryFlagUri } from '../utils/countryFlagUri';
 
 // Cache key prefix for player data
 const PLAYER_CACHE_PREFIX = 'player_cache_';
@@ -1012,6 +1013,9 @@ export default function PlayerProfileScreen() {
     if (!displayPlayer) return null;
 
     const heroPlayer = displayPlayer.player;
+    const nationalityFlagUri = heroPlayer.nationality
+        ? getCountryFlagUri(heroPlayer.nationality, null, 80)
+        : null;
 
     return (
         <View style={styles.container}>
@@ -1068,7 +1072,18 @@ export default function PlayerProfileScreen() {
                                 )}
                                 <View style={styles.playerSubInfo}>
                                     {heroPlayer.nationality && (
-                                        <Text style={styles.playerMeta}>{heroPlayer.nationality}</Text>
+                                        <View style={styles.nationalityChip}>
+                                            {nationalityFlagUri ? (
+                                                <ExpoImage
+                                                    source={{ uri: nationalityFlagUri }}
+                                                    style={styles.nationalityFlag}
+                                                    contentFit="cover"
+                                                    cachePolicy="memory-disk"
+                                                    transition={0}
+                                                />
+                                            ) : null}
+                                            <Text style={styles.playerMeta}>{heroPlayer.nationality}</Text>
+                                        </View>
                                     )}
                                     {heroPlayer.age != null && heroPlayer.age > 0 && (
                                         <>
@@ -1495,6 +1510,17 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         gap: 4,
         marginBottom: 8,
+    },
+    nationalityChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    nationalityFlag: {
+        width: 18,
+        height: 12,
+        borderRadius: 2,
+        backgroundColor: 'rgba(255,255,255,0.12)',
     },
     playerMeta: {
         fontSize: 13,

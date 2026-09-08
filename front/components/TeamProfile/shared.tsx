@@ -22,7 +22,7 @@ import { with365ImageSize } from '../../utils/scores365AthletePhoto';
 import LeagueIcon from '../common/LeagueIcon';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { useLiveFixtureStore } from '../../src/store/liveFixtureStore';
-import { getMatchPhase, MatchPhase } from './utils';
+import { getMatchPhase, MatchPhase, formatMatchCardDate } from './utils';
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
@@ -233,12 +233,14 @@ export function useMergedFixture(fixture: Fixture): MergedFixture {
 export function MatchRow({
     fixture,
     language,
+    weekdayShort,
     onPress,
     showCompetition = true,
     showVenue = false,
 }: {
     fixture: Fixture;
     language: Language;
+    weekdayShort?: readonly string[];
     onPress: () => void;
     showCompetition?: boolean;
     showVenue?: boolean;
@@ -268,7 +270,7 @@ export function MatchRow({
                     <Text style={styles.matchLeagueName} numberOfLines={1}>
                         {getLeagueDisplayName(league.name, language, league.id, league.country)}
                     </Text>
-                    <Text style={styles.matchDate}>{formatShortDate(kickoff)}</Text>
+                    <Text style={styles.matchDate}>{formatMatchCardDate(kickoff, weekdayShort)}</Text>
                 </View>
             ) : null}
 
@@ -487,6 +489,8 @@ const styles = StyleSheet.create({
     matchDate: {
         color: Colors.textMuted,
         fontSize: FontSize.sm,
+        flexShrink: 0,
+        textAlign: 'right',
     },
     matchBody: {
         flexDirection: 'row',

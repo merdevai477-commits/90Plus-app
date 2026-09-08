@@ -33,9 +33,8 @@ import {
     StatusPill,
     useMergedFixture,
     formatTime,
-    formatShortDate,
 } from './shared';
-import { computeStatsFromFixtures, getMatchPhase } from './utils';
+import { computeStatsFromFixtures, getMatchPhase, formatMatchCardDate } from './utils';
 
 interface OverviewTabProps {
     competitorId: number;
@@ -110,7 +109,7 @@ function FeaturedMatchCard({
                         {isUpcoming ? (
                             <>
                                 <Text style={styles.featuredTime}>{formatTime(kickoff)}</Text>
-                                <Text style={styles.featuredDate}>{formatShortDate(kickoff)}</Text>
+                                <Text style={styles.featuredDate}>{formatMatchCardDate(kickoff, t.teamProfile.weekdayShort)}</Text>
                             </>
                         ) : (
                             <Text style={[styles.featuredScore, merged.phase === 'live' && styles.featuredScoreLive]}>
@@ -390,6 +389,7 @@ export default function OverviewTab({
                             key={fx.fixture?.id}
                             fixture={fx}
                             language={language}
+                            weekdayShort={t.teamProfile.weekdayShort}
                             onPress={() => fx.fixture?.id && onOpenMatch(fx.fixture.id)}
                         />
                     ))

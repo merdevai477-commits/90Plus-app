@@ -33,6 +33,7 @@ import {
 import { useTranslation } from '../src/i18n';
 import { getTeamDisplayName } from '../utils/i18nHelpers';
 import TeamBadge from '../components/common/TeamBadge';
+import { getCountryFlagUri } from '../utils/countryFlagUri';
 import { logger } from '../utils/logger';
 
 if (
@@ -225,6 +226,15 @@ export default function PlayerCareerScreen() {
     }
 
     const profile = career.profile;
+    const clubName = profile.clubName || (typeof params.teamName === 'string' ? params.teamName : '') || '—';
+    const routeTeamLogo = typeof params.teamLogo === 'string' ? params.teamLogo : undefined;
+    const clubLogo =
+        profile.clubLogo ||
+        routeTeamLogo ||
+        profile.transfers?.find((tr) => tr.active && tr.competitorLogo)?.competitorLogo ||
+        profile.transfers?.find((tr) => tr.competitorLogo)?.competitorLogo ||
+        null;
+    const countryFlagUri = profile.nationality ? getCountryFlagUri(profile.nationality, null, 80) : null;
 
     return (
         <View style={styles.container}>
@@ -308,13 +318,16 @@ export default function PlayerCareerScreen() {
                         <IdentityCard
                             icon="football-outline"
                             label={pc.club}
-                            value={profile.clubName || params.teamName || '—'}
+                            value={clubName === '—' ? clubName : getTeamDisplayName(clubName, language)}
+                            logoUri={clubLogo}
+                            logoName={clubName !== '—' ? clubName : undefined}
                         />
                         <View style={styles.identityDivider} />
                         <IdentityCard
                             icon="flag-outline"
                             label={pc.country}
                             value={profile.nationality || '—'}
+                            flagUri={countryFlagUri}
                         />
                         <View style={styles.identityDivider} />
                         <IdentityCard
@@ -624,10 +637,36 @@ function sumStat(season: Player365CareerSeason, key: 'yellowCards' | 'redCards')
     return season.competitions.reduce((acc, c) => acc + (c[key] ?? 0), 0);
 }
 
-function IdentityCard({ icon, label, value }: { icon: any; label: string; value: string }) {
+function IdentityCard({
+    icon,
+    label,
+    value,
+    logoUri,
+    logoName,
+    flagUri,
+}: {
+    icon: any;
+    label: string;
+    value: string;
+    logoUri?: string | null;
+    logoName?: string;
+    flagUri?: string | null;
+}) {
     return (
         <View style={styles.identityCard}>
-            <Ionicons name={icon} size={18} color={ProfileTheme.colors.neonBlue} />
+            {logoName ? (
+                <TeamBadge name={logoName} logo={logoUri || undefined} size={28} color="transparent" />
+            ) : flagUri ? (
+                <ExpoImage
+                    source={{ uri: flagUri }}
+                    style={styles.identityFlag}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={0}
+                />
+            ) : (
+                <Ionicons name={icon} size={18} color={ProfileTheme.colors.neonBlue} />
+            )}
             <Text style={styles.identityValue} numberOfLines={1}>{value}</Text>
             <Text style={styles.identityLabel}>{label}</Text>
         </View>
@@ -826,6 +865,12 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     identityCard: { flex: 1, alignItems: 'center', gap: 4, paddingHorizontal: 4 },
+    identityFlag: {
+        width: 28,
+        height: 18,
+        borderRadius: 3,
+        backgroundColor: ProfileTheme.colors.glassMedium,
+    },
     identityDivider: { width: 1, backgroundColor: ProfileTheme.colors.borderSoft },
     identityValue: { color: '#fff', fontSize: 13, fontWeight: '700', textAlign: 'center' },
     identityLabel: { color: ProfileTheme.colors.textTertiary, fontSize: 11 },

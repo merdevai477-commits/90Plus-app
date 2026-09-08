@@ -5006,7 +5006,9 @@ class FootballDataCacheService {
             if (dbRow?.data) {
                 const age = Date.now() - dbRow.updatedAt.getTime();
                 const data = dbRow.data as unknown as ThreeSixFivePlayerCareer;
-                const hasNewShape = Array.isArray(data.currentSeasonHighlights);
+                const hasNewShape =
+                    Array.isArray(data.currentSeasonHighlights) &&
+                    Object.prototype.hasOwnProperty.call(data.profile ?? {}, 'clubLogo');
                 if (data.seasons?.length && hasNewShape && age < CAREER_DB_MAX_AGE_MS) {
                     return { data, source: '365scores' };
                 }

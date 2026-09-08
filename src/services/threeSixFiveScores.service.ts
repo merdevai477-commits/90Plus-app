@@ -583,13 +583,14 @@ export interface ThreeSixFivePlayerCareer {
     name: string;
     shortName?: string;
     position?: string | null;
-    clubName?: string | null;
+      clubName?: string | null;
     nationality?: string | null;
     jerseyNumber?: number | null;
     age?: number | null;
     dateOfBirth?: string | null;
     height?: string | null;
     imageUrl: string | null;
+    clubLogo?: string | null;
     transfers?: ThreeSixFivePlayerTransfer[];
   };
   seasons: Career365Season[];
@@ -3523,7 +3524,7 @@ export class ThreeSixFiveScoresService {
        * anything that has to fill a per-language cache (Football Grid).
        */
       const langId = options?.langId ?? resolveScores365LangId(language);
-      const cacheKey = `365:player-career:v6:${athleteId}:${langId}`;
+      const cacheKey = `365:player-career:v7:${athleteId}:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFivePlayerCareer>(cacheKey);
       if (cached?.seasons?.length) return { data: cached, source: '365scores' };
 
@@ -3884,6 +3885,13 @@ export class ThreeSixFiveScoresService {
         (raw?.competitorName as string) ??
         (raw?.club?.name as string) ??
         null,
+      clubLogo:
+        clubId != null && clubId > 0
+          ? buildCompetitorLogoUrl(
+              clubId,
+              this.num365(raw?.clubImageVersion ?? raw?.competitorImageVersion),
+            )
+          : null,
       nationality:
         (raw?.nationalityName as string) ??
         (raw?.countryName as string) ??
