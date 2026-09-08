@@ -34,6 +34,8 @@ const LIVE_FIXTURE_TTL_SEC = LIVE_LIST_TTL_SEC;
 
 /** Snapshot tombstone TTL — short so a corrected-back-to-live fixture can reappear. */
 const TERMINAL_FIXTURE_TTL_SEC = 600;
+/** Details-confirmed FT must outlive a lagging allscores live row (often 10–40 min). */
+const AUTHORITATIVE_TERMINAL_TTL_SEC = 24 * 60 * 60;
 /** Latch TTL — suppress repeat LIVE→FT invalidation for a full day (P1-3). */
 const TERMINAL_LATCH_TTL_SEC = 24 * 60 * 60;
 /** Max one post-match correction re-invalidate per fixture per 6h. */
@@ -149,6 +151,35 @@ function terminalCorrectionKey(fixtureId: number): string {
   return `${FOOTBALL_FIXTURE_TERMINAL_CORRECTION_KEY_PREFIX}${fixtureId}`;
 }
 
+export type WriteTerminalOptions = {
+  /** Game-by-id / details confirmed FT — must not be revived by the allscores live set. */
+  authoritative?: boolean;
+};
+
+type TerminalFixturePayload = FixtureFromAPI & { _authoritativeTerminal?: boolean };
+
+function isAuthoritativeTerminalRaw(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw) as TerminalFixturePayload;
+    return parsed?._authoritativeTerminal === true;
+  } catch {
+    return false;
+  }
+}
+
+function withAuthoritativeTerminalFlag(fixture: FixtureFromAPI): TerminalFixturePayload {
+  return { ...fixture, _authoritativeTerminal: true };
+}
+
+function stripTerminalMeta(fixture: FixtureFromAPI | TerminalFixturePayload): FixtureFromAPI {
+  if (fixture && typeof fixture === 'object' && '_authoritativeTerminal' in fixture) {
+    const { _authoritativeTerminal: _ignored, ...rest } = fixture as TerminalFixturePayload;
+    return rest;
+  }
+  return fixture;
+}
+
 /** True if fixture has been latched as terminal (24h suppress window). */
 export async function isTerminalLatched(fixtureId: number): Promise<boolean> {
   const redis = getRedisClient();
@@ -208,11 +239,15 @@ async function suppressTerminalTombstones(
   const ids = [...new Set(fixtures.map((f) => f?.fixture?.id).filter((id): id is number => id != null))];
   if (!ids.length) return fixtures;
   const tombstones = await Promise.all(ids.map((id) => redis.get(terminalFixtureKey(id))));
-  const terminalIds = new Set(ids.filter((_id, index) => tombstones[index] != null));
   return fixtures.filter((fixture) => {
     const id = fixture.fixture.id;
+    const index = ids.indexOf(id);
+    const tomb = index >= 0 ? tombstones[index] : null;
+    if (tomb == null) return true;
+    // Details-confirmed FT wins over a lagging 365 allscores live row.
+    if (isAuthoritativeTerminalRaw(tomb)) return false;
     if (keepLiveIds?.has(id)) return true;
-    return !terminalIds.has(id);
+    return false;
   });
 }
 
@@ -288,11 +323,20 @@ export async function mergeLiveFixturesIntoRedisSnapshot(incoming: FixtureFromAP
       if (id != null) byId.set(id, fixture);
     }
 
+    const incomingIds = [
+      ...new Set(incoming.map((f) => f?.fixture?.id).filter((id): id is number => id != null)),
+    ];
+    const incomingTombs = await Promise.all(incomingIds.map((id) => redis.get(terminalFixtureKey(id))));
+    const authoritativeBlocked = new Set(
+      incomingIds.filter((_id, index) => isAuthoritativeTerminalRaw(incomingTombs[index])),
+    );
+
     for (const fixture of incoming) {
       const id = fixture?.fixture?.id;
       if (id == null) continue;
       const status = fixture.fixture?.status?.short ?? '';
       if (LIVE_STATUSES_SET.has(status)) {
+        if (authoritativeBlocked.has(id)) continue;
         byId.set(id, fixture);
       } else {
         byId.delete(id);
@@ -347,7 +391,7 @@ export async function replace365LiveFixturesSnapshot(liveFixtures: FixtureFromAP
   if (!redis) return;
 
   const staleTerminal: FixtureFromAPI[] = [];
-  const incomingLive = liveFixtures
+  let incomingLive = liveFixtures
     .filter((fixture) => fixture?.fixture?.id != null)
     .flatMap((fixture) => {
       const short = fixture.fixture?.status?.short ?? '';
@@ -377,6 +421,17 @@ export async function replace365LiveFixturesSnapshot(liveFixtures: FixtureFromAP
         },
       ];
     });
+  const candidateIds = [
+    ...new Set(incomingLive.map((fixture) => fixture?.fixture?.id).filter((id): id is number => id != null)),
+  ];
+  const candidateTombs = await Promise.all(candidateIds.map((id) => redis.get(terminalFixtureKey(id))));
+  const authoritativeBlocked = new Set(
+    candidateIds.filter((_id, index) => isAuthoritativeTerminalRaw(candidateTombs[index])),
+  );
+  incomingLive = incomingLive.filter((fixture) => {
+    const id = fixture?.fixture?.id;
+    return id == null || !authoritativeBlocked.has(id);
+  });
   const incomingIds = new Set(
     incomingLive.map((fixture) => fixture?.fixture?.id).filter((id): id is number => id != null),
   );
@@ -461,6 +516,7 @@ export async function read365LiveFixtureIds(): Promise<number[]> {
 export async function writeTerminalFixtureSnapshot(
   fixture: FixtureFromAPI,
   provider: 'api-football' | '365' = 'api-football',
+  options?: WriteTerminalOptions,
 ): Promise<void> {
   const redis = getRedisClient();
   if (!redis) return;
@@ -469,14 +525,39 @@ export async function writeTerminalFixtureSnapshot(
   if (id == null) return;
 
   try {
+    const existingRaw = await redis.get(terminalFixtureKey(id));
+    const alreadyAuthoritative = isAuthoritativeTerminalRaw(existingRaw);
+    const authoritative = alreadyAuthoritative || options?.authoritative === true;
+
+    // A dropped-from-live guess must not downgrade a details-confirmed FT tombstone.
+    if (alreadyAuthoritative && options?.authoritative !== true) {
+      const pipeline = redis.pipeline();
+      pipeline.del(providerLiveFixtureKey(provider, id));
+      pipeline.del(liveFixtureKey(id));
+      await pipeline.exec();
+      await clearEmptyUpstreamBackoff(id);
+      return;
+    }
+
+    const payload = authoritative
+      ? withAuthoritativeTerminalFlag(stripTerminalMeta(fixture))
+      : stripTerminalMeta(fixture);
+    const ttl = authoritative ? AUTHORITATIVE_TERMINAL_TTL_SEC : TERMINAL_FIXTURE_TTL_SEC;
+
     const pipeline = redis.pipeline();
-    pipeline.setex(terminalFixtureKey(id), TERMINAL_FIXTURE_TTL_SEC, JSON.stringify(fixture));
+    pipeline.setex(terminalFixtureKey(id), ttl, JSON.stringify(payload));
     pipeline.del(providerLiveFixtureKey(provider, id));
     // Remove the legacy per-fixture key during migration without touching the other provider.
     pipeline.del(liveFixtureKey(id));
     await pipeline.exec();
 
     await clearEmptyUpstreamBackoff(id);
+
+    // Details already holds the FT bundle — do not wipe it. Still set the 24h latch.
+    if (authoritative) {
+      await tryAcquireTerminalInvalidate(id);
+      return;
+    }
 
     // P1-3: invalidate detail caches at most once (or once per 6h for corrections).
     const invalidateMode = await tryAcquireTerminalInvalidate(id);
@@ -538,6 +619,9 @@ export async function readLiveFixtureById(fixtureId: number): Promise<FixtureFro
       redis.get(providerLiveFixtureKey('api-football', fixtureId)),
       redis.get(liveFixtureKey(fixtureId)),
     ]);
+    if (isAuthoritativeTerminalRaw(terminalRaw) && terminalRaw) {
+      return stripTerminalMeta(JSON.parse(terminalRaw) as TerminalFixturePayload);
+    }
     if (scores365Raw) {
       return JSON.parse(scores365Raw) as FixtureFromAPI;
     }

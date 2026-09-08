@@ -32,6 +32,10 @@ export function overlaySnapshotsOnCalendarDetailed(
     if (Number.isNaN(id)) return row;
     const snap = snapshots[id];
     if (!snap) return row;
+    // Details/calendar FT must not be revived by a leftover live snapshot.
+    if (row.status === 'finished' && snap.phase !== 'finished') {
+      return row;
+    }
     // Promote NS→live/finished from per-fixture polls even when calendar is still stale.
     if (
       row.status === 'live' ||

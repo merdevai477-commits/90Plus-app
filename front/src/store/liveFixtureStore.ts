@@ -239,13 +239,19 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
   },
 
   ingestSnapshot(snapshot: LiveFixtureSnapshot) {
-    set((state) => ({
-      snapshots: enforceSnapshotCap(
-        { ...state.snapshots, [snapshot.fixtureId]: snapshot },
-        state.interestCounts,
-      ),
-      evictionSchedule: cancelEviction(state.evictionSchedule, snapshot.fixtureId),
-    }));
+    set((state) => {
+      const current = state.snapshots[snapshot.fixtureId];
+      if (current?.phase === 'finished' && snapshot.phase !== 'finished') {
+        return state;
+      }
+      return {
+        snapshots: enforceSnapshotCap(
+          { ...state.snapshots, [snapshot.fixtureId]: snapshot },
+          state.interestCounts,
+        ),
+        evictionSchedule: cancelEviction(state.evictionSchedule, snapshot.fixtureId),
+      };
+    });
   },
 
   ingestPreviewIfEmpty(fixtureId: number, fixture: Fixture) {

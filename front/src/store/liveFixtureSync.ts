@@ -425,6 +425,15 @@ export function shouldSkipHttpIngest(
 ): boolean {
   if (!current) return false;
 
+  if (current.phase === 'finished' && incoming.phase !== 'finished') {
+    return true;
+  }
+  const curShort = current.fixture.fixture.status.short;
+  const incShort = incoming.fixture.fixture.status.short;
+  if (FINISHED_STATUS_SHORTS.has(curShort) && !FINISHED_STATUS_SHORTS.has(incShort)) {
+    return true;
+  }
+
   if (current.lastSource === 'bootstrap') return false;
 
   if (current.lastWsAppliedAt != null && current.lastWsAppliedAt >= fetchStartedAt) {
@@ -444,8 +453,6 @@ export function shouldSkipHttpIngest(
     (current.lastWsAppliedAt ?? 0) > (current.lastHttpFetchAt ?? 0);
   if (!wsFresh) return false;
 
-  const curShort = current.fixture.fixture.status.short;
-  const incShort = incoming.fixture.fixture.status.short;
   if (curShort === incShort) {
     const curElapsed = current.fixture.fixture.status.elapsed ?? 0;
     const incElapsed = incoming.fixture.fixture.status.elapsed ?? 0;
@@ -463,6 +470,7 @@ export function shouldSkipHttpIngest(
 export function isValidStatusTransition(from: string, to: string): boolean {
   if (from === to) return true;
   if (FINISHED_STATUS_SHORTS.has(to)) return true;
+  if (FINISHED_STATUS_SHORTS.has(from)) return false;
   if (to === 'HT' || to === 'BT') return true;
   if (from === 'HT' && to === '2H') return true;
   if (from === '1H' && to === '2H') return true;

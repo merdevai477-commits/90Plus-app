@@ -73,4 +73,55 @@ describe('mergeTodayCalendarWithLiveFeed', () => {
     expect(merged[0].status).toBe('finished');
     expect(merged[0].statusShort).toBe('FT');
   });
+
+  it('does not revive a calendar FT row from a lagging live feed', () => {
+    const calendar = [
+      makeMatch({
+        id: '1',
+        status: 'finished',
+        statusShort: 'FT',
+        score: { home: 0, away: 2 },
+      }),
+    ];
+    const liveFeed = [
+      makeMatch({
+        id: '1',
+        status: 'live',
+        statusShort: '2H',
+        elapsed: 90,
+        extra: 7,
+        score: { home: 0, away: 2 },
+      }),
+    ];
+    const merged = mergeTodayCalendarWithLiveFeed(calendar, liveFeed);
+    expect(merged[0].status).toBe('finished');
+    expect(merged[0].statusShort).toBe('FT');
+  });
+
+  it('keeps a 90+7 stoppage-time row live when the calendar is still live', () => {
+    const calendar = [
+      makeMatch({
+        id: '1',
+        status: 'live',
+        statusShort: '2H',
+        elapsed: 90,
+        extra: 7,
+        score: { home: 0, away: 2 },
+      }),
+    ];
+    const liveFeed = [
+      makeMatch({
+        id: '1',
+        status: 'live',
+        statusShort: '2H',
+        elapsed: 90,
+        extra: 7,
+        score: { home: 0, away: 2 },
+      }),
+    ];
+    const merged = mergeTodayCalendarWithLiveFeed(calendar, liveFeed);
+    expect(merged[0].status).toBe('live');
+    expect(merged[0].elapsed).toBe(90);
+    expect(merged[0].extra).toBe(7);
+  });
 });

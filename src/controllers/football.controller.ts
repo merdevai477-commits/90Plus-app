@@ -1957,7 +1957,9 @@ export class FootballController {
         );
       }
 
-      const matches = await footballDataCacheService.getMatchesByDate(dateString);
+      const matches = await footballDataCacheService.getMatchesByDate(dateString, {
+        bypassLocalCache: isPull,
+      });
       const view = typeof req.query.view === 'string' ? req.query.view.toLowerCase() : '';
       // List endpoint: never ship detail blobs (events/lineups/stats/fullData).
       // ?view=list (P0-2): further project to MatchRow fields only.

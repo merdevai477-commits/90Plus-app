@@ -171,6 +171,16 @@ describe('shouldSkipHttpIngest', () => {
     const incoming = baseSnapshot(makeFixture(58, '2H', 1, 1));
     expect(shouldSkipHttpIngest(current, incoming, 500)).toBe(true);
   });
+
+  it('skips HTTP that would revive a finished snapshot as live', () => {
+    const current = baseSnapshot(makeFixture(90, 'FT', 0, 2));
+    current.phase = 'finished';
+    current.lastSource = 'http-full';
+    const incoming = baseSnapshot(makeFixture(90, '2H', 0, 2));
+    incoming.phase = 'live';
+    incoming.lastSource = 'http-fast';
+    expect(shouldSkipHttpIngest(current, incoming, Date.now())).toBe(true);
+  });
 });
 
 describe('isValidStatusTransition', () => {
@@ -180,5 +190,10 @@ describe('isValidStatusTransition', () => {
 
   it('accepts 2H from HT', () => {
     expect(isValidStatusTransition('HT', '2H')).toBe(true);
+  });
+
+  it('rejects LIVE after FT', () => {
+    expect(isValidStatusTransition('FT', '2H')).toBe(false);
+    expect(isValidStatusTransition('FT', 'LIVE')).toBe(false);
   });
 });

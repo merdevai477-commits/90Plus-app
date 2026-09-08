@@ -24,10 +24,15 @@ function finishStaleLiveRow(row: Match): Match {
   };
 }
 
+function isFinishedCalendarRow(row: Match): boolean {
+  return row.status === 'finished' || TERMINAL_STATUS_SHORT.has(row.statusShort ?? '');
+}
+
 /**
  * Merge today's date-indexed calendar with the global live feed.
  * Calendar cache can lag behind kickoff; live endpoint is authoritative for
  * both promotions (NS → live) and demotions (stale live → finished).
+ * A calendar/details FT must not be revived by a lagging live-feed row.
  */
 export function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Match[]): Match[] {
   const liveRows = liveFeed.map(finishStaleLiveRow).filter((row) => row.status === 'live');
@@ -52,6 +57,9 @@ export function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Matc
 
   for (const liveRow of liveRows) {
     const existing = map.get(liveRow.id);
+    if (existing && isFinishedCalendarRow(existing)) {
+      continue;
+    }
     map.set(
       liveRow.id,
       existing

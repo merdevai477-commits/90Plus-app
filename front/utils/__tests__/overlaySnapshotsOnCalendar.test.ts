@@ -54,10 +54,11 @@ function makeSnap(
   goals: { home: number; away: number },
   short = '1H',
   elapsed = 45,
+  phase: LiveFixtureSnapshot['phase'] = 'live',
 ): LiveFixtureSnapshot {
   return {
     fixtureId: id,
-    phase: 'live',
+    phase,
     updatedAt: Date.now(),
     revision: 1,
     lastHttpFetchAt: null,
@@ -129,5 +130,40 @@ describe('overlaySnapshotsOnCalendar', () => {
     expect(next[0]).not.toBe(live);
     expect(next[0].score.home).toBe(2);
     expect(next[1]).toBe(other);
+  });
+
+  it('does not overlay a live snapshot onto a finished calendar row', () => {
+    const calendar = [
+      makeMatch({
+        id: '100',
+        status: 'finished',
+        statusShort: 'FT',
+        score: { home: 0, away: 2 },
+        elapsed: 90,
+      }),
+    ];
+    const next = overlaySnapshotsOnCalendar(calendar, {
+      100: makeSnap(100, { home: 0, away: 2 }, '2H', 90, 'live'),
+    });
+    expect(next[0].status).toBe('finished');
+    expect(next[0].statusShort).toBe('FT');
+  });
+
+  it('overlays a finished snapshot onto a live calendar row', () => {
+    const calendar = [
+      makeMatch({
+        id: '100',
+        status: 'live',
+        statusShort: '2H',
+        score: { home: 0, away: 2 },
+        elapsed: 90,
+        extra: 7,
+      }),
+    ];
+    const next = overlaySnapshotsOnCalendar(calendar, {
+      100: makeSnap(100, { home: 0, away: 2 }, 'FT', 90, 'finished'),
+    });
+    expect(next[0].status).toBe('finished');
+    expect(next[0].statusShort).toBe('FT');
   });
 });

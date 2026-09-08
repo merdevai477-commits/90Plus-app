@@ -34,6 +34,7 @@ import { buildResponseCacheKey } from '../../middleware/responseCache.middleware
 import {
   footballDataCacheService,
   mergeFixtureProviders,
+  mergeLiveWithoutRevivingFinished,
 } from '../football-data-cache.service';
 import {
   setBoundedMapEntry,
@@ -193,5 +194,26 @@ describe('football cache reliability', () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].fixture).toMatchObject({ id: 100, status: { short: '1H', elapsed: 12 } });
     expect(merged[0].goals).toEqual({ home: 1, away: 0 });
+  });
+
+  it('does not overlay live Redis onto a calendar FT row', () => {
+    const finished = {
+      fixture: { id: 4_801_111, timestamp: 1_800_000_000, status: { short: 'FT' } },
+      teams: { home: { name: 'Smouha' }, away: { name: 'Ceramica' } },
+      goals: { home: 0, away: 2 },
+    };
+    const live = {
+      fixture: {
+        id: 4_801_111,
+        timestamp: 1_800_000_000,
+        status: { short: '2H', elapsed: 90, extra: 7 },
+      },
+      teams: { home: { name: 'Smouha' }, away: { name: 'Ceramica' } },
+      goals: { home: 0, away: 2 },
+    };
+
+    const merged = mergeLiveWithoutRevivingFinished([finished], [live]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].fixture.status.short).toBe('FT');
   });
 });

@@ -28,7 +28,7 @@ import prisma from '../lib/prisma';
 import { getRedisClient } from '../lib/redis';
 import { footballService, isFootballQuotaExhausted } from './football.service';
 import { API_FOOTBALL_FALLBACK_CALL } from './api-football-quota.service';
-import { matchCacheService, TERMINAL_LATCH_STATUSES } from './match-cache.service';
+import { matchCacheService, TERMINAL_LATCH_STATUSES, LIVE_STATUSES } from './match-cache.service';
 import { isTerminalLatched } from './live-fixture-cache.service';
 import {
     shouldSkipEmptyUpstreamPoll,
@@ -210,6 +210,31 @@ export function mergeFixtureProviders(baseFixtures: any[], overlays: any[]): any
     return merged.sort(
         (a, b) => (a?.fixture?.timestamp ?? 0) - (b?.fixture?.timestamp ?? 0),
     );
+}
+
+const FINISHED_PROVIDER_STATUSES = new Set(TERMINAL_LATCH_STATUSES);
+
+function isFinishedProviderStatus(status: string | null | undefined): boolean {
+    return FINISHED_PROVIDER_STATUSES.has(status ?? '');
+}
+
+/**
+ * Live Redis/365 overlay may promote NS → live, but must not revive a calendar FT
+ * when the allscores live set still carries the same fixture.
+ */
+export function mergeLiveWithoutRevivingFinished(baseFixtures: any[], liveOverlays: any[]): any[] {
+    const finishedIds = new Set<number>();
+    for (const row of baseFixtures) {
+        const id = row?.fixture?.id;
+        if (Number.isFinite(id) && isFinishedProviderStatus(row?.fixture?.status?.short)) {
+            finishedIds.add(id);
+        }
+    }
+    const safeOverlays = liveOverlays.filter((row) => {
+        const id = row?.fixture?.id;
+        return !Number.isFinite(id) || !finishedIds.has(id);
+    });
+    return mergeFixtureProviders(baseFixtures, safeOverlays);
 }
 
 /** Distinguishes "the wait ran out" from a genuine empty lineup result. */
@@ -717,7 +742,10 @@ class FootballDataCacheService {
         })();
     }
 
-    async getMatchesByDate(dateString: string): Promise<any[]> {
+    async getMatchesByDate(
+        dateString: string,
+        options?: { bypassLocalCache?: boolean },
+    ): Promise<any[]> {
         try {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
                 throw new Error(`Invalid date: ${dateString}`);
@@ -734,17 +762,26 @@ class FootballDataCacheService {
                 : isToday
                     ? this.TTL.MATCHES_BY_DATE_TODAY
                     : this.TTL.MATCHES_BY_DATE_FUTURE;
+            const skipLiveOverlayCache = options?.bypassLocalCache === true;
 
-            const localData = this.tryLocalMatchesByDate(
-                dateString,
-                isToday,
-                isPastDate,
-                cacheKey,
-                responseTtl,
-            );
-            if (localData) {
-                const scoped = this.filterFixturesToCalendarDay(localData, dateString);
-                return isToday ? this.mergeCalendarWithLiveSources(scoped) : scoped;
+            if (!skipLiveOverlayCache) {
+                const localData = this.tryLocalMatchesByDate(
+                    dateString,
+                    isToday,
+                    isPastDate,
+                    cacheKey,
+                    responseTtl,
+                );
+                if (localData) {
+                    const scoped = this.filterFixturesToCalendarDay(localData, dateString);
+                    return isToday ? this.mergeCalendarWithLiveSources(scoped) : scoped;
+                }
+            } else if (isToday) {
+                const localHit = this.matchesByDateLocal.get(dateString);
+                if (localHit?.data?.length) {
+                    const scoped = this.filterFixturesToCalendarDay(localHit.data, dateString);
+                    return this.mergeCalendarWithLiveSources(scoped, { skipLiveOverlayCache: true });
+                }
             }
 
             const cached = await matchCacheService.getFromMemoryCache<any[]>(cacheKey);
@@ -752,7 +789,9 @@ class FootballDataCacheService {
                 this.storeLocalMatchesByDate(dateString, cached, responseTtl);
                 logger.debug(`📦 [${dateString}] ${cached.length} matches from shared cache`);
                 const scoped = this.filterFixturesToCalendarDay(cached, dateString);
-                return isToday ? this.mergeCalendarWithLiveSources(scoped) : scoped;
+                return isToday
+                    ? this.mergeCalendarWithLiveSources(scoped, { skipLiveOverlayCache })
+                    : scoped;
             }
 
             let fromDb = await this.loadMatchesFromDbForDate(
@@ -766,7 +805,9 @@ class FootballDataCacheService {
 
             if (fromDb.length > 0) {
                 if (isToday) {
-                    const merged = await this.mergeCalendarWithLiveSources(fromDb);
+                    const merged = await this.mergeCalendarWithLiveSources(fromDb, {
+                        skipLiveOverlayCache,
+                    });
                     if (!isScores365OnlyMode() && !isWorldCupOnlyMode() && !(await this.isTodayApiFresh(dateString))) {
                         void this.refreshMatchesByDateFromApi(dateString, cacheKey, responseTtl);
                     }
@@ -1207,11 +1248,18 @@ class FootballDataCacheService {
     }
 
     /** Overlay live scores from Redis (written by live-fixture-sync) onto today's fixture list. */
-    private async mergeLiveFromRedis(apiMatches: any[]): Promise<any[]> {
+    private async mergeLiveFromRedis(
+        apiMatches: any[],
+        options?: { skipLiveOverlayCache?: boolean },
+    ): Promise<any[]> {
         if (apiMatches.length === 0) return apiMatches;
 
         const now = Date.now();
-        if (this.liveOverlayCache && this.liveOverlayCache.expiresAt > now) {
+        if (
+            !options?.skipLiveOverlayCache &&
+            this.liveOverlayCache &&
+            this.liveOverlayCache.expiresAt > now
+        ) {
             return this.applyLiveOverlay(apiMatches, this.liveOverlayCache.fixtures);
         }
 
@@ -1232,21 +1280,26 @@ class FootballDataCacheService {
     }
 
     /** Redis live overlay + terminal FT + 365Scores for today's calendar. */
-    private async mergeCalendarWithLiveSources(apiMatches: any[]): Promise<any[]> {
-        let merged = await this.mergeLiveFromRedis(apiMatches);
-        merged = await this.mergeTerminalSnapshotsOntoCalendar(merged);
+    private async mergeCalendarWithLiveSources(
+        apiMatches: any[],
+        options?: { skipLiveOverlayCache?: boolean },
+    ): Promise<any[]> {
+        let merged = await this.mergeLiveFromRedis(apiMatches, options);
 
-        if (!isScores365ExperimentEnabled()) return merged;
-
-        try {
-            const { resolveLiveFixturesForClient } = await import('./live-fixture-cache.service');
-            const live365 = await resolveLiveFixturesForClient();
-            if (live365.fixtures.length) {
-                merged = mergeFixtureProviders(merged, live365.fixtures);
+        if (isScores365ExperimentEnabled()) {
+            try {
+                const { resolveLiveFixturesForClient } = await import('./live-fixture-cache.service');
+                const live365 = await resolveLiveFixturesForClient();
+                if (live365.fixtures.length) {
+                    merged = mergeLiveWithoutRevivingFinished(merged, live365.fixtures);
+                }
+            } catch (err) {
+                logger.warn('365 live calendar merge failed:', err);
             }
-        } catch (err) {
-            logger.warn('365 live calendar merge failed:', err);
         }
+
+        // Terminal FT last so a details-confirmed finish is not overwritten by allscores live.
+        merged = await this.mergeTerminalSnapshotsOntoCalendar(merged);
 
         try {
             const { enrichFixturesWithCrowdPredictions } = await import(
@@ -1266,12 +1319,13 @@ class FootballDataCacheService {
         }
     }
 
-    /** Overlay FT snapshots onto calendar rows still stuck on NS after kickoff. */
+    /** Overlay FT snapshots onto calendar rows still stuck on NS or LIVE after kickoff. */
     private async mergeTerminalSnapshotsOntoCalendar(apiMatches: any[]): Promise<any[]> {
         if (!apiMatches.length) return apiMatches;
 
         const finishedStatuses = new Set(TERMINAL_LATCH_STATUSES);
         const nsLike = new Set(['NS', 'TBD', 'PST']);
+        const liveLike = new Set(LIVE_STATUSES);
         const now = Date.now();
         const staleIds: number[] = [];
 
@@ -1279,6 +1333,10 @@ class FootballDataCacheService {
             const id = row?.fixture?.id;
             const status = row?.fixture?.status?.short ?? '';
             if (!Number.isFinite(id) || finishedStatuses.has(status)) continue;
+            if (liveLike.has(status)) {
+                staleIds.push(id);
+                continue;
+            }
             if (!nsLike.has(status)) continue;
 
             const kickoffMs =
@@ -1310,7 +1368,7 @@ class FootballDataCacheService {
     }
 
     private applyLiveOverlay(apiMatches: any[], liveFixtures: any[]): any[] {
-        return mergeFixtureProviders(apiMatches, liveFixtures);
+        return mergeLiveWithoutRevivingFinished(apiMatches, liveFixtures);
     }
 
     // ============================================
@@ -3270,6 +3328,35 @@ class FootballDataCacheService {
         };
     }
 
+    /**
+     * Game-by-id details is FT while the allscores live set can lag as LIVE.
+     * Latch an authoritative tombstone so the matches list cannot revive the row.
+     */
+    private latchAuthoritativeFinishedFixture(fixture: any): void {
+        const short = String(fixture?.fixture?.status?.short ?? '');
+        if (!['FT', 'AET', 'PEN'].includes(short)) return;
+        const id = Number(fixture?.fixture?.id);
+        if (!Number.isFinite(id) || id <= 0) return;
+        this.liveOverlayCache = null;
+        void matchCacheService.upsertFixtures([fixture]).catch((err) => {
+            logger.warn(`[Details] FT upsert failed fixture=${id}:`, (err as Error)?.message);
+        });
+        void import('./live-fixture-cache.service')
+            .then(({ writeTerminalFixtureSnapshot }) =>
+                writeTerminalFixtureSnapshot(
+                    fixture,
+                    isNative365FixtureId(id) ? '365' : 'api-football',
+                    { authoritative: true },
+                ),
+            )
+            .catch((err) => {
+                logger.warn(
+                    `[Details] authoritative FT latch failed fixture=${id}:`,
+                    (err as Error)?.message,
+                );
+            });
+    }
+
     private rememberDetailsBundle(cacheKey: string, payload: any): void {
         if (!payload?.fixture) return;
         const status = payload.fixture?.fixture?.status?.short ?? '';
@@ -3295,6 +3382,7 @@ class FootballDataCacheService {
                 void redisCacheService.set(unprefixed, entry, this.DETAILS_KEEP_MS);
             }
         }
+        this.latchAuthoritativeFinishedFixture(payload.fixture);
     }
 
     private async readCachedDetailsBundle(
@@ -3388,6 +3476,7 @@ class FootballDataCacheService {
                     if (Date.now() - cached.timestamp >= cached.ttl) {
                         this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
                     }
+                    this.latchAuthoritativeFinishedFixture(enriched.fixture);
                     return enriched;
                 }
             }
@@ -3401,6 +3490,7 @@ class FootballDataCacheService {
                 );
                 if (!this.isHollowDetailsBundle(enriched)) {
                     this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
+                    this.latchAuthoritativeFinishedFixture(enriched.fixture);
                     return enriched;
                 }
             }
@@ -3866,6 +3956,7 @@ class FootballDataCacheService {
         this.roundsCache.clear();
         this.matchesByDateLocal.clear();
         this.standingsRefreshes.clear();
+        this.liveOverlayCache = null;
         logger.info('🧹 Memory cache cleared');
     }
 
