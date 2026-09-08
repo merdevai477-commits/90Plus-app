@@ -289,7 +289,7 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
     try {
         pushApiTrace('[PUSH API] request received');
         const clerkUserId = req.auth?.userId;
-        const { token, platform } = req.body;
+        const { token, platform, language } = req.body;
 
         pushApiTrace(`[PUSH API] userId=${clerkUserId ?? 'undefined'}`);
         pushApiTrace(`[PUSH API] token=${typeof token === 'string' ? token : 'undefined'}`);
@@ -381,6 +381,16 @@ router.post('/push-token', requireAuth, async (req: Request, res: Response): Pro
             token,
             platform: resolvedPlatform,
         });
+
+        const languageHint =
+            (typeof language === 'string' && language.trim()) ||
+            (typeof req.headers['accept-language'] === 'string'
+                ? req.headers['accept-language'].split(',')[0]
+                : '');
+        if (languageHint) {
+            const { persistUserLanguage } = await import('../services/push-templates.service');
+            await persistUserLanguage(existingUser.id, languageHint);
+        }
 
         const verify = await prisma.user.findUnique({
             where: { clerkUserId },

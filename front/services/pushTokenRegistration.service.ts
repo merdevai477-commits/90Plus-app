@@ -15,6 +15,7 @@ import { logger } from './logger';
 import { getApiUrl, getApiEndpoint } from '../config/api.config';
 import { pushStep, pushTrace } from '../utils/pushTrace';
 import { getClerkBearerToken } from '../utils/clerkAuthToken';
+import { STORAGE_KEYS, useLanguageStore } from '../src/i18n/store';
 
 type NotificationsModule = typeof import('expo-notifications');
 
@@ -413,6 +414,20 @@ export async function openNotificationSettings(): Promise<void> {
     }
 }
 
+async function resolveAppLanguageForPush(): Promise<'ar' | 'en'> {
+    if (useLanguageStore.getState().isInitialized) {
+        const lang = useLanguageStore.getState().language;
+        if (lang === 'ar' || lang === 'en') return lang;
+    }
+    try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEYS.LANGUAGE);
+        if (saved === 'ar' || saved === 'en') return saved;
+    } catch {
+        // ignore
+    }
+    return 'ar';
+}
+
 async function registerTokenWithBackend(
     authToken: string,
     pushToken: string,
@@ -421,7 +436,11 @@ async function registerTokenWithBackend(
     pushStep('5', `Sending token to backend (attempt ${attempt + 1})`);
     pushTrace('[PUSH TRACE] before registerPushToken API call');
     try {
-        const result = await MatchesService.registerPushToken(authToken, pushToken);
+        const result = await MatchesService.registerPushToken(
+            authToken,
+            pushToken,
+            await resolveAppLanguageForPush(),
+        );
         if (result.success) {
             pushStep('6', 'Backend accepted token');
             pushTrace('[PUSH TRACE] registerPushToken response=success');

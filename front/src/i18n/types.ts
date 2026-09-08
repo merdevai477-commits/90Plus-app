@@ -62,6 +62,23 @@ export function isLanguageSupported(code: string): code is Language {
 }
 
 /**
+ * Coerce stored/API language values (`ar-EG`, `{ current: 'ar' }`) to `ar` | `en`.
+ */
+export function normalizeAppLanguage(value: unknown): Language | null {
+  if (typeof value === 'string') {
+    const lower = value.trim().toLowerCase();
+    if (lower === 'ar' || lower.startsWith('ar-') || lower.startsWith('ar_')) return 'ar';
+    if (lower === 'en' || lower.startsWith('en-') || lower.startsWith('en_')) return 'en';
+    return isLanguageSupported(lower) ? (lower as Language) : null;
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const obj = value as Record<string, unknown>;
+    return normalizeAppLanguage(obj.current ?? obj.language ?? obj.code ?? obj.locale);
+  }
+  return null;
+}
+
+/**
  * Get language info by code
  */
 export function getLanguageInfo(code: Language): LanguageInfo | undefined {

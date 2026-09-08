@@ -31,6 +31,7 @@ export {
   
   // Type guards and helpers
   isLanguageSupported,
+  normalizeAppLanguage,
   getLanguageInfo,
   getTextDirection,
   isRTL,

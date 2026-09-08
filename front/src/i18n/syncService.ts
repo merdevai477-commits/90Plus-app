@@ -9,7 +9,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '../../config/api.config';
-import { Language, DEFAULT_LANGUAGE, isLanguageSupported } from './types';
+import { Language, isLanguageSupported, normalizeAppLanguage } from './types';
 
 const API_URL = getApiUrl();
 
@@ -142,9 +142,9 @@ export async function fetchFromBackend(token: string | null): Promise<Language |
 
     if (data.status === 'SUCCESS' && data.data) {
       const settings = data.data;
-      const language = settings.language;
+      const language = normalizeAppLanguage(settings?.language) ?? normalizeAppLanguage(settings?.locale);
 
-      if (language && isLanguageSupported(language)) {
+      if (language) {
         return language;
       }
     }

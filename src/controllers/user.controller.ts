@@ -4,7 +4,12 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { AuditService, AuditAction } from '../services/audit.service';
 import { ErrorCode, sendError } from '../constants/errors';
-import { invalidateUserLanguageCache } from '../services/push-templates.service';
+import {
+    extractLanguageFromSettings,
+    invalidateUserLanguageCache,
+    normalizeSupportedLanguage,
+    readLanguageFromSettings,
+} from '../services/push-templates.service';
 
 export class UserController {
     /**
@@ -25,9 +30,18 @@ export class UserController {
                 select: { settings: true },
             });
 
+            const settings =
+                user?.settings && typeof user.settings === 'object' && !Array.isArray(user.settings)
+                    ? { ...(user.settings as Record<string, unknown>) }
+                    : {};
+            const storedLang = extractLanguageFromSettings(settings);
+            if (storedLang) {
+                settings.language = normalizeSupportedLanguage(storedLang);
+            }
+
             res.json({
                 status: 'SUCCESS',
-                data: user?.settings || {},
+                data: settings,
             });
         } catch (error) {
             logger.error('Get settings error:', error);
@@ -60,6 +74,15 @@ export class UserController {
 
             const currentSettings = (user.settings as Record<string, any>) || {};
             const updatedSettings = { ...currentSettings, ...newSettings };
+            const previousLanguage = readLanguageFromSettings(currentSettings);
+            const extractedNext = extractLanguageFromSettings(updatedSettings);
+            if (extractedNext) {
+                updatedSettings.language = normalizeSupportedLanguage(extractedNext);
+            }
+            const nextLanguage = readLanguageFromSettings(updatedSettings);
+            const languageChanged =
+                nextLanguage !== previousLanguage ||
+                Boolean(extractedNext && typeof currentSettings.language !== 'string');
 
             // ✅ Sync Global Settings to NotificationPreferences table
             const prefsUpdate: Record<string, boolean> = {};
@@ -78,17 +101,6 @@ export class UserController {
 
             // Notification preferences sync (match toggles) — push consent is managed
             // only via POST /matches/push-token and POST /gdpr/consent, not here.
-
-            // Detect language change so we can invalidate the in-process
-            // language cache used by push notifications. Without this, push
-            // copy would lag behind the user's selection by up to 5 minutes
-            // (the cache TTL).
-            const previousLanguage =
-                typeof currentSettings.language === 'string' ? currentSettings.language : null;
-            const nextLanguage =
-                typeof updatedSettings.language === 'string' ? updatedSettings.language : null;
-            const languageChanged =
-                nextLanguage !== null && nextLanguage !== previousLanguage;
 
             await prisma.user.update({
                 where: { clerkUserId },

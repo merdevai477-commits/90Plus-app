@@ -17,15 +17,20 @@
  * Variables use `{name}` placeholders for both `{name}` and `{{name}}`
  * to stay tolerant of either syntax inside the locale files.
  *
- * Languages: 'ar' | 'en'. Anything else falls back to 'en'.
+ * Languages: 'ar' | 'en'. Missing preference falls back to Arabic
+ * (the app's product default). Unsupported codes fall back to English.
  */
 
+import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 
 export type SupportedLanguage = 'ar' | 'en';
 
-const DEFAULT_LANGUAGE: SupportedLanguage = 'en';
+/** Product default when the user has never stored a language preference. */
+const DEFAULT_USER_LANGUAGE: SupportedLanguage = 'ar';
+/** Template / unknown-locale fallback (keeps English copy for unsupported tags). */
+const TEMPLATE_FALLBACK_LANGUAGE: SupportedLanguage = 'en';
 
 export type PushTemplateKey =
     | 'matchStartTitle'
@@ -228,9 +233,9 @@ const en: TemplateMap = {
     matchSoonBody: '{home} vs {away} kicks off soon',
     goalTitle: '⚽ Goal!',
     goalBody: "{player} scores for {team} ({minute}')",
-    goalScoreBody: '{scorer} — {home} {homeScore}-{awayScore} {away}',
+    goalScoreBody: '{home} {homeScore}-{awayScore} {away}',
     goalCancelledTitle: '🚫 Goal cancelled',
-    goalCancelledBody: '{team} — {home} {homeScore}-{awayScore} {away}',
+    goalCancelledBody: '{home} {homeScore}-{awayScore} {away}',
     halftimeTitle: 'Half time',
     halftimeBody: '{home} {homeScore} - {awayScore} {away}',
     matchSecondHalfTitle: 'Second half',
@@ -424,9 +429,9 @@ const ar: TemplateMap = {
     matchSoonBody: '{home} ضد {away} — تذكير قبل البداية',
     goalTitle: '⚽ هدف!',
     goalBody: '{player} يسجل لـ{team} في الدقيقة {minute}',
-    goalScoreBody: '{scorer} — {home} {homeScore}-{awayScore} {away}',
+    goalScoreBody: '{home} {homeScore}-{awayScore} {away}',
     goalCancelledTitle: '🚫 تم إلغاء الهدف',
-    goalCancelledBody: '{team} — {home} {homeScore}-{awayScore} {away}',
+    goalCancelledBody: '{home} {homeScore}-{awayScore} {away}',
     halftimeTitle: 'استراحة بين الشوطين',
     halftimeBody: '{home} {homeScore} - {awayScore} {away}',
     matchSecondHalfTitle: 'الشوط الثاني',
@@ -667,11 +672,48 @@ export function localizeMatchVarDetail(
 export function normalizeSupportedLanguage(
     raw: string | null | undefined,
 ): SupportedLanguage {
-    if (!raw) return DEFAULT_LANGUAGE;
+    if (!raw) return DEFAULT_USER_LANGUAGE;
     const lower = raw.trim().toLowerCase();
     if (lower === 'ar' || lower.startsWith('ar-') || lower.startsWith('ar_')) return 'ar';
     if (lower === 'en' || lower.startsWith('en-') || lower.startsWith('en_')) return 'en';
-    return DEFAULT_LANGUAGE;
+    return TEMPLATE_FALLBACK_LANGUAGE;
+}
+
+function coerceLanguageCandidate(value: unknown): string {
+    if (typeof value === 'string') return value.trim();
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.current === 'string') return obj.current.trim();
+    if (typeof obj.language === 'string') return obj.language.trim();
+    if (typeof obj.code === 'string') return obj.code.trim();
+    if (typeof obj.locale === 'string') return obj.locale.trim();
+    return '';
+}
+
+/**
+ * Pull a language tag out of `User.settings` even when older clients stored
+ * a nested Zustand blob (`{ current: 'ar' }`) instead of `'ar'`.
+ */
+export function extractLanguageFromSettings(settings: unknown): string {
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return '';
+    const obj = settings as Record<string, unknown>;
+    const nestedI18n =
+        obj.i18n && typeof obj.i18n === 'object' && !Array.isArray(obj.i18n)
+            ? (obj.i18n as Record<string, unknown>)
+            : null;
+    const candidates = [
+        obj.language,
+        obj.locale,
+        obj.appLanguage,
+        nestedI18n?.language,
+        nestedI18n?.current,
+        obj.current,
+    ];
+    for (const candidate of candidates) {
+        const raw = coerceLanguageCandidate(candidate);
+        if (raw) return raw;
+    }
+    return '';
 }
 
 /**
@@ -687,7 +729,7 @@ export function renderPushTemplate(
     const lang = normalizeSupportedLanguage(
         typeof language === 'string' ? language : language ?? undefined,
     );
-    const fallback = TEMPLATES[DEFAULT_LANGUAGE][key];
+    const fallback = TEMPLATES[TEMPLATE_FALLBACK_LANGUAGE][key];
     const template = TEMPLATES[lang]?.[key] ?? fallback ?? '';
 
     return Object.entries(vars).reduce((acc, [k, v]) => {
@@ -731,10 +773,10 @@ export function invalidateUserLanguageCache(userId: string): void {
 
 /**
  * Resolve the user's preferred language from `User.settings.language`.
- * Always returns a supported value, defaulting to English.
+ * Always returns a supported value, defaulting to Arabic when missing.
  */
 export async function getUserLanguage(userId: string): Promise<SupportedLanguage> {
-    if (!userId) return DEFAULT_LANGUAGE;
+    if (!userId) return DEFAULT_USER_LANGUAGE;
     const cached = readCachedLanguage(userId);
     if (cached) return cached;
 
@@ -743,19 +785,57 @@ export async function getUserLanguage(userId: string): Promise<SupportedLanguage
             where: { id: userId },
             select: { settings: true },
         });
-        const settings = (user?.settings as Record<string, unknown> | null) ?? null;
-        const raw =
-            settings && typeof settings.language === 'string'
-                ? settings.language
-                : settings && typeof settings.locale === 'string'
-                  ? settings.locale
-                  : '';
-        const lang = normalizeSupportedLanguage(raw);
+        const lang = readLanguageFromSettings(user?.settings);
         writeCachedLanguage(userId, lang);
         return lang;
     } catch (err) {
         logger.warn('[push-templates] getUserLanguage failed, falling back:', err);
-        return DEFAULT_LANGUAGE;
+        return DEFAULT_USER_LANGUAGE;
+    }
+}
+
+function asSettingsRecord(settings: unknown): Record<string, unknown> {
+    if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
+        return { ...(settings as Record<string, unknown>) };
+    }
+    return {};
+}
+
+/**
+ * Persist `User.settings.language` as a canonical `'ar' | 'en'` string and
+ * refresh the in-process cache so the next match push uses the new copy.
+ */
+export async function persistUserLanguage(
+    userId: string,
+    languageInput: string | null | undefined,
+): Promise<SupportedLanguage> {
+    const lang = normalizeSupportedLanguage(languageInput);
+    if (!userId) return lang;
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { settings: true },
+        });
+        const settings = asSettingsRecord(user?.settings);
+        const alreadyRaw = extractLanguageFromSettings(settings);
+        const alreadyNorm = alreadyRaw ? normalizeSupportedLanguage(alreadyRaw) : null;
+        if (alreadyNorm === lang && typeof settings.language === 'string') {
+            writeCachedLanguage(userId, lang);
+            return lang;
+        }
+
+        settings.language = lang;
+        await prisma.user.update({
+            where: { id: userId },
+            data: { settings: settings as Prisma.InputJsonValue },
+        });
+        invalidateUserLanguageCache(userId);
+        writeCachedLanguage(userId, lang);
+        return lang;
+    } catch (err) {
+        logger.warn('[push-templates] persistUserLanguage failed:', err);
+        return lang;
     }
 }
 
@@ -781,8 +861,8 @@ export async function renderPushForUser(
 
 /**
  * Read a user's language preference from a Prisma `User.settings` JSON
- * blob without making an extra DB query. Falls back to English when
- * the value is missing or unsupported, never throws.
+ * blob without making an extra DB query. Falls back to Arabic when
+ * the value is missing, never throws.
  *
  * Use this in bulk notifiers that already select `settings` alongside
  * the push token, to avoid N+1 round-trips.
@@ -790,13 +870,23 @@ export async function renderPushForUser(
 export function readLanguageFromSettings(
     settings: unknown,
 ): SupportedLanguage {
-    if (!settings || typeof settings !== 'object') return DEFAULT_LANGUAGE;
-    const obj = settings as Record<string, unknown>;
-    const raw =
-        typeof obj.language === 'string'
-            ? obj.language
-            : typeof obj.locale === 'string'
-              ? obj.locale
-              : '';
-    return normalizeSupportedLanguage(raw);
+    return normalizeSupportedLanguage(extractLanguageFromSettings(settings));
+}
+
+/**
+ * Goal score line without repeating the scoring team (`Al Ahed — Al Ahed 4-0 …`).
+ * Keeps `{scorer} —` only when scorer is a distinct player name.
+ */
+export function renderGoalScorePushBody(
+    language: SupportedLanguage | string | null | undefined,
+    vars: Record<string, string | number> = {},
+): string {
+    const scorer = String(vars.scorer ?? vars.player ?? '').trim();
+    const home = String(vars.home ?? '').trim();
+    const away = String(vars.away ?? '').trim();
+    const line = renderPushTemplate('goalScoreBody', language, vars);
+    if (scorer && scorer !== home && scorer !== away) {
+        return `${scorer} — ${line}`;
+    }
+    return line;
 }

@@ -5,7 +5,7 @@
 
 import prisma from '../../lib/prisma';
 import { logger } from '../../utils/logger';
-import { renderPushTemplate, getUserLanguage, localizeMatchVarDetail } from '../push-templates.service';
+import { renderPushTemplate, getUserLanguage, localizeMatchVarDetail, renderGoalScorePushBody } from '../push-templates.service';
 import { NotificationService } from '../notification.service';
 import type { MatchEventPushJob } from '../../queues/match-event-push.queue';
 import {
@@ -53,7 +53,10 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
     // Prefer localized templates so Arabic/English matches User.settings.language.
     if (job.titleKey && job.bodyKey) {
         title = renderPushTemplate(job.titleKey as any, lang, vars);
-        message = renderPushTemplate(job.bodyKey as any, lang, vars);
+        message =
+            job.bodyKey === 'goalScoreBody' || job.bodyKey === 'goalCancelledBody'
+                ? renderGoalScorePushBody(lang, vars)
+                : renderPushTemplate(job.bodyKey as any, lang, vars);
     } else if (job.message) {
         title = job.titleKey
             ? renderPushTemplate(job.titleKey as any, lang, vars)

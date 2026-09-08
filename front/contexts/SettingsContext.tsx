@@ -14,8 +14,8 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { useLanguageStore, Language } from '../src/i18n';
-import { processPendingSync } from '../src/i18n/syncService';
+import { useLanguageStore, Language, normalizeAppLanguage } from '../src/i18n';
+import { processPendingSync, syncToBackend } from '../src/i18n/syncService';
 import { useAuth } from '@clerk/clerk-expo';
 import { getApiUrl } from '../config/api.config';
 import { logger } from '../services/logger';
@@ -130,6 +130,13 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   // Get language from the new i18n store
   const i18nLanguage = useLanguageStore((state) => state.language);
   const i18nSetLanguage = useLanguageStore((state) => state.setLanguage);
+  const i18nInitialized = useLanguageStore((state) => state.isInitialized);
+
+  const coerceSettings = (raw: Partial<SettingsState> | Record<string, unknown>): SettingsState => {
+    const merged = { ...DEFAULT_SETTINGS, ...raw } as SettingsState;
+    merged.language = normalizeAppLanguage(merged.language) ?? (i18nInitialized ? i18nLanguage : 'ar');
+    return merged;
+  };
 
   // ============================================================================
   // INITIALIZATION
@@ -140,30 +147,34 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     configureNotifications();
   }, []);
   
-  // Sync settings.language with i18n store language
+  // Sync settings.language with i18n store language — wait until i18n has
+  // loaded the real preference so we never PATCH the store's pre-init 'en'.
   useEffect(() => {
-    if (!loading && settings.language !== i18nLanguage) {
+    if (!loading && i18nInitialized && settings.language !== i18nLanguage) {
       setSettings((prev) => ({ ...prev, language: i18nLanguage }));
     }
-  }, [i18nLanguage, loading]);
+  }, [i18nLanguage, loading, i18nInitialized, settings.language]);
 
-  // Flush a pending language PATCH once the user is signed in so push copy
-  // matches the in-app language even if the first sync ran without a token.
+  // Persist the in-app language once the user is signed in so match-event
+  // pushes render in Arabic/English to match the UI.
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
+    if (!isLoaded || !isSignedIn || !i18nInitialized) return;
     let cancelled = false;
     void (async () => {
       try {
         const token = await getToken();
-        if (!cancelled && token) await processPendingSync(token);
+        if (!cancelled && token) {
+          await processPendingSync(token);
+          await syncToBackend(i18nLanguage, token);
+        }
       } catch (e) {
-        logger.warn('Pending language sync failed', e);
+        logger.warn('Language sync failed', e);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn, i18nInitialized, i18nLanguage, getToken]);
 
   // Sync settings to backend whenever they change (debounce could be added here)
   useEffect(() => {
@@ -208,27 +219,35 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       const stored = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Show local settings immediately
-        setSettings({ ...DEFAULT_SETTINGS, ...parsed });
-        setLoading(false); // ✅ Stop loading immediately after local load
+        setSettings(coerceSettings({ ...parsed, isFirstLaunch: false }));
+        setLoading(false);
         
-        // ✅ OPTIMIZATION: Sync with backend in background (non-blocking)
         loadSettingsFromBackend().then(backendSettings => {
           if (backendSettings) {
-            const merged = { ...DEFAULT_SETTINGS, ...parsed, ...backendSettings };
+            const liveLang = useLanguageStore.getState().isInitialized
+              ? useLanguageStore.getState().language
+              : undefined;
+            const merged = coerceSettings({
+              ...parsed,
+              ...backendSettings,
+              isFirstLaunch: false,
+              language: liveLang ?? backendSettings.language ?? parsed.language,
+            });
             setSettings(merged);
             AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(merged));
           }
         }).catch(err => console.warn('Background settings sync failed:', err));
         
-        return; // Exit early - loading is done
+        return;
       }
       
-      // No local settings - try backend (this is first launch)
       const backendSettings = await loadSettingsFromBackend();
       if (backendSettings) {
-        setSettings({ ...DEFAULT_SETTINGS, ...backendSettings });
-        await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ ...DEFAULT_SETTINGS, ...backendSettings }));
+        const merged = coerceSettings({ ...backendSettings, isFirstLaunch: false });
+        setSettings(merged);
+        await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(merged));
+      } else {
+        setSettings((prev) => ({ ...prev, isFirstLaunch: false }));
       }
     } catch (error) {
       console.error('Error loading settings:', error);

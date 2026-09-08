@@ -29,6 +29,7 @@ jest.mock('../../push-templates.service', () => ({
   getUserLanguage: async () => 'en',
   localizeMatchVarDetail: (value: string) => value,
   renderPushTemplate: (key: string) => key,
+  renderGoalScorePushBody: () => 'goalScoreBody',
 }));
 
 jest.mock('../../../utils/logger', () => ({

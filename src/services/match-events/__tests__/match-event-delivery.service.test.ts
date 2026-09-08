@@ -177,7 +177,6 @@ describe('push language helpers', () => {
         expect(renderPushTemplate('goalCancelledTitle', 'ar')).toContain('إلغاء');
         expect(
             renderPushTemplate('goalScoreBody', 'ar', {
-                scorer: 'الأهلي',
                 home: 'الأهلي',
                 away: 'الزمالك',
                 homeScore: 1,

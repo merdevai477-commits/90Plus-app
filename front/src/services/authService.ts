@@ -2505,6 +2505,7 @@ export class MatchesService {
     static async registerPushToken(
         token: string,
         pushToken: string,
+        language?: string,
     ): Promise<{
         success: boolean;
         rateLimited?: boolean;
@@ -2525,6 +2526,7 @@ export class MatchesService {
                 body: JSON.stringify({
                     token: pushToken,
                     platform: Platform.OS,
+                    ...(language === 'ar' || language === 'en' ? { language } : {}),
                 }),
             });
 
