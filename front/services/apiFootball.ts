@@ -1153,6 +1153,7 @@ const fetchFromProxy = async <T,>(
     retries?: number;
     timeout?: number;
     fresh?: boolean;
+    pull?: boolean;
     priority?: number;
     signal?: AbortSignal;
     /** Skip the shared football request queue (interactive search). */
@@ -1177,7 +1178,9 @@ const fetchFromProxy = async <T,>(
   const url = new URL(`${baseUrl}${pathPrefix}${endpoint}`);
 
   if (method === 'GET') {
-    if (options.fresh) {
+    if (options.pull) {
+      url.searchParams.set('pull', '1');
+    } else if (options.fresh) {
       url.searchParams.set('fresh', '1');
     }
     Object.entries(params).forEach(([key, value]) => {
@@ -1924,7 +1927,7 @@ export const ApiFootballService = {
    */
   async getFixtureDetailsBundle(
     fixtureId: number,
-    options?: { skipCache?: boolean; language?: 'ar' | 'en'; signal?: AbortSignal },
+    options?: { skipCache?: boolean; language?: 'ar' | 'en'; signal?: AbortSignal; pull?: boolean },
   ): Promise<{
     fixture: Fixture | null;
     lineups: Lineup[];
@@ -1942,7 +1945,7 @@ export const ApiFootballService = {
         `/cached/fixture/${id}/details`,
         langParams,
         {
-          ...(options?.skipCache ? { fresh: true } : {}),
+          ...(options?.pull ? { pull: true } : options?.skipCache ? { fresh: true } : {}),
           signal: options?.signal,
         },
       );

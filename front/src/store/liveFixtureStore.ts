@@ -37,7 +37,7 @@ interface LiveFixtureStoreState {
   /** One-shot HTTP warm-up for WS/push paths — never increments interestCounts. */
   ensureSnapshot: (fixtureId: number) => Promise<void>;
   fetchAndIngestFast: (fixtureId: number, options?: { includeEvents?: boolean }) => Promise<void>;
-  fetchAndIngestFull: (fixtureId: number) => Promise<void>;
+  fetchAndIngestFull: (fixtureId: number, options?: { pull?: boolean }) => Promise<void>;
   /** Events-only HTTP refresh (used when WS owns score/clock). */
   fetchAndIngestEvents: (fixtureId: number) => Promise<void>;
   refreshInterestedLive: () => Promise<void>;
@@ -306,10 +306,10 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
     get().ingestSnapshot(snapshot);
   },
 
-  async fetchAndIngestFull(fixtureId: number) {
+  async fetchAndIngestFull(fixtureId: number, options?: { pull?: boolean }) {
     const existing = get().snapshots[fixtureId] ?? null;
     const startedAt = Date.now();
-    const snapshot = await fetchFullSnapshot(fixtureId, existing);
+    const snapshot = await fetchFullSnapshot(fixtureId, existing, { pull: options?.pull === true });
     if (!snapshot) return;
 
     const current = get().snapshots[fixtureId];

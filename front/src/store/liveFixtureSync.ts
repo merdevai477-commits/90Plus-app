@@ -65,6 +65,7 @@ function abortEntry<T>(map: Map<number, InFlightEntry<T>>, fixtureId: number): v
 export function cancelFixtureHttpFetches(fixtureId: number): void {
   if (!fixtureId || fixtureId <= 0) return;
   abortEntry(inFlightDetailsBundle, fixtureId);
+  abortEntry(inFlightDetailsBundle, -fixtureId);
   abortEntry(inFlightScore, fixtureId);
   abortEntry(inFlightEvents, fixtureId);
 }
@@ -99,10 +100,17 @@ function runCancellable<T>(
 /**
  * One concurrent GET /details per fixture. Fast and full builders share this promise.
  */
-function fetchSharedDetailsBundle(fixtureId: number): Promise<DetailsBundle | null> {
-  return runCancellable(inFlightDetailsBundle, fixtureId, async (signal) => {
+function fetchSharedDetailsBundle(
+  fixtureId: number,
+  options?: { pull?: boolean },
+): Promise<DetailsBundle | null> {
+  const mapKey = options?.pull ? -fixtureId : fixtureId;
+  return runCancellable(inFlightDetailsBundle, mapKey, async (signal) => {
     try {
-      return await ApiFootballService.getFixtureDetailsBundle(fixtureId, { signal });
+      return await ApiFootballService.getFixtureDetailsBundle(fixtureId, {
+        signal,
+        pull: options?.pull === true,
+      });
     } catch (err) {
       if (isAbortError(err)) return null;
       throw err;
@@ -315,9 +323,10 @@ export async function fetchScoreSnapshot(
 export async function fetchFullSnapshot(
   fixtureId: number,
   existing?: LiveFixtureSnapshot | null,
+  options?: { pull?: boolean },
 ): Promise<LiveFixtureSnapshot | null> {
   try {
-    const bundle = await fetchSharedDetailsBundle(fixtureId);
+    const bundle = await fetchSharedDetailsBundle(fixtureId, { pull: options?.pull === true });
     if (!bundle) {
       if (existing) return { ...existing, updatedAt: Date.now() };
       return null;
