@@ -90,10 +90,6 @@ export const ChatWelcomeView = React.memo(function ChatWelcomeView({
         <View style={styles.welcomeBrandPill}>
           <Text style={styles.welcomeBrand}>{tChat.welcomeBrand}</Text>
         </View>
-        <View style={styles.welcomeOnline}>
-          <View style={styles.welcomeOnlineDot} />
-          <Text style={styles.welcomeOnlineText}>{tChat.welcomeOnline}</Text>
-        </View>
       </View>
 
       <View style={styles.welcomeChips}>

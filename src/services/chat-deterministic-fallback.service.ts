@@ -119,6 +119,24 @@ function formatTeam(data: any, q?: string): string | null {
   return null;
 }
 
+function matchTable(title: string, rows: any[], mode: 'live' | 'finished' | 'upcoming'): string {
+  if (!rows.length) return '';
+  const body = rows.slice(0, 6).map((m: any) => {
+    const fixture = `${m.home ?? ''} vs ${m.away ?? ''}`;
+    const score =
+      m.score?.home != null && m.score?.away != null ? `${m.score.home}–${m.score.away}` : '—';
+    const extra =
+      mode === 'live'
+        ? `${score} · ${m.minute ?? '—'}'`
+        : mode === 'finished'
+          ? score
+          : String(m.kickoff ?? m.status ?? '—');
+    return `| ${fixture} | ${extra} |`;
+  });
+  const colB = mode === 'upcoming' ? 'الموعد' : 'النتيجة';
+  return [`**${title}**`, `| المباراة | ${colB} |`, '| --- | --- |', ...body].join('\n');
+}
+
 function formatToday(data: any): string | null {
   if (!data) return null;
   const live = Array.isArray(data.live) ? data.live : [];
@@ -127,37 +145,11 @@ function formatToday(data: any): string | null {
   const grouped = live.length || finished.length || upcoming.length;
 
   if (grouped) {
-    const sections: string[] = [];
-    if (live.length) {
-      sections.push(
-        '🔴 لايف دلوقتي:\n' +
-          live
-            .slice(0, 6)
-            .map(
-              (m: any) =>
-                `• ${m.home} ضد ${m.away}: **${m.score?.home ?? 0}-${m.score?.away ?? 0}** (دقيقة ${m.minute ?? '—'})`,
-            )
-            .join('\n'),
-      );
-    }
-    if (finished.length) {
-      sections.push(
-        '✅ خلصت:\n' +
-          finished
-            .slice(0, 6)
-            .map((m: any) => `• ${m.home} ضد ${m.away}: **${m.score?.home ?? 0}-${m.score?.away ?? 0}**`)
-            .join('\n'),
-      );
-    }
-    if (upcoming.length) {
-      sections.push(
-        '⏳ جاية:\n' +
-          upcoming
-            .slice(0, 6)
-            .map((m: any) => `• ${m.home} ضد ${m.away}`)
-            .join('\n'),
-      );
-    }
+    const sections = [
+      matchTable('لايف دلوقتي', live, 'live'),
+      matchTable('خلصت', finished, 'finished'),
+      matchTable('جاية', upcoming, 'upcoming'),
+    ].filter(Boolean);
     if (sections.length) return sections.join('\n\n');
   }
 
@@ -165,15 +157,7 @@ function formatToday(data: any): string | null {
   if (!matches.length) {
     return data.note ?? 'مفيش مباريات مطابقة للدوري ده النهاردة.';
   }
-  const lines = matches.slice(0, 6).map((m: any, i: number) => {
-    const score =
-      m.score?.home != null && m.score?.away != null
-        ? `**${m.score.home}-${m.score.away}**`
-        : 'لسه';
-    const live2 = m.minute != null ? ` (دقيقة ${m.minute}, ${m.status})` : ` (${m.status})`;
-    return `${i + 1}) ${m.home} ضد ${m.away}: ${score}${live2}`;
-  });
-  return `مباريات النهاردة:\n${lines.join('\n')}`;
+  return matchTable('مباريات النهاردة', matches, 'finished');
 }
 
 function formatLive(data: any): string | null {
@@ -183,14 +167,7 @@ function formatLive(data: any): string | null {
     ['1H', '2H', 'HT', 'ET', 'P', 'LIVE', 'BT'].includes(String(m.status ?? '')),
   );
   if (!live.length) return 'مفيش ماتش لايف مهم دلوقتي.';
-  const lines = live.slice(0, 5).map((m: any) => {
-    const score =
-      m.score?.home != null && m.score?.away != null
-        ? `${m.score.home}-${m.score.away}`
-        : '?-?';
-    return `• ${m.home} ضد ${m.away}: **${score}** — دقيقة ${m.minute ?? '—'} (${m.league ?? ''})`;
-  });
-  return `فيه ماتشات لايف دلوقتي:\n${lines.join('\n')}`;
+  return matchTable('ماتشات لايف دلوقتي', live, 'live');
 }
 
 /**
@@ -200,15 +177,17 @@ function formatLive(data: any): string | null {
 export async function tryDeterministicFootballReply(
   message: string,
   language: MessageLanguage,
-): Promise<{ text: string; toolsUsed: string[] } | null> {
+): Promise<{ text: string; toolsUsed: string[]; payloads: string[] } | null> {
   const q = message.trim();
   if (q.length < 3) return null;
   const toolsUsed: string[] = [];
+  const payloads: string[] = [];
   const lang = language === 'en' ? 'en' : 'ar';
 
   const run = async (name: string, args: Record<string, unknown>) => {
     toolsUsed.push(name);
     const raw = await executeAgentTool(name, JSON.stringify(args), { language: lang as any });
+    payloads.push(raw);
     try {
       return JSON.parse(raw);
     } catch {
@@ -216,23 +195,26 @@ export async function tryDeterministicFootballReply(
     }
   };
 
+  const done = (text: string | null) =>
+    text ? { text, toolsUsed, payloads } : null;
+
   try {
     if (/لايف|مباشر|live|دلوقتي.*ماتش|ماتش.*دلوقتي/i.test(q)) {
       const data = await run('get_live_matches', {});
       const text = formatLive(data);
-      if (text) return { text, toolsUsed };
+      if (text) return done(text);
     }
 
     if (/بوليفي|bolivia/i.test(q) && /مبار|ماتش|اليوم|النهاردة|today/i.test(q)) {
       const data = await run('get_today_matches', { league: 'الدوري البوليفي' });
       const text = formatToday(data);
-      if (text) return { text, toolsUsed };
+      if (text) return done(text);
     }
 
     if (/اهلي|أهلي|ahly/i.test(q) && /افريق|أفريق|africa|caf|مدرب|coach/i.test(q)) {
       const data = await run('get_team_info', { team_name: 'الأهلي' });
       const text = formatTeam(data, q);
-      if (text) return { text, toolsUsed };
+      if (text) return done(text);
     }
 
     const player = pickPlayerName(q);
@@ -240,11 +222,11 @@ export async function tryDeterministicFootballReply(
       if (/سيزون|موسم|احصائ|إحصائ|بيانات|يلعب|نادي|فين|أين|اين|حاليا/i.test(q)) {
         const data = await run('search_player', { player_name: player });
         const text = formatSearchPlayer(data, q);
-        if (text) return { text, toolsUsed };
+        if (text) return done(text);
       }
       const data = await run('get_player_career', { player_name: player });
       const text = formatPlayerCareer(data, q);
-      if (text) return { text, toolsUsed };
+      if (text) return done(text);
     }
   } catch {
     return null;

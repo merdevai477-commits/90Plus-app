@@ -31,6 +31,8 @@ import { Colors } from '../../constants/theme';
 import { MessageContextMenu } from '../chat/MessageContextMenu';
 import { Message } from '../../hooks/useAIChatNative';
 import { getTextDirectionStyles, useBubbleMaxWidth } from './chatTextUtils';
+import { ChatNavLinks } from './ChatNavLinks';
+import { decodeChatNavMarker } from '../../utils/chatNavLinks';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -460,9 +462,13 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
     tsOp.value = withDelay(2500, withTiming(0, { duration: 300 }));
   }, []);
 
+  const parsed = useMemo(() => decodeChatNavMarker(message.text ?? ''), [message.text]);
+  const sourceText = parsed.text;
+  const navLinks = message.navLinks?.length ? message.navLinks : parsed.navLinks;
+
   useEffect(() => {
     let mounted = true;
-    const full = message.text ?? '';
+    const full = sourceText;
     if (prevId.current !== message.id) { prevId.current = message.id; initialText.current = null; }
     if (initialText.current === null) initialText.current = full;
 
@@ -492,10 +498,10 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
       if (idx >= len) { clearInterval(timer); setDone(true); }
     }, iv);
     return () => { mounted = false; clearInterval(timer); };
-  }, [message.id, isHistory, message.text]);
+  }, [message.id, isHistory, sourceText]);
 
-  const display = done ? (message.text ?? '') : visible;
-  const isStreaming = initialText.current === '' && message.text !== '' && !done;
+  const display = done ? sourceText : visible;
+  const isStreaming = initialText.current === '' && sourceText !== '' && !done;
   const showCursor = !isHistory && (isStreaming || (!done && initialText.current !== ''));
   const content = useMemo(
     () => renderMarkdown(display, t.chat.tableScrollHint, maxWidth),
@@ -525,6 +531,7 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
             </View>
           </View>
         </Pressable>
+        {navLinks.length ? <ChatNavLinks links={navLinks} /> : null}
         <Animated.Text style={[s.aiTs, tsStyle]}>{message.time}</Animated.Text>
       </View>
     </Animated.View>
@@ -889,11 +896,11 @@ const s = StyleSheet.create({
     flexGrow: 0,
   },
   table: {
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.35)',
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderColor: 'rgba(167,139,250,0.4)',
+    backgroundColor: 'rgba(8,4,18,0.72)',
     ...Platform.select({
       ios: {
         shadowColor: '#7C3AED',
@@ -906,14 +913,15 @@ const s = StyleSheet.create({
   },
   tableHead: {
     flexDirection: 'row',
+    backgroundColor: 'rgba(124,58,237,0.28)',
   },
   tableRow: {
     flexDirection: 'row',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.08)',
+    borderTopColor: 'rgba(167,139,250,0.12)',
   },
   tableRowAlt: {
-    backgroundColor: 'rgba(124,58,237,0.08)',
+    backgroundColor: 'rgba(124,58,237,0.10)',
   },
   tableRowLast: {
     borderBottomLeftRadius: 12,

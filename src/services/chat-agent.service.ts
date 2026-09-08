@@ -21,6 +21,10 @@ import {
   buildGroundingSystemMessage,
   extractGroundedFacts,
 } from './chat-grounding.service';
+import {
+  extractChatNavLinks,
+  type ChatNavLink,
+} from './chat-nav-links.service';
 
 const MAX_STEPS = 3;
 const AGENT_STREAM_MAX_TOKENS = 480;
@@ -67,7 +71,13 @@ const TOOL_USAGE_PREAMBLE = `
 - مباريات النهاردة → get_today_matches (بترجع live/finished/upcoming). مباريات دوري معيّن (اي اللي انتهى/لايف/جاي) → get_today_matches مع league. أهم المباريات الجاية → get_today_matches مع when="upcoming". لايف دلوقتي بس → get_live_matches.
 - ماتش نادي معيّن (لعب امتى/الجاية/بيلعب دلوقتي) → get_team_match أو resolve_match باسم النادي، وبعدها get_match_details لو محتاج تفاصيل أكتر.
 - ترتيب دوري أو بطولة مش من الأبطال المشهورين → search_football (competition) أو get_standings.
-- في المباريات: قدّم اللايف الأول (الدقيقة + النتيجة)، بعدين اللي خلص (النتيجة النهائية)، بعدين الجاي (معاد البداية). استخدم جدول لو فيه 3 صفوف أو أكتر.
+- في المباريات: قدّم اللايف الأول (الدقيقة + النتيجة)، بعدين اللي خلص (النتيجة النهائية)، بعدين الجاي (معاد البداية).
+- جداول Markdown احترافية لأي قائمة فيها ٣ صفوف أو أكتر. الشكل الإلزامي:
+  | العمود | العمود |
+  | --- | --- |
+  | قيمة | قيمة |
+  للمباريات استخدم: الحالة | المباراة | النتيجة/الموعد. للإحصائيات: الموسم/البطولة | أهداف | صناعة | لعب. للترتيب: مركز | الفريق | نقاط.
+- متكتبش لينكات وهمية — التطبيق هيحط أزرار تفتح بروفايل اللاعب/النادي أو تفاصيل الماتش أو صفحة المباريات.
 - اعتمد على quickFacts و seasonStats و answerHint من نتيجة الأداة. لو seasonStats موجودة متقولش "مفيش بيانات".
 - لو نتيجة الأداة فيها status="need_clarification" أو فيها suggestions/hits: اسأل المستخدم للتأكيد "قصدك <الاسم>؟" واستنى ردّه — ممنوع تخترع لاعب أو تجاوب من ذاكرتك. ولو مفيش نتيجة خالص اطلب الاسم الكامل أو اسم النادي بلطف.
 - لاعب متوسط الشهرة أو اسم فيه غلطة إملائية: اعتمد على نتيجة search_football أو search_player (بتعمل تصحيح وبحث ذكي). متقولش "مش لاقيه" طول ما فيه suggestions.
@@ -195,22 +205,30 @@ function extractFocusTeamFromHistory(
 function formatSquadReply(parsed: any, language: MessageLanguage): string | null {
   if (!parsed || parsed.error || parsed.status === 'need_clarification') return null;
   const team = parsed.teamName ?? (language === 'en' ? 'The team' : 'الفريق');
-  const line = (title: string, rows: Array<{ name?: string; jersey?: number | null }>) => {
+  const row = (title: string, rows: Array<{ name?: string; jersey?: number | null }>) => {
     if (!rows?.length) return '';
     const names = rows
       .slice(0, 8)
       .map((p) => (p.jersey ? `${p.name} (${p.jersey})` : p.name))
       .join(language === 'en' ? ', ' : '، ');
-    return `- ${title}: ${names}`;
+    return `| ${title} | ${names} |`;
   };
-  const parts = [
+  const posGk = language === 'en' ? 'GK' : 'حراسة';
+  const posDef = language === 'en' ? 'DEF' : 'دفاع';
+  const posMid = language === 'en' ? 'MID' : 'وسط';
+  const posFwd = language === 'en' ? 'FWD' : 'هجوم';
+  const colPos = language === 'en' ? 'Pos' : 'مركز';
+  const colPlayers = language === 'en' ? 'Players' : 'اللاعبين';
+  const lines = [
     language === 'en' ? `**${team}** squad:` : `تشكيلة **${team}**:`,
-    line(language === 'en' ? 'GK' : 'حراسة', parsed.goalkeepers),
-    line(language === 'en' ? 'DEF' : 'دفاع', parsed.defenders),
-    line(language === 'en' ? 'MID' : 'وسط', parsed.midfielders),
-    line(language === 'en' ? 'FWD' : 'هجوم', parsed.forwards),
+    `| ${colPos} | ${colPlayers} |`,
+    '| --- | --- |',
+    row(posGk, parsed.goalkeepers),
+    row(posDef, parsed.defenders),
+    row(posMid, parsed.midfielders),
+    row(posFwd, parsed.forwards),
   ].filter(Boolean);
-  return parts.length > 1 ? parts.join('\n') : null;
+  return lines.length > 3 ? lines.join('\n') : null;
 }
 
 function formatScorersReply(parsed: any, language: MessageLanguage): string | null {
@@ -218,12 +236,11 @@ function formatScorersReply(parsed: any, language: MessageLanguage): string | nu
   const top = Array.isArray(parsed.topScorers) ? parsed.topScorers : [];
   if (!top.length) return null;
   const team = parsed.teamName ?? (language === 'en' ? 'The team' : 'الفريق');
-  const first = top[0];
-  const rest = top.slice(1, 5).map((r: any) => `${r.name} (${r.value})`).join(language === 'en' ? ', ' : '، ');
-  if (language === 'en') {
-    return `**${team}** top scorer is **${first.name}** with **${first.value}** goals.${rest ? ` Then: ${rest}.` : ''}`;
-  }
-  return `هدّاف **${team}** هو **${first.name}** بـ **${first.value}** هدف.${rest ? ` وراه: ${rest}.` : ''}`;
+  const colPlayer = language === 'en' ? 'Player' : 'اللاعب';
+  const colGoals = language === 'en' ? 'Goals' : 'أهداف';
+  const header = language === 'en' ? `**${team}** top scorers:` : `هدافين **${team}**:`;
+  const rows = top.slice(0, 6).map((r: any, i: number) => `| ${i + 1} | ${r.name} | ${r.value} |`);
+  return [header, `| # | ${colPlayer} | ${colGoals} |`, '| --- | --- | --- |', ...rows].join('\n');
 }
 
 function formatTeamMatchReply(parsed: any, language: MessageLanguage): string | null {
@@ -344,6 +361,7 @@ export interface RunFootballAgentResult {
   fullText: string;
   usedModel: string;
   toolsUsed: string[];
+  navLinks: ChatNavLink[];
 }
 
 /**
@@ -427,6 +445,12 @@ export async function runFootballAgent(
   const toolsUsed: string[] = [];
   let fullText = '';
   let lastToolPayloads: string[] = [];
+  const allToolPayloads: string[] = [];
+
+  const finish = (text: string): RunFootballAgentResult => {
+    const navLinks = extractChatNavLinks(allToolPayloads, toolsUsed, params.language);
+    return { fullText: text, usedModel: model, toolsUsed, navLinks };
+  };
 
   const messages: ChatCompletionMessageParam[] = [
     {
@@ -484,6 +508,7 @@ export async function runFootballAgent(
         userMessage: params.userMessage,
       });
       toolsUsed.push(prefetchTool);
+      allToolPayloads.push(payload);
       logger.info(
         `[chat-agent] prefetch ${prefetchTool} q="${prefetchQuery}" ${Date.now() - tPrefetch}ms`,
       );
@@ -498,28 +523,28 @@ export async function runFootballAgent(
         fullText = clarify;
         params.onToken(clarify);
         logger.info(`[chat-agent] prefetch clarify ${Date.now() - startedAt}ms`);
-        return { fullText, usedModel: model, toolsUsed };
+        return finish(fullText);
       }
       const scored = formatScorersReply(parsed, params.language);
       if (scored && prefetchTool === 'get_team_scorers') {
         fullText = scored;
         params.onToken(scored);
         logger.info(`[chat-agent] prefetch scorers ${Date.now() - startedAt}ms`);
-        return { fullText, usedModel: model, toolsUsed };
+        return finish(fullText);
       }
       const squad = formatSquadReply(parsed, params.language);
       if (squad && prefetchTool === 'get_team_squad') {
         fullText = squad;
         params.onToken(squad);
         logger.info(`[chat-agent] prefetch squad ${Date.now() - startedAt}ms`);
-        return { fullText, usedModel: model, toolsUsed };
+        return finish(fullText);
       }
       const lastMatch = formatTeamMatchReply(parsed, params.language);
       if (lastMatch && prefetchTool === 'get_team_match') {
         fullText = lastMatch;
         params.onToken(lastMatch);
         logger.info(`[chat-agent] prefetch team-match ${Date.now() - startedAt}ms`);
-        return { fullText, usedModel: model, toolsUsed };
+        return finish(fullText);
       }
       if (parsed && !parsed.error && (parsed.status === 'ok' || parsed.source || parsed.quickFacts)) {
         lastToolPayloads = [payload];
@@ -556,7 +581,7 @@ export async function runFootballAgent(
           fullText = groundedReply;
           params.onToken(groundedReply);
           logger.info(`[chat-agent] prefetch grounded ${Date.now() - startedAt}ms`);
-          return { fullText, usedModel: model, toolsUsed };
+          return finish(fullText);
         }
         fullText = await streamFinalAnswer(
           client,
@@ -568,7 +593,7 @@ export async function runFootballAgent(
         logger.info(
           `[chat-agent] prefetch+stream total=${Date.now() - startedAt}ms chars=${fullText.length}`,
         );
-        if (fullText) return { fullText, usedModel: model, toolsUsed };
+        if (fullText) return finish(fullText);
       }
     } catch (err) {
       logger.warn(
@@ -675,7 +700,8 @@ export async function runFootballAgent(
           };
         }),
       );
-      lastToolPayloads = results.map((r) => r.content);
+          lastToolPayloads = results.map((r) => r.content);
+          allToolPayloads.push(...lastToolPayloads);
       messages.push(...results);
 
       // ─── Strict grounding ────────────────────────────────────────────────
@@ -697,7 +723,7 @@ export async function runFootballAgent(
       if (groundedReply) {
         fullText = groundedReply;
         params.onToken(groundedReply);
-        return { fullText, usedModel: model, toolsUsed };
+        return finish(fullText);
       }
 
       // After tools: stream the final answer so the user sees tokens immediately.
@@ -713,7 +739,7 @@ export async function runFootballAgent(
           if (answer) {
             fullText = answer;
             logger.info(`[chat-agent] streamed final ${Date.now() - startedAt}ms`);
-            return { fullText, usedModel: model, toolsUsed };
+            return finish(fullText);
           }
           logger.warn('[chat-agent] streamed final answer empty — retrying loop');
         } catch (err) {
@@ -732,7 +758,7 @@ export async function runFootballAgent(
         fullText = stepContent;
         params.onToken(stepContent);
       }
-      return { fullText, usedModel: model, toolsUsed };
+      return finish(fullText);
     }
 
     logger.warn(
@@ -749,13 +775,13 @@ export async function runFootballAgent(
         : 'جيب البيانات اللحظية بس الرد اتقطع. جرّب تبعت السؤال تاني بعد لحظات.';
     fullText = fallback;
     params.onToken(fallback);
-    return { fullText, usedModel: model, toolsUsed };
+    return finish(fullText);
   }
 
   if (!fullText) {
     throw new Error('chat_agent_empty_response');
   }
-  return { fullText, usedModel: model, toolsUsed };
+  return finish(fullText);
 }
 
 export { isChatAgentConfigured, resolveAgentModel };

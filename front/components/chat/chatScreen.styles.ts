@@ -62,12 +62,6 @@ export const chatScreenStyles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
     gap: 6,
   },
-  logoStatusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#22C55E',
-  },
   logo90Large: {
     color: chatColors.textPrimary,
     fontSize: 16,
@@ -172,23 +166,6 @@ export const chatScreenStyles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    fontWeight: '600',
-  },
-  welcomeOnline: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 10,
-  },
-  welcomeOnlineDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#22C55E',
-  },
-  welcomeOnlineText: {
-    fontSize: 12,
-    color: 'rgba(134,239,172,0.9)',
     fontWeight: '600',
   },
   welcomeChips: {

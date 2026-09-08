@@ -20,6 +20,12 @@ import { logger } from '../services/logger';
 import { fetchWithClerkAuth, getClerkBearerToken } from '../utils/clerkAuthToken';
 import { setChatSessionActive } from '../utils/chatSessionState';
 import { useLanguageStore } from '../src/i18n/store';
+import {
+  decodeChatNavMarker,
+  sanitizeChatNavLinks,
+  stripChatNavMarker,
+  type ChatNavLink,
+} from '../utils/chatNavLinks';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +38,7 @@ export interface Message {
   /** True while the assistant message is actively receiving SSE tokens. */
   isStreaming?: boolean;
   usedModel?: string;
+  navLinks?: ChatNavLink[];
 }
 
 export interface Conversation {
@@ -54,6 +61,7 @@ interface SSEDone {
   usedModel?: string;
   /** Set when the server auto-titles the conversation from the first message. */
   conversationTitle?: string;
+  navLinks?: ChatNavLink[];
 }
 interface SSEError { error: string; done?: boolean }
 type SSEData = SSEToken | SSEDone | SSEError;
@@ -136,7 +144,7 @@ function toHistoryFormat(messages: Message[]) {
     .filter(m => !m.isTyping)
     .map(m => ({
       role: m.role === 'ai' ? 'assistant' : 'user',
-      content: m.text,
+      content: stripChatNavMarker(m.text),
     }));
 }
 
@@ -542,12 +550,16 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       };
       const loaded: Message[] = [
         ...getInitialMessages(),
-        ...(data.messages ?? []).map(m => ({
-          id: m.id,
-          role: m.role,
-          text: m.text,
-          time: formatTime(m.createdAt),
-        })),
+        ...(data.messages ?? []).map(m => {
+          const parsed = m.role === 'ai' ? decodeChatNavMarker(m.text) : { text: m.text, navLinks: [] as ChatNavLink[] };
+          return {
+            id: m.id,
+            role: m.role,
+            text: parsed.text,
+            time: formatTime(m.createdAt),
+            navLinks: parsed.navLinks.length ? parsed.navLinks : undefined,
+          };
+        }),
       ];
 
       if (!replaceLocal && isProtectedSession()) {
@@ -914,9 +926,22 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
             // long the typing renderer takes to drain.
             if (usedModel && activeAssistantMessageIdRef.current) {
               const targetId = activeAssistantMessageIdRef.current;
+              const navLinks = sanitizeChatNavLinks(doneEvent.navLinks);
               setMessages(prev =>
-                prev.map(m => (m.id === targetId ? { ...m, usedModel } : m)),
+                prev.map(m =>
+                  m.id === targetId
+                    ? { ...m, usedModel, ...(navLinks.length ? { navLinks } : {}) }
+                    : m,
+                ),
               );
+            } else if (doneEvent.navLinks && activeAssistantMessageIdRef.current) {
+              const targetId = activeAssistantMessageIdRef.current;
+              const navLinks = sanitizeChatNavLinks(doneEvent.navLinks);
+              if (navLinks.length) {
+                setMessages(prev =>
+                  prev.map(m => (m.id === targetId ? { ...m, navLinks } : m)),
+                );
+              }
             }
             // Tell the renderer to drain remaining tokens and call us back
             // once every visible word has been rendered.
@@ -1385,7 +1410,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     const labels = getLabels();
     const formatLines = (rows: Array<{ role: 'user' | 'ai'; text: string }>) =>
       rows
-        .map(m => `${m.role === 'user' ? labels.exportUserLabel : labels.exportAiLabel}: ${m.text}`)
+        .map(m => `${m.role === 'user' ? labels.exportUserLabel : labels.exportAiLabel}: ${stripChatNavMarker(m.text)}`)
         .join('\n\n');
 
     if (conversationId === currentConversationId) {

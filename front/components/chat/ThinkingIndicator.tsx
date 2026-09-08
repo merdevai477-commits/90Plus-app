@@ -1,24 +1,23 @@
 /**
- * ThinkingIndicator.tsx — Optimized Version (Production Ready)
+ * Premium thinking card — quotes the user's question like Claude / ChatGPT.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
   useSharedValue,
   withRepeat,
   withTiming,
-  withSpring,
   useAnimatedStyle,
   interpolate,
+  Easing,
 } from 'react-native-reanimated';
-import { Brain, CheckCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react-native';
-import { Colors, Radius, FontSize, Spacing, Duration } from '../../constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Sparkles } from 'lucide-react-native';
 import { useTranslation } from '../../src/i18n';
-
-// ─── Types ───────────────────────────────────────────────────────────────────
+import { chatColors } from './chatTheme';
 
 type Status = 'thinking' | 'done' | 'error';
 
@@ -28,318 +27,286 @@ interface ThinkingIndicatorProps {
   status?: Status;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const STEP_MS = 900;
+const QUOTE_MAX = 88;
 
-function generateThinkingSteps(message: string, th: Record<string, string>): string[] {
-  if (!message) {
-    return [th.readingQuestion, th.draftingReply];
+function clipQuote(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (clean.length <= QUOTE_MAX) return clean;
+  return `${clean.slice(0, QUOTE_MAX - 1).trim()}…`;
+}
+
+function keywordFrom(message: string): string {
+  const clean = message.replace(/[?!.,،؟]/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = clean.split(' ').filter((w) => w.length > 2);
+  if (!words.length) return clean.slice(0, 24) || '…';
+  return [...words].sort((a, b) => b.length - a.length)[0] ?? clean;
+}
+
+function buildSteps(message: string, th: Record<string, string>): string[] {
+  const quote = clipQuote(message);
+  const keyword = keywordFrom(message);
+  if (!quote) {
+    return [th.readingQuestion, th.checkingLiveData, th.draftingPrecise];
   }
-
-  const clean = message.replace(/[?!.,]/g, '');
-  const words = clean.split(/\s+/).filter(w => w.length > 2);
-
-  const keyword =
-    words.sort((a, b) => b.length - a.length)[0] || 'details';
-
-  const lower = message.toLowerCase();
-
-  if (/\b(how many|count|number of|what'?s the score)\b/.test(lower)) {
-    return [
-      th.parsingNumbers,
-      th.lookingUp.replace('{keyword}', keyword),
-      th.workingThrough,
-    ];
-  }
-
-  if (/\b(how\b|why\b|what\b|explain|steps?|walk me through)\b/.test(lower) || message.includes('?')) {
-    return [
-      th.breakingDown,
-      th.analyzing.replace('{keyword}', keyword),
-      th.draftingClear,
-    ];
-  }
-
   return [
-    th.understanding,
-    th.searching.replace('{keyword}', keyword),
-    th.writing,
+    (th.analyzing as string).replace('{keyword}', keyword),
+    th.checkingLiveData,
+    th.draftingPrecise,
   ];
 }
 
-// ─── Icons ───────────────────────────────────────────────────────────────────
-
-function StatusGlyph({ status }: { status: Status }) {
-  const size = 18;
-  if (status === 'done') return <CheckCircle size={size} color={Colors.success} strokeWidth={2.2} />;
-  if (status === 'error') return <AlertTriangle size={size} color={Colors.warning} strokeWidth={2.2} />;
-  return <Brain size={size} color={Colors.purpleSoft} strokeWidth={2.2} />;
+function ThinkingDots() {
+  const [n, setN] = useState(1);
+  useEffect(() => {
+    const timer = setInterval(() => setN((v) => (v % 3) + 1), 380);
+    return () => clearInterval(timer);
+  }, []);
+  return <Text style={styles.dots}>{'.'.repeat(n)}</Text>;
 }
-
-// ─── Component ───────────────────────────────────────────────────────────────
 
 export function ThinkingIndicator({
   lastMessage,
   isThinking,
   status = 'thinking',
 }: ThinkingIndicatorProps) {
-  const { t } = useTranslation();
-  const th = t.chat.thinking;
-  const [isOpen, setIsOpen] = useState(true);
+  const { t, language } = useTranslation();
+  const th = t.chat.thinking as Record<string, string>;
+  const isAr = language === 'ar';
   const [currentStep, setCurrentStep] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const quote = clipQuote(lastMessage ?? '');
+  const steps = useMemo(() => buildSteps(lastMessage ?? '', th), [lastMessage, th]);
 
-  const steps = useMemo(
-    () => generateThinkingSteps(lastMessage ?? '', th),
-    [lastMessage, th],
-  );
-
-  // ─── Animations ────────────────────────────────────────────────────────────
-
-  const pulse = useSharedValue(1);
+  const pulse = useSharedValue(0.45);
+  const shimmer = useSharedValue(0);
 
   useEffect(() => {
     if (status !== 'thinking') {
-      pulse.value = withTiming(1);
+      pulse.value = withTiming(1, { duration: 180 });
       return;
     }
-
     pulse.value = withRepeat(
-      withTiming(0.4, { duration: 400 }),
+      withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
       -1,
-      true
+      true,
     );
-  }, [status]);
+    shimmer.value = withRepeat(
+      withTiming(1, { duration: 1400, easing: Easing.linear }),
+      -1,
+      false,
+    );
+  }, [status, pulse, shimmer]);
 
   const pulseStyle = useAnimatedStyle(() => ({
-    opacity: pulse.value,
-    transform: [{ scale: interpolate(pulse.value, [0.4, 1], [0.95, 1.05]) }],
+    opacity: interpolate(pulse.value, [0.45, 1], [0.55, 1]),
+    transform: [{ scale: interpolate(pulse.value, [0.45, 1], [0.96, 1.05]) }],
   }));
 
-  // Expand animation
-  const expand = useSharedValue(1);
+  const shimmerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(shimmer.value, [0, 1], [-80, 180]) }],
+  }));
 
-  useEffect(() => {
-    expand.value = withSpring(isOpen ? 1 : 0, {
-      stiffness: 200,
-      damping: 22,
-      mass: 0.8,
-    });
-  }, [isOpen]);
-
-  // Measured content height — ref outside animated view
-  const [contentHeight, setContentHeight] = useState(0);
-
-  const contentStyle = useAnimatedStyle(() => {
-    if (contentHeight === 0) {
-      // First render — show content normally for measurement, hide via opacity
-      return { opacity: 0 };
-    }
-    return {
-      height: expand.value * contentHeight,
-      opacity: expand.value,
-    };
-  });
-
-  // ─── Timers ────────────────────────────────────────────────────────────────
-
-  // Duration
   useEffect(() => {
     if (!isThinking) return;
-
-    const timer = setInterval(() => {
-      setDuration(d => d + 1);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [isThinking]);
-
-  // Steps
-  useEffect(() => {
-    if (!isThinking) return;
-
     setCurrentStep(0);
-
-    const stepTimer = setInterval(() => {
-      setCurrentStep(s =>
-        s < steps.length - 1 ? s + 1 : s
-      );
-    }, Duration.thinkingStep);
-
-    return () => clearInterval(stepTimer);
-  }, [steps, isThinking]);
-
-  // Reset when done
-  useEffect(() => {
-    if (!isThinking) {
-      setDuration(0);
-      setCurrentStep(steps.length - 1);
-    }
-  }, [isThinking]);
-
-  // ─── Helpers ───────────────────────────────────────────────────────────────
-
-  const toggleOpen = () => setIsOpen(p => !p);
-
-  const formattedTime = `${Math.floor(duration / 60)}:${(duration % 60)
-    .toString()
-    .padStart(2, '0')}`;
-
-  const getStatusText = () => {
-    if (status === 'done') return th.responseReady;
-    if (status === 'error') return th.somethingWrong;
-    return th.thinkingDuration.replace('{time}', formattedTime);
-  };
-
-  // ─── Render ────────────────────────────────────────────────────────────────
+    const timer = setInterval(() => {
+      setCurrentStep((s) => (s < steps.length - 1 ? s + 1 : s));
+    }, STEP_MS);
+    return () => clearInterval(timer);
+  }, [isThinking, steps.length]);
 
   if (!isThinking && status === 'thinking') return null;
 
   return (
-    <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(200)} style={styles.container}>
-      <View style={styles.wrapper}>
-        {/* Trigger */}
-        <Pressable onPress={toggleOpen} style={styles.trigger}>
-          <View style={styles.triggerBg} />
-          <View style={styles.triggerContent}>
-            <View style={styles.left}>
-              <Animated.View style={pulseStyle}>
-                <StatusGlyph status={status} />
-              </Animated.View>
-              <Text style={styles.text}>{getStatusText()}</Text>
-            </View>
-            {isOpen ? (
-              <ChevronUp size={18} color={Colors.white50} strokeWidth={2} />
-            ) : (
-              <ChevronDown size={18} color={Colors.white50} strokeWidth={2} />
-            )}
-          </View>
-        </Pressable>
+    <Animated.View
+      entering={FadeIn.duration(200)}
+      exiting={FadeOut.duration(160)}
+      style={styles.container}
+    >
+      <View style={styles.card}>
+        <LinearGradient
+          colors={['rgba(124,58,237,0.28)', 'rgba(12,6,22,0.92)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.shimmerClip} pointerEvents="none">
+          <Animated.View style={[styles.shimmer, shimmerStyle]}>
+            <LinearGradient
+              colors={['transparent', 'rgba(255,255,255,0.08)', 'transparent']}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+        </View>
 
-        {/* Content */}
-        {isOpen && (
-          <Animated.View style={[styles.content, contentStyle]}>
-            <View style={styles.contentBg} />
-
-            <View
-              style={styles.steps}
-              onLayout={(e) => {
-                const h = e.nativeEvent.layout.height;
-                if (h > 0 && h !== contentHeight) setContentHeight(h);
-              }}
-            >
-              {steps.map((step, i) => {
-                const visible = i <= currentStep;
-                if (!visible) return null;
-
-                const isActive = i === currentStep;
-
-                return (
-                  <Animated.View
-                    key={i}
-                    entering={FadeIn.delay(i * 80)}
-                    style={styles.stepRow}
-                  >
-                    <View
-                      style={[
-                        styles.dot,
-                        isActive ? styles.dotActive : styles.dotPast,
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.stepText,
-                        isActive ? styles.textActive : styles.textPast,
-                      ]}
-                    >
-                      {step}
-                    </Text>
-                  </Animated.View>
-                );
-              })}
+        <View style={[styles.header, isAr && styles.headerRtl]}>
+          <Animated.View style={pulseStyle}>
+            <View style={styles.sparkWrap}>
+              <Sparkles size={16} color="#E9D5FF" strokeWidth={2.2} />
             </View>
           </Animated.View>
-        )}
+          <View style={[styles.titleRow, isAr && styles.titleRowRtl]}>
+            <Text style={[styles.thinkingLabel, isAr && styles.rtlText]}>
+              {th.thinkingLabel}
+            </Text>
+            <ThinkingDots />
+          </View>
+        </View>
+
+        {quote ? (
+          <Text style={[styles.quote, isAr && styles.rtlText]} numberOfLines={2}>
+            “{quote}”
+          </Text>
+        ) : null}
+
+        <View style={styles.steps}>
+          {steps.map((step, i) => {
+            if (i > currentStep) return null;
+            const active = i === currentStep;
+            return (
+              <Animated.View
+                key={`${step}-${i}`}
+                entering={FadeIn.duration(180)}
+                style={[styles.stepRow, isAr && styles.stepRowRtl]}
+              >
+                <View style={[styles.dot, active ? styles.dotActive : styles.dotPast]} />
+                <Text
+                  style={[
+                    styles.stepText,
+                    active ? styles.stepActive : styles.stepPast,
+                    isAr && styles.rtlText,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {step}
+                </Text>
+              </Animated.View>
+            );
+          })}
+        </View>
       </View>
     </Animated.View>
   );
 }
 
-// ─── Styles ─────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: {
     alignItems: 'flex-start',
-    marginVertical: Spacing.sm,
+    marginVertical: 8,
+    paddingHorizontal: 2,
   },
-  wrapper: {
-    width: '85%',
-    maxWidth: 280,
-  },
-  trigger: {
-    borderRadius: Radius.xl,
+  card: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 18,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.borderSubtle,
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.28)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#7C3AED',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.22,
+        shadowRadius: 16,
+      },
+      android: { elevation: 5 },
+    }),
   },
-  triggerBg: {
+  shimmerClip: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.surfaceGlass,
-  },
-  triggerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: Spacing.base,
-    zIndex: 1,
-  },
-  left: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  text: {
-    color: Colors.white70,
-    fontSize: FontSize.md,
-  },
-  content: {
-    borderRadius: Radius.xl,
-    marginTop: 4,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Colors.borderSubtle,
   },
-  contentBg: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(22,16,36,0.95)',
+  shimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 90,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  headerRtl: {
+    flexDirection: 'row-reverse',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexShrink: 1,
+  },
+  titleRowRtl: {
+    flexDirection: 'row-reverse',
+  },
+  sparkWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(168,85,247,0.28)',
+  },
+  thinkingLabel: {
+    color: '#E9D5FF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  dots: {
+    color: '#E9D5FF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginLeft: -2,
+  },
+  quote: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 13,
+    lineHeight: 19,
+    fontStyle: 'italic',
+    marginBottom: 10,
   },
   steps: {
-    padding: Spacing.base,
-    gap: Spacing.sm,
-    zIndex: 1,
+    gap: 7,
   },
   stepRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  stepRowRtl: {
+    flexDirection: 'row-reverse',
   },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    marginTop: 6,
   },
   dotActive: {
-    backgroundColor: Colors.purpleSoft,
+    backgroundColor: chatColors.accentSoft,
   },
   dotPast: {
-    backgroundColor: 'rgba(124,58,237,0.4)',
+    backgroundColor: 'rgba(167,139,250,0.35)',
   },
   stepText: {
-    fontSize: FontSize.base,
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
   },
-  textActive: {
-    color: Colors.white80,
+  stepActive: {
+    color: 'rgba(255,255,255,0.88)',
   },
-  textPast: {
-    color: Colors.white40,
+  stepPast: {
+    color: 'rgba(255,255,255,0.42)',
+  },
+  rtlText: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
 });

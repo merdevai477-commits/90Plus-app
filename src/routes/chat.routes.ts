@@ -84,6 +84,11 @@ import {
     runFootballAgent,
 } from '../services/chat-agent.service';
 import { tryDeterministicFootballReply } from '../services/chat-deterministic-fallback.service';
+import {
+    decodeChatNavMarker,
+    encodeChatNavMarker,
+    extractChatNavLinks,
+} from '../services/chat-nav-links.service';
 
 // Data-backed factual answers stay valid for a few hours; live data is excluded
 // from caching upstream (see FootballChatContext.cacheable).
@@ -501,10 +506,20 @@ function buildHistoryWindow(history: HistoryItem[]): HistoryItem[] {
         const msg = clean[i];
         const t = estimateTokens(msg.content);
         if (result.length >= HISTORY_MIN_MESSAGES && tokens + t > HISTORY_TOKEN_BUDGET) break;
-        result.unshift(msg);
+        result.unshift({ ...msg, content: decodeChatNavMarker(msg.content).text });
         tokens += t;
     }
     return result;
+}
+
+function withChatNav(
+    text: string,
+    toolsUsed: string[],
+    payloads: string[] | undefined,
+    language: 'ar' | 'en',
+) {
+    const navLinks = extractChatNavLinks(payloads ?? [], toolsUsed, language);
+    return { stored: encodeChatNavMarker(text, navLinks), navLinks };
 }
 
 // ─── Dynamic max_tokens ──────────────────────────────────────────────────────
@@ -817,11 +832,12 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                 });
 
                 if (agentResult.fullText.trim().length > 0 && !clientClosed) {
+                    const navLinks = agentResult.navLinks ?? [];
                     await appendMessage(
                         userId,
                         targetConversation.id,
                         'assistant',
-                        agentResult.fullText,
+                        encodeChatNavMarker(agentResult.fullText, navLinks),
                         agentResult.usedModel,
                     );
                     const conversationTitle = await maybeAutoTitleConversation(
@@ -836,6 +852,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                         usedModel: agentResult.usedModel,
                         usedProvider: 'agent',
                         toolsUsed: agentResult.toolsUsed,
+                        ...(navLinks.length ? { navLinks } : {}),
                         ...(conversationTitle ? { conversationTitle } : {}),
                     });
                     return;
@@ -854,12 +871,18 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     messageLanguage,
                 );
                 if (deterministic?.text && !clientClosed) {
+                    const { stored, navLinks } = withChatNav(
+                        deterministic.text,
+                        deterministic.toolsUsed,
+                        deterministic.payloads,
+                        messageLanguage,
+                    );
                     sendToken(deterministic.text);
                     await appendMessage(
                         userId,
                         targetConversation.id,
                         'assistant',
-                        deterministic.text,
+                        stored,
                         'deterministic-tools',
                     );
                     const conversationTitle = await maybeAutoTitleConversation(
@@ -874,6 +897,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                         usedModel: 'deterministic-tools',
                         usedProvider: 'tools',
                         toolsUsed: deterministic.toolsUsed,
+                        ...(navLinks.length ? { navLinks } : {}),
                         ...(conversationTitle ? { conversationTitle } : {}),
                     });
                     return;
@@ -1062,12 +1086,18 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     messageLanguage,
                 );
                 if (deterministic?.text && !clientClosed) {
+                    const { stored, navLinks } = withChatNav(
+                        deterministic.text,
+                        deterministic.toolsUsed,
+                        deterministic.payloads,
+                        messageLanguage,
+                    );
                     sendToken(deterministic.text);
                     await appendMessage(
                         userId,
                         targetConversation.id,
                         'assistant',
-                        deterministic.text,
+                        stored,
                         'deterministic-tools',
                     );
                     const conversationTitle = await maybeAutoTitleConversation(
@@ -1082,6 +1112,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                         usedModel: 'deterministic-tools',
                         usedProvider: 'tools',
                         toolsUsed: deterministic.toolsUsed,
+                        ...(navLinks.length ? { navLinks } : {}),
                         ...(conversationTitle ? { conversationTitle } : {}),
                     });
                     return;

@@ -172,7 +172,11 @@ export function ChatMessageList({
           isThinking ? (
             <ThinkingIndicator
               isThinking={isThinking}
-              lastMessage={messages[messages.length - 1]?.text ?? ''}
+              lastMessage={
+                [...messages]
+                  .reverse()
+                  .find((m) => m.role === 'user' && m.text.trim())?.text ?? ''
+              }
             />
           ) : null
         }
