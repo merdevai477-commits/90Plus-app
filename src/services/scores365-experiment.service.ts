@@ -3247,7 +3247,7 @@ export async function getScores365ExperimentBundle(
     | { id?: number | null; name?: string | null; image?: string | null }
     | null
     | undefined;
-  if (venue && !venue.image) {
+  if (venue) {
     venue.image = await resolveVenueImage({
       venueId: venue.id,
       venueName: venue.name,

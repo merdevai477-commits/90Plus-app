@@ -1,9 +1,9 @@
 /**
  * Pre-kickoff / waiting Events tab: stadium, referee, TV, and an auto-update strip.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import { GlassWrapper, glassProps } from '../../constants/ui';
@@ -19,12 +19,20 @@ import {
   TEXT_SECONDARY,
 } from '../../constants/tokens';
 import type { MatchKickoffInfo } from '../../utils/extractMatchKickoffInfo';
+import {
+  fetchStadiumImageByName,
+  isUnverifiedStadiumCdnUrl,
+} from '../../utils/fetchStadiumImage';
+
+const STADIUM_PLACEHOLDER = require('../../assets/images/prediction-groups/hero-stadium.webp');
 
 type Row = {
   key: string;
   label: string;
   value: string;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
+  icon:
+    | { set: 'ion'; name: React.ComponentProps<typeof Ionicons>['name'] }
+    | { set: 'mci'; name: React.ComponentProps<typeof MaterialCommunityIcons>['name'] };
 };
 
 type Props = {
@@ -44,6 +52,63 @@ function formatCapacity(value: number): string {
   return value.toLocaleString();
 }
 
+function isUsableRemotePhoto(url?: string | null): boolean {
+  const value = (url ?? '').trim();
+  if (!/^https?:\/\//i.test(value)) return false;
+  if (/Football_pitch_pv/i.test(value)) return false;
+  if (isUnverifiedStadiumCdnUrl(value)) return false;
+  return true;
+}
+
+function StadiumHero({ uri, stadiumName }: { uri: string | null; stadiumName: string | null }) {
+  const initial = isUsableRemotePhoto(uri) ? uri : null;
+  const [remote, setRemote] = useState<string | null>(initial);
+
+  useEffect(() => {
+    setRemote(isUsableRemotePhoto(uri) ? uri : null);
+  }, [uri]);
+
+  useEffect(() => {
+    const name = (stadiumName ?? '').trim();
+    if (!name) return;
+    if (isUsableRemotePhoto(uri)) return;
+
+    let cancelled = false;
+    void fetchStadiumImageByName(name)
+      .then((next) => {
+        if (cancelled || !next || isUnverifiedStadiumCdnUrl(next)) return;
+        setRemote((current) => {
+          if (current && !isUnverifiedStadiumCdnUrl(current) && isUsableRemotePhoto(current)) {
+            return current;
+          }
+          return next;
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [stadiumName, uri]);
+
+  return (
+    <ExpoImage
+      source={remote ? { uri: remote } : STADIUM_PLACEHOLDER}
+      placeholder={STADIUM_PLACEHOLDER}
+      style={styles.hero}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      onError={() => setRemote(null)}
+    />
+  );
+}
+
+function RowIcon({ icon }: { icon: Row['icon'] }) {
+  if (icon.set === 'mci') {
+    return <MaterialCommunityIcons name={icon.name} size={16} color={PURPLE_SOFT} />;
+  }
+  return <Ionicons name={icon.name} size={16} color={PURPLE_SOFT} />;
+}
+
 export function MatchKickoffHighlights({
   info,
   title,
@@ -59,24 +124,44 @@ export function MatchKickoffHighlights({
   const stadiumValue = [info.stadiumName, info.city].filter(Boolean).join(' · ');
   const rows: Row[] = [];
   if (info.referee) {
-    rows.push({ key: 'referee', label: refereeLabel, value: info.referee, icon: 'flag-outline' });
+    rows.push({
+      key: 'referee',
+      label: refereeLabel,
+      value: info.referee,
+      icon: { set: 'mci', name: 'whistle' },
+    });
   }
   if (info.staff) {
-    rows.push({ key: 'staff', label: staffLabel, value: info.staff, icon: 'people-outline' });
+    rows.push({
+      key: 'staff',
+      label: staffLabel,
+      value: info.staff,
+      icon: { set: 'ion', name: 'people-outline' },
+    });
   }
   if (stadiumValue) {
-    rows.push({ key: 'stadium', label: stadiumLabel, value: stadiumValue, icon: 'business-outline' });
+    rows.push({
+      key: 'stadium',
+      label: stadiumLabel,
+      value: stadiumValue,
+      icon: { set: 'ion', name: 'business-outline' },
+    });
   }
   if (info.capacity) {
     rows.push({
       key: 'capacity',
       label: capacityLabel,
       value: formatCapacity(info.capacity),
-      icon: 'people-circle-outline',
+      icon: { set: 'ion', name: 'people-circle-outline' },
     });
   }
   if (info.broadcast) {
-    rows.push({ key: 'broadcast', label: broadcastLabel, value: info.broadcast, icon: 'tv-outline' });
+    rows.push({
+      key: 'broadcast',
+      label: broadcastLabel,
+      value: info.broadcast,
+      icon: { set: 'ion', name: 'tv-outline' },
+    });
   }
 
   return (
@@ -106,14 +191,7 @@ export function MatchKickoffHighlights({
 
         <Text style={styles.title}>{title}</Text>
 
-        {info.stadiumImage ? (
-          <ExpoImage
-            source={{ uri: info.stadiumImage }}
-            style={styles.hero}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-          />
-        ) : null}
+        <StadiumHero uri={info.stadiumImage} stadiumName={info.stadiumName} />
 
         {rows.length === 0 ? (
           <Text style={styles.empty}>{emptyHint}</Text>
@@ -124,7 +202,7 @@ export function MatchKickoffHighlights({
               style={[styles.row, index < rows.length - 1 && styles.rowDivider]}
             >
               <View style={styles.iconWrap}>
-                <Ionicons name={row.icon} size={16} color={PURPLE_SOFT} />
+                <RowIcon icon={row.icon} />
               </View>
               <View style={styles.rowText}>
                 <Text style={styles.rowLabel}>{row.label}</Text>

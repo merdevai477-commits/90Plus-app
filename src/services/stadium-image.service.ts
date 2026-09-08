@@ -552,8 +552,21 @@ export async function getStadiumImageFast(
   }
 }
 
+async function probeImageUrl(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      signal: wikiAbortSignal(2000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * 365 CDN first when a venue id exists; otherwise Wikipedia/cache (fast by default).
+ * 365 CDN first when the photo actually exists (HEAD 200). Constructed venue
+ * URLs often 404 — those must fall through to Wikipedia/cache.
  */
 export async function resolveVenueImage(options: {
   venueId?: number | null;
@@ -561,9 +574,36 @@ export async function resolveVenueImage(options: {
   country?: string | null;
   fast?: boolean;
 }): Promise<string> {
-  const from365 = scores365VenueImageUrl(options.venueId);
-  if (from365) return from365;
   const name = (options.venueName ?? '').trim();
+  if (name) {
+    const { normalized } = normalizeStadiumName(name);
+    const cached = await getFromCache(normalized);
+    if (cached) {
+      recordCache(true);
+      return imageUrlFromCache(cached);
+    }
+  }
+
+  const from365 = scores365VenueImageUrl(options.venueId);
+  if (from365 && (await probeImageUrl(from365))) {
+    if (name) {
+      const names = normalizeStadiumName(name);
+      if (names.normalized) {
+        void saveToCache({
+          stadiumNameNormalized: names.normalized,
+          originalName: names.original || name,
+          imageUrl: from365,
+          thumbnailUrl: from365,
+          latitude: null,
+          longitude: null,
+          found: true,
+          source: 'scores365',
+        });
+      }
+    }
+    return from365;
+  }
+
   if (!name) return getPlaceholderUrl();
   if (options.fast === false) {
     return getStadiumImage(name, { country: options.country });

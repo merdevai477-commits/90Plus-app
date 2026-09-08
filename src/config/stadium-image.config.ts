@@ -3,7 +3,7 @@
  */
 
 const DEFAULT_PLACEHOLDER =
-  'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Football_pitch_pv.jpg/1280px-Football_pitch_pv.jpg';
+  'https://upload.wikimedia.org/wikipedia/commons/0/0e/Estadio_Santiago_Bernab%C3%A9u_Madrid.jpg';
 
 const DEFAULT_USER_AGENT =
   '90Plus/1.0 (https://90plus.pro; stadium-images@90plus.pro)';

@@ -228,11 +228,26 @@ describe('stadium-image.service', () => {
     );
   });
 
-  it('uses a 365 venue id and never calls Wikipedia', async () => {
+  it('uses a 365 venue photo only after a successful HEAD', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) } as Response);
     const url = await resolveVenueImage({ venueId: 1023, venueName: 'Anfield' });
     expect(url).toBe(scores365VenueImageUrl(1023));
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(prismaMock.stadiumImage.findUnique).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((fetchMock.mock.calls[0][1] as { method?: string }).method).toBe('HEAD');
+  });
+
+  it('falls through to Wikipedia/cache when the 365 CDN 404s', async () => {
+    prismaMock.stadiumImage.findUnique.mockResolvedValue(null);
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) } as Response)
+      .mockResolvedValueOnce(jsonResponse({ query: { search: [{ title: 'Anfield' }] } }))
+      .mockResolvedValueOnce(
+        jsonResponse({ originalimage: { source: 'https://upload.wikimedia.org/anfield.jpg' } }),
+      );
+    const url = await resolveVenueImage({ venueId: 1023, venueName: 'Anfield', fast: true });
+    expect(url).toBe(PLACEHOLDER);
+    await flushStadiumImageWarm();
+    expect(prismaMock.stadiumImage.upsert).toHaveBeenCalled();
   });
 
   it('getStadiumImageFast returns the placeholder on miss and warms the cache', async () => {

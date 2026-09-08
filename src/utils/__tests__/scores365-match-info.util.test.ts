@@ -1,5 +1,6 @@
 import {
   cityFrom365VenueName,
+  isScores365VenueCdnUrl,
   map365OfficialNames,
   map365VenueFields,
   pick365BroadcastNames,
@@ -27,6 +28,8 @@ describe('scores365 match info', () => {
       attendance: null,
       image: scores365VenueImageUrl(1023),
     });
+    expect(isScores365VenueCdnUrl(scores365VenueImageUrl(1023))).toBe(true);
+    expect(isScores365VenueCdnUrl('https://upload.wikimedia.org/anfield.jpg')).toBe(false);
   });
 
   it('keeps official names in order and prefers local TV channels', () => {

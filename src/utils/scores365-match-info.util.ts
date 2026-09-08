@@ -24,6 +24,13 @@ export function scores365VenueImageUrl(venueId?: number | null): string | null {
   return `https://imagecache.365scores.com/image/upload/f_jpg,w_800,h_450,c_fill,q_auto:eco/v1/Venues/${venueId}`;
 }
 
+/** Constructed 365 venue CDN URL — often 404s when Cloudinary has no photo. */
+export function isScores365VenueCdnUrl(url?: string | null): boolean {
+  const value = (url ?? '').trim();
+  if (!value) return false;
+  return /imagecache\.365scores\.com\/image\/upload\/.*\/Venues\//i.test(value);
+}
+
 export function map365OfficialNames(officials?: Scores365Official[] | null): string[] {
   const names: string[] = [];
   const seen = new Set<string>();
