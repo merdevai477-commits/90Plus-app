@@ -10,6 +10,7 @@ import { logger } from '../../utils/logger';
 import { abortAfterForegroundMs } from '../../utils/abortAfterForegroundMs';
 import { isAbortError } from '../../utils/isAbortError';
 import { getApiUrl } from '../../config/api.config';
+import { appendPullQuery } from '../../utils/pullRefreshQuery';
 import { getAppLanguageCode, acceptLanguageHeader } from '../../utils/appLanguage';
 import { safeFormatMatchTime } from '../../utils/safeDate';
 import { isStaleInPlayClock } from '../../utils/staleMatchClock';
@@ -313,12 +314,16 @@ let inFlightLiveMatches: Promise<Match[]> | null = null;
  */
 export const fetchMatchesByDate = async (
   date: Date,
-  options?: { fresh?: boolean },
+  options?: { fresh?: boolean; pull?: boolean },
 ): Promise<Match[]> => {
   const dateString = formatLocalDateKey(date);
 
   // Collapse concurrent calls for the same date (unless bypassing cache).
-  const inflightKey = options?.fresh ? `${dateString}:fresh` : dateString;
+  const inflightKey = options?.pull
+    ? `${dateString}:pull`
+    : options?.fresh
+      ? `${dateString}:fresh`
+      : dateString;
   const existing = inFlightMatchesByDate.get(inflightKey);
   if (existing) return existing;
 
@@ -331,26 +336,31 @@ export const fetchMatchesByDate = async (
 
 const fetchMatchesByDateImpl = async (
   dateString: string,
-  options?: { fresh?: boolean },
+  options?: { fresh?: boolean; pull?: boolean },
 ): Promise<Match[]> => {
   const today = getLocalTodayKey();
   const isPastDate = dateString < today;
+  const skipDisk = options?.pull === true || options?.fresh === true;
 
   const diskCached =
-    options?.fresh ? null : await cacheService.getMatchesByDate(dateString, true);
+    skipDisk ? null : await cacheService.getMatchesByDate(dateString, true);
   if (diskCached && diskCached.length > 0) {
     logger.debug(`📦 [FAST] Matches from local cache for ${dateString}`);
     return diskCached;
   }
 
   try {
-    return await fetchMatchesByDateFromNetwork(dateString, isPastDate);
+    return await fetchMatchesByDateFromNetwork(dateString, isPastDate, options?.pull);
   } catch (error) {
     if (isAbortError(error)) {
       logger.debug(`Matches fetch aborted for ${dateString}`);
       throw error;
     }
     logger.warn(`Direct backend call failed, falling back:`, error);
+    if (options?.pull) {
+      const stale = await cacheService.getMatchesByDate(dateString, true);
+      return stale ?? [];
+    }
   }
 
   try {
@@ -373,10 +383,11 @@ const fetchMatchesByDateImpl = async (
 const fetchMatchesByDateFromNetwork = async (
   dateString: string,
   isPastDate: boolean,
+  pull?: boolean,
 ): Promise<Match[]> => {
   const apiUrl = getApiUrl();
   const response = await fetchJsonWithTimeout(
-    `${apiUrl}/football/cached/matches/${dateString}?view=list`,
+    appendPullQuery(`${apiUrl}/football/cached/matches/${dateString}?view=list`, pull),
   );
 
   if (!response.ok) {
@@ -431,10 +442,12 @@ export const fetchLeagueMatchesByDate = async (
 /** World Cup fixtures for a date — backend filters by league/season env. */
 export const fetchWorldCupMatchesByDate = async (
   date: Date,
-  options?: { skipDiskCache?: boolean },
+  options?: { skipDiskCache?: boolean; pull?: boolean },
 ): Promise<Match[]> => {
   const dateString = formatLocalDateKey(date);
-  const inflightKey = `${dateString}:${getAppLanguageParam()}:${options?.skipDiskCache ? 'fresh' : 'cache'}`;
+  const inflightKey = `${dateString}:${getAppLanguageParam()}:${
+    options?.pull ? 'pull' : options?.skipDiskCache ? 'fresh' : 'cache'
+  }`;
   const existing = inFlightWorldCupByDate.get(inflightKey);
   if (existing) return existing;
 
@@ -448,12 +461,13 @@ export const fetchWorldCupMatchesByDate = async (
 const fetchWorldCupMatchesByDateImpl = async (
   date: Date,
   dateString: string,
-  options?: { skipDiskCache?: boolean },
+  options?: { skipDiskCache?: boolean; pull?: boolean },
 ): Promise<Match[]> => {
   const cacheKey = `wc_matches_${dateString}_${getAppLanguageParam()}`;
   const isToday = dateString === getLocalTodayKey();
+  const skipDisk = options?.skipDiskCache === true || options?.pull === true;
 
-  if (!options?.skipDiskCache) {
+  if (!skipDisk) {
     const cached = await cacheService.get<Match[]>(cacheKey);
     if (cached && cached.length > 0) {
       return cached;
@@ -468,7 +482,10 @@ const fetchWorldCupMatchesByDateImpl = async (
     const apiUrl = getApiUrl();
     const lang = getAppLanguageParam();
     const response = await fetch(
-      `${apiUrl}/football/cached/world-cup/${dateString}?language=${lang}`,
+      appendPullQuery(
+        `${apiUrl}/football/cached/world-cup/${dateString}?language=${lang}`,
+        options?.pull,
+      ),
       {
       method: 'GET',
       headers: {
@@ -538,20 +555,31 @@ export const fetchWorldCupMatchesByPhase = async (
  * Fetches live matches directly from backend API
  * ✅ INTEGRATED: Direct backend API integration
  */
-export const fetchLiveMatches = async (): Promise<Match[]> => {
+let inFlightLiveMatchesPull: Promise<Match[]> | null = null;
+
+export const fetchLiveMatches = async (options?: { pull?: boolean }): Promise<Match[]> => {
+  if (options?.pull) {
+    if (inFlightLiveMatchesPull) return inFlightLiveMatchesPull;
+    inFlightLiveMatchesPull = fetchLiveMatchesImpl(true).finally(() => {
+      inFlightLiveMatchesPull = null;
+    });
+    return inFlightLiveMatchesPull;
+  }
   // Collapse concurrent calls — live matches are shared across screens.
   if (inFlightLiveMatches) return inFlightLiveMatches;
 
-  inFlightLiveMatches = fetchLiveMatchesImpl().finally(() => {
+  inFlightLiveMatches = fetchLiveMatchesImpl(false).finally(() => {
     inFlightLiveMatches = null;
   });
   return inFlightLiveMatches;
 };
 
-const fetchLiveMatchesImpl = async (): Promise<Match[]> => {
+const fetchLiveMatchesImpl = async (pull = false): Promise<Match[]> => {
   try {
     const apiUrl = getApiUrl();
-    const response = await fetchJsonWithTimeout(`${apiUrl}/football/fixtures/live`);
+    const response = await fetchJsonWithTimeout(
+      appendPullQuery(`${apiUrl}/football/fixtures/live`, pull),
+    );
 
     if (response.ok) {
       // Backend wraps the fixtures array in { status, results, response: [...] }.
@@ -573,6 +601,8 @@ const fetchLiveMatchesImpl = async (): Promise<Match[]> => {
     }
     logger.warn(`Direct backend call failed, falling back to ApiFootballService:`, error);
   }
+
+  if (pull) return [];
 
   const fixtures = await ApiFootballService.getLiveFixtures();
   return mapFixturesToMatches(fixtures);

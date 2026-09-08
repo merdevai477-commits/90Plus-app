@@ -122,15 +122,20 @@ function maybePrefetchMatchAssets(rows: Match[]): void {
 async function fetchTodayMatchesWithLiveFeed(
   date: Date,
   onLiveEarly?: (liveFeed: Match[]) => void,
-  options?: { fresh?: boolean },
+  options?: { fresh?: boolean; pull?: boolean },
 ): Promise<Match[]> {
-  const byDatePromise = fetchMatchesByDate(date, options);
+  const byDatePromise = fetchMatchesByDate(
+    date,
+    options?.pull ? { pull: true } : options?.fresh ? { fresh: true } : undefined,
+  );
   // A7: when WS owns live scores, honor the 12s live-feed TTL instead of force-busting.
   const forceLive = shouldForceLiveFeedFetch(
     options?.fresh === true,
     isLiveFeedWsTrusted(),
   );
-  const livePromise = ensureLiveFeed({ force: forceLive });
+  const livePromise = options?.pull
+    ? ensureLiveFeed({ pull: true })
+    : ensureLiveFeed({ force: forceLive });
 
   // Paint live rows as soon as the live endpoint returns — don't wait for the
   // full day calendar (often slower) so the Live tab feels instant.
@@ -392,10 +397,11 @@ export const useMatchesData = (
   const leaguesCount = groupedMatches.length;
 
   const fetchData = useCallback(
-    async (forceRefresh = false) => {
+    async (forceRefresh = false, options?: { pull?: boolean }) => {
       if (isFetchingRef.current && !forceRefresh) return;
       isFetchingRef.current = true;
       const generation = calendarGenRef.current;
+      const pull = options?.pull === true;
 
       setError(null);
 
@@ -496,15 +502,25 @@ export const useMatchesData = (
         let fetchedMatches: Match[];
 
         if (isToday) {
-          fetchedMatches = await fetchTodayMatchesWithLiveFeed(selectedDate, (liveFeed) => {
-            applyCalendarMatches(generation, (prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
-            setLoading(false);
-            setIsDataStale(false);
-          });
+          fetchedMatches = await fetchTodayMatchesWithLiveFeed(
+            selectedDate,
+            (liveFeed) => {
+              applyCalendarMatches(generation, (prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+              setLoading(false);
+              setIsDataStale(false);
+            },
+            pull ? { pull: true } : undefined,
+          );
         } else if (!isPastDate) {
-          fetchedMatches = await fetchMatchesByDate(selectedDate);
+          fetchedMatches = await fetchMatchesByDate(
+            selectedDate,
+            pull ? { pull: true } : undefined,
+          );
         } else {
-          fetchedMatches = await fetchMatchesByDate(selectedDate);
+          fetchedMatches = await fetchMatchesByDate(
+            selectedDate,
+            pull ? { pull: true } : undefined,
+          );
         }
 
         applyCalendarMatches(generation, fetchedMatches);
@@ -740,7 +756,7 @@ export const useMatchesData = (
   }, [calendarMatches, pauseBackgroundRefresh, isToday, isPastDate, selectedDate, dateString, applyCalendarMatches]);
 
   const refetch = useCallback(async () => {
-    await fetchData(true);
+    await fetchData(true, { pull: true });
   }, [fetchData]);
 
   return {

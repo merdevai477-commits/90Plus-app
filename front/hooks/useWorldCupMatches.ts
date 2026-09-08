@@ -179,14 +179,14 @@ export function useWorldCupMatches(
 
   const hasLive = matches.some((m) => m.status === 'live');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { pull?: boolean }) => {
     if (!enabled) {
       setCalendarMatches([]);
       setLoading(false);
       hasDataRef.current = false;
       return;
     }
-    if (fetchingRef.current) return;
+    if (fetchingRef.current && !opts?.pull) return;
     fetchingRef.current = true;
 
     const lang = appLang.startsWith('en') ? 'en' : 'ar';
@@ -196,7 +196,14 @@ export function useWorldCupMatches(
         : `${dateString}:${lang}`;
     const mem = memoryCache.get(memKey);
     const ttl = TTL_IDLE_MS;
-    if (phaseMode === 'date' && !isToday && mem && mem.data.length > 0 && Date.now() - mem.ts < ttl) {
+    if (
+      !opts?.pull &&
+      phaseMode === 'date' &&
+      !isToday &&
+      mem &&
+      mem.data.length > 0 &&
+      Date.now() - mem.ts < ttl
+    ) {
       setCalendarMatches(mem.data);
       setLoading(false);
       fetchingRef.current = false;
@@ -206,10 +213,10 @@ export function useWorldCupMatches(
     if (!hasDataRef.current) setLoading(true);
     setError(null);
 
-    const finalizeList = async (raw: Match[]): Promise<Match[]> => {
+    const finalizeList = async (raw: Match[], pullLive = false): Promise<Match[]> => {
       let list = raw;
       if (isToday && phaseMode === 'date') {
-        const liveFeed = await ensureLiveFeed();
+        const liveFeed = await ensureLiveFeed(pullLive ? { pull: true } : undefined);
         list = mergeWorldCupCalendarWithLiveFeed(list, liveFeed, leagueId);
       }
       list = list.filter((m) => isWorldCupMatchRow(m, leagueId));
@@ -253,6 +260,11 @@ export function useWorldCupMatches(
         list = await fetchWorldCupMatchesByPhase('live');
       } else if (phaseMode === 'all') {
         list = await fetchWorldCupMatchesByPhase('all');
+      } else if (opts?.pull) {
+        list = await fetchWorldCupMatchesByDate(selectedDate, {
+          skipDiskCache: true,
+          pull: true,
+        });
       } else {
         const cached = await fetchWorldCupMatchesByDate(selectedDate);
         if (cached.length > 0) {
@@ -268,7 +280,7 @@ export function useWorldCupMatches(
         }
         list = await fetchWorldCupMatchesByDate(selectedDate, { skipDiskCache: true });
       }
-      list = await finalizeList(list);
+      list = await finalizeList(list, opts?.pull === true);
       publishList(list);
     } catch (e) {
       logger.warn('useWorldCupMatches failed:', e);
@@ -296,5 +308,7 @@ export function useWorldCupMatches(
     return () => clearInterval(id);
   }, [enabled, isToday, load, phaseMode]);
 
-  return { matches, loading, error, refetch: load, hasLive };
+  const refetch = useCallback(() => load({ pull: true }), [load]);
+
+  return { matches, loading, error, refetch, hasLive };
 }

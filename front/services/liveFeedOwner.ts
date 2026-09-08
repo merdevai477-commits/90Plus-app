@@ -57,7 +57,14 @@ function notify(matches: Match[]): void {
   }
 }
 
-async function fetchAndStore(force: boolean): Promise<Match[]> {
+async function fetchAndStore(force: boolean, pull = false): Promise<Match[]> {
+  if (pull) {
+    const matches = await fetchLiveMatches({ pull: true });
+    lastPayload = matches;
+    lastFetchedAt = Date.now();
+    notify(matches);
+    return matches;
+  }
   const age = Date.now() - lastFetchedAt;
   if (!force && lastFetchedAt > 0 && age < LIVE_FEED_CACHE_TTL_MS) {
     return lastPayload;
@@ -156,8 +163,8 @@ function teardownWatchIfIdle(): void {
 /**
  * Return live matches, using TTL cache unless force=true.
  */
-export async function ensureLiveFeed(options?: { force?: boolean }): Promise<Match[]> {
-  return fetchAndStore(options?.force === true);
+export async function ensureLiveFeed(options?: { force?: boolean; pull?: boolean }): Promise<Match[]> {
+  return fetchAndStore(options?.force === true, options?.pull === true);
 }
 
 /** True once WS has been connected long enough to own live updates (A7). */

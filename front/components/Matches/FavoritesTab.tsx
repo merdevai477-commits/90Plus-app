@@ -55,6 +55,7 @@ export interface FavoritesTabProps {
     renderFixture: (fixture: FavoritesListFixture) => React.ReactNode;
     onOpenTeam?: (team: StoredFollowedTeam) => void;
     onChooseFavoriteTeam?: () => void;
+    refreshControl?: React.ReactElement;
 }
 
 function ChooseFavoriteTeamCta({ onPress, label }: { onPress: () => void; label: string }) {
@@ -275,6 +276,7 @@ export default function FavoritesTab({
     renderFixture,
     onOpenTeam,
     onChooseFavoriteTeam,
+    refreshControl,
 }: FavoritesTabProps) {
     const { t } = useTranslation();
     const chooseLabel =
@@ -365,6 +367,7 @@ export default function FavoritesTab({
             }}
             showsVerticalScrollIndicator={false}
             ListHeaderComponent={listHeader ?? null}
+            refreshControl={refreshControl}
             ListEmptyComponent={
                 empty ? (
                     <View style={styles.emptyWrap}>

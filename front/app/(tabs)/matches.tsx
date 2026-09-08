@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions, Animated, FlatList, InteractionManager } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions, Animated, FlatList, InteractionManager, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -10,9 +10,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { useTeamOnboardingGate } from '../../hooks/useTeamOnboardingGate';
 import { FlashList } from '@shopify/flash-list';
-import { TEXT_PRIMARY, PURPLE_PRIMARY, LIVE_RED } from '../../constants/tokens';
+import { TEXT_PRIMARY, PURPLE_PRIMARY, PURPLE_SOFT, LIVE_RED } from '../../constants/tokens';
 import { APP_BG } from '../../constants/ui';
 import { useMatchesData } from '../../hooks/useMatchesData';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { PredictionsService, PredictionApiError } from '../../services/predictions.service';
 import { toastManager } from '../../services/toastManager';
 import { cacheService } from '../../services/cacheService';
@@ -2178,6 +2179,30 @@ export default function MatchesHubScreenV2() {
   const listRefetch =
     filter === 'WorldCup' && worldCupEnabled ? refetchWorldCup : refetch;
 
+  const onListPull = useCallback(async () => {
+    if (filter === 'WorldCup' && worldCupEnabled) {
+      await refetchWorldCup();
+      return;
+    }
+    if (filter === 'Favorite') {
+      await Promise.all([refetch(), refreshNotified()]);
+      return;
+    }
+    await refetch();
+  }, [filter, worldCupEnabled, refetchWorldCup, refetch, refreshNotified]);
+
+  const { refreshing: listPullRefreshing, onRefresh: onListPullRefresh } = usePullToRefresh(onListPull);
+  const listHeaderOffset = Math.max(insets.top, 10) + 60;
+  const listRefreshControl = (
+    <RefreshControl
+      refreshing={listPullRefreshing}
+      onRefresh={onListPullRefresh}
+      tintColor={PURPLE_SOFT}
+      colors={[PURPLE_PRIMARY]}
+      progressViewOffset={listHeaderOffset}
+    />
+  );
+
   const listErrorMessage = useMemo(() => {
     if (!listError) return null;
     if (listError === 'load_failed') return t('matches.screen.loadFailed');
@@ -2269,6 +2294,7 @@ export default function MatchesHubScreenV2() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={listHeaderWithPinnedWc}
           ListEmptyComponent={listEmptyNode}
+          refreshControl={listRefreshControl}
         />
       ) : filter === 'Favorite' ? (
         <FavoritesTab
@@ -2280,6 +2306,7 @@ export default function MatchesHubScreenV2() {
           renderFixture={renderFavoriteFixture}
           onOpenTeam={handleOpenFavoriteTeam}
           onChooseFavoriteTeam={() => router.push('/search' as any)}
+          refreshControl={listRefreshControl}
         />
       ) : (
         <FlashList
@@ -2292,6 +2319,7 @@ export default function MatchesHubScreenV2() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={listHeaderWithPinnedWc}
           ListEmptyComponent={listEmptyNode}
+          refreshControl={listRefreshControl}
         />
       )}
 
