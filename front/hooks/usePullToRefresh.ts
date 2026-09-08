@@ -1,8 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { shouldSkipClientPullCooldown } from '../utils/pullRefreshQuery';
 
-export { PTR_CLIENT_COOLDOWN_MS } from '../utils/pullRefreshQuery';
-
 /**
  * Shared RefreshControl handler for Matches / Match Details.
  * Client cooldown is 2.5s; the server still enforces 10–60s + abuse limits.
@@ -31,5 +29,3 @@ export function usePullToRefresh(refresh: () => Promise<void>): {
 
   return { refreshing, onRefresh };
 }
-
-export { PTR_CLIENT_COOLDOWN_MS };
