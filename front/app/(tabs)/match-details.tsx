@@ -219,26 +219,8 @@ function detailsPullControl(refreshing: boolean, onRefresh: () => void) {
   );
 }
 
-function PullableTabBody({
-  refreshing,
-  onRefresh,
-  children,
-}: {
-  children: React.ReactNode;
-  refreshing: boolean;
-  onRefresh: () => void;
-}) {
-  return (
-    <ScrollView
-      style={{ flex: 1 }}
-      contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
-      showsVerticalScrollIndicator={false}
-      alwaysBounceVertical
-      refreshControl={detailsPullControl(refreshing, onRefresh)}
-    >
-      {children}
-    </ScrollView>
-  );
+function PullableTabBody({ children }: { children: React.ReactNode }) {
+  return <View>{children}</View>;
 }
 
 const MatchDetailsScreen = () => {
@@ -1549,11 +1531,9 @@ const MatchDetailsScreen = () => {
       const info = extractMatchKickoffInfo({ fixture, venue });
       return (
         <ScrollView
-          style={{ flex: 1 }}
+          scrollEnabled={false}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
-          alwaysBounceVertical
-          refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
         >
           <MatchKickoffHighlights
             info={info}
@@ -1625,7 +1605,7 @@ const MatchDetailsScreen = () => {
 
       if ((totalGoals > 0) || eventsFeedAvailable === false) {
         return (
-          <PullableTabBody refreshing={pullRefreshing} onRefresh={onPullRefresh}>
+          <PullableTabBody>
             <View style={styles.emptyState}>
               <View style={styles.eventsWaitingIcon}>
                 <Ionicons name="information-circle-outline" size={36} color={PURPLE_SOFT} />
@@ -1645,7 +1625,7 @@ const MatchDetailsScreen = () => {
       }
 
       return (
-        <PullableTabBody refreshing={pullRefreshing} onRefresh={onPullRefresh}>
+        <PullableTabBody>
           <View style={styles.emptyState}>
             <Ionicons name="football-outline" size={56} color="#333" />
             <Text style={styles.emptyStateText}>
@@ -1666,11 +1646,9 @@ const MatchDetailsScreen = () => {
 
     return (
       <ScrollView
-        style={{ flex: 1 }}
+        scrollEnabled={false}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        alwaysBounceVertical
-        refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
       >
         <MatchMomentumGraph
           events={events}
@@ -1887,7 +1865,7 @@ const MatchDetailsScreen = () => {
     // returning from player profile while a background refetch failed).
     if (!hasLineupData(lineups) && lineupsError) {
       return (
-        <PullableTabBody refreshing={pullRefreshing} onRefresh={onPullRefresh}>
+        <PullableTabBody>
           <View style={styles.emptyState}>
             <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
             <Text style={styles.emptyStateText}>{lineupsError}</Text>
@@ -1911,7 +1889,7 @@ const MatchDetailsScreen = () => {
         lineupFetchAttempts < (isLive() ? MAX_LINEUP_AUTO_RETRIES : 1);
       if (stillRetrying) {
         return (
-          <PullableTabBody refreshing={pullRefreshing} onRefresh={onPullRefresh}>
+          <PullableTabBody>
             <View style={styles.emptyState}>
               <ActivityIndicator size="large" color="#A855F7" />
               <Text style={styles.emptyStateSubtext}>
@@ -1929,7 +1907,7 @@ const MatchDetailsScreen = () => {
           ? t.matchDetails.lineupsNotAnnounced
           : t.matchDetails.lineupsUnavailable;
       return (
-        <PullableTabBody refreshing={pullRefreshing} onRefresh={onPullRefresh}>
+        <PullableTabBody>
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={64} color="#333" />
             <Text style={styles.emptyStateText}>{t.matchDetails.noLineups}</Text>
@@ -1957,11 +1935,9 @@ const MatchDetailsScreen = () => {
 
     return (
       <ScrollView
-        style={{ flex: 1 }}
+        scrollEnabled={false}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        alwaysBounceVertical
-        refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
       >
         <TeamToggle
           home={{ name: getTeamDisplayName(homeTeamName, language), logo: homeTeamLogo }}
@@ -2121,11 +2097,9 @@ const MatchDetailsScreen = () => {
     if (showLiveMatchStats) {
       return (
         <ScrollView
-          style={{ flex: 1 }}
+          scrollEnabled={false}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
-          alwaysBounceVertical
-          refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
         >
           {statsFromEvents ? (
             <Text style={styles.statsPartialNote}>
@@ -2158,7 +2132,7 @@ const MatchDetailsScreen = () => {
 
     if (!isPreKickoff() && statsError && homeLastFixtures.length === 0 && !recentFormAverages) {
       return (
-        <PullableTabBody refreshing={pullRefreshing} onRefresh={onPullRefresh}>
+        <PullableTabBody>
           <View style={styles.emptyState}>
             <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
             <Text style={styles.emptyStateText}>{statsError}</Text>
@@ -2194,11 +2168,9 @@ const MatchDetailsScreen = () => {
     if (recentPlayed > 0) {
       return (
         <ScrollView
-          style={{ flex: 1 }}
+          scrollEnabled={false}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
-          alwaysBounceVertical
-          refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
         >
           <PreMatchRecentStats
             lastN={recentFormAverages?.last ?? 4}
@@ -2251,7 +2223,7 @@ const MatchDetailsScreen = () => {
     }
 
     return (
-      <PullableTabBody refreshing={pullRefreshing} onRefresh={onPullRefresh}>
+      <PullableTabBody>
         <View style={styles.emptyState}>
           <Ionicons name="stats-chart-outline" size={64} color="#333" />
           <Text style={styles.emptyStateText}>{t.matchDetails.noStats || 'Statistics not available'}</Text>
@@ -2276,7 +2248,7 @@ const MatchDetailsScreen = () => {
 
     if (formError) {
       return (
-        <PullableTabBody refreshing={pullRefreshing} onRefresh={onPullRefresh}>
+        <PullableTabBody>
           <View style={styles.emptyState}>
             <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
             <Text style={styles.emptyStateText}>{formError}</Text>
@@ -2319,11 +2291,9 @@ const MatchDetailsScreen = () => {
 
     return (
       <ScrollView
-        style={{ flex: 1 }}
+        scrollEnabled={false}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        alwaysBounceVertical
-        refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
       >
         {/* Head-to-head (direct meetings) */}
         <View style={styles.formContainer}>
@@ -2451,7 +2421,7 @@ const MatchDetailsScreen = () => {
 
     if (standingsError) {
       return (
-        <PullableTabBody refreshing={pullRefreshing} onRefresh={onPullRefresh}>
+        <PullableTabBody>
           <View style={styles.emptyState}>
             <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
             <Text style={styles.emptyStateText}>{standingsError}</Text>
@@ -2471,7 +2441,7 @@ const MatchDetailsScreen = () => {
 
     if (standingsUnavailable || standingsGroups.length === 0) {
       return (
-        <PullableTabBody refreshing={pullRefreshing} onRefresh={onPullRefresh}>
+        <PullableTabBody>
           <View style={styles.emptyState}>
             <Ionicons name="list-outline" size={64} color="#333" />
             <Text style={styles.emptyStateText}>
@@ -2542,11 +2512,9 @@ const MatchDetailsScreen = () => {
 
     return (
       <ScrollView
-        style={{ flex: 1 }}
+        scrollEnabled={false}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        alwaysBounceVertical
-        refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
       >
         {standingsSeasonUsed != null && standingsSeasonUsed !== fixture?.league?.season && (
           <Text style={styles.standingsSeasonNote}>
@@ -2884,13 +2852,24 @@ const MatchDetailsScreen = () => {
           }}
         />
       ) : (
-        <View style={styles.content}>
-          {activeTab === 'events' && renderEvents()}
-          {activeTab === 'lineups' && renderLineups()}
-          {activeTab === 'stats' && renderStatistics()}
-          {activeTab === 'form' && renderForm()}
-          {activeTab === 'standings' && renderStandings()}
-        </View>
+        <ScrollView
+          style={styles.pageScroll}
+          contentContainerStyle={styles.pageScrollContent}
+          refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+          alwaysBounceVertical
+          overScrollMode="always"
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.content}>
+            {activeTab === 'events' && renderEvents()}
+            {activeTab === 'lineups' && renderLineups()}
+            {activeTab === 'stats' && renderStatistics()}
+            {activeTab === 'form' && renderForm()}
+            {activeTab === 'standings' && renderStandings()}
+          </View>
+        </ScrollView>
       )}
     </View>
   );
@@ -2900,6 +2879,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0c051a',
+  },
+  pageScroll: {
+    flex: 1,
+  },
+  pageScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 28,
   },
   lmtHidden: {
     height: 0,
@@ -3167,7 +3153,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   content: {
-    flex: 1,
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,

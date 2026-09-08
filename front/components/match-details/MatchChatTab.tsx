@@ -27,6 +27,7 @@ import {
   resolveLiveMinuteLabel,
 } from '../Matches/leagueApiUtils';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
+import { useSecondTick } from '../../hooks/useSecondTick';
 import { useTranslation } from '../../src/i18n';
 import { useMatchLiveChat } from '../../hooks/useMatchLiveChat';
 import type { MatchChatUiMessage } from '../../hooks/matchLiveChat.reducer';
@@ -393,6 +394,9 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
   const isStoppage = isLive && isLiveStoppage(short, summary.elapsed, summary.stoppage);
 
   const clockActive = isLive && !isStoppage && !isHalftime;
+  // Keep the import wired so Fast Refresh does not crash with
+  // `Property 'useSecondTick' doesn't exist` after dropping MM:SS.
+  useSecondTick(false);
   const anchoredStart = useAnchoredPeriodStart(
     summary.clockAnchorKey,
     short,

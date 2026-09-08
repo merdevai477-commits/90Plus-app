@@ -16,6 +16,7 @@ import {
 } from '../../components/Matches/leagueApiUtils';
 import { isStaleInPlayClock } from '../../utils/staleMatchClock';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
+import { useSecondTick } from '../../hooks/useSecondTick';
 import {
   LIVE_RED,
   TEXT_PRIMARY,
@@ -186,6 +187,10 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
     if (fixtureDate) return formatMatchTime(fixtureDate);
     return time || '--:--';
   }, [fixtureDate, time]);
+
+  // Keep the import wired so Fast Refresh does not crash with
+  // `Property 'useSecondTick' doesn't exist` after dropping MM:SS.
+  useSecondTick(false);
 
   // Minute-only live clock (no MM:SS). Anchor still fills gaps when elapsed is missing.
   const clockActive = isLive && !isStoppage && !isHalftime;

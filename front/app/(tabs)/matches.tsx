@@ -46,6 +46,7 @@ import { getAppFeaturesPollPeriodMs } from '../../utils/appFeaturesPoll';
 import type { ImageSource } from 'expo-image';
 import { resolveLiveMinuteLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
+import { useSecondTick } from '../../hooks/useSecondTick';
 import {
   getSharedLivePulse,
   subscribeSharedLivePulse,
@@ -361,6 +362,10 @@ const MatchRow = memo(function MatchRow({
     onFixtureVisibility(id, true);
     return () => onFixtureVisibility(id, false);
   }, [fixture.id, onFixtureVisibility]);
+
+  // Keep the import wired so Fast Refresh does not crash with
+  // `Property 'useSecondTick' doesn't exist`. Minute-only clock: never tick.
+  useSecondTick(false);
 
   // Live minute only — no MM:SS tick. Stoppage still uses 90+4' styling.
   const shortUpper = (fixture.statusShort ?? '').toUpperCase();
