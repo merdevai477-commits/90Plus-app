@@ -76,7 +76,8 @@ export function ChatHeader({ onBack, onMenu, backLabel, menuLabel }: ChatHeaderP
             <View style={styles.plusChipLarge}>
               <Text style={styles.logoPlusLarge}>PLUS</Text>
             </View>
-            <Text style={styles.captainText}>{t.chat.headerCaptainAi}</Text>
+            <Text style={styles.captainText} numberOfLines={1}>{t.chat.headerCaptainAi}</Text>
+            <View style={styles.logoStatusDot} />
           </Pressable>
         </View>
 

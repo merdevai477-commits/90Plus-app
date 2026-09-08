@@ -3171,6 +3171,12 @@ export const en = {
     welcomeGreeting: 'Hey {name}!',
     welcomeSubtitle: 'How can I help you?',
     welcomeBrand: '90Plus AI · Your personal coach',
+    welcomeOnline: 'Online',
+    suggestionFootballInfoSub: 'News, players and matches',
+    suggestionLeagueStatsSub: 'Tables, form and numbers',
+    suggestionTrainingPlanSub: 'A weekly plan for you',
+    suggestionDietPlanSub: 'Fuel like a pro',
+    suggestionRecoveryTipsSub: 'Bounce back after sessions',
     // Profile-completion nudge
     profileNudge: 'Fill in your profile and our chats get more tailored 🎯',
     // Connection toast

@@ -2,7 +2,6 @@ import React from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { chatColors } from './chatTheme';
 
 /** Chat-only ambient background — richer depth, soft purple glow. */
 export function ChatScreenBackground() {
@@ -16,8 +15,8 @@ export function ChatScreenBackground() {
         style={StyleSheet.absoluteFill}
       />
       <LinearGradient
-        colors={['rgba(168,85,247,0.14)', 'rgba(124,58,237,0.06)', 'transparent']}
-        locations={[0, 0.45, 1]}
+        colors={['rgba(168,85,247,0.22)', 'rgba(124,58,237,0.08)', 'transparent']}
+        locations={[0, 0.4, 1]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 0.55 }}
         style={styles.topGlow}
@@ -44,7 +43,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: 'rgba(124,58,237,0.08)',
+    backgroundColor: 'rgba(124,58,237,0.14)',
   },
   orbRight: {
     position: 'absolute',
@@ -53,7 +52,7 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
     borderRadius: 80,
-    backgroundColor: 'rgba(168,85,247,0.06)',
+    backgroundColor: 'rgba(168,85,247,0.1)',
   },
   androidVeil: {
     backgroundColor: 'rgba(4,2,10,0.12)',

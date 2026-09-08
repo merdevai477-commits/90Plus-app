@@ -617,7 +617,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-start',
     marginVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 0,
   },
   aiBubbleWrap: {},
   aiBubble: {
@@ -666,7 +666,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     marginVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 0,
   },
   userBubbleWrap: {},
   userBubble: {
