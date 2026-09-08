@@ -438,6 +438,10 @@ export default function ChatScreen() {
 
           keyboardLift={keyboard.composerKeyboardLift}
 
+          keyboardVisible={keyboard.keyboardVisible}
+
+          stickyOpenedOffset={keyboard.KEYBOARD_OPEN_GAP}
+
           inputRef={screen.inputRef}
 
           value={inputValue}

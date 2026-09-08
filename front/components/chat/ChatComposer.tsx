@@ -98,6 +98,8 @@ export interface ChatComposerProps {
   stopLabel: string;
   /** Safe-area padding when KeyboardStickyView is not active (Expo Go). */
   bottomInset?: number;
+  /** Hides the footer so the field sits on the keyboard like live chat. */
+  keyboardVisible?: boolean;
   onInputFocus?: () => void;
   onStop?: () => void;
 }
@@ -119,6 +121,7 @@ export function ChatComposer({
   limitResetsAfterText,
   stopLabel,
   bottomInset = 0,
+  keyboardVisible = false,
   onInputFocus,
   onStop,
 }: ChatComposerProps) {
@@ -191,9 +194,11 @@ export function ChatComposer({
         </ChatGlassSurface>
       )}
 
-      <View style={styles.footerInfo}>
-        <Text style={styles.footerText}>{t.chat.poweredBy}</Text>
-      </View>
+      {keyboardVisible ? null : (
+        <View style={styles.footerInfo}>
+          <Text style={styles.footerText}>{t.chat.poweredBy}</Text>
+        </View>
+      )}
     </View>
   );
 }

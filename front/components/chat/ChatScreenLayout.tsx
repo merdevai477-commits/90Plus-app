@@ -45,7 +45,9 @@ export function ChatScreenLayout({
             {mainColumn}
           </KeyboardAvoidingView>
         ) : (
-          <View style={styles.body}>{mainColumn}</View>
+          <View collapsable={false} style={styles.body}>
+            {mainColumn}
+          </View>
         )}
       </View>
     </SafeAreaView>

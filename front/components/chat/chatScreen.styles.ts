@@ -16,6 +16,7 @@ export const chatScreenStyles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     position: 'relative',
+    overflow: 'visible',
   },
   listRegion: {
     flex: 1,
