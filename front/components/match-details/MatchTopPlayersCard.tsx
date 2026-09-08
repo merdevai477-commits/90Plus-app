@@ -12,6 +12,7 @@ import {
   GLASS_BORDER_BOTTOM,
   GLASS_BORDER_SIDE,
   GLASS_BORDER_TOP,
+  TEXT_MUTED,
   TEXT_PRIMARY,
 } from '../../constants/tokens';
 import {
@@ -212,6 +213,11 @@ export function MatchTopPlayersCard({
   );
 }
 
+/**
+ * Keep TEXT_MUTED in StyleSheet.create. Fast Refresh + Hermes crash with
+ * `Property 'TEXT_MUTED' doesn't exist` if this import is dropped while a
+ * previous StyleSheet still names it.
+ */
 const styles = StyleSheet.create({
   wrap: {
     paddingHorizontal: 14,
@@ -314,7 +320,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statLabel: {
-    color: 'rgba(255,255,255,0.88)',
+    color: TEXT_MUTED,
     fontSize: 12,
     fontWeight: '600',
     minHeight: 32,
