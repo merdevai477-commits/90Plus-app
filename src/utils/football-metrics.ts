@@ -17,6 +17,17 @@ interface EndpointStats {
   staleFallbacks: number;
 }
 
+interface PullRefreshMetrics {
+  pulls: number;
+  cacheFresh: number;
+  scheduled: number;
+  coalesced: number;
+  rateLimited: number;
+  latched: number;
+  backoff: number;
+  list: number;
+}
+
 interface FootballMetricsState {
   totalApiCalls: number;
   apiSuccess: number;
@@ -35,6 +46,20 @@ interface FootballMetricsState {
   dailyResetAt: number;
   byEndpoint: Map<string, EndpointStats>;
   bySource: Map<FootballApiCallSource, number>;
+  pullRefresh: PullRefreshMetrics;
+}
+
+function emptyPullRefresh(): PullRefreshMetrics {
+  return {
+    pulls: 0,
+    cacheFresh: 0,
+    scheduled: 0,
+    coalesced: 0,
+    rateLimited: 0,
+    latched: 0,
+    backoff: 0,
+    list: 0,
+  };
 }
 
 function emptyEndpointStats(): EndpointStats {
@@ -71,6 +96,7 @@ class FootballMetrics {
     dailyResetAt: FootballMetrics.startOfUtcDay(),
     byEndpoint: new Map(),
     bySource: new Map(),
+    pullRefresh: emptyPullRefresh(),
   };
 
   private static startOfUtcDay(): number {
@@ -177,6 +203,26 @@ class FootballMetrics {
     if (resolved) this.s.teamResolverResolved += 1;
   }
 
+  recordPullRefresh(
+    outcome:
+      | 'cache_fresh'
+      | 'scheduled'
+      | 'coalesced'
+      | 'rate_limited'
+      | 'latched'
+      | 'backoff'
+      | 'list',
+  ): void {
+    this.s.pullRefresh.pulls += 1;
+    if (outcome === 'cache_fresh') this.s.pullRefresh.cacheFresh += 1;
+    else if (outcome === 'scheduled') this.s.pullRefresh.scheduled += 1;
+    else if (outcome === 'coalesced') this.s.pullRefresh.coalesced += 1;
+    else if (outcome === 'rate_limited') this.s.pullRefresh.rateLimited += 1;
+    else if (outcome === 'latched') this.s.pullRefresh.latched += 1;
+    else if (outcome === 'backoff') this.s.pullRefresh.backoff += 1;
+    else if (outcome === 'list') this.s.pullRefresh.list += 1;
+  }
+
   private rate(num: number, den: number): number {
     return den > 0 ? Number(((num / den) * 100).toFixed(2)) : 0;
   }
@@ -215,6 +261,7 @@ class FootballMetrics {
           : 0,
       bySource: Object.fromEntries(this.s.bySource),
       topEndpoints,
+      pullRefresh: { ...this.s.pullRefresh },
     };
   }
 
@@ -241,6 +288,7 @@ class FootballMetrics {
       dailyResetAt: FootballMetrics.startOfUtcDay(),
       byEndpoint: new Map(),
       bySource: new Map(),
+      pullRefresh: emptyPullRefresh(),
     };
   }
 }

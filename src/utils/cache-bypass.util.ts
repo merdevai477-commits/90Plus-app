@@ -42,3 +42,26 @@ export function shouldHonorFreshCacheBypass(req: Request): boolean {
   }
   return true;
 }
+
+const PULL_BYPASS_SUFFIXES = ['/fixtures/live'] as const;
+const PULL_BYPASS_PATTERNS = [
+  /^\/cached\/matches\/\d{4}-\d{2}-\d{2}$/,
+  /^\/cached\/world-cup\/\d{4}-\d{2}-\d{2}$/,
+  /^\/cached\/fixture\/\d+\/details$/,
+] as const;
+
+export function isPullRefreshBypassPath(req: Request): boolean {
+  const path = getFootballCachePath(req);
+  if (PULL_BYPASS_SUFFIXES.some((suffix) => path.endsWith(suffix))) return true;
+  return PULL_BYPASS_PATTERNS.some((pattern) => pattern.test(path));
+}
+
+/**
+ * `pull=1` skips HTTP response cache so the client re-reads Redis.
+ * It must never be treated as forceRefresh / 365 bypass.
+ */
+export function shouldHonorPullCacheBypass(req: Request): boolean {
+  const pull = req.query.pull === '1' || req.query.pull === 'true';
+  if (!pull) return false;
+  return isPullRefreshBypassPath(req);
+}

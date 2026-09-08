@@ -15,6 +15,14 @@ export const FOOTBALL_FIXTURE_TERMINAL_LATCHED_KEY_PREFIX = 'football:fixture_te
 export const FOOTBALL_FIXTURE_TERMINAL_CORRECTION_KEY_PREFIX = 'football:fixture_terminal_correction:';
 /** Consecutive upstream_empty streak for live fixtures (P1-7 backoff). */
 export const FOOTBALL_EMPTY_UPSTREAM_STREAK_KEY_PREFIX = 'football:empty_streak:';
+/** Last time a pull-to-refresh was allowed to schedule a cache-layer refresh. */
+export const FOOTBALL_PTR_LAST_KEY_PREFIX = 'football:ptr:last:';
+/** SET NX lock so N pulls share one background refresh across Railway instances. */
+export const FOOTBALL_PTR_LOCK_KEY_PREFIX = 'football:ptr:lock:';
+/** Per-client+fixture pull counter (defense in depth). */
+export const FOOTBALL_PTR_ABUSE_KEY_PREFIX = 'football:ptr:abuse:';
+/** Coalesced waiter count while a PTR lock is held. */
+export const FOOTBALL_PTR_WAITERS_KEY_PREFIX = 'football:ptr:waiters:';
 export const FOOTBALL_EVENTS_KEY_PREFIX = 'events:';
 export const FOOTBALL_MOMENTUM_KEY_PREFIX = 'momentum:';
 export const FOOTBALL_LINEUPS_KEY_PREFIX = 'lineups:';
@@ -43,6 +51,22 @@ export function footballDetailsRedisKey(fixtureId: number): string {
 
 export function footballDetailsLangRedisKey(fixtureId: number, language: string): string {
   return `${footballDetailsRedisKey(fixtureId)}:${language}`;
+}
+
+export function footballPtrLastKey(fixtureId: number): string {
+  return `${FOOTBALL_PTR_LAST_KEY_PREFIX}${fixtureId}`;
+}
+
+export function footballPtrLockKey(fixtureId: number): string {
+  return `${FOOTBALL_PTR_LOCK_KEY_PREFIX}${fixtureId}`;
+}
+
+export function footballPtrAbuseKey(clientKey: string, fixtureId: number): string {
+  return `${FOOTBALL_PTR_ABUSE_KEY_PREFIX}${clientKey}:${fixtureId}`;
+}
+
+export function footballPtrWaitersKey(fixtureId: number): string {
+  return `${FOOTBALL_PTR_WAITERS_KEY_PREFIX}${fixtureId}`;
 }
 
 /** Detail keys cleared on LIVE→FT / status transitions so TTL alone cannot serve stale bundles. */

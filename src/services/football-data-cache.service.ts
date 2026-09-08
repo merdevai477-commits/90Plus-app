@@ -3338,6 +3338,23 @@ class FootballDataCacheService {
     }
 
     /**
+     * Pull-to-refresh may schedule the existing SWR path (never forceRefresh).
+     * Returns already_in_flight when this process already has a refresh running.
+     */
+    async requestBackgroundDetailsRefresh(
+        fixtureId: number,
+        language?: string | null,
+    ): Promise<'started' | 'already_in_flight'> {
+        if (!Number.isFinite(fixtureId) || fixtureId <= 0) return 'already_in_flight';
+        const cacheKey = this.detailsBundleCacheKey(fixtureId, language);
+        if (this.detailsBackgroundRefresh.has(cacheKey) || this.pendingDetailsBundles.has(cacheKey)) {
+            return 'already_in_flight';
+        }
+        this.scheduleDetailsRefresh(fixtureId, language, cacheKey);
+        return 'started';
+    }
+
+    /**
      * Match details: always paint from last-good cache/DB within milliseconds.
      * 365/API refresh runs in the background (or up to 2.5s on a true cold miss).
      */

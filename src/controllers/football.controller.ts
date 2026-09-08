@@ -29,6 +29,11 @@ import {
   calendarTodayKey,
   offsetCalendarDateKey,
 } from '../utils/calendar-day-bounds.util';
+import {
+  wantsPullRefresh,
+  noteFixturePullRefresh,
+  noteListPullRefresh,
+} from '../services/pull-refresh.service';
 
 /**
  * Football API Proxy Controller
@@ -535,6 +540,22 @@ export class FootballController {
     const startedAt = Date.now();
     try {
       const language = resolveAppLanguage(req);
+      if (wantsPullRefresh(req)) {
+        const redisLive = await resolveLiveFixturesForClient(language);
+        const elapsedMs = Date.now() - startedAt;
+        await noteListPullRefresh(req);
+        res.json({
+          status: 'SUCCESS',
+          results: redisLive.fixtures.length,
+          response: redisLive.fixtures,
+          cached: true,
+          source:
+            redisLive.source === 'scores365-experiment' ? 'scores365-experiment' : 'redis-sync',
+          language,
+          _meta: { elapsedMs, pullRefresh: 'list' },
+        });
+        return;
+      }
       const redisLive = await resolveLiveFixturesForClient(language);
       if (
         (redisLive.source === 'redis' || redisLive.source === 'scores365-experiment') &&
@@ -1923,10 +1944,12 @@ export class FootballController {
         return;
       }
 
+      const isPull = wantsPullRefresh(req);
       const forceFresh =
-        req.query.fresh === '1' ||
-        req.query.fresh === 'true' ||
-        req.query.forceRefresh === '1';
+        !isPull &&
+        (req.query.fresh === '1' ||
+          req.query.fresh === 'true' ||
+          req.query.forceRefresh === '1');
       if (forceFresh) {
         await footballDataCacheService.invalidateMatchesByDateCache(
           dateString,
@@ -1961,6 +1984,9 @@ export class FootballController {
       logger.info(
         `[Perf] getCachedMatchesByDate date=${dateString} results=${response.length} view=${view || 'full'} elapsedMs=${elapsedMs}`,
       );
+      if (isPull) {
+        await noteListPullRefresh(req);
+      }
 
       res.json({
         status: 'SUCCESS',
@@ -1971,6 +1997,7 @@ export class FootballController {
           cached: true,
           elapsedMs,
           view: view === 'list' ? 'list' : 'full',
+          ...(isPull ? { pullRefresh: 'list' } : {}),
         },
       });
     } catch (error) {
@@ -2096,6 +2123,7 @@ export class FootballController {
       }
 
       const language = resolveAppLanguage(req);
+      const isPull = wantsPullRefresh(req);
 
       const matches = await footballDataCacheService.getWorldCupMatchesByDate(
         dateString,
@@ -2103,6 +2131,9 @@ export class FootballController {
         wc.season,
         language,
       );
+      if (isPull) {
+        await noteListPullRefresh(req);
+      }
 
       res.json({
         status: 'SUCCESS',
@@ -2116,6 +2147,7 @@ export class FootballController {
           cached: true,
           scores365Experiment: matches.some((m: any) => m?._experiment === 'scores365'),
           scores365ForceEnglish: (await import('../services/scores365-experiment.service')).isScores365ForceEnglish(),
+          ...(isPull ? { pullRefresh: 'list' } : {}),
         },
       });
     } catch (error) {
@@ -2606,7 +2638,8 @@ export class FootballController {
       }
 
       const language = resolveAppLanguage(req);
-      const forceRefresh = wantsFreshMatchDetails(req);
+      const isPull = wantsPullRefresh(req);
+      const forceRefresh = isPull ? false : wantsFreshMatchDetails(req);
       const bundle = await footballDataCacheService.getFixtureDetailsBundle(fixtureId, {
         language,
         forceRefresh,
@@ -2615,15 +2648,36 @@ export class FootballController {
         getScores365GameIdForFixture(fixtureId) ??
         (isNative365FixtureId(fixtureId) ? fixtureId : null);
 
+      let pullMeta: Awaited<ReturnType<typeof noteFixturePullRefresh>> | undefined;
+      if (isPull) {
+        pullMeta = await noteFixturePullRefresh({
+          req,
+          fixtureId,
+          statusShort: bundle?.fixture?.fixture?.status?.short ?? null,
+          fixture: bundle?.fixture ?? null,
+          language,
+        });
+        res.setHeader('X-Pull-Refresh', pullMeta.outcome);
+      }
+
       res.json({
         status: 'SUCCESS',
         response: bundle,
-        _meta: gameId
-          ? {
-              scores365GameId: gameId,
-              lineupPlayerIdField: 'athleteId',
-            }
-          : undefined,
+        _meta: {
+          ...(gameId
+            ? {
+                scores365GameId: gameId,
+                lineupPlayerIdField: 'athleteId',
+              }
+            : {}),
+          ...(pullMeta
+            ? {
+                pullRefresh: pullMeta.outcome,
+                pullIntervalMs: pullMeta.intervalMs,
+                pullCoalesced: pullMeta.coalescedCount,
+              }
+            : {}),
+        },
       });
     } catch (error) {
       FootballController.handleError(res, error);

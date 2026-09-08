@@ -9,7 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { redisCacheService } from '../services/redis-cache.service';
 import { logger } from '../utils/logger';
-import { shouldHonorFreshCacheBypass } from '../utils/cache-bypass.util';
+import { shouldHonorFreshCacheBypass, shouldHonorPullCacheBypass } from '../utils/cache-bypass.util';
 import { resolveAppLanguage } from '../utils/app-language.util';
 
 interface CacheEntry {
@@ -276,7 +276,7 @@ export function responseCacheMiddleware(options: {
         }
 
         // Bypass cache for explicit live-refresh requests (development only in production)
-        if (shouldHonorFreshCacheBypass(req)) {
+        if (shouldHonorFreshCacheBypass(req) || shouldHonorPullCacheBypass(req)) {
             return next();
         }
 
