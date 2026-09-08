@@ -12,7 +12,10 @@ export async function fetchStadiumImageByName(
   const base = getApiUrl().replace(/\/$/, '');
   const res = await fetch(`${base}/football/stadium-image?${params.toString()}`);
   if (!res.ok) return null;
-  const json = (await res.json()) as { response?: { imageUrl?: unknown } };
+  const json = (await res.json()) as {
+    response?: { imageUrl?: unknown; isPlaceholder?: unknown };
+  };
+  if (json?.response?.isPlaceholder === true) return null;
   const imageUrl = json?.response?.imageUrl;
   return typeof imageUrl === 'string' && imageUrl.trim() ? imageUrl.trim() : null;
 }

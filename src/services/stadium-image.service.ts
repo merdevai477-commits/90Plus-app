@@ -4,10 +4,12 @@
  */
 
 import prisma from '../lib/prisma';
-import { getPlaceholderUrl, getStadiumImageConfig } from '../config/stadium-image.config';
+import { getPlaceholderUrl, getStadiumImageConfig, isPersistedPlaceholderUrl } from '../config/stadium-image.config';
+import { getRedisClient } from '../lib/redis';
 import { logger } from '../utils/logger';
 import { scores365VenueImageUrl } from '../utils/scores365-match-info.util';
 import { normalizeStadiumName } from '../utils/stadium-name.util';
+import { isValidStadiumWikipediaSummary } from '../utils/wikipedia-stadium-validation.util';
 
 export type StadiumImageCacheRow = {
   stadiumNameNormalized: string;
@@ -27,11 +29,27 @@ export type WikipediaImageResult = {
   longitude: number | null;
   pageTitle?: string;
   lang?: string;
+  description?: string | null;
+  type?: string | null;
+};
+
+export type StadiumImageLookup = {
+  imageUrl: string | null;
+  isPlaceholder: boolean;
 };
 
 export type GetStadiumImageOptions = {
   isTeamName?: boolean;
   country?: string | null;
+};
+
+const PLACEHOLDER_LOOKUP: StadiumImageLookup = { imageUrl: null, isPlaceholder: true };
+
+const STADIUM_QUERY_OVERRIDES: Record<string, string> = {
+  'spotify camp nou': 'Camp Nou',
+  'signal iduna park': 'Westfalenstadion',
+  'signal iduna park (dortmund)': 'Westfalenstadion',
+  'etihad stadium': 'City of Manchester Stadium',
 };
 
 const COUNTRY_WIKI_LANG: Record<string, string> = {
@@ -96,7 +114,7 @@ const COUNTRY_WIKI_LANG: Record<string, string> = {
 const HIT_MISS_LOG_EVERY = 50;
 let cacheHits = 0;
 let cacheMisses = 0;
-const inflight = new Map<string, Promise<string>>();
+const inflight = new Map<string, Promise<StadiumImageLookup>>();
 
 export function wikipediaLangForCountry(country?: string | null): string | null {
   const c = (country ?? '').trim().toLowerCase();
@@ -114,6 +132,7 @@ export function parseWikipediaSummaryImage(summary: unknown): WikipediaImageResu
   if (!summary || typeof summary !== 'object') return empty;
   const row = summary as {
     type?: string;
+    description?: string;
     originalimage?: { source?: string };
     thumbnail?: { source?: string };
     coordinates?: { lat?: number; lon?: number; longitude?: number };
@@ -131,6 +150,8 @@ export function parseWikipediaSummaryImage(summary: unknown): WikipediaImageResu
     latitude: typeof lat === 'number' && Number.isFinite(lat) ? lat : null,
     longitude: typeof lon === 'number' && Number.isFinite(lon) ? lon : null,
     pageTitle: typeof row.title === 'string' ? row.title : undefined,
+    description: typeof row.description === 'string' ? row.description : null,
+    type: typeof row.type === 'string' ? row.type : null,
   };
 }
 
@@ -213,31 +234,62 @@ async function searchWikipedia(lang: string, query: string): Promise<WikiSearchH
   return parseSearchHits(await wikipediaFetch(url));
 }
 
-async function fetchSummary(lang: string, title: string): Promise<WikipediaImageResult | null> {
+async function fetchValidatedStadiumSummary(lang: string, title: string): Promise<WikipediaImageResult | null> {
   const encoded = encodeURIComponent(title.replace(/ /g, '_'));
   const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encoded}`;
   const json = await wikipediaFetch(url);
   if (!json) return null;
   const parsed = parseWikipediaSummaryImage(json);
-  if (!parsed.imageUrl) return null;
-  return { ...parsed, lang, pageTitle: parsed.pageTitle ?? title };
+  const row = json as { type?: string; description?: string; title?: string };
+  const valid = isValidStadiumWikipediaSummary({
+    type: row.type ?? parsed.type,
+    title: parsed.pageTitle ?? title,
+    description: typeof row.description === 'string' ? row.description : parsed.description,
+    latitude: parsed.latitude,
+    longitude: parsed.longitude,
+  });
+  if (!valid) return null;
+  if (!parsed.imageUrl || isPersistedPlaceholderUrl(parsed.imageUrl)) return null;
+  return {
+    ...parsed,
+    lang,
+    pageTitle: parsed.pageTitle ?? title,
+    description: typeof row.description === 'string' ? row.description : parsed.description,
+  };
+}
+
+export function buildWikipediaStadiumQueries(stadiumName: string): string[] {
+  const { original, stripped, normalized } = normalizeStadiumName(stadiumName);
+  const queries: string[] = [];
+  const push = (value: string) => {
+    const next = value.replace(/\s+/g, ' ').trim();
+    if (!next) return;
+    if (queries.some((row) => row.toLowerCase() === next.toLowerCase())) return;
+    queries.push(next);
+  };
+  const override = STADIUM_QUERY_OVERRIDES[normalized] || STADIUM_QUERY_OVERRIDES[stripped];
+  if (override) push(override);
+  push(original);
+  const noParen = original.replace(/\s*\([^)]*\)\s*$/, '').trim();
+  if (noParen) push(noParen);
+  if (stripped) push(stripped);
+  if (!/\bstadium\b/i.test(original)) push(`${original} stadium`);
+  if (stripped && stripped.toLowerCase() !== original.toLowerCase()) {
+    push(`${stripped} stadium`);
+  }
+  return queries;
 }
 
 async function fetchWikipediaEdition(lang: string, stadiumName: string): Promise<WikipediaImageResult | null> {
-  const { original, stripped } = normalizeStadiumName(stadiumName);
-  const queries = [original];
-  if (stripped && stripped !== original.toLowerCase()) {
-    queries.push(`${stripped} stadium`);
-  }
+  const queries = buildWikipediaStadiumQueries(stadiumName);
   const seen = new Set<string>();
   for (const query of queries) {
-    if (!query.trim()) continue;
     const hits = await searchWikipedia(lang, query);
-    for (const hit of hits) {
+    for (const hit of hits.slice(0, 5)) {
       const key = hit.title.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      const summary = await fetchSummary(lang, hit.title);
+      const summary = await fetchValidatedStadiumSummary(lang, hit.title);
       if (summary?.imageUrl) return summary;
     }
   }
@@ -324,26 +376,36 @@ export async function saveToCache(row: {
   found: boolean;
   source?: string;
 }): Promise<void> {
+  const placeholderUrl = isPersistedPlaceholderUrl(row.imageUrl);
+  if (row.found && (placeholderUrl || !row.imageUrl)) {
+    logger.error('stadium-image refused to persist placeholder as found=true', {
+      stadiumNameNormalized: row.stadiumNameNormalized,
+      imageUrl: row.imageUrl,
+    });
+  }
+  const found = row.found && Boolean(row.imageUrl) && !placeholderUrl;
+  const imageUrl = found ? row.imageUrl : null;
+  const thumbnailUrl = found ? row.thumbnailUrl : null;
   try {
     await prisma.stadiumImage.upsert({
       where: { stadiumNameNormalized: row.stadiumNameNormalized },
       create: {
         stadiumNameNormalized: row.stadiumNameNormalized,
         originalName: row.originalName,
-        imageUrl: row.imageUrl,
-        thumbnailUrl: row.thumbnailUrl,
-        latitude: row.latitude,
-        longitude: row.longitude,
-        found: row.found,
+        imageUrl,
+        thumbnailUrl,
+        latitude: found ? row.latitude : null,
+        longitude: found ? row.longitude : null,
+        found,
         source: row.source ?? 'wikipedia',
       },
       update: {
         originalName: row.originalName,
-        imageUrl: row.imageUrl,
-        thumbnailUrl: row.thumbnailUrl,
-        latitude: row.latitude,
-        longitude: row.longitude,
-        found: row.found,
+        imageUrl,
+        thumbnailUrl,
+        latitude: found ? row.latitude : null,
+        longitude: found ? row.longitude : null,
+        found,
         source: row.source ?? 'wikipedia',
       },
     });
@@ -447,12 +509,17 @@ export async function resolveTeamToStadium(
   return fromWiki;
 }
 
-function imageUrlFromCache(row: StadiumImageCacheRow): string {
-  if (row.found && row.imageUrl) return row.imageUrl;
-  return getPlaceholderUrl();
+function lookupFromCache(row: StadiumImageCacheRow): StadiumImageLookup {
+  if (row.found && row.imageUrl && !isPersistedPlaceholderUrl(row.imageUrl)) {
+    return { imageUrl: row.imageUrl, isPlaceholder: false };
+  }
+  return PLACEHOLDER_LOOKUP;
 }
 
-function coalesceInflight(key: string, work: () => Promise<string>): Promise<string> {
+function coalesceInflight(
+  key: string,
+  work: () => Promise<StadiumImageLookup>,
+): Promise<StadiumImageLookup> {
   const existing = inflight.get(key);
   if (existing) return existing;
   const pending = work().finally(() => {
@@ -462,52 +529,110 @@ function coalesceInflight(key: string, work: () => Promise<string>): Promise<str
   return pending;
 }
 
-export async function getStadiumImage(
-  input: string,
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withStadiumImageLock(
+  normalized: string,
+  work: () => Promise<StadiumImageLookup>,
+): Promise<StadiumImageLookup> {
+  return coalesceInflight(`stad:${normalized}`, async () => {
+    const redis = getRedisClient();
+    const lockKey = `stadium-image:lock:${normalized}`;
+    const ttlSec = getStadiumImageConfig().lockTtlSec;
+    let acquired = !redis;
+    if (redis) {
+      try {
+        const ok = await redis.set(lockKey, '1', 'EX', ttlSec, 'NX');
+        acquired = ok === 'OK';
+      } catch (error) {
+        logger.warn('stadium-image redis lock failed; fetching locally', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        acquired = true;
+      }
+    }
+    if (!acquired) {
+      const deadline = Date.now() + ttlSec * 1000;
+      while (Date.now() < deadline) {
+        const cached = await getFromCache(normalized);
+        if (cached) return lookupFromCache(cached);
+        await sleep(250);
+      }
+      const cached = await getFromCache(normalized);
+      return cached ? lookupFromCache(cached) : PLACEHOLDER_LOOKUP;
+    }
+    try {
+      const cached = await getFromCache(normalized);
+      if (cached) return lookupFromCache(cached);
+      return await work();
+    } finally {
+      if (redis) {
+        try {
+          await redis.del(lockKey);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  });
+}
+
+async function resolveAndCacheStadium(
+  stadiumName: string,
   options?: GetStadiumImageOptions,
-): Promise<string> {
-  const placeholder = getPlaceholderUrl();
-  try {
-    let stadiumName = String(input ?? '').trim();
-    if (!stadiumName) return placeholder;
-    if (options?.isTeamName) {
-      const resolved = await resolveTeamToStadium(stadiumName, { country: options.country });
-      if (!resolved) return placeholder;
-      stadiumName = resolved;
-    }
-    const names = normalizeStadiumName(stadiumName);
-    if (!names.normalized) return placeholder;
-    const cached = await getFromCache(names.normalized);
-    if (cached) {
-      recordCache(true);
-      return imageUrlFromCache(cached);
-    }
-    recordCache(false);
+): Promise<StadiumImageLookup> {
+  const names = normalizeStadiumName(stadiumName);
+  if (!names.normalized) return PLACEHOLDER_LOOKUP;
+  const cached = await getFromCache(names.normalized);
+  if (cached) {
+    recordCache(true);
+    return lookupFromCache(cached);
+  }
+  recordCache(false);
+  return withStadiumImageLock(names.normalized, async () => {
     const wiki = await fetchFromWikipedia(names.original || stadiumName, { country: options?.country });
-    const found = Boolean(wiki.imageUrl);
+    const found = Boolean(wiki.imageUrl) && !isPersistedPlaceholderUrl(wiki.imageUrl);
     await saveToCache({
       stadiumNameNormalized: names.normalized,
       originalName: names.original || stadiumName,
-      imageUrl: wiki.imageUrl,
-      thumbnailUrl: wiki.thumbnailUrl,
-      latitude: wiki.latitude,
-      longitude: wiki.longitude,
+      imageUrl: found ? wiki.imageUrl : null,
+      thumbnailUrl: found ? wiki.thumbnailUrl : null,
+      latitude: found ? wiki.latitude : null,
+      longitude: found ? wiki.longitude : null,
       found,
       source: 'wikipedia',
     });
-    return wiki.imageUrl || placeholder;
+    return found && wiki.imageUrl
+      ? { imageUrl: wiki.imageUrl, isPlaceholder: false }
+      : PLACEHOLDER_LOOKUP;
+  });
+}
+
+export async function getStadiumImage(
+  input: string,
+  options?: GetStadiumImageOptions,
+): Promise<StadiumImageLookup> {
+  try {
+    let stadiumName = String(input ?? '').trim();
+    if (!stadiumName) return PLACEHOLDER_LOOKUP;
+    if (options?.isTeamName) {
+      const resolved = await resolveTeamToStadium(stadiumName, { country: options.country });
+      if (!resolved) return PLACEHOLDER_LOOKUP;
+      stadiumName = resolved;
+    }
+    return resolveAndCacheStadium(stadiumName, options);
   } catch (error) {
     logger.warn('stadium-image lookup failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return placeholder;
+    return PLACEHOLDER_LOOKUP;
   }
 }
 
 function warmStadiumImage(input: string, options?: GetStadiumImageOptions): void {
-  const { normalized } = normalizeStadiumName(input);
-  const key = `${options?.isTeamName ? 'team' : 'stad'}:${normalized || input.trim().toLowerCase()}`;
-  void coalesceInflight(key, () => getStadiumImage(input, options)).catch((error) => {
+  void getStadiumImage(input, options).catch((error) => {
     logger.warn('stadium-image warmup failed', {
       error: error instanceof Error ? error.message : String(error),
     });
@@ -515,40 +640,39 @@ function warmStadiumImage(input: string, options?: GetStadiumImageOptions): void
 }
 
 /**
- * Highlights path: cache-only. On miss, return the placeholder and fill Wikipedia in the background.
+ * Highlights path: cache-only. On miss, return a placeholder signal and fill Wikipedia in the background.
  */
 export async function getStadiumImageFast(
   input: string,
   options?: GetStadiumImageOptions,
-): Promise<string> {
-  const placeholder = getPlaceholderUrl();
+): Promise<StadiumImageLookup> {
   try {
     let stadiumName = String(input ?? '').trim();
-    if (!stadiumName) return placeholder;
+    if (!stadiumName) return PLACEHOLDER_LOOKUP;
     if (options?.isTeamName) {
       const mapped = await lookupTeamStadiumFromDb(stadiumName);
       if (!mapped) {
         recordCache(false);
         warmStadiumImage(stadiumName, options);
-        return placeholder;
+        return PLACEHOLDER_LOOKUP;
       }
       stadiumName = mapped;
     }
     const names = normalizeStadiumName(stadiumName);
-    if (!names.normalized) return placeholder;
+    if (!names.normalized) return PLACEHOLDER_LOOKUP;
     const cached = await getFromCache(names.normalized);
     if (cached) {
       recordCache(true);
-      return imageUrlFromCache(cached);
+      return lookupFromCache(cached);
     }
     recordCache(false);
     warmStadiumImage(stadiumName, { ...options, isTeamName: false });
-    return placeholder;
+    return PLACEHOLDER_LOOKUP;
   } catch (error) {
     logger.warn('stadium-image fast lookup failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return placeholder;
+    return PLACEHOLDER_LOOKUP;
   }
 }
 
@@ -573,14 +697,14 @@ export async function resolveVenueImage(options: {
   venueName?: string | null;
   country?: string | null;
   fast?: boolean;
-}): Promise<string> {
+}): Promise<StadiumImageLookup> {
   const name = (options.venueName ?? '').trim();
   if (name) {
     const { normalized } = normalizeStadiumName(name);
     const cached = await getFromCache(normalized);
     if (cached) {
       recordCache(true);
-      return imageUrlFromCache(cached);
+      return lookupFromCache(cached);
     }
   }
 
@@ -601,10 +725,10 @@ export async function resolveVenueImage(options: {
         });
       }
     }
-    return from365;
+    return { imageUrl: from365, isPlaceholder: false };
   }
 
-  if (!name) return getPlaceholderUrl();
+  if (!name) return PLACEHOLDER_LOOKUP;
   if (options.fast === false) {
     return getStadiumImage(name, { country: options.country });
   }

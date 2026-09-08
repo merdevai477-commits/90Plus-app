@@ -3248,12 +3248,13 @@ export async function getScores365ExperimentBundle(
     | null
     | undefined;
   if (venue) {
-    venue.image = await resolveVenueImage({
+    const resolved = await resolveVenueImage({
       venueId: venue.id,
       venueName: venue.name,
       country: fixture.league?.country ?? null,
       fast: true,
     });
+    venue.image = resolved.imageUrl;
   }
 
   return {

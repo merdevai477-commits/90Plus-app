@@ -488,14 +488,15 @@ export class FootballController {
         return;
       }
       const input = name || team;
-      const imageUrl = await lookupStadiumImage(input, {
+      const result = await lookupStadiumImage(input, {
         isTeamName: Boolean(team) && !name,
         country,
       });
       res.json({
         status: 'SUCCESS',
         response: {
-          imageUrl,
+          imageUrl: result.imageUrl,
+          isPlaceholder: result.isPlaceholder,
           name: input,
           isTeamName: Boolean(team) && !name,
         },

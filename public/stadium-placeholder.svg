@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450" role="img" aria-label="90Plus stadium placeholder">
+  <rect width="800" height="450" fill="#12081C"/>
+  <rect x="40" y="40" width="720" height="370" rx="28" fill="#1C0F2E" stroke="#7C3AED" stroke-width="2" stroke-dasharray="12 10"/>
+  <ellipse cx="400" cy="250" rx="210" ry="88" fill="none" stroke="#5B21B6" stroke-width="6"/>
+  <ellipse cx="400" cy="250" rx="70" ry="30" fill="none" stroke="#3B82F6" stroke-width="3"/>
+  <text x="400" y="150" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#A78BFA">90Plus</text>
+  <text x="400" y="380" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#93C5FD">Stadium photo loading</text>
+</svg>

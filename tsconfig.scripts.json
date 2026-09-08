@@ -16,7 +16,10 @@
     "scripts/verify-share-win.ts",
     "scripts/seed-share-win.ts",
     "scripts/seed-predict-and-win.ts",
-    "src/lib/prisma.ts"
+    "scripts/audit-stadium-images.ts",
+    "scripts/cleanup-bad-stadium-images.ts",
+    "src/lib/prisma.ts",
+    "src/utils/stadium-name.util.ts"
   ],
   "exclude": [
     "node_modules",

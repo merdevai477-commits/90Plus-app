@@ -24,8 +24,6 @@ import {
   isUnverifiedStadiumCdnUrl,
 } from '../../utils/fetchStadiumImage';
 
-const STADIUM_PLACEHOLDER = require('../../assets/images/prediction-groups/hero-stadium.webp');
-
 type Row = {
   key: string;
   label: string;
@@ -56,8 +54,24 @@ function isUsableRemotePhoto(url?: string | null): boolean {
   const value = (url ?? '').trim();
   if (!/^https?:\/\//i.test(value)) return false;
   if (/Football_pitch_pv/i.test(value)) return false;
+  if (/stadium-placeholder\.svg/i.test(value)) return false;
   if (isUnverifiedStadiumCdnUrl(value)) return false;
   return true;
+}
+
+function StadiumPlaceholder() {
+  return (
+    <View style={styles.hero} accessibilityLabel="Stadium photo loading">
+      <LinearGradient
+        colors={['rgba(18,8,28,0.96)', 'rgba(28,15,46,0.92)', 'rgba(12,6,20,0.96)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.heroSkeletonMark} />
+      <MaterialCommunityIcons name="stadium-outline" size={36} color={PURPLE_SOFT} />
+    </View>
+  );
 }
 
 function StadiumHero({ uri, stadiumName }: { uri: string | null; stadiumName: string | null }) {
@@ -76,13 +90,8 @@ function StadiumHero({ uri, stadiumName }: { uri: string | null; stadiumName: st
     let cancelled = false;
     void fetchStadiumImageByName(name)
       .then((next) => {
-        if (cancelled || !next || isUnverifiedStadiumCdnUrl(next)) return;
-        setRemote((current) => {
-          if (current && !isUnverifiedStadiumCdnUrl(current) && isUsableRemotePhoto(current)) {
-            return current;
-          }
-          return next;
-        });
+        if (cancelled || !next || !isUsableRemotePhoto(next)) return;
+        setRemote((current) => (isUsableRemotePhoto(current) ? current : next));
       })
       .catch(() => undefined);
     return () => {
@@ -90,10 +99,11 @@ function StadiumHero({ uri, stadiumName }: { uri: string | null; stadiumName: st
     };
   }, [stadiumName, uri]);
 
+  if (!remote) return <StadiumPlaceholder />;
+
   return (
     <ExpoImage
-      source={remote ? { uri: remote } : STADIUM_PLACEHOLDER}
-      placeholder={STADIUM_PLACEHOLDER}
+      source={{ uri: remote }}
       style={styles.hero}
       contentFit="cover"
       cachePolicy="memory-disk"
@@ -275,6 +285,17 @@ const styles = StyleSheet.create({
     height: 132,
     borderRadius: 14,
     backgroundColor: 'rgba(8,4,16,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  heroSkeletonMark: {
+    position: 'absolute',
+    width: '70%',
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(167,139,250,0.16)',
+    top: 28,
   },
   empty: {
     color: TEXT_MUTED,

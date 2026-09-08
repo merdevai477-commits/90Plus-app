@@ -17,7 +17,9 @@ describe('fetchStadiumImage helpers', () => {
   it('reads imageUrl from the stadium-image API payload', async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ response: { imageUrl: 'https://upload.wikimedia.org/anfield.jpg' } }),
+      json: async () => ({
+        response: { imageUrl: 'https://upload.wikimedia.org/anfield.jpg', isPlaceholder: false },
+      }),
     });
     global.fetch = fetchMock as unknown as typeof fetch;
     await expect(fetchStadiumImageByName('Anfield', 'England')).resolves.toBe(
@@ -25,5 +27,26 @@ describe('fetchStadiumImage helpers', () => {
     );
     expect(String(fetchMock.mock.calls[0][0])).toContain('/football/stadium-image?');
     expect(String(fetchMock.mock.calls[0][0])).toContain('name=Anfield');
+  });
+
+  it('returns null when the API says the result is a placeholder', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ response: { imageUrl: null, isPlaceholder: true } }),
+    }) as unknown as typeof fetch;
+    await expect(fetchStadiumImageByName('Unknown Ground')).resolves.toBeNull();
+  });
+
+  it('returns null even if a placeholder URL is present in imageUrl', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        response: {
+          imageUrl: 'https://90plus.pro/stadium-placeholder.svg',
+          isPlaceholder: true,
+        },
+      }),
+    }) as unknown as typeof fetch;
+    await expect(fetchStadiumImageByName('Unknown Ground')).resolves.toBeNull();
   });
 });
