@@ -47,6 +47,7 @@ import { MatchStandingsTable } from '../../components/match-details/MatchStandin
 import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
 import { MatchKickoffHighlights } from '../../components/match-details/MatchKickoffHighlights';
+import { MatchTopPlayersCard } from '../../components/match-details/MatchTopPlayersCard';
 import { MatchLmtWebView } from '../../components/match-details/MatchLmtWebView';
 import { fetchFixtureLmt, type Scores365LmtInfo } from '../../services/lmt.service';
 import { applySubstitutionsToPitch } from '../../utils/lineupMatchState';
@@ -74,6 +75,8 @@ import {
 } from '../../utils/matchStatsFallback';
 import { hasLineupData, isAuthoritativeLineupData, pickBetterLineups, shouldShowLineupsTab } from '../../utils/matchLineupsFallback';
 import { extractMatchKickoffInfo } from '../../utils/extractMatchKickoffInfo';
+import { match365CompetitionId } from '../../utils/matchTopPlayers';
+import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import { addBreadcrumb, captureMessage } from '../../services/sentry.service';
 import { resolveFormationLabel, sortPlayersForPitch } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
@@ -1526,6 +1529,45 @@ const MatchDetailsScreen = () => {
               isLive()
                 ? (t.matchDetails.eventsWaitingLive || 'Waiting for the first event…')
                 : (t.matchDetails.beforeMatch || t.matchDetails.eventsBeforeKickoff)
+            }
+          />
+          <MatchTopPlayersCard
+            homeCompetitorId={
+              is365Fixture ? (form365TeamIds.home ?? fixture?.teams.home.id ?? 0) : 0
+            }
+            awayCompetitorId={
+              is365Fixture ? (form365TeamIds.away ?? fixture?.teams.away.id ?? 0) : 0
+            }
+            competitionId={match365CompetitionId(fixture?.league?.id) ?? 0}
+            homeTeam={{
+              id: fixture?.teams.home.id ?? 0,
+              name: getTeamDisplayName(homeTeamName, language),
+              logo: fixture?.teams.home.logo,
+            }}
+            awayTeam={{
+              id: fixture?.teams.away.id ?? 0,
+              name: getTeamDisplayName(awayTeamName, language),
+              logo: fixture?.teams.away.logo,
+            }}
+            rtl={language === 'ar'}
+            labels={{
+              title: t.matchDetails.topPlayersTitle,
+              attack: t.matchDetails.topPlayersAttack,
+              midfield: t.matchDetails.topPlayersMidfield,
+              defense: t.matchDetails.topPlayersDefense,
+              goals: t.matchDetails.topPlayersGoals,
+              assists: t.matchDetails.topPlayersAssists,
+              rating: t.matchDetails.topPlayersRating,
+            }}
+            onOpenPlayer={(player, team) =>
+              pushPlayerCareer(router, {
+                athleteId: player.athleteId,
+                name: player.name,
+                photo: player.photo,
+                teamName: team.name,
+                teamLogo: team.logo,
+                teamId: team.id,
+              })
             }
           />
         </ScrollView>

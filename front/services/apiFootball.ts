@@ -891,6 +891,7 @@ export interface Stat365LeaderRow {
   value: string;
   competitorId: number | null;
   leftClub: boolean;
+  positionName?: string | null;
 }
 
 export interface Stat365Leaderboard {
