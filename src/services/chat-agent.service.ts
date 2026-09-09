@@ -350,6 +350,19 @@ function shouldRequireTools(message: string): boolean {
   );
 }
 
+function formatCompactMatch(m: any): string | null {
+  if (!m || (typeof m !== 'object')) return null;
+  const home = String(m.home ?? '').trim();
+  const away = String(m.away ?? '').trim();
+  if (!home && !away) return null;
+  const pair = `${home || '—'} vs ${away || '—'}`;
+  const hs = m.score?.home;
+  const as = m.score?.away;
+  if (hs != null && as != null) return `${pair} (${hs}-${as})`;
+  const kickoff = typeof m.kickoff === 'string' ? m.kickoff.slice(0, 16).replace('T', ' ') : '';
+  return kickoff ? `${pair} — ${kickoff}` : pair;
+}
+
 /** A bare name ("إمام عاشور" / "ليونيل ميسي") should still search and open a profile. */
 function looksLikeNameLookup(message: string): boolean {
   const q = message.replace(/[؟?!.،,]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -360,7 +373,7 @@ function looksLikeNameLookup(message: string): boolean {
   return /[\u0600-\u06FFa-zA-Z]/.test(q);
 }
 
-function formatEntityBrief(parsed: any, language: MessageLanguage): string | null {
+export function formatEntityBrief(parsed: any, language: MessageLanguage): string | null {
   if (!parsed || parsed.error || parsed.status === 'need_clarification') return null;
   const en = language === 'en';
   const facts = parsed.quickFacts ?? {};
@@ -380,12 +393,36 @@ function formatEntityBrief(parsed: any, language: MessageLanguage): string | nul
     const position = facts.position || parsed.profile?.position;
     const age = facts.age || parsed.profile?.age;
     const nationality = facts.nationality || parsed.profile?.nationality;
+    const jersey = facts.jerseyNumber || parsed.profile?.jerseyNumber;
+    const season = parsed.seasonStats;
+    const nextGame = formatCompactMatch(parsed.nextGame);
+    const seasons: any[] = Array.isArray(parsed.recentSeasons) ? parsed.recentSeasons : [];
+    const table = seasons.length
+      ? [
+          en
+            ? '| Season | Club | G | A | Apps |'
+            : '| الموسم | النادي | أهداف | صناعة | لعب |',
+          '| --- | --- | --- | --- | --- |',
+          ...seasons.slice(0, 5).map((s) => {
+            const team = Array.isArray(s.clubs) && s.clubs[0] ? s.clubs[0] : '—';
+            return `| ${s.label ?? '—'} | ${team} | ${s.goals ?? 0} | ${s.assists ?? 0} | ${s.appearances ?? 0} |`;
+          }),
+        ].join('\n')
+      : null;
     const lines = [
-      en ? `**${name}**` : `**${name}**`,
+      `**${name}**`,
       club ? (en ? `Current club: **${club}**.` : `بيلعب دلوقتي في **${club}**.`) : null,
       position ? (en ? `Position: ${position}.` : `مركز اللعب: ${position}.`) : null,
       age ? (en ? `Age: ${age}.` : `السن: ${age}.`) : null,
       nationality ? (en ? `Nationality: ${nationality}.` : `الجنسية: ${nationality}.`) : null,
+      jersey ? (en ? `Shirt number: ${jersey}.` : `رقم القميص: ${jersey}.`) : null,
+      season
+        ? (en
+            ? `Latest season (${season.label}): **${season.goals ?? 0}** goals / **${season.assists ?? 0}** assists / **${season.appearances ?? 0}** apps.`
+            : `آخر موسم (${season.label}): **${season.goals ?? 0}** هدف / **${season.assists ?? 0}** صناعة / **${season.appearances ?? 0}** مباراة.`)
+        : facts.latestSeasonLine || null,
+      nextGame ? (en ? `Next match: ${nextGame}.` : `المباراة الجاية: ${nextGame}.`) : null,
+      table,
       en
         ? 'Open the player profile below for the full card.'
         : 'تقدر تفتح بروفايل اللاعب من الزر تحت.',
@@ -398,12 +435,20 @@ function formatEntityBrief(parsed: any, language: MessageLanguage): string | nul
     if (!name) return null;
     const coach = parsed.coach || facts.coach;
     const country = parsed.country;
+    const stadium = parsed.stadium || facts.stadium;
+    const founded = parsed.founded || facts.founded;
     const league = Array.isArray(parsed.competitions) ? parsed.competitions[0]?.name : null;
+    const nextMatch = formatCompactMatch(facts.nextMatch ?? parsed.recentMatches?.live?.[0] ?? parsed.recentMatches?.upcoming?.[0]);
+    const lastMatch = formatCompactMatch(facts.lastMatch ?? parsed.recentMatches?.finished?.[0]);
     const lines = [
       `**${name}**`,
       coach ? (en ? `Coach: **${coach}**.` : `المدرب الحالي: **${coach}**.`) : null,
       league ? (en ? `Competition: ${league}.` : `بيلعب في ${league}.`) : null,
       country ? (en ? `Country: ${country}.` : `البلد: ${country}.`) : null,
+      stadium ? (en ? `Stadium: ${stadium}.` : `الملعب: ${stadium}.`) : null,
+      founded ? (en ? `Founded: ${founded}.` : `تأسس: ${founded}.`) : null,
+      nextMatch ? (en ? `Next match: ${nextMatch}.` : `المباراة الجاية: ${nextMatch}.`) : null,
+      lastMatch ? (en ? `Last match: ${lastMatch}.` : `آخر مباراة: ${lastMatch}.`) : null,
       en
         ? 'Open the club profile below for the full page.'
         : 'تقدر تفتح بروفايل النادي من الزر تحت.',

@@ -3602,6 +3602,8 @@ export class ThreeSixFiveScoresService {
   async invalidatePlayerCareerCache(athleteId: number, langId?: number): Promise<void> {
     const langs = langId != null ? [langId] : [1, 27];
     for (const lid of langs) {
+      await redisCacheService.del(`365:player-career:v7:${athleteId}:${lid}`);
+      await redisCacheService.del(`365:player-career:v6:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v5:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v4:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v3:${athleteId}:${lid}`);

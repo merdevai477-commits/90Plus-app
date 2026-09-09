@@ -815,6 +815,15 @@ function wantsMatchContext(q: string): boolean {
   return /مبار|ماتش|لعب|جاي|القادم|لايف|مباشر|fixture|match|next\s*game/i.test(q);
 }
 
+/** Chat answers should not sit on a week-old career row from the profile cache. */
+const CHAT_CAREER_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+const CHAT_PLAYER_LOOKUP = {
+  includeInfo: true as const,
+  includeCareer: true as const,
+  careerMaxAgeMs: CHAT_CAREER_MAX_AGE_MS,
+};
+
 async function load365PlayerProfile(
   athleteId: number,
   query: string,
@@ -824,8 +833,7 @@ async function load365PlayerProfile(
 ) {
   const from365 = await footballDataCacheService.lookup365Player(resolvedAs || query, language, {
     athleteId,
-    includeInfo: true,
-    includeCareer: true,
+    ...CHAT_PLAYER_LOOKUP,
   });
   const player = from365.data?.players?.[0];
   if (!player) return null;
@@ -1197,7 +1205,6 @@ async function hydrateFootballSearchHit(
     };
   }
   if (hit.type === 'club' || hit.type === 'national_team') {
-    const needMatches = wantsMatchContext(hint);
     const needDossier = wantsTrophyEnrichment(hint);
     const [infoRes, coachRes, matchesRes, dossier] = await Promise.all([
       Promise.resolve(footballDataCacheService.getCached365CompetitorInfo(hit.id, language)).catch(
@@ -1206,11 +1213,9 @@ async function hydrateFootballSearchHit(
       Promise.resolve(footballDataCacheService.getCached365CompetitorCoach(hit.id, language)).catch(
         () => ({ data: null }),
       ),
-      needMatches
-        ? Promise.resolve(footballDataCacheService.getCached365CompetitorMatches(hit.id, language)).catch(
-            () => ({ data: null }),
-          )
-        : Promise.resolve({ data: null }),
+      Promise.resolve(footballDataCacheService.getCached365CompetitorMatches(hit.id, language)).catch(
+        () => ({ data: null }),
+      ),
       needDossier
         ? Promise.resolve(fetchTeamDossierContext(hit.name, { allowSearch: true })).catch(() => null)
         : Promise.resolve(null),
@@ -1219,6 +1224,11 @@ async function hydrateFootballSearchHit(
     const coach = coachRes?.data;
     const matches = matchesRes?.data;
     const coachName = coach?.name ?? dossier?.coach?.name ?? null;
+    const live = (matches?.live ?? []).slice(0, 2).map(compactFixture);
+    const upcoming = (matches?.upcoming ?? []).slice(0, 3).map(compactFixture);
+    const finished = (matches?.finished ?? []).slice(0, 3).map(compactFixture);
+    const nextMatch = live[0] ?? upcoming[0] ?? null;
+    const lastMatch = finished[0] ?? null;
 
     let cafCount: number | null = null;
     if (dossier?.apiTeamId) {
@@ -1257,13 +1267,17 @@ async function hydrateFootballSearchHit(
       coachNationality: coach?.nationality ?? dossier?.coach?.nationality ?? null,
       cafChampionsLeagueWins: cafCount,
       recentMatches: {
-        live: (matches?.live ?? []).slice(0, 2).map(compactFixture),
-        upcoming: (matches?.upcoming ?? []).slice(0, 3).map(compactFixture),
-        finished: (matches?.finished ?? []).slice(0, 3).map(compactFixture),
+        live,
+        upcoming,
+        finished,
       },
       quickFacts: {
         ...(coachName ? { coach: coachName } : {}),
         ...(cafCount != null ? { cafChampionsLeagueWins: cafCount } : {}),
+        ...(info?.stadium ? { stadium: info.stadium } : {}),
+        ...(info?.founded ? { founded: info.founded } : {}),
+        ...(nextMatch ? { nextMatch } : {}),
+        ...(lastMatch ? { lastMatch } : {}),
       },
       answerHint: [
         coachName
@@ -2163,8 +2177,7 @@ async function toolPlayerCareer(args: Record<string, unknown>, language: Message
   if (Number.isFinite(athleteIdArg) && athleteIdArg > 0) {
     const from365 = await footballDataCacheService.lookup365Player(rawName || String(athleteIdArg), language, {
       athleteId: athleteIdArg,
-      includeInfo: true,
-      includeCareer: true,
+      ...CHAT_PLAYER_LOOKUP,
     });
     const player = from365.data?.players?.[0];
     if (player) {
@@ -2208,13 +2221,11 @@ async function toolPlayerCareer(args: Record<string, unknown>, language: Message
     resolution.confident && resolution.best
       ? await footballDataCacheService.lookup365Player(name, language, {
           athleteId: resolution.best.athleteId,
-          includeInfo: true,
-          includeCareer: true,
+          ...CHAT_PLAYER_LOOKUP,
         })
       : await footballDataCacheService.lookup365Player(name, language, {
           limit: 1,
-          includeInfo: true,
-          includeCareer: true,
+          ...CHAT_PLAYER_LOOKUP,
         });
   const player = from365.data?.players?.[0];
   const apiFb = await enrichApiFootballTrophies(name, player?.athleteId);

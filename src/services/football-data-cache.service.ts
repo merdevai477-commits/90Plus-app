@@ -4992,8 +4992,10 @@ class FootballDataCacheService {
     async getCached365PlayerCareer(
         athleteId: number,
         language?: string | null,
+        options?: { maxAgeMs?: number },
     ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
         const langId = resolveScores365LangId(language);
+        const maxAgeMs = options?.maxAgeMs ?? CAREER_DB_MAX_AGE_MS;
 
         // 1. Postgres — serve a fresh row immediately; refresh stale rows in background.
         //    Keyed by (athleteId, langId): the row holds provider labels in one
@@ -5009,10 +5011,15 @@ class FootballDataCacheService {
                 const hasNewShape =
                     Array.isArray(data.currentSeasonHighlights) &&
                     Object.prototype.hasOwnProperty.call(data.profile ?? {}, 'clubLogo');
-                if (data.seasons?.length && hasNewShape && age < CAREER_DB_MAX_AGE_MS) {
+                if (data.seasons?.length && hasNewShape && age < maxAgeMs) {
                     return { data, source: '365scores' };
                 }
                 if (data.seasons?.length && hasNewShape) {
+                    if (options?.maxAgeMs != null) {
+                        const fresh = await this.refresh365PlayerCareer(athleteId, language, langId);
+                        if (fresh.data?.seasons?.length) return fresh;
+                        return { data, source: '365scores' };
+                    }
                     // Stale but valid: refresh in background, return cached data now.
                     this.refresh365PlayerCareer(athleteId, language, langId).catch((err) => {
                         logger.warn(`[365Career] background refresh ${athleteId} failed:`, err?.message);
@@ -5042,6 +5049,7 @@ class FootballDataCacheService {
         language: string | null | undefined,
         langId: number,
     ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerCareer>> {
+        await threeSixFiveScoresService.invalidatePlayerCareerCache(athleteId, langId);
         const result = await threeSixFiveScoresService.getPlayerCareer(athleteId, language, { langId });
         if (!result.data?.seasons?.length) {
             try {
@@ -5096,6 +5104,8 @@ class FootballDataCacheService {
             limit?: number;
             includeInfo?: boolean;
             includeCareer?: boolean;
+            /** When set, refetch career from 365 if the cached row is older than this. */
+            careerMaxAgeMs?: number;
         },
     ): Promise<ThreeSixFiveResult<ThreeSixFivePlayerLookupResult>> {
         const includeInfo = options?.includeInfo !== false;
@@ -5141,7 +5151,9 @@ class FootballDataCacheService {
                             ? this.getCached365PlayerBasicInfo(candidate.athleteId, language)
                             : Promise.resolve({ data: null, source: '365scores' as const }),
                         includeCareer
-                            ? this.getCached365PlayerCareer(candidate.athleteId, language)
+                            ? this.getCached365PlayerCareer(candidate.athleteId, language, {
+                                  maxAgeMs: options?.careerMaxAgeMs,
+                              })
                             : Promise.resolve({ data: null, source: '365scores' as const }),
                     ]);
 
