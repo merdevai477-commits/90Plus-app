@@ -17,14 +17,16 @@ const ChatScrollView = forwardRef<React.ComponentRef<typeof ChatKeyboardScrollVi
     return (
       <ChatKeyboardScrollView
         ref={ref}
+        {...props}
         inverted={inverted}
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
         keyboardDismissMode="interactive"
         keyboardLiftBehavior="whenAtEnd"
+        bounces={false}
+        overScrollMode="never"
         offset={Math.max(0, bottom - CHAT_BOTTOM_OFFSET_MARGIN)}
         extraContentPadding={extraContentPadding}
-        {...props}
       />
     );
   },

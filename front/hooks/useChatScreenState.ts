@@ -151,20 +151,13 @@ export function useChatScreenState({
     const newCount = messages.length;
     const prevCount = lastMessageCountRef.current;
 
-    if (newCount > prevCount) {
-      if (isNearBottomRef.current) {
-        const raf = requestAnimationFrame(() => {
-          safeScrollToEnd(false);
-        });
-        scrollRafRef.current.push(raf);
-      } else {
-        const added = messages.slice(prevCount, newCount);
-        const aiAdded = added.filter((m) => m.role === 'ai').length;
-        if (aiAdded > 0) setUnreadCount((c) => c + aiAdded);
-      }
+    if (newCount > prevCount && !isNearBottomRef.current) {
+      const added = messages.slice(prevCount, newCount);
+      const aiAdded = added.filter((m) => m.role === 'ai').length;
+      if (aiAdded > 0) setUnreadCount((c) => c + aiAdded);
     }
     lastMessageCountRef.current = newCount;
-  }, [messages.length, messages, safeScrollToEnd]);
+  }, [messages.length, messages]);
 
   useEffect(() => {
     if (!streamingMessageId) return;
@@ -172,16 +165,20 @@ export function useChatScreenState({
     setUnreadCount((c) => (c < 1 ? 1 : c));
   }, [streamingMessageId, messages]);
 
+  const hadMessagesRef = useRef(hasMessages);
   useEffect(() => {
-    if (!hasMessages) return;
+    if (!hasMessages) {
+      hadMessagesRef.current = false;
+      return;
+    }
+    const justOpenedThread = !hadMessagesRef.current;
+    hadMessagesRef.current = true;
+    if (!justOpenedThread) return;
     isNearBottomRef.current = true;
     const scroll = () => safeScrollToEnd(false);
     const raf = requestAnimationFrame(scroll);
     scrollRafRef.current.push(raf);
-    const t = setTimeout(scroll, 200);
-    scrollTimersRef.current.push(t);
     return () => {
-      clearTimeout(t);
       cancelAnimationFrame(raf);
     };
   }, [hasMessages, safeScrollToEnd]);
@@ -213,11 +210,9 @@ export function useChatScreenState({
       isNearBottomRef.current = true;
       setUnreadCount(0);
       const raf = requestAnimationFrame(() => {
-        safeScrollToEnd(true);
+        safeScrollToEnd(false);
       });
       scrollRafRef.current.push(raf);
-      const t = setTimeout(() => safeScrollToEnd(true), 150);
-      scrollTimersRef.current.push(t);
     },
     [editingMessage, inputValue, editMessage, sendMessage, setInputValue, isLoading, isOnline, tChat.offline, safeScrollToEnd],
   );

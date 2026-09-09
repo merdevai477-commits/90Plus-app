@@ -302,8 +302,6 @@ export default function ChatScreen() {
 
       useNativeKeyboardScroll={keyboard.useNativeKeyboardScroll}
 
-      keyboardVisible={keyboard.keyboardVisible}
-
       listBottomInset={listBottomInset}
 
     />

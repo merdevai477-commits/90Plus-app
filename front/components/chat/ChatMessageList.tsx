@@ -47,7 +47,6 @@ export type ChatMessageListProps = {
   };
   isNearBottomRef: React.MutableRefObject<boolean>;
   useNativeKeyboardScroll?: boolean;
-  keyboardVisible?: boolean;
   listBottomInset?: number;
 };
 
@@ -74,11 +73,14 @@ export function ChatMessageList({
   renderMessageHandlers,
   isNearBottomRef,
   useNativeKeyboardScroll = false,
-  keyboardVisible = false,
   listBottomInset = chatSpacing.listBottom,
 }: ChatMessageListProps) {
   const mountedRef = useRef(true);
   const contentSizeRafRef = useRef<number | null>(null);
+  const pendingContentHeightRef = useRef<number | null>(null);
+  const viewportHeightRef = useRef(0);
+  const itemCountRef = useRef(displayMessages.length);
+  itemCountRef.current = displayMessages.length;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -133,6 +135,32 @@ export function ChatMessageList({
 
   const keyExtractor = useCallback((item: Message) => item.id, []);
 
+  const stickToBottom = useCallback(() => {
+    if (!mountedRef.current || itemCountRef.current === 0) return;
+    if (!isNearBottomRef.current) return;
+    safeFlashListScrollToEnd(listRef.current, false, {
+      itemCount: itemCountRef.current,
+      contentHeight: pendingContentHeightRef.current ?? undefined,
+      viewportHeight: viewportHeightRef.current || undefined,
+    });
+  }, [isNearBottomRef, listRef]);
+
+  const onListLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
+    const next = e.nativeEvent.layout.height;
+    if (next > 0) viewportHeightRef.current = next;
+  }, []);
+
+  const onListContentSizeChange = useCallback((_w: number, h: number) => {
+    pendingContentHeightRef.current = h;
+    if (!isNearBottomRef.current) return;
+    if (!mountedRef.current || itemCountRef.current === 0) return;
+    if (contentSizeRafRef.current != null) return;
+    contentSizeRafRef.current = requestAnimationFrame(() => {
+      contentSizeRafRef.current = null;
+      stickToBottom();
+    });
+  }, [isNearBottomRef, stickToBottom]);
+
   return (
     <View style={styles.messagesPane}>
       <FlashList
@@ -146,35 +174,14 @@ export function ChatMessageList({
         {...(useNativeKeyboardScroll
           ? { renderScrollComponent }
           : {})}
+        onLayout={onListLayout}
         onScroll={onScroll}
         scrollEventThrottle={16}
         drawDistance={CHAT_DRAW_DISTANCE}
+        bounces={false}
+        overScrollMode="never"
         removeClippedSubviews={Platform.OS === 'android' ? false : undefined}
-        onContentSizeChange={() => {
-          if (!isNearBottomRef.current && !keyboardVisible) return;
-          if (!mountedRef.current || displayMessages.length === 0) return;
-          if (Platform.OS === 'android') {
-            if (contentSizeRafRef.current != null) return;
-            contentSizeRafRef.current = requestAnimationFrame(() => {
-              contentSizeRafRef.current = null;
-              if (!mountedRef.current) return;
-              safeFlashListScrollToEnd(listRef.current, false, {
-                itemCount: displayMessages.length,
-              });
-            });
-            return;
-          }
-          if (contentSizeRafRef.current != null) {
-            cancelAnimationFrame(contentSizeRafRef.current);
-          }
-          contentSizeRafRef.current = requestAnimationFrame(() => {
-            contentSizeRafRef.current = null;
-            if (!mountedRef.current) return;
-            safeFlashListScrollToEnd(listRef.current, false, {
-              itemCount: displayMessages.length,
-            });
-          });
-        }}
+        onContentSizeChange={onListContentSizeChange}
         ListFooterComponent={
           isThinking ? (
             <ThinkingIndicator

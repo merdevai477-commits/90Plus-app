@@ -43,7 +43,6 @@ export function useChatKeyboard<TItem>({
   const scrollRafRef = useRef<number[]>([]);
   const mountedRef = useRef(true);
   const keyboardVisibleRef = useRef(false);
-  const lastScrolledCountRef = useRef(0);
   const useExpoKeyboardPath = !isKeyboardControllerActive;
   const useKeyboardAvoiding = false;
   const useNativeKeyboardScroll = isKeyboardControllerActive;
@@ -79,7 +78,7 @@ export function useChatKeyboard<TItem>({
         return;
       }
     },
-    [hasMessages, listRef],
+    [hasMessages, listRef, messageCount],
   );
 
   const scrollToEndRef = useRef(scrollToEnd);
@@ -165,13 +164,6 @@ export function useChatKeyboard<TItem>({
       clearSyncTimers();
     };
   }, [clearSyncTimers]);
-
-  useEffect(() => {
-    if (!hasMessages) return;
-    if (messageCount === lastScrolledCountRef.current) return;
-    lastScrolledCountRef.current = messageCount;
-    scrollToEndRef.current(false);
-  }, [hasMessages, messageCount]);
 
   const onInputFocus = useCallback(() => {
     // Apply composer padding immediately on focus so Android pan + padding stay

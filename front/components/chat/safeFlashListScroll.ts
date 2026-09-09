@@ -9,14 +9,29 @@ export function isFlashListScrollRaceError(error: unknown): boolean {
   return FLASH_LIST_SCROLL_RACE.test(msg);
 }
 
+export type StickToBottomOpts = {
+  itemCount?: number;
+  contentHeight?: number;
+  viewportHeight?: number;
+};
+
+/** Offset that pins the last pixel of content to the bottom without overscrolling. */
+export function chatStickToBottomOffset(contentHeight: number, viewportHeight: number): number {
+  if (!Number.isFinite(contentHeight) || !Number.isFinite(viewportHeight) || viewportHeight <= 0) {
+    return 0;
+  }
+  return Math.max(0, contentHeight - viewportHeight);
+}
+
 /**
  * Scroll chat lists to the bottom without tripping FlashList's async scrollToEnd race.
- * Prefer scrollToOffset (avoids FlashList scrollToEnd async NPE races).
+ * Use the measured content size when we have it — `MAX_SAFE_INTEGER` overshoots, then
+ * the list clamps and the thread jumps upward.
  */
 export function safeFlashListScrollToEnd<T>(
   list: FlashListRef<T> | null | undefined,
   animated = false,
-  opts?: { itemCount?: number },
+  opts?: StickToBottomOpts,
 ): void {
   if (!list) return;
 
@@ -25,15 +40,26 @@ export function safeFlashListScrollToEnd<T>(
     typeof itemCount === 'number' && Number.isFinite(itemCount) && itemCount > 0
       ? itemCount - 1
       : null;
+  const contentHeight = opts?.contentHeight;
+  const viewportHeight = opts?.viewportHeight;
+  const hasMeasuredSize =
+    typeof contentHeight === 'number' &&
+    Number.isFinite(contentHeight) &&
+    typeof viewportHeight === 'number' &&
+    Number.isFinite(viewportHeight) &&
+    viewportHeight > 0;
 
   try {
-    if (typeof list.scrollToOffset === 'function') {
-      list.scrollToOffset({ offset: Number.MAX_SAFE_INTEGER, animated });
+    if (hasMeasuredSize && typeof list.scrollToOffset === 'function') {
+      list.scrollToOffset({
+        offset: chatStickToBottomOffset(contentHeight, viewportHeight),
+        animated,
+      });
       return;
     }
 
     if (typeof list.scrollToIndex === 'function' && lastIndex != null) {
-      list.scrollToIndex({ index: lastIndex, animated });
+      list.scrollToIndex({ index: lastIndex, animated, viewPosition: 1 });
       return;
     }
 
