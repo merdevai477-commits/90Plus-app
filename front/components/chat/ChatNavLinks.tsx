@@ -6,6 +6,8 @@ import { ChevronRight, Trophy, User, CalendarDays, CircleDot } from 'lucide-reac
 import { useTranslation } from '../../src/i18n';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import { resolveChatNavAvatar, type ChatNavLink } from '../../utils/chatNavLinks';
+import { getFlagByCountryName } from '../../data/localCountryFlags';
+import { getCountryFlagEmoji } from '../../utils/countryFlagUri';
 import { isArabicText } from './chatTextUtils';
 import { chatColors } from './chatTheme';
 
@@ -24,13 +26,12 @@ const AR = {
   matchSub: 'تفاصيل المباراة في 90Plus',
   matchesSub: 'صفحة المباريات في 90Plus',
   view: 'شاهد البروفايل',
-  visitPlayer: 'زيارة بروفايل اللاعب',
-  visitClub: 'زيارة بروفايل النادي',
+  visitPlayer: 'تابع بروفايل اللاعب',
+  visitClub: 'تابع بروفايل النادي',
   choose: 'قصدك الأهلي المصري ولا السعودي؟',
 };
 
-const PHOTO = 48;
-const PHOTO_RADIUS = 14;
+const PHOTO = 56;
 
 function iconFor(type: ChatNavLink['type']) {
   const color = '#F5F3FF';
@@ -61,6 +62,32 @@ function ProfileMark({ link }: { link: ChatNavLink }) {
     );
   }
   return <View style={styles.photoBox}>{iconFor(link.type)}</View>;
+}
+
+function countryLabel(raw: string, preferAr: boolean): string {
+  const hit = getFlagByCountryName(raw);
+  if (!hit) return raw;
+  return preferAr ? hit.nameAr || hit.name : hit.name;
+}
+
+function clubLine(name: string, preferAr: boolean): string {
+  const v = name.trim();
+  if (!v) return '';
+  if (/^(نادي|فريق|club|fc)\b/i.test(v)) return v;
+  return preferAr ? `نادي ${v}` : v;
+}
+
+function metaLine(link: ChatNavLink, preferAr: boolean): string {
+  const countryRaw = (link.country || '').trim();
+  const country = countryRaw ? countryLabel(countryRaw, preferAr) : '';
+  const flag = countryRaw ? getCountryFlagEmoji(countryRaw) : '';
+  const flagBit = flag && flag !== '🏳️' ? flag : '';
+  const place = [flagBit, country].filter(Boolean).join(' ');
+  const extra =
+    link.type === 'player'
+      ? clubLine(link.teamName || '', preferAr)
+      : (link.teamName || '').trim();
+  return [place, extra].filter(Boolean).join('  •  ');
 }
 
 function isNamed(label: string, type: ChatNavLink['type']): boolean {
@@ -255,21 +282,25 @@ export function ChatNavLinks({ links, onChoose }: Props) {
           );
         }
         const visit = visitLabel(link, copy.preferAr, t as { chat: Record<string, string> });
+        const meta = metaLine(link, copy.preferAr);
         return (
           <Pressable
             key={`${link.type}:${link.id ?? link.query ?? link.label}`}
             onPress={() => onPress(link)}
-            style={({ pressed }) => [styles.visitRow, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.profileCard, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel={`${copy.title}. ${visit}`}
           >
-            <View style={styles.visitLead}>
-              <View style={styles.visitDot} />
-              <Text style={styles.visitText} numberOfLines={1}>{visit}</Text>
+            <ProfileMark link={link} />
+            <View style={styles.profileText}>
+              <Text style={styles.profileEyebrow} numberOfLines={1}>{visit}</Text>
+              <Text style={styles.profileName} numberOfLines={1}>{copy.title}</Text>
+              {meta ? (
+                <Text style={styles.profileMeta} numberOfLines={1}>{meta}</Text>
+              ) : null}
             </View>
-            <View style={styles.identityCol}>
-              <ProfileMark link={link} />
-              <Text style={styles.identityName} numberOfLines={1}>{copy.title}</Text>
+            <View style={styles.profileArrow}>
+              <ChevronRight size={18} color="#FFFFFF" strokeWidth={2.6} />
             </View>
           </Pressable>
         );
@@ -350,58 +381,57 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 4,
   },
-  visitRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    alignSelf: 'stretch',
-    minHeight: 72,
-    paddingVertical: 6,
-    paddingHorizontal: 2,
-    gap: 12,
-  },
-  visitLead: {
+  profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    flexShrink: 1,
+    alignSelf: 'stretch',
+    gap: 12,
+    minHeight: 78,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    backgroundColor: 'rgba(46, 16, 92, 0.92)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(167,139,250,0.28)',
+  },
+  profileText: {
+    flex: 1,
     minWidth: 0,
-    paddingBottom: 2,
+    gap: 2,
   },
-  visitDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 39,
-    backgroundColor: 'rgba(209,191,252,0.35)',
-  },
-  visitText: {
-    color: '#D1BFFC',
+  profileEyebrow: {
+    color: '#C4B5FD',
     fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.18,
-    flexShrink: 1,
+    fontWeight: '600',
   },
-  identityCol: {
-    alignItems: 'flex-end',
-    gap: 4,
-    flexShrink: 0,
-    maxWidth: '52%',
-  },
-  identityName: {
+  profileName: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    textAlign: 'right',
+    fontWeight: '800',
+  },
+  profileMeta: {
+    color: 'rgba(226,232,240,0.78)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  profileArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7C3AED',
+    flexShrink: 0,
   },
   photoBox: {
     width: PHOTO,
     height: PHOTO,
-    borderRadius: PHOTO_RADIUS,
-    backgroundColor: '#8C5CF5',
+    borderRadius: PHOTO / 2,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    flexShrink: 0,
   },
   photoFill: {
     width: PHOTO,

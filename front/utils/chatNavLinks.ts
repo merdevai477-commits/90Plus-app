@@ -12,6 +12,7 @@ export type ChatNavLink = {
   logo?: string | null;
   teamName?: string | null;
   teamId?: number | string | null;
+  country?: string | null;
   choice?: boolean;
   subtitle?: string | null;
 };
@@ -100,6 +101,7 @@ export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
       logo: httpUrl(item.logo),
       teamName: typeof item.teamName === 'string' ? item.teamName : null,
       teamId: item.teamId == null ? null : (item.teamId as number | string),
+      country: typeof item.country === 'string' ? item.country : null,
       ...(item.choice === true ? { choice: true } : {}),
       subtitle: typeof item.subtitle === 'string' ? item.subtitle : null,
     });

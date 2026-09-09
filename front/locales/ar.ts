@@ -3192,8 +3192,8 @@ export const ar = {
     navCtaMatches: 'صفحة المباريات في 90Plus',
     navView: 'شاهد',
     navViewProfile: 'شاهد البروفايل',
-    navVisitPlayer: 'زيارة بروفايل اللاعب',
-    navVisitClub: 'زيارة بروفايل النادي',
+    navVisitPlayer: 'تابع بروفايل اللاعب',
+    navVisitClub: 'تابع بروفايل النادي',
     navChooseClub: 'قصدك الأهلي المصري ولا السعودي؟',
 
     exportUserLabel: 'أنت',

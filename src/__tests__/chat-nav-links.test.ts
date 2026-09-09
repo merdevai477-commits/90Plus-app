@@ -99,6 +99,30 @@ describe('chat-nav-links', () => {
     expect(links).toEqual([]);
   });
 
+  it('attaches club and nationality so the profile card can show them', () => {
+    const links = extractChatNavLinks(
+      [
+        JSON.stringify({
+          source: '365scores_profile',
+          athleteId: 42,
+          name: 'محمد صلاح',
+          club: 'ليفربول',
+          quickFacts: { nationality: 'Egypt', currentClub: 'ليفربول' },
+        }),
+      ],
+      ['search_football'],
+      'ar',
+      'محمد صلاح',
+    );
+    expect(links.find((l) => l.type === 'player')).toEqual(
+      expect.objectContaining({
+        label: 'محمد صلاح',
+        teamName: 'ليفربول',
+        country: 'Egypt',
+      }),
+    );
+  });
+
   it('builds a 365Scores headshot when the payload has an athleteId but no imageUrl', () => {
     const links = extractChatNavLinks(
       [JSON.stringify({ source: '365scores_profile', athleteId: 4576, name: 'Mohamed Salah' })],

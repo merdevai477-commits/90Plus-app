@@ -543,11 +543,9 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(18,10,32,0.96)',
   },
   ctaFooter: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(167,139,250,0.22)',
     paddingHorizontal: 10,
-    paddingBottom: 6,
-    backgroundColor: 'rgba(88,28,135,0.18)',
+    paddingTop: 2,
+    paddingBottom: 10,
   },
   aiBubbleTopHighlight: {
     position: 'absolute',

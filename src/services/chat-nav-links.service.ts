@@ -11,6 +11,7 @@ export type ChatNavLink = {
   logo?: string | null;
   teamName?: string | null;
   teamId?: number | string | null;
+  country?: string | null;
   /** User should pick this entity before a single profile CTA. */
   choice?: boolean;
   subtitle?: string | null;
@@ -86,6 +87,7 @@ export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
       logo: httpUrl(item.logo),
       teamName: typeof item.teamName === 'string' ? item.teamName : null,
       teamId: item.teamId == null ? null : (item.teamId as number | string),
+      country: typeof item.country === 'string' ? item.country : null,
       ...(item.choice === true ? { choice: true } : {}),
       subtitle: typeof item.subtitle === 'string' ? item.subtitle : null,
     });
@@ -127,6 +129,7 @@ function addLink(map: Map<string, ChatNavLink>, link: ChatNavLink): void {
     query: link.query || prev.query,
     teamName: link.teamName || prev.teamName,
     teamId: link.teamId ?? prev.teamId,
+    country: link.country || prev.country,
     choice: !!(link.choice || prev.choice),
     subtitle: link.subtitle || prev.subtitle,
     label: link.label && link.label !== link.type ? link.label : prev.label,
@@ -328,6 +331,11 @@ export function extractChatNavLinks(
       positiveId(profile?.imageVersion) ||
       positiveId(playerNode?.imageVersion) ||
       positiveId(playerHit?.imageVersion);
+    const facts = isRecord(parsed.quickFacts) ? parsed.quickFacts : null;
+    const playerCountry = asLabel(
+      facts?.nationality ?? profile?.nationality ?? playerHit?.country ?? playerHit?.nationality,
+    );
+    const playerClub = asLabel(parsed.club ?? facts?.currentClub ?? playerHit?.club);
     if (athleteId) {
       addLink(map, {
         type: 'player',
@@ -341,8 +349,9 @@ export function extractChatNavLinks(
             playerHit?.imageUrl,
             playerHit?.photo,
           ) ?? buildScores365AthletePhotoUrl(athleteId, 80, imageVersion),
-        teamName: asLabel(parsed.club ?? playerHit?.club) || null,
+        teamName: playerClub || null,
         teamId: parsed.teamId == null ? null : (parsed.teamId as number | string),
+        country: playerCountry || null,
       });
     } else if (parsed.source === '365scores_profile') {
       addLink(map, {
@@ -350,6 +359,8 @@ export function extractChatNavLinks(
         label: playerName || playerFallback,
         query: playerName || query,
         photo: firstHttpUrl(profile?.imageUrl, parsed.imageUrl, playerNode?.imageUrl),
+        teamName: playerClub || null,
+        country: playerCountry || null,
       });
     }
 
@@ -366,6 +377,10 @@ export function extractChatNavLinks(
         best?.name ??
         clubHit?.name,
     );
+    const clubCountry = asLabel(parsed.country ?? clubHit?.country);
+    const leagueName = Array.isArray(parsed.competitions)
+      ? asLabel(isRecord(parsed.competitions[0]) ? parsed.competitions[0].name : '')
+      : '';
     if (competitorId) {
       addLink(map, {
         type: 'club',
@@ -374,6 +389,8 @@ export function extractChatNavLinks(
         logo:
           firstHttpUrl(parsed.logo, clubHit?.logo, clubHit?.imageUrl) ??
           competitorLogoUrl(competitorId),
+        country: clubCountry || null,
+        teamName: leagueName || null,
       });
     } else if (parsed.source === '365scores_team') {
       addLink(map, {
@@ -381,6 +398,8 @@ export function extractChatNavLinks(
         label: clubName || clubFallback,
         query: clubName || query,
         logo: firstHttpUrl(parsed.logo, parsed.imageUrl),
+        country: clubCountry || null,
+        teamName: leagueName || null,
       });
     }
 
