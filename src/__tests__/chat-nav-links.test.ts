@@ -159,4 +159,31 @@ describe('chat-nav-links', () => {
     expect(links.map((l) => l.id)).toEqual([8200, 8946]);
     expect(links.every((l) => l.choice && l.logo)).toBe(true);
   });
+
+  it('does not turn a club dossier into a player photo CTA', () => {
+    const links = extractChatNavLinks(
+      [
+        JSON.stringify({
+          status: 'ok',
+          source: '365scores_team',
+          competitorId: 8200,
+          teamName: 'الأهلي',
+          coach: 'حسين عموتة',
+          best: { type: 'club', id: 8200, name: 'الأهلي المصري' },
+        }),
+      ],
+      ['search_football'],
+      'ar',
+      'الأهلي المصري',
+    );
+    expect(links.some((l) => l.type === 'player')).toBe(false);
+    expect(links).toEqual([
+      expect.objectContaining({
+        type: 'club',
+        id: 8200,
+        label: 'الأهلي المصري',
+        logo: expect.stringContaining('/Competitors/8200'),
+      }),
+    ]);
+  });
 });

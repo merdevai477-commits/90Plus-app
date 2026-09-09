@@ -50,6 +50,22 @@ function competitorLogoUrl(competitorId: number): string {
   return `https://imagecache.365scores.com/image/upload/f_png,w_80,h_80,c_limit,q_auto:eco,dpr_2/v1/Competitors/${competitorId}`;
 }
 
+const CLUB_LABELS: Record<number, { ar: string; en: string }> = {
+  8200: { ar: 'الأهلي المصري', en: 'Al Ahly (Egypt)' },
+  8946: { ar: 'الأهلي السعودي', en: 'Al Ahli (Saudi)' },
+};
+
+function displayClubLabel(id: number | undefined, label: string, language: 'ar' | 'en'): string {
+  if (!id) return label;
+  const known = CLUB_LABELS[id];
+  if (!known) return label;
+  const current = label.trim();
+  if (!current || current === 'الأهلي' || current === 'الاهلي' || /^al[-\s]?ahl[yi]$/i.test(current)) {
+    return language === 'en' ? known.en : known.ar;
+  }
+  return label;
+}
+
 export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
   if (!Array.isArray(raw)) return [];
   const out: ChatNavLink[] = [];
@@ -293,13 +309,18 @@ export function extractChatNavLinks(
     const playerHit = firstRecord(hits?.players);
     const clubHit = firstRecord(hits?.clubs);
 
-    const athleteId =
-      positiveId(parsed.athleteId) ||
-      positiveId(profile?.athleteId) ||
-      positiveId(best?.athleteId) ||
-      positiveId(best?.id) ||
-      positiveId(firstRecord(parsed.suggestions)?.athleteId) ||
-      positiveId(playerHit?.athleteId);
+    const bestType = asLabel(best?.type);
+    const bestIsAthlete = bestType === 'player' || bestType === 'coach';
+    const clubPayload =
+      parsed.source === '365scores_team' ||
+      bestType === 'club' ||
+      bestType === 'national_team';
+    const athleteId = clubPayload
+      ? null
+      : positiveId(parsed.athleteId) ||
+        positiveId(profile?.athleteId) ||
+        (bestIsAthlete ? positiveId(best?.athleteId) || positiveId(best?.id) : null) ||
+        positiveId(playerHit?.athleteId);
     const playerName = asLabel(
       parsed.name ?? parsed.resolvedAs ?? best?.name ?? playerHit?.name,
     );
@@ -349,9 +370,9 @@ export function extractChatNavLinks(
       addLink(map, {
         type: 'club',
         id: competitorId,
-        label: clubName || clubFallback,
+        label: displayClubLabel(competitorId, clubName || clubFallback, language),
         logo:
-          firstHttpUrl(parsed.logo, parsed.imageUrl, clubHit?.logo, clubHit?.imageUrl) ??
+          firstHttpUrl(parsed.logo, clubHit?.logo, clubHit?.imageUrl) ??
           competitorLogoUrl(competitorId),
       });
     } else if (parsed.source === '365scores_team') {
@@ -459,8 +480,10 @@ export function extractChatNavLinks(
   const out: ChatNavLink[] = [];
   let matchCount = 0;
   const choiceOnly = ranked.some((l) => l.choice);
+  const clubQuestion = wantClub && !wantPlayer;
   for (const link of ranked) {
     if (choiceOnly && !link.choice) continue;
+    if (clubQuestion && link.type === 'player') continue;
     if (link.type === 'match') {
       if (matchCount >= 3) continue;
       matchCount += 1;
@@ -468,7 +491,10 @@ export function extractChatNavLinks(
     if (!link.choice && link.type === 'player' && out.some((x) => x.type === 'player')) continue;
     if (!link.choice && link.type === 'club' && out.some((x) => x.type === 'club')) continue;
     if (link.type === 'matches' && out.some((x) => x.type === 'matches')) continue;
-    out.push(link);
+    out.push({
+      ...link,
+      label: link.type === 'club' ? displayClubLabel(link.id, link.label, language) : link.label,
+    });
     if (out.length >= 4) break;
   }
   return out;

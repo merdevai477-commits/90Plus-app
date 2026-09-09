@@ -140,9 +140,14 @@ function formatPrefetchClarification(parsed: any, language: MessageLanguage): st
     for (const c of hits.competitions ?? []) names.push(c.name);
   }
   if (!names.length) return null;
+  if (parsed.reason === 'same_name_clubs') {
+    return language === 'en'
+      ? 'Did you mean Egyptian Al Ahly or Saudi Al Ahli?'
+      : 'قصدك الأهلي المصري ولا السعودي؟';
+  }
   const listed = names.slice(0, 4).map((n) => `**${n}**`).join(language === 'en' ? ' or ' : ' ولا ');
   return language === 'en'
-    ? `Which club did you mean — ${listed}?`
+    ? `Which one did you mean — ${listed}?`
     : `قصدك أنهي؟ ${listed}؟`;
 }
 

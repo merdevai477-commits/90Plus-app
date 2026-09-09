@@ -3271,7 +3271,8 @@ export const en = {
     navCtaMatch: 'Match details in 90Plus',
     navCtaMatches: 'Matches page in 90Plus',
     navView: 'View',
-    navChooseClub: 'Choose the club',
+    navViewProfile: 'View profile',
+    navChooseClub: 'Did you mean Egyptian Al Ahly or Saudi Al Ahli?',
 
     exportUserLabel: 'You',
     exportAiLabel: '90Plus AI',

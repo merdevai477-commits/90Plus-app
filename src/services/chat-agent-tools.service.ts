@@ -1335,10 +1335,9 @@ async function toolSearchFootball(
       hits: compactSearchHits(emptySearchBuckets()),
       ...(details ?? {}),
       answerHint:
-        (details as { answerHint?: string } | null)?.answerHint ??
-        (language === 'en'
-          ? 'Answer from best + details only. Do not invent stats.'
-          : 'جاوب من best و details بس. ممنوع تخترع أرقام.'),
+        language === 'en'
+          ? 'Give a short club brief from these fields only. Tell the user they can open the club profile. Do not mention a player photo.'
+          : 'اكتب بريف قصير عن النادي من الحقول دي بس، وقول للمستخدم إنه يقدر يفتح بروفايل النادي. ممنوع تذكر صورة لاعب.',
     };
   }
 

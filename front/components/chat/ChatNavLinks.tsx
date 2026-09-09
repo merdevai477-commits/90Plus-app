@@ -24,8 +24,8 @@ const AR = {
   clubSub: 'بروفايل الفريق في 90Plus',
   matchSub: 'تفاصيل المباراة في 90Plus',
   matchesSub: 'صفحة المباريات في 90Plus',
-  view: 'شاهد',
-  choose: 'اختار النادي',
+  view: 'شاهد البروفايل',
+  choose: 'قصدك الأهلي المصري ولا السعودي؟',
 };
 
 const AVATAR_SIZE = 40;
@@ -81,7 +81,7 @@ function isNamed(label: string, type: ChatNavLink['type']): boolean {
 function copyFor(link: ChatNavLink, language: string, t: { chat: Record<string, string> }) {
   const named = isNamed(link.label, link.type) ? link.label.trim() : '';
   const preferAr = language === 'ar' || isArabicText(named || link.label);
-  const viewLabel = preferAr ? AR.view : t.chat.navView;
+  const viewLabel = preferAr ? AR.view : t.chat.navViewProfile;
   if (preferAr) {
     const title =
       named ||
@@ -200,50 +200,65 @@ export function ChatNavLinks({ links, onChoose }: Props) {
 
   const extraMatches = links.filter((l) => l.type === 'match' && links.some((x) => x.type !== 'match'));
   const primary = links.filter((l) => !extraMatches.includes(l));
-  const isSelection = primary.filter((l) => l.choice).length >= 2;
+  const choices = primary.filter((l) => l.choice);
+  const isSelection = choices.length >= 2;
   const preferAr = language === 'ar' || primary.some((l) => isArabicText(l.label));
+
+  if (isSelection) {
+    return (
+      <View style={styles.wrap}>
+        <Text style={styles.chooseHint}>{preferAr ? AR.choose : t.chat.navChooseClub}</Text>
+        <View style={styles.choiceGrid}>
+          {choices.map((link) => {
+            const media = resolveChatNavAvatar(link);
+            const logo = media.kind === 'club' ? media.uri : undefined;
+            return (
+              <Pressable
+                key={`${link.type}:${link.id ?? link.label}`}
+                onPress={() => onPress(link)}
+                style={({ pressed }) => [styles.choiceTile, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel={link.label}
+              >
+                <View style={styles.choiceCrest}>
+                  {logo ? (
+                    <TeamBadge name={link.label} logo={logo} size={64} color="transparent" />
+                  ) : (
+                    iconFor(link.type)
+                  )}
+                </View>
+                <Text style={styles.choiceName} numberOfLines={2}>
+                  {link.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
-      {isSelection ? (
-        <Text style={styles.chooseHint}>{preferAr ? AR.choose : t.chat.navChooseClub}</Text>
-      ) : null}
       {primary.map((link) => {
         const copy = copyFor(link, language, t as { chat: Record<string, string> });
         const showView = link.type === 'player' || link.type === 'club';
-        const viewOpensProfile = !!(link.choice && link.id && onChoose);
         return (
           <Pressable
             key={`${link.type}:${link.id ?? link.query ?? link.label}`}
             onPress={() => onPress(link)}
-            style={({ pressed }) => [
-              styles.row,
-              isSelection && styles.choiceCard,
-              pressed && styles.pressed,
-            ]}
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             accessibilityRole="button"
-            accessibilityLabel={
-              link.choice
-                ? `${copy.title}. ${copy.subtitle || copy.viewLabel}`
-                : `${copy.title}. ${copy.viewLabel}`
-            }
+            accessibilityLabel={`${copy.title}. ${copy.viewLabel}`}
           >
             <NavAvatar link={link} />
             <View style={styles.textCol}>
               <Text style={styles.title} numberOfLines={1}>
                 {copy.title}
               </Text>
-              {copy.subtitle ? (
-                <Text style={styles.subtitle} numberOfLines={1}>
-                  {copy.subtitle}
-                </Text>
-              ) : null}
             </View>
             {showView ? (
-              <ViewPill
-                label={copy.viewLabel}
-                onPress={viewOpensProfile ? () => openLink(link) : undefined}
-              />
+              <ViewPill label={copy.viewLabel} />
             ) : (
               <View style={styles.arrowWrap}>
                 <ChevronRight size={16} color="#F5F3FF" strokeWidth={2.6} />
@@ -280,11 +295,44 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   chooseHint: {
-    color: 'rgba(216,180,254,0.9)',
-    fontSize: 12,
+    color: '#F5F3FF',
+    fontSize: 14,
     fontWeight: '700',
-    paddingHorizontal: 4,
-    marginBottom: 2,
+    paddingHorizontal: 2,
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  choiceGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    alignSelf: 'stretch',
+  },
+  choiceTile: {
+    flex: 1,
+    minHeight: 128,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(124,58,237,0.16)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(167,139,250,0.35)',
+  },
+  choiceCrest: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  choiceName: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   row: {
     flexDirection: 'row',
