@@ -11,6 +11,9 @@ export type ChatNavLink = {
   logo?: string | null;
   teamName?: string | null;
   teamId?: number | string | null;
+  /** User should pick this entity before a single profile CTA. */
+  choice?: boolean;
+  subtitle?: string | null;
 };
 
 const NAV_MARKER_RE = /\n?<!--90plus-nav:([\s\S]*?)-->\s*$/;
@@ -67,6 +70,8 @@ export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
       logo: httpUrl(item.logo),
       teamName: typeof item.teamName === 'string' ? item.teamName : null,
       teamId: item.teamId == null ? null : (item.teamId as number | string),
+      ...(item.choice === true ? { choice: true } : {}),
+      subtitle: typeof item.subtitle === 'string' ? item.subtitle : null,
     });
   }
   return out;
@@ -106,6 +111,8 @@ function addLink(map: Map<string, ChatNavLink>, link: ChatNavLink): void {
     query: link.query || prev.query,
     teamName: link.teamName || prev.teamName,
     teamId: link.teamId ?? prev.teamId,
+    choice: !!(link.choice || prev.choice),
+    subtitle: link.subtitle || prev.subtitle,
     label: link.label && link.label !== link.type ? link.label : prev.label,
   });
 }
@@ -122,6 +129,80 @@ function fixtureIdFrom(node: unknown): number | null {
 
 function firstRecord(list: unknown): Record<string, unknown> | null {
   return Array.isArray(list) && isRecord(list[0]) ? list[0] : null;
+}
+
+const SHARED_CLUB_CHOICES: Array<{
+  id: number;
+  labelAr: string;
+  labelEn: string;
+  countryAr: string;
+  countryEn: string;
+}> = [
+  { id: 8200, labelAr: 'الأهلي المصري', labelEn: 'Al Ahly (Egypt)', countryAr: 'مصر', countryEn: 'Egypt' },
+  { id: 8946, labelAr: 'الأهلي السعودي', labelEn: 'Al Ahli (Saudi)', countryAr: 'السعودية', countryEn: 'Saudi Arabia' },
+];
+
+export function isBareSharedClubQuery(message: string): boolean {
+  const q = (message ?? '').replace(/\s+/g, ' ').trim();
+  if (q.length < 2) return false;
+  if (/بنك|bank/i.test(q)) return false;
+  if (/مصر|مصري|سعود|جدة|egypt|saudi|jeddah/i.test(q)) return false;
+  return /(?:ال)?أ?اهلي|al[-\s]?ahl[yi]/i.test(q);
+}
+
+function sharedClubChoiceLinks(language: 'ar' | 'en'): ChatNavLink[] {
+  return SHARED_CLUB_CHOICES.map((c) => ({
+    type: 'club' as const,
+    id: c.id,
+    label: language === 'en' ? c.labelEn : c.labelAr,
+    query: language === 'en' ? c.labelEn : c.labelAr,
+    choice: true,
+    subtitle: language === 'en' ? c.countryEn : c.countryAr,
+    logo: competitorLogoUrl(c.id),
+  }));
+}
+
+function addClarificationChoices(map: Map<string, ChatNavLink>, parsed: Record<string, unknown>): void {
+  const suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
+  const hits = isRecord(parsed.hits) ? parsed.hits : null;
+  const rows: unknown[] = suggestions.length
+    ? suggestions
+    : [
+        ...(Array.isArray(hits?.clubs) ? hits.clubs : []),
+        ...(Array.isArray(hits?.nationalTeams) ? hits.nationalTeams : []),
+        ...(Array.isArray(hits?.players) ? hits.players : []),
+      ];
+  for (const raw of rows) {
+    if (!isRecord(raw)) continue;
+    const label = asLabel(raw.label ?? raw.name);
+    const athleteId = positiveId(raw.athleteId) || (raw.type === 'player' ? positiveId(raw.id) : null);
+    const competitorId =
+      positiveId(raw.competitorId) ||
+      (raw.type === 'player' ? null : positiveId(raw.id));
+    if (athleteId && label) {
+      addLink(map, {
+        type: 'player',
+        id: athleteId,
+        label,
+        query: label,
+        choice: true,
+        subtitle: asLabel(raw.club ?? raw.country) || null,
+        photo:
+          firstHttpUrl(raw.photo, raw.imageUrl) ?? buildScores365AthletePhotoUrl(athleteId, 80),
+      });
+      continue;
+    }
+    if (!label) continue;
+    addLink(map, {
+      type: 'club',
+      ...(competitorId ? { id: competitorId } : {}),
+      label,
+      query: label,
+      choice: true,
+      subtitle: asLabel(raw.country) || null,
+      logo: firstHttpUrl(raw.logo) ?? (competitorId ? competitorLogoUrl(competitorId) : null),
+    });
+  }
 }
 
 export function inferChatNavIntent(message: string): ChatNavLinkType[] {
@@ -199,6 +280,11 @@ export function extractChatNavLinks(
       continue;
     }
     if (!isRecord(parsed) || parsed.error) continue;
+
+    if (parsed.status === 'need_clarification') {
+      addClarificationChoices(map, parsed);
+      continue;
+    }
 
     const hits = isRecord(parsed.hits) ? parsed.hits : null;
     const profile = isRecord(parsed.profile) ? parsed.profile : null;
@@ -311,7 +397,13 @@ export function extractChatNavLinks(
     }
   }
 
-  if (used.has('search_football')) {
+  if (isBareSharedClubQuery(query) && ![...map.values()].some((l) => l.type === 'club' && l.id)) {
+    for (const link of sharedClubChoiceLinks(language)) addLink(map, link);
+  }
+
+  const hasChoices = [...map.values()].some((l) => l.choice);
+
+  if (used.has('search_football') && !hasChoices) {
     const hasPlayer = [...map.values()].some((l) => l.type === 'player');
     const hasClub = [...map.values()].some((l) => l.type === 'club');
     if (!hasPlayer && !hasClub) {
@@ -323,36 +415,41 @@ export function extractChatNavLinks(
     }
   }
 
-  if (wantPlayer && ![...map.values()].some((l) => l.type === 'player')) {
+  if (!hasChoices && wantPlayer && ![...map.values()].some((l) => l.type === 'player')) {
     addLink(map, { type: 'player', label: playerFallback, query });
   }
-  if (wantClub && ![...map.values()].some((l) => l.type === 'club')) {
+  if (!hasChoices && wantClub && ![...map.values()].some((l) => l.type === 'club')) {
     addLink(map, { type: 'club', label: clubFallback, query });
   }
   if (wantMatches) {
     addLink(map, { type: 'matches', label: matchesFallback });
-  } else if (wantMatch && ![...map.values()].some((l) => l.type === 'match')) {
+  } else if (!hasChoices && wantMatch && ![...map.values()].some((l) => l.type === 'match')) {
     addLink(map, { type: 'match', label: matchFallback, query });
   }
 
   if (!map.size && inferred.length) {
-    for (const type of inferred) {
-      addLink(map, {
-        type,
-        label:
-          type === 'player'
-            ? playerFallback
-            : type === 'club'
-              ? clubFallback
-              : type === 'match'
-                ? matchFallback
-                : matchesFallback,
-        ...(type === 'matches' ? {} : { query }),
-      });
+    if (isBareSharedClubQuery(query)) {
+      for (const link of sharedClubChoiceLinks(language)) addLink(map, link);
+    } else {
+      for (const type of inferred) {
+        addLink(map, {
+          type,
+          label:
+            type === 'player'
+              ? playerFallback
+              : type === 'club'
+                ? clubFallback
+                : type === 'match'
+                  ? matchFallback
+                  : matchesFallback,
+          ...(type === 'matches' ? {} : { query }),
+        });
+      }
     }
   }
 
   const ranked = [...map.values()].sort((a, b) => {
+    if (!!b.choice !== !!a.choice) return a.choice ? -1 : 1;
     const order: Record<ChatNavLinkType, number> = { player: 0, club: 1, matches: 2, match: 3 };
     const typeDelta = order[a.type] - order[b.type];
     if (typeDelta !== 0) return typeDelta;
@@ -361,13 +458,15 @@ export function extractChatNavLinks(
 
   const out: ChatNavLink[] = [];
   let matchCount = 0;
+  const choiceOnly = ranked.some((l) => l.choice);
   for (const link of ranked) {
+    if (choiceOnly && !link.choice) continue;
     if (link.type === 'match') {
       if (matchCount >= 3) continue;
       matchCount += 1;
     }
-    if (link.type === 'player' && out.some((x) => x.type === 'player')) continue;
-    if (link.type === 'club' && out.some((x) => x.type === 'club')) continue;
+    if (!link.choice && link.type === 'player' && out.some((x) => x.type === 'player')) continue;
+    if (!link.choice && link.type === 'club' && out.some((x) => x.type === 'club')) continue;
     if (link.type === 'matches' && out.some((x) => x.type === 'matches')) continue;
     out.push(link);
     if (out.length >= 4) break;

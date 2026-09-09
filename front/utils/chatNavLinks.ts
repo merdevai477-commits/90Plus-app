@@ -12,6 +12,8 @@ export type ChatNavLink = {
   logo?: string | null;
   teamName?: string | null;
   teamId?: number | string | null;
+  choice?: boolean;
+  subtitle?: string | null;
 };
 
 export type ChatNavAvatar =
@@ -54,6 +56,30 @@ function asLabel(v: unknown, fallback = ''): string {
   return s || fallback;
 }
 
+export function isBareSharedClubQuery(message: string): boolean {
+  const q = (message ?? '').replace(/\s+/g, ' ').trim();
+  if (q.length < 2) return false;
+  if (/بنك|bank/i.test(q)) return false;
+  if (/مصر|مصري|سعود|جدة|egypt|saudi|jeddah/i.test(q)) return false;
+  return /(?:ال)?أ?اهلي|al[-\s]?ahl[yi]/i.test(q);
+}
+
+export function sharedClubDisambiguationLinks(language: 'ar' | 'en'): ChatNavLink[] {
+  const clubs = [
+    { id: 8200, ar: 'الأهلي المصري', en: 'Al Ahly (Egypt)', subAr: 'مصر', subEn: 'Egypt' },
+    { id: 8946, ar: 'الأهلي السعودي', en: 'Al Ahli (Saudi)', subAr: 'السعودية', subEn: 'Saudi Arabia' },
+  ];
+  return clubs.map((c) => ({
+    type: 'club' as const,
+    id: c.id,
+    label: language === 'en' ? c.en : c.ar,
+    query: language === 'en' ? c.en : c.ar,
+    choice: true,
+    subtitle: language === 'en' ? c.subEn : c.subAr,
+    logo: build365CompetitorLogo(c.id) || null,
+  }));
+}
+
 export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
   if (!Array.isArray(raw)) return [];
   const out: ChatNavLink[] = [];
@@ -74,6 +100,8 @@ export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
       logo: httpUrl(item.logo),
       teamName: typeof item.teamName === 'string' ? item.teamName : null,
       teamId: item.teamId == null ? null : (item.teamId as number | string),
+      ...(item.choice === true ? { choice: true } : {}),
+      subtitle: typeof item.subtitle === 'string' ? item.subtitle : null,
     });
   }
   return out;
@@ -125,7 +153,9 @@ export function inferChatNavLinksFromQuestion(
       query: q,
     });
   }
-  if (club) {
+  if (isBareSharedClubQuery(q)) {
+    out.push(...sharedClubDisambiguationLinks(language));
+  } else if (club) {
     out.push({
       type: 'club',
       label: language === 'en' ? 'Club profile' : 'بروفايل الفريق',
@@ -144,5 +174,5 @@ export function inferChatNavLinksFromQuestion(
       query: q,
     });
   }
-  return out.slice(0, 2);
+  return out.some((l) => l.choice) ? out.slice(0, 4) : out.slice(0, 2);
 }

@@ -44,6 +44,7 @@ export type ChatMessageListProps = {
     onEdit: (id: string, text: string) => void;
     onDelete: (id: string) => void;
     onCopy: (text: string) => void;
+    onNavChoice?: (text: string) => void;
   };
   isNearBottomRef: React.MutableRefObject<boolean>;
   useNativeKeyboardScroll?: boolean;
@@ -117,7 +118,7 @@ export function ChatMessageList({
           return <View style={styles.streamingPlaceholder} />;
         }
         const isHistory = msg.id !== streamingMessageId;
-        return <AIMessageBubble message={msg} index={i} isHistory={isHistory} />;
+        return <AIMessageBubble message={msg} index={i} isHistory={isHistory} onNavChoice={renderMessageHandlers.onNavChoice} />;
       }
       return (
         <UserMessageBubble

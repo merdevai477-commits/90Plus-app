@@ -1,5 +1,6 @@
 import {
   decodeChatNavMarker,
+  inferChatNavLinksFromQuestion,
   resolveChatNavAvatar,
   sanitizeChatNavLinks,
 } from '../chatNavLinks';
@@ -47,5 +48,33 @@ describe('chatNavLinks', () => {
       { type: 'player', id: 1, label: 'Salah', photo: 'not-a-url' },
     ]);
     expect(link.photo).toBeNull();
+  });
+
+  it('keeps club choices and logos on the hidden nav marker', () => {
+    const [link] = sanitizeChatNavLinks([
+      {
+        type: 'club',
+        id: 8200,
+        label: 'الأهلي المصري',
+        choice: true,
+        subtitle: 'مصر',
+        logo: 'https://img/ahly.png',
+      },
+    ]);
+    expect(link).toEqual(
+      expect.objectContaining({
+        type: 'club',
+        id: 8200,
+        choice: true,
+        subtitle: 'مصر',
+        logo: 'https://img/ahly.png',
+      }),
+    );
+  });
+
+  it('infers Egyptian vs Saudi Al Ahly choices from a bare الأهلي question', () => {
+    const links = inferChatNavLinksFromQuestion('معلومات عن النادي الاهلي', 'ar');
+    expect(links.map((l) => l.id)).toEqual([8200, 8946]);
+    expect(links.every((l) => l.choice && l.type === 'club')).toBe(true);
   });
 });

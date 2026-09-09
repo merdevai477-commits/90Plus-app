@@ -924,7 +924,14 @@ const SEARCH_NAME_EXACT = 780;
 /** Same short name, different countries — ask instead of guessing (أهلي مصر vs أهلي جدة). */
 const SHARED_CLUB_FAMILIES: Array<{
   match: RegExp;
-  members: Array<{ entityId: number; labelAr: string; labelEn: string; countryHint: RegExp }>;
+  members: Array<{
+    entityId: number;
+    labelAr: string;
+    labelEn: string;
+    countryHint: RegExp;
+    countryAr: string;
+    countryEn: string;
+  }>;
 }> = [
   {
     match: /^(ال)?أ?اهلي$|^al[-\s]?ahl[yi]$/i,
@@ -934,12 +941,16 @@ const SHARED_CLUB_FAMILIES: Array<{
         labelAr: 'الأهلي المصري',
         labelEn: 'Al Ahly (Egypt)',
         countryHint: /مصر|مصري|egypt/i,
+        countryAr: 'مصر',
+        countryEn: 'Egypt',
       },
       {
         entityId: 8946,
         labelAr: 'الأهلي السعودي',
         labelEn: 'Al Ahli (Saudi)',
         countryHint: /سعود|جدة|jeddah|saudi/i,
+        countryAr: 'السعودية',
+        countryEn: 'Saudi Arabia',
       },
     ],
   },
@@ -959,9 +970,10 @@ function clubLabel(club: { name: string; country?: string | null }, language: Me
 
 function detectSharedClubFamily(query: string) {
   if (/بنك|bank/i.test(query)) return null;
-  const core = stripSearchStopwords(normalizeSearchText(query)).split(/\s+/)[0] ?? '';
+  const tokens = stripSearchStopwords(normalizeSearchText(query)).split(/\s+/).filter(Boolean);
+  const raw = query.trim();
   return SHARED_CLUB_FAMILIES.find(
-    (f) => f.match.test(query.trim()) || f.match.test(core),
+    (f) => f.match.test(raw) || tokens.some((token) => f.match.test(token)),
   );
 }
 
@@ -1843,8 +1855,9 @@ function familyClubSuggestions(
   return family.members.map((m) => ({
     competitorId: m.entityId,
     name: language === 'en' ? m.labelEn : m.labelAr,
-    country: null,
+    country: language === 'en' ? m.countryEn : m.countryAr,
     label: language === 'en' ? m.labelEn : m.labelAr,
+    logo: `https://imagecache.365scores.com/image/upload/f_png,w_80,h_80,c_limit,q_auto:eco,dpr_2/v1/Competitors/${m.entityId}`,
   }));
 }
 

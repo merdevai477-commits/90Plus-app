@@ -108,4 +108,55 @@ describe('chat-nav-links', () => {
     const player = links.find((l) => l.type === 'player');
     expect(player?.photo).toContain('/Athletes/4576');
   });
+
+  it('turns a bare الأهلي clarification into two club choices with crests', () => {
+    const links = extractChatNavLinks(
+      [
+        JSON.stringify({
+          status: 'need_clarification',
+          reason: 'same_name_clubs',
+          suggestions: [
+            {
+              competitorId: 8200,
+              label: 'الأهلي المصري',
+              country: 'مصر',
+              logo: 'https://img/ahly.png',
+            },
+            {
+              competitorId: 8946,
+              label: 'الأهلي السعودي',
+              country: 'السعودية',
+              logo: 'https://img/ahli.png',
+            },
+          ],
+        }),
+      ],
+      ['search_football'],
+      'ar',
+      'معلومات عن النادي الاهلي',
+    );
+    expect(links).toEqual([
+      expect.objectContaining({
+        type: 'club',
+        id: 8200,
+        label: 'الأهلي المصري',
+        choice: true,
+        logo: 'https://img/ahly.png',
+      }),
+      expect.objectContaining({
+        type: 'club',
+        id: 8946,
+        label: 'الأهلي السعودي',
+        choice: true,
+        logo: 'https://img/ahli.png',
+      }),
+    ]);
+    expect(links.some((l) => l.label === 'بروفايل الفريق' && !l.id)).toBe(false);
+  });
+
+  it('offers Egyptian and Saudi Al Ahly when the question is bare الأهلي', () => {
+    const links = extractChatNavLinks([], ['search_football'], 'ar', 'معلومات عن النادي الاهلي');
+    expect(links.map((l) => l.id)).toEqual([8200, 8946]);
+    expect(links.every((l) => l.choice && l.logo)).toBe(true);
+  });
 });

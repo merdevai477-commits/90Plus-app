@@ -41,6 +41,7 @@ interface MessageBubbleProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onCopy?: () => void;
+  onNavChoice?: (text: string) => void;
 }
 
 // ─── Markdown helpers ─────────────────────────────────────────────────────────
@@ -367,7 +368,7 @@ export const TypingIndicator = React.memo(() => {
 
 // ─── AI Bubble ────────────────────────────────────────────────────────────────
 
-export const AIMessageBubble = React.memo(function AIMessageBubble({ message, index = 0, isHistory = false }: MessageBubbleProps) {
+export const AIMessageBubble = React.memo(function AIMessageBubble({ message, index = 0, isHistory = false, onNavChoice }: MessageBubbleProps) {
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
   const { maxWidth } = useBubbleMaxWidth(width);
@@ -416,7 +417,7 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
           </Pressable>
           {navLinks.length ? (
             <View style={s.ctaFooter}>
-              <ChatNavLinks links={navLinks} />
+              <ChatNavLinks links={navLinks} onChoose={onNavChoice} />
             </View>
           ) : null}
         </View>

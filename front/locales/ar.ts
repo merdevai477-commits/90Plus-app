@@ -3190,6 +3190,8 @@ export const ar = {
     navCtaClub: 'بروفايل الفريق في 90Plus',
     navCtaMatch: 'تفاصيل المباراة في 90Plus',
     navCtaMatches: 'صفحة المباريات في 90Plus',
+    navView: 'شاهد',
+    navChooseClub: 'اختار النادي',
 
     exportUserLabel: 'أنت',
     exportAiLabel: '90Plus AI',

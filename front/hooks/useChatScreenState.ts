@@ -281,6 +281,7 @@ export function useChatScreenState({
       onEdit: handleStartEdit,
       onDelete: deleteMessage,
       onCopy: (text: string) => ExpoClipboard.setStringAsync(text).catch(() => {}),
+      onNavChoice: (text: string) => handleSend(text),
     }),
     [handleSend, handleStartEdit, deleteMessage],
   );

@@ -328,7 +328,24 @@ describe('chat-agent-tools', () => {
     expect(parsed.reason).toBe('same_name_clubs');
     const labels = (parsed.suggestions ?? []).map((s: { label: string }) => s.label);
     expect(labels).toEqual(expect.arrayContaining(['الأهلي المصري', 'الأهلي السعودي']));
+    expect(parsed.suggestions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ competitorId: 8200, country: 'مصر', logo: expect.stringContaining('/Competitors/8200') }),
+        expect.objectContaining({ competitorId: 8946, country: 'السعودية', logo: expect.stringContaining('/Competitors/8946') }),
+      ]),
+    );
     expect(footballDataCacheService.getCached365CompetitorCoach).not.toHaveBeenCalled();
+  });
+
+  test('search_football asks which Al Ahly when the sentence only says النادي الاهلي', async () => {
+    const raw = await executeAgentTool(
+      'search_football',
+      JSON.stringify({ query: 'معلومات عن النادي الاهلي' }),
+      { language: 'ar' },
+    );
+    const parsed = JSON.parse(raw);
+    expect(parsed.status).toBe('need_clarification');
+    expect(parsed.reason).toBe('same_name_clubs');
   });
 
   test('search_football hydrates Egyptian Al Ahly when the user says الأهلي المصري', async () => {

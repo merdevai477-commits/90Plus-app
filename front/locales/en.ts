@@ -3270,6 +3270,8 @@ export const en = {
     navCtaClub: 'Club profile in 90Plus',
     navCtaMatch: 'Match details in 90Plus',
     navCtaMatches: 'Matches page in 90Plus',
+    navView: 'View',
+    navChooseClub: 'Choose the club',
 
     exportUserLabel: 'You',
     exportAiLabel: '90Plus AI',

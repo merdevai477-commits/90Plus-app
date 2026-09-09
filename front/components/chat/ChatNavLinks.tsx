@@ -12,6 +12,7 @@ import { chatColors } from './chatTheme';
 
 type Props = {
   links: ChatNavLink[];
+  onChoose?: (text: string) => void;
 };
 
 const AR = {
@@ -23,6 +24,8 @@ const AR = {
   clubSub: 'بروفايل الفريق في 90Plus',
   matchSub: 'تفاصيل المباراة في 90Plus',
   matchesSub: 'صفحة المباريات في 90Plus',
+  view: 'شاهد',
+  choose: 'اختار النادي',
 };
 
 const AVATAR_SIZE = 40;
@@ -78,6 +81,7 @@ function isNamed(label: string, type: ChatNavLink['type']): boolean {
 function copyFor(link: ChatNavLink, language: string, t: { chat: Record<string, string> }) {
   const named = isNamed(link.label, link.type) ? link.label.trim() : '';
   const preferAr = language === 'ar' || isArabicText(named || link.label);
+  const viewLabel = preferAr ? AR.view : t.chat.navView;
   if (preferAr) {
     const title =
       named ||
@@ -88,15 +92,17 @@ function copyFor(link: ChatNavLink, language: string, t: { chat: Record<string, 
           : link.type === 'match'
             ? AR.matchTitle
             : AR.matchesTitle);
-    const subtitle =
-      link.type === 'player'
-        ? AR.playerSub
-        : link.type === 'club'
-          ? AR.clubSub
-          : link.type === 'match'
-            ? AR.matchSub
-            : AR.matchesSub;
-    return { title, subtitle };
+    const subtitle = link.subtitle?.trim()
+      || (named
+        ? ''
+        : link.type === 'player'
+          ? AR.playerSub
+          : link.type === 'club'
+            ? AR.clubSub
+            : link.type === 'match'
+              ? AR.matchSub
+              : AR.matchesSub);
+    return { title, subtitle, viewLabel, preferAr };
   }
   const title =
     named ||
@@ -107,22 +113,38 @@ function copyFor(link: ChatNavLink, language: string, t: { chat: Record<string, 
         : link.type === 'match'
           ? t.chat.navOpenMatch
           : t.chat.navOpenMatches);
-  const subtitle =
-    link.type === 'player'
-      ? t.chat.navCtaPlayer
-      : link.type === 'club'
-        ? t.chat.navCtaClub
-        : link.type === 'match'
-          ? t.chat.navCtaMatch
-          : t.chat.navCtaMatches;
-  return { title, subtitle };
+  const subtitle = link.subtitle?.trim()
+    || (named
+      ? ''
+      : link.type === 'player'
+        ? t.chat.navCtaPlayer
+        : link.type === 'club'
+          ? t.chat.navCtaClub
+          : link.type === 'match'
+            ? t.chat.navCtaMatch
+            : t.chat.navCtaMatches);
+  return { title, subtitle, viewLabel, preferAr };
 }
 
-export function ChatNavLinks({ links }: Props) {
+function ViewPill({ label, onPress }: { label: string; onPress?: () => void }) {
+  const inner = (
+    <View style={styles.viewPill}>
+      <Text style={styles.viewPillText}>{label}</Text>
+    </View>
+  );
+  if (!onPress) return inner;
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      {inner}
+    </Pressable>
+  );
+}
+
+export function ChatNavLinks({ links, onChoose }: Props) {
   const router = useRouter();
   const { t, language } = useTranslation();
 
-  const onPress = useCallback(
+  const openLink = useCallback(
     (link: ChatNavLink) => {
       if (link.type === 'matches' || (link.type === 'match' && !link.id)) {
         router.push('/(tabs)/matches' as never);
@@ -162,35 +184,71 @@ export function ChatNavLinks({ links }: Props) {
     [router],
   );
 
+  const onPress = useCallback(
+    (link: ChatNavLink) => {
+      if (link.choice && onChoose) {
+        const q = (link.query || link.label || '').trim();
+        if (q) onChoose(q);
+        return;
+      }
+      openLink(link);
+    },
+    [onChoose, openLink],
+  );
+
   if (!links.length) return null;
 
   const extraMatches = links.filter((l) => l.type === 'match' && links.some((x) => x.type !== 'match'));
   const primary = links.filter((l) => !extraMatches.includes(l));
+  const isSelection = primary.filter((l) => l.choice).length >= 2;
+  const preferAr = language === 'ar' || primary.some((l) => isArabicText(l.label));
 
   return (
     <View style={styles.wrap}>
+      {isSelection ? (
+        <Text style={styles.chooseHint}>{preferAr ? AR.choose : t.chat.navChooseClub}</Text>
+      ) : null}
       {primary.map((link) => {
         const copy = copyFor(link, language, t as { chat: Record<string, string> });
+        const showView = link.type === 'player' || link.type === 'club';
+        const viewOpensProfile = !!(link.choice && link.id && onChoose);
         return (
           <Pressable
             key={`${link.type}:${link.id ?? link.query ?? link.label}`}
             onPress={() => onPress(link)}
-            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.row,
+              isSelection && styles.choiceCard,
+              pressed && styles.pressed,
+            ]}
             accessibilityRole="button"
-            accessibilityLabel={`${copy.title}. ${copy.subtitle}`}
+            accessibilityLabel={
+              link.choice
+                ? `${copy.title}. ${copy.subtitle || copy.viewLabel}`
+                : `${copy.title}. ${copy.viewLabel}`
+            }
           >
             <NavAvatar link={link} />
             <View style={styles.textCol}>
               <Text style={styles.title} numberOfLines={1}>
                 {copy.title}
               </Text>
-              <Text style={styles.subtitle} numberOfLines={1}>
-                {copy.subtitle}
-              </Text>
+              {copy.subtitle ? (
+                <Text style={styles.subtitle} numberOfLines={1}>
+                  {copy.subtitle}
+                </Text>
+              ) : null}
             </View>
-            <View style={styles.arrowWrap}>
-              <ChevronRight size={16} color="#F5F3FF" strokeWidth={2.6} />
-            </View>
+            {showView ? (
+              <ViewPill
+                label={copy.viewLabel}
+                onPress={viewOpensProfile ? () => openLink(link) : undefined}
+              />
+            ) : (
+              <View style={styles.arrowWrap}>
+                <ChevronRight size={16} color="#F5F3FF" strokeWidth={2.6} />
+              </View>
+            )}
           </Pressable>
         );
       })}
@@ -218,8 +276,15 @@ export function ChatNavLinks({ links }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     marginTop: 2,
-    gap: 6,
+    gap: 8,
     alignSelf: 'stretch',
+  },
+  chooseHint: {
+    color: 'rgba(216,180,254,0.9)',
+    fontSize: 12,
+    fontWeight: '700',
+    paddingHorizontal: 4,
+    marginBottom: 2,
   },
   row: {
     flexDirection: 'row',
@@ -229,6 +294,14 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingVertical: 8,
     paddingHorizontal: 4,
+  },
+  choiceCard: {
+    minHeight: 56,
+    paddingHorizontal: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(124,58,237,0.16)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(167,139,250,0.28)',
   },
   pressed: {
     opacity: 0.88,
@@ -264,6 +337,20 @@ const styles = StyleSheet.create({
     color: 'rgba(216,180,254,0.88)',
     fontSize: 12,
     fontWeight: '600',
+  },
+  viewPill: {
+    flexShrink: 0,
+    minHeight: 32,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  viewPillText: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '800',
   },
   arrowWrap: {
     width: 30,
