@@ -18,7 +18,7 @@
         "applinks:clerk.90plus.pro"
       ],
       "usesAppleSignIn": true,
-      "buildNumber": "137",
+      "buildNumber": "139",
       "requireFullScreen": false,
       "entitlements": {
         "com.apple.developer.usernotifications.time-sensitive": true
@@ -76,7 +76,7 @@
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 114,
+      "versionCode": 115,
       "softwareKeyboardLayoutMode": "resize",
       "intentFilters": [
         {
