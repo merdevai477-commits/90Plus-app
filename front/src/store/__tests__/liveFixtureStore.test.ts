@@ -4,6 +4,7 @@ import {
   isValidStatusTransition,
   shouldSkipHttpIngest,
 } from '../liveFixtureSync';
+import { useLiveFixtureStore } from '../liveFixtureStore';
 import type { Fixture } from '../../../services/apiFootball';
 import type { LiveFixtureSnapshot } from '../liveFixtureStore.types';
 
@@ -195,5 +196,43 @@ describe('isValidStatusTransition', () => {
   it('rejects LIVE after FT', () => {
     expect(isValidStatusTransition('FT', '2H')).toBe(false);
     expect(isValidStatusTransition('FT', 'LIVE')).toBe(false);
+  });
+});
+
+describe('ingestPreviewIfEmpty live precedence', () => {
+  beforeEach(() => {
+    useLiveFixtureStore.setState({
+      snapshots: {},
+      interestCounts: {},
+      focusedFixtureId: null,
+      evictionSchedule: {},
+    });
+  });
+
+  it('inserts when no snapshot exists', () => {
+    useLiveFixtureStore.getState().ingestPreviewIfEmpty(1, makeFixture(12, '1H', 0, 0));
+    const snap = useLiveFixtureStore.getState().snapshots[1];
+    expect(snap?.fixture.fixture.status.elapsed).toBe(12);
+    expect(snap?.lastSource).toBe('bootstrap');
+  });
+
+  it('replaces a stale 12 with incoming 13', () => {
+    useLiveFixtureStore.getState().ingestPreviewIfEmpty(1, makeFixture(12, '1H', 0, 0));
+    useLiveFixtureStore.getState().ingestPreviewIfEmpty(1, makeFixture(13, '1H', 0, 0));
+    expect(useLiveFixtureStore.getState().snapshots[1]?.fixture.fixture.status.elapsed).toBe(13);
+  });
+
+  it('accepts a goal at the same elapsed', () => {
+    useLiveFixtureStore.getState().ingestPreviewIfEmpty(1, makeFixture(12, '1H', 0, 0));
+    useLiveFixtureStore.getState().ingestPreviewIfEmpty(1, makeFixture(12, '1H', 1, 0));
+    expect(useLiveFixtureStore.getState().snapshots[1]?.fixture.goals.home).toBe(1);
+  });
+
+  it('does not regress 27 1-0 to 12 0-0', () => {
+    useLiveFixtureStore.getState().ingestPreviewIfEmpty(1, makeFixture(27, '1H', 1, 0));
+    useLiveFixtureStore.getState().ingestPreviewIfEmpty(1, makeFixture(12, '1H', 0, 0));
+    const fx = useLiveFixtureStore.getState().snapshots[1]?.fixture;
+    expect(fx?.fixture.status.elapsed).toBe(27);
+    expect(fx?.goals.home).toBe(1);
   });
 });

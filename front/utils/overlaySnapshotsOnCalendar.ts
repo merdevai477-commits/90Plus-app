@@ -1,6 +1,19 @@
+/**
+ * Overlay Zustand live snapshots onto calendar rows for live/finished fixtures.
+ * Unchanged rows keep the same object reference so React.memo / FlashList can skip work.
+ * Also returns which row IDs changed (P1-5 incremental grouping).
+ *
+ * A stale in-memory snapshot must not bury a newer Redis/calendar/live-feed row.
+ */
 import type { Match } from '../components/Matches/matchCardUtils';
 import type { LiveFixtureSnapshot } from '../src/store/liveFixtureStore.types';
 import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
+import {
+  applyLiveClockToMatch,
+  clockFromMatch,
+  decideLiveMerge,
+  logLiveMergeFix,
+} from './liveFixtureFreshness';
 
 /** Cheap fingerprint for list-row live fields (status + score + elapsed/extra). */
 export function matchLiveFingerprint(row: Match): string {
@@ -13,11 +26,6 @@ export type OverlayResult = {
   anyChanged: boolean;
 };
 
-/**
- * Overlay Zustand live snapshots onto calendar rows for live/finished fixtures.
- * Unchanged rows keep the same object reference so React.memo / FlashList can skip work.
- * Also returns which row IDs changed (P1-5 incremental grouping).
- */
 export function overlaySnapshotsOnCalendarDetailed(
   calendarRows: Match[],
   snapshots: Record<number, LiveFixtureSnapshot>,
@@ -44,12 +52,22 @@ export function overlaySnapshotsOnCalendarDetailed(
       (row.status === 'upcoming' && snap.phase !== 'upcoming' && snap.phase !== 'unknown')
     ) {
       const overlaid = snapshotToMatchRow(snap);
+      const snapClock = clockFromMatch(overlaid);
+      const rowClock = clockFromMatch(row);
+      const decision = decideLiveMerge(snapClock, rowClock);
+      logLiveMergeFix(id, snapClock, rowClock, decision);
+
+      // Calendar/live-feed row is newer than the in-memory snapshot — keep it.
+      if (decision.action === 'REPLACE') {
+        return row;
+      }
+
       if (matchLiveFingerprint(row) === matchLiveFingerprint(overlaid)) {
         return row;
       }
       anyChanged = true;
       changedIds.add(row.id);
-      return overlaid;
+      return applyLiveClockToMatch(row, overlaid);
     }
     return row;
   });

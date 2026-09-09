@@ -16,6 +16,12 @@ import { mergeFixtureEvents } from '../../utils/mergeFixtureEvents';
 import type { LiveFixtureSnapshot } from './liveFixtureStore.types';
 import type { Fixture } from '../../services/apiFootball';
 import {
+  clockFromFixture,
+  decideLiveMerge,
+  logLiveMergeFix,
+  mergeIncomingLiveOntoFixture,
+} from '../../utils/liveFixtureFreshness';
+import {
   LIVE_FIXTURE_FINISHED_RETENTION_MS,
   LIVE_FIXTURE_MAX_SNAPSHOTS,
   LIVE_FIXTURE_UPCOMING_GRACE_MS,
@@ -256,12 +262,35 @@ export const useLiveFixtureStore = create<LiveFixtureStoreState>((set, get) => (
 
   ingestPreviewIfEmpty(fixtureId: number, fixture: Fixture) {
     if (!fixtureId || fixtureId <= 0) return;
-    if (get().snapshots[fixtureId]?.fixture) return;
+    const existing = get().snapshots[fixtureId];
+    const incomingClock = clockFromFixture(fixture);
+    const existingClock = existing?.fixture ? clockFromFixture(existing.fixture) : null;
+    const decision = decideLiveMerge(existingClock, incomingClock);
+    logLiveMergeFix(fixtureId, existingClock, incomingClock, decision);
+
+    if (decision.action === 'KEEP') return;
+
+    if (!existing?.fixture) {
+      const snap = buildSnapshotFromRaw({
+        fixtureId,
+        fixture,
+        events: [],
+        source: 'bootstrap',
+      });
+      if (snap) get().ingestSnapshot(snap);
+      return;
+    }
+
+    const mergedFixture = mergeIncomingLiveOntoFixture(existing.fixture, fixture);
     const snap = buildSnapshotFromRaw({
       fixtureId,
-      fixture,
-      events: [],
-      source: 'bootstrap',
+      fixture: mergedFixture,
+      events: existing.events,
+      lineups: existing.lineups,
+      statistics: existing.statistics,
+      venue: existing.venue,
+      source: existing.lastSource,
+      existing,
     });
     if (snap) get().ingestSnapshot(snap);
   },

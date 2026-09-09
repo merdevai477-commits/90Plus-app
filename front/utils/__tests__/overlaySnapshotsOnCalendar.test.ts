@@ -166,4 +166,58 @@ describe('overlaySnapshotsOnCalendar', () => {
     expect(next[0].status).toBe('finished');
     expect(next[0].statusShort).toBe('FT');
   });
+
+  it('does not bury a newer calendar elapsed under a stale snapshot (4783857-style freeze)', () => {
+    const calendar = [
+      makeMatch({
+        id: '4783857',
+        status: 'live',
+        statusShort: '1H',
+        score: { home: 1, away: 0 },
+        elapsed: 27,
+        minute: "27'",
+      }),
+    ];
+    const next = overlaySnapshotsOnCalendar(calendar, {
+      4783857: makeSnap(4783857, { home: 0, away: 0 }, '1H', 12),
+    });
+    expect(next[0]).toBe(calendar[0]);
+    expect(next[0].elapsed).toBe(27);
+    expect(next[0].score.home).toBe(1);
+  });
+
+  it('still overlays a newer snapshot onto an older calendar row', () => {
+    const calendar = [
+      makeMatch({
+        id: '100',
+        status: 'live',
+        statusShort: '1H',
+        score: { home: 0, away: 0 },
+        elapsed: 12,
+      }),
+    ];
+    const next = overlaySnapshotsOnCalendar(calendar, {
+      100: makeSnap(100, { home: 1, away: 0 }, '1H', 27),
+    });
+    expect(next[0].elapsed).toBe(27);
+    expect(next[0].score.home).toBe(1);
+    expect(next[0].homeTeam.name).toBe('Home');
+  });
+
+  it('keeps calendar HT over a stale 1H snapshot at elapsed 45', () => {
+    const calendar = [
+      makeMatch({
+        id: '100',
+        status: 'live',
+        statusShort: 'HT',
+        elapsed: 45,
+        score: { home: 0, away: 0 },
+      }),
+    ];
+    const next = overlaySnapshotsOnCalendar(calendar, {
+      100: makeSnap(100, { home: 0, away: 0 }, '1H', 45),
+    });
+    expect(next[0]).toBe(calendar[0]);
+    expect(next[0].statusShort).toBe('HT');
+  });
 });
