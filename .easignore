@@ -1,9 +1,17 @@
-# EAS packs from the git repo root. Exclude backend/monorepo junk; keep front/.
-# Docs: https://expo.fyi/eas-build-archive
-# Patterns without a leading "/" match in EVERY folder — always prefix root-only rules.
+# EAS CLI packs from the GIT REPO ROOT and reads ONLY this file.
+# front/.easignore is ignored. Docs: https://expo.fyi/eas-build-archive
+# A missing rule re-uploads android/dist/node_modules and the tarball jumps to ~100MB+.
+# Use explicit `front/...` paths — `**/dist` is unreliable on Windows.
 
-# Never upload git metadata (can double archive size)
+# Never upload git metadata (can double archive size).
+# `.git/` alone still leaked objects/pack (~22MB) on Windows.
 .git/
+.git/**
+.git/objects/
+.git/objects/**
+.git/hooks/
+.git/logs/
+.git/refs/
 .eas-archive-check/
 
 # ── Backend / monorepo (not needed for Expo) ────────────────────────────────
@@ -21,7 +29,15 @@
 /.cursor/
 /.kiro/
 /.vscode/
+/tmp-validation/
+/tmp-validation_health.json
+/tmp-validation_metrics.json
+/today-check.json
+
+# Any node_modules tree (EAS runs npm install on the builder)
+node_modules/
 /node_modules/
+front/node_modules/
 
 # Root server / deploy configs (leading / = repo root ONLY)
 /Dockerfile
@@ -50,21 +66,17 @@
 /app.json
 /eas.json
 
-# Web export / native / deps — never upload (EAS prebuilds & npm installs)
-/android
-/android/**
-/ios
-/ios/**
-**/dist/
-**/dist/**
-**/android/
-**/ios/
-
-# ── Front local junk ────────────────────────────────────────────────────────
+# ── Front native / export / caches (EAS prebuilds + npm install) ────────────
+front/android/
+front/ios/
+front/dist/
+front/build/
+front/.expo/
+front/.expo-shared/
 front/.expo-tmp-export/
 front/.expo-tmp-export-check/
 front/.metro-cache/
-front/.expo-shared/
+front/.eas/
 front/coverage/
 front/docs/
 front/__tests__/
@@ -73,10 +85,12 @@ front/*.log
 front/.eas-log.txt
 front/tsconfig.tsbuildinfo
 front/.tmp-expo-config.json
+front/.env
 front/.env.local
 front/.env.*.local
 front/.env.development
 front/.env.test
+front/.env.production
 front/.vscode/
 front/.idea/
 front/.DS_Store
@@ -87,3 +101,52 @@ front/**/*.test.js
 front/**/*.spec.ts
 front/**/*.spec.tsx
 front/**/*.spec.js
+front/*.ps1
+front/*.sh
+front/@*.jks
+front/*.jks
+front/sentry.properties
+front/.cache/
+front/*.orig
+front/*.md
+
+# Unused design dumps — not required() by any screen
+front/assets/Quiz/
+front/assets/images/*.original.png
+front/assets/images/**/*.original.png
+front/assets/images/around-card.png
+front/assets/images/around-card.original.png
+front/assets/images/create contant.png
+front/assets/images/no videos yet.png
+front/assets/images/Treading highlights.png
+front/assets/images/team of the month.png
+front/assets/images/1st.png
+front/assets/images/2st.png
+front/assets/images/3st.png
+front/assets/images/4st.png
+front/assets/images/5st.png
+front/assets/images/6st.png
+front/assets/images/7st.png
+front/assets/images/90Plus world cup.png
+front/assets/images/arena.png
+front/assets/images/arena_profile.png
+front/assets/images/auth-hero.png
+front/assets/images/plear 90Plus.png
+front/assets/images/profile-card-back.png
+front/assets/images/store.png
+front/assets/images/daily-quiz.png
+front/assets/images/football.png
+front/assets/images/football-quiz.png
+front/assets/images/growth.png
+front/assets/images/guess-club.png
+front/assets/images/player-connection.png
+front/assets/images/questions-frame.png
+front/assets/images/share.png
+front/assets/images/top-challenge.png
+front/assets/images/prediction-groups/hero-stadium.png
+front/assets/images/rank/comp-share.png
+front/assets/images/rank/comp-predictions.png
+front/assets/images/rank/comp-quiz.png
+front/assets/images/rank/comp-engagement.png
+front/assets/images/auth/auth-hero-figma.png
+front/assets/images/auth-reference.png
