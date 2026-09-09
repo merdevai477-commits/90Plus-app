@@ -2378,7 +2378,17 @@ export default function MatchesHubScreenV2() {
               </View>
               <View style={styles.calBody}>
                 {weekDayLabels.map((d, i) => (
-                  <Text key={`wd-${i}`} style={styles.calDayName}>{d}</Text>
+                  <View key={`wd-${i}`} style={styles.calDayNameCell}>
+                    <Text
+                      style={styles.calDayName}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                      allowFontScaling={false}
+                    >
+                      {d}
+                    </Text>
+                  </View>
                 ))}
                 {calendarGrid.map((day, idx) => {
                   if (day === null) {
@@ -2716,7 +2726,7 @@ const styles = StyleSheet.create({
 
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   calendarModalOuter: { width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 35, elevation: 20 },
-  calendarModalInner: { borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', overflow: 'hidden', padding: 24 },
+  calendarModalInner: { borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', overflow: 'hidden', paddingVertical: 24, paddingHorizontal: 16 },
   calHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, zIndex: 1, gap: 12 },
   calTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
   calMonthNavRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
@@ -2742,9 +2752,23 @@ const styles = StyleSheet.create({
   },
   calTodayTxt: { color: '#D8B4FE', fontSize: 13, fontWeight: '700' },
   calClose: { color: PURPLE_PRIMARY, fontSize: 16, fontWeight: '700' },
-  calBody: { flexDirection: 'row', flexWrap: 'wrap', gap: '2%', zIndex: 1 },
-  calDayName: { width: '12%', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: '700', marginBottom: 12 },
-  calDay: { width: '12%', height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 10, overflow: 'hidden', marginBottom: 8 },
+  calBody: { flexDirection: 'row', flexWrap: 'wrap', zIndex: 1 },
+  calDayNameCell: {
+    width: '14.28%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 1,
+  },
+  calDayName: {
+    width: '100%',
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 11,
+    fontWeight: '700',
+    includeFontPadding: false,
+  },
+  calDay: { width: '14.28%', height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 10, overflow: 'hidden', marginBottom: 8 },
   calDayActive: { borderColor: 'rgba(168,85,247,0.5)', borderWidth: 1 },
   calDayTxt: { color: 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: '600', zIndex: 1 },
   ticketsInfoModalOuter: { width: '85%', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 35, elevation: 20 },
