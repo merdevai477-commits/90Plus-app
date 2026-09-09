@@ -1,12 +1,11 @@
 import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { ChevronRight, Trophy, User, CalendarDays, CircleDot } from 'lucide-react-native';
 import { useTranslation } from '../../src/i18n';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import { resolveChatNavAvatar, type ChatNavLink } from '../../utils/chatNavLinks';
-import CachedAthletePhoto from '../common/CachedAthletePhoto';
-import TeamBadge from '../common/TeamBadge';
 import { isArabicText } from './chatTextUtils';
 import { chatColors } from './chatTheme';
 
@@ -25,10 +24,13 @@ const AR = {
   matchSub: 'تفاصيل المباراة في 90Plus',
   matchesSub: 'صفحة المباريات في 90Plus',
   view: 'شاهد البروفايل',
+  visitPlayer: 'زيارة بروفايل اللاعب',
+  visitClub: 'زيارة بروفايل النادي',
   choose: 'قصدك الأهلي المصري ولا السعودي؟',
 };
 
-const AVATAR_SIZE = 40;
+const PHOTO = 48;
+const PHOTO_RADIUS = 14;
 
 function iconFor(type: ChatNavLink['type']) {
   const color = '#F5F3FF';
@@ -38,23 +40,27 @@ function iconFor(type: ChatNavLink['type']) {
   return <CalendarDays size={17} color={color} strokeWidth={2.2} />;
 }
 
-function NavAvatar({ link }: { link: ChatNavLink }) {
+function visitLabel(link: ChatNavLink, preferAr: boolean, t: { chat: Record<string, string> }): string {
+  if (link.type === 'club') return preferAr ? AR.visitClub : t.chat.navVisitClub;
+  if (link.type === 'player') return preferAr ? AR.visitPlayer : t.chat.navVisitPlayer;
+  return preferAr ? AR.view : t.chat.navViewProfile;
+}
+
+function ProfileMark({ link }: { link: ChatNavLink }) {
   const media = resolveChatNavAvatar(link);
-  if (media.kind === 'player') {
+  if (media.kind === 'player' || media.kind === 'club') {
     return (
-      <View style={styles.avatarWrap} pointerEvents="none">
-        <CachedAthletePhoto uri={media.uri} size={AVATAR_SIZE} recyclingKey={link.id ?? media.uri} />
+      <View style={styles.photoBox} pointerEvents="none">
+        <Image
+          source={{ uri: media.uri }}
+          style={styles.photoFill}
+          contentFit={media.kind === 'club' ? 'contain' : 'cover'}
+          cachePolicy="memory-disk"
+        />
       </View>
     );
   }
-  if (media.kind === 'club') {
-    return (
-      <View style={styles.avatarWrap} pointerEvents="none">
-        <TeamBadge name={link.label} logo={media.uri} size={AVATAR_SIZE} color="transparent" />
-      </View>
-    );
-  }
-  return <View style={styles.iconWrap}>{iconFor(link.type)}</View>;
+  return <View style={styles.photoBox}>{iconFor(link.type)}</View>;
 }
 
 function isNamed(label: string, type: ChatNavLink['type']): boolean {
@@ -124,20 +130,6 @@ function copyFor(link: ChatNavLink, language: string, t: { chat: Record<string, 
             ? t.chat.navCtaMatch
             : t.chat.navCtaMatches);
   return { title, subtitle, viewLabel, preferAr };
-}
-
-function ViewPill({ label, onPress }: { label: string; onPress?: () => void }) {
-  const inner = (
-    <View style={styles.viewPill}>
-      <Text style={styles.viewPillText}>{label}</Text>
-    </View>
-  );
-  if (!onPress) return inner;
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
-      {inner}
-    </Pressable>
-  );
 }
 
 export function ChatNavLinks({ links, onChoose }: Props) {
@@ -222,7 +214,7 @@ export function ChatNavLinks({ links, onChoose }: Props) {
               >
                 <View style={styles.choiceCrest}>
                   {logo ? (
-                    <TeamBadge name={link.label} logo={logo} size={64} color="transparent" />
+                    <Image source={{ uri: logo }} style={styles.choiceLogo} contentFit="contain" />
                   ) : (
                     iconFor(link.type)
                   )}
@@ -242,28 +234,43 @@ export function ChatNavLinks({ links, onChoose }: Props) {
     <View style={styles.wrap}>
       {primary.map((link) => {
         const copy = copyFor(link, language, t as { chat: Record<string, string> });
-        const showView = link.type === 'player' || link.type === 'club';
+        const isProfile = link.type === 'player' || link.type === 'club';
+        if (!isProfile) {
+          return (
+            <Pressable
+              key={`${link.type}:${link.id ?? link.query ?? link.label}`}
+              onPress={() => onPress(link)}
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={copy.title}
+            >
+              <View style={styles.iconWrap}>{iconFor(link.type)}</View>
+              <View style={styles.textCol}>
+                <Text style={styles.title} numberOfLines={1}>{copy.title}</Text>
+              </View>
+              <View style={styles.arrowWrap}>
+                <ChevronRight size={16} color="#F5F3FF" strokeWidth={2.6} />
+              </View>
+            </Pressable>
+          );
+        }
+        const visit = visitLabel(link, copy.preferAr, t as { chat: Record<string, string> });
         return (
           <Pressable
             key={`${link.type}:${link.id ?? link.query ?? link.label}`}
             onPress={() => onPress(link)}
-            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.visitRow, pressed && styles.pressed]}
             accessibilityRole="button"
-            accessibilityLabel={`${copy.title}. ${copy.viewLabel}`}
+            accessibilityLabel={`${copy.title}. ${visit}`}
           >
-            <NavAvatar link={link} />
-            <View style={styles.textCol}>
-              <Text style={styles.title} numberOfLines={1}>
-                {copy.title}
-              </Text>
+            <View style={styles.visitLead}>
+              <View style={styles.visitDot} />
+              <Text style={styles.visitText} numberOfLines={1}>{visit}</Text>
             </View>
-            {showView ? (
-              <ViewPill label={copy.viewLabel} />
-            ) : (
-              <View style={styles.arrowWrap}>
-                <ChevronRight size={16} color="#F5F3FF" strokeWidth={2.6} />
-              </View>
-            )}
+            <View style={styles.identityCol}>
+              <ProfileMark link={link} />
+              <Text style={styles.identityName} numberOfLines={1}>{copy.title}</Text>
+            </View>
           </Pressable>
         );
       })}
@@ -343,6 +350,67 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 4,
   },
+  visitRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    minHeight: 72,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+    gap: 12,
+  },
+  visitLead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 1,
+    minWidth: 0,
+    paddingBottom: 2,
+  },
+  visitDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 39,
+    backgroundColor: 'rgba(209,191,252,0.35)',
+  },
+  visitText: {
+    color: '#D1BFFC',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.18,
+    flexShrink: 1,
+  },
+  identityCol: {
+    alignItems: 'flex-end',
+    gap: 4,
+    flexShrink: 0,
+    maxWidth: '52%',
+  },
+  identityName: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textAlign: 'right',
+  },
+  photoBox: {
+    width: PHOTO,
+    height: PHOTO,
+    borderRadius: PHOTO_RADIUS,
+    backgroundColor: '#8C5CF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  photoFill: {
+    width: PHOTO,
+    height: PHOTO,
+  },
+  choiceLogo: {
+    width: 56,
+    height: 56,
+  },
   choiceCard: {
     minHeight: 56,
     paddingHorizontal: 6,
@@ -354,17 +422,10 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.88,
   },
-  avatarWrap: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    flexShrink: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   iconWrap: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(124,58,237,0.45)',
