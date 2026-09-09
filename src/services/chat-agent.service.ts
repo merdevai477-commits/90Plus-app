@@ -344,9 +344,74 @@ function shouldRequireTools(message: string): boolean {
   if (/^(hi|hello|hey|اهلا|أهلا|السلام|سلام|ازيك|عامل ايه|صباح|مساء)[\s!.,؟?]*$/i.test(m)) {
     return false;
   }
+  if (looksLikeNameLookup(m)) return true;
   return /(مين|كام|عدد|فين|أين|اين|يلعب|سيزون|موسم|بيانات|احصائ|إحصائ|كاس|كأس|شامبيونز|افريق|أفريق|اهلي|أهلي|مبار|ماتش|لايف|مباشر|اليوم|النهاردة|الجايه|الجاية|القادمة|القادمه|اهداف|أهداف|صنع|تروفي|ألقاب|القاب|نادي|دوري|مدرب|مدير فني|منتخب|ترتيب|جدول|هداف|تشكيلة|قائمة|لاعبين|coach|manager|where|how many|season|trophy|champions|live|today|upcoming|next|goals|assists|club|squad|scorer)/i.test(
     m,
   );
+}
+
+/** A bare name ("إمام عاشور" / "ليونيل ميسي") should still search and open a profile. */
+function looksLikeNameLookup(message: string): boolean {
+  const q = message.replace(/[؟?!.،,]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (q.length < 2 || q.length > 48) return false;
+  if (/نظام\s*أكل|دايت|رجيم|\bdiet\b|تدريب|تمرين/i.test(q)) return false;
+  const words = q.split(' ').filter(Boolean);
+  if (words.length < 1 || words.length > 4) return false;
+  return /[\u0600-\u06FFa-zA-Z]/.test(q);
+}
+
+function formatEntityBrief(parsed: any, language: MessageLanguage): string | null {
+  if (!parsed || parsed.error || parsed.status === 'need_clarification') return null;
+  const en = language === 'en';
+  const facts = parsed.quickFacts ?? {};
+  const bestType = String(parsed.best?.type ?? '');
+  const isPlayer =
+    parsed.source === '365scores_profile' ||
+    bestType === 'player' ||
+    parsed.athleteId != null;
+  const isClub =
+    !isPlayer &&
+    (parsed.source === '365scores_team' || bestType === 'club' || bestType === 'national_team' || parsed.competitorId);
+
+  if (isPlayer) {
+    const name = parsed.name || parsed.resolvedAs || parsed.best?.name;
+    if (!name) return null;
+    const club = parsed.club || facts.currentClub;
+    const position = facts.position || parsed.profile?.position;
+    const age = facts.age || parsed.profile?.age;
+    const nationality = facts.nationality || parsed.profile?.nationality;
+    const lines = [
+      en ? `**${name}**` : `**${name}**`,
+      club ? (en ? `Current club: **${club}**.` : `بيلعب دلوقتي في **${club}**.`) : null,
+      position ? (en ? `Position: ${position}.` : `مركز اللعب: ${position}.`) : null,
+      age ? (en ? `Age: ${age}.` : `السن: ${age}.`) : null,
+      nationality ? (en ? `Nationality: ${nationality}.` : `الجنسية: ${nationality}.`) : null,
+      en
+        ? 'Open the player profile below for the full card.'
+        : 'تقدر تفتح بروفايل اللاعب من الزر تحت.',
+    ].filter(Boolean);
+    return lines.join('\n');
+  }
+
+  if (isClub) {
+    const name = parsed.teamName || parsed.name || parsed.best?.name;
+    if (!name) return null;
+    const coach = parsed.coach || facts.coach;
+    const country = parsed.country;
+    const league = Array.isArray(parsed.competitions) ? parsed.competitions[0]?.name : null;
+    const lines = [
+      `**${name}**`,
+      coach ? (en ? `Coach: **${coach}**.` : `المدرب الحالي: **${coach}**.`) : null,
+      league ? (en ? `Competition: ${league}.` : `بيلعب في ${league}.`) : null,
+      country ? (en ? `Country: ${country}.` : `البلد: ${country}.`) : null,
+      en
+        ? 'Open the club profile below for the full page.'
+        : 'تقدر تفتح بروفايل النادي من الزر تحت.',
+    ].filter(Boolean);
+    return lines.join('\n');
+  }
+
+  return null;
 }
 export interface AgentHistoryItem {
   role: 'user' | 'assistant';
@@ -491,7 +556,8 @@ export async function runFootballAgent(
   const prefetchQuery =
     followUp
       ? focusTeam
-      : !skipEntityPrefetch(params.userMessage) && shouldRequireTools(params.userMessage)
+      : !skipEntityPrefetch(params.userMessage) &&
+          (shouldRequireTools(params.userMessage) || looksLikeNameLookup(params.userMessage))
         ? extractSearchQuery(params.userMessage)
         : null;
   const prefetchTool = followUp
@@ -534,6 +600,15 @@ export async function runFootballAgent(
         params.onToken(clarify);
         logger.info(`[chat-agent] prefetch clarify ${Date.now() - startedAt}ms`);
         return finish(fullText);
+      }
+      if (looksLikeNameLookup(params.userMessage)) {
+        const brief = formatEntityBrief(parsed, params.language);
+        if (brief) {
+          fullText = brief;
+          params.onToken(brief);
+          logger.info(`[chat-agent] prefetch name brief ${Date.now() - startedAt}ms`);
+          return finish(fullText);
+        }
       }
       const scored = formatScorersReply(parsed, params.language);
       if (scored && prefetchTool === 'get_team_scorers') {
