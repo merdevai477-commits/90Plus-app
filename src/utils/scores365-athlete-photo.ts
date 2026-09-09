@@ -34,6 +34,15 @@ export function buildScores365AthleteNationalTeamPhotoUrl(
 }
 
 /**
+ * Rewrite stale NationalTeam athlete URLs to the generic Athletes/{id} path.
+ * NationalTeam often returns only the default silhouette.
+ */
+export function preferScores365AthletesPhotoUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  return url.replace('/Athletes/NationalTeam/', '/Athletes/');
+}
+
+/**
  * 365Scores coach headshot URL. Coaches use the generic Athletes path.
  * When `imageVersion` is present, insert `/v{n}/` as 365's CDN expects.
  */

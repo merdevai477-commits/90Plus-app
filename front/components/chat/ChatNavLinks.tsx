@@ -1,5 +1,5 @@
-import React, { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import {
@@ -16,9 +16,11 @@ import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import {
   resolveChatNavAvatar,
   resolveChatNavClubBadge,
+  resolveChatNavClubBadgeCandidates,
+  resolveChatNavClubPhotos,
+  resolveChatNavPlayerPhotos,
   type ChatNavLink,
 } from '../../utils/chatNavLinks';
-import { isArabicText } from './chatTextUtils';
 import { chatColors } from './chatTheme';
 
 type Props = {
@@ -26,26 +28,12 @@ type Props = {
   onChoose?: (text: string) => void;
 };
 
-const AR = {
-  playerTitle: 'اللاعب',
-  clubTitle: 'الفريق',
-  matchTitle: 'المباراة',
-  matchesTitle: 'المباريات',
-  playerSub: 'بروفايل اللاعب في 90Plus',
-  clubSub: 'بروفايل الفريق في 90Plus',
-  matchSub: 'تفاصيل المباراة في 90Plus',
-  matchesSub: 'صفحة المباريات في 90Plus',
-  view: 'عرض البروفايل',
-  visitPlayer: 'تابع بروفايل اللاعب',
-  visitClub: 'تابع بروفايل النادي',
-  a11yPlayer: 'عرض بروفايل اللاعب',
-  a11yClub: 'عرض بروفايل النادي',
-  choose: 'قصدك الأهلي المصري ولا السعودي؟',
-};
-
 const PHOTO = 64;
 const BADGE = 24;
 const CARD_BG = '#080410';
+const FALLBACK_BG = '#2A2438';
+const CTA_BG = '#7C3AED';
+const CTA_TEXT = '#EEEDFE';
 
 function iconFor(type: ChatNavLink['type']) {
   const color = '#F5F3FF';
@@ -55,68 +43,114 @@ function iconFor(type: ChatNavLink['type']) {
   return <CalendarDays size={17} color={color} strokeWidth={2.2} />;
 }
 
-function visitLabel(link: ChatNavLink, preferAr: boolean, t: { chat: Record<string, string> }): string {
-  if (link.type === 'club') return preferAr ? AR.visitClub : t.chat.navVisitClub;
-  if (link.type === 'player') return preferAr ? AR.visitPlayer : t.chat.navVisitPlayer;
-  return preferAr ? AR.view : t.chat.navViewProfile;
+function PulseFill() {
+  const opacity = useRef(new Animated.Value(0.32)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.78, duration: 720, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.28, duration: 720, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+  return <Animated.View pointerEvents="none" style={[styles.pulseFill, { opacity }]} />;
 }
 
-function ctaLabel(preferAr: boolean, t: { chat: Record<string, string> }): string {
-  return preferAr ? AR.view : t.chat.navViewProfile;
+function CandidateMedia({
+  uris,
+  contentFit,
+  fallback,
+}: {
+  uris: string[];
+  contentFit: 'cover' | 'contain';
+  fallback: React.ReactNode;
+}) {
+  const key = uris.join('|');
+  const [idx, setIdx] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [failedAll, setFailedAll] = useState(!uris.length);
+
+  useEffect(() => {
+    setIdx(0);
+    setLoaded(false);
+    setFailedAll(!uris.length);
+  }, [key, uris.length]);
+
+  const uri = !failedAll ? uris[idx] : undefined;
+  if (!uri) return <>{fallback}</>;
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {!loaded ? <PulseFill /> : null}
+      <Image
+        source={{ uri }}
+        style={[StyleSheet.absoluteFill, !loaded && styles.imageHidden]}
+        contentFit={contentFit}
+        cachePolicy="memory-disk"
+        recyclingKey={uri}
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          if (idx + 1 < uris.length) {
+            setLoaded(false);
+            setIdx((i) => i + 1);
+          } else {
+            setFailedAll(true);
+          }
+        }}
+      />
+    </View>
+  );
 }
 
-function ClubBadge({ uri }: { uri: string | null }) {
-  const [failed, setFailed] = useState(false);
-  const showImg = !!uri && !failed;
+function ClubBadge({ uris, rtl }: { uris: string[]; rtl: boolean }) {
   return (
     <View
-      style={styles.clubBadge}
+      style={[styles.clubBadge, rtl ? styles.clubBadgeRtl : styles.clubBadgeLtr]}
       pointerEvents="none"
       accessible={false}
       accessibilityElementsHidden
       importantForAccessibility="no"
     >
       <View style={styles.clubBadgeInner}>
-        {showImg ? (
-          <Image
-            source={{ uri }}
-            style={styles.clubBadgeImg}
-            contentFit="contain"
-            cachePolicy="memory-disk"
-            onError={() => setFailed(true)}
-          />
-        ) : (
-          <Shield size={11} color="#F5C518" strokeWidth={2.2} />
-        )}
+        <CandidateMedia
+          uris={uris}
+          contentFit="contain"
+          fallback={<Shield size={11} color="#C4B5FD" strokeWidth={2.2} />}
+        />
       </View>
     </View>
   );
 }
 
 function FollowAvatar({
-  photoUri,
+  photoUris,
   photoKind,
-  badgeUri,
+  badgeUris,
+  rtl,
 }: {
-  photoUri: string | null;
+  photoUris: string[];
   photoKind: 'player' | 'club';
-  badgeUri: string | null;
+  badgeUris: string[];
+  rtl: boolean;
 }) {
+  const fallbackIcon =
+    photoKind === 'club' ? (
+      <Trophy size={22} color="#C4B5FD" strokeWidth={2.1} />
+    ) : (
+      <User size={22} color="#C4B5FD" strokeWidth={2.1} />
+    );
   return (
     <View style={styles.avatarWrap} pointerEvents="none" accessible={false}>
       <View style={styles.avatarRing}>
-        {photoUri ? (
-          <Image
-            source={{ uri: photoUri }}
-            style={styles.photoFill}
-            contentFit={photoKind === 'club' ? 'contain' : 'cover'}
-            cachePolicy="memory-disk"
-          />
-        ) : (
-          iconFor(photoKind)
-        )}
+        <CandidateMedia
+          uris={photoUris}
+          contentFit={photoKind === 'club' ? 'contain' : 'cover'}
+          fallback={<View style={styles.avatarFallback}>{fallbackIcon}</View>}
+        />
       </View>
-      {photoKind === 'player' ? <ClubBadge uri={badgeUri} /> : null}
+      {photoKind === 'player' ? <ClubBadge uris={badgeUris} rtl={rtl} /> : null}
     </View>
   );
 }
@@ -136,28 +170,44 @@ function FollowProfileCard({
   rtl: boolean;
   onPress: () => void;
 }) {
-  const media = resolveChatNavAvatar(link);
-  const photoUri = media.kind === 'icon' ? null : media.uri;
-  const badgeUri = link.type === 'player' ? resolveChatNavClubBadge(link) : null;
+  const photoUris = useMemo(
+    () => (link.type === 'club' ? resolveChatNavClubPhotos(link) : resolveChatNavPlayerPhotos(link)),
+    [link],
+  );
+  const badgeUris = useMemo(
+    () => (link.type === 'player' ? resolveChatNavClubBadgeCandidates(link) : []),
+    [link],
+  );
   const Chevron = rtl ? ChevronLeft : ChevronRight;
   return (
-    <View style={[styles.profileCard, rtl && styles.profileCardRtl]}>
+    <View
+      style={[styles.profileCard, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
+    >
       <FollowAvatar
-        photoUri={photoUri}
+        photoUris={photoUris}
         photoKind={link.type === 'club' ? 'club' : 'player'}
-        badgeUri={badgeUri}
+        badgeUris={badgeUris}
+        rtl={rtl}
       />
-      <Text style={[styles.followLabel, rtl && styles.followLabelRtl]} numberOfLines={1}>
+      <Text
+        style={[styles.followLabel, { textAlign: rtl ? 'right' : 'left' }]}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
         {followLabel}
       </Text>
       <Pressable
         onPress={onPress}
-        style={({ pressed }) => [styles.ctaBtn, rtl && styles.ctaBtnRtl, pressed && styles.pressed]}
+        style={({ pressed }) => [
+          styles.ctaBtn,
+          { flexDirection: rtl ? 'row-reverse' : 'row' },
+          pressed && styles.ctaPressed,
+        ]}
         accessibilityRole="button"
         accessibilityLabel={a11yLabel}
       >
         <Text style={styles.ctaBtnText}>{buttonLabel}</Text>
-        <Chevron size={16} color="#F5F3FF" strokeWidth={2.6} />
+        <Chevron size={15} color={CTA_TEXT} strokeWidth={2.6} />
       </Pressable>
     </View>
   );
@@ -184,57 +234,10 @@ function isNamed(label: string, type: ChatNavLink['type']): boolean {
   return !generic.has(v);
 }
 
-function copyFor(link: ChatNavLink, language: string, t: { chat: Record<string, string> }) {
-  const named = isNamed(link.label, link.type) ? link.label.trim() : '';
-  const preferAr = language === 'ar' || isArabicText(named || link.label);
-  const viewLabel = preferAr ? AR.view : t.chat.navViewProfile;
-  if (preferAr) {
-    const title =
-      named ||
-      (link.type === 'player'
-        ? AR.playerTitle
-        : link.type === 'club'
-          ? AR.clubTitle
-          : link.type === 'match'
-            ? AR.matchTitle
-            : AR.matchesTitle);
-    const subtitle = link.subtitle?.trim()
-      || (named
-        ? ''
-        : link.type === 'player'
-          ? AR.playerSub
-          : link.type === 'club'
-            ? AR.clubSub
-            : link.type === 'match'
-              ? AR.matchSub
-              : AR.matchesSub);
-    return { title, subtitle, viewLabel, preferAr };
-  }
-  const title =
-    named ||
-    (link.type === 'player'
-      ? t.chat.navOpenPlayer
-      : link.type === 'club'
-        ? t.chat.navOpenClub
-        : link.type === 'match'
-          ? t.chat.navOpenMatch
-          : t.chat.navOpenMatches);
-  const subtitle = link.subtitle?.trim()
-    || (named
-      ? ''
-      : link.type === 'player'
-        ? t.chat.navCtaPlayer
-        : link.type === 'club'
-          ? t.chat.navCtaClub
-          : link.type === 'match'
-            ? t.chat.navCtaMatch
-            : t.chat.navCtaMatches);
-  return { title, subtitle, viewLabel, preferAr };
-}
-
 export function ChatNavLinks({ links, onChoose }: Props) {
   const router = useRouter();
   const { t, language } = useTranslation();
+  const rtl = language === 'ar';
 
   const openLink = useCallback(
     (link: ChatNavLink) => {
@@ -295,12 +298,11 @@ export function ChatNavLinks({ links, onChoose }: Props) {
   const primary = links.filter((l) => !extraMatches.includes(l));
   const choices = primary.filter((l) => l.choice);
   const isSelection = choices.length >= 2;
-  const preferAr = language === 'ar' || primary.some((l) => isArabicText(l.label));
 
   if (isSelection) {
     return (
       <View style={styles.wrap}>
-        <Text style={styles.chooseHint}>{preferAr ? AR.choose : t.chat.navChooseClub}</Text>
+        <Text style={styles.chooseHint}>{t.chat.navChooseClub}</Text>
         <View style={styles.choiceGrid}>
           {choices.map((link) => {
             const media = resolveChatNavAvatar(link);
@@ -334,32 +336,41 @@ export function ChatNavLinks({ links, onChoose }: Props) {
   return (
     <View style={styles.wrap}>
       {primary.map((link) => {
-        const copy = copyFor(link, language, t as { chat: Record<string, string> });
+        const named = isNamed(link.label, link.type) ? link.label.trim() : '';
         const isProfile = link.type === 'player' || link.type === 'club';
         if (!isProfile) {
+          const title =
+            named ||
+            (link.type === 'match' ? t.chat.navOpenMatch : t.chat.navOpenMatches);
+          const MatchChevron = rtl ? ChevronLeft : ChevronRight;
           return (
             <Pressable
               key={`${link.type}:${link.id ?? link.query ?? link.label}`}
               onPress={() => onPress(link)}
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.row,
+                { flexDirection: rtl ? 'row-reverse' : 'row' },
+                pressed && styles.pressed,
+              ]}
               accessibilityRole="button"
-              accessibilityLabel={copy.title}
+              accessibilityLabel={title}
             >
               <View style={styles.iconWrap}>{iconFor(link.type)}</View>
               <View style={styles.textCol}>
-                <Text style={styles.title} numberOfLines={1}>{copy.title}</Text>
+                <Text style={[styles.title, { textAlign: rtl ? 'right' : 'left' }]} numberOfLines={1}>
+                  {title}
+                </Text>
               </View>
               <View style={styles.arrowWrap}>
-                <ChevronRight size={16} color="#F5F3FF" strokeWidth={2.6} />
+                <MatchChevron size={16} color="#F5F3FF" strokeWidth={2.6} />
               </View>
             </Pressable>
           );
         }
-        const follow = visitLabel(link, copy.preferAr, t as { chat: Record<string, string> });
-        const button = ctaLabel(copy.preferAr, t as { chat: Record<string, string> });
-        const a11y = copy.preferAr
-          ? (link.type === 'club' ? AR.a11yClub : AR.a11yPlayer)
-          : button;
+        const follow =
+          link.type === 'club' ? t.chat.navVisitClub : t.captainAI.followProfile;
+        const button = t.captainAI.viewProfile;
+        const a11y = link.type === 'club' ? t.chat.navViewClubA11y : t.chat.navViewPlayerA11y;
         return (
           <FollowProfileCard
             key={`${link.type}:${link.id ?? link.query ?? link.label}`}
@@ -367,25 +378,30 @@ export function ChatNavLinks({ links, onChoose }: Props) {
             followLabel={follow}
             buttonLabel={button}
             a11yLabel={a11y}
-            rtl={copy.preferAr}
+            rtl={rtl}
             onPress={() => onPress(link)}
           />
         );
       })}
       {extraMatches.map((link) => {
+        const MatchChevron = rtl ? ChevronLeft : ChevronRight;
         return (
           <Pressable
             key={`${link.type}:${link.id ?? link.label}`}
             onPress={() => onPress(link)}
-            style={({ pressed }) => [styles.compact, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.compact,
+              { flexDirection: rtl ? 'row-reverse' : 'row' },
+              pressed && styles.pressed,
+            ]}
             accessibilityRole="button"
             accessibilityLabel={link.label}
           >
             {iconFor('match')}
-            <Text style={styles.compactLabel} numberOfLines={1}>
+            <Text style={[styles.compactLabel, { textAlign: rtl ? 'right' : 'left' }]} numberOfLines={1}>
               {link.label}
             </Text>
-            <ChevronRight size={16} color={chatColors.accentSoft} strokeWidth={2.4} />
+            <MatchChevron size={16} color={chatColors.accentSoft} strokeWidth={2.4} />
           </Pressable>
         );
       })}
@@ -440,7 +456,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   row: {
-    flexDirection: 'row',
     flexWrap: 'nowrap',
     alignItems: 'center',
     gap: 10,
@@ -449,10 +464,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   profileCard: {
-    flexDirection: 'row',
+    flexWrap: 'nowrap',
     alignItems: 'center',
     alignSelf: 'stretch',
-    gap: 10,
+    gap: 13,
     minHeight: 88,
     paddingVertical: 12,
     paddingHorizontal: 12,
@@ -461,36 +476,30 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(124, 58, 237, 0.35)',
   },
-  profileCardRtl: {
-    flexDirection: 'row-reverse',
-  },
   followLabel: {
     flex: 1,
     minWidth: 0,
     color: '#C4B5FD',
     fontSize: 13,
     fontWeight: '600',
-    textAlign: 'left',
-  },
-  followLabelRtl: {
-    textAlign: 'right',
   },
   ctaBtn: {
     flexShrink: 0,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    minHeight: 36,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: '#7C3AED',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: 40,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: CTA_BG,
   },
-  ctaBtnRtl: {
-    flexDirection: 'row-reverse',
+  ctaPressed: {
+    transform: [{ scale: 0.97 }],
+    opacity: 0.88,
   },
   ctaBtnText: {
-    color: '#F5F3FF',
+    color: CTA_TEXT,
     fontSize: 13,
     fontWeight: '800',
   },
@@ -505,18 +514,26 @@ const styles = StyleSheet.create({
     borderRadius: PHOTO / 2,
     borderWidth: 2,
     borderColor: '#7C3AED',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: FALLBACK_BG,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  photoFill: {
-    width: PHOTO,
-    height: PHOTO,
+  avatarFallback: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: FALLBACK_BG,
+  },
+  pulseFill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(124, 58, 237, 0.42)',
+  },
+  imageHidden: {
+    opacity: 0,
   },
   clubBadge: {
     position: 'absolute',
-    left: -2,
     bottom: -2,
     width: BADGE + 4,
     height: BADGE + 4,
@@ -527,20 +544,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  clubBadgeRtl: {
+    left: -2,
+  },
+  clubBadgeLtr: {
+    right: -2,
+  },
   clubBadgeInner: {
     width: BADGE,
     height: BADGE,
     borderRadius: BADGE / 2,
     borderWidth: 1,
-    borderColor: '#F5C518',
-    backgroundColor: '#12081C',
+    borderColor: '#7C3AED',
+    backgroundColor: FALLBACK_BG,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-  },
-  clubBadgeImg: {
-    width: BADGE - 4,
-    height: BADGE - 4,
   },
   choiceLogo: {
     width: 56,
@@ -579,7 +598,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   compact: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     minHeight: 40,

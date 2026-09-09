@@ -3162,6 +3162,11 @@ export const en = {
     uploadHashtagLengthDetail: 'Each hashtag must be between 2 and 30 characters.',
   },
 
+  captainAI: {
+    followProfile: 'Follow player profile',
+    viewProfile: 'View profile',
+  },
+
   // AI Chat
   chat: {
     limitReached: 'Daily message limit reached',
@@ -3274,6 +3279,8 @@ export const en = {
     navViewProfile: 'View profile',
     navVisitPlayer: 'Follow player profile',
     navVisitClub: 'Follow club profile',
+    navViewPlayerA11y: 'View player profile',
+    navViewClubA11y: 'View club profile',
     navChooseClub: 'Did you mean Egyptian Al Ahly or Saudi Al Ahli?',
 
     exportUserLabel: 'You',

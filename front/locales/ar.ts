@@ -3090,6 +3090,11 @@ export const ar = {
     uploadHashtagLengthDetail: 'يجب أن يكون كل هاشتاج بين 2 و30 حرفاً.',
   },
 
+  captainAI: {
+    followProfile: 'تابع بروفايل اللاعب',
+    viewProfile: 'عرض البروفايل',
+  },
+
   // AI Chat
   chat: {
     limitReached: 'انتهت رسائلك اليومية',
@@ -3194,6 +3199,8 @@ export const ar = {
     navViewProfile: 'عرض البروفايل',
     navVisitPlayer: 'تابع بروفايل اللاعب',
     navVisitClub: 'تابع بروفايل النادي',
+    navViewPlayerA11y: 'عرض بروفايل اللاعب',
+    navViewClubA11y: 'عرض بروفايل النادي',
     navChooseClub: 'قصدك الأهلي المصري ولا السعودي؟',
 
     exportUserLabel: 'أنت',

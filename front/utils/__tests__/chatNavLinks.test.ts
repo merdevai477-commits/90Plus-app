@@ -3,6 +3,8 @@ import {
   inferChatNavLinksFromQuestion,
   resolveChatNavAvatar,
   resolveChatNavClubBadge,
+  resolveChatNavClubBadgeCandidates,
+  resolveChatNavPlayerPhotos,
   sanitizeChatNavLinks,
 } from '../chatNavLinks';
 
@@ -97,5 +99,49 @@ describe('chatNavLinks', () => {
       }),
     ).toEqual(expect.stringContaining('/Competitors/1015'));
     expect(resolveChatNavClubBadge({ type: 'player', id: 42, label: 'Salah' })).toBeNull();
+  });
+
+  it('prefers Athletes CDN for player photos and still lists NationalTeam last', () => {
+    const uris = resolveChatNavPlayerPhotos({
+      type: 'player',
+      id: 110445,
+      label: 'Salah',
+      photo:
+        'https://imageprod.365scores.com/image/upload/w_80,h_80,c_limit,q_auto:eco,f_webp,d_Athletes:default.png,r_max,c_thumb,g_face,z_0.65/Athletes/NationalTeam/110445',
+    });
+    expect(uris[0]).toContain('/Athletes/110445');
+    expect(uris[0]).not.toContain('NationalTeam');
+    expect(uris.some((u) => u.includes('/Athletes/NationalTeam/110445'))).toBe(true);
+  });
+
+  it('builds club badge candidates from logo then teamId', () => {
+    const uris = resolveChatNavClubBadgeCandidates({
+      type: 'player',
+      id: 42,
+      label: 'Salah',
+      logo: 'https://img/liv.png',
+      teamId: 1015,
+    });
+    expect(uris[0]).toBe('https://img/liv.png');
+    expect(uris[1]).toEqual(expect.stringContaining('/Competitors/1015'));
+  });
+
+  it('maps photoUrl and currentClub.logoUrl onto photo/logo/teamId', () => {
+    const links = sanitizeChatNavLinks([
+      {
+        type: 'player',
+        id: 1,
+        label: 'Salah',
+        photoUrl: 'https://cdn/p.png',
+        currentClub: { logoUrl: 'https://cdn/c.png', id: 9 },
+      },
+    ]);
+    expect(links[0]).toEqual(
+      expect.objectContaining({
+        photo: 'https://cdn/p.png',
+        logo: 'https://cdn/c.png',
+        teamId: 9,
+      }),
+    );
   });
 });

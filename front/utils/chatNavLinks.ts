@@ -1,5 +1,8 @@
 import { build365CompetitorLogo } from './scores365Adapters';
-import { buildScores365AthletePhotoUrl } from './scores365AthletePhoto';
+import {
+  preferScores365AthletesPhotoUrl,
+  scores365AthletePhotoCandidates,
+} from './scores365AthletePhoto';
 
 export type ChatNavLinkType = 'player' | 'club' | 'match' | 'matches';
 
@@ -28,29 +31,89 @@ function httpUrl(v: unknown): string | null {
   return /^https?:\/\//i.test(s) ? s : null;
 }
 
+function firstHttpUrl(...candidates: unknown[]): string | null {
+  for (const c of candidates) {
+    const u = httpUrl(c);
+    if (u) return u;
+  }
+  return null;
+}
+
+function currentClubNode(item: Record<string, unknown>): Record<string, unknown> | null {
+  return isRecord(item.currentClub) ? item.currentClub : null;
+}
+
+function photoFromNavItem(item: Record<string, unknown>): string | null {
+  return firstHttpUrl(item.photo, item.photoUrl, item.imageUrl);
+}
+
+function logoFromNavItem(item: Record<string, unknown>): string | null {
+  const club = currentClubNode(item);
+  return firstHttpUrl(item.logo, item.logoUrl, club?.logoUrl, club?.logo);
+}
+
+function teamIdFromNavItem(item: Record<string, unknown>): number | string | null {
+  if (item.teamId != null && item.teamId !== '') return item.teamId as number | string;
+  const club = currentClubNode(item);
+  if (club?.id != null && club.id !== '') return club.id as number | string;
+  if (club?.teamId != null && club.teamId !== '') return club.teamId as number | string;
+  return null;
+}
+
 /** Headshot / crest for the chat CTA, with a 365Scores fallback from the entity id. */
 export function resolveChatNavAvatar(link: ChatNavLink): ChatNavAvatar {
   if (link.type === 'player') {
-    const uri = httpUrl(link.photo) || (link.id ? buildScores365AthletePhotoUrl(link.id, 80) : null);
+    const uri = resolveChatNavPlayerPhotos(link)[0] ?? null;
     if (uri) return { kind: 'player', uri };
   }
   if (link.type === 'club') {
-    const uri = httpUrl(link.logo) || (link.id ? build365CompetitorLogo(link.id) : null);
+    const uri = resolveChatNavClubPhotos(link)[0] ?? null;
     if (uri) return { kind: 'club', uri };
   }
   return { kind: 'icon' };
 }
 
-/** Club crest for the player-card overlay (logo URL or 365Scores teamId). */
+/** Ordered player photo URLs to try (payload first, Athletes CDN, NationalTeam last). */
+export function resolveChatNavPlayerPhotos(link: ChatNavLink): string[] {
+  if (link.type !== 'player') return [];
+  const urls: string[] = [];
+  const payload = httpUrl(link.photo);
+  const rewritten = payload ? preferScores365AthletesPhotoUrl(payload) ?? payload : null;
+  if (rewritten && !rewritten.includes('/Athletes/NationalTeam/')) {
+    urls.push(rewritten);
+  }
+  if (link.id) {
+    urls.push(...scores365AthletePhotoCandidates(link.id, link.photo, 80));
+  } else if (rewritten) {
+    urls.push(rewritten);
+  }
+  return [...new Set(urls)];
+}
+
+/** Club crest candidates for the player-card overlay (logo URL or 365Scores teamId). */
 export function resolveChatNavClubBadge(link: ChatNavLink): string | null {
+  return resolveChatNavClubBadgeCandidates(link)[0] ?? null;
+}
+
+export function resolveChatNavClubBadgeCandidates(link: ChatNavLink): string[] {
+  const urls: string[] = [];
   const fromLogo = httpUrl(link.logo);
-  if (fromLogo) return fromLogo;
+  if (fromLogo) urls.push(fromLogo);
   const teamId = Number(link.teamId);
   if (Number.isFinite(teamId) && teamId > 0) {
-    const uri = build365CompetitorLogo(teamId);
-    return uri || null;
+    const built = build365CompetitorLogo(teamId);
+    if (built) urls.push(built);
   }
-  return null;
+  return [...new Set(urls)];
+}
+
+/** Club CTA photos: payload logo, then competitor id. */
+export function resolveChatNavClubPhotos(link: ChatNavLink): string[] {
+  if (link.type !== 'club') return resolveChatNavClubBadgeCandidates(link);
+  const urls = [...resolveChatNavClubBadgeCandidates({ ...link, teamId: link.teamId ?? link.id })];
+  const fromId = link.id ? build365CompetitorLogo(link.id) : null;
+  if (fromId) urls.push(fromId);
+  return [...new Set(urls)];
 }
 
 const NAV_MARKER_RE = /\n?<!--90plus-nav:([\s\S]*?)-->\s*$/;
@@ -109,10 +172,10 @@ export function sanitizeChatNavLinks(raw: unknown): ChatNavLink[] {
       ...(id ? { id } : {}),
       label,
       ...(query ? { query } : {}),
-      photo: httpUrl(item.photo),
-      logo: httpUrl(item.logo),
+      photo: photoFromNavItem(item),
+      logo: logoFromNavItem(item),
       teamName: typeof item.teamName === 'string' ? item.teamName : null,
-      teamId: item.teamId == null ? null : (item.teamId as number | string),
+      teamId: teamIdFromNavItem(item),
       country: typeof item.country === 'string' ? item.country : null,
       ...(item.choice === true ? { choice: true } : {}),
       subtitle: typeof item.subtitle === 'string' ? item.subtitle : null,

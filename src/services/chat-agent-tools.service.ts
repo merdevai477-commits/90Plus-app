@@ -5,6 +5,7 @@
 
 import type { ChatCompletionTool } from 'openai/resources/chat/completions';
 import { logger } from '../utils/logger';
+import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
 import type { MessageLanguage } from '../utils/message-language.util';
 import { localDateKey } from '../utils/world-cup-campaign.util';
 import { resolveFootballSeason } from '../utils/football-season.util';
@@ -544,7 +545,14 @@ function build365ProfilePayload(
       }
     : null;
 
-  const clubIdRaw = Number(player.clubId ?? info?.teamId ?? info?.clubId ?? info?.raw?.clubId);
+  const clubIdFromSeason = Number(seasonStats?.competitions?.[0]?.teamId);
+  const clubIdRaw = Number(
+    player.clubId ??
+      info?.teamId ??
+      info?.clubId ??
+      info?.raw?.clubId ??
+      (Number.isFinite(clubIdFromSeason) && clubIdFromSeason > 0 ? clubIdFromSeason : null),
+  );
   const clubId = Number.isFinite(clubIdRaw) && clubIdRaw > 0 ? clubIdRaw : null;
   const clubLogo =
     typeof profile.clubLogo === 'string' && /^https?:\/\//i.test(profile.clubLogo)
@@ -552,6 +560,19 @@ function build365ProfilePayload(
       : clubId
         ? `https://imagecache.365scores.com/image/upload/f_png,w_80,h_80,c_limit,q_auto:eco,dpr_2/v1/Competitors/${clubId}`
         : null;
+  const athleteId = Number(player.athleteId);
+  const imageVersion = Number(profile.imageVersion ?? player.imageVersion);
+  const imageUrl =
+    (Number.isFinite(athleteId) && athleteId > 0
+      ? buildScores365AthletePhotoUrl(
+          athleteId,
+          80,
+          Number.isFinite(imageVersion) && imageVersion > 0 ? imageVersion : null,
+        )
+      : null) ||
+    profile.imageUrl ||
+    player.imageUrl ||
+    null;
 
   return {
     source: '365scores_profile',
@@ -563,6 +584,7 @@ function build365ProfilePayload(
     clubId,
     clubLogo,
     teamId: clubId,
+    imageUrl,
     clubRaw: cleanClubName(profile.clubName ?? player.clubName),
     quickFacts,
     profile: {
@@ -570,7 +592,7 @@ function build365ProfilePayload(
       position: quickFacts.position,
       nationality: quickFacts.nationality,
       jerseyNumber: quickFacts.jerseyNumber,
-      imageUrl: profile.imageUrl ?? player.imageUrl ?? null,
+      imageUrl,
     },
     seasonStats,
     currentSeasonHighlights: compactHighlights(career?.currentSeasonHighlights),

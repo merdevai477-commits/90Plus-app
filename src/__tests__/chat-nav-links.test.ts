@@ -2,6 +2,7 @@ import {
   decodeChatNavMarker,
   encodeChatNavMarker,
   extractChatNavLinks,
+  sanitizeChatNavLinks,
 } from '../services/chat-nav-links.service';
 
 describe('chat-nav-links', () => {
@@ -234,5 +235,63 @@ describe('chat-nav-links', () => {
         logo: expect.stringContaining('/Competitors/8200'),
       }),
     ]);
+  });
+
+  it('uses season teamId for the current-club badge when clubLogo is missing', () => {
+    const links = extractChatNavLinks(
+      [
+        JSON.stringify({
+          source: '365scores_profile',
+          athleteId: 42,
+          name: 'Salah',
+          seasonStats: { competitions: [{ teamId: 1015, teamName: 'Liverpool' }] },
+        }),
+      ],
+      ['search_player'],
+      'en',
+    );
+    expect(links.find((l) => l.type === 'player')).toEqual(
+      expect.objectContaining({
+        teamId: 1015,
+        logo: expect.stringContaining('/Competitors/1015'),
+      }),
+    );
+  });
+
+  it('rewrites NationalTeam athlete photos to Athletes/{id}', () => {
+    const links = extractChatNavLinks(
+      [
+        JSON.stringify({
+          source: '365scores_profile',
+          athleteId: 110445,
+          name: 'Salah',
+          imageUrl:
+            'https://imageprod.365scores.com/image/upload/w_80,h_80/Athletes/NationalTeam/110445',
+        }),
+      ],
+      ['search_player'],
+      'en',
+    );
+    expect(links.find((l) => l.type === 'player')?.photo).toContain('/Athletes/110445');
+    expect(links.find((l) => l.type === 'player')?.photo).not.toContain('NationalTeam');
+  });
+
+  it('maps photoUrl and currentClub.logoUrl onto the player nav link', () => {
+    const links = sanitizeChatNavLinks([
+      {
+        type: 'player',
+        id: 1,
+        label: 'Salah',
+        photoUrl: 'https://cdn/p.png',
+        currentClub: { logoUrl: 'https://cdn/c.png', id: 9 },
+      },
+    ]);
+    expect(links[0]).toEqual(
+      expect.objectContaining({
+        photo: 'https://cdn/p.png',
+        logo: 'https://cdn/c.png',
+        teamId: 9,
+      }),
+    );
   });
 });
