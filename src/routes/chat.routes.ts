@@ -655,7 +655,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
     try {
         // ─── Limit check ─────────────────────────────────────────────────────
         const remaining = await getRemaining(userId, tz);
-        if (remaining <= 0 && !isResume) {
+        if (remaining <= 0 && !isResume && !isChatUnlimitedUser(userId)) {
             sendError('انتهت رسائلك اليومية');
             return;
         }
@@ -856,6 +856,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     );
                     sendDone({
                         remaining: await getRemaining(userId, tz),
+                        unlimited: isChatUnlimitedUser(userId),
                         limit: DAILY_LIMIT,
                         resetAt: await getResetTimeForUser(userId),
                         usedModel: agentResult.usedModel,
@@ -902,6 +903,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     );
                     sendDone({
                         remaining: await getRemaining(userId, tz),
+                        unlimited: isChatUnlimitedUser(userId),
                         limit: DAILY_LIMIT,
                         resetAt: await getResetTimeForUser(userId),
                         usedModel: 'deterministic-tools',
@@ -1126,6 +1128,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
                     );
                     sendDone({
                         remaining: await getRemaining(userId, tz),
+                        unlimited: isChatUnlimitedUser(userId),
                         limit: DAILY_LIMIT,
                         resetAt: await getResetTimeForUser(userId),
                         usedModel: 'deterministic-tools',
@@ -1220,6 +1223,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
             sendDone({
                 remaining: await getRemaining(userId, tz),
+                unlimited: isChatUnlimitedUser(userId),
                 limit: DAILY_LIMIT,
                 resetAt: await getResetTimeForUser(userId),
                 usedModel: usedProvider.model,
@@ -1233,6 +1237,7 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
             logger.error('[chat] post-stream housekeeping failed:', err?.message ?? err);
             sendDone({
                 remaining: await getRemaining(userId, tz).catch(() => 0),
+                unlimited: isChatUnlimitedUser(userId),
                 limit: DAILY_LIMIT,
                 resetAt: await getResetTimeForUser(userId),
                 usedModel: usedProvider.model,

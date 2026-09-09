@@ -310,6 +310,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   // `null` = we have not yet fetched the real limit from the backend. The UI
   // renders a neutral placeholder instead of a misleading hardcoded number.
   const [messagesRemaining, setMessagesRemaining] = useState<number | null>(null);
+  const chatUnlimitedRef = useRef(false);
   const [dailyMessageLimit, setDailyMessageLimit] = useState<number | null>(null);
   const [resetTime, setResetTime] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -476,8 +477,10 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         headers: await getAuthHeaders(),
       });
       if (res.ok) {
-        const data = await res.json() as { remaining: number; limit?: number; resetAt?: string };
-        setMessagesRemaining(data.remaining);
+        const data = await res.json() as { remaining: number; limit?: number; resetAt?: string; unlimited?: boolean };
+        const unlimited = data.unlimited === true;
+        chatUnlimitedRef.current = unlimited;
+        setMessagesRemaining(unlimited ? null : data.remaining);
         setDailyMessageLimit(
           typeof data.limit === 'number' && data.limit > 0
             ? data.limit
@@ -918,7 +921,12 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
 
           if ('done' in event && event.done) {
             const doneEvent = event as SSEDone;
-            if (doneEvent.remaining !== undefined) setMessagesRemaining(doneEvent.remaining);
+            if (doneEvent.unlimited === true) {
+              chatUnlimitedRef.current = true;
+              setMessagesRemaining(null);
+            } else if (doneEvent.remaining !== undefined && !chatUnlimitedRef.current) {
+              setMessagesRemaining(doneEvent.remaining);
+            }
             if (typeof doneEvent.limit === 'number' && doneEvent.limit > 0) {
               setDailyMessageLimit(doneEvent.limit);
             }
@@ -1111,7 +1119,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     const messageText = text ?? inputValue;
     const trimmed = messageText.trim();
     if (!trimmed || isLoading) return;
-    if (messagesRemaining !== null && messagesRemaining <= 0) return;
+    if (!chatUnlimitedRef.current && messagesRemaining !== null && messagesRemaining <= 0) return;
 
     const base = historyBase ?? messages;
 
@@ -1166,7 +1174,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     streamingMessageIdRef.current = aiMessageId;
     setIsLoading(true);
     setIsThinking(true);
-    setMessagesRemaining(prev => (prev === null ? prev : Math.max(0, prev - 1)));
+    setMessagesRemaining(prev => (
+      chatUnlimitedRef.current || prev === null ? prev : Math.max(0, prev - 1)
+    ));
 
     let convId = currentConversationId;
     if (!convId) {

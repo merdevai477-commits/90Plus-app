@@ -49,11 +49,17 @@ const DAILY_LIMIT = Number(process.env.CHAT_DAILY_MESSAGE_LIMIT ?? 10);
 const ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /** Clerk user ids with unlimited AI chat (comma/space separated). */
+const BUILTIN_UNLIMITED_CHAT_USER_IDS = [
+  'user_3FYXdIa6tYCy4rWrAKRpYvx4zs9',
+];
+
 function parseUnlimitedChatUserIds(): Set<string> {
   const raw = process.env.CHAT_UNLIMITED_USER_IDS ?? '';
   return new Set(
-    raw
-      .split(/[,;\s]+/)
+    [
+      ...BUILTIN_UNLIMITED_CHAT_USER_IDS,
+      ...raw.split(/[,;\s]+/),
+    ]
       .map((s) => s.trim())
       .filter((s) => s.length > 0),
   );
