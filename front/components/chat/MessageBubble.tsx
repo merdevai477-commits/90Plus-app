@@ -21,6 +21,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { useTranslation } from '../../src/i18n';
 
@@ -117,7 +118,12 @@ function MarkdownTable({
   scrollHint?: string;
   bubbleMaxWidth: number;
 }) {
+  const { t } = useTranslation();
   const scrollRef = useRef<ScrollView>(null);
+  const offsetX = useRef(0);
+  const [offset, setOffset] = useState(0);
+  const [contentW, setContentW] = useState(0);
+  const [layoutW, setLayoutW] = useState(0);
   const colCount = headers.length;
   const scrollViewportWidth = Math.max(180, Math.round(bubbleMaxWidth - 24));
 
@@ -142,10 +148,21 @@ function MarkdownTable({
   }, [headers, rows, colCount, scrollViewportWidth]);
 
   const tableIntrinsicWidth = colWidths.reduce((a, b) => a + b, 0);
-  const isOverflow = tableIntrinsicWidth > scrollViewportWidth + 6;
+  const isOverflowEstimate = tableIntrinsicWidth > scrollViewportWidth + 6;
+  const maxX = Math.max(0, contentW - layoutW);
+  const measured = contentW > 0 && layoutW > 0;
+  const needsPager = measured ? maxX > 8 : isOverflowEstimate;
+  const canLeft = measured && offset > 4;
+  const canRight = needsPager && (!measured || offset < maxX - 4);
+
+  const scrollBy = useCallback((dir: -1 | 1) => {
+    const step = Math.max(96, Math.round((layoutW || scrollViewportWidth) * 0.72));
+    const next = Math.max(0, Math.min(maxX, offsetX.current + dir * step));
+    scrollRef.current?.scrollTo({ x: next, animated: true });
+  }, [layoutW, maxX, scrollViewportWidth]);
 
   const tableGrid = (
-    <View style={[s.table, { width: isOverflow ? tableIntrinsicWidth : scrollViewportWidth }]}>
+    <View style={[s.table, { width: needsPager ? tableIntrinsicWidth : scrollViewportWidth }]}>
       <View style={s.tableHead}>
         {headers.map((h, hi) => (
           <View
@@ -191,18 +208,17 @@ function MarkdownTable({
     </View>
   );
 
-  if (!isOverflow) {
-    return <View style={s.tableBlock}>{tableGrid}</View>;
-  }
-
   return (
     <View style={s.tableBlock}>
-      {scrollHint ? (
+      {needsPager && scrollHint ? (
         <View style={s.tableHintRow}>
           <Text style={s.tableHint}>{scrollHint}</Text>
         </View>
       ) : null}
-      <View style={[s.tableScrollShell, { width: scrollViewportWidth }]}>
+      <View
+        style={[s.tableScrollShell, { width: scrollViewportWidth }]}
+        onLayout={(e) => setLayoutW(e.nativeEvent.layout.width)}
+      >
         <ScrollView
           ref={scrollRef}
           horizontal
@@ -212,11 +228,67 @@ function MarkdownTable({
           showsHorizontalScrollIndicator={false}
           overScrollMode="never"
           bounces={false}
+          scrollEnabled={needsPager}
+          scrollEventThrottle={16}
+          onScroll={(e) => {
+            const x = e.nativeEvent.contentOffset.x;
+            offsetX.current = x;
+            setOffset(x);
+          }}
+          onContentSizeChange={(w) => setContentW(w)}
           style={s.tableScroll}
           contentContainerStyle={s.tableScrollContent}
         >
           {tableGrid}
         </ScrollView>
+        {needsPager ? (
+          <>
+            {canLeft ? (
+              <LinearGradient
+                pointerEvents="none"
+                colors={['rgba(8,4,16,0.92)', 'rgba(8,4,16,0)']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={s.tableFadeLeft}
+              />
+            ) : null}
+            {canRight ? (
+              <LinearGradient
+                pointerEvents="none"
+                colors={['rgba(8,4,16,0)', 'rgba(8,4,16,0.92)']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={s.tableFadeRight}
+              />
+            ) : null}
+            <View style={s.tableArrowLeft} pointerEvents="box-none">
+              <Pressable
+                onPress={() => scrollBy(-1)}
+                disabled={!canLeft}
+                hitSlop={6}
+                style={[s.tableArrowBtn, !canLeft && s.tableArrowBtnDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel={t.chat.tableScrollLeft}
+                accessibilityState={{ disabled: !canLeft }}
+              >
+                <ChevronLeft size={20} color="#FFFFFF" strokeWidth={2.6} />
+              </Pressable>
+            </View>
+            <View style={s.tableArrowRight} pointerEvents="box-none">
+              <Pressable
+                onPress={() => scrollBy(1)}
+                disabled={!canRight}
+                hitSlop={6}
+                style={[s.tableArrowBtn, !canRight && s.tableArrowBtnDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel={t.chat.tableScrollRight}
+                accessibilityState={{ disabled: !canRight }}
+              >
+                <ChevronRight size={20} color="#FFFFFF" strokeWidth={2.6} />
+              </Pressable>
+            </View>
+          </>
+        ) : null}
       </View>
     </View>
   );
@@ -788,6 +860,9 @@ const s = StyleSheet.create({
       },
       android: { elevation: 6 },
     }),
+  },
+  tableArrowBtnDisabled: {
+    opacity: 0.38,
   },
   tableScroll: {
     flexGrow: 0,

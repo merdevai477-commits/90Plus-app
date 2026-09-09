@@ -3118,6 +3118,8 @@ export const ar = {
     inputPlaceholder: 'اكتب رسالتك...',
     inputPlaceholderEdit: 'عدّل...',
     tableScrollHint: 'اسحب أو اضغط الأسهم لعرض الجدول كاملاً',
+    tableScrollLeft: 'تمرير الجدول لليسار',
+    tableScrollRight: 'تمرير الجدول لليمين',
     editingMessage: 'تعديل الرسالة',
     cancelEdit: 'إلغاء',
     sendButton: 'إرسال',

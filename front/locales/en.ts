@@ -3196,6 +3196,8 @@ export const en = {
     inputPlaceholder: 'Type your message...',
     inputPlaceholderEdit: 'Edit...',
     tableScrollHint: 'Swipe or tap arrows to see the full table',
+    tableScrollLeft: 'Scroll table left',
+    tableScrollRight: 'Scroll table right',
     editingMessage: 'Edit message',
     cancelEdit: 'Cancel',
     sendButton: 'Send',
