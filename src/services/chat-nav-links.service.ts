@@ -336,6 +336,13 @@ export function extractChatNavLinks(
       facts?.nationality ?? profile?.nationality ?? playerHit?.country ?? playerHit?.nationality,
     );
     const playerClub = asLabel(parsed.club ?? facts?.currentClub ?? playerHit?.club);
+    const clubCompetitorId = positiveId(parsed.clubId) || positiveId(playerHit?.clubId);
+    const playerClubLogo =
+      firstHttpUrl(parsed.clubLogo, profile?.clubLogo, playerHit?.logo) ??
+      (clubCompetitorId ? competitorLogoUrl(clubCompetitorId) : null);
+    const playerTeamId: number | string | null =
+      clubCompetitorId ??
+      (typeof parsed.teamId === 'number' || typeof parsed.teamId === 'string' ? parsed.teamId : null);
     if (athleteId) {
       addLink(map, {
         type: 'player',
@@ -349,8 +356,9 @@ export function extractChatNavLinks(
             playerHit?.imageUrl,
             playerHit?.photo,
           ) ?? buildScores365AthletePhotoUrl(athleteId, 80, imageVersion),
+        logo: playerClubLogo,
         teamName: playerClub || null,
-        teamId: parsed.teamId == null ? null : (parsed.teamId as number | string),
+        teamId: playerTeamId,
         country: playerCountry || null,
       });
     } else if (parsed.source === '365scores_profile') {
@@ -359,7 +367,9 @@ export function extractChatNavLinks(
         label: playerName || playerFallback,
         query: playerName || query,
         photo: firstHttpUrl(profile?.imageUrl, parsed.imageUrl, playerNode?.imageUrl),
+        logo: playerClubLogo,
         teamName: playerClub || null,
+        teamId: playerTeamId,
         country: playerCountry || null,
       });
     }

@@ -2,6 +2,7 @@ import {
   decodeChatNavMarker,
   inferChatNavLinksFromQuestion,
   resolveChatNavAvatar,
+  resolveChatNavClubBadge,
   sanitizeChatNavLinks,
 } from '../chatNavLinks';
 
@@ -76,5 +77,25 @@ describe('chatNavLinks', () => {
     const links = inferChatNavLinksFromQuestion('معلومات عن النادي الاهلي', 'ar');
     expect(links.map((l) => l.id)).toEqual([8200, 8946]);
     expect(links.every((l) => l.choice && l.type === 'club')).toBe(true);
+  });
+
+  it('resolves a player club badge from logo or teamId', () => {
+    expect(
+      resolveChatNavClubBadge({
+        type: 'player',
+        id: 42,
+        label: 'Salah',
+        logo: 'https://img/liv.png',
+      }),
+    ).toBe('https://img/liv.png');
+    expect(
+      resolveChatNavClubBadge({
+        type: 'player',
+        id: 42,
+        label: 'Salah',
+        teamId: 1015,
+      }),
+    ).toEqual(expect.stringContaining('/Competitors/1015'));
+    expect(resolveChatNavClubBadge({ type: 'player', id: 42, label: 'Salah' })).toBeNull();
   });
 });

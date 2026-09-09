@@ -123,6 +123,31 @@ describe('chat-nav-links', () => {
     );
   });
 
+  it('attaches a club crest on player links for the overlay badge', () => {
+    const links = extractChatNavLinks(
+      [
+        JSON.stringify({
+          source: '365scores_profile',
+          athleteId: 42,
+          name: 'محمد صلاح',
+          club: 'ليفربول',
+          clubId: 1015,
+          clubLogo: 'https://img/liv.png',
+        }),
+      ],
+      ['search_football'],
+      'ar',
+      'محمد صلاح',
+    );
+    expect(links.find((l) => l.type === 'player')).toEqual(
+      expect.objectContaining({
+        id: 42,
+        logo: 'https://img/liv.png',
+        teamId: 1015,
+      }),
+    );
+  });
+
   it('builds a 365Scores headshot when the payload has an athleteId but no imageUrl', () => {
     const links = extractChatNavLinks(
       [JSON.stringify({ source: '365scores_profile', athleteId: 4576, name: 'Mohamed Salah' })],

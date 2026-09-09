@@ -1,13 +1,23 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { ChevronRight, Trophy, User, CalendarDays, CircleDot } from 'lucide-react-native';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Trophy,
+  User,
+  CalendarDays,
+  CircleDot,
+  Shield,
+} from 'lucide-react-native';
 import { useTranslation } from '../../src/i18n';
 import { pushPlayerCareer } from '../../utils/openPlayerProfile';
-import { resolveChatNavAvatar, type ChatNavLink } from '../../utils/chatNavLinks';
-import { getFlagByCountryName } from '../../data/localCountryFlags';
-import { getCountryFlagEmoji } from '../../utils/countryFlagUri';
+import {
+  resolveChatNavAvatar,
+  resolveChatNavClubBadge,
+  type ChatNavLink,
+} from '../../utils/chatNavLinks';
 import { isArabicText } from './chatTextUtils';
 import { chatColors } from './chatTheme';
 
@@ -25,13 +35,17 @@ const AR = {
   clubSub: 'بروفايل الفريق في 90Plus',
   matchSub: 'تفاصيل المباراة في 90Plus',
   matchesSub: 'صفحة المباريات في 90Plus',
-  view: 'شاهد البروفايل',
+  view: 'عرض البروفايل',
   visitPlayer: 'تابع بروفايل اللاعب',
   visitClub: 'تابع بروفايل النادي',
+  a11yPlayer: 'عرض بروفايل اللاعب',
+  a11yClub: 'عرض بروفايل النادي',
   choose: 'قصدك الأهلي المصري ولا السعودي؟',
 };
 
-const PHOTO = 56;
+const PHOTO = 64;
+const BADGE = 24;
+const CARD_BG = '#080410';
 
 function iconFor(type: ChatNavLink['type']) {
   const color = '#F5F3FF';
@@ -47,47 +61,106 @@ function visitLabel(link: ChatNavLink, preferAr: boolean, t: { chat: Record<stri
   return preferAr ? AR.view : t.chat.navViewProfile;
 }
 
-function ProfileMark({ link }: { link: ChatNavLink }) {
-  const media = resolveChatNavAvatar(link);
-  if (media.kind === 'player' || media.kind === 'club') {
-    return (
-      <View style={styles.photoBox} pointerEvents="none">
-        <Image
-          source={{ uri: media.uri }}
-          style={styles.photoFill}
-          contentFit={media.kind === 'club' ? 'contain' : 'cover'}
-          cachePolicy="memory-disk"
-        />
+function ctaLabel(preferAr: boolean, t: { chat: Record<string, string> }): string {
+  return preferAr ? AR.view : t.chat.navViewProfile;
+}
+
+function ClubBadge({ uri }: { uri: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const showImg = !!uri && !failed;
+  return (
+    <View
+      style={styles.clubBadge}
+      pointerEvents="none"
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    >
+      <View style={styles.clubBadgeInner}>
+        {showImg ? (
+          <Image
+            source={{ uri }}
+            style={styles.clubBadgeImg}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <Shield size={11} color="#F5C518" strokeWidth={2.2} />
+        )}
       </View>
-    );
-  }
-  return <View style={styles.photoBox}>{iconFor(link.type)}</View>;
+    </View>
+  );
 }
 
-function countryLabel(raw: string, preferAr: boolean): string {
-  const hit = getFlagByCountryName(raw);
-  if (!hit) return raw;
-  return preferAr ? hit.nameAr || hit.name : hit.name;
+function FollowAvatar({
+  photoUri,
+  photoKind,
+  badgeUri,
+}: {
+  photoUri: string | null;
+  photoKind: 'player' | 'club';
+  badgeUri: string | null;
+}) {
+  return (
+    <View style={styles.avatarWrap} pointerEvents="none" accessible={false}>
+      <View style={styles.avatarRing}>
+        {photoUri ? (
+          <Image
+            source={{ uri: photoUri }}
+            style={styles.photoFill}
+            contentFit={photoKind === 'club' ? 'contain' : 'cover'}
+            cachePolicy="memory-disk"
+          />
+        ) : (
+          iconFor(photoKind)
+        )}
+      </View>
+      {photoKind === 'player' ? <ClubBadge uri={badgeUri} /> : null}
+    </View>
+  );
 }
 
-function clubLine(name: string, preferAr: boolean): string {
-  const v = name.trim();
-  if (!v) return '';
-  if (/^(نادي|فريق|club|fc)\b/i.test(v)) return v;
-  return preferAr ? `نادي ${v}` : v;
-}
-
-function metaLine(link: ChatNavLink, preferAr: boolean): string {
-  const countryRaw = (link.country || '').trim();
-  const country = countryRaw ? countryLabel(countryRaw, preferAr) : '';
-  const flag = countryRaw ? getCountryFlagEmoji(countryRaw) : '';
-  const flagBit = flag && flag !== '🏳️' ? flag : '';
-  const place = [flagBit, country].filter(Boolean).join(' ');
-  const extra =
-    link.type === 'player'
-      ? clubLine(link.teamName || '', preferAr)
-      : (link.teamName || '').trim();
-  return [place, extra].filter(Boolean).join('  •  ');
+function FollowProfileCard({
+  link,
+  followLabel,
+  buttonLabel,
+  a11yLabel,
+  rtl,
+  onPress,
+}: {
+  link: ChatNavLink;
+  followLabel: string;
+  buttonLabel: string;
+  a11yLabel: string;
+  rtl: boolean;
+  onPress: () => void;
+}) {
+  const media = resolveChatNavAvatar(link);
+  const photoUri = media.kind === 'icon' ? null : media.uri;
+  const badgeUri = link.type === 'player' ? resolveChatNavClubBadge(link) : null;
+  const Chevron = rtl ? ChevronLeft : ChevronRight;
+  return (
+    <View style={[styles.profileCard, rtl && styles.profileCardRtl]}>
+      <FollowAvatar
+        photoUri={photoUri}
+        photoKind={link.type === 'club' ? 'club' : 'player'}
+        badgeUri={badgeUri}
+      />
+      <Text style={[styles.followLabel, rtl && styles.followLabelRtl]} numberOfLines={1}>
+        {followLabel}
+      </Text>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [styles.ctaBtn, rtl && styles.ctaBtnRtl, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel={a11yLabel}
+      >
+        <Text style={styles.ctaBtnText}>{buttonLabel}</Text>
+        <Chevron size={16} color="#F5F3FF" strokeWidth={2.6} />
+      </Pressable>
+    </View>
+  );
 }
 
 function isNamed(label: string, type: ChatNavLink['type']): boolean {
@@ -190,6 +263,7 @@ export function ChatNavLinks({ links, onChoose }: Props) {
           name: link.label,
           photo: avatar.kind === 'player' ? avatar.uri : link.photo,
           teamName: link.teamName,
+          teamLogo: resolveChatNavClubBadge(link),
           teamId: link.teamId,
         });
         return;
@@ -281,28 +355,21 @@ export function ChatNavLinks({ links, onChoose }: Props) {
             </Pressable>
           );
         }
-        const visit = visitLabel(link, copy.preferAr, t as { chat: Record<string, string> });
-        const meta = metaLine(link, copy.preferAr);
+        const follow = visitLabel(link, copy.preferAr, t as { chat: Record<string, string> });
+        const button = ctaLabel(copy.preferAr, t as { chat: Record<string, string> });
+        const a11y = copy.preferAr
+          ? (link.type === 'club' ? AR.a11yClub : AR.a11yPlayer)
+          : button;
         return (
-          <Pressable
+          <FollowProfileCard
             key={`${link.type}:${link.id ?? link.query ?? link.label}`}
+            link={link}
+            followLabel={follow}
+            buttonLabel={button}
+            a11yLabel={a11y}
+            rtl={copy.preferAr}
             onPress={() => onPress(link)}
-            style={({ pressed }) => [styles.profileCard, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel={`${copy.title}. ${visit}`}
-          >
-            <ProfileMark link={link} />
-            <View style={styles.profileText}>
-              <Text style={styles.profileEyebrow} numberOfLines={1}>{visit}</Text>
-              <Text style={styles.profileName} numberOfLines={1}>{copy.title}</Text>
-              {meta ? (
-                <Text style={styles.profileMeta} numberOfLines={1}>{meta}</Text>
-              ) : null}
-            </View>
-            <View style={styles.profileArrow}>
-              <ChevronRight size={18} color="#FFFFFF" strokeWidth={2.6} />
-            </View>
-          </Pressable>
+          />
         );
       })}
       {extraMatches.map((link) => {
@@ -385,69 +452,99 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'stretch',
-    gap: 12,
-    minHeight: 78,
-    paddingVertical: 10,
+    gap: 10,
+    minHeight: 88,
+    paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 18,
-    backgroundColor: 'rgba(46, 16, 92, 0.92)',
+    borderRadius: 16,
+    backgroundColor: CARD_BG,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(167,139,250,0.28)',
+    borderColor: 'rgba(124, 58, 237, 0.35)',
   },
-  profileText: {
+  profileCardRtl: {
+    flexDirection: 'row-reverse',
+  },
+  followLabel: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
-  },
-  profileEyebrow: {
     color: '#C4B5FD',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
+    textAlign: 'left',
   },
-  profileName: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  followLabelRtl: {
+    textAlign: 'right',
+  },
+  ctaBtn: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#7C3AED',
+  },
+  ctaBtnRtl: {
+    flexDirection: 'row-reverse',
+  },
+  ctaBtnText: {
+    color: '#F5F3FF',
+    fontSize: 13,
     fontWeight: '800',
   },
-  profileMeta: {
-    color: 'rgba(226,232,240,0.78)',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  profileArrow: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#7C3AED',
+  avatarWrap: {
+    width: PHOTO,
+    height: PHOTO,
     flexShrink: 0,
   },
-  photoBox: {
+  avatarRing: {
     width: PHOTO,
     height: PHOTO,
     borderRadius: PHOTO / 2,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 2,
+    borderColor: '#7C3AED',
+    backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    flexShrink: 0,
   },
   photoFill: {
     width: PHOTO,
     height: PHOTO,
   },
+  clubBadge: {
+    position: 'absolute',
+    left: -2,
+    bottom: -2,
+    width: BADGE + 4,
+    height: BADGE + 4,
+    borderRadius: (BADGE + 4) / 2,
+    backgroundColor: CARD_BG,
+    borderWidth: 2,
+    borderColor: CARD_BG,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clubBadgeInner: {
+    width: BADGE,
+    height: BADGE,
+    borderRadius: BADGE / 2,
+    borderWidth: 1,
+    borderColor: '#F5C518',
+    backgroundColor: '#12081C',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  clubBadgeImg: {
+    width: BADGE - 4,
+    height: BADGE - 4,
+  },
   choiceLogo: {
     width: 56,
     height: 56,
-  },
-  choiceCard: {
-    minHeight: 56,
-    paddingHorizontal: 6,
-    borderRadius: 14,
-    backgroundColor: 'rgba(124,58,237,0.16)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(167,139,250,0.28)',
   },
   pressed: {
     opacity: 0.88,
@@ -471,25 +568,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: 0.1,
-  },
-  subtitle: {
-    color: 'rgba(216,180,254,0.88)',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  viewPill: {
-    flexShrink: 0,
-    minHeight: 32,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-  },
-  viewPillText: {
-    color: '#F8FAFC',
-    fontSize: 13,
-    fontWeight: '800',
   },
   arrowWrap: {
     width: 30,

@@ -41,6 +41,18 @@ export function resolveChatNavAvatar(link: ChatNavLink): ChatNavAvatar {
   return { kind: 'icon' };
 }
 
+/** Club crest for the player-card overlay (logo URL or 365Scores teamId). */
+export function resolveChatNavClubBadge(link: ChatNavLink): string | null {
+  const fromLogo = httpUrl(link.logo);
+  if (fromLogo) return fromLogo;
+  const teamId = Number(link.teamId);
+  if (Number.isFinite(teamId) && teamId > 0) {
+    const uri = build365CompetitorLogo(teamId);
+    return uri || null;
+  }
+  return null;
+}
+
 const NAV_MARKER_RE = /\n?<!--90plus-nav:([\s\S]*?)-->\s*$/;
 
 function isRecord(v: unknown): v is Record<string, unknown> {

@@ -544,6 +544,15 @@ function build365ProfilePayload(
       }
     : null;
 
+  const clubIdRaw = Number(player.clubId ?? info?.teamId ?? info?.clubId ?? info?.raw?.clubId);
+  const clubId = Number.isFinite(clubIdRaw) && clubIdRaw > 0 ? clubIdRaw : null;
+  const clubLogo =
+    typeof profile.clubLogo === 'string' && /^https?:\/\//i.test(profile.clubLogo)
+      ? profile.clubLogo
+      : clubId
+        ? `https://imagecache.365scores.com/image/upload/f_png,w_80,h_80,c_limit,q_auto:eco,dpr_2/v1/Competitors/${clubId}`
+        : null;
+
   return {
     source: '365scores_profile',
     query: rawName,
@@ -551,6 +560,9 @@ function build365ProfilePayload(
     athleteId: player.athleteId,
     name: player.name || profile.name || player.shortName,
     club,
+    clubId,
+    clubLogo,
+    teamId: clubId,
     clubRaw: cleanClubName(profile.clubName ?? player.clubName),
     quickFacts,
     profile: {
