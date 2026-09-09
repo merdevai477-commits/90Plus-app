@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
   ChevronLeft,
@@ -21,7 +22,7 @@ import {
   resolveChatNavPlayerPhotos,
   type ChatNavLink,
 } from '../../utils/chatNavLinks';
-import { chatColors } from './chatTheme';
+import { chatColors, chatRadii } from './chatTheme';
 
 type Props = {
   links: ChatNavLink[];
@@ -32,8 +33,7 @@ const PHOTO = 64;
 const BADGE = 24;
 const CARD_BG = '#080410';
 const FALLBACK_BG = '#2A2438';
-const CTA_BG = '#7C3AED';
-const CTA_TEXT = '#EEEDFE';
+const CTA_TEXT = '#FFFFFF';
 
 function iconFor(type: ChatNavLink['type']) {
   const color = '#F5F3FF';
@@ -198,16 +198,21 @@ function FollowProfileCard({
       </Text>
       <Pressable
         onPress={onPress}
-        style={({ pressed }) => [
-          styles.ctaBtn,
-          { flexDirection: rtl ? 'row-reverse' : 'row' },
-          pressed && styles.ctaPressed,
-        ]}
+        style={({ pressed }) => [styles.ctaHit, pressed && styles.ctaPressed]}
         accessibilityRole="button"
         accessibilityLabel={a11yLabel}
       >
-        <Text style={styles.ctaBtnText}>{buttonLabel}</Text>
-        <Chevron size={15} color={CTA_TEXT} strokeWidth={2.6} />
+        <LinearGradient
+          colors={chatColors.userBubble}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.ctaFill, rtl ? styles.ctaFillRtl : styles.ctaFillLtr]}
+        >
+          <Text style={styles.ctaBtnText} numberOfLines={1}>
+            {buttonLabel}
+          </Text>
+          <Chevron size={14} color={CTA_TEXT} strokeWidth={2.8} />
+        </LinearGradient>
       </Pressable>
     </View>
   );
@@ -483,25 +488,48 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  ctaBtn: {
+  ctaHit: {
     flexShrink: 0,
+    borderRadius: chatRadii.lg,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#7C3AED',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.45,
+        shadowRadius: 8,
+      },
+      android: { elevation: 5 },
+      default: {},
+    }),
+  },
+  ctaFill: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    minHeight: 40,
+    minHeight: 42,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: CTA_BG,
+    borderRadius: chatRadii.lg,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  ctaFillLtr: {
+    flexDirection: 'row',
+  },
+  ctaFillRtl: {
+    flexDirection: 'row-reverse',
   },
   ctaPressed: {
     transform: [{ scale: 0.97 }],
-    opacity: 0.88,
+    opacity: 0.92,
   },
   ctaBtnText: {
     color: CTA_TEXT,
     fontSize: 13,
     fontWeight: '800',
+    includeFontPadding: false,
   },
   avatarWrap: {
     width: PHOTO,
