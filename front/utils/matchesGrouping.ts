@@ -1,6 +1,7 @@
 import type { Match } from '../components/Matches/matchCardUtils';
 import type { CountryGroup, GroupedMatches } from '../hooks/matchesData.types';
 import { getCountryFlagUri } from './countryFlagUri';
+import { matchLiveFingerprint, logLiveRenderFix } from './liveFixtureFreshness';
 import { sortCountryGroupsForMatches } from './matchesCountrySort';
 
 /** Fallback to full re-group when more than this fraction of rows changed (P1-5). */
@@ -76,6 +77,43 @@ export function groupMatchesByCountry(
   return sortCountryGroupsForMatches(raw);
 }
 
+export function flattenCountryGroupMatches(groups: CountryGroup[]): Map<string, Match> {
+  const map = new Map<string, Match>();
+  for (const cg of groups) {
+    for (const lg of cg.leagues) {
+      for (const m of lg.matches) {
+        map.set(m.id, m);
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * When overlay leaves changedIds empty (KEEP EQUAL, or no snapshots after eviction)
+ * the grouped tree can still hold stale Match objects from freeze-on-blur / PTR.
+ * Infer IDs whose user-visible live fingerprint differs from previousGroups.
+ */
+export function collectLiveFingerprintChangedIds(
+  matches: Match[],
+  previous: CountryGroup[],
+): Set<string> {
+  const prevById = flattenCountryGroupMatches(previous);
+  const changed = new Set<string>();
+  const seen = new Set<string>();
+  for (const m of matches) {
+    seen.add(m.id);
+    const prev = prevById.get(m.id);
+    if (!prev || matchLiveFingerprint(prev) !== matchLiveFingerprint(m)) {
+      changed.add(m.id);
+    }
+  }
+  for (const id of prevById.keys()) {
+    if (!seen.has(id)) changed.add(id);
+  }
+  return changed;
+}
+
 /**
  * Incremental country/league regroup when only a subset of match rows changed.
  * Preserves object identity for unaffected country and league groups.
@@ -90,19 +128,22 @@ export function groupMatchesByCountryIncremental(
     return groupMatchesByCountry(matches);
   }
 
-  // Nothing changed — preserve all group identities.
-  if (changedIds.size === 0) {
-    return previous;
+  let ids = changedIds;
+  if (ids.size === 0) {
+    ids = collectLiveFingerprintChangedIds(matches, previous);
+    if (ids.size === 0) {
+      return previous;
+    }
   }
 
-  if (changedIds.size > matches.length * INCREMENTAL_GROUP_CHANGE_RATIO) {
+  if (ids.size > matches.length * INCREMENTAL_GROUP_CHANGE_RATIO) {
     return groupMatchesByCountry(matches);
   }
 
   const matchById = new Map(matches.map((m) => [m.id, m]));
   const changedCountries = new Set<string>();
 
-  for (const id of changedIds) {
+  for (const id of ids) {
     const m = matchById.get(id);
     if (!m) {
       // Row disappeared — structure may have changed; full rebuild.
@@ -140,6 +181,12 @@ export function groupMatchesByCountryIncremental(
     // Full country regroup includes live-first league ordering.
     const rebuilt = groupMatchesByCountry(countryMatches);
     return rebuilt.find((c) => c.country === cg.country) ?? rebuilt[0] ?? cg;
+  });
+
+  logLiveRenderFix({
+    groupRebuilt: anyCountryRebuilt,
+    changedIdsSize: ids.size,
+    inferredFromFingerprint: changedIds.size === 0,
   });
 
   return anyCountryRebuilt ? nextCountries : previous;

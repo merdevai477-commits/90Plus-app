@@ -268,11 +268,11 @@ const GradientMatchCard: React.FC<GradientMatchCardProps> = ({
                   {/* Live Timer or Static Minute */}
                   {isLive && (
                     <Text style={styles.matchMinute}>
-                      {match.minute ??
-                        resolveLiveMinuteLabel(match.statusShort, match.elapsed, {
-                          startTimestamp: match.startTimestamp,
-                          extra: match.extra,
-                        }) ??
+                      {resolveLiveMinuteLabel(match.statusShort, match.elapsed, {
+                        startTimestamp: match.startTimestamp,
+                        extra: match.extra,
+                      }) ??
+                        match.minute ??
                         match.statusShort ??
                         'LIVE'}
                     </Text>

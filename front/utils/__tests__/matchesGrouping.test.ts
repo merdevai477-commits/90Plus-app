@@ -137,4 +137,38 @@ describe('matchesGrouping incremental (P1-5)', () => {
     const groups = groupMatchesByLeague(matches);
     expect(groups[0].matches[0].id).toBe('2');
   });
+
+  it('rebuilds the live row when changedIds is empty but fingerprint advanced (PTR/freeze)', () => {
+    const stale = makeMatch('4812183', {
+      leagueId: 39,
+      leagueName: 'EPL',
+      country: 'England',
+      status: 'live',
+    });
+    stale.elapsed = 50;
+    stale.minute = "50'";
+    stale.statusShort = '2H';
+    stale.score = { home: 1, away: 2 };
+
+    const fresh = { ...stale, elapsed: 64, minute: "64'" };
+    const spain = makeMatch('9', { leagueId: 2, leagueName: 'La Liga', country: 'Spain' });
+    const italy = makeMatch('10', { leagueId: 3, leagueName: 'Serie A', country: 'Italy' });
+    const france = makeMatch('11', { leagueId: 4, leagueName: 'Ligue 1', country: 'France' });
+    const germany = makeMatch('12', { leagueId: 5, leagueName: 'Bundesliga', country: 'Germany' });
+    const previous = groupMatchesByCountry([stale, spain, italy, france, germany]);
+    const spainPrev = previous.find((c) => c.country === 'Spain');
+
+    const next = groupMatchesByCountryIncremental(
+      [fresh, spain, italy, france, germany],
+      new Set(),
+      previous,
+    );
+    const grouped = next
+      .flatMap((c) => c.leagues)
+      .flatMap((l) => l.matches)
+      .find((m) => m.id === '4812183');
+    expect(grouped?.elapsed).toBe(64);
+    expect(grouped?.minute).toBe("64'");
+    expect(next.find((c) => c.country === 'Spain')).toBe(spainPrev);
+  });
 });

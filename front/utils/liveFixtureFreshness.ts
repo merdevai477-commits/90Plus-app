@@ -6,6 +6,7 @@
 
 import type { Fixture } from '../services/apiFootball';
 import type { Match } from '../components/Matches/matchCardUtils';
+import { formatLiveMinuteDisplay } from './formatLiveMinuteDisplay';
 import { FINISHED_STATUS_SHORTS } from '../src/store/liveFixtureStore.types';
 
 export type LiveClockView = {
@@ -35,6 +36,10 @@ const LIVE_MERGE_LOG =
   process.env.EXPO_PUBLIC_LIVE_MERGE_FIX_LOG === '1' ||
   process.env.EXPO_PUBLIC_LIVE_MERGE_FIX_LOG === 'true';
 
+const LIVE_RENDER_LOG =
+  process.env.EXPO_PUBLIC_LIVE_RENDER_FIX_LOG === '1' ||
+  process.env.EXPO_PUBLIC_LIVE_RENDER_FIX_LOG === 'true';
+
 export function logLiveMergeFix(
   fixtureId: number,
   existing: LiveClockView | null,
@@ -59,6 +64,38 @@ export function logLiveMergeFix(
       reason: decision.reason,
     }),
   );
+}
+
+/** Temporary PTR/render-pipeline diagnostic. Default off. */
+export function logLiveRenderFix(fields: Record<string, unknown>): void {
+  if (!LIVE_RENDER_LOG) return;
+  console.info(
+    JSON.stringify({
+      tag: 'LIVE-RENDER-FIX',
+      t: new Date().toISOString(),
+      ...fields,
+    }),
+  );
+}
+
+/** Cheap fingerprint for list-row live fields (status + score + elapsed/extra/minute). */
+export function matchLiveFingerprint(row: Match): string {
+  return `${row.status}|${row.score?.home ?? ''}|${row.score?.away ?? ''}|${row.elapsed ?? ''}|${row.extra ?? ''}|${row.minute ?? ''}|${row.statusShort ?? ''}|${row.corners?.home ?? ''}|${row.corners?.away ?? ''}`;
+}
+
+/**
+ * Keep baked `minute` aligned with elapsed/status/extra so MatchRow cannot
+ * show a stale label. Render also prefers resolveLiveMinuteLabel(elapsed) first.
+ */
+export function withAuthoritativeLiveMinute(row: Match): Match {
+  if (row.status !== 'live') return row;
+  const label = formatLiveMinuteDisplay(
+    row.statusShort ?? '',
+    row.elapsed,
+    row.extra,
+  );
+  if (!label || row.minute === label) return row;
+  return { ...row, minute: label };
 }
 
 function normalizeShort(short: string | null | undefined): string {
@@ -225,7 +262,7 @@ export function mergeIncomingLiveOntoFixture(existing: Fixture, incoming: Fixtur
 
 /** Overlay a newer snapshot's live fields onto the calendar row (keep logos/league/crowd). */
 export function applyLiveClockToMatch(row: Match, live: Match): Match {
-  return {
+  return withAuthoritativeLiveMinute({
     ...row,
     score: live.score,
     status: live.status,
@@ -233,5 +270,5 @@ export function applyLiveClockToMatch(row: Match, live: Match): Match {
     elapsed: live.elapsed,
     extra: live.extra,
     minute: live.minute,
-  };
+  });
 }

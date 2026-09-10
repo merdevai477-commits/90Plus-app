@@ -31,7 +31,7 @@ import FavoritesTab from '../../components/Matches/FavoritesTab';
 import { useFavoritesFeed, type FavoritesListFixture } from '../../hooks/useFavoritesFeed';
 import type { CountryGroup } from '../../hooks/useMatchesData';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
-import { fetchLeagueMatchesByDate } from '../../components/Matches/leagueApiUtils';
+import { fetchLeagueMatchesByDate, resolveLiveMinuteLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
 import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
 import { CrowdOddsStrip } from '../../components/common/CrowdOddsStrip';
 import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModal';
@@ -44,7 +44,6 @@ import {
 } from '../../constants/worldCup';
 import { getAppFeaturesPollPeriodMs } from '../../utils/appFeaturesPoll';
 import type { ImageSource } from 'expo-image';
-import { resolveLiveMinuteLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import { useSecondTick } from '../../hooks/useSecondTick';
 import {
@@ -470,11 +469,11 @@ const MatchRow = memo(function MatchRow({
             {fixture.live ? (
               <View style={styles.liveMetaCol}>
                 <Text style={[styles.minuteTxtLive, inStoppage && styles.minuteTxtStoppage]}>
-                  {fixture.minute ??
-                    resolveLiveMinuteLabel(fixture.statusShort, fixture.elapsed, {
-                      startTimestamp: anchoredStart,
-                      extra: fixture.extra,
-                    }) ??
+                  {resolveLiveMinuteLabel(fixture.statusShort, fixture.elapsed, {
+                    startTimestamp: anchoredStart,
+                    extra: fixture.extra,
+                  }) ??
+                    fixture.minute ??
                     fixture.statusShort ??
                     t('matches.status.live')}
                 </Text>

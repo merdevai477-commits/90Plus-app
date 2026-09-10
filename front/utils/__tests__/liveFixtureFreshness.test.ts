@@ -4,6 +4,7 @@ import {
   clockFromMatch,
   decideLiveMerge,
   mergeIncomingLiveOntoFixture,
+  withAuthoritativeLiveMinute,
 } from '../liveFixtureFreshness';
 import type { Fixture } from '../../services/apiFootball';
 import type { Match } from '../../components/Matches/matchCardUtils';
@@ -238,5 +239,42 @@ describe('clock helpers', () => {
     expect(next.score.home).toBe(1);
     expect(next.homeTeam.logo).toBe('logo-h');
     expect(next.crowdPrediction?.totalVotes).toBe(10);
+  });
+});
+
+describe('withAuthoritativeLiveMinute', () => {
+  it('does not let baked minute 50 win over elapsed 64', () => {
+    const row: Match = {
+      id: '4812183',
+      homeTeam: { name: 'H', logo: 'h.png' },
+      awayTeam: { name: 'A', logo: 'a.png' },
+      score: { home: 1, away: 2 },
+      status: 'live',
+      statusShort: '2H',
+      elapsed: 64,
+      extra: null,
+      minute: "50'",
+      league: { id: 39, name: 'EPL', logo: 'lg.png', country: 'England' },
+    };
+    const next = withAuthoritativeLiveMinute(row);
+    expect(next.elapsed).toBe(64);
+    expect(next.minute).toBe("64'");
+    expect(next.homeTeam.logo).toBe('h.png');
+  });
+
+  it('formats 2H stoppage from extra while elapsed stays 90', () => {
+    const row: Match = {
+      id: '1',
+      homeTeam: { name: 'H', logo: '' },
+      awayTeam: { name: 'A', logo: '' },
+      score: { home: 0, away: 0 },
+      status: 'live',
+      statusShort: '2H',
+      elapsed: 90,
+      extra: 4,
+      minute: "90'",
+      league: { id: 1, name: 'L', logo: '' },
+    };
+    expect(withAuthoritativeLiveMinute(row).minute).toBe("90+4'");
   });
 });

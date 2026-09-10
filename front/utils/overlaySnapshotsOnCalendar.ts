@@ -4,6 +4,7 @@
  * Also returns which row IDs changed (P1-5 incremental grouping).
  *
  * A stale in-memory snapshot must not bury a newer Redis/calendar/live-feed row.
+ * REPLACE (calendar newer) must mark changedIds so grouping rebuilds FlashList rows.
  */
 import type { Match } from '../components/Matches/matchCardUtils';
 import type { LiveFixtureSnapshot } from '../src/store/liveFixtureStore.types';
@@ -13,12 +14,12 @@ import {
   clockFromMatch,
   decideLiveMerge,
   logLiveMergeFix,
+  logLiveRenderFix,
+  matchLiveFingerprint,
+  withAuthoritativeLiveMinute,
 } from './liveFixtureFreshness';
 
-/** Cheap fingerprint for list-row live fields (status + score + elapsed/extra). */
-export function matchLiveFingerprint(row: Match): string {
-  return `${row.status}|${row.score?.home ?? ''}|${row.score?.away ?? ''}|${row.elapsed ?? ''}|${row.extra ?? ''}|${row.minute ?? ''}|${row.statusShort ?? ''}`;
-}
+export { matchLiveFingerprint } from './liveFixtureFreshness';
 
 export type OverlayResult = {
   rows: Match[];
@@ -58,8 +59,24 @@ export function overlaySnapshotsOnCalendarDetailed(
       logLiveMergeFix(id, snapClock, rowClock, decision);
 
       // Calendar/live-feed row is newer than the in-memory snapshot — keep it.
+      // Always mark changedIds so incremental grouping cannot reuse a stale Match.
       if (decision.action === 'REPLACE') {
-        return row;
+        const fresh = withAuthoritativeLiveMinute(row);
+        anyChanged = true;
+        changedIds.add(row.id);
+        logLiveRenderFix({
+          fixtureId: id,
+          decision: decision.action,
+          reason: decision.reason,
+          existingElapsed: snapClock.elapsed,
+          incomingElapsed: rowClock.elapsed,
+          changedIdsContains: true,
+          renderedElapsed: fresh.elapsed ?? null,
+          renderedMinute: fresh.minute ?? null,
+          renderedScore: `${fresh.score?.home ?? 0}-${fresh.score?.away ?? 0}`,
+          renderedStatus: fresh.statusShort ?? null,
+        });
+        return fresh;
       }
 
       if (matchLiveFingerprint(row) === matchLiveFingerprint(overlaid)) {
@@ -67,7 +84,20 @@ export function overlaySnapshotsOnCalendarDetailed(
       }
       anyChanged = true;
       changedIds.add(row.id);
-      return applyLiveClockToMatch(row, overlaid);
+      const kept = applyLiveClockToMatch(row, overlaid);
+      logLiveRenderFix({
+        fixtureId: id,
+        decision: decision.action,
+        reason: decision.reason,
+        existingElapsed: snapClock.elapsed,
+        incomingElapsed: rowClock.elapsed,
+        changedIdsContains: true,
+        renderedElapsed: kept.elapsed ?? null,
+        renderedMinute: kept.minute ?? null,
+        renderedScore: `${kept.score?.home ?? 0}-${kept.score?.away ?? 0}`,
+        renderedStatus: kept.statusShort ?? null,
+      });
+      return kept;
     }
     return row;
   });

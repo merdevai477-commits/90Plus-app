@@ -28,7 +28,7 @@ jest.mock('../../src/utils/snapshotToMatchRow', () => ({
   }),
 }));
 
-import { overlaySnapshotsOnCalendar } from '../overlaySnapshotsOnCalendar';
+import { overlaySnapshotsOnCalendar, overlaySnapshotsOnCalendarDetailed } from '../overlaySnapshotsOnCalendar';
 import type { Match } from '../../components/Matches/matchCardUtils';
 import type { LiveFixtureSnapshot } from '../../src/store/liveFixtureStore.types';
 
@@ -186,6 +186,79 @@ describe('overlaySnapshotsOnCalendar', () => {
     expect(next[0].score.home).toBe(1);
   });
 
+  it('REPLACE (calendar 64 vs snapshot 50) marks changedIds', () => {
+    const calendar = [
+      makeMatch({
+        id: '4812183',
+        status: 'live',
+        statusShort: '2H',
+        score: { home: 1, away: 2 },
+        elapsed: 64,
+        minute: "64'",
+      }),
+    ];
+    const result = overlaySnapshotsOnCalendarDetailed(calendar, {
+      4812183: makeSnap(4812183, { home: 1, away: 2 }, '2H', 50),
+    });
+    expect(result.rows[0].elapsed).toBe(64);
+    expect(result.changedIds.has('4812183')).toBe(true);
+    expect(result.anyChanged).toBe(true);
+  });
+
+  it('KEEP with score fingerprint change marks changedIds', () => {
+    const calendar = [
+      makeMatch({
+        id: '100',
+        status: 'live',
+        statusShort: '1H',
+        score: { home: 0, away: 0 },
+        elapsed: 25,
+        minute: "25'",
+      }),
+    ];
+    const result = overlaySnapshotsOnCalendarDetailed(calendar, {
+      100: makeSnap(100, { home: 1, away: 0 }, '1H', 25),
+    });
+    expect(result.rows[0].score.home).toBe(1);
+    expect(result.changedIds.has('100')).toBe(true);
+  });
+
+  it('KEEP EQUAL does not mark changedIds', () => {
+    const calendar = [
+      makeMatch({
+        id: '100',
+        score: { home: 1, away: 0 },
+        elapsed: 45,
+        statusShort: '1H',
+        minute: "45'",
+      }),
+    ];
+    const result = overlaySnapshotsOnCalendarDetailed(calendar, {
+      100: makeSnap(100, { home: 1, away: 0 }, '1H', 45),
+    });
+    expect(result.changedIds.size).toBe(0);
+    expect(result.rows).toBe(calendar);
+  });
+
+  it('older snapshot cannot regress calendar elapsed (KEEP) but REPLACE-path is not used', () => {
+    const calendar = [
+      makeMatch({
+        id: '4783857',
+        status: 'live',
+        statusShort: '1H',
+        score: { home: 1, away: 0 },
+        elapsed: 64,
+        minute: "64'",
+      }),
+    ];
+    const result = overlaySnapshotsOnCalendarDetailed(calendar, {
+      4783857: makeSnap(4783857, { home: 0, away: 0 }, '1H', 50),
+    });
+    expect(result.rows[0].elapsed).toBe(64);
+    expect(result.rows[0].score.home).toBe(1);
+    expect(result.changedIds.has('4783857')).toBe(true);
+  });
+
   it('still overlays a newer snapshot onto an older calendar row', () => {
     const calendar = [
       makeMatch({
@@ -211,6 +284,7 @@ describe('overlaySnapshotsOnCalendar', () => {
         status: 'live',
         statusShort: 'HT',
         elapsed: 45,
+        minute: 'HT',
         score: { home: 0, away: 0 },
       }),
     ];
@@ -219,5 +293,23 @@ describe('overlaySnapshotsOnCalendar', () => {
     });
     expect(next[0]).toBe(calendar[0]);
     expect(next[0].statusShort).toBe('HT');
+  });
+
+  it('1H 45 → calendar HT 45 marks changedIds (period transition)', () => {
+    const calendar = [
+      makeMatch({
+        id: '100',
+        status: 'live',
+        statusShort: 'HT',
+        elapsed: 45,
+        minute: 'HT',
+        score: { home: 0, away: 0 },
+      }),
+    ];
+    const result = overlaySnapshotsOnCalendarDetailed(calendar, {
+      100: makeSnap(100, { home: 0, away: 0 }, '1H', 45),
+    });
+    expect(result.rows[0].statusShort).toBe('HT');
+    expect(result.changedIds.has('100')).toBe(true);
   });
 });
