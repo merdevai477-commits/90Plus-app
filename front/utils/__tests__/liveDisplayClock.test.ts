@@ -112,10 +112,79 @@ describe('liveDisplayClock presentation', () => {
       nowMs: T0 + 30_000,
       anchorMs: T0,
     });
-    expect(a.label).toBe('45:00');
-    expect(b.label).toBe('45:00');
+    expect(a.label).toBe('HT');
+    expect(b.label).toBe('HT');
     expect(a.ticking).toBe(false);
     expect(liveDisplayClockShouldTick({ statusShort: 'HT', elapsed: 45 })).toBe(false);
+  });
+
+  it('TEST A — 1H 44:59 → HT displays HT immediately', () => {
+    expect(
+      clock({
+        statusShort: '1H',
+        elapsed: 44,
+        fallbackLabel: "44'",
+        nowMs: T0 + 59_000,
+        anchorMs: T0,
+      }).label,
+    ).toBe('44:59');
+    const ht = clock({
+      statusShort: 'HT',
+      elapsed: 45,
+      fallbackLabel: 'HT',
+      nowMs: T0 + 60_000,
+      anchorMs: T0,
+    });
+    expect(ht.label).toBe('HT');
+    expect(ht.ticking).toBe(false);
+    expect(ht.displaySeconds).toBeNull();
+    expect(liveDisplayClockShouldTick({ statusShort: 'HT', elapsed: 45 })).toBe(false);
+  });
+
+  it('TEST B — LIVE 45:00 → HT is HT, not 45:00', () => {
+    expect(
+      clock({
+        statusShort: 'LIVE',
+        elapsed: 45,
+        fallbackLabel: "45'",
+        nowMs: T0,
+        anchorMs: T0,
+      }).label,
+    ).toBe('45:00');
+    const ht = clock({
+      statusShort: 'HT',
+      elapsed: 45,
+      fallbackLabel: "45'",
+      nowMs: T0 + 1_000,
+      anchorMs: T0,
+    });
+    expect(ht.label).toBe('HT');
+    expect(ht.label).not.toBe('45:00');
+    expect(ht.ticking).toBe(false);
+  });
+
+  it('TEST C — 1H stoppage 45+N → HT displays HT', () => {
+    const stoppage = clock({
+      statusShort: '1H',
+      elapsed: 49,
+      extra: 4,
+      fallbackLabel: "45+4'",
+      nowMs: T0 + 12_000,
+      anchorMs: T0,
+    });
+    expect(stoppage.label).toBe("45+4'");
+    expect(stoppage.ticking).toBe(false);
+    const ht = clock({
+      statusShort: 'HT',
+      elapsed: 49,
+      extra: 4,
+      fallbackLabel: "45+4'",
+      nowMs: T0 + 15_000,
+      anchorMs: T0,
+    });
+    expect(ht.label).toBe('HT');
+    expect(ht.ticking).toBe(false);
+    expect(liveDisplayClockShouldTick({ statusShort: 'HT', elapsed: 49, extra: 4 })).toBe(false);
   });
 
   it('TEST 6 — HT → 2H 46 re-anchors and ticks', () => {
@@ -126,6 +195,7 @@ describe('liveDisplayClock presentation', () => {
       nowMs: T0,
       anchorMs: T0,
     });
+    expect(ht.label).toBe('HT');
     expect(ht.ticking).toBe(false);
     const resumeAt = T0 + 60_000;
     const next = nextLiveDisplayAnchorMs({
@@ -154,6 +224,15 @@ describe('liveDisplayClock presentation', () => {
         anchorMs: next.anchorMs,
       }).label,
     ).toBe('46:00');
+    expect(
+      clock({
+        statusShort: '2H',
+        elapsed: 46,
+        fallbackLabel: "46'",
+        nowMs: next.anchorMs + 1_000,
+        anchorMs: next.anchorMs,
+      }).label,
+    ).toBe('46:01');
     expect(
       clock({
         statusShort: '2H',
@@ -281,6 +360,25 @@ describe('liveDisplayClock presentation', () => {
     expect(match.statusShort).toBe('2H');
     expect(match.score.home).toBe(1);
     expect(copy.elapsed).toBe(51);
+
+    const htMatch = Object.freeze({
+      id: '2',
+      elapsed: 45,
+      statusShort: 'HT',
+      extra: 4 as number | null,
+    });
+    clock({
+      fixtureId: htMatch.id,
+      statusShort: htMatch.statusShort,
+      elapsed: htMatch.elapsed,
+      extra: htMatch.extra,
+      fallbackLabel: 'HT',
+      nowMs: T0 + 5_000,
+      anchorMs: T0,
+    });
+    expect(htMatch.elapsed).toBe(45);
+    expect(htMatch.statusShort).toBe('HT');
+    expect(htMatch.extra).toBe(4);
   });
 
   it('does not call incremental grouping while computing display time', () => {
@@ -288,6 +386,13 @@ describe('liveDisplayClock presentation', () => {
     clock({ nowMs: T0, anchorMs: T0 });
     clock({ nowMs: T0 + 1_000, anchorMs: T0 });
     clock({ nowMs: T0 + 2_000, anchorMs: T0 });
+    clock({
+      statusShort: 'HT',
+      elapsed: 45,
+      fallbackLabel: 'HT',
+      nowMs: T0 + 3_000,
+      anchorMs: T0,
+    });
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });

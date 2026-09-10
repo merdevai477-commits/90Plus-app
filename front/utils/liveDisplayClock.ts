@@ -125,7 +125,7 @@ export function resolveLiveDisplayClock(
   const status = normalizeStatus(input.statusShort);
 
   if (status === 'HT') {
-    return { label: '45:00', ticking: false, mode: 'frozen', displaySeconds: 45 * 60 };
+    return { label: 'HT', ticking: false, mode: 'frozen', displaySeconds: null };
   }
   if (status === 'BT') {
     return { label: 'BT', ticking: false, mode: 'frozen', displaySeconds: null };
