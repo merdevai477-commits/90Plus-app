@@ -32,6 +32,7 @@ import { useFavoritesFeed, type FavoritesListFixture } from '../../hooks/useFavo
 import type { CountryGroup } from '../../hooks/useMatchesData';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } from '../../utils/i18nHelpers';
 import { fetchLeagueMatchesByDate, resolveLiveMinuteLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
+import { MatchListLiveClock } from '../../components/Matches/MatchListLiveClock';
 import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
 import { CrowdOddsStrip } from '../../components/common/CrowdOddsStrip';
 import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModal';
@@ -468,15 +469,24 @@ const MatchRow = memo(function MatchRow({
             )}
             {fixture.live ? (
               <View style={styles.liveMetaCol}>
-                <Text style={[styles.minuteTxtLive, inStoppage && styles.minuteTxtStoppage]}>
-                  {resolveLiveMinuteLabel(fixture.statusShort, fixture.elapsed, {
-                    startTimestamp: anchoredStart,
-                    extra: fixture.extra,
-                  }) ??
+                <MatchListLiveClock
+                  fixtureId={fixture.id}
+                  statusShort={fixture.statusShort}
+                  elapsed={fixture.elapsed}
+                  extra={fixture.extra}
+                  fallbackLabel={
+                    resolveLiveMinuteLabel(fixture.statusShort, fixture.elapsed, {
+                      startTimestamp: anchoredStart,
+                      extra: fixture.extra,
+                    }) ??
                     fixture.minute ??
                     fixture.statusShort ??
-                    t('matches.status.live')}
-                </Text>
+                    t('matches.status.live')
+                  }
+                  inStoppage={inStoppage}
+                  style={styles.minuteTxtLive}
+                  stoppageStyle={styles.minuteTxtStoppage}
+                />
                 {fixture.corners ? (
                   <Text style={styles.cornersTxt} numberOfLines={1}>
                     {t('matchDetails.corners')} {fixture.corners.home}-{fixture.corners.away}

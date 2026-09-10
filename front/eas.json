@@ -18,7 +18,8 @@
         "SENTRY_DISABLE_AUTO_UPLOAD": "true",
         "SENTRY_ALLOW_FAILURE": "true",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuOTBwbHVzLnBybyQ",
-        "EXPO_PUBLIC_API_URL": "https://90plus.pro/api"
+        "EXPO_PUBLIC_API_URL": "https://90plus.pro/api",
+        "EXPO_PUBLIC_LIVE_CLOCK_SECONDS": "1"
       }
     },
     "preview": {
@@ -36,6 +37,7 @@
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuOTBwbHVzLnBybyQ",
         "EXPO_PUBLIC_API_URL": "https://90plus.pro/api",
         "EXPO_PUBLIC_SHARE_BASE_URL": "https://90plus.pro",
+        "EXPO_PUBLIC_LIVE_CLOCK_SECONDS": "1",
         "EXPO_USE_PRECOMPILED_MODULES": "0"
       }
     },
