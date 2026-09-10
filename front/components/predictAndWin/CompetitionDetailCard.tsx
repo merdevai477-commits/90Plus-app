@@ -27,6 +27,7 @@ import { useTranslation } from '../../src/i18n';
 import type { CompetitionInfo } from '../../services/competitions.service';
 import { prizeArtSource } from './PrizeCategoryGrid';
 import { shouldShowSponsorLogo, sponsorLogoSource } from './pwAssets';
+import { SponsorCountryFlag } from './SponsorCountryFlag';
 import { sponsorContactLine } from './sponsorPhone';
 import {
   IconFacebook,
@@ -389,6 +390,7 @@ export function CompetitionDetailCard({
             >
               {sponsor.address}
             </Text>
+            <SponsorCountryFlag sponsor={sponsor} size={s(16)} />
             <IconLocation width={s(14)} height={s(14)} />
           </View>
         ) : null}
@@ -680,7 +682,7 @@ const styles = {
     width: '100%' as const,
     alignItems: 'center' as const,
     justifyContent: 'flex-end' as const,
-    gap: 2,
+    gap: 4,
   },
   chip: {
     position: 'absolute' as const,

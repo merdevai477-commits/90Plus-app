@@ -44,6 +44,22 @@ export function buildMapPickerHtml(apiKey: string, labels: { myLocation: string 
 
       document.getElementById('myLoc').textContent = MY_LOC_LABEL;
 
+      function countryCodeFromResults(results) {
+        if (!results) return null;
+        for (var i = 0; i < results.length; i++) {
+          var comps = results[i].address_components || [];
+          for (var j = 0; j < comps.length; j++) {
+            var types = comps[j].types || [];
+            for (var t = 0; t < types.length; t++) {
+              if (types[t] === 'country') {
+                return comps[j].short_name || null;
+              }
+            }
+          }
+        }
+        return null;
+      }
+
       function reverseGeocode(latLng) {
         if (!geocoder) return;
         geocoder.geocode({ location: latLng }, function (results, status) {
@@ -53,6 +69,7 @@ export function buildMapPickerHtml(apiKey: string, labels: { myLocation: string 
               address: results[0].formatted_address,
               lat: latLng.lat(),
               lng: latLng.lng(),
+              countryCode: countryCodeFromResults(results),
             });
           } else {
             post({ type: 'error', code: 'GEOCODE' });

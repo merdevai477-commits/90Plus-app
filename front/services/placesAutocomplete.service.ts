@@ -5,7 +5,20 @@ export interface PlaceSuggestion {
   description: string;
 }
 
+export interface PlaceAddressDetails {
+  address: string;
+  countryCode: string | null;
+}
+
 type PlacesApiStatus = 'OK' | 'ZERO_RESULTS' | string;
+
+function countryCodeFromComponents(
+  components?: Array<{ short_name?: string; types?: string[] }>,
+): string | null {
+  const hit = components?.find((c) => c.types?.includes('country'));
+  const code = hit?.short_name?.trim();
+  return code || null;
+}
 
 async function placesJson<T>(url: string): Promise<T | null> {
   try {
@@ -44,10 +57,10 @@ export async function fetchPlaceSuggestions(
   }));
 }
 
-export async function fetchPlaceFormattedAddress(
+export async function fetchPlaceAddressDetails(
   placeId: string,
   language = 'ar',
-): Promise<string | null> {
+): Promise<PlaceAddressDetails | null> {
   const key = getGooglePlacesApiKey();
   if (!key || !placeId) return null;
 
@@ -55,13 +68,29 @@ export async function fetchPlaceFormattedAddress(
     place_id: placeId,
     key,
     language,
-    fields: 'formatted_address',
+    fields: 'formatted_address,address_components',
   });
   const data = await placesJson<{
     status: PlacesApiStatus;
-    result?: { formatted_address?: string };
+    result?: {
+      formatted_address?: string;
+      address_components?: Array<{ short_name?: string; types?: string[] }>;
+    };
   }>(`https://maps.googleapis.com/maps/api/place/details/json?${params}`);
 
   if (!data || data.status !== 'OK') return null;
-  return data.result?.formatted_address?.trim() ?? null;
+  const address = data.result?.formatted_address?.trim();
+  if (!address) return null;
+  return {
+    address,
+    countryCode: countryCodeFromComponents(data.result?.address_components),
+  };
+}
+
+export async function fetchPlaceFormattedAddress(
+  placeId: string,
+  language = 'ar',
+): Promise<string | null> {
+  const details = await fetchPlaceAddressDetails(placeId, language);
+  return details?.address ?? null;
 }

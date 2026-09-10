@@ -24,8 +24,10 @@ import { PW, usePWDirection, usePWFonts, usePWScale } from './theme';
 type MapPickerMessage =
   | { type: 'ready' }
   | { type: 'locateMe' }
-  | { type: 'address'; address: string; lat: number; lng: number }
+  | { type: 'address'; address: string; lat: number; lng: number; countryCode?: string | null }
   | { type: 'error'; code: string };
+
+export type StoreAddressMeta = { countryCode?: string | null };
 
 export function PWMapPickerModal({
   visible,
@@ -36,8 +38,8 @@ export function PWMapPickerModal({
 }: {
   visible: boolean;
   onClose: () => void;
-  onConfirm: (address: string) => void;
-  onAddressChange?: (address: string) => void;
+  onConfirm: (address: string, meta?: StoreAddressMeta) => void;
+  onAddressChange?: (address: string, meta?: StoreAddressMeta) => void;
   labels: {
     title: string;
     close: string;
@@ -61,6 +63,7 @@ export function PWMapPickerModal({
   const permissionPromptedRef = useRef(false);
   const apiKey = getGoogleMapsJsApiKey();
   const [preview, setPreview] = useState('');
+  const [previewCountryCode, setPreviewCountryCode] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
@@ -72,6 +75,7 @@ export function PWMapPickerModal({
 
   const reset = () => {
     setPreview('');
+    setPreviewCountryCode(null);
     setMapReady(false);
     setError(null);
     setLocating(false);
@@ -160,8 +164,9 @@ export function PWMapPickerModal({
       }
       if (msg.type === 'address') {
         setPreview(msg.address);
+        setPreviewCountryCode(msg.countryCode?.trim() || null);
         setError(null);
-        onAddressChange?.(msg.address);
+        onAddressChange?.(msg.address, { countryCode: msg.countryCode?.trim() || null });
         return;
       }
       if (msg.type === 'error') {
@@ -286,7 +291,7 @@ export function PWMapPickerModal({
           <Pressable
             onPress={() => {
               if (!preview.trim()) return;
-              onConfirm(preview.trim());
+              onConfirm(preview.trim(), { countryCode: previewCountryCode });
               reset();
             }}
             disabled={!preview.trim()}

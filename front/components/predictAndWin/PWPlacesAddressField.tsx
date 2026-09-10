@@ -11,12 +11,13 @@ import { useDebouncedCallback } from 'use-debounce';
 
 import { hasGooglePlacesApiKey } from './googlePlaces';
 import {
-  fetchPlaceFormattedAddress,
+  fetchPlaceAddressDetails,
   fetchPlaceSuggestions,
   type PlaceSuggestion,
 } from '../../services/placesAutocomplete.service';
 import { PWBox } from './fields';
 import { usePWDirection, usePWFonts, usePWScale, PW } from './theme';
+import type { StoreAddressMeta } from './PWMapPickerModal';
 
 export function PWPlacesAddressField({
   value,
@@ -25,7 +26,7 @@ export function PWPlacesAddressField({
   icon,
 }: {
   value: string;
-  onChangeText: (t: string) => void;
+  onChangeText: (t: string, meta?: StoreAddressMeta) => void;
   placeholder?: string;
   icon?: React.ReactNode;
 }) {
@@ -71,8 +72,12 @@ export function PWPlacesAddressField({
     async (item: PlaceSuggestion) => {
       setSuggestions([]);
       setFocused(false);
-      const detailed = await fetchPlaceFormattedAddress(item.placeId);
-      onChangeText(detailed ?? item.description);
+      const detailed = await fetchPlaceAddressDetails(item.placeId);
+      if (detailed) {
+        onChangeText(detailed.address, { countryCode: detailed.countryCode });
+        return;
+      }
+      onChangeText(item.description);
     },
     [onChangeText],
   );

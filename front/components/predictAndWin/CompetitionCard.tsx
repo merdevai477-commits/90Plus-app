@@ -22,6 +22,7 @@ import { CompetitionDetailCard } from './CompetitionDetailCard';
 import { usePWLocalize } from './localize';
 import { prizeArtSource } from './PrizeCategoryGrid';
 import { shouldShowSponsorLogo, sponsorLogoSource, usesDefaultStoreLogo } from './pwAssets';
+import { SponsorCountryFlag } from './SponsorCountryFlag';
 import { sponsorContactLine } from './sponsorPhone';
 import { IconLocation, IconPickupPin, IconVespaGreen } from './icons';
 import {
@@ -387,6 +388,7 @@ export function CompetitionCard({
               >
                 {sponsor.address}
               </Text>
+              <SponsorCountryFlag sponsor={sponsor} size={c(16)} />
               <IconLocation width={c(14)} height={c(14)} />
             </View>
           ) : null}

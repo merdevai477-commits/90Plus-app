@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { PWMapPickerModal } from './PWMapPickerModal';
+import { PWMapPickerModal, type StoreAddressMeta } from './PWMapPickerModal';
 import { PWPlacesAddressField } from './PWPlacesAddressField';
 import { IconMapFill } from './icons';
 import { PW, usePWDirection, usePWFonts, usePWScale } from './theme';
@@ -16,7 +16,7 @@ export function PWStoreAddressBlock({
   icon,
 }: {
   value: string;
-  onChangeText: (t: string) => void;
+  onChangeText: (t: string, meta?: StoreAddressMeta) => void;
   labels: {
     fieldPlaceholder: string;
     steps: string;
@@ -58,8 +58,8 @@ export function PWStoreAddressBlock({
   }, [onChangeText, onPasteEmpty, onPasteDone]);
 
   const confirmMapAddress = useCallback(
-    (address: string) => {
-      onChangeText(address);
+    (address: string, meta?: StoreAddressMeta) => {
+      onChangeText(address, meta);
       setMapOpen(false);
       onPasteDone();
     },

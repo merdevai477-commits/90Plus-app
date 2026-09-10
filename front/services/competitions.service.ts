@@ -50,6 +50,8 @@ export interface SponsorInfo {
     phoneCountryId?: string;
     phoneNational?: string;
     storeLogoDefault?: boolean;
+    /** ISO 3166-1 alpha-2 from map/places; Israel is stored/shown as `ps`. */
+    countryCode?: string;
   } | null;
   isVerified: boolean;
   isActive: boolean;
@@ -180,6 +182,7 @@ export interface CreateCompetitionPayload {
       phoneCountryId?: string;
       phoneNational?: string;
       storeLogoDefault?: boolean;
+      countryCode?: string;
     } | null;
   };
   categoryId: string;

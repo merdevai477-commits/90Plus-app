@@ -102,6 +102,7 @@ import {
 } from '../../services/competitions.service';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
+import { remapSponsorCountryIso } from '../../utils/sponsorCountry';
 
 type Phase = 'category' | 1 | 2 | 3 | 4;
 
@@ -164,6 +165,7 @@ export default function CreateCompetitionScreen() {
   const [storePhoneCountryId, setStorePhoneCountryId] = useState(DEFAULT_SPONSOR_PHONE_COUNTRY_ID);
   const [storePhoneNational, setStorePhoneNational] = useState('');
   const [storeAddress, setStoreAddress] = useState('');
+  const [storeCountryCode, setStoreCountryCode] = useState<string | null>(null);
   const [hasDelivery, setHasDelivery] = useState<boolean | null>(null);
   const [facebook, setFacebook] = useState('');
   const [instagram, setInstagram] = useState('');
@@ -218,6 +220,8 @@ export default function CreateCompetitionScreen() {
         if (sp.name) setStoreName(sp.name);
         if (sp.address) setStoreAddress(sp.address);
         const links = sp.socialLinks;
+        const storedCountry = remapSponsorCountryIso(links?.countryCode);
+        setStoreCountryCode(storedCountry);
         if (sp.logoUrl) {
           setStoreImageUrl(sp.logoUrl);
           setUseDefaultStoreLogo(false);
@@ -291,6 +295,9 @@ export default function CreateCompetitionScreen() {
     if (!storeImageUrl && useDefaultStoreLogo) {
       socialLinks.storeLogoDefault = true;
     }
+    if (storeCountryCode) {
+      socialLinks.countryCode = storeCountryCode;
+    }
     const phoneLine = national ? sponsorPhoneLine(socialLinks) : null;
     return {
       name: storeName.trim(),
@@ -307,6 +314,7 @@ export default function CreateCompetitionScreen() {
     storeImageUrl,
     useDefaultStoreLogo,
     storeAddress,
+    storeCountryCode,
     hasDelivery,
     facebook,
     instagram,
@@ -1089,7 +1097,14 @@ export default function CreateCompetitionScreen() {
                   <PWFieldLabel label={wizard.storeAddress} />
                   <PWStoreAddressBlock
                     value={storeAddress}
-                    onChangeText={setStoreAddress}
+                    onChangeText={(text, meta) => {
+                      setStoreAddress(text);
+                      if (meta && 'countryCode' in meta) {
+                        setStoreCountryCode(remapSponsorCountryIso(meta.countryCode));
+                      } else {
+                        setStoreCountryCode(null);
+                      }
+                    }}
                     labels={{
                       fieldPlaceholder: wizard.storeAddressPlaceholder,
                       steps: wizard.storeAddressSteps,

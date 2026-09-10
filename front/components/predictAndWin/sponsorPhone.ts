@@ -10,6 +10,8 @@ export type SponsorPhoneSocialLinks = {
   phoneNational?: string;
   /** True when the advertiser removed a custom logo — show bundled `store.png`. */
   storeLogoDefault?: boolean;
+  /** ISO 3166-1 alpha-2 from the store pin / Places; Israel is saved as `ps`. */
+  countryCode?: string;
 };
 
 /** ISO 3166-1 alpha-2 → country calling code (without +). */
