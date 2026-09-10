@@ -12,6 +12,28 @@ export interface StoredFollowedTeam {
     country?: string | null;
 }
 
+export function followedTeamsEqual(
+    a: StoredFollowedTeam[] | null | undefined,
+    b: StoredFollowedTeam[] | null | undefined,
+): boolean {
+    const left = a ?? [];
+    const right = b ?? [];
+    if (left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i += 1) {
+        const x = left[i];
+        const y = right[i];
+        if (
+            x.apiTeamId !== y.apiTeamId ||
+            x.teamName !== y.teamName ||
+            (x.teamLogo ?? null) !== (y.teamLogo ?? null) ||
+            (x.country ?? null) !== (y.country ?? null)
+        ) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function normalizeTeam(raw: unknown): StoredFollowedTeam | null {
     if (!raw || typeof raw !== 'object') return null;
     const row = raw as Record<string, unknown>;
