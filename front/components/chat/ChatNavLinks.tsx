@@ -155,7 +155,17 @@ function FollowAvatar({
   );
 }
 
-function FollowProfileCard({
+function IconAvatar({ children }: { children: React.ReactNode }) {
+  return (
+    <View style={styles.avatarWrap} pointerEvents="none" accessible={false}>
+      <View style={styles.avatarRing}>
+        <View style={styles.avatarFallback}>{children}</View>
+      </View>
+    </View>
+  );
+}
+
+function NavLinkCard({
   link,
   followLabel,
   buttonLabel,
@@ -170,8 +180,14 @@ function FollowProfileCard({
   rtl: boolean;
   onPress: () => void;
 }) {
+  const isProfile = link.type === 'player' || link.type === 'club';
   const photoUris = useMemo(
-    () => (link.type === 'club' ? resolveChatNavClubPhotos(link) : resolveChatNavPlayerPhotos(link)),
+    () =>
+      link.type === 'club'
+        ? resolveChatNavClubPhotos(link)
+        : link.type === 'player'
+          ? resolveChatNavPlayerPhotos(link)
+          : [],
     [link],
   );
   const badgeUris = useMemo(
@@ -179,16 +195,26 @@ function FollowProfileCard({
     [link],
   );
   const Chevron = rtl ? ChevronLeft : ChevronRight;
+  const avatar = isProfile ? (
+    <FollowAvatar
+      photoUris={photoUris}
+      photoKind={link.type === 'club' ? 'club' : 'player'}
+      badgeUris={badgeUris}
+      rtl={rtl}
+    />
+  ) : (
+    <IconAvatar>
+      {link.type === 'match' ? (
+        <CircleDot size={22} color="#C4B5FD" strokeWidth={2.1} />
+      ) : (
+        <CalendarDays size={22} color="#C4B5FD" strokeWidth={2.1} />
+      )}
+    </IconAvatar>
+  );
+
   return (
-    <View
-      style={[styles.profileCard, { flexDirection: rtl ? 'row-reverse' : 'row' }]}
-    >
-      <FollowAvatar
-        photoUris={photoUris}
-        photoKind={link.type === 'club' ? 'club' : 'player'}
-        badgeUris={badgeUris}
-        rtl={rtl}
-      />
+    <View style={[styles.profileCard, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+      {avatar}
       <Text
         style={[styles.followLabel, { textAlign: rtl ? 'right' : 'left' }]}
         numberOfLines={1}
@@ -237,6 +263,39 @@ function isNamed(label: string, type: ChatNavLink['type']): boolean {
     'مباريات اليوم',
   ]);
   return !generic.has(v);
+}
+
+function copyForNavLink(
+  link: ChatNavLink,
+  t: ReturnType<typeof useTranslation>['t'],
+): { followLabel: string; buttonLabel: string; a11yLabel: string } {
+  const named = isNamed(link.label, link.type) ? link.label.trim() : '';
+  if (link.type === 'club') {
+    return {
+      followLabel: t.chat.navVisitClub,
+      buttonLabel: t.captainAI.viewProfile,
+      a11yLabel: t.chat.navViewClubA11y,
+    };
+  }
+  if (link.type === 'player') {
+    return {
+      followLabel: t.captainAI.followProfile,
+      buttonLabel: t.captainAI.viewProfile,
+      a11yLabel: t.chat.navViewPlayerA11y,
+    };
+  }
+  if (link.type === 'matches') {
+    return {
+      followLabel: named || t.chat.navVisitMatches,
+      buttonLabel: t.chat.navViewMatches,
+      a11yLabel: t.chat.navViewMatchesA11y,
+    };
+  }
+  return {
+    followLabel: named || t.chat.navVisitMatch,
+    buttonLabel: t.chat.navViewMatch,
+    a11yLabel: t.chat.navViewMatchA11y,
+  };
 }
 
 export function ChatNavLinks({ links, onChoose }: Props) {
@@ -340,74 +399,18 @@ export function ChatNavLinks({ links, onChoose }: Props) {
 
   return (
     <View style={styles.wrap}>
-      {primary.map((link) => {
-        const named = isNamed(link.label, link.type) ? link.label.trim() : '';
-        const isProfile = link.type === 'player' || link.type === 'club';
-        if (!isProfile) {
-          const title =
-            named ||
-            (link.type === 'match' ? t.chat.navOpenMatch : t.chat.navOpenMatches);
-          const MatchChevron = rtl ? ChevronLeft : ChevronRight;
-          return (
-            <Pressable
-              key={`${link.type}:${link.id ?? link.query ?? link.label}`}
-              onPress={() => onPress(link)}
-              style={({ pressed }) => [
-                styles.row,
-                { flexDirection: rtl ? 'row-reverse' : 'row' },
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={title}
-            >
-              <View style={styles.iconWrap}>{iconFor(link.type)}</View>
-              <View style={styles.textCol}>
-                <Text style={[styles.title, { textAlign: rtl ? 'right' : 'left' }]} numberOfLines={1}>
-                  {title}
-                </Text>
-              </View>
-              <View style={styles.arrowWrap}>
-                <MatchChevron size={16} color="#F5F3FF" strokeWidth={2.6} />
-              </View>
-            </Pressable>
-          );
-        }
-        const follow =
-          link.type === 'club' ? t.chat.navVisitClub : t.captainAI.followProfile;
-        const button = t.captainAI.viewProfile;
-        const a11y = link.type === 'club' ? t.chat.navViewClubA11y : t.chat.navViewPlayerA11y;
+      {[...primary, ...extraMatches].map((link) => {
+        const copy = copyForNavLink(link, t);
         return (
-          <FollowProfileCard
+          <NavLinkCard
             key={`${link.type}:${link.id ?? link.query ?? link.label}`}
             link={link}
-            followLabel={follow}
-            buttonLabel={button}
-            a11yLabel={a11y}
+            followLabel={copy.followLabel}
+            buttonLabel={copy.buttonLabel}
+            a11yLabel={copy.a11yLabel}
             rtl={rtl}
             onPress={() => onPress(link)}
           />
-        );
-      })}
-      {extraMatches.map((link) => {
-        const MatchChevron = rtl ? ChevronLeft : ChevronRight;
-        return (
-          <Pressable
-            key={`${link.type}:${link.id ?? link.label}`}
-            onPress={() => onPress(link)}
-            style={({ pressed }) => [
-              styles.compact,
-              { flexDirection: rtl ? 'row-reverse' : 'row' },
-              pressed && styles.pressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel={link.label}
-          >
-            {iconFor('match')}
-            <Text style={[styles.compactLabel, { textAlign: rtl ? 'right' : 'left' }]} numberOfLines={1}>
-              {link.label}
-            </Text>
-            <MatchChevron size={16} color={chatColors.accentSoft} strokeWidth={2.4} />
-          </Pressable>
         );
       })}
     </View>
@@ -459,14 +462,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
-  },
-  row: {
-    flexWrap: 'nowrap',
-    alignItems: 'center',
-    gap: 10,
-    minHeight: 52,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
   },
   profileCard: {
     flexWrap: 'nowrap',
@@ -595,49 +590,5 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.88,
-  },
-  iconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(124,58,237,0.45)',
-    flexShrink: 0,
-  },
-  textCol: {
-    flex: 1,
-    minWidth: 0,
-    gap: 1,
-  },
-  title: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.1,
-  },
-  arrowWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    flexShrink: 0,
-  },
-  compact: {
-    alignItems: 'center',
-    gap: 8,
-    minHeight: 40,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    backgroundColor: 'rgba(124,58,237,0.12)',
-  },
-  compactLabel: {
-    flex: 1,
-    minWidth: 0,
-    color: '#EDE9FE',
-    fontSize: 13,
-    fontWeight: '600',
   },
 });

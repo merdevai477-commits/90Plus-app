@@ -3203,6 +3203,12 @@ export const ar = {
     navVisitClub: 'تابع بروفايل النادي',
     navViewPlayerA11y: 'عرض بروفايل اللاعب',
     navViewClubA11y: 'عرض بروفايل النادي',
+    navVisitMatches: 'تابع مباريات اليوم',
+    navViewMatches: 'عرض المباريات',
+    navViewMatchesA11y: 'عرض مباريات اليوم',
+    navVisitMatch: 'تابع تفاصيل المباراة',
+    navViewMatch: 'عرض المباراة',
+    navViewMatchA11y: 'عرض تفاصيل المباراة',
     navChooseClub: 'قصدك الأهلي المصري ولا السعودي؟',
 
     exportUserLabel: 'أنت',

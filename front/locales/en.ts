@@ -3283,6 +3283,12 @@ export const en = {
     navVisitClub: 'Follow club profile',
     navViewPlayerA11y: 'View player profile',
     navViewClubA11y: 'View club profile',
+    navVisitMatches: "Follow today's matches",
+    navViewMatches: 'View matches',
+    navViewMatchesA11y: "View today's matches",
+    navVisitMatch: 'Follow match details',
+    navViewMatch: 'View match',
+    navViewMatchA11y: 'View match details',
     navChooseClub: 'Did you mean Egyptian Al Ahly or Saudi Al Ahli?',
 
     exportUserLabel: 'You',
