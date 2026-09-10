@@ -42,6 +42,7 @@ import {
   scoreCompetitor,
   scoreSearchName,
 } from '../utils/football-search-index';
+import { filterCompleted365Transfers } from '../utils/scores365-transfer-status.util';
 import {
   calendarDateFromKickoff,
   calendarTodayKey,
@@ -750,6 +751,7 @@ interface TransfersPayload {
     time?: string;
     price?: string;
     athleteId?: number;
+    statusId?: number;
     statusName?: string;
     positionId?: number;
     ImageVersion?: number;
@@ -2211,16 +2213,21 @@ export class ThreeSixFiveScoresService {
     }
     try {
       const langId = resolveScores365LangId(language);
-      const cacheKey = `365:competitor:${competitorId}:transfers:${langId}`;
+      const cacheKey = `365:competitor:${competitorId}:transfers:v2:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFiveCompetitorTransfers>(cacheKey);
       if (cached) return { data: cached, source: '365scores' };
 
       const payload = await this.fetchJson<TransfersPayload>(
         `/web/transfers/?${this.commonParams(langId)}&competitors=${competitorId}`,
-        `competitor-transfers:${competitorId}`,
+        `competitor-transfers:v2:${competitorId}`,
         3_600_000,
       );
-      if (!payload?.transfers?.length) {
+      // Rate-limit / upstream miss → do not cache an empty list for an hour.
+      if (!payload) {
+        return { data: null, source: null };
+      }
+      const transfers = filterCompleted365Transfers(payload.transfers);
+      if (!transfers.length) {
         const empty: ThreeSixFiveCompetitorTransfers = { in: [], out: [] };
         await redisCacheService.set(cacheKey, empty, 3_600_000);
         return { data: empty, source: '365scores' };
@@ -2258,8 +2265,8 @@ export class ThreeSixFiveScoresService {
         new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime();
 
       const result: ThreeSixFiveCompetitorTransfers = {
-        in: payload.transfers.filter((t) => t.isArrival).map(map).sort(byDateDesc),
-        out: payload.transfers.filter((t) => !t.isArrival).map(map).sort(byDateDesc),
+        in: transfers.filter((t) => t.isArrival).map(map).sort(byDateDesc),
+        out: transfers.filter((t) => !t.isArrival).map(map).sort(byDateDesc),
       };
 
       await redisCacheService.set(cacheKey, result, 3_600_000);
@@ -2286,7 +2293,7 @@ export class ThreeSixFiveScoresService {
       const langId = resolveScores365LangId(language);
       const groups: ThreeSixFiveCompetitionTransfers[] = [];
       for (const competitionId of ids) {
-        const cacheKey = `365:competition:${competitionId}:transfers:v1:${langId}`;
+        const cacheKey = `365:competition:${competitionId}:transfers:v2:${langId}`;
         const cached = await redisCacheService.get<ThreeSixFiveCompetitionTransfers>(cacheKey);
         if (cached) {
           groups.push(cached);
@@ -2298,13 +2305,16 @@ export class ThreeSixFiveScoresService {
           }
         >(
           `/web/transfers/?${this.commonParams(langId)}&competitions=${competitionId}`,
-          `competition-transfers:${competitionId}`,
+          `competition-transfers:v2:${competitionId}`,
           3_600_000,
         );
-        const athletesById = new Map((payload?.athletes ?? []).map((a) => [a.id, a] as const));
-        const competitorsById = new Map((payload?.competitors ?? []).map((c) => [c.id, c] as const));
-        const meta = payload?.competitions?.find((c) => c.id === competitionId);
-        const mapped: ThreeSixFiveLeagueTransfer[] = (payload?.transfers ?? []).map((t) => {
+        if (!payload) continue;
+        const athletesById = new Map((payload.athletes ?? []).map((a) => [a.id, a] as const));
+        const competitorsById = new Map((payload.competitors ?? []).map((c) => [c.id, c] as const));
+        const meta = payload.competitions?.find((c) => c.id === competitionId);
+        const mapped: ThreeSixFiveLeagueTransfer[] = filterCompleted365Transfers(
+          payload.transfers,
+        ).map((t) => {
           const athlete = t.athleteId != null ? athletesById.get(t.athleteId) : undefined;
           const from = t.origin != null ? competitorsById.get(t.origin) : undefined;
           const to = t.target != null ? competitorsById.get(t.target) : undefined;
