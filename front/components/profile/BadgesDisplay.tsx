@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { X, Award, Trophy, Star, Crown, Medal } from 'lucide-react-native';
 import { getUserBadges, UserBadgesResponse, UserBadge } from '../../services/rankingsService';
 import { useTranslation } from '../../src/i18n';
+import { localeWithLatinNumerals } from '../../src/i18n/latinDigits';
 import { BadgeTypeIcon } from '../common/RankMedalIcon';
 
 interface BadgesDisplayProps {
@@ -150,7 +151,7 @@ const BadgesModal = memo(({
   streak: any;
 }) => {
   const { t, language } = useTranslation();
-  const dateLocale = language === 'ar' ? 'ar-EG' : 'en-US';
+  const dateLocale = localeWithLatinNumerals(language);
 
   return (
     <Modal

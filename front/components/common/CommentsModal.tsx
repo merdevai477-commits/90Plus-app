@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { X, Heart, Send, CheckCircle, AlertCircle, MessageCircle, ChevronDown, ChevronUp, Trash2, Flag } from 'lucide-react-native';
+import { localeWithLatinNumerals } from '../../src/i18n/latinDigits';
 import { useHaptic } from '@/hooks/useHaptic';
 import { Comment } from '../../contexts/VideosContext';
 import { globalState } from '../../globalState';
@@ -1506,7 +1507,7 @@ function formatTimestamp(dateString: string): string {
     if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
     if (diffHours < 24) return `منذ ${diffHours} ساعة`;
     if (diffDays < 7) return `منذ ${diffDays} يوم`;
-    return date.toLocaleDateString('ar');
+    return date.toLocaleDateString(localeWithLatinNumerals('ar'));
 }
 
 const styles = StyleSheet.create({

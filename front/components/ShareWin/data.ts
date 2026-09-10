@@ -6,6 +6,7 @@
  */
 
 import type { Language } from '../../src/i18n';
+import { localeWithLatinNumerals, toLatinDigits } from '../../src/i18n/latinDigits';
 import type {
   ShareWinLastWinner,
   ShareWinPrize,
@@ -36,10 +37,10 @@ export function splitCountdown(remainingMs: number): CountdownParts {
   };
 }
 
-/** Locale-aware thousands separators — Figma shows "1,250" and "3,250 xp". */
+/** Thousands separators with Latin digits — Figma shows "1,250" and "3,250 xp". */
 export function formatNumber(value: number, language: Language): string {
   try {
-    return new Intl.NumberFormat(language === 'ar' ? 'ar-EG' : 'en-US').format(value);
+    return toLatinDigits(new Intl.NumberFormat(localeWithLatinNumerals(language)).format(value));
   } catch {
     return String(value);
   }

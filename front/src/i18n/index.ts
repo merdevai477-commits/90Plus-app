@@ -60,6 +60,15 @@ export {
 
 export { formatXpLabel, arabicPointWord } from './formatXp';
 
+export {
+  toLatinDigits,
+  hasNonLatinDigits,
+  localeWithLatinNumerals,
+  withLatinNumberingOptions,
+  installLatinNumerals,
+  LATIN_NUMBERING_SYSTEM,
+} from './latinDigits';
+
 // ============================================================================
 // Language Store (Zustand)
 // ============================================================================

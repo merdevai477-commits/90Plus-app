@@ -15,6 +15,11 @@ import { safeParseDate } from '../../utils/safeDate';
 import { Language, TextDirection } from './types';
 import { getTranslation, getTranslationsForLanguage, TranslationKeys } from './utils';
 import { syncToBackend } from './syncService';
+import {
+  localeWithLatinNumerals,
+  toLatinDigits,
+  withLatinNumberingOptions,
+} from './latinDigits';
 
 /**
  * Return type for the useTranslation hook
@@ -43,19 +48,19 @@ export interface UseTranslationReturn {
 }
 
 /**
- * Map language codes to Intl locale codes
- * Some languages need region codes for proper formatting
+ * Map language codes to Intl locale codes.
+ * Arabic keeps Arabic month names; `-u-nu-latn` pins digits to 0-9.
  */
 const LOCALE_MAP: Record<Language, string> = {
-  ar: 'ar-SA',
-  en: 'en-US',
+  ar: localeWithLatinNumerals('ar'),
+  en: localeWithLatinNumerals('en'),
 };
 
 /**
  * Get the Intl locale string for a language
  */
 function getLocale(language: Language): string {
-  return LOCALE_MAP[language] || 'en-US';
+  return localeWithLatinNumerals(language);
 }
 
 /**
@@ -155,7 +160,9 @@ export function useTranslation(): UseTranslationReturn {
     options: Intl.DateTimeFormatOptions = DEFAULT_DATE_OPTIONS
   ): string => {
     try {
-      return new Intl.DateTimeFormat(locale, options).format(date);
+      return toLatinDigits(
+        new Intl.DateTimeFormat(locale, withLatinNumberingOptions(options)).format(date),
+      );
     } catch (error) {
       console.warn('Date formatting failed:', error);
       const parsed = safeParseDate(date);
@@ -179,7 +186,9 @@ export function useTranslation(): UseTranslationReturn {
     options: Intl.NumberFormatOptions = DEFAULT_NUMBER_OPTIONS
   ): string => {
     try {
-      return new Intl.NumberFormat(locale, options).format(num);
+      return toLatinDigits(
+        new Intl.NumberFormat(locale, withLatinNumberingOptions(options)).format(num),
+      );
     } catch (error) {
       // Fallback to toString if Intl fails
       console.warn('Number formatting failed:', error);
@@ -196,10 +205,12 @@ export function useTranslation(): UseTranslationReturn {
     currency: string = 'USD'
   ): string => {
     try {
-      return new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency,
-      }).format(amount);
+      return toLatinDigits(
+        new Intl.NumberFormat(locale, withLatinNumberingOptions({
+          style: 'currency',
+          currency,
+        })).format(amount),
+      );
     } catch (error) {
       // Fallback to basic format if Intl fails
       console.warn('Currency formatting failed:', error);

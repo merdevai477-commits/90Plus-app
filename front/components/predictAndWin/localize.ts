@@ -13,13 +13,14 @@
  *  2. **Server error prose.** The API's messages are Arabic-only. Requests now
  *     reject with a `CompetitionApiError` carrying a stable code, and
  *     `errorMessage` turns that into copy from the active locale.
- *  3. **Dates, times and durations.** `toLocaleDateString('ar-EG')` and the
- *     hardcoded "س / د / ث" countdown suffixes were Arabic on every screen.
+ *  3. **Dates, times and durations.** Kickoff copy follows the app language
+ *     (Arabic month names when `ar`) but digits stay Latin (`0-9`).
  */
 
 import { useCallback, useMemo } from 'react';
 
 import { useTranslation } from '../../src/i18n';
+import { localeWithLatinNumerals } from '../../src/i18n/latinDigits';
 import {
   CompetitionApiError,
   isKnownCompetitionError,
@@ -28,7 +29,7 @@ import {
 
 /** BCP-47 tag for `Intl` / `toLocale*String`, derived from the app language. */
 export function intlLocale(language: string): string {
-  return language === 'ar' ? 'ar-EG' : 'en-GB';
+  return language === 'ar' ? localeWithLatinNumerals('ar') : 'en-GB';
 }
 
 export interface PWLocalize {
@@ -42,13 +43,13 @@ export interface PWLocalize {
   prizeTypeLabel: (prizeType: string) => string;
   /** Copy for a thrown error, whatever its shape. */
   errorMessage: (error: unknown) => string;
-  /** `12/09/2026` in en, `٢٠٢٦/٠٩/١٢` in ar — matches Figma's date field. */
+  /** `12/09/2026` in en, `12/09/2026` with Arabic labels in ar — Latin digits. */
   formatDate: (date: Date) => string;
   /** Short day + month, e.g. `12 Sep`. */
   formatDayMonth: (date: Date) => string;
   /** `10:30 PM`. */
   formatTime: (date: Date) => string;
-  /** Countdown, e.g. `10h 42m 45s` / `١٠ س ٤٢ د ٤٥ ث`. */
+  /** Countdown, e.g. `10h 42m 45s` / `10 س 42 د 45 ث`. */
   formatRemaining: (msRemaining: number) => string;
 }
 

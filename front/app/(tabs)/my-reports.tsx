@@ -21,6 +21,7 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { localeWithLatinNumerals } from '../../src/i18n/latinDigits';
 import { getApiUrl } from '../../config/api.config';
 import { logger } from '../../utils/logger';
 
@@ -202,7 +203,7 @@ export default function MyReportsScreen() {
           <View style={styles.reportInfo}>
             <Text style={styles.reportType}>{typeLabel}</Text>
             <Text style={styles.reportDate}>
-              {new Date(item.createdAt).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
+              {new Date(item.createdAt).toLocaleDateString(localeWithLatinNumerals(language))}
             </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>

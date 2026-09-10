@@ -22,6 +22,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import EnhancedNetworkService from '../../utils/enhancedNetworkService';
 import { logger } from '../../services/logger';
+import { localeWithLatinNumerals } from '../../src/i18n/latinDigits';
 
 interface NetworkStatusIndicatorProps {
     showDetails?: boolean;
@@ -181,7 +182,7 @@ export default function NetworkStatusIndicator({
                             <Text style={styles.detailLabel}>آخر فحص للسيرفر:</Text>
                             <Text style={styles.detailValue}>
                                 {networkState.lastHealthCheck
-                                    ? new Date(networkState.lastHealthCheck).toLocaleTimeString('ar-SA')
+                                    ? new Date(networkState.lastHealthCheck).toLocaleTimeString(localeWithLatinNumerals('ar'))
                                     : 'لم يتم الفحص بعد'
                                 }
                             </Text>

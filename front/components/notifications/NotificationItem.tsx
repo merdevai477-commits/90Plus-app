@@ -7,6 +7,7 @@ import { AlertCircle, AtSign, CheckCircle, Heart, Info, MessageCircle, Reply, Sh
 import * as Haptics from 'expo-haptics';
 import { COLORS } from '../reels/constants';
 import { useTranslation } from '../../src/i18n';
+import { localeWithLatinNumerals } from '../../src/i18n/latinDigits';
 import type { SocialNotification } from '../../src/services/authService';
 import MiniProfileCard from '../profile/MiniProfileCard';
 
@@ -53,7 +54,7 @@ export const NotificationItem = React.memo<NotificationItemProps>(({
     if (diffMins < 60) return t.notifications.minutesAgo.replace('{n}', String(diffMins));
     if (diffHours < 24) return t.notifications.hoursAgo.replace('{n}', String(diffHours));
     if (diffDays < 7) return t.notifications.daysAgo.replace('{n}', String(diffDays));
-    return date.toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US');
+    return date.toLocaleDateString(localeWithLatinNumerals(language));
   };
 
   const getIcon = () => {

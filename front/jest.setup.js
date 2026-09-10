@@ -6,6 +6,8 @@ try {
   /* no-op when not installed */
 }
 
+require('./src/i18n/latinDigits');
+
 // ── expo-router ────────────────────────────────────────────────────────────
 jest.mock('expo-router', () => ({
   router: {

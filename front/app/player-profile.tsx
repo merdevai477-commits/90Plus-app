@@ -23,6 +23,7 @@ import ImageViewerModal from '../components/common/ImageViewerModal';
 import TeamBadge from '../components/common/TeamBadge';
 import { useTranslation } from '../src/i18n';
 import type { Language } from '../src/i18n';
+import { localeWithLatinNumerals } from '../src/i18n/latinDigits';
 import { getTeamDisplayName, getLeagueDisplayName, getLocalizedStatType } from '../utils/i18nHelpers';
 import { Image as ExpoImage } from 'expo-image';
 import LeagueIcon from '../components/common/LeagueIcon';
@@ -249,7 +250,7 @@ const formatDate = (dateString: string | null, language: Language): string => {
     if (!dateString) return 'N/A';
     try {
         const date = new Date(dateString);
-        const locale = language === 'ar' ? 'ar-EG' : 'en-US';
+        const locale = localeWithLatinNumerals(language);
         return date.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
     } catch {
         return dateString;

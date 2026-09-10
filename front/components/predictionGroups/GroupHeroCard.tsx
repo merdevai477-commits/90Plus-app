@@ -30,6 +30,7 @@ import Svg, {
   Stop,
 } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
+import { localeWithLatinNumerals } from '../../src/i18n/latinDigits';
 
 import { useToast } from '../../contexts/ToastContext';
 import { PressableScale } from './atoms';
@@ -258,7 +259,7 @@ export function GroupHeroCard({
         <View style={[styles.membersHead, row]}>
           <Text style={[styles.membersTitle, { fontFamily: bold }]}>الأعضاء</Text>
           <Text style={[styles.membersJoined, { fontFamily: medium }]}>
-            {memberCount.toLocaleString('ar-EG')} منضم
+            {memberCount.toLocaleString(localeWithLatinNumerals('ar'))} منضم
           </Text>
         </View>
 
