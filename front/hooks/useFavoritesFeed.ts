@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Competitor365Matches, Fixture as ApiFixture } from '../services/apiFootball';
+import { formatLiveMinuteDisplay } from '../utils/formatLiveMinuteDisplay';
 import { useFavoriteTeam } from './useFavoriteTeam';
 import {
     MatchFavoritesStorage,
@@ -83,8 +84,9 @@ export function apiFixtureToListFixture(f: ApiFixture): FavoritesListFixture {
         extra: f.fixture?.status?.extra ?? null,
         startTimestamp: f.fixture?.timestamp,
         minute:
-            status === 'LIVE' && f.fixture?.status?.elapsed != null
-                ? `${f.fixture.status.elapsed}'`
+            status === 'LIVE'
+                ? formatLiveMinuteDisplay(short, f.fixture?.status?.elapsed, f.fixture?.status?.extra) ??
+                  (f.fixture?.status?.elapsed != null ? `${f.fixture.status.elapsed}'` : undefined)
                 : undefined,
     };
 }

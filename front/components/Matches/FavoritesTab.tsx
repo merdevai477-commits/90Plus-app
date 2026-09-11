@@ -31,6 +31,7 @@ import {
     storedMatchToListFixture,
     type FavoritesListFixture,
 } from '../../hooks/useFavoritesFeed';
+import { useFavoritesLiveOverlay } from '../../hooks/useFavoritesLiveOverlay';
 import type { StoredFollowedTeam } from '../../src/storage/teamFavorites.storage';
 import type { StoredFavoriteMatch } from '../../src/storage/matchFavorites.storage';
 import { CompetitorMatchesCache } from '../../src/storage/competitorMatches.cache';
@@ -166,12 +167,14 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
         };
     }, [team.apiTeamId]);
 
-    const fixtures = useMemo(() => {
+    const baseFixtures = useMemo(() => {
         if (matchesQ.data) {
             return sliceTeamFavoriteMatches(matchesQ.data).map(apiFixtureToListFixture);
         }
         return diskFixtures;
     }, [matchesQ.data, diskFixtures]);
+
+    const fixtures = useFavoritesLiveOverlay(baseFixtures);
 
     const leagueGroups = useMemo(() => groupFixturesByLeague(fixtures), [fixtures]);
 
@@ -180,15 +183,17 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
         return first?.leagueName || team.country || null;
     }, [fixtures, team.country]);
 
-    const liveIds = useMemo(
+    // Register interest for in-play / not-finished rows so liveFixtureStore stays warm.
+    // Cap is enforced inside the store; accordion max ~10 fixtures.
+    const interestIds = useMemo(
         () =>
             fixtures
-                .filter((f) => f.status === 'LIVE')
+                .filter((f) => f.status !== 'FT')
                 .map((f) => Number(f.id))
                 .filter((id) => Number.isFinite(id) && id > 0),
         [fixtures],
     );
-    useRegisterLiveFixtures(expanded ? liveIds : []);
+    useRegisterLiveFixtures(expanded ? interestIds : []);
 
     const toggle = useCallback(() => {
         if (ANIMATE_TOGGLE) {
@@ -267,6 +272,39 @@ const TeamFavoriteRow = memo(function TeamFavoriteRow({
     );
 });
 
+const NotifiedFavoriteBlock = memo(function NotifiedFavoriteBlock({
+    match,
+    renderFixture,
+}: {
+    match: StoredFavoriteMatch;
+    renderFixture: (fixture: FavoritesListFixture) => React.ReactNode;
+}) {
+    const base = useMemo(() => [storedMatchToListFixture(match)], [match]);
+    const fixtures = useFavoritesLiveOverlay(base);
+    const fixture = fixtures[0] ?? base[0];
+
+    const interestIds = useMemo(() => {
+        const id = Number(fixture.id);
+        if (!Number.isFinite(id) || id <= 0) return [];
+        if (fixture.status === 'FT') return [];
+        return [id];
+    }, [fixture.id, fixture.status]);
+    useRegisterLiveFixtures(interestIds);
+
+    return (
+        <View style={styles.teamContainer}>
+            <LeagueMatchBlock
+                leagueName={fixture.leagueName || match.leagueName || 'Match'}
+                leagueLogo={fixture.leagueLogo || match.leagueLogo}
+                fixtures={[fixture]}
+                renderFixture={renderFixture}
+                showChevron
+                expanded
+            />
+        </View>
+    );
+});
+
 export default function FavoritesTab({
     followedTeams,
     notifiedMatches,
@@ -326,18 +364,8 @@ export default function FavoritesTab({
                 ) : null;
             }
             if (item.type === 'notified') {
-                const fixture = storedMatchToListFixture(item.match);
                 return (
-                    <View style={styles.teamContainer}>
-                        <LeagueMatchBlock
-                            leagueName={fixture.leagueName || item.match.leagueName || 'Match'}
-                            leagueLogo={fixture.leagueLogo || item.match.leagueLogo}
-                            fixtures={[fixture]}
-                            renderFixture={renderFixture}
-                            showChevron
-                            expanded
-                        />
-                    </View>
+                    <NotifiedFavoriteBlock match={item.match} renderFixture={renderFixture} />
                 );
             }
             return (
@@ -348,7 +376,7 @@ export default function FavoritesTab({
                 />
             );
         },
-        [onOpenTeam, onChooseFavoriteTeam, chooseLabel, renderFixture, t],
+        [onOpenTeam, onChooseFavoriteTeam, chooseLabel, renderFixture],
     );
 
     const empty = !loading && rows.length === 0;
