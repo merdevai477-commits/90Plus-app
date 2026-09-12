@@ -91,16 +91,34 @@ describe('provider-owned live fixture snapshots', () => {
     experiment.isScores365ExperimentEnabled.mockReturnValue(false);
   });
 
-  it('does not erase 365 rows when API-Football writes an empty snapshot', async () => {
+  it('intentional empty REPLACE clears a previous 365 list (legitimate quiet period)', async () => {
     const redis = redisHarness({
-      [FOOTBALL_365_LIVE_MATCHES_KEY]: JSON.stringify([fixture(365, '1H', '365')]),
+      [FOOTBALL_365_LIVE_MATCHES_KEY]: JSON.stringify([
+        fixture(1, '1H', '365'),
+        fixture(2, '2H', '365'),
+      ]),
+      [FOOTBALL_API_LIVE_MATCHES_KEY]: JSON.stringify([fixture(9, '1H', 'api')]),
     });
     mockedGetRedisClient.mockReturnValue(redis.client as any);
 
-    await writeLiveFixturesSnapshot([]);
+    await replace365LiveFixturesSnapshot([]);
 
-    expect(redis.values.get(FOOTBALL_API_LIVE_MATCHES_KEY)).toBe('[]');
-    await expect(readLiveFixturesList()).resolves.toEqual([fixture(365, '1H', '365')]);
+    expect(JSON.parse(redis.values.get(FOOTBALL_365_LIVE_MATCHES_KEY) ?? '[]')).toEqual([]);
+    await expect(readLiveFixturesList()).resolves.toEqual([fixture(9, '1H', 'api')]);
+  });
+
+  it('KEEP path leaves Redis untouched when replace365 is not called', async () => {
+    const previous = [fixture(10, '1H', '365'), fixture(11, '2H', '365')];
+    const redis = redisHarness({
+      [FOOTBALL_365_LIVE_MATCHES_KEY]: JSON.stringify(previous),
+    });
+    mockedGetRedisClient.mockReturnValue(redis.client as any);
+
+    // Simulates syncLiveSnapshot KEEP_PREVIOUS: skip replace365 on empty degraded tick.
+    await expect(read365LiveFixtureIds()).resolves.toEqual([10, 11]);
+    const { fixtures, source } = await resolveLiveFixturesForClient();
+    expect(source).toBe('redis');
+    expect(fixtures).toEqual(previous);
   });
 
   it('merges legacy and provider lists with provider data winning duplicates', async () => {

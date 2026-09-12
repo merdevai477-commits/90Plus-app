@@ -57,6 +57,7 @@ import {
   isAllScoresLiveItem,
   coerceAllScoresLiveStatus,
 } from '../utils/scores365-live-identity.util';
+import { decide365LiveSnapshotWrite } from '../utils/scores365-live-snapshot-guard.util';
 
 const BASE_URL = 'https://webws.365scores.com';
 
@@ -1206,19 +1207,44 @@ export class ThreeSixFiveScoresService {
       return { live: 0, ended: 0, retired: 0 };
     }
 
-    const { replace365LiveFixturesSnapshot } = await import('./live-fixture-cache.service');
-    await replace365LiveFixturesSnapshot(liveFixtures);
+    const { read365LiveFixtureIds, replace365LiveFixturesSnapshot } = await import(
+      './live-fixture-cache.service'
+    );
+    const previousIds = await read365LiveFixtureIds();
+    const previousLiveCount = previousIds.length;
+    const decision = decide365LiveSnapshotWrite({
+      incomingLiveCount: liveFixtures.length,
+      previousLiveCount,
+      catalogueCount: loaded.items.length,
+    });
+
+    let resultingLiveCount = previousLiveCount;
+    if (decision.action === 'KEEP_PREVIOUS') {
+      resultingLiveCount = previousLiveCount;
+    } else {
+      await replace365LiveFixturesSnapshot(liveFixtures);
+      resultingLiveCount = liveFixtures.length;
+    }
 
     const hotItems = loaded.items.filter((item) => isHotAllScoresPersistItem(item));
     const persistResult = await this.persistAllScoresFixtures(hotItems, loaded.competitionMeta, {
       refreshLiveDetails: false,
     });
 
-    logger.info(
-      `[OtherLeagues-365] live tick: ${liveFixtures.length} live (allscores ${liveItems.length}), ${hotItems.length - liveItems.length} just-ended, ${persistResult.retiredIds.length} retired (${start}..${end}, ${loaded.items.length} allscores)`,
-    );
+    const logLine =
+      `[OtherLeagues-365] live tick: incoming=${liveFixtures.length} previous=${previousLiveCount} ` +
+      `resulting=${resultingLiveCount} action=${decision.action} reason=${decision.reason} ` +
+      `(allscoresLive=${liveItems.length}, catalogue=${loaded.items.length}, ` +
+      `justEnded=${Math.max(0, hotItems.length - liveItems.length)}, retired=${persistResult.retiredIds.length}, ` +
+      `${start}..${end})`;
+    if (decision.action === 'KEEP_PREVIOUS') {
+      logger.warn(logLine);
+    } else {
+      logger.info(logLine);
+    }
+
     return {
-      live: liveFixtures.length,
+      live: resultingLiveCount,
       ended: Math.max(0, hotItems.length - liveItems.length),
       retired: persistResult.retiredIds.length,
     };
