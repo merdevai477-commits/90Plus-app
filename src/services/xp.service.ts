@@ -15,17 +15,11 @@ import { NotificationType } from './notification.service';
 // ─── XP Values Map ──────────────────────────────────────────────────────────
 
 /**
- * King of Predictions — the same two values for a solo and a group prediction.
- * An exact score is worth 5 IN TOTAL, not 2 + 5: the resolver awards ONE of
- * these actions per settled prediction, never both.
+ * King of Predictions. An exact score is worth 5 IN TOTAL, not 2 + 5: the
+ * resolver awards ONE of these actions per settled prediction, never both.
  */
 const PREDICTION_XP_WINNER = 2;
 const PREDICTION_XP_EXACT = 5;
-
-const GROUP_PREDICTION_XP_VALUES = {
-  GROUP_PREDICTION_WINNER: PREDICTION_XP_WINNER,
-  GROUP_PREDICTION_EXACT: PREDICTION_XP_EXACT,
-} satisfies Record<'GROUP_PREDICTION_WINNER' | 'GROUP_PREDICTION_EXACT', number>;
 
 export const XP_VALUES: Record<XpActionType, number> = {
   PROFILE_AVATAR: 50,
@@ -56,7 +50,12 @@ export const XP_VALUES: Record<XpActionType, number> = {
   RECEIVED_FOLLOW: 5,
   PREDICTION_EXACT: PREDICTION_XP_EXACT,
   PREDICTION_WINNER: PREDICTION_XP_WINNER,
-  ...GROUP_PREDICTION_XP_VALUES,
+  /**
+   * RETIRED with prediction groups. Kept in the enum so historical rows still
+   * read back; 0 makes awardXp reject any new award.
+   */
+  GROUP_PREDICTION_WINNER: 0,
+  GROUP_PREDICTION_EXACT: 0,
   /** One question answered correctly. A wrong one costs the same, see QUIZ_ANSWER_WRONG. */
   QUIZ_ANSWER_CORRECT: 1,
   QUIZ_ANSWER_WRONG: 1,

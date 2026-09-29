@@ -28,7 +28,6 @@ import {
 } from '../../config/appleAppSite';
 import {
   buildReferralLandingPage,
-  buildGroupJoinLandingPage,
   buildReelLandingPage,
   buildProfileLandingPage,
   PLAY_STORE_URL,
@@ -48,7 +47,6 @@ describe('iOS Universal Links (AASA)', () => {
   it('keeps the paths that already worked', () => {
     expect(AASA_ACTIVE_PATHS).toContain('/reels/*');
     expect(AASA_ACTIVE_PATHS).toContain('/@*');
-    expect(AASA_ACTIVE_PATHS).toContain('/groups/join/*');
   });
 
   it('serves them as AASA components under the real app id', () => {
@@ -167,7 +165,6 @@ describe('the other share landing pages keep the same store fallback', () => {
   const pages: Array<[string, string]> = [
     ['reel', buildReelLandingPage('11111111-2222-3333-4444-555555555555')],
     ['profile', buildProfileLandingPage('omar')],
-    ['group join', buildGroupJoinLandingPage('90PLUSAB12')],
     ['referral', buildReferralLandingPage('AB23CD')],
   ];
 

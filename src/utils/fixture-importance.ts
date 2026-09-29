@@ -1,6 +1,6 @@
 /**
  * Ranks fixtures by perceived importance (league tier, live status, knockout round).
- * Shared by chat highlights and prediction group daily rounds.
+ * Shared by chat highlights and the daily prediction match pool.
  */
 
 import { scores365CompetitionToLeagueId } from './scores365-league-id.util';
@@ -380,7 +380,7 @@ function kickoffMs(fixture: any): number {
 }
 
 /**
- * Top upcoming fixtures for prediction-group daily rounds.
+ * Top upcoming fixtures for the daily prediction match pool.
  *
  * 1) Big 5 domestic leagues first (max 2 per league).
  * 2) If slots remain: up to 2 marquee-club fixtures per continent

@@ -6,7 +6,6 @@
         "components": [
           { "/": "/reels/*" },
           { "/": "/@*" },
-          { "/": "/groups/join/*" },
           { "/": "/invite/*" },
           { "/": "/ref/*" }
         ]

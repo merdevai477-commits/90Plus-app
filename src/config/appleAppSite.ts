@@ -30,7 +30,6 @@ export const APPLE_APP_ID = `${APPLE_TEAM_ID}.${IOS_BUNDLE_ID}`;
 export const AASA_ACTIVE_PATHS = [
   '/reels/*',
   '/@*',
-  '/groups/join/*',
   '/invite/*',
   '/ref/*',
 ] as const;

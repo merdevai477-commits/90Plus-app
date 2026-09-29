@@ -10,17 +10,27 @@ import { requireAuth, optionalAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/rbac.middleware';
 import { responseCacheMiddleware, clearResponseCache } from '../middleware/responseCache.middleware';
 import { getBlockRelation } from '../services/block.service';
-import {
-  buildGroupPredictionStats,
-  fetchGroupPredictionsForProfile,
-  mergePredictionLists,
-  mergePredictionStats,
-  type ProfilePredictionRow,
-} from '../services/profile-predictions.service';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
 
 const router = Router();
+
+interface ProfilePredictionRow {
+  id: string;
+  apiMatchId: number;
+  predictionType: string;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  homeTeamLogo: string | null;
+  awayTeamLogo: string | null;
+  matchDate: string | null;
+  leagueName: string | null;
+  isCorrect: boolean | null;
+  coinsWon: number | null;
+  coinsSpent: number;
+  createdAt: string;
+  source: 'match';
+}
 
 // Constants
 const DAILY_PREDICTION_LIMIT = 10; // الحد الأقصى للتوقعات اليومية (= عدد التذاكر اليومية)
@@ -273,14 +283,11 @@ router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }), as
             return;
         }
 
-        const [predictions, groupPredictions] = await Promise.all([
-            prisma.prediction.findMany({
-                where: { userId: user.id },
-                orderBy: { createdAt: 'desc' },
-                take: 50,
-            }),
-            fetchGroupPredictionsForProfile(user.id, 50),
-        ]);
+        const predictions = await prisma.prediction.findMany({
+            where: { userId: user.id },
+            orderBy: { createdAt: 'desc' },
+            take: 50,
+        });
 
         const regularRows: ProfilePredictionRow[] = predictions.map((p) => ({
             id: p.id,
@@ -299,9 +306,7 @@ router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }), as
             source: 'match',
         }));
 
-        const merged = mergePredictionLists(regularRows, groupPredictions, 50);
-
-        // Group by match for frontend consumption (regular predictions tab only)
+        // Group by match for frontend consumption
         const predictionsMap: { [key: number]: any } = {};
         predictions.forEach((p: any) => {
             predictionsMap[p.apiMatchId] = {
@@ -321,7 +326,7 @@ router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }), as
         res.json({
             success: true,
             data: {
-                predictions: merged,
+                predictions: regularRows,
                 predictionsMap
             }
         });
@@ -446,12 +451,9 @@ router.get('/stats', requireAuth, responseCacheMiddleware({ ttl: 60 * 1000 }), a
             return;
         }
 
-        const baseStats = await buildPredictionStatsForUser(user.id);
-        const groupStats = await buildGroupPredictionStats(user.id);
-
         res.json({
             success: true,
-            data: mergePredictionStats(baseStats, groupStats),
+            data: await buildPredictionStatsForUser(user.id),
         });
     } catch (error) {
         logger.error('Error getting prediction stats:', error);
@@ -487,9 +489,7 @@ async function buildPredictionStatsForUser(userId: string) {
     const accuracy = resolved > 0 ? Math.round((correct / resolved) * 100) : 0;
     const totalCoinsWon = coinsAgg._sum.coinsWon || 0;
 
-    const base = { total, correct, incorrect, pending, accuracy, resolved, totalCoinsWon };
-    const groupStats = await buildGroupPredictionStats(userId);
-    return mergePredictionStats(base, groupStats);
+    return { total, correct, incorrect, pending, accuracy, resolved, totalCoinsWon };
 }
 
 const EMPTY_PUBLIC_PREDICTIONS = {
@@ -544,7 +544,7 @@ router.get('/public/:username', optionalAuth, responseCacheMiddleware({ ttl: 60 
             }
         }
 
-        const [stats, predictions, groupPredictions] = await Promise.all([
+        const [stats, predictions] = await Promise.all([
             buildPredictionStatsForUser(targetUser.id),
             prisma.prediction.findMany({
                 where: { userId: targetUser.id },
@@ -566,7 +566,6 @@ router.get('/public/:username', optionalAuth, responseCacheMiddleware({ ttl: 60 
                     createdAt: true,
                 },
             }),
-            fetchGroupPredictionsForProfile(targetUser.id, 50),
         ]);
 
         const regularRows: ProfilePredictionRow[] = predictions.map((p) => ({
@@ -586,13 +585,11 @@ router.get('/public/:username', optionalAuth, responseCacheMiddleware({ ttl: 60 
             source: 'match',
         }));
 
-        const mergedPredictions = mergePredictionLists(regularRows, groupPredictions, 50);
-
         res.json({
             success: true,
             data: {
                 stats,
-                predictions: mergedPredictions,
+                predictions: regularRows,
             },
         });
     } catch (error) {

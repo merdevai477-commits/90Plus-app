@@ -1235,7 +1235,7 @@ export default function CreateCompetitionScreen() {
           }}
           /**
            * `/api/upload` is the app's one mounted upload surface — the same one
-           * `/upload/avatar`, `/upload/cover` and `/upload/group-avatar` use.
+           * `/upload/avatar` and `/upload/cover` use.
            * This pointed at `/storage/competition-asset`, on a router `main.ts`
            * never mounts, so every prize and store image upload answered
            * `404 Route not found`.

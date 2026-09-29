@@ -33,16 +33,10 @@ export interface UserPredictionItem {
   isCorrect: boolean | null;
   coinsWon: number | null;
   coinsSpent: number;
-  xpAwarded?: number;
   createdAt: string;
-  source?: 'match' | 'group';
-  sourceLabel?: string;
-  mode?: 'WINNER' | 'EXACT';
-  predictedHomeScore?: number | null;
-  predictedAwayScore?: number | null;
 }
 
-type PredictionFilter = 'all' | 'correct' | 'pending' | 'group' | 'wrong';
+type PredictionFilter = 'all' | 'correct' | 'pending' | 'wrong';
 
 interface Props {
   predictionStats: PredictionStats | null;
@@ -51,12 +45,11 @@ interface Props {
 
 const FILTER_OPTIONS: {
   id: PredictionFilter;
-  labelKey: 'predictionFilterAll' | 'correctPredictions' | 'pendingPredictions' | 'predictionFilterGroup' | 'wrongPredictions';
+  labelKey: 'predictionFilterAll' | 'correctPredictions' | 'pendingPredictions' | 'wrongPredictions';
 }[] = [
   { id: 'all', labelKey: 'predictionFilterAll' },
   { id: 'correct', labelKey: 'correctPredictions' },
   { id: 'pending', labelKey: 'pendingPredictions' },
-  { id: 'group', labelKey: 'predictionFilterGroup' },
   { id: 'wrong', labelKey: 'wrongPredictions' },
 ];
 
@@ -74,13 +67,6 @@ function pickLabel(
   awayName: string,
   t: ReturnType<typeof useTranslation>['t'],
 ): string {
-  if (
-    item.mode === 'EXACT' &&
-    item.predictedHomeScore != null &&
-    item.predictedAwayScore != null
-  ) {
-    return `${item.predictedHomeScore}-${item.predictedAwayScore}`;
-  }
   if (item.predictionType === 'home') return homeName;
   if (item.predictionType === 'away') return awayName;
   return t.predictions.draw;
@@ -268,8 +254,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
 
   const filteredPredictions = useMemo(() => {
     let list = [...predictions];
-    if (filter === 'group') list = list.filter((p) => p.source === 'group');
-    else if (filter === 'pending') list = list.filter((p) => p.isCorrect === null);
+    if (filter === 'pending') list = list.filter((p) => p.isCorrect === null);
     else if (filter === 'correct') list = list.filter((p) => p.isCorrect === true);
     else if (filter === 'wrong') list = list.filter((p) => p.isCorrect === false);
     return sortByLatest(list);
@@ -279,8 +264,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
   const canExpand = visibleCount < filteredPredictions.length;
   const canCollapse = visibleCount > COLLAPSED_COUNT;
 
-  const emptyMessage =
-    filter === 'group' ? t.profile.noGroupPredictionsYet : t.profile.noPredictionsYet;
+  const emptyMessage = t.profile.noPredictionsYet;
 
   const accuracyPct = displayStats?.accuracy ?? 0;
   const normalizedAccuracy =

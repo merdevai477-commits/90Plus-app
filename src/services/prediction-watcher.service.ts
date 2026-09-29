@@ -11,7 +11,6 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { footballService } from './football.service';
 import { PredictionResolverService } from './prediction-resolver.service';
-import { GroupPredictionResolverService } from './group-prediction-resolver.service';
 import { CompetitionResolverService } from './competition-resolver.service';
 import { notifyUser } from './notify.service';
 import { NotificationType } from './notification.service';
@@ -85,30 +84,12 @@ export class PredictionWatcherService {
             );
 
             // Get all unique match IDs that have unresolved predictions.
-            // group_predictions may not exist yet on environments where the
-            // prediction-groups migration hasn't been applied — degrade to an
-            // empty list instead of crashing the whole watcher cycle every run.
-            const [unresolvedPredictions, unresolvedGroupPredictions, unresolvedCompetitions] = await Promise.all([
+            const [unresolvedPredictions, unresolvedCompetitions] = await Promise.all([
                 (prisma as any).prediction.findMany({
                     where: { isCorrect: null },
                     select: { apiMatchId: true },
                     distinct: ['apiMatchId'],
                 }),
-                prisma.groupPrediction
-                    .findMany({
-                        where: { isCorrect: null },
-                        select: { apiMatchId: true },
-                        distinct: ['apiMatchId'],
-                    })
-                    .catch((err: any) => {
-                        if (err?.code === 'P2021') {
-                            logger.warn(
-                                '⚠️ group_predictions table missing — run `npx prisma migrate deploy` (skipping group predictions this cycle)',
-                            );
-                            return [];
-                        }
-                        throw err;
-                    }),
                 prisma.competition
                     .findMany({
                         where: { status: { in: ['PUBLISHED', 'LOCKED'] } },
@@ -123,7 +104,6 @@ export class PredictionWatcherService {
 
             const matchIdSet = new Set<number>([
                 ...unresolvedPredictions.map((p: any) => p.apiMatchId),
-                ...unresolvedGroupPredictions.map((p) => p.apiMatchId),
                 ...unresolvedCompetitions.map((p) => p.apiMatchId),
             ]);
             const matchIds = Array.from(matchIdSet);
@@ -262,7 +242,6 @@ export class PredictionWatcherService {
                 
                 // Resolve all predictions for this match
                 await PredictionResolverService.resolveMatchPredictions(matchId, homeScore, awayScore);
-                await GroupPredictionResolverService.resolveMatchPredictions(matchId, homeScore, awayScore);
                 await CompetitionResolverService.resolveMatchCompetitions(matchId, homeScore, awayScore, status);
                 return true;
             } else {

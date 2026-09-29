@@ -2,7 +2,7 @@
  * Predict & Win (توقع واربح) — sponsored prediction competitions.
  *
  * Errors are thrown as `Error(CODE)` and mapped to HTTP responses by the
- * route layer, matching the `prediction-groups.service.ts` convention.
+ * route layer.
  */
 
 import type { Prisma } from '@prisma/client';

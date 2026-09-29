@@ -47,7 +47,7 @@ import { configureAudioVideo } from "../utils/videoConfig";
 import { ClerkProvider } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
-import { parseReelIdFromUrl, parseProfileUsernameFromUrl, parseGroupCodeFromUrl, parseReferralCodeFromUrl } from '../constants/shareLinks';
+import { parseReelIdFromUrl, parseProfileUsernameFromUrl, parseReferralCodeFromUrl } from '../constants/shareLinks';
 import { capturePendingReferral } from '../utils/pendingReferral';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -314,7 +314,6 @@ function RootLayoutNav() {
       <Stack.Screen name="competition-profile" options={{ headerShown: false }} />
       <Stack.Screen name="team-profile" options={{ headerShown: false }} />
       <Stack.Screen name="search" options={{ headerShown: false }} />
-      <Stack.Screen name="prediction-groups" options={{ headerShown: false }} />
       {/*
        * SHARE & WIN — front/app/share-win/
        *   index.tsx       → the Figma screen (node 109:470)
@@ -683,15 +682,6 @@ function RootLayout() {
       const profileUsername = parseProfileUsernameFromUrl(url);
       if (profileUsername) {
         navigateToProfile(profileUsername);
-        return;
-      }
-
-      const groupCode = parseGroupCodeFromUrl(url);
-      if (groupCode) {
-        router.push({
-          pathname: '/prediction-groups',
-          params: { joinCode: groupCode },
-        });
         return;
       }
 

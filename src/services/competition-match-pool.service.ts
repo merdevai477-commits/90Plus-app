@@ -6,10 +6,7 @@
  * (`PREDICT_WIN_POOL_SIZE`, default 10) and the pool is computed per day, so
  * raising it later needs no schema or app change.
  *
- * This deliberately does NOT reuse `group-round.service`: that pool belongs to
- * the Prediction Groups feature and is capped at its own fixed 10. Both share
- * the same ranking helper, but this picker reads Scores365 `cached_fixtures`
- * only — never API-Football.
+ * This picker reads Scores365 `cached_fixtures` only — never API-Football.
  */
 
 import {
@@ -97,7 +94,7 @@ function toPoolMatch(fixture: any, fallbackDay: string): PoolMatch | null {
   if (typeof apiMatchId !== 'number') return null;
 
   // Keep the full ISO instant. Slicing date/time apart and re-parsing them as
-  // local wall-clock (as the group-round formatter does) shifts kickoffs by the
+  // local wall-clock shifts kickoffs by the
   // server's UTC offset.
   const kickoff = meta.date ? new Date(meta.date) : null;
   const kickoffIso =
