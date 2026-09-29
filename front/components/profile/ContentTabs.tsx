@@ -50,7 +50,7 @@ const ContentTabs = memo(function ContentTabs({
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabsWrapper}>
+      <View style={[styles.tabsWrapper, LTR_ROW]}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -92,6 +92,9 @@ const ContentTabs = memo(function ContentTabs({
 
 export default ContentTabs;
 
+// Inline, not in StyleSheet.create: react-native-web rejects `direction` there.
+const LTR_ROW = { direction: 'ltr' } as const;
+
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 20,
@@ -99,7 +102,6 @@ const styles = StyleSheet.create({
   },
   tabsWrapper: {
     flexDirection: 'row',
-    direction: 'ltr',
     alignItems: 'stretch',
     justifyContent: 'space-between',
     backgroundColor: ProfileTheme.colors.profileTabBar,

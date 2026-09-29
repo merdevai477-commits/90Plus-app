@@ -77,7 +77,7 @@ export function ProfileAddLinkModal({
       >
         <Pressable style={StyleSheet.absoluteFill} onPress={safeClose} />
         <View style={styles.card}>
-          <View style={styles.header}>
+          <View style={[styles.header, LTR_ROW]}>
             <Pressable
               onPress={safeClose}
               hitSlop={8}
@@ -154,6 +154,9 @@ export function ProfileAddLinkModal({
   );
 }
 
+// Inline, not in StyleSheet.create: react-native-web rejects `direction` there.
+const LTR_ROW = { direction: 'ltr' } as const;
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -177,7 +180,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    direction: 'ltr',
     marginBottom: 10,
   },
   closeHit: {

@@ -53,6 +53,9 @@ const FILTER_OPTIONS: {
   { id: 'wrong', labelKey: 'wrongPredictions' },
 ];
 
+// Inline, not in StyleSheet.create: react-native-web rejects `direction` there.
+const RTL_ROW = { direction: 'rtl' } as const;
+
 const COLLAPSED_COUNT = 1;
 
 function sortByLatest(list: UserPredictionItem[]): UserPredictionItem[] {
@@ -181,14 +184,14 @@ const PredictionMatchCard = memo(function PredictionMatchCard({
       <Image source={PROFILE_ICONS.predictionDivider} style={cardStyles.divider} contentFit="fill" />
 
       <View style={cardStyles.resultsBlock}>
-        <View style={cardStyles.resultRow}>
+        <View style={[cardStyles.resultRow, RTL_ROW]}>
           <ResultPill
             label={isPending ? pendingLabel : userPick}
             tone={isPending ? 'pending' : themeKey === 'wrong' ? 'wrong' : 'correct'}
           />
           <Text style={cardStyles.resultLabel}>{t.profile.yourPick}</Text>
         </View>
-        <View style={cardStyles.resultRow}>
+        <View style={[cardStyles.resultRow, RTL_ROW]}>
           <ResultPill
             label={isPending ? pendingLabel : correctPick}
             tone={isPending ? 'pending' : 'correct'}
@@ -313,7 +316,7 @@ export const ProfileAnalyticsTab: React.FC<Props> = ({
           end={{ x: 0.5, y: 0 }}
         />
         <Text style={styles.successPct}>{normalizedAccuracy}%</Text>
-        <View style={styles.successRight}>
+        <View style={[styles.successRight, RTL_ROW]}>
           <Text style={styles.successLabel}>{t.profile.successRate}</Text>
           <Image source={PROFILE_ICONS.lineChart} style={styles.successIcon} contentFit="contain" />
         </View>
@@ -449,7 +452,6 @@ const cardStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    direction: 'rtl',
   },
   resultLabel: {
     color: '#C5C5C5',
@@ -514,7 +516,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    direction: 'rtl',
   },
   successLabel: {
     color: '#fff',
