@@ -47,7 +47,7 @@ export function SplashScreenLayout({ children, logoAnimatedStyle }: SplashScreen
 
       <LogoWrap style={[styles.logoContainer, logoAnimatedStyle]} pointerEvents="none">
         <Image
-          source={require('../../assets/images/splash/splash-logo.png')}
+          source={require('../../assets/images/splash/splash-logo-v2.png')}
           style={styles.logo}
           contentFit="contain"
           priority="high"

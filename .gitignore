@@ -58,6 +58,9 @@ front/assets/images/*.png
 !front/assets/images/android-icon-background.png
 !front/assets/images/android-icon-foreground.png
 !front/assets/images/android-icon-monochrome.png
+!front/assets/images/app-icon.png
+!front/assets/images/adaptive-icon-foreground.png
+!front/assets/images/adaptive-icon-monochrome.png
 !front/assets/images/90Plus.png
 !front/assets/images/fwc-2026-official-logo.png
 # Questions hub card / hero artwork (already jpeg)

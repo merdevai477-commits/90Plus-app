@@ -5,7 +5,7 @@
     "version": "1.1.0",
     "runtimeVersion": "1.1.0",
     "orientation": "portrait",
-    "icon": "./assets/images/90Plus.png",
+    "icon": "./assets/images/app-icon.png",
     "scheme": "ninetyplus",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -69,10 +69,9 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0d0529",
-        "foregroundImage": "./assets/images/90Plus.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/90Plus.png"
+        "backgroundColor": "#0a0224",
+        "foregroundImage": "./assets/images/adaptive-icon-foreground.png",
+        "monochromeImage": "./assets/images/adaptive-icon-monochrome.png"
       },
       "package": "com.mhmdsh1892.ninetyplusapp",
       "googleServicesFile": "./google-services.json",
@@ -174,7 +173,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/90Plus.png"
+      "favicon": "./assets/images/app-icon.png"
     },
     "plugins": [
       "expo-router",
@@ -203,7 +202,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash/splash-logo.png",
+          "image": "./assets/images/splash/splash-logo-v2.png",
           "imageWidth": 220,
           "resizeMode": "contain",
           "backgroundColor": "#0d0529",
@@ -212,7 +211,7 @@
           },
           "android": {
             "backgroundColor": "#0d0529",
-            "image": "./assets/images/splash/splash-logo.png",
+            "image": "./assets/images/splash/splash-logo-v2.png",
             "imageWidth": 220,
             "resizeMode": "contain",
             "dark": {
