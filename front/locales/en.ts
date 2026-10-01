@@ -1078,6 +1078,8 @@ export const en = {
     matchResult: 'Match result',
     pickWinner: "Tap the winning club's crest or Draw",
     viewDay: 'View predictions',
+    resultCorrect: 'Correct',
+    resultWrong: 'Wrong',
     majorLeagues: 'Major leagues',
     weekRange: 'This week | Sunday to Saturday',
     prizeTitle: 'Predict & win',

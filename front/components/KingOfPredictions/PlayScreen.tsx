@@ -41,13 +41,20 @@ type SavedRow = {
   type?: Pick;
   home: number | null;
   away: number | null;
-  resolved: boolean;
+  correct: boolean | null;
 };
+
+type Verdict = 'pending' | 'correct' | 'wrong';
 
 const SIDE = 22;
 const VS_GRADIENT = ['#A855F7', '#633291'] as const;
 const PICK_ON = [KING_PURPLE, '#513690'] as const;
 const CARD_BG = ['#0C051A', '#07040D'] as const;
+const VERDICT_GRADIENT: Record<Verdict, readonly [string, string]> = {
+  pending: ['#FACC15', '#CA8A04'],
+  correct: ['#22C55E', '#15803D'],
+  wrong: ['#EF4444', '#B91C1C'],
+};
 
 function started(match: Match): boolean {
   if (match.status === 'live' || match.status === 'finished') return true;
@@ -121,7 +128,7 @@ export function KingPlayScreen({
         type: row.prediction?.type,
         home: row.predictedHomeScore ?? null,
         away: row.predictedAwayScore ?? null,
-        resolved: row.isCorrect != null,
+        correct: row.isCorrect ?? null,
       };
     }
     setSaved(nextSaved);
@@ -163,7 +170,7 @@ export function KingPlayScreen({
   }, [copy]);
 
   const isLocked = useCallback(
-    (match: Match) => dayPassed || started(match) || saved[match.id]?.resolved === true,
+    (match: Match) => dayPassed || started(match) || saved[match.id]?.correct != null,
     [dayPassed, saved],
   );
 
@@ -231,6 +238,23 @@ export function KingPlayScreen({
     return null;
   };
 
+  // King of Results is about the exact scoreline, so a right winner with the
+  // wrong score still reads as wrong here once the final score is known.
+  const verdictOf = (match: Match): Verdict | null => {
+    const prev = saved[match.id];
+    if (!prev || savedLabel(match) == null) return null;
+    if (prev.correct == null) return 'pending';
+    if (!prev.correct) return 'wrong';
+    if (
+      !isGame &&
+      match.status === 'finished' &&
+      (prev.home !== match.score.home || prev.away !== match.score.away)
+    ) {
+      return 'wrong';
+    }
+    return 'correct';
+  };
+
   return (
     <View style={styles.root}>
       <KingHeader />
@@ -254,7 +278,14 @@ export function KingPlayScreen({
         >
           {matches.map((match) => {
             const locked = isLocked(match);
-            const label = savedLabel(match) ?? (locked ? copy.closed : copy.predictNow);
+            const verdict = verdictOf(match);
+            const label =
+              verdict === 'correct'
+                ? copy.resultCorrect
+                : verdict === 'wrong'
+                  ? copy.resultWrong
+                  : savedLabel(match) ?? (locked ? copy.closed : copy.predictNow);
+            const btnColors = verdict ? VERDICT_GRADIENT[verdict] : locked ? KING_PASSED_GRADIENT : PICK_ON;
             return (
               <LinearGradient key={match.id} colors={CARD_BG} style={styles.card}>
                 <CardTeam name={match.awayTeam.name} logo={match.awayTeam.logo} font={fontBold} size={13} />
@@ -264,9 +295,14 @@ export function KingPlayScreen({
                   </PWGradientText>
                   <Text style={[styles.time, { fontFamily: fontMedium }]}>{match.time || ''}</Text>
                   <Pressable disabled={locked || busy} onPress={() => openSheet(match)}>
-                    <LinearGradient colors={locked ? KING_PASSED_GRADIENT : PICK_ON} style={styles.predictBtn}>
+                    <LinearGradient colors={btnColors} style={styles.predictBtn}>
                       <Text
-                        style={[styles.predictText, locked && styles.predictTextPassed, { fontFamily: fontBold }]}
+                        style={[
+                          styles.predictText,
+                          !verdict && locked && styles.predictTextPassed,
+                          verdict === 'pending' && styles.predictTextPending,
+                          { fontFamily: fontBold },
+                        ]}
                         numberOfLines={1}
                         adjustsFontSizeToFit
                         minimumFontScale={0.6}
@@ -521,6 +557,7 @@ const styles = StyleSheet.create({
   },
   predictText: { color: '#fff', fontSize: 13 },
   predictTextPassed: { color: '#8A8794' },
+  predictTextPending: { color: '#2B1D00' },
   footer: {
     position: 'absolute',
     left: 0,

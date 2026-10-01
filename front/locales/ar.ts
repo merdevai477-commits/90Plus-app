@@ -1163,6 +1163,8 @@ export const ar = {
     matchResult: 'نتيجة المباراة',
     pickWinner: 'اختر شعار الفريق الفائز أو التعادل',
     viewDay: 'عرض التوقعات',
+    resultCorrect: 'صحيح',
+    resultWrong: 'خاطئ',
     majorLeagues: 'الدوريات الكبرى',
     weekRange: 'هذا الأسبوع | من الأحد إلى السبت',
     prizeTitle: 'توقع واربح',
