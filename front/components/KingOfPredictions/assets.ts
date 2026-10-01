@@ -1,5 +1,6 @@
 export const KING_ART = {
   stadium: require('../../assets/images/king-of-predictions/stadium-bg.png'),
+  stadiumGame: require('../../assets/images/king-of-predictions/stadium-game.jpg'),
   confetti: require('../../assets/images/king-of-predictions/confetti.png'),
   confettiPrize: require('../../assets/images/king-of-predictions/confetti-prize.png'),
   prizeBg: require('../../assets/images/king-of-predictions/prize-bg.png'),

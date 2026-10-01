@@ -175,7 +175,11 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.stadium, { height: 309 + Math.max(0, insets.top - 47) }]} pointerEvents="none">
-          <Image source={KING_ART.stadium} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <Image
+            source={isResults ? KING_ART.stadium : KING_ART.stadiumGame}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
           <LinearGradient
             colors={['rgba(20,3,52,0)', 'rgba(20,3,52,0.92)']}
             locations={[0.19, 0.6]}
@@ -183,9 +187,21 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
             end={{ x: 0, y: 0.9 }}
             style={StyleSheet.absoluteFill}
           />
-          <LinearGradient colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.84)']} style={StyleSheet.absoluteFill} />
+          {isResults ? (
+            <LinearGradient colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.84)']} style={StyleSheet.absoluteFill} />
+          ) : (
+            <LinearGradient
+              colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.75)']}
+              locations={[0.65, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
           <View style={styles.confetti}>
-            <Image source={KING_ART.confetti} style={styles.confettiImage} contentFit="fill" />
+            <Image
+              source={KING_ART.confetti}
+              style={isResults ? styles.confettiImage : StyleSheet.absoluteFill}
+              contentFit={isResults ? 'fill' : 'cover'}
+            />
             <LinearGradient colors={['rgba(3,3,3,0)', '#030303']} style={StyleSheet.absoluteFill} />
           </View>
         </View>
