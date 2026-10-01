@@ -80,7 +80,8 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
             emptyTitle={copy.emptyTitle}
             emptyActionLabel={copy.predictNow}
             onEmptyAction={() => {
-              router.push({ pathname: '/king-of-predictions/week', params: { mode } } as never);
+              if (router.canGoBack()) router.back();
+              else router.push({ pathname: '/king-of-predictions/week', params: { mode } } as never);
             }}
           />
         )}

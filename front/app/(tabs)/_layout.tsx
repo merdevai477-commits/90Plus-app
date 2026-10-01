@@ -1,4 +1,4 @@
-import { Tabs, useRouter, usePathname } from "expo-router";
+import { Tabs, useRouter, usePathname, useNavigation } from "expo-router";
 import { User, Video, Brain, BarChart2, Gift } from "lucide-react-native";
 import React, { useEffect } from "react";
 import { Animated, BackHandler, View } from 'react-native';
@@ -25,12 +25,19 @@ function isLandingTab(pathname: string | null): boolean {
 export default function TabLayout() {
   const router = useRouter();
   const pathname = usePathname();
+  const navigation = useNavigation();
 
   useEffect(() => {
     let backPressCount = 0;
     let backPressTimer: ReturnType<typeof setTimeout>;
 
     const backAction = () => {
+      // This layout stays mounted under screens pushed onto the root stack;
+      // let those screens pop one step at a time instead of jumping to matches.
+      if (!navigation.isFocused()) {
+        return false;
+      }
+
       if (isLandingTab(pathname)) {
         backPressCount++;
 
@@ -60,7 +67,7 @@ export default function TabLayout() {
         clearTimeout(backPressTimer);
       }
     };
-  }, [pathname, router]);
+  }, [navigation, pathname, router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
