@@ -230,19 +230,20 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
           {[...days].reverse().map((day) => {
             const index = days.findIndex((item) => localDateKey(item) === localDateKey(day));
             const selected = index === dayIndex;
+            const past = !selected && index < initialIndex;
+            const dayFont = selected ? fontBold : past ? fontMedium : fontRegular;
+            const tone = selected ? styles.dayOn : past && styles.dayPast;
             const label = (
               <>
                 <Text
-                  style={[styles.dayName, { fontFamily: selected ? fontBold : fontRegular }, selected && styles.dayOn]}
+                  style={[styles.dayName, { fontFamily: dayFont }, tone]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.6}
                 >
                   {copy.days[index]}
                 </Text>
-                <Text style={[styles.dayNum, { fontFamily: selected ? fontBold : fontRegular }, selected && styles.dayOn]}>
-                  {index + 1}
-                </Text>
+                <Text style={[styles.dayNum, { fontFamily: dayFont }, tone]}>{index + 1}</Text>
               </>
             );
             return (
@@ -252,7 +253,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
                     {label}
                   </LinearGradient>
                 ) : (
-                  <View style={[styles.dayChip, styles.dayChipIdle]}>{label}</View>
+                  <View style={[styles.dayChip, past ? styles.dayChipPast : styles.dayChipIdle]}>{label}</View>
                 )}
               </Pressable>
             );
@@ -366,8 +367,10 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
               end={{ x: 1, y: 0 }}
               style={styles.challengeBtn}
             >
+              <Text style={[styles.challengeBtnText, { fontFamily: fontSemi }]} numberOfLines={1}>
+                {cta}
+              </Text>
               <Image source={KING_ICON.arrowLeft} style={styles.arrowIcon} contentFit="contain" />
-              <Text style={[styles.challengeBtnText, { fontFamily: fontSemi }]}>{cta}</Text>
             </LinearGradient>
           </Pressable>
         </LinearGradient>
@@ -478,6 +481,7 @@ const styles = StyleSheet.create({
   },
   dayCell: { flex: 1 },
   dayChip: {
+    height: 69,
     borderRadius: 8,
     paddingVertical: 14,
     paddingHorizontal: 2,
@@ -487,11 +491,15 @@ const styles = StyleSheet.create({
   dayChipIdle: {
     backgroundColor: 'rgba(23,19,33,0.2)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(194,194,194,0.18)',
+  },
+  dayChipPast: {
+    backgroundColor: '#171321',
   },
   dayName: { color: '#C2C2C2', fontSize: 13, textAlign: 'center' },
   dayNum: { color: '#C2C2C2', fontSize: 12, textAlign: 'center' },
   dayOn: { color: '#fff' },
+  dayPast: { color: '#494949' },
   prize: {
     marginTop: 24,
     marginHorizontal: SIDE,
@@ -531,7 +539,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     height: 37,
     minWidth: 122,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderRadius: 36,
     flexDirection: 'row',
     alignItems: 'center',
