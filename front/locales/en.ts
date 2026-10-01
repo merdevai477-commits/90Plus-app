@@ -1076,6 +1076,8 @@ export const en = {
     yourPoints: 'Your points',
     matchCountLabel: 'match predictions',
     matchResult: 'Match result',
+    pickWinner: "Tap the winning club's crest or Draw",
+    viewDay: 'View predictions',
     majorLeagues: 'Major leagues',
     weekRange: 'This week | Sunday to Saturday',
     prizeTitle: 'Predict & win',

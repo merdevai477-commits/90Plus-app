@@ -26,11 +26,13 @@ import { useAppFont } from '../../utils/fontSetup';
 import { KING_ART, KING_ICON, KING_LEAGUE_BADGES } from './assets';
 import {
   KING_BUTTON_GRADIENT,
+  KING_PASSED_GRADIENT,
   KingBoardList,
   KingEmptyState,
   KingOrnament,
   KingPeriodTabs,
 } from './KingBoardList';
+import { GlassSurface } from './GlassSurface';
 import { KingHeader } from './KingHeader';
 import {
   KING_BG,
@@ -138,7 +140,8 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   }, [load]);
 
   const started = predictedIds.size > 0;
-  const cta = started ? copy.continueChallenge : copy.startChallenge;
+  const dayPassed = dayIndex < initialIndex;
+  const cta = dayPassed ? copy.viewDay : started ? copy.continueChallenge : copy.startChallenge;
   const openPlay = () => {
     router.push({
       pathname: '/king-of-predictions/play',
@@ -248,13 +251,9 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
             );
             return (
               <Pressable key={localDateKey(day)} onPress={() => setDayIndex(index)} style={styles.dayCell}>
-                {selected ? (
-                  <LinearGradient colors={[KING_PURPLE, '#513690']} style={styles.dayChip}>
-                    {label}
-                  </LinearGradient>
-                ) : (
-                  <View style={[styles.dayChip, past ? styles.dayChipPast : styles.dayChipIdle]}>{label}</View>
-                )}
+                <GlassSurface radius={8} tone={selected ? 'purple' : past ? 'muted' : 'neutral'} style={styles.dayChip}>
+                  {label}
+                </GlassSurface>
               </Pressable>
             );
           })}
@@ -360,18 +359,20 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
               <Text style={[styles.challengeLabel, { fontFamily: fontSemi }]}>{` ${copy.matchCountLabel}`}</Text>
             </Text>
           </View>
-          <Pressable onPress={openPlay}>
-            <LinearGradient
-              colors={['rgba(139,92,246,0.2)', 'rgba(81,54,144,0.2)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.challengeBtn}
-            >
-              <Text style={[styles.challengeBtnText, { fontFamily: fontSemi }]} numberOfLines={1}>
+          <Pressable onPress={openPlay} style={styles.challengeBtnWrap}>
+            <GlassSurface radius={36} tone={dayPassed ? 'muted' : 'purple'} style={styles.challengeBtn}>
+              <Text
+                style={[styles.challengeBtnText, dayPassed && styles.passedText, { fontFamily: fontSemi }]}
+                numberOfLines={1}
+              >
                 {cta}
               </Text>
-              <Image source={KING_ICON.arrowLeft} style={styles.arrowIcon} contentFit="contain" />
-            </LinearGradient>
+              <Image
+                source={KING_ICON.arrowLeft}
+                style={[styles.arrowIcon, dayPassed && styles.passedIcon]}
+                contentFit="contain"
+              />
+            </GlassSurface>
           </Pressable>
         </LinearGradient>
 
@@ -409,8 +410,8 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
         style={[styles.footer, { height: 130 + Math.max(insets.bottom, 12), paddingBottom: Math.max(insets.bottom, 12) + 8 }]}
       >
         <Pressable onPress={openPlay}>
-          <LinearGradient colors={KING_BUTTON_GRADIENT} style={styles.footerBtn}>
-            <Text style={[styles.footerText, { fontFamily: fontSemi }]}>{cta}</Text>
+          <LinearGradient colors={dayPassed ? KING_PASSED_GRADIENT : KING_BUTTON_GRADIENT} style={styles.footerBtn}>
+            <Text style={[styles.footerText, dayPassed && styles.passedText, { fontFamily: fontSemi }]}>{cta}</Text>
           </LinearGradient>
         </Pressable>
       </LinearGradient>
@@ -482,19 +483,10 @@ const styles = StyleSheet.create({
   dayCell: { flex: 1 },
   dayChip: {
     height: 69,
-    borderRadius: 8,
     paddingVertical: 14,
     paddingHorizontal: 2,
     alignItems: 'center',
     gap: 10,
-  },
-  dayChipIdle: {
-    backgroundColor: 'rgba(23,19,33,0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(194,194,194,0.18)',
-  },
-  dayChipPast: {
-    backgroundColor: '#171321',
   },
   dayName: { color: '#C2C2C2', fontSize: 13, textAlign: 'center' },
   dayNum: { color: '#C2C2C2', fontSize: 12, textAlign: 'center' },
@@ -535,8 +527,8 @@ const styles = StyleSheet.create({
   challengeLine: { textAlign: 'right' },
   challengeCount: { color: KING_PURPLE, fontSize: 32 },
   challengeLabel: { color: '#fff', fontSize: 22 },
+  challengeBtnWrap: { alignSelf: 'flex-start' },
   challengeBtn: {
-    alignSelf: 'flex-start',
     height: 37,
     minWidth: 122,
     paddingHorizontal: 12,
@@ -548,6 +540,8 @@ const styles = StyleSheet.create({
   },
   arrowIcon: { width: 16, height: 16 },
   challengeBtnText: { color: '#fff', fontSize: 14 },
+  passedText: { color: '#8A8794' },
+  passedIcon: { opacity: 0.5 },
   boardCard: {
     marginTop: 24,
     marginHorizontal: SIDE,

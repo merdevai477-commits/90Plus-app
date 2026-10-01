@@ -10,6 +10,7 @@ import { KING_ART, KING_ICON } from './assets';
 const PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
 
 export const KING_BUTTON_GRADIENT = ['#8B5CF6', '#2E146A'] as const;
+export const KING_PASSED_GRADIENT = ['#3A3842', '#1E1C24'] as const;
 const GOLD_LINE = ['rgba(24,6,64,0)', '#C29425', '#FFF0C0'] as const;
 
 /** Medal tiers from Figma rows 1–3 (`1228:7416`, `1228:7439`, `1228:7462`). */

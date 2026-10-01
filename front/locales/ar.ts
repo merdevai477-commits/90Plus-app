@@ -1161,6 +1161,8 @@ export const ar = {
     yourPoints: 'نقاطك',
     matchCountLabel: 'توقعات للمباريات',
     matchResult: 'نتيجة المباراة',
+    pickWinner: 'اختر شعار الفريق الفائز أو التعادل',
+    viewDay: 'عرض التوقعات',
     majorLeagues: 'الدوريات الكبرى',
     weekRange: 'هذا الأسبوع | من الأحد إلى السبت',
     prizeTitle: 'توقع واربح',
