@@ -5,13 +5,20 @@
 
 import { Router, Request, Response } from 'express';
 import prisma from '../lib/prisma';
-import type { Prediction, User } from '@prisma/client';
+import type { Prediction } from '@prisma/client';
 import { requireAuth, optionalAuth } from '../middleware/clerk.middleware';
 import { requireAdmin } from '../middleware/rbac.middleware';
 import { responseCacheMiddleware, clearResponseCache } from '../middleware/responseCache.middleware';
 import { getBlockRelation } from '../services/block.service';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
+import {
+    getKingLeaderboard,
+    KingPredictionError,
+    upsertKingPrediction,
+    type KingMode,
+    type KingPeriod,
+} from '../services/king-prediction.service';
 
 const router = Router();
 
@@ -109,7 +116,18 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        const { apiMatchId, predictionType, homeTeam, awayTeam, homeTeamLogo, awayTeamLogo, matchDate, leagueName } = req.body;
+        const {
+            apiMatchId,
+            predictionType,
+            homeTeam,
+            awayTeam,
+            homeTeamLogo,
+            awayTeamLogo,
+            matchDate,
+            leagueName,
+            predictedHomeScore,
+            predictedAwayScore,
+        } = req.body;
 
         const parsedMatchId = parseInt(String(apiMatchId), 10);
         if (!apiMatchId || Number.isNaN(parsedMatchId) || parsedMatchId <= 0) {
@@ -119,14 +137,30 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        if (!predictionType) {
+        const hasScoreline = predictedHomeScore !== undefined && predictedHomeScore !== null
+            && predictedAwayScore !== undefined && predictedAwayScore !== null;
+        const home = hasScoreline ? parseInt(String(predictedHomeScore), 10) : null;
+        const away = hasScoreline ? parseInt(String(predictedAwayScore), 10) : null;
+        if (hasScoreline && (
+            home == null || away == null || Number.isNaN(home) || Number.isNaN(away)
+            || home < 0 || away < 0 || home > 20 || away > 20
+        )) {
+            sendError(req, res, ErrorCode.VALIDATION, 'النتيجة يجب أن تكون بين 0 و 20', {
+                reason: 'INVALID_SCORE_RANGE',
+                min: 0,
+                max: 20,
+            });
+            return;
+        }
+
+        if (!hasScoreline && !predictionType) {
             sendError(req, res, ErrorCode.VALIDATION, 'Missing predictionType', {
                 required: ['predictionType'],
             });
             return;
         }
 
-        if (!['home', 'draw', 'away'].includes(predictionType)) {
+        if (!hasScoreline && !['home', 'draw', 'away'].includes(predictionType)) {
             sendError(req, res, ErrorCode.VALIDATION, 'Invalid prediction type', {
                 field: 'predictionType',
                 allowed: ['home', 'draw', 'away'],
@@ -134,117 +168,53 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        // Find user (minimal select — full validation happens inside transaction)
-        const userExists = await prisma.user.findFirst({
-            where: { clerkUserId },
-            select: { id: true }
-        });
-
-        if (!userExists) {
-            sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
-            return;
-        }
-
-        // Fix SEC-5: Move coins check, daily limit check, and duplicate check INSIDE the transaction
-        // so all 3 operations are atomic — eliminates the race condition where two concurrent
-        // requests could both pass the pre-transaction checks and double-deduct coins.
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
-        let prediction: Prediction;
-        let updatedUser: Pick<User, 'coins'>;
-        let todayPredictionsCount = 0;
-
+        let saved;
         try {
-            [prediction, updatedUser] = await prisma.$transaction(async (tx) => {
-                // Re-read user inside transaction (prevents TOCTOU race)
-                const user = await tx.user.findUnique({
-                    where: { id: userExists.id },
-                    select: { id: true, coins: true }
-                });
-
-                if (!user) throw new Error('USER_NOT_FOUND');
-
-                // Predictions no longer cost coins — only a daily ticket.
-                // The old INSUFFICIENT_COINS check has been removed.
-
-                // Atomic daily limit check (= ticket check)
-                const todayCount = await tx.prediction.count({
-                    where: {
-                        userId: user.id,
-                        createdAt: { gte: today, lt: tomorrow }
-                    }
-                });
-                todayPredictionsCount = todayCount;
-
-                if (todayCount >= DAILY_PREDICTION_LIMIT) {
-                    throw new Error('DAILY_LIMIT_REACHED');
-                }
-
-                // Atomic duplicate check
-                const existing = await tx.prediction.findUnique({
-                    where: {
-                        userId_apiMatchId: {
-                            userId: user.id,
-                            apiMatchId: parsedMatchId
-                        }
-                    }
-                });
-
-                if (existing) throw new Error('ALREADY_PREDICTED');
-
-                // All checks passed — create prediction atomically (no coin charge).
-                const newPrediction = await tx.prediction.create({
-                    data: {
-                        userId: user.id,
-                        apiMatchId: parsedMatchId,
-                        predictionType,
-                        coinsSpent: PREDICTION_COST, // = 0
-                        isCorrect: null,
-                        homeTeam,
-                        awayTeam,
-                        homeTeamLogo,
-                        awayTeamLogo,
-                        matchDate: matchDate ? new Date(matchDate) : null,
-                        leagueName
-                    }
-                });
-
-                // No coin deduction — predictions now cost only 1 daily ticket.
-                const newUser = { coins: user.coins };
-
-                return [newPrediction, newUser];
+            saved = await upsertKingPrediction({
+                clerkUserId,
+                apiMatchId: parsedMatchId,
+                mode: hasScoreline ? 'exact' : 'winner',
+                predictionType: hasScoreline ? undefined : predictionType,
+                homeScore: home ?? undefined,
+                awayScore: away ?? undefined,
+                homeTeam,
+                awayTeam,
+                homeTeamLogo,
+                awayTeamLogo,
+                matchDate,
+                leagueName,
+                dailyLimit: DAILY_PREDICTION_LIMIT,
+                coinsSpent: PREDICTION_COST,
             });
-        } catch (txError: any) {
-            const msg = txError?.message || '';
-            if (msg === 'USER_NOT_FOUND') {
-                sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
-            } else if (msg === 'DAILY_LIMIT_REACHED') {
-                sendError(req, res, ErrorCode.RATE_LIMIT, 'Daily prediction limit reached', {
-                    reason: 'DAILY_LIMIT_REACHED',
-                    limit: DAILY_PREDICTION_LIMIT,
-                });
-            } else if (msg === 'ALREADY_PREDICTED') {
-                sendError(req, res, ErrorCode.CONFLICT, 'Already predicted on this match', {
-                    reason: 'ALREADY_PREDICTED',
-                    matchId: String(apiMatchId),
-                });
-            } else {
-                throw txError; // re-throw unexpected errors to outer catch
+        } catch (txError: unknown) {
+            if (txError instanceof KingPredictionError) {
+                if (txError.reason === 'USER_NOT_FOUND') {
+                    sendError(req, res, ErrorCode.NOT_FOUND, 'User not found');
+                } else if (txError.reason === 'DAILY_LIMIT_REACHED') {
+                    sendError(req, res, ErrorCode.RATE_LIMIT, 'Daily prediction limit reached', {
+                        reason: 'DAILY_LIMIT_REACHED',
+                        limit: DAILY_PREDICTION_LIMIT,
+                    });
+                } else if (txError.reason === 'MATCH_STARTED' || txError.reason === 'ALREADY_RESOLVED') {
+                    sendError(req, res, ErrorCode.CONFLICT, 'Predictions are closed for this match', {
+                        reason: txError.reason,
+                        matchId: String(apiMatchId),
+                    });
+                }
+                return;
             }
-            return;
+            throw txError;
         }
 
         res.json({
             success: true,
             data: {
-                prediction,
-                newBalance: updatedUser.coins,
-                remaining: DAILY_PREDICTION_LIMIT - todayPredictionsCount - 1
+                prediction: saved.prediction,
+                newBalance: saved.coins,
+                remaining: saved.remaining,
+                updated: saved.updated,
             },
-            message: 'تم تسجيل توقعك بنجاح! 🎯'
+            message: saved.updated ? 'تم تحديث توقعك' : 'تم تسجيل توقعك بنجاح! 🎯'
         });
 
         // Invalidate the per-user predictions cache so the next GET /user
@@ -313,9 +283,11 @@ router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }), as
                 id: p.id,
                 prediction: {
                     type: p.predictionType,
-                    homeScore: 0,
-                    awayScore: 0
+                    homeScore: p.predictedHomeScore ?? 0,
+                    awayScore: p.predictedAwayScore ?? 0,
                 },
+                predictedHomeScore: p.predictedHomeScore,
+                predictedAwayScore: p.predictedAwayScore,
                 coinsSpent: p.coinsSpent,
                 coinsWon: p.coinsWon,
                 isCorrect: p.isCorrect,
@@ -750,123 +722,60 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
             return;
         }
 
-        const user = await prisma.user.findFirst({
-            where: { clerkUserId },
-            select: { id: true, coins: true }
-        });
-
-        if (!user) {
-            sendError(req, res, ErrorCode.NOT_FOUND, 'المستخدم غير موجود');
+        const parsedMatchId = typeof matchId === 'string' ? parseInt(matchId, 10) : Number(matchId);
+        if (!Number.isFinite(parsedMatchId) || parsedMatchId <= 0) {
+            sendError(req, res, ErrorCode.VALIDATION, 'Invalid matchId', { field: 'matchId' });
             return;
         }
 
-        // Check if user has enough coins
-        if (user.coins < PREDICTION_COST) {
-            sendError(req, res, ErrorCode.VALIDATION, `تحتاج إلى ${PREDICTION_COST} عملة لإرسال توقع`, {
-                reason: 'INSUFFICIENT_COINS',
-                required: PREDICTION_COST,
-                current: user.coins,
+        let saved;
+        try {
+            saved = await upsertKingPrediction({
+                clerkUserId,
+                apiMatchId: parsedMatchId,
+                mode: 'exact',
+                homeScore: home,
+                awayScore: away,
+                dailyLimit: DAILY_PREDICTION_LIMIT,
+                coinsSpent: PREDICTION_COST,
             });
-            return;
-        }
-
-        // Check daily limit
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-
-        const todayPredictions = await prisma.prediction.count({
-            where: {
-                userId: user.id,
-                createdAt: {
-                    gte: today,
-                    lt: tomorrow
+        } catch (txError: unknown) {
+            if (txError instanceof KingPredictionError) {
+                if (txError.reason === 'USER_NOT_FOUND') {
+                    sendError(req, res, ErrorCode.NOT_FOUND, 'المستخدم غير موجود');
+                } else if (txError.reason === 'DAILY_LIMIT_REACHED') {
+                    sendError(req, res, ErrorCode.RATE_LIMIT, `لقد وصلت إلى الحد اليومي (${DAILY_PREDICTION_LIMIT} توقعات)`, {
+                        reason: 'DAILY_LIMIT_REACHED',
+                        limit: DAILY_PREDICTION_LIMIT,
+                    });
+                } else {
+                    sendError(req, res, ErrorCode.CONFLICT, 'لا يمكن تعديل التوقع بعد بداية المباراة', {
+                        reason: txError.reason,
+                        matchId: String(matchId),
+                    });
                 }
+                return;
             }
-        });
-
-        if (todayPredictions >= DAILY_PREDICTION_LIMIT) {
-            sendError(req, res, ErrorCode.RATE_LIMIT, `لقد وصلت إلى الحد اليومي (${DAILY_PREDICTION_LIMIT} توقعات)`, {
-                reason: 'DAILY_LIMIT_REACHED',
-                limit: DAILY_PREDICTION_LIMIT,
-            });
-            return;
+            throw txError;
         }
-
-        // Check if already predicted on this match
-        const existingPrediction = await prisma.prediction.findUnique({
-            where: {
-                userId_apiMatchId: {
-                    userId: user.id,
-                    apiMatchId: typeof matchId === 'string' ? parseInt(matchId) : matchId
-                }
-            }
-        });
-
-        if (existingPrediction) {
-            sendError(req, res, ErrorCode.CONFLICT, 'لقد أرسلت توقعاً لهذه المباراة بالفعل', {
-                reason: 'ALREADY_PREDICTED',
-                matchId: String(matchId),
-            });
-            return;
-        }
-
-        // Determine prediction type based on scores
-        let predictionType: string;
-        if (home > away) {
-            predictionType = 'home';
-        } else if (away > home) {
-            predictionType = 'away';
-        } else {
-            predictionType = 'draw';
-        }
-
-        // Create prediction and deduct coins in transaction
-        const [prediction, updatedUser] = await prisma.$transaction([
-            prisma.prediction.create({
-                data: {
-                    userId: user.id,
-                    apiMatchId: typeof matchId === 'string' ? parseInt(matchId) : matchId,
-                    predictionType,
-                    coinsSpent: PREDICTION_COST,
-                    isCorrect: null, // ✅ Explicitly set to null (pending state)
-                    // Fix SEC-3: store scores in dedicated fields, not in team name fields
-                    predictedHomeScore: home,
-                    predictedAwayScore: away,
-                }
-            }),
-            prisma.user.update({
-                where: { id: user.id },
-                data: { coins: { decrement: PREDICTION_COST } },
-                select: { coins: true }
-            }),
-            prisma.coinTransaction.create({
-                data: {
-                    userId: user.id,
-                    amount: -PREDICTION_COST,
-                    type: 'PREDICTION' as any,
-                    description: `توقع نتيجة المباراة: ${home}-${away}`
-                }
-            })
-        ]);
 
         res.json({
             success: true,
             data: {
                 prediction: {
-                    id: prediction.id,
-                    matchId: prediction.apiMatchId,
+                    id: saved.prediction.id,
+                    matchId: saved.prediction.apiMatchId,
                     homeScore: home,
                     awayScore: away,
-                    predictionType,
-                    coinsSpent: PREDICTION_COST,
-                    createdAt: prediction.createdAt
+                    predictionType: saved.prediction.predictionType,
+                    coinsSpent: saved.prediction.coinsSpent,
+                    createdAt: saved.prediction.createdAt
                 },
-                newBalance: updatedUser.coins,
-                remaining: DAILY_PREDICTION_LIMIT - todayPredictions - 1
+                newBalance: saved.coins,
+                remaining: saved.remaining,
+                updated: saved.updated,
             },
-            message: '🎯 تم إرسال توقعك بنجاح!'
+            message: saved.updated ? 'تم تحديث توقعك' : '🎯 تم إرسال توقعك بنجاح!'
         });
 
         clearResponseCache('/predictions/user').catch((err) => {
@@ -884,6 +793,28 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
  */
 router.get('/leaderboard', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {
+        const mode = req.query.mode;
+        const period = req.query.period;
+        if (
+            (mode === 'winner' || mode === 'exact')
+            && (period === 'week' || period === 'all')
+        ) {
+            const clerkUserId = req.auth?.userId;
+            if (!clerkUserId) {
+                sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
+                return;
+            }
+            const take = Math.min(parseInt(String(req.query.limit ?? '50'), 10) || 50, 50);
+            const data = await getKingLeaderboard({
+                clerkUserId,
+                mode: mode as KingMode,
+                period: period as KingPeriod,
+                limit: take,
+            });
+            res.json({ success: true, data });
+            return;
+        }
+
         const { limit = '10' } = req.query;
         const take = Math.min(parseInt(limit as string) || 10, 50);
         

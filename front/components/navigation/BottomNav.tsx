@@ -26,7 +26,7 @@ function resolveActiveIndex(pathname: string | null): number {
   ) {
     return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'profile');
   }
-  if (p.includes('/rank')) {
+  if (p.includes('/rank') || p.includes('king-of-predictions')) {
     return LIQUID_TAB_ITEMS.findIndex((t) => t.id === 'rank');
   }
   if (p.includes('predict-and-win')) {

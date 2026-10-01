@@ -241,6 +241,8 @@ export default function RankScreen() {
         // The 10 XP / 24h app-share reward it used to fire directly is still
         // claimed there, after a share actually goes out.
         router.push('/share-win' as never);
+      } else if (id === '1') {
+        router.push('/king-of-predictions' as never);
       }
     },
     [router, appLanguage, queryClient, getToken],

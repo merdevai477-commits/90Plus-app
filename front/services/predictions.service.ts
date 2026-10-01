@@ -46,7 +46,28 @@ export interface Prediction {
   awayTeamLogo?: string | null;
   matchDate?: string | null;
   leagueName?: string | null;
+  predictedHomeScore?: number | null;
+  predictedAwayScore?: number | null;
   createdAt: string;
+}
+
+export type KingMode = 'winner' | 'exact';
+export type KingPeriod = 'week' | 'all';
+
+export interface KingLeaderboardEntry {
+  rank: number;
+  userId: string;
+  username: string | null;
+  displayName: string | null;
+  avatar: string | null;
+  xp: number;
+}
+
+export interface KingLeaderboard {
+  mode: KingMode;
+  period: KingPeriod;
+  entries: KingLeaderboardEntry[];
+  me: { rank: number | null; xp: number; userId: string } | null;
 }
 
 export interface PredictionRemaining {
@@ -158,8 +179,10 @@ export const PredictionsService = {
       awayTeamLogo?: string;
       matchDate: string;
       leagueName?: string;
+      predictedHomeScore?: number;
+      predictedAwayScore?: number;
     }
-  ): Promise<Prediction> => {
+  ): Promise<{ prediction: Prediction; remaining?: number; updated?: boolean }> => {
     try {
       const response = await fetch(`${API_URL}/predictions`, {
         method: 'POST',
@@ -308,5 +331,34 @@ export const PredictionsService = {
       logger.error('Error getting match prediction count:', error);
       throw error;
     }
+  },
+
+  /**
+   * King of the Game (winner) / King of Results (exact) board.
+   * `mode=winner|exact` keeps the legacy accuracy leaderboard untouched.
+   */
+  getKingLeaderboard: async (
+    token: string,
+    mode: KingMode,
+    period: KingPeriod,
+    limit = 50,
+  ): Promise<KingLeaderboard> => {
+    const response = await fetch(
+      `${API_URL}/predictions/leaderboard?mode=${mode}&period=${period}&limit=${limit}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+    if (!response.ok) {
+      throw await PredictionsService._parseError(response);
+    }
+    const result = await response.json();
+    if (!result?.success || !result.data) {
+      throw new PredictionApiError('E010', 'Invalid response format', response.status);
+    }
+    return result.data as KingLeaderboard;
   },
 };
