@@ -1,13 +1,18 @@
 import { Image } from 'expo-image';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,13 +20,15 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useFocusEffect } from '@react-navigation/native';
 
 import type { Match } from '../Matches/matchCardUtils';
+import { PWGradientText } from '../predictAndWin/GradientText';
 import { PredictionApiError, PredictionsService } from '../../services/predictions.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { KING_ART, KING_ICON } from './assets';
+import { KING_BUTTON_GRADIENT } from './KingBoardList';
 import { KingHeader } from './KingHeader';
 import {
   KING_BG,
-  KING_CARD,
   KING_PURPLE,
   fetchKingMatches,
   localDateKey,
@@ -30,8 +37,6 @@ import {
 
 type Pick = 'home' | 'draw' | 'away';
 
-type ScoreDraft = { home: number | null; away: number | null };
-
 type SavedRow = {
   type?: Pick;
   home: number | null;
@@ -39,11 +44,22 @@ type SavedRow = {
   resolved: boolean;
 };
 
+const SIDE = 22;
+const VS_GRADIENT = ['#A855F7', '#633291'] as const;
+const PICK_ON = [KING_PURPLE, '#513690'] as const;
+const CHIP_IDLE = ['#0C051A', '#07040D'] as const;
+
 function started(match: Match): boolean {
   if (match.status === 'live' || match.status === 'finished') return true;
   if (!match.fixtureDate) return false;
   const kickoff = new Date(match.fixtureDate).getTime();
   return Number.isFinite(kickoff) && kickoff <= Date.now();
+}
+
+function parseScore(text: string): number | null {
+  const digits = text.replace(/\D/g, '');
+  if (!digits) return null;
+  return Math.min(20, Number.parseInt(digits, 10));
 }
 
 export function KingPlayScreen({
@@ -55,6 +71,7 @@ export function KingPlayScreen({
 }) {
   const mode = parseKingMode(Array.isArray(modeParam) ? modeParam[0] : modeParam);
   const dateKey = (Array.isArray(date) ? date[0] : date) || '';
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { getToken, isSignedIn } = useAuth();
   // Clerk hands out a new getToken on renders; keeping it out of load's deps
@@ -66,15 +83,17 @@ export function KingPlayScreen({
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
   const fontMedium = useAppFont(500);
+  const fontRegular = useAppFont(400);
 
   const [matches, setMatches] = useState<Match[]>([]);
   const [saved, setSaved] = useState<Record<string, SavedRow>>({});
-  const [scores, setScores] = useState<Record<string, ScoreDraft>>({});
+  const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [sheetMatch, setSheetMatch] = useState<Match | null>(null);
-  const [sheetPick, setSheetPick] = useState<Pick | null>(null);
   const [busy, setBusy] = useState(false);
+  const [scoreMatch, setScoreMatch] = useState<Match | null>(null);
+  const [homeText, setHomeText] = useState('');
+  const [awayText, setAwayText] = useState('');
 
   const load = useCallback(async () => {
     setError(false);
@@ -84,12 +103,12 @@ export function KingPlayScreen({
     const token = await getTokenRef.current().catch(() => null);
     if (!token) {
       setSaved({});
-      setScores({});
+      setPicks({});
       return;
     }
     const preds = await PredictionsService.getUserPredictions(token);
     const nextSaved: Record<string, SavedRow> = {};
-    const nextScores: Record<string, ScoreDraft> = {};
+    const nextPicks: Record<string, Pick> = {};
     for (const match of dayMatches) {
       const row = (preds.predictionsMap as Record<string, {
         prediction?: { type?: Pick };
@@ -97,22 +116,17 @@ export function KingPlayScreen({
         predictedAwayScore?: number | null;
         isCorrect?: boolean | null;
       }>)[match.id];
-      if (!row) {
-        nextScores[match.id] = { home: null, away: null };
-        continue;
-      }
-      const home = row.predictedHomeScore ?? null;
-      const away = row.predictedAwayScore ?? null;
+      if (!row) continue;
       nextSaved[match.id] = {
         type: row.prediction?.type,
-        home,
-        away,
+        home: row.predictedHomeScore ?? null,
+        away: row.predictedAwayScore ?? null,
         resolved: row.isCorrect != null,
       };
-      nextScores[match.id] = { home, away };
+      if (row.prediction?.type) nextPicks[match.id] = row.prediction.type;
     }
     setSaved(nextSaved);
-    setScores(nextScores);
+    setPicks(nextPicks);
   }, [dateKey]);
 
   useFocusEffect(
@@ -151,50 +165,33 @@ export function KingPlayScreen({
   }, [copy]);
 
   const submitOne = useCallback(async (
+    token: string,
     match: Match,
     body: { predictionType: Pick; predictedHomeScore?: number; predictedAwayScore?: number },
-    options?: { silent?: boolean },
-  ): Promise<boolean> => {
-    const token = await getToken();
-    if (!token || !isSignedIn) {
-      if (!options?.silent) Alert.alert(copy.signIn);
-      return false;
-    }
-    if (!options?.silent) setBusy(true);
-    try {
-      const result = await PredictionsService.submitPrediction(token, {
-        apiMatchId: match.id,
-        predictionType: body.predictionType,
-        homeTeam: match.homeTeam.name,
-        awayTeam: match.awayTeam.name,
-        homeTeamLogo: match.homeTeam.logo,
-        awayTeamLogo: match.awayTeam.logo,
-        matchDate: match.fixtureDate || new Date().toISOString(),
-        leagueName: match.league?.name,
-        predictedHomeScore: body.predictedHomeScore,
-        predictedAwayScore: body.predictedAwayScore,
-      });
-      if (!options?.silent) {
-        Alert.alert(result.updated ? copy.updated : copy.saved);
-        await load();
-      }
-      return true;
-    } catch (err) {
-      if (!options?.silent) explain(err);
-      else throw err;
-    } finally {
-      if (!options?.silent) setBusy(false);
-    }
-    return false;
-  }, [copy, explain, getToken, isSignedIn, load]);
+  ) => {
+    return PredictionsService.submitPrediction(token, {
+      apiMatchId: match.id,
+      predictionType: body.predictionType,
+      homeTeam: match.homeTeam.name,
+      awayTeam: match.awayTeam.name,
+      homeTeamLogo: match.homeTeam.logo,
+      awayTeamLogo: match.awayTeam.logo,
+      matchDate: match.fixtureDate || new Date().toISOString(),
+      leagueName: match.league?.name,
+      predictedHomeScore: body.predictedHomeScore,
+      predictedAwayScore: body.predictedAwayScore,
+    });
+  }, []);
 
-  const confirmScores = useCallback(async () => {
+  const isLocked = useCallback(
+    (match: Match) => started(match) || saved[match.id]?.resolved === true,
+    [saved],
+  );
+
+  const confirmPicks = useCallback(async () => {
     const pending = matches.filter((match) => {
-      if (started(match) || saved[match.id]?.resolved) return false;
-      const draft = scores[match.id];
-      if (draft?.home == null || draft.away == null) return false;
-      const prev = saved[match.id];
-      return prev?.home !== draft.home || prev?.away !== draft.away;
+      const pick = picks[match.id];
+      return pick && !isLocked(match) && pick !== saved[match.id]?.type;
     });
     if (pending.length === 0) return;
     const token = await getToken();
@@ -203,46 +200,77 @@ export function KingPlayScreen({
       return;
     }
     setBusy(true);
-    let updated = false;
+    let saves = 0;
     try {
       for (const match of pending) {
-        const draft = scores[match.id];
-        if (draft?.home == null || draft.away == null) continue;
-        const home = draft.home ?? 0;
-        const away = draft.away ?? 0;
-        const predictionType: Pick = home > away ? 'home' : away > home ? 'away' : 'draw';
-        const ok = await submitOne(
-          match,
-          { predictionType, predictedHomeScore: home, predictedAwayScore: away },
-          { silent: true },
-        );
-        updated = updated || ok;
+        await submitOne(token, match, { predictionType: picks[match.id] });
+        saves += 1;
       }
-      if (updated) Alert.alert(copy.saved);
+      Alert.alert(copy.saved);
     } catch (err) {
       explain(err);
     } finally {
-      if (updated) await load();
+      if (saves > 0) await load().catch(() => undefined);
       setBusy(false);
     }
-  }, [copy, explain, getToken, isSignedIn, load, matches, saved, scores, submitOne]);
+  }, [copy, explain, getToken, isLocked, isSignedIn, load, matches, picks, saved, submitOne]);
 
-  const title = mode === 'results' ? copy.resultsTitle : copy.gameTitle;
+  const openScore = (match: Match) => {
+    const prev = saved[match.id];
+    setHomeText(prev?.home != null ? String(prev.home) : '');
+    setAwayText(prev?.away != null ? String(prev.away) : '');
+    setScoreMatch(match);
+  };
 
-  const sheetOptions = useMemo(() => ([
-    { id: 'home' as const, label: copy.homeWin },
-    { id: 'draw' as const, label: copy.draw },
-    { id: 'away' as const, label: copy.awayWin },
-  ]), [copy]);
+  const confirmScore = useCallback(async () => {
+    const match = scoreMatch;
+    const home = parseScore(homeText);
+    const away = parseScore(awayText);
+    if (!match || home == null || away == null) return;
+    const token = await getToken();
+    if (!token || !isSignedIn) {
+      Alert.alert(copy.signIn);
+      return;
+    }
+    setBusy(true);
+    try {
+      const predictionType: Pick = home > away ? 'home' : away > home ? 'away' : 'draw';
+      const result = await submitOne(token, match, {
+        predictionType,
+        predictedHomeScore: home,
+        predictedAwayScore: away,
+      });
+      setScoreMatch(null);
+      Alert.alert(result.updated ? copy.updated : copy.saved);
+      await load().catch(() => undefined);
+    } catch (err) {
+      explain(err);
+    } finally {
+      setBusy(false);
+    }
+  }, [awayText, copy, explain, getToken, homeText, isSignedIn, load, scoreMatch, submitOne]);
+
+  const onFooter = () => {
+    if (mode === 'game') {
+      void confirmPicks();
+      return;
+    }
+    if (router.canGoBack()) router.back();
+  };
+
+  const scoreReady = parseScore(homeText) != null && parseScore(awayText) != null;
 
   return (
     <View style={styles.root}>
       <KingHeader />
-      <Text style={[styles.title, { fontFamily: fontBold }]}>{title}</Text>
+      <LinearGradient colors={KING_BUTTON_GRADIENT} style={styles.pill}>
+        <Text style={[styles.pillText, { fontFamily: fontSemi }]}>{copy.majorLeagues}</Text>
+      </LinearGradient>
+
       {loading ? (
         <ActivityIndicator color={KING_PURPLE} style={{ marginTop: 40 }} />
       ) : error ? (
-        <Pressable onPress={() => { setLoading(true); void load().finally(() => setLoading(false)); }} style={styles.center}>
+        <Pressable onPress={() => { setLoading(true); void load().catch(() => setError(true)).finally(() => setLoading(false)); }} style={styles.center}>
           <Text style={[styles.muted, { fontFamily: fontMedium }]}>{copy.loadError}</Text>
           <Text style={[styles.retry, { fontFamily: fontSemi }]}>{copy.retry}</Text>
         </Pressable>
@@ -250,237 +278,392 @@ export function KingPlayScreen({
         <Text style={[styles.muted, styles.center, { fontFamily: fontMedium }]}>{copy.noMatches}</Text>
       ) : (
         <ScrollView
-          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + (mode === 'results' ? 110 : 24) }}
+          contentContainerStyle={[
+            mode === 'game' ? styles.gameList : styles.cardList,
+            { paddingBottom: Math.max(insets.bottom, 16) + 130 },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           {matches.map((match) => {
-            const locked = started(match) || saved[match.id]?.resolved === true;
+            const locked = isLocked(match);
             if (mode === 'game') {
-              const current = saved[match.id]?.type;
-              const label = current === 'home' ? copy.homeWin : current === 'away' ? copy.awayWin : current === 'draw' ? copy.draw : copy.predictNow;
+              const pick = picks[match.id];
               return (
-                <View key={match.id} style={styles.matchCard}>
-                  <TeamSide name={match.homeTeam.name} logo={match.homeTeam.logo} font={fontSemi} />
-                  <View style={styles.mid}>
-                    <Text style={[styles.vs, { fontFamily: fontBold }]}>{copy.vs}</Text>
-                    <Text style={[styles.time, { fontFamily: fontMedium }]}>{match.time || ''}</Text>
-                    <Pressable
-                      disabled={locked || busy}
-                      onPress={() => {
-                        setSheetPick(current ?? null);
-                        setSheetMatch(match);
-                      }}
-                      style={[styles.predictBtn, locked && styles.predictBtnOff]}
-                    >
-                      <Text style={[styles.predictText, { fontFamily: fontSemi }]}>
-                        {locked && !current ? copy.closed : label}
-                      </Text>
-                    </Pressable>
-                  </View>
-                  <TeamSide name={match.awayTeam.name} logo={match.awayTeam.logo} font={fontSemi} />
+                <View key={match.id} style={[styles.gameRow, locked && styles.locked]}>
+                  <TeamChip
+                    name={match.awayTeam.name}
+                    logo={match.awayTeam.logo}
+                    logoFirst
+                    selected={pick === 'away'}
+                    disabled={locked || busy}
+                    fonts={{ on: fontBold, off: fontSemi }}
+                    onPress={() => setPicks((prev) => ({ ...prev, [match.id]: 'away' }))}
+                  />
+                  <Pressable
+                    disabled={locked || busy}
+                    onPress={() => setPicks((prev) => ({ ...prev, [match.id]: 'draw' }))}
+                    accessibilityLabel={copy.draw}
+                  >
+                    {pick === 'draw' ? (
+                      <LinearGradient colors={PICK_ON} style={styles.drawCircle}>
+                        <Text style={[styles.drawText, { fontFamily: fontSemi }]}>{copy.draw}</Text>
+                      </LinearGradient>
+                    ) : (
+                      <LinearGradient
+                        colors={['rgba(86,21,216,0.32)', 'rgba(62,15,156,0.32)', 'rgba(46,11,114,0.32)']}
+                        locations={[0, 0.587, 1]}
+                        style={[styles.drawCircle, styles.drawIdle]}
+                      >
+                        <Image source={KING_ICON.drawXGlow} style={styles.drawGlow} contentFit="contain" />
+                        <Image source={KING_ICON.drawX} style={styles.drawX} contentFit="contain" />
+                      </LinearGradient>
+                    )}
+                  </Pressable>
+                  <TeamChip
+                    name={match.homeTeam.name}
+                    logo={match.homeTeam.logo}
+                    selected={pick === 'home'}
+                    disabled={locked || busy}
+                    fonts={{ on: fontBold, off: fontSemi }}
+                    onPress={() => setPicks((prev) => ({ ...prev, [match.id]: 'home' }))}
+                  />
                 </View>
               );
             }
 
-            const draft = scores[match.id] ?? { home: null, away: null };
+            const prev = saved[match.id];
+            const hasScore = prev?.home != null && prev.away != null;
+            const label = hasScore ? `${prev.away} - ${prev.home}` : locked ? copy.closed : copy.predictNow;
             return (
-              <View key={match.id} style={styles.scoreRow}>
-                <TeamSide name={match.homeTeam.name} logo={match.homeTeam.logo} font={fontSemi} compact />
-                <ScoreBox
-                  value={draft.home}
-                  disabled={locked || busy}
-                  onChange={(home) => setScores((prev) => ({ ...prev, [match.id]: { ...draft, home } }))}
-                />
-                <Text style={[styles.vs, { fontFamily: fontBold }]}>{copy.vs}</Text>
-                <ScoreBox
-                  value={draft.away}
-                  disabled={locked || busy}
-                  onChange={(away) => setScores((prev) => ({ ...prev, [match.id]: { ...draft, away } }))}
-                />
-                <TeamSide name={match.awayTeam.name} logo={match.awayTeam.logo} font={fontSemi} compact />
-              </View>
+              <LinearGradient key={match.id} colors={CHIP_IDLE} style={styles.card}>
+                <CardTeam name={match.awayTeam.name} logo={match.awayTeam.logo} font={fontBold} size={13} />
+                <View style={styles.cardMid}>
+                  <PWGradientText colors={VS_GRADIENT} style={[styles.vs, { fontFamily: fontSemi }]}>
+                    {copy.vs}
+                  </PWGradientText>
+                  <Text style={[styles.time, { fontFamily: fontMedium }]}>{match.time || ''}</Text>
+                  <Pressable disabled={locked || busy} onPress={() => openScore(match)}>
+                    <LinearGradient colors={PICK_ON} style={[styles.predictBtn, locked && styles.locked]}>
+                      <Text
+                        style={[styles.predictText, { fontFamily: fontBold }]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.6}
+                      >
+                        {label}
+                      </Text>
+                    </LinearGradient>
+                  </Pressable>
+                </View>
+                <CardTeam name={match.homeTeam.name} logo={match.homeTeam.logo} font={fontBold} size={14} />
+              </LinearGradient>
             );
           })}
         </ScrollView>
       )}
 
-      {mode === 'results' && !loading && matches.length > 0 ? (
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <Pressable style={styles.footerBtn} disabled={busy} onPress={() => { void confirmScores(); }}>
-            <Text style={[styles.footerText, { fontFamily: fontBold }]}>{copy.confirm}</Text>
+      {!loading && matches.length > 0 ? (
+        <LinearGradient
+          colors={['rgba(18,5,48,0)', '#180544']}
+          pointerEvents="box-none"
+          style={[styles.footer, { height: 130 + Math.max(insets.bottom, 12), paddingBottom: Math.max(insets.bottom, 12) + 8 }]}
+        >
+          <Pressable disabled={busy} onPress={onFooter}>
+            <LinearGradient colors={KING_BUTTON_GRADIENT} style={[styles.footerBtn, busy && styles.locked]}>
+              <Text style={[styles.footerText, { fontFamily: fontSemi }]}>{copy.confirm}</Text>
+            </LinearGradient>
           </Pressable>
-        </View>
+        </LinearGradient>
       ) : null}
 
-      <Modal visible={sheetMatch != null} transparent animationType="slide" onRequestClose={() => setSheetMatch(null)}>
-        <Pressable style={styles.backdrop} onPress={() => setSheetMatch(null)}>
-          <Pressable style={styles.sheet} onPress={() => undefined}>
-            <Text style={[styles.sheetTitle, { fontFamily: fontBold }]}>{copy.sheetTitle}</Text>
-            {sheetMatch ? (
+      <Modal visible={scoreMatch != null} transparent animationType="fade" onRequestClose={() => setScoreMatch(null)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.backdrop}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setScoreMatch(null)} />
+          <LinearGradient colors={CHIP_IDLE} style={styles.sheet}>
+            <Pressable onPress={() => setScoreMatch(null)} style={styles.close} hitSlop={8}>
+              <Image source={KING_ICON.close} style={styles.closeIcon} contentFit="contain" />
+            </Pressable>
+            <Text style={[styles.sheetTitle, { fontFamily: fontSemi }]}>{copy.sheetTitle}</Text>
+            {scoreMatch ? (
               <View style={styles.sheetTeams}>
-                <TeamSide name={sheetMatch.homeTeam.name} logo={sheetMatch.homeTeam.logo} font={fontSemi} />
-                <Text style={[styles.vs, { fontFamily: fontBold }]}>{copy.vs}</Text>
-                <TeamSide name={sheetMatch.awayTeam.name} logo={sheetMatch.awayTeam.logo} font={fontSemi} />
+                <SheetTeam name={scoreMatch.awayTeam.name} logo={scoreMatch.awayTeam.logo} font={fontSemi} />
+                <View style={styles.sheetMid}>
+                  <PWGradientText colors={VS_GRADIENT} style={[styles.vs, { fontFamily: fontSemi }]}>
+                    {copy.vs}
+                  </PWGradientText>
+                  <Text style={[styles.time, { fontFamily: fontMedium }]}>{scoreMatch.time || ''}</Text>
+                </View>
+                <SheetTeam name={scoreMatch.homeTeam.name} logo={scoreMatch.homeTeam.logo} font={fontSemi} />
               </View>
             ) : null}
-            {sheetOptions.map((option) => {
-              const on = sheetPick === option.id;
-              return (
-                <Pressable
-                  key={option.id}
-                  onPress={() => setSheetPick(option.id)}
-                  style={[styles.option, on && styles.optionOn]}
-                >
-                  <Text style={[styles.optionText, { fontFamily: fontSemi }]}>{option.label}</Text>
-                </Pressable>
-              );
-            })}
-            <Pressable
-              disabled={!sheetPick || busy || !sheetMatch}
-              style={[styles.footerBtn, (!sheetPick || busy) && styles.predictBtnOff]}
-              onPress={() => {
-                if (!sheetMatch || !sheetPick) return;
-                const match = sheetMatch;
-                const pick = sheetPick;
-                setSheetMatch(null);
-                void submitOne(match, { predictionType: pick });
-              }}
-            >
-              <Text style={[styles.footerText, { fontFamily: fontBold }]}>{copy.confirm}</Text>
+            <Text style={[styles.resultTitle, { fontFamily: fontSemi }]}>{copy.matchResult}</Text>
+            <View style={styles.scoreRow}>
+              <ScoreInput value={awayText} onChange={setAwayText} font={fontBold} />
+              <PWGradientText colors={VS_GRADIENT} style={[styles.scoreVs, { fontFamily: fontSemi }]}>
+                {copy.vs}
+              </PWGradientText>
+              <ScoreInput value={homeText} onChange={setHomeText} font={fontBold} />
+            </View>
+            <Pressable disabled={!scoreReady || busy} onPress={() => { void confirmScore(); }} style={styles.sheetConfirm}>
+              <LinearGradient colors={KING_BUTTON_GRADIENT} style={[styles.footerBtn, (!scoreReady || busy) && styles.locked]}>
+                <Text style={[styles.footerText, { fontFamily: fontSemi }]}>{copy.confirm}</Text>
+              </LinearGradient>
             </Pressable>
-            <Text style={[styles.hint, { fontFamily: fontMedium }]}>{copy.editHint}</Text>
-          </Pressable>
-        </Pressable>
+            <View style={styles.hintRow}>
+              <Text style={[styles.hint, { fontFamily: fontRegular }]}>{copy.editHint}</Text>
+              <Image source={KING_ICON.info} style={styles.infoIcon} contentFit="contain" />
+            </View>
+          </LinearGradient>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
 }
 
-function TeamSide({
+function TeamChip({
   name,
   logo,
-  font,
-  compact,
+  logoFirst,
+  selected,
+  disabled,
+  fonts,
+  onPress,
 }: {
   name: string;
   logo?: string;
-  font: string;
-  compact?: boolean;
+  logoFirst?: boolean;
+  selected: boolean;
+  disabled: boolean;
+  fonts: { on: string; off: string };
+  onPress: () => void;
 }) {
+  const crest = logo ? (
+    <Image source={{ uri: logo }} style={styles.chipLogo} contentFit="contain" />
+  ) : (
+    <View style={styles.chipLogo} />
+  );
+  const label = (
+    <Text
+      style={[styles.chipName, { fontFamily: selected ? fonts.on : fonts.off }, selected && styles.chipNameOn]}
+      numberOfLines={1}
+    >
+      {name}
+    </Text>
+  );
   return (
-    <View style={[styles.team, compact && styles.teamCompact]}>
-      {logo ? <Image source={{ uri: logo }} style={styles.logo} contentFit="contain" /> : <View style={styles.logo} />}
-      <Text style={[styles.teamName, { fontFamily: font }]} numberOfLines={2}>{name}</Text>
+    <Pressable disabled={disabled} onPress={onPress} style={styles.chipCell}>
+      <LinearGradient
+        colors={selected ? PICK_ON : CHIP_IDLE}
+        style={[styles.chip, !selected && styles.chipIdle]}
+      >
+        {logoFirst ? crest : label}
+        {logoFirst ? label : crest}
+      </LinearGradient>
+    </Pressable>
+  );
+}
+
+function CardTeam({ name, logo, font, size }: { name: string; logo?: string; font: string; size: number }) {
+  return (
+    <View style={styles.cardTeam}>
+      {logo ? <Image source={{ uri: logo }} style={styles.cardLogo} contentFit="contain" /> : <View style={styles.cardLogo} />}
+      <Text
+        style={[styles.cardName, { fontFamily: font, fontSize: size }]}
+        numberOfLines={singleWord(name) ? 1 : 2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
+        {name}
+      </Text>
     </View>
   );
 }
 
-function ScoreBox({
-  value,
-  disabled,
-  onChange,
-}: {
-  value: number | null;
-  disabled: boolean;
-  onChange: (next: number) => void;
-}) {
-  const fontBold = useAppFont(700);
-  const current = value ?? 0;
+function singleWord(name: string) {
+  return !/\s/.test(name.trim());
+}
+
+function SheetTeam({ name, logo, font }: { name: string; logo?: string; font: string }) {
+  return (
+    <View style={styles.sheetTeam}>
+      {logo ? <Image source={{ uri: logo }} style={styles.sheetLogo} contentFit="contain" /> : <View style={styles.sheetLogo} />}
+      <Text
+        style={[styles.sheetName, { fontFamily: font }]}
+        numberOfLines={singleWord(name) ? 1 : 2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
+        {name}
+      </Text>
+    </View>
+  );
+}
+
+function ScoreInput({ value, onChange, font }: { value: string; onChange: (next: string) => void; font: string }) {
   return (
     <View style={styles.scoreBox}>
-      <Pressable disabled={disabled} onPress={() => onChange(Math.min(20, (value ?? -1) + 1))}>
-        <Text style={styles.step}>+</Text>
-      </Pressable>
-      <Text style={[styles.scoreValue, { fontFamily: fontBold }]}>{value == null ? '_' : String(current)}</Text>
-      <Pressable disabled={disabled || value == null} onPress={() => onChange(Math.max(0, current - 1))}>
-        <Text style={styles.step}>−</Text>
-      </Pressable>
+      <Image source={KING_ART.scoreBox} style={StyleSheet.absoluteFill} contentFit="fill" />
+      {value ? <View style={styles.scoreFill} /> : null}
+      <TextInput
+        value={value}
+        onChangeText={(text) => onChange(text.replace(/\D/g, '').slice(0, 2))}
+        keyboardType="number-pad"
+        maxLength={2}
+        style={[styles.scoreInput, { fontFamily: font }]}
+        selectionColor={KING_PURPLE}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: KING_BG },
-  title: { color: '#fff', fontSize: 22, textAlign: 'center', marginBottom: 8 },
+  pill: {
+    marginTop: 14,
+    marginHorizontal: SIDE,
+    height: 58,
+    borderRadius: 16,
+    paddingHorizontal: 23,
+    justifyContent: 'center',
+  },
+  pillText: { color: '#fff', fontSize: 19, textAlign: 'right' },
   center: { marginTop: 48, alignItems: 'center' },
   muted: { color: '#A1A1AA', fontSize: 15, textAlign: 'center' },
   retry: { color: KING_PURPLE, marginTop: 8, fontSize: 15 },
-  matchCard: {
-    marginHorizontal: 22,
-    marginBottom: 12,
-    backgroundColor: KING_CARD,
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  scoreRow: {
-    marginHorizontal: 16,
-    marginBottom: 10,
-    backgroundColor: KING_CARD,
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  team: { flex: 1, alignItems: 'center' },
-  teamCompact: { flex: 1 },
-  logo: { width: 36, height: 36 },
-  teamName: { color: '#fff', fontSize: 12, textAlign: 'center', marginTop: 4 },
-  mid: { width: 110, alignItems: 'center' },
-  vs: { color: '#fff', fontSize: 16 },
-  time: { color: '#A1A1AA', fontSize: 12, marginTop: 2 },
-  predictBtn: {
-    marginTop: 8,
-    backgroundColor: KING_PURPLE,
+  gameList: { paddingHorizontal: SIDE, paddingTop: 37, gap: 10 },
+  cardList: { paddingHorizontal: SIDE, paddingTop: 19, gap: 12 },
+  gameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  locked: { opacity: 0.45 },
+  chipCell: { flex: 1 },
+  chip: {
+    height: 54,
     borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 8,
   },
-  predictBtnOff: { opacity: 0.45 },
-  predictText: { color: '#fff', fontSize: 12 },
-  scoreBox: { width: 36, alignItems: 'center' },
-  scoreValue: { color: '#fff', fontSize: 20 },
-  step: { color: KING_PURPLE, fontSize: 18, paddingHorizontal: 6 },
+  chipIdle: { borderWidth: 1, borderColor: '#0F0F11' },
+  chipLogo: { width: 35, height: 35 },
+  chipName: { color: '#fff', fontSize: 14, flexShrink: 1, textAlign: 'right' },
+  chipNameOn: { fontSize: 16 },
+  drawCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawIdle: { borderWidth: 1, borderColor: '#6521FF' },
+  drawGlow: { position: 'absolute', width: 43, height: 43, left: 4.5, top: 4.5 },
+  drawX: { width: 32, height: 32 },
+  drawText: { color: '#fff', fontSize: 15 },
+  card: {
+    height: 121,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#6D33F2',
+    paddingHorizontal: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardTeam: { width: 72, alignItems: 'center', gap: 9 },
+  cardLogo: { width: 43, height: 43 },
+  cardName: { color: '#fff', textAlign: 'center' },
+  cardMid: { width: 105, alignItems: 'center' },
+  vs: { fontSize: 21, textAlign: 'center' },
+  time: { color: '#777', fontSize: 13, textAlign: 'center', marginTop: 4 },
+  predictBtn: {
+    marginTop: 9,
+    width: 105,
+    height: 33,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  predictText: { color: '#fff', fontSize: 13 },
   footer: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 23,
-    paddingTop: 10,
-    backgroundColor: 'rgba(3,3,3,0.94)',
+    justifyContent: 'flex-end',
+    paddingHorizontal: SIDE,
   },
   footerBtn: {
-    height: 54,
+    height: 58,
     borderRadius: 16,
-    backgroundColor: KING_PURPLE,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  footerText: { color: '#fff', fontSize: 18 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  footerText: { color: '#fff', fontSize: 19 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center' },
   sheet: {
-    backgroundColor: '#12081F',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    paddingBottom: 28,
+    marginHorizontal: 16,
+    borderRadius: 44,
+    paddingTop: 16,
+    paddingBottom: 20,
+    paddingHorizontal: 24,
+    shadowColor: '#5A129E',
+    shadowOpacity: 0.36,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
   },
-  sheetTitle: { color: '#fff', fontSize: 20, textAlign: 'center', marginBottom: 12 },
-  sheetTeams: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  option: {
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+  close: { height: 35, justifyContent: 'center', alignSelf: 'flex-start', marginLeft: 4 },
+  closeIcon: { width: 36, height: 36 },
+  sheetTitle: { color: '#fff', fontSize: 24, textAlign: 'center' },
+  sheetTeams: {
+    marginTop: 16,
+    height: 101,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sheetTeam: { width: 92, alignItems: 'center', gap: 9 },
+  sheetLogo: { width: 50, height: 58 },
+  sheetName: { color: '#fff', fontSize: 18, textAlign: 'center' },
+  sheetMid: { width: 105, alignItems: 'center' },
+  resultTitle: { color: '#fff', fontSize: 23, textAlign: 'center', marginTop: 24 },
+  scoreRow: {
+    marginTop: 16,
+    paddingHorizontal: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  scoreVs: { fontSize: 26, textAlign: 'center' },
+  scoreBox: { width: 95, height: 74 },
+  scoreFill: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    top: 4,
+    bottom: 4,
+    borderRadius: 12,
+    backgroundColor: '#07040D',
+  },
+  scoreInput: {
+    ...StyleSheet.absoluteFillObject,
+    color: '#fff',
+    fontSize: 32,
+    textAlign: 'center',
+    padding: 0,
+  },
+  sheetConfirm: { marginTop: 48 },
+  hintRow: {
+    marginTop: 10,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    gap: 2,
   },
-  optionOn: { backgroundColor: KING_PURPLE, borderColor: KING_PURPLE },
-  optionText: { color: '#fff', fontSize: 16 },
-  hint: { color: '#A1A1AA', fontSize: 12, textAlign: 'center', marginTop: 10 },
+  hint: { color: '#6B6B6B', fontSize: 12, textAlign: 'center' },
+  infoIcon: { width: 16, height: 16 },
 });

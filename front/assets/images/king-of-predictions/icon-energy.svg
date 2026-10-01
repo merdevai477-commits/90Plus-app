@@ -1,0 +1,15 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="hugeicons:energy">
+<path id="Vector" d="M12.192 3.312L6.194 11.397C5.756 11.987 6.108 12.914 6.771 12.914H9.69C10.115 12.914 10.46 13.322 10.46 13.827V20.085C10.46 20.927 11.338 21.32 11.808 20.688L17.806 12.604C18.244 12.013 17.891 11.086 17.228 11.086H14.31C13.885 11.086 13.54 10.678 13.54 10.173V3.915C13.54 3.073 12.662 2.68 12.192 3.312Z" fill="url(#paint0_linear_0_79)" stroke="url(#paint1_linear_0_79)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_79" x1="11.9995" y1="3.00019" x2="11.9995" y2="20.9998" gradientUnits="userSpaceOnUse">
+<stop stop-color="#A855F7"/>
+<stop offset="1" stop-color="#633291"/>
+</linearGradient>
+<linearGradient id="paint1_linear_0_79" x1="11.9995" y1="3.00019" x2="11.9995" y2="20.9998" gradientUnits="userSpaceOnUse">
+<stop stop-color="#A855F7"/>
+<stop offset="1" stop-color="#633291"/>
+</linearGradient>
+</defs>
+</svg>
