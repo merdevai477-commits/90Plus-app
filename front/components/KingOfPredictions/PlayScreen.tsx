@@ -1,10 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -25,8 +24,10 @@ import { PredictionApiError, PredictionsService } from '../../services/predictio
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { KING_ART, KING_ICON } from './assets';
-import { KING_BUTTON_GRADIENT, KING_PASSED_GRADIENT } from './KingBoardList';
+import { GlassSurface, type GlassTone } from './GlassSurface';
+import { KING_BUTTON_GRADIENT } from './KingBoardList';
 import { KingHeader } from './KingHeader';
+import { KingToast, type KingToastState } from './KingToast';
 import {
   KING_BG,
   KING_PURPLE,
@@ -50,10 +51,17 @@ const SIDE = 22;
 const VS_GRADIENT = ['#A855F7', '#633291'] as const;
 const PICK_ON = [KING_PURPLE, '#513690'] as const;
 const CARD_BG = ['#0C051A', '#07040D'] as const;
-const VERDICT_GRADIENT: Record<Verdict, readonly [string, string]> = {
-  pending: ['#FACC15', '#CA8A04'],
-  correct: ['#22C55E', '#15803D'],
-  wrong: ['#EF4444', '#B91C1C'],
+type ButtonState = Verdict | 'open' | 'closed';
+
+const BUTTON_LOOK: Record<
+  ButtonState,
+  { tone: GlassTone; icon: React.ComponentProps<typeof Ionicons>['name']; text: string }
+> = {
+  open: { tone: 'purple', icon: 'sparkles', text: '#FFFFFF' },
+  pending: { tone: 'yellow', icon: 'time', text: '#FEF3C7' },
+  correct: { tone: 'green', icon: 'checkmark-circle', text: '#DCFCE7' },
+  wrong: { tone: 'red', icon: 'close-circle', text: '#FEE2E2' },
+  closed: { tone: 'muted', icon: 'lock-closed', text: '#8A8794' },
 };
 
 function started(match: Match): boolean {
@@ -80,7 +88,6 @@ export function KingPlayScreen({
   const isGame = mode === 'game';
   const dateKey = (Array.isArray(date) ? date[0] : date) || '';
   const dayPassed = dateKey !== '' && dateKey < localDateKey(new Date());
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { getToken, isSignedIn } = useAuth();
   // Clerk hands out a new getToken on renders; keeping it out of load's deps
@@ -103,6 +110,7 @@ export function KingPlayScreen({
   const [sheetPick, setSheetPick] = useState<Pick | null>(null);
   const [homeText, setHomeText] = useState('');
   const [awayText, setAwayText] = useState('');
+  const [toast, setToast] = useState<KingToastState | null>(null);
 
   const load = useCallback(async () => {
     setError(false);
@@ -151,23 +159,25 @@ export function KingPlayScreen({
     }, [load]),
   );
 
+  const showError = useCallback((title: string) => setToast({ variant: 'error', title }), []);
+
   const explain = useCallback((err: unknown) => {
     const api = err instanceof PredictionApiError ? err : null;
     const reason = String(api?.details?.reason ?? '');
     if (api?.code === 'E006' || reason === 'DAILY_LIMIT_REACHED') {
-      Alert.alert(copy.limit);
+      showError(copy.limit);
       return;
     }
     if (reason === 'MATCH_STARTED' || reason === 'ALREADY_RESOLVED') {
-      Alert.alert(copy.started);
+      showError(copy.started);
       return;
     }
     if (api?.code === 'E002') {
-      Alert.alert(copy.signIn);
+      showError(copy.signIn);
       return;
     }
-    Alert.alert(copy.loadError);
-  }, [copy]);
+    showError(copy.loadError);
+  }, [copy, showError]);
 
   const isLocked = useCallback(
     (match: Match) => dayPassed || started(match) || saved[match.id]?.correct != null,
@@ -192,7 +202,7 @@ export function KingPlayScreen({
     if (isGame ? sheetPick == null : home == null || away == null) return;
     const token = await getToken();
     if (!token || !isSignedIn) {
-      Alert.alert(copy.signIn);
+      showError(copy.signIn);
       return;
     }
     setBusy(true);
@@ -213,14 +223,21 @@ export function KingPlayScreen({
         predictedAwayScore: isGame ? undefined : away!,
       });
       setSheetMatch(null);
-      Alert.alert(result.updated ? copy.updated : copy.saved);
+      const pickName =
+        predictionType === 'home' ? match.homeTeam.name : predictionType === 'away' ? match.awayTeam.name : copy.draw;
+      setToast({
+        variant: 'success',
+        title: result.updated ? copy.updated : copy.saved,
+        pick: isGame ? pickName : `${away} - ${home}`,
+        caption: `${match.awayTeam.name} ${copy.vs} ${match.homeTeam.name}`,
+      });
       await load().catch(() => undefined);
     } catch (err) {
       explain(err);
     } finally {
       setBusy(false);
     }
-  }, [awayText, copy, explain, getToken, homeText, isGame, isSignedIn, load, sheetMatch, sheetPick]);
+  }, [awayText, copy, explain, getToken, homeText, isGame, isSignedIn, load, sheetMatch, sheetPick, showError]);
 
   const sheetReady = isGame
     ? sheetPick != null
@@ -258,9 +275,6 @@ export function KingPlayScreen({
   return (
     <View style={styles.root}>
       <KingHeader />
-      <LinearGradient colors={KING_BUTTON_GRADIENT} style={styles.pill}>
-        <Text style={[styles.pillText, { fontFamily: fontSemi }]}>{copy.majorLeagues}</Text>
-      </LinearGradient>
 
       {loading ? (
         <ActivityIndicator color={KING_PURPLE} style={{ marginTop: 40 }} />
@@ -273,7 +287,7 @@ export function KingPlayScreen({
         <Text style={[styles.muted, styles.center, { fontFamily: fontMedium }]}>{copy.noMatches}</Text>
       ) : (
         <ScrollView
-          contentContainerStyle={[styles.cardList, { paddingBottom: Math.max(insets.bottom, 16) + 130 }]}
+          contentContainerStyle={[styles.cardList, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]}
           showsVerticalScrollIndicator={false}
         >
           {matches.map((match) => {
@@ -285,7 +299,8 @@ export function KingPlayScreen({
                 : verdict === 'wrong'
                   ? copy.resultWrong
                   : savedLabel(match) ?? (locked ? copy.closed : copy.predictNow);
-            const btnColors = verdict ? VERDICT_GRADIENT[verdict] : locked ? KING_PASSED_GRADIENT : PICK_ON;
+            const state: ButtonState = verdict ?? (locked ? 'closed' : 'open');
+            const look = BUTTON_LOOK[state];
             return (
               <LinearGradient key={match.id} colors={CARD_BG} style={styles.card}>
                 <CardTeam name={match.awayTeam.name} logo={match.awayTeam.logo} font={fontBold} size={13} />
@@ -294,22 +309,22 @@ export function KingPlayScreen({
                     {copy.vs}
                   </PWGradientText>
                   <Text style={[styles.time, { fontFamily: fontMedium }]}>{match.time || ''}</Text>
-                  <Pressable disabled={locked || busy} onPress={() => openSheet(match)}>
-                    <LinearGradient colors={btnColors} style={styles.predictBtn}>
+                  <Pressable
+                    disabled={locked || busy}
+                    onPress={() => openSheet(match)}
+                    style={({ pressed }) => [styles.predictPress, pressed && styles.predictPressed]}
+                  >
+                    <GlassSurface radius={12} tone={look.tone} style={styles.predictBtn}>
+                      <Ionicons name={look.icon} size={13} color={look.text} />
                       <Text
-                        style={[
-                          styles.predictText,
-                          !verdict && locked && styles.predictTextPassed,
-                          verdict === 'pending' && styles.predictTextPending,
-                          { fontFamily: fontBold },
-                        ]}
+                        style={[styles.predictText, { color: look.text, fontFamily: fontBold }]}
                         numberOfLines={1}
                         adjustsFontSizeToFit
                         minimumFontScale={0.6}
                       >
                         {label}
                       </Text>
-                    </LinearGradient>
+                    </GlassSurface>
                   </Pressable>
                 </View>
                 <CardTeam name={match.homeTeam.name} logo={match.homeTeam.logo} font={fontBold} size={14} />
@@ -318,22 +333,6 @@ export function KingPlayScreen({
           })}
         </ScrollView>
       )}
-
-      {!loading && matches.length > 0 ? (
-        <LinearGradient
-          colors={['rgba(18,5,48,0)', '#180544']}
-          pointerEvents="box-none"
-          style={[styles.footer, { height: 130 + Math.max(insets.bottom, 12), paddingBottom: Math.max(insets.bottom, 12) + 8 }]}
-        >
-          <Pressable disabled={busy} onPress={() => { if (router.canGoBack()) router.back(); }}>
-            <LinearGradient colors={dayPassed ? KING_PASSED_GRADIENT : KING_BUTTON_GRADIENT} style={styles.footerBtn}>
-              <Text style={[styles.footerText, dayPassed && styles.predictTextPassed, { fontFamily: fontSemi }]}>
-                {copy.confirm}
-              </Text>
-            </LinearGradient>
-          </Pressable>
-        </LinearGradient>
-      ) : null}
 
       <Modal visible={sheetMatch != null} transparent animationType="fade" onRequestClose={closeSheet}>
         <KeyboardAvoidingView
@@ -431,7 +430,10 @@ export function KingPlayScreen({
             </View>
           </LinearGradient>
         </KeyboardAvoidingView>
+        {sheetMatch ? <KingToast toast={toast} onHide={() => setToast(null)} /> : null}
       </Modal>
+
+      {sheetMatch ? null : <KingToast toast={toast} onHide={() => setToast(null)} />}
     </View>
   );
 }
@@ -516,19 +518,10 @@ function ScoreInput({ value, onChange, font }: { value: string; onChange: (next:
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: KING_BG },
-  pill: {
-    marginTop: 14,
-    marginHorizontal: SIDE,
-    height: 58,
-    borderRadius: 16,
-    paddingHorizontal: 23,
-    justifyContent: 'center',
-  },
-  pillText: { color: '#fff', fontSize: 19, textAlign: 'right' },
   center: { marginTop: 48, alignItems: 'center' },
   muted: { color: '#A1A1AA', fontSize: 15, textAlign: 'center' },
   retry: { color: KING_PURPLE, marginTop: 8, fontSize: 15 },
-  cardList: { paddingHorizontal: SIDE, paddingTop: 19, gap: 12 },
+  cardList: { paddingHorizontal: SIDE, paddingTop: 10, gap: 12 },
   dimmed: { opacity: 0.45 },
   card: {
     height: 121,
@@ -543,29 +536,21 @@ const styles = StyleSheet.create({
   cardTeam: { width: 72, alignItems: 'center', gap: 9 },
   cardLogo: { width: 43, height: 43 },
   cardName: { color: '#fff', textAlign: 'center' },
-  cardMid: { width: 105, alignItems: 'center' },
+  cardMid: { width: 112, alignItems: 'center' },
   vs: { fontSize: 21, textAlign: 'center' },
   time: { color: '#777', fontSize: 13, textAlign: 'center', marginTop: 4 },
+  predictPress: { marginTop: 9 },
+  predictPressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
   predictBtn: {
-    marginTop: 9,
-    width: 105,
-    height: 33,
-    borderRadius: 10,
-    paddingHorizontal: 6,
+    width: 112,
+    height: 34,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
   },
-  predictText: { color: '#fff', fontSize: 13 },
-  predictTextPassed: { color: '#8A8794' },
-  predictTextPending: { color: '#2B1D00' },
-  footer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'flex-end',
-    paddingHorizontal: SIDE,
-  },
+  predictText: { flexShrink: 1, fontSize: 13 },
   footerBtn: {
     height: 58,
     borderRadius: 16,

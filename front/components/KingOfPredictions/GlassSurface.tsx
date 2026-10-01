@@ -6,7 +6,7 @@ import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'reac
 import { BlurIntensity } from '../../constants/theme';
 import { LiquidGlassView, isLiquidGlassSupported } from '../../utils/liquidGlassSafe';
 
-export type GlassTone = 'neutral' | 'purple' | 'muted';
+export type GlassTone = 'neutral' | 'purple' | 'muted' | 'yellow' | 'green' | 'red';
 
 const TONES: Record<GlassTone, { tint: string; fallback: string; sheen: string; rim: string; rimTop: string }> = {
   neutral: {
@@ -29,6 +29,27 @@ const TONES: Record<GlassTone, { tint: string; fallback: string; sheen: string; 
     sheen: 'rgba(255,255,255,0.06)',
     rim: 'rgba(255,255,255,0.04)',
     rimTop: 'rgba(255,255,255,0.1)',
+  },
+  yellow: {
+    tint: 'rgba(250,204,21,0.32)',
+    fallback: 'rgba(202,138,4,0.42)',
+    sheen: 'rgba(255,248,200,0.3)',
+    rim: 'rgba(253,224,71,0.35)',
+    rimTop: 'rgba(254,240,138,0.75)',
+  },
+  green: {
+    tint: 'rgba(34,197,94,0.32)',
+    fallback: 'rgba(22,163,74,0.45)',
+    sheen: 'rgba(220,252,231,0.28)',
+    rim: 'rgba(134,239,172,0.35)',
+    rimTop: 'rgba(187,247,208,0.75)',
+  },
+  red: {
+    tint: 'rgba(239,68,68,0.32)',
+    fallback: 'rgba(220,38,38,0.45)',
+    sheen: 'rgba(254,226,226,0.26)',
+    rim: 'rgba(252,165,165,0.35)',
+    rimTop: 'rgba(254,202,202,0.75)',
   },
 };
 
