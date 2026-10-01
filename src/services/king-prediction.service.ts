@@ -8,6 +8,9 @@
 
 import type { Prediction } from '@prisma/client';
 import prisma from '../lib/prisma';
+import { calendarTodayKey } from '../utils/calendar-day-bounds.util';
+import { pickTopFixtures } from '../utils/fixture-importance';
+import { projectMatchesForListView } from '../utils/matches-list-projection.util';
 import { XP_VALUES } from './xp.service';
 
 export type KingMode = 'winner' | 'exact';
@@ -44,6 +47,56 @@ export function deriveWinner(home: number, away: number): WinnerPick {
 export function kickoffHasPassed(matchDate: Date | null | undefined, now = new Date()): boolean {
   if (!matchDate) return false;
   return matchDate.getTime() <= now.getTime();
+}
+
+export const KING_DAILY_MATCH_LIMIT = 10;
+
+const KING_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const SECONDARY_LEAGUE_RE = /women|femenil|feminin|frauen|reserv|youth|primavera|\bU\d{2}\b/i;
+const SECONDARY_TEAM_RE = /\(W\)|\bRes\.?$|\bReserves?\b|\bII$|\bB$|\bU\d{2}\b/i;
+
+function isSecondaryFixture(fixture: any): boolean {
+  if (SECONDARY_LEAGUE_RE.test(String(fixture?.league?.name ?? ''))) return true;
+  const home = String(fixture?.teams?.home?.name ?? '');
+  const away = String(fixture?.teams?.away?.name ?? '');
+  return SECONDARY_TEAM_RE.test(home) || SECONDARY_TEAM_RE.test(away);
+}
+
+/**
+ * The day's top matches, ranked the same way the prediction-groups daily round
+ * was (Big 5 first, then marquee clubs per continent).
+ *
+ * `pickTopFixtures` only considers fixtures that have not kicked off, so every
+ * fixture is ranked as if it were still upcoming. Otherwise a match would drop
+ * out of the list at kickoff and take the user's locked prediction with it.
+ * Women's, reserve and youth sides are left out so quiet days don't fill up
+ * with them.
+ */
+export async function getKingDailyMatches(dateString?: string): Promise<unknown[]> {
+  const day = dateString && KING_DATE_RE.test(dateString) ? dateString : calendarTodayKey();
+  const { footballDataCacheService } = await import('./football-data-cache.service');
+  const fixtures: any[] = await footballDataCacheService.getMatchesByDate(day);
+
+  const asUpcoming = fixtures.filter((f) => !isSecondaryFixture(f)).map((original) => ({
+    ...original,
+    fixture: {
+      ...original?.fixture,
+      status: { ...original?.fixture?.status, short: 'NS' },
+    },
+    __original: original,
+  }));
+
+  const top = pickTopFixtures(asUpcoming, KING_DAILY_MATCH_LIMIT)
+    .map((row: any) => row.__original)
+    .sort((a: any, b: any) => {
+      const left = Date.parse(a?.fixture?.date ?? '') || 0;
+      const right = Date.parse(b?.fixture?.date ?? '') || 0;
+      return left - right;
+    })
+    .map(({ events: _e, lineups: _l, statistics: _s, players: _p, fullData: _f, ...rest }: any) => rest);
+
+  return projectMatchesForListView(top);
 }
 
 export interface UpsertKingPredictionInput {

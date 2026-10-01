@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Crown, Trophy } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/clerk-expo';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { fetchMatchesByDate } from '../Matches/leagueApiUtils';
 import {
   PredictionsService,
   type KingLeaderboard,
@@ -28,9 +27,9 @@ import { KingHeader } from './KingHeader';
 import {
   KING_BG,
   KING_CARD,
-  KING_LEAGUE_IDS,
   KING_PURPLE,
   currentWeekDays,
+  fetchKingMatches,
   fillTemplate,
   kingLeagueLogos,
   localDateKey,
@@ -52,6 +51,8 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const { t } = useTranslation();
   const copy = t.kingPredictions;
   const fontExtra = useAppFont(800);
@@ -76,14 +77,10 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const overflow = Math.max(0, logos.length - visibleLogos.length);
 
   const load = useCallback(async () => {
-    const [matches, token] = await Promise.all([
-      fetchMatchesByDate(days[dayIndex] ?? new Date()).catch(() => []),
-      getToken().catch(() => null),
+    const [dayMatches, token] = await Promise.all([
+      fetchKingMatches(selectedKey).catch(() => []),
+      getTokenRef.current().catch(() => null),
     ]);
-    const leagueSet = new Set<number>(KING_LEAGUE_IDS);
-    const dayMatches = matches
-      .filter((match) => leagueSet.has(match.league?.id))
-      .slice(0, 10);
     setMatchCount(dayMatches.length);
 
     if (!token) {
@@ -107,7 +104,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
     }
     setPredictedIds(ids);
     setBoard(leaderboard);
-  }, [dayIndex, days, getToken, mode, period]);
+  }, [mode, period, selectedKey]);
 
   useFocusEffect(
     useCallback(() => {

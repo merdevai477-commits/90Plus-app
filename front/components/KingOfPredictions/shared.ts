@@ -1,4 +1,7 @@
 import { LEAGUES } from '../../data/leagues';
+import { PredictionsService } from '../../services/predictions.service';
+import { mapFixturesToMatches } from '../Matches/leagueApiUtils';
+import type { Match } from '../Matches/matchCardUtils';
 
 /** Major leagues shown on the King week card (Figma logos + overflow). */
 export const KING_LEAGUE_IDS = [39, 140, 135, 78, 61, 200, 307, 496, 94, 88, 233, 2] as const;
@@ -43,6 +46,11 @@ export function kingLeagueLogos(): { id: number; logo: string }[] {
     const league = LEAGUES.find((row) => row.id === id);
     return league ? [{ id, logo: league.logo }] : [];
   });
+}
+
+export async function fetchKingMatches(dateKey: string): Promise<Match[]> {
+  const fixtures = await PredictionsService.getKingMatches(dateKey);
+  return mapFixturesToMatches(fixtures as Parameters<typeof mapFixturesToMatches>[0]);
 }
 
 export function fillTemplate(template: string, values: Record<string, string | number>): string {

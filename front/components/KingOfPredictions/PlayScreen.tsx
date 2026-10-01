@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +14,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/clerk-expo';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { fetchMatchesByDate } from '../Matches/leagueApiUtils';
 import type { Match } from '../Matches/matchCardUtils';
 import { PredictionApiError, PredictionsService } from '../../services/predictions.service';
 import { useTranslation } from '../../src/i18n';
@@ -23,8 +22,9 @@ import { KingHeader } from './KingHeader';
 import {
   KING_BG,
   KING_CARD,
-  KING_LEAGUE_IDS,
   KING_PURPLE,
+  fetchKingMatches,
+  localDateKey,
   parseKingMode,
 } from './shared';
 
@@ -57,6 +57,10 @@ export function KingPlayScreen({
   const dateKey = (Array.isArray(date) ? date[0] : date) || '';
   const insets = useSafeAreaInsets();
   const { getToken, isSignedIn } = useAuth();
+  // Clerk hands out a new getToken on renders; keeping it out of load's deps
+  // stops the focus effect from re-running (and re-rendering) forever.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const { t } = useTranslation();
   const copy = t.kingPredictions;
   const fontBold = useAppFont(700);
@@ -74,13 +78,10 @@ export function KingPlayScreen({
 
   const load = useCallback(async () => {
     setError(false);
-    const when = dateKey ? new Date(`${dateKey}T12:00:00`) : new Date();
-    const list = await fetchMatchesByDate(when);
-    const leagueSet = new Set<number>(KING_LEAGUE_IDS);
-    const dayMatches = list.filter((match) => leagueSet.has(match.league?.id)).slice(0, 10);
+    const dayMatches = await fetchKingMatches(dateKey || localDateKey(new Date()));
     setMatches(dayMatches);
 
-    const token = await getToken().catch(() => null);
+    const token = await getTokenRef.current().catch(() => null);
     if (!token) {
       setSaved({});
       setScores({});
@@ -112,7 +113,7 @@ export function KingPlayScreen({
     }
     setSaved(nextSaved);
     setScores(nextScores);
-  }, [dateKey, getToken]);
+  }, [dateKey]);
 
   useFocusEffect(
     useCallback(() => {

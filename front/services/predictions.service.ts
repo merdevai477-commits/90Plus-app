@@ -361,4 +361,20 @@ export const PredictionsService = {
     }
     return result.data as KingLeaderboard;
   },
+
+  /** Raw list-view fixtures for the day's top 10 King matches. */
+  getKingMatches: async (date: string): Promise<unknown[]> => {
+    const response = await fetch(
+      `${API_URL}/predictions/king/matches?date=${encodeURIComponent(date)}`,
+      { headers: { 'Content-Type': 'application/json' } },
+    );
+    if (!response.ok) {
+      throw await PredictionsService._parseError(response);
+    }
+    const result = await response.json();
+    if (!result?.success || !Array.isArray(result.data)) {
+      throw new PredictionApiError('E010', 'Invalid response format', response.status);
+    }
+    return result.data;
+  },
 };

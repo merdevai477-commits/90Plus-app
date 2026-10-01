@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/clerk-expo';
@@ -17,6 +17,8 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const { t } = useTranslation();
   const copy = t.kingPredictions;
   const fontBold = useAppFont(700);
@@ -27,14 +29,14 @@ export function KingLeaderboardScreen({ mode: modeParam }: { mode: string | stri
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const token = await getToken().catch(() => null);
+    const token = await getTokenRef.current().catch(() => null);
     if (!token) {
       setBoard(null);
       return;
     }
     const data = await PredictionsService.getKingLeaderboard(token, toApiMode(mode), period).catch(() => null);
     setBoard(data);
-  }, [getToken, mode, period]);
+  }, [mode, period]);
 
   useFocusEffect(
     useCallback(() => {

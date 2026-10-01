@@ -13,6 +13,7 @@ import { getBlockRelation } from '../services/block.service';
 import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
 import {
+    getKingDailyMatches,
     getKingLeaderboard,
     KingPredictionError,
     upsertKingPrediction,
@@ -784,6 +785,21 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
     } catch (error) {
         logger.error('Error submitting score prediction:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
+    }
+});
+
+/**
+ * GET /api/predictions/king/matches?date=YYYY-MM-DD
+ * The day's top 10 matches for King of the Game / King of Results.
+ */
+router.get('/king/matches', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const date = typeof req.query.date === 'string' ? req.query.date : undefined;
+        const matches = await getKingDailyMatches(date);
+        res.json({ success: true, data: matches });
+    } catch (error) {
+        logger.error('Error getting king matches:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });
 
