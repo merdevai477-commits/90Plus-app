@@ -21,9 +21,12 @@ export function KingToast({ toast, onHide }: { toast: KingToastState | null; onH
   const progress = useRef(new Animated.Value(0)).current;
   const onHideRef = useRef(onHide);
   onHideRef.current = onHide;
+  const runRef = useRef(0);
 
   useEffect(() => {
     if (!toast) return undefined;
+    const run = runRef.current + 1;
+    runRef.current = run;
     progress.setValue(0);
     Animated.spring(progress, { toValue: 1, useNativeDriver: true, friction: 7, tension: 80 }).start();
     const timer = setTimeout(() => {
@@ -32,9 +35,14 @@ export function KingToast({ toast, onHide }: { toast: KingToastState | null; onH
         duration: 180,
         easing: Easing.in(Easing.quad),
         useNativeDriver: true,
-      }).start(() => onHideRef.current());
+      }).start(() => {
+        if (runRef.current === run) onHideRef.current();
+      });
     }, AUTO_HIDE_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      runRef.current += 1;
+      clearTimeout(timer);
+    };
   }, [progress, toast]);
 
   const success = toast?.variant !== 'error';

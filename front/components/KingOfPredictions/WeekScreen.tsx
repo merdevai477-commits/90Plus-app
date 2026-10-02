@@ -164,7 +164,8 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const myXp = board?.me?.xp ?? 0;
   const preview = previewEntries(board);
 
-  const prizeScale = (screenW - SIDE * 2) / PRIZE_W;
+  // Keep the prize card's proportions on small and large phones.
+  const prizeScale = Math.min(1.05, Math.max(0.78, (screenW - SIDE * 2) / PRIZE_W));
   const s = (value: number) => value * prizeScale;
 
   return (
@@ -370,7 +371,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
             <Text style={[styles.challengeEyebrow, { fontFamily: fontMedium }]}>
               {fillTemplate(copy.dayLine, { day: dayName, index: ordinal })}
             </Text>
-            <Text style={styles.challengeLine}>
+            <Text style={styles.challengeLine} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
               <Text style={[styles.challengeCount, { fontFamily: fontBold }]}>{loading ? '—' : matchCount}</Text>
               <Text style={[styles.challengeLabel, { fontFamily: fontSemi }]}>{` ${copy.matchCountLabel}`}</Text>
             </Text>

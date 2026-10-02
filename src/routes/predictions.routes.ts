@@ -207,6 +207,12 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
             throw txError;
         }
 
+        // Drop the cached GET /user before responding, so the screen reload
+        // that follows this save cannot read the previous list.
+        await clearResponseCache('/predictions/user').catch((err) => {
+            logger.warn('Failed to invalidate /predictions/user cache:', err);
+        });
+
         res.json({
             success: true,
             data: {
@@ -216,13 +222,6 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
                 updated: saved.updated,
             },
             message: saved.updated ? 'تم تحديث توقعك' : 'تم تسجيل توقعك بنجاح! 🎯'
-        });
-
-        // Invalidate the per-user predictions cache so the next GET /user
-        // reflects this new prediction immediately (30s TTL would otherwise
-        // leave the UI out of sync after optimistic write).
-        clearResponseCache('/predictions/user').catch((err) => {
-            logger.warn('Failed to invalidate /predictions/user cache:', err);
         });
     } catch (error) {
         logger.error('Error creating prediction:', error);
@@ -760,6 +759,10 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
             throw txError;
         }
 
+        await clearResponseCache('/predictions/user').catch((err) => {
+            logger.warn('Failed to invalidate /predictions/user cache:', err);
+        });
+
         res.json({
             success: true,
             data: {
@@ -777,10 +780,6 @@ router.post('/submit', requireAuth, async (req: Request, res: Response): Promise
                 updated: saved.updated,
             },
             message: saved.updated ? 'تم تحديث توقعك' : '🎯 تم إرسال توقعك بنجاح!'
-        });
-
-        clearResponseCache('/predictions/user').catch((err) => {
-            logger.warn('Failed to invalidate /predictions/user cache:', err);
         });
     } catch (error) {
         logger.error('Error submitting score prediction:', error);

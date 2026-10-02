@@ -189,6 +189,10 @@ export async function upsertKingPrediction(
       };
     }
 
+    if (kickoffHasPassed(safeMatchDate)) {
+      throw new KingPredictionError('MATCH_STARTED');
+    }
+
     const used = await tx.prediction.count({
       where: { userId: user.id, createdAt: { gte: today, lt: tomorrow } },
     });

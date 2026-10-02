@@ -356,6 +356,7 @@ export function KingPlayScreen({
                     selected={sheetPick === 'away'}
                     font={fontSemi}
                     onPress={() => setSheetPick('away')}
+                    style={styles.pickPress}
                   />
                   <View style={styles.pickMid}>
                     <Pressable onPress={() => setSheetPick('draw')} accessibilityLabel={copy.draw}>
@@ -389,6 +390,7 @@ export function KingPlayScreen({
                     selected={sheetPick === 'home'}
                     font={fontSemi}
                     onPress={() => setSheetPick('home')}
+                    style={styles.pickPress}
                   />
                 </View>
               </>
@@ -479,15 +481,17 @@ function PickTeam({
   selected,
   font,
   onPress,
+  style,
 }: {
   name: string;
   logo?: string;
   selected: boolean;
   font: string;
   onPress: () => void;
+  style?: object;
 }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }} style={style}>
       <LinearGradient
         colors={selected ? PICK_ON : ['rgba(255,255,255,0.04)', 'rgba(255,255,255,0.01)']}
         style={[styles.pickTeam, selected ? styles.pickTeamOn : styles.pickTeamIdle]}
@@ -524,25 +528,26 @@ const styles = StyleSheet.create({
   cardList: { paddingHorizontal: SIDE, paddingTop: 10, gap: 12 },
   dimmed: { opacity: 0.45 },
   card: {
-    height: 121,
+    minHeight: 121,
     borderRadius: 25,
     borderWidth: 1,
     borderColor: '#6D33F2',
-    paddingHorizontal: 34,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
-  cardTeam: { width: 72, alignItems: 'center', gap: 9 },
+  cardTeam: { flex: 1, minWidth: 0, alignItems: 'center', gap: 9 },
   cardLogo: { width: 43, height: 43 },
   cardName: { color: '#fff', textAlign: 'center' },
-  cardMid: { width: 112, alignItems: 'center' },
-  vs: { fontSize: 21, textAlign: 'center' },
-  time: { color: '#777', fontSize: 13, textAlign: 'center', marginTop: 4 },
-  predictPress: { marginTop: 9 },
+  cardMid: { width: '34%', maxWidth: 124, minWidth: 96, alignItems: 'stretch' },
+  vs: { fontSize: 21, textAlign: 'center', alignSelf: 'center' },
+  time: { color: '#777', fontSize: 13, textAlign: 'center', alignSelf: 'center', marginTop: 4 },
+  predictPress: { marginTop: 9, alignSelf: 'stretch' },
   predictPressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
   predictBtn: {
-    width: 112,
     height: 34,
     paddingHorizontal: 8,
     flexDirection: 'row',
@@ -576,13 +581,14 @@ const styles = StyleSheet.create({
   sheetTitle: { color: '#fff', fontSize: 24, textAlign: 'center' },
   sheetTeams: {
     marginTop: 16,
-    height: 101,
-    paddingHorizontal: 12,
+    minHeight: 101,
+    paddingHorizontal: 4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
-  sheetTeam: { width: 92, alignItems: 'center', gap: 9 },
+  sheetTeam: { flex: 1, minWidth: 0, alignItems: 'center', gap: 9 },
   sheetLogo: { width: 50, height: 58 },
   sheetName: { color: '#fff', fontSize: 18, textAlign: 'center' },
   sheetMid: { width: 105, alignItems: 'center' },
@@ -592,9 +598,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
+  pickPress: { flex: 1, maxWidth: 140 },
   pickTeam: {
-    width: 104,
+    width: '100%',
     height: 132,
     borderRadius: 22,
     paddingHorizontal: 8,
@@ -629,13 +637,13 @@ const styles = StyleSheet.create({
   resultTitle: { color: '#fff', fontSize: 23, textAlign: 'center', marginTop: 24 },
   scoreRow: {
     marginTop: 16,
-    paddingHorizontal: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
   },
   scoreVs: { fontSize: 26, textAlign: 'center' },
-  scoreBox: { width: 95, height: 74 },
+  scoreBox: { flex: 1, maxWidth: 110, height: 74 },
   scoreFill: {
     position: 'absolute',
     left: 4,

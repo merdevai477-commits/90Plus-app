@@ -44,7 +44,12 @@ export function KingHeader() {
       </GlassSurface>
 
       <GlassSurface radius={78} style={[styles.island, styles.energy]} accessibilityLabel={`${copy.energyA11y}: ${coins}`}>
-        <Text style={[styles.energyValue, { fontFamily: fontBold }]}>
+        <Text
+          style={[styles.energyValue, { fontFamily: fontBold }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+        >
           {loading ? '—' : String(coins)}
         </Text>
         <Image source={KING_ICON.energy} style={styles.energyIcon} contentFit="contain" />
@@ -101,6 +106,8 @@ const styles = StyleSheet.create({
   energyValue: {
     color: '#fff',
     fontSize: 22,
+    flexShrink: 1,
+    maxWidth: 72,
   },
   energyIcon: {
     width: 24,
