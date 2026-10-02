@@ -18,6 +18,7 @@ import {
   TEXT_PRIMARY,
   TEXT_SECONDARY,
 } from '../../constants/tokens';
+import { CrowdOddsStrip } from '../common/CrowdOddsStrip';
 import type { MatchKickoffInfo } from '../../utils/extractMatchKickoffInfo';
 import {
   fetchStadiumImageByName,
@@ -52,6 +53,14 @@ type Props = {
   capacityLabel: string;
   broadcastLabel: string;
   emptyHint: string;
+  crowd?: {
+    homePercent: number;
+    drawPercent: number;
+    awayPercent: number;
+    label: string;
+  } | null;
+  /** The "switches to Events" note only belongs on the pre-event Highlights tab. */
+  showAutoUpdate?: boolean;
 };
 
 function formatCapacity(value: number): string {
@@ -139,6 +148,8 @@ export function MatchKickoffHighlights({
   capacityLabel,
   broadcastLabel,
   emptyHint,
+  crowd = null,
+  showAutoUpdate = true,
 }: Props) {
   const stadiumValue = [info.stadiumName, info.city].filter(Boolean).join(' · ');
   const rows: Row[] = [];
@@ -185,19 +196,21 @@ export function MatchKickoffHighlights({
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.strip}>
-        <LinearGradient
-          colors={['rgba(124,58,237,0.42)', 'rgba(59,130,246,0.22)', 'rgba(91,33,182,0.18)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.stripDot} />
-        <View style={styles.stripCopy}>
-          <Text style={styles.stripTitle}>{autoUpdateTitle}</Text>
-          <Text style={styles.stripHint}>{autoUpdateHint}</Text>
+      {showAutoUpdate ? (
+        <View style={styles.strip}>
+          <LinearGradient
+            colors={['rgba(124,58,237,0.42)', 'rgba(59,130,246,0.22)', 'rgba(91,33,182,0.18)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.stripDot} />
+          <View style={styles.stripCopy}>
+            <Text style={styles.stripTitle}>{autoUpdateTitle}</Text>
+            <Text style={styles.stripHint}>{autoUpdateHint}</Text>
+          </View>
         </View>
-      </View>
+      ) : null}
 
       <View style={styles.cardOuter}>
         <GlassWrapper {...(glassProps.card as object)} style={StyleSheet.absoluteFill} />
@@ -209,6 +222,15 @@ export function MatchKickoffHighlights({
         />
 
         <Text style={styles.title}>{title}</Text>
+
+        {crowd ? (
+          <CrowdOddsStrip
+            homePercent={crowd.homePercent}
+            drawPercent={crowd.drawPercent}
+            awayPercent={crowd.awayPercent}
+            label={crowd.label}
+          />
+        ) : null}
 
         <StadiumHero uri={info.stadiumImage} stadiumName={info.stadiumName} />
 

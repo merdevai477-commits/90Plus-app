@@ -16,7 +16,7 @@ import {
 } from '../../components/Matches/leagueApiUtils';
 import { isStaleInPlayClock } from '../../utils/staleMatchClock';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
-import { useSecondTick } from '../../hooks/useSecondTick';
+import { useLiveDisplayClock } from '../../hooks/useLiveDisplayClock';
 import {
   LIVE_RED,
   TEXT_PRIMARY,
@@ -188,11 +188,8 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
     return time || '--:--';
   }, [fixtureDate, time]);
 
-  // Keep the import wired so Fast Refresh does not crash with
-  // `Property 'useSecondTick' doesn't exist` after dropping MM:SS.
-  useSecondTick(false);
-
-  // Minute-only live clock (no MM:SS). Anchor still fills gaps when elapsed is missing.
+  // Seconds tick only in open play. Stoppage, half-time and full time keep
+  // the existing minute or status label.
   const clockActive = isLive && !isStoppage && !isHalftime;
 
   const anchoredStart = useAnchoredPeriodStart(
@@ -209,8 +206,16 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
     }) ??
     (isLive ? short || liveLabel : '');
 
+  const liveClock = useLiveDisplayClock({
+    fixtureId: clockAnchorKey != null ? String(clockAnchorKey) : '',
+    statusShort: short,
+    elapsed,
+    extra: stoppage,
+    fallbackLabel: minuteLabel,
+  });
+
   const statusLine = isLive
-    ? minuteLabel
+    ? (clockActive ? liveClock : minuteLabel)
     : isFinished
     ? finishedBadgeText
     : isHalftime
@@ -466,6 +471,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+    writingDirection: 'ltr',
   },
   statusLive: { color: '#c4b5fd' },
   statusStoppage: { color: LIVE_RED },

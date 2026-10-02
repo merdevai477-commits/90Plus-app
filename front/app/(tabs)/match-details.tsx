@@ -1526,73 +1526,95 @@ const MatchDetailsScreen = () => {
 
   // Render Events Tab
   const renderEvents = () => {
+    const crowdSource = fixture as {
+      _crowdPrediction?: { homePercent?: number; drawPercent?: number; awayPercent?: number };
+      crowdPrediction?: { homePercent?: number; drawPercent?: number; awayPercent?: number };
+    } | null;
+    const crowdRaw = crowdSource?._crowdPrediction ?? crowdSource?.crowdPrediction;
+    const crowdPercents = [crowdRaw?.homePercent, crowdRaw?.drawPercent, crowdRaw?.awayPercent].map(Number);
+    const crowd = crowdPercents.every((value) => Number.isFinite(value))
+      ? {
+          homePercent: crowdPercents[0],
+          drawPercent: crowdPercents[1],
+          awayPercent: crowdPercents[2],
+          label: translate('matches.crowdPrediction.label'),
+        }
+      : null;
+
+    const highlightsBlock = (showAutoUpdate: boolean) => (
+      <>
+        <MatchKickoffHighlights
+          info={extractMatchKickoffInfo({ fixture, venue })}
+          title={t.matchDetails.highlightsTitle || t.matchDetails.matchInfo || 'Match information'}
+          autoUpdateTitle={t.matchDetails.highlightsAutoUpdate || 'Updates automatically with the first event'}
+          autoUpdateHint={
+            t.matchDetails.highlightsAutoUpdateHint ||
+            'This tab switches to Events as soon as the first event appears.'
+          }
+          refereeLabel={t.matchDetails.referee || 'Referee'}
+          staffLabel={t.matchDetails.matchStaff || 'Officials'}
+          stadiumLabel={t.matchDetails.stadium || 'Stadium'}
+          capacityLabel={t.matchDetails.capacity || 'Capacity'}
+          broadcastLabel={t.matchDetails.broadcastChannel || 'Broadcast'}
+          emptyHint={
+            isLive()
+              ? (t.matchDetails.eventsWaitingLive || 'Waiting for the first event…')
+              : (t.matchDetails.beforeMatch || t.matchDetails.eventsBeforeKickoff)
+          }
+          crowd={crowd}
+          showAutoUpdate={showAutoUpdate}
+        />
+        <MatchTopPlayersCard
+          homeCompetitorId={
+            is365Fixture ? (form365TeamIds.home ?? fixture?.teams.home.id ?? 0) : 0
+          }
+          awayCompetitorId={
+            is365Fixture ? (form365TeamIds.away ?? fixture?.teams.away.id ?? 0) : 0
+          }
+          competitionId={match365CompetitionId(fixture?.league?.id) ?? 0}
+          homeTeam={{
+            id: fixture?.teams.home.id ?? 0,
+            name: getTeamDisplayName(homeTeamName, language),
+            logo: fixture?.teams.home.logo,
+          }}
+          awayTeam={{
+            id: fixture?.teams.away.id ?? 0,
+            name: getTeamDisplayName(awayTeamName, language),
+            logo: fixture?.teams.away.logo,
+          }}
+          rtl={language === 'ar'}
+          labels={{
+            title: t.matchDetails.topPlayersTitle,
+            attack: t.matchDetails.topPlayersAttack,
+            midfield: t.matchDetails.topPlayersMidfield,
+            defense: t.matchDetails.topPlayersDefense,
+            goals: t.matchDetails.topPlayersGoals,
+            assists: t.matchDetails.topPlayersAssists,
+            rating: t.matchDetails.topPlayersRating,
+          }}
+          onOpenPlayer={(player, team) =>
+            pushPlayerCareer(router, {
+              athleteId: player.athleteId,
+              name: player.name,
+              photo: player.photo,
+              teamName: team.name,
+              teamLogo: team.logo,
+              teamId: team.id,
+            })
+          }
+        />
+      </>
+    );
+
     const finished = isFinishedMatch();
     if (!finished && events.length === 0) {
-      const info = extractMatchKickoffInfo({ fixture, venue });
       return (
         <ScrollView
           scrollEnabled={false}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          <MatchKickoffHighlights
-            info={info}
-            title={t.matchDetails.highlightsTitle || t.matchDetails.matchInfo || 'Match information'}
-            autoUpdateTitle={t.matchDetails.highlightsAutoUpdate || 'Updates automatically with the first event'}
-            autoUpdateHint={
-              t.matchDetails.highlightsAutoUpdateHint ||
-              'This tab switches to Events as soon as the first event appears.'
-            }
-            refereeLabel={t.matchDetails.referee || 'Referee'}
-            staffLabel={t.matchDetails.matchStaff || 'Officials'}
-            stadiumLabel={t.matchDetails.stadium || 'Stadium'}
-            capacityLabel={t.matchDetails.capacity || 'Capacity'}
-            broadcastLabel={t.matchDetails.broadcastChannel || 'Broadcast'}
-            emptyHint={
-              isLive()
-                ? (t.matchDetails.eventsWaitingLive || 'Waiting for the first event…')
-                : (t.matchDetails.beforeMatch || t.matchDetails.eventsBeforeKickoff)
-            }
-          />
-          <MatchTopPlayersCard
-            homeCompetitorId={
-              is365Fixture ? (form365TeamIds.home ?? fixture?.teams.home.id ?? 0) : 0
-            }
-            awayCompetitorId={
-              is365Fixture ? (form365TeamIds.away ?? fixture?.teams.away.id ?? 0) : 0
-            }
-            competitionId={match365CompetitionId(fixture?.league?.id) ?? 0}
-            homeTeam={{
-              id: fixture?.teams.home.id ?? 0,
-              name: getTeamDisplayName(homeTeamName, language),
-              logo: fixture?.teams.home.logo,
-            }}
-            awayTeam={{
-              id: fixture?.teams.away.id ?? 0,
-              name: getTeamDisplayName(awayTeamName, language),
-              logo: fixture?.teams.away.logo,
-            }}
-            rtl={language === 'ar'}
-            labels={{
-              title: t.matchDetails.topPlayersTitle,
-              attack: t.matchDetails.topPlayersAttack,
-              midfield: t.matchDetails.topPlayersMidfield,
-              defense: t.matchDetails.topPlayersDefense,
-              goals: t.matchDetails.topPlayersGoals,
-              assists: t.matchDetails.topPlayersAssists,
-              rating: t.matchDetails.topPlayersRating,
-            }}
-            onOpenPlayer={(player, team) =>
-              pushPlayerCareer(router, {
-                athleteId: player.athleteId,
-                name: player.name,
-                photo: player.photo,
-                teamName: team.name,
-                teamLogo: team.logo,
-                teamId: team.id,
-              })
-            }
-          />
+          {highlightsBlock(true)}
         </ScrollView>
       );
     }
@@ -1764,6 +1786,7 @@ const MatchDetailsScreen = () => {
             );
           })}
         </View>
+        {highlightsBlock(false)}
       </ScrollView>
     );
   };

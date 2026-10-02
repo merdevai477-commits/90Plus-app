@@ -34,7 +34,6 @@ import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus } fro
 import { fetchLeagueMatchesByDate, resolveLiveMinuteLabel, isLiveStoppage } from '../../components/Matches/leagueApiUtils';
 import { MatchListLiveClock } from '../../components/Matches/MatchListLiveClock';
 import { FeatureInfoModal } from '../../components/common/FeatureInfoModal';
-import { CrowdOddsStrip } from '../../components/common/CrowdOddsStrip';
 import { WorldCupLockedModal } from '../../components/Matches/WorldCupLockedModal';
 import { useWorldCupMatches } from '../../hooks/useWorldCupMatches';
 import { useAppFeaturesStore } from '../../src/stores/appFeaturesStore';
@@ -537,29 +536,8 @@ const MatchRow = memo(function MatchRow({
         </TouchableOpacity>
       </View>
 
-      {fixture.status === 'UPCOMING' && fixture.crowdPrediction && !showPreds ? (
-        <View style={[styles.crowdStripOuter, worldCupCard && styles.crowdStripOuterInCard]}>
-          <CrowdOddsStrip
-            homePercent={fixture.crowdPrediction.homePercent}
-            drawPercent={fixture.crowdPrediction.drawPercent}
-            awayPercent={fixture.crowdPrediction.awayPercent}
-            label={t('matches.crowdPrediction.label')}
-            compact
-          />
-        </View>
-      ) : null}
-
       {showPreds && fixture.status === 'UPCOMING' && (
         <View style={[styles.predWrap, worldCupCard && styles.predWrapInCard]}>
-          {fixture.crowdPrediction ? (
-            <CrowdOddsStrip
-              homePercent={fixture.crowdPrediction.homePercent}
-              drawPercent={fixture.crowdPrediction.drawPercent}
-              awayPercent={fixture.crowdPrediction.awayPercent}
-              label={t('matches.crowdPrediction.label')}
-            />
-          ) : null}
-
           <View style={styles.predTitleRow}>
             <Text style={styles.predTitle}>
               {existingPrediction ? t('matches.prediction.yourPrediction') : t('matches.prediction.title')}
@@ -2715,12 +2693,6 @@ const styles = StyleSheet.create({
   },
   predWrap: { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 6 },
   predWrapInCard: { paddingHorizontal: 14, paddingBottom: 14 },
-  crowdStripOuter: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    paddingTop: 0,
-  },
-  crowdStripOuterInCard: { paddingHorizontal: 12 },
   predTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
   predTitleSpinner: { marginLeft: 4 },
   predTitle: { color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '700', textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },
