@@ -233,7 +233,7 @@ const MatchDetailsScreen = () => {
   const shimmerX = useShimmer();
   const translationsReady = Boolean(t?.matchDetails);
 
-  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'chats'>('events');
+  const [activeTab, setActiveTab] = useState<'lineups' | 'stats' | 'form' | 'events' | 'standings' | 'chats' | 'info'>('events');
 
   const [homeLastFixtures, setHomeLastFixtures] = useState<TeamFixture[]>([]);
   const [awayLastFixtures, setAwayLastFixtures] = useState<TeamFixture[]>([]);
@@ -1329,6 +1329,15 @@ const MatchDetailsScreen = () => {
     void loadVenueIfNeeded();
   }, [activeTab, fixtureId, events.length, isFinishedMatch, loadVenueIfNeeded]);
 
+  const infoTabVisible = events.length > 0 && !isFinishedMatch();
+  useEffect(() => {
+    if (activeTab === 'info' && !infoTabVisible) setActiveTab('events');
+  }, [activeTab, infoTabVisible]);
+  useEffect(() => {
+    if (activeTab !== 'info') return;
+    void loadVenueIfNeeded();
+  }, [activeTab, loadVenueIfNeeded]);
+
   // Reload stats when match reaches HT or full time
   useEffect(() => {
     const short = fixture?.fixture?.status?.short;
@@ -1525,7 +1534,7 @@ const MatchDetailsScreen = () => {
   };
 
   // Render Events Tab
-  const renderEvents = () => {
+  const renderMatchInformation = (showAutoUpdate: boolean) => {
     const crowdSource = fixture as {
       _crowdPrediction?: { homePercent?: number; drawPercent?: number; awayPercent?: number };
       crowdPrediction?: { homePercent?: number; drawPercent?: number; awayPercent?: number };
@@ -1541,15 +1550,15 @@ const MatchDetailsScreen = () => {
         }
       : null;
 
-    const highlightsBlock = (showAutoUpdate: boolean) => (
+    return (
       <>
         <MatchKickoffHighlights
           info={extractMatchKickoffInfo({ fixture, venue })}
           title={t.matchDetails.highlightsTitle || t.matchDetails.matchInfo || 'Match information'}
-          autoUpdateTitle={t.matchDetails.highlightsAutoUpdate || 'Updates automatically with the first event'}
+          autoUpdateTitle={t.matchDetails.highlightsAutoUpdate || 'Details move to Information'}
           autoUpdateHint={
             t.matchDetails.highlightsAutoUpdateHint ||
-            'This tab switches to Events as soon as the first event appears.'
+            'When the first event appears, these details open in a new Information tab.'
           }
           refereeLabel={t.matchDetails.referee || 'Referee'}
           staffLabel={t.matchDetails.matchStaff || 'Officials'}
@@ -1605,7 +1614,9 @@ const MatchDetailsScreen = () => {
         />
       </>
     );
+  };
 
+  const renderEvents = () => {
     const finished = isFinishedMatch();
     if (!finished && events.length === 0) {
       return (
@@ -1614,7 +1625,7 @@ const MatchDetailsScreen = () => {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {highlightsBlock(true)}
+          {renderMatchInformation(true)}
         </ScrollView>
       );
     }
@@ -1786,7 +1797,6 @@ const MatchDetailsScreen = () => {
             );
           })}
         </View>
-        {highlightsBlock(false)}
       </ScrollView>
     );
   };
@@ -2660,6 +2670,13 @@ const MatchDetailsScreen = () => {
   }
 
   const baseTabs = [
+    ...(infoTabVisible
+      ? [{
+          key: 'info',
+          label: t.matchDetails.infoShort || (language === 'ar' ? 'معلومات' : 'Information'),
+          icon: 'information-circle' as const,
+        }]
+      : []),
     {
       key: 'events',
       label:
@@ -2886,6 +2903,15 @@ const MatchDetailsScreen = () => {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.content}>
+            {activeTab === 'info' && infoTabVisible ? (
+              <ScrollView
+                scrollEnabled={false}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+              >
+                {renderMatchInformation(false)}
+              </ScrollView>
+            ) : null}
             {activeTab === 'events' && renderEvents()}
             {activeTab === 'lineups' && renderLineups()}
             {activeTab === 'stats' && renderStatistics()}

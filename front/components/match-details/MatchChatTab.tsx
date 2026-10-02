@@ -27,7 +27,7 @@ import {
   resolveLiveMinuteLabel,
 } from '../Matches/leagueApiUtils';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
-import { useSecondTick } from '../../hooks/useSecondTick';
+import { useLiveDisplayClock } from '../../hooks/useLiveDisplayClock';
 import { useTranslation } from '../../src/i18n';
 import { useMatchLiveChat } from '../../hooks/useMatchLiveChat';
 import type { MatchChatUiMessage } from '../../hooks/matchLiveChat.reducer';
@@ -394,9 +394,6 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
   const isStoppage = isLive && isLiveStoppage(short, summary.elapsed, summary.stoppage);
 
   const clockActive = isLive && !isStoppage && !isHalftime;
-  // Keep the import wired so Fast Refresh does not crash with
-  // `Property 'useSecondTick' doesn't exist` after dropping MM:SS.
-  useSecondTick(false);
   const anchoredStart = useAnchoredPeriodStart(
     summary.clockAnchorKey,
     short,
@@ -410,8 +407,16 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
     }) ??
     (isLive ? short || summary.liveLabel || 'LIVE' : '');
 
+  const liveClock = useLiveDisplayClock({
+    fixtureId: summary.clockAnchorKey != null ? String(summary.clockAnchorKey) : '',
+    statusShort: short,
+    elapsed: summary.elapsed,
+    extra: summary.stoppage,
+    fallbackLabel: minuteLabel,
+  });
+
   const statusLine = isLive
-    ? minuteLabel
+    ? (clockActive ? liveClock : minuteLabel)
     : isFinished
       ? summary.statusLabel || summary.finishedLabel || short
       : isHalftime
@@ -616,9 +621,16 @@ export function MatchChatTab({
 
   const frozenMs = frozenUntil ? Math.max(0, frozenUntil - now) : 0;
   const frozen = frozenMs > 0;
+  const chatClosed =
+    ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(matchSummary?.statusShort || '') ||
+    lastError === 'MATCH_ENDED';
+  useEffect(() => {
+    if (!chatClosed) return;
+    setReplyTarget(null);
+  }, [chatClosed]);
   const online = connection === 'connected';
   const hasDraft = draft.trim().length > 0 && draft.trim().length <= maxLength;
-  const canCompose = signedIn && !frozen;
+  const canCompose = signedIn && !frozen && !chatClosed;
   const canSend = canCompose && hasDraft && online;
   const isLoading = signedIn && connection === 'connecting' && messages.length === 0;
 
@@ -687,10 +699,10 @@ export function MatchChatTab({
   }, []);
 
   const onReply = useCallback((message: MatchChatUiMessage) => {
-    if (message.pending || message.failed) return;
+    if (chatClosed || message.pending || message.failed) return;
     setReplyTarget(message);
     inputRef.current?.focus();
-  }, []);
+  }, [chatClosed]);
 
   const clearReplyTarget = useCallback(() => {
     setReplyTarget(null);
@@ -701,7 +713,7 @@ export function MatchChatTab({
       router.push('/auth');
       return;
     }
-    if (frozen) return;
+    if (frozen || chatClosed) return;
     if (!hasDraft) return;
     if (!online) {
       Alert.alert(md.chatSendBlockedTitle, md.chatSendBlockedOffline);
@@ -727,7 +739,7 @@ export function MatchChatTab({
       setDraft('');
       setReplyTarget(null);
     }
-  }, [signedIn, frozen, hasDraft, online, send, draft, replyTarget, router, md]);
+  }, [signedIn, frozen, chatClosed, hasDraft, online, send, draft, replyTarget, router, md]);
 
   const onShowAllChats = useCallback(() => {
     setExpanded(true);
@@ -823,7 +835,11 @@ export function MatchChatTab({
           {lastError ? <Text style={styles.statusError}>{lastError}</Text> : null}
         </View>
       ) : null}
-      {frozen ? (
+      {chatClosed ? (
+        <View style={styles.freezeBanner}>
+          <Text style={styles.freezeText}>{md.chatClosedPlaceholder}</Text>
+        </View>
+      ) : frozen ? (
         <View style={styles.freezeBanner}>
           <Text style={styles.freezeText}>
             {md.chatFrozen.replace('{seconds}', String(Math.ceil(frozenMs / 1000)))}
@@ -888,18 +904,24 @@ export function MatchChatTab({
           <SendButtonIcon size={53} disabled={!canSend && signedIn} />
         </Pressable>
 
-        <View style={[styles.inputContainer, (frozen || !signedIn) && styles.inputContainerDisabled]}>
+        <View style={[styles.inputContainer, (frozen || chatClosed || !signedIn) && styles.inputContainerDisabled]}>
           <FaceSmileIcon size={24} />
           <TextInput
             ref={inputRef}
             style={styles.input}
             placeholder={
-              frozen ? md.chatFrozenPlaceholder : !signedIn ? md.chatLoginHint : md.chatPlaceholder
+              chatClosed
+                ? md.chatClosedPlaceholder
+                : frozen
+                  ? md.chatFrozenPlaceholder
+                  : !signedIn
+                    ? md.chatLoginHint
+                    : md.chatPlaceholder
             }
             placeholderTextColor="#484050"
             textAlign="right"
             textAlignVertical="center"
-            editable={signedIn && !frozen}
+            editable={signedIn && !frozen && !chatClosed}
             value={draft}
             onChangeText={setDraft}
             maxLength={maxLength}

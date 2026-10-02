@@ -3,7 +3,8 @@
  * Canonical elapsed/status/score live in the server pipeline — this file
  * never writes Match objects, Zustand, or network.
  *
- * Enable with EXPO_PUBLIC_LIVE_CLOCK_SECONDS=1 (preview/dev). Production default: off.
+ * Seconds are on for the matches list and match details.
+ * Set EXPO_PUBLIC_LIVE_CLOCK_SECONDS=0 to turn them off.
  */
 
 import { formatLiveMinuteDisplay } from './formatLiveMinuteDisplay';
@@ -18,10 +19,9 @@ const LIVE_CLOCK_LOG =
 
 export function isLiveClockSecondsEnabled(): boolean {
   if (LIVE_CLOCK_SECONDS_HARD_OFF) return false;
-  return (
-    process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS === '1' ||
-    process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS === 'true'
-  );
+  const flag = process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS;
+  if (flag === '0' || flag === 'false') return false;
+  return true;
 }
 
 export type LiveDisplayClockInput = {

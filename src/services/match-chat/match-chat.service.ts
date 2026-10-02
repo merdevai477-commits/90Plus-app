@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
+import { prisma } from '../../lib/prisma';
 import { getRedisClient, isRedisConnected } from '../../lib/redis';
+import { readLiveFixtureById } from '../live-fixture-cache.service';
 import { MATCH_CHAT_CONFIG, MATCH_CHAT_REDIS_KEYS, matchChatRoom } from '../../config/match-chat.config';
 import { logger } from '../../utils/logger';
 import { moderateMatchChatText } from './match-chat.moderation';
@@ -114,6 +116,27 @@ export async function loadJoinHistory(
   };
 }
 
+const CHAT_CLOSED_STATUSES = new Set(['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO']);
+
+async function isMatchChatClosed(matchId: number): Promise<boolean> {
+  try {
+    const live = await readLiveFixtureById(matchId);
+    const short = live?.fixture?.status?.short;
+    if (short && CHAT_CLOSED_STATUSES.has(short)) return true;
+  } catch {
+    // Live cache is optional. The stored fixture status still closes the chat.
+  }
+  try {
+    const row = await prisma.cachedFixture.findUnique({
+      where: { fixtureId: matchId },
+      select: { status: true },
+    });
+    return Boolean(row?.status && CHAT_CLOSED_STATUSES.has(row.status));
+  } catch {
+    return false;
+  }
+}
+
 export async function processMatchChatSend(input: {
   user: MatchChatSocketUser;
   ip: string;
@@ -133,6 +156,11 @@ export async function processMatchChatSend(input: {
   }
   if (existing?.kind === 'rejected') {
     return { ok: false, code: existing.code ?? 'DUPLICATE', reason: existing.reason };
+  }
+
+  if (await isMatchChatClosed(matchId)) {
+    matchChatIncr('rejected');
+    return { ok: false, code: 'MATCH_ENDED', reason: 'finished' };
   }
 
   const frozenUntil = await getFrozenUntil(input.user.userId);

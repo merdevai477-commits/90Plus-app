@@ -421,9 +421,11 @@ describe('liveDisplayClock presentation', () => {
     expect(late.ticking).toBe(false);
   });
 
-  it('flag defaults off', () => {
+  it('flag defaults on unless explicitly disabled', () => {
     const prev = process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS;
     delete process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS;
+    expect(isLiveClockSecondsEnabled()).toBe(true);
+    process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS = '0';
     expect(isLiveClockSecondsEnabled()).toBe(false);
     process.env.EXPO_PUBLIC_LIVE_CLOCK_SECONDS = '1';
     expect(isLiveClockSecondsEnabled()).toBe(true);
