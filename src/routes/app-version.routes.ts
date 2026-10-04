@@ -15,7 +15,7 @@ const router = Router();
 // Current app version configuration
 // يمكن تحديثها من خلال admin endpoint
 let appVersionConfig = {
-    currentVersion: process.env.APP_CURRENT_VERSION || '1.0.2',
+    currentVersion: process.env.APP_CURRENT_VERSION || '1.1.1',
     minimumVersion: process.env.APP_MINIMUM_VERSION || '1.0.0',
     forceUpdate: process.env.APP_FORCE_UPDATE === 'true',
     maintenanceMode: process.env.APP_MAINTENANCE_MODE === 'true',
