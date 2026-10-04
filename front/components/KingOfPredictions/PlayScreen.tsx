@@ -442,7 +442,11 @@ export function KingPlayScreen({
       </Modal>
 
       <View pointerEvents="box-none" style={[styles.navWrap, { bottom: navBottom }]}>
-        <GlassSurface radius={NAV_HEIGHT / 2} tone="muted" style={styles.nav}>
+        <GlassSurface
+          radius={NAV_HEIGHT / 2}
+          tone="muted"
+          style={[styles.nav, Platform.OS === 'android' && styles.navSolid]}
+        >
           {NAV_TABS.map(({ key, icon }) => {
             const active = tab === key;
             const label = key === 'predict' ? copy.tabPredict : copy.tabHistory;
@@ -724,6 +728,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 10,
   },
+  navSolid: { backgroundColor: 'rgba(14,8,28,0.97)', borderWidth: 1, borderColor: 'rgba(139,92,246,0.35)' },
   navItem: {
     flex: 1,
     borderRadius: (NAV_HEIGHT - 10) / 2,

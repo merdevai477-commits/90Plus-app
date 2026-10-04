@@ -182,7 +182,7 @@ export function KingHistoryList({ mode, bottomPadding }: { mode: KingRouteMode; 
     <ActivityIndicator color={KING_PURPLE} style={styles.center} />
   ) : error ? (
     <Pressable onPress={() => { void reload(); }} style={styles.center}>
-      <Text style={[styles.muted, { fontFamily: fontMedium }]}>{copy.loadError}</Text>
+      <Text style={[styles.muted, { fontFamily: fontMedium }]}>{copy.historyError}</Text>
       <Text style={[styles.retry, { fontFamily: fontSemi }]}>{copy.retry}</Text>
     </Pressable>
   ) : (

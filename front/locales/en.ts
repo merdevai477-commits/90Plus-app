@@ -1123,6 +1123,7 @@ export const en = {
     yourPick: 'Your pick',
     historyEmpty: 'No predictions here yet',
     historySignIn: 'Sign in to see your predictions',
+    historyError: 'Could not load your predictions',
     vs: 'VS',
     days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
     ordinals: ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th'],
