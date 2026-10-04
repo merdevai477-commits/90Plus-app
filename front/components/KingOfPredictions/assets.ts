@@ -1,9 +1,9 @@
 export const KING_ART = {
-  stadium: require('../../assets/images/king-of-predictions/stadium-bg.png'),
+  stadium: require('../../assets/images/king-of-predictions/stadium-bg.jpg'),
   stadiumGame: require('../../assets/images/king-of-predictions/stadium-game.jpg'),
   confetti: require('../../assets/images/king-of-predictions/confetti.png'),
   confettiPrize: require('../../assets/images/king-of-predictions/confetti-prize.png'),
-  prizeBg: require('../../assets/images/king-of-predictions/prize-bg.png'),
+  prizeBg: require('../../assets/images/king-of-predictions/prize-bg.jpg'),
   prizeGlow1: require('../../assets/images/king-of-predictions/prize-glow-1.svg'),
   prizeGlow2: require('../../assets/images/king-of-predictions/prize-glow-2.png'),
   shirt1: require('../../assets/images/king-of-predictions/shirt-1.png'),
