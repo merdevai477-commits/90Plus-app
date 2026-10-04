@@ -2225,9 +2225,8 @@ const MatchDetailsScreen = () => {
             awayScore={awaySummary}
             enrichment={recentFormAverages}
             labels={{
-              goalsScored: t.matchDetails.goalsScoredAvg || t.matchDetails.goalsFor || 'Goals scored',
-              goalsConceded:
-                t.matchDetails.goalsConcededAvg || t.matchDetails.goalsAgainst || 'Goals conceded',
+              goalsScored: t.matchDetails.goalsScoredAvg || 'Goals scored',
+              goalsConceded: t.matchDetails.goalsConcededAvg || 'Goals conceded',
               expectedGoals:
                 t.matchDetails.statTypes?.expectedGoals || 'Expected Goals (xG)',
               expectedGoalsAgainst:
