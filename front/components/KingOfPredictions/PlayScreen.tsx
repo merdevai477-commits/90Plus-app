@@ -281,7 +281,7 @@ export function KingPlayScreen({
       <KingHeader />
 
       {tab === 'history' ? (
-        <KingHistoryList mode={mode} bottomPadding={listBottom} />
+        <KingHistoryList mode={mode} bottomPadding={listBottom} onPredict={() => setTab('predict')} />
       ) : loading ? (
         <ActivityIndicator color={KING_PURPLE} style={{ marginTop: 40 }} />
       ) : error ? (

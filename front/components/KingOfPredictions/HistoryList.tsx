@@ -22,6 +22,7 @@ import {
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { GlassSurface, type GlassTone } from './GlassSurface';
+import { KingEmptyState } from './KingBoardList';
 import { KING_PURPLE, toApiMode, type KingRouteMode } from './shared';
 
 const SIDE = 22;
@@ -57,7 +58,15 @@ function shortDate(iso: string | null): string {
     : `${dd}/${mm}/${date.getFullYear()}`;
 }
 
-export function KingHistoryList({ mode, bottomPadding }: { mode: KingRouteMode; bottomPadding: number }) {
+export function KingHistoryList({
+  mode,
+  bottomPadding,
+  onPredict,
+}: {
+  mode: KingRouteMode;
+  bottomPadding: number;
+  onPredict: () => void;
+}) {
   const { getToken, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
@@ -133,6 +142,12 @@ export function KingHistoryList({ mode, bottomPadding }: { mode: KingRouteMode; 
     pending: copy.filterPending,
   };
 
+  const emptyFilterTitle: Record<Exclude<KingHistoryStatus, 'all'>, string> = {
+    correct: copy.historyEmptyCorrect,
+    wrong: copy.historyEmptyWrong,
+    pending: copy.historyEmptyPending,
+  };
+
   const pickLabel = (item: KingHistoryItem): string => {
     if (mode === 'results' && item.predictedHomeScore != null && item.predictedAwayScore != null) {
       return `${item.predictedAwayScore} - ${item.predictedHomeScore}`;
@@ -185,10 +200,24 @@ export function KingHistoryList({ mode, bottomPadding }: { mode: KingRouteMode; 
       <Text style={[styles.muted, { fontFamily: fontMedium }]}>{copy.historyError}</Text>
       <Text style={[styles.retry, { fontFamily: fontSemi }]}>{copy.retry}</Text>
     </Pressable>
+  ) : !isSignedIn ? (
+    <KingEmptyState title={copy.historySignIn} scale={0.8} style={styles.emptyState} />
+  ) : status === 'all' ? (
+    <KingEmptyState
+      title={copy.historyEmpty}
+      actionLabel={copy.predictNow}
+      onAction={onPredict}
+      scale={0.8}
+      style={styles.emptyState}
+    />
   ) : (
-    <Text style={[styles.muted, styles.center, { fontFamily: fontMedium }]}>
-      {isSignedIn ? copy.historyEmpty : copy.historySignIn}
-    </Text>
+    <KingEmptyState
+      title={emptyFilterTitle[status]}
+      actionLabel={copy.showAll}
+      onAction={() => setStatus('all')}
+      scale={0.8}
+      style={styles.emptyState}
+    />
   );
 
   return (
@@ -266,6 +295,7 @@ const styles = StyleSheet.create({
   center: { marginTop: 48, alignItems: 'center' },
   muted: { color: '#A1A1AA', fontSize: 15, textAlign: 'center' },
   retry: { color: KING_PURPLE, marginTop: 8, fontSize: 15 },
+  emptyState: { marginTop: 36 },
   filtersBar: { flexGrow: 0 },
   filters: { paddingHorizontal: SIDE, paddingVertical: 10, gap: 8 },
   chip: {
