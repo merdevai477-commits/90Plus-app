@@ -25,6 +25,7 @@ import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { KING_ART, KING_ICON } from './assets';
 import { GlassSurface, type GlassTone } from './GlassSurface';
+import { KingHistoryList } from './HistoryList';
 import { KING_BUTTON_GRADIENT } from './KingBoardList';
 import { KingHeader } from './KingHeader';
 import { KingToast, type KingToastState } from './KingToast';
@@ -111,6 +112,9 @@ export function KingPlayScreen({
   const [homeText, setHomeText] = useState('');
   const [awayText, setAwayText] = useState('');
   const [toast, setToast] = useState<KingToastState | null>(null);
+  const [tab, setTab] = useState<KingTab>('predict');
+  const navBottom = Math.max(insets.bottom, 12) + 8;
+  const listBottom = navBottom + NAV_HEIGHT + 20;
 
   const load = useCallback(async () => {
     setError(false);
@@ -276,7 +280,9 @@ export function KingPlayScreen({
     <View style={styles.root}>
       <KingHeader />
 
-      {loading ? (
+      {tab === 'history' ? (
+        <KingHistoryList mode={mode} bottomPadding={listBottom} />
+      ) : loading ? (
         <ActivityIndicator color={KING_PURPLE} style={{ marginTop: 40 }} />
       ) : error ? (
         <Pressable onPress={() => { setLoading(true); void load().catch(() => setError(true)).finally(() => setLoading(false)); }} style={styles.center}>
@@ -287,7 +293,7 @@ export function KingPlayScreen({
         <Text style={[styles.muted, styles.center, { fontFamily: fontMedium }]}>{copy.noMatches}</Text>
       ) : (
         <ScrollView
-          contentContainerStyle={[styles.cardList, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]}
+          contentContainerStyle={[styles.cardList, { paddingBottom: listBottom }]}
           showsVerticalScrollIndicator={false}
         >
           {matches.map((match) => {
@@ -435,10 +441,45 @@ export function KingPlayScreen({
         {sheetMatch ? <KingToast toast={toast} onHide={() => setToast(null)} /> : null}
       </Modal>
 
+      <View pointerEvents="box-none" style={[styles.navWrap, { bottom: navBottom }]}>
+        <GlassSurface radius={NAV_HEIGHT / 2} tone="muted" style={styles.nav}>
+          {NAV_TABS.map(({ key, icon }) => {
+            const active = tab === key;
+            const label = key === 'predict' ? copy.tabPredict : copy.tabHistory;
+            return (
+              <Pressable
+                key={key}
+                onPress={() => setTab(key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={label}
+                style={styles.navItem}
+              >
+                {active ? (
+                  <LinearGradient colors={KING_BUTTON_GRADIENT} style={styles.navActive} />
+                ) : null}
+                <Ionicons name={icon} size={17} color={active ? '#FFFFFF' : '#8A8794'} />
+                <Text style={[styles.navText, active && styles.navTextOn, { fontFamily: active ? fontBold : fontMedium }]}>
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </GlassSurface>
+      </View>
+
       {sheetMatch ? null : <KingToast toast={toast} onHide={() => setToast(null)} />}
     </View>
   );
 }
+
+type KingTab = 'predict' | 'history';
+
+const NAV_HEIGHT = 56;
+const NAV_TABS: { key: KingTab; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
+  { key: 'predict', icon: 'sparkles' },
+  { key: 'history', icon: 'time' },
+];
 
 function singleWord(name: string) {
   return !/\s/.test(name.trim());
@@ -671,4 +712,28 @@ const styles = StyleSheet.create({
   },
   hint: { color: '#6B6B6B', fontSize: 12, textAlign: 'center' },
   infoIcon: { width: 16, height: 16 },
+  navWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  nav: {
+    width: 260,
+    height: NAV_HEIGHT,
+    padding: 5,
+    flexDirection: 'row',
+    shadowColor: '#5A129E',
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+  },
+  navItem: {
+    flex: 1,
+    borderRadius: (NAV_HEIGHT - 10) / 2,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  navActive: { ...StyleSheet.absoluteFillObject },
+  navText: { color: '#8A8794', fontSize: 14 },
+  navTextOn: { color: '#FFFFFF' },
 });

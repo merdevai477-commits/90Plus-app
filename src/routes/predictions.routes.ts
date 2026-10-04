@@ -14,9 +14,11 @@ import { logger } from '../utils/logger';
 import { ErrorCode, sendError } from '../constants/errors';
 import {
     getKingDailyMatches,
+    getKingHistory,
     getKingLeaderboard,
     KingPredictionError,
     upsertKingPrediction,
+    type KingHistoryStatus,
     type KingMode,
     type KingPeriod,
 } from '../services/king-prediction.service';
@@ -798,6 +800,30 @@ router.get('/king/matches', async (req: Request, res: Response): Promise<void> =
         res.json({ success: true, data: matches });
     } catch (error) {
         logger.error('Error getting king matches:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
+    }
+});
+
+/**
+ * GET /api/predictions/king/history?mode=winner|exact&status=all|correct|wrong|pending&page=0
+ * The signed-in user's King predictions for one mode, newest match first.
+ */
+router.get('/king/history', requireAuth, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const clerkUserId = req.auth?.userId;
+        if (!clerkUserId) {
+            sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
+            return;
+        }
+        const mode: KingMode = req.query.mode === 'exact' ? 'exact' : 'winner';
+        const rawStatus = String(req.query.status ?? 'all');
+        const status: KingHistoryStatus =
+            rawStatus === 'correct' || rawStatus === 'wrong' || rawStatus === 'pending' ? rawStatus : 'all';
+        const page = Math.max(0, parseInt(String(req.query.page ?? '0'), 10) || 0);
+        const data = await getKingHistory({ clerkUserId, mode, status, page, limit: 20 });
+        res.json({ success: true, data });
+    } catch (error) {
+        logger.error('Error getting king history:', error);
         sendError(req, res, ErrorCode.INTERNAL, 'Internal server error');
     }
 });

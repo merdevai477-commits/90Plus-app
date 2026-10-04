@@ -70,6 +70,32 @@ export interface KingLeaderboard {
   me: { rank: number | null; xp: number; userId: string } | null;
 }
 
+export type KingHistoryStatus = 'all' | 'correct' | 'wrong' | 'pending';
+
+export interface KingHistoryItem {
+  id: string;
+  apiMatchId: number;
+  predictionType: 'home' | 'draw' | 'away';
+  predictedHomeScore: number | null;
+  predictedAwayScore: number | null;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  homeTeamLogo: string | null;
+  awayTeamLogo: string | null;
+  matchDate: string | null;
+  leagueName: string | null;
+  isCorrect: boolean | null;
+  finalHomeScore: number | null;
+  finalAwayScore: number | null;
+  matchStatus: string | null;
+}
+
+export interface KingHistory {
+  items: KingHistoryItem[];
+  counts: Record<KingHistoryStatus, number>;
+  hasMore: boolean;
+}
+
 export interface PredictionRemaining {
   remaining: number;
   total: number;
@@ -376,5 +402,31 @@ export const PredictionsService = {
       throw new PredictionApiError('E010', 'Invalid response format', response.status);
     }
     return result.data;
+  },
+
+  /** The signed-in user's King predictions for one mode, 20 per page. */
+  getKingHistory: async (
+    token: string,
+    mode: KingMode,
+    status: KingHistoryStatus,
+    page: number,
+  ): Promise<KingHistory> => {
+    const response = await fetch(
+      `${API_URL}/predictions/king/history?mode=${mode}&status=${status}&page=${page}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+    if (!response.ok) {
+      throw await PredictionsService._parseError(response);
+    }
+    const result = await response.json();
+    if (!result?.success || !result.data) {
+      throw new PredictionApiError('E010', 'Invalid response format', response.status);
+    }
+    return result.data as KingHistory;
   },
 };

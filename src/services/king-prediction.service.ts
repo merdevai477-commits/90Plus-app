@@ -258,9 +258,7 @@ export async function getKingLeaderboard(params: {
   const predictions = await prisma.prediction.findMany({
     where: {
       isCorrect: true,
-      ...(params.mode === 'exact'
-        ? { predictedHomeScore: { not: null }, predictedAwayScore: { not: null } }
-        : { predictedHomeScore: null }),
+      ...modeWhere(params.mode),
       ...(week ? { matchDate: { gte: week.start, lt: week.end } } : {}),
     },
     select: { id: true, userId: true },
@@ -323,6 +321,120 @@ export async function getKingLeaderboard(params: {
     me: me
       ? { rank: meRank, xp: meXp, userId: me.id }
       : null,
+  };
+}
+
+export type KingHistoryStatus = 'all' | 'correct' | 'wrong' | 'pending';
+
+export interface KingHistoryItem {
+  id: string;
+  apiMatchId: number;
+  predictionType: string;
+  predictedHomeScore: number | null;
+  predictedAwayScore: number | null;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  homeTeamLogo: string | null;
+  awayTeamLogo: string | null;
+  matchDate: string | null;
+  leagueName: string | null;
+  isCorrect: boolean | null;
+  finalHomeScore: number | null;
+  finalAwayScore: number | null;
+  matchStatus: string | null;
+}
+
+export interface KingHistoryResult {
+  items: KingHistoryItem[];
+  counts: Record<KingHistoryStatus, number>;
+  hasMore: boolean;
+}
+
+function modeWhere(mode: KingMode) {
+  return mode === 'exact'
+    ? { predictedHomeScore: { not: null }, predictedAwayScore: { not: null } }
+    : { predictedHomeScore: null };
+}
+
+const STATUS_WHERE: Record<Exclude<KingHistoryStatus, 'all'>, boolean | null> = {
+  correct: true,
+  wrong: false,
+  pending: null,
+};
+
+export async function getKingHistory(params: {
+  clerkUserId: string;
+  mode: KingMode;
+  status: KingHistoryStatus;
+  page: number;
+  limit: number;
+}): Promise<KingHistoryResult> {
+  const empty: KingHistoryResult = {
+    items: [],
+    counts: { all: 0, correct: 0, wrong: 0, pending: 0 },
+    hasMore: false,
+  };
+  const user = await prisma.user.findFirst({
+    where: { clerkUserId: params.clerkUserId },
+    select: { id: true },
+  });
+  if (!user) return empty;
+
+  const base = { userId: user.id, ...modeWhere(params.mode) };
+  const where =
+    params.status === 'all' ? base : { ...base, isCorrect: STATUS_WHERE[params.status] };
+
+  const [rows, grouped] = await Promise.all([
+    prisma.prediction.findMany({
+      where,
+      orderBy: [{ matchDate: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+      skip: params.page * params.limit,
+      take: params.limit + 1,
+    }),
+    prisma.prediction.groupBy({ by: ['isCorrect'], where: base, _count: true }),
+  ]);
+
+  const counts = { ...empty.counts };
+  for (const row of grouped) {
+    const n = row._count as number;
+    counts.all += n;
+    if (row.isCorrect === true) counts.correct += n;
+    else if (row.isCorrect === false) counts.wrong += n;
+    else counts.pending += n;
+  }
+
+  const page = rows.slice(0, params.limit);
+  const fixtures = page.length
+    ? await prisma.cachedFixture.findMany({
+        where: { fixtureId: { in: page.map((row) => row.apiMatchId) } },
+        select: { fixtureId: true, homeScore: true, awayScore: true, status: true },
+      })
+    : [];
+  const fixtureById = new Map(fixtures.map((f) => [f.fixtureId, f]));
+
+  return {
+    items: page.map((row) => {
+      const fixture = fixtureById.get(row.apiMatchId);
+      return {
+        id: row.id,
+        apiMatchId: row.apiMatchId,
+        predictionType: row.predictionType,
+        predictedHomeScore: row.predictedHomeScore,
+        predictedAwayScore: row.predictedAwayScore,
+        homeTeam: row.homeTeam,
+        awayTeam: row.awayTeam,
+        homeTeamLogo: row.homeTeamLogo,
+        awayTeamLogo: row.awayTeamLogo,
+        matchDate: row.matchDate?.toISOString() ?? null,
+        leagueName: row.leagueName,
+        isCorrect: row.isCorrect,
+        finalHomeScore: fixture?.homeScore ?? null,
+        finalAwayScore: fixture?.awayScore ?? null,
+        matchStatus: fixture?.status ?? null,
+      };
+    }),
+    counts,
+    hasMore: rows.length > params.limit,
   };
 }
 
