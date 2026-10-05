@@ -276,7 +276,7 @@ export default function RankScreen() {
   );
 
   // Figma 2×2 order (left → right, top → bottom):
-  // Row 1: ملك التوقعات | بطل التفاعل
+  // Row 1: ملك التوقعات | خماسي الهدافين
   // Row 2: شارك واربح | الأسئلة اليومية
   const competitions = useMemo(
     () => [

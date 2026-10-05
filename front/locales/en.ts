@@ -1975,7 +1975,7 @@ export const en = {
         action: 'Predict Now',
       },
       engagementHero: {
-        title: 'Engagement Hero',
+        title: 'Top Scorers Five',
         sub: 'Post your reels and lead the interaction charts!',
         action: 'Post Now',
       },
