@@ -2020,6 +2020,14 @@ export const en = {
     },
   },
 
+  topScorersFive: {
+    title: 'Top Scorers Five',
+    subtitle:
+      'Pick 5 players from 5 leagues, predict their goals and win a football shirt',
+    cta: 'Start picking',
+    back: 'Back',
+  },
+
   profile: {
     title: 'Profile',
     myProfile: 'My Profile',

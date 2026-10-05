@@ -235,7 +235,7 @@ export default function RankScreen() {
         void prefetchDailyQuiz(queryClient, getToken, quizLang);
         router.push('/(tabs)/quiz' as never);
       } else if (id === '4') {
-        router.push('/(tabs)/reels' as never);
+        router.push('/top-scorers-five' as never);
       } else if (id === '2') {
         // "شارك واربح" now opens the full Share & Win screen (Figma 109:470).
         // The 10 XP / 24h app-share reward it used to fire directly is still
