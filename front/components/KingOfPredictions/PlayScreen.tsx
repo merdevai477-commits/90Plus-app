@@ -19,7 +19,6 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useFocusEffect } from '@react-navigation/native';
 
 import type { Match } from '../Matches/matchCardUtils';
-import { PWGradientText } from '../predictAndWin/GradientText';
 import { PredictionApiError, PredictionsService } from '../../services/predictions.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
@@ -49,7 +48,7 @@ type SavedRow = {
 type Verdict = 'pending' | 'correct' | 'wrong';
 
 const SIDE = 22;
-const VS_GRADIENT = ['#A855F7', '#633291'] as const;
+const VS_COLOR = '#A855F7';
 const PICK_ON = [KING_PURPLE, '#513690'] as const;
 const CARD_BG = ['#0C051A', '#07040D'] as const;
 type ButtonState = Verdict | 'open' | 'closed';
@@ -311,9 +310,9 @@ export function KingPlayScreen({
               <LinearGradient key={match.id} colors={CARD_BG} style={styles.card}>
                 <CardTeam name={match.awayTeam.name} logo={match.awayTeam.logo} font={fontBold} size={13} />
                 <View style={styles.cardMid}>
-                  <PWGradientText colors={VS_GRADIENT} style={[styles.vs, { fontFamily: fontSemi }]}>
+                  <Text style={[styles.vsColor, styles.vs, { fontFamily: fontSemi }]}>
                     {copy.vs}
-                  </PWGradientText>
+                  </Text>
                   <Text style={[styles.time, { fontFamily: fontMedium }]}>{match.time || ''}</Text>
                   <Pressable
                     disabled={locked || busy}
@@ -327,6 +326,7 @@ export function KingPlayScreen({
                         numberOfLines={1}
                         adjustsFontSizeToFit
                         minimumFontScale={0.6}
+                        maxFontSizeMultiplier={1.15}
                       >
                         {label}
                       </Text>
@@ -405,9 +405,9 @@ export function KingPlayScreen({
                 <View style={styles.sheetTeams}>
                   <SheetTeam name={sheetMatch.awayTeam.name} logo={sheetMatch.awayTeam.logo} font={fontSemi} />
                   <View style={styles.sheetMid}>
-                    <PWGradientText colors={VS_GRADIENT} style={[styles.vs, { fontFamily: fontSemi }]}>
+                    <Text style={[styles.vsColor, styles.vs, { fontFamily: fontSemi }]}>
                       {copy.vs}
-                    </PWGradientText>
+                    </Text>
                     <Text style={[styles.time, { fontFamily: fontMedium }]}>{sheetMatch.time || ''}</Text>
                   </View>
                   <SheetTeam name={sheetMatch.homeTeam.name} logo={sheetMatch.homeTeam.logo} font={fontSemi} />
@@ -415,9 +415,9 @@ export function KingPlayScreen({
                 <Text style={[styles.resultTitle, { fontFamily: fontSemi }]}>{copy.matchResult}</Text>
                 <View style={styles.scoreRow}>
                   <ScoreInput value={awayText} onChange={setAwayText} font={fontBold} />
-                  <PWGradientText colors={VS_GRADIENT} style={[styles.scoreVs, { fontFamily: fontSemi }]}>
+                  <Text style={[styles.vsColor, styles.scoreVs, { fontFamily: fontSemi }]}>
                     {copy.vs}
-                  </PWGradientText>
+                  </Text>
                   <ScoreInput value={homeText} onChange={setHomeText} font={fontBold} />
                 </View>
               </>
@@ -429,7 +429,7 @@ export function KingPlayScreen({
               style={isGame ? styles.sheetConfirmGame : styles.sheetConfirm}
             >
               <LinearGradient colors={KING_BUTTON_GRADIENT} style={[styles.footerBtn, (!sheetReady || busy) && styles.dimmed]}>
-                <Text style={[styles.footerText, { fontFamily: fontSemi }]}>{copy.confirm}</Text>
+                <Text style={[styles.footerText, { fontFamily: fontSemi }]} maxFontSizeMultiplier={1.15}>{copy.confirm}</Text>
               </LinearGradient>
             </Pressable>
             <View style={styles.hintRow}>
@@ -445,7 +445,7 @@ export function KingPlayScreen({
         <GlassSurface
           radius={NAV_HEIGHT / 2}
           tone="muted"
-          style={[styles.nav, Platform.OS === 'android' && styles.navSolid]}
+          style={[styles.nav, styles.navSolid]}
         >
           {NAV_TABS.map(({ key, icon }) => {
             const active = tab === key;
@@ -463,7 +463,11 @@ export function KingPlayScreen({
                   <LinearGradient colors={KING_BUTTON_GRADIENT} style={styles.navActive} />
                 ) : null}
                 <Ionicons name={icon} size={17} color={active ? '#FFFFFF' : '#8A8794'} />
-                <Text style={[styles.navText, active && styles.navTextOn, { fontFamily: active ? fontBold : fontMedium }]}>
+                <Text
+                  style={[styles.navText, active && styles.navTextOn, { fontFamily: active ? fontBold : fontMedium }]}
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={1.15}
+                >
                   {label}
                 </Text>
               </Pressable>
@@ -496,6 +500,7 @@ function TeamName({ name, style, font }: { name: string; style: object; font: st
       numberOfLines={singleWord(name) ? 1 : 2}
       adjustsFontSizeToFit
       minimumFontScale={0.7}
+      maxFontSizeMultiplier={1.15}
     >
       {name}
     </Text>
@@ -588,6 +593,7 @@ const styles = StyleSheet.create({
   cardLogo: { width: 43, height: 43 },
   cardName: { color: '#fff', textAlign: 'center' },
   cardMid: { width: '34%', maxWidth: 124, minWidth: 96, alignItems: 'stretch' },
+  vsColor: { color: VS_COLOR },
   vs: { fontSize: 21, textAlign: 'center', alignSelf: 'center' },
   time: { color: '#777', fontSize: 13, textAlign: 'center', alignSelf: 'center', marginTop: 4 },
   predictPress: { marginTop: 9, alignSelf: 'stretch' },

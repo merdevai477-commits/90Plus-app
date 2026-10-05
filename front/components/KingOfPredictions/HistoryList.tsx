@@ -13,7 +13,6 @@ import {
   View,
 } from 'react-native';
 
-import { PWGradientText } from '../predictAndWin/GradientText';
 import {
   PredictionsService,
   type KingHistoryItem,
@@ -27,7 +26,7 @@ import { KING_PURPLE, toApiMode, type KingRouteMode } from './shared';
 
 const SIDE = 22;
 const CARD_BG = ['#0C051A', '#07040D'] as const;
-const VS_GRADIENT = ['#A855F7', '#633291'] as const;
+const VS_COLOR = '#A855F7';
 const FILTERS: KingHistoryStatus[] = ['all', 'correct', 'wrong', 'pending'];
 
 type Verdict = 'correct' | 'wrong' | 'pending';
@@ -166,19 +165,19 @@ export function KingHistoryList({
         <HistoryTeam name={item.awayTeam ?? ''} logo={item.awayTeamLogo} font={fontBold} />
         <View style={styles.cardMid}>
           {hasScore ? (
-            <Text style={[styles.score, { fontFamily: fontBold }]}>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.score, { fontFamily: fontBold }]}>
               {`${item.finalAwayScore} - ${item.finalHomeScore}`}
             </Text>
           ) : (
-            <PWGradientText colors={VS_GRADIENT} style={[styles.vs, { fontFamily: fontSemi }]}>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.vsColor, styles.vs, { fontFamily: fontSemi }]}>
               {copy.vs}
-            </PWGradientText>
+            </Text>
           )}
-          <Text style={[styles.date, { fontFamily: fontMedium }]}>{shortDate(item.matchDate)}</Text>
-          <Text style={[styles.pickCaption, { fontFamily: fontMedium }]}>{copy.yourPick}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.date, { fontFamily: fontMedium }]}>{shortDate(item.matchDate)}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.pickCaption, { fontFamily: fontMedium }]}>{copy.yourPick}</Text>
           <GlassSurface radius={12} tone={look.tone} style={styles.badge}>
             <Ionicons name={look.icon} size={13} color={look.text} />
-            <Text
+            <Text maxFontSizeMultiplier={1.15}
               style={[styles.badgeText, { color: look.text, fontFamily: fontBold }]}
               numberOfLines={1}
               adjustsFontSizeToFit
@@ -197,8 +196,8 @@ export function KingHistoryList({
     <ActivityIndicator color={KING_PURPLE} style={styles.center} />
   ) : error ? (
     <Pressable onPress={() => { void reload(); }} style={styles.center}>
-      <Text style={[styles.muted, { fontFamily: fontMedium }]}>{copy.historyError}</Text>
-      <Text style={[styles.retry, { fontFamily: fontSemi }]}>{copy.retry}</Text>
+      <Text maxFontSizeMultiplier={1.15} style={[styles.muted, { fontFamily: fontMedium }]}>{copy.historyError}</Text>
+      <Text maxFontSizeMultiplier={1.15} style={[styles.retry, { fontFamily: fontSemi }]}>{copy.retry}</Text>
     </Pressable>
   ) : !isSignedIn ? (
     <KingEmptyState title={copy.historySignIn} scale={0.8} style={styles.emptyState} />
@@ -240,14 +239,14 @@ export function KingHistoryList({
             >
               {active ? (
                 <LinearGradient colors={['#8B5CF6', '#513690']} style={[styles.chip, styles.chipOn]}>
-                  <Text style={[styles.chipText, styles.chipTextOn, { fontFamily: fontSemi }]}>
+                  <Text maxFontSizeMultiplier={1.15} style={[styles.chipText, styles.chipTextOn, { fontFamily: fontSemi }]}>
                     {filterLabel[key]}
                     {count != null ? ` ${count}` : ''}
                   </Text>
                 </LinearGradient>
               ) : (
                 <View style={[styles.chip, styles.chipIdle]}>
-                  <Text style={[styles.chipText, { fontFamily: fontMedium }]}>
+                  <Text maxFontSizeMultiplier={1.15} style={[styles.chipText, { fontFamily: fontMedium }]}>
                     {filterLabel[key]}
                     {count != null ? ` ${count}` : ''}
                   </Text>
@@ -278,7 +277,7 @@ function HistoryTeam({ name, logo, font }: { name: string; logo: string | null; 
   return (
     <View style={styles.team}>
       {logo ? <Image source={{ uri: logo }} style={styles.logo} contentFit="contain" /> : <View style={styles.logo} />}
-      <Text
+      <Text maxFontSizeMultiplier={1.15}
         style={[styles.teamName, { fontFamily: font }]}
         numberOfLines={single ? 1 : 2}
         adjustsFontSizeToFit
@@ -327,6 +326,7 @@ const styles = StyleSheet.create({
   logo: { width: 43, height: 43 },
   teamName: { color: '#fff', fontSize: 13, textAlign: 'center' },
   cardMid: { width: '34%', maxWidth: 124, minWidth: 96, alignItems: 'stretch' },
+  vsColor: { color: VS_COLOR },
   vs: { fontSize: 21, textAlign: 'center', alignSelf: 'center' },
   score: { color: '#fff', fontSize: 22, textAlign: 'center', fontVariant: ['tabular-nums'] },
   date: { color: '#777', fontSize: 12, textAlign: 'center', marginTop: 2 },

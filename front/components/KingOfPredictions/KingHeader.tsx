@@ -37,9 +37,9 @@ export function KingHeader() {
       </Pressable>
 
       <GlassSurface radius={78} style={[styles.island, styles.brand]} accessibilityLabel={copy.brandA11y}>
-        <Text style={[styles.ninety, { fontFamily: fontBold }]}>90</Text>
+        <Text style={[styles.ninety, { fontFamily: fontBold }]} allowFontScaling={false}>90</Text>
         <LinearGradient colors={['#6E36EE', '#3F1F88']} style={styles.plus}>
-          <Text style={[styles.plusText, { fontFamily: fontExtra }]}>PLUS</Text>
+          <Text style={[styles.plusText, { fontFamily: fontExtra }]} allowFontScaling={false}>PLUS</Text>
         </LinearGradient>
       </GlassSurface>
 
@@ -49,6 +49,7 @@ export function KingHeader() {
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.6}
+          allowFontScaling={false}
         >
           {loading ? '—' : String(coins)}
         </Text>

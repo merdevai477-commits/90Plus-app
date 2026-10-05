@@ -76,7 +76,8 @@ function HubCard({
 }) {
   return (
     <Pressable accessibilityRole="button" onPress={onPress} style={styles.card}>
-      <Image source={art} style={StyleSheet.absoluteFill} contentFit="cover" />
+      {/* Art is drawn for a 404pt card; anchor right so narrow phones crop the gradient side, not the crown. */}
+      <Image source={art} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="right center" />
       <LinearGradient
         colors={['#140334', 'rgba(20,3,52,0.92)', 'rgba(20,3,52,0.35)', 'transparent']}
         locations={[0, 0.42, 0.68, 1]}
@@ -90,11 +91,21 @@ function HubCard({
           {icon === 'crown' ? <Crown size={14} color="#F6D36B" /> : <Text style={styles.trophy}>🏆</Text>}
           <View style={styles.goldLine} />
         </View>
-        <Text style={[styles.title, { fontFamily: fonts.extra }]}>{title}</Text>
-        <Text style={[styles.sub, { fontFamily: fonts.medium }]}>{sub}</Text>
+        <Text
+          style={[styles.title, { fontFamily: fonts.extra }]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          maxFontSizeMultiplier={1.1}
+        >
+          {title}
+        </Text>
+        <Text style={[styles.sub, { fontFamily: fonts.medium }]} numberOfLines={2} maxFontSizeMultiplier={1.1}>
+          {sub}
+        </Text>
         <View style={styles.cta}>
           <ChevronLeft size={14} color="#fff" />
-          <Text style={[styles.ctaText, { fontFamily: fonts.semi }]}>{cta}</Text>
+          <Text style={[styles.ctaText, { fontFamily: fonts.semi }]} maxFontSizeMultiplier={1.1}>{cta}</Text>
         </View>
       </View>
     </Pressable>

@@ -260,10 +260,13 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.6}
+                  maxFontSizeMultiplier={1.15}
                 >
                   {copy.days[index]}
                 </Text>
-                <Text style={[styles.dayNum, { fontFamily: dayFont }, tone]}>{index + 1}</Text>
+                <Text style={[styles.dayNum, { fontFamily: dayFont }, tone]} maxFontSizeMultiplier={1.15}>
+                  {index + 1}
+                </Text>
               </>
             );
             return (
@@ -330,10 +333,16 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
                 style={[styles.prizeTitle, { fontFamily: fontBold, fontSize: s(36) }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
+                allowFontScaling={false}
               >
                 {copy.prizeTitle}
               </Text>
-              <Text style={[styles.prizeSub, { fontFamily: fontMedium, fontSize: s(11) }]} numberOfLines={1} adjustsFontSizeToFit>
+              <Text
+                style={[styles.prizeSub, { fontFamily: fontMedium, fontSize: s(11) }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                allowFontScaling={false}
+              >
                 {copy.prizeSub}
               </Text>
             </View>
@@ -343,8 +352,10 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
                 style={[styles.stat, { height: s(34), borderRadius: s(7), gap: s(6), paddingHorizontal: s(6) }]}
               >
                 <View style={styles.statText}>
-                  <Text style={[styles.statLabel, { fontFamily: fontRegular, fontSize: s(7) }]}>{copy.yourRank}</Text>
-                  <Text style={[styles.statValue, { fontFamily: fontBold, fontSize: s(14) }]} numberOfLines={1}>
+                  <Text style={[styles.statLabel, { fontFamily: fontRegular, fontSize: s(7) }]} allowFontScaling={false}>
+                    {copy.yourRank}
+                  </Text>
+                  <Text style={[styles.statValue, { fontFamily: fontBold, fontSize: s(14) }]} numberOfLines={1} allowFontScaling={false}>
                     {rankLabel}
                   </Text>
                 </View>
@@ -355,8 +366,10 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
                 style={[styles.stat, { height: s(34), borderRadius: s(7), gap: s(6), paddingHorizontal: s(6) }]}
               >
                 <View style={[styles.statText, { flex: 1 }]}>
-                  <Text style={[styles.statLabel, { fontFamily: fontRegular, fontSize: s(7) }]}>{copy.yourPoints}</Text>
-                  <Text style={[styles.statValue, { fontFamily: fontBold, fontSize: s(14) }]} numberOfLines={1}>
+                  <Text style={[styles.statLabel, { fontFamily: fontRegular, fontSize: s(7) }]} allowFontScaling={false}>
+                    {copy.yourPoints}
+                  </Text>
+                  <Text style={[styles.statValue, { fontFamily: fontBold, fontSize: s(14) }]} numberOfLines={1} allowFontScaling={false}>
                     {myXp}
                   </Text>
                 </View>
@@ -381,6 +394,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
               <Text
                 style={[styles.challengeBtnText, dayPassed && styles.passedText, { fontFamily: fontSemi }]}
                 numberOfLines={1}
+                maxFontSizeMultiplier={1.15}
               >
                 {cta}
               </Text>
@@ -428,7 +442,9 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
       >
         <Pressable onPress={openPlay}>
           <LinearGradient colors={dayPassed ? KING_PASSED_GRADIENT : KING_BUTTON_GRADIENT} style={styles.footerBtn}>
-            <Text style={[styles.footerText, dayPassed && styles.passedText, { fontFamily: fontSemi }]}>{cta}</Text>
+            <Text style={[styles.footerText, dayPassed && styles.passedText, { fontFamily: fontSemi }]} maxFontSizeMultiplier={1.15}>
+              {cta}
+            </Text>
           </LinearGradient>
         </Pressable>
       </LinearGradient>

@@ -42,13 +42,13 @@ export function KingPeriodTabs({
     if (active) {
       return (
         <LinearGradient key={id} colors={KING_BUTTON_GRADIENT} style={[styles.tab, round]}>
-          <Text style={[styles.tabText, { fontFamily: fontBold }]}>{label}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.tabText, { fontFamily: fontBold }]}>{label}</Text>
         </LinearGradient>
       );
     }
     return (
       <Pressable key={id} onPress={() => onChange(id)} style={[styles.tab, styles.tabIdle, round]}>
-        <Text style={[styles.tabText, { fontFamily: fontRegular }]}>{label}</Text>
+        <Text maxFontSizeMultiplier={1.15} style={[styles.tabText, { fontFamily: fontRegular }]}>{label}</Text>
       </Pressable>
     );
   };
@@ -106,11 +106,11 @@ export function KingEmptyState({
           contentFit="fill"
         />
       </View>
-      <Text style={[styles.emptyTitle, { fontFamily: fontSemi }]}>{title}</Text>
+      <Text maxFontSizeMultiplier={1.15} style={[styles.emptyTitle, { fontFamily: fontSemi }]}>{title}</Text>
       {onAction && actionLabel ? (
         <Pressable onPress={onAction} style={styles.emptyBtnWrap}>
           <LinearGradient colors={KING_BUTTON_GRADIENT} style={[styles.emptyBtn, { height: scale < 1 ? 40 : 52 }]}>
-            <Text style={[styles.emptyBtnText, { fontFamily: fontBold }]}>{actionLabel}</Text>
+            <Text maxFontSizeMultiplier={1.15} style={[styles.emptyBtnText, { fontFamily: fontBold }]}>{actionLabel}</Text>
           </LinearGradient>
         </Pressable>
       ) : null}
@@ -154,7 +154,7 @@ export function KingBoardList({
             ]}
           >
             <View style={styles.xpWrap}>
-              <Text
+              <Text maxFontSizeMultiplier={1.15}
                 style={[
                   styles.xp,
                   tier
@@ -164,12 +164,12 @@ export function KingBoardList({
               >
                 {entry.xp}
               </Text>
-              <Text style={[styles.xpUnit, { color: tier ? tier.xp : '#831DE5', fontFamily: fontSemi }]}>{xpLabel}</Text>
+              <Text maxFontSizeMultiplier={1.15} style={[styles.xpUnit, { color: tier ? tier.xp : '#831DE5', fontFamily: fontSemi }]}>{xpLabel}</Text>
             </View>
             <View style={[styles.identity, { gap: tier ? 16 : 30 }]}>
               <View style={styles.person}>
                 <View style={styles.nameWrap}>
-                  <Text
+                  <Text maxFontSizeMultiplier={1.15}
                     style={[
                       styles.name,
                       {
@@ -192,7 +192,7 @@ export function KingBoardList({
               {tier ? (
                 <Image source={tier.medal} style={{ width: tier.medalSize, height: tier.medalSize }} contentFit="contain" />
               ) : (
-                <Text style={[styles.rankNum, { fontFamily: fontRegular }]}>{entry.rank}</Text>
+                <Text maxFontSizeMultiplier={1.15} style={[styles.rankNum, { fontFamily: fontRegular }]}>{entry.rank}</Text>
               )}
             </View>
           </View>
