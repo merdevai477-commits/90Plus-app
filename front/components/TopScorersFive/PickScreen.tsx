@@ -35,7 +35,10 @@ import { TSF_MOCK_PLAYERS, tsfInitials, tsfShortName, type TsfPlayer } from './m
 const BG = '#030303';
 const PURPLE = '#8B5CF6';
 const PURPLE_SOFT = '#A78BFA';
-const CARD_BG = '#0D0718';
+const CARD_BG = '#08050F';
+const CARD_STROKE = '#B896FC';
+const CARD_LABEL = '#CF9BFC';
+const TAB_ACTIVE = '#8C5CF5';
 
 /** Design frame minus its 62pt status bar, down to 16pt below the tab bar. */
 const DESIGN_STATUS_BAR = 62;
@@ -64,10 +67,10 @@ const SLOTS: readonly Slot[] = [
 
 type TabKey = 'matches' | 'pitch' | 'ranking';
 
-const TAB_ICON: Record<TabKey, ReactElement> = {
-  matches: <Ionicons name="calendar-outline" size={22} color="#FFFFFF" />,
-  pitch: <MaterialCommunityIcons name="soccer-field" size={22} color="#FFFFFF" />,
-  ranking: <Ionicons name="trophy-outline" size={22} color="#FFFFFF" />,
+const TAB_ICON: Record<TabKey, (size: number) => ReactElement> = {
+  matches: (size) => <Ionicons name="calendar-outline" size={size} color="#FFFFFF" />,
+  pitch: (size) => <MaterialCommunityIcons name="soccer-field" size={size} color="#FFFFFF" />,
+  ranking: (size) => <Ionicons name="trophy-outline" size={size} color="#FFFFFF" />,
 };
 
 export default function TopScorersFivePickScreen() {
@@ -131,7 +134,7 @@ export default function TopScorersFivePickScreen() {
         <Text
           style={[
             styles.title,
-            { top: s(21), height: s(26), fontSize: s(18), lineHeight: s(26), fontFamily: fontBold },
+            { top: s(10), height: s(38), fontSize: s(20), lineHeight: s(38), fontFamily: fontSemi },
           ]}
           maxFontSizeMultiplier={1.1}
         >
@@ -145,9 +148,9 @@ export default function TopScorersFivePickScreen() {
           accessibilityRole="button"
           accessibilityLabel={copy.back}
           testID="top-scorers-five-pick-back"
-          style={[styles.back, { left: s(24), top: s(14), width: s(38), height: s(38) }]}
+          style={[styles.back, { left: s(24), top: s(10), width: s(38), height: s(38) }]}
         >
-          <Ionicons name="arrow-back" size={s(26)} color="#FFFFFF" />
+          <Ionicons name="arrow-back" size={s(28)} color="#FFFFFF" />
         </TouchableOpacity>
 
         <View
@@ -158,30 +161,42 @@ export default function TopScorersFivePickScreen() {
               top: s(144 - DESIGN_STATUS_BAR),
               width: s(422),
               height: s(84),
-              borderRadius: s(18),
-              paddingHorizontal: s(18),
-              gap: s(14),
+              borderRadius: s(15),
+              paddingHorizontal: s(23),
+              gap: s(8),
               flexDirection: isAr ? 'row-reverse' : 'row',
             },
           ]}
         >
-          <Ionicons name="flash" size={s(34)} color={PURPLE} />
+          <View style={[styles.bannerIcon, { width: s(58), height: s(58) }]}>
+            <Ionicons name="flash" size={s(44)} color={PURPLE} />
+          </View>
           <View style={styles.bannerText}>
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.bannerLine,
-                { fontFamily: fontBold, fontSize: s(17), textAlign: isAr ? 'right' : 'left' },
+                {
+                  fontFamily: fontMedium,
+                  fontSize: s(20),
+                  lineHeight: s(27),
+                  textAlign: isAr ? 'right' : 'left',
+                },
               ]}
               maxFontSizeMultiplier={1.1}
             >
               {pickCopy.goalLabel} <Text style={styles.accent}>{pickCopy.goalPoints}</Text>
             </Text>
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.bannerLine,
                 {
                   fontFamily: fontMedium,
-                  fontSize: s(14),
+                  fontSize: s(20),
+                  lineHeight: s(27),
                   marginTop: s(4),
                   textAlign: isAr ? 'right' : 'left',
                 },
@@ -216,7 +231,7 @@ export default function TopScorersFivePickScreen() {
                 testID={`top-scorers-five-slot-${slot.key}`}
                 style={[
                   styles.card,
-                  { top: s(CARD.top), width: s(CARD.width), height: s(CARD.height), borderRadius: s(14) },
+                  { top: s(CARD.top), width: s(CARD.width), height: s(CARD.height), borderRadius: s(16) },
                 ]}
               >
                 {player ? (
@@ -260,7 +275,13 @@ export default function TopScorersFivePickScreen() {
                       numberOfLines={1}
                       style={[
                         styles.cardLabel,
-                        { top: s(slot.labelTop), height: s(18), fontSize: s(12), fontFamily: fontMedium },
+                        {
+                          top: s(slot.labelTop),
+                          height: s(18),
+                          fontSize: s(15),
+                          lineHeight: s(18),
+                          fontFamily: fontMedium,
+                        },
                       ]}
                       maxFontSizeMultiplier={1.1}
                     >
@@ -307,8 +328,9 @@ export default function TopScorersFivePickScreen() {
               top: s(772 - DESIGN_STATUS_BAR),
               width: s(404),
               height: s(83),
-              borderRadius: s(24),
+              borderRadius: s(20),
               paddingHorizontal: s(20),
+              gap: s(15),
             },
           ]}
         >
@@ -321,15 +343,19 @@ export default function TopScorersFivePickScreen() {
                 accessibilityState={{ selected: active }}
                 style={[
                   styles.tab,
+                  { paddingVertical: s(6) },
                   active
-                    ? { width: s(86), height: s(66), borderRadius: s(16), backgroundColor: '#7C3AED' }
-                    : { width: s(109), height: s(83) },
+                    ? { width: s(86), height: s(66), borderRadius: s(12), backgroundColor: TAB_ACTIVE }
+                    : { width: s(109) },
                 ]}
               >
-                {TAB_ICON[tab]}
+                {TAB_ICON[tab](s(24))}
                 <Text
                   numberOfLines={1}
-                  style={[styles.tabLabel, { fontFamily: fontSemi, fontSize: s(12), marginTop: s(4) }]}
+                  style={[
+                    styles.tabLabel,
+                    { fontFamily: fontSemi, fontSize: s(active ? 14 : 12), marginTop: s(4) },
+                  ]}
                   maxFontSizeMultiplier={1.1}
                 >
                   {pickCopy.tabs[tab]}
@@ -540,9 +566,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     backgroundColor: 'rgba(76,29,149,0.45)',
-    borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.35)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(79,48,143,0.39)',
   },
+  bannerIcon: { alignItems: 'center', justifyContent: 'center' },
   bannerText: { flex: 1 },
   bannerLine: { color: '#FFFFFF' },
   accent: { color: PURPLE_SOFT },
@@ -552,15 +579,16 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: 'center',
     backgroundColor: CARD_BG,
-    borderWidth: 1.5,
-    borderColor: PURPLE,
+    borderWidth: 0.5,
+    borderColor: CARD_STROKE,
     overflow: 'hidden',
+    boxShadow: '0px 1px 13.2px rgba(163,77,245,0.62)',
   },
   cardLabel: {
     position: 'absolute',
     left: 1,
     right: 1,
-    color: '#D4D4D8',
+    color: CARD_LABEL,
     textAlign: 'center',
   },
   cardName: { color: '#FFFFFF' },
@@ -587,10 +615,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(22,8,46,0.94)',
-    borderWidth: 1,
-    borderColor: '#4C1D95',
+    justifyContent: 'center',
+    backgroundColor: '#050A1A',
+    borderWidth: 0.5,
+    borderColor: '#A854F7',
   },
   tab: { alignItems: 'center', justifyContent: 'center' },
   tabLabel: { color: '#FFFFFF', textAlign: 'center' },

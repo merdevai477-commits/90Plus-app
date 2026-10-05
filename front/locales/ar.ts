@@ -1982,7 +1982,7 @@ export const ar = {
     pick: {
       goalLabel: 'الهدف:',
       goalPoints: '3 نقاط',
-      assistLabel: 'صناعة الأسيست:',
+      assistLabel: 'تمريرة حاسمة (أسيست):',
       assistPoints: 'نقطة واحدة',
       choosePlayer: 'اختر لاعب',
       sheetTitle: 'اختر لاعب من {league}',
