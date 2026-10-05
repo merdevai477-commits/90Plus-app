@@ -122,6 +122,9 @@ export default function TopScorersFiveScreen() {
             source={TSF_ART.hero}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
+            // Source art is far taller than the hero box; a centred crop cuts the
+            // back two players off at the screen edge, so anchor to the top.
+            contentPosition="top"
             transition={0}
           />
         ) : (

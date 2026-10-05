@@ -8,16 +8,16 @@
  */
 
 /**
- * Full-bleed art not exported from Figma yet. Until each file lands in
- * assets/images/top-scorers-five/ its screen draws a fallback — a `require` of a
- * missing file breaks the whole Metro bundle, not just this screen.
+ * Full-bleed art behind each screen.
  *   hero  → layer "ChatGPT Image Oct 3, 2026, 10_06_18 AM 1" (intro, 1259:8321)
- *   pitch → layer "ChatGPT Image Oct 2, 2026, 11_47_05 PM 1" (pick, 1263:10333),
- *           saved as pitch.png
+ *   pitch → layer "ChatGPT Image Oct 2, 2026, 11_47_05 PM 1" (pick, 1263:10333)
+ *
+ * Both stay nullable: each screen keeps a gradient fallback, so dropping an art
+ * file re-renders as a plain background instead of a blank screen.
  */
 export const TSF_ART: { hero: number | null; pitch: number | null } = {
-  hero: null,
-  pitch: null,
+  hero: require('../../assets/images/top-scorers-five/hero.jpg'),
+  pitch: require('../../assets/images/top-scorers-five/pitch.jpg'),
 };
 
 export type TsfLeagueKey = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
