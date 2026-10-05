@@ -2035,6 +2035,9 @@ export const en = {
       sheetTitle: 'Pick a player from {league}',
       removePlayer: 'Remove {name}',
       close: 'Close',
+      goalsA11y: '{count} goals',
+      assistsA11y: '{count} assists',
+      selectLeagueA11y: 'Show {league} players',
       tabs: {
         matches: 'Matches',
         pitch: 'Pitch',

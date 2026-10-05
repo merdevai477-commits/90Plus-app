@@ -12,8 +12,6 @@
 
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import {
-  FlatList,
-  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -31,7 +29,8 @@ import { useAppFont, useScreenFont } from '../../utils/fontSetup';
 
 import { GlassSurface } from '../KingOfPredictions/GlassSurface';
 import { TSF_ART, TSF_DESIGN_WIDTH, TSF_LEAGUE_LOGO, type TsfLeagueKey } from './assets';
-import { TSF_MOCK_PLAYERS, tsfInitials, tsfShortName, type TsfPlayer } from './mockData';
+import { tsfInitials, tsfShortName, type TsfPlayer } from './mockData';
+import { PlayerPicker } from './PlayerPicker';
 
 const BG = '#030303';
 const PURPLE = '#8B5CF6';
@@ -370,17 +369,11 @@ export default function TopScorersFivePickScreen() {
         </GlassSurface>
       </View>
 
-      <PlayerSheet
+      <PlayerPicker
         league={openLeague}
         selectedId={openLeague ? picks[openLeague]?.id : undefined}
-        title={
-          openLeague ? pickCopy.sheetTitle.replace('{league}', pickCopy.leagues[openLeague]) : ''
-        }
-        closeLabel={pickCopy.close}
-        bottomInset={insets.bottom}
-        fontBold={fontBold}
-        fontMedium={fontMedium}
         onClose={() => setOpenLeague(null)}
+        onChangeLeague={setOpenLeague}
         onPick={handlePick}
       />
     </View>
@@ -421,99 +414,6 @@ function PitchBackground() {
         style={styles.pitchFade}
       />
     </View>
-  );
-}
-
-type PlayerSheetProps = {
-  league: TsfLeagueKey | null;
-  selectedId: string | undefined;
-  title: string;
-  closeLabel: string;
-  bottomInset: number;
-  fontBold: string;
-  fontMedium: string;
-  onClose: () => void;
-  onPick: (league: TsfLeagueKey, player: TsfPlayer) => void;
-};
-
-function PlayerSheet({
-  league,
-  selectedId,
-  title,
-  closeLabel,
-  bottomInset,
-  fontBold,
-  fontMedium,
-  onClose,
-  onPick,
-}: PlayerSheetProps) {
-  const players = league ? TSF_MOCK_PLAYERS[league] : [];
-
-  return (
-    <Modal visible={league != null} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.sheetRoot}>
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel={closeLabel}
-        />
-        <View style={[styles.sheet, { paddingBottom: Math.max(bottomInset, 16) + 8 }]}>
-          <View style={styles.sheetHandle} />
-          <View style={styles.sheetHeader}>
-            {league ? (
-              <Image
-                source={TSF_LEAGUE_LOGO[league]}
-                style={styles.sheetLogo}
-                contentFit="contain"
-                transition={0}
-              />
-            ) : null}
-            <Text style={[styles.sheetTitle, { fontFamily: fontBold }]} numberOfLines={1}>
-              {title}
-            </Text>
-          </View>
-          <FlatList
-            data={players}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.sheetList}
-            renderItem={({ item }) => {
-              const selected = item.id === selectedId;
-              return (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => league && onPick(league, item)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  style={[styles.row, selected && styles.rowSelected]}
-                >
-                  <View style={styles.rowAvatar}>
-                    <Text style={[styles.rowAvatarText, { fontFamily: fontBold }]}>
-                      {tsfInitials(item)}
-                    </Text>
-                  </View>
-                  <View style={styles.rowText}>
-                    <Text style={[styles.rowName, { fontFamily: fontBold }]} numberOfLines={1}>
-                      {item.name}
-                    </Text>
-                    <View style={styles.rowMeta}>
-                      <Text style={[styles.rowPosition, { fontFamily: fontBold }]}>{item.position}</Text>
-                      <Text style={[styles.rowClub, { fontFamily: fontMedium }]} numberOfLines={1}>
-                        {item.club}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={[styles.check, selected && styles.checkOn]}>
-                    {selected ? <Ionicons name="checkmark" size={18} color="#FFFFFF" /> : null}
-                  </View>
-                </TouchableOpacity>
-              );
-            }}
-          />
-        </View>
-      </View>
-    </Modal>
   );
 }
 
@@ -631,69 +531,4 @@ const styles = StyleSheet.create({
   },
   tab: { alignItems: 'center', justifyContent: 'center' },
   tabLabel: { color: '#FFFFFF', textAlign: 'center' },
-
-  sheetRoot: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.55)' },
-  sheet: {
-    maxHeight: '75%',
-    backgroundColor: '#0E0820',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    borderColor: '#2E146A',
-    paddingTop: 10,
-  },
-  sheetHandle: {
-    alignSelf: 'center',
-    width: 44,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  sheetLogo: { width: 28, height: 28 },
-  sheetTitle: { color: '#FFFFFF', fontSize: 17 },
-  sheetList: { paddingHorizontal: 16, gap: 10 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
-    backgroundColor: '#16082E',
-    borderWidth: 1,
-    borderColor: 'rgba(139,92,246,0.25)',
-  },
-  rowSelected: { borderColor: PURPLE },
-  rowAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2E146A',
-  },
-  rowAvatarText: { color: '#FFFFFF', fontSize: 16 },
-  rowText: { flex: 1 },
-  rowName: { color: '#FFFFFF', fontSize: 15 },
-  rowMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  rowPosition: { color: PURPLE_SOFT, fontSize: 12 },
-  rowClub: { color: '#A1A1AA', fontSize: 12, flexShrink: 1 },
-  check: {
-    width: 27,
-    height: 27,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: PURPLE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkOn: { backgroundColor: PURPLE },
 });

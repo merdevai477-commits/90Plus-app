@@ -1988,6 +1988,9 @@ export const ar = {
       sheetTitle: 'اختر لاعب من {league}',
       removePlayer: 'إزالة {name}',
       close: 'إغلاق',
+      goalsA11y: '{count} هدف',
+      assistsA11y: '{count} تمريرة حاسمة',
+      selectLeagueA11y: 'عرض لاعبي {league}',
       tabs: {
         matches: 'المباريات',
         pitch: 'الملعب',
