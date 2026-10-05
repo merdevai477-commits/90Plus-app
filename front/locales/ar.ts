@@ -1979,6 +1979,28 @@ export const ar = {
     subtitle: 'اختر 5 لاعبين من 5 دوريات وتوقع عدد الأهداف واربح تيشرت كرة القدم',
     cta: 'ابدأ اختيارك',
     back: 'رجوع',
+    pick: {
+      goalLabel: 'الهدف:',
+      goalPoints: '3 نقاط',
+      assistLabel: 'صناعة الأسيست:',
+      assistPoints: 'نقطة واحدة',
+      choosePlayer: 'اختر لاعب',
+      sheetTitle: 'اختر لاعب من {league}',
+      removePlayer: 'إزالة {name}',
+      close: 'إغلاق',
+      tabs: {
+        matches: 'المباريات',
+        pitch: 'الملعب',
+        ranking: 'الترتيب والجائزة',
+      },
+      leagues: {
+        pl: 'الدوري الإنجليزي',
+        laliga: 'الدوري الإسباني',
+        bundesliga: 'الدوري الألماني',
+        seriea: 'الدوري الإيطالي',
+        ligue1: 'الدوري الفرنسي',
+      },
+    },
   },
 
   profile: {

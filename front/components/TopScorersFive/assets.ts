@@ -8,13 +8,25 @@
  */
 
 /**
- * Player-poster hero from Figma layer "ChatGPT Image Oct 3, 2026, 10_06_18 AM 1".
- * Until it is exported to assets/images/top-scorers-five/hero.png the screen
- * falls back to a purple gradient — a `require` of a missing file breaks the
- * whole Metro bundle, not just this screen.
+ * Full-bleed art not exported from Figma yet. Until each file lands in
+ * assets/images/top-scorers-five/ its screen draws a fallback — a `require` of a
+ * missing file breaks the whole Metro bundle, not just this screen.
+ *   hero  → layer "ChatGPT Image Oct 3, 2026, 10_06_18 AM 1" (intro, 1259:8321)
+ *   pitch → layer "ChatGPT Image Oct 2, 2026, 11_47_05 PM 1" (pick, 1263:10333)
  */
-export const TSF_ART: { hero: number | null } = {
+export const TSF_ART: { hero: number | null; pitch: number | null } = {
   hero: null,
+  pitch: null,
+};
+
+export type TsfLeagueKey = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
+
+export const TSF_LEAGUE_LOGO: Record<TsfLeagueKey, number> = {
+  pl: require('../../assets/images/king-of-predictions/league-pl.png'),
+  laliga: require('../../assets/images/king-of-predictions/league-laliga.png'),
+  bundesliga: require('../../assets/images/king-of-predictions/league-bundesliga.png'),
+  seriea: require('../../assets/images/king-of-predictions/league-seriea.png'),
+  ligue1: require('../../assets/images/king-of-predictions/league-ligue1.png'),
 };
 
 export type TsfLeagueBadge = {

@@ -41,7 +41,7 @@ export default function TopScorersFiveScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const copy = t.topScorersFive;
 
   const fontBold = useAppFont(700);
@@ -59,6 +59,10 @@ export default function TopScorersFiveScreen() {
   const handleBack = useCallback(() => {
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)/rank' as never);
+  }, [router]);
+
+  const handleStart = useCallback(() => {
+    router.push('/top-scorers-five/pick' as never);
   }, [router]);
 
   const leagueRow = useMemo(
@@ -124,7 +128,6 @@ export default function TopScorersFiveScreen() {
             paddingTop: insets.top + s(14),
             paddingLeft: Math.max(insets.left, s(24)),
             paddingRight: Math.max(insets.right, s(24)),
-            flexDirection: language === 'ar' ? 'row-reverse' : 'row',
           },
         ]}
       >
@@ -137,11 +140,7 @@ export default function TopScorersFiveScreen() {
           testID="top-scorers-five-back"
           style={[styles.backButton, { width: s(38), height: s(38) }]}
         >
-          <Ionicons
-            name={language === 'ar' ? 'arrow-forward' : 'arrow-back'}
-            size={s(26)}
-            color="#FFFFFF"
-          />
+          <Ionicons name="arrow-back" size={s(26)} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -176,8 +175,8 @@ export default function TopScorersFiveScreen() {
         {leagueRow}
       </View>
 
-      {/* The picking flow it leads to is not built yet, so this stays inert. */}
       <TouchableOpacity
+        onPress={handleStart}
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={copy.cta}

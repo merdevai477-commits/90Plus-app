@@ -2026,6 +2026,28 @@ export const en = {
       'Pick 5 players from 5 leagues, predict their goals and win a football shirt',
     cta: 'Start picking',
     back: 'Back',
+    pick: {
+      goalLabel: 'Goal:',
+      goalPoints: '3 points',
+      assistLabel: 'Assist:',
+      assistPoints: '1 point',
+      choosePlayer: 'Pick a player',
+      sheetTitle: 'Pick a player from {league}',
+      removePlayer: 'Remove {name}',
+      close: 'Close',
+      tabs: {
+        matches: 'Matches',
+        pitch: 'Pitch',
+        ranking: 'Ranking & Prize',
+      },
+      leagues: {
+        pl: 'Premier League',
+        laliga: 'LaLiga',
+        bundesliga: 'Bundesliga',
+        seriea: 'Serie A',
+        ligue1: 'Ligue 1',
+      },
+    },
   },
 
   profile: {
