@@ -25,7 +25,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 
-import { TSF_DESIGN_WIDTH, TSF_LEAGUE_LOGO, type TsfLeagueKey } from './assets';
+import {
+  TSF_DESIGN_WIDTH,
+  TSF_LEAGUE_LOGO,
+  TSF_LIGUE1_CREST_ASPECT,
+  TSF_LOGO_TINT_ON_DARK,
+  type TsfLeagueKey,
+} from './assets';
 import { TSF_MOCK_PLAYERS, tsfInitials, tsfShortName, type TsfPlayer } from './mockData';
 
 const BG = '#030303';
@@ -46,11 +52,13 @@ const CARD_TEXT = { bottom: 21.7, iconSize: 13, dividerHeight: 14 };
 
 const CHIP = { width: 77, height: 93, radius: 10, gap: 4 };
 /** Logo box per league inside a chip, straight off the design. */
-const CHIP_LOGO: Record<TsfLeagueKey, { width: number; height: number }> = {
+const CHIP_LOGO: Record<TsfLeagueKey, { width: number; height: number; anchorTop?: boolean }> = {
   pl: { width: 49, height: 81 },
   laliga: { width: 57, height: 43.7 },
   bundesliga: { width: 67, height: 67 },
-  ligue1: { width: 49, height: 49 },
+  // Design draws this box 49 square; narrowing it to the sponsor-free crest's
+  // ratio is what crops Ligue 1's McDonald's band off the foot of the asset.
+  ligue1: { width: 49 * TSF_LIGUE1_CREST_ASPECT, height: 49, anchorTop: true },
   seriea: { width: 50, height: 85 },
 };
 /** Bundesliga is the one chip whose unselected fill is tinted rather than white. */
@@ -204,7 +212,9 @@ export function PlayerPicker({
                 <Image
                   source={TSF_LEAGUE_LOGO[key]}
                   style={{ width: s(logo.width), height: s(logo.height) }}
-                  contentFit="contain"
+                  contentFit={logo.anchorTop ? 'cover' : 'contain'}
+                  contentPosition={logo.anchorTop ? 'top' : 'center'}
+                  tintColor={TSF_LOGO_TINT_ON_DARK[key]}
                   transition={0}
                 />
               </TouchableOpacity>

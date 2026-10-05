@@ -30,6 +30,24 @@ export const TSF_LEAGUE_LOGO: Record<TsfLeagueKey, number> = {
   ligue1: require('../../assets/images/king-of-predictions/league-ligue1.png'),
 };
 
+/**
+ * The shared crests are drawn dark on transparent, which reads against the
+ * white intro badges but vanishes on the dark pitch cards and picker chips —
+ * where the design shows these two white instead.
+ */
+export const TSF_LOGO_TINT_ON_DARK: Partial<Record<TsfLeagueKey, string>> = {
+  pl: '#FFFFFF',
+  ligue1: '#FFFFFF',
+};
+
+/**
+ * Ligue 1's asset is 250×448 and carries a McDonald's band across rows 344–447
+ * that the design does not show. Keeping only the rows above it leaves the
+ * crest at 250×344, so a box of that ratio with the art anchored to its top
+ * crops the band away.
+ */
+export const TSF_LIGUE1_CREST_ASPECT = 250 / 344;
+
 export type TsfLeagueBadge = {
   readonly key: string;
   readonly source: number;

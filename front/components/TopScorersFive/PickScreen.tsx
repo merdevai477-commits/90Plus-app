@@ -28,7 +28,14 @@ import { useTranslation } from '../../src/i18n';
 import { useAppFont, useScreenFont } from '../../utils/fontSetup';
 
 import { GlassSurface } from '../KingOfPredictions/GlassSurface';
-import { TSF_ART, TSF_DESIGN_WIDTH, TSF_LEAGUE_LOGO, type TsfLeagueKey } from './assets';
+import {
+  TSF_ART,
+  TSF_DESIGN_WIDTH,
+  TSF_LEAGUE_LOGO,
+  TSF_LIGUE1_CREST_ASPECT,
+  TSF_LOGO_TINT_ON_DARK,
+  type TsfLeagueKey,
+} from './assets';
 import { tsfInitials, tsfShortName, type TsfPlayer } from './mockData';
 import { PlayerPicker } from './PlayerPicker';
 
@@ -53,7 +60,13 @@ type Slot = {
   readonly key: TsfLeagueKey;
   readonly left: number;
   readonly top: number;
-  readonly logo: { width: number; height: number; top: number };
+  readonly logo: {
+    width: number;
+    height: number;
+    top: number;
+    /** Pins the art to the box's top edge so a cropping box drops the foot. */
+    anchorTop?: boolean;
+  };
   readonly labelTop: number;
 };
 
@@ -61,7 +74,15 @@ const SLOTS: readonly Slot[] = [
   { key: 'pl', left: 128.5, top: 0, logo: { width: 49, height: 81, top: 14.5 }, labelTop: 103.5 },
   { key: 'bundesliga', left: 0, top: 170.47, logo: { width: 67, height: 67, top: 21.5 }, labelTop: 96.5 },
   { key: 'seriea', left: 257, top: 170.47, logo: { width: 50, height: 85, top: 12.5 }, labelTop: 105.5 },
-  { key: 'ligue1', left: 22, top: 360.93, logo: { width: 73, height: 73, top: 18.5 }, labelTop: 99.5 },
+  {
+    key: 'ligue1',
+    left: 22,
+    top: 360.93,
+    // Design draws this box 73 square; narrowing it to the sponsor-free crest's
+    // ratio is what crops the band, and leaves the mark the width it renders at.
+    logo: { width: 73 * TSF_LIGUE1_CREST_ASPECT, height: 73, top: 18.5, anchorTop: true },
+    labelTop: 99.5,
+  },
   { key: 'laliga', left: 235, top: 360.93, logo: { width: 85, height: 65, top: 22.5 }, labelTop: 95.5 },
 ];
 
@@ -275,7 +296,9 @@ export default function TopScorersFivePickScreen() {
                         width: s(slot.logo.width),
                         height: s(slot.logo.height),
                       }}
-                      contentFit="contain"
+                      contentFit={slot.logo.anchorTop ? 'cover' : 'contain'}
+                      contentPosition={slot.logo.anchorTop ? 'top' : 'center'}
+                      tintColor={TSF_LOGO_TINT_ON_DARK[slot.key]}
                       transition={0}
                     />
                     <Text
