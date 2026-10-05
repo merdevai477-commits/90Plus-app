@@ -9,9 +9,9 @@
 
 import { useCallback, useMemo } from 'react';
 import {
-  Pressable,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -31,7 +31,7 @@ const BG = '#030303';
 /** Hero art is 501×549 in the design and bleeds 26.5pt past each frame edge. */
 const HERO_DESIGN = { width: 501, height: 549, overhang: 26.5 };
 const HERO_FADE = ['rgba(3,3,3,0)', 'rgba(3,3,3,0.65)', BG] as const;
-const HERO_FALLBACK = ['#4C1D95', '#2E146A', BG] as const;
+const HERO_FALLBACK = ['#5B21B6', '#3B0F7A', '#14052E', BG] as const;
 /** Frame 718 overflows 21pt above its own bounds, so the row is 402×138. */
 const LEAGUE_ROW = { width: 402, height: 138 };
 
@@ -104,7 +104,11 @@ export default function TopScorersFiveScreen() {
             transition={0}
           />
         ) : (
-          <LinearGradient colors={HERO_FALLBACK} style={StyleSheet.absoluteFill} />
+          <LinearGradient
+            colors={HERO_FALLBACK}
+            locations={[0, 0.35, 0.7, 1]}
+            style={StyleSheet.absoluteFill}
+          />
         )}
         <LinearGradient
           colors={HERO_FADE}
@@ -124,24 +128,21 @@ export default function TopScorersFiveScreen() {
           },
         ]}
       >
-        <Pressable
+        <TouchableOpacity
           onPress={handleBack}
           hitSlop={12}
+          activeOpacity={0.75}
           accessibilityRole="button"
           accessibilityLabel={copy.back}
           testID="top-scorers-five-back"
-          style={({ pressed }) => [
-            styles.backButton,
-            { width: s(38), height: s(38) },
-            pressed && styles.pressed,
-          ]}
+          style={[styles.backButton, { width: s(38), height: s(38) }]}
         >
           <Ionicons
             name={language === 'ar' ? 'arrow-forward' : 'arrow-back'}
             size={s(26)}
             color="#FFFFFF"
           />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.spacer} pointerEvents="none" />
@@ -176,25 +177,27 @@ export default function TopScorersFiveScreen() {
       </View>
 
       {/* The picking flow it leads to is not built yet, so this stays inert. */}
-      <Pressable
+      <TouchableOpacity
+        activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={copy.cta}
         testID="top-scorers-five-cta"
-        style={({ pressed }) => [
+        style={[
           styles.ctaPress,
           {
             width: s(402),
+            height: s(58),
+            borderRadius: s(29),
             marginTop: s(54),
-            marginBottom: Math.max(insets.bottom, s(24)) + s(24),
+            marginBottom: Math.max(insets.bottom, 16) + s(65),
           },
-          pressed && styles.pressed,
         ]}
       >
         <LinearGradient
           colors={KING_BUTTON_GRADIENT}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={[styles.cta, { height: s(58), borderRadius: s(29), gap: s(12) }]}
+          style={[styles.cta, { width: s(402), height: s(58), borderRadius: s(29), gap: s(12) }]}
         >
           <Text
             style={[styles.ctaText, { fontFamily: fontSemi, fontSize: s(17) }]}
@@ -204,7 +207,7 @@ export default function TopScorersFiveScreen() {
           </Text>
           <Ionicons name="chevron-forward" size={s(22)} color="#FFFFFF" />
         </LinearGradient>
-      </Pressable>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -214,7 +217,6 @@ const styles = StyleSheet.create({
   hero: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
   header: { alignSelf: 'stretch', alignItems: 'center' },
   backButton: { alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.75 },
   spacer: { flex: 1 },
   intro: { alignItems: 'center' },
   ball: { textAlign: 'center' },
