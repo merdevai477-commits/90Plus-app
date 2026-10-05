@@ -23,17 +23,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTranslation } from '../../src/i18n';
 import { useAppFont, useScreenFont } from '../../utils/fontSetup';
-import { KING_BUTTON_GRADIENT } from '../KingOfPredictions/KingBoardList';
 
 import { TSF_ART, TSF_DESIGN_WIDTH, TSF_LEAGUE_BADGES } from './assets';
 
 const BG = '#030303';
-/** Hero art is 501×549 in the design and bleeds 26.5pt past each frame edge. */
-const HERO_DESIGN = { width: 501, height: 549, overhang: 26.5 };
-const HERO_FADE = ['rgba(3,3,3,0)', 'rgba(3,3,3,0.65)', BG] as const;
+const CTA_BG = '#8C5CF5';
+/** Hero art is 501×549 at (−27, −10) in the design frame, bleeding past both sides. */
+const HERO_DESIGN = { width: 501, height: 549, left: -27, top: -10 };
+/** The fade layer is 448×630 at y −55, so it ends below the hero art. */
+const HERO_FADE_BOX = { top: -55, height: 630 };
+const HERO_FADE = ['rgba(3,3,3,0)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0.6)', BG] as const;
 const HERO_FALLBACK = ['#5B21B6', '#3B0F7A', '#14052E', BG] as const;
-/** Frame 718 overflows 21pt above its own bounds, so the row is 402×138. */
-const LEAGUE_ROW = { width: 402, height: 138 };
+/**
+ * Frame 718 overflows 21pt above its own bounds, so the row is 402×138. Figma
+ * places it 8pt right of center (x 31 in a 448 frame).
+ */
+const LEAGUE_ROW = { width: 402, height: 138, offsetX: 8 };
 
 export default function TopScorersFiveScreen() {
   useScreenFont();
@@ -41,10 +46,11 @@ export default function TopScorersFiveScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const copy = t.topScorersFive;
+  const isAr = language === 'ar';
 
-  const fontBold = useAppFont(700);
+  const fontHeavy = useAppFont(800);
   const fontMedium = useAppFont(500);
   const fontSemi = useAppFont(600);
 
@@ -72,14 +78,18 @@ export default function TopScorersFiveScreen() {
           key={badge.key}
           style={[
             styles.leagueCard,
-            badge.featured && styles.leagueCardFeatured,
             {
               left: s(badge.card.left),
               top: s(badge.card.top),
               width: s(badge.card.width),
               height: s(badge.card.height),
-              borderRadius: s(badge.featured ? 20 : 16),
+              borderRadius: s(badge.radius),
+              backgroundColor: badge.background,
             },
+            badge.stroke ? { borderWidth: 1, borderColor: badge.stroke } : null,
+            badge.shadow
+              ? { boxShadow: `0px 0px ${s(badge.shadow.blur)}px ${badge.shadow.color}` }
+              : null,
           ]}
         >
           <Image
@@ -95,15 +105,22 @@ export default function TopScorersFiveScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.hero, { height: s(HERO_DESIGN.height) }]} pointerEvents="none">
+      <View
+        style={[
+          styles.hero,
+          {
+            left: s(HERO_DESIGN.left),
+            top: s(HERO_DESIGN.top),
+            width: s(HERO_DESIGN.width),
+            height: s(HERO_DESIGN.height),
+          },
+        ]}
+        pointerEvents="none"
+      >
         {TSF_ART.hero != null ? (
           <Image
             source={TSF_ART.hero}
-            style={{
-              width: s(HERO_DESIGN.width),
-              height: s(HERO_DESIGN.height),
-              marginLeft: -s(HERO_DESIGN.overhang),
-            }}
+            style={StyleSheet.absoluteFill}
             contentFit="cover"
             transition={0}
           />
@@ -114,18 +131,19 @@ export default function TopScorersFiveScreen() {
             style={StyleSheet.absoluteFill}
           />
         )}
-        <LinearGradient
-          colors={HERO_FADE}
-          locations={[0, 0.62, 1]}
-          style={StyleSheet.absoluteFill}
-        />
       </View>
+      <LinearGradient
+        colors={HERO_FADE}
+        locations={[0, 0.55, 0.9, 1]}
+        style={[styles.heroFade, { top: s(HERO_FADE_BOX.top), height: s(HERO_FADE_BOX.height) }]}
+        pointerEvents="none"
+      />
 
       <View
         style={[
           styles.header,
           {
-            paddingTop: insets.top + s(14),
+            paddingTop: insets.top + s(10),
             paddingLeft: Math.max(insets.left, s(24)),
             paddingRight: Math.max(insets.right, s(24)),
           },
@@ -140,16 +158,16 @@ export default function TopScorersFiveScreen() {
           testID="top-scorers-five-back"
           style={[styles.backButton, { width: s(38), height: s(38) }]}
         >
-          <Ionicons name="arrow-back" size={s(26)} color="#FFFFFF" />
+          <Ionicons name="arrow-back" size={s(28)} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
       <View style={styles.spacer} pointerEvents="none" />
 
       <View style={[styles.intro, { width: s(387) }]}>
-        <Text style={[styles.ball, { fontSize: s(46), lineHeight: s(60) }]}>⚽</Text>
+        <Text style={[styles.ball, { fontSize: s(48), lineHeight: s(60) }]}>⚽</Text>
         <Text
-          style={[styles.title, { fontFamily: fontBold, fontSize: s(34), marginTop: s(8) }]}
+          style={[styles.title, { fontFamily: fontHeavy, fontSize: s(40), marginTop: s(8) }]}
           maxFontSizeMultiplier={1.15}
         >
           {copy.title}
@@ -157,7 +175,7 @@ export default function TopScorersFiveScreen() {
         <Text
           style={[
             styles.subtitle,
-            { fontFamily: fontMedium, fontSize: s(15), lineHeight: s(24), marginTop: s(12) },
+            { fontFamily: fontMedium, fontSize: s(20), lineHeight: s(30), marginTop: s(12) },
           ]}
           maxFontSizeMultiplier={1.15}
         >
@@ -168,7 +186,12 @@ export default function TopScorersFiveScreen() {
       <View
         style={[
           styles.leagueRow,
-          { width: s(LEAGUE_ROW.width), height: s(LEAGUE_ROW.height), marginTop: s(33) },
+          {
+            width: s(LEAGUE_ROW.width),
+            height: s(LEAGUE_ROW.height),
+            marginTop: s(33),
+            left: s(LEAGUE_ROW.offsetX),
+          },
         ]}
         pointerEvents="none"
       >
@@ -186,26 +209,33 @@ export default function TopScorersFiveScreen() {
           {
             width: s(402),
             height: s(58),
-            borderRadius: s(29),
-            marginTop: s(54),
+            borderRadius: s(16),
+            marginTop: s(34),
             marginBottom: Math.max(insets.bottom, 16) + s(65),
           },
         ]}
       >
-        <LinearGradient
-          colors={KING_BUTTON_GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.cta, { width: s(402), height: s(58), borderRadius: s(29), gap: s(12) }]}
+        <View
+          style={[
+            styles.cta,
+            {
+              width: s(402),
+              height: s(58),
+              borderRadius: s(16),
+              gap: s(12),
+              paddingHorizontal: s(23),
+              flexDirection: isAr ? 'row-reverse' : 'row',
+            },
+          ]}
         >
           <Text
-            style={[styles.ctaText, { fontFamily: fontSemi, fontSize: s(17) }]}
+            style={[styles.ctaText, { fontFamily: fontSemi, fontSize: s(19) }]}
             maxFontSizeMultiplier={1.15}
           >
             {copy.cta}
           </Text>
-          <Ionicons name="chevron-forward" size={s(22)} color="#FFFFFF" />
-        </LinearGradient>
+          <Ionicons name={isAr ? 'chevron-back' : 'chevron-forward'} size={s(24)} color="#FFFFFF" />
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -213,32 +243,23 @@ export default function TopScorersFiveScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG, alignItems: 'center' },
-  hero: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
+  hero: { position: 'absolute', overflow: 'hidden' },
+  heroFade: { position: 'absolute', left: 0, right: 0 },
   header: { alignSelf: 'stretch', alignItems: 'center' },
   backButton: { alignItems: 'center', justifyContent: 'center' },
   spacer: { flex: 1 },
   intro: { alignItems: 'center' },
   ball: { textAlign: 'center' },
   title: { color: '#FFFFFF', textAlign: 'center' },
-  subtitle: { color: '#BCBCBC', textAlign: 'center' },
+  subtitle: { color: '#9E9E9E', textAlign: 'center' },
   leagueRow: { position: 'relative' },
   leagueCard: {
     position: 'absolute',
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  leagueCardFeatured: {
-    borderWidth: 2,
-    borderColor: '#8B5CF6',
-    shadowColor: '#8B5CF6',
-    shadowOpacity: 0.6,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 12,
-  },
   ctaPress: { alignSelf: 'center' },
-  cta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  cta: { alignItems: 'center', justifyContent: 'center', backgroundColor: CTA_BG },
   ctaText: { color: '#FFFFFF' },
 });

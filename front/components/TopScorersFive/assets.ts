@@ -37,46 +37,63 @@ export type TsfLeagueBadge = {
   readonly card: { left: number; top: number; width: number; height: number };
   /** Logo box inside the card, also in design units. */
   readonly logo: { width: number; height: number };
-  /** The Premier League card sits higher and carries the purple ring. */
-  readonly featured?: boolean;
+  readonly radius: number;
+  readonly background: string;
+  /** Premier League carries a purple ring. */
+  readonly stroke?: string;
+  /** CSS box-shadow, scaled by the screen. */
+  readonly shadow?: { blur: number; color: string };
 };
 
 /**
  * Design coordinates come from Figma "Frame 718" (402×97 at y=617). The frame
  * clips nothing, and the Premier League card overflows 21pt above it, so every
- * `top` below is shifted by +21 into a 402×138 container.
+ * `top` below is shifted by +21 into a 402×138 container. Array order is the
+ * Figma paint order: Bundesliga covers LaLiga, Serie A covers Ligue 1, and the
+ * Premier League card sits over both.
  */
 export const TSF_LEAGUE_BADGES: readonly TsfLeagueBadge[] = [
   {
-    key: 'ligue1',
-    source: require('../../assets/images/king-of-predictions/league-ligue1.png'),
-    card: { left: 3, top: 45, width: 82, height: 88 },
-    logo: { width: 49, height: 49 },
-  },
-  {
-    key: 'seriea',
-    source: require('../../assets/images/king-of-predictions/league-seriea.png'),
-    card: { left: 75, top: 41, width: 90, height: 97 },
-    logo: { width: 50, height: 85 },
+    key: 'laliga',
+    source: require('../../assets/images/king-of-predictions/league-laliga.png'),
+    card: { left: 314, top: 45, width: 82, height: 88 },
+    logo: { width: 62, height: 48 },
+    radius: 14,
+    background: '#FFFFFF',
   },
   {
     key: 'bundesliga',
     source: require('../../assets/images/king-of-predictions/league-bundesliga.png'),
     card: { left: 237, top: 41, width: 90, height: 97 },
     logo: { width: 67, height: 67 },
+    radius: 16,
+    background: '#D10314',
   },
   {
-    key: 'laliga',
-    source: require('../../assets/images/king-of-predictions/league-laliga.png'),
-    card: { left: 314, top: 45, width: 82, height: 88 },
-    logo: { width: 62, height: 48 },
+    key: 'ligue1',
+    source: require('../../assets/images/king-of-predictions/league-ligue1.png'),
+    card: { left: 3, top: 45, width: 82, height: 88 },
+    logo: { width: 49, height: 49 },
+    radius: 14,
+    background: '#FFFFFF',
+  },
+  {
+    key: 'seriea',
+    source: require('../../assets/images/king-of-predictions/league-seriea.png'),
+    card: { left: 75, top: 41, width: 90, height: 97 },
+    logo: { width: 50, height: 85 },
+    radius: 16,
+    background: '#FFFFFF',
+    shadow: { blur: 13.4, color: 'rgba(0,0,0,0.45)' },
   },
   {
     key: 'pl',
     source: require('../../assets/images/king-of-predictions/league-pl.png'),
     card: { left: 146, top: 0, width: 111, height: 120 },
     logo: { width: 60, height: 100 },
-    featured: true,
+    radius: 21,
+    background: '#FFFFFF',
+    stroke: '#8C5CF5',
   },
 ] as const;
 
