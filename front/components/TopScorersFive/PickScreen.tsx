@@ -29,6 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont, useScreenFont } from '../../utils/fontSetup';
 
+import { GlassSurface } from '../KingOfPredictions/GlassSurface';
 import { TSF_ART, TSF_DESIGN_WIDTH, TSF_LEAGUE_LOGO, type TsfLeagueKey } from './assets';
 import { TSF_MOCK_PLAYERS, tsfInitials, tsfShortName, type TsfPlayer } from './mockData';
 
@@ -94,6 +95,13 @@ export default function TopScorersFivePickScreen() {
   const availableHeight = height - insets.top - Math.max(insets.bottom, 12);
   const scale = Math.min(width / TSF_DESIGN_WIDTH, availableHeight / DESIGN_CONTENT_HEIGHT);
   const s = useCallback((value: number) => value * scale, [scale]);
+
+  /**
+   * The nav floats over the pitch at the same lift as the King of Predictions
+   * one. `DESIGN_CONTENT_HEIGHT` still reserves the nav's slot in the scale
+   * above, so the formation can never grow down into it.
+   */
+  const navBottom = Math.max(insets.bottom, 12) + 8;
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) router.back();
@@ -319,19 +327,15 @@ export default function TopScorersFivePickScreen() {
             </View>
           );
         })}
+      </View>
 
-        <View
+      <View pointerEvents="box-none" style={[styles.navWrap, { bottom: navBottom }]}>
+        <GlassSurface
+          radius={s(20)}
+          tone="muted"
           style={[
-            styles.tabBar,
-            {
-              left: s(22),
-              top: s(772 - DESIGN_STATUS_BAR),
-              width: s(404),
-              height: s(83),
-              borderRadius: s(20),
-              paddingHorizontal: s(20),
-              gap: s(15),
-            },
+            styles.nav,
+            { width: s(404), height: s(83), paddingHorizontal: s(20), gap: s(15) },
           ]}
         >
           {tabs.map((tab) => {
@@ -363,7 +367,7 @@ export default function TopScorersFivePickScreen() {
               </View>
             );
           })}
-        </View>
+        </GlassSurface>
       </View>
 
       <PlayerSheet
@@ -611,14 +615,19 @@ const styles = StyleSheet.create({
     borderColor: '#9CA3AF',
   },
 
-  tabBar: {
-    position: 'absolute',
+  navWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  nav: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#050A1A',
     borderWidth: 0.5,
     borderColor: '#A854F7',
+    shadowColor: '#5A129E',
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
   tab: { alignItems: 'center', justifyContent: 'center' },
   tabLabel: { color: '#FFFFFF', textAlign: 'center' },
