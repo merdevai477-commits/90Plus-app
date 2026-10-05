@@ -2,9 +2,10 @@
  * "خماسي الهدافين" intro screen — Figma `iPhone 14 Plus - 55` (node 1259:8321).
  *
  * Entered from the Rank page competition card. The layout is ported from the
- * 448×925 design frame: everything below the hero keeps its design spacing and
- * is scaled by the device width, while the gap above the title flexes so the
- * block stays anchored to the bottom on shorter screens.
+ * 448×925 design frame and scaled by the device width. The title block sits on
+ * the hero art rather than below it, so it is pinned to its design offset from
+ * the top; the slack on taller screens is taken between the title and the
+ * league row, which keeps the row and the CTA anchored to the bottom.
  */
 
 import { useCallback, useMemo } from 'react';
@@ -32,8 +33,20 @@ const CTA_BG = '#8C5CF5';
 const HERO_DESIGN = { width: 501, height: 549, left: -27, top: -10 };
 /** The fade layer is 448×630 at y −55, so it ends below the hero art. */
 const HERO_FADE_BOX = { top: -55, height: 630 };
-const HERO_FADE = ['rgba(3,3,3,0)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0.6)', BG] as const;
+/**
+ * Stays clear over the title — the art's own haze is the backdrop there — then
+ * turns solid just past the hero's bottom edge (design y 539, i.e. 0.94 of the
+ * fade box) so the art never cuts off against the page in a hard line.
+ */
+const HERO_FADE = ['rgba(3,3,3,0)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0.35)', BG] as const;
+const HERO_FADE_STOPS = [0, 0.7, 0.9, 0.97] as const;
 const HERO_FALLBACK = ['#5B21B6', '#3B0F7A', '#14052E', BG] as const;
+/**
+ * Design y of the title block's top edge: the 60pt ball + title + subtitle stack
+ * is centred at 475.5 (frame centre 462.5 plus its 12.96 offset) and runs 176
+ * tall, so it starts 152 above the hero's bottom and reads against the art.
+ */
+const INTRO_TOP = 387.5;
 /**
  * Frame 718 overflows 21pt above its own bounds, so the row is 402×138. Figma
  * places it 8pt right of center (x 31 in a 448 frame).
@@ -57,6 +70,13 @@ export default function TopScorersFiveScreen() {
   /** Design unit → device points. */
   const scale = width / TSF_DESIGN_WIDTH;
   const s = useCallback((value: number) => value * scale, [scale]);
+
+  /**
+   * Drops the title block onto its design offset. The header above it is sized
+   * by the notch rather than the design's status bar, so the gap is whatever is
+   * left over — floored in case a very tall inset would otherwise overlap.
+   */
+  const introGap = Math.max(s(INTRO_TOP) - (insets.top + s(48)), s(16));
 
   /**
    * Rank is the only way into this screen, so a missing history stack (cold
@@ -137,7 +157,7 @@ export default function TopScorersFiveScreen() {
       </View>
       <LinearGradient
         colors={HERO_FADE}
-        locations={[0, 0.55, 0.9, 1]}
+        locations={HERO_FADE_STOPS}
         style={[styles.heroFade, { top: s(HERO_FADE_BOX.top), height: s(HERO_FADE_BOX.height) }]}
         pointerEvents="none"
       />
@@ -165,7 +185,7 @@ export default function TopScorersFiveScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.spacer} pointerEvents="none" />
+      <View style={{ height: introGap }} pointerEvents="none" />
 
       <View style={[styles.intro, { width: s(387) }]}>
         <Text style={[styles.ball, { fontSize: s(48), lineHeight: s(60) }]}>⚽</Text>
@@ -185,6 +205,8 @@ export default function TopScorersFiveScreen() {
           {copy.subtitle}
         </Text>
       </View>
+
+      <View style={styles.spacer} pointerEvents="none" />
 
       <View
         style={[
@@ -248,7 +270,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG, alignItems: 'center' },
   hero: { position: 'absolute', overflow: 'hidden' },
   heroFade: { position: 'absolute', left: 0, right: 0 },
-  header: { alignSelf: 'stretch', alignItems: 'center' },
+  header: { alignSelf: 'stretch', alignItems: 'flex-start' },
   backButton: { alignItems: 'center', justifyContent: 'center' },
   spacer: { flex: 1 },
   intro: { alignItems: 'center' },
