@@ -357,11 +357,18 @@ export default function TopScorersFivePickScreen() {
   );
 }
 
-/** Stand-in for the stadium art until it is exported from Figma. */
+/**
+ * Figma fills the frame with the stadium art stretched to 2.34× the frame width
+ * (shifted −0.67 widths, full height) under a 62% black layer. Until the art is
+ * exported a drawn pitch stands in, without the overlay its colors already include.
+ */
 function PitchBackground() {
   if (TSF_ART.pitch != null) {
     return (
-      <Image source={TSF_ART.pitch} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} />
+      <View style={styles.artClip} pointerEvents="none">
+        <Image source={TSF_ART.pitch} style={styles.art} contentFit="fill" transition={0} />
+        <View style={styles.artShade} />
+      </View>
     );
   }
   return (
@@ -482,6 +489,10 @@ function PlayerSheet({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
+
+  artClip: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  art: { position: 'absolute', top: 0, left: '-67%', width: '234%', height: '100%' },
+  artShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.62)' },
 
   stands: { position: 'absolute', top: 0, left: 0, right: 0, height: '46%' },
   pitch: { position: 'absolute', top: '42%', left: 0, right: 0, bottom: 0, overflow: 'hidden' },

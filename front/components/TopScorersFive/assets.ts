@@ -12,7 +12,8 @@
  * assets/images/top-scorers-five/ its screen draws a fallback — a `require` of a
  * missing file breaks the whole Metro bundle, not just this screen.
  *   hero  → layer "ChatGPT Image Oct 3, 2026, 10_06_18 AM 1" (intro, 1259:8321)
- *   pitch → layer "ChatGPT Image Oct 2, 2026, 11_47_05 PM 1" (pick, 1263:10333)
+ *   pitch → layer "ChatGPT Image Oct 2, 2026, 11_47_05 PM 1" (pick, 1263:10333),
+ *           saved as pitch.png
  */
 export const TSF_ART: { hero: number | null; pitch: number | null } = {
   hero: null,
