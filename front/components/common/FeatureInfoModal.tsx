@@ -2,8 +2,6 @@ import React from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
-
 const ACCENT = '#A855F7';
 
 export function FeatureInfoModal({
@@ -25,22 +23,14 @@ export function FeatureInfoModal({
 }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View
-        style={[
-          s.overlay,
-          Platform.OS === 'android' && { backgroundColor: 'rgba(0,0,0,0.85)' },
-        ]}
-      >
+      <View style={s.overlay}>
         <BlurView intensity={Platform.OS === 'ios' ? 30 : 100} tint="dark" style={StyleSheet.absoluteFill} />
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
         <View style={s.outer}>
           <View style={s.inner}>
-            {isLiquidGlassSupported ? (
-              <LiquidGlassView
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                {...({ style: StyleSheet.absoluteFill, tint: 'rgba(15,5,25,0.99)', effect: 'regular' } as any)}
-              />
+            {Platform.OS === 'ios' ? (
+              <View style={[StyleSheet.absoluteFill, s.cardSolid]} />
             ) : (
               <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
             )}
@@ -88,7 +78,9 @@ export function FeatureInfoModal({
 }
 
 const s = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.75)' },
+  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.85)' },
+  // iOS 26 liquid glass is see-through, which made the rules unreadable over the profile.
+  cardSolid: { backgroundColor: 'rgba(20,14,28,0.97)' },
   outer: { width: '88%', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 35, elevation: 20 },
   inner: { borderRadius: 28, borderWidth: 1, borderColor: 'rgba(168,85,247,0.4)', overflow: 'hidden', padding: 24, alignItems: 'center' },
   iconWrap: { width: 70, height: 70, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 10, backgroundColor: 'rgba(168,85,247,0.12)', borderWidth: 1, borderColor: 'rgba(168,85,247,0.35)' },

@@ -60,12 +60,19 @@ function MetricCell({ item, compact }: { item: ProfileMetricItem; compact: boole
         <Image source={item.icon} style={styles.icon} contentFit="contain" />
       </View>
       <View style={styles.copy}>
-        <Text style={styles.value} numberOfLines={1}>
+        <Text
+          style={styles.value}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          maxFontSizeMultiplier={1.15}
+        >
           {formatProfileStat(item.value)}
         </Text>
         <Text
           style={[styles.label, compact && styles.perfLabel]}
           numberOfLines={compact ? 2 : 1}
+          maxFontSizeMultiplier={1.15}
         >
           {item.label}
         </Text>

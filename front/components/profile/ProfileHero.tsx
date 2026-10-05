@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ImageSourcePropType,
-  Dimensions,
+  PixelRatio,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,49 @@ import { getCountryFlagUri } from '../../utils/countryFlagUri';
 
 const COVER_HEIGHT = 420;
 const AVATAR_SIZE = 101;
+const OVERLAY_PADDING_X = 8;
+const ROW_GAP = 6;
+const WING_GAP = 4;
+const LEVEL_CHIP_WIDTH = 74;
+const SIDE_SLOT_WIDTH = 58;
+const ENERGY_CHIP_WIDTH = 68;
+const WING_WIDTH = Math.max(LEVEL_CHIP_WIDTH + SIDE_SLOT_WIDTH, SIDE_SLOT_WIDTH + ENERGY_CHIP_WIDTH) + WING_GAP;
+// Full-size identity row needs ~395pt; iPhones are 375–393pt wide, so the row scales down to fit.
+const ROW_DESIGN_WIDTH = WING_WIDTH * 2 + AVATAR_SIZE + ROW_GAP * 2;
+// The social metric card overlaps the hero bottom by 72pt (see ProfileMetricStrip socialCard).
+const HERO_BOTTOM_SPACE = 100;
+
+function buildScaledStyles(scale: number) {
+  const px = (n: number) => PixelRatio.roundToNearestPixel(n * scale);
+  return {
+    scale,
+    avatarSize: px(AVATAR_SIZE),
+    rowGap: px(ROW_GAP),
+    wingGap: px(WING_GAP),
+    levelChip: { width: px(LEVEL_CHIP_WIDTH), height: px(75), gap: px(10) },
+    levelPill: { width: px(58), height: px(24), paddingHorizontal: px(10) },
+    lvlWord: { fontSize: px(10) },
+    lvlNum: { fontSize: px(14) },
+    xpTrack: { width: px(56) },
+    xpCaption: { fontSize: px(8) },
+    sideSlot: { width: px(SIDE_SLOT_WIDTH), height: px(77) },
+    flagImage: { width: px(41), height: px(23) },
+    clubLogo: { width: px(27), height: px(48) },
+    slotCaption: { fontSize: px(9) },
+    emptySlotLabel: { fontSize: px(10) },
+    addIcon: px(24),
+    energyChip: { width: px(ENERGY_CHIP_WIDTH), height: px(60) },
+    energyIcon: { width: px(20), height: px(20) },
+    energyValue: { fontSize: px(13) },
+    energyLine: { width: px(49) },
+    energyLabel: { fontSize: px(11) },
+    editBadge: { width: px(26), height: px(26), borderRadius: px(13) },
+    editIcon: Math.max(10, px(12)),
+    cameraIcon: px(36),
+  };
+}
+
+type ScaledStyles = ReturnType<typeof buildScaledStyles>;
 
 export interface ProfileHeroProps {
   topInset: number;
@@ -88,16 +132,20 @@ const ProfileHero = memo(function ProfileHero({
   energyLabel,
   actionBelowName,
 }: ProfileHeroProps) {
-  const compact = Dimensions.get('window').width < 380;
-  const avatarSize = compact ? 84 : AVATAR_SIZE;
+  const { width: windowWidth } = useWindowDimensions();
+  const sz = useMemo(() => {
+    const available = windowWidth - OVERLAY_PADDING_X * 2 - 4;
+    return buildScaledStyles(Math.max(0.75, Math.min(1, available / ROW_DESIGN_WIDTH)));
+  }, [windowWidth]);
+  const avatarSize = sz.avatarSize;
   const hasCountry = isMeaningfulCountryFlag(countryFlag) || !!countryLabel?.trim();
   const hasClub = !!(clubLogo || clubName?.trim());
   const fillPct = Math.max(0, Math.min(1, progressPct > 1 ? progressPct / 100 : progressPct));
   const countryFlagUri = getCountryFlagUri(countryLabel || '', countryFlag, 80);
-  const heroHeight = actionBelowName ? COVER_HEIGHT + 72 : COVER_HEIGHT;
+  const minHeight = actionBelowName ? COVER_HEIGHT + 72 : COVER_HEIGHT;
 
   return (
-    <View style={[styles.wrap, { height: heroHeight }]} testID="profile-hero">
+    <View style={[styles.wrap, { minHeight }]} testID="profile-hero">
       <View style={styles.coverHit} pointerEvents="none" testID="profile-cover">
         <Image
           source={PROFILE_STADIUM_COVER}
@@ -164,20 +212,20 @@ const ProfileHero = memo(function ProfileHero({
           </View>
         </View>
 
-        <View style={styles.identityRow}>
-          <View style={styles.identityWing}>
+        <View style={[styles.identityRow, { gap: sz.rowGap }]}>
+          <View style={[styles.identityWing, { gap: sz.wingGap }]}>
             <TouchableOpacity
-              style={styles.levelChip}
+              style={[styles.levelChip, sz.levelChip]}
               onPress={onLevelPress}
               disabled={!onLevelPress}
               activeOpacity={0.85}
             >
-              <View style={styles.levelPill}>
-                <Text style={styles.lvlWord}>LVL</Text>
-                <Text style={styles.lvlNum}>{level}</Text>
+              <View style={[styles.levelPill, sz.levelPill]}>
+                <Text style={[styles.lvlWord, sz.lvlWord]} allowFontScaling={false}>LVL</Text>
+                <Text style={[styles.lvlNum, sz.lvlNum]} allowFontScaling={false}>{level}</Text>
               </View>
               <View style={styles.xpBlock}>
-                <View style={styles.xpTrack}>
+                <View style={[styles.xpTrack, sz.xpTrack]}>
                   <LinearGradient
                     colors={['#5E2990', '#A047F6']}
                     start={{ x: 0, y: 0 }}
@@ -185,7 +233,13 @@ const ProfileHero = memo(function ProfileHero({
                     style={[styles.xpFill, { width: `${Math.round(fillPct * 100)}%` }]}
                   />
                 </View>
-                <Text style={styles.xpCaption} numberOfLines={1}>
+                <Text
+                  style={[styles.xpCaption, sz.xpCaption]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                  allowFontScaling={false}
+                >
                   {formatProfileStat(xp)} / {formatProfileStat(nextLevelXp)} XP
                 </Text>
               </View>
@@ -196,20 +250,27 @@ const ProfileHero = memo(function ProfileHero({
               filled={hasCountry}
               editable={isOwnProfile}
               onPress={onCountryPress}
+              sz={sz}
             >
               {hasCountry ? (
                 <>
                   {countryFlagUri ? (
                     <Image
                       source={{ uri: countryFlagUri }}
-                      style={styles.flagImage}
+                      style={sz.flagImage}
                       contentFit="cover"
                     />
                   ) : (
                     <Text style={styles.flag}>{countryFlag?.trim() || '🏳️'}</Text>
                   )}
                   {!!countryLabel?.trim() && (
-                    <Text style={styles.slotCaption} numberOfLines={1}>
+                    <Text
+                      style={[styles.slotCaption, sz.slotCaption]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                      allowFontScaling={false}
+                    >
                       {countryLabel}
                     </Text>
                   )}
@@ -234,7 +295,7 @@ const ProfileHero = memo(function ProfileHero({
               />
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder, { width: avatarSize, height: avatarSize, borderRadius: avatarSize }]}>
-                <Ionicons name="camera-outline" size={compact ? 28 : 36} color="rgba(216,174,255,0.85)" />
+                <Ionicons name="camera-outline" size={sz.cameraIcon} color="rgba(216,174,255,0.85)" />
               </View>
             )}
             <LinearGradient
@@ -244,9 +305,9 @@ const ProfileHero = memo(function ProfileHero({
             {isOwnProfile && (
               <LinearGradient
                 colors={['rgba(126,21,226,0.92)', 'rgba(69,11,124,0.92)']}
-                style={styles.editBadge}
+                style={[styles.editBadge, sz.editBadge]}
               >
-                <Ionicons name="pencil" size={12} color="#fff" />
+                <Ionicons name="pencil" size={sz.editIcon} color="#fff" />
               </LinearGradient>
             )}
             {isAvatarUploading && (
@@ -256,26 +317,33 @@ const ProfileHero = memo(function ProfileHero({
             )}
           </TouchableOpacity>
 
-          <View style={[styles.identityWing, styles.identityWingEnd]}>
+          <View style={[styles.identityWing, styles.identityWingEnd, { gap: sz.wingGap }]}>
             <SideSlot
               emptyLabel={addClubLabel}
               filled={hasClub}
               editable={isOwnProfile}
               onPress={onClubPress}
+              sz={sz}
             >
               {hasClub ? (
                 <>
                   {clubLogo ? (
                     <Image
                       source={{ uri: clubLogo } as ImageSourcePropType}
-                      style={styles.clubLogo}
+                      style={sz.clubLogo}
                       contentFit="contain"
                     />
                   ) : (
                     <Ionicons name="football-outline" size={22} color="#D8AEFF" />
                   )}
                   {!!clubName?.trim() && (
-                    <Text style={styles.slotCaption} numberOfLines={1}>
+                    <Text
+                      style={[styles.slotCaption, sz.slotCaption]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                      allowFontScaling={false}
+                    >
                       {clubName}
                     </Text>
                   )}
@@ -285,21 +353,35 @@ const ProfileHero = memo(function ProfileHero({
 
             {energyValue != null ? (
               <TouchableOpacity
-                style={styles.energyChip}
+                style={[styles.energyChip, sz.energyChip]}
                 onPress={onEnergyPress}
                 disabled={!onEnergyPress}
                 activeOpacity={0.85}
               >
                 <View style={styles.energyRow}>
-                  <Image source={PROFILE_ICONS.energy} style={styles.energyIcon} />
-                  <Text style={styles.energyValue}>{formatProfileStat(energyValue)}</Text>
+                  <Image source={PROFILE_ICONS.energy} style={sz.energyIcon} />
+                  <Text
+                    style={[styles.energyValue, sz.energyValue]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                    allowFontScaling={false}
+                  >
+                    {formatProfileStat(energyValue)}
+                  </Text>
                 </View>
                 <Image
                   source={PROFILE_ICONS.energyLine}
-                  style={styles.energyLine}
+                  style={[styles.energyLine, sz.energyLine]}
                   contentFit="fill"
                 />
-                <Text style={styles.energyLabel} numberOfLines={1}>
+                <Text
+                  style={[styles.energyLabel, sz.energyLabel]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.8}
+                  allowFontScaling={false}
+                >
                   {energyLabel}
                 </Text>
               </TouchableOpacity>
@@ -315,13 +397,13 @@ const ProfileHero = memo(function ProfileHero({
           accessibilityRole={onMorePress && isOwnProfile ? 'button' : undefined}
         >
           <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1}>
+            <Text style={styles.name} numberOfLines={1} maxFontSizeMultiplier={1.2}>
               {name}
             </Text>
             {isVerified && <VerifiedBadge size={18} />}
             {isDeveloper && <DeveloperBadge size={18} />}
           </View>
-          <Text style={styles.handle} numberOfLines={1}>
+          <Text style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={1.2}>
             @{username}
           </Text>
         </TouchableOpacity>
@@ -337,18 +419,20 @@ function SideSlot({
   filled,
   editable,
   onPress,
+  sz,
   children,
 }: {
   emptyLabel: string;
   filled: boolean;
   editable: boolean;
   onPress?: () => void;
+  sz: ScaledStyles;
   children: React.ReactNode;
 }) {
   if (!filled && !editable) return null;
   return (
     <TouchableOpacity
-      style={[styles.sideSlot, filled ? styles.sideSlotFilled : styles.sideSlotEmpty]}
+      style={[styles.sideSlot, sz.sideSlot, filled ? styles.sideSlotFilled : styles.sideSlotEmpty]}
       onPress={onPress}
       disabled={!onPress}
       activeOpacity={0.85}
@@ -357,8 +441,14 @@ function SideSlot({
         children
       ) : (
         <>
-          <Ionicons name="add" size={24} color="#9E9E9E" />
-          <Text style={styles.emptySlotLabel} numberOfLines={2}>
+          <Ionicons name="add" size={sz.addIcon} color="#9E9E9E" />
+          <Text
+            style={[styles.emptySlotLabel, sz.emptySlotLabel]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+            allowFontScaling={false}
+          >
             {emptyLabel}
           </Text>
         </>
@@ -371,7 +461,7 @@ export default ProfileHero;
 
 const styles = StyleSheet.create({
   wrap: {
-    height: COVER_HEIGHT,
+    minHeight: COVER_HEIGHT,
     backgroundColor: ProfileTheme.colors.profileBg,
   },
   coverHit: {
@@ -382,8 +472,9 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   overlay: {
-    flex: 1,
-    paddingHorizontal: 8,
+    flexGrow: 1,
+    paddingHorizontal: OVERLAY_PADDING_X,
+    paddingBottom: HERO_BOTTOM_SPACE,
   },
   nav: {
     flexDirection: 'row',
@@ -422,7 +513,7 @@ const styles = StyleSheet.create({
   identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: ROW_GAP,
   },
   identityWing: {
     flex: 1,
@@ -430,7 +521,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: 4,
+    gap: WING_GAP,
   },
   identityWingEnd: {
     justifyContent: 'flex-end',
@@ -512,14 +603,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 26,
   },
-  flagImage: {
-    width: 41,
-    height: 23,
-  },
-  clubLogo: {
-    width: 27,
-    height: 48,
-  },
   slotCaption: {
     color: '#fff',
     fontSize: 9,
@@ -589,10 +672,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 21,
   },
-  energyIcon: {
-    width: 20,
-    height: 20,
-  },
   energyValue: {
     color: '#fff',
     fontSize: 13,
@@ -622,6 +701,7 @@ const styles = StyleSheet.create({
     maxWidth: '90%',
   },
   name: {
+    flexShrink: 1,
     color: '#fff',
     fontSize: 24,
     fontWeight: '700',
