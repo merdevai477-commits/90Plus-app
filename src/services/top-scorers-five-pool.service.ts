@@ -12,12 +12,14 @@ import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { TOP_SCORERS_FIVE_LALIGA, type TopScorersFiveSeedClub } from '../data/top-scorers-five-laliga';
 import { TOP_SCORERS_FIVE_SERIEA } from '../data/top-scorers-five-seriea';
+import { TOP_SCORERS_FIVE_BUNDESLIGA } from '../data/top-scorers-five-bundesliga';
 import { scoreTsfNameMatch, tsfPortraitUrl, type TsfLeagueKey } from './top-scorers-five-scoring';
 import type { ThreeSixFiveSquadPlayer } from './threeSixFiveScores.service';
 
 const SEED_LISTS: Partial<Record<TsfLeagueKey, TopScorersFiveSeedClub[]>> = {
   laliga: TOP_SCORERS_FIVE_LALIGA,
   seriea: TOP_SCORERS_FIVE_SERIEA,
+  bundesliga: TOP_SCORERS_FIVE_BUNDESLIGA,
 };
 
 const POSITION_CODES: Array<[RegExp, string]> = [

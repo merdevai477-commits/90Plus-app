@@ -25,6 +25,7 @@ export type TsfLeagueConfig = {
 export const TSF_LEAGUES: Partial<Record<TsfLeagueKey, TsfLeagueConfig>> = {
   laliga: { key: 'laliga', competitionLeagueId: 7000011, scores365CompetitionId: 11 },
   seriea: { key: 'seriea', competitionLeagueId: 7000017, scores365CompetitionId: 17 },
+  bundesliga: { key: 'bundesliga', competitionLeagueId: 7000025, scores365CompetitionId: 25 },
 };
 
 /**
