@@ -44,6 +44,7 @@ import { BG_BASE,
   TEXT_SECONDARY,
 } from '../../constants/tokens';
 import { FootballField } from '../../components/match-details/FootballField';
+import { LineupBench } from '../../components/match-details/LineupBench';
 import { MatchStandingsTable } from '../../components/match-details/MatchStandingsTable';
 import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
@@ -1967,18 +1968,7 @@ const MatchDetailsScreen = () => {
     const visibleLineups = selectedLineup ? [selectedLineup] : [];
 
     return (
-      <ScrollView
-        scrollEnabled={false}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <TeamToggle
-          home={{ name: getTeamDisplayName(homeTeamName, language), logo: homeTeamLogo }}
-          away={{ name: getTeamDisplayName(awayTeamName, language), logo: awayTeamLogo }}
-          value={selectedTeamSide}
-          onChange={setSelectedTeamSide}
-        />
-        <View style={styles.lineupsContainer}>
+      <View style={styles.lineupScreen}>
           {visibleLineups.map((lineup, index) => {
             const startingXI = lineup.startXI || [];
             const substitutes = lineup.substitutes || [];
@@ -2005,49 +1995,21 @@ const MatchDetailsScreen = () => {
             const formation = resolveFormationLabel(lineup.formation, fieldPlayers).label;
 
             return (
-              <View key={index} style={styles.teamLineupContainer}>
-                <View style={styles.teamHeader}>
-                  <TeamBadge name={lineup.team.name} logo={lineup.team.logo} size={60} color="transparent" />
-                  <View style={styles.teamInfo}>
-                    <Text style={styles.teamName} numberOfLines={2}>
-                      {getTeamDisplayName(lineup.team.name, language)}
-                    </Text>
-                    {formation ? (
-                      <Text style={styles.formationText}>
-                        {t.matchDetails.formation}: {formation}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View style={styles.coachBlock}>
-                    {(() => {
-                      const coachUri = resolveCoachPhoto(
-                        lineup.coach?.id,
-                        lineup.coach?.photo,
-                      );
-                      return coachUri ? (
-                        <CachedAthletePhoto
-                          uri={coachUri}
-                          size={48}
-                          recyclingKey={lineup.coach?.id ?? coachUri}
-                        />
-                      ) : (
-                        <View style={styles.coachPhotoPlaceholder}>
-                          <Ionicons name="person" size={22} color="#888" />
-                        </View>
-                      );
-                    })()}
-                    <Text style={styles.coachName} numberOfLines={2}>
-                      {lineup.coach?.name || t.common.unknown}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Football Field Visualization */}
+              <View key={index} style={styles.lineupScreenBody}>
                 <FootballField
                   formation={formation}
                   players={fieldPlayers}
-                  teamName={lineup.team.name}
-                  teamColor={selectedTeamSide === 'home' ? '#A855F7' : '#3b82f6'}
+                  kitToggleLabel={t.matchDetails.lineupKitView}
+                  renderTeamToggle={(scale) => (
+                    <TeamToggle
+                      variant="pill"
+                      scale={scale}
+                      home={{ name: getTeamDisplayName(homeTeamName, language), logo: homeTeamLogo }}
+                      away={{ name: getTeamDisplayName(awayTeamName, language), logo: awayTeamLogo }}
+                      value={selectedTeamSide}
+                      onChange={setSelectedTeamSide}
+                    />
+                  )}
                   onPlayerPress={(player) => {
                     if (player.id) {
                       openPlayerProfile(
@@ -2063,62 +2025,32 @@ const MatchDetailsScreen = () => {
                   }}
                 />
 
-                {/* Substitutes & bench */}
-                {benchPlayers.length > 0 && (
-                  <View style={styles.substitutesSection}>
-                    <Text style={styles.substitutesTitle}>{t.matchDetails.substitutes}</Text>
-                    <View style={styles.substitutesGrid}>
-                      {benchPlayers.map((player) => (
-                        <TouchableOpacity
-                          key={`bench-${player.id}`}
-                          style={[
-                            styles.substituteCard,
-                            player.subbedOff != null && styles.substituteCardOut,
-                          ]}
-                          onPress={() => {
-                            if (!player.id) return;
-                            openPlayerProfile(
-                              {
-                                id: player.id,
-                                athleteId: player.id,
-                                name: player.name,
-                                photo: player.photo,
-                              },
-                              lineup.team,
-                            );
-                          }}
-                        >
-                          <CachedAthletePhoto
-                            uri={resolveLineupPlayerPhoto(player.id, player.photo)}
-                            size={28}
-                            recyclingKey={player.id}
-                          />
-                          <Text style={styles.substituteNumber}>{player.number || '-'}</Text>
-                          <View style={styles.substituteInfo}>
-                            <Text style={styles.substituteName} numberOfLines={1}>{player.name}</Text>
-                            <Text style={styles.substitutePos}>
-                              {player.subbedOff != null
-                                ? `${player.pos} · ${Math.floor(player.subbedOff)}'`
-                                : player.pos}
-                            </Text>
-                          </View>
-                          {player.subbedOff != null ? (
-                            <Ionicons name="arrow-down" size={14} color="#ef4444" />
-                          ) : player.rating != null && player.rating > 0 ? (
-                            <Text style={styles.subRating}>{player.rating.toFixed(1)}</Text>
-                          ) : null}
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                )}
+                <LineupBench
+                  players={benchPlayers}
+                  title={t.matchDetails.substitutes}
+                  expandLabel={t.matchDetails.lineupFullList}
+                  collapseLabel={t.matchDetails.lineupShowLess}
+                  rtl={language === 'ar'}
+                  resolvePhoto={resolveLineupPlayerPhoto}
+                  onPlayerPress={(player) => {
+                    if (!player.id) return;
+                    openPlayerProfile(
+                      {
+                        id: player.id,
+                        athleteId: player.id,
+                        name: player.name,
+                        photo: player.photo,
+                      },
+                      lineup.team,
+                    );
+                  }}
+                />
 
-                {renderMatchInfoCard()}
+                <View style={styles.lineupInfoWrap}>{renderMatchInfoCard()}</View>
               </View>
             );
           })}
-        </View>
-      </ScrollView>
+      </View>
     );
   };
 
@@ -3006,6 +2938,18 @@ const styles = StyleSheet.create({
   },
   lineupsContainer: {
     paddingBottom: 40,
+  },
+  /** Full-bleed under the tabs: cancels `content` padding so the stadium art spans the screen. */
+  lineupScreen: {
+    marginHorizontal: -16,
+    marginTop: -8,
+    backgroundColor: '#030303',
+  },
+  lineupScreenBody: {
+    paddingBottom: 28,
+  },
+  lineupInfoWrap: {
+    paddingHorizontal: 15,
   },
   substitutesSection: {
     paddingHorizontal: 4,

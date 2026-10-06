@@ -470,6 +470,9 @@ export const en = {
     // Tabs
     lineups: 'Lineups',
     lineupsShort: 'Lineup',
+    lineupFullList: 'Full list',
+    lineupShowLess: 'Show less',
+    lineupKitView: 'Show kits',
     statistics: 'Statistics',
     events: 'Events',
     eventsShort: 'Events',

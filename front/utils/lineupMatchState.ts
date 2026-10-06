@@ -102,6 +102,13 @@ export function applySubstitutionsToPitch(
   };
 }
 
+/** Full name when it fits a lineup card, otherwise the surname. */
+export function shortPlayerName(name: string, maxFull = 12): string {
+  const trimmed = name.trim();
+  if (trimmed.length <= maxFull) return trimmed;
+  return trimmed.split(/\s+/).pop() ?? trimmed;
+}
+
 export function ratingBadgeColor(rating: number): string {
   if (rating >= 8) return '#16a34a';
   if (rating >= 7) return '#22c55e';

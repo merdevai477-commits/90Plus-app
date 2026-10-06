@@ -705,6 +705,9 @@ export const ar = {
     // Tabs
     lineups: 'التشكيلات',
     lineupsShort: 'التشكيلة',
+    lineupFullList: 'كامل القائمة',
+    lineupShowLess: 'عرض أقل',
+    lineupKitView: 'عرض القمصان',
     statistics: 'الإحصائيات',
     events: 'أحداث المباراة',
     eventsShort: 'الأحداث',
