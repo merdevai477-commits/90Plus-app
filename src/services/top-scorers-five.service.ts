@@ -602,6 +602,62 @@ const FIXTURE_SELECT = {
   awayTeamId: true, awayTeamName: true, awayTeamLogo: true,
 } as const;
 
+const TEAM_NAMES_UPSTREAM_BUDGET_MS = 2_500;
+
+function resolveAfter<T>(ms: number, value: T): Promise<T> {
+  return new Promise((resolve) => setTimeout(() => resolve(value), ms).unref());
+}
+
+/**
+ * Club names in the reader's language. The fixture cache holds a single
+ * language, so the pool's bilingual club names come first; clubs outside the
+ * pool fall back to the league's fixture list in that language, which sits in
+ * the shared Redis cache — one read per league and language, not per user.
+ */
+async function tsfTeamNames(
+  cfg: TsfLeagueConfig,
+  teamIds: number[],
+  language: TsfLanguage,
+): Promise<Map<number, string>> {
+  const names = new Map<number, string>();
+  const ids = [...new Set(teamIds)];
+  if (ids.length === 0) return names;
+
+  const clubs = await prisma.topScorersFivePlayer.findMany({
+    where: { leagueKey: cfg.key, teamId: { in: ids } },
+    select: { teamId: true, clubNameAr: true, clubNameEn: true },
+  });
+  for (const club of clubs) {
+    if (club.teamId == null || names.has(club.teamId)) continue;
+    const name = language === 'en' ? club.clubNameEn : club.clubNameAr;
+    if (name) names.set(club.teamId, name);
+  }
+  if (ids.every((id) => names.has(id))) return names;
+
+  const upstream = await Promise.race([
+    threeSixFiveScoresService.getFixtures(cfg.scores365CompetitionId, language).catch(() => null),
+    resolveAfter(TEAM_NAMES_UPSTREAM_BUDGET_MS, null),
+  ]);
+  for (const item of upstream?.data ?? []) {
+    for (const side of [item.raw.homeCompetitor, item.raw.awayCompetitor]) {
+      if (side?.id != null && side.name && !names.has(side.id)) names.set(side.id, side.name);
+    }
+  }
+  return names;
+}
+
+function withTeamNames<T extends { home: TsfTeamRef; away: TsfTeamRef }>(row: T, names: Map<number, string>): T {
+  return {
+    ...row,
+    home: { ...row.home, name: names.get(row.home.id) ?? row.home.name },
+    away: { ...row.away, name: names.get(row.away.id) ?? row.away.name },
+  };
+}
+
+function teamIdsIn(rows: Array<{ home: TsfTeamRef; away: TsfTeamRef }>): number[] {
+  return rows.flatMap((row) => [row.home.id, row.away.id]);
+}
+
 /**
  * The gameweek's fixtures for these clubs: the shared fixture cache (kept fresh
  * by the live pipeline) merged with the fixtures the scoring job has stored for
@@ -661,6 +717,7 @@ export type TsfLeagueFixtureDto = TsfUpcomingFixtureDto & {
  */
 export async function listTsfUpcomingFixtures(
   leagueKey: string,
+  language: TsfLanguage = 'ar',
   now: Date = new Date(),
 ): Promise<{ leagueKey: string; from: string; to: string; fixtures: TsfLeagueFixtureDto[] }> {
   const cfg = requireLeague(leagueKey);
@@ -674,19 +731,21 @@ export async function listTsfUpcomingFixtures(
     orderBy: { matchDate: 'asc' },
     select: { ...FIXTURE_SELECT, leagueName: true },
   });
+  const fixtures = rows.map((row) => ({
+    fixtureId: row.fixtureId,
+    kickoff: row.matchDate.toISOString(),
+    status: row.status,
+    home: { id: row.homeTeamId, name: row.homeTeamName, logo: row.homeTeamLogo ?? COMPETITOR_LOGO(row.homeTeamId) },
+    away: { id: row.awayTeamId, name: row.awayTeamName, logo: row.awayTeamLogo ?? COMPETITOR_LOGO(row.awayTeamId) },
+    league: { key: cfg.key, id: cfg.scores365CompetitionId, name: row.leagueName },
+    season: row.leagueSeason ?? null,
+  }));
+  const names = await tsfTeamNames(cfg, teamIdsIn(fixtures), language);
   return {
     leagueKey: cfg.key,
     from: from.toISOString(),
     to: to.toISOString(),
-    fixtures: rows.map((row) => ({
-      fixtureId: row.fixtureId,
-      kickoff: row.matchDate.toISOString(),
-      status: row.status,
-      home: { id: row.homeTeamId, name: row.homeTeamName, logo: row.homeTeamLogo ?? COMPETITOR_LOGO(row.homeTeamId) },
-      away: { id: row.awayTeamId, name: row.awayTeamName, logo: row.awayTeamLogo ?? COMPETITOR_LOGO(row.awayTeamId) },
-      league: { key: cfg.key, id: cfg.scores365CompetitionId, name: row.leagueName },
-      season: row.leagueSeason ?? null,
-    })),
+    fixtures: fixtures.map((row) => withTeamNames(row, names)),
   };
 }
 
@@ -767,10 +826,18 @@ export async function getTsfMyFixtures(clerkUserId: string, language: TsfLanguag
   const perfKey = (gameweekId: string, playerId: string, fixtureId: number) => `${gameweekId}:${playerId}:${fixtureId}`;
   const perfByKey = new Map(performances.map((row) => [perfKey(row.gameweekId, row.playerId, row.fixtureId), row]));
 
+  const namesByLeague = new Map(
+    await Promise.all(
+      withPick.map(async (pick) => [pick.cfg.key, await tsfTeamNames(pick.cfg, teamIdsIn(pick.fixtures), language)] as const),
+    ),
+  );
+
   const fixtures: TsfMyFixtureDto[] = [];
   for (const pick of withPick) {
     const player = pick.selection.player;
-    for (const fixture of pick.fixtures) {
+    const names = namesByLeague.get(pick.cfg.key) ?? new Map<number, string>();
+    for (const rawFixture of pick.fixtures) {
+      const fixture = withTeamNames(rawFixture, names);
       if (player.teamId !== fixture.home.id && player.teamId !== fixture.away.id) continue;
       const perf = perfByKey.get(perfKey(pick.gameweek.id, player.id, fixture.fixtureId));
       const final = fixture.processed;
@@ -821,7 +888,11 @@ export async function getTsfMyFixtures(clerkUserId: string, language: TsfLanguag
 }
 
 /** The player's club's next league fixtures, straight from the fixture cache. */
-export async function listTsfPlayerFixtures(playerId: string, limit = 6): Promise<TsfUpcomingFixtureDto[]> {
+export async function listTsfPlayerFixtures(
+  playerId: string,
+  language: TsfLanguage = 'ar',
+  limit = 6,
+): Promise<TsfUpcomingFixtureDto[]> {
   const player = await prisma.topScorersFivePlayer.findUnique({ where: { id: playerId } });
   if (!player) throw new TopScorersFiveError('PLAYER_NOT_FOUND', 'Player not found');
   const cfg = requireLeague(player.leagueKey);
@@ -842,11 +913,13 @@ export async function listTsfPlayerFixtures(playerId: string, limit = 6): Promis
       awayTeamId: true, awayTeamName: true, awayTeamLogo: true,
     },
   });
-  return rows.map((row) => ({
+  const fixtures = rows.map((row) => ({
     fixtureId: row.fixtureId,
     kickoff: row.matchDate.toISOString(),
     status: row.status,
     home: { id: row.homeTeamId, name: row.homeTeamName, logo: row.homeTeamLogo ?? null },
     away: { id: row.awayTeamId, name: row.awayTeamName, logo: row.awayTeamLogo ?? null },
   }));
+  const names = await tsfTeamNames(cfg, teamIdsIn(fixtures), language);
+  return fixtures.map((row) => withTeamNames(row, names));
 }

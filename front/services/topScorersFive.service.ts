@@ -161,8 +161,8 @@ export const topScorersFiveService = {
   clearSelection: (token: string, league: TsfApiLeague) =>
     request<null>(`/leagues/${league}/selection`, { token, method: 'DELETE' }),
 
-  getPlayerFixtures: (playerId: string) =>
-    request<TsfApiFixture[]>(`/players/${encodeURIComponent(playerId)}/fixtures`),
+  getPlayerFixtures: (playerId: string, lang: string) =>
+    request<TsfApiFixture[]>(`/players/${encodeURIComponent(playerId)}/fixtures?lang=${lang}`),
 
   /** Only the fixtures of my picked players this gameweek, with results once stored. */
   getMyFixtures: (token: string, lang: string) =>

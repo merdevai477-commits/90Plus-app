@@ -104,7 +104,7 @@ router.put('/leagues/:leagueKey/selection', requireAuth, handle('save selection'
 
 /** GET /leagues/:leagueKey/fixtures/upcoming — the league's fixtures in the next 7 days. */
 router.get('/leagues/:leagueKey/fixtures/upcoming', handle('upcoming fixtures', async (req, res) => {
-  res.json({ success: true, data: await listTsfUpcomingFixtures(String(req.params.leagueKey)) });
+  res.json({ success: true, data: await listTsfUpcomingFixtures(String(req.params.leagueKey), language(req)) });
 }));
 
 /** GET /me/fixtures — only the fixtures of my picked players, with their results once stored. */
@@ -140,7 +140,7 @@ router.get('/leaderboard', requireAuth, handle('leaderboard', async (req, res) =
 
 /** GET /players/:playerId/fixtures — the player's club's next league fixtures. */
 router.get('/players/:playerId/fixtures', handle('fixtures', async (req, res) => {
-  res.json({ success: true, data: await listTsfPlayerFixtures(String(req.params.playerId)) });
+  res.json({ success: true, data: await listTsfPlayerFixtures(String(req.params.playerId), language(req)) });
 }));
 
 // ─── Admin ──────────────────────────────────────────────────────────────────
