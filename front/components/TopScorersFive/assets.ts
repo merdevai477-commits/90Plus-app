@@ -24,19 +24,16 @@ export const TSF_ART: { hero: number | null; pitch: number | null } = {
 export const TSF_PRIZE_SHIRT: number = require('../../assets/images/top-scorers-five/shirt.png');
 
 /**
- * Picker card frame, Figma 1302:15248. The body's light-streak fill is
- * `background`; the player's photo and the fade over it are drawn in code.
+ * Picker card frame, Figma 1302:15248, flattened into the two layers that sit
+ * under and over the player's photo: rails, crown, sparkle and the body's
+ * light streaks below; the body's black fade, gradient stroke and bars above.
+ * Both cover the design box (-1, -7) 114.48×185 so the sparkle can overhang.
  */
 export const TSF_CARD_ART = {
-  background: require('../../assets/images/top-scorers-five/card-bg.jpg') as number,
-  railLeft: require('../../assets/images/top-scorers-five/card-rail-left.svg') as number,
-  railRight: require('../../assets/images/top-scorers-five/card-rail-right.svg') as number,
-  crown: require('../../assets/images/top-scorers-five/card-crown.svg') as number,
-  sparkle: require('../../assets/images/top-scorers-five/card-sparkle.png') as number,
-  topBar: require('../../assets/images/top-scorers-five/card-top-bar.svg') as number,
-  bottomBar: require('../../assets/images/top-scorers-five/card-bottom-bar.svg') as number,
-  divider: require('../../assets/images/top-scorers-five/card-divider.svg') as number,
+  under: require('../../assets/images/top-scorers-five/card-under.png') as number,
+  over: require('../../assets/images/top-scorers-five/card-over.png') as number,
 };
+export const TSF_CARD_ART_BOX = { left: -1, top: -7, width: 114.48, height: 185 };
 
 export type TsfLeagueKey = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
 
