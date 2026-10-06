@@ -26,7 +26,6 @@ export const LINEUP_ART = {
 } as const;
 
 export const LINEUP_ICON = {
-  chevronDown: require('../../assets/images/match-lineup/chevron-down.svg'),
   tShirt: require('../../assets/images/match-lineup/t-shirt.svg'),
   users: require('../../assets/images/match-lineup/users.svg'),
   ratingStarSm: require('../../assets/images/match-lineup/rating-star-sm.svg'),

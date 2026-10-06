@@ -409,18 +409,12 @@ export const FootballField: React.FC<FootballFieldProps> = ({
                 minWidth: 122 * s,
                 height: 36 * s,
                 paddingHorizontal: 14 * s,
-                gap: 10 * s,
               },
             ]}
           >
             <Text style={[styles.pillText, { fontSize: 16 * s }]} maxFontSizeMultiplier={1.1}>
               {formationLabel.split('-').join(' - ')}
             </Text>
-            <Image
-              source={LINEUP_ICON.chevronDown}
-              style={{ width: 24 * s, height: 24 * s }}
-              contentFit="contain"
-            />
           </View>
         ) : null}
 
