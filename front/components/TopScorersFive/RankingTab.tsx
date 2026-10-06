@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { KingPeriod } from '../../services/predictions.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { KING_ICON } from '../KingOfPredictions/assets';
 import { KingEmptyState, KingPeriodTabs } from '../KingOfPredictions/KingBoardList';
 
 import { TSF_DESIGN_WIDTH, TSF_PRIZE_SHIRT } from './assets';
@@ -24,20 +25,32 @@ import { TSF_MOCK_LEADERBOARD, type TsfLeaderboardRow } from './mockData';
 import { TsfHeader } from './TsfHeader';
 import { tsfNavBottom } from './TsfNav';
 
+const AVATAR_PLACEHOLDER = require('../../assets/images/plear 90Plus.jpg');
+
 /** Each rule fades out away from the ball, so the outer ends dissolve into the page. */
 const RULE_FADE = ['rgba(219,219,219,0)', '#DBDBDB'] as const;
 const PRIZE_BG = '#150336';
 const PRIZE_STROKE = '#1C0F38';
 const PRIZE_LABEL = '#E0D4FF';
 const PRIZE_SUB = '#ADADAD';
-const PLACEHOLDER = '#2A1361';
+const AVATAR_STROKE = 'rgba(194,194,194,0.92)';
+const YOU_RIM = 'rgba(140,92,245,0.69)';
 
 /** The 87×2 rules either side of the 24 icon, 209 across. */
 const RULE_ROW = { lineWidth: 87, lineHeight: 2, icon: 24, gap: 8, width: 209 };
 /** Rule row sits 27 under the header in both states; the body 42 under the title. */
 const GAP = { rule: 27, title: 8, body: 42 };
-const PRIZE = { height: 143, radius: 20 };
+/** The text block sits 29 in from the card's trailing edge, over the art. */
+const PRIZE = { height: 143, radius: 20, textInset: 29 };
 const ROW = { height: 58, radius: 16, gap: 8 };
+/**
+ * Plain rows sit their rank 30 from the avatar, and the design narrows that to
+ * 22 for "10" so the avatars stay in one column. A fixed slot does the same for
+ * any number of digits.
+ */
+const RANK_SLOT = { width: 18, gap: 26 };
+
+type Weight = 'bold' | 'semi' | 'medium' | 'regular';
 
 /**
  * Podium dressing by position. The design's third row is also the signed-in
@@ -49,10 +62,12 @@ const PODIUM: readonly {
   stroke: string;
   xp: string;
   xpSize: number;
+  xpWeight: Weight;
   nameSize: number;
+  nameWeight: Weight;
   avatar: number;
   medal: number;
-  medalColor: string;
+  medalSize: number;
   opacity?: number;
 }[] = [
   {
@@ -60,20 +75,24 @@ const PODIUM: readonly {
     stroke: 'rgba(255,255,255,0.10)',
     xp: '#FCF5DB',
     xpSize: 22,
+    xpWeight: 'semi',
     nameSize: 20,
+    nameWeight: 'bold',
     avatar: 38,
-    medal: 32,
-    medalColor: '#FFD75E',
+    medal: KING_ICON.medal1,
+    medalSize: 32,
   },
   {
     bg: 'rgba(122,122,122,0.31)',
     stroke: 'rgba(255,255,255,0.15)',
     xp: '#CFCFCF',
     xpSize: 20,
+    xpWeight: 'medium',
     nameSize: 18,
+    nameWeight: 'semi',
     avatar: 36,
-    medal: 30,
-    medalColor: '#D9D9D9',
+    medal: KING_ICON.medal2,
+    medalSize: 30,
     opacity: 0.8,
   },
   {
@@ -81,10 +100,12 @@ const PODIUM: readonly {
     stroke: 'rgba(255,255,255,0.10)',
     xp: '#D4976E',
     xpSize: 18,
+    xpWeight: 'medium',
     nameSize: 16,
+    nameWeight: 'semi',
     avatar: 34,
-    medal: 28,
-    medalColor: '#D4976E',
+    medal: KING_ICON.medal3,
+    medalSize: 28,
   },
 ];
 
@@ -93,9 +114,11 @@ const PLAIN = {
   xp: '#EBDBFA',
   xpUnit: '#851CE6',
   xpSize: 18,
+  xpWeight: 'medium',
   nameSize: 16,
+  nameWeight: 'regular',
   avatar: 34,
-};
+} as const;
 
 type RankingTabProps = {
   complete: boolean;
@@ -214,20 +237,20 @@ export function RankingTab({ complete, onBack, onPickNow }: RankingTabProps) {
               height: s(PRIZE.height),
               borderRadius: s(PRIZE.radius),
               marginTop: s(GAP.body),
-              paddingVertical: s(20),
-              paddingHorizontal: s(16),
-              columnGap: s(13),
-              flexDirection: isAr ? 'row' : 'row-reverse',
+              alignItems: isAr ? 'flex-end' : 'flex-start',
+              [isAr ? 'paddingRight' : 'paddingLeft']: s(PRIZE.textInset),
             },
           ]}
         >
+          {/* Rounded on the image rather than clipped on the card, so the
+              card's glow is not cut off with it. */}
           <Image
             source={TSF_PRIZE_SHIRT}
-            style={styles.prizeArt}
-            contentFit="contain"
+            style={[StyleSheet.absoluteFill, { borderRadius: s(PRIZE.radius) }]}
+            contentFit="cover"
             transition={0}
           />
-          <View style={styles.prizeText}>
+          <View>
             <Text
               style={[
                 styles.prizeLabel,
@@ -324,10 +347,18 @@ function BoardRow({
   rankLabel,
 }: BoardRowProps) {
   const podium = PODIUM[rank - 1];
-  const xpColor = podium ? podium.xp : PLAIN.xp;
-  const xpSize = podium ? podium.xpSize : PLAIN.xpSize;
-  const nameSize = podium ? podium.nameSize : PLAIN.nameSize;
-  const avatar = podium ? podium.avatar : PLAIN.avatar;
+  const look = podium ?? PLAIN;
+  const font: Record<Weight, string> = {
+    bold: fontBold,
+    semi: fontSemi,
+    medium: fontMedium,
+    regular: fontRegular,
+  };
+  /*
+   * Layout is LTR in every language, so Arabic reverses the identity group to
+   * read name · avatar · medal towards the right edge, as the design does.
+   */
+  const identityDirection = isAr ? 'row-reverse' : 'row';
 
   return (
     <View
@@ -338,17 +369,14 @@ function BoardRow({
           height: s(ROW.height),
           borderRadius: s(ROW.radius),
           paddingHorizontal: s(20),
+          columnGap: s(12),
           flexDirection: isAr ? 'row' : 'row-reverse',
+          backgroundColor: look.bg,
         },
         podium
-          ? {
-              backgroundColor: podium.bg,
-              borderWidth: 0.5,
-              borderColor: podium.stroke,
-              opacity: podium.opacity,
-            }
-          : { backgroundColor: PLAIN.bg },
-        row.isYou ? { borderWidth: 0.5, borderColor: 'rgba(140,92,245,0.69)' } : null,
+          ? { borderWidth: 0.5, borderColor: podium.stroke, opacity: podium.opacity }
+          : null,
+        row.isYou ? { borderWidth: 0.5, borderColor: YOU_RIM } : null,
         rank === 1 ? styles.rowLift : null,
       ]}
     >
@@ -356,19 +384,17 @@ function BoardRow({
           the row they sit on mirrors, which the row itself handles. */}
       <View style={[styles.xp, { columnGap: s(2) }]}>
         <Text
-          style={[{ color: xpColor, fontFamily: podium ? fontSemi : fontMedium, fontSize: s(xpSize) }]}
+          style={{ color: look.xp, fontFamily: font[look.xpWeight], fontSize: s(look.xpSize) }}
           allowFontScaling={false}
         >
           {row.xp}
         </Text>
         <Text
-          style={[
-            {
-              color: podium ? xpColor : PLAIN.xpUnit,
-              fontFamily: fontSemi,
-              fontSize: s(16),
-            },
-          ]}
+          style={{
+            color: podium ? podium.xp : PLAIN.xpUnit,
+            fontFamily: fontSemi,
+            fontSize: s(16),
+          }}
           allowFontScaling={false}
         >
           {xpUnit}
@@ -376,37 +402,71 @@ function BoardRow({
       </View>
 
       <View
-        style={[styles.who, { columnGap: s(16), flexDirection: isAr ? 'row' : 'row-reverse' }]}
+        style={[
+          styles.who,
+          {
+            columnGap: s(podium ? 16 : RANK_SLOT.gap),
+            flexDirection: identityDirection,
+          },
+        ]}
       >
         {podium ? (
-          <Ionicons name="medal" size={s(podium.medal)} color={podium.medalColor} />
+          <Image
+            source={podium.medal}
+            style={{ width: s(podium.medalSize), height: s(podium.medalSize) }}
+            contentFit="contain"
+          />
         ) : (
           <Text
-            style={[styles.rankNumber, { fontFamily: fontRegular, fontSize: s(16) }]}
+            style={[
+              styles.rankNumber,
+              { fontFamily: fontRegular, fontSize: s(16), width: s(RANK_SLOT.width) },
+            ]}
             allowFontScaling={false}
           >
             {rank}
           </Text>
         )}
-        <View
-          style={[styles.whoName, { columnGap: s(8), flexDirection: isAr ? 'row' : 'row-reverse' }]}
-        >
-          <View
+        <View style={[styles.whoName, { columnGap: s(8), flexDirection: identityDirection }]}>
+          <Image
+            source={AVATAR_PLACEHOLDER}
             style={[
               styles.avatar,
-              { width: s(avatar), height: s(avatar), borderRadius: s(avatar / 2) },
+              {
+                width: s(look.avatar),
+                height: s(look.avatar),
+                borderRadius: s(look.avatar / 2),
+              },
+              row.isYou ? null : { borderWidth: 0.5, borderColor: AVATAR_STROKE },
             ]}
+            contentFit="cover"
+            transition={0}
           />
-          <Text
-            numberOfLines={1}
+          {/* The "you" mark sits between the name and the avatar. */}
+          <View
             style={[
-              styles.name,
-              { fontFamily: podium ? fontBold : fontRegular, fontSize: s(nameSize) },
+              styles.nameWrap,
+              { columnGap: s(4), flexDirection: isAr ? 'row' : 'row-reverse' },
             ]}
-            maxFontSizeMultiplier={1.1}
           >
-            {name}
-          </Text>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.name,
+                { fontFamily: font[look.nameWeight], fontSize: s(look.nameSize) },
+              ]}
+              maxFontSizeMultiplier={1.1}
+            >
+              {name}
+            </Text>
+            {row.isYou ? (
+              <Image
+                source={KING_ICON.user}
+                style={{ width: s(16), height: s(16) }}
+                contentFit="contain"
+              />
+            ) : null}
+          </View>
         </View>
       </View>
     </View>
@@ -424,14 +484,12 @@ const styles = StyleSheet.create({
   emptyBody: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   prize: {
-    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: PRIZE_BG,
     borderWidth: 0.5,
     borderColor: PRIZE_STROKE,
     boxShadow: '0px 0px 33.4px rgba(168,84,247,0.16)',
   },
-  prizeArt: { flex: 1, height: '100%' },
-  prizeText: { flexShrink: 0 },
   prizeLabel: { color: PRIZE_LABEL },
   prizeName: { color: '#FFFFFF' },
   prizeSub: { color: PRIZE_SUB },
@@ -439,9 +497,10 @@ const styles = StyleSheet.create({
   row: { alignItems: 'center', justifyContent: 'space-between' },
   rowLift: { boxShadow: '0px 1px 11.2px rgba(69,5,133,0.25)' },
   xp: { flexDirection: 'row', alignItems: 'baseline' },
-  who: { alignItems: 'center' },
-  whoName: { alignItems: 'center' },
-  avatar: { backgroundColor: PLACEHOLDER, borderWidth: 0.5, borderColor: 'rgba(194,194,194,0.92)' },
-  name: { color: '#FFFFFF' },
-  rankNumber: { color: '#FFFFFF' },
+  who: { alignItems: 'center', flexShrink: 1 },
+  whoName: { alignItems: 'center', flexShrink: 1 },
+  nameWrap: { alignItems: 'center', flexShrink: 1 },
+  avatar: { backgroundColor: '#2A2A2A' },
+  name: { color: '#FFFFFF', flexShrink: 1 },
+  rankNumber: { color: '#FFFFFF', textAlign: 'center' },
 });
