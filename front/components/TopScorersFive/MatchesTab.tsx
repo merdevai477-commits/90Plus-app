@@ -160,37 +160,17 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
             >
               {picked.map(({ player }) => {
                 const selected = player.id === active.player.id;
-                return (
-                  <TouchableOpacity
-                    key={player.id}
-                    onPress={() => setSelectedId(player.id)}
-                    activeOpacity={0.85}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={copy.selectPlayerA11y.replace('{name}', player.name)}
-                    style={[
-                      styles.chip,
-                      {
-                        width: s(CHIP.width),
-                        height: s(CHIP.height),
-                        borderRadius: s(CHIP.radius),
-                        // The export's 10pt inset cannot hold a 57pt photo plus
-                        // two lines inside 93, so only the sides keep their gap.
-                        paddingHorizontal: s((CHIP.width - CHIP.photo.width) / 2),
-                      },
-                      selected
-                        ? null
-                        : {
-                            backgroundColor: CHIP_IDLE,
-                            borderWidth: 1,
-                            borderColor: CHIP_IDLE_STROKE,
-                            opacity: 0.5,
-                          },
-                    ]}
-                  >
-                    {selected ? (
-                      <LinearGradient colors={ACTIVE_GRADIENT} style={StyleSheet.absoluteFill} />
-                    ) : null}
+                const body = [
+                  styles.chip,
+                  {
+                    borderRadius: s(CHIP.radius),
+                    // The export's 10pt inset cannot hold a 57pt photo plus
+                    // two lines inside 93, so only the sides keep their gap.
+                    paddingHorizontal: s((CHIP.width - CHIP.photo.width) / 2),
+                  },
+                ];
+                const content = (
+                  <>
                     <View
                       style={[
                         styles.chipPhoto,
@@ -233,6 +213,27 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
                     >
                       {player.position}
                     </Text>
+                  </>
+                );
+                // Fading or painting the touchable itself drops the chip that
+                // turns selected on Android, so the body below carries both.
+                return (
+                  <TouchableOpacity
+                    key={player.id}
+                    onPress={() => setSelectedId(player.id)}
+                    activeOpacity={0.85}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={copy.selectPlayerA11y.replace('{name}', player.name)}
+                    style={{ width: s(CHIP.width), height: s(CHIP.height) }}
+                  >
+                    {selected ? (
+                      <LinearGradient colors={ACTIVE_GRADIENT} style={body}>
+                        {content}
+                      </LinearGradient>
+                    ) : (
+                      <View style={[body, styles.chipIdle]}>{content}</View>
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -435,7 +436,13 @@ const styles = StyleSheet.create({
   stateLine: { color: DATE },
 
   chips: { flexDirection: 'row', justifyContent: 'center' },
-  chip: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  chip: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  chipIdle: {
+    backgroundColor: CHIP_IDLE,
+    borderWidth: 1,
+    borderColor: CHIP_IDLE_STROKE,
+    opacity: 0.5,
+  },
   chipPhoto: {
     alignItems: 'center',
     justifyContent: 'center',
