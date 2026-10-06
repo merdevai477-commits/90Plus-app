@@ -16,8 +16,10 @@ import {
   isTsfGameweekOpen,
   sumTsfPerformances,
   tsfGameweekWindow,
+  tsfPortraitUrl,
   type TsfLeagueConfig,
 } from './top-scorers-five-scoring';
+import { threeSixFiveScoresService } from './threeSixFiveScores.service';
 
 export type TsfErrorCode =
   | 'USER_NOT_FOUND'
@@ -162,13 +164,20 @@ export type TsfPlayerDto = {
   goals: number;
   assists: number;
   points: number;
+  /** The player's league season so far, from 365Scores' leaderboards. */
+  seasonGoals: number;
+  seasonAssists: number;
 };
+
+type TsfSeasonLine = { goals: number; assists: number };
 
 function playerDto(
   player: TopScorersFivePlayer,
   language: TsfLanguage,
   totals: { goals: number; assists: number; points: number } = { goals: 0, assists: 0, points: 0 },
+  season: Map<number, TsfSeasonLine> = new Map(),
 ): TsfPlayerDto {
+  const seasonLine = player.externalPlayerId != null ? season.get(player.externalPlayerId) : undefined;
   return {
     id: player.id,
     name: language === 'en' ? (player.nameEn ?? player.nameAr) : player.nameAr,
@@ -177,11 +186,57 @@ function playerDto(
     club: language === 'en' ? (player.clubNameEn ?? player.clubNameAr) : player.clubNameAr,
     teamId: player.teamId,
     teamLogo: player.teamId ? COMPETITOR_LOGO(player.teamId) : null,
-    photo: player.photoUrl,
+    photo: player.externalPlayerId != null ? tsfPortraitUrl(player.externalPlayerId) : player.photoUrl,
     position: player.position,
     externalPlayerId: player.externalPlayerId,
     ...totals,
+    seasonGoals: seasonLine?.goals ?? 0,
+    seasonAssists: seasonLine?.assists ?? 0,
   };
+}
+
+/** 365Scores leaderboard ids on `/web/stats/`. */
+const SEASON_BOARD = { goals: 1, assists: 3 } as const;
+const SEASON_STATS_TTL_MS = 10 * 60 * 1000;
+const seasonStatsMemo = new Map<string, { at: number; stats: Map<number, TsfSeasonLine> }>();
+
+/**
+ * League-season goals and assists per athlete, one cached 365Scores call per
+ * club rather than per player. Failures leave that club's players at zero.
+ */
+async function tsfSeasonStats(cfg: TsfLeagueConfig, teamIds: number[]): Promise<Map<number, TsfSeasonLine>> {
+  const clubs = [...new Set(teamIds)].sort((a, b) => a - b);
+  const memoKey = `${cfg.key}:${clubs.join(',')}`;
+  const memo = seasonStatsMemo.get(memoKey);
+  if (memo && Date.now() - memo.at < SEASON_STATS_TTL_MS) return memo.stats;
+
+  const stats = new Map<number, TsfSeasonLine>();
+  const results = await Promise.all(
+    clubs.map((teamId) =>
+      threeSixFiveScoresService
+        .getCompetitorStats(teamId, cfg.scores365CompetitionId, 'en', { roster: true })
+        .catch(() => ({ data: null })),
+    ),
+  );
+  for (const result of results) {
+    for (const board of result.data?.leaderboards ?? []) {
+      const field = board.key === SEASON_BOARD.goals ? 'goals' : board.key === SEASON_BOARD.assists ? 'assists' : null;
+      if (!field) continue;
+      for (const row of board.rows) {
+        const value = Number.parseInt(String(row.value), 10);
+        if (!Number.isFinite(value)) continue;
+        const line = stats.get(row.athleteId) ?? { goals: 0, assists: 0 };
+        line[field] = value;
+        stats.set(row.athleteId, line);
+      }
+    }
+  }
+  seasonStatsMemo.set(memoKey, { at: Date.now(), stats });
+  return stats;
+}
+
+function teamIdsOf(players: TopScorersFivePlayer[]): number[] {
+  return players.map((p) => p.teamId).filter((id): id is number => id != null);
 }
 
 async function playerTotals(playerIds: string[]): Promise<Map<string, { goals: number; assists: number; points: number }>> {
@@ -206,8 +261,11 @@ export async function listTsfEligiblePlayers(leagueKey: string, language: TsfLan
     where: { leagueKey: cfg.key, active: true, externalPlayerId: { not: null } },
     orderBy: { sortOrder: 'asc' },
   });
-  const totals = await playerTotals(players.map((p) => p.id));
-  return players.map((player) => playerDto(player, language, totals.get(player.id)));
+  const [totals, season] = await Promise.all([
+    playerTotals(players.map((p) => p.id)),
+    tsfSeasonStats(cfg, teamIdsOf(players)),
+  ]);
+  return players.map((player) => playerDto(player, language, totals.get(player.id), season));
 }
 
 // ─── Selection ──────────────────────────────────────────────────────────────
@@ -244,11 +302,13 @@ async function selectionDto(
     select: { fixtureId: true, fixtureDate: true, goals: true, assists: true, points: true },
   });
   const totals = await playerTotals([selection.playerId]);
+  const cfg = getTsfLeagueConfig(gameweek.leagueKey);
+  const season = cfg ? await tsfSeasonStats(cfg, teamIdsOf([selection.player])) : new Map<number, TsfSeasonLine>();
   return {
     leagueKey: gameweek.leagueKey,
     gameweek: gameweekDto(gameweek),
     selection: {
-      player: playerDto(selection.player, language, totals.get(selection.playerId)),
+      player: playerDto(selection.player, language, totals.get(selection.playerId), season),
       score: {
         ...sumTsfPerformances(performances),
         fixtures: performances.map((row) => ({ ...row, fixtureDate: row.fixtureDate.toISOString() })),

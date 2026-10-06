@@ -13,14 +13,19 @@ export type TsfPlayer = {
   /** Broadcast-short, the length the design's fixture rows are drawn for. */
   readonly club: string;
   /**
-   * Tallies shown on the picker tile. For a live league's pick they are the
-   * current gameweek's, the ones its pitch card shows with `points`.
+   * Tallies shown on the picker card: the league season so far. For a live
+   * league's pick they are the current gameweek's, the ones its pitch card
+   * shows with `points`.
    */
   readonly goals: number;
   readonly assists: number;
   /** Live leagues only. */
   readonly points?: number;
   readonly photo?: string | null;
+  readonly clubLogo?: string | null;
+  /** Both spellings, so the picker's search finds a player in either language. */
+  readonly nameAr?: string;
+  readonly nameEn?: string | null;
   readonly live?: boolean;
 };
 

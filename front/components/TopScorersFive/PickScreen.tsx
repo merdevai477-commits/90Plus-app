@@ -218,7 +218,6 @@ export default function TopScorersFivePickScreen() {
         players={livePlayers}
         selectedId={openLeague ? picks[openLeague]?.id : undefined}
         onClose={() => setOpenLeague(null)}
-        onChangeLeague={setOpenLeague}
         onPick={handlePick}
       />
     </View>

@@ -14,6 +14,8 @@ export type TsfLeagueConfig = {
   key: TsfLeagueKey;
   /** `CachedFixture.leagueId` of the competition (365Scores competition id + 7,000,000). */
   competitionLeagueId: number;
+  /** 365Scores competition id, for its season leaderboards. */
+  scores365CompetitionId: number;
 };
 
 /**
@@ -21,8 +23,16 @@ export type TsfLeagueConfig = {
  * placeholder data until their player lists are supplied.
  */
 export const TSF_LEAGUES: Partial<Record<TsfLeagueKey, TsfLeagueConfig>> = {
-  laliga: { key: 'laliga', competitionLeagueId: 7000011 },
+  laliga: { key: 'laliga', competitionLeagueId: 7000011, scores365CompetitionId: 11 },
 };
+
+/**
+ * The picker card draws the player over its own artwork, so the portrait has
+ * its studio backdrop removed (365's image CDN does the cut-out and caches it).
+ */
+export function tsfPortraitUrl(athleteId: number): string {
+  return `https://imagecache.365scores.com/image/upload/e_background_removal,f_png,w_256,h_256,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png/Athletes/${athleteId}`;
+}
 
 export function getTsfLeagueConfig(leagueKey: string): TsfLeagueConfig | null {
   return (TSF_LEAGUES as Record<string, TsfLeagueConfig | undefined>)[leagueKey] ?? null;

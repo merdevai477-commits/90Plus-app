@@ -23,6 +23,21 @@ export const TSF_ART: { hero: number | null; pitch: number | null } = {
 /** Prize art on the ranking tab — the shirt the week's top score wins. */
 export const TSF_PRIZE_SHIRT: number = require('../../assets/images/top-scorers-five/shirt.png');
 
+/**
+ * Picker card frame, Figma 1302:15248. The body's light-streak fill is
+ * `background`; the player's photo and the fade over it are drawn in code.
+ */
+export const TSF_CARD_ART = {
+  background: require('../../assets/images/top-scorers-five/card-bg.jpg') as number,
+  railLeft: require('../../assets/images/top-scorers-five/card-rail-left.svg') as number,
+  railRight: require('../../assets/images/top-scorers-five/card-rail-right.svg') as number,
+  crown: require('../../assets/images/top-scorers-five/card-crown.svg') as number,
+  sparkle: require('../../assets/images/top-scorers-five/card-sparkle.png') as number,
+  topBar: require('../../assets/images/top-scorers-five/card-top-bar.svg') as number,
+  bottomBar: require('../../assets/images/top-scorers-five/card-bottom-bar.svg') as number,
+  divider: require('../../assets/images/top-scorers-five/card-divider.svg') as number,
+};
+
 export type TsfLeagueKey = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
 
 export const TSF_LEAGUE_LOGO: Record<TsfLeagueKey, number> = {

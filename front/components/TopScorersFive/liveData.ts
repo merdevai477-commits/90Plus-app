@@ -18,10 +18,13 @@ export function tsfPlayerFromApi(player: TsfApiPlayer): TsfPlayer {
     name: player.name,
     position: player.position ?? '',
     club: player.club,
-    goals: player.goals,
-    assists: player.assists,
+    goals: player.seasonGoals,
+    assists: player.seasonAssists,
     points: player.points,
     photo: player.photo,
+    clubLogo: player.teamLogo,
+    nameAr: player.nameAr,
+    nameEn: player.nameEn,
     live: true,
   };
 }

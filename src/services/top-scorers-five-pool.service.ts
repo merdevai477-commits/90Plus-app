@@ -11,7 +11,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { TOP_SCORERS_FIVE_LALIGA, type TopScorersFiveSeedClub } from '../data/top-scorers-five-laliga';
-import { scoreTsfNameMatch, type TsfLeagueKey } from './top-scorers-five-scoring';
+import { scoreTsfNameMatch, tsfPortraitUrl, type TsfLeagueKey } from './top-scorers-five-scoring';
 import type { ThreeSixFiveSquadPlayer } from './threeSixFiveScores.service';
 
 const SEED_LISTS: Partial<Record<TsfLeagueKey, TopScorersFiveSeedClub[]>> = {
@@ -31,14 +31,6 @@ const POSITION_CODES: Array<[RegExp, string]> = [
   [/secondary striker/i, 'SS'],
   [/centre forward|center forward|striker|forward/i, 'CF'],
 ];
-
-/**
- * Uncropped portrait: the picker tile is a tall rectangle, so the app's usual
- * round face-crop (`buildScores365AthletePhotoUrl`) would show its circle edge.
- */
-export function tsfPortraitUrl(athleteId: number): string {
-  return `https://imagecache.365scores.com/image/upload/f_png,w_256,h_256,c_limit,q_auto:eco,dpr_2,d_Athletes:default.png/Athletes/${athleteId}`;
-}
 
 /** The pick screens show broadcast codes ("CF"), not 365's role names. */
 export function tsfPositionCode(position: string | null | undefined): string | null {

@@ -88,6 +88,9 @@ jest.mock('../../lib/prisma', () => ({ __esModule: true, default: prismaMock }))
 jest.mock('../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
+jest.mock('../threeSixFiveScores.service', () => ({
+  threeSixFiveScoresService: { getCompetitorStats: jest.fn(async () => ({ data: null })) },
+}));
 jest.mock('../scores365-experiment.service', () => ({
   classifyScores365MatchStatus: jest.fn(),
   fetchScores365GameById: jest.fn(),

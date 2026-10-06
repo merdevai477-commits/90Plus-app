@@ -1,74 +1,103 @@
 /**
  * "خماسي الهدافين" player picker — the grid a pitch card opens.
  *
- * Ported from the 448×925 design frame: a 3-up grid of 112.48×176.7 player
- * tiles followed by a league switcher. The switcher scrolls with the grid
- * rather than floating at the foot, so a short league leaves no gap between the
- * two. The design carries no confirm button, so a tap commits the pick and
- * closes, and the switcher swaps the league being browsed without leaving.
+ * Ported from the 448×925 design frame: a search field over a 3-up grid of
+ * 112.48×176.7 player cards (Figma 1302:15248). The picker only browses the
+ * league of the pitch card that opened it. The design carries no confirm
+ * button, so a tap commits the pick and closes.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import Svg, {
+  ClipPath,
+  Defs,
+  G,
+  Image as SvgImage,
+  LinearGradient as SvgLinearGradient,
+  Path,
+  Rect,
+  Stop,
+} from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { TSF_LIVE_LEAGUES } from '../../services/topScorersFive.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 
 import {
+  TSF_CARD_ART,
   TSF_DESIGN_WIDTH,
   TSF_LEAGUE_LOGO,
-  TSF_LIGUE1_CREST_ASPECT,
   TSF_LOGO_TINT_ON_DARK,
   type TsfLeagueKey,
 } from './assets';
-import { TSF_LIVE_LEAGUES } from '../../services/topScorersFive.service';
-
-import { TSF_MOCK_PLAYERS, tsfInitials, tsfShortName, type TsfPlayer } from './mockData';
+import {
+  TSF_MOCK_PLAYERS,
+  tsfClubInitials,
+  tsfInitials,
+  tsfShortName,
+  type TsfPlayer,
+} from './mockData';
 
 const BG = '#030303';
 const ACTIVE = '#8C5CF5';
 const COLUMNS = 3;
 
-/** Design has no radius on the tile; 12 matches the rest of the feature. */
-const CARD = { width: 112.48, height: 176.7, radius: 12 };
-/** Grid starts 12 below the 128-tall header block, 21 between columns. */
-const GRID = { columnGap: 21, rowGap: 16, top: 12 };
+const CARD = { width: 112.48, height: 176.7 };
+/** Grid starts 12 below the search field, 21 between columns. */
+const GRID = { columnGap: 21, rowGap: 22, top: 12 };
+const GRID_WIDTH = CARD.width * COLUMNS + GRID.columnGap * (COLUMNS - 1);
+const SEARCH = { height: 44, radius: 12 };
+
 /**
- * The name/stats block is 61 wide at x 25 inside a 112.48 tile, leaving 26.5 on
- * the far side — centred, not leading — and its baseline sits 21.7 off the
- * bottom edge. The design's 22 divider matches its 22 icons; ours are 13, so the
- * rule is cut to suit or it towers over the figures it separates.
+ * Card body ("Vector 28"): its outline in its own 100.1×168.3 box, placed at
+ * (5.88, 8.39) on the card and stroked 2 wide on the centre line.
  */
-const CARD_TEXT = { bottom: 21.7, iconSize: 13, dividerHeight: 14 };
-
-const CHIP = { width: 77, height: 93, radius: 10, gap: 4 };
-/** Logo box per league inside a chip, straight off the design. */
-const CHIP_LOGO: Record<TsfLeagueKey, { width: number; height: number; anchorTop?: boolean }> = {
-  pl: { width: 49, height: 81 },
-  laliga: { width: 57, height: 43.7 },
-  bundesliga: { width: 67, height: 67 },
-  // Design draws this box 49 square; narrowing it to the sponsor-free crest's
-  // ratio is what crops Ligue 1's McDonald's band off the foot of the asset.
-  ligue1: { width: 49 * TSF_LIGUE1_CREST_ASPECT, height: 49, anchorTop: true },
-  seriea: { width: 50, height: 85 },
+const BODY = { left: 5.876, top: 8.394, width: 100.099, height: 168.301, stroke: 2 };
+const BODY_PATH =
+  'M41.551 0L25.812 3.148L14.690 11.962L1.679 16.368L0 18.677L0 144.798L2.728 147.316L18.467 153.822L24.763 159.488L50.155 168.301L76.176 159.697L81.003 154.031L98.421 146.896L100.099 144.378L100.099 18.887L98.211 16.368L84.570 11.542L74.078 2.938L58.339 0L49.945 4.407L41.551 0Z';
+/** Figma's stroke gradient handles, resolved to the body's bounding box. */
+const BODY_STROKE = {
+  from: { x: 1.068, y: 0.382 },
+  to: { x: -0.28, y: 0.078 },
+  stops: [
+    [0, '#8814F6'],
+    [0.129, '#9242DF'],
+    [0.289, '#9551D7'],
+    [0.61, '#4B078B'],
+    [0.78, '#B376ED'],
+    [0.862, '#53168E'],
+    [1, '#862CDB'],
+  ] as const,
 };
-/** Bundesliga is the one chip whose unselected fill is tinted rather than white. */
-const CHIP_TINT: Partial<Record<TsfLeagueKey, string>> = { bundesliga: '#D10314' };
+/** The black fade over the photo runs from 37% to 74% down the body. */
+const BODY_FADE = { from: 0.373, to: 0.736 };
+/** Portraits are square head-and-shoulders crops; this frames them like the design's. */
+const PHOTO = { left: -6, top: 8, size: 112 };
 
-/** Reads right→left in the Arabic design, so the row is reversed for it. */
-const LEAGUE_ORDER: readonly TsfLeagueKey[] = ['pl', 'laliga', 'bundesliga', 'ligue1', 'seriea'];
+/** Frame pieces as placed in the design, each box already including its stroke overflow. */
+const FRAME = {
+  railLeft: { box: { left: 0, top: 11.327, width: 31.904, height: 155.97 }, art: { left: -0.753, top: -0.484, width: 32.9, height: 156.886 } },
+  railRight: { box: { left: 80.577, top: 11.538, width: 31.904, height: 155.92 }, art: { left: -0.753, top: -0.484, width: 32.9, height: 156.886 } },
+  crown: { left: 45.746, top: 2.173, width: 19.783, height: 16.293 },
+  sparkle: { left: 44.4, top: -6.8, width: 22.833, height: 26.611 },
+  topBar: { left: 20.37, top: 7.341, width: 70.504, height: 13.645 },
+  bottomBar: { left: 24.115, top: 160.77, width: 65.383, height: 16.976 },
+};
+/** Name + badges block: 113 down, the badge row 11 apart around a 22 rule. */
+const INFO = { top: 113, gap: 2, rowGap: 11, league: { width: 19, height: 22 }, club: 20, divider: 22 };
 
 type PlayerPickerProps = {
   league: TsfLeagueKey | null;
@@ -76,7 +105,6 @@ type PlayerPickerProps = {
   players?: Partial<Record<TsfLeagueKey, readonly TsfPlayer[]>>;
   selectedId: string | undefined;
   onClose: () => void;
-  onChangeLeague: (league: TsfLeagueKey) => void;
   onPick: (league: TsfLeagueKey, player: TsfPlayer) => void;
 };
 
@@ -85,7 +113,6 @@ export function PlayerPicker({
   players: livePlayers,
   selectedId,
   onClose,
-  onChangeLeague,
   onPick,
 }: PlayerPickerProps) {
   const insets = useSafeAreaInsets();
@@ -97,25 +124,42 @@ export function PlayerPicker({
 
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
+  const fontRegular = useAppFont(400);
 
   const scale = width / TSF_DESIGN_WIDTH;
   const s = useCallback((value: number) => value * scale, [scale]);
 
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    setQuery('');
+  }, [league]);
+
+  const pool = useMemo(
+    () =>
+      league
+        ? TSF_LIVE_LEAGUES.includes(league)
+          ? livePlayers?.[league] ?? []
+          : TSF_MOCK_PLAYERS[league]
+        : [],
+    [league, livePlayers],
+  );
+
   const rows = useMemo(() => {
-    const players = league
-      ? (TSF_LIVE_LEAGUES.includes(league) ? livePlayers?.[league] ?? [] : TSF_MOCK_PLAYERS[league])
-      : [];
+    const tokens = searchKey(query).split(' ').filter(Boolean);
+    const matches = tokens.length
+      ? pool.filter((player) => {
+          const haystack = searchKey(
+            [player.name, player.nameAr, player.nameEn, player.club].filter(Boolean).join(' '),
+          );
+          return tokens.every((token) => haystack.includes(token));
+        })
+      : pool;
     const chunks: TsfPlayer[][] = [];
-    for (let index = 0; index < players.length; index += COLUMNS) {
-      chunks.push(players.slice(index, index + COLUMNS));
+    for (let index = 0; index < matches.length; index += COLUMNS) {
+      chunks.push(matches.slice(index, index + COLUMNS));
     }
     return chunks;
-  }, [league, livePlayers]);
-
-  const chips = useMemo(
-    () => (isAr ? [...LEAGUE_ORDER].reverse() : LEAGUE_ORDER),
-    [isAr],
-  );
+  }, [pool, query]);
 
   return (
     <Modal
@@ -156,73 +200,87 @@ export function PlayerPicker({
           <View style={{ width: s(38) }} />
         </View>
 
+        <View
+          style={[
+            styles.search,
+            {
+              width: s(GRID_WIDTH),
+              height: s(SEARCH.height),
+              borderRadius: s(SEARCH.radius),
+              paddingHorizontal: s(14),
+              columnGap: s(8),
+              flexDirection: isAr ? 'row-reverse' : 'row',
+            },
+          ]}
+        >
+          <Ionicons name="search" size={s(18)} color="#8C8C8C" />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder={pickCopy.searchPlaceholder}
+            placeholderTextColor="#6E6E6E"
+            selectionColor={ACTIVE}
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+            testID="tsf-picker-search"
+            style={[
+              styles.searchInput,
+              { fontFamily: fontRegular, fontSize: s(15), textAlign: isAr ? 'right' : 'left' },
+            ]}
+          />
+          {query ? (
+            <TouchableOpacity
+              onPress={() => setQuery('')}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={pickCopy.searchClear}
+            >
+              <Ionicons name="close-circle" size={s(18)} color="#8C8C8C" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
         <ScrollView
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           contentContainerStyle={{
-            paddingTop: s(GRID.top),
+            // Room for the card's sparkle, which rises above the frame.
+            paddingTop: s(GRID.top + 7),
             paddingBottom: Math.max(insets.bottom, 12) + s(12),
             rowGap: s(GRID.rowGap),
           }}
         >
+          {rows.length === 0 && query ? (
+            <Text style={[styles.empty, { fontFamily: fontRegular, fontSize: s(15), marginTop: s(32) }]}>
+              {pickCopy.searchEmpty}
+            </Text>
+          ) : null}
           {rows.map((row, rowIndex) => (
             <View
               key={rowIndex}
-              style={[styles.row, { columnGap: s(GRID.columnGap) }]}
+              style={[styles.row, { width: s(GRID_WIDTH), columnGap: s(GRID.columnGap) }]}
             >
               {row.map((player) => (
                 <PlayerCard
                   key={player.id}
+                  league={league as TsfLeagueKey}
                   player={player}
                   selected={player.id === selectedId}
                   fontBold={fontBold}
                   s={s}
-                  goalsLabel={pickCopy.goalsA11y.replace('{count}', String(player.goals))}
-                  assistsLabel={pickCopy.assistsA11y.replace('{count}', String(player.assists))}
+                  a11yLabel={[
+                    player.name,
+                    player.club,
+                    pickCopy.goalsA11y.replace('{count}', String(player.goals)),
+                    `${pickCopy.assistsA11y.replace('{count}', String(player.assists))} ${pickCopy.seasonA11y}`,
+                  ].join('. ')}
                   onPress={() => league && onPick(league, player)}
                 />
               ))}
             </View>
           ))}
-
-          <View style={[styles.switcher, { marginTop: s(8), columnGap: s(CHIP.gap) }]}>
-            {chips.map((key) => {
-              const active = key === league;
-              const logo = CHIP_LOGO[key];
-              return (
-                <TouchableOpacity
-                  key={key}
-                  onPress={() => onChangeLeague(key)}
-                  activeOpacity={0.8}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: active }}
-                  accessibilityLabel={pickCopy.selectLeagueA11y.replace(
-                    '{league}',
-                    pickCopy.leagues[key],
-                  )}
-                  style={[
-                    styles.chip,
-                    {
-                      width: s(CHIP.width),
-                      height: s(CHIP.height),
-                      borderRadius: s(CHIP.radius),
-                      backgroundColor: active
-                        ? ACTIVE
-                        : withAlpha(CHIP_TINT[key] ?? '#FFFFFF', 0.05),
-                    },
-                  ]}
-                >
-                  <Image
-                    source={TSF_LEAGUE_LOGO[key]}
-                    style={{ width: s(logo.width), height: s(logo.height) }}
-                    contentFit={logo.anchorTop ? 'cover' : 'contain'}
-                    contentPosition={logo.anchorTop ? 'top' : 'center'}
-                    tintColor={TSF_LOGO_TINT_ON_DARK[key]}
-                    transition={0}
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
         </ScrollView>
       </View>
     </Modal>
@@ -230,117 +288,202 @@ export function PlayerPicker({
 }
 
 type PlayerCardProps = {
+  league: TsfLeagueKey;
   player: TsfPlayer;
   selected: boolean;
   fontBold: string;
   s: (value: number) => number;
-  goalsLabel: string;
-  assistsLabel: string;
+  a11yLabel: string;
   onPress: () => void;
 };
 
 /**
- * Tile is mostly the player's portrait with the name and tallies over a scrim.
- * Placeholder players have no portrait, so initials stand in behind the same scrim.
+ * The design's framed card: purple rails, crown and bars around a body that
+ * holds the portrait over light streaks, fading to black under the name and
+ * the league · club badges. Season goals and assists sit in the top corners.
  */
-function PlayerCard({
-  player,
-  selected,
-  fontBold,
-  s,
-  goalsLabel,
-  assistsLabel,
-  onPress,
-}: PlayerCardProps) {
+function PlayerCard({ league, player, selected, fontBold, s, a11yLabel, onPress }: PlayerCardProps) {
+  const ids = useMemo(() => {
+    const key = player.id.replace(/[^a-zA-Z0-9_-]/g, '');
+    return { clip: `tsf-clip-${key}`, fade: `tsf-fade-${key}`, stroke: `tsf-stroke-${key}` };
+  }, [player.id]);
+  const box = (b: { left: number; top: number; width: number; height: number }) => ({
+    position: 'absolute' as const,
+    left: s(b.left),
+    top: s(b.top),
+    width: s(b.width),
+    height: s(b.height),
+  });
+
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.85}
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={`${player.name}. ${goalsLabel}. ${assistsLabel}`}
-      style={[
-        styles.card,
-        {
-          width: s(CARD.width),
-          height: s(CARD.height),
-          borderRadius: s(CARD.radius),
-        },
-        selected ? { borderWidth: 1.5, borderColor: ACTIVE } : null,
-      ]}
+      accessibilityLabel={a11yLabel}
+      style={{ width: s(CARD.width), height: s(CARD.height) }}
     >
-      <LinearGradient
-        colors={['#2A1361', '#140832']}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      {player.photo ? (
-        <Image
-          source={{ uri: player.photo }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          contentPosition="top"
-        />
-      ) : (
-        <Text
-          style={[styles.initials, { fontFamily: fontBold, fontSize: s(40) }]}
-          allowFontScaling={false}
-        >
-          {tsfInitials(player)}
-        </Text>
-      )}
-      <LinearGradient
-        colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.55)', 'rgba(3,3,3,0.92)']}
-        locations={[0, 0.45, 1]}
-        style={styles.scrim}
-        pointerEvents="none"
-      />
+      <View style={[box(FRAME.railLeft.box), styles.flipX]} pointerEvents="none">
+        <Image source={TSF_CARD_ART.railLeft} style={box(FRAME.railLeft.art)} contentFit="fill" />
+      </View>
+      <View style={box(FRAME.railRight.box)} pointerEvents="none">
+        <Image source={TSF_CARD_ART.railRight} style={box(FRAME.railRight.art)} contentFit="fill" />
+      </View>
+      <Image source={TSF_CARD_ART.crown} style={box(FRAME.crown)} contentFit="fill" />
+      <Image source={TSF_CARD_ART.sparkle} style={box(FRAME.sparkle)} contentFit="fill" />
 
-      <View style={[styles.cardText, { bottom: s(CARD_TEXT.bottom) }]}>
+      <Svg
+        style={box({
+          left: BODY.left - BODY.stroke / 2,
+          top: BODY.top - BODY.stroke / 2,
+          width: BODY.width + BODY.stroke,
+          height: BODY.height + BODY.stroke,
+        })}
+        viewBox={`${-BODY.stroke / 2} ${-BODY.stroke / 2} ${BODY.width + BODY.stroke} ${BODY.height + BODY.stroke}`}
+        pointerEvents="none"
+      >
+        <Defs>
+          <ClipPath id={ids.clip}>
+            <Path d={BODY_PATH} />
+          </ClipPath>
+          <SvgLinearGradient id={ids.fade} x1="0.5" y1={BODY_FADE.from} x2="0.5" y2={BODY_FADE.to}>
+            <Stop offset="0" stopColor="#000000" stopOpacity="0" />
+            <Stop offset="1" stopColor="#000000" stopOpacity="1" />
+          </SvgLinearGradient>
+          <SvgLinearGradient
+            id={ids.stroke}
+            x1={BODY_STROKE.from.x}
+            y1={BODY_STROKE.from.y}
+            x2={BODY_STROKE.to.x}
+            y2={BODY_STROKE.to.y}
+          >
+            {BODY_STROKE.stops.map(([offset, color]) => (
+              <Stop key={offset} offset={offset} stopColor={color} />
+            ))}
+          </SvgLinearGradient>
+        </Defs>
+        <G clipPath={`url(#${ids.clip})`}>
+          <SvgImage
+            href={TSF_CARD_ART.background}
+            x={0}
+            y={0}
+            width={BODY.width}
+            height={BODY.height}
+            preserveAspectRatio="xMidYMid slice"
+          />
+          {player.photo ? (
+            <SvgImage
+              href={{ uri: player.photo }}
+              x={PHOTO.left}
+              y={PHOTO.top}
+              width={PHOTO.size}
+              height={PHOTO.size}
+              preserveAspectRatio="xMidYMin meet"
+            />
+          ) : null}
+          <Rect x={0} y={0} width={BODY.width} height={BODY.height} fill={`url(#${ids.fade})`} />
+        </G>
+        <Path d={BODY_PATH} fill="none" stroke={`url(#${ids.stroke})`} strokeWidth={BODY.stroke} />
+      </Svg>
+
+      {player.photo ? null : (
+        <View style={[box({ left: BODY.left, top: 30, width: BODY.width, height: 70 }), styles.center]}>
+          <Text style={[styles.initials, { fontFamily: fontBold, fontSize: s(36) }]} allowFontScaling={false}>
+            {tsfInitials(player)}
+          </Text>
+        </View>
+      )}
+
+      <Image source={TSF_CARD_ART.topBar} style={box(FRAME.topBar)} contentFit="fill" />
+      <Image source={TSF_CARD_ART.bottomBar} style={box(FRAME.bottomBar)} contentFit="fill" />
+
+      <View style={[styles.corner, { left: s(13), top: s(24) }]} pointerEvents="none">
+        <Text style={[styles.cornerValue, { fontFamily: fontBold, fontSize: s(15) }]} allowFontScaling={false}>
+          {player.goals}
+        </Text>
+        <Ionicons name="football" size={s(10)} color="#FFFFFF" />
+      </View>
+      <View style={[styles.corner, { right: s(13), top: s(24) }]} pointerEvents="none">
+        <Text style={[styles.cornerValue, { fontFamily: fontBold, fontSize: s(15) }]} allowFontScaling={false}>
+          {player.assists}
+        </Text>
+        <MaterialCommunityIcons name="shoe-cleat" size={s(10)} color="#FFFFFF" />
+      </View>
+
+      <View style={[styles.info, { top: s(INFO.top), left: s(8), right: s(8), rowGap: s(INFO.gap) }]} pointerEvents="none">
         <Text
-          style={[styles.cardName, { fontFamily: fontBold, fontSize: s(15) }]}
+          style={[styles.name, { fontFamily: fontBold, fontSize: s(15) }]}
           numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
           maxFontSizeMultiplier={1.1}
         >
           {tsfShortName(player)}
         </Text>
-        <View style={[styles.stats, { marginTop: s(2), columnGap: s(8) }]}>
-          <View style={[styles.stat, { columnGap: s(3) }]}>
-            <Ionicons name="football" size={s(CARD_TEXT.iconSize)} color="#FFFFFF" />
-            <Text
-              style={[styles.statValue, { fontFamily: fontBold, fontSize: s(12) }]}
-              allowFontScaling={false}
-            >
-              {player.goals}
-            </Text>
-          </View>
-          <View style={[styles.divider, { height: s(CARD_TEXT.dividerHeight) }]} />
-          <View style={[styles.stat, { columnGap: s(3) }]}>
-            <MaterialCommunityIcons
-              name="shoe-cleat"
-              size={s(CARD_TEXT.iconSize)}
-              color="#FFFFFF"
+        <View style={[styles.badges, { columnGap: s(INFO.rowGap), height: s(INFO.divider) }]}>
+          <Image
+            source={TSF_LEAGUE_LOGO[league]}
+            style={{ width: s(INFO.league.width), height: s(INFO.league.height) }}
+            contentFit="contain"
+            tintColor={TSF_LOGO_TINT_ON_DARK[league]}
+          />
+          <View style={{ width: 0, height: s(INFO.divider) }}>
+            <Image
+              source={TSF_CARD_ART.divider}
+              style={[
+                styles.divider,
+                { width: s(INFO.divider), height: 0.5, left: -s(INFO.divider) / 2, top: s(INFO.divider) / 2 },
+              ]}
+              contentFit="fill"
             />
-            <Text
-              style={[styles.statValue, { fontFamily: fontBold, fontSize: s(12) }]}
-              allowFontScaling={false}
-            >
-              {player.assists}
-            </Text>
           </View>
+          {player.clubLogo ? (
+            <Image
+              source={{ uri: player.clubLogo }}
+              style={{ width: s(INFO.club), height: s(INFO.club) }}
+              contentFit="contain"
+            />
+          ) : (
+            <View style={[styles.clubFallback, { width: s(INFO.club), height: s(INFO.club), borderRadius: s(INFO.club / 2) }]}>
+              <Text style={[styles.clubFallbackText, { fontFamily: fontBold, fontSize: s(7) }]} allowFontScaling={false}>
+                {tsfClubInitials(player.club)}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
+
+      {selected ? (
+        <View
+          style={[
+            styles.check,
+            { width: s(18), height: s(18), borderRadius: s(9), top: s(158), left: s(CARD.width / 2 - 9) },
+          ]}
+          pointerEvents="none"
+        >
+          <Ionicons name="checkmark" size={s(12)} color="#FFFFFF" />
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
 
-/** `#RRGGBB` plus an alpha, for the chips' 5% fills. */
-function withAlpha(hex: string, alpha: number): string {
-  const value = hex.replace('#', '');
-  const r = parseInt(value.slice(0, 2), 16);
-  const g = parseInt(value.slice(2, 4), 16);
-  const b = parseInt(value.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
+/** Folds Arabic letter variants, diacritics and Latin accents so either spelling matches. */
+function searchKey(raw: string): string {
+  return raw
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[\u064B-\u0652\u0670\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .replace(/[-'’.]/g, ' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 const styles = StyleSheet.create({
@@ -350,18 +493,38 @@ const styles = StyleSheet.create({
   headerButton: { alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, color: '#FFFFFF', textAlign: 'center' },
 
-  row: { flexDirection: 'row', justifyContent: 'center' },
+  search: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  searchInput: { flex: 1, color: '#FFFFFF', paddingVertical: 0 },
+  empty: { color: '#8C8C8C', textAlign: 'center' },
 
-  card: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  row: { flexDirection: 'row', alignSelf: 'center' },
+
+  flipX: { transform: [{ scaleX: -1 }] },
+  center: { alignItems: 'center', justifyContent: 'center' },
   initials: { color: 'rgba(255,255,255,0.32)' },
-  scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '62%' },
-  cardText: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  cardName: { color: '#FFFFFF', textAlign: 'center' },
-  stats: { flexDirection: 'row', alignItems: 'center' },
-  stat: { flexDirection: 'row', alignItems: 'center' },
-  statValue: { color: '#FFFFFF' },
-  divider: { width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.4)' },
 
-  switcher: { flexDirection: 'row', justifyContent: 'center' },
-  chip: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  corner: { position: 'absolute', alignItems: 'center' },
+  cornerValue: { color: '#FFFFFF' },
+
+  info: { position: 'absolute', alignItems: 'center' },
+  name: { color: '#FFFFFF', textAlign: 'center', alignSelf: 'stretch' },
+  badges: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  divider: { position: 'absolute', transform: [{ rotate: '-90deg' }] },
+  clubFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.12)' },
+  clubFallbackText: { color: '#FFFFFF' },
+
+  check: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: ACTIVE,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
 });

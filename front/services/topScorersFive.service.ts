@@ -25,6 +25,8 @@ export interface TsfApiPlayer {
   goals: number;
   assists: number;
   points: number;
+  seasonGoals: number;
+  seasonAssists: number;
 }
 
 export interface TsfApiGameweek {
