@@ -68,7 +68,7 @@ type LoadMode = 'html' | 'uri';
 /** SportRadar LMT widgets are typically ~1.6 width:height (not 16:9). */
 const DEFAULT_LMT_ASPECT_RATIO = 1.6;
 /** SportRadar embed often letterboxes below the grass — trim so we do not show a black bar. */
-const LMT_HERO_BOTTOM_TRIM_PX = 36;
+const LMT_HERO_BOTTOM_TRIM_PX = 8;
 
 type WebSource =
   | { html: string; baseUrl: string }
