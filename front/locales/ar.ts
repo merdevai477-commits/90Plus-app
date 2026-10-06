@@ -708,6 +708,8 @@ export const ar = {
     lineupFullList: 'كامل القائمة',
     lineupShowLess: 'عرض أقل',
     lineupBestPlayers: 'أفضل اللاعبين',
+    scorersViewMore: 'عرض المزيد',
+    scorersViewLess: 'عرض أقل',
     lineupNoSubstitutes: 'لا يوجد بدلاء مسجلين لهذا الفريق',
     statistics: 'الإحصائيات',
     events: 'أحداث المباراة',

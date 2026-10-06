@@ -473,6 +473,8 @@ export const en = {
     lineupFullList: 'Full list',
     lineupShowLess: 'Show less',
     lineupBestPlayers: 'Best Players',
+    scorersViewMore: 'View more',
+    scorersViewLess: 'View less',
     lineupNoSubstitutes: 'No substitutes listed for this team',
     statistics: 'Statistics',
     events: 'Events',

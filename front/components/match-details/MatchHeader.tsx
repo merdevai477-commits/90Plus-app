@@ -17,6 +17,7 @@ import {
 import { isStaleInPlayClock } from '../../utils/staleMatchClock';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import { useLiveDisplayClock } from '../../hooks/useLiveDisplayClock';
+import { ScorersViewMoreButton, useCollapsibleScorers } from './ScorersViewMore';
 import {
   LIVE_RED,
   TEXT_PRIMARY,
@@ -63,6 +64,9 @@ interface MatchHeaderProps {
     home: Array<{ name: string; minute: string }>;
     away: Array<{ name: string; minute: string }>;
   };
+  /** Toggle shown when a team has more scorers than the preview fits. */
+  scorersViewMoreLabel?: string;
+  scorersViewLessLabel?: string;
   /** Tapping a team (logo + name) opens its 365 profile when provided. */
   onPressHomeTeam?: () => void;
   onPressAwayTeam?: () => void;
@@ -149,6 +153,8 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   penaltiesShortLabel = 'Pens',
   kickoffStatusLabel,
   scorers,
+  scorersViewMoreLabel = 'View more',
+  scorersViewLessLabel = 'View less',
   onPressHomeTeam,
   onPressAwayTeam,
 }) => {
@@ -231,8 +237,12 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   const teamNameSize = compact ? 14 : 18;
   const leagueMaxWidth = Math.min(compact ? 148 : 180, Math.max(108, screenWidth * 0.4));
   const scoreAreaMin = compact ? 108 : 124;
-  const homeScorers = scorers?.home?.filter((s) => s.name) ?? [];
-  const awayScorers = scorers?.away?.filter((s) => s.name) ?? [];
+  const scorerList = useCollapsibleScorers(
+    scorers?.home?.filter((s) => s.name) ?? [],
+    scorers?.away?.filter((s) => s.name) ?? [],
+  );
+  const homeScorers = scorerList.home;
+  const awayScorers = scorerList.away;
   const showScorers = homeScorers.length > 0 || awayScorers.length > 0;
 
   return (
@@ -372,6 +382,14 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
             ))}
           </View>
         </View>
+      ) : null}
+      {showScorers && scorerList.collapsible ? (
+        <ScorersViewMoreButton
+          expanded={scorerList.expanded}
+          onPress={scorerList.toggle}
+          viewMoreLabel={scorersViewMoreLabel}
+          viewLessLabel={scorersViewLessLabel}
+        />
       ) : null}
     </LinearGradient>
   );

@@ -28,6 +28,7 @@ import {
 } from '../Matches/leagueApiUtils';
 import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
 import { useLiveDisplayClock } from '../../hooks/useLiveDisplayClock';
+import { ScorersViewMoreButton, useCollapsibleScorers } from './ScorersViewMore';
 import { useTranslation } from '../../src/i18n';
 import { useMatchLiveChat } from '../../hooks/useMatchLiveChat';
 import type { MatchChatUiMessage } from '../../hooks/matchLiveChat.reducer';
@@ -65,6 +66,8 @@ export type MatchChatSummary = {
     home: MatchChatScorer[];
     away: MatchChatScorer[];
   };
+  scorersViewMoreLabel?: string | null;
+  scorersViewLessLabel?: string | null;
 };
 
 type MatchChatTabProps = {
@@ -425,8 +428,12 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
           ? summary.statusLabel || short
           : summary.kickoffStatusLabel || summary.statusLabel || '';
 
-  const homeScorers = summary.scorers?.home?.filter((s) => s.name) ?? [];
-  const awayScorers = summary.scorers?.away?.filter((s) => s.name) ?? [];
+  const scorerList = useCollapsibleScorers(
+    summary.scorers?.home?.filter((s) => s.name) ?? [],
+    summary.scorers?.away?.filter((s) => s.name) ?? [],
+  );
+  const homeScorers = scorerList.home;
+  const awayScorers = scorerList.away;
   const showScorers = homeScorers.length > 0 || awayScorers.length > 0;
 
   return (
@@ -520,6 +527,15 @@ const ChatScoreHeader = memo(function ChatScoreHeader({
               ))}
             </View>
           </View>
+        ) : null}
+        {showScorers && scorerList.collapsible ? (
+          <ScorersViewMoreButton
+            compact
+            expanded={scorerList.expanded}
+            onPress={scorerList.toggle}
+            viewMoreLabel={summary.scorersViewMoreLabel || 'View more'}
+            viewLessLabel={summary.scorersViewLessLabel || 'View less'}
+          />
         ) : null}
       </View>
     </View>

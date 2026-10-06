@@ -2592,6 +2592,8 @@ const MatchDetailsScreen = () => {
       penaltiesShortLabel={getLocalizedMatchStatus('PEN', language)}
       kickoffStatusLabel={t.matchDetails.kickoffStatus}
       scorers={goalScorers}
+      scorersViewMoreLabel={t.matchDetails.scorersViewMore}
+      scorersViewLessLabel={t.matchDetails.scorersViewLess}
       onPressHomeTeam={() => openTeamProfile('home')}
       onPressAwayTeam={() => openTeamProfile('away')}
     />
@@ -2735,6 +2737,8 @@ const MatchDetailsScreen = () => {
                 : getLocalizedMatchStatus(fixture.fixture.status.short, language)
               : t.matchDetails.kickoffStatus,
             scorers: goalScorers,
+            scorersViewMoreLabel: t.matchDetails.scorersViewMore,
+            scorersViewLessLabel: t.matchDetails.scorersViewLess,
           }}
         />
       ) : (
