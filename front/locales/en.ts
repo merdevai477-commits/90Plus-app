@@ -2051,6 +2051,28 @@ export const en = {
         ligue1: 'Ligue 1',
       },
     },
+    matches: {
+      title: "Your players' next matches",
+      playerFixtures: "{name}'s next matches",
+      versus: '{home} vs {away}',
+      emptyTitle: 'No players picked yet',
+      emptyBody: 'Pick your five on the pitch and their matches will show up here',
+      emptyCta: 'Go to the pitch',
+      selectPlayerA11y: "Show {name}'s matches",
+    },
+    ranking: {
+      title: 'Top Scorers Five ranking',
+      filterAll: 'All',
+      filterWeek: 'This week',
+      emptyTitle: 'No winners yet',
+      emptyCta: 'Pick now',
+      prizeLabel: "This week's prize",
+      prizeName: 'Football shirt',
+      prizeSubtitle: 'For the highest score',
+      you: 'You',
+      xp: 'XP',
+      rankA11y: 'Rank {rank}',
+    },
   },
 
   profile: {

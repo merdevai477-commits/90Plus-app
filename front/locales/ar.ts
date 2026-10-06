@@ -2004,6 +2004,28 @@ export const ar = {
         ligue1: 'الدوري الفرنسي',
       },
     },
+    matches: {
+      title: 'مباريات لاعبيك القادمة',
+      playerFixtures: 'مباريات {name} القادمة',
+      versus: '{home} ضد {away}',
+      emptyTitle: 'لم تختر لاعبين بعد',
+      emptyBody: 'اختر خماسيك من الملعب وستظهر مبارياتهم هنا',
+      emptyCta: 'اذهب للملعب',
+      selectPlayerA11y: 'عرض مباريات {name}',
+    },
+    ranking: {
+      title: 'ترتيب خماسي الهدافيين',
+      filterAll: 'الكل',
+      filterWeek: 'هذا الأسبوع',
+      emptyTitle: 'لا يوجد فائزين بعد',
+      emptyCta: 'اختر الان',
+      prizeLabel: 'جائزة هذا الأسبوع',
+      prizeName: 'تيشرت كرة القدم',
+      prizeSubtitle: 'لصاحب أعلى نقاط',
+      you: 'أنت',
+      xp: 'XP',
+      rankA11y: 'المركز {rank}',
+    },
   },
 
   profile: {

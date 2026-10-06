@@ -2,9 +2,10 @@
  * "خماسي الهدافين" player picker — the grid a pitch card opens.
  *
  * Ported from the 448×925 design frame: a 3-up grid of 112.48×176.7 player
- * tiles sitting over a league switcher. The design carries no confirm button,
- * so a tap commits the pick and closes, and the switcher swaps the league being
- * browsed without leaving the screen.
+ * tiles followed by a league switcher. The switcher scrolls with the grid
+ * rather than floating at the foot, so a short league leaves no gap between the
+ * two. The design carries no confirm button, so a tap commits the pick and
+ * closes, and the switcher swaps the league being browsed without leaving.
  */
 
 import { useCallback, useMemo } from 'react';
@@ -109,8 +110,6 @@ export function PlayerPicker({
     [isAr],
   );
 
-  const switcherBottom = Math.max(insets.bottom, 12) + 8;
-
   return (
     <Modal
       visible={league != null}
@@ -154,7 +153,7 @@ export function PlayerPicker({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingTop: s(GRID.top),
-            paddingBottom: switcherBottom + s(CHIP.height) + s(24),
+            paddingBottom: Math.max(insets.bottom, 12) + s(12),
             rowGap: s(GRID.rowGap),
           }}
         >
@@ -177,50 +176,47 @@ export function PlayerPicker({
               ))}
             </View>
           ))}
-        </ScrollView>
 
-        <View
-          pointerEvents="box-none"
-          style={[styles.switcher, { bottom: switcherBottom, columnGap: s(CHIP.gap) }]}
-        >
-          {chips.map((key) => {
-            const active = key === league;
-            const logo = CHIP_LOGO[key];
-            return (
-              <TouchableOpacity
-                key={key}
-                onPress={() => onChangeLeague(key)}
-                activeOpacity={0.8}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-                accessibilityLabel={pickCopy.selectLeagueA11y.replace(
-                  '{league}',
-                  pickCopy.leagues[key],
-                )}
-                style={[
-                  styles.chip,
-                  {
-                    width: s(CHIP.width),
-                    height: s(CHIP.height),
-                    borderRadius: s(CHIP.radius),
-                    backgroundColor: active
-                      ? ACTIVE
-                      : withAlpha(CHIP_TINT[key] ?? '#FFFFFF', 0.05),
-                  },
-                ]}
-              >
-                <Image
-                  source={TSF_LEAGUE_LOGO[key]}
-                  style={{ width: s(logo.width), height: s(logo.height) }}
-                  contentFit={logo.anchorTop ? 'cover' : 'contain'}
-                  contentPosition={logo.anchorTop ? 'top' : 'center'}
-                  tintColor={TSF_LOGO_TINT_ON_DARK[key]}
-                  transition={0}
-                />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+          <View style={[styles.switcher, { marginTop: s(8), columnGap: s(CHIP.gap) }]}>
+            {chips.map((key) => {
+              const active = key === league;
+              const logo = CHIP_LOGO[key];
+              return (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => onChangeLeague(key)}
+                  activeOpacity={0.8}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={pickCopy.selectLeagueA11y.replace(
+                    '{league}',
+                    pickCopy.leagues[key],
+                  )}
+                  style={[
+                    styles.chip,
+                    {
+                      width: s(CHIP.width),
+                      height: s(CHIP.height),
+                      borderRadius: s(CHIP.radius),
+                      backgroundColor: active
+                        ? ACTIVE
+                        : withAlpha(CHIP_TINT[key] ?? '#FFFFFF', 0.05),
+                    },
+                  ]}
+                >
+                  <Image
+                    source={TSF_LEAGUE_LOGO[key]}
+                    style={{ width: s(logo.width), height: s(logo.height) }}
+                    contentFit={logo.anchorTop ? 'cover' : 'contain'}
+                    contentPosition={logo.anchorTop ? 'top' : 'center'}
+                    tintColor={TSF_LOGO_TINT_ON_DARK[key]}
+                    transition={0}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -350,12 +346,6 @@ const styles = StyleSheet.create({
   statValue: { color: '#FFFFFF' },
   divider: { width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.4)' },
 
-  switcher: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
+  switcher: { flexDirection: 'row', justifyContent: 'center' },
   chip: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 });

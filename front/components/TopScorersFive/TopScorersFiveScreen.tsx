@@ -29,6 +29,8 @@ import { TSF_ART, TSF_DESIGN_WIDTH, TSF_LEAGUE_BADGES } from './assets';
 
 const BG = '#030303';
 const CTA_BG = '#8C5CF5';
+/** The design's one purple, also the pitch cards' stroke. */
+const TITLE = '#B896FC';
 /** Hero art is 501×549 at (−27, −10) in the design frame, bleeding past both sides. */
 const HERO_DESIGN = { width: 501, height: 549, left: -27, top: -10 };
 /** The fade layer is 448×630 at y −55, so it ends below the hero art. */
@@ -42,11 +44,13 @@ const HERO_FADE = ['rgba(3,3,3,0)', 'rgba(3,3,3,0)', 'rgba(3,3,3,0.35)', BG] as 
 const HERO_FADE_STOPS = [0, 0.7, 0.9, 0.97] as const;
 const HERO_FALLBACK = ['#5B21B6', '#3B0F7A', '#14052E', BG] as const;
 /**
- * Design y of the title block's top edge: the 60pt ball + title + subtitle stack
- * is centred at 475.5 (frame centre 462.5 plus its 12.96 offset) and runs 176
- * tall, so it starts 152 above the hero's bottom and reads against the art.
+ * Design y of the title block's top edge, measured off where the design's ink
+ * actually lands rather than off the stack's SwiftUI frame — the frame centre
+ * (475.5) sits well above the ink centre because the 60pt ball box and the text
+ * line boxes carry empty space. In the design the ball reads 422.5..459.1 and
+ * the title 496.8..526.7; this value lands them at 424.7 and 495.2.
  */
-const INTRO_TOP = 387.5;
+const INTRO_TOP = 412;
 /**
  * Frame 718 overflows 21pt above its own bounds, so the row is 402×138. Figma
  * places it 8pt right of center (x 31 in a 448 frame).
@@ -275,7 +279,7 @@ const styles = StyleSheet.create({
   spacer: { flex: 1 },
   intro: { alignItems: 'center' },
   ball: { textAlign: 'center' },
-  title: { color: '#FFFFFF', textAlign: 'center' },
+  title: { color: TITLE, textAlign: 'center' },
   subtitle: { color: '#9E9E9E', textAlign: 'center' },
   leagueRow: { position: 'relative' },
   leagueCard: {

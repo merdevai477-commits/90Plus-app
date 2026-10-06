@@ -20,6 +20,9 @@ export const TSF_ART: { hero: number | null; pitch: number | null } = {
   pitch: require('../../assets/images/top-scorers-five/pitch.jpg'),
 };
 
+/** Prize art on the ranking tab — the shirt the week's top score wins. */
+export const TSF_PRIZE_SHIRT: number = require('../../assets/images/top-scorers-five/shirt.png');
+
 export type TsfLeagueKey = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
 
 export const TSF_LEAGUE_LOGO: Record<TsfLeagueKey, number> = {
