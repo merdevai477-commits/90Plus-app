@@ -1989,8 +1989,8 @@ export const en = {
       },
       engagementHero: {
         title: 'Top Scorers Five',
-        sub: 'Post your reels and lead the interaction charts!',
-        action: 'Post Now',
+        sub: 'Pick five scorers and earn points from every goal!',
+        action: 'Challenge',
       },
       dailyQuiz: {
         title: 'Daily Quiz',

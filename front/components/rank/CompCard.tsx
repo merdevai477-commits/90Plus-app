@@ -40,9 +40,16 @@ export interface CompCardProps {
   rewardHint?: string;
   titleIcon?: LucideIcon;
   ctaIcon?: LucideIcon;
+  /** Darker, taller fade for full-bleed photos, where the text sits on busy art. */
+  photoScrim?: boolean;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }
+
+const SCRIM = {
+  art: { colors: ['transparent', 'rgba(3,0,8,0.25)', 'rgba(3,0,8,0.82)'], locations: [0.45, 0.72, 1] },
+  photo: { colors: ['transparent', 'rgba(3,0,8,0.6)', 'rgba(3,0,8,0.94)'], locations: [0.3, 0.55, 0.8] },
+} as const;
 
 const CompCard: React.FC<CompCardProps> = ({
   img,
@@ -51,9 +58,11 @@ const CompCard: React.FC<CompCardProps> = ({
   actionText,
   titleIcon: TitleIcon,
   ctaIcon: CtaIcon,
+  photoScrim = false,
   onPress,
   style,
 }) => {
+  const scrim = photoScrim ? SCRIM.photo : SCRIM.art;
   const { t, isRTL } = useTranslation();
   const ctaLabel = actionText ?? t.rank.playNow;
   const [slotWidth, setSlotWidth] = useState(0);
@@ -85,8 +94,8 @@ const CompCard: React.FC<CompCardProps> = ({
       />
 
       <LinearGradient
-        colors={['transparent', 'rgba(3,0,8,0.25)', 'rgba(3,0,8,0.82)']}
-        locations={[0.45, 0.72, 1]}
+        colors={scrim.colors}
+        locations={scrim.locations}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
