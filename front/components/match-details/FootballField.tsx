@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurTargetView } from 'expo-blur';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import CachedAthletePhoto from '../common/CachedAthletePhoto';
 import {
@@ -70,6 +71,12 @@ interface FootballFieldProps {
   /** The T-shirt button in the bottom corner opens the substitutes drawer. */
   onBenchPress?: () => void;
   benchButtonLabel?: string;
+  /** Drawn over the whole lineup section; `blurTarget` lets a BlurView frost the pitch on Android. */
+  renderOverlay?: (args: {
+    blurTarget: React.RefObject<View | null>;
+    width: number;
+    height: number;
+  }) => React.ReactNode;
 }
 
 type PitchLayer = {
@@ -314,9 +321,11 @@ export const FootballField: React.FC<FootballFieldProps> = ({
   renderTeamToggle,
   onBenchPress,
   benchButtonLabel,
+  renderOverlay,
 }) => {
   const { width: windowW } = useWindowDimensions();
   const [containerW, setContainerW] = useState(windowW);
+  const blurTargetRef = useRef<View | null>(null);
 
   const onLayout = (e: LayoutChangeEvent) => {
     const w = Math.round(e.nativeEvent.layout.width);
@@ -338,7 +347,7 @@ export const FootballField: React.FC<FootballFieldProps> = ({
 
   return (
     <View style={[styles.section, { height: sectionH }]} onLayout={onLayout}>
-      <View style={{ width: canvasW, height: sectionH }}>
+      <BlurTargetView ref={blurTargetRef} style={{ width: canvasW, height: sectionH }}>
         <Image
           source={LINEUP_ART.stadium}
           style={[styles.abs, { left: 0, top: 0, width: 449 * s, height: 484 * s }]}
@@ -436,7 +445,19 @@ export const FootballField: React.FC<FootballFieldProps> = ({
             />
           </TouchableOpacity>
         ) : null}
-      </View>
+      </BlurTargetView>
+
+      {renderOverlay ? (
+        <View
+          style={[
+            styles.overlay,
+            { left: (containerW - canvasW) / 2, width: canvasW, height: sectionH },
+          ]}
+          pointerEvents="box-none"
+        >
+          {renderOverlay({ blurTarget: blurTargetRef, width: canvasW, height: sectionH })}
+        </View>
+      ) : null}
     </View>
   );
 };
@@ -517,5 +538,10 @@ const styles = StyleSheet.create({
   },
   benchButton: {
     zIndex: 4,
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    zIndex: 10,
   },
 });

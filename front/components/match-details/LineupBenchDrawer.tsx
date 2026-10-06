@@ -1,33 +1,37 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
+  BackHandler,
   Easing,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CachedAthletePhoto from '../common/CachedAthletePhoto';
 import { shortPlayerName, type LineupPitchPlayer } from '../../utils/lineupMatchState';
 import { LineupRatingBadge } from './LineupRatingBadge';
 
-const PANEL_MAX_W = 360;
+const PANEL_RATIO = 0.8;
+const PANEL_MAX_W = 380;
 const COLUMNS = 2;
-const GAP = 10;
-const PADDING = 16;
-const AVATAR = 58;
+const GAP = 8;
+const PADDING = 12;
+const AVATAR = 50;
 const DURATION = 240;
 
 interface LineupBenchDrawerProps {
   visible: boolean;
   onClose: () => void;
+  /** Width/height of the lineup section the drawer covers. */
+  width: number;
+  height: number;
+  blurTarget?: React.RefObject<View | null>;
   players: LineupPitchPlayer[];
   title: string;
   emptyLabel: string;
@@ -41,12 +45,10 @@ interface LineupBenchDrawerProps {
 
 function BenchCell({
   player,
-  width,
   resolvePhoto,
   onPress,
 }: {
   player: LineupPitchPlayer;
-  width: number;
   resolvePhoto: LineupBenchDrawerProps['resolvePhoto'];
   onPress?: (player: LineupPitchPlayer) => void;
 }) {
@@ -54,7 +56,7 @@ function BenchCell({
   const hasRating = player.rating != null && player.rating > 0;
   return (
     <TouchableOpacity
-      style={[styles.cell, { width }, subbedOff && styles.cellOut]}
+      style={[styles.cell, subbedOff && styles.cellOut]}
       onPress={onPress ? () => onPress(player) : undefined}
       disabled={!onPress || !player.id}
       activeOpacity={0.8}
@@ -101,6 +103,9 @@ function BenchCell({
 export function LineupBenchDrawer({
   visible,
   onClose,
+  width,
+  height,
+  blurTarget,
   players,
   title,
   emptyLabel,
@@ -111,10 +116,7 @@ export function LineupBenchDrawer({
   resolvePhoto,
   onPlayerPress,
 }: LineupBenchDrawerProps) {
-  const { width: windowW } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const panelW = Math.min(windowW * 0.82, PANEL_MAX_W);
-  const cellW = (panelW - PADDING * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
+  const panelW = Math.min(width * PANEL_RATIO, PANEL_MAX_W);
   const progress = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
 
@@ -130,14 +132,26 @@ export function LineupBenchDrawer({
     });
   }, [visible, progress]);
 
+  useEffect(() => {
+    if (!visible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [visible, onClose]);
+
   if (!mounted) return null;
 
   const offscreen = rtl ? -panelW : panelW;
   const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [offscreen, 0] });
+  const rows: LineupPitchPlayer[][] = [];
+  for (let i = 0; i < players.length; i += COLUMNS) rows.push(players.slice(i, i + COLUMNS));
+  const rowDirection = rtl ? 'row-reverse' : 'row';
 
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      <Animated.View style={[styles.backdrop, { opacity: progress }]}>
+    <View style={[styles.root, { width, height }]} pointerEvents={visible ? 'auto' : 'none'}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: progress }]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
@@ -150,17 +164,20 @@ export function LineupBenchDrawer({
         style={[
           styles.panel,
           rtl ? styles.panelLeft : styles.panelRight,
-          rtl ? styles.panelEdgeLeft : styles.panelEdgeRight,
-          {
-            width: panelW,
-            paddingTop: insets.top + 12,
-            paddingBottom: insets.bottom,
-            transform: [{ translateX }],
-          },
+          { width: panelW, transform: [{ translateX }] },
         ]}
       >
-        <View style={[styles.header, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
-          <View style={[styles.headerTitle, { flexDirection: rtl ? 'row-reverse' : 'row' }]}>
+        <BlurView
+          intensity={40}
+          tint="dark"
+          blurMethod="dimezisBlurViewSdk31Plus"
+          blurTarget={blurTarget}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[StyleSheet.absoluteFill, styles.glassTint]} pointerEvents="none" />
+
+        <View style={[styles.header, { flexDirection: rowDirection }]}>
+          <View style={[styles.headerTitle, { flexDirection: rowDirection }]}>
             {teamLogo ? (
               <Image source={{ uri: teamLogo }} style={styles.teamLogo} contentFit="contain" />
             ) : null}
@@ -182,117 +199,136 @@ export function LineupBenchDrawer({
             accessibilityLabel={closeLabel}
             hitSlop={8}
           >
-            <Ionicons name="close" size={20} color="#FFFFFF" />
+            <Ionicons name="close" size={18} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
         {players.length === 0 ? (
           <View style={styles.empty}>
-            <Ionicons name="people-outline" size={40} color="#4B3A75" />
+            <Ionicons name="people-outline" size={36} color="#A78BFA" />
             <Text style={styles.emptyText}>{emptyLabel}</Text>
           </View>
         ) : (
           <ScrollView
-            contentContainerStyle={[
-              styles.grid,
-              { flexDirection: rtl ? 'row-reverse' : 'row' },
-            ]}
+            style={styles.scroll}
+            contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
           >
-            {players.map((player, i) => (
-              <BenchCell
-                key={`drawer-bench-${player.id ?? player.name}-${i}`}
-                player={player}
-                width={cellW}
-                resolvePhoto={resolvePhoto}
-                onPress={onPlayerPress}
-              />
+            {rows.map((row, rowIndex) => (
+              <View key={`drawer-row-${rowIndex}`} style={[styles.row, { flexDirection: rowDirection }]}>
+                {row.map((player, i) => (
+                  <BenchCell
+                    key={`drawer-bench-${player.id ?? player.name}-${i}`}
+                    player={player}
+                    resolvePhoto={resolvePhoto}
+                    onPress={onPlayerPress}
+                  />
+                ))}
+                {row.length < COLUMNS ? <View style={styles.cellSpacer} /> : null}
+              </View>
             ))}
           </ScrollView>
         )}
       </Animated.View>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    overflow: 'hidden',
+  },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(3,3,3,0.35)',
   },
   panel: {
     position: 'absolute',
     top: 0,
     bottom: 0,
-    backgroundColor: '#0B0518',
-    borderColor: 'rgba(106,46,242,0.34)',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    paddingTop: PADDING,
   },
   panelRight: {
     right: 0,
     borderTopLeftRadius: 20,
     borderBottomLeftRadius: 20,
+    borderRightWidth: 0,
   },
   panelLeft: {
     left: 0,
     borderTopRightRadius: 20,
     borderBottomRightRadius: 20,
+    borderLeftWidth: 0,
   },
-  panelEdgeRight: {
-    borderLeftWidth: 1,
-  },
-  panelEdgeLeft: {
-    borderRightWidth: 1,
+  glassTint: {
+    backgroundColor: 'rgba(22,10,48,0.45)',
   },
   header: {
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: PADDING,
-    paddingBottom: 14,
-    gap: 12,
+    paddingBottom: 10,
+    gap: 10,
   },
   headerTitle: {
     flex: 1,
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   teamLogo: {
-    width: 32,
-    height: 32,
+    width: 28,
+    height: 28,
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
   },
   subtitle: {
-    color: '#A78BFA',
-    fontSize: 13,
+    color: '#C4B5FD',
+    fontSize: 12,
     fontWeight: '500',
-    marginTop: 2,
+    marginTop: 1,
   },
   closeButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(168,85,247,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
-  grid: {
-    flexWrap: 'wrap',
+  scroll: {
+    flex: 1,
+  },
+  list: {
     gap: GAP,
     paddingHorizontal: PADDING,
-    paddingBottom: 24,
+    paddingBottom: PADDING,
+  },
+  row: {
+    gap: GAP,
   },
   cell: {
+    flex: 1,
+    minWidth: 0,
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderRadius: 16,
-    backgroundColor: 'rgba(20,14,33,0.6)',
-    borderWidth: 2,
-    borderColor: 'rgba(168,85,247,0.1)',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  cellSpacer: {
+    flex: 1,
   },
   cellOut: {
     opacity: 0.55,
@@ -305,25 +341,25 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: -4,
     right: -6,
-    minWidth: 22,
-    height: 22,
+    minWidth: 20,
+    height: 20,
     paddingHorizontal: 4,
-    borderRadius: 11,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#00081B',
     borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.4)',
+    borderColor: 'rgba(168,85,247,0.5)',
   },
   numberText: {
     color: '#D8B3FC',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     includeFontPadding: false,
   },
   name: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
     alignSelf: 'stretch',
@@ -348,12 +384,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
     paddingHorizontal: PADDING,
   },
   emptyText: {
-    color: '#9CA3AF',
-    fontSize: 14,
+    color: '#D1D5DB',
+    fontSize: 13,
     textAlign: 'center',
   },
 });

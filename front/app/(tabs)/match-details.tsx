@@ -1932,6 +1932,27 @@ const MatchDetailsScreen = () => {
                       );
                     }
                   }}
+                  renderOverlay={({ blurTarget, width, height }) => (
+                    <LineupBenchDrawer
+                      visible={benchDrawerOpen}
+                      onClose={() => setBenchDrawerOpen(false)}
+                      width={width}
+                      height={height}
+                      blurTarget={blurTarget}
+                      players={benchPlayers}
+                      title={t.matchDetails.substitutes}
+                      emptyLabel={t.matchDetails.lineupNoSubstitutes}
+                      closeLabel={t.common.close}
+                      teamName={getTeamDisplayName(selectedTeamName, language)}
+                      teamLogo={selectedTeamSide === 'home' ? homeTeamLogo : awayTeamLogo}
+                      rtl={language === 'ar'}
+                      resolvePhoto={resolveLineupPlayerPhoto}
+                      onPlayerPress={(player) => {
+                        setBenchDrawerOpen(false);
+                        openLineupPlayer(player);
+                      }}
+                    />
+                  )}
                 />
 
                 <LineupBestPlayers
@@ -1940,23 +1961,6 @@ const MatchDetailsScreen = () => {
                   rtl={language === 'ar'}
                   resolvePhoto={resolveLineupPlayerPhoto}
                   onPlayerPress={openLineupPlayer}
-                />
-
-                <LineupBenchDrawer
-                  visible={benchDrawerOpen}
-                  onClose={() => setBenchDrawerOpen(false)}
-                  players={benchPlayers}
-                  title={t.matchDetails.substitutes}
-                  emptyLabel={t.matchDetails.lineupNoSubstitutes}
-                  closeLabel={t.common.close}
-                  teamName={getTeamDisplayName(selectedTeamName, language)}
-                  teamLogo={selectedTeamSide === 'home' ? homeTeamLogo : awayTeamLogo}
-                  rtl={language === 'ar'}
-                  resolvePhoto={resolveLineupPlayerPhoto}
-                  onPlayerPress={(player) => {
-                    setBenchDrawerOpen(false);
-                    openLineupPlayer(player);
-                  }}
                 />
               </View>
             );
