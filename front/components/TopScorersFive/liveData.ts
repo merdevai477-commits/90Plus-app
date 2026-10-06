@@ -6,6 +6,7 @@
 import type {
   TsfApiFixture,
   TsfApiLeaderboard,
+  TsfApiMyFixture,
   TsfApiPlayer,
   TsfApiSelection,
 } from '../../services/topScorersFive.service';
@@ -26,18 +27,22 @@ export function tsfPlayerFromApi(player: TsfApiPlayer): TsfPlayer {
     nameAr: player.nameAr,
     nameEn: player.nameEn,
     live: true,
+    athleteId: player.externalPlayerId,
+    teamId: player.teamId,
   };
 }
 
 /** The pick with this gameweek's figures, which its pitch card shows. */
 export function tsfPickFromSelection(data: TsfApiSelection): TsfPlayer | null {
   if (!data.selection) return null;
-  const { player, score } = data.selection;
+  const { player, score, locked, confirmed } = data.selection;
   return {
     ...tsfPlayerFromApi(player),
     goals: score.goals,
     assists: score.assists,
     points: score.points,
+    locked,
+    confirmed,
   };
 }
 
@@ -47,6 +52,23 @@ export function tsfFixtureFromApi(fixture: TsfApiFixture): TsfFixture {
     home: fixture.home.name,
     away: fixture.away.name,
     kickoffISO: fixture.kickoff,
+  };
+}
+
+/** A matches-tab row for one picked player, with his line once the match is stored. */
+export function tsfMyFixtureFor(fixture: TsfApiMyFixture, playerId: string): TsfFixture {
+  const line = fixture.players.find((p) => p.playerId === playerId);
+  return {
+    ...tsfFixtureFromApi(fixture),
+    result:
+      fixture.processed && line
+        ? {
+            goals: line.goals ?? 0,
+            assists: line.assists ?? 0,
+            points: line.points ?? 0,
+            participation: line.participation,
+          }
+        : undefined,
   };
 }
 

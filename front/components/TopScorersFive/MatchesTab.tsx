@@ -1,12 +1,14 @@
 /**
  * "خماسي الهدافين" matches tab — Figma node 1288:14161.
  *
- * Lists the upcoming fixtures of whichever of the user's five is selected in the
- * chip row. Ported from the 448×925 design frame and scaled by device width;
- * the content runs past the frame, so it scrolls under the floating nav.
+ * Lists this gameweek's fixtures of whichever of the user's five is selected in
+ * the chip row — only matches of the picked players' clubs, from one
+ * `/me/fixtures` read — with the player's line once the match is scored.
+ * Ported from the 448×925 design frame and scaled by device width; the content
+ * runs past the frame, so it scrolls under the floating nav.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -16,16 +18,17 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { topScorersFiveService } from '../../services/topScorersFive.service';
+import { topScorersFiveService, type TsfApiMyFixtures } from '../../services/topScorersFive.service';
 import { localeWithLatinNumerals, useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { logger } from '../../utils/logger';
 import { KingEmptyState } from '../KingOfPredictions/KingBoardList';
 
 import { TSF_DESIGN_WIDTH, type TsfLeagueKey } from './assets';
-import { tsfFixtureFromApi } from './liveData';
+import { tsfMyFixtureFor } from './liveData';
 import {
   tsfClubInitials,
   tsfInitials,
@@ -80,30 +83,41 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const active = picked.find((entry) => entry.player.id === selectedId) ?? picked[0];
 
-  const [liveFixtures, setLiveFixtures] = useState<Record<string, readonly TsfFixture[]>>({});
-  const activeLiveId = active?.player.live ? active.player.id : null;
+  const { getToken, isSignedIn } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+  const [mine, setMine] = useState<TsfApiMyFixtures | null>(null);
+  const hasLivePick = picked.some((entry) => entry.player.live);
 
   useEffect(() => {
-    if (!activeLiveId || liveFixtures[activeLiveId]) return;
+    if (!isSignedIn || !hasLivePick) return;
     let cancelled = false;
-    topScorersFiveService
-      .getPlayerFixtures(activeLiveId)
-      .then((rows) => {
-        if (!cancelled) {
-          setLiveFixtures((prev) => ({ ...prev, [activeLiveId]: rows.map(tsfFixtureFromApi) }));
-        }
-      })
-      .catch((error) => logger.warn('[TopScorersFive] fixtures load failed', error));
+    (async () => {
+      const token = await getTokenRef.current().catch(() => null);
+      if (!token || cancelled) return;
+      try {
+        const data = await topScorersFiveService.getMyFixtures(token, language);
+        if (!cancelled) setMine(data);
+      } catch (error) {
+        logger.warn('[TopScorersFive] my fixtures load failed', error);
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [activeLiveId, liveFixtures]);
+  }, [hasLivePick, isSignedIn, language]);
 
-  const fixtures = useMemo(() => {
+  const fixtures = useMemo<readonly TsfFixture[]>(() => {
     if (!active) return [];
-    if (active.player.live) return liveFixtures[active.player.id] ?? [];
-    return tsfMockFixtures(active.league, active.player);
-  }, [active, liveFixtures]);
+    if (!active.player.live) return tsfMockFixtures(active.league, active.player);
+    return (mine?.fixtures ?? [])
+      .filter((fixture) => fixture.players.some((p) => p.playerId === active.player.id))
+      .map((fixture) => tsfMyFixtureFor(fixture, active.player.id));
+  }, [active, mine]);
+
+  const activeState = active?.player.live
+    ? mine?.leagues.find((entry) => entry.leagueKey === active.league)?.state
+    : undefined;
 
   return (
     <View style={styles.root}>
@@ -224,6 +238,17 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
             >
               {copy.playerFixtures.replace('{name}', tsfShortName(active.player))}
             </Text>
+            {activeState ? (
+              <Text
+                style={[
+                  styles.stateLine,
+                  { fontFamily: fontMedium, fontSize: s(12), marginTop: s(4), textAlign: isAr ? 'right' : 'left' },
+                ]}
+                maxFontSizeMultiplier={1.15}
+              >
+                {copy.states[activeState]}
+              </Text>
+            ) : null}
 
             {fixtures.length === 0 ? (
               <KingEmptyState
@@ -244,6 +269,7 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
                     label={copy.versus
                       .replace('{home}', fixture.home)
                       .replace('{away}', fixture.away)}
+                    resultLabel={resultLabel(fixture, copy)}
                   />
                 ))}
               </View>
@@ -255,6 +281,20 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
   );
 }
 
+type MatchesCopy = ReturnType<typeof useTranslation>['t']['topScorersFive']['matches'];
+
+/** "1 G · 1 A · 4 pts", prefixed with why he scored nothing when he did not play. */
+function resultLabel(fixture: TsfFixture, copy: MatchesCopy): string | null {
+  const result = fixture.result;
+  if (!result) return null;
+  const line = copy.result
+    .replace('{goals}', String(result.goals))
+    .replace('{assists}', String(result.assists))
+    .replace('{points}', String(result.points));
+  const didNotPlay = result.participation === 'BENCH' || result.participation === 'UNAVAILABLE' || result.participation === 'NOT_IN_SQUAD';
+  return didNotPlay ? `${copy.participation[result.participation as keyof MatchesCopy['participation']]} · ${line}` : line;
+}
+
 type FixtureRowProps = {
   fixture: TsfFixture;
   s: (value: number) => number;
@@ -263,10 +303,13 @@ type FixtureRowProps = {
   fontBold: string;
   fontMedium: string;
   label: string;
+  resultLabel?: string | null;
 };
 
-function FixtureRow({ fixture, s, isAr, language, fontBold, fontMedium, label }: FixtureRowProps) {
-  const kickoff = formatKickoff(fixture.kickoffISO, language);
+function FixtureRow({ fixture, s, isAr, language, fontBold, fontMedium, label, resultLabel: result }: FixtureRowProps) {
+  const kickoff = result
+    ? `${formatKickoff(fixture.kickoffISO, language)} · ${result}`
+    : formatKickoff(fixture.kickoffISO, language);
 
   return (
     <View
@@ -376,6 +419,7 @@ const styles = StyleSheet.create({
 
   title: { color: '#FFFFFF', textAlign: 'center' },
   sectionTitle: { color: '#FFFFFF' },
+  stateLine: { color: DATE },
 
   chips: { justifyContent: 'center' },
   chip: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

@@ -6,7 +6,7 @@
  * keys as the real tables, so duplicate handling is exercised, not assumed.
  */
 
-import type { TopScorersFiveFixture, TopScorersFiveGameweek } from '@prisma/client';
+import { Prisma, type TopScorersFiveFixture, type TopScorersFiveGameweek } from '@prisma/client';
 
 type PerformanceRow = {
   gameweekId: string;
@@ -15,8 +15,21 @@ type PerformanceRow = {
   goals: number;
   assists: number;
   points: number;
+  participation?: string;
 };
-type SelectionRow = { id: string; userId: string; gameweekId: string; leagueKey: string; playerId: string; updatedAt: Date };
+type SelectionRow = {
+  id: string;
+  userId: string;
+  gameweekId: string;
+  leagueKey: string;
+  playerId: string;
+  confirmedAt: Date | null;
+  updatedAt: Date;
+};
+type SelectionKey = { userId_gameweekId_leagueKey: { userId: string; gameweekId: string; leagueKey: string } };
+
+const findSelection = (key: { userId: string; gameweekId: string; leagueKey: string }) =>
+  db.selections.find((s) => s.userId === key.userId && s.gameweekId === key.gameweekId && s.leagueKey === key.leagueKey);
 
 const db = {
   performances: [] as PerformanceRow[],
@@ -40,7 +53,7 @@ const prismaMock = {
     findUnique: jest.fn(async ({ where }: { where: { id: string } }) => db.players.get(where.id) ?? null),
     findMany: jest.fn(async () => db.pool.map(({ id, externalPlayerId }) => ({ id, externalPlayerId }))),
   },
-  topScorersFiveFixture: { update: jest.fn(async () => ({})) },
+  topScorersFiveFixture: { update: jest.fn(async () => ({})), findMany: jest.fn(async () => []) },
   topScorersFivePerformance: {
     createMany: jest.fn(async ({ data, skipDuplicates }: { data: PerformanceRow[]; skipDuplicates?: boolean }) => {
       let count = 0;
@@ -61,25 +74,33 @@ const prismaMock = {
     groupBy: jest.fn(async () => []),
   },
   topScorersFiveSelection: {
-    upsert: jest.fn(
-      async ({ where, create, update }: {
-        where: { userId_gameweekId_leagueKey: { userId: string; gameweekId: string; leagueKey: string } };
-        create: Omit<SelectionRow, 'id' | 'updatedAt'>;
-        update: { playerId: string };
-      }) => {
-        const key = where.userId_gameweekId_leagueKey;
-        let row = db.selections.find(
-          (s) => s.userId === key.userId && s.gameweekId === key.gameweekId && s.leagueKey === key.leagueKey,
-        );
-        if (row) {
-          Object.assign(row, update, { updatedAt: new Date() });
-        } else {
-          row = { id: `sel-${db.selections.length + 1}`, ...create, updatedAt: new Date() };
-          db.selections.push(row);
-        }
-        return { ...row, player: db.players.get(row.playerId) };
+    findUnique: jest.fn(async ({ where }: { where: SelectionKey }) => {
+      const row = findSelection(where.userId_gameweekId_leagueKey);
+      return row ? { ...row, player: db.players.get(row.playerId) } : null;
+    }),
+    create: jest.fn(async ({ data }: { data: Omit<SelectionRow, 'id' | 'updatedAt'> }) => {
+      if (findSelection(data)) {
+        throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: 'test' });
+      }
+      const row = { id: `sel-${db.selections.length + 1}`, ...data, updatedAt: new Date() };
+      db.selections.push(row);
+      return row;
+    }),
+    updateMany: jest.fn(
+      async ({ where, data }: { where: Omit<SelectionRow, 'id' | 'updatedAt' | 'playerId'>; data: Partial<SelectionRow> }) => {
+        const row = findSelection(where);
+        if (!row || (where.confirmedAt === null && row.confirmedAt !== null)) return { count: 0 };
+        Object.assign(row, data, { updatedAt: new Date() });
+        return { count: 1 };
       },
     ),
+    deleteMany: jest.fn(async ({ where }: { where: Omit<SelectionRow, 'id' | 'updatedAt' | 'playerId'> }) => {
+      const before = db.selections.length;
+      db.selections = db.selections.filter(
+        (s) => !(findSelection(where) === s && (where.confirmedAt !== null || s.confirmedAt === null)),
+      );
+      return { count: before - db.selections.length };
+    }),
   },
   $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
 };
@@ -97,14 +118,19 @@ jest.mock('../scores365-experiment.service', () => ({
 }));
 
 import {
+  combineTsfPickStates,
   computeTsfPoints,
   extractTsfStatsFrom365Game,
   isTsfGameweekOpen,
   nextTsfGameweekStatus,
   sumTsfPerformances,
   tsfGameweekWindow,
+  tsfParticipationFrom365Game,
+  tsfParticipationOf,
+  tsfPickState,
+  tsfUpcomingWindow,
 } from '../top-scorers-five-scoring';
-import { saveTsfSelection, scoreTsfPicks, TopScorersFiveError } from '../top-scorers-five.service';
+import { clearTsfSelection, saveTsfSelection, scoreTsfPicks, TopScorersFiveError } from '../top-scorers-five.service';
 import { processTsfFixture, type TsfProcessingDeps } from '../top-scorers-five-processing.service';
 
 const NOW = new Date('2026-10-10T20:00:00.000Z');
@@ -314,24 +340,106 @@ describe('fixture processing', () => {
   });
 });
 
-describe('selection', () => {
-  it('keeps one pick per user, gameweek and league — a second pick replaces the first', async () => {
-    db.gameweek = gameweek({ status: 'OPEN', lockAt: new Date(NOW.getTime() + 3600_000) });
-    await saveTsfSelection('clerk-1', 'laliga', 'p-mbappe', 'en', NOW);
-    const changed = await saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW);
-    expect(db.selections).toHaveLength(1);
-    expect(db.selections[0]).toMatchObject({ userId: 'user-1', gameweekId: 'gw-1', leagueKey: 'laliga', playerId: 'p-lewa' });
-    expect(changed.selection?.player.id).toBe('p-lewa');
+describe('fixture processing — participation', () => {
+  const LINEUP_GAME = {
+    members: [
+      { id: 11, athleteId: 1001 },
+      { id: 12, athleteId: 1002 },
+      { id: 13, athleteId: 1003 },
+      { id: 14, athleteId: 1004 },
+    ],
+    homeCompetitor: {
+      lineups: { members: [{ id: 11, status: 1 }, { id: 12, status: 2 }, { id: 13, status: 2 }, { id: 14, status: 3 }] },
+    },
+    awayCompetitor: { lineups: { members: [] } },
+    events: [
+      { playerId: 11, extraPlayers: [], eventType: { id: 1 } },
+      { playerId: 99, extraPlayers: [12], eventType: { id: 1000, name: 'Substitution' } },
+    ],
+  };
+
+  it('reads started, came on, unused bench, unavailable and absent from the final lineups', () => {
+    const p = tsfParticipationFrom365Game(LINEUP_GAME);
+    expect(tsfParticipationOf(1001, p)).toBe('STARTED');
+    expect(tsfParticipationOf(1002, p)).toBe('SUBBED_ON');
+    expect(tsfParticipationOf(1003, p)).toBe('BENCH');
+    expect(tsfParticipationOf(1004, p)).toBe('UNAVAILABLE');
+    expect(tsfParticipationOf(2001, p)).toBe('NOT_IN_SQUAD');
+    expect(tsfParticipationOf(1001, tsfParticipationFrom365Game({ members: [], events: [] }))).toBe('UNKNOWN');
   });
 
-  it('refuses to change a pick once the gameweek is locked', async () => {
+  it('stores participation and gives a player who did not play 0 points although his club played', async () => {
+    db.pool = [
+      { id: 'p-mbappe', externalPlayerId: 1001, teamId: 131 },
+      { id: 'p-bench', externalPlayerId: 1003, teamId: 131 },
+      { id: 'p-out', externalPlayerId: 1004, teamId: 131 },
+    ];
+    await processTsfFixture(gameweek(), fixture(), deps(LINEUP_GAME));
+    const byPlayer = Object.fromEntries(db.performances.map((p) => [p.playerId, p]));
+    expect(byPlayer['p-mbappe']).toMatchObject({ goals: 1, points: 3, participation: 'STARTED' });
+    expect(byPlayer['p-bench']).toMatchObject({ goals: 0, assists: 0, points: 0, participation: 'BENCH' });
+    expect(byPlayer['p-out']).toMatchObject({ points: 0, participation: 'UNAVAILABLE' });
+  });
+});
+
+describe('selection — confirm is final', () => {
+  const openWeek = () => gameweek({ status: 'OPEN', lockAt: new Date(NOW.getTime() + 3600_000) });
+
+  it('confirms the pick and reports it locked', async () => {
+    db.gameweek = openWeek();
+    const saved = await saveTsfSelection('clerk-1', 'laliga', 'p-mbappe', 'en', NOW);
+    expect(db.selections).toHaveLength(1);
+    expect(db.selections[0]).toMatchObject({ userId: 'user-1', gameweekId: 'gw-1', leagueKey: 'laliga', playerId: 'p-mbappe', confirmedAt: NOW });
+    expect(saved.selection).toMatchObject({ confirmed: true, locked: true });
+    expect(saved.state).toBe('CONFIRMED');
+  });
+
+  it('refuses another player after confirming with GAMEWEEK_PICK_LOCKED; the same player again is a no-op', async () => {
+    db.gameweek = openWeek();
+    await saveTsfSelection('clerk-1', 'laliga', 'p-mbappe', 'en', NOW);
+    await expect(saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW)).rejects.toMatchObject({ code: 'GAMEWEEK_PICK_LOCKED' });
+    expect(db.selections[0].playerId).toBe('p-mbappe');
+    const again = await saveTsfSelection('clerk-1', 'laliga', 'p-mbappe', 'en', NOW);
+    expect(again.selection?.player.id).toBe('p-mbappe');
+  });
+
+  it('refuses to remove a confirmed pick', async () => {
+    db.gameweek = openWeek();
+    await saveTsfSelection('clerk-1', 'laliga', 'p-mbappe', 'en', NOW);
+    await expect(clearTsfSelection('clerk-1', 'laliga', NOW)).rejects.toMatchObject({ code: 'GAMEWEEK_PICK_LOCKED' });
+    expect(db.selections).toHaveLength(1);
+  });
+
+  it('lets a carried-over, unconfirmed pick be replaced once, then locks it', async () => {
+    db.gameweek = openWeek();
+    db.selections.push({ id: 'sel-1', userId: 'user-1', gameweekId: 'gw-1', leagueKey: 'laliga', playerId: 'p-vini', confirmedAt: null, updatedAt: NOW });
+    const replaced = await saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW);
+    expect(replaced.selection).toMatchObject({ confirmed: true });
+    expect(db.selections).toEqual([expect.objectContaining({ playerId: 'p-lewa', confirmedAt: NOW })]);
+    await expect(saveTsfSelection('clerk-1', 'laliga', 'p-mbappe', 'en', NOW)).rejects.toMatchObject({ code: 'GAMEWEEK_PICK_LOCKED' });
+  });
+
+  it('lets only one of two racing confirms win', async () => {
+    db.gameweek = openWeek();
+    const results = await Promise.allSettled([
+      saveTsfSelection('clerk-1', 'laliga', 'p-mbappe', 'en', NOW),
+      saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    expect(rejected?.reason).toMatchObject({ code: 'GAMEWEEK_PICK_LOCKED' });
+    expect(db.selections).toHaveLength(1);
+  });
+
+  it('refuses any pick once the gameweek deadline has passed', async () => {
     db.gameweek = gameweek({ status: 'OPEN', lockAt: new Date(NOW.getTime() - 60_000) });
     await expect(saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW)).rejects.toMatchObject({
       code: 'GAMEWEEK_LOCKED',
     });
     db.gameweek = gameweek({ status: 'LIVE', lockAt: new Date(NOW.getTime() + 3600_000) });
     await expect(saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW)).rejects.toBeInstanceOf(TopScorersFiveError);
-    expect(prismaMock.topScorersFiveSelection.upsert).not.toHaveBeenCalled();
+    expect(prismaMock.topScorersFiveSelection.create).not.toHaveBeenCalled();
+    expect(prismaMock.topScorersFiveSelection.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects players outside the eligible list or not linked to match data', async () => {
@@ -368,10 +476,77 @@ describe('gameweek window and lifecycle', () => {
     expect(nextTsfGameweekStatus('LIVE', { ...base, now: new Date('2026-10-08T00:00:00.000Z') })).toBe('LIVE');
   });
 
+  it('computes the upcoming window as the next 7 days from now', () => {
+    const { from, to } = tsfUpcomingWindow(NOW);
+    expect(from).toEqual(NOW);
+    expect(to.getTime() - from.getTime()).toBe(7 * 86_400_000);
+  });
+
+  it('starts a carried-over pick at 0 in the next gameweek — points never carry over', () => {
+    const points = new Map([['gw-1:p-vini', 7]]);
+    const picks = [
+      { userId: 'u1', gameweekId: 'gw-1', playerId: 'p-vini', leagueKey: 'laliga' },
+      { userId: 'u1', gameweekId: 'gw-2', playerId: 'p-vini', leagueKey: 'laliga' },
+    ];
+    expect(scoreTsfPicks(picks.slice(1), points).get('u1')).toBe(0);
+    expect(scoreTsfPicks(picks, points).get('u1')).toBe(7);
+  });
+
   it('allows edits only while OPEN and before the deadline', () => {
     const lockAt = new Date(NOW.getTime() + 1);
     expect(isTsfGameweekOpen({ status: 'OPEN', lockAt }, NOW)).toBe(true);
     expect(isTsfGameweekOpen({ status: 'OPEN', lockAt: NOW }, NOW)).toBe(false);
     expect(isTsfGameweekOpen({ status: 'LOCKED', lockAt }, NOW)).toBe(false);
+  });
+});
+
+describe('pick state', () => {
+  const END = new Date('2026-10-13T00:00:00.000Z');
+  const past = (hours: number) => new Date(NOW.getTime() - hours * 3600_000);
+  const later = (hours: number) => new Date(NOW.getTime() + hours * 3600_000);
+  const state = (fixtures: Parameters<typeof tsfPickState>[0]['fixtures'], extra: Partial<Parameters<typeof tsfPickState>[0]> = {}) =>
+    tsfPickState({ picked: true, locked: true, now: NOW, windowEnd: END, fixtures, ...extra });
+
+  it('is PICKING with no pick or an unconfirmed carried-over pick in an open week', () => {
+    expect(state([], { picked: false })).toBe('PICKING');
+    expect(state([], { locked: false })).toBe('PICKING');
+  });
+
+  it('is CONFIRMED until the first relevant match kicks off', () => {
+    expect(state([{ kickoffAt: later(20), status: 'NS', processed: false }])).toBe('CONFIRMED');
+  });
+
+  it('waits for every relevant match — two matches, one still to come', () => {
+    expect(state([
+      { kickoffAt: past(30), status: 'FT', processed: true },
+      { kickoffAt: later(20), status: 'NS', processed: false },
+    ])).toBe('WAITING_FOR_MATCHES');
+  });
+
+  it('is CALCULATING when every match is over but stats are not all stored, COMPLETED when they are', () => {
+    expect(state([
+      { kickoffAt: past(30), status: 'FT', processed: true },
+      { kickoffAt: past(3), status: 'FT', processed: false },
+    ])).toBe('CALCULATING');
+    expect(state([
+      { kickoffAt: past(30), status: 'FT', processed: true },
+      { kickoffAt: past(3), status: 'CANC', processed: true },
+    ])).toBe('COMPLETED');
+  });
+
+  it('ignores a postponed match and closes a week with no match at its end', () => {
+    expect(state([
+      { kickoffAt: past(30), status: 'FT', processed: true },
+      { kickoffAt: past(5), status: 'PST', processed: false },
+    ])).toBe('COMPLETED');
+    expect(state([])).toBe('CONFIRMED');
+    expect(state([], { now: END })).toBe('COMPLETED');
+  });
+
+  it('is final for the user only once every pick is — four done, one waiting', () => {
+    expect(combineTsfPickStates(['COMPLETED', 'COMPLETED', 'COMPLETED', 'WAITING_FOR_MATCHES', 'COMPLETED'])).toBe('WAITING_FOR_MATCHES');
+    expect(combineTsfPickStates(['COMPLETED', 'CALCULATING'])).toBe('CALCULATING');
+    expect(combineTsfPickStates(['COMPLETED', 'COMPLETED'])).toBe('COMPLETED');
+    expect(combineTsfPickStates([])).toBe('PICKING');
   });
 });

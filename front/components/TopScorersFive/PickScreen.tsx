@@ -5,12 +5,19 @@
  * The bar at the foot is an in-page switcher rather than a router tab bar, so
  * all three live on one route and the picks survive moving between them.
  * Leagues in `TSF_LIVE_LEAGUES` load their pool and the saved pick from the
- * backend and save every change; the others stay local placeholder picks.
+ * backend; the others stay local placeholder picks.
+ *
+ * Picking is two steps: a tap in the grid only proposes the player, and the
+ * confirmation sheet's "Yes" saves it — final for the gameweek, which the
+ * server enforces (GAMEWEEK_PICK_LOCKED). "View player profile" opens the
+ * app's player career screen with the picker hidden, and the pending
+ * proposal is still there on return.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -22,6 +29,7 @@ import {
 import { useTranslation } from '../../src/i18n';
 import { logger } from '../../utils/logger';
 import { useScreenFont } from '../../utils/fontSetup';
+import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 
 import { TSF_DESIGN_WIDTH, type TsfLeagueKey } from './assets';
 import { tsfPickFromSelection, tsfPlayerFromApi } from './liveData';
@@ -53,6 +61,15 @@ export default function TopScorersFivePickScreen() {
   const [picks, setPicks] = useState<Partial<Record<TsfLeagueKey, TsfPlayer>>>({});
   const [openLeague, setOpenLeague] = useState<TsfLeagueKey | null>(null);
   const [livePlayers, setLivePlayers] = useState<Partial<Record<TsfLeagueKey, readonly TsfPlayer[]>>>({});
+  const [pending, setPending] = useState<TsfPlayer | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      setProfileOpen(false);
+    }, []),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -118,6 +135,33 @@ export default function TopScorersFivePickScreen() {
     });
   }, []);
 
+  const explainLocked = useCallback(
+    (player: TsfPlayer | undefined) => {
+      if (player?.confirmed) {
+        Alert.alert(pickCopy.pickLockedTitle, pickCopy.pickLockedBody.replace('{name}', player.name));
+      } else {
+        Alert.alert(pickCopy.lockedTitle, pickCopy.lockedBody);
+      }
+    },
+    [pickCopy],
+  );
+
+  /** Re-reads one league's saved pick, e.g. after the server refused a change. */
+  const reloadPick = useCallback(
+    async (token: string, league: TsfLeagueKey) => {
+      try {
+        const data = await topScorersFiveService.getSelection(token, league, language);
+        const pick = tsfPickFromSelection(data);
+        setPick(league, pick ?? undefined);
+        return pick;
+      } catch (error) {
+        logger.warn('[TopScorersFive] selection reload failed', error);
+        return null;
+      }
+    },
+    [language, setPick],
+  );
+
   const explainFailure = useCallback(
     (error: unknown) => {
       if (error instanceof TsfApiError && error.reason === 'GAMEWEEK_LOCKED') {
@@ -131,36 +175,86 @@ export default function TopScorersFivePickScreen() {
     [pickCopy],
   );
 
-  const handlePick = useCallback(
-    (league: TsfLeagueKey, player: TsfPlayer) => {
-      const previous = picks[league];
+  const handleOpenLeague = useCallback(
+    (league: TsfLeagueKey) => {
+      const current = picks[league];
+      if (current?.locked) {
+        explainLocked(current);
+        return;
+      }
+      setOpenLeague(league);
+    },
+    [explainLocked, picks],
+  );
+
+  const handlePick = useCallback((league: TsfLeagueKey, player: TsfPlayer) => {
+    if (!isLive(league)) {
       setPick(league, player);
       setOpenLeague(null);
-      if (!isLive(league)) return;
+      return;
+    }
+    setPending(player);
+  }, [setPick]);
 
-      (async () => {
-        const token = isSignedIn ? await getTokenRef.current().catch(() => null) : null;
-        if (!token) {
-          setPick(league, previous);
-          Alert.alert(pickCopy.signInTitle, pickCopy.signInBody);
-          return;
-        }
-        try {
-          const data = await topScorersFiveService.saveSelection(token, league, player.id, language);
-          setPick(league, tsfPickFromSelection(data) ?? player);
-        } catch (error) {
-          logger.warn('[TopScorersFive] save failed', error);
-          setPick(league, previous);
+  const closePicker = useCallback(() => {
+    setPending(null);
+    setOpenLeague(null);
+  }, []);
+
+  const handleConfirm = useCallback(() => {
+    const league = openLeague;
+    const player = pending;
+    if (!league || !player || confirming) return;
+
+    (async () => {
+      const token = isSignedIn ? await getTokenRef.current().catch(() => null) : null;
+      if (!token) {
+        Alert.alert(pickCopy.signInTitle, pickCopy.signInBody);
+        return;
+      }
+      setConfirming(true);
+      try {
+        const data = await topScorersFiveService.saveSelection(token, league, player.id, language);
+        setPick(league, tsfPickFromSelection(data) ?? { ...player, locked: true, confirmed: true });
+        closePicker();
+      } catch (error) {
+        logger.warn('[TopScorersFive] confirm failed', error);
+        if (error instanceof TsfApiError && error.reason === 'GAMEWEEK_PICK_LOCKED') {
+          const saved = await reloadPick(token, league);
+          closePicker();
+          explainLocked(saved ?? { ...player, confirmed: true });
+        } else {
           explainFailure(error);
         }
-      })();
+      } finally {
+        setConfirming(false);
+      }
+    })();
+  }, [closePicker, confirming, explainFailure, explainLocked, isSignedIn, language, openLeague, pending, pickCopy, reloadPick, setPick]);
+
+  const handleViewProfile = useCallback(
+    (player: TsfPlayer) => {
+      if (player.athleteId == null) return;
+      setProfileOpen(true);
+      pushPlayerCareer(router, {
+        athleteId: player.athleteId,
+        name: player.name,
+        photo: player.photo,
+        teamName: player.club,
+        teamLogo: player.clubLogo,
+        teamId: player.teamId,
+      });
     },
-    [explainFailure, isSignedIn, language, pickCopy, picks, setPick],
+    [router],
   );
 
   const handleRemove = useCallback(
     (league: TsfLeagueKey) => {
       const previous = picks[league];
+      if (previous?.locked) {
+        explainLocked(previous);
+        return;
+      }
       setPick(league, undefined);
       if (!isLive(league) || !previous) return;
 
@@ -171,12 +265,16 @@ export default function TopScorersFivePickScreen() {
           await topScorersFiveService.clearSelection(token, league);
         } catch (error) {
           logger.warn('[TopScorersFive] clear failed', error);
+          if (error instanceof TsfApiError && error.reason === 'GAMEWEEK_PICK_LOCKED') {
+            explainLocked((await reloadPick(token, league)) ?? previous);
+            return;
+          }
           setPick(league, previous);
           explainFailure(error);
         }
       })();
     },
-    [explainFailure, isSignedIn, picks, setPick],
+    [explainFailure, explainLocked, isSignedIn, picks, reloadPick, setPick],
   );
 
   const goToPitch = useCallback(() => setTab('pitch'), []);
@@ -200,7 +298,7 @@ export default function TopScorersFivePickScreen() {
           picks={picks}
           scale={scale}
           onBack={handleBack}
-          onOpenLeague={setOpenLeague}
+          onOpenLeague={handleOpenLeague}
           onRemove={handleRemove}
         />
       ) : null}
@@ -215,10 +313,16 @@ export default function TopScorersFivePickScreen() {
 
       <PlayerPicker
         league={openLeague}
+        hidden={profileOpen}
         players={livePlayers}
-        selectedId={openLeague ? picks[openLeague]?.id : undefined}
-        onClose={() => setOpenLeague(null)}
+        selectedId={openLeague ? (pending?.id ?? picks[openLeague]?.id) : undefined}
+        onClose={closePicker}
         onPick={handlePick}
+        pending={pending}
+        confirming={confirming}
+        onConfirm={handleConfirm}
+        onCancelPending={() => setPending(null)}
+        onViewProfile={handleViewProfile}
       />
     </View>
   );

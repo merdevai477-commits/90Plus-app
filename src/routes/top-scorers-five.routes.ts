@@ -12,15 +12,17 @@ import {
   TopScorersFiveError,
   clearTsfSelection,
   getTsfLeaderboard,
+  getTsfMyFixtures,
   getTsfSelection,
   getTsfUserScore,
   listTsfEligiblePlayers,
   listTsfPlayerFixtures,
+  listTsfUpcomingFixtures,
   saveTsfSelection,
   type TsfErrorCode,
   type TsfLanguage,
 } from '../services/top-scorers-five.service';
-import { processTopScorersFive } from '../services/top-scorers-five-processing.service';
+import { processTopScorersFive, syncTsfPickFixtures } from '../services/top-scorers-five-processing.service';
 import { resolveTopScorersFivePool, seedTopScorersFivePool } from '../services/top-scorers-five-pool.service';
 import { getTsfLeagueConfig, type TsfLeagueKey } from '../services/top-scorers-five-scoring';
 
@@ -33,6 +35,7 @@ const ERROR_MAP: Record<TsfErrorCode, ErrorCodeValue> = {
   PLAYER_NOT_ELIGIBLE: ErrorCode.VALIDATION,
   PLAYER_UNRESOLVED: ErrorCode.VALIDATION,
   GAMEWEEK_LOCKED: ErrorCode.CONFLICT,
+  GAMEWEEK_PICK_LOCKED: ErrorCode.CONFLICT,
 };
 
 function language(req: Request): TsfLanguage {
@@ -78,7 +81,11 @@ router.get('/leagues/:leagueKey/selection', requireAuth, handle('get selection',
   res.json({ success: true, data });
 }));
 
-/** C. PUT /leagues/:leagueKey/selection { playerId } — pick or change while open. */
+/**
+ * C. PUT /leagues/:leagueKey/selection { playerId } — confirm the pick; final
+ * for the gameweek. Only `playerId` is read: the gameweek, lock and points are
+ * the server's.
+ */
 router.put('/leagues/:leagueKey/selection', requireAuth, handle('save selection', async (req, res) => {
   const id = clerkId(req, res);
   if (!id) return;
@@ -87,11 +94,27 @@ router.put('/leagues/:leagueKey/selection', requireAuth, handle('save selection'
     sendError(req, res, ErrorCode.VALIDATION, 'playerId is required');
     return;
   }
-  const data = await saveTsfSelection(id, String(req.params.leagueKey), playerId, language(req));
+  const leagueKey = String(req.params.leagueKey);
+  const data = await saveTsfSelection(id, leagueKey, playerId, language(req));
   res.json({ success: true, data });
+  syncTsfPickFixtures(leagueKey, data.selection?.player.teamId ?? null).catch((error) =>
+    logger.warn(`[TopScorersFive] fixture sync after confirm failed: ${(error as Error)?.message}`),
+  );
 }));
 
-/** DELETE /leagues/:leagueKey/selection — drop the pick while open. */
+/** GET /leagues/:leagueKey/fixtures/upcoming — the league's fixtures in the next 7 days. */
+router.get('/leagues/:leagueKey/fixtures/upcoming', handle('upcoming fixtures', async (req, res) => {
+  res.json({ success: true, data: await listTsfUpcomingFixtures(String(req.params.leagueKey)) });
+}));
+
+/** GET /me/fixtures — only the fixtures of my picked players, with their results once stored. */
+router.get('/me/fixtures', requireAuth, handle('my fixtures', async (req, res) => {
+  const id = clerkId(req, res);
+  if (!id) return;
+  res.json({ success: true, data: await getTsfMyFixtures(id, language(req)) });
+}));
+
+/** DELETE /leagues/:leagueKey/selection — drop an unconfirmed pick while open. */
 router.delete('/leagues/:leagueKey/selection', requireAuth, handle('clear selection', async (req, res) => {
   const id = clerkId(req, res);
   if (!id) return;

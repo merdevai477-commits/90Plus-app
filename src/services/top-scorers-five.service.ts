@@ -11,13 +11,20 @@ import { Prisma, type TopScorersFiveGameweek, type TopScorersFivePlayer } from '
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import {
+  combineTsfPickStates,
   enabledTsfLeagues,
   getTsfLeagueConfig,
+  isTsfFinishedStatus,
   isTsfGameweekOpen,
+  isTsfSelectionLocked,
+  isTsfVoidStatus,
   sumTsfPerformances,
   tsfGameweekWindow,
+  tsfPickState,
   tsfPortraitUrl,
+  tsfUpcomingWindow,
   type TsfLeagueConfig,
+  type TsfPickState,
 } from './top-scorers-five-scoring';
 import { threeSixFiveScoresService } from './threeSixFiveScores.service';
 
@@ -27,7 +34,8 @@ export type TsfErrorCode =
   | 'PLAYER_NOT_FOUND'
   | 'PLAYER_NOT_ELIGIBLE'
   | 'PLAYER_UNRESOLVED'
-  | 'GAMEWEEK_LOCKED';
+  | 'GAMEWEEK_LOCKED'
+  | 'GAMEWEEK_PICK_LOCKED';
 
 export class TopScorersFiveError extends Error {
   constructor(public readonly code: TsfErrorCode, message: string) {
@@ -74,7 +82,9 @@ export async function computeTsfLockAt(
 
 /**
  * The gameweek `now` falls in, created on first use. A new week inherits each
- * user's pick from the league's previous week, so a pick stands until changed.
+ * user's pick from the league's previous week, unconfirmed, so the pick stands
+ * until the user confirms it or a new one. Only the pick carries over: points
+ * are per (gameweek, player, fixture) and start from zero.
  */
 export async function ensureTsfGameweek(leagueKey: string, now: Date = new Date()): Promise<TopScorersFiveGameweek> {
   const cfg = requireLeague(leagueKey);
@@ -281,41 +291,65 @@ export type TsfFixtureScoreDto = {
 export type TsfSelectionDto = {
   leagueKey: string;
   gameweek: TsfGameweekDto;
+  /** Where this league's pick stands (see `tsfPickState`). */
+  state: TsfPickState;
   selection: null | {
     player: TsfPlayerDto;
     /** D. The pick's score this gameweek, from finished fixtures only. */
     score: { goals: number; assists: number; points: number; fixtures: TsfFixtureScoreDto[] };
+    /** The user confirmed this pick; it is final for the gameweek. */
+    confirmed: boolean;
+    confirmedAt: string | null;
+    /** Cannot be changed or removed any more (confirmed, or the gameweek is closed). */
+    locked: boolean;
     updatedAt: string;
   };
 };
 
+type SelectionWithPlayer = { playerId: string; confirmedAt: Date | null; updatedAt: Date; player: TopScorersFivePlayer };
+
 async function selectionDto(
   gameweek: TopScorersFiveGameweek,
-  selection: { playerId: string; updatedAt: Date; player: TopScorersFivePlayer } | null,
+  selection: SelectionWithPlayer | null,
   language: TsfLanguage,
+  now: Date = new Date(),
 ): Promise<TsfSelectionDto> {
-  if (!selection) return { leagueKey: gameweek.leagueKey, gameweek: gameweekDto(gameweek), selection: null };
-
-  const performances = await prisma.topScorersFivePerformance.findMany({
-    where: { gameweekId: gameweek.id, playerId: selection.playerId },
-    orderBy: { fixtureDate: 'asc' },
-    select: { fixtureId: true, fixtureDate: true, goals: true, assists: true, points: true },
-  });
-  const totals = await playerTotals([selection.playerId]);
   const cfg = getTsfLeagueConfig(gameweek.leagueKey);
-  const season = cfg ? await tsfSeasonStats(cfg, teamIdsOf([selection.player])) : new Map<number, TsfSeasonLine>();
+  if (!selection) {
+    return { leagueKey: gameweek.leagueKey, gameweek: gameweekDto(gameweek, now), state: 'PICKING', selection: null };
+  }
+
+  const [performances, totals, season, fixtures] = await Promise.all([
+    prisma.topScorersFivePerformance.findMany({
+      where: { gameweekId: gameweek.id, playerId: selection.playerId },
+      orderBy: { fixtureDate: 'asc' },
+      select: { fixtureId: true, fixtureDate: true, goals: true, assists: true, points: true },
+    }),
+    playerTotals([selection.playerId]),
+    cfg ? tsfSeasonStats(cfg, teamIdsOf([selection.player])) : Promise.resolve(new Map<number, TsfSeasonLine>()),
+    cfg ? tsfRelevantFixtures(cfg, gameweek, teamIdsOf([selection.player])) : Promise.resolve([]),
+  ]);
+  const locked = isTsfSelectionLocked(selection, gameweek, now);
   return {
     leagueKey: gameweek.leagueKey,
-    gameweek: gameweekDto(gameweek),
+    gameweek: gameweekDto(gameweek, now),
+    state: tsfPickState({ picked: true, locked, now, windowEnd: gameweek.endAt, fixtures }),
     selection: {
       player: playerDto(selection.player, language, totals.get(selection.playerId), season),
       score: {
         ...sumTsfPerformances(performances),
         fixtures: performances.map((row) => ({ ...row, fixtureDate: row.fixtureDate.toISOString() })),
       },
+      confirmed: selection.confirmedAt != null,
+      confirmedAt: selection.confirmedAt?.toISOString() ?? null,
+      locked,
       updatedAt: selection.updatedAt.toISOString(),
     },
   };
+}
+
+function selectionKey(userId: string, gameweek: TopScorersFiveGameweek) {
+  return { userId_gameweekId_leagueKey: { userId, gameweekId: gameweek.id, leagueKey: gameweek.leagueKey } };
 }
 
 /** B + D. The signed-in user's pick for the league's current gameweek. */
@@ -323,13 +357,20 @@ export async function getTsfSelection(clerkUserId: string, leagueKey: string, la
   const userId = await requireUserId(clerkUserId);
   const gameweek = await ensureTsfGameweek(leagueKey);
   const selection = await prisma.topScorersFiveSelection.findUnique({
-    where: { userId_gameweekId_leagueKey: { userId, gameweekId: gameweek.id, leagueKey: gameweek.leagueKey } },
+    where: selectionKey(userId, gameweek),
     include: { player: true },
   });
   return selectionDto(gameweek, selection, language);
 }
 
-/** C. Pick or change the league's player while the gameweek is open. */
+/**
+ * C. Confirm the league's player for the current gameweek. Confirming is final:
+ * once a pick is confirmed, any other player is refused with
+ * GAMEWEEK_PICK_LOCKED until the next gameweek (re-sending the same player is a
+ * no-op). A carried-over pick that was never confirmed can be confirmed or
+ * replaced once, while the gameweek is open. The confirm itself is a
+ * conditional write, so two racing requests cannot both win.
+ */
 export async function saveTsfSelection(
   clerkUserId: string,
   leagueKey: string,
@@ -349,28 +390,54 @@ export async function saveTsfSelection(
   }
 
   const gameweek = await ensureTsfGameweek(cfg.key, now);
+  const where = selectionKey(userId, gameweek);
+  const settled = async (): Promise<TsfSelectionDto> => {
+    const current = await prisma.topScorersFiveSelection.findUnique({ where, include: { player: true } });
+    if (current?.confirmedAt && current.playerId === player.id) return selectionDto(gameweek, current, language, now);
+    throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your pick is confirmed for this gameweek');
+  };
+
+  const existing = await prisma.topScorersFiveSelection.findUnique({ where, include: { player: true } });
+  if (existing?.confirmedAt) return settled();
   if (!isTsfGameweekOpen(gameweek, now)) {
     throw new TopScorersFiveError('GAMEWEEK_LOCKED', 'Picks are locked for this gameweek');
   }
 
-  const selection = await prisma.topScorersFiveSelection.upsert({
-    where: { userId_gameweekId_leagueKey: { userId, gameweekId: gameweek.id, leagueKey: cfg.key } },
-    create: { userId, gameweekId: gameweek.id, leagueKey: cfg.key, playerId: player.id },
-    update: { playerId: player.id },
-    include: { player: true },
-  });
-  return selectionDto(gameweek, selection, language);
+  if (existing) {
+    const { count } = await prisma.topScorersFiveSelection.updateMany({
+      where: { userId, gameweekId: gameweek.id, leagueKey: cfg.key, confirmedAt: null },
+      data: { playerId: player.id, confirmedAt: now },
+    });
+    if (count === 0) return settled();
+  } else {
+    try {
+      await prisma.topScorersFiveSelection.create({
+        data: { userId, gameweekId: gameweek.id, leagueKey: cfg.key, playerId: player.id, confirmedAt: now },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return settled();
+      throw error;
+    }
+  }
+  return settled();
 }
 
-/** Drop the league's pick while the gameweek is open (the pitch card's ✕). */
+/**
+ * Drop the league's pick (the pitch card's ✕). Only an unconfirmed,
+ * carried-over pick can be dropped, and only while the gameweek is open.
+ */
 export async function clearTsfSelection(clerkUserId: string, leagueKey: string, now: Date = new Date()): Promise<void> {
   const userId = await requireUserId(clerkUserId);
   const gameweek = await ensureTsfGameweek(leagueKey, now);
+  const existing = await prisma.topScorersFiveSelection.findUnique({ where: selectionKey(userId, gameweek) });
+  if (existing?.confirmedAt) {
+    throw new TopScorersFiveError('GAMEWEEK_PICK_LOCKED', 'Your pick is confirmed for this gameweek');
+  }
   if (!isTsfGameweekOpen(gameweek, now)) {
     throw new TopScorersFiveError('GAMEWEEK_LOCKED', 'Picks are locked for this gameweek');
   }
   await prisma.topScorersFiveSelection.deleteMany({
-    where: { userId, gameweekId: gameweek.id, leagueKey: gameweek.leagueKey },
+    where: { userId, gameweekId: gameweek.id, leagueKey: gameweek.leagueKey, confirmedAt: null },
   });
 }
 
@@ -402,16 +469,19 @@ export function scoreTsfPicks(picks: PickRow[], points: Map<string, number>): Ma
 
 export type TsfUserScoreDto = {
   total: number;
+  /** This gameweek: the sum of every picked player's points over all his fixtures. */
   week: number;
-  leagues: Array<{ leagueKey: string; total: number; week: number }>;
+  /** COMPLETED only once every picked player's matches this gameweek are stored. */
+  state: TsfPickState;
+  leagues: Array<{ leagueKey: string; total: number; week: number; state: TsfPickState }>;
 };
 
 /** E. The user's competition score: all leagues, all gameweeks (and this week). */
 export async function getTsfUserScore(clerkUserId: string): Promise<TsfUserScoreDto> {
   const userId = await requireUserId(clerkUserId);
-  const currentIds = new Set(
-    (await Promise.all(enabledTsfLeagues().map((cfg) => ensureTsfGameweek(cfg.key)))).map((gw) => gw.id),
-  );
+  const leaguePicks = await tsfLeaguePicks(userId);
+  const currentIds = new Set(leaguePicks.map((p) => p.gameweek.id));
+  const stateByLeague = new Map(leaguePicks.map((p) => [p.cfg.key as string, p.state]));
   const picks = await prisma.topScorersFiveSelection.findMany({
     where: { userId },
     select: { userId: true, gameweekId: true, playerId: true, leagueKey: true },
@@ -426,10 +496,15 @@ export async function getTsfUserScore(clerkUserId: string): Promise<TsfUserScore
     if (currentIds.has(pick.gameweekId)) entry.week += value;
     leagues.set(pick.leagueKey, entry);
   }
-  const list = [...leagues.entries()].map(([leagueKey, v]) => ({ leagueKey, ...v }));
+  const list = [...leagues.entries()].map(([leagueKey, v]) => ({
+    leagueKey,
+    ...v,
+    state: stateByLeague.get(leagueKey) ?? ('PICKING' as TsfPickState),
+  }));
   return {
     total: list.reduce((sum, l) => sum + l.total, 0),
     week: list.reduce((sum, l) => sum + l.week, 0),
+    state: combineTsfPickStates(leaguePicks.filter((p) => p.selection != null).map((p) => p.state)),
     leagues: list,
   };
 }
@@ -500,13 +575,250 @@ export async function getTsfLeaderboard(params: {
 
 // ─── Fixtures (matches tab) ─────────────────────────────────────────────────
 
+type TsfTeamRef = { id: number; name: string; logo: string | null };
+
 export type TsfUpcomingFixtureDto = {
   fixtureId: number;
   kickoff: string;
   status: string;
-  home: { id: number; name: string; logo: string | null };
-  away: { id: number; name: string; logo: string | null };
+  home: TsfTeamRef;
+  away: TsfTeamRef;
 };
+
+type RelevantFixture = {
+  fixtureId: number;
+  kickoffAt: Date;
+  status: string;
+  /** Stats stored (or the fixture voided) — it will not change any more. */
+  processed: boolean;
+  home: TsfTeamRef;
+  away: TsfTeamRef;
+  season: number | null;
+};
+
+const FIXTURE_SELECT = {
+  fixtureId: true, matchDate: true, status: true, leagueSeason: true,
+  homeTeamId: true, homeTeamName: true, homeTeamLogo: true,
+  awayTeamId: true, awayTeamName: true, awayTeamLogo: true,
+} as const;
+
+/**
+ * The gameweek's fixtures for these clubs: the shared fixture cache (kept fresh
+ * by the live pipeline) merged with the fixtures the scoring job has stored for
+ * the week, whose `processedAt` says the stats are in. Nothing upstream is called.
+ */
+async function tsfRelevantFixtures(
+  cfg: TsfLeagueConfig,
+  gameweek: TopScorersFiveGameweek,
+  teamIds: number[],
+): Promise<RelevantFixture[]> {
+  if (teamIds.length === 0) return [];
+  const clubs = [{ homeTeamId: { in: teamIds } }, { awayTeamId: { in: teamIds } }];
+  const [cached, stored] = await Promise.all([
+    prisma.cachedFixture.findMany({
+      where: { leagueId: cfg.competitionLeagueId, matchDate: { gte: gameweek.startAt, lt: gameweek.endAt }, OR: clubs },
+      select: FIXTURE_SELECT,
+    }),
+    prisma.topScorersFiveFixture.findMany({ where: { gameweekId: gameweek.id, OR: clubs } }),
+  ]);
+
+  const byId = new Map<number, RelevantFixture>();
+  for (const row of cached) {
+    byId.set(row.fixtureId, {
+      fixtureId: row.fixtureId,
+      kickoffAt: row.matchDate,
+      status: row.status,
+      processed: false,
+      home: { id: row.homeTeamId, name: row.homeTeamName, logo: row.homeTeamLogo ?? COMPETITOR_LOGO(row.homeTeamId) },
+      away: { id: row.awayTeamId, name: row.awayTeamName, logo: row.awayTeamLogo ?? COMPETITOR_LOGO(row.awayTeamId) },
+      season: row.leagueSeason ?? null,
+    });
+  }
+  for (const row of stored) {
+    const base = byId.get(row.fixtureId);
+    const processed = row.processedAt != null;
+    byId.set(row.fixtureId, {
+      fixtureId: row.fixtureId,
+      kickoffAt: row.kickoffAt,
+      status: processed ? row.status : (base?.status ?? row.status),
+      processed,
+      home: base?.home ?? { id: row.homeTeamId, name: row.homeTeamName ?? '', logo: COMPETITOR_LOGO(row.homeTeamId) },
+      away: base?.away ?? { id: row.awayTeamId, name: row.awayTeamName ?? '', logo: COMPETITOR_LOGO(row.awayTeamId) },
+      season: base?.season ?? null,
+    });
+  }
+  return [...byId.values()].sort((a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime());
+}
+
+export type TsfLeagueFixtureDto = TsfUpcomingFixtureDto & {
+  league: { key: string; id: number; name: string };
+  season: number | null;
+};
+
+/**
+ * The league's fixtures kicking off in the next 7 days (now → now + 7 × 24h,
+ * UTC instants), from the shared fixture cache.
+ */
+export async function listTsfUpcomingFixtures(
+  leagueKey: string,
+  now: Date = new Date(),
+): Promise<{ leagueKey: string; from: string; to: string; fixtures: TsfLeagueFixtureDto[] }> {
+  const cfg = requireLeague(leagueKey);
+  const { from, to } = tsfUpcomingWindow(now);
+  const rows = await prisma.cachedFixture.findMany({
+    where: {
+      leagueId: cfg.competitionLeagueId,
+      matchDate: { gte: from, lt: to },
+      status: { notIn: ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'] },
+    },
+    orderBy: { matchDate: 'asc' },
+    select: { ...FIXTURE_SELECT, leagueName: true },
+  });
+  return {
+    leagueKey: cfg.key,
+    from: from.toISOString(),
+    to: to.toISOString(),
+    fixtures: rows.map((row) => ({
+      fixtureId: row.fixtureId,
+      kickoff: row.matchDate.toISOString(),
+      status: row.status,
+      home: { id: row.homeTeamId, name: row.homeTeamName, logo: row.homeTeamLogo ?? COMPETITOR_LOGO(row.homeTeamId) },
+      away: { id: row.awayTeamId, name: row.awayTeamName, logo: row.awayTeamLogo ?? COMPETITOR_LOGO(row.awayTeamId) },
+      league: { key: cfg.key, id: cfg.scores365CompetitionId, name: row.leagueName },
+      season: row.leagueSeason ?? null,
+    })),
+  };
+}
+
+type LeaguePick = {
+  cfg: TsfLeagueConfig;
+  gameweek: TopScorersFiveGameweek;
+  selection: (SelectionWithPlayer & { id: string }) | null;
+  fixtures: RelevantFixture[];
+  state: TsfPickState;
+};
+
+/** Every enabled league's current gameweek with the user's pick, its fixtures and state. */
+async function tsfLeaguePicks(userId: string, now: Date = new Date()): Promise<LeaguePick[]> {
+  return Promise.all(
+    enabledTsfLeagues().map(async (cfg) => {
+      const gameweek = await ensureTsfGameweek(cfg.key, now);
+      const selection = await prisma.topScorersFiveSelection.findUnique({
+        where: selectionKey(userId, gameweek),
+        include: { player: true },
+      });
+      const fixtures = selection ? await tsfRelevantFixtures(cfg, gameweek, teamIdsOf([selection.player])) : [];
+      const state = tsfPickState({
+        picked: selection != null,
+        locked: isTsfSelectionLocked(selection, gameweek, now),
+        now,
+        windowEnd: gameweek.endAt,
+        fixtures,
+      });
+      return { cfg, gameweek, selection, fixtures, state };
+    }),
+  );
+}
+
+export type TsfMyFixtureDto = TsfUpcomingFixtureDto & {
+  leagueKey: string;
+  season: number | null;
+  /** The final whistle has gone (or the match was voided). */
+  finished: boolean;
+  /** Stats are stored; the players' lines below are final. */
+  processed: boolean;
+  players: Array<{
+    playerId: string;
+    name: string;
+    photo: string | null;
+    teamId: number | null;
+    /** From the final lineups once processed; null before. */
+    participation: string | null;
+    goals: number | null;
+    assists: number | null;
+    points: number | null;
+  }>;
+};
+
+export type TsfMyFixturesDto = {
+  state: TsfPickState;
+  leagues: Array<{ leagueKey: string; state: TsfPickState; gameweek: TsfGameweekDto; playerId: string | null }>;
+  fixtures: TsfMyFixtureDto[];
+};
+
+/**
+ * The matches tab: only fixtures of the clubs the user picked, in each pick's
+ * current gameweek, each with the picked players in it and — once the scoring
+ * job has stored the match — their goals, assists, points and participation.
+ */
+export async function getTsfMyFixtures(clerkUserId: string, language: TsfLanguage, now: Date = new Date()): Promise<TsfMyFixturesDto> {
+  const userId = await requireUserId(clerkUserId);
+  const picks = await tsfLeaguePicks(userId, now);
+
+  const withPick = picks.filter((p): p is LeaguePick & { selection: NonNullable<LeaguePick['selection']> } => p.selection != null);
+  const performances = withPick.length
+    ? await prisma.topScorersFivePerformance.findMany({
+        where: {
+          OR: withPick.map((p) => ({ gameweekId: p.gameweek.id, playerId: p.selection.playerId })),
+        },
+        select: { gameweekId: true, playerId: true, fixtureId: true, goals: true, assists: true, points: true, participation: true },
+      })
+    : [];
+  const perfKey = (gameweekId: string, playerId: string, fixtureId: number) => `${gameweekId}:${playerId}:${fixtureId}`;
+  const perfByKey = new Map(performances.map((row) => [perfKey(row.gameweekId, row.playerId, row.fixtureId), row]));
+
+  const fixtures: TsfMyFixtureDto[] = [];
+  for (const pick of withPick) {
+    const player = pick.selection.player;
+    for (const fixture of pick.fixtures) {
+      if (player.teamId !== fixture.home.id && player.teamId !== fixture.away.id) continue;
+      const perf = perfByKey.get(perfKey(pick.gameweek.id, player.id, fixture.fixtureId));
+      const final = fixture.processed;
+      fixtures.push({
+        fixtureId: fixture.fixtureId,
+        leagueKey: pick.cfg.key,
+        kickoff: fixture.kickoffAt.toISOString(),
+        status: fixture.status,
+        season: fixture.season,
+        home: fixture.home,
+        away: fixture.away,
+        finished: final || isTsfFinishedStatus(fixture.status) || isTsfVoidStatus(fixture.status),
+        processed: final,
+        players: [
+          {
+            playerId: player.id,
+            name: language === 'en' ? (player.nameEn ?? player.nameAr) : player.nameAr,
+            photo: player.externalPlayerId != null ? tsfPortraitUrl(player.externalPlayerId) : player.photoUrl,
+            teamId: player.teamId,
+            participation: final ? (perf?.participation ?? null) : null,
+            goals: final ? (perf?.goals ?? 0) : null,
+            assists: final ? (perf?.assists ?? 0) : null,
+            points: final ? (perf?.points ?? 0) : null,
+          },
+        ],
+      });
+    }
+  }
+
+  // Two picks at the same club (or the two clubs of one match) share a row.
+  const merged = new Map<number, TsfMyFixtureDto>();
+  for (const row of fixtures) {
+    const existing = merged.get(row.fixtureId);
+    if (existing) existing.players.push(...row.players);
+    else merged.set(row.fixtureId, row);
+  }
+
+  return {
+    state: combineTsfPickStates(withPick.map((p) => p.state)),
+    leagues: picks.map((p) => ({
+      leagueKey: p.cfg.key,
+      state: p.state,
+      gameweek: gameweekDto(p.gameweek, now),
+      playerId: p.selection?.playerId ?? null,
+    })),
+    fixtures: [...merged.values()].sort((a, b) => a.kickoff.localeCompare(b.kickoff)),
+  };
+}
 
 /** The player's club's next league fixtures, straight from the fixture cache. */
 export async function listTsfPlayerFixtures(playerId: string, limit = 6): Promise<TsfUpcomingFixtureDto[]> {

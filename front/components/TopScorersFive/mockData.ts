@@ -27,6 +27,12 @@ export type TsfPlayer = {
   readonly nameAr?: string;
   readonly nameEn?: string | null;
   readonly live?: boolean;
+  /** 365Scores ids, for the player profile. */
+  readonly athleteId?: number | null;
+  readonly teamId?: number | null;
+  /** A saved pick the user can no longer change this gameweek. */
+  readonly locked?: boolean;
+  readonly confirmed?: boolean;
 };
 
 export const TSF_MOCK_PLAYERS: Record<TsfLeagueKey, readonly TsfPlayer[]> = {
@@ -74,6 +80,13 @@ export type TsfFixture = {
   readonly away: string;
   /** Kick-off instant; the row formats it in the active locale. */
   readonly kickoffISO: string;
+  /** The picked player's line once the match's stats are stored. */
+  readonly result?: {
+    readonly goals: number;
+    readonly assists: number;
+    readonly points: number;
+    readonly participation: string | null;
+  };
 };
 
 /** Opponents a club is paired against, so every player gets a plausible run. */

@@ -2818,16 +2818,19 @@ model TopScorersFiveFixture {
 
 /// A user's pick for one league in one gameweek.
 model TopScorersFiveSelection {
-  id         String                 @id @default(uuid())
-  userId     String
-  gameweekId String
-  leagueKey  String
-  playerId   String
-  createdAt  DateTime               @default(now())
-  updatedAt  DateTime               @updatedAt
-  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gameweek   TopScorersFiveGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
-  player     TopScorersFivePlayer   @relation(fields: [playerId], references: [id], onDelete: Restrict)
+  id          String                 @id @default(uuid())
+  userId      String
+  gameweekId  String
+  leagueKey   String
+  playerId    String
+  /// Set when the user confirms the pick; from then on it is final for this
+  /// gameweek. Null on a pick carried over from last week and not yet confirmed.
+  confirmedAt DateTime?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameweek    TopScorersFiveGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
+  player      TopScorersFivePlayer   @relation(fields: [playerId], references: [id], onDelete: Restrict)
 
   @@unique([userId, gameweekId, leagueKey])
   @@index([gameweekId, playerId])
@@ -2838,18 +2841,20 @@ model TopScorersFiveSelection {
 /// What one player did in one finished fixture. Insert-only: a fixture is
 /// recorded once and never rewritten; a user's score is the sum of these rows.
 model TopScorersFivePerformance {
-  id          String                 @id @default(uuid())
-  gameweekId  String
-  playerId    String
-  fixtureId   Int
-  goals       Int                    @default(0)
-  assists     Int                    @default(0)
-  points      Int                    @default(0)
-  status      String                 @default("FINISHED")
-  fixtureDate DateTime
-  createdAt   DateTime               @default(now())
-  gameweek    TopScorersFiveGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
-  player      TopScorersFivePlayer   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  id            String                 @id @default(uuid())
+  gameweekId    String
+  playerId      String
+  fixtureId     Int
+  goals         Int                    @default(0)
+  assists       Int                    @default(0)
+  points        Int                    @default(0)
+  status        String                 @default("FINISHED")
+  /// STARTED | SUBBED_ON | BENCH | UNAVAILABLE | NOT_IN_SQUAD | UNKNOWN, from the final lineups.
+  participation String?
+  fixtureDate   DateTime
+  createdAt     DateTime               @default(now())
+  gameweek      TopScorersFiveGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
+  player        TopScorersFivePlayer   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([gameweekId, playerId, fixtureId])
   @@index([playerId])

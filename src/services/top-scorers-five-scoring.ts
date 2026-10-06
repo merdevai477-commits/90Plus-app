@@ -91,11 +91,14 @@ type GameMember = { id: number; athleteId?: number | null };
 type GameEvent = {
   playerId?: number | null;
   extraPlayers?: number[] | null;
-  eventType?: { id?: number | null; subTypeName?: string | null } | null;
+  eventType?: { id?: number | null; name?: string | null; subTypeName?: string | null } | null;
 };
+type GameSide = { lineups?: { members?: Array<{ id: number; status?: number | null }> | null } | null };
 export type TsfScorableGame = {
   members?: GameMember[] | null;
   events?: GameEvent[] | null;
+  homeCompetitor?: GameSide | null;
+  awayCompetitor?: GameSide | null;
 };
 
 const GOAL_EVENT_TYPE_ID = 1;
@@ -134,6 +137,64 @@ export function extractTsfStatsFrom365Game(game: TsfScorableGame): Map<number, T
   }
 
   return stats;
+}
+
+export type TsfParticipation = 'STARTED' | 'SUBBED_ON' | 'BENCH' | 'UNAVAILABLE' | 'NOT_IN_SQUAD' | 'UNKNOWN';
+
+/** 365Scores lineup member status: 0/1 starter, 2 bench, 3 missing (injured, suspended). */
+const LINEUP_STARTER = new Set([0, 1]);
+const LINEUP_BENCH = 2;
+const LINEUP_MISSING = 3;
+const SUBSTITUTION_EVENT_TYPE_IDS = new Set([4, 1000]);
+
+/**
+ * How each listed athlete took part, from the final lineups. A bench player who
+ * shows up in a substitution (or scores) came on. Without lineups 365 cannot
+ * tell, so every athlete is UNKNOWN and an absent one NOT_IN_SQUAD only when
+ * lineups exist. Points never depend on this — only goals and assists score.
+ */
+export function tsfParticipationFrom365Game(game: TsfScorableGame): {
+  hasLineups: boolean;
+  byAthlete: Map<number, TsfParticipation>;
+} {
+  const athleteByMember = new Map<number, number>();
+  for (const member of game.members ?? []) {
+    if (member.athleteId != null && member.athleteId > 0) athleteByMember.set(member.id, member.athleteId);
+  }
+
+  const involved = new Set<number>();
+  for (const event of game.events ?? []) {
+    const typeId = event.eventType?.id ?? null;
+    const isSub = (typeId != null && SUBSTITUTION_EVENT_TYPE_IDS.has(typeId)) || /subst/i.test(event.eventType?.name ?? '');
+    if (!isSub && typeId !== GOAL_EVENT_TYPE_ID) continue;
+    for (const memberId of [event.playerId, ...(event.extraPlayers ?? [])]) {
+      if (memberId != null) involved.add(memberId);
+    }
+  }
+
+  const byAthlete = new Map<number, TsfParticipation>();
+  const lineupMembers = [
+    ...(game.homeCompetitor?.lineups?.members ?? []),
+    ...(game.awayCompetitor?.lineups?.members ?? []),
+  ];
+  for (const member of lineupMembers) {
+    const athleteId = athleteByMember.get(member.id);
+    if (athleteId == null) continue;
+    const status = member.status ?? -1;
+    let value: TsfParticipation | null = null;
+    if (LINEUP_STARTER.has(status)) value = 'STARTED';
+    else if (status === LINEUP_BENCH) value = involved.has(member.id) ? 'SUBBED_ON' : 'BENCH';
+    else if (status === LINEUP_MISSING) value = 'UNAVAILABLE';
+    if (value) byAthlete.set(athleteId, value);
+  }
+  return { hasLineups: byAthlete.size > 0, byAthlete };
+}
+
+export function tsfParticipationOf(
+  athleteId: number,
+  participation: ReturnType<typeof tsfParticipationFrom365Game>,
+): TsfParticipation {
+  return participation.byAthlete.get(athleteId) ?? (participation.hasLineups ? 'NOT_IN_SQUAD' : 'UNKNOWN');
 }
 
 /** Every athlete listed for the game (starters, bench, both clubs). */
@@ -190,6 +251,69 @@ export function nextTsfGameweekStatus(
 /** Picks are editable only before the deadline, whatever the stored status says. */
 export function isTsfGameweekOpen(gameweek: { lockAt: Date; status: TopScorersFiveGameweekStatus }, now: Date = new Date()): boolean {
   return gameweek.status === 'OPEN' && now < gameweek.lockAt;
+}
+
+/**
+ * A pick can still be set only while the gameweek is open and the user has not
+ * confirmed one. Confirming is final until the next gameweek.
+ */
+export function isTsfSelectionLocked(
+  selection: { confirmedAt: Date | null } | null,
+  gameweek: { lockAt: Date; status: TopScorersFiveGameweekStatus },
+  now: Date = new Date(),
+): boolean {
+  return selection?.confirmedAt != null || !isTsfGameweekOpen(gameweek, now);
+}
+
+/** The "next 7 days" fixture window, from now. */
+export function tsfUpcomingWindow(now: Date = new Date(), days = 7): { from: Date; to: Date } {
+  return { from: now, to: new Date(now.getTime() + days * DAY_MS) };
+}
+
+// ─── A user's pick state ─────────────────────────────────────────────────────
+
+export type TsfPickState = 'PICKING' | 'CONFIRMED' | 'WAITING_FOR_MATCHES' | 'CALCULATING' | 'COMPLETED';
+
+const PICK_STATE_ORDER: TsfPickState[] = ['PICKING', 'CONFIRMED', 'WAITING_FOR_MATCHES', 'CALCULATING', 'COMPLETED'];
+
+export type TsfRelevantFixtureState = { kickoffAt: Date; status: string; processed: boolean };
+
+/**
+ * Where one league pick stands. Fixtures are the pick's club's fixtures in the
+ * gameweek; postponed ones have left the window and are ignored.
+ *   PICKING              nothing picked, or a carried-over pick not yet confirmed
+ *   CONFIRMED            locked, no relevant match has kicked off
+ *   WAITING_FOR_MATCHES  a relevant match is live or still to come
+ *   CALCULATING          every relevant match is over, stats not all stored yet
+ *   COMPLETED            every relevant match's stats are stored — the score is final
+ */
+export function tsfPickState(input: {
+  picked: boolean;
+  locked: boolean;
+  now: Date;
+  windowEnd: Date;
+  fixtures: readonly TsfRelevantFixtureState[];
+}): TsfPickState {
+  if (!input.picked || !input.locked) return 'PICKING';
+  const relevant = input.fixtures.filter((f) => f.processed || !isTsfPostponedStatus(f.status));
+  if (relevant.length === 0) return input.now >= input.windowEnd ? 'COMPLETED' : 'CONFIRMED';
+  if (relevant.every((f) => f.processed)) return 'COMPLETED';
+  if (!relevant.some((f) => f.kickoffAt <= input.now)) return 'CONFIRMED';
+  const allOver = relevant.every(
+    (f) => f.processed || isTsfFinishedStatus(f.status) || isTsfVoidStatus(f.status),
+  );
+  return allOver ? 'CALCULATING' : 'WAITING_FOR_MATCHES';
+}
+
+/**
+ * The user's overall state across league picks: the least advanced one, so the
+ * result is final only once every pick's matches are done. No pick → PICKING.
+ */
+export function combineTsfPickStates(states: readonly TsfPickState[]): TsfPickState {
+  if (states.length === 0) return 'PICKING';
+  return states.reduce((min, state) =>
+    PICK_STATE_ORDER.indexOf(state) < PICK_STATE_ORDER.indexOf(min) ? state : min,
+  );
 }
 
 // ─── Name matching (pool resolution) ────────────────────────────────────────

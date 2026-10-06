@@ -3,12 +3,14 @@
  *
  * Ported from the 448×925 design frame: a search field over a 3-up grid of
  * 112.48×176.7 player cards (Figma 1302:15248). The picker only browses the
- * league of the pitch card that opened it. The design carries no confirm
- * button, so a tap commits the pick and closes.
+ * league of the pitch card that opened it. A tap only proposes the player: the
+ * confirmation sheet shows his card again, and confirming there is final for
+ * the gameweek.
  */
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   StyleSheet,
@@ -67,19 +69,33 @@ type Box = { left: number; top: number; width: number; height: number };
 
 type PlayerPickerProps = {
   league: TsfLeagueKey | null;
+  /** Hides the picker without losing its state, e.g. while a player profile is open on top. */
+  hidden?: boolean;
   /** Pools loaded from the backend; leagues missing here use the placeholder pool. */
   players?: Partial<Record<TsfLeagueKey, readonly TsfPlayer[]>>;
   selectedId: string | undefined;
   onClose: () => void;
   onPick: (league: TsfLeagueKey, player: TsfPlayer) => void;
+  /** The tapped player awaiting confirmation. */
+  pending?: TsfPlayer | null;
+  confirming?: boolean;
+  onConfirm?: () => void;
+  onCancelPending?: () => void;
+  onViewProfile?: (player: TsfPlayer) => void;
 };
 
 export function PlayerPicker({
   league,
+  hidden = false,
   players: livePlayers,
   selectedId,
   onClose,
   onPick,
+  pending = null,
+  confirming = false,
+  onConfirm,
+  onCancelPending,
+  onViewProfile,
 }: PlayerPickerProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -164,9 +180,9 @@ export function PlayerPicker({
 
   return (
     <Modal
-      visible={league != null}
+      visible={league != null && !hidden}
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={pending ? onCancelPending : onClose}
       onShow={() => setShown(true)}
       statusBarTranslucent
     >
@@ -273,10 +289,137 @@ export function PlayerPicker({
             ) : null
           }
         />
+
+        {league && pending ? (
+          <ConfirmSheet
+            league={league}
+            player={pending}
+            scale={scale}
+            confirming={confirming}
+            onConfirm={onConfirm}
+            onCancel={onCancelPending}
+            onViewProfile={onViewProfile}
+          />
+        ) : null}
       </View>
     </Modal>
   );
 }
+
+const CONFIRM_CARD_SCALE = 1.45;
+
+type ConfirmSheetProps = {
+  league: TsfLeagueKey;
+  player: TsfPlayer;
+  scale: number;
+  confirming: boolean;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+  onViewProfile?: (player: TsfPlayer) => void;
+};
+
+/** The pending pick over a dimmed picker: his card, then profile / confirm / cancel. */
+function ConfirmSheet({ league, player, scale, confirming, onConfirm, onCancel, onViewProfile }: ConfirmSheetProps) {
+  const { t, language } = useTranslation();
+  const pickCopy = t.topScorersFive.pick;
+  const isAr = language === 'ar';
+  const fontBold = useAppFont(700);
+  const fontSemi = useAppFont(600);
+  const fontRegular = useAppFont(400);
+  const s = (value: number) => value * scale;
+  const canViewProfile = onViewProfile != null && player.athleteId != null;
+
+  return (
+    <View style={styles.sheetBackdrop}>
+      <View
+        accessibilityViewIsModal
+        style={[styles.sheet, { width: s(380), borderRadius: s(20), padding: s(20), rowGap: s(14) }]}
+      >
+        <Text style={[styles.sheetTitle, { fontFamily: fontSemi, fontSize: s(18) }]} maxFontSizeMultiplier={1.15}>
+          {pickCopy.confirmTitle}
+        </Text>
+
+        <View pointerEvents="none" style={styles.sheetCard}>
+          <PlayerCard
+            league={league}
+            player={player}
+            selected={false}
+            fontBold={fontBold}
+            scale={scale * CONFIRM_CARD_SCALE}
+            a11yLabel={player.name}
+            onSelect={noop}
+          />
+        </View>
+
+        <View style={{ rowGap: s(2) }}>
+          <Text style={[styles.sheetName, { fontFamily: fontBold, fontSize: s(18) }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
+            {player.name}
+          </Text>
+          <Text style={[styles.sheetMeta, { fontFamily: fontRegular, fontSize: s(13) }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
+            {`${player.club} · ${pickCopy.leagues[league]}`}
+          </Text>
+        </View>
+
+        <Text
+          style={[styles.sheetBody, { fontFamily: fontRegular, fontSize: s(13), lineHeight: s(19), textAlign: 'center' }]}
+          maxFontSizeMultiplier={1.15}
+        >
+          {pickCopy.confirmBody}
+        </Text>
+
+        {canViewProfile ? (
+          <TouchableOpacity
+            onPress={() => onViewProfile?.(player)}
+            disabled={confirming}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            testID="tsf-confirm-profile"
+            style={[styles.sheetLink, { columnGap: s(6), flexDirection: isAr ? 'row-reverse' : 'row' }]}
+          >
+            <Ionicons name="person-circle-outline" size={s(18)} color={ACTIVE} />
+            <Text style={[styles.sheetLinkText, { fontFamily: fontSemi, fontSize: s(14) }]} maxFontSizeMultiplier={1.15}>
+              {pickCopy.viewProfile}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
+        <View style={[styles.sheetActions, { columnGap: s(10), flexDirection: isAr ? 'row-reverse' : 'row' }]}>
+          <TouchableOpacity
+            onPress={onConfirm}
+            disabled={confirming}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityState={{ busy: confirming }}
+            testID="tsf-confirm-yes"
+            style={[styles.sheetButton, styles.sheetPrimary, { height: s(48), borderRadius: s(14) }]}
+          >
+            {confirming ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={[styles.sheetPrimaryText, { fontFamily: fontSemi, fontSize: s(15) }]} maxFontSizeMultiplier={1.15}>
+                {pickCopy.confirmYes}
+              </Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onCancel}
+            disabled={confirming}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            testID="tsf-confirm-no"
+            style={[styles.sheetButton, styles.sheetSecondary, { height: s(48), borderRadius: s(14) }]}
+          >
+            <Text style={[styles.sheetSecondaryText, { fontFamily: fontSemi, fontSize: s(15) }]} maxFontSizeMultiplier={1.15}>
+              {pickCopy.confirmNo}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const noop = () => undefined;
 
 type PlayerCardProps = {
   league: TsfLeagueKey;
@@ -467,4 +610,31 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
   },
+
+  sheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(3,3,3,0.78)',
+  },
+  sheet: {
+    alignItems: 'center',
+    backgroundColor: '#0D081A',
+    borderWidth: 0.5,
+    borderColor: '#B896FC',
+    boxShadow: '0px 1px 13.2px rgba(163,77,245,0.45)',
+  },
+  sheetTitle: { color: '#FFFFFF', textAlign: 'center' },
+  sheetCard: { alignItems: 'center' },
+  sheetName: { color: '#FFFFFF', textAlign: 'center' },
+  sheetMeta: { color: '#B896FC', textAlign: 'center' },
+  sheetBody: { color: '#9E9E9E' },
+  sheetLink: { alignItems: 'center', justifyContent: 'center' },
+  sheetLinkText: { color: ACTIVE },
+  sheetActions: { alignSelf: 'stretch' },
+  sheetButton: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  sheetPrimary: { backgroundColor: ACTIVE },
+  sheetPrimaryText: { color: '#FFFFFF' },
+  sheetSecondary: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
+  sheetSecondaryText: { color: '#FFFFFF' },
 });

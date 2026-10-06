@@ -306,7 +306,25 @@ export function PitchTab({ picks, scale, onBack, onOpenLeague, onRemove }: Pitch
                 <FontAwesome5 name="crown" size={s(17)} color={PURPLE_SOFT} />
               </View>
 
-              {player ? (
+              {player?.locked ? (
+                <View
+                  accessible
+                  accessibilityLabel={pickCopy.lockedA11y.replace('{name}', player.name)}
+                  style={[
+                    styles.remove,
+                    styles.locked,
+                    {
+                      right: -s(3.5),
+                      top: s(CARD.top - 4.5),
+                      width: s(24),
+                      height: s(24),
+                      borderRadius: s(12),
+                    },
+                  ]}
+                >
+                  <Ionicons name="lock-closed" size={s(12)} color="#FFFFFF" />
+                </View>
+              ) : player ? (
                 <TouchableOpacity
                   onPress={() => onRemove(slot.key)}
                   hitSlop={8}
@@ -478,4 +496,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#9CA3AF',
   },
+  locked: { backgroundColor: PURPLE, borderColor: PURPLE_SOFT },
 });

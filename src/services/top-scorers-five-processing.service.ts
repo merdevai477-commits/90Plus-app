@@ -30,6 +30,8 @@ import {
   isTsfVoidStatus,
   nextTsfGameweekStatus,
   tsfGameAthleteIds,
+  tsfParticipationFrom365Game,
+  tsfParticipationOf,
   tsfStatusRank,
   type TsfLeagueConfig,
   type TsfScorableGame,
@@ -116,6 +118,7 @@ async function discoverFixtures(
   gameweek: TopScorersFiveGameweek,
   teamIds: number[],
   deps: TsfProcessingDeps,
+  options: { supplement?: boolean } = {},
 ): Promise<DiscoveredFixture[]> {
   const found = new Map<number, DiscoveredFixture>();
   const teamSet = new Set(teamIds);
@@ -145,6 +148,8 @@ async function discoverFixtures(
 
   // The durable cache can miss days; the shared day lists fill the gaps for
   // days that have already started (future fixtures are always in the cache).
+  // The day memo is per league, so only full passes (every club) may set it.
+  if (options.supplement === false) return [...found.values()];
   const now = deps.now();
   const until = new Date(Math.min(now.getTime(), gameweek.endAt.getTime()));
   for (const day of dayKeysBetween(gameweek.startAt, until)) {
@@ -242,6 +247,7 @@ export async function processTsfFixture(
 
   const scorable = game as unknown as TsfScorableGame;
   const stats = extractTsfStatsFrom365Game(scorable);
+  const participation = tsfParticipationFrom365Game(scorable);
   const athletes = tsfGameAthleteIds(scorable);
   const pool = await prisma.topScorersFivePlayer.findMany({
     where: {
@@ -255,8 +261,11 @@ export async function processTsfFixture(
     select: { id: true, externalPlayerId: true },
   });
 
+  // A player who did not play has no goal or assist events, so his row is 0 —
+  // points come only from his own events, never from his club having played.
   const rows = pool.map((player) => {
-    const line = stats.get(player.externalPlayerId as number) ?? { goals: 0, assists: 0 };
+    const athleteId = player.externalPlayerId as number;
+    const line = stats.get(athleteId) ?? { goals: 0, assists: 0 };
     return {
       gameweekId: gameweek.id,
       playerId: player.id,
@@ -265,6 +274,7 @@ export async function processTsfFixture(
       assists: line.assists,
       points: computeTsfPoints(line),
       status: 'FINISHED',
+      participation: tsfParticipationOf(athleteId, participation),
       fixtureDate: fixture.kickoffAt,
     };
   });
@@ -277,6 +287,18 @@ export async function processTsfFixture(
     }),
   ]);
   return { outcome: 'scored', rows: count };
+}
+
+/**
+ * Store the gameweek's fixtures for one newly confirmed pick's club straight
+ * away, so the scoring job and the matches tab see them before the next tick.
+ */
+export async function syncTsfPickFixtures(leagueKey: string, teamId: number | null): Promise<void> {
+  const cfg = getTsfLeagueConfig(leagueKey);
+  if (!cfg || teamId == null) return;
+  const gameweek = await ensureTsfGameweek(cfg.key, defaultDeps.now());
+  if (gameweek.status === 'COMPLETED') return;
+  await storeFixtures(gameweek, await discoverFixtures(cfg, gameweek, [teamId], defaultDeps, { supplement: false }));
 }
 
 /** One full pass over a gameweek: discover, score what finished, advance status. */
