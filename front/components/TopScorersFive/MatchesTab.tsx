@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { localeWithLatinNumerals, useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { KingEmptyState } from '../KingOfPredictions/KingBoardList';
 
 import { TSF_DESIGN_WIDTH, type TsfLeagueKey } from './assets';
 import {
@@ -88,6 +89,7 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
+          flexGrow: 1,
           paddingHorizontal: s((TSF_DESIGN_WIDTH - 404) / 2),
           paddingBottom: tsfNavBottom(insets.bottom) + s(83 + 16),
         }}
@@ -100,34 +102,12 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
         </Text>
 
         {active == null ? (
-          <View style={[styles.empty, { marginTop: s(64) }]}>
-            <Ionicons name="calendar-outline" size={s(64)} color="#4A3A6B" />
-            <Text
-              style={[styles.emptyTitle, { fontFamily: fontSemi, fontSize: s(18), marginTop: s(16) }]}
-            >
-              {copy.emptyTitle}
-            </Text>
-            <Text
-              style={[
-                styles.emptyBody,
-                { fontFamily: fontMedium, fontSize: s(14), lineHeight: s(22), marginTop: s(8) },
-              ]}
-            >
-              {copy.emptyBody}
-            </Text>
-            <TouchableOpacity
-              onPress={onGoToPitch}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              style={[
-                styles.emptyCta,
-                { height: s(52), borderRadius: s(16), paddingHorizontal: s(23), marginTop: s(24) },
-              ]}
-            >
-              <Text style={[styles.emptyCtaLabel, { fontFamily: fontBold, fontSize: s(16) }]}>
-                {copy.emptyCta}
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.emptyBody}>
+            <KingEmptyState
+              title={copy.emptyTitle}
+              actionLabel={copy.emptyCta}
+              onAction={onGoToPitch}
+            />
           </View>
         ) : (
           <>
@@ -222,22 +202,29 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
               {copy.playerFixtures.replace('{name}', tsfShortName(active.player))}
             </Text>
 
-            <View style={{ marginTop: s(8), rowGap: s(ROW.gap) }}>
-              {fixtures.map((fixture) => (
-                <FixtureRow
-                  key={fixture.id}
-                  fixture={fixture}
-                  s={s}
-                  isAr={isAr}
-                  language={language}
-                  fontBold={fontBold}
-                  fontMedium={fontMedium}
-                  label={copy.versus
-                    .replace('{home}', fixture.home)
-                    .replace('{away}', fixture.away)}
-                />
-              ))}
-            </View>
+            {fixtures.length === 0 ? (
+              <KingEmptyState
+                title={copy.noFixtures.replace('{name}', tsfShortName(active.player))}
+                style={{ marginTop: s(32) }}
+              />
+            ) : (
+              <View style={{ marginTop: s(8), rowGap: s(ROW.gap) }}>
+                {fixtures.map((fixture) => (
+                  <FixtureRow
+                    key={fixture.id}
+                    fixture={fixture}
+                    s={s}
+                    isAr={isAr}
+                    language={language}
+                    fontBold={fontBold}
+                    fontMedium={fontMedium}
+                    label={copy.versus
+                      .replace('{home}', fixture.home)
+                      .replace('{away}', fixture.away)}
+                  />
+                ))}
+              </View>
+            )}
           </>
         )}
       </ScrollView>
@@ -400,9 +387,5 @@ const styles = StyleSheet.create({
   },
   crestText: { color: 'rgba(255,255,255,0.72)' },
 
-  empty: { alignItems: 'center', paddingHorizontal: 16 },
-  emptyTitle: { color: '#FFFFFF', textAlign: 'center' },
-  emptyBody: { color: '#858585', textAlign: 'center' },
-  emptyCta: { alignItems: 'center', justifyContent: 'center', backgroundColor: ACTIVE },
-  emptyCtaLabel: { color: '#FFFFFF' },
+  emptyBody: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });

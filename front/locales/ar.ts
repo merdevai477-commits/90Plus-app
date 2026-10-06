@@ -2008,9 +2008,9 @@ export const ar = {
       title: 'مباريات لاعبيك القادمة',
       playerFixtures: 'مباريات {name} القادمة',
       versus: '{home} ضد {away}',
-      emptyTitle: 'لم تختر لاعبين بعد',
-      emptyBody: 'اختر خماسيك من الملعب وستظهر مبارياتهم هنا',
-      emptyCta: 'اذهب للملعب',
+      emptyTitle: 'لا توجد مباريات بعد',
+      emptyCta: 'اختر الان',
+      noFixtures: 'لا توجد مباريات قادمة لـ {name}',
       selectPlayerA11y: 'عرض مباريات {name}',
     },
     ranking: {

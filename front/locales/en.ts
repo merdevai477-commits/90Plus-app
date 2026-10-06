@@ -2055,9 +2055,9 @@ export const en = {
       title: "Your players' next matches",
       playerFixtures: "{name}'s next matches",
       versus: '{home} vs {away}',
-      emptyTitle: 'No players picked yet',
-      emptyBody: 'Pick your five on the pitch and their matches will show up here',
-      emptyCta: 'Go to the pitch',
+      emptyTitle: 'No matches yet',
+      emptyCta: 'Pick now',
+      noFixtures: 'No upcoming matches for {name}',
       selectPlayerA11y: "Show {name}'s matches",
     },
     ranking: {
