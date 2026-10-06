@@ -10,6 +10,8 @@ interface CachedAthletePhotoProps {
   size?: number;
   recyclingKey?: string | number;
   onPress?: () => void;
+  /** Use `uri` exactly as given (already sized + prefetched by the caller). */
+  preSized?: boolean;
 }
 
 export default function CachedAthletePhoto({
@@ -17,13 +19,16 @@ export default function CachedAthletePhoto({
   size = 40,
   recyclingKey,
   onPress,
+  preSized = false,
 }: CachedAthletePhotoProps) {
   const [failed, setFailed] = useState(false);
   React.useEffect(() => {
     setFailed(false);
   }, [uri]);
   const displayUri = uri
-    ? with365ImageSize(uri, size <= 48 ? 64 : size <= 96 ? 80 : 128) ?? uri
+    ? preSized
+      ? uri
+      : with365ImageSize(uri, size <= 48 ? 64 : size <= 96 ? 80 : 128) ?? uri
     : undefined;
   const showImage = !!displayUri && !failed;
 

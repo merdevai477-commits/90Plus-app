@@ -129,6 +129,7 @@ export function LineupBench({
                       uri={player.id ? resolvePhoto(player.id, player.photo) : player.photo}
                       size={55 * s}
                       recyclingKey={player.id ?? player.photo}
+                      preSized={Boolean(player.id)}
                     />
                   </View>
                 </TouchableOpacity>

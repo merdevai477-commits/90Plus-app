@@ -83,10 +83,7 @@ import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 import { addBreadcrumb, captureMessage } from '../../services/sentry.service';
 import { resolveFormationLabel, sortPlayersForPitch } from '../../utils/lineupGrid';
 import { playerPhotoUrl } from '../../utils/playerStatsAggregate';
-import {
-  buildScores365CoachPhotoUrl,
-  with365ImageSize,
-} from '../../utils/scores365AthletePhoto';
+import { with365ImageSize } from '../../utils/scores365AthletePhoto';
 import { prefetchImageUrls } from '../../utils/prefetchMatchAssets';
 import { MatchSubscriptionsService } from '../../services/matchSubscriptions.service';
 import { MatchFavoritesStorage } from '../../src/storage/matchFavorites.storage';
@@ -114,6 +111,8 @@ const LIVE_MATCH_STATUSES = ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT'] a
 const EMPTY_EVENTS: FixtureEvent[] = [];
 const EMPTY_STATISTICS: TeamStatistics[] = [];
 const EMPTY_LINEUPS: Lineup[] = [];
+/** Single 365 headshot size for prefetch + pitch/bench avatars (they render `preSized`). */
+const LINEUP_PHOTO_PX = 80;
 /** Stats tab refresh while live + focused (backend answers from cache). */
 const STATS_LIVE_POLL_MS = 35_000;
 /** Lineups tab: one scheduler — live cadence, then backoff after repeated empty answers. */
@@ -332,20 +331,7 @@ const MatchDetailsScreen = () => {
         photo,
         is365Fixture ? { source: '365' } : undefined,
       );
-      return with365ImageSize(raw, 64) ?? raw ?? '';
-    },
-    [is365Fixture],
-  );
-
-  const resolveCoachPhoto = useCallback(
-    (coachId: number | null | undefined, photo?: string | null) => {
-      const raw = photo?.trim()
-        ? photo.trim()
-        : is365Fixture && coachId
-          ? buildScores365CoachPhotoUrl(coachId, 68)
-          : '';
-      if (!raw) return '';
-      return with365ImageSize(raw, 64) ?? raw;
+      return with365ImageSize(raw, LINEUP_PHOTO_PX) ?? raw ?? '';
     },
     [is365Fixture],
   );
@@ -385,7 +371,6 @@ const MatchDetailsScreen = () => {
   const [standingsError, setStandingsError] = useState<string | null>(null);
 
   const [lineupFetchAttempts, setLineupFetchAttempts] = useState(0);
-  const [venueLoading, setVenueLoading] = useState(false);
   /** Max silent background retries while lineups tab is open (live matches). */
   const MAX_LINEUP_AUTO_RETRIES = 4;
 
@@ -937,23 +922,25 @@ const MatchDetailsScreen = () => {
     loadLineupsIfNeeded,
   ]);
 
-  // Warm the image cache with lineup player + coach photos as soon as lineups
-  // are available (even before the user opens the tab) so pitch/bench photos
-  // render instantly instead of loading one-by-one.
+  // Warm the image cache with lineup photos as soon as lineups are available
+  // (even before the user opens the tab). URLs must be byte-identical to what the
+  // pitch/bench avatars request, or the warm-up is a wasted second download.
+  // Both starting XIs go first so the visible pitch is ready before the benches.
   useEffect(() => {
     if (!hasLineupData(lineups)) return;
     const urls: Array<string | null | undefined> = [];
     for (const lineup of lineups) {
-      urls.push(resolveCoachPhoto(lineup.coach?.id, lineup.coach?.photo));
       for (const s of lineup.startXI ?? []) {
         urls.push(resolveLineupPlayerPhoto(s.player.id, s.player.photo));
       }
+    }
+    for (const lineup of lineups) {
       for (const s of lineup.substitutes ?? []) {
         urls.push(resolveLineupPlayerPhoto(s.player.id, s.player.photo));
       }
     }
     prefetchImageUrls(urls);
-  }, [lineups, resolveCoachPhoto, resolveLineupPlayerPhoto]);
+  }, [lineups, resolveLineupPlayerPhoto]);
 
   /**
    * Stats tab: the details bundle is the first source, but it may hold nothing or only
@@ -1289,13 +1276,10 @@ const MatchDetailsScreen = () => {
   const loadVenueIfNeeded = useCallback(async () => {
     if (loadedTabsRef.current.has('stadium') || !fixture) return;
     loadedTabsRef.current.add('stadium');
-    setVenueLoading(true);
     try {
       await useLiveFixtureStore.getState().fetchAndIngestFull(fixtureId);
     } catch {
       // venue may remain from fixture stub in snapshot
-    } finally {
-      setVenueLoading(false);
     }
   }, [fixtureId, fixture]);
 
@@ -1400,11 +1384,6 @@ const MatchDetailsScreen = () => {
     return () => clearInterval(interval);
   }, [fixtureId, fixture?.fixture?.id, isLive, isFinishedMatch, loadLineupsIfNeeded, lineups]);
 
-  useEffect(() => {
-    if (activeTab !== 'lineups' || !fixture) return;
-    void loadVenueIfNeeded();
-  }, [activeTab, fixture?.fixture?.id, loadVenueIfNeeded]);
-
   const showLineupsTab = shouldShowLineupsTab(lineups);
 
   useEffect(() => {
@@ -1425,15 +1404,12 @@ const MatchDetailsScreen = () => {
   const handleTabChange = useCallback((tab: string) => {
     setActiveTab(tab as any);
     switch (tab) {
-      case 'lineups':
-        loadLineupsIfNeeded();
-        void loadVenueIfNeeded();
-        break;
+      case 'lineups':   loadLineupsIfNeeded(); break;
       case 'stats':     loadStatsIfNeeded(); break;
       case 'form':      loadFormIfNeeded(); break;
       case 'standings': loadStandingsIfNeeded(); break;
     }
-  }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded, loadVenueIfNeeded]);
+  }, [loadLineupsIfNeeded, loadStatsIfNeeded, loadFormIfNeeded, loadStandingsIfNeeded]);
 
   const openPlayerProfile = useCallback(
     (
@@ -1808,94 +1784,6 @@ const MatchDetailsScreen = () => {
     );
   };
 
-  // Render Lineups Tab
-  const renderMatchInfoCard = () => {
-    const venueData = venue || {
-      id: fixture?.fixture.venue?.id,
-      name: fixture?.fixture.venue?.name,
-      city: fixture?.fixture.venue?.city,
-      address: null as string | null,
-      country: null as string | null,
-      capacity: null as number | null,
-      surface: null as string | null,
-      image: null as string | null,
-    };
-    const stadiumName = venueData.name || fixture?.fixture.venue?.name;
-    const referee = fixture?.fixture?.referee;
-    const capacity = venueData.capacity;
-    const hasAny = Boolean(stadiumName || referee || capacity || venueData.city);
-
-    if (!hasAny && !venueLoading) return null;
-
-    const rows: Array<{
-      key: string;
-      label: string;
-      value: string;
-      icon: React.ComponentProps<typeof Ionicons>['name'];
-    }> = [];
-
-    if (stadiumName) {
-      rows.push({
-        key: 'stadium',
-        label: t.matchDetails.stadium || 'Stadium',
-        value: [stadiumName, venueData.city].filter(Boolean).join(' · '),
-        icon: 'business-outline',
-      });
-    }
-    if (capacity) {
-      rows.push({
-        key: 'attendance',
-        label: t.matchDetails.attendance || 'Attendance',
-        value: capacity.toLocaleString(),
-        icon: 'people-outline',
-      });
-    }
-    if (referee) {
-      rows.push({
-        key: 'referee',
-        label: t.matchDetails.referee || 'Referee',
-        value: referee,
-        icon: 'flag-outline',
-      });
-    }
-
-    if (rows.length === 0) {
-      if (venueLoading) {
-        return (
-          <View style={styles.matchInfoCard}>
-            <ActivityIndicator size="small" color="#A855F7" />
-          </View>
-        );
-      }
-      return null;
-    }
-
-    return (
-      <View style={styles.matchInfoCard}>
-        <Text style={styles.matchInfoTitle}>
-          {t.matchDetails.matchInfo || 'Match Information'}
-        </Text>
-        {rows.map((row, index) => (
-          <View
-            key={row.key}
-            style={[
-              styles.matchInfoRow,
-              index < rows.length - 1 && styles.matchInfoRowBorder,
-            ]}
-          >
-            <View style={styles.matchInfoValueWrap}>
-              <Ionicons name={row.icon} size={16} color="#a78bfa" />
-              <Text style={styles.matchInfoValue} numberOfLines={2}>
-                {row.value}
-              </Text>
-            </View>
-            <Text style={styles.matchInfoLabel}>{row.label}</Text>
-          </View>
-        ))}
-      </View>
-    );
-  };
-
   const renderLineups = () => {
     if (lineupsLoading && !hasLineupData(lineups)) {
       return <LineupsSkeleton shimmerX={shimmerX} />;
@@ -2051,8 +1939,6 @@ const MatchDetailsScreen = () => {
                     );
                   }}
                 />
-
-                <View style={styles.lineupInfoWrap}>{renderMatchInfoCard()}</View>
               </View>
             );
           })}
@@ -2954,9 +2840,6 @@ const styles = StyleSheet.create({
   lineupScreenBody: {
     paddingBottom: 28,
   },
-  lineupInfoWrap: {
-    paddingHorizontal: 15,
-  },
   substitutesSection: {
     paddingHorizontal: 4,
     marginTop: 16,
@@ -3154,54 +3037,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
-  },
-  matchInfoCard: {
-    marginTop: 20,
-    marginBottom: 12,
-    borderRadius: 16,
-    backgroundColor: 'rgba(18, 12, 28, 0.98)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  matchInfoTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  matchInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    gap: 12,
-  },
-  matchInfoRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  matchInfoLabel: {
-    color: '#cfcfcf',
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'right',
-    flexShrink: 0,
-  },
-  matchInfoValueWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  matchInfoValue: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-    flexShrink: 1,
   },
   scrollContent: {
     paddingBottom: 20,

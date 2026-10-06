@@ -254,6 +254,7 @@ function PitchPlayerCard({
             uri={player.photo}
             size={avatar}
             recyclingKey={player.id ?? player.photo}
+            preSized
           />
         )}
       </View>
