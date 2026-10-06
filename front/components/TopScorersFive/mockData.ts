@@ -78,6 +78,8 @@ export type TsfFixture = {
   readonly id: string;
   readonly home: string;
   readonly away: string;
+  readonly homeLogo?: string | null;
+  readonly awayLogo?: string | null;
   /** Kick-off instant; the row formats it in the active locale. */
   readonly kickoffISO: string;
   /** The picked player's line once the match's stats are stored. */
@@ -129,6 +131,8 @@ export function tsfMockFixtures(league: TsfLeagueKey, player: TsfPlayer): readon
       id: `${player.id}-${index}`,
       home: atHome ? player.club : opponent,
       away: atHome ? opponent : player.club,
+      homeLogo: atHome ? player.clubLogo : null,
+      awayLogo: atHome ? null : player.clubLogo,
       kickoffISO: kickoff.toISOString(),
     };
   });

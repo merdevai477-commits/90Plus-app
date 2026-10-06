@@ -2038,8 +2038,8 @@ export const ar = {
       },
     },
     matches: {
-      title: 'مباريات لاعبيك',
-      playerFixtures: 'مباريات {name} في هذه الجولة',
+      title: 'مباريات لاعبيك القادمة',
+      playerFixtures: 'مباريات {name} القادمة',
       versus: '{home} ضد {away}',
       emptyTitle: 'لا توجد مباريات بعد',
       emptyCta: 'اختر الان',

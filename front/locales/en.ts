@@ -2085,8 +2085,8 @@ export const en = {
       },
     },
     matches: {
-      title: "Your players' matches",
-      playerFixtures: "{name}'s matches this gameweek",
+      title: "Your players' upcoming matches",
+      playerFixtures: "{name}'s upcoming matches",
       versus: '{home} vs {away}',
       emptyTitle: 'No matches yet',
       emptyCta: 'Pick now',

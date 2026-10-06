@@ -19,6 +19,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { topScorersFiveService, type TsfApiMyFixtures } from '../../services/topScorersFive.service';
@@ -40,13 +42,15 @@ import {
 import { TsfHeader } from './TsfHeader';
 import { tsfNavBottom } from './TsfNav';
 
-const ACTIVE = '#8C5CF5';
-const CHIP_IDLE = '#0D081A';
-const CHIP_IDLE_STROKE = 'rgba(51,48,51,0.43)';
+const ACTIVE = '#8B5CF6';
+const ACTIVE_GRADIENT = [ACTIVE, '#513590'] as const;
+const CHIP_IDLE = '#0C0718';
+const CHIP_IDLE_STROKE = 'rgba(50,49,51,0.43)';
 const CHIP_NAME = '#D9D9D9';
-const ROW_BG = '#080510';
-const ROW_STROKE = '#1C1C1C';
-const DATE = '#E6CFFC';
+const ROW_BG = '#08050E';
+const ROW_STROKE = '#1B1B1B';
+const DATE = '#E6CEFD';
+const CHEVRON = 'rgba(255,255,255,0.7)';
 const PLACEHOLDER = '#2A1361';
 
 const CHIP = { width: 77, height: 93, radius: 10, gap: 4, photo: { width: 68, height: 57 } };
@@ -151,11 +155,7 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
             <View
               style={[
                 styles.chips,
-                {
-                  columnGap: s(CHIP.gap),
-                  marginTop: s(GAP.chips),
-                  flexDirection: isAr ? 'row-reverse' : 'row',
-                },
+                { columnGap: s(CHIP.gap), marginTop: s(GAP.chips) },
               ]}
             >
               {picked.map(({ player }) => {
@@ -179,15 +179,18 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
                         paddingHorizontal: s((CHIP.width - CHIP.photo.width) / 2),
                       },
                       selected
-                        ? { backgroundColor: ACTIVE }
+                        ? null
                         : {
                             backgroundColor: CHIP_IDLE,
-                            borderWidth: 0.5,
+                            borderWidth: 1,
                             borderColor: CHIP_IDLE_STROKE,
                             opacity: 0.5,
                           },
                     ]}
                   >
+                    {selected ? (
+                      <LinearGradient colors={ACTIVE_GRADIENT} style={StyleSheet.absoluteFill} />
+                    ) : null}
                     <View
                       style={[
                         styles.chipPhoto,
@@ -196,14 +199,25 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
                           height: s(CHIP.photo.height),
                           borderRadius: s(6),
                         },
+                        player.photo ? null : { backgroundColor: PLACEHOLDER },
                       ]}
                     >
-                      <Text
-                        style={[styles.chipPhotoText, { fontFamily: fontBold, fontSize: s(20) }]}
-                        allowFontScaling={false}
-                      >
-                        {tsfInitials(player)}
-                      </Text>
+                      {player.photo ? (
+                        <Image
+                          source={{ uri: player.photo }}
+                          style={StyleSheet.absoluteFill}
+                          contentFit="cover"
+                          contentPosition="top"
+                          transition={150}
+                        />
+                      ) : (
+                        <Text
+                          style={[styles.chipPhotoText, { fontFamily: fontBold, fontSize: s(20) }]}
+                          allowFontScaling={false}
+                        >
+                          {tsfInitials(player)}
+                        </Text>
+                      )}
                     </View>
                     <Text
                       numberOfLines={1}
@@ -224,20 +238,27 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
               })}
             </View>
 
-            <Text
+            <View
               style={[
-                styles.sectionTitle,
+                styles.sectionHead,
                 {
-                  fontFamily: fontBold,
-                  fontSize: s(16),
                   marginTop: s(GAP.fixtures),
-                  textAlign: isAr ? 'right' : 'left',
+                  columnGap: s(12),
+                  flexDirection: isAr ? 'row-reverse' : 'row',
                 },
               ]}
-              maxFontSizeMultiplier={1.15}
             >
-              {copy.playerFixtures.replace('{name}', tsfShortName(active.player))}
-            </Text>
+              <View style={[styles.sectionBar, { width: s(3), height: s(30), borderRadius: s(2) }]} />
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { fontFamily: fontBold, fontSize: s(16), textAlign: isAr ? 'right' : 'left' },
+                ]}
+                maxFontSizeMultiplier={1.15}
+              >
+                {copy.playerFixtures.replace('{name}', tsfShortName(active.player))}
+              </Text>
+            </View>
             {activeState ? (
               <Text
                 style={[
@@ -262,7 +283,6 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
                     key={fixture.id}
                     fixture={fixture}
                     s={s}
-                    isAr={isAr}
                     language={language}
                     fontBold={fontBold}
                     fontMedium={fontMedium}
@@ -298,7 +318,6 @@ function resultLabel(fixture: TsfFixture, copy: MatchesCopy): string | null {
 type FixtureRowProps = {
   fixture: TsfFixture;
   s: (value: number) => number;
-  isAr: boolean;
   language: string;
   fontBold: string;
   fontMedium: string;
@@ -306,7 +325,8 @@ type FixtureRowProps = {
   resultLabel?: string | null;
 };
 
-function FixtureRow({ fixture, s, isAr, language, fontBold, fontMedium, label, resultLabel: result }: FixtureRowProps) {
+/** Left to right in both languages, as the Arabic frame draws it. */
+function FixtureRow({ fixture, s, language, fontBold, fontMedium, label, resultLabel: result }: FixtureRowProps) {
   const kickoff = result
     ? `${formatKickoff(fixture.kickoffISO, language)} · ${result}`
     : formatKickoff(fixture.kickoffISO, language);
@@ -319,39 +339,23 @@ function FixtureRow({ fixture, s, isAr, language, fontBold, fontMedium, label, r
           height: s(ROW.height),
           borderRadius: s(ROW.radius),
           paddingHorizontal: s(16),
-          flexDirection: isAr ? 'row-reverse' : 'row',
+          columnGap: s(8),
         },
       ]}
     >
-      <View
-        style={[
-          styles.rowLead,
-          { columnGap: s(5), flexDirection: isAr ? 'row-reverse' : 'row' },
-        ]}
-      >
-        <Crest name={fixture.home} size={s(ROW.crest)} s={s} fontBold={fontBold} />
+      <View style={[styles.rowLead, { columnGap: s(5) }]}>
+        <Crest name={fixture.home} logo={fixture.homeLogo} size={s(ROW.crest)} s={s} fontBold={fontBold} />
         <View style={styles.rowText}>
           <Text
             numberOfLines={1}
-            style={[
-              styles.rowTitle,
-              { fontFamily: fontMedium, fontSize: s(16), textAlign: isAr ? 'right' : 'left' },
-            ]}
+            style={[styles.rowTitle, { fontFamily: fontMedium, fontSize: s(16) }]}
             maxFontSizeMultiplier={1.1}
           >
             {label}
           </Text>
           <Text
             numberOfLines={1}
-            style={[
-              styles.rowDate,
-              {
-                fontFamily: fontMedium,
-                fontSize: s(11),
-                marginTop: s(9),
-                textAlign: isAr ? 'right' : 'left',
-              },
-            ]}
+            style={[styles.rowDate, { fontFamily: fontMedium, fontSize: s(11), marginTop: s(9) }]}
             maxFontSizeMultiplier={1.1}
           >
             {kickoff}
@@ -359,32 +363,39 @@ function FixtureRow({ fixture, s, isAr, language, fontBold, fontMedium, label, r
         </View>
       </View>
 
-      <View
-        style={[styles.rowTrail, { columnGap: s(8), flexDirection: isAr ? 'row-reverse' : 'row' }]}
-      >
-        <Crest name={fixture.away} size={s(44)} s={s} fontBold={fontBold} />
-        <Ionicons
-          name={isAr ? 'chevron-back' : 'chevron-forward'}
-          size={s(24)}
-          color="#FFFFFF"
-        />
+      <View style={[styles.rowTrail, { columnGap: s(8) }]}>
+        <Crest name={fixture.away} logo={fixture.awayLogo} size={s(ROW.crest)} s={s} fontBold={fontBold} />
+        <Ionicons name="chevron-forward" size={s(24)} color={CHEVRON} />
       </View>
     </View>
   );
 }
 
-/** Club badges do not ship yet, so initials stand in at the design's box size. */
+/** Initials stand in at the design's box size when 365 has no badge for the club. */
 function Crest({
   name,
+  logo,
   size,
   s,
   fontBold,
 }: {
   name: string;
+  logo?: string | null;
   size: number;
   s: (value: number) => number;
   fontBold: string;
 }) {
+  if (logo) {
+    return (
+      <Image
+        source={{ uri: logo }}
+        style={{ width: size, height: size }}
+        contentFit="contain"
+        transition={150}
+        accessibilityLabel={name}
+      />
+    );
+  }
   return (
     <View style={[styles.crest, { width: size, height: size, borderRadius: s(8) }]}>
       <Text
@@ -418,15 +429,16 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
 
   title: { color: '#FFFFFF', textAlign: 'center' },
-  sectionTitle: { color: '#FFFFFF' },
+  sectionHead: { alignItems: 'center' },
+  sectionBar: { backgroundColor: ACTIVE },
+  sectionTitle: { flex: 1, color: '#FFFFFF' },
   stateLine: { color: DATE },
 
-  chips: { justifyContent: 'center' },
+  chips: { flexDirection: 'row', justifyContent: 'center' },
   chip: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   chipPhoto: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: PLACEHOLDER,
     overflow: 'hidden',
   },
   chipPhotoText: { color: 'rgba(255,255,255,0.55)' },
@@ -434,17 +446,18 @@ const styles = StyleSheet.create({
   chipPosition: { color: '#FFFFFF', textAlign: 'center' },
 
   row: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: ROW_BG,
-    borderWidth: 0.5,
+    borderWidth: 1,
     borderColor: ROW_STROKE,
   },
-  rowLead: { flex: 1, alignItems: 'center' },
+  rowLead: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   rowText: { flex: 1 },
   rowTitle: { color: '#FFFFFF' },
   rowDate: { color: DATE },
-  rowTrail: { alignItems: 'center' },
+  rowTrail: { flexDirection: 'row', alignItems: 'center' },
 
   crest: {
     alignItems: 'center',

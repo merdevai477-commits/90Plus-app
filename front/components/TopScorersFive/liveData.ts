@@ -51,6 +51,8 @@ export function tsfFixtureFromApi(fixture: TsfApiFixture): TsfFixture {
     id: String(fixture.fixtureId),
     home: fixture.home.name,
     away: fixture.away.name,
+    homeLogo: fixture.home.logo,
+    awayLogo: fixture.away.logo,
     kickoffISO: fixture.kickoff,
   };
 }
