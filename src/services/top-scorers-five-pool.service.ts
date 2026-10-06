@@ -11,11 +11,13 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { TOP_SCORERS_FIVE_LALIGA, type TopScorersFiveSeedClub } from '../data/top-scorers-five-laliga';
+import { TOP_SCORERS_FIVE_SERIEA } from '../data/top-scorers-five-seriea';
 import { scoreTsfNameMatch, tsfPortraitUrl, type TsfLeagueKey } from './top-scorers-five-scoring';
 import type { ThreeSixFiveSquadPlayer } from './threeSixFiveScores.service';
 
 const SEED_LISTS: Partial<Record<TsfLeagueKey, TopScorersFiveSeedClub[]>> = {
   laliga: TOP_SCORERS_FIVE_LALIGA,
+  seriea: TOP_SCORERS_FIVE_SERIEA,
 };
 
 const POSITION_CODES: Array<[RegExp, string]> = [
@@ -143,6 +145,11 @@ export async function resolveTopScorersFivePool(
   const listedClubByName = new Map(
     (SEED_LISTS[leagueKey] ?? []).flatMap((club) => club.players.map((p) => [p.nameAr, club] as const)),
   );
+  const pinnedByName = new Map(
+    (SEED_LISTS[leagueKey] ?? []).flatMap((club) =>
+      club.players.flatMap((p) => (p.athleteId != null ? [[p.nameAr, p.athleteId] as const] : [])),
+    ),
+  );
   const squadCache = new Map<string, ThreeSixFiveSquadPlayer[]>();
   const loadSquad = async (teamId: number, language: 'ar' | 'en') => {
     const key = `${teamId}:${language}`;
@@ -157,7 +164,18 @@ export async function resolveTopScorersFivePool(
   for (const player of players) {
     try {
       const candidates: Candidate[] = [];
-      if (player.teamId) {
+      const pinned = pinnedByName.get(player.nameAr);
+      if (pinned != null) {
+        candidates.push({
+          athleteId: pinned,
+          score: 1,
+          name: player.nameEn ?? player.nameAr,
+          clubId: player.teamId,
+          clubName: null,
+          photo: null,
+          position: null,
+        });
+      } else if (player.teamId) {
         candidates.push(...squadCandidates(await loadSquad(player.teamId, 'ar'), player.nameAr, player.teamId));
         candidates.push(...squadCandidates(await loadSquad(player.teamId, 'en'), player.nameEn, player.teamId));
       }
@@ -168,7 +186,7 @@ export async function resolveTopScorersFivePool(
       const ambiguous = (b: Candidate | null, r: Candidate | null) =>
         !!b && !!r && b.score < 1 && r.score >= b.score - 0.01;
 
-      if (!best || best.score < ACCEPT_SCORE || ambiguous(best, runnerUp)) {
+      if (pinned == null && (!best || best.score < ACCEPT_SCORE || ambiguous(best, runnerUp))) {
         const searched: Candidate[] = [];
         for (const [query, language] of [[player.nameAr, 'ar'], [player.nameEn, 'en']] as const) {
           if (!query) continue;

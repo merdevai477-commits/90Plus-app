@@ -11,6 +11,11 @@
 export type TopScorersFiveSeedPlayer = {
   nameAr: string;
   nameEn: string | null;
+  /**
+   * 365Scores athleteId, checked by hand against the club's squad, for names
+   * the matcher cannot settle (a different spelling or first name).
+   */
+  athleteId?: number;
 };
 
 export type TopScorersFiveSeedClub = {
