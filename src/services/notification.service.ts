@@ -77,6 +77,8 @@ export interface CreateNotificationParams {
     idempotencyKey?: string;
     /** Return null when Expo was attempted but every device send failed. */
     requirePushSuccess?: boolean;
+    /** Push-only image (Android large icon); not stored on the inbox row. */
+    imageUrl?: string;
 }
 
 /**
@@ -158,6 +160,7 @@ export class NotificationService {
                 pushFirst,
                 idempotencyKey,
                 requirePushSuccess,
+                imageUrl,
             } = params;
 
             // Ensure actor info is included in data
@@ -214,6 +217,7 @@ export class NotificationService {
                             interruptionLevel: String(type).includes('MATCH')
                                 ? 'time-sensitive'
                                 : undefined,
+                            imageUrl,
                             data: {
                                 type: String(type),
                                 ...notificationData,

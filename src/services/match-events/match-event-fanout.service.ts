@@ -25,10 +25,12 @@ function buildPushPayload(sub: SubscriptionRow, event: NormalizedMatchEvent) {
     };
 
     let vars = { ...event.templateVars };
+    let imageUrl: string | undefined;
 
     if (event.eventType === 'goal_home' || event.eventType === 'goal_away') {
         const side = event.eventType === 'goal_home' ? 'home' : 'away';
         const scorer = side === 'home' ? sub.homeTeam : sub.awayTeam;
+        imageUrl = (side === 'home' ? sub.homeTeamLogo : sub.awayTeamLogo) || undefined;
         const homeScore = Number(event.payload.homeScore ?? 0);
         const awayScore = Number(event.payload.awayScore ?? 0);
         vars = {
@@ -75,6 +77,7 @@ function buildPushPayload(sub: SubscriptionRow, event: NormalizedMatchEvent) {
             ...event.data,
         },
         idempotencyKey: `match-event:${event.eventKey}:${sub.userId}`,
+        ...(imageUrl ? { imageUrl } : {}),
     };
 }
 

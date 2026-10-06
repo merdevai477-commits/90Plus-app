@@ -17,6 +17,7 @@ export interface MatchEventPushJob {
     prefKey: string | null;
     data: Record<string, unknown>;
     idempotencyKey: string;
+    imageUrl?: string;
 }
 
 let queue: Queue<MatchEventPushJob> | null = null;

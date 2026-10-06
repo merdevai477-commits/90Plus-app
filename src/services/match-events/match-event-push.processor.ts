@@ -88,6 +88,7 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
             requirePushSuccess: true,
             // Push before inbox write — middle-ground latency cut without an iOS store build.
             pushFirst: true,
+            imageUrl: job.imageUrl,
             data: {
                 type: String(job.notificationType),
                 priority: 'high',

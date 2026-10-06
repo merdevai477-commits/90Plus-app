@@ -180,6 +180,16 @@ export interface PushNotificationPayload {
     channelId?: string;
     /** iOS UNNotificationInterruptionLevel — Expo uses hyphenated values. */
     interruptionLevel?: 'active' | 'critical' | 'passive' | 'time-sensitive';
+    /**
+     * HTTPS image (e.g. scoring team crest). Android renders it as the large-icon
+     * thumbnail; iOS ignores it until a Notification Service Extension ships.
+     */
+    imageUrl?: string;
+}
+
+function resolveRichContent(imageUrl?: string): Pick<ExpoPushMessage, 'richContent'> {
+    if (!imageUrl || !/^https:\/\//i.test(imageUrl)) return {};
+    return { richContent: { image: imageUrl } };
 }
 
 function resolvePushChannelId(
@@ -324,6 +334,7 @@ export class PushNotificationService {
                     channelId,
                     interruptionLevel,
                     ...(payload.threadId ? { threadId: payload.threadId } : {}),
+                    ...resolveRichContent(payload.imageUrl),
                 };
             }
 
@@ -406,6 +417,7 @@ export class PushNotificationService {
                 priority: 'high',
                 channelId,
                 interruptionLevel: resolveInterruptionLevel(payload, channelId),
+                ...resolveRichContent(payload.imageUrl),
             });
         }
 
