@@ -6,7 +6,7 @@
  * the content runs past the frame, so it scrolls under the floating nav.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -18,11 +18,14 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { topScorersFiveService } from '../../services/topScorersFive.service';
 import { localeWithLatinNumerals, useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { logger } from '../../utils/logger';
 import { KingEmptyState } from '../KingOfPredictions/KingBoardList';
 
 import { TSF_DESIGN_WIDTH, type TsfLeagueKey } from './assets';
+import { tsfFixtureFromApi } from './liveData';
 import {
   tsfClubInitials,
   tsfInitials,
@@ -77,10 +80,30 @@ export function MatchesTab({ picked, onBack, onGoToPitch }: MatchesTabProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const active = picked.find((entry) => entry.player.id === selectedId) ?? picked[0];
 
-  const fixtures = useMemo(
-    () => (active ? tsfMockFixtures(active.league, active.player) : []),
-    [active],
-  );
+  const [liveFixtures, setLiveFixtures] = useState<Record<string, readonly TsfFixture[]>>({});
+  const activeLiveId = active?.player.live ? active.player.id : null;
+
+  useEffect(() => {
+    if (!activeLiveId || liveFixtures[activeLiveId]) return;
+    let cancelled = false;
+    topScorersFiveService
+      .getPlayerFixtures(activeLiveId)
+      .then((rows) => {
+        if (!cancelled) {
+          setLiveFixtures((prev) => ({ ...prev, [activeLiveId]: rows.map(tsfFixtureFromApi) }));
+        }
+      })
+      .catch((error) => logger.warn('[TopScorersFive] fixtures load failed', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLiveId, liveFixtures]);
+
+  const fixtures = useMemo(() => {
+    if (!active) return [];
+    if (active.player.live) return liveFixtures[active.player.id] ?? [];
+    return tsfMockFixtures(active.league, active.player);
+  }, [active, liveFixtures]);
 
   return (
     <View style={styles.root}>

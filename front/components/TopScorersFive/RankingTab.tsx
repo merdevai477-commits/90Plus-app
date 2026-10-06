@@ -2,26 +2,30 @@
  * "خماسي الهدافين" ranking tab — Figma nodes 1288:14458 (empty) and
  * 1288:14284 (with the prize card and the board).
  *
- * The empty state shows until the user's five are complete, which is also the
- * only thing its "اختر الان" button can act on. Ported from the 448×925 design
- * frame and scaled by device width.
+ * The board is the backend's points ranking for the chosen period; the empty
+ * state (whose "اختر الان" sends the user to pick) shows while nobody is ranked
+ * yet. Ported from the 448×925 design frame and scaled by device width.
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@clerk/clerk-expo';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { KingPeriod } from '../../services/predictions.service';
+import { topScorersFiveService } from '../../services/topScorersFive.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { logger } from '../../utils/logger';
 import { KING_ICON } from '../KingOfPredictions/assets';
 import { KingEmptyState, KingPeriodTabs } from '../KingOfPredictions/KingBoardList';
 
 import { TSF_DESIGN_WIDTH, TSF_PRIZE_SHIRT } from './assets';
-import { TSF_MOCK_LEADERBOARD, type TsfLeaderboardRow } from './mockData';
+import { tsfLeaderboardRows } from './liveData';
+import type { TsfLeaderboardRow } from './mockData';
 import { TsfHeader } from './TsfHeader';
 import { tsfNavBottom } from './TsfNav';
 
@@ -121,12 +125,11 @@ const PLAIN = {
 } as const;
 
 type RankingTabProps = {
-  complete: boolean;
   onBack: () => void;
   onPickNow: () => void;
 };
 
-export function RankingTab({ complete, onBack, onPickNow }: RankingTabProps) {
+export function RankingTab({ onBack, onPickNow }: RankingTabProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { t, language } = useTranslation();
@@ -142,6 +145,32 @@ export function RankingTab({ complete, onBack, onPickNow }: RankingTabProps) {
   const s = (value: number) => value * scale;
 
   const [filter, setFilter] = useState<KingPeriod>('week');
+  const [boards, setBoards] = useState<Partial<Record<KingPeriod, TsfLeaderboardRow[]>>>({});
+
+  const { getToken, isSignedIn } = useAuth();
+  // Clerk hands out a new getToken on renders; keeping it out of effect deps.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getTokenRef.current().catch(() => null);
+      if (!token || cancelled) return;
+      try {
+        const board = await topScorersFiveService.getLeaderboard(token, filter);
+        if (!cancelled) setBoards((prev) => ({ ...prev, [filter]: tsfLeaderboardRows(board) }));
+      } catch (error) {
+        logger.warn('[TopScorersFive] leaderboard load failed', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [filter, isSignedIn]);
+
+  const rows = boards[filter] ?? [];
 
   const navClearance = tsfNavBottom(insets.bottom) + s(83 + 16);
   const sidePadding = s((TSF_DESIGN_WIDTH - 404) / 2);
@@ -191,7 +220,7 @@ export function RankingTab({ complete, onBack, onPickNow }: RankingTabProps) {
     />
   );
 
-  if (!complete) {
+  if (rows.length === 0) {
     return (
       <View style={styles.root}>
         <TsfHeader onBack={onBack} s={s} testID="tsf-ranking-back" />
@@ -297,11 +326,11 @@ export function RankingTab({ complete, onBack, onPickNow }: RankingTabProps) {
         <View style={{ marginTop: s(16) }}>{filters}</View>
 
         <View style={{ marginTop: s(19), rowGap: s(ROW.gap) }}>
-          {TSF_MOCK_LEADERBOARD.map((row, index) => (
+          {rows.map((row, index) => (
             <BoardRow
               key={row.id}
               row={row}
-              rank={index + 1}
+              rank={row.rank ?? index + 1}
               s={s}
               isAr={isAr}
               fontBold={fontBold}
@@ -310,7 +339,7 @@ export function RankingTab({ complete, onBack, onPickNow }: RankingTabProps) {
               fontRegular={fontRegular}
               name={row.isYou ? copy.you : row.name}
               xpUnit={copy.xp}
-              rankLabel={copy.rankA11y.replace('{rank}', String(index + 1))}
+              rankLabel={copy.rankA11y.replace('{rank}', String(row.rank ?? index + 1))}
             />
           ))}
         </View>
@@ -429,7 +458,8 @@ function BoardRow({
         )}
         <View style={[styles.whoName, { columnGap: s(8), flexDirection: identityDirection }]}>
           <Image
-            source={AVATAR_PLACEHOLDER}
+            source={row.avatar ? { uri: row.avatar } : AVATAR_PLACEHOLDER}
+            placeholder={AVATAR_PLACEHOLDER}
             style={[
               styles.avatar,
               {

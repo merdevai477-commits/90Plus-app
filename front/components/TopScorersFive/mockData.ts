@@ -1,7 +1,7 @@
 /**
- * Placeholder data for "خماسي الهدافين" — the selectable player pool, the
- * fixtures the matches tab lists and the ranking tab's leaderboard. None of it
- * comes from the API; there are no endpoints for the competition yet.
+ * Placeholder data for "خماسي الهدافين" — the player pool and fixtures of the
+ * leagues the backend does not serve yet (see `TSF_LIVE_LEAGUES`). Live leagues
+ * come from `liveData.ts`.
  */
 
 import type { TsfLeagueKey } from './assets';
@@ -12,9 +12,16 @@ export type TsfPlayer = {
   readonly position: string;
   /** Broadcast-short, the length the design's fixture rows are drawn for. */
   readonly club: string;
-  /** Season tallies shown on the picker card. Placeholder, like the rest. */
+  /**
+   * Tallies shown on the picker tile. For a live league's pick they are the
+   * current gameweek's, the ones its pitch card shows with `points`.
+   */
   readonly goals: number;
   readonly assists: number;
+  /** Live leagues only. */
+  readonly points?: number;
+  readonly photo?: string | null;
+  readonly live?: boolean;
 };
 
 export const TSF_MOCK_PLAYERS: Record<TsfLeagueKey, readonly TsfPlayer[]> = {
@@ -111,23 +118,14 @@ export function tsfMockFixtures(league: TsfLeagueKey, player: TsfPlayer): readon
 
 export type TsfLeaderboardRow = {
   readonly id: string;
+  /** Shared by tied players; falls back to list position when absent. */
+  readonly rank?: number;
   readonly name: string;
   readonly xp: number;
   /** The signed-in player's row; its label comes from the locale, not here. */
   readonly isYou?: boolean;
+  readonly avatar?: string | null;
 };
-
-export const TSF_MOCK_LEADERBOARD: readonly TsfLeaderboardRow[] = [
-  { id: 'lb-1', name: 'محمد', xp: 2450 },
-  { id: 'lb-2', name: 'حسن', xp: 2100 },
-  { id: 'lb-3', name: '', xp: 1538, isYou: true },
-  { id: 'lb-4', name: 'سامي', xp: 620 },
-  { id: 'lb-5', name: 'ياسر', xp: 540 },
-  { id: 'lb-6', name: 'كريم', xp: 500 },
-  { id: 'lb-7', name: 'طارق', xp: 480 },
-  { id: 'lb-8', name: 'عمر', xp: 300 },
-  { id: 'lb-9', name: 'أدهم', xp: 250 },
-];
 
 /** Short name shown on a filled pitch card, e.g. "Erling Haaland" → "Haaland". */
 export function tsfShortName(player: TsfPlayer): string {

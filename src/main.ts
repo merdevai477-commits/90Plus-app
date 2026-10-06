@@ -242,6 +242,7 @@ import dailySpinRoutes from './routes/daily-spin.routes';
 import footballRoutes from './routes/football.routes';
 import knowledgeExportRoutes from './routes/knowledge-export.routes';
 import predictionsRoutes from './routes/predictions.routes';
+import topScorersFiveRoutes from './routes/top-scorers-five.routes';
 import competitionsRoutes from './routes/competitions.routes';
 import assRoutes from './routes/ass.routes';
 import coinsRoutes from './routes/coins.routes';
@@ -457,6 +458,7 @@ app.use(`${API_PREFIX}/internal/football/knowledge`, knowledgeExportRoutes);
 app.use(`${API_PREFIX}/news`, newsRoutes);
 app.use(`${API_PREFIX}/i18n`, i18nRoutes);
 app.use(`${API_PREFIX}/predictions`, predictionsRoutes);
+app.use(`${API_PREFIX}/top-scorers-five`, topScorersFiveRoutes);
 app.use(`${API_PREFIX}/competitions`, competitionsRoutes);
 app.use(`${API_PREFIX}/ass`, assRoutes);
 app.use(`${API_PREFIX}/coins`, coinsRoutes);
@@ -979,6 +981,13 @@ async function startServer() {
                     runShareWinRollover();
                     setInterval(runShareWinRollover, 15 * 60 * 1000).unref?.();
                     logger.info('✅ Share & Win weekly cycle rollover scheduled (every 15m)');
+
+                    // Top Scorers Five scoring reads 365Scores game data only — no
+                    // API-Football quota — so it runs on every plan.
+                    const { startTopScorersFiveProcessor } = await import(
+                        './services/top-scorers-five-processing.service'
+                    );
+                    startTopScorersFiveProcessor();
 
                     const { startWinnerReminderCron } = await import(
                         './services/competition-award.service'

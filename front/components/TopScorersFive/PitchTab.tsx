@@ -9,7 +9,7 @@
 
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -215,9 +215,18 @@ export function PitchTab({ picks, scale, onBack, onOpenLeague, onRemove }: Pitch
                         { top: s(16), width: s(68), height: s(68), borderRadius: s(34) },
                       ]}
                     >
-                      <Text style={[styles.avatarText, { fontFamily: fontBold, fontSize: s(22) }]}>
-                        {tsfInitials(player)}
-                      </Text>
+                      {player.photo ? (
+                        <Image
+                          source={{ uri: player.photo }}
+                          style={[StyleSheet.absoluteFill, { borderRadius: s(34) }]}
+                          contentFit="cover"
+                          contentPosition="top"
+                        />
+                      ) : (
+                        <Text style={[styles.avatarText, { fontFamily: fontBold, fontSize: s(22) }]}>
+                          {tsfInitials(player)}
+                        </Text>
+                      )}
                     </View>
                     <Text
                       numberOfLines={1}
@@ -230,6 +239,33 @@ export function PitchTab({ picks, scale, onBack, onOpenLeague, onRemove }: Pitch
                     >
                       {tsfShortName(player)}
                     </Text>
+                    {player.points != null ? (
+                      <View
+                        accessible
+                        accessibilityLabel={[
+                          pickCopy.goalsA11y.replace('{count}', String(player.goals)),
+                          pickCopy.assistsA11y.replace('{count}', String(player.assists)),
+                          pickCopy.pointsA11y.replace('{count}', String(player.points)),
+                        ].join('. ')}
+                        style={[styles.cardStats, { top: s(117), height: s(14), columnGap: s(6) }]}
+                      >
+                        <View style={[styles.cardStat, { columnGap: s(2) }]}>
+                          <Ionicons name="football" size={s(10)} color="#FFFFFF" />
+                          <Text style={[styles.cardStatText, { fontFamily: fontBold, fontSize: s(11) }]} allowFontScaling={false}>
+                            {player.goals}
+                          </Text>
+                        </View>
+                        <View style={[styles.cardStat, { columnGap: s(2) }]}>
+                          <MaterialCommunityIcons name="shoe-cleat" size={s(10)} color="#FFFFFF" />
+                          <Text style={[styles.cardStatText, { fontFamily: fontBold, fontSize: s(11) }]} allowFontScaling={false}>
+                            {player.assists}
+                          </Text>
+                        </View>
+                        <Text style={[styles.cardPoints, { fontFamily: fontBold, fontSize: s(11) }]} allowFontScaling={false}>
+                          {`${player.points} ${pickCopy.pointsShort}`}
+                        </Text>
+                      </View>
+                    ) : null}
                   </>
                 ) : (
                   <>
@@ -422,6 +458,17 @@ const styles = StyleSheet.create({
     borderColor: PURPLE_SOFT,
   },
   avatarText: { color: '#FFFFFF' },
+  cardStats: {
+    position: 'absolute',
+    left: 1,
+    right: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardStat: { flexDirection: 'row', alignItems: 'center' },
+  cardStatText: { color: '#FFFFFF' },
+  cardPoints: { color: CARD_LABEL },
   crown: { position: 'absolute', top: 0, left: 0, alignItems: 'center' },
   remove: {
     position: 'absolute',

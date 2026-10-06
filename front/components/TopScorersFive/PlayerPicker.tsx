@@ -33,6 +33,8 @@ import {
   TSF_LOGO_TINT_ON_DARK,
   type TsfLeagueKey,
 } from './assets';
+import { TSF_LIVE_LEAGUES } from '../../services/topScorersFive.service';
+
 import { TSF_MOCK_PLAYERS, tsfInitials, tsfShortName, type TsfPlayer } from './mockData';
 
 const BG = '#030303';
@@ -70,6 +72,8 @@ const LEAGUE_ORDER: readonly TsfLeagueKey[] = ['pl', 'laliga', 'bundesliga', 'li
 
 type PlayerPickerProps = {
   league: TsfLeagueKey | null;
+  /** Pools loaded from the backend; leagues missing here use the placeholder pool. */
+  players?: Partial<Record<TsfLeagueKey, readonly TsfPlayer[]>>;
   selectedId: string | undefined;
   onClose: () => void;
   onChangeLeague: (league: TsfLeagueKey) => void;
@@ -78,6 +82,7 @@ type PlayerPickerProps = {
 
 export function PlayerPicker({
   league,
+  players: livePlayers,
   selectedId,
   onClose,
   onChangeLeague,
@@ -97,13 +102,15 @@ export function PlayerPicker({
   const s = useCallback((value: number) => value * scale, [scale]);
 
   const rows = useMemo(() => {
-    const players = league ? TSF_MOCK_PLAYERS[league] : [];
+    const players = league
+      ? (TSF_LIVE_LEAGUES.includes(league) ? livePlayers?.[league] ?? [] : TSF_MOCK_PLAYERS[league])
+      : [];
     const chunks: TsfPlayer[][] = [];
     for (let index = 0; index < players.length; index += COLUMNS) {
       chunks.push(players.slice(index, index + COLUMNS));
     }
     return chunks;
-  }, [league]);
+  }, [league, livePlayers]);
 
   const chips = useMemo(
     () => (isAr ? [...LEAGUE_ORDER].reverse() : LEAGUE_ORDER),
@@ -234,7 +241,7 @@ type PlayerCardProps = {
 
 /**
  * Tile is mostly the player's portrait with the name and tallies over a scrim.
- * No portraits ship yet, so initials stand in behind the same scrim.
+ * Placeholder players have no portrait, so initials stand in behind the same scrim.
  */
 function PlayerCard({
   player,
@@ -267,12 +274,21 @@ function PlayerCard({
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
-      <Text
-        style={[styles.initials, { fontFamily: fontBold, fontSize: s(40) }]}
-        allowFontScaling={false}
-      >
-        {tsfInitials(player)}
-      </Text>
+      {player.photo ? (
+        <Image
+          source={{ uri: player.photo }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          contentPosition="top"
+        />
+      ) : (
+        <Text
+          style={[styles.initials, { fontFamily: fontBold, fontSize: s(40) }]}
+          allowFontScaling={false}
+        >
+          {tsfInitials(player)}
+        </Text>
+      )}
       <LinearGradient
         colors={['rgba(3,3,3,0)', 'rgba(3,3,3,0.55)', 'rgba(3,3,3,0.92)']}
         locations={[0, 0.45, 1]}

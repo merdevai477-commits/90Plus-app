@@ -157,6 +157,7 @@ model User {
   shareWinReferralReceived      ShareWinReferral?        @relation("ShareWinReferred")
   matchChatMessages             MatchChatMessage[]
   matchChatReportsFiled         MatchChatReport[]        @relation("MatchChatReporter")
+  topScorersFiveSelections      TopScorersFiveSelection[]
 
   @@index([email])
   @@index([username])
@@ -2715,4 +2716,135 @@ enum ShareWinCycleStatus {
 enum ShareWinReferralStatus {
   CONVERTED
   REVOKED
+}
+
+// ─── Top Scorers Five ("خماسي الهدافين") ─────────────────────────────────────
+
+enum TopScorersFiveGameweekStatus {
+  OPEN
+  LOCKED
+  LIVE
+  CALCULATING
+  COMPLETED
+}
+
+/// Admin-curated pool per league: only these players can be picked. Identity is
+/// the 365Scores athleteId (`externalPlayerId`), the same id the app's fixtures,
+/// lineups and match events carry; null until the name is resolved.
+model TopScorersFivePlayer {
+  id               String    @id @default(uuid())
+  leagueKey        String
+  nameAr           String
+  nameEn           String?
+  clubNameAr       String
+  clubNameEn       String?
+  /// 365Scores competitor id of the club — how the player's fixtures are found.
+  teamId           Int?
+  externalPlayerId Int?
+  photoUrl         String?
+  position         String?
+  sortOrder        Int       @default(0)
+  active           Boolean   @default(true)
+  resolvedAt       DateTime?
+  /// Why resolution failed or needs a second look (club mismatch, ambiguity…).
+  resolveNote      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  selections   TopScorersFiveSelection[]
+  performances TopScorersFivePerformance[]
+
+  @@unique([leagueKey, nameAr])
+  @@unique([leagueKey, externalPlayerId])
+  @@index([leagueKey, active, sortOrder])
+  @@map("top_scorers_five_players")
+}
+
+/// One scoring window per league. Picks lock at `lockAt` (first kickoff of the
+/// window); `status` only ever moves forward.
+model TopScorersFiveGameweek {
+  id          String                       @id @default(uuid())
+  leagueKey   String
+  /// Window start date ("2026-10-06") — deterministic, so concurrent rollovers
+  /// collide on the unique index instead of creating duplicate weeks.
+  weekKey     String
+  startAt     DateTime
+  endAt       DateTime
+  lockAt      DateTime
+  status      TopScorersFiveGameweekStatus @default(OPEN)
+  completedAt DateTime?
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+
+  selections   TopScorersFiveSelection[]
+  fixtures     TopScorersFiveFixture[]
+  performances TopScorersFivePerformance[]
+
+  @@unique([leagueKey, weekKey])
+  @@index([status, endAt])
+  @@map("top_scorers_five_gameweeks")
+}
+
+/// Fixtures of selected players' clubs inside a gameweek. `processedAt` marks a
+/// fixture whose stats were stored (or that was voided), so it is never fetched again.
+model TopScorersFiveFixture {
+  id           String                 @id @default(uuid())
+  gameweekId   String
+  fixtureId    Int
+  homeTeamId   Int
+  awayTeamId   Int
+  homeTeamName String?
+  awayTeamName String?
+  kickoffAt    DateTime
+  status       String                 @default("NS")
+  processedAt  DateTime?
+  failureCount Int                    @default(0)
+  lastError    String?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  gameweek     TopScorersFiveGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
+
+  @@unique([gameweekId, fixtureId])
+  @@index([gameweekId, processedAt])
+  @@map("top_scorers_five_fixtures")
+}
+
+/// A user's pick for one league in one gameweek.
+model TopScorersFiveSelection {
+  id         String                 @id @default(uuid())
+  userId     String
+  gameweekId String
+  leagueKey  String
+  playerId   String
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameweek   TopScorersFiveGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
+  player     TopScorersFivePlayer   @relation(fields: [playerId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, gameweekId, leagueKey])
+  @@index([gameweekId, playerId])
+  @@index([userId])
+  @@map("top_scorers_five_selections")
+}
+
+/// What one player did in one finished fixture. Insert-only: a fixture is
+/// recorded once and never rewritten; a user's score is the sum of these rows.
+model TopScorersFivePerformance {
+  id          String                 @id @default(uuid())
+  gameweekId  String
+  playerId    String
+  fixtureId   Int
+  goals       Int                    @default(0)
+  assists     Int                    @default(0)
+  points      Int                    @default(0)
+  status      String                 @default("FINISHED")
+  fixtureDate DateTime
+  createdAt   DateTime               @default(now())
+  gameweek    TopScorersFiveGameweek @relation(fields: [gameweekId], references: [id], onDelete: Cascade)
+  player      TopScorersFivePlayer   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([gameweekId, playerId, fixtureId])
+  @@index([playerId])
+  @@map("top_scorers_five_performances")
 }
