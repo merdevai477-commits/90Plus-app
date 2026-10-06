@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, TouchableOpacity, Image, StyleSheet, useWindowDimensions } from 'react-native';
+import { Text } from './MatchText';
 import type { Standing } from '../../services/apiFootball';
 import { getTeamDisplayName } from '../../utils/i18nHelpers';
 import { standingRowMatchesTeam } from '../../utils/standingsHelpers';

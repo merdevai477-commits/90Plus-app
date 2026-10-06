@@ -8,10 +8,10 @@
 import React from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
+import { Text } from './MatchText';
 import { Calendar, MapPin, Trophy } from 'lucide-react-native';
 import { MatchArchive } from '../../services/matchArchiveService';
 import TeamBadge from '../common/TeamBadge';

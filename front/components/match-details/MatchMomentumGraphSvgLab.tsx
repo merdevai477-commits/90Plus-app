@@ -5,7 +5,8 @@
  */
 
 import React, { useEffect, useId, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { Text } from './MatchText';
 import Svg, { Defs, LinearGradient, Path, Stop, Line } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import {

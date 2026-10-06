@@ -3,7 +3,8 @@
  * Circular gauges + dual bars for home vs away.
  */
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Text } from './MatchText';
 import Svg, { Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { TeamStatistics } from '../../services/apiFootball';

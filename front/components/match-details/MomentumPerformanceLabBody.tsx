@@ -6,12 +6,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   Pressable,
   useWindowDimensions,
 } from 'react-native';
+import { Text } from './MatchText';
 import { MatchMomentumGraphSvgLab } from './MatchMomentumGraphSvgLab';
 import {
   MatchMomentumGraphSkia,

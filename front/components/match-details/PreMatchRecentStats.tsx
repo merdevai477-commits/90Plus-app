@@ -3,7 +3,8 @@
  * liquid-glass surface (purple / electric blue / gold).
  */
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Text } from './MatchText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GlassWrapper, glassProps } from '../../constants/ui';
 import { isLiquidGlassSupported } from '../../utils/liquidGlassSafe';

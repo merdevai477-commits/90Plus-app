@@ -5,7 +5,8 @@
  */
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Text } from './MatchText';
 import {
   Canvas,
   Group,

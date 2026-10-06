@@ -3,7 +3,8 @@
  * (attack / midfield / defense), from 365 competitor leaderboards.
  */
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Text } from './MatchText';
 import { LinearGradient } from 'expo-linear-gradient';
 import CachedAthletePhoto from '../common/CachedAthletePhoto';
 import { useCompetitorSquad, useCompetitorStats } from '../../hooks/useTeamProfile';

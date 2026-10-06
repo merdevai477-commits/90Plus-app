@@ -8,12 +8,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
-  Text,
   FlatList,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { Text } from './MatchText';
 import { History } from 'lucide-react-native';
 import { MatchArchive, matchArchiveService } from '../../services/matchArchiveService';
 import MatchHistoryCard from './MatchHistoryCard';

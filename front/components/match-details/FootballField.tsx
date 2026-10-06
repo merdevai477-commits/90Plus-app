@@ -1,12 +1,12 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   LayoutChangeEvent,
   useWindowDimensions,
 } from 'react-native';
+import { Text } from './MatchText';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurTargetView } from 'expo-blur';

@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, I18nManager } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, ScrollView, I18nManager } from 'react-native';
+import { Text } from './MatchText';
 
 interface Tab {
   key: string;

@@ -2,7 +2,8 @@
  * Fan 1-X-2 vote (365 "Who will win?") — Figma 1347:18834 header + three cards.
  */
 import React from 'react';
-import { View, Text, StyleSheet, type ViewStyle } from 'react-native';
+import { View, StyleSheet, type ViewStyle } from 'react-native';
+import { Text } from './MatchText';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 

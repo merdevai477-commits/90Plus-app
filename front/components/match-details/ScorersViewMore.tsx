@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, TouchableOpacity } from 'react-native';
+import { Text } from './MatchText';
 import { Ionicons } from '@expo/vector-icons';
 
 /** Scorer lines shown per team before the list collapses behind "View more". */

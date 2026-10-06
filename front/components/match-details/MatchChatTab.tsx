@@ -1,7 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   TextInput,
   Pressable,
@@ -14,6 +13,7 @@ import {
   StatusBar,
   BackHandler,
 } from 'react-native';
+import { Text } from './MatchText';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
