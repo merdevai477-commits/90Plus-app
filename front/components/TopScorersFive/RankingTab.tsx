@@ -8,35 +8,28 @@
  */
 
 import { useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { KingPeriod } from '../../services/predictions.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { KingEmptyState, KingPeriodTabs } from '../KingOfPredictions/KingBoardList';
 
 import { TSF_DESIGN_WIDTH, TSF_PRIZE_SHIRT } from './assets';
 import { TSF_MOCK_LEADERBOARD, type TsfLeaderboardRow } from './mockData';
 import { TsfHeader } from './TsfHeader';
 import { tsfNavBottom } from './TsfNav';
 
-const ACTIVE = '#8C5CF5';
-const RULE = '#DBDBDB';
-const FILTER_IDLE_BG = '#08080A';
-const FILTER_IDLE_STROKE = '#14141A';
+/** Each rule fades out away from the ball, so the outer ends dissolve into the page. */
+const RULE_FADE = ['rgba(219,219,219,0)', '#DBDBDB'] as const;
 const PRIZE_BG = '#150336';
 const PRIZE_STROKE = '#1C0F38';
 const PRIZE_LABEL = '#E0D4FF';
 const PRIZE_SUB = '#ADADAD';
-const EMPTY_TEXT = '#858585';
 const PLACEHOLDER = '#2A1361';
 
 /** The 87×2 rules either side of the 24 icon, 209 across. */
@@ -44,15 +37,7 @@ const RULE_ROW = { lineWidth: 87, lineHeight: 2, icon: 24, gap: 8, width: 209 };
 /** Rule row sits 27 under the header in both states; the body 42 under the title. */
 const GAP = { rule: 27, title: 8, body: 42 };
 const PRIZE = { height: 143, radius: 20 };
-const FILTER = { height: 46, radius: 12 };
 const ROW = { height: 58, radius: 16, gap: 8 };
-/**
- * The design's illustration is a 203.85×159.82 placeholder for art that was
- * never exported. Drawing the shirt we do have at that width and its own
- * 1024×430 ratio keeps the design's footprint without the dead band a taller
- * box would leave above and below it.
- */
-const EMPTY_ART = { width: 203.85, height: 203.85 / (1024 / 430) };
 
 /**
  * Podium dressing by position. The design's third row is also the signed-in
@@ -133,10 +118,11 @@ export function RankingTab({ complete, onBack, onPickNow }: RankingTabProps) {
   const scale = width / TSF_DESIGN_WIDTH;
   const s = (value: number) => value * scale;
 
-  const [filter, setFilter] = useState<'all' | 'week'>('week');
+  const [filter, setFilter] = useState<KingPeriod>('week');
 
   const navClearance = tsfNavBottom(insets.bottom) + s(83 + 16);
   const sidePadding = s((TSF_DESIGN_WIDTH - 404) / 2);
+  const ruleSize = { width: s(RULE_ROW.lineWidth), height: s(RULE_ROW.lineHeight) };
 
   const heading = (
     <>
@@ -146,12 +132,18 @@ export function RankingTab({ complete, onBack, onPickNow }: RankingTabProps) {
           { width: s(RULE_ROW.width), columnGap: s(RULE_ROW.gap), marginTop: s(GAP.rule) },
         ]}
       >
-        <View
-          style={[styles.rule, { width: s(RULE_ROW.lineWidth), height: s(RULE_ROW.lineHeight) }]}
+        <LinearGradient
+          colors={RULE_FADE}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.rule, ruleSize]}
         />
-        <Ionicons name="trophy" size={s(RULE_ROW.icon)} color={ACTIVE} />
-        <View
-          style={[styles.rule, { width: s(RULE_ROW.lineWidth), height: s(RULE_ROW.lineHeight) }]}
+        <Ionicons name="football" size={s(RULE_ROW.icon)} color="#FFFFFF" />
+        <LinearGradient
+          colors={RULE_FADE}
+          start={{ x: 1, y: 0 }}
+          end={{ x: 0, y: 0 }}
+          style={[styles.rule, ruleSize]}
         />
       </View>
       <Text
@@ -163,89 +155,41 @@ export function RankingTab({ complete, onBack, onPickNow }: RankingTabProps) {
     </>
   );
 
+  /**
+   * Same segmented control, empty illustration and gradient button as King of
+   * Predictions' leaderboard — the two competitions share these in the design.
+   */
   const filters = (
-    <View style={[styles.filters, { flexDirection: isAr ? 'row-reverse' : 'row' }]}>
-      {(['all', 'week'] as const).map((key) => {
-        const selected = key === filter;
-        return (
-          <TouchableOpacity
-            key={key}
-            onPress={() => setFilter(key)}
-            activeOpacity={0.85}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            style={[
-              styles.filter,
-              {
-                height: s(FILTER.height),
-                borderRadius: s(FILTER.radius),
-                paddingHorizontal: s(24),
-              },
-              selected
-                ? { backgroundColor: ACTIVE }
-                : {
-                    backgroundColor: FILTER_IDLE_BG,
-                    borderWidth: 0.5,
-                    borderColor: FILTER_IDLE_STROKE,
-                  },
-            ]}
-          >
-            <Text
-              style={[
-                styles.filterLabel,
-                { fontFamily: selected ? fontBold : fontRegular, fontSize: s(16) },
-              ]}
-              maxFontSizeMultiplier={1.1}
-            >
-              {key === 'all' ? copy.filterAll : copy.filterWeek}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+    <KingPeriodTabs
+      period={filter}
+      allLabel={copy.filterAll}
+      weekLabel={copy.filterWeek}
+      onChange={setFilter}
+    />
   );
 
   if (!complete) {
     return (
       <View style={styles.root}>
         <TsfHeader onBack={onBack} s={s} testID="tsf-ranking-back" />
-        <View style={[styles.headingWrap, { paddingHorizontal: sidePadding }]}>{heading}</View>
-
-        <View
-          style={[
-            styles.emptyBody,
-            { paddingHorizontal: sidePadding, paddingBottom: navClearance },
-          ]}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingHorizontal: sidePadding,
+            paddingBottom: navClearance,
+          }}
         >
-          <Image
-            source={TSF_PRIZE_SHIRT}
-            style={{ width: s(EMPTY_ART.width), height: s(EMPTY_ART.height) }}
-            contentFit="contain"
-            transition={0}
-          />
-          <Text
-            style={[
-              styles.emptyTitle,
-              { fontFamily: fontSemi, fontSize: s(16), marginTop: s(20) },
-            ]}
-          >
-            {copy.emptyTitle}
-          </Text>
-          <TouchableOpacity
-            onPress={onPickNow}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            testID="tsf-ranking-pick-now"
-            style={[
-              styles.emptyCta,
-              { height: s(52), borderRadius: s(16), paddingHorizontal: s(23), marginTop: s(12) },
-            ]}
-          >
-            <Text style={[styles.emptyCtaLabel, { fontFamily: fontBold, fontSize: s(16) }]}>
-              {copy.emptyCta}
-            </Text>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.headingWrap}>{heading}</View>
+          <View style={{ marginTop: s(GAP.body) }}>{filters}</View>
+          <View style={[styles.emptyBody, { paddingVertical: s(24) }]}>
+            <KingEmptyState
+              title={copy.emptyTitle}
+              actionLabel={copy.emptyCta}
+              onAction={onPickNow}
+            />
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -474,17 +418,10 @@ const styles = StyleSheet.create({
 
   headingWrap: { alignItems: 'center' },
   ruleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  rule: { backgroundColor: RULE, borderRadius: 1 },
+  rule: { borderRadius: 1 },
   title: { color: '#FFFFFF', textAlign: 'center' },
 
-  filters: { justifyContent: 'center', columnGap: 8 },
-  filter: { alignItems: 'center', justifyContent: 'center' },
-  filterLabel: { color: '#FFFFFF' },
-
   emptyBody: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { color: EMPTY_TEXT, textAlign: 'center' },
-  emptyCta: { alignItems: 'center', justifyContent: 'center', backgroundColor: ACTIVE },
-  emptyCtaLabel: { color: '#FFFFFF' },
 
   prize: {
     alignItems: 'center',
