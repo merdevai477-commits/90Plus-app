@@ -67,7 +67,9 @@ interface FootballFieldProps {
   onPlayerPress?: (player: Player) => void;
   /** Fills the 247×37 team-switch slot at the top right; receives the canvas scale. */
   renderTeamToggle?: (scale: number) => React.ReactNode;
-  kitToggleLabel?: string;
+  /** The T-shirt button in the bottom corner opens the substitutes drawer. */
+  onBenchPress?: () => void;
+  benchButtonLabel?: string;
 }
 
 type PitchLayer = {
@@ -186,7 +188,6 @@ function PitchPlayerCard({
   u,
   left,
   top,
-  showKit,
   onPress,
 }: {
   player: Player;
@@ -194,7 +195,6 @@ function PitchPlayerCard({
   u: number;
   left: number;
   top: number;
-  showKit: boolean;
   onPress?: (player: Player) => void;
 }) {
   const goals = player.goals ?? 0;
@@ -247,16 +247,12 @@ function PitchPlayerCard({
           },
         ]}
       >
-        {showKit ? (
-          <MaterialCommunityIcons name="tshirt-crew" size={avatar * 0.62} color="#8B5CF6" />
-        ) : (
-          <CachedAthletePhoto
-            uri={player.photo}
-            size={avatar}
-            recyclingKey={player.id ?? player.photo}
-            preSized
-          />
-        )}
+        <CachedAthletePhoto
+          uri={player.photo}
+          size={avatar}
+          recyclingKey={player.id ?? player.photo}
+          preSized
+        />
       </View>
 
       {player.number ? (
@@ -316,11 +312,11 @@ export const FootballField: React.FC<FootballFieldProps> = ({
   players,
   onPlayerPress,
   renderTeamToggle,
-  kitToggleLabel,
+  onBenchPress,
+  benchButtonLabel,
 }) => {
   const { width: windowW } = useWindowDimensions();
   const [containerW, setContainerW] = useState(windowW);
-  const [showKits, setShowKits] = useState(false);
 
   const onLayout = (e: LayoutChangeEvent) => {
     const w = Math.round(e.nativeEvent.layout.width);
@@ -384,7 +380,6 @@ export const FootballField: React.FC<FootballFieldProps> = ({
             u={u}
             left={(cx - (CARD_W * k) / 2) * s}
             top={y(top)}
-            showKit={showKits}
             onPress={onPlayerPress}
           />
         ))}
@@ -422,24 +417,25 @@ export const FootballField: React.FC<FootballFieldProps> = ({
           </View>
         ) : null}
 
-        <TouchableOpacity
-          style={[
-            styles.abs,
-            { left: 388.5 * s, top: y(904.5), width: 45 * s, height: 45 * s },
-            showKits && styles.kitActive,
-          ]}
-          onPress={() => setShowKits((v) => !v)}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel={kitToggleLabel}
-          accessibilityState={{ selected: showKits }}
-        >
-          <Image
-            source={LINEUP_ICON.tShirt}
-            style={{ width: 45 * s, height: 45 * s }}
-            contentFit="contain"
-          />
-        </TouchableOpacity>
+        {onBenchPress ? (
+          <TouchableOpacity
+            style={[
+              styles.abs,
+              styles.benchButton,
+              { left: 388.5 * s, top: y(904.5), width: 45 * s, height: 45 * s },
+            ]}
+            onPress={onBenchPress}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={benchButtonLabel}
+          >
+            <Image
+              source={LINEUP_ICON.tShirt}
+              style={{ width: 45 * s, height: 45 * s }}
+              contentFit="contain"
+            />
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
@@ -519,12 +515,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     includeFontPadding: false,
   },
-  kitActive: {
-    borderRadius: 999,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 10,
-    elevation: 6,
+  benchButton: {
+    zIndex: 4,
   },
 });

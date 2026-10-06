@@ -44,7 +44,8 @@ import { BG_BASE,
   TEXT_SECONDARY,
 } from '../../constants/tokens';
 import { FootballField } from '../../components/match-details/FootballField';
-import { LineupBench } from '../../components/match-details/LineupBench';
+import { LineupBestPlayers } from '../../components/match-details/LineupBestPlayers';
+import { LineupBenchDrawer } from '../../components/match-details/LineupBenchDrawer';
 import { MatchStandingsTable } from '../../components/match-details/MatchStandingsTable';
 import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
@@ -251,6 +252,7 @@ const MatchDetailsScreen = () => {
 
   // Home/Away selector shared by Lineups and Previous Results.
   const [selectedTeamSide, setSelectedTeamSide] = useState<'home' | 'away'>('home');
+  const [benchDrawerOpen, setBenchDrawerOpen] = useState(false);
   // Selected standings group index (World Cup groups A-G etc.).
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
 
@@ -325,13 +327,13 @@ const MatchDetailsScreen = () => {
   }, [fixture]);
 
   const resolveLineupPlayerPhoto = useCallback(
-    (playerId: number, photo?: string | null) => {
+    (playerId: number, photo?: string | null, px: number = LINEUP_PHOTO_PX) => {
       const raw = playerPhotoUrl(
         playerId,
         photo,
         is365Fixture ? { source: '365' } : undefined,
       );
-      return with365ImageSize(raw, LINEUP_PHOTO_PX) ?? raw ?? '';
+      return with365ImageSize(raw, px) ?? raw ?? '';
     },
     [is365Fixture],
   );
@@ -1887,13 +1889,26 @@ const MatchDetailsScreen = () => {
             // Provider formation when it fits the XI, else derived from positions —
             // never a made-up default that contradicts the pitch.
             const formation = resolveFormationLabel(lineup.formation, fieldPlayers).label;
+            const openLineupPlayer = (player: { id?: number; name: string; photo?: string }) => {
+              if (!player.id) return;
+              openPlayerProfile(
+                {
+                  id: player.id,
+                  athleteId: player.id,
+                  name: player.name,
+                  photo: player.photo,
+                },
+                lineup.team,
+              );
+            };
 
             return (
               <View key={index} style={styles.lineupScreenBody}>
                 <FootballField
                   formation={formation}
                   players={fieldPlayers}
-                  kitToggleLabel={t.matchDetails.lineupKitView}
+                  onBenchPress={() => setBenchDrawerOpen(true)}
+                  benchButtonLabel={t.matchDetails.substitutes}
                   renderTeamToggle={(scale) => (
                     <TeamToggle
                       variant="pill"
@@ -1919,24 +1934,28 @@ const MatchDetailsScreen = () => {
                   }}
                 />
 
-                <LineupBench
+                <LineupBestPlayers
+                  players={[...pitchPlayers, ...benchPlayers]}
+                  title={t.matchDetails.lineupBestPlayers}
+                  rtl={language === 'ar'}
+                  resolvePhoto={resolveLineupPlayerPhoto}
+                  onPlayerPress={openLineupPlayer}
+                />
+
+                <LineupBenchDrawer
+                  visible={benchDrawerOpen}
+                  onClose={() => setBenchDrawerOpen(false)}
                   players={benchPlayers}
                   title={t.matchDetails.substitutes}
-                  expandLabel={t.matchDetails.lineupFullList}
-                  collapseLabel={t.matchDetails.lineupShowLess}
+                  emptyLabel={t.matchDetails.lineupNoSubstitutes}
+                  closeLabel={t.common.close}
+                  teamName={getTeamDisplayName(selectedTeamName, language)}
+                  teamLogo={selectedTeamSide === 'home' ? homeTeamLogo : awayTeamLogo}
                   rtl={language === 'ar'}
                   resolvePhoto={resolveLineupPlayerPhoto}
                   onPlayerPress={(player) => {
-                    if (!player.id) return;
-                    openPlayerProfile(
-                      {
-                        id: player.id,
-                        athleteId: player.id,
-                        name: player.name,
-                        photo: player.photo,
-                      },
-                      lineup.team,
-                    );
+                    setBenchDrawerOpen(false);
+                    openLineupPlayer(player);
                   }}
                 />
               </View>
