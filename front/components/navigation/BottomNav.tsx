@@ -1,11 +1,35 @@
 import React, { memo, useCallback, useEffect, useMemo } from 'react';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useTranslation } from '@/src/i18n';
 import { prefetchRoute, prefetchRoutes } from '@/utils/routePrefetcher';
 
-import { LIQUID_TAB_ITEMS, LiquidGlassTabBar } from './LiquidGlassTabBar';
+import {
+  GLASS_ICON_ACTIVE,
+  GLASS_ICON_IDLE,
+  GlassCapsuleNav,
+  type GlassCapsuleItem,
+  type GlassCapsuleMetrics,
+} from './GlassCapsuleNav';
+import { BuiltInTabIcon, LIQUID_TAB_ITEMS } from './LiquidGlassTabBar';
+import { TAB_BAR_HEIGHT, TAB_BAR_HORIZONTAL_MARGIN } from './liquidGlassTabBar.constants';
+import type { LiquidTabId } from './liquidGlassTabBar.types';
 import { useProfileTabAvatar } from './useProfileTabAvatar';
+
+/** Six tabs share the row, so the capsule runs tighter than the three-tab one. */
+const MAIN_METRICS: Partial<GlassCapsuleMetrics> = {
+  height: TAB_BAR_HEIGHT,
+  pad: 5,
+  gap: 2,
+  idle: 48,
+  minIdle: 38,
+  icon: 20,
+  font: 12,
+  labelGap: 6,
+  trail: 14,
+};
 
 function resolveActiveIndex(pathname: string | null): number {
   const p = (pathname ?? '').toLowerCase();
@@ -101,17 +125,59 @@ const BottomNav = memo(function BottomNav() {
     [activeIndex],
   );
 
+  const { t } = useTranslation();
+  const { width } = useWindowDimensions();
+  const labels = t.bottomNav;
+
+  const items = useMemo<GlassCapsuleItem<LiquidTabId>[]>(
+    () =>
+      LIQUID_TAB_ITEMS.map((tab) => ({
+        key: tab.id,
+        label: labels[tab.id],
+        testID: `bottom-nav-${tab.id}`,
+        renderIcon: (active, size) => (
+          <BuiltInTabIcon
+            icon={tab.icon}
+            color={active ? GLASS_ICON_ACTIVE : GLASS_ICON_IDLE}
+            size={size}
+            avatarUrl={tab.id === 'profile' ? profileAvatarUrl : undefined}
+            accent={GLASS_ICON_ACTIVE}
+            isActive={active}
+          />
+        ),
+      })),
+    [labels, profileAvatarUrl],
+  );
+
+  const indexOf = useCallback((key: LiquidTabId) => LIQUID_TAB_ITEMS.findIndex((tab) => tab.id === key), []);
+
   if (hidden) return null;
 
+  const activeKey = LIQUID_TAB_ITEMS[activeIndex]?.id ?? LIQUID_TAB_ITEMS[0]!.id;
+
   return (
-    <LiquidGlassTabBar
-      activeIndex={activeIndex}
-      onNavigate={handleNavigate}
-      profileAvatarUrl={profileAvatarUrl}
-      bottomInset={insets.bottom}
-      onTabPressIn={handleTabPressIn}
-    />
+    <View pointerEvents="box-none" style={[styles.container, { bottom: Math.max(insets.bottom, 16) }]}>
+      <GlassCapsuleNav
+        items={items}
+        activeKey={activeKey}
+        onChange={(key) => handleNavigate(indexOf(key))}
+        onPressIn={(key) => handleTabPressIn(indexOf(key))}
+        metrics={MAIN_METRICS}
+        maxWidth={width - TAB_BAR_HORIZONTAL_MARGIN * 2}
+      />
+    </View>
   );
+});
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    left: TAB_BAR_HORIZONTAL_MARGIN,
+    right: TAB_BAR_HORIZONTAL_MARGIN,
+    alignItems: 'center',
+    zIndex: 9999,
+    elevation: 100,
+  },
 });
 
 export default BottomNav;

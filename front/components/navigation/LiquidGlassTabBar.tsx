@@ -72,7 +72,7 @@ function isIconKind(icon: LiquidTabIconKind | LiquidTabIconComponent): icon is L
   return typeof icon === 'string';
 }
 
-function BuiltInTabIcon({
+export function BuiltInTabIcon({
   icon,
   color,
   size,

@@ -3695,6 +3695,14 @@ export const en = {
     competitionAdminAwardTitle: 'Winner awarded',
     competitionAdminAwardBody: '{winner} won "{prize}" from {store}.',
   },
+  bottomNav: {
+    matches: 'Matches',
+    rank: 'Rank',
+    sponsors: 'Sponsors',
+    reels: 'Reels',
+    ai: 'AI',
+    profile: 'Profile',
+  },
 };
 
 export default en;

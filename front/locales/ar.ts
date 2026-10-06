@@ -3603,6 +3603,14 @@ export const ar = {
     competitionAdminAwardTitle: 'تم تربيح فائز',
     competitionAdminAwardBody: '{winner} كسب "{prize}" من {store}.',
   },
+  bottomNav: {
+    matches: 'المباريات',
+    rank: 'الترتيب',
+    sponsors: 'الرعاة',
+    reels: 'ريلز',
+    ai: 'الذكاء',
+    profile: 'حسابي',
+  },
 };
 
 export type TranslationKeys = typeof ar;
