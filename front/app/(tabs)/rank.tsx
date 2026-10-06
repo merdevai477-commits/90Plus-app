@@ -42,6 +42,7 @@ import {
 import LeaderboardModal, {
   LeaderboardEntry,
 } from '../../components/rank/LeaderboardModal';
+import { GLASS_BAR_BG, GlassBubbleFill, GlassRim, GlassSheen } from '../../components/navigation/glass';
 import PodiumCard from '../../components/rank/PodiumCard';
 import ProfileCard from '../../components/rank/ProfileCard';
 import RankHeader from '../../components/rank/RankHeader';
@@ -62,6 +63,10 @@ import { globalState } from '../../globalState';
 import { useQueryClient } from '@tanstack/react-query';
 
 const ACCENT = '#A855F7';
+const VIEW_ALL_HEIGHT = 54;
+const VIEW_ALL_CHEVRON = 28;
+/** Board rows are 12 + 44 (avatar) + 12 tall, so this makes them full capsules. */
+const BOARD_ROW_RADIUS = 34;
 const PROFILE_PLACEHOLDER: ImageSourcePropType = require('../../assets/images/plear 90Plus.jpg');
 
 interface PodiumSlot {
@@ -555,6 +560,8 @@ export default function RankScreen() {
                     : { intensity: 15, tint: 'dark' as const };
                   const rowInner = (
                     <>
+                      <GlassSheen radius={BOARD_ROW_RADIUS} intensity={0.7} />
+                      <GlassRim radius={BOARD_ROW_RADIUS} />
                       <View style={s.rankBadgeSmall}>
                         <Text style={s.boardRank}>{row.rank}</Text>
                       </View>
@@ -630,15 +637,13 @@ export default function RankScreen() {
               accessibilityLabel={t.rank.viewAll}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <LinearGradient
-                colors={['rgba(192,132,252,0.35)', 'rgba(168,85,247,0.22)', 'rgba(124,58,237,0.14)']}
-                style={s.viewAllLeaderboardGrad}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Text style={[s.viewAllLeaderboardTxt, { fontFamily: fontExtraBold }]}>{t.rank.viewAll}</Text>
-                <ChevronRight size={16} color={ACCENT} strokeWidth={2.5} />
-              </LinearGradient>
+              <GlassSheen radius={VIEW_ALL_HEIGHT / 2} />
+              <GlassRim radius={VIEW_ALL_HEIGHT / 2} />
+              <Text style={[s.viewAllLeaderboardTxt, { fontFamily: fontExtraBold }]}>{t.rank.viewAll}</Text>
+              <View style={s.viewAllChevron}>
+                <GlassBubbleFill radius={VIEW_ALL_CHEVRON / 2} height={VIEW_ALL_CHEVRON} />
+                <ChevronRight size={16} color="#FFFFFF" strokeWidth={2.6} />
+              </View>
             </TouchableOpacity>
           )}
         </View>
@@ -790,21 +795,20 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
+    paddingRight: 18,
     backgroundColor: 'rgba(255, 255, 255, 0)',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(241, 241, 241, 0)',
+    borderRadius: BOARD_ROW_RADIUS,
     gap: 12,
   },
   boardRowGlassAndroid: {
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.035)',
   },
   rankBadgeSmall: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginLeft: 4,
+    backgroundColor: 'rgba(164, 123, 255, 0.18)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -869,24 +873,26 @@ const s = StyleSheet.create({
 
   viewAllLeaderboardBtn: {
     marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.45)',
-    zIndex: 2,
-    shadowColor: '#A855F7',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  viewAllLeaderboardGrad: {
+    marginTop: 18,
+    height: VIEW_ALL_HEIGHT,
+    borderRadius: VIEW_ALL_HEIGHT / 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    gap: 8,
+    gap: 10,
+    zIndex: 2,
+    backgroundColor: GLASS_BAR_BG,
+    // No elevation: on Android it draws a dark box inside translucent views.
+    shadowColor: '#7C4DFF',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+  },
+  viewAllChevron: {
+    width: VIEW_ALL_CHEVRON,
+    height: VIEW_ALL_CHEVRON,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   viewAllLeaderboardTxt: {
     color: '#fff',

@@ -7,7 +7,6 @@
 
 import { useEffect, useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -17,6 +16,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { useAppFont } from '@/utils/fontSetup';
+
+import { GLASS_BAR_BG, GlassBubbleFill, GlassRim, GlassSheen } from './glass';
 
 export const GLASS_ICON_ACTIVE = '#FFFFFF';
 export const GLASS_ICON_IDLE = 'rgba(235,228,255,0.6)';
@@ -167,27 +168,14 @@ export function GlassCapsuleNav<K extends string>({
           { height, borderRadius: height / 2, paddingHorizontal: pad, columnGap: gap },
         ]}
       >
-        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: height / 2, overflow: 'hidden' }]}>
-          <LinearGradient
-            colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.04)', 'rgba(255,255,255,0.02)', 'rgba(255,255,255,0.08)']}
-            locations={[0, 0.45, 0.7, 1]}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-        <View pointerEvents="none" style={[styles.rim, { borderRadius: height / 2 }]} />
+        <GlassSheen radius={height / 2} />
+        <GlassRim radius={height / 2} />
 
         <Animated.View
           pointerEvents="none"
           style={[styles.bubble, { top: pad, height: slotHeight, borderRadius: slotHeight / 2 }, bubbleStyle]}
         >
-          <View style={[StyleSheet.absoluteFill, { borderRadius: slotHeight / 2, overflow: 'hidden' }]}>
-            <LinearGradient colors={['#A47BFF', '#7B4DF0', '#5B30C6']} style={StyleSheet.absoluteFill} />
-            <LinearGradient
-              colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0)']}
-              style={[styles.bubbleSheen, { height: slotHeight * 0.55 }]}
-            />
-          </View>
-          <View pointerEvents="none" style={[styles.bubbleRim, { borderRadius: slotHeight / 2 }]} />
+          <GlassBubbleFill radius={slotHeight / 2} height={slotHeight} />
         </Animated.View>
 
         {items.map((item) => {
@@ -306,18 +294,12 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16,12,28,0.8)',
+    backgroundColor: GLASS_BAR_BG,
     shadowColor: '#7C4DFF',
     shadowOpacity: 0.45,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 8 },
     elevation: 12,
-  },
-  rim: {
-    ...StyleSheet.absoluteFillObject,
-    borderWidth: 1,
-    borderColor: 'rgba(190,160,255,0.18)',
-    borderTopColor: 'rgba(255,255,255,0.32)',
   },
   bubble: {
     position: 'absolute',
@@ -326,13 +308,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     // No elevation: on Android it would lift the bubble over the tab icons.
-  },
-  bubbleSheen: { position: 'absolute', top: 0, left: 0, right: 0 },
-  bubbleRim: {
-    ...StyleSheet.absoluteFillObject,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-    borderTopColor: 'rgba(255,255,255,0.6)',
   },
   slot: { flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
   label: { color: '#FFFFFF' },
