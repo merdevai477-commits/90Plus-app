@@ -9,7 +9,7 @@ const API_URL = getApiUrl(); // Already includes /api
 export type TsfApiLeague = 'pl' | 'laliga' | 'bundesliga' | 'seriea' | 'ligue1';
 
 /** Leagues whose pool and scoring come from the backend; the rest stay placeholder. */
-export const TSF_LIVE_LEAGUES: readonly TsfApiLeague[] = ['pl', 'laliga', 'seriea', 'bundesliga'];
+export const TSF_LIVE_LEAGUES: readonly TsfApiLeague[] = ['pl', 'laliga', 'seriea', 'bundesliga', 'ligue1'];
 
 export interface TsfApiPlayer {
   id: string;

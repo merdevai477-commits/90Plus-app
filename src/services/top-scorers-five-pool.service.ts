@@ -14,6 +14,7 @@ import { TOP_SCORERS_FIVE_LALIGA, type TopScorersFiveSeedClub } from '../data/to
 import { TOP_SCORERS_FIVE_SERIEA } from '../data/top-scorers-five-seriea';
 import { TOP_SCORERS_FIVE_BUNDESLIGA } from '../data/top-scorers-five-bundesliga';
 import { TOP_SCORERS_FIVE_PL } from '../data/top-scorers-five-pl';
+import { TOP_SCORERS_FIVE_LIGUE1 } from '../data/top-scorers-five-ligue1';
 import { scoreTsfNameMatch, tsfPortraitUrl, type TsfLeagueKey } from './top-scorers-five-scoring';
 import type { ThreeSixFiveSquadPlayer } from './threeSixFiveScores.service';
 
@@ -22,6 +23,7 @@ const SEED_LISTS: Partial<Record<TsfLeagueKey, TopScorersFiveSeedClub[]>> = {
   seriea: TOP_SCORERS_FIVE_SERIEA,
   bundesliga: TOP_SCORERS_FIVE_BUNDESLIGA,
   pl: TOP_SCORERS_FIVE_PL,
+  ligue1: TOP_SCORERS_FIVE_LIGUE1,
 };
 
 const POSITION_CODES: Array<[RegExp, string]> = [

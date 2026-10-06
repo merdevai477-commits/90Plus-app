@@ -341,7 +341,7 @@ describe('selection', () => {
     await expect(saveTsfSelection('clerk-1', 'laliga', 'p-unlinked', 'en', NOW)).rejects.toMatchObject({ code: 'PLAYER_UNRESOLVED' });
     db.players.set('p-other', { ...db.players.get('p-yamal'), id: 'p-other', leagueKey: 'pl' });
     await expect(saveTsfSelection('clerk-1', 'laliga', 'p-other', 'en', NOW)).rejects.toMatchObject({ code: 'PLAYER_NOT_ELIGIBLE' });
-    await expect(saveTsfSelection('clerk-1', 'ligue1', 'p-mbappe', 'en', NOW)).rejects.toMatchObject({ code: 'LEAGUE_NOT_SUPPORTED' });
+    await expect(saveTsfSelection('clerk-1', 'eredivisie', 'p-mbappe', 'en', NOW)).rejects.toMatchObject({ code: 'LEAGUE_NOT_SUPPORTED' });
   });
 });
 

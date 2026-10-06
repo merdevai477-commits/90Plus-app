@@ -27,6 +27,7 @@ export const TSF_LEAGUES: Partial<Record<TsfLeagueKey, TsfLeagueConfig>> = {
   seriea: { key: 'seriea', competitionLeagueId: 7000017, scores365CompetitionId: 17 },
   bundesliga: { key: 'bundesliga', competitionLeagueId: 7000025, scores365CompetitionId: 25 },
   pl: { key: 'pl', competitionLeagueId: 7000007, scores365CompetitionId: 7 },
+  ligue1: { key: 'ligue1', competitionLeagueId: 7000035, scores365CompetitionId: 35 },
 };
 
 /**
