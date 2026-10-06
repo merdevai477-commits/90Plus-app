@@ -208,39 +208,43 @@ function PitchPlayerCard({
   const assists = player.assists ?? 0;
   const hasRating = player.rating != null && player.rating > 0;
   const borderWidth = Math.max(1, 2 * u);
-  const innerW = CARD_W * u - borderWidth * 2;
+  const rise = AVATAR_RISE * u;
   const avatar = AVATAR * u;
   const mini = 14 * u;
+  // Badges were placed inside the card's border box in Figma; the wrapper adds the avatar rise above it.
+  const badgeTop = rise + borderWidth + 10 * u;
 
+  // The avatar must stay inside the touchable's bounds: Android's BlurTargetView clips overflow.
   return (
     <TouchableOpacity
-      style={[
-        styles.card,
-        {
-          left,
-          top,
-          width: CARD_W * u,
-          height: CARD_H * u,
-          borderRadius: 16 * u,
-          borderWidth,
-          paddingBottom: 5 * u,
-          gap: 7 * u,
-        },
-      ]}
+      style={[styles.cardWrap, { left, top: top - rise, width: CARD_W * u, height: CARD_H * u + rise }]}
       onPress={onPress ? () => onPress(player) : undefined}
       disabled={!onPress}
       activeOpacity={0.75}
       accessibilityRole="button"
       accessibilityLabel={player.name}
     >
-      <Text
-        style={[styles.cardName, { fontSize: 12 * u, paddingHorizontal: 4 * u }]}
-        numberOfLines={1}
-        maxFontSizeMultiplier={1.1}
+      <View
+        style={[
+          styles.card,
+          {
+            height: CARD_H * u,
+            borderRadius: 16 * u,
+            borderWidth,
+            paddingBottom: 5 * u,
+            gap: 7 * u,
+          },
+        ]}
       >
-        {shortPlayerName(player.name)}
-      </Text>
-      {hasRating ? <LineupRatingBadge rating={player.rating as number} scale={u} /> : null}
+        <Text
+          style={[styles.cardName, { fontSize: 12 * u, paddingHorizontal: 4 * u }]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.1}
+        >
+          {shortPlayerName(player.name)}
+        </Text>
+        {hasRating ? <LineupRatingBadge rating={player.rating as number} scale={u} /> : null}
+      </View>
 
       <View
         style={[
@@ -249,8 +253,8 @@ function PitchPlayerCard({
             width: avatar,
             height: avatar,
             borderRadius: avatar / 2,
-            top: -AVATAR_RISE * u,
-            left: (innerW - avatar) / 2,
+            top: 0,
+            left: (CARD_W * u - avatar) / 2,
           },
         ]}
       >
@@ -267,8 +271,8 @@ function PitchPlayerCard({
           style={[
             styles.numberBadge,
             {
-              left: 18 * u,
-              top: 10 * u,
+              left: borderWidth + 18 * u,
+              top: badgeTop,
               width: 20 * u,
               height: 20 * u,
               borderRadius: 10 * u,
@@ -282,7 +286,9 @@ function PitchPlayerCard({
       ) : null}
 
       {goals > 0 || assists > 0 || player.subbedIn != null ? (
-        <View style={[styles.eventBadges, { right: 16 * u, top: 10 * u, gap: 2 * u }]}>
+        <View
+          style={[styles.eventBadges, { right: borderWidth + 16 * u, top: badgeTop, gap: 2 * u }]}
+        >
           {goals > 0 ? (
             <View style={[styles.mini, { width: mini, height: mini, borderRadius: mini / 2 }]}>
               <MaterialCommunityIcons name="soccer" size={mini * 0.7} color="#fff" />
@@ -478,13 +484,19 @@ const styles = StyleSheet.create({
   flipY: {
     transform: [{ scaleY: -1 }],
   },
+  cardWrap: {
+    position: 'absolute',
+    zIndex: 2,
+  },
   card: {
     position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'flex-end',
     backgroundColor: '#0B0518',
     borderColor: 'rgba(168,85,247,0.31)',
-    zIndex: 2,
   },
   cardName: {
     color: '#FFFFFF',
