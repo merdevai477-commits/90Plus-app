@@ -1536,10 +1536,8 @@ const MatchDetailsScreen = () => {
 
   // Render Events Tab
   const renderMatchInformation = (showAutoUpdate: boolean) => {
-    const crowdSource = fixture as {
-      _crowdPrediction?: { homePercent?: number; drawPercent?: number; awayPercent?: number };
-      crowdPrediction?: { homePercent?: number; drawPercent?: number; awayPercent?: number };
-    } | null;
+    type CrowdRaw = { homePercent?: number; drawPercent?: number; awayPercent?: number; totalVotes?: number };
+    const crowdSource = fixture as { _crowdPrediction?: CrowdRaw; crowdPrediction?: CrowdRaw } | null;
     const crowdRaw = crowdSource?._crowdPrediction ?? crowdSource?.crowdPrediction;
     const crowdPercents = [crowdRaw?.homePercent, crowdRaw?.drawPercent, crowdRaw?.awayPercent].map(Number);
     const crowd = crowdPercents.every((value) => Number.isFinite(value))
@@ -1547,7 +1545,13 @@ const MatchDetailsScreen = () => {
           homePercent: crowdPercents[0],
           drawPercent: crowdPercents[1],
           awayPercent: crowdPercents[2],
-          label: translate('matches.crowdPrediction.label'),
+          totalVotes: Number(crowdRaw?.totalVotes) || null,
+          home: { name: getTeamDisplayName(homeTeamName, language), logo: homeTeamLogo },
+          away: { name: getTeamDisplayName(awayTeamName, language), logo: awayTeamLogo },
+          title: t.matchDetails.crowdVoteTitle || 'Match result vote',
+          subtitle: t.matchDetails.crowdVoteSubtitle || 'Who will win the match?',
+          drawLabel: t.matchDetails.crowdVoteDraw || 'Draw',
+          votesUnit: t.matchDetails.crowdVoteUnit || 'votes',
         }
       : null;
 
@@ -1555,7 +1559,9 @@ const MatchDetailsScreen = () => {
       <>
         <MatchKickoffHighlights
           info={extractMatchKickoffInfo({ fixture, venue })}
-          title={t.matchDetails.highlightsTitle || t.matchDetails.matchInfo || 'Match information'}
+          kickoffTime={kickoffTime}
+          rtl={language === 'ar'}
+          matchTimeLabel={t.matchDetails.matchTimeLabel || 'Kick-off'}
           autoUpdateTitle={t.matchDetails.highlightsAutoUpdate || 'Details move to Information'}
           autoUpdateHint={
             t.matchDetails.highlightsAutoUpdateHint ||
@@ -1563,9 +1569,9 @@ const MatchDetailsScreen = () => {
           }
           refereeLabel={t.matchDetails.referee || 'Referee'}
           staffLabel={t.matchDetails.matchStaff || 'Officials'}
-          stadiumLabel={t.matchDetails.stadium || 'Stadium'}
+          stadiumLabel={t.matchDetails.stadiumTag || t.matchDetails.stadium || 'Stadium'}
           capacityLabel={t.matchDetails.capacity || 'Capacity'}
-          broadcastLabel={t.matchDetails.broadcastChannel || 'Broadcast'}
+          broadcastLabel={t.matchDetails.liveBroadcast || t.matchDetails.broadcastChannel || 'Broadcast'}
           emptyHint={
             isLive()
               ? (t.matchDetails.eventsWaitingLive || 'Waiting for the first event…')

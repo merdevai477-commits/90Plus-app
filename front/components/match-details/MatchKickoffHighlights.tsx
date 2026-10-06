@@ -1,24 +1,14 @@
 /**
- * Pre-kickoff / waiting Events tab: stadium, referee, TV, and an auto-update strip.
+ * Pre-kickoff / Information tab: fan 1-X-2 vote, stadium photo card and the
+ * kickoff / capacity / broadcast / referee grid (Figma 1347:18834).
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
-import { GlassWrapper, glassProps } from '../../constants/ui';
-import {
-  BLUE_ELECTRIC,
-  GLASS_BORDER_BOTTOM,
-  GLASS_BORDER_SIDE,
-  GLASS_BORDER_TOP,
-  GOLD_PRIMARY,
-  PURPLE_SOFT,
-  TEXT_MUTED,
-  TEXT_PRIMARY,
-  TEXT_SECONDARY,
-} from '../../constants/tokens';
-import { CrowdOddsStrip } from '../common/CrowdOddsStrip';
+import { GOLD_PRIMARY, PURPLE_SOFT, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from '../../constants/tokens';
+import { MatchCrowdVote, type CrowdVoteTeam } from './MatchCrowdVote';
 import type { MatchKickoffInfo } from '../../utils/extractMatchKickoffInfo';
 import {
   fetchStadiumImageByName,
@@ -33,18 +23,26 @@ import {
  */
 const STADIUM_PLACEHOLDER = require('../../assets/images/splash/splash-logo.png');
 
-type Row = {
+const ICON = {
+  time: require('../../assets/images/match-vote/time.svg'),
+  capacity: require('../../assets/images/match-vote/capacity.svg'),
+  whistle: require('../../assets/images/match-vote/whistle.svg'),
+  location: require('../../assets/images/match-vote/location.svg'),
+};
+
+const ACCENT = '#BC7BFA';
+
+type InfoItem = {
   key: string;
   label: string;
   value: string;
-  icon:
-    | { set: 'ion'; name: React.ComponentProps<typeof Ionicons>['name'] }
-    | { set: 'mci'; name: React.ComponentProps<typeof MaterialCommunityIcons>['name'] };
+  icon: React.ReactNode;
 };
 
 type Props = {
   info: MatchKickoffInfo;
-  title: string;
+  kickoffTime?: string | null;
+  rtl: boolean;
   autoUpdateTitle: string;
   autoUpdateHint: string;
   refereeLabel: string;
@@ -52,20 +50,23 @@ type Props = {
   stadiumLabel: string;
   capacityLabel: string;
   broadcastLabel: string;
+  matchTimeLabel: string;
   emptyHint: string;
   crowd?: {
     homePercent: number;
     drawPercent: number;
     awayPercent: number;
-    label: string;
+    totalVotes?: number | null;
+    home: CrowdVoteTeam;
+    away: CrowdVoteTeam;
+    title: string;
+    subtitle: string;
+    drawLabel: string;
+    votesUnit: string;
   } | null;
   /** The "switches to Events" note only belongs on the pre-event Highlights tab. */
   showAutoUpdate?: boolean;
 };
-
-function formatCapacity(value: number): string {
-  return value.toLocaleString();
-}
 
 function isUsableRemotePhoto(url?: string | null): boolean {
   const value = (url ?? '').trim();
@@ -78,20 +79,19 @@ function isUsableRemotePhoto(url?: string | null): boolean {
 
 function StadiumPlaceholder() {
   return (
-    <View style={styles.hero} accessibilityLabel="Stadium photo loading">
+    <View style={[StyleSheet.absoluteFill, styles.heroPlaceholder]} accessibilityLabel="Stadium photo loading">
       <LinearGradient
         colors={['rgba(18,8,28,0.96)', 'rgba(28,15,46,0.92)', 'rgba(12,6,20,0.96)']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      <View style={styles.heroSkeletonMark} />
-      <MaterialCommunityIcons name="stadium-outline" size={36} color={PURPLE_SOFT} />
+      <MaterialCommunityIcons name="stadium-outline" size={40} color={PURPLE_SOFT} />
     </View>
   );
 }
 
-function StadiumHero({ uri, stadiumName }: { uri: string | null; stadiumName: string | null }) {
+function StadiumPhoto({ uri, stadiumName }: { uri: string | null; stadiumName: string | null }) {
   const initial = isUsableRemotePhoto(uri) ? uri : null;
   const [remote, setRemote] = useState<string | null>(initial);
 
@@ -122,7 +122,7 @@ function StadiumHero({ uri, stadiumName }: { uri: string | null; stadiumName: st
     <ExpoImage
       source={{ uri: remote }}
       placeholder={STADIUM_PLACEHOLDER}
-      style={styles.hero}
+      style={StyleSheet.absoluteFill}
       contentFit="cover"
       cachePolicy="memory-disk"
       onError={() => setRemote(null)}
@@ -130,16 +130,35 @@ function StadiumHero({ uri, stadiumName }: { uri: string | null; stadiumName: st
   );
 }
 
-function RowIcon({ icon }: { icon: Row['icon'] }) {
-  if (icon.set === 'mci') {
-    return <MaterialCommunityIcons name={icon.name} size={16} color={PURPLE_SOFT} />;
-  }
-  return <Ionicons name={icon.name} size={16} color={PURPLE_SOFT} />;
+function IconCircle({ children }: { children: React.ReactNode }) {
+  return <View style={styles.iconCircle}>{children}</View>;
+}
+
+function InfoCell({ item, rtl, divided }: { item: InfoItem; rtl: boolean; divided: boolean }) {
+  return (
+    <View style={[styles.cell, rtl && styles.rowReverse, divided && styles.cellDivided]}>
+      {item.icon}
+      <View style={styles.cellText}>
+        <Text style={[styles.cellLabel, { textAlign: rtl ? 'right' : 'left' }]} numberOfLines={1}>
+          {item.label}
+        </Text>
+        <Text
+          style={[styles.cellValue, { textAlign: rtl ? 'right' : 'left' }]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.65}
+        >
+          {item.value}
+        </Text>
+      </View>
+    </View>
+  );
 }
 
 export function MatchKickoffHighlights({
   info,
-  title,
+  kickoffTime,
+  rtl,
   autoUpdateTitle,
   autoUpdateHint,
   refereeLabel,
@@ -147,52 +166,75 @@ export function MatchKickoffHighlights({
   stadiumLabel,
   capacityLabel,
   broadcastLabel,
+  matchTimeLabel,
   emptyHint,
   crowd = null,
   showAutoUpdate = true,
 }: Props) {
-  const stadiumValue = [info.stadiumName, info.city].filter(Boolean).join(' · ');
-  const rows: Row[] = [];
-  if (info.referee) {
-    rows.push({
-      key: 'referee',
-      label: refereeLabel,
-      value: info.referee,
-      icon: { set: 'mci', name: 'whistle' },
-    });
-  }
-  if (info.staff) {
-    rows.push({
-      key: 'staff',
-      label: staffLabel,
-      value: info.staff,
-      icon: { set: 'ion', name: 'people-outline' },
-    });
-  }
-  if (stadiumValue) {
-    rows.push({
-      key: 'stadium',
-      label: stadiumLabel,
-      value: stadiumValue,
-      icon: { set: 'ion', name: 'business-outline' },
+  const items: InfoItem[] = [];
+  const time = (kickoffTime ?? '').trim();
+  if (time) {
+    items.push({
+      key: 'time',
+      label: matchTimeLabel,
+      value: time,
+      icon: (
+        <IconCircle>
+          <ExpoImage source={ICON.time} style={styles.icon25} contentFit="contain" />
+        </IconCircle>
+      ),
     });
   }
   if (info.capacity) {
-    rows.push({
+    items.push({
       key: 'capacity',
       label: capacityLabel,
-      value: formatCapacity(info.capacity),
-      icon: { set: 'ion', name: 'people-circle-outline' },
+      value: info.capacity.toLocaleString('en-US'),
+      icon: <ExpoImage source={ICON.capacity} style={styles.iconCircleSize} contentFit="contain" />,
     });
   }
   if (info.broadcast) {
-    rows.push({
+    items.push({
       key: 'broadcast',
       label: broadcastLabel,
       value: info.broadcast,
-      icon: { set: 'ion', name: 'tv-outline' },
+      icon: (
+        <IconCircle>
+          <Text style={styles.tvMark}>TV</Text>
+        </IconCircle>
+      ),
     });
   }
+  if (info.referee) {
+    items.push({
+      key: 'referee',
+      label: refereeLabel,
+      value: info.referee,
+      icon: (
+        <IconCircle>
+          <ExpoImage source={ICON.whistle} style={styles.icon22} contentFit="contain" />
+        </IconCircle>
+      ),
+    });
+  }
+  if (info.staff) {
+    items.push({
+      key: 'staff',
+      label: staffLabel,
+      value: info.staff,
+      icon: (
+        <IconCircle>
+          <Ionicons name="people" size={20} color={ACCENT} />
+        </IconCircle>
+      ),
+    });
+  }
+
+  const gridRows: InfoItem[][] = [];
+  for (let i = 0; i < items.length; i += 2) gridRows.push(items.slice(i, i + 2));
+
+  const hasStadium = Boolean(info.stadiumName || info.stadiumImage);
+  const hasCard = hasStadium || items.length > 0;
 
   return (
     <View style={styles.wrap}>
@@ -212,57 +254,70 @@ export function MatchKickoffHighlights({
         </View>
       ) : null}
 
-      <View style={styles.cardOuter}>
-        <GlassWrapper {...(glassProps.card as object)} style={StyleSheet.absoluteFill} />
-        <LinearGradient
-          colors={['rgba(124,58,237,0.16)', 'rgba(59,130,246,0.08)', 'rgba(10,6,18,0.20)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
+      {crowd ? <MatchCrowdVote {...crowd} rtl={rtl} /> : null}
 
-        <Text style={styles.title}>{title}</Text>
-
-        {crowd ? (
-          <CrowdOddsStrip
-            homePercent={crowd.homePercent}
-            drawPercent={crowd.drawPercent}
-            awayPercent={crowd.awayPercent}
-            label={crowd.label}
-          />
-        ) : null}
-
-        <StadiumHero uri={info.stadiumImage} stadiumName={info.stadiumName} />
-
-        {rows.length === 0 ? (
-          <Text style={styles.empty}>{emptyHint}</Text>
-        ) : (
-          rows.map((row, index) => (
-            <View
-              key={row.key}
-              style={[styles.row, index < rows.length - 1 && styles.rowDivider]}
-            >
-              <View style={styles.iconWrap}>
-                <RowIcon icon={row.icon} />
-              </View>
-              <View style={styles.rowText}>
-                <Text style={styles.rowLabel}>{row.label}</Text>
-                <Text style={styles.rowValue}>{row.value}</Text>
-              </View>
+      {hasCard ? (
+        <View style={styles.card}>
+          {hasStadium ? (
+            <View style={styles.hero}>
+              <StadiumPhoto uri={info.stadiumImage} stadiumName={info.stadiumName} />
+              <LinearGradient
+                colors={['rgba(0,0,0,0.32)', '#000000']}
+                locations={[0, 0.91]}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              {info.stadiumName ? (
+                <View style={styles.heroCopy}>
+                  <Text style={styles.heroTag}>{stadiumLabel}</Text>
+                  <Text style={styles.heroName} numberOfLines={2}>
+                    {info.stadiumName}
+                  </Text>
+                  {info.city ? (
+                    <View style={[styles.heroLocation, rtl && styles.rowReverse]}>
+                      <ExpoImage source={ICON.location} style={styles.icon16} contentFit="contain" />
+                      <Text style={styles.heroCity} numberOfLines={1}>
+                        {info.city}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
-          ))
-        )}
-      </View>
+          ) : null}
+
+          {gridRows.length > 0 ? (
+            <View style={styles.grid}>
+              {gridRows.map((row) => (
+                <View key={row.map((item) => item.key).join('-')} style={styles.gridRow}>
+                  <View style={styles.gridCol}>
+                    <InfoCell item={row[0]} rtl={rtl} divided={false} />
+                  </View>
+                  <View style={styles.gridCol}>
+                    {row[1] ? <InfoCell item={row[1]} rtl={rtl} divided /> : null}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <Text style={styles.empty}>{emptyHint}</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 2,
     paddingTop: 12,
     paddingBottom: 24,
-    gap: 12,
+    gap: 24,
+  },
+  rowReverse: {
+    flexDirection: 'row-reverse',
   },
   strip: {
     minHeight: 58,
@@ -296,77 +351,125 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
-  cardOuter: {
-    borderRadius: 20,
+  card: {
+    borderRadius: 24,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: GLASS_BORDER_SIDE,
-    borderTopColor: GLASS_BORDER_TOP,
-    borderBottomColor: GLASS_BORDER_BOTTOM,
-    padding: 16,
-    gap: 12,
-  },
-  title: {
-    color: TEXT_PRIMARY,
-    fontSize: 18,
-    fontWeight: '700',
+    borderWidth: 1,
+    borderColor: 'rgba(72,72,72,0.29)',
+    backgroundColor: '#080719',
   },
   hero: {
-    width: '100%',
-    height: 132,
-    borderRadius: 14,
-    backgroundColor: 'rgba(8,4,16,0.6)',
+    height: 193,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    backgroundColor: '#000000',
   },
-  heroSkeletonMark: {
+  heroPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroCopy: {
     position: 'absolute',
-    width: '70%',
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: 'rgba(167,139,250,0.16)',
-    top: 28,
+    top: 56,
+    left: 24,
+    right: 24,
+    alignItems: 'center',
+    gap: 2,
+  },
+  heroTag: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  heroName: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  heroLocation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+    maxWidth: '100%',
+  },
+  heroCity: {
+    flexShrink: 1,
+    color: '#9A9A9A',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  grid: {
+    paddingHorizontal: 19,
+    paddingVertical: 30,
+    gap: 20,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  gridCol: {
+    flex: 1,
+  },
+  cell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 58,
+  },
+  cellDivided: {
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(168,85,247,0.38)',
+    paddingLeft: 12,
+  },
+  cellText: {
+    flex: 1,
+    gap: 2,
+  },
+  cellLabel: {
+    color: ACCENT,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  cellValue: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontWeight: '700',
+  },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(168,85,247,0.19)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconCircleSize: {
+    width: 44,
+    height: 44,
+  },
+  icon25: {
+    width: 25,
+    height: 25,
+  },
+  icon22: {
+    width: 22,
+    height: 22,
+  },
+  icon16: {
+    width: 16,
+    height: 16,
+  },
+  tvMark: {
+    color: ACCENT,
+    fontSize: 16,
+    fontWeight: '700',
   },
   empty: {
     color: TEXT_MUTED,
     fontSize: 13,
     lineHeight: 18,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 8,
-  },
-  rowDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  iconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(124,58,237,0.22)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(96,165,250,0.28)',
-  },
-  rowText: {
-    flex: 1,
-    gap: 2,
-  },
-  rowLabel: {
-    color: BLUE_ELECTRIC,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  rowValue: {
-    color: TEXT_PRIMARY,
-    fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 20,
   },
 });
