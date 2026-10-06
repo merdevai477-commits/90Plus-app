@@ -3,7 +3,7 @@ import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 /** Scorer lines shown per team before the list collapses behind "View more". */
-export const SCORERS_PREVIEW_COUNT = 3;
+export const SCORERS_PREVIEW_COUNT = 2;
 
 type Scorer = { name: string; minute: string };
 
