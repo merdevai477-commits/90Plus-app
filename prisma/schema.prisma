@@ -1377,6 +1377,9 @@ model GroupMember {
   @@index([groupId])
   @@index([userId])
   @@index([groupId, groupXpTotal(sort: Desc)])
+  /// Partial unique: one active membership per user is enforced in SQL as
+  /// `group_members_one_active_per_user_idx` WHERE "leftAt" IS NULL
+  /// (Prisma cannot express partial unique indexes in schema).
   @@map("group_members")
 }
 
@@ -1422,6 +1425,8 @@ model GroupPrediction {
   isCorrect          Boolean?
   xpAwarded          Int                 @default(0)
   settledAt          DateTime?
+  /// Set when the fixture is PST/CANC/ABD (etc.). Terminal: no XP, not pending.
+  voidedAt           DateTime?
   createdAt          DateTime            @default(now())
   round              GroupRound          @relation(fields: [roundId], references: [id], onDelete: Cascade)
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1432,6 +1437,8 @@ model GroupPrediction {
   @@index([apiMatchId])
   @@index([userId])
   @@index([settledAt])
+  @@index([voidedAt])
+  @@index([apiMatchId, isCorrect, xpAwarded, voidedAt], map: "group_predictions_xp_retry_idx")
   @@map("group_predictions")
 }
 
