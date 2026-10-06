@@ -182,14 +182,17 @@ export interface PushNotificationPayload {
     interruptionLevel?: 'active' | 'critical' | 'passive' | 'time-sensitive';
     /**
      * HTTPS image (e.g. scoring team crest). Android renders it as the large-icon
-     * thumbnail; iOS ignores it until a Notification Service Extension ships.
+     * thumbnail; iOS attaches it via the app's Notification Service Extension.
      */
     imageUrl?: string;
 }
 
-function resolveRichContent(imageUrl?: string): Pick<ExpoPushMessage, 'richContent'> {
+function resolveRichContent(
+    imageUrl?: string,
+): Pick<ExpoPushMessage, 'richContent' | 'mutableContent'> {
     if (!imageUrl || !/^https:\/\//i.test(imageUrl)) return {};
-    return { richContent: { image: imageUrl } };
+    // mutable-content is what makes iOS hand the push to the extension before display.
+    return { richContent: { image: imageUrl }, mutableContent: true };
 }
 
 function resolvePushChannelId(

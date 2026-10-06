@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mhmdsh1892.ninetyplusapp",
+      "appleTeamId": "337M3TRC5C",
       "associatedDomains": [
         "applinks:90plus.pro",
         "webcredentials:90plus.pro",
@@ -230,6 +231,7 @@
         }
       ],
       "expo-apple-authentication",
+      "@bacons/apple-targets",
       [
         "expo-build-properties",
         {
