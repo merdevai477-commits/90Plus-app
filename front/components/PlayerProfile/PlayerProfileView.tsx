@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   ScrollView,
   StatusBar,
@@ -121,6 +122,7 @@ interface PlayerProfileViewProps {
   refreshControl?: ReactElement<RefreshControlProps>;
   onBack: () => void;
   onBell?: () => void;
+  onSelectSeason?: (seasonKey: string) => void;
 }
 
 export default function PlayerProfileView({
@@ -130,6 +132,7 @@ export default function PlayerProfileView({
   refreshControl,
   onBack,
   onBell,
+  onSelectSeason,
 }: PlayerProfileViewProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -350,14 +353,11 @@ export default function PlayerProfileView({
 
         <View style={{ paddingHorizontal: pad }}>
           {tab === 'overview' ? (
-            <OverviewTab vm={vm} rtl={rtl} />
+            <OverviewTab vm={vm} rtl={rtl} onSelectSeason={onSelectSeason} />
           ) : tab === 'stats' ? (
             statsContent ?? null
           ) : (
-            <View style={[styles.card, styles.comingSoon]}>
-              <Ionicons name="chatbubbles-outline" size={36} color={C.primary} />
-              <Text style={[styles.comingSoonText, { fontFamily: fontSemi }]}>{pc.chatsComingSoon}</Text>
-            </View>
+            <SocialTab name={vm.name} rtl={rtl} />
           )}
         </View>
       </ScrollView>
@@ -403,11 +403,13 @@ export function SectionHeader({
   icon,
   title,
   trailing,
+  trailingNode,
   rtl,
 }: {
   icon: number;
   title: string;
   trailing?: string | null;
+  trailingNode?: ReactNode;
   rtl: boolean;
 }) {
   const fontBold = useAppFont(700);
@@ -417,20 +419,118 @@ export function SectionHeader({
         <Image source={icon} style={styles.sectionIcon} contentFit="contain" />
         <Text style={[styles.sectionTitle, { fontFamily: fontBold }]}>{title}</Text>
       </View>
-      {trailing ? (
-        <Text style={[styles.sectionTrailing, { fontFamily: fontBold }]}>{trailing}</Text>
-      ) : null}
+      {trailingNode ??
+        (trailing ? (
+          <Text style={[styles.sectionTrailing, { fontFamily: fontBold }]}>{trailing}</Text>
+        ) : null)}
     </View>
   );
 }
 
-function OverviewTab({ vm, rtl }: { vm: PlayerProfileViewModel; rtl: boolean }) {
+const SOCIALS = [
+  {
+    key: 'facebook',
+    icon: 'logo-facebook' as const,
+    colors: ['#1877F2', '#0B4FB3'] as const,
+    url: (q: string) => `https://www.facebook.com/search/top?q=${q}`,
+  },
+  {
+    key: 'instagram',
+    icon: 'logo-instagram' as const,
+    colors: ['#F58529', '#DD2A7B', '#8134AF'] as const,
+    url: (q: string) => `https://www.instagram.com/explore/search/keyword/?q=${q}`,
+  },
+];
+
+function SocialTab({ name, rtl }: { name: string; rtl: boolean }) {
+  const { t } = useTranslation();
+  const pc = t.playerCareer;
+  const fontBold = useAppFont(700);
+  const fontReg = useAppFont(400);
+  const row = rtl ? 'row-reverse' : 'row';
+  const textAlign = rtl ? 'right' : 'left';
+  const query = encodeURIComponent(name);
+
+  return (
+    <>
+      <SectionHeader icon={PP_ICON.verified} title={pc.socialTitle} rtl={rtl} />
+      <Text style={[styles.socialHint, { fontFamily: fontReg, textAlign }]}>{pc.socialHint}</Text>
+      {SOCIALS.map((s) => (
+        <Pressable
+          key={s.key}
+          accessibilityRole="link"
+          onPress={() => Linking.openURL(s.url(query)).catch(() => undefined)}
+          style={({ pressed }) => [styles.card, styles.socialCard, { flexDirection: row, opacity: pressed ? 0.85 : 1 }]}
+        >
+          <LinearGradient colors={s.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.socialIcon}>
+            <Ionicons name={s.icon} size={24} color="#fff" />
+          </LinearGradient>
+          <View style={styles.socialText}>
+            <Text style={[styles.socialName, { fontFamily: fontBold, textAlign }]}>
+              {s.key === 'facebook' ? pc.facebook : pc.instagram}
+            </Text>
+            <Text style={[styles.socialSub, { fontFamily: fontReg, textAlign }]} numberOfLines={1}>
+              {`${pc.openOn} ${s.key === 'facebook' ? pc.facebook : pc.instagram} · ${name}`}
+            </Text>
+          </View>
+          <Ionicons name="open-outline" size={18} color={C.statLabel} />
+        </Pressable>
+      ))}
+      <View style={[styles.chatsNote, { flexDirection: row }]}>
+        <Ionicons name="chatbubbles-outline" size={16} color={C.primary} />
+        <Text style={[styles.chatsNoteText, { fontFamily: fontReg }]}>{pc.chatsComingSoon}</Text>
+      </View>
+    </>
+  );
+}
+
+function SeasonPicker({
+  vm,
+  rtl,
+  open,
+  onToggle,
+}: {
+  vm: PlayerProfileViewModel;
+  rtl: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const fontSemi = useAppFont(600);
+  const canPick = vm.seasons.length > 1;
+  return (
+    <Pressable
+      onPress={onToggle}
+      disabled={!canPick}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      style={[styles.seasonPill, { flexDirection: rtl ? 'row-reverse' : 'row' }, open && styles.seasonPillOpen]}
+    >
+      <Text style={[styles.seasonPillText, { fontFamily: fontSemi }]}>{vm.seasonLabel ?? '—'}</Text>
+      {canPick ? (
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={C.seasonLabel} />
+      ) : null}
+    </Pressable>
+  );
+}
+
+function OverviewTab({
+  vm,
+  rtl,
+  onSelectSeason,
+}: {
+  vm: PlayerProfileViewModel;
+  rtl: boolean;
+  onSelectSeason?: (seasonKey: string) => void;
+}) {
   const { t } = useTranslation();
   const pc = t.playerCareer;
   const row = rtl ? 'row-reverse' : 'row';
   const fontBold = useAppFont(700);
   const fontReg = useAppFont(400);
+  const fontSemi = useAppFont(600);
   const s = vm.season;
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const played = vm.lastMatches.filter((m) => m.played);
   const recent = (played.length ? played : vm.lastMatches).slice(0, 3).reverse();
@@ -442,10 +542,49 @@ function OverviewTab({ vm, rtl }: { vm: PlayerProfileViewModel; rtl: boolean }) 
           <SectionHeader
             icon={PP_ICON.seasonStats}
             title={pc.seasonStatsTitle}
-            trailing={vm.seasonLabel}
+            trailingNode={
+              <SeasonPicker
+                vm={vm}
+                rtl={rtl}
+                open={pickerOpen}
+                onToggle={() => setPickerOpen((o) => !o)}
+              />
+            }
             rtl={rtl}
           />
-          <View style={styles.card}>
+          {pickerOpen ? (
+            <View style={[styles.card, styles.seasonDropdown]}>
+              <Text style={[styles.seasonDropdownTitle, { fontFamily: fontReg, textAlign: rtl ? 'right' : 'left' }]}>
+                {pc.chooseSeason}
+              </Text>
+              <View style={[styles.seasonGrid, { flexDirection: row }]}>
+                {vm.seasons.map((season) => {
+                  const active = season.key === vm.selectedSeasonKey;
+                  return (
+                    <Pressable
+                      key={season.key}
+                      onPress={() => {
+                        onSelectSeason?.(season.key);
+                        setPickerOpen(false);
+                      }}
+                      style={[styles.seasonOption, active && styles.seasonOptionActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.seasonOptionText,
+                          { fontFamily: active ? fontBold : fontSemi },
+                          active && styles.seasonOptionTextActive,
+                        ]}
+                      >
+                        {season.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+          <View style={[styles.card, styles.seasonCard]}>
             <View style={[styles.bigStatsRow, { flexDirection: row }]}>
               <BigStat icon={PP_ICON.court} label={pc.statMatches} value={fmtNum(s.matches)} rtl={rtl} />
               <View style={styles.vDivider} />
@@ -476,8 +615,8 @@ function OverviewTab({ vm, rtl }: { vm: PlayerProfileViewModel; rtl: boolean }) 
               <SmallStat
                 leading={
                   <View style={[styles.cardsIcon, { flexDirection: row }]}>
-                    <View style={[styles.cardChip, { backgroundColor: '#FACC15' }]} />
-                    <View style={[styles.cardChip, { backgroundColor: '#EF4444', marginLeft: -3 }]} />
+                    <View style={[styles.cardChip, { backgroundColor: C.cardYellow }]} />
+                    <View style={[styles.cardChip, styles.cardChipRed]} />
                   </View>
                 }
                 label={pc.cardsYellowRed}
@@ -493,8 +632,11 @@ function OverviewTab({ vm, rtl }: { vm: PlayerProfileViewModel; rtl: boolean }) 
         <>
           <SectionHeader icon={PP_ICON.history} title={pc.lastMatches} rtl={rtl} />
           <View style={[styles.card, styles.matchesCard, { flexDirection: row }]}>
-            {recent.map((m) => (
-              <LastMatchCell key={m.gameId} match={m} rtl={rtl} dnpLabel={pc.didNotPlay} />
+            {recent.map((m, idx) => (
+              <React.Fragment key={m.gameId}>
+                {idx > 0 ? <View style={styles.matchDivider} /> : null}
+                <LastMatchCell match={m} rtl={rtl} dnpLabel={pc.didNotPlay} />
+              </React.Fragment>
             ))}
           </View>
         </>
@@ -514,6 +656,7 @@ function OverviewTab({ vm, rtl }: { vm: PlayerProfileViewModel; rtl: boolean }) 
                 feeLabel={pc.transferFee}
                 fontBold={fontBold}
                 fontReg={fontReg}
+                fontSemi={fontSemi}
               />
             ))}
           </View>
@@ -584,35 +727,44 @@ function LastMatchCell({
   dnpLabel: string;
 }) {
   const fontBold = useAppFont(700);
+  const fontSemi = useAppFont(600);
   const fontReg = useAppFont(400);
   const hasRating = match.played && match.rating != null;
+  // Some leagues have no 365 ratings: a played game without one is "—", not DNP.
+  const pillText = hasRating ? (match.rating as number).toFixed(1) : match.played ? '—' : dnpLabel;
   return (
     <View style={styles.matchCell}>
       <View style={[styles.inlineRow, { flexDirection: rtl ? 'row-reverse' : 'row', gap: 8 }]}>
         <TeamBadge
           name={match.opponentName || '—'}
           logo={match.opponentLogo || undefined}
-          size={26}
+          size={30}
           color="transparent"
         />
         <View
           style={[
             styles.ratingPill,
-            { backgroundColor: hasRating ? ratingTone(match.rating as number) : 'rgba(255,255,255,0.12)' },
+            { backgroundColor: hasRating ? ratingTone(match.rating as number) : 'rgba(255,255,255,0.1)' },
           ]}
         >
           <Text
             style={[
               styles.ratingText,
-              { fontFamily: fontBold, color: hasRating ? '#0b0518' : C.muted },
+              { fontFamily: fontSemi, color: hasRating ? C.ratingText : C.muted },
+              !hasRating && !match.played && styles.ratingTextSmall,
             ]}
           >
-            {hasRating ? (match.rating as number).toFixed(1) : dnpLabel}
+            {pillText}
           </Text>
         </View>
       </View>
       <Text style={[styles.matchDate, { fontFamily: fontReg }]}>{fmtMatchDate(match.startTime, rtl)}</Text>
-      <Text style={[styles.matchOpponent, { fontFamily: fontBold }]} numberOfLines={1}>
+      <Text
+        style={[styles.matchOpponent, { fontFamily: fontBold }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+      >
         {match.opponentName || '—'}
       </Text>
     </View>
@@ -627,6 +779,7 @@ function TransferItem({
   feeLabel,
   fontBold,
   fontReg,
+  fontSemi,
 }: {
   row: PlayerTransferRow;
   rtl: boolean;
@@ -635,10 +788,13 @@ function TransferItem({
   feeLabel: string;
   fontBold: string;
   fontReg: string;
+  fontSemi: string;
 }) {
   const row = rtl ? 'row-reverse' : 'row';
   const textAlign = rtl ? 'right' : 'left';
   const endAlign = rtl ? 'flex-start' : 'flex-end';
+  const euro = tr.price?.trim().startsWith('€') ?? false;
+  const priceText = euro ? tr.price!.trim().replace(/^€\s*/, '') : tr.price;
   return (
     <View style={[styles.transferRow, { flexDirection: row }]}>
       <View style={styles.timelineCol}>
@@ -653,21 +809,24 @@ function TransferItem({
       <View style={[styles.transferBody, { flexDirection: row }, !last && styles.transferDivider]}>
         <TeamBadge name={tr.clubName} logo={tr.clubLogo || undefined} size={28} color="transparent" />
         <View style={styles.transferText}>
-          <Text style={[styles.transferClub, { fontFamily: fontBold, textAlign }]} numberOfLines={1}>
+          <Text style={[styles.transferClub, { fontFamily: fontSemi, textAlign }]} numberOfLines={1}>
             {tr.clubName}
           </Text>
           {tr.date ? (
-            <Text style={[styles.transferDate, { fontFamily: fontReg, textAlign }]}>{tr.date}</Text>
+            <Text style={[styles.transferDate, { fontFamily: fontSemi, textAlign }]}>{tr.date}</Text>
           ) : null}
         </View>
-        <View style={{ alignItems: endAlign }}>
-          {tr.price ? (
+        <View style={{ alignItems: endAlign, gap: 4 }}>
+          {priceText ? (
             <>
-              <Text style={[styles.transferPrice, { fontFamily: fontBold }]}>{tr.price}</Text>
+              <View style={[styles.inlineRow, { flexDirection: 'row', gap: 3 }]}>
+                {euro ? <Image source={PP_ICON.euro} style={styles.euroIcon} contentFit="contain" /> : null}
+                <Text style={[styles.transferPrice, { fontFamily: fontSemi }]}>{priceText}</Text>
+              </View>
               <Text style={[styles.transferFee, { fontFamily: fontReg }]}>{feeLabel}</Text>
             </>
           ) : tr.title ? (
-            <Text style={[styles.transferFee, { fontFamily: fontReg }]}>{tr.title}</Text>
+            <Text style={[styles.transferTitle, { fontFamily: fontReg }]}>{tr.title}</Text>
           ) : null}
         </View>
       </View>
@@ -776,7 +935,34 @@ const styles = StyleSheet.create({
   },
   sectionIcon: { width: 20, height: 20 },
   sectionTitle: { color: '#fff', fontSize: 17 },
-  sectionTrailing: { color: C.primary, fontSize: 15 },
+  sectionTrailing: { color: C.seasonLabel, fontSize: 16 },
+
+  seasonPill: {
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: 'rgba(139,92,246,0.08)',
+  },
+  seasonPillOpen: { borderColor: C.primary, backgroundColor: 'rgba(139,92,246,0.18)' },
+  seasonPillText: { color: C.seasonLabel, fontSize: 15 },
+  seasonDropdown: { padding: 14, marginBottom: 12 },
+  seasonDropdownTitle: { color: C.statLabel, fontSize: 12, marginBottom: 10 },
+  seasonGrid: { flexWrap: 'wrap', gap: 8 },
+  seasonOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.divider,
+    backgroundColor: C.bg,
+  },
+  seasonOptionActive: { borderColor: C.primary, backgroundColor: 'rgba(139,92,246,0.22)' },
+  seasonOptionText: { color: C.soft, fontSize: 13 },
+  seasonOptionTextActive: { color: '#fff' },
 
   card: {
     backgroundColor: C.card,
@@ -784,27 +970,44 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     borderRadius: 16,
   },
-  bigStatsRow: { paddingVertical: 18 },
-  bigStat: { flex: 1, alignItems: 'center', gap: 6 },
-  bigStatValue: { color: '#fff', fontSize: 26 },
-  bigStatIcon: { width: 18, height: 18 },
-  bigStatLabel: { color: C.soft, fontSize: 14 },
+  seasonCard: { paddingVertical: 10 },
+  bigStatsRow: { paddingTop: 14, paddingBottom: 14 },
+  bigStat: { flex: 1, alignItems: 'center', gap: 4 },
+  bigStatValue: { color: '#fff', fontSize: 25 },
+  bigStatIcon: { width: 22, height: 22 },
+  bigStatLabel: { color: C.statLabel, fontSize: 16 },
   vDivider: { width: 1, backgroundColor: C.divider, marginVertical: 6 },
   hDivider: { height: 1, backgroundColor: C.divider, marginHorizontal: 14 },
-  smallStatsRow: { paddingVertical: 14, paddingHorizontal: 6 },
-  smallStat: { flex: 1, alignItems: 'center', gap: 5, paddingHorizontal: 2 },
-  smallStatValue: { color: '#fff', fontSize: 16 },
-  smallStatLabel: { color: C.muted, fontSize: 10, flexShrink: 1 },
-  smallIcon: { width: 12, height: 12 },
-  cardsIcon: { alignItems: 'center' },
-  cardChip: { width: 7, height: 10, borderRadius: 1.5 },
+  smallStatsRow: { paddingVertical: 14, paddingHorizontal: 5 },
+  smallStat: { flex: 1, alignItems: 'center', gap: 8, paddingHorizontal: 2 },
+  smallStatValue: { color: '#fff', fontSize: 18 },
+  smallStatLabel: { color: C.statLabel, fontSize: 10, flexShrink: 1 },
+  smallIcon: { width: 16, height: 16 },
+  cardsIcon: { alignItems: 'center', gap: 1 },
+  cardChip: { width: 8, height: 11, borderRadius: 2, transform: [{ rotate: '-25deg' }] },
+  cardChipRed: {
+    backgroundColor: C.cardRed,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 0 },
+  },
 
-  matchesCard: { paddingVertical: 16, paddingHorizontal: 6 },
-  matchCell: { flex: 1, alignItems: 'center', gap: 6 },
-  ratingPill: { minWidth: 40, paddingHorizontal: 8, height: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  ratingText: { fontSize: 13 },
-  matchDate: { color: C.muted, fontSize: 11, marginTop: 2 },
-  matchOpponent: { color: '#fff', fontSize: 14, maxWidth: '95%' },
+  matchesCard: { paddingVertical: 20, paddingHorizontal: 10 },
+  matchCell: { flex: 1, alignItems: 'center', gap: 8 },
+  matchDivider: { width: 1, backgroundColor: C.divider, marginVertical: 4 },
+  ratingPill: {
+    minWidth: 54,
+    paddingHorizontal: 10,
+    height: 27,
+    borderRadius: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ratingText: { fontSize: 18 },
+  ratingTextSmall: { fontSize: 12 },
+  matchDate: { color: C.dateLilac, fontSize: 11, marginTop: 4 },
+  matchOpponent: { color: '#fff', fontSize: 16, maxWidth: '95%' },
 
   transfersCard: { paddingHorizontal: 14, paddingVertical: 4 },
   transferRow: { alignItems: 'stretch' },
@@ -812,14 +1015,22 @@ const styles = StyleSheet.create({
   timelineLine: { flex: 1, width: 2, backgroundColor: C.timeline },
   timelineHidden: { backgroundColor: 'transparent' },
   timelineDot: { width: 19, height: 19 },
-  transferBody: { flex: 1, alignItems: 'center', gap: 10, paddingVertical: 14, marginHorizontal: 8 },
+  transferBody: { flex: 1, alignItems: 'center', gap: 6, minHeight: 57, paddingVertical: 12, marginHorizontal: 8 },
   transferDivider: { borderBottomWidth: 1, borderBottomColor: C.divider },
-  transferText: { flex: 1, minWidth: 0, gap: 3 },
-  transferClub: { color: '#fff', fontSize: 14 },
-  transferDate: { color: C.muted, fontSize: 12 },
+  transferText: { flex: 1, minWidth: 0, gap: 6 },
+  transferClub: { color: '#fff', fontSize: 15 },
+  transferDate: { color: C.transferLilac, fontSize: 11 },
   transferPrice: { color: '#fff', fontSize: 15 },
-  transferFee: { color: C.muted, fontSize: 11 },
+  transferFee: { color: C.transferLilac, fontSize: 10 },
+  transferTitle: { color: C.transferLilac, fontSize: 12 },
+  euroIcon: { width: 16, height: 16 },
 
-  comingSoon: { marginTop: 22, paddingVertical: 36, alignItems: 'center', gap: 12 },
-  comingSoonText: { color: C.soft, fontSize: 14 },
+  socialHint: { color: C.statLabel, fontSize: 13, marginTop: -4, marginBottom: 12 },
+  socialCard: { alignItems: 'center', gap: 14, padding: 14, marginBottom: 10 },
+  socialIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  socialText: { flex: 1, minWidth: 0, gap: 3 },
+  socialName: { color: '#fff', fontSize: 16 },
+  socialSub: { color: C.muted, fontSize: 12 },
+  chatsNote: { alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 },
+  chatsNoteText: { color: C.muted, fontSize: 12 },
 });

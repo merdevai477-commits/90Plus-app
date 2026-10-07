@@ -35,6 +35,8 @@ export interface PlayerProfileViewModel {
   height: string | null;
   age: number | null;
   seasonLabel: string | null;
+  seasons: { key: string; label: string }[];
+  selectedSeasonKey: string | null;
   season: PlayerSeasonSummary | null;
   lastMatches: Player365LastMatch[];
   transfers: PlayerTransferRow[];

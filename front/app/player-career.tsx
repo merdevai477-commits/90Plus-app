@@ -187,7 +187,8 @@ export default function PlayerCareerScreen() {
                 ? `${profile.height.trim()} ${pc.heightUnit}`
                 : profile.height
             : null;
-        const current = careerCurrentSeason(career);
+        const shown =
+            career.seasons.find((s) => s.seasonKey === selectedSeasonKey) ?? careerCurrentSeason(career);
         return {
             name: profile.name,
             photoCandidates,
@@ -199,8 +200,10 @@ export default function PlayerCareerScreen() {
             position: profile.position ?? null,
             height,
             age: profile.age ?? ageFromDateOfBirth(profile.dateOfBirth),
-            seasonLabel: current?.label ?? null,
-            season: careerSeasonSummary(career),
+            seasonLabel: shown?.label ?? null,
+            seasons: career.seasons.map((s) => ({ key: s.seasonKey, label: s.label })),
+            selectedSeasonKey: shown?.seasonKey ?? null,
+            season: careerSeasonSummary(career, shown?.seasonKey),
             lastMatches: (career.lastMatches ?? []).map((m) => ({
                 ...m,
                 opponentName: m.opponentName ? getTeamDisplayName(m.opponentName, language) : null,
@@ -210,7 +213,7 @@ export default function PlayerCareerScreen() {
                 clubName: getTeamDisplayName(tr.clubName, language),
             })),
         };
-    }, [career, photoCandidates, athleteId, params.teamLogo, routeTeamName, language, pc.heightUnit]);
+    }, [career, photoCandidates, athleteId, params.teamLogo, routeTeamName, language, pc.heightUnit, selectedSeasonKey]);
 
     const animateSeasonLayout = () => {
         if (Platform.OS === 'ios') {
@@ -486,6 +489,7 @@ export default function PlayerCareerScreen() {
             statsContent={statsContent}
             onBack={goBack}
             onBell={() => router.push('/notifications' as never)}
+            onSelectSeason={setSelectedSeasonKey}
         />
     );
 }

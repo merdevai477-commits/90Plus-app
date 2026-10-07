@@ -799,6 +799,12 @@ export const en = {
     transferFee: 'Transfer fee',
     didNotPlay: 'DNP',
     chatsComingSoon: 'Player chats coming soon',
+    socialTitle: 'Player accounts',
+    socialHint: 'Follow the player on social media',
+    facebook: 'Facebook',
+    instagram: 'Instagram',
+    openOn: 'Open on',
+    chooseSeason: 'Choose season',
   },
 
   coachProfile: {

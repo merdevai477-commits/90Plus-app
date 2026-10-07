@@ -1033,6 +1033,12 @@ export const ar = {
     transferFee: 'رسوم انتقال',
     didNotPlay: 'لم يلعب',
     chatsComingSoon: 'محادثات اللاعب قريباً',
+    socialTitle: 'حسابات اللاعب',
+    socialHint: 'تابع أخبار اللاعب على السوشيال ميديا',
+    facebook: 'فيسبوك',
+    instagram: 'إنستجرام',
+    openOn: 'افتح على',
+    chooseSeason: 'اختر الموسم',
   },
 
   coachProfile: {

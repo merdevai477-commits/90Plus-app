@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import ApiFootballService, { type Player365Career, type Player365Transfer } from '../services/apiFootball';
+import ApiFootballService, { type Player365Career } from '../services/apiFootball';
 import { logger } from '../utils/logger';
 import PlayerAvatar from '../components/common/PlayerAvatar';
 import ImageViewerModal from '../components/common/ImageViewerModal';
@@ -48,7 +48,6 @@ import { PP_COLORS as B, ratingTone } from '../components/PlayerProfile/theme';
 
 // Cache key prefix for player data
 const PLAYER_CACHE_PREFIX = 'player_cache_';
-const TRANSFER_CACHE_PREFIX = 'player_transfers_';
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const CACHE_TTL_FROM_MATCH_MS = 5 * 60 * 1000; // after a live match, refresh stats within 5m
 const BACKGROUND_REFRESH_MS = 15 * 60 * 1000; // skip network if cache is fresher than 15m
@@ -210,22 +209,6 @@ interface PlayerData {
     }>;
 }
 
-interface Transfer {
-    player: {
-        id: number;
-        name: string;
-        photo: string | null;
-    };
-    transfers: Array<{
-        date: string;
-        type: string;
-        teams: {
-            in: { id: number; name: string; logo: string | null } | null;
-            out: { id: number; name: string; logo: string | null } | null;
-        };
-    }>;
-}
-
 // Team colors mapping (common teams) - using app theme colors
 const TEAM_COLORS: { [key: string]: readonly [string, string, ...string[]] } = {
     'Liverpool': ['#C8102E', '#8B0000'],
@@ -262,17 +245,6 @@ const formatDate = (dateString: string | null, language: Language): string => {
     } catch {
         return dateString;
     }
-};
-
-// Helper to format transfer value
-const formatTransferValue = (type: string | null, labels: Record<string, string>): string => {
-    if (!type) return labels.freeTransfer;
-    if (type.includes('€') || type.includes('M') || type.includes('K')) {
-        return type;
-    }
-    if (type.toLowerCase().includes('free')) return labels.freeTransfer;
-    if (type.toLowerCase().includes('loan')) return labels.loan;
-    return type;
 };
 
 function formatPreferredFoot(
@@ -620,11 +592,9 @@ export default function PlayerProfileScreen() {
     );
 
     const [player, setPlayer] = useState<PlayerData | null>(routeShell);
-    const [transfers, setTransfers] = useState<Transfer[]>([]);
     const [loading, setLoading] = useState(!routeShell);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [loadingTransfers, setLoadingTransfers] = useState(false);
     const [matchReport365, setMatchReport365] = useState<MatchReport365 | null>(null);
     const [career365, setCareer365] = useState<Player365Career | null>(null);
     const [athleteId365, setAthleteId365] = useState(contextAthleteId);
@@ -636,17 +606,11 @@ export default function PlayerProfileScreen() {
         setPlayer(routeShell);
         setLoading(!routeShell);
         setError(null);
-        setTransfers([]);
         setAthleteId365(contextAthleteId);
     }, [playerId, routeShell, contextAthleteId]);
 
     useEffect(() => {
         loadPlayerData();
-        if (!is365Source) {
-            loadPlayerTransfers();
-        } else {
-            setTransfers([]);
-        }
 
         // Entrance animations
         Animated.parallel([
@@ -867,41 +831,9 @@ export default function PlayerProfileScreen() {
         }
     };
 
-    const loadPlayerTransfers = async (force = false) => {
-        if (!playerId) return;
-
-        try {
-            if (!force) {
-                const cachedRaw = await AsyncStorage.getItem(`${TRANSFER_CACHE_PREFIX}${playerId}`);
-                if (cachedRaw) {
-                    const { data, timestamp } = JSON.parse(cachedRaw) as { data: Transfer[]; timestamp: number };
-                    if (Date.now() - timestamp < CACHE_TTL) {
-                        setTransfers(data);
-                        return;
-                    }
-                }
-            }
-
-            setLoadingTransfers(true);
-            const data = await ApiFootballService.getTransfers({ player: playerId });
-            setTransfers(data);
-            await AsyncStorage.setItem(
-                `${TRANSFER_CACHE_PREFIX}${playerId}`,
-                JSON.stringify({ data, timestamp: Date.now() }),
-            );
-        } catch (err: any) {
-            logger.warn('Failed to load transfers:', err);
-        } finally {
-            setLoadingTransfers(false);
-        }
-    };
-
     const onRefresh = async () => {
         setRefreshing(true);
         await loadPlayerData(true);
-        if (!is365Source) {
-            await loadPlayerTransfers(true);
-        }
         setRefreshing(false);
     };
 
@@ -1389,103 +1321,6 @@ export default function PlayerProfileScreen() {
                             </View>
                         </>
                     )}
-
-                    {/* Transfers — 365 career payload, never API-Football getTransfers */}
-                    {is365Source && (career365?.profile.transfers?.length ?? 0) > 0 && (
-                        <>
-                            <SectionHeader icon={PP_ICON.transfers} title={pp.transfers} rtl={rtl} />
-                            <View style={[styles.card, styles.listCard]}>
-                                {career365!.profile.transfers!.map((tr: Player365Transfer, index: number, arr) => (
-                                    <View
-                                        key={`${tr.competitorId}-${tr.date}-${index}`}
-                                        style={[
-                                            styles.transferRow,
-                                            { flexDirection: row },
-                                            index < arr.length - 1 && styles.statRowDivider,
-                                        ]}
-                                    >
-                                        <TeamBadge
-                                            name={tr.competitorName || '—'}
-                                            size={30}
-                                            logo={tr.competitorLogo || undefined}
-                                            color="transparent"
-                                        />
-                                        <View style={styles.transferText}>
-                                            <Text style={[styles.transferClub, { fontFamily: fontBold, textAlign }]} numberOfLines={1}>
-                                                {getTeamDisplayName(tr.competitorName || '—', language)}
-                                            </Text>
-                                            <Text style={[styles.transferDate, { fontFamily: fontReg, textAlign }]}>
-                                                {tr.date ? String(tr.date).slice(0, 10) : 'N/A'}
-                                            </Text>
-                                        </View>
-                                        {(tr.price || tr.transferTitle) ? (
-                                            <Text style={[styles.transferType, { fontFamily: fontBold }]} numberOfLines={1}>
-                                                {tr.price || tr.transferTitle}
-                                            </Text>
-                                        ) : null}
-                                    </View>
-                                ))}
-                            </View>
-                        </>
-                    )}
-
-                    {/* Transfers — API-Football only */}
-                    {!is365Source && transfers.length > 0 && (
-                        <>
-                            <SectionHeader icon={PP_ICON.transfers} title={pp.transfers} rtl={rtl} />
-                            {loadingTransfers ? (
-                                <View style={[styles.card, styles.loadingCard]}>
-                                    <ActivityIndicator size="small" color={B.primary} />
-                                </View>
-                            ) : (
-                                <View style={[styles.card, styles.listCard]}>
-                                    {transfers.flatMap((transfer, index) =>
-                                        (transfer.transfers ?? []).map((tr, tIndex) => (
-                                            <View key={`${index}-${tIndex}`} style={[styles.apiTransfer, styles.statRowDivider]}>
-                                                <View style={[styles.apiTransferMeta, { flexDirection: row }]}>
-                                                    <Text style={[styles.transferDate, { fontFamily: fontReg }]}>
-                                                        {tr.date ? formatDate(tr.date, language) : 'N/A'}
-                                                    </Text>
-                                                    <Text style={[styles.transferType, { fontFamily: fontBold }]}>
-                                                        {formatTransferValue(tr.type, pp)}
-                                                    </Text>
-                                                </View>
-                                                <View style={[styles.apiTransferTeams, { flexDirection: row }]}>
-                                                    {tr.teams.out && (
-                                                        <View style={[styles.apiTransferTeam, { flexDirection: row }]}>
-                                                            <TeamBadge
-                                                                name={tr.teams.out.name}
-                                                                color={teamColors[0]}
-                                                                size={28}
-                                                                logo={teamLogoUrl(tr.teams.out.id, tr.teams.out.logo)}
-                                                            />
-                                                            <Text style={[styles.transferClub, { fontFamily: fontSemi }]} numberOfLines={1}>
-                                                                {getTeamDisplayName(tr.teams.out.name, language)}
-                                                            </Text>
-                                                        </View>
-                                                    )}
-                                                    <Ionicons name={rtl ? 'arrow-back' : 'arrow-forward'} size={18} color={B.primary} />
-                                                    {tr.teams.in && (
-                                                        <View style={[styles.apiTransferTeam, { flexDirection: row }]}>
-                                                            <TeamBadge
-                                                                name={tr.teams.in.name}
-                                                                color={teamColors[0]}
-                                                                size={28}
-                                                                logo={teamLogoUrl(tr.teams.in.id, tr.teams.in.logo)}
-                                                            />
-                                                            <Text style={[styles.transferClub, { fontFamily: fontSemi }]} numberOfLines={1}>
-                                                                {getTeamDisplayName(tr.teams.in.name, language)}
-                                                            </Text>
-                                                        </View>
-                                                    )}
-                                                </View>
-                                            </View>
-                                        )),
-                                    )}
-                                </View>
-                            )}
-                        </>
-                    )}
                 </Animated.View>
             </ScrollView>
         </View>
@@ -1651,13 +1486,4 @@ const styles = StyleSheet.create({
     infoLabel: { fontSize: 11, color: B.muted, textAlign: 'center' },
     infoValue: { fontSize: 14, color: '#fff', textAlign: 'center' },
 
-    transferRow: { alignItems: 'center', gap: 10, paddingVertical: 12 },
-    transferText: { flex: 1, minWidth: 0, gap: 3 },
-    transferClub: { color: '#fff', fontSize: 14, flexShrink: 1 },
-    transferDate: { color: B.muted, fontSize: 12 },
-    transferType: { color: B.primarySoft, fontSize: 13, maxWidth: 120 },
-    apiTransfer: { paddingVertical: 12, gap: 10 },
-    apiTransferMeta: { justifyContent: 'space-between', alignItems: 'center' },
-    apiTransferTeams: { alignItems: 'center', gap: 10 },
-    apiTransferTeam: { flex: 1, alignItems: 'center', gap: 8 },
 });

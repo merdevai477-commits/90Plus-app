@@ -31,18 +31,28 @@ export function careerCurrentSeason(career: Player365Career) {
   );
 }
 
-export function careerSeasonSummary(career: Player365Career): PlayerSeasonSummary | null {
-  const season = careerCurrentSeason(career);
+export function careerSeasonSummary(
+  career: Player365Career,
+  seasonKey?: string | null,
+): PlayerSeasonSummary | null {
+  const current = careerCurrentSeason(career);
+  const season = (seasonKey && career.seasons.find((s) => s.seasonKey === seasonKey)) || current;
   if (!season) return null;
+  // 365 only publishes shots / chances (highlightStats) for the active season.
+  const isCurrent = season.seasonKey === current?.seasonKey;
   const sumComp = (key: 'yellowCards' | 'redCards') =>
     season.competitions.reduce((acc, c) => acc + (c[key] ?? 0), 0);
+  const minutesFromComps = season.competitions.reduce<number | null>(
+    (acc, c) => (c.minutes != null ? (acc ?? 0) + c.minutes : acc),
+    null,
+  );
   return {
     matches: season.appearances ?? null,
     goals: season.goals ?? null,
     assists: season.assists ?? null,
-    minutes: season.minutes ?? null,
-    shotsOnTarget: sumHighlightType(career, SHOTS_ON_TARGET_TYPE),
-    chancesCreated: sumHighlightType(career, CHANCES_CREATED_TYPE),
+    minutes: season.minutes ?? minutesFromComps,
+    shotsOnTarget: isCurrent ? sumHighlightType(career, SHOTS_ON_TARGET_TYPE) : null,
+    chancesCreated: isCurrent ? sumHighlightType(career, CHANCES_CREATED_TYPE) : null,
     yellowCards: sumComp('yellowCards'),
     redCards: sumComp('redCards'),
   };
