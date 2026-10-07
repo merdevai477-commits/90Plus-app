@@ -579,6 +579,18 @@ export interface Career365Trophy {
   categoryName?: string;
 }
 
+export interface Career365LastMatch {
+  gameId: number;
+  startTime: string | null;
+  competitionName: string | null;
+  opponentId: number | null;
+  opponentName: string | null;
+  opponentLogo: string | null;
+  played: boolean;
+  rating: number | null;
+  ratingColor: string | null;
+}
+
 export interface ThreeSixFivePlayerCareer {
   athleteId: number;
   profile: {
@@ -602,6 +614,8 @@ export interface ThreeSixFivePlayerCareer {
   /** Rich per-competition stats for the active season (highlightStats). */
   currentSeasonHighlights: Career365HighlightCompetition[];
   trophies: Career365Trophy[];
+  /** The athlete's most recent games (newest first) with per-game rating. */
+  lastMatches: Career365LastMatch[];
 }
 
 export interface ThreeSixFiveCoach {
@@ -3560,7 +3574,7 @@ export class ThreeSixFiveScoresService {
        * anything that has to fill a per-language cache (Football Grid).
        */
       const langId = options?.langId ?? resolveScores365LangId(language);
-      const cacheKey = `365:player-career:v7:${athleteId}:${langId}`;
+      const cacheKey = `365:player-career:v8:${athleteId}:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFivePlayerCareer>(cacheKey);
       if (cached?.seasons?.length) return { data: cached, source: '365scores' };
 
@@ -3585,6 +3599,7 @@ export class ThreeSixFiveScoresService {
       const currentSeasonKey = String(athlete.careerStats?.seasons?.[0]?.key ?? '') || null;
       const currentSeasonHighlights = this.parse365HighlightStats(athlete.highlightStats, compLogoMap);
       const trophies = this.parse365Trophies(athlete.trophies);
+      const lastMatches = this.parse365LastMatches(athlete.lastMatches);
 
       const seasonDefs: Array<{ key: string; name: string; embeddedStats?: any }> = (
         athlete.careerStats?.seasons ?? []
@@ -3624,6 +3639,7 @@ export class ThreeSixFiveScoresService {
         currentSeasonKey,
         currentSeasonHighlights,
         trophies,
+        lastMatches,
       };
 
       await redisCacheService.set(cacheKey, data, 86_400_000);
@@ -3638,6 +3654,7 @@ export class ThreeSixFiveScoresService {
   async invalidatePlayerCareerCache(athleteId: number, langId?: number): Promise<void> {
     const langs = langId != null ? [langId] : [1, 27];
     for (const lid of langs) {
+      await redisCacheService.del(`365:player-career:v8:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v7:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v6:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v5:${athleteId}:${lid}`);
@@ -3656,6 +3673,38 @@ export class ThreeSixFiveScoresService {
       }
     }
     return map;
+  }
+
+  private parse365LastMatches(raw: any): Career365LastMatch[] {
+    const games: any[] = Array.isArray(raw?.games) ? raw.games : Array.isArray(raw) ? raw : [];
+    const out: Career365LastMatch[] = [];
+    for (const entry of games) {
+      const game = entry?.game ?? entry;
+      const gameId = this.num365(game?.id);
+      if (gameId == null) continue;
+      const ownId = this.num365(entry?.relatedCompetitor);
+      const home = game?.homeCompetitor;
+      const away = game?.awayCompetitor;
+      const opponent = ownId != null && this.num365(home?.id) === ownId ? away : home;
+      const opponentId = this.num365(opponent?.id);
+      const ratingStat = Array.isArray(entry?.athleteStats)
+        ? entry.athleteStats.find((s: any) => Number(s?.type) === 0)
+        : null;
+      const rating = ratingStat ? Number.parseFloat(String(ratingStat.value)) : NaN;
+      out.push({
+        gameId,
+        startTime: typeof game?.startTime === 'string' ? game.startTime : null,
+        competitionName: game?.competitionDisplayName ?? null,
+        opponentId,
+        opponentName: opponent?.name ?? null,
+        opponentLogo:
+          opponentId != null ? buildCompetitorLogoUrl(opponentId, this.num365(opponent?.imageVersion), 64) : null,
+        played: entry?.played !== false,
+        rating: Number.isFinite(rating) ? rating : null,
+        ratingColor: typeof ratingStat?.bgColor === 'string' ? ratingStat.bgColor : null,
+      });
+    }
+    return out.sort((a, b) => (Date.parse(b.startTime ?? '') || 0) - (Date.parse(a.startTime ?? '') || 0));
   }
 
   private parse365HighlightStats(
@@ -3935,7 +3984,7 @@ export class ThreeSixFiveScoresService {
         (raw?.countryName as string) ??
         (raw?.nationality as string) ??
         null,
-      jerseyNumber: this.num365(raw?.jerseyNumber ?? raw?.shirtNumber ?? raw?.jersey),
+      jerseyNumber: this.num365(raw?.jerseyNum ?? raw?.jerseyNumber ?? raw?.shirtNumber ?? raw?.jersey),
       age: this.num365(raw?.age),
       dateOfBirth: this.parse365DateOfBirth(raw),
       height: this.parse365Height(raw),

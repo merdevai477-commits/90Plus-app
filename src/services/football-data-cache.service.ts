@@ -5011,7 +5011,8 @@ class FootballDataCacheService {
                 const hasNewShape =
                     Array.isArray(data.currentSeasonHighlights) &&
                     Object.prototype.hasOwnProperty.call(data.profile ?? {}, 'clubLogo');
-                if (data.seasons?.length && hasNewShape && age < maxAgeMs) {
+                const hasLastMatches = Array.isArray(data.lastMatches);
+                if (data.seasons?.length && hasNewShape && hasLastMatches && age < maxAgeMs) {
                     return { data, source: '365scores' };
                 }
                 if (data.seasons?.length && hasNewShape) {

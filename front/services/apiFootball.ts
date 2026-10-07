@@ -284,6 +284,18 @@ export interface Player365Transfer {
   active: boolean;
 }
 
+export interface Player365LastMatch {
+  gameId: number;
+  startTime: string | null;
+  competitionName: string | null;
+  opponentId: number | null;
+  opponentName: string | null;
+  opponentLogo: string | null;
+  played: boolean;
+  rating: number | null;
+  ratingColor: string | null;
+}
+
 export interface Player365Career {
   athleteId: number;
   profile: {
@@ -305,6 +317,7 @@ export interface Player365Career {
   currentSeasonKey?: string | null;
   currentSeasonHighlights?: Player365CareerHighlightCompetition[];
   trophies?: Player365CareerTrophy[];
+  lastMatches?: Player365LastMatch[];
 }
 
 export interface League {

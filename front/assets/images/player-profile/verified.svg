@@ -1,0 +1,12 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="material-symbols:done-rounded">
+<rect width="24" height="24" rx="12" fill="url(#paint0_linear_0_74)"/>
+<path id="Vector" d="M9.62996 14.8174L17.851 7.26726C18.045 7.08909 18.2713 7 18.53 7C18.7886 7 19.015 7.08909 19.209 7.26726C19.403 7.44543 19.5 7.65716 19.5 7.90245C19.5 8.14774 19.403 8.35917 19.209 8.53675L10.309 16.7327C10.115 16.9109 9.88863 17 9.62996 17C9.37128 17 9.14494 16.9109 8.95094 16.7327L4.77982 12.902C4.58581 12.7238 4.49269 12.5124 4.50045 12.2677C4.50821 12.023 4.60941 11.8113 4.80407 11.6325C4.99872 11.4537 5.22926 11.3647 5.4957 11.3653C5.76213 11.3658 5.99235 11.4549 6.18636 11.6325L9.62996 14.8174Z" fill="white"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_74" x1="12" y1="0" x2="12" y2="24" gradientUnits="userSpaceOnUse">
+<stop stop-color="#8B5CF6"/>
+<stop offset="1" stop-color="#513690"/>
+</linearGradient>
+</defs>
+</svg>

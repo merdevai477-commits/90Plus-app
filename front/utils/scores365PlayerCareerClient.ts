@@ -8,6 +8,7 @@ import type {
   Player365CareerHighlightCompetition,
   Player365CareerSeason,
   Player365CareerTrophy,
+  Player365LastMatch,
 } from '../services/apiFootball';
 import { buildScores365AthletePhotoUrl } from './scores365AthletePhoto';
 import { logger } from '../utils/logger';
@@ -52,6 +53,40 @@ function buildCompetitionLogoMap(competitions: any[]): Map<number, string | null
     }
   }
   return map;
+}
+
+function parseLastMatches(raw: any): Player365LastMatch[] {
+  const games: any[] = Array.isArray(raw?.games) ? raw.games : Array.isArray(raw) ? raw : [];
+  const out: Player365LastMatch[] = [];
+  for (const entry of games) {
+    const game = entry?.game ?? entry;
+    const gameId = num365(game?.id);
+    if (gameId == null) continue;
+    const ownId = num365(entry?.relatedCompetitor);
+    const home = game?.homeCompetitor;
+    const away = game?.awayCompetitor;
+    const opponent = ownId != null && num365(home?.id) === ownId ? away : home;
+    const opponentId = num365(opponent?.id);
+    const ratingStat = Array.isArray(entry?.athleteStats)
+      ? entry.athleteStats.find((s: any) => Number(s?.type) === 0)
+      : null;
+    const rating = ratingStat ? Number.parseFloat(String(ratingStat.value)) : NaN;
+    out.push({
+      gameId,
+      startTime: typeof game?.startTime === 'string' ? game.startTime : null,
+      competitionName: game?.competitionDisplayName ?? null,
+      opponentId,
+      opponentName: opponent?.name ?? null,
+      opponentLogo:
+        opponentId != null
+          ? `https://imagecache.365scores.com/image/upload/f_png,w_64,h_64,c_limit,q_auto:eco,dpr_2/v${num365(opponent?.imageVersion) ?? 1}/Competitors/${opponentId}`
+          : null,
+      played: entry?.played !== false,
+      rating: Number.isFinite(rating) ? rating : null,
+      ratingColor: typeof ratingStat?.bgColor === 'string' ? ratingStat.bgColor : null,
+    });
+  }
+  return out.sort((a, b) => (Date.parse(b.startTime ?? '') || 0) - (Date.parse(a.startTime ?? '') || 0));
 }
 
 async function fetch365Json<T>(path: string): Promise<T | null> {
@@ -239,7 +274,7 @@ export async function fetch365PlayerCareerClient(
     position: athlete.position?.name ?? athlete.positionName ?? null,
     clubName: clubFromMap ?? athlete.clubName ?? athlete.competitorName ?? null,
     nationality: athlete.nationalityName ?? athlete.countryName ?? null,
-    jerseyNumber: num365(athlete.jerseyNumber ?? athlete.shirtNumber),
+    jerseyNumber: num365(athlete.jerseyNum ?? athlete.jerseyNumber ?? athlete.shirtNumber),
     age: num365(athlete.age),
     imageUrl: buildScores365AthletePhotoUrl(
       athleteId,
@@ -315,5 +350,6 @@ export async function fetch365PlayerCareerClient(
     currentSeasonKey,
     currentSeasonHighlights,
     trophies,
+    lastMatches: parseLastMatches(athlete.lastMatches),
   };
 }
