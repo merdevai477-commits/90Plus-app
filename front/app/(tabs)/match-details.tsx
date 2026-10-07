@@ -1988,23 +1988,10 @@ const MatchDetailsScreen = () => {
           ) : null}
           <MatchStatsCompare
             statistics={statistics}
-            language={language}
-            title={
-              t.matchDetails.statsComparison ||
-              t.matchDetails.statistics ||
-              'Statistics Comparison'
-            }
-            possessionLabelLines={[
-              t.matchDetails.possessionLine1 || 'Possession',
-              t.matchDetails.possessionLine2 || '',
-            ]}
-            dangerousAttacksLabelLines={[
-              t.matchDetails.dangerousAttacksLine1 || 'Dangerous',
-              t.matchDetails.dangerousAttacksLine2 || 'Attacks',
-            ]}
-            attacksLabel={
-              t.matchDetails.statTypes?.attacks || 'Attacks'
-            }
+            homeName={getTeamDisplayName(homeTeamName, language)}
+            awayName={getTeamDisplayName(awayTeamName, language)}
+            homeLogo={homeTeamLogo}
+            awayLogo={awayTeamLogo}
           />
         </ScrollView>
       );

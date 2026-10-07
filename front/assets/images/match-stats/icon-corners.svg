@@ -1,0 +1,11 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="emojione-monotone:flag-for-triangular-flag">
+<path id="Vector" d="M18.8705 6.391L6.56666 0.6875H5.27691V19.733C3.83453 19.8082 2.75 20.1293 2.75 20.5147C2.75 20.9553 4.17037 21.3125 5.92247 21.3125C7.6725 21.3125 9.09287 20.9553 9.09287 20.5147C9.09287 20.1293 8.00834 19.8082 6.56666 19.7333V13.4124C8.05234 12.7243 18.2476 7.99803 18.8708 7.70859C19.3765 7.47416 19.3765 6.62578 18.8705 6.391Z" fill="url(#paint0_linear_0_4)"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_4" x1="11" y1="0.6875" x2="11" y2="21.3125" gradientUnits="userSpaceOnUse">
+<stop stop-color="#8B5CF6"/>
+<stop offset="1" stop-color="#513690"/>
+</linearGradient>
+</defs>
+</svg>
