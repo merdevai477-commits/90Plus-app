@@ -44,7 +44,17 @@ type LiveSnapshot = {
     status: string;
     elapsed: number | null;
     extra: number | null;
+    /** Last tick this fixture was in the live feed. */
+    seenAt: number;
 };
+
+/**
+ * Dropped fixtures that never confirm FT (postponed, abandoned, quota) would keep
+ * their snapshot forever. The grace window stops a brief feed blip from looking
+ * like a first sighting (which re-sends a goal/score push).
+ */
+const LIVE_STATE_RETENTION_MS = 30 * 60_000;
+const LIVE_STATE_PRUNE_INTERVAL_MS = 60_000;
 
 class LiveFixtureSyncService {
     private intervalRef: NodeJS.Timeout | null = null;
@@ -57,6 +67,7 @@ class LiveFixtureSyncService {
     private warmedLiveIds = new Set<number>();
     /** Throttle non-score event WS pushes (cards/subs) — max one delta / 8s per fixture. */
     private lastEventPushAt = new Map<number, number>();
+    private lastLiveStatePruneAt = 0;
 
     start(): void {
         if (!process.env.FOOTBALL_API_KEY) {
@@ -93,6 +104,7 @@ class LiveFixtureSyncService {
         this.finishingInFlight.clear();
         this.warmedLiveIds.clear();
         this.lastEventPushAt.clear();
+        this.lastLiveStatePruneAt = 0;
         logger.info('🔴 Live fixture sync stopped');
     }
 
@@ -469,6 +481,8 @@ class LiveFixtureSyncService {
             const extra = fixture.fixture.status.extra ?? null;
 
             const prev = this.lastSnapshots.get(id);
+            const nowMs = Date.now();
+            if (prev) prev.seenAt = nowMs;
             const scoreChanged =
                 !prev || prev.homeScore !== homeScore || prev.awayScore !== awayScore;
             const statusChanged = !prev || prev.status !== status;
@@ -481,7 +495,7 @@ class LiveFixtureSyncService {
                 prev.elapsed !== elapsed;
 
             if (changed) {
-                this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed, extra });
+                this.lastSnapshots.set(id, { homeScore, awayScore, status, elapsed, extra, seenAt: nowMs });
                 this.broadcastMatchUpdate(id, homeScore, awayScore, status, elapsed, extra);
 
                 if (scoreChanged) {
@@ -500,7 +514,6 @@ class LiveFixtureSyncService {
                 }
 
                 const forceEvents = scoreChanged || statusChanged;
-                const nowMs = Date.now();
                 const lastPush = this.lastEventPushAt.get(id) ?? 0;
                 if (forceEvents || nowMs - lastPush >= 8_000) {
                     this.lastEventPushAt.set(id, nowMs);
@@ -560,7 +573,26 @@ class LiveFixtureSyncService {
             }
         } finally {
             this.syncInFlight = false;
+            this.pruneStaleLiveState(Date.now());
         }
+    }
+
+    /** Runs on followers too so state left from a lost lease is released. */
+    pruneStaleLiveState(now: number): void {
+        if (now - this.lastLiveStatePruneAt < LIVE_STATE_PRUNE_INTERVAL_MS) return;
+        this.lastLiveStatePruneAt = now;
+        for (const [id, snapshot] of this.lastSnapshots) {
+            if (this.finishingInFlight.has(id)) continue;
+            if (now - snapshot.seenAt > LIVE_STATE_RETENTION_MS) this.lastSnapshots.delete(id);
+        }
+        // Throttle stamps are only written beside a snapshot; FT clears the snapshot alone.
+        for (const id of this.lastEventPushAt.keys()) {
+            if (!this.lastSnapshots.has(id)) this.lastEventPushAt.delete(id);
+        }
+    }
+
+    getLiveStateSizes(): { snapshots: number; eventPushStamps: number } {
+        return { snapshots: this.lastSnapshots.size, eventPushStamps: this.lastEventPushAt.size };
     }
 
     private async syncOnceAsLeader(signal: AbortSignal): Promise<void> {
