@@ -50,7 +50,8 @@ export default function RegisterScreen() {
   const router = useRouter();
   const { signUp, setActive, isLoaded } = useSignUp();
   const { getToken } = useAuth();
-  const { t, isRTL } = useTranslation();
+  const { t, language } = useTranslation();
+  const isRTL = language === 'ar';
   const tCommon = t.common;
   const [terms, setTerms] = useState(false);
   const [name, setName] = useState('');

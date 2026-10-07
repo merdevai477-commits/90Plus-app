@@ -53,7 +53,8 @@ export default function LoginScreen() {
   const router = useRouter();
   const { signIn, setActive, isLoaded } = useSignIn();
   const { getToken } = useAuth();
-  const { t, isRTL } = useTranslation();
+  const { t, language } = useTranslation();
+  const isRTL = language === 'ar';
   const tCommon = t.common;
 
   const [email, setEmail] = useState('');

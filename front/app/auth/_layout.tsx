@@ -8,9 +8,9 @@ const AUTH_STACK_OPTIONS = {
 
 export default function AuthLayout() {
     return (
-        <Stack initialRouteName="login" screenOptions={AUTH_STACK_OPTIONS}>
-            <Stack.Screen name="login" />
+        <Stack initialRouteName="index" screenOptions={AUTH_STACK_OPTIONS}>
             <Stack.Screen name="index" />
+            <Stack.Screen name="login" />
             <Stack.Screen name="forgot-password" />
         </Stack>
     );

@@ -5,7 +5,8 @@ import { useTranslation } from '@/src/i18n';
 import { AUTH_V2_ASSETS } from './authV2Assets';
 
 export function AuthHeroBlock() {
-  const { isRTL } = useTranslation();
+  const { language } = useTranslation();
+  const isRTL = language === 'ar';
 
   return (
     <View style={[styles.hero, isRTL && styles.heroRtl]} pointerEvents="none">

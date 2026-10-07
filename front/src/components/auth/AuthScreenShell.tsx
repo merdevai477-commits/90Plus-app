@@ -67,7 +67,8 @@ type Props = {
 export function AuthScreenShell({ children, hideClose }: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isRTL } = useTranslation();
+  const { language } = useTranslation();
+  const isRTL = language === 'ar';
   const { width, height } = useWindowDimensions();
   const metrics = getAuthLayoutMetrics(width, height);
   const {

@@ -27,6 +27,7 @@ export {
   // Constants
   SUPPORTED_LANGUAGES,
   DEFAULT_LANGUAGE,
+  FIRST_LAUNCH_LANGUAGE,
   SUPPORTED_LANGUAGE_CODES,
   
   // Type guards and helpers

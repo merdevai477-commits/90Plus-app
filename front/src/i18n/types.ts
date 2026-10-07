@@ -48,6 +48,13 @@ export const SUPPORTED_LANGUAGES: readonly LanguageInfo[] = [
 export const DEFAULT_LANGUAGE: Language = 'en';
 
 /**
+ * Language used on a fresh install, before the user picks one. Most players are
+ * Arabic speakers, so this intentionally ignores the device locale.
+ * `DEFAULT_LANGUAGE` stays English because it is also the missing-key fallback.
+ */
+export const FIRST_LAUNCH_LANGUAGE: Language = 'ar';
+
+/**
  * Set of supported language codes for quick lookup
  */
 export const SUPPORTED_LANGUAGE_CODES: ReadonlySet<string> = new Set(

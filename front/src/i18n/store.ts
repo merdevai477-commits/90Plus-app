@@ -10,8 +10,7 @@
 import { create } from 'zustand';
 import { I18nManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Language, DEFAULT_LANGUAGE, isLanguageSupported } from './types';
-import { detectDeviceLanguage } from './utils';
+import { Language, DEFAULT_LANGUAGE, FIRST_LAUNCH_LANGUAGE, isLanguageSupported } from './types';
 
 /**
  * Storage keys for language preferences
@@ -180,9 +179,7 @@ export const useLanguageStore = create<LanguageStore>((set, get) => ({
         // Use saved preference (Requirements: 2.4)
         languageToUse = savedLanguage;
       } else {
-        // Detect device language (Requirements: 2.1, 2.2)
-        languageToUse = detectDeviceLanguage();
-        // Save the detected language for future use
+        languageToUse = FIRST_LAUNCH_LANGUAGE;
         await saveLanguage(languageToUse);
       }
       
@@ -197,9 +194,8 @@ export const useLanguageStore = create<LanguageStore>((set, get) => ({
       });
     } catch (error) {
       console.error('Failed to initialize language store:', error);
-      // Fall back to default language on error
       set({
-        language: DEFAULT_LANGUAGE,
+        language: FIRST_LAUNCH_LANGUAGE,
         isRTL: false,
         isInitialized: true,
         isLoading: false,
@@ -241,7 +237,7 @@ export function shouldLanguageBeRTL(_language: Language): boolean {
  */
 export async function determineInitialLanguage(): Promise<{
   language: Language;
-  source: 'saved' | 'device';
+  source: 'saved' | 'default';
 }> {
   const savedLanguage = await loadSavedLanguage();
   
@@ -249,5 +245,5 @@ export async function determineInitialLanguage(): Promise<{
     return { language: savedLanguage, source: 'saved' };
   }
   
-  return { language: detectDeviceLanguage(), source: 'device' };
+  return { language: FIRST_LAUNCH_LANGUAGE, source: 'default' };
 }
