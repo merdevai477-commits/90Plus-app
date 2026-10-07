@@ -7,6 +7,8 @@
 
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import type Redis from 'ioredis';
+import { getRedisClient } from '../lib/redis';
 import { redisCacheService } from '../services/redis-cache.service';
 import { logger } from '../utils/logger';
 import { shouldHonorFreshCacheBypass, shouldHonorPullCacheBypass } from '../utils/cache-bypass.util';
@@ -244,17 +246,17 @@ class ResponseCache {
      * Clear cache for a specific path pattern
      */
     async clear(pattern?: string): Promise<void> {
+        await redisCacheService.delPattern(pattern ? `response:*${pattern}*` : 'response:*');
+        this.clearMemory(pattern);
+        publishInvalidation(pattern);
+    }
+
+    /** L1 only — this instance's copies. */
+    clearMemory(pattern?: string): void {
         if (!pattern) {
-            // Clear all response cache
-            await redisCacheService.delPattern('response:*');
             this.memoryCache.clear();
             return;
         }
-
-        // Clear Redis cache matching pattern
-        await redisCacheService.delPattern(`response:*${pattern}*`);
-
-        // Clear memory cache matching pattern
         for (const key of this.memoryCache.keys()) {
             if (key.includes(pattern)) {
                 this.memoryCache.delete(key);
@@ -276,6 +278,66 @@ class ResponseCache {
 }
 
 const responseCache = new ResponseCache();
+
+// L1 is per process: when one instance clears, the others must drop their copies too.
+const INVALIDATE_CHANNEL = 'response-cache:invalidate';
+const instanceId = crypto.randomUUID();
+let invalidationSubscriber: Redis | null = null;
+
+function publishInvalidation(pattern?: string): void {
+    const client = getRedisClient();
+    if (!client) return;
+    client
+        .publish(INVALIDATE_CHANNEL, JSON.stringify({ from: instanceId, pattern: pattern ?? null }))
+        .catch((err: Error) => {
+            logger.warn('[responseCache] invalidation publish failed', { message: err.message });
+        });
+}
+
+export function handleInvalidationMessage(raw: string): void {
+    let msg: { from?: string; pattern?: string | null };
+    try {
+        msg = JSON.parse(raw);
+    } catch {
+        return;
+    }
+    if (!msg || msg.from === instanceId) return;
+    responseCache.clearMemory(typeof msg.pattern === 'string' ? msg.pattern : undefined);
+}
+
+export async function startResponseCacheInvalidationBus(): Promise<void> {
+    if (invalidationSubscriber) return;
+    const client = getRedisClient();
+    if (!client) return;
+    const subscriber = client.duplicate();
+    invalidationSubscriber = subscriber;
+    subscriber.on('error', (err) => {
+        logger.warn('[responseCache] invalidation subscriber error', { message: err.message });
+    });
+    subscriber.on('message', (channel: string, raw: string) => {
+        if (channel === INVALIDATE_CHANNEL) handleInvalidationMessage(raw);
+    });
+    try {
+        await subscriber.subscribe(INVALIDATE_CHANNEL);
+        logger.info('[responseCache] cross-instance invalidation subscribed');
+    } catch (err) {
+        logger.warn('[responseCache] invalidation subscribe failed — L1 clears stay local', {
+            message: err instanceof Error ? err.message : String(err),
+        });
+        subscriber.disconnect();
+        invalidationSubscriber = null;
+    }
+}
+
+export async function stopResponseCacheInvalidationBus(): Promise<void> {
+    const subscriber = invalidationSubscriber;
+    invalidationSubscriber = null;
+    try {
+        await subscriber?.quit();
+    } catch {
+        subscriber?.disconnect();
+    }
+}
 
 // Clean expired entries every 5 minutes without keeping CLI/test processes alive.
 const responseCacheCleanupTimer = setInterval(() => {

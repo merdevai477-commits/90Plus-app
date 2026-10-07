@@ -12,6 +12,10 @@ import { logger } from './utils/logger';
 import { basicHealthCheck } from './middleware/health-check.middleware';
 import { WebSocketService } from './services/websocket.service';
 import { performanceMiddleware } from './middleware/performance.middleware';
+import {
+    startResponseCacheInvalidationBus,
+    stopResponseCacheInvalidationBus,
+} from './middleware/responseCache.middleware';
 import { backgroundPreloadService } from './services/background-preload.service';
 import {
     resolveAndroidSha256Fingerprints,
@@ -838,6 +842,8 @@ async function startServer() {
                 logger.warn('Could not start keep-alive ping (non-fatal):', pingErr);
             } 
 
+            void startResponseCacheInvalidationBus();
+
                 // Start match watcher for push notifications
                 if (process.env.FOOTBALL_API_KEY) {
                     const { logWorldCupOnlyModeStartup } = await import(
@@ -1251,6 +1257,7 @@ process.on('SIGINT', async () => {
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
 
     stopKeepAlive();
+    await stopResponseCacheInvalidationBus();
     await prisma.$disconnect();
     process.exit(0);
 });
@@ -1275,6 +1282,7 @@ process.on('SIGTERM', async () => {
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
 
     stopKeepAlive();
+    await stopResponseCacheInvalidationBus();
     await prisma.$disconnect();
     process.exit(0);
 });

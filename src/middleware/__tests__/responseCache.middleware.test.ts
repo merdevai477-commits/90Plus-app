@@ -3,6 +3,7 @@ import {
   responseCacheMiddleware,
   responseCache,
   clearResponseCache,
+  handleInvalidationMessage,
 } from '../responseCache.middleware';
 
 jest.mock('../../services/redis-cache.service', () => ({
@@ -133,6 +134,22 @@ describe('responseCacheMiddleware', () => {
     expect(res.send).not.toHaveBeenCalled();
     expect(res.headers['x-cache']).toBe('SKIP');
     expect(res.headers['etag']).toBeUndefined();
+  });
+
+  it('drops L1 copies when another instance publishes an invalidation', async () => {
+    const middleware = responseCacheMiddleware({ ttl: 60_000, sharedCache: true });
+    const path = '/api/predictions/user/stats';
+    const first = makeRes();
+    await middleware(makeReq(path), first, jest.fn());
+    (first as any).json({ status: 'SUCCESS', data: { points: 1 } });
+    expect(responseCache.size()).toBe(1);
+
+    handleInvalidationMessage('not json');
+    handleInvalidationMessage(JSON.stringify({ from: 'other-instance', pattern: '/reels' }));
+    expect(responseCache.size()).toBe(1);
+
+    handleInvalidationMessage(JSON.stringify({ from: 'other-instance', pattern: '/predictions/user' }));
+    expect(responseCache.size()).toBe(0);
   });
 
   it('does not cache degraded fallbacks', async () => {
