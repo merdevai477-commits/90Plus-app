@@ -616,6 +616,8 @@ export interface ThreeSixFivePlayerCareer {
   trophies: Career365Trophy[];
   /** The athlete's most recent games (newest first) with per-game rating. */
   lastMatches: Career365LastMatch[];
+  /** True once every season 365 lists is included (older payloads were capped at 8). */
+  allSeasons?: boolean;
 }
 
 export interface ThreeSixFiveCoach {
@@ -3574,7 +3576,7 @@ export class ThreeSixFiveScoresService {
        * anything that has to fill a per-language cache (Football Grid).
        */
       const langId = options?.langId ?? resolveScores365LangId(language);
-      const cacheKey = `365:player-career:v8:${athleteId}:${langId}`;
+      const cacheKey = `365:player-career:v9:${athleteId}:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFivePlayerCareer>(cacheKey);
       if (cached?.seasons?.length) return { data: cached, source: '365scores' };
 
@@ -3640,6 +3642,7 @@ export class ThreeSixFiveScoresService {
         currentSeasonHighlights,
         trophies,
         lastMatches,
+        allSeasons: true,
       };
 
       await redisCacheService.set(cacheKey, data, 86_400_000);
@@ -3654,6 +3657,7 @@ export class ThreeSixFiveScoresService {
   async invalidatePlayerCareerCache(athleteId: number, langId?: number): Promise<void> {
     const langs = langId != null ? [langId] : [1, 27];
     for (const lid of langs) {
+      await redisCacheService.del(`365:player-career:v9:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v8:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v7:${athleteId}:${lid}`);
       await redisCacheService.del(`365:player-career:v6:${athleteId}:${lid}`);
@@ -3793,9 +3797,9 @@ export class ThreeSixFiveScoresService {
     compLogoMap: Map<number, string | null>,
   ): Promise<Career365Season[]> {
     const seasons: Career365Season[] = [];
-    const BATCH = 4;
-    const HOT_SEASON_LIMIT = 8;
-    const defs = seasonDefs.slice(0, HOT_SEASON_LIMIT);
+    const BATCH = 6;
+    const MAX_SEASONS = 30;
+    const defs = seasonDefs.slice(0, MAX_SEASONS);
 
     const hasEmbeddedRows = (stats: any): boolean =>
       Array.isArray(stats?.tables) &&
@@ -3821,9 +3825,7 @@ export class ThreeSixFiveScoresService {
         }),
       );
       for (const s of results) {
-        if (s && (s.competitions.length > 0 || s.appearances > 0 || s.goals > 0 || s.assists > 0)) {
-          seasons.push(s);
-        }
+        if (s) seasons.push(s);
       }
     }
 

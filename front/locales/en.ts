@@ -783,7 +783,7 @@ export const en = {
     age: 'Age',
     years: 'yrs',
     heightUnit: 'm',
-    tabChats: 'Chats',
+    tabSocial: 'Social',
     tabOverview: 'Overview',
     tabStats: 'Stats',
     seasonStatsTitle: 'Season stats',
@@ -798,13 +798,13 @@ export const en = {
     transferHistory: 'Transfer history',
     transferFee: 'Transfer fee',
     didNotPlay: 'DNP',
-    chatsComingSoon: 'Player chats coming soon',
     socialTitle: 'Player accounts',
     socialHint: 'Follow the player on social media',
     facebook: 'Facebook',
     instagram: 'Instagram',
     openOn: 'Open on',
     chooseSeason: 'Choose season',
+    onlyOneSeason: 'This is the only season on record for this player so far',
   },
 
   coachProfile: {

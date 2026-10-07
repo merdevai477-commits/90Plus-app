@@ -298,9 +298,9 @@ export async function fetch365PlayerCareerClient(
     }));
 
   const seasons: Player365CareerSeason[] = [];
-  const BATCH = 4;
-  const HOT_SEASON_LIMIT = 8;
-  const defs = seasonDefs.slice(0, HOT_SEASON_LIMIT);
+  const BATCH = 6;
+  const MAX_SEASONS = 30;
+  const defs = seasonDefs.slice(0, MAX_SEASONS);
 
   for (let i = 0; i < defs.length; i += BATCH) {
     const batch = defs.slice(i, i + BATCH);

@@ -164,7 +164,7 @@ export default function PlayerProfileView({
   const tabs: { key: PlayerProfileTab; label: string }[] = [
     { key: 'stats', label: pc.tabStats },
     { key: 'overview', label: pc.tabOverview },
-    { key: 'chats', label: pc.tabChats },
+    { key: 'chats', label: pc.tabSocial },
   ];
 
   return (
@@ -476,10 +476,6 @@ function SocialTab({ name, rtl }: { name: string; rtl: boolean }) {
           <Ionicons name="open-outline" size={18} color={C.statLabel} />
         </Pressable>
       ))}
-      <View style={[styles.chatsNote, { flexDirection: row }]}>
-        <Ionicons name="chatbubbles-outline" size={16} color={C.primary} />
-        <Text style={[styles.chatsNoteText, { fontFamily: fontReg }]}>{pc.chatsComingSoon}</Text>
-      </View>
     </>
   );
 }
@@ -496,20 +492,16 @@ function SeasonPicker({
   onToggle: () => void;
 }) {
   const fontSemi = useAppFont(600);
-  const canPick = vm.seasons.length > 1;
   return (
     <Pressable
       onPress={onToggle}
-      disabled={!canPick}
       hitSlop={8}
       accessibilityRole="button"
       accessibilityState={{ expanded: open }}
       style={[styles.seasonPill, { flexDirection: rtl ? 'row-reverse' : 'row' }, open && styles.seasonPillOpen]}
     >
       <Text style={[styles.seasonPillText, { fontFamily: fontSemi }]}>{vm.seasonLabel ?? '—'}</Text>
-      {canPick ? (
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={C.seasonLabel} />
-      ) : null}
+      <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={C.seasonLabel} />
     </Pressable>
   );
 }
@@ -582,6 +574,11 @@ function OverviewTab({
                   );
                 })}
               </View>
+              {vm.seasons.length <= 1 ? (
+                <Text style={[styles.seasonDropdownNote, { fontFamily: fontReg, textAlign: rtl ? 'right' : 'left' }]}>
+                  {pc.onlyOneSeason}
+                </Text>
+              ) : null}
             </View>
           ) : null}
           <View style={[styles.card, styles.seasonCard]}>
@@ -963,6 +960,7 @@ const styles = StyleSheet.create({
   seasonOptionActive: { borderColor: C.primary, backgroundColor: 'rgba(139,92,246,0.22)' },
   seasonOptionText: { color: C.soft, fontSize: 13 },
   seasonOptionTextActive: { color: '#fff' },
+  seasonDropdownNote: { color: C.muted, fontSize: 12, marginTop: 10 },
 
   card: {
     backgroundColor: C.card,
@@ -1031,6 +1029,4 @@ const styles = StyleSheet.create({
   socialText: { flex: 1, minWidth: 0, gap: 3 },
   socialName: { color: '#fff', fontSize: 16 },
   socialSub: { color: C.muted, fontSize: 12 },
-  chatsNote: { alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10 },
-  chatsNoteText: { color: C.muted, fontSize: 12 },
 });
