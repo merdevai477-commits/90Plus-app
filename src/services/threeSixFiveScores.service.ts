@@ -2863,7 +2863,7 @@ export class ThreeSixFiveScoresService {
         competitors?: Array<{ id: number; name?: string }>;
       }>(
         `/web/athletes/?${this.commonParams(langId)}&athletes=${athleteId}&fullDetails=true`,
-        `athlete-profile:${athleteId}`,
+        `athlete-profile:${athleteId}:${langId}`,
         21_600_000,
       );
       const athlete = payload?.athletes?.[0];
@@ -3370,13 +3370,13 @@ export class ThreeSixFiveScoresService {
     const [playerPayload, gameLineups] = await Promise.all([
       this.fetchJson<LineupsPayload>(
         `/web/athletes/games/lineups?${this.commonParams(langId)}&athleteId=${athleteId}&gameId=${gameId}`,
-        `player-report:${athleteId}:${gameId}`,
-        300_000,
+        `player-report:${athleteId}:${gameId}:${langId}`,
+        60_000,
       ),
       this.fetchJson<LineupsPayload>(
         `/web/athletes/games/lineups?${this.commonParams(langId)}&gameId=${gameId}`,
-        `lineups-chart:${gameId}`,
-        120_000,
+        `lineups-chart:${gameId}:${langId}`,
+        60_000,
       ),
     ]);
 
@@ -3416,7 +3416,7 @@ export class ThreeSixFiveScoresService {
       chartEvents,
     };
 
-    await redisCacheService.set(cacheKey, report, 300_000);
+    await redisCacheService.set(cacheKey, report, 120_000);
     void this.invalidatePlayerCareerCache(aid, langId);
     return { data: report, source: '365scores' };
   }
@@ -3476,7 +3476,7 @@ export class ThreeSixFiveScoresService {
 
       const payload = await this.fetchJson<ChartEventsPayload>(
         `/web/athletes/chartEvents?${this.commonParams(langId)}&athletes=${athleteId}`,
-        `player-chart:${athleteId}`,
+        `player-chart:${athleteId}:${langId}`,
         86_400_000,
       );
       const athlete = payload?.athletes?.[0];
@@ -3516,7 +3516,7 @@ export class ThreeSixFiveScoresService {
 
       const payload = await this.fetchJson<NextGamePayload>(
         `/web/athletes/nextGame?${this.commonParams(langId)}&athletes=${athleteId}&fullDetails=true`,
-        `player-info:${athleteId}`,
+        `player-info:${athleteId}:${langId}`,
         86_400_000,
       );
       const raw = payload?.athletes?.[0] as any;
