@@ -9,13 +9,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import CachedAthletePhoto from '../common/CachedAthletePhoto';
 import { useCompetitorSquad, useCompetitorStats } from '../../hooks/useTeamProfile';
 import {
-  BLUE_ELECTRIC,
-  GLASS_BORDER_BOTTOM,
-  GLASS_BORDER_SIDE,
-  GLASS_BORDER_TOP,
+  PURPLE_GLOW,
+  PURPLE_PRIMARY,
+  PURPLE_SOFT,
   TEXT_MUTED,
   TEXT_PRIMARY,
 } from '../../constants/tokens';
+
+const PURPLE_DEEP = '#2e146a';
 import {
   formatTopPlayerStat,
   pickMatchTopPlayer,
@@ -154,7 +155,7 @@ export function MatchTopPlayersCard({
     <View style={styles.wrap} testID="match-top-players">
       <View style={styles.card}>
         <LinearGradient
-          colors={['rgba(124,58,237,0.16)', 'rgba(59,130,246,0.08)', 'rgba(10,6,18,0.20)']}
+          colors={['rgba(124,58,237,0.20)', 'rgba(46,20,106,0.12)', 'rgba(10,6,18,0.20)']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -176,6 +177,14 @@ export function MatchTopPlayersCard({
                 accessibilityRole="tab"
                 accessibilityState={{ selected }}
               >
+                {selected ? (
+                  <LinearGradient
+                    colors={[PURPLE_PRIMARY, PURPLE_DEEP]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                ) : null}
                 <Text style={[styles.tabText, selected && styles.tabTextSelected]}>
                   {tabLabel(item, labels)}
                 </Text>
@@ -227,13 +236,11 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: GLASS_BORDER_SIDE,
-    borderTopColor: GLASS_BORDER_TOP,
-    borderBottomColor: GLASS_BORDER_BOTTOM,
+    borderWidth: 1,
+    borderColor: 'rgba(139,92,246,0.28)',
     padding: 16,
     gap: 14,
-    backgroundColor: 'rgba(12,8,20,0.92)',
+    backgroundColor: 'rgba(11,5,24,0.92)',
   },
   title: {
     color: TEXT_PRIMARY,
@@ -242,7 +249,7 @@ const styles = StyleSheet.create({
   },
   titleRule: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(139,92,246,0.28)',
     marginTop: -6,
   },
   tabs: {
@@ -254,17 +261,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(8,6,16,0.85)',
+    backgroundColor: 'rgba(11,5,24,0.85)',
     borderWidth: 1,
-    borderColor: BLUE_ELECTRIC,
+    borderColor: 'rgba(167,139,250,0.45)',
     paddingHorizontal: 6,
+    overflow: 'hidden',
   },
   tabSelected: {
-    backgroundColor: BLUE_ELECTRIC,
-    borderColor: BLUE_ELECTRIC,
+    borderColor: 'rgba(167,139,250,0.6)',
   },
   tabText: {
-    color: BLUE_ELECTRIC,
+    color: PURPLE_SOFT,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -285,8 +292,12 @@ const styles = StyleSheet.create({
   photoRing: {
     borderRadius: 34,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.88)',
+    borderColor: PURPLE_SOFT,
     padding: 1,
+    shadowColor: PURPLE_PRIMARY,
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
   },
   playerName: {
     color: TEXT_PRIMARY,
@@ -311,7 +322,9 @@ const styles = StyleSheet.create({
     minHeight: 32,
     paddingHorizontal: 8,
     borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.72)',
+    backgroundColor: 'rgba(124,58,237,0.14)',
+    borderWidth: 1,
+    borderColor: PURPLE_GLOW,
     alignItems: 'center',
     justifyContent: 'center',
   },
