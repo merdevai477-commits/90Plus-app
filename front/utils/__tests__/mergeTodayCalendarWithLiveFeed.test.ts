@@ -123,6 +123,24 @@ describe('mergeTodayCalendarWithLiveFeed', () => {
     expect(merged[1]).toBe(calendar[1]);
   });
 
+  it('adds a missing in-play row but not a suspended one from another day', () => {
+    const calendar = [makeMatch({ id: '1', status: 'upcoming' })];
+    const liveFeed = [
+      makeMatch({ id: '2', status: 'live', statusShort: '2H', elapsed: 60 }),
+      makeMatch({ id: '3', status: 'live', statusShort: 'SUSP', elapsed: 10 }),
+      makeMatch({ id: '4', status: 'live', statusShort: 'INT', elapsed: 1 }),
+    ];
+    const ids = mergeTodayCalendarWithLiveFeed(calendar, liveFeed).map((row) => row.id);
+    expect(ids).toEqual(['1', '2']);
+  });
+
+  it('still updates a calendar row that becomes suspended', () => {
+    const calendar = [makeMatch({ id: '1', status: 'live', statusShort: '1H', elapsed: 20 })];
+    const liveFeed = [makeMatch({ id: '1', status: 'live', statusShort: 'SUSP', elapsed: 20 })];
+    const merged = mergeTodayCalendarWithLiveFeed(calendar, liveFeed);
+    expect(merged[0].statusShort).toBe('SUSP');
+  });
+
   it('keeps a 90+7 stoppage-time row live when the calendar is still live', () => {
     const calendar = [
       makeMatch({

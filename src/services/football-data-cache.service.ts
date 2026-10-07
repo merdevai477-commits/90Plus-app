@@ -214,6 +214,7 @@ export function mergeFixtureProviders(baseFixtures: any[], overlays: any[]): any
 }
 
 const FINISHED_PROVIDER_STATUSES = new Set(TERMINAL_LATCH_STATUSES);
+const IN_PLAY_STATUSES = new Set(['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE']);
 
 function isFinishedProviderStatus(status: string | null | undefined): boolean {
     return FINISHED_PROVIDER_STATUSES.has(status ?? '');
@@ -771,7 +772,7 @@ class FootballDataCacheService {
                 rows: any[],
                 mergeOptions?: { skipLiveOverlayCache?: boolean },
             ): Promise<any[]> => {
-                if (isToday) return this.mergeCalendarWithLiveSources(rows, mergeOptions);
+                if (isToday) return this.mergeTodayCalendar(rows, dateString, mergeOptions);
                 if (!isYesterday || rows.length === 0) return rows;
                 // The overlay unions in every live fixture; keep only this day's rows.
                 const merged = await this.mergeCalendarWithLiveSources(rows, mergeOptions);
@@ -794,7 +795,7 @@ class FootballDataCacheService {
                 const localHit = this.matchesByDateLocal.get(dateString);
                 if (localHit?.data?.length) {
                     const scoped = this.filterFixturesToCalendarDay(localHit.data, dateString);
-                    return this.mergeCalendarWithLiveSources(scoped, { skipLiveOverlayCache: true });
+                    return this.mergeTodayCalendar(scoped, dateString, { skipLiveOverlayCache: true });
                 }
             }
 
@@ -817,7 +818,7 @@ class FootballDataCacheService {
 
             if (fromDb.length > 0) {
                 if (isToday) {
-                    const merged = await this.mergeCalendarWithLiveSources(fromDb, {
+                    const merged = await this.mergeTodayCalendar(fromDb, dateString, {
                         skipLiveOverlayCache,
                     });
                     if (!isScores365OnlyMode() && !isWorldCupOnlyMode() && !(await this.isTodayApiFresh(dateString))) {
@@ -1360,6 +1361,24 @@ class FootballDataCacheService {
     }
 
     /** Redis live overlay + terminal FT + 365Scores for today's calendar. */
+    /**
+     * Today's list keeps other-day rows from the live overlay only while they are
+     * being played (late kickoffs past midnight); a suspended or interrupted match
+     * stays on its own day's list.
+     */
+    private async mergeTodayCalendar(
+        rows: any[],
+        dateString: string,
+        options?: { skipLiveOverlayCache?: boolean },
+    ): Promise<any[]> {
+        const merged = await this.mergeCalendarWithLiveSources(rows, options);
+        return merged.filter(
+            (f) =>
+                calendarDateFromKickoff(f?.fixture?.date) === dateString ||
+                IN_PLAY_STATUSES.has(f?.fixture?.status?.short ?? ''),
+        );
+    }
+
     private async mergeCalendarWithLiveSources(
         apiMatches: any[],
         options?: { skipLiveOverlayCache?: boolean },

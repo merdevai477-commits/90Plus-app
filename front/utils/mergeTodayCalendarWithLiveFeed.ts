@@ -2,6 +2,8 @@ import type { Match } from '../components/Matches/matchCardUtils';
 import { isStaleInPlayClock } from './staleMatchClock';
 
 const TERMINAL_STATUS_SHORT = new Set(['FT', 'AET', 'PEN', 'ABD', 'AWD', 'WO', 'CANC']);
+/** Not being played: a missing row like this belongs to another day's list. */
+const PAUSED_STATUS_SHORT = new Set(['INT', 'SUSP']);
 
 function finishStaleLiveRow(row: Match): Match {
   if (row.status !== 'live') return row;
@@ -61,7 +63,7 @@ export function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Matc
       continue;
     }
     if (!existing) {
-      map.set(liveRow.id, liveRow);
+      if (!PAUSED_STATUS_SHORT.has(liveRow.statusShort ?? '')) map.set(liveRow.id, liveRow);
       continue;
     }
     const merged: Match = {
