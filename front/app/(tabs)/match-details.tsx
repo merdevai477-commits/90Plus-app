@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ApiFootballService, { TeamStatistics, TeamFixture, FixtureEvent, Fixture, Lineup, Standing } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
-import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus, getLocalizedStatType, getLocalizedEventLabel } from '../../utils/i18nHelpers';
+import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus, getLocalizedStatType } from '../../utils/i18nHelpers';
 import { prefetchFootballTranslations } from '../../src/stores/footballTranslationStore';
 import { collectUniqueStrings } from '../../utils/footballNamePrefetch';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
@@ -47,7 +47,7 @@ import { FootballField } from '../../components/match-details/FootballField';
 import { LineupBestPlayers } from '../../components/match-details/LineupBestPlayers';
 import { LineupBenchDrawer } from '../../components/match-details/LineupBenchDrawer';
 import { MatchStandingsTable } from '../../components/match-details/MatchStandingsTable';
-import { MatchEventIcon, getMatchEventColor } from '../../components/match-details/MatchEventIcon';
+import { MatchEventsTimeline } from '../../components/match-details/MatchEventsTimeline';
 import { MatchMomentumGraph } from '../../components/match-details/MatchMomentumGraph';
 import { MatchKickoffHighlights } from '../../components/match-details/MatchKickoffHighlights';
 import { MatchTopPlayersCard } from '../../components/match-details/MatchTopPlayersCard';
@@ -1703,85 +1703,14 @@ const MatchDetailsScreen = () => {
               <Ionicons name="football-outline" size={48} color="#333" />
               <Text style={styles.emptyStateText}>{t.matchDetails.noEvents}</Text>
             </View>
-          ) : sortedEvents.map((event, index) => {
-            const homeTeamId = fixture?.teams?.home?.id;
-            const isHomeTeam = homeTeamId != null
-              ? event.team.id === homeTeamId
-              : event.team.name.toLowerCase().includes(homeTeamName.toLowerCase()) ||
-                homeTeamName.toLowerCase().includes(event.team.name.toLowerCase());
-
-            const eventColor = getMatchEventColor(event.type, event.detail);
-            const isSubstitution = event.type === 'subst';
-            const isSynthetic = event._synthetic === true;
-            const minuteKnown = !isSynthetic || event._minuteKnown !== false;
-
-            return (
-              <View
-                key={`${event.time.elapsed}-${event.type}-${event.player?.id ?? index}`}
-                style={[
-                  styles.eventCard,
-                  isHomeTeam ? styles.eventHome : styles.eventAway,
-                ]}
-              >
-                <View style={styles.eventTime}>
-                  <Text style={styles.eventTimeText}>
-                    {minuteKnown ? `${event.time.elapsed}'` : '—'}
-                  </Text>
-                  {minuteKnown && !!event.time.extra && (
-                    <Text style={styles.eventExtraTime}>{`+${event.time.extra}'`}</Text>
-                  )}
-                </View>
-
-                <View style={[styles.eventIcon, { backgroundColor: `${eventColor}20` }]}>
-                  <MatchEventIcon type={event.type} detail={event.detail} size={20} />
-                </View>
-
-                <View style={styles.eventDetails}>
-                  {isSynthetic ? (
-                    <>
-                      <Text style={styles.eventPlayer}>
-                        {(t.matchDetails.goalFor || 'Goal for {team}').replace(
-                          '{team}',
-                          getTeamDisplayName(event.team.name, language),
-                        )}
-                      </Text>
-                      <Text style={styles.eventSyntheticTag}>
-                        {t.matchDetails.eventDetailsUnavailable || 'Details unavailable'}
-                      </Text>
-                    </>
-                  ) : isSubstitution ? (
-                    <>
-                      {!!event.assist?.name && (
-                        <View style={styles.subEventRow}>
-                          <Ionicons name="arrow-down" size={12} color="#ef4444" />
-                          <Text style={styles.eventPlayer}>{String(event.assist.name)}</Text>
-                        </View>
-                      )}
-                      {!!event.player?.name && (
-                        <View style={styles.subEventRow}>
-                          <Ionicons name="arrow-up" size={12} color="#22c55e" />
-                          <Text style={styles.eventPlayer}>{String(event.player.name)}</Text>
-                        </View>
-                      )}
-                      <Text style={styles.eventType}>{t.matchDetails.substitution}</Text>
-                    </>
-                  ) : (
-                    <>
-                      {!!event.player.name && <Text style={styles.eventPlayer}>{String(event.player.name)}</Text>}
-                      <Text style={styles.eventType}>
-                        {getLocalizedEventLabel(event.type, event.detail, language)}
-                      </Text>
-                      {!!event.assist?.name && event.type === 'Goal' && (
-                        <Text style={styles.eventAssist}>{t.matchDetails?.assist || 'Assist'}: {String(event.assist.name)}</Text>
-                      )}
-                    </>
-                  )}
-                </View>
-
-                <TeamBadge name={getTeamDisplayName(event.team.name, language)} logo={event.team.logo} size={30} color="transparent" />
-              </View>
-            );
-          })}
+          ) : (
+            <MatchEventsTimeline
+              events={sortedEvents}
+              language={language}
+              goalForLabel={t.matchDetails.goalFor || 'Goal for {team}'}
+              detailsUnavailableLabel={t.matchDetails.eventDetailsUnavailable || 'Details unavailable'}
+            />
+          )}
         </View>
       </ScrollView>
     );
@@ -3391,70 +3320,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   eventsContainer: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 20,
-    padding: 20,
-  },
-  eventCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#252525',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    gap: 12,
-  },
-  eventHome: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#A855F7',
-  },
-  eventAway: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#3b82f6',
-  },
-  eventTime: {
-    minWidth: 50,
-    alignItems: 'center',
-  },
-  eventTimeText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  eventExtraTime: {
-    color: '#888',
-    fontSize: 11,
-  },
-  eventIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  eventDetails: {
-    flex: 1,
-  },
-  eventPlayer: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  eventType: {
-    color: '#888',
-    fontSize: 12,
-    marginBottom: 2,
-  },
-  eventAssist: {
-    color: '#666',
-    fontSize: 11,
-    fontStyle: 'italic',
-  },
-  eventSyntheticTag: {
-    color: TEXT_MUTED,
-    fontSize: 11,
-    marginTop: 2,
+    marginTop: 4,
   },
   eventsFeedNotice: {
     flexDirection: 'row',
@@ -3473,12 +3339,6 @@ const styles = StyleSheet.create({
     color: TEXT_MUTED,
     fontSize: 12,
     lineHeight: 17,
-  },
-  subEventRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
   },
   substituteCardOut: {
     opacity: 0.55,
