@@ -69,10 +69,6 @@ const TONE_AWAY: Tone = {
   glow: 'rgba(139,92,246,0.46)',
   pill: ['#8B5CF6', '#513690'],
 };
-
-const VOTED_COLOR = '#22C55E';
-const VOTED_GLOW = 'rgba(34,197,94,0.42)';
-
 function formatVotes(value: number): string {
   return Math.max(0, Math.round(value)).toLocaleString('en-US');
 }
@@ -127,8 +123,8 @@ function VoteCard({
 }) {
   const cardStyle: ViewStyle = {
     backgroundColor: tone.bg,
-    borderColor: selected ? VOTED_COLOR : tone.border,
-    boxShadow: `inset 0px 0px 18px 0px ${selected ? VOTED_GLOW : tone.glow}`,
+    borderColor: tone.border,
+    boxShadow: `inset 0px 0px 18px 0px ${tone.glow}`,
   };
   return (
     <Pressable
@@ -137,17 +133,17 @@ function VoteCard({
       accessibilityRole="button"
       accessibilityLabel={name}
       accessibilityState={{ selected, disabled: locked }}
-      style={({ pressed }) => [
-        styles.card,
-        cardStyle,
-        locked && !selected && styles.cardDimmed,
-        pressed && styles.cardPressed,
-      ]}
+      style={({ pressed }) => [styles.card, cardStyle, pressed && styles.cardPressed]}
     >
       {selected ? (
-        <View style={[styles.checkBadge, rtl ? styles.checkBadgeLeft : styles.checkBadgeRight]}>
-          <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-        </View>
+        <LinearGradient
+          colors={tone.pill}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.checkBadge, rtl ? styles.checkBadgeLeft : styles.checkBadgeRight]}
+        >
+          <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+        </LinearGradient>
       ) : null}
       <View style={styles.cardTeam}>
         {media}
@@ -414,29 +410,27 @@ const styles = StyleSheet.create({
     gap: 12,
     overflow: 'hidden',
   },
-  cardDimmed: {
-    opacity: 0.5,
-  },
   cardPressed: {
     opacity: 0.85,
     transform: [{ scale: 0.97 }],
   },
   checkBadge: {
     position: 'absolute',
-    top: 8,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: VOTED_COLOR,
+    top: 7,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.85)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
   },
   checkBadgeRight: {
-    right: 8,
+    right: 7,
   },
   checkBadgeLeft: {
-    left: 8,
+    left: 7,
   },
   cardTeam: {
     alignItems: 'center',
