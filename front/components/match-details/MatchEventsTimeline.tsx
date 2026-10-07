@@ -16,6 +16,12 @@ const MINUTE_W = 40;
 const MINUTE_GAP = 8;
 const LINE_OFFSET = MINUTE_W + MINUTE_GAP + DOT / 2 - 0.5;
 
+// Names and labels mix Arabic and Latin scripts; without explicit isolation the
+// bidi algorithm reorders "label - team" and "in x out" unpredictably.
+const LRM = '\u200E';
+const RLM = '\u200F';
+const isolate = (s: string) => `\u2068${s}\u2069`;
+
 type Props = {
   events: FixtureEvent[];
   language: Language;
@@ -66,6 +72,7 @@ export function MatchEventsTimeline({
   const rtl = language === 'ar';
   const rowDirection = rtl ? 'row' : 'row-reverse';
   const textAlign = rtl ? 'right' : 'left';
+  const baseMark = rtl ? RLM : LRM;
   const lastIndex = events.length - 1;
 
   return (
@@ -85,14 +92,16 @@ export function MatchEventsTimeline({
           let title: string;
           let subtitle: string;
           if (isSynthetic) {
-            title = goalForLabel.replace('{team}', teamName);
+            title = goalForLabel.replace('{team}', isolate(teamName));
             subtitle = detailsUnavailableLabel;
           } else {
-            title = `${getLocalizedEventLabel(event.type, event.detail, language)} - ${teamName}`;
+            title = `${isolate(getLocalizedEventLabel(event.type, event.detail, language))} - ${isolate(teamName)}`;
             subtitle = event.type === 'subst'
-              ? [event.player?.name, event.assist?.name].filter(Boolean).join(' x ')
-              : String(event.player?.name ?? '');
+              ? [event.player?.name, event.assist?.name].filter(Boolean).map((n) => isolate(String(n))).join(' x ')
+              : isolate(String(event.player?.name ?? ''));
           }
+          title = `${baseMark}${title}`;
+          subtitle = subtitle ? `${baseMark}${subtitle}` : '';
 
           return (
             <View
