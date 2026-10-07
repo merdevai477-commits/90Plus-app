@@ -15,11 +15,12 @@ import { NotificationType } from './notification.service';
 // ─── XP Values Map ──────────────────────────────────────────────────────────
 
 /**
- * King of Predictions. An exact score is worth 5 IN TOTAL, not 2 + 5: the
- * resolver awards ONE of these actions per settled prediction, never both.
+ * King of the Game / King of Results: a correct prediction is worth ONE point
+ * in both modes — calling a home win, an away win, a draw or the exact
+ * scoreline all pay the same. A wrong prediction pays nothing.
  */
-const PREDICTION_XP_WINNER = 2;
-const PREDICTION_XP_EXACT = 5;
+const PREDICTION_XP_WINNER = 1;
+const PREDICTION_XP_EXACT = 1;
 
 export const XP_VALUES: Record<XpActionType, number> = {
   PROFILE_AVATAR: 50,

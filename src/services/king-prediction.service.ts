@@ -261,30 +261,43 @@ export async function getKingLeaderboard(params: {
       ...modeWhere(params.mode),
       ...(week ? { matchDate: { gte: week.start, lt: week.end } } : {}),
     },
-    select: { id: true, userId: true },
+    select: {
+      id: true,
+      userId: true,
+      apiMatchId: true,
+      predictedHomeScore: true,
+      predictedAwayScore: true,
+    },
   });
 
-  const xpByPrediction = new Map<string, number>();
+  // Rows settled before King of Results required the exact scoreline were
+  // marked correct for the right winner alone; only exact hits count here.
+  const finalScoreByMatch = new Map<number, { home: number | null; away: number | null }>();
   if (params.mode === 'exact' && predictions.length > 0) {
-    const txs = await prisma.xpTransaction.findMany({
-      where: {
-        idempotencyKey: { in: predictions.map((p) => `prediction:${p.id}`) },
-      },
-      select: { idempotencyKey: true, amount: true },
+    const fixtures = await prisma.cachedFixture.findMany({
+      where: { fixtureId: { in: [...new Set(predictions.map((p) => p.apiMatchId))] } },
+      select: { fixtureId: true, homeScore: true, awayScore: true },
     });
-    for (const tx of txs) {
-      if (tx.idempotencyKey) xpByPrediction.set(tx.idempotencyKey, tx.amount);
+    for (const f of fixtures) {
+      finalScoreByMatch.set(f.fixtureId, { home: f.homeScore, away: f.awayScore });
     }
   }
 
+  const points = params.mode === 'winner' ? WINNER_XP : EXACT_XP;
   const xpByUser = new Map<string, number>();
   for (const row of predictions) {
-    const xp =
-      params.mode === 'winner'
-        ? WINNER_XP
-        : (xpByPrediction.get(`prediction:${row.id}`) ?? WINNER_XP);
-    if (xp <= 0) continue;
-    xpByUser.set(row.userId, (xpByUser.get(row.userId) ?? 0) + xp);
+    if (params.mode === 'exact') {
+      const final = finalScoreByMatch.get(row.apiMatchId);
+      if (
+        final &&
+        final.home != null &&
+        final.away != null &&
+        (final.home !== row.predictedHomeScore || final.away !== row.predictedAwayScore)
+      ) {
+        continue;
+      }
+    }
+    xpByUser.set(row.userId, (xpByUser.get(row.userId) ?? 0) + points);
   }
 
   const ranked = [...xpByUser.entries()]

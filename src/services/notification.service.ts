@@ -682,7 +682,7 @@ export class NotificationService {
         userId: string,
         isCorrect: boolean,
         matchInfo: string,
-        coinsWon: number,
+        points: number,
         match?: {
             fixtureId?: number | string | null;
             homeTeam?: string | null;
@@ -711,8 +711,8 @@ export class NotificationService {
                 ? renderPushTemplate('predictionWinTitle', lang)
                 : renderPushTemplate('predictionLossTitle', lang);
             const message = isCorrect
-                ? `${renderPushTemplate('predictionWinBody', lang, { coins: coinsWon, match: matchInfo })}`
-                : `${renderPushTemplate('predictionLossBody', lang, { match: matchInfo })}`;
+                ? renderPushTemplate('predictionWinBody', lang, { points, match: matchInfo })
+                : renderPushTemplate('predictionLossBody', lang, { points: 0, match: matchInfo });
 
             const fixtureId = match?.fixtureId != null ? String(match.fixtureId) : '';
             const matchDate = match?.matchDate
@@ -730,7 +730,7 @@ export class NotificationService {
                     type: 'PREDICTION_RESULT',
                     isCorrect,
                     matchInfo,
-                    coinsWon,
+                    points,
                     // Always include — empty strings when unavailable so the
                     // mobile deep-link handler can decide whether to open
                     // match-details or fall back to /(tabs)/matches.

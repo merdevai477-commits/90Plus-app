@@ -588,7 +588,7 @@ const MatchRow = memo(function MatchRow({
           </Text>
           {predictionEntry.isCorrect === true ? (
             <Text style={styles.predResultWin}>
-              ✓ {t('predictions.correctPrediction')} (+10 XP)
+              ✓ {t('predictions.correctPrediction')} (+1 XP)
             </Text>
           ) : predictionEntry.isCorrect === false ? (
             <Text style={styles.predResultLoss}>

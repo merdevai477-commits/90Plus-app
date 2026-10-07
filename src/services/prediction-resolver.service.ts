@@ -11,35 +11,40 @@
 import prisma from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { NotificationService } from './notification.service';
-import { awardXp } from './xp.service';
+import { awardXp, XP_VALUES } from './xp.service';
 import { clearResponseCache } from '../middleware/responseCache.middleware';
 
 const CORRECT_PREDICTION_REWARD = 10; // coins for correct prediction
 
+type ScoredPrediction = {
+    predictionType: string;
+    predictedHomeScore: number | null;
+    predictedAwayScore: number | null;
+};
+
+function hasScoreline(prediction: ScoredPrediction): boolean {
+    return prediction.predictedHomeScore != null && prediction.predictedAwayScore != null;
+}
+
 /**
- * XP for a settled prediction — ONE of these, never both:
- *
- *   called the result .................. PREDICTION_WINNER  (+2 XP)
- *   called the exact scoreline ......... PREDICTION_EXACT   (+5 XP)
- *
- * An exact score is worth 5 IN TOTAL. The amounts live in xp.service.ts
- * (XP_VALUES) so King of Predictions and its group mode price the same thing
- * the same way.
- *
- * Every prediction row records the scoreline the user picked
- * (predictedHomeScore / predictedAwayScore); this used to award WINNER
- * unconditionally, so calling a 3-1 exactly paid the same as calling "home
- * win" — the exact-score reward existed in the XP table and was never
- * reachable from here.
+ * King of Results (a scoreline was picked) is won ONLY by the exact final
+ * score — 2-0 predicted on a 1-0 finish is a loss even though the winner is
+ * right. King of the Game (no scoreline) is won by calling home/draw/away.
  */
-function predictionXpAction(
-    prediction: { predictedHomeScore: number | null; predictedAwayScore: number | null },
+function isPredictionCorrect(
+    prediction: ScoredPrediction,
     homeScore: number,
     awayScore: number,
-): 'PREDICTION_EXACT' | 'PREDICTION_WINNER' {
-    const calledExactScore =
-        prediction.predictedHomeScore === homeScore && prediction.predictedAwayScore === awayScore;
-    return calledExactScore ? 'PREDICTION_EXACT' : 'PREDICTION_WINNER';
+    actualResult: 'home' | 'draw' | 'away',
+): boolean {
+    if (hasScoreline(prediction)) {
+        return prediction.predictedHomeScore === homeScore && prediction.predictedAwayScore === awayScore;
+    }
+    return prediction.predictionType === actualResult;
+}
+
+function predictionXpAction(prediction: ScoredPrediction): 'PREDICTION_EXACT' | 'PREDICTION_WINNER' {
+    return hasScoreline(prediction) ? 'PREDICTION_EXACT' : 'PREDICTION_WINNER';
 }
 
 export class PredictionResolverService {
@@ -92,8 +97,11 @@ export class PredictionResolverService {
             logger.info(`📊 Resolving ${predictions.length} predictions for match ${apiMatchId}`);
 
             // Process each prediction
+            let correctCount = 0;
             for (const prediction of predictions) {
-                const isCorrect = prediction.predictionType === actualResult;
+                const isCorrect = isPredictionCorrect(prediction, homeScore, awayScore, actualResult);
+                const xpAction = predictionXpAction(prediction);
+                const points = isCorrect ? XP_VALUES[xpAction] : 0;
 
                 // Only resolve once — parallel watchers may race on the same row
                 const resolved = await (prisma as any).prediction.updateMany({
@@ -108,6 +116,7 @@ export class PredictionResolverService {
                 if (resolved.count === 0) {
                     continue;
                 }
+                if (isCorrect) correctCount += 1;
 
                 // Award coins for correct prediction
                 if (isCorrect) {
@@ -129,7 +138,8 @@ export class PredictionResolverService {
                         }),
                     ]);
 
-                    // ✅ Award XP for correct prediction (daily cap 5 to prevent farming)
+                    // No daily cap: predictions are already limited per day, and
+                    // a cap would silently drop the point of a correct call.
                     // idempotencyKey ties the award to this prediction row so
                     // even if MatchWatcher + PredictionWatcher race on the
                     // same match, awardXp returns the cached result on the
@@ -137,8 +147,7 @@ export class PredictionResolverService {
                     try {
                         await awardXp({
                             userId: prediction.userId,
-                            action: predictionXpAction(prediction, homeScore, awayScore),
-                            dailyCap: 5,
+                            action: xpAction,
                             timezone: 'UTC',
                             idempotencyKey: `prediction:${prediction.id}`,
                             metadata: {
@@ -152,7 +161,7 @@ export class PredictionResolverService {
                         logger.warn(`⚠️ XP award failed for user ${prediction.userId} (non-fatal):`, xpErr?.message);
                     }
 
-                    logger.info(`💰 Awarded ${CORRECT_PREDICTION_REWARD} coins + XP to user ${prediction.userId} for correct prediction`);
+                    logger.info(`💰 Awarded ${CORRECT_PREDICTION_REWARD} coins + ${points} point to user ${prediction.userId} for correct prediction`);
                     
                     // ✅ Send push notification for correct prediction
                     try {
@@ -161,7 +170,7 @@ export class PredictionResolverService {
                             prediction.userId,
                             true, // isCorrect
                             matchInfo,
-                            CORRECT_PREDICTION_REWARD,
+                            points,
                             {
                                 fixtureId: apiMatchId,
                                 homeTeam: prediction.homeTeam,
@@ -208,7 +217,6 @@ export class PredictionResolverService {
                 }
             }
 
-            const correctCount = predictions.filter((p: any) => p.predictionType === actualResult).length;
             logger.info(`✅ Resolved ${predictions.length} predictions: ${correctCount} correct, ${predictions.length - correctCount} incorrect`);
 
             clearResponseCache('/predictions/stats').catch(() => {});
