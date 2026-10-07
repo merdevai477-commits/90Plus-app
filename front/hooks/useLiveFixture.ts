@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLiveFixtureStore } from '../src/store/liveFixtureStore';
 import type { LiveFixtureSnapshot } from '../src/store/liveFixtureStore.types';
 
@@ -44,15 +44,33 @@ export function useLiveFixture(
  */
 export function useRegisterLiveFixtures(fixtureIds: number[]): void {
   const idsKey = fixtureIds.slice().sort((a, b) => a - b).join(',');
+  const registeredRef = useRef<Set<number>>(new Set());
 
+  // Diff instead of unregister-all → register-all: ids that stay must never
+  // drop to zero interest, which aborts their in-flight polls and schedules eviction.
   useEffect(() => {
-    const ids = idsKey
-      ? idsKey.split(',').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n) && n > 0)
-      : [];
+    const next = new Set(
+      idsKey
+        ? idsKey.split(',').map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n) && n > 0)
+        : [],
+    );
+    const prev = registeredRef.current;
     const store = useLiveFixtureStore.getState();
-    ids.forEach((id) => store.registerInterest(id));
-    return () => {
-      ids.forEach((id) => useLiveFixtureStore.getState().unregisterInterest(id));
-    };
+    next.forEach((id) => {
+      if (!prev.has(id)) store.registerInterest(id);
+    });
+    prev.forEach((id) => {
+      if (!next.has(id)) store.unregisterInterest(id);
+    });
+    registeredRef.current = next;
   }, [idsKey]);
+
+  useEffect(
+    () => () => {
+      const s = useLiveFixtureStore.getState();
+      registeredRef.current.forEach((id) => s.unregisterInterest(id));
+      registeredRef.current = new Set();
+    },
+    [],
+  );
 }

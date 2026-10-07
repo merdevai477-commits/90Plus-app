@@ -20,6 +20,7 @@
 import React, { memo, useState, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation, Platform } from 'react-native';
 import { Image } from 'expo-image';
+import { useRecyclingState } from '@shopify/flash-list';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { CountryGroup, GroupedMatches } from '../../hooks/useMatchesData';
 import { Match } from './matchCardUtils';
@@ -73,12 +74,17 @@ interface CountryAccordionProps {
 const LeagueSection = memo(function LeagueSection({
   league,
   renderMatchCard,
-  onViewAll,
+  onViewAllLeague,
 }: {
   league: GroupedMatches;
   renderMatchCard: (match: Match, index: number) => React.ReactNode;
-  onViewAll?: () => void;
+  onViewAllLeague?: (leagueId: number, leagueName: string) => void;
 }) {
+  const onViewAll = useMemo(
+    () =>
+      onViewAllLeague ? () => onViewAllLeague(league.leagueId, league.leagueName) : undefined,
+    [onViewAllLeague, league.leagueId, league.leagueName],
+  );
   // Leagues start COLLAPSED — opening a country shouldn't paint a wall of
   // match cards. The user explicitly asked for this and it's also much
   // faster on first paint.
@@ -172,7 +178,9 @@ export const CountryAccordion = memo(function CountryAccordion({
   onViewAllLeague,
   defaultExpanded = false,
 }: CountryAccordionProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  // FlashList recycles cells: plain useState would carry another country's
+  // expanded state over and ignore defaultExpanded.
+  const [expanded, setExpanded] = useRecyclingState(defaultExpanded, [countryGroup.country]);
   const { language } = useTranslation();
   const localizedCountryName = getCountryDisplayName(countryGroup.country, language);
 
@@ -181,7 +189,7 @@ export const CountryAccordion = memo(function CountryAccordion({
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     }
     setExpanded(prev => !prev);
-  }, []);
+  }, [setExpanded]);
 
   // Sum is O(leagues) — cheap, no useMemo needed.
   let totalMatches = 0;
@@ -211,7 +219,7 @@ export const CountryAccordion = memo(function CountryAccordion({
               key={league.leagueId}
               league={league}
               renderMatchCard={renderMatchCard}
-              onViewAll={onViewAllLeague ? () => onViewAllLeague(league.leagueId, league.leagueName) : undefined}
+              onViewAllLeague={onViewAllLeague}
             />
           ))}
         </View>

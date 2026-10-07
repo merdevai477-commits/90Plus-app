@@ -53,6 +53,13 @@ class ResponseCache {
         return this.memoryCache.size;
     }
 
+    private isOversized(data: unknown): boolean {
+        const list = (data as { response?: unknown; data?: unknown } | null)?.response
+            ?? (data as { data?: unknown } | null)?.data;
+        // Cheap proxy (no stringify): large fixture arrays are the oversized case.
+        return Array.isArray(list) && list.length > 300;
+    }
+
     /**
      * Generate cache key from request.
      * When `sharedCache` is true the userId is omitted so a single entry
@@ -89,7 +96,8 @@ class ResponseCache {
         try {
             const cached = await redisCacheService.get<CacheEntry>(redisKey);
             if (cached) {
-                this.putMemory(key, cached);
+                // Same size guard as set(): huge calendars must not fill process RAM.
+                if (!this.isOversized(cached.data)) this.putMemory(key, cached);
                 return cached;
             }
         } catch (err) {
@@ -176,9 +184,15 @@ class ResponseCache {
     /**
      * Set cached response
      */
-    async set(req: Request, data: any, ttl?: number, sharedCache = false): Promise<string> {
+    async set(
+        req: Request,
+        data: any,
+        ttl?: number,
+        sharedCache = false,
+        precomputed?: { etag: string; bytes: number },
+    ): Promise<string> {
         const key = this.getCacheKey(req, sharedCache);
-        const etag = this.generateETag(data);
+        const etag = precomputed?.etag ?? this.generateETag(data);
         const entry: CacheEntry = {
             data,
             etag,
@@ -191,11 +205,13 @@ class ResponseCache {
         await redisCacheService.set(redisKey, entry, entry.ttl);
 
         // L1 only for modest payloads — huge calendars must not fill process RAM.
-        let approxBytes = 0;
-        try {
-            approxBytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
-        } catch {
-            approxBytes = this.MAX_ENTRY_BYTES + 1;
+        let approxBytes = precomputed?.bytes ?? 0;
+        if (!precomputed) {
+            try {
+                approxBytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
+            } catch {
+                approxBytes = this.MAX_ENTRY_BYTES + 1;
+            }
         }
         if (approxBytes <= this.MAX_ENTRY_BYTES) {
             this.putMemory(key, entry);
@@ -266,8 +282,21 @@ export function responseCacheMiddleware(options: {
     ttl?: number;
     skip?: (req: Request) => boolean;
     sharedCache?: boolean;
+    /**
+     * Cap on the max-age sent to clients. 0 → `no-cache` (device revalidates via
+     * ETag every time) for payloads with live data merged in.
+     */
+    clientMaxAgeSec?: number;
 } = {}) {
-    const { ttl, skip, sharedCache = false } = options;
+    const { ttl, skip, sharedCache = false, clientMaxAgeSec } = options;
+    const scope = sharedCache ? 'public' : 'private';
+
+    // Advertise only the time left on the server entry, never the full TTL.
+    const cacheControl = (entryTtlMs: number, ageMs: number): string => {
+        let seconds = Math.max(0, Math.floor((entryTtlMs - ageMs) / 1000));
+        if (clientMaxAgeSec != null) seconds = Math.min(seconds, clientMaxAgeSec);
+        return seconds === 0 ? `${scope}, no-cache` : `${scope}, max-age=${seconds}`;
+    };
 
     return async (req: Request, res: Response, next: NextFunction) => {
         // Only cache GET requests
@@ -297,8 +326,9 @@ export function responseCacheMiddleware(options: {
         if (cached) {
             // Check ETag
             const ifNoneMatch = req.headers['if-none-match'];
+            const age = Date.now() - (cached.timestamp || 0);
             if (ifNoneMatch === cached.etag || ifNoneMatch === `"${cached.etag}"` || ifNoneMatch === `W/"${cached.etag}"`) {
-                res.setHeader('Cache-Control', `${sharedCache ? 'public' : 'private'}, max-age=${Math.floor((cached.ttl || 0) / 1000)}`);
+                res.setHeader('Cache-Control', cacheControl(cached.ttl || 0, age));
                 res.status(304).end();
                 return;
             }
@@ -306,7 +336,7 @@ export function responseCacheMiddleware(options: {
             // Return cached data
             res.setHeader('ETag', `"${cached.etag}"`);
             res.setHeader('X-Cache', 'HIT');
-            res.setHeader('Cache-Control', `${sharedCache ? 'public' : 'private'}, max-age=${Math.floor((cached.ttl || 0) / 1000)}`);
+            res.setHeader('Cache-Control', cacheControl(cached.ttl || 0, age));
             return res.json(cached.data);
         }
 
@@ -325,7 +355,7 @@ export function responseCacheMiddleware(options: {
             if (filled) {
                 res.setHeader('ETag', `"${filled.etag}"`);
                 res.setHeader('X-Cache', 'HIT');
-                res.setHeader('Cache-Control', `private, max-age=${Math.floor((filled.ttl || 0) / 1000)}`);
+                res.setHeader('Cache-Control', cacheControl(filled.ttl || 0, Date.now() - (filled.timestamp || 0)));
                 return res.json(filled.data);
             }
             // If still not available (timeout), proceed normally.
@@ -343,9 +373,12 @@ export function responseCacheMiddleware(options: {
             //   { success: true, data: ... }     (predictions/legacy)
             const isStatusSuccess = body?.status === 'SUCCESS';
             const isSuccessFlag = body?.success === true;
+            // Degraded = fallback payload after an upstream/DB failure; sharing it
+            // would serve the outage to every user for the TTL.
             const shouldCache = res.statusCode >= 200 &&
                 res.statusCode < 300 &&
-                (isStatusSuccess || isSuccessFlag);
+                (isStatusSuccess || isSuccessFlag) &&
+                body?.degraded !== true;
 
             // Cap cache lifetime for empty payloads so a transient backend
             // outage (e.g. API quota exhausted → empty list) doesn't freeze
@@ -365,15 +398,23 @@ export function responseCacheMiddleware(options: {
             if (shouldCache) {
                 // P1-4: compute ETag + set headers BEFORE sending the body.
                 // Redis write stays async/non-blocking.
-                const etag = responseCache.generateETag(body);
+                // Serialize once for ETag + size instead of once per consumer.
+                let precomputed: { etag: string; bytes: number } | undefined;
+                try {
+                    const serialized = JSON.stringify(body);
+                    precomputed = {
+                        etag: crypto.createHash('md5').update(serialized).digest('hex'),
+                        bytes: Buffer.byteLength(serialized, 'utf8'),
+                    };
+                } catch {
+                    precomputed = undefined;
+                }
+                const etag = precomputed?.etag ?? responseCache.generateETag(body);
                 const maxAge = effectiveTtl ?? 5 * 60 * 1000;
                 res.setHeader('ETag', `"${etag}"`);
                 res.setHeader('X-Cache', isEmptyPayload ? 'MISS-EMPTY' : 'MISS');
-                res.setHeader(
-                    'Cache-Control',
-                    `${sharedCache ? 'public' : 'private'}, max-age=${Math.floor(maxAge / 1000)}`,
-                );
-                responseCache.set(req, body, effectiveTtl, sharedCache).catch(() => {
+                res.setHeader('Cache-Control', cacheControl(maxAge, 0));
+                responseCache.set(req, body, effectiveTtl, sharedCache, precomputed).catch(() => {
                     responseCache.failFill(req, new Error('CACHE_SET_FAILED'), sharedCache);
                 });
             } else {

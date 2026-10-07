@@ -60,22 +60,49 @@ export function mergeTodayCalendarWithLiveFeed(calendar: Match[], liveFeed: Matc
     if (existing && isFinishedCalendarRow(existing)) {
       continue;
     }
-    map.set(
-      liveRow.id,
-      existing
-        ? {
-            ...existing,
-            ...liveRow,
-            status: 'live',
-            score: liveRow.score,
-            minute: liveRow.minute ?? existing.minute,
-            elapsed: liveRow.elapsed ?? existing.elapsed,
-            extra: liveRow.extra ?? existing.extra,
-            statusShort: liveRow.statusShort ?? existing.statusShort,
-          }
-        : liveRow,
-    );
+    if (!existing) {
+      map.set(liveRow.id, liveRow);
+      continue;
+    }
+    const merged: Match = {
+      ...existing,
+      ...liveRow,
+      status: 'live',
+      score: liveRow.score,
+      minute: liveRow.minute ?? existing.minute,
+      elapsed: liveRow.elapsed ?? existing.elapsed,
+      extra: liveRow.extra ?? existing.extra,
+      statusShort: liveRow.statusShort ?? existing.statusShort,
+    };
+    // Keep the existing object when the tick changed nothing visible, so
+    // memoized rows / grouping don't rebuild on every live-feed poll.
+    map.set(liveRow.id, sameLiveState(existing, merged) ? existing : merged);
+  }
+
+  // Nothing changed → hand back the same array so downstream memos hold.
+  if (map.size === calendar.length) {
+    let identical = true;
+    for (const row of calendar) {
+      if (map.get(row.id) !== row) {
+        identical = false;
+        break;
+      }
+    }
+    if (identical) return calendar;
   }
 
   return Array.from(map.values());
+}
+
+function sameLiveState(a: Match, b: Match): boolean {
+  return (
+    a.status === b.status &&
+    a.statusShort === b.statusShort &&
+    a.score?.home === b.score?.home &&
+    a.score?.away === b.score?.away &&
+    a.minute === b.minute &&
+    a.elapsed === b.elapsed &&
+    a.extra === b.extra &&
+    a.startTimestamp === b.startTimestamp
+  );
 }

@@ -33,8 +33,6 @@ import {
   pickMatchesListInterestIds,
 } from '../utils/matchesListInterest';
 import {
-  groupMatchesByLeague,
-  groupMatchesByCountry,
   groupMatchesByCountryIncremental,
 } from '../utils/matchesGrouping';
 import { matchCardToApiFixture } from '../utils/matchCardToApiFixture';
@@ -56,6 +54,7 @@ export interface UseMatchesDataResult {
   error: string | null;
   isDataStale: boolean;
   refetch: () => Promise<void>;
+  refreshSoft: () => void;
   matchesCount: number;
   leaguesCount: number;
 }
@@ -86,12 +85,22 @@ const lastBackgroundFetch = new Map<string, number>();
 // Fix MEM-1: Evict oldest entry when cache exceeds this size
 const MAX_CACHE_ENTRIES = 10;
 
-const evictOldestIfNeeded = (map: Map<string, any>) => {
+const evictOldestIfNeeded = (map: Map<string, any>, incomingKey?: string) => {
+  if (incomingKey !== undefined && map.has(incomingKey)) {
+    // Re-insert so Map order tracks recency instead of first insertion.
+    map.delete(incomingKey);
+    return;
+  }
   if (map.size >= MAX_CACHE_ENTRIES) {
     // Map preserves insertion order — first key is oldest
     const oldestKey = map.keys().next().value;
     if (oldestKey !== undefined) map.delete(oldestKey);
   }
+};
+
+const rememberCalendar = (dateKey: string, data: Match[]) => {
+  evictOldestIfNeeded(memoryCache, dateKey);
+  memoryCache.set(dateKey, { data, timestamp: Date.now() });
 };
 
 // ✅ Throttle background refresh - track last background fetch per date.
@@ -102,8 +111,11 @@ const BACKGROUND_REFRESH_THROTTLE = LIVE_FIXTURE_CALENDAR_POLL_MS;
 const PREFETCH_THROTTLE_MS = 30_000;
 /** When calendar rows are overdue NS, force a fresh day fetch (throttled). */
 const STALE_CALENDAR_REFRESH_MS = 20_000;
+const STALE_CALENDAR_MAX_REPEATS = 2;
 let lastPrefetchAt = 0;
 let lastStaleCalendarRefreshAt = 0;
+let lastStaleCalendarKey = '';
+let staleCalendarRepeats = 0;
 
 function prefetchLiveMatchAssets(rows: Match[]): void {
   const live = rows.filter((m) => m.status === 'live');
@@ -236,7 +248,8 @@ export const useMatchesData = (
   const [error, setError] = useState<string | null>(null);
   // Fix ERR-3: track when background refresh fails so UI can show a stale indicator
   const [isDataStale, setIsDataStale] = useState<boolean>(false);
-  const isFetchingRef = useRef(false);
+  /** Date currently being fetched — a different date must never be skipped. */
+  const inFlightDateRef = useRef<string | null>(null);
   const calendarLenRef = useRef(0);
   /** Bumps on date change so stale async writers cannot overwrite the active calendar (C2). */
   const calendarGenRef = useRef(0);
@@ -318,29 +331,18 @@ export const useMatchesData = (
     }
   }, [pollIdsKey, calendarMatches, pauseBackgroundRefresh, isToday]);
   
-  // Stale-while-revalidate: show disk cache immediately when date changes
+  // On date change paint from memory, otherwise drop the previous day's rows so
+  // they never show under the new date. fetchData handles disk + network.
   useEffect(() => {
-    let cancelled = false;
     const generation = calendarGenRef.current;
     const memoryCached = memoryCache.get(dateString);
     if (memoryCached?.data?.length) {
       applyCalendarMatches(generation, memoryCached.data);
       setLoading(false);
     } else {
+      applyCalendarMatches(generation, []);
       setLoading(true);
     }
-
-    const cacheKey = getMatchesCacheKey(dateString);
-    cacheService.get<Match[]>(cacheKey, true).then((cached) => {
-      if (cancelled || !cached?.length) return;
-      if (!shouldApplyCalendarGeneration(generation, calendarGenRef.current)) return;
-      evictOldestIfNeeded(memoryCache);
-      memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
-      applyCalendarMatches(generation, cached);
-      setLoading(false);
-    }).catch(() => {});
-
-    return () => { cancelled = true; };
   }, [dateString, applyCalendarMatches]);
 
   // Prefetch today + yesterday in background for instant tab switches
@@ -355,16 +357,17 @@ export const useMatchesData = (
       if (memoryCache.has(key)) return;
       // fetchData already loads today — avoid a duplicate calendar+live round-trip.
       if (key === todayKey && dateString === todayKey) return;
-      const date = key === todayKey ? new Date() : yesterday;
-      const load =
-        key === todayKey
-          ? fetchTodayMatchesWithLiveFeed(date)
-          : fetchMatchesByDate(date);
+      if (key === yesterdayKey && dateString === yesterdayKey) return;
+      const isTodayKey = key === todayKey;
+      const date = isTodayKey ? new Date() : yesterday;
+      const load = isTodayKey ? fetchTodayMatchesWithLiveFeed(date) : fetchMatchesByDate(date);
       load.then((data) => {
         if (data.length > 0) {
-          evictOldestIfNeeded(memoryCache);
-          memoryCache.set(key, { data, timestamp: Date.now() });
-          cacheService.set(getMatchesCacheKey(key), data, key === todayKey ? MATCHES_CALENDAR_DISK_TTL_MS : MATCHES_PAST_DISK_TTL_MS).catch(() => {});
+          rememberCalendar(key, data);
+          // fetchMatchesByDate already persisted non-today calendars.
+          if (isTodayKey) {
+            cacheService.set(getMatchesCacheKey(key), data, MATCHES_CALENDAR_DISK_TTL_MS).catch(() => {});
+          }
         }
       }).catch(() => {});
     });
@@ -376,7 +379,6 @@ export const useMatchesData = (
   useEffect(() => {
     countryGroupsPrevRef.current = null;
   }, [dateString]);
-  const groupedMatches = useMemo(() => groupMatchesByLeague(matches), [matches]);
   const countryGroups = useMemo(() => {
     const next = groupMatchesByCountryIncremental(
       matches,
@@ -385,7 +387,11 @@ export const useMatchesData = (
     );
     countryGroupsPrevRef.current = next;
     return next;
-  }, [matches, overlayResult.changedIds, groupedMatches]);
+  }, [matches, overlayResult.changedIds]);
+  const groupedMatches = useMemo(
+    () => countryGroups.flatMap((cg) => cg.leagues),
+    [countryGroups],
+  );
 
   useEffect(() => {
     if (matches.length === 0 || language !== 'ar') return;
@@ -398,9 +404,13 @@ export const useMatchesData = (
 
   const fetchData = useCallback(
     async (forceRefresh = false, options?: { pull?: boolean }) => {
-      if (isFetchingRef.current && !forceRefresh) return;
-      isFetchingRef.current = true;
+      if (inFlightDateRef.current === dateString && !forceRefresh) return;
+      inFlightDateRef.current = dateString;
+      const release = () => {
+        if (inFlightDateRef.current === dateString) inFlightDateRef.current = null;
+      };
       const generation = calendarGenRef.current;
+      const isCurrent = () => shouldApplyCalendarGeneration(generation, calendarGenRef.current);
       const pull = options?.pull === true;
 
       setError(null);
@@ -408,34 +418,32 @@ export const useMatchesData = (
       try {
         const cacheKey = getMatchesCacheKey(dateString);
 
-        const persistCalendar = (data: Match[]) => {
-          evictOldestIfNeeded(memoryCache);
-          memoryCache.set(dateString, { data, timestamp: Date.now() });
-          const ttl = isPastDate
-            ? MATCHES_PAST_DISK_TTL_MS
-            : isToday
-              ? MATCHES_CALENDAR_DISK_TTL_MS
-              : 3 * 24 * 60 * 60 * 1000;
-          return cacheService.set(cacheKey, data, ttl);
+        // fetchMatchesByDate already persists non-today calendars to disk; only
+        // today's merged (calendar + live feed) rows need a second write.
+        const persistCalendar = async (data: Match[]) => {
+          rememberCalendar(dateString, data);
+          if (isToday) await cacheService.set(cacheKey, data, MATCHES_CALENDAR_DISK_TTL_MS);
+        };
+
+        const onLiveEarly = (liveFeed: Match[]) => {
+          if (!isCurrent()) return;
+          applyCalendarMatches(generation, (prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
+          setLoading(false);
+          setIsDataStale(false);
         };
 
         const refreshTodayInBackground = () => {
-          void fetchTodayMatchesWithLiveFeed(
-            selectedDate,
-            (liveFeed) => {
-              applyCalendarMatches(generation, (prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
-              setLoading(false);
-              setIsDataStale(false);
-            },
-            { fresh: true },
-          )
+          void fetchTodayMatchesWithLiveFeed(selectedDate, onLiveEarly, { fresh: true })
             .then((merged) => {
+              if (!isCurrent()) return;
               applyCalendarMatches(generation, merged);
               setIsDataStale(false);
               maybePrefetchMatchAssets(merged);
               return persistCalendar(merged);
             })
-            .catch(() => setIsDataStale(true));
+            .catch(() => {
+              if (isCurrent()) setIsDataStale(true);
+            });
         };
 
         // Try memory cache first (instant) — even if TTL elapsed, paint then refresh.
@@ -448,7 +456,7 @@ export const useMatchesData = (
             maybePrefetchMatchAssets(memoryCached.data);
 
             if (isPastDate) {
-              isFetchingRef.current = false;
+              release();
               return;
             }
 
@@ -457,7 +465,7 @@ export const useMatchesData = (
             } else {
               fetchDataInBackground(dateString, isToday, isPastDate);
             }
-            isFetchingRef.current = false;
+            release();
             return;
           }
         }
@@ -470,17 +478,16 @@ export const useMatchesData = (
               cachedCount: cached.length,
             });
             if (!shouldApplyCalendarGeneration(generation, calendarGenRef.current)) {
-              isFetchingRef.current = false;
+              release();
               return;
             }
-            evictOldestIfNeeded(memoryCache);
-            memoryCache.set(dateString, { data: cached, timestamp: Date.now() });
+            rememberCalendar(dateString, cached);
             applyCalendarMatches(generation, cached);
             setLoading(false);
             maybePrefetchMatchAssets(cached);
 
             if (isPastDate) {
-              isFetchingRef.current = false;
+              release();
               return;
             }
 
@@ -489,7 +496,7 @@ export const useMatchesData = (
             } else {
               fetchDataInBackground(dateString, isToday, isPastDate);
             }
-            isFetchingRef.current = false;
+            release();
             return;
           }
         }
@@ -504,16 +511,7 @@ export const useMatchesData = (
         if (isToday) {
           fetchedMatches = await fetchTodayMatchesWithLiveFeed(
             selectedDate,
-            (liveFeed) => {
-              applyCalendarMatches(generation, (prev) => mergeTodayCalendarWithLiveFeed(prev, liveFeed));
-              setLoading(false);
-              setIsDataStale(false);
-            },
-            pull ? { pull: true } : undefined,
-          );
-        } else if (!isPastDate) {
-          fetchedMatches = await fetchMatchesByDate(
-            selectedDate,
+            onLiveEarly,
             pull ? { pull: true } : undefined,
           );
         } else {
@@ -523,6 +521,7 @@ export const useMatchesData = (
           );
         }
 
+        if (!isCurrent()) return;
         applyCalendarMatches(generation, fetchedMatches);
         setIsDataStale(false);
         maybePrefetchMatchAssets(fetchedMatches);
@@ -565,49 +564,13 @@ export const useMatchesData = (
           logger.error('Error fetching matches data:', err);
         }
       } finally {
-        setLoading(false);
-        isFetchingRef.current = false;
+        // A superseded date must not clear the spinner of the date now loading.
+        if (isCurrent()) setLoading(false);
+        release();
       }
     },
     [dateString, selectedDate, isToday, isPastDate, applyCalendarMatches]
   );
-
-  // Preload upcoming days in background
-  const preloadUpcomingDays = useCallback(async (days: number) => {
-    try {
-      const startDate = new Date();
-      startDate.setHours(0, 0, 0, 0);
-      
-      const preloadPromises: Promise<void>[] = [];
-      for (let i = 1; i <= days; i++) {
-        const futureDate = new Date(startDate);
-        futureDate.setDate(startDate.getDate() + i);
-        const futureDateStr = formatLocalDateKey(futureDate);
-        
-        // Check if already cached
-        const cached = memoryCache.get(futureDateStr);
-        if (!cached) {
-          preloadPromises.push(
-            fetchMatchesByDate(futureDate).then(matches => {
-              if (matches.length > 0) {
-                evictOldestIfNeeded(memoryCache);
-                memoryCache.set(futureDateStr, { data: matches, timestamp: Date.now() });
-                const cacheKey = getMatchesCacheKey(futureDateStr);
-                cacheService.set(cacheKey, matches, 3 * 24 * 60 * 60 * 1000); // 3 days cache
-              }
-            }).catch(err => {
-              logger.warn(`Failed to preload matches for ${futureDateStr}:`, err);
-            })
-          );
-        }
-      }
-      
-      // Execute in background (don't await)
-      Promise.all(preloadPromises).catch(() => {});
-    } catch (err) {
-      logger.warn('Preload upcoming days failed:', err);
-    }
-  }, []);
 
   // Background refresh function (non-blocking)
   const fetchDataInBackground = useCallback(async (
@@ -644,12 +607,12 @@ export const useMatchesData = (
       applyCalendarMatches(generation, fetchedMatches);
       setIsDataStale(false); // background refresh succeeded
 
-      const cacheTTL = isTodayFlag ? MATCHES_CALENDAR_DISK_TTL_MS : 3 * 24 * 60 * 60 * 1000;
-      const cacheKey = getMatchesCacheKey(dateStr);
-      evictOldestIfNeeded(memoryCache);
-      memoryCache.set(dateStr, { data: fetchedMatches, timestamp: Date.now() });
+      rememberCalendar(dateStr, fetchedMatches);
       evictOldestIfNeeded(lastBackgroundFetch);
-      await cacheService.set(cacheKey, fetchedMatches, cacheTTL);
+      // Non-today calendars were already persisted by fetchMatchesByDate.
+      if (isTodayFlag) {
+        await cacheService.set(getMatchesCacheKey(dateStr), fetchedMatches, MATCHES_CALENDAR_DISK_TTL_MS);
+      }
     } catch (err) {
       if (isAbortError(err)) {
         logger.debug('[useMatchesData] Background refresh aborted');
@@ -677,6 +640,17 @@ export const useMatchesData = (
 
   // Calendar refresh only — live scores via useLiveFixtureSync + Zustand store.
   // Pause while backgrounded; resume + silent refetch on foreground.
+  // Coming back from a paused state (screen refocused / WC tab left): catch up
+  // once instead of waiting a full poll period. Throttled inside.
+  const wasPausedRef = useRef(pauseBackgroundRefresh);
+  useEffect(() => {
+    const wasPaused = wasPausedRef.current;
+    wasPausedRef.current = pauseBackgroundRefresh;
+    if (wasPaused && !pauseBackgroundRefresh && !isPastDate) {
+      fetchDataInBackground(dateString, isToday, isPastDate).catch(() => {});
+    }
+  }, [pauseBackgroundRefresh, dateString, isToday, isPastDate, fetchDataInBackground]);
+
   useEffect(() => {
     if (pauseBackgroundRefresh || isPastDate) return;
     const intervalMs = isToday ? LIVE_FIXTURE_CALENDAR_POLL_MS : 5 * 60_000;
@@ -736,10 +710,22 @@ export const useMatchesData = (
   // Calendar still shows UPCOMING after kickoff+FT window — bypass day cache.
   useEffect(() => {
     if (pauseBackgroundRefresh || !isToday || isPastDate) return;
-    const hasStale = calendarMatches.some((m) => isStaleUpcomingOnCalendar(m));
-    if (!hasStale) return;
+    const staleKey = calendarMatches
+      .filter((m) => isStaleUpcomingOnCalendar(m))
+      .map((m) => m.id)
+      .join(',');
+    if (!staleKey) return;
     const now = Date.now();
     if (now - lastStaleCalendarRefreshAt < STALE_CALENDAR_REFRESH_MS) return;
+    // Same overdue rows after repeated refreshes → the provider has nothing new;
+    // per-fixture polling still covers them, so stop re-downloading the day.
+    if (staleKey === lastStaleCalendarKey) {
+      if (staleCalendarRepeats >= STALE_CALENDAR_MAX_REPEATS) return;
+      staleCalendarRepeats += 1;
+    } else {
+      lastStaleCalendarKey = staleKey;
+      staleCalendarRepeats = 1;
+    }
     lastStaleCalendarRefreshAt = now;
     const generation = calendarGenRef.current;
     void fetchTodayMatchesWithLiveFeed(selectedDate, (liveFeed) => {
@@ -749,8 +735,7 @@ export const useMatchesData = (
       .then((merged) => {
         applyCalendarMatches(generation, merged);
         setIsDataStale(false);
-        evictOldestIfNeeded(memoryCache);
-        memoryCache.set(dateString, { data: merged, timestamp: Date.now() });
+        rememberCalendar(dateString, merged);
       })
       .catch(() => undefined);
   }, [calendarMatches, pauseBackgroundRefresh, isToday, isPastDate, selectedDate, dateString, applyCalendarMatches]);
@@ -758,6 +743,11 @@ export const useMatchesData = (
   const refetch = useCallback(async () => {
     await fetchData(true, { pull: true });
   }, [fetchData]);
+
+  /** Throttled cache-friendly refresh (no server pull) — for tab switches. */
+  const refreshSoft = useCallback(() => {
+    void fetchDataInBackground(dateString, isToday, isPastDate).catch(() => {});
+  }, [fetchDataInBackground, dateString, isToday, isPastDate]);
 
   return {
     matches,
@@ -767,6 +757,7 @@ export const useMatchesData = (
     error,
     isDataStale,
     refetch,
+    refreshSoft,
     matchesCount,
     leaguesCount,
   };

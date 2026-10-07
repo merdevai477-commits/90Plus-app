@@ -54,6 +54,14 @@ const memoryStore = new Map<string, { data: any; timestamp: number; ttl: number 
 const MEMORY_FIRST_KEYS = new Set<string>(['reels_feed']);
 
 /**
+ * Storage key → write timestamp. Lets LRU eviction sort without re-reading and
+ * JSON.parse-ing every entry (day calendars are ~200KB each) on the JS thread.
+ */
+const writeTimestampIndex = new Map<string, number>();
+const EVICTION_MIN_INTERVAL_MS = 60_000;
+let lastEvictionAt = 0;
+
+/**
  * Cache entry structure with timestamp and TTL support
  */
 export interface CacheEntry<T> {
@@ -235,6 +243,7 @@ class CacheService {
 
         const slim: SlimCacheEntry = { ids, timestamp: now, ttl, meta };
         await AsyncStorage.setItem(cacheKey, JSON.stringify(slim));
+        writeTimestampIndex.set(cacheKey, now);
         await this.evictIfNeeded();
       } catch (error: any) {
         // Storage errors are non-critical — data is already in memory
@@ -254,8 +263,8 @@ class CacheService {
       };
 
       await AsyncStorage.setItem(cacheKey, JSON.stringify(entry));
-      
-      // Check if we need to evict old entries
+      writeTimestampIndex.set(cacheKey, now);
+
       await this.evictIfNeeded();
     } catch (error: any) {
       // ✅ FIX: Define cacheKey here for retry
@@ -480,6 +489,12 @@ class CacheService {
    * Requirement 4.4: Remove oldest entries first when cache exceeds limits
    */
   private async evictIfNeeded(maxEntries: number = MAX_CACHE_ENTRIES): Promise<void> {
+    // Routine writes evict at most once a minute; the storage-full paths pass a
+    // smaller cap and must run immediately.
+    const routine = maxEntries === MAX_CACHE_ENTRIES;
+    const now = Date.now();
+    if (routine && now - lastEvictionAt < EVICTION_MIN_INTERVAL_MS) return;
+    if (routine) lastEvictionAt = now;
     try {
       const allKeys = await AsyncStorage.getAllKeys();
       const cacheKeys = allKeys.filter(key => key.startsWith(CACHE_PREFIX));
@@ -488,25 +503,29 @@ class CacheService {
         return; // No eviction needed
       }
 
-      // Get all cache entries with their timestamps
       const entriesWithTimestamp: Array<{ key: string; timestamp: number }> = [];
-      
+      const unindexed: string[] = [];
       for (const cacheKey of cacheKeys) {
-        try {
-          const raw = await AsyncStorage.getItem(cacheKey);
-          if (raw) {
-            const entry: CacheEntry<unknown> = JSON.parse(raw);
-            entriesWithTimestamp.push({
-              key: cacheKey,
-              timestamp: entry.timestamp,
-            });
+        const ts = writeTimestampIndex.get(cacheKey);
+        if (ts != null) entriesWithTimestamp.push({ key: cacheKey, timestamp: ts });
+        else unindexed.push(cacheKey);
+      }
+
+      // Entries written in a previous session: read once, then remember.
+      if (unindexed.length > 0) {
+        const pairs = await AsyncStorage.multiGet(unindexed);
+        for (const [cacheKey, raw] of pairs) {
+          let timestamp = 0;
+          try {
+            if (raw) {
+              const parsed = JSON.parse(raw) as { timestamp?: number };
+              timestamp = typeof parsed.timestamp === 'number' ? parsed.timestamp : 0;
+            }
+          } catch {
+            timestamp = 0;
           }
-        } catch {
-          // If we can't parse the entry, mark it for removal with oldest timestamp
-          entriesWithTimestamp.push({
-            key: cacheKey,
-            timestamp: 0,
-          });
+          writeTimestampIndex.set(cacheKey, timestamp);
+          entriesWithTimestamp.push({ key: cacheKey, timestamp });
         }
       }
 
@@ -527,6 +546,7 @@ class CacheService {
           .map(entry => entry.key);
         
         await AsyncStorage.multiRemove(keysToRemove);
+        for (const k of keysToRemove) writeTimestampIndex.delete(k);
         console.log(`[CacheService] Evicted ${keysToRemove.length} oldest cache entries`);
       }
     } catch (error) {

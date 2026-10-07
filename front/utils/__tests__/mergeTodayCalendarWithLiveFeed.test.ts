@@ -98,6 +98,31 @@ describe('mergeTodayCalendarWithLiveFeed', () => {
     expect(merged[0].statusShort).toBe('FT');
   });
 
+  it('returns the same calendar array when the live tick changes nothing', () => {
+    const calendar = [
+      makeMatch({ id: '1', status: 'live', statusShort: '1H', elapsed: 30, minute: "30'", score: { home: 1, away: 0 } }),
+      makeMatch({ id: '2', status: 'upcoming' }),
+    ];
+    const liveFeed = [
+      makeMatch({ id: '1', status: 'live', statusShort: '1H', elapsed: 30, minute: "30'", score: { home: 1, away: 0 } }),
+    ];
+    expect(mergeTodayCalendarWithLiveFeed(calendar, liveFeed)).toBe(calendar);
+  });
+
+  it('replaces only the row whose score changed', () => {
+    const calendar = [
+      makeMatch({ id: '1', status: 'live', statusShort: '1H', elapsed: 30, score: { home: 0, away: 0 } }),
+      makeMatch({ id: '2', status: 'upcoming' }),
+    ];
+    const liveFeed = [
+      makeMatch({ id: '1', status: 'live', statusShort: '1H', elapsed: 31, score: { home: 1, away: 0 } }),
+    ];
+    const merged = mergeTodayCalendarWithLiveFeed(calendar, liveFeed);
+    expect(merged).not.toBe(calendar);
+    expect(merged[0].score.home).toBe(1);
+    expect(merged[1]).toBe(calendar[1]);
+  });
+
   it('keeps a 90+7 stoppage-time row live when the calendar is still live', () => {
     const calendar = [
       makeMatch({

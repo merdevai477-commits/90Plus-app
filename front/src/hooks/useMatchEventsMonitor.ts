@@ -26,7 +26,8 @@ export const useMatchEventsMonitor = () => {
             }
         }
         for (const id of liveFixtureIds) {
-            store.registerInterest(id);
+            // registerInterest is ref-counted — only add ids not already held.
+            if (!prev.includes(id)) store.registerInterest(id);
         }
         registeredFavoritesRef.current = liveFixtureIds;
     };
@@ -41,8 +42,6 @@ export const useMatchEventsMonitor = () => {
             }
 
             const liveFixtureIds = await MatchEventMonitor.getLiveFavoritedFixtures(favoritedIds);
-
-            await MatchEventMonitor.monitorMatches(liveFixtureIds);
             syncFavoriteInterest(liveFixtureIds);
 
             if (liveFixtureIds.length > 0 && !websocketClient.isConnected()) {

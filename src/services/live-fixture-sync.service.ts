@@ -19,8 +19,10 @@ import {
     writeLiveFixturesSnapshot,
     writeTerminalFixtureSnapshot,
     readLiveFixturesList,
+    readTerminalFixturesForIds,
     isNsNearKickoff,
 } from './live-fixture-cache.service';
+import { isNative365FixtureId } from '../utils/native-365-fixture-id';
 import LiveMatchIngestorService from './live-match-ingestor.service';
 import {
     filterWorldCupFixtures,
@@ -166,7 +168,12 @@ class LiveFixtureSyncService {
     }
 
     private async verifyFinishedBatch(fixtureIds: number[]): Promise<void> {
-        const unique = [...new Set(fixtureIds)].filter((id) => id > 0 && !this.finishingInFlight.has(id));
+        const candidates = [...new Set(fixtureIds)].filter((id) => id > 0 && !this.finishingInFlight.has(id));
+        // 365-native ids don't exist on API-Football: querying them only burns the
+        // daily quota and never confirms FT. The 365 writer already tombstones them.
+        const native = candidates.filter((id) => isNative365FixtureId(id));
+        const unique = candidates.filter((id) => !isNative365FixtureId(id));
+        if (native.length > 0) await this.finalizeNative365Drops(native);
         if (unique.length === 0) return;
 
         for (let i = 0; i < unique.length; i += 20) {
@@ -201,6 +208,47 @@ class LiveFixtureSyncService {
                 }
             } catch (err) {
                 logger.debug(`Could not verify finished batch (${chunk.length} ids):`, err);
+            }
+        }
+    }
+
+    /**
+     * Push full-time for 365-native fixtures that left the live set, from the
+     * terminal snapshot the 365 writer stored — clients otherwise keep "live"
+     * until their next list refetch.
+     */
+    private async finalizeNative365Drops(fixtureIds: number[]): Promise<void> {
+        try {
+            const terminal = await readTerminalFixturesForIds(fixtureIds);
+            const dateKeys = new Set<string>();
+            const { calendarDateFromKickoff } = await import('../utils/calendar-day-bounds.util');
+            for (const fixture of terminal) {
+                const id = fixture?.fixture?.id;
+                const status = fixture?.fixture?.status?.short ?? '';
+                if (id == null || !FINISHED_STATUSES_SET.has(status)) continue;
+                this.broadcastMatchUpdate(
+                    id,
+                    fixture.goals?.home ?? 0,
+                    fixture.goals?.away ?? 0,
+                    status,
+                    fixture.fixture?.status?.elapsed ?? null,
+                );
+                const key = calendarDateFromKickoff(fixture.fixture?.date ?? null);
+                if (key) dateKeys.add(key);
+            }
+            if (dateKeys.size > 0) {
+                const { footballDataCacheService } = await import('./football-data-cache.service');
+                for (const key of dateKeys) {
+                    await footballDataCacheService.invalidateMatchesByDateCache(key, 'LIVE→FT');
+                }
+            }
+        } catch (err) {
+            logger.debug('[LiveFixtureSync] native 365 finalize failed:', err);
+        } finally {
+            for (const id of fixtureIds) {
+                this.lastSnapshots.delete(id);
+                this.warmedLiveIds.delete(id);
+                this.lastEventPushAt.delete(id);
             }
         }
     }

@@ -22,6 +22,13 @@ const SHARED_CACHE_8S   = responseCacheMiddleware({ ttl: 8   * 1000, sharedCache
 const SHARED_CACHE_5MIN = responseCacheMiddleware({ ttl: 5   * 60 * 1000, sharedCache: true });
 const SHARED_CACHE_1H   = responseCacheMiddleware({ ttl: 60  * 60 * 1000, sharedCache: true });
 const SHARED_CACHE_24H  = responseCacheMiddleware({ ttl: 24  * 60 * 60 * 1000, sharedCache: true });
+// Today's day list has live scores merged in: keep the shared entry short and make
+// devices revalidate (cheap 304 via ETag) so the list never trails the websocket.
+const MATCHES_TODAY_CACHE = responseCacheMiddleware({
+  ttl: 10 * 1000,
+  sharedCache: true,
+  clientMaxAgeSec: 0,
+});
 
 const router = Router();
 
@@ -111,14 +118,14 @@ router.get('/fixtures/optimized', SHARED_CACHE_8S, FootballController.getOptimiz
 // These endpoints use PostgreSQL for permanent storage
 // ============================================
 
-// GET /api/football/cached/matches/:date — TTL by date (today 60s; any UTC offset −12..+14)
+// GET /api/football/cached/matches/:date — TTL by date (today 10s; any UTC offset −12..+14)
 router.get('/cached/matches/:date', (req, res, next) => {
   const dateParam = req.params.date as string;
   if (isDatePastInAllOffsets(dateParam)) {
     return SHARED_CACHE_24H(req, res, next);
   }
   if (isDateTodayInAnyOffset(dateParam)) {
-    return SHARED_CACHE_60S(req, res, next);
+    return MATCHES_TODAY_CACHE(req, res, next);
   }
   return SHARED_CACHE_5MIN(req, res, next);
 }, FootballController.getCachedMatchesByDate);

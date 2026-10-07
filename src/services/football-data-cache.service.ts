@@ -756,13 +756,26 @@ class FootballDataCacheService {
             const todayKey = calendarTodayKey();
             const isPastDate = dateString < todayKey;
             const isToday = dateString === todayKey;
+            // Late kickoffs are still running after Cairo midnight: yesterday stays
+            // "hot" (live overlay + short TTL) instead of freezing for 24h.
+            const isYesterday = dateString === offsetCalendarDateKey(todayKey, -1);
             const cacheKey = `by_date_${dateString}`;
-            const responseTtl = isPastDate
-                ? this.TTL.MATCHES_BY_DATE_PAST
-                : isToday
-                    ? this.TTL.MATCHES_BY_DATE_TODAY
+            const responseTtl = isToday || isYesterday
+                ? this.TTL.MATCHES_BY_DATE_TODAY
+                : isPastDate
+                    ? this.TTL.MATCHES_BY_DATE_PAST
                     : this.TTL.MATCHES_BY_DATE_FUTURE;
             const skipLiveOverlayCache = options?.bypassLocalCache === true;
+            const withLive = async (
+                rows: any[],
+                mergeOptions?: { skipLiveOverlayCache?: boolean },
+            ): Promise<any[]> => {
+                if (isToday) return this.mergeCalendarWithLiveSources(rows, mergeOptions);
+                if (!isYesterday || rows.length === 0) return rows;
+                // The overlay unions in every live fixture; keep only this day's rows.
+                const merged = await this.mergeCalendarWithLiveSources(rows, mergeOptions);
+                return this.filterFixturesToCalendarDay(merged, dateString);
+            };
 
             if (!skipLiveOverlayCache) {
                 const localData = this.tryLocalMatchesByDate(
@@ -774,7 +787,7 @@ class FootballDataCacheService {
                 );
                 if (localData) {
                     const scoped = this.filterFixturesToCalendarDay(localData, dateString);
-                    return isToday ? this.mergeCalendarWithLiveSources(scoped) : scoped;
+                    return withLive(scoped);
                 }
             } else if (isToday) {
                 const localHit = this.matchesByDateLocal.get(dateString);
@@ -789,9 +802,7 @@ class FootballDataCacheService {
                 this.storeLocalMatchesByDate(dateString, cached, responseTtl);
                 logger.debug(`📦 [${dateString}] ${cached.length} matches from shared cache`);
                 const scoped = this.filterFixturesToCalendarDay(cached, dateString);
-                return isToday
-                    ? this.mergeCalendarWithLiveSources(scoped, { skipLiveOverlayCache })
-                    : scoped;
+                return withLive(scoped, { skipLiveOverlayCache });
             }
 
             let fromDb = await this.loadMatchesFromDbForDate(
@@ -815,7 +826,7 @@ class FootballDataCacheService {
                     return merged;
                 }
                 logger.debug(`📦 [${dateString}] ${fromDb.length} matches from DB (calendar cache)`);
-                return fromDb;
+                return withLive(fromDb, { skipLiveOverlayCache });
             }
 
             // Today with empty DB: try 365 first, then optional API refresh in background.
@@ -1139,9 +1150,18 @@ class FootballDataCacheService {
         if (dbMatches.length === 0) return [];
 
         const fromDb = dbMatches.map((m) => matchCacheService.convertDbMatchToApiFormat(m));
-        void matchCacheService.setInMemoryCache(cacheKey, fromDb, responseTtl);
-        this.storeLocalMatchesByDate(dateString, fromDb, responseTtl);
+        const ttl = this.capTtlForInPlayRows(responseTtl, fromDb);
+        void matchCacheService.setInMemoryCache(cacheKey, fromDb, ttl);
+        this.storeLocalMatchesByDate(dateString, fromDb, ttl);
         return fromDb;
+    }
+
+    /** A day snapshot that still has in-play rows must not be pinned for the 24h past TTL. */
+    private capTtlForInPlayRows(responseTtl: number, rows: any[]): number {
+        if (responseTtl <= this.TTL.MATCHES_BY_DATE_TODAY) return responseTtl;
+        const liveLike = new Set<string>(LIVE_STATUSES);
+        const hasInPlay = rows.some((row) => liveLike.has(row?.fixture?.status?.short ?? ''));
+        return hasInPlay ? this.TTL.MATCHES_BY_DATE_TODAY : responseTtl;
     }
 
     private async isTodayApiFresh(dateString: string): Promise<boolean> {
@@ -1198,8 +1218,9 @@ class FootballDataCacheService {
                 });
             }
 
-            void matchCacheService.setInMemoryCache(cacheKey, apiMatches, responseTtl);
-            this.storeLocalMatchesByDate(dateString, apiMatches, responseTtl);
+            const ttl = this.capTtlForInPlayRows(responseTtl, apiMatches);
+            void matchCacheService.setInMemoryCache(cacheKey, apiMatches, ttl);
+            this.storeLocalMatchesByDate(dateString, apiMatches, ttl);
             if (mergeLive) {
                 await this.markTodayApiFetched(dateString);
             }

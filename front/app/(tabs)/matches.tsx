@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react';
+import { useStableCallback } from '../../utils/performance';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions, Animated, FlatList, InteractionManager, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,6 +8,7 @@ import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe
 import { Bell, ChevronDown, Calendar, Search, X, ChevronLeft, ChevronRight, CalendarCheck2, Lock } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useTeamOnboardingGate } from '../../hooks/useTeamOnboardingGate';
 import { FlashList } from '@shopify/flash-list';
@@ -1084,9 +1086,10 @@ export default function MatchesHubScreenV2() {
     if (typeof fn === 'function') await fn();
   }, []);
 
+  // useFavoritesFeed already refreshes when the bell set / readiness changes.
   useEffect(() => {
     if (filter === 'Favorite') void refreshNotified();
-  }, [filter, refreshNotified, subscribedIdsKey, subscriptionsReady]);
+  }, [filter, refreshNotified]);
 
   const wcTabActive = filter === 'WorldCup' && worldCupEnabled;
   // Fetch WC fixtures only when a WC-related tab is active (not on every mount).
@@ -1112,7 +1115,7 @@ export default function MatchesHubScreenV2() {
     interestSyncTimerRef.current = setTimeout(() => {
       interestSyncTimerRef.current = null;
       setInterestRevision((r) => r + 1);
-    }, 100);
+    }, 250);
   }, []);
 
   const handleFixtureVisibility = useCallback(
@@ -1138,11 +1141,15 @@ export default function MatchesHubScreenV2() {
     };
   }, []);
 
+  // freezeOnBlur only stops rendering — timers keep running, so pause polling
+  // and live interest explicitly while another screen (e.g. match details) is up.
+  const isFocused = useIsFocused();
+
   // Real matches data from backend — pause polling/WS when WC hook owns live updates
-  const { countryGroups, matches, loading, error, isDataStale, refetch } = useMatchesData(
+  const { countryGroups, matches, loading, error, isDataStale, refetch, refreshSoft } = useMatchesData(
     selectedDate,
     {
-      pauseBackgroundRefresh: wcTabActive,
+      pauseBackgroundRefresh: wcTabActive || !isFocused,
       visibleFixtureIds,
       interestRevision,
     },
@@ -1273,7 +1280,10 @@ export default function MatchesHubScreenV2() {
           if (cancelled) return;
           setSubscribedFixtures(new Set(Array.from(ids).map((n) => String(n))));
         } catch {
-          // non-fatal
+          // Server list unavailable: trust local favorites instead of an empty
+          // set, which would make useFavoritesFeed prune every stored match.
+          const local = await MatchFavoritesStorage.getActiveMatches().catch(() => []);
+          if (!cancelled) setSubscribedFixtures(new Set(local.map((m) => String(m.id))));
         } finally {
           if (!cancelled) setSubscriptionsReady(true);
         }
@@ -1311,16 +1321,15 @@ export default function MatchesHubScreenV2() {
       setShowWorldCupLocked(true);
       return;
     }
-    if (f === 'Live') {
-      setSelectedDate(startOfLocalDay());
-      void refetch();
-    }
-    if (f === 'Finished') {
-      setSelectedDate(startOfLocalDay());
-      void refetch();
+    if (f === 'Live' || f === 'Finished') {
+      const today = startOfLocalDay();
+      // A new date triggers its own fetch; same day only needs a throttled
+      // refresh (keeps the Date identity so date-keyed hooks don't refetch).
+      if (selectedDate.getTime() !== today.getTime()) setSelectedDate(today);
+      else refreshSoft();
     }
     setFilter(f);
-  }, [worldCupEnabled, worldCupLocked, refetch]);
+  }, [worldCupEnabled, worldCupLocked, selectedDate, refreshSoft]);
 
   const handleCalendarDayPress = useCallback((date: Date) => {
     const next = new Date(date);
@@ -1376,27 +1385,50 @@ export default function MatchesHubScreenV2() {
   // Country → League hierarchy after filtering. Drops empty leagues and
   // empty countries. World Cup stays on its dedicated tab / pin.
   // Continental / international leagues show in the main list (sorted on top).
+  // Per-country memo: countries whose CountryGroup object didn't change keep
+  // their filtered object identity, so their accordions skip re-rendering.
+  const filteredCountryCacheRef = useRef<{
+    key: string;
+    byGroup: WeakMap<CountryGroup, CountryGroup>;
+  }>({ key: '', byGroup: new WeakMap() });
   const filteredCountryGroups = useMemo<CountryGroup[]>(() => {
-    return countryGroups
-      .map(cg => {
-        const leagues = cg.leagues
-          .map(l => ({ ...l, matches: l.matches.filter(matchPassesFilter) }))
-          .filter((l) => {
-            if (l.matches.length === 0) return false;
-            // Real WC stays on the dedicated pin/tab. Mis-tagged leagueId=1 rows
-            // (e.g. "Italy, Primavera 1") must remain in the country list.
-            if (
-              l.leagueId === worldCupLeagueId &&
-              !isMisTaggedWorldCupLeagueName(l.leagueName)
-            ) {
-              return false;
-            }
-            return true;
-          });
-        return { ...cg, leagues };
-      })
-      .filter(cg => cg.leagues.length > 0);
-  }, [countryGroups, matchPassesFilter, worldCupLeagueId]);
+    const cacheKey = `${filter}|${worldCupLeagueId}`;
+    if (filteredCountryCacheRef.current.key !== cacheKey) {
+      filteredCountryCacheRef.current = { key: cacheKey, byGroup: new WeakMap() };
+    }
+    const cache = filteredCountryCacheRef.current.byGroup;
+    const out: CountryGroup[] = [];
+    for (const cg of countryGroups) {
+      let filtered = cache.get(cg);
+      if (!filtered) {
+        let changed = false;
+        const leagues: CountryGroup['leagues'] = [];
+        for (const l of cg.leagues) {
+          // Real WC stays on the dedicated pin/tab. Mis-tagged leagueId=1 rows
+          // (e.g. "Italy, Primavera 1") must remain in the country list.
+          if (l.leagueId === worldCupLeagueId && !isMisTaggedWorldCupLeagueName(l.leagueName)) {
+            changed = true;
+            continue;
+          }
+          const kept = l.matches.filter(matchPassesFilter);
+          if (kept.length === 0) {
+            changed = true;
+            continue;
+          }
+          if (kept.length === l.matches.length) {
+            leagues.push(l);
+          } else {
+            changed = true;
+            leagues.push({ ...l, matches: kept });
+          }
+        }
+        filtered = changed ? { ...cg, leagues } : cg;
+        cache.set(cg, filtered);
+      }
+      if (filtered.leagues.length > 0) out.push(filtered);
+    }
+    return out;
+  }, [countryGroups, matchPassesFilter, worldCupLeagueId, filter]);
 
   const worldCupLeagueGroups = useMemo<LeagueGroup[]>(() => {
     const wcMatches = worldCupMatches.filter(
@@ -1542,7 +1574,9 @@ export default function MatchesHubScreenV2() {
   //  5. Persist to AsyncStorage (user-scoped) so the state survives restarts
   //  6. Offline? enqueue for later and return. Online? call the backend.
   //  7. On failure, match by error CODE (not string) and roll back.
-  const handlePredict = useCallback(async (fixtureId: string, type: 'home' | 'draw' | 'away') => {
+  // Stable identity: deps (matches, getToken, …) change every render and would
+  // otherwise defeat MatchRow's React.memo for every mounted row.
+  const handlePredict = useStableCallback(async (fixtureId: string, type: 'home' | 'draw' | 'away') => {
     // Guests cannot predict — gate BEFORE the optimistic update so we never
     // show a fake "saved" toast / decremented ticket that later rolls back.
     if (!userId) {
@@ -1724,11 +1758,11 @@ export default function MatchesHubScreenV2() {
     } finally {
       setSubmittingId(null);
     }
-  }, [ticketsRemaining, predictedMatches, findFixtureInCountryGroups, matches, worldCupMatches, getToken, userId, PRED_CACHE_KEY, TICKETS_CACHE_KEY, t]);
+  });
 
   // Toggle match-start push notification for a fixture (the bell icon).
   // Optimistic: flip the bell immediately, roll back on API failure.
-  const handleToggleSubscription = useCallback(
+  const handleToggleSubscription = useStableCallback(
     async (fixture: Fixture, subscribe: boolean) => {
       if (!userId) {
         toastManager.showWarning(
@@ -1809,7 +1843,6 @@ export default function MatchesHubScreenV2() {
         setSubscribingFixtureId(null);
       }
     },
-    [userId, getToken, t, refreshNotified],
   );
 
   // Open the full match-details screen for a fixture. Mirrors the params

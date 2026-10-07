@@ -53,7 +53,7 @@ export const MatchEventMonitor = {
 
             if (!lastSnapshot) {
                 // First time checking this match - don't notify about existing events
-                logger.error(`📸 First snapshot for fixture ${fixtureId} (${matchName})`);
+                logger.debug(`📸 First snapshot for fixture ${fixtureId} (${matchName})`);
             } else {
                 // Compare current with last snapshot
                 const lastEventIds = new Set(lastSnapshot.events.map((e) => e.id));

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { Match } from '../components/Matches/matchCardUtils';
 import {
   fetchWorldCupMatchesByDate,
@@ -10,7 +12,10 @@ import { ApiFootballService } from '../services/apiFootball';
 import { ensureLiveFeed } from '../services/liveFeedOwner';
 import { logger } from '../utils/logger';
 import { useLiveFixtureStore } from '../src/store/liveFixtureStore';
-import { LIVE_FIXTURE_CALENDAR_POLL_MS } from '../src/store/liveFixtureStore.types';
+import {
+  LIVE_FIXTURE_CALENDAR_POLL_MS,
+  type LiveFixtureSnapshot,
+} from '../src/store/liveFixtureStore.types';
 import { useRegisterLiveFixtures } from './useLiveFixture';
 import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
 import { registerWorldCupMemoryCacheClear } from '../services/footballCacheEpochSync';
@@ -44,11 +49,29 @@ function shouldPollFixture(match: Match, now = Date.now()): boolean {
   return delta <= NEAR_KICKOFF_POLL_MS && delta >= -OVERDUE_NS_POLL_MS;
 }
 
+const EMPTY_SNAPSHOTS: Record<number, LiveFixtureSnapshot> = Object.freeze({});
+
+function shallowSnapshotsEqual(
+  a: Record<number, LiveFixtureSnapshot>,
+  b: Record<number, LiveFixtureSnapshot>,
+): boolean {
+  if (a === b) return true;
+  const aKeys = Object.keys(a);
+  if (aKeys.length !== Object.keys(b).length) return false;
+  for (const key of aKeys) {
+    const id = Number(key);
+    if (a[id] !== b[id]) return false;
+  }
+  return true;
+}
+
 function overlaySnapshots(
   calendarRows: Match[],
-  snapshots: Record<number, import('../src/store/liveFixtureStore.types').LiveFixtureSnapshot>,
+  snapshots: Record<number, LiveFixtureSnapshot>,
 ): Match[] {
-  return calendarRows.map((row) => {
+  if (snapshots === EMPTY_SNAPSHOTS) return calendarRows;
+  let changed = false;
+  const next = calendarRows.map((row) => {
     const id = parseInt(row.id, 10);
     if (Number.isNaN(id)) return row;
     const snap = snapshots[id];
@@ -59,10 +82,12 @@ function overlaySnapshots(
       snap.phase === 'finished' ||
       (row.status === 'upcoming' && snap.phase !== 'upcoming' && snap.phase !== 'unknown')
     ) {
+      changed = true;
       return snapshotToMatchRow(snap);
     }
     return row;
   });
+  return changed ? next : calendarRows;
 }
 
 function cornerValue(raw: number | string | null | undefined): number | null {
@@ -152,18 +177,50 @@ export function useWorldCupMatches(
   phaseMode?: 'date' | 'upcoming' | 'finished' | 'live' | 'all',
 ): UseWorldCupMatchesResult {
   const [calendarMatches, setCalendarMatches] = useState<Match[]>([]);
-  const snapshots = useLiveFixtureStore((s) => s.snapshots);
+  // Only this hook's fixtures — subscribing to the whole snapshots map
+  // re-rendered the entire matches screen on every live update app-wide.
+  const calendarIdsKey = useMemo(
+    () => calendarMatches.map((m) => m.id).join(','),
+    [calendarMatches],
+  );
+  const selectSnapshots = useCallback(
+    (s: { snapshots: Record<number, LiveFixtureSnapshot> }) => {
+      if (!calendarIdsKey) return EMPTY_SNAPSHOTS;
+      const out: Record<number, LiveFixtureSnapshot> = {};
+      let any = false;
+      for (const raw of calendarIdsKey.split(',')) {
+        const id = parseInt(raw, 10);
+        const snap = s.snapshots[id];
+        if (snap) {
+          out[id] = snap;
+          any = true;
+        }
+      }
+      return any ? out : EMPTY_SNAPSHOTS;
+    },
+    [calendarIdsKey],
+  );
+  const snapshots = useStoreWithEqualityFn(
+    useLiveFixtureStore,
+    selectSnapshots,
+    shallowSnapshotsEqual,
+  );
   const matches = useMemo(
     () => overlaySnapshots(calendarMatches, snapshots),
     [calendarMatches, snapshots],
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fetchingRef = useRef(false);
+  const fetchingKeyRef = useRef<string | null>(null);
+  const loadGenRef = useRef(0);
+  const publishedKeyRef = useRef<string | null>(null);
   const hasDataRef = useRef(false);
   const lastCornersFetchRef = useRef(0);
 
   const dateString = formatLocalDateKey(selectedDate);
+  // Fetch by day key, not Date identity — a new Date for the same day must not refetch.
+  const selectedDateRef = useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
   const isToday = dateString === getLocalTodayKey();
   const appLang = useLanguageStore((s) => s.language);
 
@@ -181,19 +238,33 @@ export function useWorldCupMatches(
 
   const load = useCallback(async (opts?: { pull?: boolean }) => {
     if (!enabled) {
-      setCalendarMatches([]);
+      loadGenRef.current += 1;
+      publishedKeyRef.current = null;
+      setCalendarMatches((prev) => (prev.length === 0 ? prev : []));
       setLoading(false);
       hasDataRef.current = false;
       return;
     }
-    if (fetchingRef.current && !opts?.pull) return;
-    fetchingRef.current = true;
-
     const lang = appLang.startsWith('en') ? 'en' : 'ar';
     const memKey =
       phaseMode && phaseMode !== 'date'
         ? `phase:${phaseMode}:${lang}`
         : `${dateString}:${lang}`;
+    if (fetchingKeyRef.current === memKey && !opts?.pull) return;
+    fetchingKeyRef.current = memKey;
+    const releaseFetching = () => {
+      if (fetchingKeyRef.current === memKey) fetchingKeyRef.current = null;
+    };
+    const generation = ++loadGenRef.current;
+    const isCurrent = () => generation === loadGenRef.current;
+    const selectedDate = selectedDateRef.current;
+    if (publishedKeyRef.current !== memKey) {
+      // Different day / phase / language: never show the previous list under it.
+      publishedKeyRef.current = memKey;
+      setCalendarMatches((prev) => (prev.length === 0 ? prev : []));
+      hasDataRef.current = false;
+    }
+
     const mem = memoryCache.get(memKey);
     const ttl = TTL_IDLE_MS;
     if (
@@ -206,7 +277,7 @@ export function useWorldCupMatches(
     ) {
       setCalendarMatches(mem.data);
       setLoading(false);
-      fetchingRef.current = false;
+      releaseFetching();
       return;
     }
 
@@ -246,6 +317,8 @@ export function useWorldCupMatches(
 
     const publishList = (list: Match[]) => {
       memoryCache.set(memKey, { data: list, ts: Date.now() });
+      // A newer load (date / tab / language change) owns the visible list.
+      if (!isCurrent()) return;
       setCalendarMatches(list);
       hasDataRef.current = list.length > 0;
     };
@@ -268,10 +341,12 @@ export function useWorldCupMatches(
       } else {
         const cached = await fetchWorldCupMatchesByDate(selectedDate);
         if (cached.length > 0) {
+          // Paint the cached list right away; live-feed merge + corners follow.
+          publishList(cached.filter((m) => isWorldCupMatchRow(m, leagueId)));
+          if (isCurrent()) setLoading(false);
           const painted = await finalizeList(cached);
           publishList(painted);
-          setLoading(false);
-          fetchingRef.current = false;
+          releaseFetching();
           void fetchWorldCupMatchesByDate(selectedDate, { skipDiskCache: true })
             .then((fresh) => finalizeList(fresh))
             .then(publishList)
@@ -284,13 +359,13 @@ export function useWorldCupMatches(
       publishList(list);
     } catch (e) {
       logger.warn('useWorldCupMatches failed:', e);
-      setError('load_failed');
-      setCalendarMatches([]);
+      // Keep whatever is on screen; only an empty list surfaces the error state.
+      if (isCurrent() && !hasDataRef.current) setError('load_failed');
     } finally {
-      setLoading(false);
-      fetchingRef.current = false;
+      if (isCurrent()) setLoading(false);
+      releaseFetching();
     }
-  }, [appLang, dateString, enabled, enrichCorners, isToday, leagueId, phaseMode, selectedDate]);
+  }, [appLang, dateString, enabled, enrichCorners, isToday, leagueId, phaseMode]);
 
   useEffect(() => {
     void load();
@@ -304,7 +379,9 @@ export function useWorldCupMatches(
     if (phaseMode === 'upcoming' || phaseMode === 'all') return;
     const shouldPoll = isToday || phaseMode === 'live';
     if (!shouldPoll) return;
-    const id = setInterval(() => void load(), LIVE_FIXTURE_CALENDAR_POLL_MS);
+    const id = setInterval(() => {
+      if (AppState.currentState === 'active') void load();
+    }, LIVE_FIXTURE_CALENDAR_POLL_MS);
     return () => clearInterval(id);
   }, [enabled, isToday, load, phaseMode]);
 

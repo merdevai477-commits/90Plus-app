@@ -17,12 +17,17 @@ function isUpcomingLike(match: Match): boolean {
   return match.status !== 'live' && match.status !== 'finished';
 }
 
-/** Calendar still NS/upcoming this long after kickoff — refresh the day list. */
+/**
+ * Calendar still NS/upcoming this long after kickoff — refresh the day list.
+ * Bounded by the same window as polling: rows the provider never updates
+ * (delays, TBD, lower tiers) would otherwise force a full-day refetch all day.
+ */
 export function isStaleUpcomingOnCalendar(match: Match, now = Date.now()): boolean {
   if (!isUpcomingLike(match)) return false;
   const kickoff = kickoffMs(match);
   if (kickoff == null) return false;
-  return now - kickoff >= MATCHES_LIST_OVERDUE_KICKOFF_MS;
+  const after = now - kickoff;
+  return after >= MATCHES_LIST_OVERDUE_KICKOFF_MS && after <= MATCHES_LIST_NS_AFTER_KICKOFF_MS;
 }
 
 /** Poll from 10 min before kickoff through 3h after while the row is still NS. */
