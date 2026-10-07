@@ -129,11 +129,15 @@ export function useCompetitorStats(
     competitorId: number,
     competitionId: number | null | undefined,
     enabled = true,
+    options?: { roster?: boolean },
 ) {
+    const roster = options?.roster === true;
     return useQuery<Competitor365Stats | null, Error>({
-        queryKey: competitorKey(competitorId, 'stats', competitionId ?? 0),
+        queryKey: competitorKey(competitorId, roster ? 'stats-roster' : 'stats', competitionId ?? 0),
         queryFn: () =>
-            ApiFootballService.getCompetitor365Stats(competitorId, competitionId ?? undefined),
+            ApiFootballService.getCompetitor365Stats(competitorId, competitionId ?? undefined, {
+                roster,
+            }),
         enabled: enabled && competitorId > 0,
         staleTime: FIVE_MIN,
         gcTime: FIVE_MIN * 4,

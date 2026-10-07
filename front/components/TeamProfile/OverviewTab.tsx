@@ -229,7 +229,7 @@ function TopScorers({
     const board = useMemo(() => {
         const boards = stats?.leaderboards ?? [];
         if (boards.length === 0) return null;
-        const goals = boards.find((b) => b.key === 1);
+        const goals = boards.find((b) => b.typeId === 1) ?? boards.find((b) => b.key === 1);
         return goals ?? boards[0];
     }, [stats]);
 

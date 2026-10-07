@@ -118,8 +118,8 @@ export function MatchTopPlayersCard({
 }: Props) {
   const [tab, setTab] = useState<MatchTopPlayersTab>('attack');
   const enabled = homeCompetitorId > 0 && awayCompetitorId > 0 && competitionId > 0;
-  const homeStats = useCompetitorStats(homeCompetitorId, competitionId, enabled);
-  const awayStats = useCompetitorStats(awayCompetitorId, competitionId, enabled);
+  const homeStats = useCompetitorStats(homeCompetitorId, competitionId, enabled, { roster: true });
+  const awayStats = useCompetitorStats(awayCompetitorId, competitionId, enabled, { roster: true });
   const homeSquad = useCompetitorSquad(homeCompetitorId, enabled);
   const awaySquad = useCompetitorSquad(awayCompetitorId, enabled);
 
@@ -201,7 +201,7 @@ export function MatchTopPlayersCard({
           <View style={styles.statCol}>
             <StatBox value={formatTopPlayerStat(homePlayer?.goals ?? 0, 'int')} />
             <StatBox value={formatTopPlayerStat(homePlayer?.assists ?? 0, 'int')} />
-            <StatBox value={formatTopPlayerStat(homePlayer?.rating ?? 0, 'rating')} />
+            <StatBox value={formatTopPlayerStat(homePlayer?.rating ?? null, 'rating')} />
           </View>
           <View style={styles.labelCol}>
             <Text style={styles.statLabel}>{labels.goals}</Text>
@@ -211,7 +211,7 @@ export function MatchTopPlayersCard({
           <View style={styles.statCol}>
             <StatBox value={formatTopPlayerStat(awayPlayer?.goals ?? 0, 'int')} />
             <StatBox value={formatTopPlayerStat(awayPlayer?.assists ?? 0, 'int')} />
-            <StatBox value={formatTopPlayerStat(awayPlayer?.rating ?? 0, 'rating')} />
+            <StatBox value={formatTopPlayerStat(awayPlayer?.rating ?? null, 'rating')} />
           </View>
           <PlayerColumn
             player={awayPlayer}

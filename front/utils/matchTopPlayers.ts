@@ -16,12 +16,19 @@ export type MatchTopPlayer = {
   photo: string | null;
   goals: number;
   assists: number;
-  rating: number;
+  /** null = 365 has no rating for this player in this competition. */
+  rating: number | null;
 };
 
-const GOALS_NAME_RE = /goal|scorer|هدف/;
+const GOALS_TYPE_ID = 1;
+const ASSISTS_TYPE_ID = 2;
+const RATING_TYPE_ID = 36;
+
+const GOALS_NAME_RE = /goal|scorer|هدف|هداف/;
 const ASSISTS_NAME_RE = /assist|صناع|تمرير/;
-const RATING_NAME_RE = /rating|تقييم|mark|note|average/;
+const RATING_NAME_RE = /rating|تقييم/;
+/** Combined / expected boards whose names also contain "goals" or "assists". */
+const DERIVED_NAME_RE = /expected|متوقع|\+|\band\b| و|penalt|ركل/;
 
 export function match365CompetitionId(leagueId: number | undefined | null): number | null {
   if (leagueId == null || leagueId <= 0) return null;
@@ -37,14 +44,13 @@ export function parseLeaderValue(value: string | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function formatTopPlayerStat(value: number, kind: 'int' | 'rating'): string {
+export function formatTopPlayerStat(value: number | null, kind: 'int' | 'rating'): string {
   if (kind === 'rating') {
-    if (value <= 0) return '0';
-    const rounded = Math.round(value * 10) / 10;
-    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    if (value == null || value <= 0) return '–';
+    return (Math.round(value * 10) / 10).toFixed(1);
   }
-  if (value <= 0) return '0';
-  return Number.isInteger(value) ? String(value) : String(value);
+  if (value == null || value <= 0) return '0';
+  return String(Math.round(value));
 }
 
 export function classifyMatchPlayerPosition(
@@ -69,16 +75,25 @@ export function classifyMatchPlayerPosition(
   return 'other';
 }
 
+/**
+ * Board `key` is positional (in a cup with no scorers, key 1 can be "Red Cards"),
+ * so match on the 365 stat `typeId`. Payloads cached before `typeId` existed
+ * fall back to the board name.
+ */
 function findBoard(
   boards: Stat365Leaderboard[],
+  typeId: number,
   nameRe: RegExp,
-  keys?: number[],
 ): Stat365Leaderboard | null {
-  if (keys?.length) {
-    const byKey = boards.find((board) => keys.includes(board.key));
-    if (byKey) return byKey;
-  }
-  return boards.find((board) => nameRe.test((board.name ?? '').toLowerCase())) ?? null;
+  const byType = boards.find((board) => board.typeId === typeId);
+  if (byType) return byType;
+  if (boards.some((board) => board.typeId != null)) return null;
+  return (
+    boards.find((board) => {
+      const name = (board.name ?? '').toLowerCase();
+      return nameRe.test(name) && !DERIVED_NAME_RE.test(name);
+    }) ?? null
+  );
 }
 
 function ownRows(board: Stat365Leaderboard | null, competitorId: number): Stat365LeaderRow[] {
@@ -114,9 +129,10 @@ function playerPosition(
 }
 
 function scorePlayer(player: MatchTopPlayer, tab: MatchTopPlayersTab): number {
-  if (tab === 'attack') return player.goals * 1000 + player.assists * 10 + player.rating;
-  if (tab === 'midfield') return player.assists * 1000 + player.goals * 10 + player.rating;
-  return player.rating * 100 + player.goals + player.assists;
+  const rating = player.rating ?? 0;
+  if (tab === 'attack') return player.goals * 1000 + player.assists * 10 + rating;
+  if (tab === 'midfield') return player.assists * 1000 + player.goals * 10 + rating;
+  return rating * 100 + player.goals + player.assists;
 }
 
 export function pickMatchTopPlayer(
@@ -127,9 +143,9 @@ export function pickMatchTopPlayer(
 ): MatchTopPlayer | null {
   if (!competitorId) return null;
   const boards = stats?.leaderboards ?? [];
-  const goalsBoard = findBoard(boards, GOALS_NAME_RE, [1]);
-  const assistsBoard = findBoard(boards, ASSISTS_NAME_RE);
-  const ratingBoard = findBoard(boards, RATING_NAME_RE);
+  const goalsBoard = findBoard(boards, GOALS_TYPE_ID, GOALS_NAME_RE);
+  const assistsBoard = findBoard(boards, ASSISTS_TYPE_ID, ASSISTS_NAME_RE);
+  const ratingBoard = findBoard(boards, RATING_TYPE_ID, RATING_NAME_RE);
   const goalsById = valueByAthlete(goalsBoard, competitorId);
   const assistsById = valueByAthlete(assistsBoard, competitorId);
   const ratingById = valueByAthlete(ratingBoard, competitorId);
@@ -156,7 +172,7 @@ export function pickMatchTopPlayer(
     photo: photo ?? existing?.photo ?? null,
     goals: goalsById.get(athleteId) ?? existing?.goals ?? 0,
     assists: assistsById.get(athleteId) ?? existing?.assists ?? 0,
-    rating: ratingById.get(athleteId) ?? existing?.rating ?? 0,
+    rating: (ratingById.get(athleteId) || null) ?? existing?.rating ?? null,
   });
 
   for (const player of squad?.groups[wanted] ?? []) {

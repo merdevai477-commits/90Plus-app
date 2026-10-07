@@ -915,7 +915,10 @@ export interface Stat365LeaderRow {
 }
 
 export interface Stat365Leaderboard {
+  /** Positional id within one response — differs between competitions. */
   key: number;
+  /** 365 stat type of the board's value (1 goals, 2 assists, 36 rating). */
+  typeId?: number | null;
   name: string;
   rows: Stat365LeaderRow[];
 }
@@ -2822,10 +2825,12 @@ export const ApiFootballService = {
   async getCompetitor365Stats(
     competitorId: number,
     competitionId?: number,
+    options?: { roster?: boolean },
   ): Promise<Competitor365Stats | null> {
     if (!competitorId || competitorId <= 0) return null;
     try {
-      const params = competitionId ? { competitionId } : {};
+      const params: Record<string, string | number> = competitionId ? { competitionId } : {};
+      if (options?.roster) params.roster = 1;
       const res = await fetchFromProxy<Competitor365Stats>(
         `/cached/365/competitor/${competitorId}/stats`,
         params,

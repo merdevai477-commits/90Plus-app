@@ -51,8 +51,14 @@ describe('parse / format', () => {
 
   it('formats rating to one decimal and ints as-is', () => {
     expect(formatTopPlayerStat(7.42, 'rating')).toBe('7.4');
-    expect(formatTopPlayerStat(0, 'rating')).toBe('0');
+    expect(formatTopPlayerStat(7, 'rating')).toBe('7.0');
     expect(formatTopPlayerStat(8, 'int')).toBe('8');
+    expect(formatTopPlayerStat(0, 'int')).toBe('0');
+  });
+
+  it('shows a dash for a missing rating instead of 0', () => {
+    expect(formatTopPlayerStat(null, 'rating')).toBe('–');
+    expect(formatTopPlayerStat(0, 'rating')).toBe('–');
   });
 });
 
@@ -193,5 +199,79 @@ describe('pickMatchTopPlayer', () => {
 
   it('returns null when there is nothing to show', () => {
     expect(pickMatchTopPlayer(null, emptySquad(100), 100, 'attack')).toBeNull();
+  });
+
+  const row = (athleteId: number, name: string, value: string, positionName: string) => ({
+    rank: 1,
+    athleteId,
+    name,
+    photo: null,
+    value,
+    competitorId: 100,
+    leftClub: false,
+    positionName,
+  });
+
+  it('matches boards by 365 stat typeId, not positional key', () => {
+    const cup: Competitor365Stats = {
+      competitionId: 7808,
+      leaderboards: [
+        { key: 1, typeId: 4, name: 'Red Cards', rows: [row(50, 'Temine', '1', 'Centre Forward')] },
+        { key: 2, typeId: 61, name: 'Goals and Assists', rows: [row(50, 'Temine', '3', 'Centre Forward')] },
+        { key: 3, typeId: 2, name: 'Assists', rows: [row(50, 'Temine', '1', 'Centre Forward')] },
+      ],
+    };
+    expect(pickMatchTopPlayer(cup, emptySquad(100), 100, 'attack')).toMatchObject({
+      athleteId: 50,
+      goals: 0,
+      assists: 1,
+    });
+
+    const withGoals: Competitor365Stats = {
+      ...cup,
+      leaderboards: [
+        ...cup.leaderboards,
+        { key: 4, typeId: 1, name: 'Goals', rows: [row(50, 'Temine', '2', 'Centre Forward')] },
+      ],
+    };
+    expect(pickMatchTopPlayer(withGoals, emptySquad(100), 100, 'attack')).toMatchObject({
+      athleteId: 50,
+      goals: 2,
+      assists: 1,
+      rating: null,
+    });
+  });
+
+  it('reads rating from the typed 365 Ratings board', () => {
+    const league: Competitor365Stats = {
+      competitionId: 552,
+      leaderboards: [
+        { key: 1, typeId: 1, name: 'Goals', rows: [row(60, 'Belhadji', '2', 'Left Forward')] },
+        { key: 2, typeId: 42, name: 'Expected Goals', rows: [row(60, 'Belhadji', '0.96', 'Left Forward')] },
+        { key: 7, typeId: 36, name: '365 Ratings', rows: [row(60, 'Belhadji', '7.6', 'Left Forward')] },
+      ],
+    };
+    expect(pickMatchTopPlayer(league, emptySquad(100), 100, 'attack')).toMatchObject({
+      athleteId: 60,
+      goals: 2,
+      assists: 0,
+      rating: 7.6,
+    });
+  });
+
+  it('ignores expected / combined boards in the untyped name fallback', () => {
+    const untyped: Competitor365Stats = {
+      competitionId: 552,
+      leaderboards: [
+        { key: 1, name: 'أهداف متوقعة', rows: [row(70, 'A', '1.69', 'مهاجم')] },
+        { key: 2, name: 'الأهداف', rows: [row(70, 'A', '2', 'مهاجم')] },
+        { key: 3, name: 'أهداف + صناعة', rows: [row(70, 'A', '4', 'مهاجم')] },
+      ],
+    };
+    expect(pickMatchTopPlayer(untyped, emptySquad(100), 100, 'attack')).toMatchObject({
+      athleteId: 70,
+      goals: 2,
+      assists: 0,
+    });
   });
 });

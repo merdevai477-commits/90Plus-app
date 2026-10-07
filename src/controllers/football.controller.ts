@@ -3256,6 +3256,7 @@ export class FootballController {
         return;
       }
 
+      const roster = req.query.roster === '1' || req.query.roster === 'true';
       const result = await footballDataCacheService.getCached365CompetitorStats(
         competitorId,
         competitionId,
@@ -3294,6 +3295,7 @@ export class FootballController {
       const result = await footballDataCacheService.getCached365CompetitorSquad(
         competitorId,
         language,
+        { roster },
       );
       if (!result.data) {
         res.status(503).json({

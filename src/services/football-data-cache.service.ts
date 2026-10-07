@@ -4884,8 +4884,9 @@ class FootballDataCacheService {
         competitorId: number,
         competitionId: number,
         language?: string | null,
+        options?: { roster?: boolean },
     ): Promise<ThreeSixFiveResult<ThreeSixFiveCompetitorStats>> {
-        return threeSixFiveScoresService.getCompetitorStats(competitorId, competitionId, language);
+        return threeSixFiveScoresService.getCompetitorStats(competitorId, competitionId, language, options);
     }
 
     async getCached365CompetitorSquad(

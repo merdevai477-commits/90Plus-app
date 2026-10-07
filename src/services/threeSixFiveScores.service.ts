@@ -422,7 +422,10 @@ export interface ThreeSixFiveStatLeaderRow {
 }
 
 export interface ThreeSixFiveStatLeaderboard {
+  /** Positional board id in this response — not stable across competitions. */
   key: number;
+  /** 365 athlete stat type of the board's primary value (1 goals, 2 assists, 36 rating). */
+  typeId: number | null;
   name: string;
   rows: ThreeSixFiveStatLeaderRow[];
 }
@@ -799,6 +802,7 @@ interface StatsPayload {
       id: number;
       name?: string;
       competitionId?: number;
+      statsTypes?: Array<{ typeId: number; name?: string }>;
       rows?: Array<{
         position: number;
         secondaryStatName?: string;
@@ -2416,7 +2420,7 @@ export class ThreeSixFiveScoresService {
     try {
       const langId = resolveScores365LangId(language);
       const roster = options?.roster === true;
-      const cacheKey = `365:competitor:${competitorId}:stats${roster ? ':roster' : ''}:${competitionId}:${langId}`;
+      const cacheKey = `365:competitor:${competitorId}:stats:v2${roster ? ':roster' : ''}:${competitionId}:${langId}`;
       const cached = await redisCacheService.get<ThreeSixFiveCompetitorStats>(cacheKey);
       if (cached) return { data: cached, source: '365scores' };
 
@@ -2434,6 +2438,7 @@ export class ThreeSixFiveScoresService {
         .slice(0, maxBoards)
         .map((board) => ({
           key: board.id,
+          typeId: board.statsTypes?.[0]?.typeId ?? board.rows?.[0]?.stats?.[0]?.typeId ?? null,
           name: board.name ?? '—',
           rows: (board.rows ?? [])
             .slice(0, maxRows)
