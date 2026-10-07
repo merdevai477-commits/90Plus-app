@@ -293,20 +293,23 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
             </Text>
           ) : (
             <View style={styles.scoreRow}>
+              {/* No adjustsFontSizeToFit: Android ignores minimumFontScale and can shrink scores to dots. */}
               <Text
-                style={[styles.scoreNum, { fontSize: scoreFont, lineHeight: scoreFont + 6 }]}
+                style={[
+                  styles.scoreNum,
+                  { fontSize: scoreFont, lineHeight: scoreFont + 6, minWidth: Math.round(scoreFont * 0.7) },
+                ]}
                 numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
               >
                 {homeScore || '0'}
               </Text>
               <Text style={[styles.scoreDash, { fontSize: Math.round(scoreFont * 0.72) }]}>—</Text>
               <Text
-                style={[styles.scoreNum, { fontSize: scoreFont, lineHeight: scoreFont + 6 }]}
+                style={[
+                  styles.scoreNum,
+                  { fontSize: scoreFont, lineHeight: scoreFont + 6, minWidth: Math.round(scoreFont * 0.7) },
+                ]}
                 numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
               >
                 {awayScore || '0'}
               </Text>
