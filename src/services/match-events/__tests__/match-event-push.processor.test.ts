@@ -30,6 +30,7 @@ jest.mock('../../push-templates.service', () => ({
   localizeMatchVarDetail: (value: string) => value,
   renderPushTemplate: (key: string) => key,
   renderGoalScorePushBody: () => 'goalScoreBody',
+  withEventMinute: (title: string) => title,
 }));
 
 jest.mock('../../../utils/logger', () => ({

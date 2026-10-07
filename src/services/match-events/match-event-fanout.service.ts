@@ -41,6 +41,7 @@ function buildPushPayload(sub: SubscriptionRow, event: NormalizedMatchEvent) {
             away: sub.awayTeam,
             homeScore,
             awayScore,
+            scoringSide: side,
         };
     }
 

@@ -5,9 +5,16 @@
 
 import prisma from '../../lib/prisma';
 import { logger } from '../../utils/logger';
-import { renderPushTemplate, getUserLanguage, localizeMatchVarDetail, renderGoalScorePushBody } from '../push-templates.service';
+import {
+    renderPushTemplate,
+    getUserLanguage,
+    localizeMatchVarDetail,
+    renderGoalScorePushBody,
+    withEventMinute,
+} from '../push-templates.service';
 import { NotificationService } from '../notification.service';
 import type { MatchEventPushJob } from '../../queues/match-event-push.queue';
+import type { MatchEventKind } from './match-event.types';
 import {
     shouldDeliverToSubscription,
     isPrefAllowed,
@@ -16,6 +23,15 @@ import {
     completeMatchEventDelivery,
     releaseMatchEventDeliveryClaim,
 } from './match-event-delivery.service';
+
+/** In-play moments whose title shows the match minute; status changes (kickoff, HT, FT) don't. */
+const TIMED_EVENT_KINDS: ReadonlySet<MatchEventKind> = new Set([
+    'goal_home',
+    'goal_away',
+    'goal_cancelled',
+    'card_red',
+    'var',
+]);
 
 export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<void> {
     const { subscriptionId, userId, event, fixtureId } = job;
@@ -66,6 +82,10 @@ export async function processMatchEventPushJob(job: MatchEventPushJob): Promise<
 
     if (!title || !message) {
         throw new Error(`missing push copy for event ${event.eventKey}`);
+    }
+
+    if (TIMED_EVENT_KINDS.has(event.eventType)) {
+        title = withEventMinute(title, event.minute, event.extraMinute, lang);
     }
 
     const claim = await claimMatchEventDelivery(subscriptionId, event.eventKey, fixtureId);

@@ -23,7 +23,7 @@ interface ApiFootballEvent {
 }
 
 interface ApiFootballFixture {
-    fixture: { id: number; status: { short: string; elapsed?: number | null } };
+    fixture: { id: number; status: { short: string; elapsed?: number | null; extra?: number | null } };
     goals: { home: number | null; away: number | null };
 }
 
@@ -127,24 +127,28 @@ export function normalizeApiEvents(
     return out;
 }
 
+type MatchClock = { minute: number | null; extra: number | null };
+
 export function diffScoreGoals(
     fixtureId: number,
     prev: Pick<FixtureSnapshot, 'homeScore' | 'awayScore'> | null,
-    current: { homeScore: number; awayScore: number },
+    current: { homeScore: number; awayScore: number; elapsed?: number | null; extra?: number | null },
     meta: { homeTeam: string; awayTeam: string },
 ): NormalizedMatchEvent[] {
     const now = new Date();
     const out: NormalizedMatchEvent[] = [];
     const prevHome = prev?.homeScore ?? 0;
     const prevAway = prev?.awayScore ?? 0;
+    // Score diffs carry no event time, so stamp them with the clock at detection.
+    const clock: MatchClock = { minute: current.elapsed ?? null, extra: current.extra ?? null };
 
     for (let h = prevHome + 1; h <= current.homeScore; h++) {
         const eventKey = buildScoreGoalEventKey(fixtureId, 'home', h, current.awayScore);
-        out.push(buildGoalEvent(fixtureId, 'home', h, current.awayScore, eventKey, now, meta));
+        out.push(buildGoalEvent(fixtureId, 'home', h, current.awayScore, eventKey, now, meta, clock));
     }
     for (let a = prevAway + 1; a <= current.awayScore; a++) {
         const eventKey = buildScoreGoalEventKey(fixtureId, 'away', current.homeScore, a);
-        out.push(buildGoalEvent(fixtureId, 'away', current.homeScore, a, eventKey, now, meta));
+        out.push(buildGoalEvent(fixtureId, 'away', current.homeScore, a, eventKey, now, meta, clock));
     }
 
     // Scoreboard drop → goal cancelled / disallowed (common after VAR).
@@ -152,13 +156,13 @@ export function diffScoreGoals(
         const homeScore = h - 1;
         const awayScore = current.awayScore;
         const eventKey = buildScoreCancelledEventKey(fixtureId, 'home', homeScore, awayScore);
-        out.push(buildCancelledGoalEvent(fixtureId, 'home', homeScore, awayScore, eventKey, now, meta));
+        out.push(buildCancelledGoalEvent(fixtureId, 'home', homeScore, awayScore, eventKey, now, meta, clock));
     }
     for (let a = prevAway; a > current.awayScore; a--) {
         const homeScore = current.homeScore;
         const awayScore = a - 1;
         const eventKey = buildScoreCancelledEventKey(fixtureId, 'away', homeScore, awayScore);
-        out.push(buildCancelledGoalEvent(fixtureId, 'away', homeScore, awayScore, eventKey, now, meta));
+        out.push(buildCancelledGoalEvent(fixtureId, 'away', homeScore, awayScore, eventKey, now, meta, clock));
     }
 
     return out;
@@ -172,14 +176,15 @@ function buildGoalEvent(
     eventKey: string,
     detectedAt: Date,
     meta: { homeTeam: string; awayTeam: string },
+    clock: MatchClock,
 ): NormalizedMatchEvent {
     const scorer = side === 'home' ? meta.homeTeam : meta.awayTeam;
     return {
         fixtureId,
         eventKey,
         eventType: side === 'home' ? 'goal_home' : 'goal_away',
-        minute: null,
-        extraMinute: null,
+        minute: clock.minute,
+        extraMinute: clock.extra,
         teamId: null,
         playerId: null,
         detectedAt,
@@ -216,14 +221,15 @@ function buildCancelledGoalEvent(
     eventKey: string,
     detectedAt: Date,
     meta: { homeTeam: string; awayTeam: string },
+    clock: MatchClock,
 ): NormalizedMatchEvent {
     const team = side === 'home' ? meta.homeTeam : meta.awayTeam;
     return {
         fixtureId,
         eventKey,
         eventType: 'goal_cancelled',
-        minute: null,
-        extraMinute: null,
+        minute: clock.minute,
+        extraMinute: clock.extra,
         teamId: null,
         playerId: null,
         detectedAt,
@@ -420,6 +426,7 @@ export function parseFixtureSnapshot(fixtureId: number, raw: ApiFootballFixture)
         awayScore,
         status,
         elapsed: raw.fixture.status.elapsed ?? null,
+        extra: raw.fixture.status.extra ?? null,
         isLive: LIVE_STATUSES.has(status),
         latestEventKey: null,
     };

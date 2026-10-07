@@ -129,12 +129,13 @@ describe('diffScoreGoals', () => {
         const events = diffScoreGoals(
             7,
             { homeScore: 0, awayScore: 0 },
-            { homeScore: 1, awayScore: 0 },
+            { homeScore: 1, awayScore: 0, elapsed: 90, extra: 3 },
             meta,
         );
 
         expect(events).toHaveLength(1);
         expect(events[0].eventType).toBe('goal_home');
+        expect(events[0]).toMatchObject({ minute: 90, extraMinute: 3 });
         expect(events[0].bodyKey).toBe('goalScoreBody');
         expect(events[0].payload).toMatchObject({ homeScore: 1, awayScore: 0 });
     });

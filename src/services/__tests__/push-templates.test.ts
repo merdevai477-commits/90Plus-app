@@ -5,6 +5,7 @@ import {
   renderPushTemplate,
   extractLanguageFromSettings,
   readLanguageFromSettings,
+  withEventMinute,
 } from '../push-templates.service';
 
 describe('push templates language', () => {
@@ -60,5 +61,22 @@ describe('push templates language', () => {
       }),
     ).toContain('Salah');
     expect(localizeMatchVarDetail('Goal cancelled', 'ar-EG')).toBe('إلغاء هدف');
+  });
+
+  it('brackets the scoring side in the goal score line', () => {
+    const base = { scorer: 'Club Aurora', home: 'Club Aurora', away: 'Academia', homeScore: 2, awayScore: 0 };
+    expect(renderGoalScorePushBody('en', { ...base, scoringSide: 'home' })).toBe('Club Aurora [2]-0 Academia');
+    expect(renderGoalScorePushBody('ar', { ...base, scorer: 'Academia', homeScore: 1, awayScore: 1, scoringSide: 'away' })).toBe(
+      'Club Aurora 1-[1] Academia',
+    );
+    expect(renderGoalScorePushBody('en', base)).toBe('Club Aurora 2-0 Academia');
+  });
+
+  it('puts the match minute beside the event title', () => {
+    expect(withEventMinute('⚽ Goal!', 67, null, 'en')).toBe("⚽ Goal! 67'");
+    expect(withEventMinute('⚽ Goal!', 90, 3, 'en')).toBe("⚽ Goal! 90+3'");
+    expect(withEventMinute('⚽ هدف!', 67, null, 'ar')).toBe('⚽ هدف! الدقيقة 67');
+    expect(withEventMinute('📺 مراجعة الفار', 45, 2, 'ar-EG')).toBe('📺 مراجعة الفار الدقيقة 45+2');
+    expect(withEventMinute('⚽ Goal!', null, null, 'en')).toBe('⚽ Goal!');
   });
 });

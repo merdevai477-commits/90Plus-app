@@ -342,7 +342,7 @@ const en: TemplateMap = {
     // Live match events (cards / kickoff / reminders)
     matchYellowCardTitle: '🟨 Yellow card!',
     matchRedCardTitle: '🟥 Red card!',
-    matchCardBody: "{player} ({team}) - {minute}'",
+    matchCardBody: '{player} ({team})',
     matchCardPlayerFallback: 'A player',
     leagueMatchSoonTitle: '⏰ Match starting soon!',
     leagueMatchSoonBody: '{home} vs {away} - in {minutes} minutes',
@@ -389,11 +389,11 @@ const en: TemplateMap = {
     aiCheckinFallbackBody: '{name}, ready for another round? Tap to keep your streak alive.',
     // Extended live match events
     matchSubstitutionTitle: '🔁 Substitution',
-    matchSubstitutionBody: "{playerIn} on for {playerOut} ({team}) — {minute}'",
+    matchSubstitutionBody: '{playerIn} on for {playerOut} ({team})',
     matchVarTitle: '📺 VAR review',
-    matchVarBody: "{team} — {detail} ({minute}')",
+    matchVarBody: '{team} — {detail}',
     matchPenaltyTitle: '🎯 Penalty!',
-    matchPenaltyBody: "{team} awarded a penalty ({minute}')",
+    matchPenaltyBody: '{team} awarded a penalty',
     matchLineupTitle: '📋 Lineup announced',
     matchLineupBody: '{home} vs {away} — lineups are out',
     matchFavoriteTitle: '🔔 Match added to Favorites',
@@ -538,7 +538,7 @@ const ar: TemplateMap = {
     // أحداث المباراة (بطاقات / تذكير / بدء)
     matchYellowCardTitle: '🟨 بطاقة صفراء!',
     matchRedCardTitle: '🟥 بطاقة حمراء!',
-    matchCardBody: '{player} ({team}) - الدقيقة {minute}',
+    matchCardBody: '{player} ({team})',
     matchCardPlayerFallback: 'لاعب',
     leagueMatchSoonTitle: '⏰ مباراة قريبًا!',
     leagueMatchSoonBody: '{home} ضد {away} - بعد {minutes} دقيقة',
@@ -585,11 +585,11 @@ const ar: TemplateMap = {
     aiCheckinFallbackBody: '{name}، جاهز لجولة تانية؟ ادخل وكمّل ستريكك.',
     // أحداث المباراة الموسعة
     matchSubstitutionTitle: '🔁 تبديل',
-    matchSubstitutionBody: '{playerIn} بدل {playerOut} ({team}) — الدقيقة {minute}',
+    matchSubstitutionBody: '{playerIn} بدل {playerOut} ({team})',
     matchVarTitle: '📺 مراجعة الفار',
-    matchVarBody: '{team} — {detail} (الدقيقة {minute})',
+    matchVarBody: '{team} — {detail}',
     matchPenaltyTitle: '🎯 ضربة جزاء!',
-    matchPenaltyBody: 'احتسبت ضربة جزاء لـ{team} (الدقيقة {minute})',
+    matchPenaltyBody: 'احتسبت ضربة جزاء لـ{team}',
     matchLineupTitle: '📋 تم إعلان التشكيلات',
     matchLineupBody: '{home} ضد {away} — ظهرت التشكيلات',
     matchFavoriteTitle: '🔔 المباراة أُضيفت للمفضلة',
@@ -874,8 +874,28 @@ export function readLanguageFromSettings(
 }
 
 /**
+ * Event title with its match minute beside it: `⚽ Goal! 67'` / `⚽ هدف! الدقيقة 67`.
+ * Arabic spells out "الدقيقة" because a trailing `'` after digits flips to the
+ * wrong side of the number in right-to-left text.
+ */
+export function withEventMinute(
+    title: string,
+    minute: number | null | undefined,
+    extraMinute: number | null | undefined,
+    language: SupportedLanguage | string | null | undefined,
+): string {
+    if (minute == null || !Number.isFinite(minute)) return title;
+    const clock = extraMinute ? `${minute}+${extraMinute}` : `${minute}`;
+    const label = normalizeSupportedLanguage(typeof language === 'string' ? language : undefined) === 'ar'
+        ? `الدقيقة ${clock}`
+        : `${clock}'`;
+    return `${title} ${label}`;
+}
+
+/**
  * Goal score line without repeating the scoring team (`Al Ahed — Al Ahed 4-0 …`).
- * Keeps `{scorer} —` only when scorer is a distinct player name.
+ * Keeps `{scorer} —` only when scorer is a distinct player name. The side in
+ * `vars.scoringSide` gets its score bracketed (`Al Ahly [2]-0 Zamalek`).
  */
 export function renderGoalScorePushBody(
     language: SupportedLanguage | string | null | undefined,
@@ -884,7 +904,12 @@ export function renderGoalScorePushBody(
     const scorer = String(vars.scorer ?? vars.player ?? '').trim();
     const home = String(vars.home ?? '').trim();
     const away = String(vars.away ?? '').trim();
-    const line = renderPushTemplate('goalScoreBody', language, vars);
+    const side = vars.scoringSide;
+    const line = renderPushTemplate('goalScoreBody', language, {
+        ...vars,
+        ...(side === 'home' ? { homeScore: `[${vars.homeScore}]` } : {}),
+        ...(side === 'away' ? { awayScore: `[${vars.awayScore}]` } : {}),
+    });
     if (scorer && scorer !== home && scorer !== away) {
         return `${scorer} — ${line}`;
     }

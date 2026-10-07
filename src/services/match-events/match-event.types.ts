@@ -50,6 +50,8 @@ export interface FixtureSnapshot {
     awayScore: number;
     status: string;
     elapsed: number | null;
+    /** Stoppage-time minutes on top of `elapsed` (the `3` in 90+3). */
+    extra?: number | null;
     isLive: boolean;
     latestEventKey: string | null;
 }
