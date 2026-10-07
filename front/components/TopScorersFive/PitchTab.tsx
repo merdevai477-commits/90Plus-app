@@ -307,8 +307,11 @@ export function PitchTab({ picks, scale, onBack, onOpenLeague, onRemove }: Pitch
               </View>
 
               {player?.locked ? (
-                <View
-                  accessible
+                <TouchableOpacity
+                  onPress={() => onOpenLeague(slot.key)}
+                  hitSlop={8}
+                  activeOpacity={0.75}
+                  accessibilityRole="button"
                   accessibilityLabel={pickCopy.lockedA11y.replace('{name}', player.name)}
                   style={[
                     styles.remove,
@@ -323,7 +326,7 @@ export function PitchTab({ picks, scale, onBack, onOpenLeague, onRemove }: Pitch
                   ]}
                 >
                   <Ionicons name="lock-closed" size={s(12)} color="#FFFFFF" />
-                </View>
+                </TouchableOpacity>
               ) : player ? (
                 <TouchableOpacity
                   onPress={() => onRemove(slot.key)}

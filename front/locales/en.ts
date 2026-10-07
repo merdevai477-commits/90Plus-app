@@ -2108,6 +2108,12 @@ export const en = {
       pickLockedTitle: 'Pick confirmed',
       pickLockedBody: 'You confirmed {name} for this gameweek. You can pick again next gameweek.',
       lockedA11y: '{name} is locked for this gameweek',
+      lockedUntilNext: 'Locked until next gameweek',
+      lockedGotIt: 'Got it',
+      gameweekStats: 'This gameweek',
+      statGoals: 'Goals',
+      statAssists: 'Assists',
+      statPoints: 'Points',
       tabs: {
         matches: 'Matches',
         pitch: 'Pitch',

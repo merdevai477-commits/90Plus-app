@@ -33,6 +33,7 @@ import { pushPlayerCareer } from '../../utils/openPlayerProfile';
 
 import { TSF_DESIGN_WIDTH, type TsfLeagueKey } from './assets';
 import { tsfPickFromSelection, tsfPlayerFromApi } from './liveData';
+import { LockedPickSheet, type TsfLockedNotice } from './LockedPickSheet';
 import { type TsfPlayer } from './mockData';
 import { MatchesTab } from './MatchesTab';
 import { PitchTab, TSF_PITCH_DESIGN_HEIGHT } from './PitchTab';
@@ -64,6 +65,7 @@ export default function TopScorersFivePickScreen() {
   const [pending, setPending] = useState<TsfPlayer | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [lockedNotice, setLockedNotice] = useState<TsfLockedNotice | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -135,16 +137,11 @@ export default function TopScorersFivePickScreen() {
     });
   }, []);
 
-  const explainLocked = useCallback(
-    (player: TsfPlayer | undefined) => {
-      if (player?.confirmed) {
-        Alert.alert(pickCopy.pickLockedTitle, pickCopy.pickLockedBody.replace('{name}', player.name));
-      } else {
-        Alert.alert(pickCopy.lockedTitle, pickCopy.lockedBody);
-      }
-    },
-    [pickCopy],
-  );
+  const explainLocked = useCallback((league: TsfLeagueKey, player: TsfPlayer | undefined) => {
+    setLockedNotice({ league, player, reason: player?.confirmed ? 'confirmed' : 'gameweek' });
+  }, []);
+
+  const closeLockedNotice = useCallback(() => setLockedNotice(null), []);
 
   /** Re-reads one league's saved pick, e.g. after the server refused a change. */
   const reloadPick = useCallback(
@@ -163,9 +160,9 @@ export default function TopScorersFivePickScreen() {
   );
 
   const explainFailure = useCallback(
-    (error: unknown) => {
+    (league: TsfLeagueKey, error: unknown, player?: TsfPlayer) => {
       if (error instanceof TsfApiError && error.reason === 'GAMEWEEK_LOCKED') {
-        Alert.alert(pickCopy.lockedTitle, pickCopy.lockedBody);
+        setLockedNotice({ league, player, reason: 'gameweek' });
       } else if (error instanceof TsfApiError && error.status === 401) {
         Alert.alert(pickCopy.signInTitle, pickCopy.signInBody);
       } else {
@@ -179,7 +176,7 @@ export default function TopScorersFivePickScreen() {
     (league: TsfLeagueKey) => {
       const current = picks[league];
       if (current?.locked) {
-        explainLocked(current);
+        explainLocked(league, current);
         return;
       }
       setOpenLeague(league);
@@ -222,9 +219,11 @@ export default function TopScorersFivePickScreen() {
         if (error instanceof TsfApiError && error.reason === 'GAMEWEEK_PICK_LOCKED') {
           const saved = await reloadPick(token, league);
           closePicker();
-          explainLocked(saved ?? { ...player, confirmed: true });
+          explainLocked(league, saved ?? { ...player, confirmed: true });
         } else {
-          explainFailure(error);
+          // The notice draws under the picker modal, so the picker has to go first.
+          if (error instanceof TsfApiError && error.reason === 'GAMEWEEK_LOCKED') closePicker();
+          explainFailure(league, error);
         }
       } finally {
         setConfirming(false);
@@ -248,11 +247,19 @@ export default function TopScorersFivePickScreen() {
     [router],
   );
 
+  const handleLockedViewProfile = useCallback(
+    (player: TsfPlayer) => {
+      setLockedNotice(null);
+      handleViewProfile(player);
+    },
+    [handleViewProfile],
+  );
+
   const handleRemove = useCallback(
     (league: TsfLeagueKey) => {
       const previous = picks[league];
       if (previous?.locked) {
-        explainLocked(previous);
+        explainLocked(league, previous);
         return;
       }
       setPick(league, undefined);
@@ -266,11 +273,11 @@ export default function TopScorersFivePickScreen() {
         } catch (error) {
           logger.warn('[TopScorersFive] clear failed', error);
           if (error instanceof TsfApiError && error.reason === 'GAMEWEEK_PICK_LOCKED') {
-            explainLocked((await reloadPick(token, league)) ?? previous);
+            explainLocked(league, (await reloadPick(token, league)) ?? previous);
             return;
           }
           setPick(league, previous);
-          explainFailure(error);
+          explainFailure(league, error, previous);
         }
       })();
     },
@@ -323,6 +330,13 @@ export default function TopScorersFivePickScreen() {
         onConfirm={handleConfirm}
         onCancelPending={() => setPending(null)}
         onViewProfile={handleViewProfile}
+      />
+
+      <LockedPickSheet
+        notice={lockedNotice}
+        scale={scale}
+        onClose={closeLockedNotice}
+        onViewProfile={handleLockedViewProfile}
       />
     </View>
   );
