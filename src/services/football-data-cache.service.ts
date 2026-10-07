@@ -126,6 +126,7 @@ import {
     calendarDateFromKickoff,
     calendarTodayKey,
     offsetCalendarDateKey,
+    sharesAppCalendarDay,
 } from '../utils/calendar-day-bounds.util';
 import { map365StandingRowsToApiGroups } from '../utils/scores365-standings-mapper';
 import { buildScores365AthletePhotoUrl } from '../utils/scores365-athlete-photo';
@@ -863,6 +864,64 @@ class FootballDataCacheService {
             logger.error(`[${dateString}] Error in getMatchesByDate:`, error);
             throw error;
         }
+    }
+
+    /**
+     * Calendar day in the caller's timezone. Storage, caches and 365 grouping all use
+     * the app (Cairo) day, so other zones are assembled from the adjacent app days.
+     */
+    async getMatchesByDateInTimezone(
+        dateString: string,
+        timezone: string | null,
+        options?: { bypassLocalCache?: boolean },
+    ): Promise<any[]> {
+        if (!timezone || sharesAppCalendarDay(dateString, timezone)) {
+            return this.getMatchesByDate(dateString, options);
+        }
+        return this.collectTimezoneDay(dateString, timezone, (day) =>
+            this.getMatchesByDate(day, options),
+        );
+    }
+
+    async getWorldCupMatchesByDateInTimezone(
+        dateString: string,
+        leagueId: number,
+        season: number,
+        language: string | null | undefined,
+        timezone: string | null,
+    ): Promise<any[]> {
+        if (!timezone || sharesAppCalendarDay(dateString, timezone)) {
+            return this.getWorldCupMatchesByDate(dateString, leagueId, season, language);
+        }
+        return this.collectTimezoneDay(dateString, timezone, (day) =>
+            this.getWorldCupMatchesByDate(day, leagueId, season, language),
+        );
+    }
+
+    private async collectTimezoneDay(
+        dateString: string,
+        timezone: string,
+        loadAppDay: (day: string) => Promise<any[]>,
+    ): Promise<any[]> {
+        const days = [-1, 0, 1].map((offset) => offsetCalendarDateKey(dateString, offset));
+        const settled = await Promise.allSettled(days.map((day) => loadAppDay(day)));
+        if (settled.every((r) => r.status === 'rejected')) {
+            throw (settled[1] as PromiseRejectedResult).reason;
+        }
+        const seen = new Set<unknown>();
+        const rows: any[] = [];
+        for (const result of settled) {
+            if (result.status !== 'fulfilled') continue;
+            for (const fixture of result.value) {
+                const id = fixture?.fixture?.id;
+                if (id == null || seen.has(id)) continue;
+                if (calendarDateFromKickoff(fixture?.fixture?.date, timezone) !== dateString) continue;
+                seen.add(id);
+                rows.push(fixture);
+            }
+        }
+        rows.sort((a, b) => (a?.fixture?.timestamp ?? 0) - (b?.fixture?.timestamp ?? 0));
+        return rows;
     }
 
     private filterWorldCupFixtures(

@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import {
   calendarTodayKey,
   offsetCalendarDateKey,
+  resolveRequestCalendarTimezone,
 } from '../utils/calendar-day-bounds.util';
 import {
   isDatePastInAllOffsets,
@@ -153,7 +154,7 @@ router.get('/cached/world-cup/phase/:phase', (req, res, next) => {
 // GET /api/football/cached/world-cup/:date — World Cup fixtures (league + season from env)
 router.get('/cached/world-cup/:date', (req, res, next) => {
   const dateParam = req.params.date as string;
-  const today = calendarTodayKey();
+  const today = calendarTodayKey(resolveRequestCalendarTimezone(req.query.tz) ?? undefined);
   const yesterdayKey = offsetCalendarDateKey(today, -1);
   if (dateParam < today) {
     // Yesterday may still receive status corrections — avoid locking stale 2H for 24h.

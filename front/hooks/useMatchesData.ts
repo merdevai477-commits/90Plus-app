@@ -41,6 +41,7 @@ import { dateFromLocalKey } from '../utils/safeDate';
 import { ensureLiveFeed, subscribeLiveFeed, isLiveFeedWsTrusted } from '../services/liveFeedOwner';
 import { shouldApplyCalendarGeneration } from '../utils/calendarGeneration';
 import { shouldForceLiveFeedFetch } from '../utils/liveFeedForceGate';
+import { calendarStorageKey, onCalendarTimezoneChange } from '../utils/calendarTimezone';
 
 import type { GroupedMatches, CountryGroup } from './matchesData.types';
 
@@ -68,9 +69,9 @@ export interface UseMatchesDataOptions {
   interestRevision?: number;
 }
 
-// Cache key generator
+// Must match cacheService.cacheMatchesByDate so both writers share one disk entry.
 const getMatchesCacheKey = (dateString: string): string => {
-  return `matches_${dateString}`;
+  return `matches_${calendarStorageKey(dateString)}`;
 };
 
 // Memory cache for instant access with TTL check
@@ -81,6 +82,10 @@ interface MemoryCacheEntry {
 
 const memoryCache = new Map<string, MemoryCacheEntry>();
 const lastBackgroundFetch = new Map<string, number>();
+onCalendarTimezoneChange(() => {
+  memoryCache.clear();
+  lastBackgroundFetch.clear();
+});
 
 // Fix MEM-1: Evict oldest entry when cache exceeds this size
 const MAX_CACHE_ENTRIES = 10;

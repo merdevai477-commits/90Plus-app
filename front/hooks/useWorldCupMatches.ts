@@ -21,6 +21,7 @@ import { snapshotToMatchRow } from '../src/utils/snapshotToMatchRow';
 import { registerWorldCupMemoryCacheClear } from '../services/footballCacheEpochSync';
 import { useLanguageStore } from '../src/i18n/store';
 import { isMisTaggedWorldCupLeagueName } from '../constants/worldCup';
+import { onCalendarTimezoneChange } from '../utils/calendarTimezone';
 
 interface UseWorldCupMatchesResult {
   matches: Match[];
@@ -35,6 +36,7 @@ const TTL_IDLE_MS = 8_000;
 const CORNERS_REFRESH_MS = 20_000;
 
 registerWorldCupMemoryCacheClear(() => memoryCache.clear());
+onCalendarTimezoneChange(() => memoryCache.clear());
 
 const NEAR_KICKOFF_POLL_MS = 12 * 60 * 1000;
 const OVERDUE_NS_POLL_MS = 3 * 60 * 60 * 1000;

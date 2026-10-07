@@ -1,4 +1,5 @@
 import { fromZonedTime } from 'date-fns-tz';
+import { sanitizeTimezone } from './chat-timezone';
 
 const DEFAULT_CALENDAR_TZ =
   process.env.APP_CALENDAR_TIMEZONE ||
@@ -55,6 +56,24 @@ export function calendarDateRangeBounds(
 
 export function getAppCalendarTimezone(): string {
   return DEFAULT_CALENDAR_TZ;
+}
+
+/** Client `tz` → IANA zone; null when absent, invalid, or already the app zone. */
+export function resolveRequestCalendarTimezone(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === DEFAULT_CALENDAR_TZ) return null;
+  return sanitizeTimezone(trimmed) === trimmed ? trimmed : null;
+}
+
+/** True when `timezone`'s `dateString` covers the same instants as the app calendar day. */
+export function sharesAppCalendarDay(dateString: string, timezone: string): boolean {
+  const zoned = calendarDayBounds(dateString, timezone);
+  const app = calendarDayBounds(dateString);
+  return (
+    zoned.start.getTime() === app.start.getTime() &&
+    zoned.end.getTime() === app.end.getTime()
+  );
 }
 
 /** Shift a calendar YYYY-MM-DD by `days` (UTC-safe arithmetic on the date parts). */

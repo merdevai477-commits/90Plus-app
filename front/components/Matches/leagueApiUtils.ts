@@ -11,6 +11,7 @@ import { abortAfterForegroundMs } from '../../utils/abortAfterForegroundMs';
 import { isAbortError } from '../../utils/isAbortError';
 import { getApiUrl } from '../../config/api.config';
 import { appendPullQuery } from '../../utils/pullRefreshQuery';
+import { appendCalendarTzQuery, calendarStorageKey } from '../../utils/calendarTimezone';
 import { getAppLanguageCode, acceptLanguageHeader } from '../../utils/appLanguage';
 import { safeFormatMatchTime } from '../../utils/safeDate';
 import { isStaleInPlayClock } from '../../utils/staleMatchClock';
@@ -339,7 +340,10 @@ const fetchMatchesByDateFromNetwork = async (
 ): Promise<Match[]> => {
   const apiUrl = getApiUrl();
   const response = await fetchJsonWithTimeout(
-    appendPullQuery(`${apiUrl}/football/cached/matches/${dateString}?view=list`, pull),
+    appendPullQuery(
+      appendCalendarTzQuery(`${apiUrl}/football/cached/matches/${dateString}?view=list`),
+      pull,
+    ),
   );
 
   if (!response.ok) {
@@ -415,7 +419,7 @@ const fetchWorldCupMatchesByDateImpl = async (
   dateString: string,
   options?: { skipDiskCache?: boolean; pull?: boolean },
 ): Promise<Match[]> => {
-  const cacheKey = `wc_matches_${dateString}_${getAppLanguageParam()}`;
+  const cacheKey = `wc_matches_${calendarStorageKey(dateString)}_${getAppLanguageParam()}`;
   const isToday = dateString === getLocalTodayKey();
   const skipDisk = options?.skipDiskCache === true || options?.pull === true;
 
@@ -435,7 +439,7 @@ const fetchWorldCupMatchesByDateImpl = async (
     const lang = getAppLanguageParam();
     const response = await fetch(
       appendPullQuery(
-        `${apiUrl}/football/cached/world-cup/${dateString}?language=${lang}`,
+        appendCalendarTzQuery(`${apiUrl}/football/cached/world-cup/${dateString}?language=${lang}`),
         options?.pull,
       ),
       {

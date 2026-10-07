@@ -22,6 +22,7 @@ import { circuitBreakerService } from './circuitBreaker.service';
 import { requestQueueService } from './requestQueue.service';
 import { detailsRequestGate } from './detailsRequestGate';
 import { acceptLanguageHeader, getAppLanguageCode } from '../utils/appLanguage';
+import { getCalendarTzParam } from '../utils/calendarTimezone';
 import { isAbortError } from '../utils/isAbortError';
 
 export { isAbortError };
@@ -1450,7 +1451,11 @@ export const ApiFootballService = {
     // For date-based queries, use the cached endpoint
     if (params.date && !params.live) {
       try {
-        const fixtures = await fetchFromProxy<Fixture[]>(`/cached/matches/${params.date}`);
+        const tz = getCalendarTzParam();
+        const fixtures = await fetchFromProxy<Fixture[]>(
+          `/cached/matches/${params.date}`,
+          tz ? { tz } : {},
+        );
         // Local cache as backup
         if (fixtures?.length) {
           footballCacheService.cacheMatches(fixtures as any).catch(console.error);

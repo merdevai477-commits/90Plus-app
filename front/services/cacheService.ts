@@ -7,6 +7,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { calendarStorageKey } from '../utils/calendarTimezone';
 
 // Cache key prefix to identify cache entries
 const CACHE_PREFIX = '@cache_';
@@ -709,7 +710,7 @@ class CacheService {
    * Future dates are cached for 3 days.
    */
   async cacheMatchesByDate(dateString: string, matches: any[], ttl?: number): Promise<void> {
-    const key = `${CACHE_KEYS.MATCHES}_${dateString}`;
+    const key = `${CACHE_KEYS.MATCHES}_${calendarStorageKey(dateString)}`;
     
     // Use provided TTL, or determine TTL based on date
     let cacheTTL: number;
@@ -739,8 +740,9 @@ class CacheService {
    * Defaults to allowing stale snapshots so a killed app can paint instantly.
    */
   async getMatchesByDate(dateString: string, allowStale: boolean = true): Promise<any[] | null> {
-    const unifiedKey = `${CACHE_KEYS.MATCHES}_${dateString}`;
-    const legacyKey = `${CACHE_KEYS.MATCHES_BY_DATE}_${dateString}`;
+    const storageDay = calendarStorageKey(dateString);
+    const unifiedKey = `${CACHE_KEYS.MATCHES}_${storageDay}`;
+    const legacyKey = `${CACHE_KEYS.MATCHES_BY_DATE}_${storageDay}`;
     const unified = await this.get<any[]>(unifiedKey, allowStale);
     if (unified && unified.length > 0) return unified;
     return this.get<any[]>(legacyKey, allowStale);

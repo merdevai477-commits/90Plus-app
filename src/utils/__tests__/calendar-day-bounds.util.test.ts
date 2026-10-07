@@ -1,4 +1,36 @@
-import { calendarDateFromKickoff, calendarDateRangeBounds, toScores365QueryDate } from '../calendar-day-bounds.util';
+import {
+  calendarDateFromKickoff,
+  calendarDateRangeBounds,
+  resolveRequestCalendarTimezone,
+  sharesAppCalendarDay,
+  toScores365QueryDate,
+} from '../calendar-day-bounds.util';
+
+describe('resolveRequestCalendarTimezone', () => {
+  it('returns null for missing, invalid or app-zone values', () => {
+    expect(resolveRequestCalendarTimezone(undefined)).toBeNull();
+    expect(resolveRequestCalendarTimezone('')).toBeNull();
+    expect(resolveRequestCalendarTimezone(['America/New_York'])).toBeNull();
+    expect(resolveRequestCalendarTimezone('Not/AZone')).toBeNull();
+    expect(resolveRequestCalendarTimezone('x; DROP TABLE')).toBeNull();
+    expect(resolveRequestCalendarTimezone('Africa/Cairo')).toBeNull();
+  });
+
+  it('accepts real IANA zones', () => {
+    expect(resolveRequestCalendarTimezone('America/New_York')).toBe('America/New_York');
+    expect(resolveRequestCalendarTimezone(' Asia/Tokyo ')).toBe('Asia/Tokyo');
+    expect(resolveRequestCalendarTimezone('UTC')).toBe('UTC');
+  });
+});
+
+describe('sharesAppCalendarDay', () => {
+  it('is true for zones on the Cairo offset that day and false otherwise', () => {
+    expect(sharesAppCalendarDay('2026-10-08', 'Africa/Cairo')).toBe(true);
+    expect(sharesAppCalendarDay('2026-10-08', 'Asia/Riyadh')).toBe(true);
+    expect(sharesAppCalendarDay('2026-10-08', 'America/New_York')).toBe(false);
+    expect(sharesAppCalendarDay('2026-10-08', 'Asia/Tokyo')).toBe(false);
+  });
+});
 
 describe('calendarDateRangeBounds', () => {
   it('includes the complete final local calendar day', () => {

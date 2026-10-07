@@ -28,6 +28,7 @@ import {
   calendarDateRangeBounds,
   calendarTodayKey,
   offsetCalendarDateKey,
+  resolveRequestCalendarTimezone,
 } from '../utils/calendar-day-bounds.util';
 import {
   wantsPullRefresh,
@@ -1945,21 +1946,26 @@ export class FootballController {
       }
 
       const isPull = wantsPullRefresh(req);
+      const timezone = resolveRequestCalendarTimezone(req.query.tz);
       const forceFresh =
         !isPull &&
         (req.query.fresh === '1' ||
           req.query.fresh === 'true' ||
           req.query.forceRefresh === '1');
       if (forceFresh) {
-        await footballDataCacheService.invalidateMatchesByDateCache(
-          dateString,
-          'client_fresh',
-        );
+        const appDays = timezone
+          ? [-1, 0, 1].map((offset) => offsetCalendarDateKey(dateString, offset))
+          : [dateString];
+        for (const day of appDays) {
+          await footballDataCacheService.invalidateMatchesByDateCache(day, 'client_fresh');
+        }
       }
 
-      const matches = await footballDataCacheService.getMatchesByDate(dateString, {
-        bypassLocalCache: isPull,
-      });
+      const matches = await footballDataCacheService.getMatchesByDateInTimezone(
+        dateString,
+        timezone,
+        { bypassLocalCache: isPull },
+      );
       const view = typeof req.query.view === 'string' ? req.query.view.toLowerCase() : '';
       // List endpoint: never ship detail blobs (events/lineups/stats/fullData).
       // ?view=list (P0-2): further project to MatchRow fields only.
@@ -1996,6 +2002,7 @@ export class FootballController {
         response,
         _meta: {
           date: dateString,
+          ...(timezone ? { timezone } : {}),
           cached: true,
           elapsedMs,
           view: view === 'list' ? 'list' : 'full',
@@ -2126,12 +2133,14 @@ export class FootballController {
 
       const language = resolveAppLanguage(req);
       const isPull = wantsPullRefresh(req);
+      const timezone = resolveRequestCalendarTimezone(req.query.tz);
 
-      const matches = await footballDataCacheService.getWorldCupMatchesByDate(
+      const matches = await footballDataCacheService.getWorldCupMatchesByDateInTimezone(
         dateString,
         wc.leagueId,
         wc.season,
         language,
+        timezone,
       );
       if (isPull) {
         await noteListPullRefresh(req);
