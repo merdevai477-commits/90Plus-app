@@ -1,11 +1,22 @@
 /**
  * Fan 1-X-2 vote (365 "Who will win?") — Figma 1347:18834 header + three cards.
  */
-import React from 'react';
-import { View, StyleSheet, type ViewStyle } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Pressable, StyleSheet, type ViewStyle } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from './MatchText';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+
+export type CrowdVoteChoice = 'home' | 'draw' | 'away';
+
+const VOTE_STORAGE_PREFIX = 'match-crowd-vote:';
+
+function isVoteChoice(value: unknown): value is CrowdVoteChoice {
+  return value === 'home' || value === 'draw' || value === 'away';
+}
 
 const ICON = {
   barChart: require('../../assets/images/match-vote/bar-chart.svg'),
@@ -29,6 +40,8 @@ type Props = {
   drawLabel: string;
   votesUnit: string;
   rtl: boolean;
+  /** Fixture id; the user's single vote is remembered per match under this key. */
+  voteKey?: string | number | null;
 };
 
 type Tone = {
@@ -56,6 +69,9 @@ const TONE_AWAY: Tone = {
   glow: 'rgba(139,92,246,0.46)',
   pill: ['#8B5CF6', '#513690'],
 };
+
+const VOTED_COLOR = '#22C55E';
+const VOTED_GLOW = 'rgba(34,197,94,0.42)';
 
 function formatVotes(value: number): string {
   return Math.max(0, Math.round(value)).toLocaleString('en-US');
@@ -91,6 +107,9 @@ function VoteCard({
   votesUnit,
   choice,
   rtl,
+  selected,
+  locked,
+  onPress,
 }: {
   tone: Tone;
   media: React.ReactNode;
@@ -102,14 +121,34 @@ function VoteCard({
   votesUnit: string;
   choice: string;
   rtl: boolean;
+  selected: boolean;
+  locked: boolean;
+  onPress: () => void;
 }) {
   const cardStyle: ViewStyle = {
     backgroundColor: tone.bg,
-    borderColor: tone.border,
-    boxShadow: `inset 0px 0px 18px 0px ${tone.glow}`,
+    borderColor: selected ? VOTED_COLOR : tone.border,
+    boxShadow: `inset 0px 0px 18px 0px ${selected ? VOTED_GLOW : tone.glow}`,
   };
   return (
-    <View style={[styles.card, cardStyle]}>
+    <Pressable
+      onPress={onPress}
+      disabled={locked}
+      accessibilityRole="button"
+      accessibilityLabel={name}
+      accessibilityState={{ selected, disabled: locked }}
+      style={({ pressed }) => [
+        styles.card,
+        cardStyle,
+        locked && !selected && styles.cardDimmed,
+        pressed && styles.cardPressed,
+      ]}
+    >
+      {selected ? (
+        <View style={[styles.checkBadge, rtl ? styles.checkBadgeLeft : styles.checkBadgeRight]}>
+          <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+        </View>
+      ) : null}
       <View style={styles.cardTeam}>
         {media}
         <Text style={styles.cardName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
@@ -145,7 +184,7 @@ function VoteCard({
       >
         <Text style={styles.choiceText}>{choice}</Text>
       </LinearGradient>
-    </View>
+    </Pressable>
   );
 }
 
@@ -161,11 +200,67 @@ export function MatchCrowdVote({
   drawLabel,
   votesUnit,
   rtl,
+  voteKey = null,
 }: Props) {
+  const storageKey =
+    voteKey != null && String(voteKey) !== '' && String(voteKey) !== '0'
+      ? `${VOTE_STORAGE_PREFIX}${voteKey}`
+      : null;
+  const [myVote, setMyVote] = useState<CrowdVoteChoice | null>(null);
+  const lockedRef = useRef(false);
+
+  useEffect(() => {
+    lockedRef.current = false;
+    setMyVote(null);
+    if (!storageKey) return;
+    let cancelled = false;
+    AsyncStorage.getItem(storageKey)
+      .then((stored) => {
+        if (cancelled || !isVoteChoice(stored)) return;
+        lockedRef.current = true;
+        setMyVote(stored);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey]);
+
+  const castVote = useCallback(
+    (choice: CrowdVoteChoice) => {
+      if (lockedRef.current) return;
+      lockedRef.current = true;
+      setMyVote(choice);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+      if (storageKey) void AsyncStorage.setItem(storageKey, choice).catch(() => undefined);
+    },
+    [storageKey],
+  );
+
   const total = totalVotes != null && totalVotes > 0 ? totalVotes : null;
-  const votesFor = (pct: number) => (total != null ? (total * pct) / 100 : null);
-  const homeTrend = homePercent === awayPercent ? null : homePercent > awayPercent ? 'up' : 'down';
-  const awayTrend = homePercent === awayPercent ? null : awayPercent > homePercent ? 'up' : 'down';
+  const baseCounts =
+    total != null
+      ? {
+          home: (total * homePercent) / 100,
+          draw: (total * drawPercent) / 100,
+          away: (total * awayPercent) / 100,
+        }
+      : null;
+  const counts =
+    baseCounts && myVote ? { ...baseCounts, [myVote]: baseCounts[myVote] + 1 } : baseCounts;
+  const countsSum = counts ? counts.home + counts.draw + counts.away : 0;
+  const percents =
+    counts && myVote && countsSum > 0
+      ? {
+          home: (counts.home / countsSum) * 100,
+          draw: (counts.draw / countsSum) * 100,
+          away: (counts.away / countsSum) * 100,
+        }
+      : { home: homePercent, draw: drawPercent, away: awayPercent };
+
+  const locked = myVote != null;
+  const homeTrend = percents.home === percents.away ? null : percents.home > percents.away ? 'up' : 'down';
+  const awayTrend = percents.home === percents.away ? null : percents.away > percents.home ? 'up' : 'down';
 
   return (
     <View style={styles.wrap}>
@@ -199,36 +294,45 @@ export function MatchCrowdVote({
           tone={TONE_HOME}
           media={<Crest team={home} />}
           name={home.name}
-          percent={homePercent}
+          percent={percents.home}
           trend={homeTrend}
           arrow={ICON.arrowHome}
-          votes={votesFor(homePercent)}
+          votes={counts?.home ?? null}
           votesUnit={votesUnit}
           choice="1"
           rtl={rtl}
+          selected={myVote === 'home'}
+          locked={locked}
+          onPress={() => castVote('home')}
         />
         <VoteCard
           tone={TONE_DRAW}
           media={<Image source={ICON.drawCross} style={styles.crest} contentFit="contain" />}
           name={drawLabel}
-          percent={drawPercent}
+          percent={percents.draw}
           trend={null}
-          votes={votesFor(drawPercent)}
+          votes={counts?.draw ?? null}
           votesUnit={votesUnit}
           choice="X"
           rtl={rtl}
+          selected={myVote === 'draw'}
+          locked={locked}
+          onPress={() => castVote('draw')}
         />
         <VoteCard
           tone={TONE_AWAY}
           media={<Crest team={away} />}
           name={away.name}
-          percent={awayPercent}
+          percent={percents.away}
           trend={awayTrend}
           arrow={ICON.arrowAway}
-          votes={votesFor(awayPercent)}
+          votes={counts?.away ?? null}
           votesUnit={votesUnit}
           choice="2"
           rtl={rtl}
+          selected={myVote === 'away'}
+          locked={locked}
+          onPress={() => castVote('away')}
         />
       </View>
     </View>
@@ -309,6 +413,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
     overflow: 'hidden',
+  },
+  cardDimmed: {
+    opacity: 0.5,
+  },
+  cardPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }],
+  },
+  checkBadge: {
+    position: 'absolute',
+    top: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: VOTED_COLOR,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  checkBadgeRight: {
+    right: 8,
+  },
+  checkBadgeLeft: {
+    left: 8,
   },
   cardTeam: {
     alignItems: 'center',

@@ -1530,6 +1530,7 @@ const MatchDetailsScreen = () => {
           subtitle: t.matchDetails.crowdVoteSubtitle || 'Who will win the match?',
           drawLabel: t.matchDetails.crowdVoteDraw || 'Draw',
           votesUnit: t.matchDetails.crowdVoteUnit || 'votes',
+          voteKey: fixtureId || null,
         }
       : null;
 

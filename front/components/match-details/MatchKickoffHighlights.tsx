@@ -64,6 +64,7 @@ type Props = {
     subtitle: string;
     drawLabel: string;
     votesUnit: string;
+    voteKey?: string | number | null;
   } | null;
   /** The "switches to Events" note only belongs on the pre-event Highlights tab. */
   showAutoUpdate?: boolean;
