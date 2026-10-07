@@ -91,6 +91,28 @@ export const strictAuthRateLimiter = rateLimit({
 });
 
 /**
+ * Device-session resume/revoke limiter (unauthenticated, keyed by IP)
+ * 20 requests per 15 minutes
+ */
+export const deviceSessionRateLimiter = rateLimit({
+    store: getRedisRateLimitStore(),
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    passOnStoreError: true,
+    handler: (req, res) => {
+        logger.warn('Device session rate limit exceeded', { ip: req.ip, path: req.path });
+        res.status(429).json({
+            status: 'ERROR',
+            message: 'Too many session restore attempts. Please try again later.',
+            code: 'RATE_LIMIT_EXCEEDED',
+            retryAfter: 15 * 60,
+        });
+    },
+});
+
+/**
  * Webhook rate limiter
  * 100 requests per minute (for Clerk webhooks)
  */

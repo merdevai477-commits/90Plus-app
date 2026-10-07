@@ -11,8 +11,104 @@ import {
   sendParentalConsentEmail,
   sendConsentConfirmationEmail,
 } from '../services/email.service';
+import { issueDeviceKey, resumeWithDeviceKey, revokeDeviceKey } from '../services/device-session.service';
+import { deviceSessionRateLimiter } from '../middleware/auth-rate-limit.middleware';
 
 const router = Router();
+
+function readDeviceKey(body: unknown): string | null {
+  const key = (body as { deviceKey?: unknown } | undefined)?.deviceKey;
+  return typeof key === 'string' && key.length >= 32 && key.length <= 256 ? key : null;
+}
+
+function deviceMeta(req: Request) {
+  const deviceInfo = typeof req.body?.deviceInfo === 'string' ? req.body.deviceInfo : null;
+  return {
+    deviceInfo,
+    ipAddress: req.ip ?? null,
+    userAgent: req.headers['user-agent'] ?? null,
+  };
+}
+
+/**
+ * POST /api/auth/device-session
+ * Issue a long-lived device key for the signed-in user (stored in SecureStore).
+ */
+router.post('/device-session', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clerkUserId = req.auth?.userId;
+    if (!clerkUserId) {
+      sendError(req, res, ErrorCode.AUTHENTICATION, 'Unauthorized');
+      return;
+    }
+    const user = await ensureBackendUser(clerkUserId);
+
+    const previousKey = readDeviceKey({ deviceKey: req.body?.previousDeviceKey });
+    if (previousKey) {
+      await revokeDeviceKey(previousKey).catch(() => {});
+    }
+
+    const issued = await issueDeviceKey(user.id, deviceMeta(req));
+    res.json({ deviceKey: issued.deviceKey, expiresAt: issued.expiresAt.toISOString() });
+  } catch (error: any) {
+    logger.error('[auth/device-session] Error:', error);
+    sendError(req, res, ErrorCode.INTERNAL, 'Failed to register device session');
+  }
+});
+
+/**
+ * POST /api/auth/device-session/resume
+ * Exchange a device key for a short-lived Clerk sign-in ticket + a rotated key.
+ */
+router.post(
+  '/device-session/resume',
+  deviceSessionRateLimiter,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const deviceKey = readDeviceKey(req.body);
+      if (!deviceKey) {
+        sendError(req, res, ErrorCode.VALIDATION, 'deviceKey is required');
+        return;
+      }
+
+      const result = await resumeWithDeviceKey(deviceKey, deviceMeta(req));
+      if (!result.ok) {
+        res.status(401).json({ status: 'ERROR', code: 'DEVICE_SESSION_INVALID', reason: result.reason });
+        return;
+      }
+
+      res.json({
+        ticket: result.ticket,
+        deviceKey: result.deviceKey,
+        expiresAt: result.expiresAt.toISOString(),
+      });
+    } catch (error: any) {
+      logger.error('[auth/device-session/resume] Error:', error);
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to resume device session');
+    }
+  },
+);
+
+/**
+ * POST /api/auth/device-session/revoke
+ * Called on explicit logout; possession of the key is the proof of ownership.
+ */
+router.post(
+  '/device-session/revoke',
+  deviceSessionRateLimiter,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const deviceKey = readDeviceKey(req.body);
+      if (deviceKey) {
+        await revokeDeviceKey(deviceKey);
+      }
+      res.status(204).end();
+    } catch (error: any) {
+      logger.error('[auth/device-session/revoke] Error:', error);
+      sendError(req, res, ErrorCode.INTERNAL, 'Failed to revoke device session');
+    }
+  },
+);
 
 /**
  * GET /api/auth/session-check

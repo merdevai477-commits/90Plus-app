@@ -62,7 +62,12 @@ import { cacheService, CACHE_KEYS } from "../services/cacheService";
 WebBrowser.maybeCompleteAuthSession();
 import { AuthService } from "../src/services/authService";
 import { createClerkTokenGetter, getClerkBearerToken } from "../utils/clerkAuthToken";
-import { useAuth, useUser } from "@clerk/clerk-expo";
+import { useAuth, useSignIn, useUser } from "@clerk/clerk-expo";
+import {
+  ensureDeviceSessionRegistered,
+  peekHasDeviceKey,
+  resumeDeviceSession,
+} from "../utils/deviceSession";
 import * as Sentry from '@sentry/react-native';
 import { captureException } from "../services/sentry.service";
 import { SentryUserTracker } from "../components/SentryUserTracker";
@@ -248,14 +253,64 @@ function HideSplashWhenReady({ fontsReady }: { fontsReady: boolean }) {
   return null;
 }
 
+const DEVICE_SESSION_RESUME_TIMEOUT_MS = 12_000;
+
 function ClerkGate({ children }: { children: React.ReactNode }) {
-  const { isLoaded } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
+  const { signIn, setActive, isLoaded: signInLoaded } = useSignIn();
+  const [resumeState, setResumeState] = React.useState<'pending' | 'running' | 'done'>('pending');
+
+  // Every signed-in → signed-out transition gets one silent restore attempt
+  // (Clerk ends sessions after a fixed 7 days on the Hobby plan).
+  useEffect(() => {
+    if (isSignedIn) setResumeState('pending');
+  }, [isSignedIn]);
+
+  useEffect(() => {
+    if (!isLoaded || isSignedIn || resumeState !== 'pending') return;
+    if (!signInLoaded || !signIn || !setActive) return;
+    if (peekHasDeviceKey() === false) {
+      setResumeState('done');
+      return;
+    }
+    setResumeState('running');
+    void Promise.race([
+      resumeDeviceSession(signIn, setActive),
+      new Promise((resolve) => setTimeout(resolve, DEVICE_SESSION_RESUME_TIMEOUT_MS)),
+    ])
+      .catch((err) => logger.warn('[ClerkGate] Device session resume error:', err))
+      .finally(() => setResumeState((s) => (s === 'running' ? 'done' : s)));
+  }, [isLoaded, isSignedIn, resumeState, signInLoaded, signIn, setActive]);
 
   if (!isLoaded) {
     return <BootSplashScreen />;
   }
 
+  if (!isSignedIn && resumeState !== 'done' && peekHasDeviceKey() !== false) {
+    return <BootSplashScreen />;
+  }
+
   return <>{children}</>;
+}
+
+function DeviceSessionRegistrar() {
+  const { isLoaded, isSignedIn, userId, getToken } = useAuth();
+  const getTokenRef = React.useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !userId) return;
+    const timer = setTimeout(() => {
+      ensureDeviceSessionRegistered(() => getClerkBearerToken(getTokenRef.current)).catch((err) =>
+        logger.warn('[DeviceSessionRegistrar] Register failed (non-critical):', err),
+      );
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [isLoaded, isSignedIn, userId]);
+
+  return null;
 }
 
 function RootLayoutNav() {
@@ -874,6 +929,7 @@ function RootLayout() {
                                           />
                                           <ClerkGate>
                                             <ClerkTokenWarmup />
+                                            <DeviceSessionRegistrar />
                                             <PushTokenSyncBootstrap />
                                             <GlobalNotificationTrayBridge />
                                             <WebSocketInitializer>

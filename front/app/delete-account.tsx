@@ -24,6 +24,7 @@ import { getApiEndpoint } from '../config/api.config';
 import { captureException } from '../services/sentry.service';
 import { cacheService } from '../services/cacheService';
 import { predictionsMapKey, predictionsTicketsKey } from '../services/predictionsCacheKeys';
+import { revokeDeviceSession } from '../utils/deviceSession';
 import { ProfileTheme } from '../constants/ProfileTheme';
 import {
   APP_BG,
@@ -120,6 +121,7 @@ export default function DeleteAccountScreen() {
                       cacheService.invalidate(predictionsTicketsKey(userId)),
                     ]).catch(() => {});
                   }
+                  await revokeDeviceSession().catch(() => {});
                   signOut();
                   router.replace('/');
                 },

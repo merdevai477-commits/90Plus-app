@@ -65,6 +65,13 @@ export async function performFastLogout(options: {
     /* noop */
   }
 
+  try {
+    const { revokeDeviceSession } = await import('./deviceSession');
+    await revokeDeviceSession();
+  } catch {
+    /* noop */
+  }
+
   await signOutWithTimeout(options.signOut);
   runLogoutCleanup(options.clearVideos);
 }
