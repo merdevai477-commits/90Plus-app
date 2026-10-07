@@ -19,21 +19,61 @@ import {
 export type { Scores365CrowdPrediction } from '../utils/scores365-crowd-prediction.util';
 export { extractScores365CrowdWinPrediction } from '../utils/scores365-crowd-prediction.util';
 
-const crowdPredictionMemory = new Map<
-  number,
-  { prediction: Scores365CrowdPrediction; fetchedAt: number }
->();
+/** `prediction: null` = 365 has no vote for this game yet (negative cache). */
+type CrowdMemoryEntry = { prediction: Scores365CrowdPrediction | null; fetchedAt: number };
+
+const crowdPredictionMemory = new Map<number, CrowdMemoryEntry>();
 const crowdPredictionInFlight = new Map<number, Promise<Scores365CrowdPrediction | null>>();
 
 const CROWD_PRED_TTL_MS = Math.max(
   60_000,
   parseInt(process.env.SCORES365_CROWD_PRED_CACHE_MS || '1200000', 10) || 1_200_000,
 );
+const CROWD_PRED_MISS_TTL_MS = 5 * 60_000;
+const CROWD_PRED_MEMORY_MAX = 2_000;
 const CROWD_PRED_MAX_PER_LIST = Math.max(
   8,
   parseInt(process.env.SCORES365_CROWD_PRED_MAX || '80', 10) || 80,
 );
 const CROWD_PRED_CONCURRENCY = 8;
+
+function readCrowdMemory(gameId: number, now = Date.now()): CrowdMemoryEntry | null {
+  const entry = crowdPredictionMemory.get(gameId);
+  if (!entry) return null;
+  const ttl = entry.prediction ? CROWD_PRED_TTL_MS : CROWD_PRED_MISS_TTL_MS;
+  if (now - entry.fetchedAt < ttl) return entry;
+  crowdPredictionMemory.delete(gameId);
+  return null;
+}
+
+function rememberCrowdPrediction(gameId: number, prediction: Scores365CrowdPrediction | null): void {
+  crowdPredictionMemory.delete(gameId);
+  if (crowdPredictionMemory.size >= CROWD_PRED_MEMORY_MAX) {
+    const oldest = crowdPredictionMemory.keys().next().value;
+    if (oldest !== undefined) crowdPredictionMemory.delete(oldest);
+  }
+  crowdPredictionMemory.set(gameId, { prediction, fetchedAt: Date.now() });
+}
+
+export function sweepCrowdPredictionMemory(now = Date.now()): number {
+  let removed = 0;
+  for (const gameId of Array.from(crowdPredictionMemory.keys())) {
+    if (!readCrowdMemory(gameId, now)) removed += 1;
+  }
+  return removed;
+}
+
+export function getCrowdPredictionMemorySize(): number {
+  return crowdPredictionMemory.size;
+}
+
+export function resetCrowdPredictionMemory(): void {
+  crowdPredictionMemory.clear();
+  crowdPredictionInFlight.clear();
+}
+
+const crowdSweepTimer = setInterval(() => sweepCrowdPredictionMemory(), 10 * 60_000);
+crowdSweepTimer.unref?.();
 
 function swapCrowdSides(
   prediction: Scores365CrowdPrediction | null,
@@ -53,8 +93,8 @@ async function fetchCrowdPredictionForGameId(
   swapped = false,
   cacheOnly = false,
 ): Promise<Scores365CrowdPrediction | null> {
-  const mem = crowdPredictionMemory.get(gameId);
-  if (mem && Date.now() - mem.fetchedAt < CROWD_PRED_TTL_MS) {
+  const mem = readCrowdMemory(gameId);
+  if (mem) {
     return swapCrowdSides(mem.prediction, swapped);
   }
 
@@ -68,14 +108,25 @@ async function fetchCrowdPredictionForGameId(
     return swapCrowdSides(await pending, swapped);
   }
 
+  const redisKey = `365:crowd-pred:${gameId}`;
   const promise = (async () => {
-    const game = await fetchScores365GameById(gameId, { language });
-    const prediction = extractScores365CrowdWinPrediction(game as CrowdGameShape, {
-      swapped: false,
-    });
+    const shared = await redisCacheService
+      .get<Scores365CrowdPrediction>(redisKey)
+      .catch(() => null);
+    if (shared) {
+      rememberCrowdPrediction(gameId, shared);
+      return shared;
+    }
+    let prediction: Scores365CrowdPrediction | null = null;
+    try {
+      const game = await fetchScores365GameById(gameId, { language });
+      prediction = extractScores365CrowdWinPrediction(game as CrowdGameShape, { swapped: false });
+    } catch (err) {
+      logger.debug(`[CrowdPred] game ${gameId} fetch failed`, err);
+    }
+    rememberCrowdPrediction(gameId, prediction);
     if (prediction) {
-      crowdPredictionMemory.set(gameId, { prediction, fetchedAt: Date.now() });
-      void redisCacheService.set(`365:crowd-pred:${gameId}`, prediction, CROWD_PRED_TTL_MS);
+      void redisCacheService.set(redisKey, prediction, CROWD_PRED_TTL_MS);
     }
     return prediction;
   })().finally(() => {
@@ -146,7 +197,14 @@ export async function enrichFixturesWithCrowdPredictions(
     return fixtures;
   }
 
-  logger.info(`[CrowdPred] enriching ${targets.length}/${fixtures.length} upcoming fixtures`);
+  const toFetch = options?.cacheOnly
+    ? 0
+    : targets.filter((t) => !readCrowdMemory(t.gameId!)).length;
+  if (toFetch > 0) {
+    logger.info(
+      `[CrowdPred] enriching ${targets.length}/${fixtures.length} upcoming fixtures (${toFetch} uncached)`,
+    );
+  }
 
   const out = fixtures.slice();
   let attached = 0;
@@ -173,6 +231,8 @@ export async function enrichFixturesWithCrowdPredictions(
     );
   }
 
-  logger.info(`[CrowdPred] attached ${attached}/${targets.length} crowd strips`);
+  if (toFetch > 0) {
+    logger.info(`[CrowdPred] attached ${attached}/${targets.length} crowd strips`);
+  }
   return out;
 }
