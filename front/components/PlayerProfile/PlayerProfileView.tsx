@@ -4,7 +4,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   ScrollView,
   StatusBar,
@@ -164,7 +163,6 @@ export default function PlayerProfileView({
   const tabs: { key: PlayerProfileTab; label: string }[] = [
     { key: 'stats', label: pc.tabStats },
     { key: 'overview', label: pc.tabOverview },
-    { key: 'chats', label: pc.tabSocial },
   ];
 
   return (
@@ -354,10 +352,8 @@ export default function PlayerProfileView({
         <View style={{ paddingHorizontal: pad }}>
           {tab === 'overview' ? (
             <OverviewTab vm={vm} rtl={rtl} onSelectSeason={onSelectSeason} />
-          ) : tab === 'stats' ? (
-            statsContent ?? null
           ) : (
-            <SocialTab name={vm.name} rtl={rtl} />
+            statsContent ?? null
           )}
         </View>
       </ScrollView>
@@ -424,59 +420,6 @@ export function SectionHeader({
           <Text style={[styles.sectionTrailing, { fontFamily: fontBold }]}>{trailing}</Text>
         ) : null)}
     </View>
-  );
-}
-
-const SOCIALS = [
-  {
-    key: 'facebook',
-    icon: 'logo-facebook' as const,
-    colors: ['#1877F2', '#0B4FB3'] as const,
-    url: (q: string) => `https://www.facebook.com/search/top?q=${q}`,
-  },
-  {
-    key: 'instagram',
-    icon: 'logo-instagram' as const,
-    colors: ['#F58529', '#DD2A7B', '#8134AF'] as const,
-    url: (q: string) => `https://www.instagram.com/explore/search/keyword/?q=${q}`,
-  },
-];
-
-function SocialTab({ name, rtl }: { name: string; rtl: boolean }) {
-  const { t } = useTranslation();
-  const pc = t.playerCareer;
-  const fontBold = useAppFont(700);
-  const fontReg = useAppFont(400);
-  const row = rtl ? 'row-reverse' : 'row';
-  const textAlign = rtl ? 'right' : 'left';
-  const query = encodeURIComponent(name);
-
-  return (
-    <>
-      <SectionHeader icon={PP_ICON.verified} title={pc.socialTitle} rtl={rtl} />
-      <Text style={[styles.socialHint, { fontFamily: fontReg, textAlign }]}>{pc.socialHint}</Text>
-      {SOCIALS.map((s) => (
-        <Pressable
-          key={s.key}
-          accessibilityRole="link"
-          onPress={() => Linking.openURL(s.url(query)).catch(() => undefined)}
-          style={({ pressed }) => [styles.card, styles.socialCard, { flexDirection: row, opacity: pressed ? 0.85 : 1 }]}
-        >
-          <LinearGradient colors={s.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.socialIcon}>
-            <Ionicons name={s.icon} size={24} color="#fff" />
-          </LinearGradient>
-          <View style={styles.socialText}>
-            <Text style={[styles.socialName, { fontFamily: fontBold, textAlign }]}>
-              {s.key === 'facebook' ? pc.facebook : pc.instagram}
-            </Text>
-            <Text style={[styles.socialSub, { fontFamily: fontReg, textAlign }]} numberOfLines={1}>
-              {`${pc.openOn} ${s.key === 'facebook' ? pc.facebook : pc.instagram} · ${name}`}
-            </Text>
-          </View>
-          <Ionicons name="open-outline" size={18} color={C.statLabel} />
-        </Pressable>
-      ))}
-    </>
   );
 }
 
@@ -1023,10 +966,4 @@ const styles = StyleSheet.create({
   transferTitle: { color: C.transferLilac, fontSize: 12 },
   euroIcon: { width: 16, height: 16 },
 
-  socialHint: { color: C.statLabel, fontSize: 13, marginTop: -4, marginBottom: 12 },
-  socialCard: { alignItems: 'center', gap: 14, padding: 14, marginBottom: 10 },
-  socialIcon: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  socialText: { flex: 1, minWidth: 0, gap: 3 },
-  socialName: { color: '#fff', fontSize: 16 },
-  socialSub: { color: C.muted, fontSize: 12 },
 });

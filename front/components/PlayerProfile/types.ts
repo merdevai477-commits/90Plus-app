@@ -1,6 +1,6 @@
 import type { Player365LastMatch } from '../../services/apiFootball';
 
-export type PlayerProfileTab = 'stats' | 'overview' | 'chats';
+export type PlayerProfileTab = 'stats' | 'overview';
 
 export interface PlayerSeasonSummary {
   matches: number | null;
