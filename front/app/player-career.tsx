@@ -19,7 +19,12 @@ import ApiFootballService, {
     type Player365CareerSeason,
 } from '../services/apiFootball';
 import { ProfileTheme } from '../constants/ProfileTheme';
-import { scores365AthletePhotoCandidates, with365ImageSize } from '../utils/scores365AthletePhoto';
+import {
+    buildScores365AthleteCutoutUrl,
+    scores365AthleteImageVersionFromUrl,
+    scores365AthletePhotoCandidates,
+    with365ImageSize,
+} from '../utils/scores365AthletePhoto';
 import {
     PlayerSeasonStatsCard,
     parsePlayerStatNumber,
@@ -156,9 +161,14 @@ export default function PlayerCareerScreen() {
             (typeof params.photo === 'string' && params.photo) ||
             career?.profile.imageUrl ||
             null;
-        return scores365AthletePhotoCandidates(athleteId, preferred, 250).map(
+        const circular = scores365AthletePhotoCandidates(athleteId, preferred, 250).map(
             (uri) => with365ImageSize(uri, 250) ?? uri,
         );
+        if (athleteId <= 0) return circular;
+        const imageVersion =
+            scores365AthleteImageVersionFromUrl(career?.profile.imageUrl) ??
+            scores365AthleteImageVersionFromUrl(preferred);
+        return [buildScores365AthleteCutoutUrl(athleteId, 500, imageVersion), ...circular];
     }, [athleteId, career?.profile.imageUrl, params.photo]);
 
     const vm: PlayerProfileViewModel | null = useMemo(() => {

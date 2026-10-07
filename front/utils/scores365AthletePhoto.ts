@@ -19,6 +19,36 @@ export function buildScores365AthletePhotoUrl(
   );
 }
 
+/**
+ * Background-removed (cutout) athlete photo for large hero art.
+ *
+ * Deliberately has no `d_Athletes:default.png`: athletes without a real headshot
+ * return 404 so the caller falls through to its circular candidates instead of
+ * showing a cut-out default silhouette.
+ */
+export function buildScores365AthleteCutoutUrl(
+  athleteId: number,
+  size = 500,
+  imageVersion?: number | null,
+): string {
+  const versionSegment =
+    imageVersion != null && imageVersion > 0 ? `v${imageVersion}/` : '';
+  return (
+    `https://imagecache.365scores.com/image/upload/` +
+    `e_background_removal,f_png,w_${size},h_${size},c_limit,q_auto:eco,dpr_2/` +
+    `${versionSegment}Athletes/${athleteId}`
+  );
+}
+
+/** Reads the `/v{n}/` segment from a 365 athlete image URL, if present. */
+export function scores365AthleteImageVersionFromUrl(
+  url: string | null | undefined,
+): number | null {
+  const match = url ? /\/v(\d+)\/Athletes\//.exec(url) : null;
+  const version = match ? Number(match[1]) : 0;
+  return version > 0 ? version : null;
+}
+
 /** Legacy NationalTeam path — keep as a secondary candidate only. */
 export function buildScores365AthleteNationalTeamPhotoUrl(
   athleteId: number,

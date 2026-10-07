@@ -202,7 +202,7 @@ export default function PlayerProfileView({
                 contentPosition="bottom"
                 cachePolicy="memory-disk"
                 priority="high"
-                transition={0}
+                transition={300}
                 recyclingKey={`${vm.photoKey}-${photoIndex}`}
                 onError={() =>
                   setPhotoIndex((i) =>
@@ -218,8 +218,8 @@ export default function PlayerProfileView({
           </Pressable>
           <LinearGradient
             pointerEvents="none"
-            colors={['rgba(3,3,3,0.92)', 'rgba(3,3,3,0.55)', 'rgba(3,3,3,0)']}
-            locations={[0, 0.45, 0.8]}
+            colors={['rgba(3,3,3,0.92)', 'rgba(3,3,3,0.7)', 'rgba(3,3,3,0)']}
+            locations={[0, 0.5, 0.78]}
             start={{ x: rtl ? 1 : 0, y: 0.5 }}
             end={{ x: rtl ? 0 : 1, y: 0.5 }}
             style={StyleSheet.absoluteFill}
@@ -713,7 +713,7 @@ const styles = StyleSheet.create({
     color: C.jersey,
     opacity: 0.9,
   },
-  heroPhotoWrap: { position: 'absolute', top: 0, bottom: STRIP_OVERLAP - 6, width: '52%' },
+  heroPhotoWrap: { position: 'absolute', top: 0, bottom: STRIP_OVERLAP - 6, width: '62%' },
   heroPhoto: { width: '100%', height: '100%' },
   heroPhotoFallback: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 24 },
   heroBottomFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
