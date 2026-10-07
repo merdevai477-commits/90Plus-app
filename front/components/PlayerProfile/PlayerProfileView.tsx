@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import React, { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PURPLE_PRIMARY } from '../../constants/tokens';
 import type { Player365LastMatch } from '../../services/apiFootball';
 import { useTranslation } from '../../src/i18n';
 import { getCountryFlagUri } from '../../utils/countryFlagUri';
@@ -22,7 +24,6 @@ import { useAppFont } from '../../utils/fontSetup';
 import { toFullscreenPhotoUrl } from '../../utils/scores365AthletePhoto';
 import ImageViewerModal from '../common/ImageViewerModal';
 import TeamBadge from '../common/TeamBadge';
-import GradientText from '../ShareWin/components/GradientText';
 import { PP_ICON, PP_STADIUM } from './assets';
 import { PP_COLORS as C, ratingTone } from './theme';
 import type { PlayerProfileTab, PlayerProfileViewModel, PlayerTransferRow } from './types';
@@ -50,34 +51,73 @@ function fmtMatchDate(iso: string | null, rtl: boolean): string {
   return rtl ? `${yyyy} - ${mm} - ${dd}` : `${dd} - ${mm} - ${yyyy}`;
 }
 
-export function PlayerProfileHeader({ onBack, onBell }: { onBack: () => void; onBell?: () => void }) {
+const HEADER_BAR_HEIGHT = 56;
+
+export function usePlayerHeaderHeight(): number {
   const insets = useSafeAreaInsets();
-  const fontBold = useAppFont(700);
+  return Math.max(insets.top, 10) + HEADER_BAR_HEIGHT;
+}
+
+/**
+ * Transparent header. With `scrollY` it floats over the hero and a solid bar fades in
+ * once the content scrolls underneath it.
+ */
+export function PlayerProfileHeader({ onBack, scrollY }: { onBack: () => void; scrollY?: Animated.Value }) {
+  const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
+  const barOpacity = scrollY
+    ? scrollY.interpolate({ inputRange: [0, 140], outputRange: [0, 1], extrapolate: 'clamp' })
+    : 0;
+
   return (
-    <View style={[styles.header, { paddingTop: Math.max(insets.top, 10) }]}>
-      <Pressable onPress={onBack} hitSlop={10} style={styles.headerBtn} accessibilityRole="button">
-        <Image source={PP_ICON.arrowBack} style={styles.headerIcon} contentFit="contain" />
-      </Pressable>
-      <View style={styles.brand}>
-        <Text style={[styles.brandNinety, { fontFamily: fontBold }]} allowFontScaling={false}>
-          90{' '}
-        </Text>
-        <GradientText
-          colors={['#a78bfa', '#7c3aed']}
-          style={[styles.brandNinety, { fontFamily: fontBold }]}
-        >
-          PLUS
-        </GradientText>
-      </View>
+    <View
+      style={[
+        styles.header,
+        { paddingTop: Math.max(insets.top, 10), height: Math.max(insets.top, 10) + HEADER_BAR_HEIGHT },
+        scrollY ? styles.headerOverlay : null,
+      ]}
+    >
+      {scrollY ? (
+        <>
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(3,3,3,0.55)', 'rgba(3,3,3,0)']}
+            style={StyleSheet.absoluteFill}
+          />
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.headerBar, { opacity: barOpacity }]} />
+        </>
+      ) : null}
+
       <Pressable
-        onPress={onBell}
-        hitSlop={10}
-        style={[styles.headerBtn, styles.headerBtnEnd]}
+        onPress={onBack}
+        hitSlop={12}
         accessibilityRole="button"
-        disabled={!onBell}
+        accessibilityLabel={t.playerCareer.goBack}
+        style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
       >
-        <Image source={PP_ICON.bell} style={styles.headerIcon} contentFit="contain" />
+        <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.03)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Ionicons name="chevron-back" size={22} color="#fff" style={styles.backIcon} />
       </Pressable>
+
+      <View style={styles.brandPill}>
+        <Text style={styles.brand90} allowFontScaling={false}>
+          90
+        </Text>
+        <View style={styles.brandPlusChip}>
+          <Text style={styles.brandPlus} allowFontScaling={false}>
+            PLUS
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.headerSpacer} />
     </View>
   );
 }
@@ -120,7 +160,6 @@ interface PlayerProfileViewProps {
   initialTab?: PlayerProfileTab;
   refreshControl?: ReactElement<RefreshControlProps>;
   onBack: () => void;
-  onBell?: () => void;
   onSelectSeason?: (seasonKey: string) => void;
 }
 
@@ -130,10 +169,11 @@ export default function PlayerProfileView({
   initialTab = 'overview',
   refreshControl,
   onBack,
-  onBell,
   onSelectSeason,
 }: PlayerProfileViewProps) {
   const insets = useSafeAreaInsets();
+  const headerHeight = usePlayerHeaderHeight();
+  const scrollY = useRef(new Animated.Value(0)).current;
   const { width } = useWindowDimensions();
   const rtl = useRtl();
   const { t } = useTranslation();
@@ -168,21 +208,24 @@ export default function PlayerProfileView({
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" />
-      <PlayerProfileHeader onBack={onBack} onBell={onBell} />
-      <ScrollView
+      <Animated.ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={refreshControl}
+        refreshControl={
+          refreshControl ? React.cloneElement(refreshControl, { progressViewOffset: headerHeight }) : undefined
+        }
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
         {/* Hero */}
-        <View style={[styles.hero, { height: heroHeight }]}>
+        <View style={[styles.hero, { height: heroHeight + headerHeight }]}>
           <Image source={PP_STADIUM} style={StyleSheet.absoluteFill} contentFit="cover" />
           <View style={[StyleSheet.absoluteFill, styles.heroTint]} />
           {vm.jerseyNumber != null ? (
             <Text
               style={[
                 styles.heroJersey,
-                { fontFamily: fontBold, fontSize: 150 * scale },
+                { fontFamily: fontBold, fontSize: 150 * scale, top: headerHeight - 12 },
                 rtl ? { left: pad } : { right: pad },
               ]}
               allowFontScaling={false}
@@ -356,7 +399,9 @@ export default function PlayerProfileView({
             statsContent ?? null
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <PlayerProfileHeader onBack={onBack} scrollY={scrollY} />
 
       <ImageViewerModal
         visible={viewerOpen && !!photoUri && !photoFailed}
@@ -778,18 +823,45 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
 
   header: {
-    backgroundColor: C.bar,
-    paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerBtn: { width: 40, height: 36, justifyContent: 'center' },
-  headerBtnEnd: { alignItems: 'flex-end' },
-  headerIcon: { width: 24, height: 24 },
-  brand: { flexDirection: 'row', alignItems: 'center' },
-  brandNinety: { color: '#fff', fontSize: 22 },
+  headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 },
+  headerBar: {
+    backgroundColor: 'rgba(12,5,26,0.96)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(139,92,246,0.25)',
+  },
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(12,5,26,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  backBtnPressed: { transform: [{ scale: 0.92 }], borderColor: 'rgba(167,139,250,0.6)' },
+  backIcon: { marginRight: 2 },
+  headerSpacer: { width: 42, height: 42 },
+  brandPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  brand90: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
+  brandPlusChip: { backgroundColor: PURPLE_PRIMARY, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
+  brandPlus: { color: '#fff', fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
 
   statusBody: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
   statusText: { color: C.soft, fontSize: 14, textAlign: 'center' },

@@ -4,7 +4,6 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    ScrollView,
     ActivityIndicator,
     Animated,
     StatusBar,
@@ -41,6 +40,7 @@ import { useAppFont } from '../utils/fontSetup';
 import {
     PlayerProfileHeader,
     PlayerProfileStatus,
+    usePlayerHeaderHeight,
     SectionHeader,
 } from '../components/PlayerProfile/PlayerProfileView';
 import { PP_ICON, PP_STADIUM } from '../components/PlayerProfile/assets';
@@ -601,6 +601,8 @@ export default function PlayerProfileScreen() {
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(50)).current;
+    const scrollY = useRef(new Animated.Value(0)).current;
+    const headerHeight = usePlayerHeaderHeight();
 
     useEffect(() => {
         setPlayer(routeShell);
@@ -1027,9 +1029,7 @@ export default function PlayerProfileScreen() {
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
-            <PlayerProfileHeader onBack={goBack} onBell={() => router.push('/notifications' as never)} />
-
-            <ScrollView
+            <Animated.ScrollView
                 showsVerticalScrollIndicator={false}
                 refreshControl={
                     <RefreshControl
@@ -1037,12 +1037,15 @@ export default function PlayerProfileScreen() {
                         onRefresh={onRefresh}
                         tintColor={B.primary}
                         colors={[B.primary]}
+                        progressViewOffset={headerHeight}
                     />
                 }
+                onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+                scrollEventThrottle={16}
                 contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
             >
                 {/* Hero */}
-                <View style={styles.hero}>
+                <View style={[styles.hero, { paddingTop: headerHeight + 12 }]}>
                     <ExpoImage source={PP_STADIUM} style={StyleSheet.absoluteFill} contentFit="cover" />
                     <LinearGradient
                         colors={['rgba(12,5,26,0.55)', 'rgba(12,5,26,0.88)', B.bg]}
@@ -1051,7 +1054,7 @@ export default function PlayerProfileScreen() {
                     />
                     {jerseyNumber != null ? (
                         <Text
-                            style={[styles.heroJersey, { fontFamily: fontBold }, rtl ? { left: 14 } : { right: 14 }]}
+                            style={[styles.heroJersey, { fontFamily: fontBold, top: headerHeight - 6 }, rtl ? { left: 14 } : { right: 14 }]}
                             allowFontScaling={false}
                         >
                             {`#${jerseyNumber}`}
@@ -1322,7 +1325,9 @@ export default function PlayerProfileScreen() {
                         </>
                     )}
                 </Animated.View>
-            </ScrollView>
+            </Animated.ScrollView>
+
+            <PlayerProfileHeader onBack={goBack} scrollY={scrollY} />
         </View>
     );
 }

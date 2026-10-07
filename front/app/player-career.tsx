@@ -488,7 +488,6 @@ export default function PlayerCareerScreen() {
             vm={vm}
             statsContent={statsContent}
             onBack={goBack}
-            onBell={() => router.push('/notifications' as never)}
             onSelectSeason={setSelectedSeasonKey}
         />
     );
