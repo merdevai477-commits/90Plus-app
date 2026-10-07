@@ -225,7 +225,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
-          "color": "#7724f9",
+          "color": "#0D0529",
           "defaultChannel": "default",
           "googleServicesFile": "./google-services.json"
         }
