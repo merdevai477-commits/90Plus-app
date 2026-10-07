@@ -141,7 +141,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <View style={{ gap: 20 * s }}>
+    <View style={{ gap: 14 * s }}>
       <View
         style={[
           styles.sectionTitleRow,
@@ -151,7 +151,7 @@ function Section({
           },
         ]}
       >
-        <Text style={[styles.sectionTitle, { fontSize: 18 * s }]}>
+        <Text style={[styles.sectionTitle, { fontSize: 16 * s }]}>
           {title}
           {suffix ? <Text style={styles.sectionTitleSuffix}>{` ${suffix}`}</Text> : null}
         </Text>
@@ -164,6 +164,19 @@ function Section({
 
 function Card({ style, children }: { style?: object; children: React.ReactNode }) {
   return <View style={[styles.card, style]}>{children}</View>;
+}
+
+function TeamName({ name, s, size = 14 }: { name: string; s: number; size?: number }) {
+  return (
+    <Text
+      style={[styles.teamName, { fontSize: size * s }]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.8}
+    >
+      {name}
+    </Text>
+  );
 }
 
 function PercentRing({
@@ -222,21 +235,17 @@ function RingPair({
   s: number;
   divider?: boolean;
 }) {
-  const size = 144 * s;
+  const size = 112 * s;
   return (
-    <View style={[styles.pairRow, { gap: (divider ? 36 : 60) * s }]}>
-      <View style={[styles.ringCol, { gap: (divider ? 12 : 16) * s }]}>
+    <View style={[styles.pairRow, { gap: (divider ? 28 : 40) * s }]}>
+      <View style={[styles.ringCol, { gap: (divider ? 10 : 12) * s }]}>
         <PercentRing pct={n(pair.home)} size={size} color={C.homeRing} track={C.homeRingTrack} />
-        <Text style={[styles.teamName, { fontSize: 18 * s }]} numberOfLines={1}>
-          {homeName}
-        </Text>
+        <TeamName name={homeName} s={s} />
       </View>
       {divider ? <VDivider /> : null}
-      <View style={[styles.ringCol, { gap: (divider ? 12 : 16) * s }]}>
+      <View style={[styles.ringCol, { gap: (divider ? 10 : 12) * s }]}>
         <PercentRing pct={n(pair.away)} size={size} color={C.primary} track={C.awayRingTrack} />
-        <Text style={[styles.teamName, { fontSize: 18 * s }]} numberOfLines={1}>
-          {awayName}
-        </Text>
+        <TeamName name={awayName} s={s} />
       </View>
     </View>
   );
@@ -247,8 +256,8 @@ function BigNumberPair({
   homeName,
   awayName,
   s,
-  fontSize = 48,
-  gap = 12,
+  fontSize = 34,
+  gap = 8,
   decimals = 0,
 }: {
   pair: Pair;
@@ -268,14 +277,12 @@ function BigNumberPair({
       >
         {fmt(value, decimals)}
       </Text>
-      <Text style={[styles.teamName, { fontSize: 18 * s }]} numberOfLines={1}>
-        {name}
-      </Text>
+      <TeamName name={name} s={s} />
     </View>
   );
 
   return (
-    <View style={[styles.pairRow, { gap: 36 * s }]}>
+    <View style={[styles.pairRow, { gap: 28 * s }]}>
       {col(pair.home, homeName, C.secondary)}
       <VDivider />
       {col(pair.away, awayName, C.primary)}
@@ -288,11 +295,11 @@ function DualTrack({ pair, s }: { pair: Pair; s: number }) {
   const total = n(pair.home) + n(pair.away);
   const homePct = total > 0 ? (n(pair.home) / total) * 88 : 0;
   const awayPct = total > 0 ? (n(pair.away) / total) * 88 : 0;
-  const h = 11 * s;
+  const h = 8 * s;
   return (
-    <View style={[styles.track, { height: h, borderRadius: 9 * s }]}>
-      <View style={{ width: `${homePct}%`, height: h, borderRadius: 9 * s, backgroundColor: C.secondary }} />
-      <View style={{ width: `${awayPct}%`, height: h, borderRadius: 9 * s, backgroundColor: C.primary }} />
+    <View style={[styles.track, { height: h, borderRadius: h / 2 }]}>
+      <View style={{ width: `${homePct}%`, height: h, borderRadius: h / 2, backgroundColor: C.secondary }} />
+      <View style={{ width: `${awayPct}%`, height: h, borderRadius: h / 2, backgroundColor: C.primary }} />
     </View>
   );
 }
@@ -311,18 +318,18 @@ function ShotsCard({
   s: number;
 }) {
   return (
-    <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 25 * s, gap: 36 * s }}>
-      <View style={{ gap: 16 * s }}>
+    <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s, gap: 22 * s }}>
+      <View style={{ gap: 12 * s }}>
         <View style={styles.spaceBetween}>
-          <View style={styles.alignStart}>
-            <Text style={[styles.smallValue, { fontSize: 24 * s }]}>{fmt(total.home)}</Text>
-            <Text style={[styles.smallName, { fontSize: 13 * s }]} numberOfLines={1}>
+          <View style={[styles.flex1, styles.alignStart]}>
+            <Text style={[styles.smallValue, { fontSize: 20 * s }]}>{fmt(total.home)}</Text>
+            <Text style={[styles.smallName, { fontSize: 12 * s }]} numberOfLines={1}>
               {homeName}
             </Text>
           </View>
-          <View style={styles.alignEnd}>
-            <Text style={[styles.smallValue, { fontSize: 24 * s }]}>{fmt(total.away)}</Text>
-            <Text style={[styles.smallName, { fontSize: 13 * s }]} numberOfLines={1}>
+          <View style={[styles.flex1, styles.alignEnd]}>
+            <Text style={[styles.smallValue, { fontSize: 20 * s }]}>{fmt(total.away)}</Text>
+            <Text style={[styles.smallName, { fontSize: 12 * s }]} numberOfLines={1}>
               {awayName}
             </Text>
           </View>
@@ -331,13 +338,13 @@ function ShotsCard({
       </View>
 
       {rows.map((row) => (
-        <View key={row.key} style={{ gap: 13 * s }}>
+        <View key={row.key} style={{ gap: 10 * s }}>
           <View style={styles.spaceBetween}>
-            <Text style={[styles.rowValue, { fontSize: 22 * s }]}>{fmt(row.pair.home)}</Text>
-            <Text style={[styles.rowLabel, { fontSize: 16 * s }]} numberOfLines={1}>
+            <Text style={[styles.rowValue, { fontSize: 17 * s }]}>{fmt(row.pair.home)}</Text>
+            <Text style={[styles.rowLabel, { fontSize: 13 * s }]} numberOfLines={1}>
               {row.label}
             </Text>
-            <Text style={[styles.rowValue, { fontSize: 22 * s }]}>{fmt(row.pair.away)}</Text>
+            <Text style={[styles.rowValue, { fontSize: 17 * s }]}>{fmt(row.pair.away)}</Text>
           </View>
           <DualTrack pair={row.pair} s={s} />
         </View>
@@ -360,29 +367,29 @@ function SideBarsCard({
 }) {
   const max = Math.max(n(pair.home), n(pair.away));
   const pct = (v: number | null) => (max > 0 ? (n(v) / max) * 100 : 0);
-  const h = 11 * s;
+  const h = 8 * s;
 
   const side = (value: number | null, name: string, color: string, align: 'start' | 'end') => (
-    <View style={[styles.flex1, { gap: 16 * s }]}>
+    <View style={[styles.flex1, { gap: 12 * s }]}>
       <View style={align === 'start' ? styles.alignStart : styles.alignEnd}>
-        <Text style={[styles.smallValue, { fontSize: 24 * s }]}>{fmt(value)}</Text>
-        <Text style={[styles.smallName, { fontSize: 13 * s }]} numberOfLines={1}>
+        <Text style={[styles.smallValue, { fontSize: 20 * s }]}>{fmt(value)}</Text>
+        <Text style={[styles.smallName, { fontSize: 12 * s }]} numberOfLines={1}>
           {name}
         </Text>
       </View>
       <View
         style={[
           styles.track,
-          { height: h, borderRadius: 9 * s, justifyContent: align === 'start' ? 'flex-start' : 'flex-end' },
+          { height: h, borderRadius: h / 2, justifyContent: align === 'start' ? 'flex-start' : 'flex-end' },
         ]}
       >
-        <View style={{ width: `${pct(value)}%`, height: h, borderRadius: 9 * s, backgroundColor: color }} />
+        <View style={{ width: `${pct(value)}%`, height: h, borderRadius: h / 2, backgroundColor: color }} />
       </View>
     </View>
   );
 
   return (
-    <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 25 * s }}>
+    <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s }}>
       <View style={[styles.pairRow, { gap: 16 * s }]}>
         {side(pair.home, homeName, C.secondary, 'start')}
         <VDivider />
@@ -406,19 +413,17 @@ function CardsCard({
   s: number;
 }) {
   const group = (value: number | null, name: string, color: string) => (
-    <View style={[styles.cardGroup, { gap: 7 * s }]}>
-      <View style={[styles.cardCountCol, { gap: 8 * s }]}>
-        <Text style={[styles.cardCount, { fontSize: 40 * s }]}>{fmt(value)}</Text>
-        <Text style={[styles.teamName, { fontSize: 18 * s }]} numberOfLines={1}>
-          {name}
-        </Text>
+    <View style={[styles.cardGroup, { gap: 6 * s }]}>
+      <View style={[styles.cardCountCol, { gap: 4 * s }]}>
+        <Text style={[styles.cardCount, { fontSize: 28 * s }]}>{fmt(value)}</Text>
+        <TeamName name={name} s={s} size={13} />
       </View>
-      <View style={{ width: 20 * s, height: 26 * s, borderRadius: 3, backgroundColor: color }} />
+      <View style={{ width: 14 * s, height: 19 * s, borderRadius: 2, backgroundColor: color, marginTop: 6 * s }} />
     </View>
   );
 
   const row = (pair: Pair, color: string) => (
-    <View style={[styles.pairRow, { gap: 36 * s }]}>
+    <View style={[styles.pairRow, { gap: 24 * s }]}>
       {group(pair.home, homeName, color)}
       <VDivider />
       {group(pair.away, awayName, color)}
@@ -426,7 +431,7 @@ function CardsCard({
   );
 
   return (
-    <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 24 * s, gap: 24 * s }}>
+    <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s, gap: 18 * s }}>
       {row(yellow, C.yellow)}
       <HDivider />
       {row(red, C.red)}
@@ -448,27 +453,29 @@ function SummarySide({
   s: number;
 }) {
   const crest = (
-    <TeamBadge name={name} logo={logo} size={39 * s} color="transparent" />
+    <TeamBadge name={name} logo={logo} size={30 * s} color="transparent" />
   );
   return (
-    <View style={[styles.summarySide, { gap: 5 * s, flexDirection: align === 'start' ? 'row' : 'row-reverse' }]}>
+    <View style={[styles.summarySide, { gap: 6 * s, flexDirection: align === 'start' ? 'row' : 'row-reverse' }]}>
       {crest}
-      <View style={[styles.flex1, { gap: 24 * s, alignItems: align === 'start' ? 'flex-start' : 'flex-end' }]}>
+      <View style={[styles.flex1, { gap: 14 * s, alignItems: align === 'start' ? 'flex-start' : 'flex-end' }]}>
         <Text
-          style={[styles.summaryName, { fontSize: 23 * s, textAlign: align === 'start' ? 'left' : 'right' }]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
+          style={[
+            styles.summaryName,
+            { fontSize: 14 * s, lineHeight: 18 * s, minHeight: 36 * s, textAlign: align === 'start' ? 'left' : 'right' },
+          ]}
+          numberOfLines={2}
         >
           {name}
         </Text>
-        <View style={[styles.summaryMetrics, { gap: 12 * s }]}>
+        <View style={[styles.summaryMetrics, { gap: 8 * s }]}>
           {metrics.map((m) => (
             <View key={m.key} style={[styles.flex1, styles.summaryMetric]}>
-              <Text style={[styles.summaryValue, { fontSize: 19 * s }]} numberOfLines={1} adjustsFontSizeToFit>
+              <Text style={[styles.summaryValue, { fontSize: 17 * s }]} numberOfLines={1} adjustsFontSizeToFit>
                 {m.value}
               </Text>
               <Text
-                style={[styles.summaryLabel, { fontSize: (m.small ? 9 : 11) * s }]}
+                style={[styles.summaryLabel, { fontSize: (m.small ? 9 : 10) * s }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
               >
@@ -603,10 +610,10 @@ export function MatchStatsCompare({
   const names = { homeName, awayName, s };
 
   return (
-    <View style={[styles.root, { gap: 28 * s }]} onLayout={onLayout}>
+    <View style={[styles.root, { gap: 22 * s }]} onLayout={onLayout}>
       {has(p.possession) ? (
         <Section title={getLocalizedStatType('Ball Possession', language)} icon={ICON.possession} {...sectionProps}>
-          <Card style={{ paddingVertical: 20 * s }}>
+          <Card style={{ paddingVertical: 16 * s, paddingHorizontal: 12 * s }}>
             <RingPair pair={p.possession} {...names} />
           </Card>
         </Section>
@@ -614,8 +621,8 @@ export function MatchStatsCompare({
 
       {has(p.xg) ? (
         <Section title={md.statsXgTitle} suffix="(XG)" icon={ICON.xg} {...sectionProps}>
-          <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 28 * s }}>
-            <BigNumberPair pair={p.xg} decimals={2} gap={24} {...names} />
+          <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 20 * s }}>
+            <BigNumberPair pair={p.xg} decimals={2} gap={12} {...names} />
           </Card>
         </Section>
       ) : null}
@@ -628,12 +635,12 @@ export function MatchStatsCompare({
 
       {has(p.totalPasses) || has(p.passAccuracy) ? (
         <Section title={md.passes} icon={ICON.passes} {...sectionProps}>
-          <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 24 * s, gap: 24 * s }}>
+          <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s, gap: 18 * s }}>
             {has(p.totalPasses) ? <BigNumberPair pair={p.totalPasses} {...names} /> : null}
             {has(p.totalPasses) && has(p.passAccuracy) ? <HDivider /> : null}
             {has(p.passAccuracy) ? (
               <View style={{ gap: 8 * s, alignItems: 'center' }}>
-                <Text style={[styles.subTitle, { fontSize: 18 * s }]}>
+                <Text style={[styles.subTitle, { fontSize: 15 * s }]}>
                   {getLocalizedStatType('Pass Accuracy', language)}
                 </Text>
                 <RingPair pair={p.passAccuracy} divider {...names} />
@@ -645,15 +652,15 @@ export function MatchStatsCompare({
 
       {has(p.attacks) || has(p.dangerous) ? (
         <Section title={getLocalizedStatType('Attacks', language)} icon={ICON.attacks} {...sectionProps}>
-          <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 24 * s, gap: 24 * s }}>
+          <Card style={{ paddingHorizontal: 16 * s, paddingVertical: 18 * s, gap: 18 * s }}>
             {has(p.attacks) ? <BigNumberPair pair={p.attacks} {...names} /> : null}
             {has(p.attacks) && has(p.dangerous) ? <HDivider /> : null}
             {has(p.dangerous) ? (
-              <View style={{ gap: 12 * s, alignItems: 'center' }}>
-                <Text style={[styles.subTitle, { fontSize: 18 * s }]}>
+              <View style={{ gap: 10 * s, alignItems: 'center' }}>
+                <Text style={[styles.subTitle, { fontSize: 15 * s }]}>
                   {getLocalizedStatType('Dangerous Attacks', language)}
                 </Text>
-                <BigNumberPair pair={p.dangerous} fontSize={42} {...names} />
+                <BigNumberPair pair={p.dangerous} fontSize={30} {...names} />
               </View>
             ) : null}
           </Card>
@@ -689,7 +696,7 @@ export function MatchStatsCompare({
         </Section>
       ) : null}
 
-      {has(p.offsides) ? (
+      {n(p.offsides.home) + n(p.offsides.away) > 0 ? (
         <Section title={md.offsides} icon={ICON.offsides} {...sectionProps}>
           <SideBarsCard pair={p.offsides} {...names} />
         </Section>
@@ -698,10 +705,10 @@ export function MatchStatsCompare({
       {summaryMetrics('home').length > 0 ? (
         <View style={{ gap: 12 * s }}>
           <Section title={md.statsSummary} icon={ICON.summary} {...sectionProps}>
-            <Card style={{ padding: 16 * s }}>
+            <Card style={{ padding: 14 * s }}>
               <View style={[styles.pairRow, { gap: 9 * s, alignItems: 'center' }]}>
                 <SummarySide name={homeName} logo={homeLogo} metrics={summaryMetrics('home')} align="start" s={s} />
-                <VDivider height={72 * s} />
+                <VDivider height={64 * s} />
                 <SummarySide name={awayName} logo={awayLogo} metrics={summaryMetrics('away')} align="end" s={s} />
               </View>
             </Card>
@@ -722,7 +729,7 @@ export function MatchStatsCompare({
                 },
               ]}
             >
-              <Text style={[styles.insightText, { fontSize: 14 * s, textAlign: rtl ? 'right' : 'left' }]}>
+              <Text style={[styles.insightText, { fontSize: 13 * s, textAlign: rtl ? 'right' : 'left' }]}>
                 {insight}
               </Text>
               <View style={styles.insightIconBox}>
