@@ -30,14 +30,23 @@ type LmtJsonResponse = {
 export const LMT_TRANSPARENT_LOGO =
   'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-/** High-contrast 90PLUS-app mark for SportRadar pitchLogo / banners. */
-export const LMT_DEFAULT_BRAND_LOGO_DATA_URI =
-  'data:image/svg+xml,' +
-  encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="280" height="84" viewBox="0 0 280 84"><text x="140" y="54" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="900" font-size="34" fill="rgba(0,0,0,0.45)" letter-spacing="0.8">90PLUS-app</text><text x="140" y="52" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="900" font-size="34" fill="#FFFFFF" letter-spacing="0.8">90PLUS-app</text></svg>`,
-  );
-
 export const LMT_WIDGET_BASE_ORIGIN = 'https://lmtsrcf.365scores.com';
+
+export const LMT_BALL_TRAIL_COLOR = '#8B5CF6';
+
+/**
+ * SportRadar draws the ball trail as `polyline.sr-lmt-bspot__line` with
+ * stroke="#fff" presentation attributes — CSS rules override those.
+ * The pitch logo img caps at 25% of pitch height, too tall for a square icon.
+ */
+const LMT_CUSTOM_CSS = `<style id="90plus-lmt">
+.sr-lmt-bspot__line{stroke:${LMT_BALL_TRAIL_COLOR}!important;stroke-opacity:.95!important}
+img.sr-lmt-1-pitchlogo__wrapper{max-height:16%!important;opacity:.85!important}
+</style>`;
+
+function backendOrigin(): string {
+  return getApiUrl().replace(/\/$/, '').replace(/\/api$/i, '');
+}
 
 function buildEmbedUrl(kind: 'fixture' | 'game', id: number): string {
   const base = getApiUrl().replace(/\/$/, '');
@@ -48,13 +57,18 @@ function buildEmbedUrl(kind: 'fixture' | 'game', id: number): string {
   return `${base}/${path}`;
 }
 
-/** Absolute URL to hosted SVG (when data URI not preferred). */
+/** Square app icon shown mid-pitch. */
 export function resolveLmtBrandLogoUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_LMT_PITCH_LOGO_URL?.trim();
   if (fromEnv) return fromEnv;
-  const api = getApiUrl().replace(/\/$/, '');
-  const origin = api.replace(/\/api$/i, '');
-  return `${origin}/90plus-pitch-logo.svg`;
+  return `${backendOrigin()}/90plus-lmt-pitch-logo.png`;
+}
+
+/** Wide logo tiled along the pitch-side ad boards and goal banners. */
+export function resolveLmtBannerUrl(): string {
+  const fromEnv = process.env.EXPO_PUBLIC_LMT_BANNER_URL?.trim();
+  if (fromEnv) return fromEnv;
+  return `${backendOrigin()}/90plus-lmt-banner.png`;
 }
 
 /**
@@ -68,19 +82,27 @@ export function resolveLmtBrandLogoUrl(): string {
  *   window.location.href = "widgetrender://postrender"
  * WKWebView treats that custom scheme as NSURLErrorUnsupportedURL (-1002).
  */
-export function customizeScores365LmtWidgetHtml(html: string, logoUrl: string): string {
+export function customizeScores365LmtWidgetHtml(
+  html: string,
+  logoUrl: string,
+  bannerUrl: string = logoUrl,
+): string {
   const logo = logoUrl.replace(/"/g, '\\"');
-  return html
+  const banner = bannerUrl.replace(/"/g, '\\"');
+  const branded = html
     .replace(/pitchLogo:\s*"[^"]*"/, `pitchLogo: "${logo}"`)
-    .replace(/goalBannerImage:\s*"[^"]*"/, `goalBannerImage: "${logo}"`)
+    .replace(/goalBannerImage:\s*"[^"]*"/, `goalBannerImage: "${banner}"`)
     .replace(
       /widgetProps\.vlmtCourtBannerUrl\s*=\s*"[^"]*";/,
-      `widgetProps.vlmtCourtBannerUrl = "${logo}";`,
+      `widgetProps.vlmtCourtBannerUrl = "${banner}";`,
     )
     .replace(
       /window\.location\.href\s*=\s*["']widgetrender:\/\/[^"']*["']/g,
       '/* 90plus: blocked widgetrender:// for WKWebView */ void 0',
     );
+  return /<\/head>/i.test(branded)
+    ? branded.replace(/<\/head>/i, `${LMT_CUSTOM_CSS}</head>`)
+    : `${LMT_CUSTOM_CSS}${branded}`;
 }
 
 export function resolveLmtBrandLogoForHtml(options?: {
@@ -92,6 +114,11 @@ export function resolveLmtBrandLogoForHtml(options?: {
   if (custom) return custom;
   // Prefer https host over data: SVG — safer for SportRadar/WKWebView asset loads.
   return resolveLmtBrandLogoUrl();
+}
+
+export function resolveLmtBannerForHtml(options?: { hideBrand?: boolean }): string {
+  if (options?.hideBrand) return LMT_TRANSPARENT_LOGO;
+  return resolveLmtBannerUrl();
 }
 
 /** Fetch official GetWidget HTML and rewrite pitch branding (DD flow). */
@@ -108,7 +135,8 @@ async function fetchBrandedLmtHtmlOnce(
     throw new Error('GetWidget HTML missing pitchLogo');
   }
   const logo = resolveLmtBrandLogoForHtml(options);
-  return customizeScores365LmtWidgetHtml(html, logo);
+  const banner = resolveLmtBannerForHtml(options);
+  return customizeScores365LmtWidgetHtml(html, logo, banner);
 }
 
 export async function fetchBrandedLmtHtml(
