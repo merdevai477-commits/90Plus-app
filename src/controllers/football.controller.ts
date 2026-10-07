@@ -3261,6 +3261,7 @@ export class FootballController {
         competitorId,
         competitionId,
         language,
+        { roster },
       );
       if (!result.data) {
         res.status(503).json({
@@ -3295,7 +3296,6 @@ export class FootballController {
       const result = await footballDataCacheService.getCached365CompetitorSquad(
         competitorId,
         language,
-        { roster },
       );
       if (!result.data) {
         res.status(503).json({
