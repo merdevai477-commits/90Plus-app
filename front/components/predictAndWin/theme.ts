@@ -103,6 +103,19 @@ export const PW = {
   statLabel: '#c8b2fb',
   statValue: '#8351f5',
 
+  /** Sponsor prize page (`1311:17041`). */
+  spPageBg: '#0b0518',
+  spPanel: '#160c2d',
+  spPillText: '#c58bfc',
+  spPillBorder: 'rgba(79,48,143,0.39)',
+  spChipText: '#d7affe',
+  spStoreDesc: '#a1a1a1',
+  spTileBorder: 'rgba(186,157,254,0.13)',
+  spTileBody: '#bababa',
+  spDay: '#999999',
+  spTime: '#e0e0e0',
+  spAction: '#d7d7d7',
+
   /** Delivery badges (Group 67). */
   badgePickupBg: 'rgba(255,255,255,0.06)',
   badgePickupText: '#cdcdcd',
@@ -192,6 +205,12 @@ export const PW_GRADIENTS = {
     'rgb(6,3,12)',
   ] as const,
   cardWashLocations: [0.15357, 0.54292, 0.63109, 1] as const,
+  /** Sponsor page pills: "جائزة مقدمة من المتجر" runs right→left, "توقع برعاية" bottom→top. */
+  spPillPrize: ['rgba(62,12,176,0.36)', 'rgba(139,92,246,0.36)'] as const,
+  spPillPrizeLocations: [0.05185, 1] as const,
+  spPillSponsor: ['rgba(62,12,176,0.14)', 'rgba(139,92,246,0.14)'] as const,
+  spTile: ['rgba(139,92,246,0.11)', 'rgba(81,54,144,0.11)'] as const,
+  spCta: ['#8b5cf6', '#2e146a'] as const,
 } as const;
 
 // ─── Geometry (raw Figma units on the 448 artboard) ──────────────────────────

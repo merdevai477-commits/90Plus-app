@@ -83,9 +83,11 @@ function useCardMetrics() {
 export function HubPrizeCard({
   competition,
   onPress,
+  onOpenSponsor,
 }: {
   competition: CompetitionInfo;
   onPress: () => void;
+  onOpenSponsor?: () => void;
 }) {
   const remaining = useHubDeadlineRemaining(competition.predictionDeadline);
   const { t } = useTranslation();
@@ -104,6 +106,7 @@ export function HubPrizeCard({
       onCtaPress={onPress}
       ctaLabel={t.predictAndWin.detail.sharePrediction}
       onOpenMap={openMap}
+      onSponsorPress={onOpenSponsor}
     />
   );
 }

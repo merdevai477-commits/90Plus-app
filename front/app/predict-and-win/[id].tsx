@@ -5,13 +5,13 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CompetitionDetailCard } from '../../components/predictAndWin/CompetitionDetailCard';
 import { PredictScoreModal } from '../../components/predictAndWin/PredictScoreModal';
 import { PWHeader, usePWHeaderOffset } from '../../components/predictAndWin/PWHeader';
 import { PWFieldLabel } from '../../components/predictAndWin/fields';
+import { SponsorPrizeDetail } from '../../components/predictAndWin/SponsorPrizeDetail';
 import { usePWLocalize } from '../../components/predictAndWin/localize';
 import {
   PW,
@@ -158,13 +158,22 @@ export default function CompetitionDetailScreen() {
     Linking.openURL(`https://maps.google.com/?q=${q}`).catch(() => undefined);
   };
 
+  const share = () => {
+    const message = detail.shareMessage
+      .replace('{prize}', competition.prizeName)
+      .replace('{sponsor}', competition.sponsor.name)
+      .replace('{home}', competition.homeTeam)
+      .replace('{away}', competition.awayTeam);
+    Share.share({ message }).catch(() => undefined);
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: PW.screen }}>
       <PWHeader title={t.predictAndWin.title} onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={{ paddingTop: headerOffset, paddingBottom: insets.bottom + s(40) }}>
         <View style={{ marginTop: s(12) }}>
-          <CompetitionDetailCard
+          <SponsorPrizeDetail
             competition={competition}
             remaining={remaining}
             ctaLabel={canEdit && !competition.myEntry ? detail.sharePrediction : ctaLabel}
@@ -174,8 +183,26 @@ export default function CompetitionDetailScreen() {
               setSheetOpen(true);
             }}
             onOpenMap={openMap}
+            onShare={share}
           />
         </View>
+
+        {competition.prizeDescription ? (
+          <View style={{ marginTop: s(28), marginHorizontal: s(22), gap: s(8) }}>
+            <PWFieldLabel label={detail.prizeDetails} style={{ alignSelf: dir.alignStart }} />
+            <Text
+              style={{
+                fontFamily: regular,
+                fontSize: f(13),
+                lineHeight: f(13) * 1.5,
+                color: PW.textTipBody,
+                textAlign: dir.textAlign,
+              }}
+            >
+              {competition.prizeDescription}
+            </Text>
+          </View>
+        ) : null}
 
         {competition.status === 'SETTLED' && competition.myEntry ? (
           <View

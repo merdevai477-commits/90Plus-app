@@ -167,6 +167,7 @@ export default function PredictAndWinScreen() {
                 }
                 router.push(`/predict-and-win/${item.id}`);
               }}
+              onOpenSponsor={() => router.push(`/predict-and-win/${item.id}`)}
             />
           </View>
         ))}

@@ -198,6 +198,7 @@ export function CompetitionDetailCard({
   /** Entry is closed (settled/locked/cancelled/past deadline) or in flight. */
   ctaDisabled = false,
   onOpenMap,
+  onSponsorPress,
 }: {
   competition: CompetitionInfo;
   remaining: string;
@@ -205,6 +206,8 @@ export function CompetitionDetailCard({
   ctaLabel: string;
   ctaDisabled?: boolean;
   onOpenMap?: () => void;
+  /** Store name / logo tap — opens the sponsor prize page. */
+  onSponsorPress?: () => void;
 }) {
   const { s, f } = usePWScale();
   const { width: cardWidth, height: cardHeight, c, x } = useDetailMetrics();
@@ -271,33 +274,32 @@ export function CompetitionDetailCard({
     >
       {/* Brand mark — only when the advertiser uploaded a store image. */}
       {showSponsorLogo && leftArt ? (
-        <>
+        <Pressable
+          onPress={onSponsorPress}
+          disabled={!onSponsorPress}
+          accessibilityRole={onSponsorPress ? 'button' : undefined}
+          accessibilityLabel={sponsor.name}
+          style={{
+            position: 'absolute',
+            left: x(26, 78),
+            top: c(18),
+            width: c(78),
+            height: c(80),
+          }}
+        >
           <Image
             source={leftArt}
-            style={{
-              position: 'absolute',
-              left: x(26, 78),
-              top: c(18),
-              width: c(78),
-              height: c(80),
-              opacity: 0.9,
-            }}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.9 }}
             contentFit="contain"
             blurRadius={6}
           />
           <Image
             source={leftArt}
-            style={{
-              position: 'absolute',
-              left: x(26, 78),
-              top: c(18),
-              width: c(78),
-              height: c(80),
-            }}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
             contentFit="contain"
             cacheKey={sponsor.logoUrl ?? (sponsor.socialLinks?.storeLogoDefault ? 'default-store' : 'none')}
           />
-        </>
+        </Pressable>
       ) : null}
 
       {/* Prize photo — Figma 101.57×102 at (291,8). */}
@@ -347,7 +349,10 @@ export function CompetitionDetailCard({
       </View>
 
       {/* Sponsor block — Figma w112 at (8,109). */}
-      <View
+      <Pressable
+        onPress={onSponsorPress}
+        disabled={!onSponsorPress}
+        accessibilityRole={onSponsorPress ? 'button' : undefined}
         style={{
           position: 'absolute',
           left: x(8, 112),
@@ -394,7 +399,7 @@ export function CompetitionDetailCard({
             <IconLocation width={s(14)} height={s(14)} />
           </View>
         ) : null}
-      </View>
+      </Pressable>
 
       {/* "فتح الموقع" — Figma 109×27 at (9,175). */}
       <Pressable

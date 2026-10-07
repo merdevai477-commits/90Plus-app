@@ -175,6 +175,34 @@ export function getSponsorCountryFlagUri(
   return getCountryFlagUri(iso, null, width);
 }
 
+export function getSponsorCountryName(
+  input: SponsorCountryInput,
+  language: string,
+): string | null {
+  const iso = resolveSponsorCountryIso(input);
+  if (!iso) return null;
+  const isAr = language === 'ar';
+  if (iso === PALESTINE_ISO) return isAr ? 'فلسطين' : 'Palestine';
+  const byId = COUNTRIES.find((c) => c.id === iso);
+  if (byId) return isAr ? byId.name : byId.nameEn;
+  const byFlag = ALL_COUNTRY_FLAGS.find(
+    (c) => c.code.toLowerCase() === iso || c.code.split('-')[0]!.toLowerCase() === iso,
+  );
+  if (byFlag) return isAr ? byFlag.nameAr : byFlag.name;
+  return null;
+}
+
+/** Address without its trailing country segment, which the country chip already shows. */
+export function sponsorAddressWithoutCountry(address?: string | null): string | null {
+  const parts = (address ?? '')
+    .split(/[,،]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return null;
+  if (parts.length > 1 && isoFromAddressFragment(parts[parts.length - 1]!)) parts.pop();
+  return parts.join(' - ');
+}
+
 export function getSponsorCountryFlagEmoji(input: SponsorCountryInput): string | null {
   const iso = resolveSponsorCountryIso(input);
   if (!iso) return null;
