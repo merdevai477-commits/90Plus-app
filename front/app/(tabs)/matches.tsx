@@ -1007,7 +1007,9 @@ export default function MatchesHubScreenV2() {
   const router = useRouter();
   const { getToken, userId } = useAuth();
   useTeamOnboardingGate();
-  const { t: tObj, translate: t } = useTranslation();
+  const { t: tObj, translate: t, language } = useTranslation();
+  // The app forces LTR layout, so the Arabic calendar is mirrored manually.
+  const calMirrored = language === 'ar';
 
   // Clerk's getToken returns a NEW function reference on every render — store
   // it in a ref so effects don't re-fire on every parent re-render.
@@ -1320,9 +1322,8 @@ export default function MatchesHubScreenV2() {
     setFilter(f);
   }, [worldCupEnabled, worldCupLocked, refetch]);
 
-  const handleCalendarDayPress = useCallback((day: number) => {
-    const next = new Date(calendarViewDate);
-    next.setDate(day);
+  const handleCalendarDayPress = useCallback((date: Date) => {
+    const next = new Date(date);
     next.setHours(0, 0, 0, 0);
     setSelectedDate(next);
     setShowCalendar(false);
@@ -1331,7 +1332,7 @@ export default function MatchesHubScreenV2() {
     if (filter !== 'WorldCup' && filter !== 'Favorite' && filter !== 'Live') {
       setFilter(filterForCalendarDay(next));
     }
-  }, [calendarViewDate, filter]);
+  }, [filter]);
 
   const openCalendar = useCallback(() => {
     setCalendarViewDate(new Date(selectedDate));
@@ -1345,14 +1346,6 @@ export default function MatchesHubScreenV2() {
       next.setMonth(next.getMonth() + delta);
       return next;
     });
-  }, []);
-
-  const goToTodayInCalendar = useCallback(() => {
-    const today = startOfLocalDay();
-    setCalendarViewDate(today);
-    setSelectedDate(today);
-    setShowCalendar(false);
-    setFilter(filterForCalendarDay(today));
   }, []);
 
   // Filter helper applied to a Match list.
@@ -1988,13 +1981,11 @@ export default function MatchesHubScreenV2() {
   }, [viewAllLeagueId, filteredCountryGroups]);
 
   // ─── Calendar grid (driven by selectedDate — always in sync) ──────────────
-  // `calendarGrid` is the array of cells to render. Each cell is either a
-  // day number (1..daysInMonth) or `null` for a leading blank so the first
-  // day lands under the correct weekday column.
+  // Always 6 full weeks (42 cells); days outside the viewed month are shown
+  // faded and still selectable.
   const calendarGrid = useMemo(() => {
     const year = calendarViewDate.getFullYear();
     const month = calendarViewDate.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
     // Native JS Date.getDay: 0=Sunday..6=Saturday.
     // Arabic calendars traditionally start the week on Saturday; everyone
     // else we render Sunday-first. Convert native 0..6 into offset within
@@ -2003,9 +1994,11 @@ export default function MatchesHubScreenV2() {
     const weekStartsOn = tObj.matches?.screen?.weekStartsOn === 'saturday' ? 6 : 0;
     const offset = (firstDayNative - weekStartsOn + 7) % 7;
 
-    const cells: Array<number | null> = [];
-    for (let i = 0; i < offset; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    const cells: Array<{ date: Date; inMonth: boolean }> = [];
+    for (let i = 0; i < 42; i++) {
+      const date = new Date(year, month, 1 - offset + i);
+      cells.push({ date, inMonth: date.getMonth() === month });
+    }
     return cells;
   }, [calendarViewDate, tObj.matches?.screen?.weekStartsOn]);
 
@@ -2039,11 +2032,11 @@ export default function MatchesHubScreenV2() {
   }, [calendarViewDate]);
 
   const isCalendarDaySelected = useCallback(
-    (day: number) =>
-      selectedDate.getDate() === day
-      && selectedDate.getMonth() === calendarViewDate.getMonth()
-      && selectedDate.getFullYear() === calendarViewDate.getFullYear(),
-    [selectedDate, calendarViewDate],
+    (date: Date) =>
+      selectedDate.getDate() === date.getDate()
+      && selectedDate.getMonth() === date.getMonth()
+      && selectedDate.getFullYear() === date.getFullYear(),
+    [selectedDate],
   );
 
   const headerRight = useMemo(
@@ -2332,38 +2325,37 @@ export default function MatchesHubScreenV2() {
               ) : (
                 <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
               )}
-              <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.01)', 'rgba(0,0,0,0.5)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} pointerEvents="none" />
-              <View style={styles.calHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.calTitle}>{t('matches.screen.selectDate')}</Text>
-                  <View style={styles.calMonthNavRow}>
-                    <TouchableOpacity
-                      style={styles.calNavBtn}
-                      onPress={() => shiftCalendarMonth(-1)}
-                      accessibilityLabel={t('matches.screen.prevMonth')}
-                    >
-                      <ChevronLeft size={22} color="#E9D5FF" />
-                    </TouchableOpacity>
-                    <Text style={styles.calMonthLabel}>{calendarMonthLabel}</Text>
-                    <TouchableOpacity
-                      style={styles.calNavBtn}
-                      onPress={() => shiftCalendarMonth(1)}
-                      accessibilityLabel={t('matches.screen.nextMonth')}
-                    >
-                      <ChevronRight size={22} color="#E9D5FF" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <View style={styles.calHeaderActions}>
-                  <TouchableOpacity style={styles.calTodayBtn} onPress={goToTodayInCalendar}>
-                    <Text style={styles.calTodayTxt}>{t('matches.screen.today')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setShowCalendar(false)}>
-                    <Text style={styles.calClose}>{t('matches.screen.done')}</Text>
-                  </TouchableOpacity>
-                </View>
+              <View style={[styles.calHeader, calMirrored && styles.calRowReverse]}>
+                <View style={styles.calHeaderSide} />
+                <Text style={styles.calTitle} numberOfLines={1}>{t('matches.screen.selectDate')}</Text>
+                <TouchableOpacity
+                  style={[styles.calHeaderSide, { alignItems: calMirrored ? 'flex-start' : 'flex-end' }]}
+                  onPress={() => setShowCalendar(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={styles.calClose}>{t('matches.screen.done')}</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.calBody}>
+              <View style={styles.calMonthNavRow}>
+                <TouchableOpacity
+                  style={styles.calNavBtn}
+                  onPress={() => shiftCalendarMonth(calMirrored ? 1 : -1)}
+                  accessibilityLabel={t(calMirrored ? 'matches.screen.nextMonth' : 'matches.screen.prevMonth')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <ChevronLeft size={16} color="#fff" strokeWidth={2.5} />
+                </TouchableOpacity>
+                <Text style={styles.calMonthLabel} numberOfLines={1}>{calendarMonthLabel}</Text>
+                <TouchableOpacity
+                  style={styles.calNavBtn}
+                  onPress={() => shiftCalendarMonth(calMirrored ? -1 : 1)}
+                  accessibilityLabel={t(calMirrored ? 'matches.screen.prevMonth' : 'matches.screen.nextMonth')}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <ChevronRight size={16} color="#fff" strokeWidth={2.5} />
+                </TouchableOpacity>
+              </View>
+              <View style={[styles.calBody, calMirrored && styles.calRowReverse]}>
                 {weekDayLabels.map((d, i) => (
                   <View key={`wd-${i}`} style={styles.calDayNameCell}>
                     <Text
@@ -2377,21 +2369,23 @@ export default function MatchesHubScreenV2() {
                     </Text>
                   </View>
                 ))}
-                {calendarGrid.map((day, idx) => {
-                  if (day === null) {
-                    return <View key={`blank-${idx}`} style={styles.calDay} />;
-                  }
-                  const isSelected = isCalendarDaySelected(day);
+                {calendarGrid.map(({ date, inMonth }) => {
+                  const isSelected = isCalendarDaySelected(date);
                   return (
                     <TouchableOpacity
-                      key={`d-${day}`}
-                      style={[styles.calDay, isSelected && styles.calDayActive]}
-                      onPress={() => handleCalendarDayPress(day)}
+                      key={date.toDateString()}
+                      style={styles.calDay}
+                      onPress={() => handleCalendarDayPress(date)}
+                      activeOpacity={0.7}
                     >
-                      {isSelected && (
-                        <LinearGradient colors={['rgba(168,85,247,0.9)', 'rgba(126,34,206,0.6)']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-                      )}
-                      <Text style={[styles.calDayTxt, isSelected && { color: '#fff', textShadowColor: 'rgba(255,255,255,0.5)', textShadowRadius: 10 }]}>{day}</Text>
+                      <View style={[styles.calDayInner, isSelected && styles.calDayActive]}>
+                        <Text
+                          style={[styles.calDayTxt, !inMonth && !isSelected && styles.calDayTxtOutside]}
+                          allowFontScaling={false}
+                        >
+                          {date.getDate()}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
@@ -2707,51 +2701,69 @@ const styles = StyleSheet.create({
 
   modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   calendarModalOuter: { width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 35, elevation: 20 },
-  calendarModalInner: { borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', overflow: 'hidden', paddingVertical: 24, paddingHorizontal: 16 },
-  calHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, zIndex: 1, gap: 12 },
-  calTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
-  calMonthNavRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  calNavBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+  calendarModalInner: {
+    borderRadius: 28,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    overflow: 'hidden',
+    paddingVertical: 23,
+    paddingHorizontal: 12,
+  },
+  calRowReverse: { flexDirection: 'row-reverse' },
+  calHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11, zIndex: 1 },
+  calHeaderSide: { width: 48, justifyContent: 'center' },
+  calTitle: { flex: 1, color: '#fff', fontSize: 24, fontWeight: '800', textAlign: 'center' },
+  calClose: { color: '#8C5CF5', fontSize: 18, fontWeight: '800' },
+  calMonthNavRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    height: 35,
+    marginTop: 12,
+    marginBottom: 25,
+    gap: 36,
+    zIndex: 1,
   },
-  calMonthLabel: { color: '#E9D5FF', fontSize: 14, fontWeight: '700', minWidth: 130, textAlign: 'center' },
-  calHeaderActions: { alignItems: 'flex-end', gap: 10 },
-  calTodayBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(168,85,247,0.45)',
-    backgroundColor: 'rgba(168,85,247,0.12)',
+  calNavBtn: {
+    width: 29,
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(219,219,219,0.17)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  calTodayTxt: { color: '#D8B4FE', fontSize: 13, fontWeight: '700' },
-  calClose: { color: PURPLE_PRIMARY, fontSize: 16, fontWeight: '700' },
+  calMonthLabel: { color: '#fff', fontSize: 19, fontWeight: '700', minWidth: 120, textAlign: 'center' },
   calBody: { flexDirection: 'row', flexWrap: 'wrap', zIndex: 1 },
   calDayNameCell: {
     width: '14.28%',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
     paddingHorizontal: 1,
   },
   calDayName: {
     width: '100%',
     textAlign: 'center',
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 11,
+    color: '#fff',
+    fontSize: 15,
     fontWeight: '700',
     includeFontPadding: false,
   },
-  calDay: { width: '14.28%', height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 10, overflow: 'hidden', marginBottom: 8 },
-  calDayActive: { borderColor: 'rgba(168,85,247,0.5)', borderWidth: 1 },
-  calDayTxt: { color: 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: '600', zIndex: 1 },
+  calDay: { width: '14.28%', height: 33, alignItems: 'center', justifyContent: 'center' },
+  calDayInner: {
+    minWidth: 28,
+    height: 28,
+    paddingHorizontal: 2,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calDayActive: { backgroundColor: '#8C5CF5' },
+  calDayTxt: { color: '#fff', fontSize: 21, fontWeight: '800', letterSpacing: 0.63, includeFontPadding: false },
+  calDayTxtOutside: { opacity: 0.2 },
   ticketsInfoModalOuter: { width: '85%', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.8, shadowRadius: 35, elevation: 20 },
   ticketsInfoModalInner: { borderRadius: 28, borderWidth: 1, borderColor: 'rgba(168,85,247,0.4)', overflow: 'hidden', padding: 24, alignItems: 'center' },
   infoIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(168,85,247,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 16, borderWidth: 1, borderColor: 'rgba(168,85,247,0.3)' },
