@@ -513,6 +513,8 @@ export async function revertXp(input: {
 
 // ─── Daily Login Streak ─────────────────────────────────────────────────────
 
+const LAST_SEEN_REFRESH_MS = 15 * 60 * 1000;
+
 export async function awardDailyLogin(userId: string, timezone: string): Promise<AwardXpResult> {
   const todayStr = getUserToday(timezone);
 
@@ -525,8 +527,17 @@ export async function awardDailyLogin(userId: string, timezone: string): Promise
     });
   } else {
     if (streak.lastLoginDate === todayStr) {
-      // Already counted today — no-op
-      const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { xp: true, level: true } });
+      // Already counted today — no XP, but keep User.lastLoginDate fresh: the
+      // re-engagement notifier reads it as "last seen".
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { xp: true, level: true, lastLoginDate: true },
+      });
+      if (!user.lastLoginDate || Date.now() - user.lastLoginDate.getTime() > LAST_SEEN_REFRESH_MS) {
+        await prisma.user
+          .update({ where: { id: userId }, data: { lastLoginDate: new Date() } })
+          .catch((err) => logger.warn('lastLoginDate refresh failed', { userId, error: err?.message }));
+      }
       return { awarded: 0, newXp: user.xp, newLevel: user.level, leveledUp: false, previousLevel: user.level, reason: 'duplicate' };
     }
 

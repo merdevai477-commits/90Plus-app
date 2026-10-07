@@ -958,6 +958,10 @@ async function startServer() {
                     const { startDailyQuizNotifier } = await import('./services/daily-quiz-notifier.service');
                     startDailyQuizNotifier();
 
+                    // Re-engagement push is DB + Expo only, so it runs on every plan.
+                    const { startReEngagementNotifier } = await import('./services/re-engagement-notifier.service');
+                    startReEngagementNotifier();
+
                     if (process.env.WORLD_CUP_NEWS_ENABLED === 'true') {
                         const { startWorldCupNewsRefreshCron } = await import(
                             './services/world-cup-news-cron.service'

@@ -27,6 +27,7 @@ import {
     renderPushTemplate,
     type SupportedLanguage,
 } from './push-templates.service';
+import { bidiSafeName, resolvePushFirstName } from '../utils/push-display-name';
 
 const BATCH_SIZE = 20;
 const MIN_HOURS_BETWEEN_CHECKINS = 11; // dedup across cron drift / restarts
@@ -126,9 +127,11 @@ async function generateAIBody(
 
 interface CheckinCandidate {
     id: string;
-    displayName: string;
+    firstName: string | null;
     settings: unknown;
 }
+
+const FALLBACK_NAME: Record<SupportedLanguage, string> = { ar: 'بطل', en: 'champ' };
 
 /**
  * Find users eligible for a check-in this cron tick.
@@ -161,7 +164,7 @@ async function selectCandidates(): Promise<CheckinCandidate[]> {
             isBanned: false,
             isSuspended: false,
         },
-        select: { id: true, displayName: true, username: true, settings: true },
+        select: { id: true, displayName: true, username: true, clerkUserId: true, settings: true },
         take: RUN_BUDGET * 3,
     });
 
@@ -182,7 +185,7 @@ async function selectCandidates(): Promise<CheckinCandidate[]> {
         .filter((u) => !recentSet.has(u.id))
         .map((u) => ({
             id: u.id,
-            displayName: u.displayName || u.username || 'champ',
+            firstName: resolvePushFirstName(u),
             settings: u.settings,
         }));
 }
@@ -216,15 +219,16 @@ async function runAICheckin(): Promise<void> {
             const dispatches = await Promise.all(
                 batch.map(async (u) => {
                     const language = readLanguageFromSettings(u.settings);
+                    const name = u.firstName
+                        ? bidiSafeName(u.firstName, language)
+                        : FALLBACK_NAME[language];
                     let body: string | null = null;
                     if (aiUsed < RUN_BUDGET) {
-                        body = await generateAIBody(u.displayName, language);
+                        body = await generateAIBody(u.firstName ?? FALLBACK_NAME[language], language);
                         if (body) aiUsed++;
                     }
                     if (!body) {
-                        body = renderPushTemplate('aiCheckinFallbackBody', language, {
-                            name: u.displayName,
-                        });
+                        body = renderPushTemplate('aiCheckinFallbackBody', language, { name });
                         fallbacks++;
                     }
 
@@ -233,7 +237,7 @@ async function runAICheckin(): Promise<void> {
                         type: NotificationType.AI_CHECKIN,
                         titleKey: 'aiCheckinTitle',
                         message: body, // body is pre-rendered (AI or fallback)
-                        vars: { name: u.displayName },
+                        vars: { name },
                         data: { screen: '/(tabs)/chat', source: 'ai-checkin' },
                         idempotencyKey: `ai-checkin:${u.id}:${halfDayBucket}`,
                     });

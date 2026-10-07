@@ -581,7 +581,16 @@ router.post('/test-push', requireAuth, async (req: Request, res: Response): Prom
 
         const user = await prisma.user.findUnique({
             where: { clerkUserId },
-            select: { id: true, expoPushToken: true, pushNotificationsConsent: true, isDeveloper: true },
+            select: {
+                id: true,
+                expoPushToken: true,
+                pushNotificationsConsent: true,
+                isDeveloper: true,
+                username: true,
+                displayName: true,
+                clerkUserId: true,
+                settings: true,
+            },
         });
         if (!user) { sendError(req, res, ErrorCode.NOT_FOUND, 'User not found'); return; }
         if (!user.isDeveloper) { sendError(req, res, ErrorCode.AUTHORIZATION, 'Developer access only'); return; }
@@ -652,11 +661,23 @@ router.post('/test-push', requireAuth, async (req: Request, res: Response): Prom
             });
         }
         if (type === 'all' || type === 're_engagement') {
+            const { buildReEngagementMessage } = await import('../services/re-engagement-notifier.service');
+            const { readLanguageFromSettings } = await import('../services/push-templates.service');
+            const { resolvePushFirstName } = await import('../utils/push-display-name');
+            const tier = (['short', 'miss', 'comeback'] as const).includes(req.body?.tier)
+                ? req.body.tier
+                : 'short';
+            const msg = buildReEngagementMessage({
+                userId: user.id,
+                tier,
+                language: readLanguageFromSettings(user.settings),
+                firstName: resolvePushFirstName(user),
+            });
             tests.push({
                 type: 'RE_ENGAGEMENT',
-                title: '⚽ الكرة بتنادي عليك!',
-                body: 'رجع التطبيق وشوف أحدث مباريات وتوقعات النهارده 🔥',
-                data: { type: 'RE_ENGAGEMENT', screen: '/(tabs)/matches' },
+                title: msg.title,
+                body: msg.body,
+                data: { type: 'RE_ENGAGEMENT', screen: msg.screen },
             });
         }
 
