@@ -296,6 +296,12 @@ export interface Player365LastMatch {
   ratingColor: string | null;
 }
 
+export interface PlayerSocialLinks {
+  athleteId: number;
+  facebookUrl: string | null;
+  instagramUrl: string | null;
+}
+
 export interface Player365Career {
   athleteId: number;
   profile: {
@@ -2232,6 +2238,20 @@ export const ApiFootballService = {
       return data;
     } catch (err) {
       logger.warn('365 career fetch failed:', err);
+      return null;
+    }
+  },
+
+  /** Admin-curated Facebook / Instagram pages for a 365 athlete (nulls when not set). */
+  async get365PlayerSocials(athleteId: number): Promise<PlayerSocialLinks | null> {
+    try {
+      const url = `${getApiUrl()}/football/cached/365/player/${athleteId}/socials`;
+      const response = await withTimeout(fetch(url, { headers: { Accept: 'application/json' } }), 8_000);
+      if (!response.ok) return null;
+      const json = (await response.json()) as { data?: PlayerSocialLinks };
+      return json.data ?? null;
+    } catch (err) {
+      logger.warn('365 player socials fetch failed:', err);
       return null;
     }
   },

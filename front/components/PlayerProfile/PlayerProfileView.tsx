@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState, type ReactElement, type ReactNode }
 import {
   ActivityIndicator,
   Animated,
+  Linking,
   Pressable,
   StatusBar,
   StyleSheet,
@@ -161,7 +162,22 @@ interface PlayerProfileViewProps {
   refreshControl?: ReactElement<RefreshControlProps>;
   onBack: () => void;
   onSelectSeason?: (seasonKey: string) => void;
+  /** Admin-curated pages; a button is enabled only when its link is set. */
+  socials?: { facebookUrl: string | null; instagramUrl: string | null } | null;
 }
+
+const SOCIAL_BUTTONS = [
+  {
+    key: 'instagram',
+    icon: 'logo-instagram' as const,
+    colors: ['#F58529', '#DD2A7B', '#8134AF'] as const,
+  },
+  {
+    key: 'facebook',
+    icon: 'logo-facebook' as const,
+    colors: ['#1877F2', '#0B4FB3'] as const,
+  },
+];
 
 export default function PlayerProfileView({
   vm,
@@ -170,6 +186,7 @@ export default function PlayerProfileView({
   refreshControl,
   onBack,
   onSelectSeason,
+  socials,
 }: PlayerProfileViewProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = usePlayerHeaderHeight();
@@ -308,22 +325,37 @@ export default function PlayerProfileView({
                 <TeamBadge name={vm.clubName} logo={vm.clubLogo || undefined} size={22} color="transparent" />
               </View>
             ) : null}
-            <Pressable
-              disabled
-              accessibilityRole="button"
-              accessibilityState={{ disabled: true }}
-              style={styles.followWrap}
-            >
-              <LinearGradient
-                colors={[C.primary, '#2e146a']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.followBtn, { flexDirection: row }]}
-              >
-                <Image source={PP_ICON.star} style={styles.followIcon} contentFit="contain" />
-                <Text style={[styles.followText, { fontFamily: fontBold }]}>{pc.follow}</Text>
-              </LinearGradient>
-            </Pressable>
+            <View style={[styles.socialRow, { flexDirection: row }]}>
+              {SOCIAL_BUTTONS.map((s) => {
+                const url = s.key === 'instagram' ? socials?.instagramUrl : socials?.facebookUrl;
+                return (
+                  <Pressable
+                    key={s.key}
+                    disabled={!url}
+                    onPress={() => url && Linking.openURL(url).catch(() => undefined)}
+                    accessibilityRole="link"
+                    accessibilityState={{ disabled: !url }}
+                    style={({ pressed }) => [
+                      styles.socialBtnWrap,
+                      !url && styles.socialBtnUnavailable,
+                      pressed && styles.socialBtnPressed,
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={s.colors}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={[styles.socialBtn, { flexDirection: row }]}
+                    >
+                      <Ionicons name={s.icon} size={18} color="#fff" />
+                      <Text style={[styles.socialBtnText, { fontFamily: fontBold }]} numberOfLines={1}>
+                        {s.key === 'instagram' ? pc.instagram : pc.facebook}
+                      </Text>
+                    </LinearGradient>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         </View>
 
@@ -895,18 +927,21 @@ const styles = StyleSheet.create({
   heroName: { color: '#fff', flexShrink: 1 },
   verified: { width: 22, height: 22 },
   heroClub: { color: C.soft, fontSize: 14, flexShrink: 1 },
-  followWrap: { marginTop: 12, alignSelf: 'stretch' },
-  followBtn: {
+  socialRow: { marginTop: 12, alignSelf: 'stretch', gap: 8 },
+  socialBtnWrap: { flex: 1, borderRadius: 12, overflow: 'hidden' },
+  socialBtnUnavailable: { opacity: 0.4 },
+  socialBtnPressed: { transform: [{ scale: 0.96 }] },
+  socialBtn: {
     height: 40,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
+    paddingHorizontal: 8,
     borderWidth: 1,
-    borderColor: 'rgba(167,139,250,0.35)',
+    borderColor: 'rgba(255,255,255,0.18)',
   },
-  followIcon: { width: 16, height: 16 },
-  followText: { color: '#fff', fontSize: 14 },
+  socialBtnText: { color: '#fff', fontSize: 13, flexShrink: 1 },
 
   strip: {
     marginTop: -STRIP_OVERLAP,

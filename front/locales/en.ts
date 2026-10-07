@@ -778,7 +778,6 @@ export const en = {
     height: 'Height',
     personalInfo: 'Personal info',
     transfers: 'Transfers',
-    follow: 'Follow',
     nationality: 'Nationality',
     age: 'Age',
     years: 'yrs',
@@ -798,6 +797,8 @@ export const en = {
     transferFee: 'Transfer fee',
     didNotPlay: 'DNP',
     chooseSeason: 'Choose season',
+    instagram: 'Instagram',
+    facebook: 'Facebook',
     onlyOneSeason: 'This is the only season on record for this player so far',
   },
 

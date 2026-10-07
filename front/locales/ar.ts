@@ -1012,7 +1012,6 @@ export const ar = {
     height: 'الطول',
     personalInfo: 'معلومات شخصية',
     transfers: 'الانتقالات',
-    follow: 'متابعة',
     nationality: 'الجنسية',
     age: 'العمر',
     years: 'سنة',
@@ -1032,6 +1031,8 @@ export const ar = {
     transferFee: 'رسوم انتقال',
     didNotPlay: 'لم يلعب',
     chooseSeason: 'اختر الموسم',
+    instagram: 'إنستجرام',
+    facebook: 'فيسبوك',
     onlyOneSeason: 'ده الموسم الوحيد المسجل للاعب حتى الآن',
   },
 

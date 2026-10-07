@@ -17,6 +17,7 @@ import ApiFootballService, {
     type Player365Career,
     type Player365CareerHighlightCompetition,
     type Player365CareerSeason,
+    type PlayerSocialLinks,
 } from '../services/apiFootball';
 import { ProfileTheme } from '../constants/ProfileTheme';
 import {
@@ -92,6 +93,18 @@ export default function PlayerCareerScreen() {
     const [selectedSeasonKey, setSelectedSeasonKey] = useState<string | null>(null);
     const [seasonPickerOpen, setSeasonPickerOpen] = useState(false);
     const [highlightCompId, setHighlightCompId] = useState<number | null>(null);
+    const [socials, setSocials] = useState<PlayerSocialLinks | null>(null);
+
+    useEffect(() => {
+        if (athleteId <= 0) return;
+        let active = true;
+        ApiFootballService.get365PlayerSocials(athleteId).then((links) => {
+            if (active) setSocials(links);
+        });
+        return () => {
+            active = false;
+        };
+    }, [athleteId]);
 
     useEffect(() => {
         let active = true;
@@ -489,6 +502,7 @@ export default function PlayerCareerScreen() {
             statsContent={statsContent}
             onBack={goBack}
             onSelectSeason={setSelectedSeasonKey}
+            socials={socials}
         />
     );
 }

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { FootballController } from '../controllers/football.controller';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
+import { getPlayerSocialLinks } from '../services/player-social-links.service';
+import { logger } from '../utils/logger';
 import {
   calendarTodayKey,
   offsetCalendarDateKey,
@@ -215,6 +217,20 @@ router.get(
   SHARED_CACHE_24H,
   FootballController.getCached365PlayerCareer,
 );
+// Admin-curated Facebook / Instagram pages (null when not set yet).
+router.get('/cached/365/player/:athleteId/socials', SHARED_CACHE_60S, async (req, res) => {
+  const athleteId = Number.parseInt(String(req.params.athleteId), 10);
+  if (!Number.isFinite(athleteId) || athleteId <= 0) {
+    res.status(400).json({ status: 'ERROR', message: 'Invalid athleteId' });
+    return;
+  }
+  try {
+    res.json({ status: 'SUCCESS', data: await getPlayerSocialLinks(athleteId) });
+  } catch (error) {
+    logger.warn(`[PlayerSocials] read ${athleteId} failed:`, (error as Error)?.message);
+    res.json({ status: 'SUCCESS', data: { athleteId, facebookUrl: null, instagramUrl: null } });
+  }
+});
 
 // GET /api/football/cached/365/search?q= — discover 365 athleteId by player name
 router.get('/cached/365/search', SHARED_CACHE_5MIN, FootballController.search365Athletes);

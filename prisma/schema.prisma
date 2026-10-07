@@ -1186,6 +1186,19 @@ model Cached365PlayerCareer {
   @@map("cached_365_player_career")
 }
 
+/// Official social pages for a player, keyed by 365Scores athleteId.
+/// Curated by admins; the profile shows a button only for links that exist.
+model PlayerSocialLink {
+  athleteId    Int      @id
+  name         String?
+  facebookUrl  String?
+  instagramUrl String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("player_social_links")
+}
+
 /// 365Scores competitor (club or national team) profile snapshot.
 /// competitorId is the 365 competitor id; type 1 = club, 2 = national team.
 model Cached365Competitor {

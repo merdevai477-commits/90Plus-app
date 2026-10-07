@@ -1757,5 +1757,72 @@ router.post('/prize-categories', requireAdmin, async (req: Request, res: Respons
     }
 });
 
+// ─── Player social pages (Facebook / Instagram on the player profile) ───────
+
+function parseAthleteId(raw: unknown): number | null {
+    const id = Number.parseInt(String(raw), 10);
+    return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+/** GET /api/admin/player-socials?limit=&offset= */
+router.get('/player-socials', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { listPlayerSocialLinks } = await import('../services/player-social-links.service');
+        const take = Math.min(Number.parseInt(String(req.query.limit ?? ''), 10) || 100, 500);
+        const skip = Math.max(Number.parseInt(String(req.query.offset ?? ''), 10) || 0, 0);
+        res.json({ status: 'SUCCESS', data: await listPlayerSocialLinks(take, skip) });
+    } catch (error: unknown) {
+        logger.error('Admin player socials list error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to load player socials');
+    }
+});
+
+/**
+ * PUT /api/admin/player-socials/:athleteId
+ * Body: { facebookUrl?, instagramUrl?, name? } — full URL or handle; null/"" clears.
+ */
+router.put('/player-socials/:athleteId', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    const athleteId = parseAthleteId(req.params.athleteId);
+    if (!athleteId) {
+        sendError(req, res, ErrorCode.VALIDATION, 'Invalid athleteId');
+        return;
+    }
+    try {
+        const { upsertPlayerSocialLinks, PlayerSocialLinkError } = await import(
+            '../services/player-social-links.service'
+        );
+        try {
+            const row = await upsertPlayerSocialLinks(athleteId, req.body ?? {});
+            res.json({ status: 'SUCCESS', data: row });
+        } catch (error: unknown) {
+            if (error instanceof PlayerSocialLinkError) {
+                sendError(req, res, ErrorCode.VALIDATION, error.message);
+                return;
+            }
+            throw error;
+        }
+    } catch (error: unknown) {
+        logger.error('Admin player socials upsert error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to save player socials');
+    }
+});
+
+/** DELETE /api/admin/player-socials/:athleteId */
+router.delete('/player-socials/:athleteId', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    const athleteId = parseAthleteId(req.params.athleteId);
+    if (!athleteId) {
+        sendError(req, res, ErrorCode.VALIDATION, 'Invalid athleteId');
+        return;
+    }
+    try {
+        const { deletePlayerSocialLinks } = await import('../services/player-social-links.service');
+        await deletePlayerSocialLinks(athleteId);
+        res.json({ status: 'SUCCESS' });
+    } catch (error: unknown) {
+        logger.error('Admin player socials delete error:', error);
+        sendError(req, res, ErrorCode.INTERNAL, 'Failed to delete player socials');
+    }
+});
+
 export default router;
 
