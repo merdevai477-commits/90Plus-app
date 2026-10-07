@@ -37,11 +37,10 @@ export const LMT_BALL_TRAIL_COLOR = '#8B5CF6';
 /**
  * SportRadar draws the ball trail as `polyline.sr-lmt-bspot__line` with
  * stroke="#fff" presentation attributes — CSS rules override those.
- * The pitch logo img caps at 25% of pitch height, too tall for a square icon.
  */
 const LMT_CUSTOM_CSS = `<style id="90plus-lmt">
 .sr-lmt-bspot__line{stroke:${LMT_BALL_TRAIL_COLOR}!important;stroke-opacity:.95!important}
-img.sr-lmt-1-pitchlogo__wrapper{max-height:16%!important;opacity:.85!important}
+img.sr-lmt-1-pitchlogo__wrapper{opacity:.9!important}
 </style>`;
 
 function backendOrigin(): string {
@@ -57,11 +56,11 @@ function buildEmbedUrl(kind: 'fixture' | 'game', id: number): string {
   return `${base}/${path}`;
 }
 
-/** Square app icon shown mid-pitch. */
+/** Transparent "90 PLUS" wordmark shown mid-pitch. */
 export function resolveLmtBrandLogoUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_LMT_PITCH_LOGO_URL?.trim();
   if (fromEnv) return fromEnv;
-  return `${backendOrigin()}/90plus-lmt-pitch-logo.png`;
+  return `${backendOrigin()}/90plus-lmt-pitch-wordmark.png`;
 }
 
 /** Wide logo tiled along the pitch-side ad boards and goal banners. */

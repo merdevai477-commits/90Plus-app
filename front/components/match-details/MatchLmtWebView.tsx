@@ -46,7 +46,7 @@ type MatchLmtWebViewProps = {
   variant?: 'hero' | 'card';
   /**
    * true → transparent pitchLogo (hide 365 mark entirely).
-   * false → brandLogoUrl or the hosted 90PLUS app icon.
+   * false → brandLogoUrl or the hosted 90PLUS wordmark.
    */
   hideBrand?: boolean;
   /** Absolute / data URI used as pitchLogo when hideBrand is false. */

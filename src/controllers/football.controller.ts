@@ -120,7 +120,7 @@ async function sendLmtResponse(req: Request, res: Response, info: Scores365LmtWi
   const brandLogoUrl = hideBrand
     ? null
     : process.env.LMT_PITCH_LOGO_URL?.trim() ||
-      (publicBase ? `${publicBase}/90plus-lmt-pitch-logo.png` : null);
+      (publicBase ? `${publicBase}/90plus-lmt-pitch-wordmark.png` : null);
 
   if (format === 'json') {
     res.json({
