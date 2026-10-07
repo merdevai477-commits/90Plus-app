@@ -16,7 +16,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiFootballService, { type Player365Career, type Player365Transfer } from '../services/apiFootball';
-import { ProfileTheme } from '../constants/ProfileTheme';
 import { logger } from '../utils/logger';
 import PlayerAvatar from '../components/common/PlayerAvatar';
 import ImageViewerModal from '../components/common/ImageViewerModal';
@@ -38,6 +37,14 @@ import {
 } from '../utils/playerStatsAggregate';
 import { preferScores365AthletesPhotoUrl, toFullscreenPhotoUrl, with365ImageSize } from '../utils/scores365AthletePhoto';
 import { getCountryFlagUri } from '../utils/countryFlagUri';
+import { useAppFont } from '../utils/fontSetup';
+import {
+    PlayerProfileHeader,
+    PlayerProfileStatus,
+    SectionHeader,
+} from '../components/PlayerProfile/PlayerProfileView';
+import { PP_ICON, PP_STADIUM } from '../components/PlayerProfile/assets';
+import { PP_COLORS as B, ratingTone } from '../components/PlayerProfile/theme';
 
 // Cache key prefix for player data
 const PLAYER_CACHE_PREFIX = 'player_cache_';
@@ -233,7 +240,7 @@ const TEAM_COLORS: { [key: string]: readonly [string, string, ...string[]] } = {
     'Juventus': ['#000000', '#FFFFFF'],
     'Al Ahly': ['#C8102E', '#8B0000'],
     'Zamalek': ['#FFFFFF', '#000000'],
-    'default': [ProfileTheme.colors.neonBlue, ProfileTheme.colors.neonPurple],
+    'default': [B.primary, B.primaryDeep],
 };
 
 const getTeamColors = (teamName: string): readonly [string, string, ...string[]] => {
@@ -322,59 +329,79 @@ function PlayerHeroPhoto({
     }, [playerId, photo]);
 
     const uri = candidates[uriIndex] ?? '';
-    const displayUri = with365ImageSize(uri, 80) ?? uri;
+    const displayUri = with365ImageSize(uri, 160) ?? uri;
     const [viewerOpen, setViewerOpen] = useState(false);
     const viewerUrl = toFullscreenPhotoUrl(uri) ?? uri;
-
-    if (!uri || uriIndex >= candidates.length) {
-        return (
-            <PlayerAvatar name={name} position={position} size={112} colors={colors} />
-        );
-    }
+    const hasPhoto = !!uri && uriIndex < candidates.length;
 
     return (
         <>
-            <TouchableOpacity
-                style={heroPhotoStyles.circle}
-                onPress={() => setViewerOpen(true)}
-                activeOpacity={0.85}
-                accessibilityRole="imagebutton"
+            <LinearGradient
+                colors={[B.primarySoft, B.primary, B.primaryDeep]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={heroPhotoStyles.ring}
             >
-                <ExpoImage
-                    source={{ uri: displayUri }}
-                    style={heroPhotoStyles.image}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    recyclingKey={`player-${playerId}-${uriIndex}`}
-                    priority="high"
-                    transition={0}
-                    onError={() => {
-                        if (uriIndex + 1 < candidates.length) {
-                            setUriIndex((i) => i + 1);
-                        } else {
-                            setUriIndex(candidates.length);
-                        }
-                    }}
+                {hasPhoto ? (
+                    <TouchableOpacity
+                        style={heroPhotoStyles.circle}
+                        onPress={() => setViewerOpen(true)}
+                        activeOpacity={0.85}
+                        accessibilityRole="imagebutton"
+                    >
+                        <ExpoImage
+                            source={{ uri: displayUri }}
+                            style={heroPhotoStyles.image}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            recyclingKey={`player-${playerId}-${uriIndex}`}
+                            priority="high"
+                            transition={0}
+                            onError={() => {
+                                if (uriIndex + 1 < candidates.length) {
+                                    setUriIndex((i) => i + 1);
+                                } else {
+                                    setUriIndex(candidates.length);
+                                }
+                            }}
+                        />
+                    </TouchableOpacity>
+                ) : (
+                    <View style={heroPhotoStyles.circle}>
+                        <PlayerAvatar name={name} position={position} size={98} colors={colors} />
+                    </View>
+                )}
+            </LinearGradient>
+            {hasPhoto ? (
+                <ImageViewerModal
+                    visible={viewerOpen}
+                    imageUrl={viewerUrl}
+                    onClose={() => setViewerOpen(false)}
                 />
-            </TouchableOpacity>
-            <ImageViewerModal
-                visible={viewerOpen}
-                imageUrl={viewerUrl}
-                onClose={() => setViewerOpen(false)}
-            />
+            ) : null}
         </>
     );
 }
 
 const heroPhotoStyles = StyleSheet.create({
+    ring: {
+        width: 106,
+        height: 106,
+        borderRadius: 53,
+        padding: 3,
+        shadowColor: B.primary,
+        shadowOpacity: 0.7,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 10,
+    },
     circle: {
-        width: 112,
-        height: 112,
-        borderRadius: 56,
+        flex: 1,
+        borderRadius: 50,
         overflow: 'hidden',
-        backgroundColor: '#ffffff',
-        borderWidth: 3,
-        borderColor: 'rgba(255,255,255,0.45)',
+        backgroundColor: B.card,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     image: {
         width: '100%',
@@ -382,11 +409,17 @@ const heroPhotoStyles = StyleSheet.create({
     },
 });
 
-function MiniStat({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
+function MiniStat({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
+    const fontBold = useAppFont(700);
+    const fontReg = useAppFont(400);
     return (
         <View style={miniStatStyles.box}>
-            <Text style={[miniStatStyles.value, accent ? { color: accent } : null]}>{value}</Text>
-            <Text style={miniStatStyles.label}>{label}</Text>
+            <Text style={[miniStatStyles.value, { fontFamily: fontBold }, tone ? { color: tone } : null]}>
+                {value}
+            </Text>
+            <Text style={[miniStatStyles.label, { fontFamily: fontReg }]} numberOfLines={1}>
+                {label}
+            </Text>
         </View>
     );
 }
@@ -396,12 +429,18 @@ function LeagueStatCard({
     language,
     labels,
     teamColor,
+    rtl,
 }: {
     stat: PlayerStatRow;
     language: Language;
     labels: Record<string, string>;
     teamColor: string;
+    rtl: boolean;
 }) {
+    const fontBold = useAppFont(700);
+    const fontReg = useAppFont(400);
+    const row = rtl ? 'row-reverse' : 'row';
+    const textAlign = rtl ? 'right' : 'left';
     const leagueName = getLeagueDisplayName(
         stat.league.name,
         language,
@@ -411,26 +450,43 @@ function LeagueStatCard({
     const seasonLabel = stat.league.season
         ? `${stat.league.season}/${stat.league.season + 1}`
         : '';
-    const rating = stat.games.rating ? parseFloat(stat.games.rating).toFixed(1) : '—';
-    const showPassAcc = stat.passes?.accuracy != null;
-    const showShots = statNum(stat.shots?.on) > 0;
-    const showTackles = statNum(stat.tackles?.total) > 0;
-    const showDribbles = statNum(stat.dribbles?.success) > 0;
-    const showAdvanced = showPassAcc || showShots || showTackles || showDribbles;
+    const ratingNum = stat.games.rating ? parseFloat(stat.games.rating) : NaN;
+    const rating = Number.isFinite(ratingNum) ? ratingNum.toFixed(1) : '—';
+    const details: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
+        { icon: 'time-outline', text: `${statNum(stat.games.minutes).toLocaleString('en-US')} ${labels.minutesPlayed}` },
+    ];
+    if (stat.games.lineups != null) {
+        details.push({ icon: 'shirt-outline', text: `${statNum(stat.games.lineups)} ${labels.lineups}` });
+    }
+    if (stat.games.position) details.push({ icon: 'locate-outline', text: stat.games.position });
+    if (stat.passes?.accuracy != null) {
+        details.push({ icon: 'git-network-outline', text: `${labels.passAccuracy}: ${stat.passes.accuracy}%` });
+    }
+    if (statNum(stat.shots?.on) > 0) {
+        details.push({ icon: 'radio-button-on-outline', text: `${labels.shotsOnTarget}: ${statNum(stat.shots?.on)}` });
+    }
+    if (statNum(stat.tackles?.total) > 0) {
+        details.push({ icon: 'shield-outline', text: `${labels.tackles}: ${statNum(stat.tackles?.total)}` });
+    }
+    if (statNum(stat.dribbles?.success) > 0) {
+        details.push({ icon: 'flash-outline', text: `${labels.successfulDribbles}: ${statNum(stat.dribbles?.success)}` });
+    }
 
     return (
         <View style={leagueCardStyles.card}>
-            <View style={leagueCardStyles.header}>
+            <View style={[leagueCardStyles.header, { flexDirection: row }]}>
                 <LeagueIcon
                     name={stat.league.name}
                     logo={stat.league.logo}
                     leagueId={stat.league.id}
-                    size={44}
+                    size={40}
                     color={teamColor}
                 />
                 <View style={leagueCardStyles.headerText}>
-                    <Text style={leagueCardStyles.leagueName} numberOfLines={2}>{leagueName}</Text>
-                    <Text style={leagueCardStyles.leagueMeta} numberOfLines={1}>
+                    <Text style={[leagueCardStyles.leagueName, { fontFamily: fontBold, textAlign }]} numberOfLines={2}>
+                        {leagueName}
+                    </Text>
+                    <Text style={[leagueCardStyles.leagueMeta, { fontFamily: fontReg, textAlign }]} numberOfLines={1}>
                         {stat.league.country}{seasonLabel ? ` • ${seasonLabel}` : ''}
                     </Text>
                 </View>
@@ -441,134 +497,95 @@ function LeagueStatCard({
                         size={28}
                         logo={stat.team.logo}
                     />
-                    <Text style={leagueCardStyles.teamName} numberOfLines={1}>
+                    <Text style={[leagueCardStyles.teamName, { fontFamily: fontReg }]} numberOfLines={1}>
                         {getTeamDisplayName(stat.team.name, language)}
                     </Text>
                 </View>
             </View>
 
-            <View style={leagueCardStyles.statsRow}>
-                <MiniStat label={labels.matches} value={statNum(stat.games.appearences)} accent={ProfileTheme.colors.neonBlue} />
-                <MiniStat label={labels.goals} value={statNum(stat.goals.total)} accent={ProfileTheme.colors.neonGreen} />
-                <MiniStat label={labels.assists} value={statNum(stat.goals.assists)} accent={ProfileTheme.colors.neonPurple} />
-                <MiniStat label={labels.rating} value={rating} accent={ProfileTheme.colors.gold} />
+            <View style={[leagueCardStyles.statsRow, { flexDirection: row }]}>
+                <MiniStat label={labels.matches} value={statNum(stat.games.appearences)} />
+                <View style={leagueCardStyles.statsDivider} />
+                <MiniStat label={labels.goals} value={statNum(stat.goals.total)} />
+                <View style={leagueCardStyles.statsDivider} />
+                <MiniStat label={labels.assists} value={statNum(stat.goals.assists)} />
+                <View style={leagueCardStyles.statsDivider} />
+                <MiniStat
+                    label={labels.rating}
+                    value={rating}
+                    tone={Number.isFinite(ratingNum) ? ratingTone(ratingNum) : undefined}
+                />
             </View>
 
-            <View style={leagueCardStyles.detailsRow}>
-                <View style={leagueCardStyles.detailItem}>
-                    <Ionicons name="time-outline" size={14} color={ProfileTheme.colors.textSecondary} />
-                    <Text style={leagueCardStyles.detailText}>
-                        {statNum(stat.games.minutes).toLocaleString()} {labels.minutesPlayed}
-                    </Text>
-                </View>
-                {stat.games.lineups != null && (
-                    <View style={leagueCardStyles.detailItem}>
-                        <Ionicons name="shirt-outline" size={14} color={ProfileTheme.colors.textSecondary} />
-                        <Text style={leagueCardStyles.detailText}>
-                            {statNum(stat.games.lineups)} {labels.lineups}
+            <View style={[leagueCardStyles.detailsRow, { flexDirection: row }]}>
+                {details.map((d) => (
+                    <View key={d.text} style={[leagueCardStyles.detailChip, { flexDirection: row }]}>
+                        <Ionicons name={d.icon} size={13} color={B.primarySoft} />
+                        <Text style={[leagueCardStyles.detailText, { fontFamily: fontReg }]}>{d.text}</Text>
+                    </View>
+                ))}
+                {statNum(stat.cards.yellow) > 0 && (
+                    <View style={[leagueCardStyles.detailChip, { flexDirection: row }]}>
+                        <View style={[leagueCardStyles.cardDot, { backgroundColor: '#FACC15' }]} />
+                        <Text style={[leagueCardStyles.detailText, { fontFamily: fontReg }]}>
+                            {statNum(stat.cards.yellow)} {labels.yellowCards}
                         </Text>
                     </View>
                 )}
-                {stat.games.position && (
-                    <View style={leagueCardStyles.detailItem}>
-                        <Ionicons name="locate-outline" size={14} color={ProfileTheme.colors.textSecondary} />
-                        <Text style={leagueCardStyles.detailText}>{stat.games.position}</Text>
+                {statNum(stat.cards.red) > 0 && (
+                    <View style={[leagueCardStyles.detailChip, { flexDirection: row }]}>
+                        <View style={[leagueCardStyles.cardDot, { backgroundColor: '#EF4444' }]} />
+                        <Text style={[leagueCardStyles.detailText, { fontFamily: fontReg }]}>
+                            {statNum(stat.cards.red)} {labels.redCards}
+                        </Text>
                     </View>
                 )}
             </View>
-
-            {showAdvanced && (
-                <View style={leagueCardStyles.advancedRow}>
-                    {showPassAcc && (
-                        <View style={leagueCardStyles.detailItem}>
-                            <Ionicons name="git-network-outline" size={14} color={ProfileTheme.colors.textSecondary} />
-                            <Text style={leagueCardStyles.detailText}>
-                                {labels.passAccuracy}: {stat.passes!.accuracy}%
-                            </Text>
-                        </View>
-                    )}
-                    {showShots && (
-                        <View style={leagueCardStyles.detailItem}>
-                            <Ionicons name="radio-button-on-outline" size={14} color={ProfileTheme.colors.textSecondary} />
-                            <Text style={leagueCardStyles.detailText}>
-                                {labels.shotsOnTarget}: {statNum(stat.shots?.on)}
-                            </Text>
-                        </View>
-                    )}
-                    {showTackles && (
-                        <View style={leagueCardStyles.detailItem}>
-                            <Ionicons name="shield-outline" size={14} color={ProfileTheme.colors.textSecondary} />
-                            <Text style={leagueCardStyles.detailText}>
-                                {labels.tackles}: {statNum(stat.tackles?.total)}
-                            </Text>
-                        </View>
-                    )}
-                    {showDribbles && (
-                        <View style={leagueCardStyles.detailItem}>
-                            <Ionicons name="flash-outline" size={14} color={ProfileTheme.colors.textSecondary} />
-                            <Text style={leagueCardStyles.detailText}>
-                                {labels.successfulDribbles}: {statNum(stat.dribbles?.success)}
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            )}
-
-            {(statNum(stat.cards.yellow) > 0 || statNum(stat.cards.red) > 0) && (
-                <View style={leagueCardStyles.cardsRow}>
-                    {statNum(stat.cards.yellow) > 0 && (
-                        <View style={leagueCardStyles.cardBadge}>
-                            <View style={[leagueCardStyles.cardDot, { backgroundColor: '#f59e0b' }]} />
-                            <Text style={leagueCardStyles.cardText}>{statNum(stat.cards.yellow)} {labels.yellowCards}</Text>
-                        </View>
-                    )}
-                    {statNum(stat.cards.red) > 0 && (
-                        <View style={leagueCardStyles.cardBadge}>
-                            <View style={[leagueCardStyles.cardDot, { backgroundColor: '#ef4444' }]} />
-                            <Text style={leagueCardStyles.cardText}>{statNum(stat.cards.red)} {labels.redCards}</Text>
-                        </View>
-                    )}
-                </View>
-            )}
         </View>
     );
 }
 
 const miniStatStyles = StyleSheet.create({
-    box: { flex: 1, alignItems: 'center', paddingVertical: 10 },
-    value: { fontSize: 22, fontWeight: '800', color: ProfileTheme.colors.textPrimary },
-    label: { fontSize: 11, color: ProfileTheme.colors.textSecondary, marginTop: 4, textAlign: 'center' },
+    box: { flex: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 2 },
+    value: { fontSize: 22, color: '#fff' },
+    label: { fontSize: 11, color: B.muted, marginTop: 4, textAlign: 'center' },
 });
 
 const leagueCardStyles = StyleSheet.create({
     card: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 18,
-        padding: 16,
+        backgroundColor: B.card,
+        borderRadius: 16,
+        padding: 14,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: ProfileTheme.colors.border,
+        borderColor: B.border,
     },
-    header: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 12 },
+    header: { alignItems: 'center', marginBottom: 12, gap: 12 },
     headerText: { flex: 1 },
-    leagueName: { fontSize: 16, fontWeight: '700', color: ProfileTheme.colors.textPrimary },
-    leagueMeta: { fontSize: 12, color: ProfileTheme.colors.textSecondary, marginTop: 2 },
+    leagueName: { fontSize: 15, color: '#fff' },
+    leagueMeta: { fontSize: 12, color: B.muted, marginTop: 2 },
     teamChip: { alignItems: 'center', maxWidth: 72, gap: 4 },
-    teamName: { fontSize: 10, color: ProfileTheme.colors.textSecondary, textAlign: 'center' },
+    teamName: { fontSize: 10, color: B.muted, textAlign: 'center' },
     statsRow: {
-        flexDirection: 'row',
-        backgroundColor: 'rgba(0,0,0,0.25)',
-        borderRadius: 14,
-        overflow: 'hidden',
+        backgroundColor: 'rgba(139,92,246,0.06)',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: B.divider,
     },
-    detailsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 },
-    advancedRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
-    detailItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    detailText: { fontSize: 12, color: ProfileTheme.colors.textSecondary },
-    cardsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
-    cardBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    cardDot: { width: 8, height: 8, borderRadius: 4 },
-    cardText: { fontSize: 12, color: ProfileTheme.colors.textSecondary },
+    statsDivider: { width: 1, backgroundColor: B.divider, marginVertical: 10 },
+    detailsRow: { flexWrap: 'wrap', gap: 8, marginTop: 12 },
+    detailChip: {
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 999,
+        backgroundColor: 'rgba(139,92,246,0.08)',
+        borderWidth: 1,
+        borderColor: B.divider,
+    },
+    detailText: { fontSize: 11, color: B.soft },
+    cardDot: { width: 7, height: 10, borderRadius: 1.5 },
 });
 
 export default function PlayerProfileScreen() {
@@ -987,27 +1004,59 @@ export default function PlayerProfileScreen() {
         ? formatPreferredFoot(displayPlayer.statistics, t.playerProfile, displayPlayer.player.foot)
         : null;
     const pp = t.playerProfile;
+    const rtl = language === 'ar';
+    const fontBold = useAppFont(700);
+    const fontSemi = useAppFont(600);
+    const fontReg = useAppFont(400);
+
+    const matchStats = useMemo(() => {
+        type Row = { key: string; label: string; value: string; isTop: boolean; isRating: boolean };
+        const rows: Row[] = [];
+        (matchReport365?.stats ?? []).forEach((raw, idx) => {
+            const formatted = format365StatEntry(raw, language);
+            if (!formatted) return;
+            const o = raw as Record<string, unknown>;
+            const names = `${o.name ?? ''} ${o.shortName ?? ''} ${formatted.label}`.toLowerCase();
+            rows.push({
+                ...formatted,
+                key: `${idx}-${formatted.label}`,
+                isTop: o.isTop === true,
+                isRating: /rating|تقييم/.test(names),
+            });
+        });
+        const rating = rows.find((r) => r.isRating) ?? null;
+        const rest = rows.filter((r) => r !== rating);
+        const tops = rest.filter((r) => r.isTop);
+        const featured = (tops.length >= 2 ? tops : rest).slice(0, 4);
+        const list = rest.filter((r) => !featured.includes(r));
+        const ratingNum = rating ? Number.parseFloat(rating.value) : NaN;
+        return { rating: Number.isFinite(ratingNum) ? ratingNum : null, featured, list, total: rows.length };
+    }, [matchReport365, language]);
+
+    const matchEvents = useMemo(
+        () =>
+            (matchReport365?.chartEvents ?? [])
+                .map(format365ChartEvent)
+                .filter((line): line is string => !!line),
+        [matchReport365],
+    );
+
+    const goBack = () => {
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)/matches' as never);
+    };
 
     if (loading && !displayPlayer) {
-        return (
-            <View style={styles.loadingContainer}>
-                <StatusBar barStyle="light-content" />
-                <ActivityIndicator size="large" color={ProfileTheme.colors.neonGreen} />
-                <Text style={styles.loadingText}>{pp.loadingPlayer}</Text>
-            </View>
-        );
+        return <PlayerProfileStatus loading message={pp.loadingPlayer} onBack={goBack} />;
     }
 
     if (error && !displayPlayer && !loading) {
         return (
-            <View style={styles.errorContainer}>
-                <StatusBar barStyle="light-content" />
-                <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
-                <Text style={styles.errorText}>{error || t.playerProfile.playerNotFound}</Text>
-                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                    <Text style={styles.backButtonText}>{pp.goBack}</Text>
-                </TouchableOpacity>
-            </View>
+            <PlayerProfileStatus
+                message={error || pp.playerNotFound}
+                actionLabel={pp.goBack}
+                onBack={goBack}
+            />
         );
     }
 
@@ -1017,10 +1066,36 @@ export default function PlayerProfileScreen() {
     const nationalityFlagUri = heroPlayer.nationality
         ? getCountryFlagUri(heroPlayer.nationality, null, 80)
         : null;
+    const row = rtl ? 'row-reverse' : 'row';
+    const textAlign = rtl ? 'right' : 'left';
+    const alignStart = rtl ? 'flex-end' : 'flex-start';
+    const jerseyNumber = matchReport365?.jerseyNumber ?? career365?.profile.jerseyNumber ?? null;
+
+    const openCareer = () =>
+        router.push({
+            pathname: '/player-career' as any,
+            params: {
+                athleteId: String(athleteId365),
+                id: String(athleteId365),
+                name: heroPlayer.name,
+                photo: heroPlayer.photo ?? params.photo ?? '',
+                teamName: params.teamName ?? '',
+                teamLogo: params.teamLogo ?? '',
+                teamId: params.teamId ?? '',
+                dataSource: '365',
+            },
+        } as any);
+
+    const chips: { key: string; icon?: number; text: string }[] = [];
+    if (primaryPosition) chips.push({ key: 'pos', icon: PP_ICON.position, text: primaryPosition });
+    if (is365Source && matchReport365?.formation) chips.push({ key: 'formation', icon: PP_ICON.court, text: matchReport365.formation });
+    if (heroPlayer.age != null && heroPlayer.age > 0) chips.push({ key: 'age', icon: PP_ICON.cake, text: `${heroPlayer.age} ${pp.years}` });
+    if (!is365Source) chips.push({ key: 'season', icon: PP_ICON.seasonStats, text: `${seasonYear}/${seasonYear + 1}` });
 
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
+            <PlayerProfileHeader onBack={goBack} onBell={() => router.push('/notifications' as never)} />
 
             <ScrollView
                 showsVerticalScrollIndicator={false}
@@ -1028,371 +1103,388 @@ export default function PlayerProfileScreen() {
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        tintColor={ProfileTheme.colors.neonGreen}
-                        colors={[ProfileTheme.colors.neonGreen]}
+                        tintColor={B.primary}
+                        colors={[B.primary]}
                     />
                 }
-                contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
             >
-                {/* Hero: photo + name */}
-                <LinearGradient
-                    colors={[teamColors[0], teamColors[1] || teamColors[0], ProfileTheme.colors.deepBlack]}
-                    style={[styles.hero, { paddingTop: insets.top + 12 }]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                >
-                    <TouchableOpacity
-                        style={styles.backButtonFloat}
-                        onPress={() => router.back()}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="chevron-back" size={24} color="#fff" />
-                    </TouchableOpacity>
+                {/* Hero */}
+                <View style={styles.hero}>
+                    <ExpoImage source={PP_STADIUM} style={StyleSheet.absoluteFill} contentFit="cover" />
+                    <LinearGradient
+                        colors={['rgba(12,5,26,0.55)', 'rgba(12,5,26,0.88)', B.bg]}
+                        locations={[0, 0.65, 1]}
+                        style={StyleSheet.absoluteFill}
+                    />
+                    {jerseyNumber != null ? (
+                        <Text
+                            style={[styles.heroJersey, { fontFamily: fontBold }, rtl ? { left: 14 } : { right: 14 }]}
+                            allowFontScaling={false}
+                        >
+                            {`#${jerseyNumber}`}
+                        </Text>
+                    ) : null}
 
-                    <Animated.View
-                        style={[styles.heroContent, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
-                    >
-                        <View style={styles.heroRow}>
-                            <PlayerHeroPhoto
-                                key={playerId}
-                                playerId={playerId}
-                                photo={heroPlayer.photo ?? params.photo}
-                                name={heroPlayer.name}
-                                position={primaryPosition}
-                                colors={teamColors}
-                                photoSource={is365Source ? '365' : 'api'}
-                            />
+                    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+                        <View style={[styles.heroRow, { flexDirection: row }]}>
+                            <View style={styles.photoWrap}>
+                                <PlayerHeroPhoto
+                                    key={playerId}
+                                    playerId={playerId}
+                                    photo={heroPlayer.photo ?? params.photo}
+                                    name={heroPlayer.name}
+                                    position={primaryPosition}
+                                    colors={teamColors}
+                                    photoSource={is365Source ? '365' : 'api'}
+                                />
+                                {matchStats.rating != null ? (
+                                    <View style={[styles.ratingMedal, { backgroundColor: ratingTone(matchStats.rating) }]}>
+                                        <Text style={[styles.ratingMedalText, { fontFamily: fontBold }]}>
+                                            {matchStats.rating.toFixed(1)}
+                                        </Text>
+                                    </View>
+                                ) : null}
+                            </View>
 
-                            <View style={styles.heroInfo}>
-                                <Text style={styles.playerName} numberOfLines={2}>{heroPlayer.name}</Text>
+                            <View style={[styles.heroInfo, { alignItems: alignStart }]}>
+                                {heroPlayer.nationality ? (
+                                    <View style={[styles.inlineRow, { flexDirection: row }]}>
+                                        {nationalityFlagUri ? (
+                                            <ExpoImage
+                                                source={{ uri: nationalityFlagUri }}
+                                                style={styles.flag}
+                                                contentFit="cover"
+                                                cachePolicy="memory-disk"
+                                                transition={0}
+                                            />
+                                        ) : null}
+                                        <Text style={[styles.heroMeta, { fontFamily: fontSemi }]} numberOfLines={1}>
+                                            {heroPlayer.nationality}
+                                        </Text>
+                                    </View>
+                                ) : null}
+                                <View style={[styles.inlineRow, { flexDirection: row, marginTop: 4 }]}>
+                                    <Text
+                                        style={[styles.playerName, { fontFamily: fontBold, textAlign }]}
+                                        numberOfLines={2}
+                                    >
+                                        {heroPlayer.name}
+                                    </Text>
+                                    <ExpoImage source={PP_ICON.verified} style={styles.verified} contentFit="contain" />
+                                </View>
                                 {heroPlayer.injured && (
-                                    <View style={styles.injuredBadge}>
+                                    <View style={[styles.injuredBadge, { flexDirection: row }]}>
                                         <Ionicons name="medkit-outline" size={12} color="#fca5a5" />
-                                        <Text style={styles.injuredText}>{pp.injured}</Text>
+                                        <Text style={[styles.injuredText, { fontFamily: fontBold }]}>{pp.injured}</Text>
                                     </View>
                                 )}
-                                <View style={styles.playerSubInfo}>
-                                    {heroPlayer.nationality && (
-                                        <View style={styles.nationalityChip}>
-                                            {nationalityFlagUri ? (
-                                                <ExpoImage
-                                                    source={{ uri: nationalityFlagUri }}
-                                                    style={styles.nationalityFlag}
-                                                    contentFit="cover"
-                                                    cachePolicy="memory-disk"
-                                                    transition={0}
-                                                />
-                                            ) : null}
-                                            <Text style={styles.playerMeta}>{heroPlayer.nationality}</Text>
-                                        </View>
-                                    )}
-                                    {heroPlayer.age != null && heroPlayer.age > 0 && (
-                                        <>
-                                            <Text style={styles.separator}>•</Text>
-                                            <Text style={styles.playerMeta}>{heroPlayer.age} {pp.years}</Text>
-                                        </>
-                                    )}
-                                    {primaryPosition && (
-                                        <>
-                                            <Text style={styles.separator}>•</Text>
-                                            <Text style={styles.playerMeta}>{primaryPosition}</Text>
-                                        </>
-                                    )}
-                                </View>
                                 {primaryTeam && (
-                                    <View style={styles.heroTeamRow}>
+                                    <View style={[styles.inlineRow, { flexDirection: row, marginTop: 6 }]}>
                                         <TeamBadge
                                             name={primaryTeam.name}
                                             color={teamColors[0]}
-                                            size={32}
+                                            size={24}
                                             logo={teamLogoUrl(primaryTeam.id, primaryTeam.logo)}
                                         />
-                                        <Text style={styles.heroTeamName} numberOfLines={1}>
+                                        <Text style={[styles.heroTeamName, { fontFamily: fontSemi }]} numberOfLines={1}>
                                             {getTeamDisplayName(primaryTeam.name, language)}
                                         </Text>
                                     </View>
                                 )}
-                                {is365Source && athleteId365 > 0 && (
-                                    <TouchableOpacity
-                                        activeOpacity={0.85}
-                                        style={styles.careerButtonWrap}
-                                        onPress={() =>
-                                            router.push({
-                                                pathname: '/player-career' as any,
-                                                params: {
-                                                    athleteId: String(athleteId365),
-                                                    id: String(athleteId365),
-                                                    name: heroPlayer.name,
-                                                    photo: heroPlayer.photo ?? params.photo ?? '',
-                                                    teamName: params.teamName ?? '',
-                                                    teamLogo: params.teamLogo ?? '',
-                                                    teamId: params.teamId ?? '',
-                                                    dataSource: '365',
-                                                },
-                                            } as any)
-                                        }
-                                    >
-                                        <LinearGradient
-                                            colors={[ProfileTheme.colors.neonPurple, ProfileTheme.colors.neonBlue, ProfileTheme.colors.neonGreen]}
-                                            start={{ x: 0, y: 0 }}
-                                            end={{ x: 1, y: 1 }}
-                                            style={styles.careerButton}
-                                        >
-                                            <Ionicons name="stats-chart" size={14} color="#fff" />
-                                            <Text style={styles.careerButtonText}>{pp.viewFullCareer}</Text>
-                                            <Ionicons name="chevron-forward" size={14} color="#fff" />
-                                        </LinearGradient>
-                                    </TouchableOpacity>
-                                )}
-                                <Text style={styles.seasonBadge}>
-                                    {is365Source ? pp.matchStats : `${pp.seasonStats} ${seasonYear}/${seasonYear + 1}`}
-                                </Text>
                             </View>
                         </View>
+
+                        {chips.length > 0 ? (
+                            <View style={[styles.chipsRow, { flexDirection: row }]}>
+                                {chips.map((c) => (
+                                    <View key={c.key} style={[styles.chip, { flexDirection: row }]}>
+                                        {c.icon != null ? (
+                                            <ExpoImage source={c.icon} style={styles.chipIcon} contentFit="contain" />
+                                        ) : null}
+                                        <Text style={[styles.chipText, { fontFamily: fontSemi }]} numberOfLines={1}>
+                                            {c.text}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </View>
+                        ) : null}
+
+                        {is365Source && athleteId365 > 0 && (
+                            <TouchableOpacity activeOpacity={0.85} style={styles.careerButtonWrap} onPress={openCareer}>
+                                <LinearGradient
+                                    colors={[B.primary, B.primaryDeep]}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={[styles.careerButton, { flexDirection: row }]}
+                                >
+                                    <ExpoImage source={PP_ICON.seasonStats} style={styles.chipIcon} contentFit="contain" />
+                                    <Text style={[styles.careerButtonText, { fontFamily: fontBold }]}>{pp.viewFullCareer}</Text>
+                                    <Ionicons name={rtl ? 'chevron-back' : 'chevron-forward'} size={16} color="#fff" />
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        )}
                     </Animated.View>
-                </LinearGradient>
+                </View>
 
                 <Animated.View style={[styles.body, { opacity: fadeAnim }]}>
                     {is365Source && (
-                        <View style={styles.infoSection}>
-                            <Text style={styles.sectionTitle}>{pp.matchStats}</Text>
-                            <View style={styles.infoCardContainer}>
-                                {loading && !matchReport365 ? (
-                                    <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
-                                ) : matchReport365 ? (
-                                    <>
-                                        {matchReport365.jerseyNumber != null && (
-                                            <Text style={styles.infoValue}>
-                                                #{matchReport365.jerseyNumber}
-                                                {matchReport365.formation ? ` · ${matchReport365.formation}` : ''}
-                                            </Text>
-                                        )}
-                                        {(matchReport365.stats ?? [])
-                                            .map((raw) => format365StatEntry(raw, language))
-                                            .filter((row): row is { label: string; value: string } => row != null)
-                                            .map((row) => (
-                                                <View key={`${row.label}-${row.value}`} style={styles.matchStatRow}>
-                                                    <Text style={styles.infoLabel}>{row.label}</Text>
-                                                    <Text style={styles.infoValue}>{row.value}</Text>
+                        <>
+                            <SectionHeader icon={PP_ICON.seasonStats} title={pp.matchStats} rtl={rtl} />
+                            {loading && !matchReport365 ? (
+                                <View style={[styles.card, styles.loadingCard]}>
+                                    <ActivityIndicator size="small" color={B.primary} />
+                                </View>
+                            ) : matchStats.total > 0 ? (
+                                <>
+                                    {matchStats.featured.length > 0 && (
+                                        <View style={[styles.featuredGrid, { flexDirection: row }]}>
+                                            {matchStats.featured.map((s) => (
+                                                <View key={s.key} style={[styles.featuredTile, { alignItems: alignStart }]}>
+                                                    <LinearGradient
+                                                        colors={[B.primary, 'rgba(139,92,246,0)']}
+                                                        start={{ x: rtl ? 1 : 0, y: 0 }}
+                                                        end={{ x: rtl ? 0 : 1, y: 0 }}
+                                                        style={styles.featuredAccent}
+                                                    />
+                                                    <Text style={[styles.featuredValue, { fontFamily: fontBold }]} numberOfLines={1}>
+                                                        {s.value}
+                                                    </Text>
+                                                    <Text
+                                                        style={[styles.featuredLabel, { fontFamily: fontReg, textAlign }]}
+                                                        numberOfLines={2}
+                                                    >
+                                                        {s.label}
+                                                    </Text>
                                                 </View>
                                             ))}
-                                        {(matchReport365.stats ?? []).length === 0 && (
-                                            <Text style={styles.emptyText}>{pp.noCompetitionStats}</Text>
-                                        )}
-                                        {(matchReport365.chartEvents ?? []).length > 0 && (
-                                            <View style={{ marginTop: 12 }}>
-                                                <Text style={[styles.infoLabel, { marginBottom: 8 }]}>{pp.eventsSection}</Text>
-                                                {(matchReport365.chartEvents ?? [])
-                                                    .map(format365ChartEvent)
-                                                    .filter((line): line is string => !!line)
-                                                    .map((line, idx) => (
-                                                        <Text key={idx} style={styles.infoValue}>{line}</Text>
-                                                    ))}
+                                        </View>
+                                    )}
+                                    {matchStats.list.length > 0 && (
+                                        <View style={[styles.card, styles.listCard]}>
+                                            {matchStats.list.map((s, idx) => (
+                                                <View
+                                                    key={s.key}
+                                                    style={[
+                                                        styles.statRow,
+                                                        { flexDirection: row },
+                                                        idx < matchStats.list.length - 1 && styles.statRowDivider,
+                                                    ]}
+                                                >
+                                                    <Text
+                                                        style={[styles.statLabel, { fontFamily: fontReg, textAlign }]}
+                                                        numberOfLines={2}
+                                                    >
+                                                        {s.label}
+                                                    </Text>
+                                                    <Text style={[styles.statValue, { fontFamily: fontBold }]}>{s.value}</Text>
+                                                </View>
+                                            ))}
+                                        </View>
+                                    )}
+                                </>
+                            ) : (
+                                <View style={[styles.card, styles.emptyCard]}>
+                                    <Ionicons name="stats-chart-outline" size={30} color={B.primary} />
+                                    <Text style={[styles.emptyText, { fontFamily: fontReg }]}>{pp.noCompetitionStats}</Text>
+                                </View>
+                            )}
+
+                            {matchEvents.length > 0 && (
+                                <>
+                                    <SectionHeader icon={PP_ICON.time} title={pp.eventsSection} rtl={rtl} />
+                                    <View style={[styles.eventsWrap, { flexDirection: row }]}>
+                                        {matchEvents.map((line, idx) => (
+                                            <View key={`${line}-${idx}`} style={styles.eventChip}>
+                                                <Text style={[styles.eventText, { fontFamily: fontSemi }]}>{line}</Text>
                                             </View>
-                                        )}
-                                    </>
-                                ) : (
-                                    <Text style={styles.emptyText}>{pp.noCompetitionStats}</Text>
-                                )}
-                            </View>
-                        </View>
+                                        ))}
+                                    </View>
+                                </>
+                            )}
+                        </>
                     )}
 
                     {/* Season total summary — API-Football career profile only */}
                     {!is365Source && leagueStats.length > 0 && (
-                        <View style={styles.totalCard}>
-                            <Text style={styles.totalTitle}>{pp.seasonTotal}</Text>
-                            <View style={styles.totalRow}>
-                                <MiniStat label={pp.matches} value={seasonTotals.appearences} accent={ProfileTheme.colors.neonBlue} />
-                                <MiniStat label={pp.goals} value={seasonTotals.goals} accent={ProfileTheme.colors.neonGreen} />
-                                <MiniStat label={pp.assists} value={seasonTotals.assists} accent={ProfileTheme.colors.neonPurple} />
+                        <>
+                            <SectionHeader
+                                icon={PP_ICON.seasonStats}
+                                title={pp.seasonTotal}
+                                trailing={`${seasonYear}/${seasonYear + 1}`}
+                                rtl={rtl}
+                            />
+                            <View style={[styles.card, styles.totalRow, { flexDirection: row }]}>
+                                <MiniStat label={pp.matches} value={seasonTotals.appearences} />
+                                <View style={styles.vDivider} />
+                                <MiniStat label={pp.goals} value={seasonTotals.goals} />
+                                <View style={styles.vDivider} />
+                                <MiniStat label={pp.assists} value={seasonTotals.assists} />
+                                <View style={styles.vDivider} />
                                 <MiniStat
                                     label={pp.rating}
                                     value={seasonTotals.rating ? parseFloat(seasonTotals.rating).toFixed(1) : '—'}
-                                    accent={ProfileTheme.colors.gold}
+                                    tone={seasonTotals.rating ? ratingTone(parseFloat(seasonTotals.rating)) : undefined}
                                 />
                             </View>
-                        </View>
+                        </>
                     )}
 
                     {/* Per-league stats */}
                     {!is365Source && (
-                    <View style={styles.infoSection}>
-                        <Text style={styles.sectionTitle}>{pp.competitions}</Text>
-                        {leagueStats.length === 0 ? (
-                            <View style={styles.emptyCard}>
-                                <Ionicons name="stats-chart-outline" size={32} color={ProfileTheme.colors.textSecondary} />
-                                <Text style={styles.emptyText}>{pp.noCompetitionStats}</Text>
-                            </View>
-                        ) : (
-                            leagueStats.map((stat) => (
-                                <LeagueStatCard
-                                    key={`${stat.league.id}-${stat.league.season}-${stat.team.id}`}
-                                    stat={stat}
-                                    language={language}
-                                    labels={pp}
-                                    teamColor={teamColors[0]}
-                                />
-                            ))
-                        )}
-                    </View>
+                        <>
+                            <SectionHeader icon={PP_ICON.court} title={pp.competitions} rtl={rtl} />
+                            {leagueStats.length === 0 ? (
+                                <View style={[styles.card, styles.emptyCard]}>
+                                    <Ionicons name="stats-chart-outline" size={30} color={B.primary} />
+                                    <Text style={[styles.emptyText, { fontFamily: fontReg }]}>{pp.noCompetitionStats}</Text>
+                                </View>
+                            ) : (
+                                leagueStats.map((stat) => (
+                                    <LeagueStatCard
+                                        key={`${stat.league.id}-${stat.league.season}-${stat.team.id}`}
+                                        stat={stat}
+                                        language={language}
+                                        labels={pp}
+                                        teamColor={teamColors[0]}
+                                        rtl={rtl}
+                                    />
+                                ))
+                            )}
+                        </>
                     )}
 
                     {/* Personal info — API-Football only (365 has no DOB/height in match context) */}
                     {!is365Source && (
-                    <View style={styles.infoSection}>
-                        <Text style={styles.sectionTitle}>{pp.personalInfo}</Text>
-                        <View style={styles.infoCardContainer}>
-                            <View style={styles.infoGrid}>
-                                <View style={styles.infoGridItem}>
-                                    <Ionicons name="calendar-outline" size={18} color={ProfileTheme.colors.textSecondary} />
-                                    <Text style={styles.infoLabel}>{pp.dateOfBirth}</Text>
-                                    <Text style={styles.infoValue}>
-                                        {heroPlayer.birth?.date ? formatDate(heroPlayer.birth.date, language) : 'N/A'}
-                                    </Text>
+                        <>
+                            <SectionHeader icon={PP_ICON.position} title={pp.personalInfo} rtl={rtl} />
+                            <View style={[styles.card, styles.infoCard]}>
+                                <View style={[styles.infoGrid, { flexDirection: row }]}>
+                                    <InfoTile icon="calendar-outline" label={pp.dateOfBirth} value={heroPlayer.birth?.date ? formatDate(heroPlayer.birth.date, language) : 'N/A'} />
+                                    <View style={styles.vDivider} />
+                                    <InfoTile icon="location-outline" label={pp.birthPlace} value={heroPlayer.birth?.place || 'N/A'} />
                                 </View>
-                                <View style={styles.infoGridDivider} />
-                                <View style={styles.infoGridItem}>
-                                    <Ionicons name="location-outline" size={18} color={ProfileTheme.colors.textSecondary} />
-                                    <Text style={styles.infoLabel}>{pp.birthPlace}</Text>
-                                    <Text style={styles.infoValue}>{heroPlayer.birth?.place || 'N/A'}</Text>
+                                <View style={styles.hDivider} />
+                                <View style={[styles.infoGrid, { flexDirection: row }]}>
+                                    <InfoTile icon="resize-outline" label={pp.height} value={heroPlayer.height || 'N/A'} />
+                                    <View style={styles.vDivider} />
+                                    <InfoTile icon="barbell-outline" label={pp.weight} value={heroPlayer.weight || 'N/A'} />
                                 </View>
+                                {(preferredFoot || leagueStats.some((s) => s.games.captain)) && (
+                                    <>
+                                        <View style={styles.hDivider} />
+                                        <View style={[styles.infoGrid, { flexDirection: row }]}>
+                                            {preferredFoot && (
+                                                <InfoTile icon="footsteps-outline" label={pp.preferredFoot} value={preferredFoot} />
+                                            )}
+                                            {leagueStats.some((s) => s.games.captain) && (
+                                                <>
+                                                    {preferredFoot && <View style={styles.vDivider} />}
+                                                    <InfoTile icon="star" label={pp.captain} value={pp.yes} tone="#FACC15" />
+                                                </>
+                                            )}
+                                        </View>
+                                    </>
+                                )}
                             </View>
-                            <View style={styles.infoGridDividerHorizontal} />
-                            <View style={styles.infoGrid}>
-                                <View style={styles.infoGridItem}>
-                                    <Ionicons name="resize-outline" size={18} color={ProfileTheme.colors.textSecondary} />
-                                    <Text style={styles.infoLabel}>{pp.height}</Text>
-                                    <Text style={styles.infoValue}>{heroPlayer.height || 'N/A'}</Text>
-                                </View>
-                                <View style={styles.infoGridDivider} />
-                                <View style={styles.infoGridItem}>
-                                    <Ionicons name="barbell-outline" size={18} color={ProfileTheme.colors.textSecondary} />
-                                    <Text style={styles.infoLabel}>{pp.weight}</Text>
-                                    <Text style={styles.infoValue}>{heroPlayer.weight || 'N/A'}</Text>
-                                </View>
-                            </View>
-                            {(preferredFoot || leagueStats.some((s) => s.games.captain)) && (
-                                <>
-                                    <View style={styles.infoGridDividerHorizontal} />
-                                    <View style={styles.infoGrid}>
-                                        {preferredFoot && (
-                                            <View style={styles.infoGridItem}>
-                                                <Ionicons name="footsteps-outline" size={18} color={ProfileTheme.colors.textSecondary} />
-                                                <Text style={styles.infoLabel}>{pp.preferredFoot}</Text>
-                                                <Text style={styles.infoValue}>{preferredFoot}</Text>
-                                            </View>
-                                        )}
-                                        {leagueStats.some((s) => s.games.captain) && (
-                                            <>
-                                                {preferredFoot && <View style={styles.infoGridDivider} />}
-                                                <View style={styles.infoGridItem}>
-                                                    <Ionicons name="star" size={18} color={ProfileTheme.colors.gold} />
-                                                    <Text style={styles.infoLabel}>{pp.captain}</Text>
-                                                    <Text style={[styles.infoValue, { color: ProfileTheme.colors.gold }]}>{pp.yes}</Text>
-                                                </View>
-                                            </>
-                                        )}
-                                    </View>
-                                </>
-                            )}
-                        </View>
-                    </View>
+                        </>
                     )}
 
                     {/* Transfers — 365 career payload, never API-Football getTransfers */}
                     {is365Source && (career365?.profile.transfers?.length ?? 0) > 0 && (
-                        <View style={styles.infoSection}>
-                            <Text style={styles.sectionTitle}>{pp.transfers}</Text>
-                            <View style={styles.transfersContainer}>
-                                {career365!.profile.transfers!.map((tr: Player365Transfer, index: number) => (
-                                    <View key={`${tr.competitorId}-${tr.date}-${index}`} style={styles.transferCard}>
-                                        <View style={styles.transferItem}>
-                                            <View style={styles.transferDateContainer}>
-                                                <Text style={styles.transferDate}>
-                                                    {tr.date ? String(tr.date).slice(0, 10) : 'N/A'}
-                                                </Text>
-                                                <Text style={styles.transferType}>
-                                                    {tr.transferTitle || tr.price || ''}
-                                                </Text>
-                                            </View>
-                                            <View style={styles.transferTeams}>
-                                                <View style={styles.transferTeam}>
-                                                    <TeamBadge
-                                                        name={tr.competitorName || '—'}
-                                                        size={32}
-                                                        logo={tr.competitorLogo || undefined}
-                                                    />
-                                                    <Text style={styles.transferTeamName} numberOfLines={1}>
-                                                        {getTeamDisplayName(tr.competitorName || '—', language)}
-                                                    </Text>
-                                                </View>
-                                            </View>
+                        <>
+                            <SectionHeader icon={PP_ICON.transfers} title={pp.transfers} rtl={rtl} />
+                            <View style={[styles.card, styles.listCard]}>
+                                {career365!.profile.transfers!.map((tr: Player365Transfer, index: number, arr) => (
+                                    <View
+                                        key={`${tr.competitorId}-${tr.date}-${index}`}
+                                        style={[
+                                            styles.transferRow,
+                                            { flexDirection: row },
+                                            index < arr.length - 1 && styles.statRowDivider,
+                                        ]}
+                                    >
+                                        <TeamBadge
+                                            name={tr.competitorName || '—'}
+                                            size={30}
+                                            logo={tr.competitorLogo || undefined}
+                                            color="transparent"
+                                        />
+                                        <View style={styles.transferText}>
+                                            <Text style={[styles.transferClub, { fontFamily: fontBold, textAlign }]} numberOfLines={1}>
+                                                {getTeamDisplayName(tr.competitorName || '—', language)}
+                                            </Text>
+                                            <Text style={[styles.transferDate, { fontFamily: fontReg, textAlign }]}>
+                                                {tr.date ? String(tr.date).slice(0, 10) : 'N/A'}
+                                            </Text>
                                         </View>
+                                        {(tr.price || tr.transferTitle) ? (
+                                            <Text style={[styles.transferType, { fontFamily: fontBold }]} numberOfLines={1}>
+                                                {tr.price || tr.transferTitle}
+                                            </Text>
+                                        ) : null}
                                     </View>
                                 ))}
                             </View>
-                        </View>
+                        </>
                     )}
 
                     {/* Transfers — API-Football only */}
                     {!is365Source && transfers.length > 0 && (
-                        <View style={styles.infoSection}>
-                            <Text style={styles.sectionTitle}>{pp.transfers}</Text>
+                        <>
+                            <SectionHeader icon={PP_ICON.transfers} title={pp.transfers} rtl={rtl} />
                             {loadingTransfers ? (
-                                <View style={styles.loadingContainerSmall}>
-                                    <ActivityIndicator size="small" color={ProfileTheme.colors.neonGreen} />
+                                <View style={[styles.card, styles.loadingCard]}>
+                                    <ActivityIndicator size="small" color={B.primary} />
                                 </View>
                             ) : (
-                                <View style={styles.transfersContainer}>
-                                    {transfers.map((transfer, index) => (
-                                        <View key={index} style={styles.transferCard}>
-                                            {transfer.transfers?.map((tr, tIndex) => (
-                                                <View key={tIndex} style={styles.transferItem}>
-                                                    <View style={styles.transferDateContainer}>
-                                                        <Text style={styles.transferDate}>
-                                                            {tr.date ? formatDate(tr.date, language) : 'N/A'}
-                                                        </Text>
-                                                        <Text style={styles.transferType}>
-                                                            {formatTransferValue(tr.type, pp)}
-                                                        </Text>
-                                                    </View>
-                                                    <View style={styles.transferTeams}>
-                                                        {tr.teams.out && (
-                                                            <View style={styles.transferTeam}>
-                                                                <TeamBadge
-                                                                    name={tr.teams.out.name}
-                                                                    color={teamColors[0]}
-                                                                    size={32}
-                                                                    logo={teamLogoUrl(tr.teams.out.id, tr.teams.out.logo)}
-                                                                />
-                                                                <Text style={styles.transferTeamName} numberOfLines={1}>
-                                                                    {getTeamDisplayName(tr.teams.out.name, language)}
-                                                                </Text>
-                                                            </View>
-                                                        )}
-                                                        <Ionicons name="arrow-forward" size={20} color={ProfileTheme.colors.textSecondary} />
-                                                        {tr.teams.in && (
-                                                            <View style={styles.transferTeam}>
-                                                                <TeamBadge
-                                                                    name={tr.teams.in.name}
-                                                                    color={teamColors[0]}
-                                                                    size={32}
-                                                                    logo={teamLogoUrl(tr.teams.in.id, tr.teams.in.logo)}
-                                                                />
-                                                                <Text style={styles.transferTeamName} numberOfLines={1}>
-                                                                    {getTeamDisplayName(tr.teams.in.name, language)}
-                                                                </Text>
-                                                            </View>
-                                                        )}
-                                                    </View>
+                                <View style={[styles.card, styles.listCard]}>
+                                    {transfers.flatMap((transfer, index) =>
+                                        (transfer.transfers ?? []).map((tr, tIndex) => (
+                                            <View key={`${index}-${tIndex}`} style={[styles.apiTransfer, styles.statRowDivider]}>
+                                                <View style={[styles.apiTransferMeta, { flexDirection: row }]}>
+                                                    <Text style={[styles.transferDate, { fontFamily: fontReg }]}>
+                                                        {tr.date ? formatDate(tr.date, language) : 'N/A'}
+                                                    </Text>
+                                                    <Text style={[styles.transferType, { fontFamily: fontBold }]}>
+                                                        {formatTransferValue(tr.type, pp)}
+                                                    </Text>
                                                 </View>
-                                            ))}
-                                        </View>
-                                    ))}
+                                                <View style={[styles.apiTransferTeams, { flexDirection: row }]}>
+                                                    {tr.teams.out && (
+                                                        <View style={[styles.apiTransferTeam, { flexDirection: row }]}>
+                                                            <TeamBadge
+                                                                name={tr.teams.out.name}
+                                                                color={teamColors[0]}
+                                                                size={28}
+                                                                logo={teamLogoUrl(tr.teams.out.id, tr.teams.out.logo)}
+                                                            />
+                                                            <Text style={[styles.transferClub, { fontFamily: fontSemi }]} numberOfLines={1}>
+                                                                {getTeamDisplayName(tr.teams.out.name, language)}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                    <Ionicons name={rtl ? 'arrow-back' : 'arrow-forward'} size={18} color={B.primary} />
+                                                    {tr.teams.in && (
+                                                        <View style={[styles.apiTransferTeam, { flexDirection: row }]}>
+                                                            <TeamBadge
+                                                                name={tr.teams.in.name}
+                                                                color={teamColors[0]}
+                                                                size={28}
+                                                                logo={teamLogoUrl(tr.teams.in.id, tr.teams.in.logo)}
+                                                            />
+                                                            <Text style={[styles.transferClub, { fontFamily: fontSemi }]} numberOfLines={1}>
+                                                                {getTeamDisplayName(tr.teams.in.name, language)}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            </View>
+                                        )),
+                                    )}
                                 </View>
                             )}
-                        </View>
+                        </>
                     )}
                 </Animated.View>
             </ScrollView>
@@ -1400,320 +1492,172 @@ export default function PlayerProfileScreen() {
     );
 }
 
+function InfoTile({
+    icon,
+    label,
+    value,
+    tone,
+}: {
+    icon: keyof typeof Ionicons.glyphMap;
+    label: string;
+    value: string;
+    tone?: string;
+}) {
+    const fontBold = useAppFont(700);
+    const fontReg = useAppFont(400);
+    return (
+        <View style={styles.infoTile}>
+            <Ionicons name={icon} size={18} color={tone ?? B.primarySoft} />
+            <Text style={[styles.infoLabel, { fontFamily: fontReg }]}>{label}</Text>
+            <Text style={[styles.infoValue, { fontFamily: fontBold }, tone ? { color: tone } : null]} numberOfLines={2}>
+                {value}
+            </Text>
+        </View>
+    );
+}
+
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: ProfileTheme.colors.deepBlack,
+    container: { flex: 1, backgroundColor: B.bg },
+
+    hero: { paddingHorizontal: 18, paddingTop: 22, paddingBottom: 20, overflow: 'hidden' },
+    heroJersey: {
+        position: 'absolute',
+        top: -6,
+        fontSize: 110,
+        color: B.jersey,
+        opacity: 0.85,
     },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: ProfileTheme.colors.deepBlack,
-    },
-    loadingContainerSmall: {
-        padding: 20,
-        alignItems: 'center',
-    },
-    loadingText: {
-        color: ProfileTheme.colors.textSecondary,
-        marginTop: 16,
-        fontSize: 16,
-    },
-    errorContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: ProfileTheme.colors.deepBlack,
-        padding: 20,
-    },
-    errorText: {
-        color: '#ef4444',
-        fontSize: 16,
-        marginTop: 16,
-        textAlign: 'center',
-    },
-    backButton: {
-        marginTop: 20,
-        paddingHorizontal: 24,
-        paddingVertical: 12,
-        backgroundColor: ProfileTheme.colors.neonGreen,
+    heroRow: { alignItems: 'center', gap: 16 },
+    photoWrap: { alignItems: 'center' },
+    ratingMedal: {
+        position: 'absolute',
+        bottom: -8,
+        minWidth: 44,
+        paddingHorizontal: 8,
+        height: 24,
         borderRadius: 8,
-    },
-    backButtonText: {
-        color: '#fff',
-        fontWeight: 'bold',
-    },
-    hero: {
-        paddingHorizontal: 20,
-        paddingBottom: 24,
-    },
-    backButtonFloat: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(0,0,0,0.35)',
+        alignItems: 'center',
         justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
+        borderWidth: 2,
+        borderColor: B.bg,
     },
-    heroContent: {},
-    heroRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-    },
-    playerPhotoCircle: {
-        width: 112,
-        height: 112,
-        borderRadius: 56,
-        overflow: 'hidden',
-        backgroundColor: 'rgba(0,0,0,0.2)',
-        borderWidth: 3,
-        borderColor: 'rgba(255,255,255,0.35)',
-    },
-    playerPhotoImage: {
-        width: '100%',
-        height: '100%',
-    },
-    heroInfo: {
-        flex: 1,
-    },
-    playerName: {
-        fontSize: 24,
-        fontWeight: '800',
-        color: '#fff',
-        marginBottom: 6,
-    },
+    ratingMedalText: { color: '#0b0518', fontSize: 13 },
+    heroInfo: { flex: 1 },
+    inlineRow: { alignItems: 'center', gap: 6 },
+    flag: { width: 18, height: 12, borderRadius: 2 },
+    heroMeta: { color: B.soft, fontSize: 13, flexShrink: 1 },
+    playerName: { color: '#fff', fontSize: 22, flexShrink: 1 },
+    verified: { width: 20, height: 20 },
     injuredBadge: {
-        flexDirection: 'row',
         alignItems: 'center',
-        alignSelf: 'flex-start',
         gap: 4,
-        backgroundColor: 'rgba(239,68,68,0.25)',
+        backgroundColor: 'rgba(239,68,68,0.2)',
         borderRadius: 8,
         paddingHorizontal: 8,
         paddingVertical: 3,
-        marginBottom: 6,
+        marginTop: 6,
         borderWidth: 1,
         borderColor: 'rgba(239,68,68,0.45)',
     },
-    injuredText: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: '#fca5a5',
-    },
-    playerSubInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 4,
-        marginBottom: 8,
-    },
-    nationalityChip: {
-        flexDirection: 'row',
+    injuredText: { fontSize: 11, color: '#fca5a5' },
+    heroTeamName: { color: B.soft, fontSize: 14, flexShrink: 1 },
+
+    chipsRow: { flexWrap: 'wrap', gap: 8, marginTop: 18 },
+    chip: {
         alignItems: 'center',
         gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: 999,
+        backgroundColor: 'rgba(11,5,24,0.85)',
+        borderWidth: 1,
+        borderColor: B.border,
     },
-    nationalityFlag: {
-        width: 18,
-        height: 12,
-        borderRadius: 2,
-        backgroundColor: 'rgba(255,255,255,0.12)',
-    },
-    playerMeta: {
-        fontSize: 13,
-        color: 'rgba(255,255,255,0.85)',
-    },
-    separator: {
-        fontSize: 13,
-        color: 'rgba(255,255,255,0.5)',
-    },
-    heroTeamRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 6,
-    },
-    heroTeamName: {
-        flex: 1,
-        fontSize: 14,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.9)',
-    },
-    seasonBadge: {
-        fontSize: 12,
-        color: 'rgba(255,255,255,0.65)',
-        fontWeight: '500',
-    },
+    chipIcon: { width: 14, height: 14 },
+    chipText: { color: '#fff', fontSize: 12 },
+
     careerButtonWrap: {
-        marginTop: 10,
-        marginBottom: 4,
-        alignSelf: 'flex-start',
-        borderRadius: 20,
-        shadowColor: ProfileTheme.colors.neonPurple,
+        marginTop: 14,
+        borderRadius: 12,
+        shadowColor: B.primary,
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
+        shadowOpacity: 0.6,
         shadowRadius: 12,
-        elevation: 10,
+        elevation: 8,
     },
     careerButton: {
-        flexDirection: 'row',
+        height: 44,
+        borderRadius: 12,
         alignItems: 'center',
-        gap: 6,
-        paddingVertical: 8,
+        justifyContent: 'center',
+        gap: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(167,139,250,0.35)',
+    },
+    careerButtonText: { color: '#fff', fontSize: 14 },
+
+    body: { paddingHorizontal: 18 },
+
+    card: {
+        backgroundColor: B.card,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: B.border,
+    },
+    loadingCard: { paddingVertical: 28, alignItems: 'center' },
+    emptyCard: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 16, gap: 10 },
+    emptyText: { fontSize: 14, color: B.soft, textAlign: 'center' },
+
+    featuredGrid: { flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10, marginBottom: 10 },
+    featuredTile: {
+        width: '48.5%',
+        backgroundColor: B.card,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: B.border,
         paddingHorizontal: 14,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.35)',
-    },
-    careerButtonText: {
-        color: '#fff',
-        fontSize: 13,
-        fontWeight: '800',
-        letterSpacing: 0.3,
-    },
-    body: {
-        paddingHorizontal: 20,
-        paddingTop: 8,
-    },
-    totalCard: {
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        borderRadius: 18,
-        padding: 16,
-        marginBottom: 20,
-        borderWidth: 1,
-        borderColor: ProfileTheme.colors.border,
-    },
-    totalTitle: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: ProfileTheme.colors.textSecondary,
-        marginBottom: 10,
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-    },
-    totalRow: {
-        flexDirection: 'row',
-        backgroundColor: 'rgba(0,0,0,0.25)',
-        borderRadius: 14,
+        paddingTop: 16,
+        paddingBottom: 14,
         overflow: 'hidden',
     },
-    infoSection: {
-        marginBottom: 24,
-    },
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: ProfileTheme.colors.textPrimary,
-        marginBottom: 14,
-    },
-    emptyCard: {
-        alignItems: 'center',
-        padding: 32,
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 16,
+    featuredAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
+    featuredValue: { color: '#fff', fontSize: 26 },
+    featuredLabel: { color: B.muted, fontSize: 12, marginTop: 4 },
+
+    listCard: { paddingHorizontal: 14 },
+    statRow: { alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 13 },
+    statRowDivider: { borderBottomWidth: 1, borderBottomColor: B.divider },
+    statLabel: { flex: 1, color: B.soft, fontSize: 14 },
+    statValue: { color: '#fff', fontSize: 15 },
+
+    eventsWrap: { flexWrap: 'wrap', gap: 8 },
+    eventChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: 999,
+        backgroundColor: 'rgba(139,92,246,0.1)',
         borderWidth: 1,
-        borderColor: ProfileTheme.colors.border,
-        gap: 10,
+        borderColor: B.border,
     },
-    emptyText: {
-        fontSize: 14,
-        color: ProfileTheme.colors.textSecondary,
-        textAlign: 'center',
-    },
-    infoCardContainer: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: ProfileTheme.colors.border,
-    },
-    matchStatRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 8,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: ProfileTheme.colors.border,
-    },
-    infoGrid: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    infoGridItem: {
-        flex: 1,
-        alignItems: 'center',
-        gap: 6,
-    },
-    infoGridDivider: {
-        width: 1,
-        height: '80%',
-        backgroundColor: ProfileTheme.colors.border,
-    },
-    infoGridDividerHorizontal: {
-        height: 1,
-        width: '100%',
-        backgroundColor: ProfileTheme.colors.border,
-        marginVertical: 14,
-    },
-    infoLabel: {
-        fontSize: 11,
-        color: ProfileTheme.colors.textSecondary,
-        textAlign: 'center',
-    },
-    infoValue: {
-        fontSize: 15,
-        color: ProfileTheme.colors.textPrimary,
-        fontWeight: '600',
-        textAlign: 'center',
-    },
-    transfersContainer: {
-        gap: 12,
-    },
-    transferCard: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: ProfileTheme.colors.border,
-    },
-    transferItem: {
-        gap: 12,
-    },
-    transferDateContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    transferDate: {
-        fontSize: 14,
-        color: ProfileTheme.colors.textSecondary,
-    },
-    transferType: {
-        fontSize: 14,
-        color: ProfileTheme.colors.neonGreen,
-        fontWeight: '600',
-    },
-    transferTeams: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    transferTeam: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    transferTeamName: {
-        flex: 1,
-        fontSize: 14,
-        color: ProfileTheme.colors.textPrimary,
-        fontWeight: '500',
-    },
+    eventText: { color: '#fff', fontSize: 12 },
+
+    totalRow: { overflow: 'hidden' },
+    vDivider: { width: 1, backgroundColor: B.divider, marginVertical: 10 },
+    hDivider: { height: 1, backgroundColor: B.divider, marginVertical: 14 },
+
+    infoCard: { padding: 16 },
+    infoGrid: { alignItems: 'stretch' },
+    infoTile: { flex: 1, alignItems: 'center', gap: 6, paddingHorizontal: 4 },
+    infoLabel: { fontSize: 11, color: B.muted, textAlign: 'center' },
+    infoValue: { fontSize: 14, color: '#fff', textAlign: 'center' },
+
+    transferRow: { alignItems: 'center', gap: 10, paddingVertical: 12 },
+    transferText: { flex: 1, minWidth: 0, gap: 3 },
+    transferClub: { color: '#fff', fontSize: 14, flexShrink: 1 },
+    transferDate: { color: B.muted, fontSize: 12 },
+    transferType: { color: B.primarySoft, fontSize: 13, maxWidth: 120 },
+    apiTransfer: { paddingVertical: 12, gap: 10 },
+    apiTransferMeta: { justifyContent: 'space-between', alignItems: 'center' },
+    apiTransferTeams: { alignItems: 'center', gap: 10 },
+    apiTransferTeam: { flex: 1, alignItems: 'center', gap: 8 },
 });

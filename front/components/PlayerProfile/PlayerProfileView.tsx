@@ -24,20 +24,8 @@ import ImageViewerModal from '../common/ImageViewerModal';
 import TeamBadge from '../common/TeamBadge';
 import GradientText from '../ShareWin/components/GradientText';
 import { PP_ICON, PP_STADIUM } from './assets';
+import { PP_COLORS as C, ratingTone } from './theme';
 import type { PlayerProfileTab, PlayerProfileViewModel, PlayerTransferRow } from './types';
-
-const C = {
-  bg: '#030303',
-  bar: '#0c051a',
-  card: '#0b0518',
-  border: '#281359',
-  divider: '#200A53',
-  primary: '#8b5cf6',
-  timeline: '#211930',
-  jersey: '#21163b',
-  muted: 'rgba(255,255,255,0.55)',
-  soft: 'rgba(255,255,255,0.75)',
-};
 
 const DESIGN_WIDTH = 448;
 const STRIP_OVERLAP = 41;
@@ -60,12 +48,6 @@ function fmtMatchDate(iso: string | null, rtl: boolean): string {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const yyyy = String(d.getFullYear());
   return rtl ? `${yyyy} - ${mm} - ${dd}` : `${dd} - ${mm} - ${yyyy}`;
-}
-
-function ratingTone(rating: number): string {
-  if (rating >= 7) return '#86EFAC';
-  if (rating >= 6) return '#FACC15';
-  return '#ff8a7a';
 }
 
 export function PlayerProfileHeader({ onBack, onBell }: { onBack: () => void; onBell?: () => void }) {
@@ -417,7 +399,7 @@ function InfoCell({
   );
 }
 
-function SectionHeader({
+export function SectionHeader({
   icon,
   title,
   trailing,
