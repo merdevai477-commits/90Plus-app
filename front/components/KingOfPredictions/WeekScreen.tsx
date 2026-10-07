@@ -164,9 +164,12 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const myXp = board?.me?.xp ?? 0;
   const preview = previewEntries(board);
 
-  // Keep the prize card's proportions on small and large phones.
-  const prizeScale = Math.min(1.05, Math.max(0.78, (screenW - SIDE * 2) / PRIZE_W));
+  // Art coordinates come from the 404pt-wide Figma card, so they scale with
+  // the card's real width — clamping would push the shirts off its edge.
+  const prizeScale = (screenW - SIDE * 2) / PRIZE_W;
   const s = (value: number) => value * prizeScale;
+  // Text keeps a readable floor on narrow phones.
+  const fs = (value: number) => Math.max(value * prizeScale, value * 0.85);
 
   return (
     <View style={styles.root}>
@@ -279,7 +282,7 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
           })}
         </View>
 
-        <View style={[styles.prize, { height: s(PRIZE_H), borderRadius: s(20) }]}>
+        <View style={[styles.prize, { minHeight: s(PRIZE_H), borderRadius: s(20) }]}>
           <Image
             source={KING_ART.prizeBg}
             style={{ position: 'absolute', left: 0, right: 0, top: s(-85.4), height: s(303.3) }}
@@ -307,74 +310,98 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
             style={{ position: 'absolute', right: 0, top: 0, width: s(276), height: s(161) }}
             contentFit="fill"
           />
-          <Image
-            source={KING_ART.shirtShadow}
-            style={{ position: 'absolute', left: s(252), top: s(130), width: s(76), height: s(23) }}
-            contentFit="fill"
-          />
-          <Image
-            source={KING_ART.shirtShadow}
-            style={{ position: 'absolute', left: s(303), top: s(124), width: s(78), height: s(23) }}
-            contentFit="fill"
-          />
-          <Image
-            source={KING_ART.shirt1}
-            style={{ position: 'absolute', left: s(274), top: s(9), width: s(139), height: s(139) }}
-            contentFit="cover"
-          />
-          <Image
-            source={KING_ART.shirt2}
-            style={{ position: 'absolute', left: s(228), top: s(27), width: s(127), height: s(126) }}
-            contentFit="cover"
-          />
-          <View style={{ position: 'absolute', left: s(22), top: s(27), width: s(195), gap: s(17) }}>
-            <View style={{ gap: s(2) }}>
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <View style={styles.shirtStage}>
+              <View style={{ width: s(182), height: s(150) }}>
+                <Image
+                  source={KING_ART.shirtShadow}
+                  style={{ position: 'absolute', left: s(24), top: s(118), width: s(76), height: s(23) }}
+                  contentFit="fill"
+                />
+                <Image
+                  source={KING_ART.shirtShadow}
+                  style={{ position: 'absolute', left: s(75), top: s(112), width: s(78), height: s(23) }}
+                  contentFit="fill"
+                />
+                <Image
+                  source={KING_ART.shirt1}
+                  style={{ position: 'absolute', left: s(43), top: 0, width: s(139), height: s(139) }}
+                  contentFit="contain"
+                />
+                <Image
+                  source={KING_ART.shirt2}
+                  style={{ position: 'absolute', left: 0, top: s(18), width: s(127), height: s(126) }}
+                  contentFit="contain"
+                />
+              </View>
+            </View>
+          </View>
+          <View
+            style={{
+              width: s(212),
+              minHeight: s(PRIZE_H),
+              paddingLeft: s(18),
+              paddingVertical: s(16),
+              justifyContent: 'center',
+              gap: s(12),
+            }}
+          >
+            <View>
               <Text
-                style={[styles.prizeTitle, { fontFamily: fontBold, fontSize: s(36) }]}
+                style={[styles.prizeTitle, { fontFamily: fontBold, fontSize: fs(32), lineHeight: fs(32) * 1.3 }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
+                minimumFontScale={0.6}
                 allowFontScaling={false}
               >
                 {copy.prizeTitle}
               </Text>
               <Text
-                style={[styles.prizeSub, { fontFamily: fontMedium, fontSize: s(11) }]}
-                numberOfLines={1}
+                style={[styles.prizeSub, { fontFamily: fontMedium, fontSize: fs(11), lineHeight: fs(11) * 1.5 }]}
+                numberOfLines={2}
                 adjustsFontSizeToFit
+                minimumFontScale={0.75}
                 allowFontScaling={false}
               >
                 {copy.prizeSub}
               </Text>
             </View>
-            <View style={[styles.statRow, { gap: s(4) }]}>
-              <LinearGradient
-                colors={['rgba(139,92,246,0.2)', 'rgba(81,54,144,0.2)']}
-                style={[styles.stat, { height: s(34), borderRadius: s(7), gap: s(6), paddingHorizontal: s(6) }]}
-              >
-                <View style={styles.statText}>
-                  <Text style={[styles.statLabel, { fontFamily: fontRegular, fontSize: s(7) }]} allowFontScaling={false}>
-                    {copy.yourRank}
-                  </Text>
-                  <Text style={[styles.statValue, { fontFamily: fontBold, fontSize: s(14) }]} numberOfLines={1} allowFontScaling={false}>
-                    {rankLabel}
-                  </Text>
-                </View>
-                <Image source={KING_ICON.ranking} style={{ width: s(24), height: s(24) }} contentFit="contain" />
-              </LinearGradient>
-              <LinearGradient
-                colors={['rgba(139,92,246,0.2)', 'rgba(81,54,144,0.2)']}
-                style={[styles.stat, { height: s(34), borderRadius: s(7), gap: s(6), paddingHorizontal: s(6) }]}
-              >
-                <View style={[styles.statText, { flex: 1 }]}>
-                  <Text style={[styles.statLabel, { fontFamily: fontRegular, fontSize: s(7) }]} allowFontScaling={false}>
-                    {copy.yourPoints}
-                  </Text>
-                  <Text style={[styles.statValue, { fontFamily: fontBold, fontSize: s(14) }]} numberOfLines={1} allowFontScaling={false}>
-                    {myXp}
-                  </Text>
-                </View>
-                <Image source={KING_ICON.energy} style={{ width: s(24), height: s(24) }} contentFit="contain" />
-              </LinearGradient>
+            <View style={[styles.statRow, { gap: s(5) }]}>
+              {[
+                { label: copy.yourRank, value: rankLabel, icon: KING_ICON.ranking },
+                { label: copy.yourPoints, value: String(myXp), icon: KING_ICON.energy },
+              ].map((stat) => (
+                <LinearGradient
+                  key={stat.label}
+                  colors={['rgba(139,92,246,0.2)', 'rgba(81,54,144,0.2)']}
+                  style={[
+                    styles.stat,
+                    { minHeight: s(40), borderRadius: s(8), gap: s(5), paddingHorizontal: s(6), paddingVertical: s(4) },
+                  ]}
+                >
+                  <View style={styles.statText}>
+                    <Text
+                      style={[styles.statLabel, { fontFamily: fontRegular, fontSize: fs(9), lineHeight: fs(9) * 1.45 }]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                      allowFontScaling={false}
+                    >
+                      {stat.label}
+                    </Text>
+                    <Text
+                      style={[styles.statValue, { fontFamily: fontBold, fontSize: fs(15), lineHeight: fs(15) * 1.35 }]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                      allowFontScaling={false}
+                    >
+                      {stat.value}
+                    </Text>
+                  </View>
+                  <Image source={stat.icon} style={{ width: s(22), height: s(22) }} contentFit="contain" />
+                </LinearGradient>
+              ))}
             </View>
           </View>
         </View>
@@ -541,7 +568,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
-  statText: { alignItems: 'flex-end' },
+  statText: { flex: 1, alignItems: 'flex-end' },
+  shirtStage: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: 4,
+    justifyContent: 'center',
+  },
   statLabel: { color: '#fff', textAlign: 'right' },
   statValue: { color: '#fff', textAlign: 'right' },
   challenge: {
