@@ -13,19 +13,9 @@ import { getFootballMetrics } from '../utils/football-metrics';
  */
 export function metricsMiddleware(req: Request, res: Response, next: NextFunction): void {
   const startTime = Date.now();
-  let cacheHit = false;
 
-  // Track cache hits from response headers
-  const originalJson = res.json.bind(res);
-  res.json = function (body: any) {
-    const cacheHeader = res.getHeader('X-Cache');
-    if (cacheHeader === 'HIT') {
-      cacheHit = true;
-    }
-    return originalJson(body);
-  };
-
-  // Track when response finishes
+  // Track when response finishes. Cache hits are sent as pre-serialized
+  // strings (res.send), so read the header rather than wrapping res.json.
   res.on('finish', () => {
     const responseTime = Date.now() - startTime;
     
@@ -34,7 +24,7 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
       method: req.method,
       responseTime,
       statusCode: res.statusCode,
-      cacheHit,
+      cacheHit: res.getHeader('X-Cache') === 'HIT',
       timestamp: Date.now(),
     });
   });

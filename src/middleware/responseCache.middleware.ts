@@ -17,6 +17,16 @@ interface CacheEntry {
     etag: string;
     timestamp: number;
     ttl: number;
+    /** Serialized `data` — L1 only (Redis stores `data`); hits send it as-is. */
+    body?: string;
+}
+
+function sendCacheEntry(res: Response, entry: CacheEntry): Response {
+    if (typeof entry.body === 'string') {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        return res.send(entry.body);
+    }
+    return res.json(entry.data);
 }
 
 export function buildResponseCacheKey(req: Request, sharedCache = false): string {
@@ -51,6 +61,20 @@ class ResponseCache {
 
     size(): number {
         return this.memoryCache.size;
+    }
+
+    /** L1 copy holding only the serialized body; null when too large for L1. */
+    private toMemoryEntry(entry: CacheEntry, body?: string): CacheEntry | null {
+        let serialized = body;
+        if (serialized === undefined) {
+            try {
+                serialized = JSON.stringify(entry.data);
+            } catch {
+                return null;
+            }
+        }
+        if (Buffer.byteLength(serialized, 'utf8') > this.MAX_ENTRY_BYTES) return null;
+        return { etag: entry.etag, timestamp: entry.timestamp, ttl: entry.ttl, data: undefined, body: serialized };
     }
 
     private isOversized(data: unknown): boolean {
@@ -97,7 +121,11 @@ class ResponseCache {
             const cached = await redisCacheService.get<CacheEntry>(redisKey);
             if (cached) {
                 // Same size guard as set(): huge calendars must not fill process RAM.
-                if (!this.isOversized(cached.data)) this.putMemory(key, cached);
+                const memoryCopy = this.isOversized(cached.data) ? null : this.toMemoryEntry(cached);
+                if (memoryCopy) {
+                    this.putMemory(key, memoryCopy);
+                    return memoryCopy;
+                }
                 return cached;
             }
         } catch (err) {
@@ -189,7 +217,7 @@ class ResponseCache {
         data: any,
         ttl?: number,
         sharedCache = false,
-        precomputed?: { etag: string; bytes: number },
+        precomputed?: { etag: string; body: string },
     ): Promise<string> {
         const key = this.getCacheKey(req, sharedCache);
         const etag = precomputed?.etag ?? this.generateETag(data);
@@ -200,25 +228,14 @@ class ResponseCache {
             ttl: ttl || this.DEFAULT_TTL,
         };
 
-        // Store in Redis
+        // L1 only for modest payloads — huge calendars must not fill process RAM.
+        const memoryCopy = this.toMemoryEntry(entry, precomputed?.body);
+        if (memoryCopy) this.putMemory(key, memoryCopy);
+        // Waiters are released before the Redis round-trip.
+        this.endFill(req, memoryCopy ?? entry, sharedCache);
+
         const redisKey = `response:${key}`;
         await redisCacheService.set(redisKey, entry, entry.ttl);
-
-        // L1 only for modest payloads — huge calendars must not fill process RAM.
-        let approxBytes = precomputed?.bytes ?? 0;
-        if (!precomputed) {
-            try {
-                approxBytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
-            } catch {
-                approxBytes = this.MAX_ENTRY_BYTES + 1;
-            }
-        }
-        if (approxBytes <= this.MAX_ENTRY_BYTES) {
-            this.putMemory(key, entry);
-        }
-
-        // Resolve any waiters.
-        this.endFill(req, entry, sharedCache);
 
         return etag;
     }
@@ -337,7 +354,7 @@ export function responseCacheMiddleware(options: {
             res.setHeader('ETag', `"${cached.etag}"`);
             res.setHeader('X-Cache', 'HIT');
             res.setHeader('Cache-Control', cacheControl(cached.ttl || 0, age));
-            return res.json(cached.data);
+            return sendCacheEntry(res, cached);
         }
 
         // Cache miss: register a fill so concurrent requests can wait instead of stampeding downstream.
@@ -356,7 +373,7 @@ export function responseCacheMiddleware(options: {
                 res.setHeader('ETag', `"${filled.etag}"`);
                 res.setHeader('X-Cache', 'HIT');
                 res.setHeader('Cache-Control', cacheControl(filled.ttl || 0, Date.now() - (filled.timestamp || 0)));
-                return res.json(filled.data);
+                return sendCacheEntry(res, filled);
             }
             // If still not available (timeout), proceed normally.
         }
@@ -398,13 +415,13 @@ export function responseCacheMiddleware(options: {
             if (shouldCache) {
                 // P1-4: compute ETag + set headers BEFORE sending the body.
                 // Redis write stays async/non-blocking.
-                // Serialize once for ETag + size instead of once per consumer.
-                let precomputed: { etag: string; bytes: number } | undefined;
+                // Serialize once: ETag, L1 body and the wire payload share it.
+                let precomputed: { etag: string; body: string } | undefined;
                 try {
                     const serialized = JSON.stringify(body);
                     precomputed = {
                         etag: crypto.createHash('md5').update(serialized).digest('hex'),
-                        bytes: Buffer.byteLength(serialized, 'utf8'),
+                        body: serialized,
                     };
                 } catch {
                     precomputed = undefined;
@@ -417,6 +434,10 @@ export function responseCacheMiddleware(options: {
                 responseCache.set(req, body, effectiveTtl, sharedCache, precomputed).catch(() => {
                     responseCache.failFill(req, new Error('CACHE_SET_FAILED'), sharedCache);
                 });
+                if (precomputed) {
+                    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                    return res.send(precomputed.body);
+                }
             } else {
                 // Release waiters for this key if leader request ended with non-cacheable response.
                 responseCache.failFill(req, new Error('RESPONSE_NOT_CACHEABLE'), sharedCache);
