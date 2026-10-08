@@ -3,17 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>90Plus — عالمك الكروي في جيبك</title>
-    <meta name="description" content="90Plus — نتائج مباشرة، كويزات، تنبؤات، ريلز، ومجتمع كروي في تطبيق واحد. حمّل مجاناً على iOS و Android." />
-    <meta name="theme-color" content="#030208" />
+    <title>90Plus — تنافس. توقّع. ارتقِ.</title>
+    <meta name="description" content="90Plus تطبيق كرة القدم للمشجع الحقيقي: نتائج مباشرة، توقعات بجوائز حقيقية، كويز يومي، ريلز، ومساعد ذكي Captain AI. مجاني على iOS و Android." />
+    <meta name="theme-color" content="#05010D" />
     <meta name="color-scheme" content="dark" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://90plus.pro/" />
     <meta name="apple-itunes-app" content="app-id=6758296989" />
 
     <meta property="og:site_name" content="90Plus" />
-    <meta property="og:title" content="90Plus — عالمك الكروي في جيبك" />
-    <meta property="og:description" content="نتائج مباشرة، كويزات يومية، تنبؤات، ريلز، وذكاء اصطناعي كروي — كل ما يحتاجه المشجع الحقيقي." />
+    <meta property="og:title" content="90Plus — تنافس. توقّع. ارتقِ." />
+    <meta property="og:description" content="نتائج مباشرة، توقعات بجوائز حقيقية، كويز يومي، ريلز، و Captain AI — كل اللي يحتاجه المشجع في تطبيق واحد." />
     <meta property="og:url" content="https://90plus.pro/" />
     <meta property="og:image" content="https://90plus.pro/og-image.png" />
     <meta property="og:image:width" content="1200" />
@@ -22,13 +22,14 @@
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="ar_EG" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="90Plus — عالمك الكروي في جيبك" />
-    <meta name="twitter:description" content="حمّل تطبيق 90Plus مجاناً — نتائج مباشرة، كويزات، تنبؤات، وريلز." />
+    <meta name="twitter:title" content="90Plus — تنافس. توقّع. ارتقِ." />
+    <meta name="twitter:description" content="حمّل 90Plus مجاناً — نتائج مباشرة، توقعات بجوائز، كويز يومي، وريلز." />
     <meta name="twitter:image" content="https://90plus.pro/og-image.png" />
 
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/90plus-logo-512.png" type="image/png" sizes="512x512" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="preload" as="image" href="./src/assets/art/hero-player.webp" type="image/webp" fetchpriority="high" />
 
     <script type="application/ld+json">
       {
@@ -37,7 +38,7 @@
         "name": "90Plus",
         "url": "https://90plus.pro/",
         "image": "https://90plus.pro/90plus-logo-512.png",
-        "description": "نتائج مباشرة، كويزات يومية، تنبؤات، ريلز، وذكاء اصطناعي كروي في تطبيق واحد.",
+        "description": "نتائج مباشرة، توقعات بجوائز حقيقية، كويز يومي، ريلز، ومساعد ذكي Captain AI في تطبيق واحد.",
         "applicationCategory": "SportsApplication",
         "operatingSystem": "iOS, Android",
         "inLanguage": ["ar", "en"],
@@ -52,237 +53,466 @@
   </head>
   <body>
     <a class="skip-link" href="#main">تخطَّ إلى المحتوى</a>
-
-    <!-- Liquid glass SVG filter -->
-    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
-      <filter id="liquid" x="-20%" y="-20%" width="140%" height="140%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.009 0.013" numOctaves="2" seed="7" result="noise" />
-        <feDisplacementMap in="SourceGraphic" in2="noise" scale="16" xChannelSelector="R" yChannelSelector="G" />
-      </filter>
-    </svg>
-
-    <div class="bg-orbs" aria-hidden="true">
-      <div class="orb orb-1"></div>
-      <div class="orb orb-2"></div>
-      <div class="orb orb-3"></div>
-    </div>
     <div class="grain" aria-hidden="true"></div>
 
-    <header class="site-header">
+    <header class="site-header" id="siteHeader">
       <div class="header-inner">
-        <a class="brand" href="/" aria-label="90Plus — الصفحة الرئيسية">
+        <a class="brand" href="#top" aria-label="90Plus — أعلى الصفحة">
           <img src="./src/assets/logo-96.png" width="40" height="40" alt="" />
-          <span>90Plus</span>
+          <span class="brand-word">90<b>PLUS</b></span>
         </a>
-        <nav class="site-nav" aria-label="روابط الموقع">
-          <a href="/news">الأخبار</a>
-          <a href="/support">الدعم</a>
-          <a href="/privacy">الخصوصية</a>
-          <a href="/terms">الشروط</a>
+        <nav class="site-nav" aria-label="أقسام الصفحة">
+          <a href="#features">المميزات</a>
+          <a href="#prizes">الجوائز</a>
+          <a href="#rank">الرانك</a>
+          <a href="#community">المجتمع</a>
         </nav>
+        <a class="header-cta" href="#download">حمّل مجاناً</a>
       </div>
     </header>
 
-    <main class="page" id="main">
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <div class="eyebrow">
-            <span class="dot" aria-hidden="true"></span>
-            متاح على App Store و Google Play
-          </div>
-          <h1 id="hero-title">
-            عالمك الكروي<br />
-            <span class="gold">في جيبك</span>
-          </h1>
-          <p class="lead">
-            90Plus منصة كروية متكاملة: نتائج مباشرة، كويزات يومية، تنبؤات، ريلز،
-            ذكاء اصطناعي، ومجتمع مشجعين — كل ما تحتاجه في تطبيق واحد.
-          </p>
+    <main id="main">
+      <!-- HERO -->
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-media" aria-hidden="true">
+          <img src="./src/assets/art/hero-player.webp" alt="" width="1448" height="1086" fetchpriority="high" />
+        </div>
+        <div class="hero-shade" aria-hidden="true"></div>
 
-          <div class="store-row">
-            <a
-              class="store-badge primary"
-              href="https://apps.apple.com/app/id6758296989"
-              data-store="apple"
-              rel="noopener noreferrer"
-              aria-label="حمّل 90Plus من App Store"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.63 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-              </svg>
-              <span class="label">
-                <span class="small">Download on the</span>
-                <span class="big">App Store</span>
-              </span>
-            </a>
-            <a
-              class="store-badge"
-              href="https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp"
-              data-store="google"
-              rel="noopener noreferrer"
-              aria-label="حمّل 90Plus من Google Play"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85C3.34 21.61 3 21.09 3 20.5m13.81-5.38L6.05 21.34 14.54 12.85l2.27 2.27m3.35-4.31c.34.27.59.69.59 1.19s-.25.92-.57 1.18l-2.29 1.32-2.5-2.5 2.5-2.5 2.27 1.31M6.05 2.66l10.76 6.22-2.27 2.27L6.05 2.66z"/>
-              </svg>
-              <span class="label">
-                <span class="small">Get it on</span>
-                <span class="big">Google Play</span>
-              </span>
-            </a>
+        <div class="hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow" data-intro>
+              <span class="pulse" aria-hidden="true"></span>
+              متاح الآن على iOS و Android
+            </p>
+            <h1 id="hero-title" class="hero-title">
+              <span class="line" data-intro>تنافس. توقّع.</span>
+              <span class="line gold-text" data-intro>ارتقِ.</span>
+            </h1>
+            <p class="lead" data-intro>
+              نتائج مباشرة لحظة بلحظة، توقعات بجوائز حقيقية، كويز يومي، ريلز،
+              ومساعدك الذكي <b>Captain AI</b> — كل اللي يحتاجه المشجع في تطبيق واحد.
+            </p>
+            <div class="store-row" data-intro>
+              <a class="store-badge store-badge--light" href="https://apps.apple.com/app/id6758296989" data-store="apple" rel="noopener noreferrer" aria-label="حمّل 90Plus من App Store">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.63 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                <span class="label"><span class="small">Download on the</span><span class="big">App Store</span></span>
+              </a>
+              <a class="store-badge" href="https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp" data-store="google" rel="noopener noreferrer" aria-label="حمّل 90Plus من Google Play">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85C3.34 21.61 3 21.09 3 20.5m13.81-5.38L6.05 21.34 14.54 12.85l2.27 2.27m3.35-4.31c.34.27.59.69.59 1.19s-.25.92-.57 1.18l-2.29 1.32-2.5-2.5 2.5-2.5 2.27 1.31M6.05 2.66l10.76 6.22-2.27 2.27L6.05 2.66z"/></svg>
+                <span class="label"><span class="small">Get it on</span><span class="big">Google Play</span></span>
+              </a>
+            </div>
+            <ul class="hero-facts" data-intro>
+              <li>مجاني بالكامل</li>
+              <li>عربي و English</li>
+              <li>iOS و Android</li>
+            </ul>
           </div>
         </div>
 
-        <div class="hero-visual reveal" aria-hidden="true">
-          <div class="iphone-tilt">
-            <div class="iphone">
-              <div class="iphone-screen">
-                <img class="phone-shot" src="./src/assets/screens/screen-1.svg" alt="" fetchpriority="high" />
-                <img class="phone-shot" src="./src/assets/screens/screen-2.svg" alt="" />
-                <img class="phone-shot" src="./src/assets/screens/screen-4.svg" alt="" />
-                <img class="phone-shot" src="./src/assets/screens/screen-5.svg" alt="" />
-                <div class="iphone-island"></div>
-                <div class="iphone-home"></div>
+        <div class="hero-chips" aria-hidden="true">
+          <div class="chip chip--live" data-depth="0.6" dir="ltr">
+            <span class="live-dot"></span>
+            <span class="num">LIVE <span data-live-minute="67">67</span>'</span>
+            <span class="chip-score num">2 : 1</span>
+          </div>
+          <div class="chip chip--xp" data-depth="1">
+            <span class="chip-icon">✓</span>
+            <span>توقعك صح</span>
+            <span class="num gold-text" dir="ltr">+50 XP</span>
+          </div>
+          <div class="chip chip--streak" data-depth="0.8">
+            <span class="chip-icon">🔥</span>
+            <span>سلسلة <span class="num">7</span> أيام</span>
+          </div>
+        </div>
+
+        <a class="scroll-cue" href="#features" aria-label="انزل للمميزات">
+          <span></span>
+        </a>
+      </section>
+
+      <!-- MARQUEE -->
+      <div class="marquee" aria-hidden="true">
+        <div class="marquee-track">
+          <span>نتائج مباشرة</span><i>✦</i><span>ملك التوقعات</span><i>✦</i><span>كويز يومي</span><i>✦</i><span>Captain AI</span><i>✦</i><span>ريلز وترند</span><i>✦</i><span>تشكيلة الشهر</span><i>✦</i><span>لاعب الأسبوع</span><i>✦</i><span>خماسي الهدافين</span><i>✦</i><span>عجلة الحظ</span><i>✦</i><span>شارك واربح</span><i>✦</i>
+          <span>نتائج مباشرة</span><i>✦</i><span>ملك التوقعات</span><i>✦</i><span>كويز يومي</span><i>✦</i><span>Captain AI</span><i>✦</i><span>ريلز وترند</span><i>✦</i><span>تشكيلة الشهر</span><i>✦</i><span>لاعب الأسبوع</span><i>✦</i><span>خماسي الهدافين</span><i>✦</i><span>عجلة الحظ</span><i>✦</i><span>شارك واربح</span><i>✦</i>
+        </div>
+      </div>
+
+      <!-- FEATURE STORY -->
+      <section class="story" id="features" aria-labelledby="story-title">
+        <header class="section-head reveal">
+          <p class="kicker">جوّه التطبيق</p>
+          <h2 id="story-title">كل دقيقة في الماتش<br /><span class="grad-text">ليها مكان في 90Plus</span></h2>
+        </header>
+
+        <div class="story-grid">
+          <div class="story-steps">
+            <article class="step" data-step="live">
+              <span class="step-num num">01</span>
+              <h3>نتائج مباشرة لحظة بلحظة</h3>
+              <p>كل الدوريات الكبرى وكأس العالم في شاشة واحدة. الأهداف والكروت والدقيقة بتتحدث أول بأول، وإشعار يوصلك أول ما الكورة تدخل الشبكة.</p>
+              <ul class="tags"><li>مباشر</li><li>مواعيد</li><li>إشعارات أهداف</li></ul>
+              <div class="step-phone" data-slot="live"></div>
+            </article>
+            <article class="step" data-step="match">
+              <span class="step-num num">02</span>
+              <h3>مركز المباراة</h3>
+              <p>التشكيلات، الأحداث، الإحصائيات، الزخم، والمواجهات المباشرة — وصوّت مع الجمهور مين هيكسب قبل صافرة البداية.</p>
+              <ul class="tags"><li>تشكيلات</li><li>إحصائيات</li><li>تصويت الجمهور</li></ul>
+              <div class="step-phone" data-slot="match"></div>
+            </article>
+            <article class="step" data-step="predict">
+              <span class="step-num num">03</span>
+              <h3>ملك التوقعات</h3>
+              <p>توقّع الفائز في «ملك اللعبة» أو النتيجة بالظبط في «ملك النتائج»، اجمع نقاط طول الأسبوع، والمركز الأول بياخد تيشرت كرة قدم كل أسبوع.</p>
+              <ul class="tags"><li>ملك اللعبة</li><li>ملك النتائج</li><li>خماسي الهدافين</li></ul>
+              <div class="step-phone" data-slot="predict"></div>
+            </article>
+            <article class="step" data-step="quiz">
+              <span class="step-num num">04</span>
+              <h3>الكويز اليومي</h3>
+              <p>أسئلة جديدة كل يوم، أسئلة بالصور، خمّن اللاعب، وتلميحات بالكوينز. جاوب صح ورا بعض وكبّر السلسلة واكسب عملات ذهبية.</p>
+              <ul class="tags"><li>كويز بالصور</li><li>خمّن اللاعب</li><li>عملات ذهبية</li></ul>
+              <div class="step-phone" data-slot="quiz"></div>
+            </article>
+            <article class="step" data-step="ai">
+              <span class="step-num num">05</span>
+              <h3>Captain AI</h3>
+              <p>مساعدك الكروي الذكي: اسأله عن تحليل ماتش، تكتيك، أو أي سؤال في الكورة، وخد نصايح مخصصة على حسب مستواك وتقدمك.</p>
+              <ul class="tags"><li>تحليل مباريات</li><li>تكتيك</li><li>نصايح مخصصة</li></ul>
+              <div class="step-phone" data-slot="ai"></div>
+            </article>
+          </div>
+
+          <div class="story-stage" aria-hidden="true">
+            <div class="stage-glow"></div>
+            <div class="phone" id="storyPhone" data-active="live">
+              <div class="phone-island"></div>
+              <div class="phone-screen">
+                <!-- Screen: live scores -->
+                <div class="screen" data-screen="live">
+                  <div class="app-bar">
+                    <span class="app-title">المباريات</span>
+                    <span class="pill pill--live"><span class="live-dot"></span>مباشر</span>
+                  </div>
+                  <div class="date-strip">
+                    <span>أمس</span><span class="on">اليوم</span><span>بكرة</span>
+                  </div>
+                  <div class="league-row"><span class="league-dot" style="--c:#7c3aed"></span>الدوري الإنجليزي</div>
+                  <div class="fixture">
+                    <div class="team"><span class="crest" style="--c1:#ef0107;--c2:#9c824a">ARS</span><span>آرسنال</span></div>
+                    <div class="fx-mid"><span class="fx-score num">2 - 1</span><span class="fx-min num"><span data-live-minute="67">67</span>'</span></div>
+                    <div class="team team--end"><span>تشيلسي</span><span class="crest" style="--c1:#034694;--c2:#dba111">CHE</span></div>
+                  </div>
+                  <div class="fixture">
+                    <div class="team"><span class="crest" style="--c1:#c8102e;--c2:#00b2a9">LIV</span><span>ليفربول</span></div>
+                    <div class="fx-mid"><span class="fx-score num">0 - 0</span><span class="fx-min fx-min--ht">استراحة</span></div>
+                    <div class="team team--end"><span>مان سيتي</span><span class="crest" style="--c1:#6cabdd;--c2:#1c2c5b">MCI</span></div>
+                  </div>
+                  <div class="league-row"><span class="league-dot" style="--c:#f5c518"></span>الدوري الإسباني</div>
+                  <div class="fixture fixture--goal">
+                    <div class="team"><span class="crest" style="--c1:#ffffff;--c2:#febe10">RMA</span><span>ريال مدريد</span></div>
+                    <div class="fx-mid"><span class="fx-score num"><span class="goal-flip">1</span> - 1</span><span class="fx-min num"><span data-live-minute="54">54</span>'</span></div>
+                    <div class="team team--end"><span>برشلونة</span><span class="crest" style="--c1:#a50044;--c2:#004d98">FCB</span></div>
+                  </div>
+                  <div class="league-row"><span class="league-dot" style="--c:#3b82f6"></span>الدوري المصري</div>
+                  <div class="fixture">
+                    <div class="team"><span class="crest" style="--c1:#c8102e;--c2:#f5c518">AHL</span><span>الأهلي</span></div>
+                    <div class="fx-mid"><span class="fx-time num">21:00</span></div>
+                    <div class="team team--end"><span>الزمالك</span><span class="crest" style="--c1:#f4f4f4;--c2:#d6001c">ZAM</span></div>
+                  </div>
+                  <div class="goal-toast">
+                    <span class="goal-ball">⚽</span>
+                    <div><b>جووول! ريال مدريد</b><small>فينيسيوس · 54'</small></div>
+                  </div>
+                  <div class="tabbar"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+                </div>
+
+                <!-- Screen: match centre -->
+                <div class="screen" data-screen="match">
+                  <div class="match-hero">
+                    <span class="mh-league">الدوري الإنجليزي · الجولة 12</span>
+                    <div class="mh-row">
+                      <div class="mh-team"><span class="crest crest--lg" style="--c1:#ef0107;--c2:#9c824a">ARS</span><span>آرسنال</span></div>
+                      <div class="mh-score"><span class="num">2 - 1</span><span class="pill pill--live"><span class="live-dot"></span><span class="num"><span data-live-minute="67">67</span>'</span></span></div>
+                      <div class="mh-team"><span class="crest crest--lg" style="--c1:#034694;--c2:#dba111">CHE</span><span>تشيلسي</span></div>
+                    </div>
+                  </div>
+                  <div class="seg"><span>الأحداث</span><span class="on">الإحصائيات</span><span>التشكيل</span></div>
+                  <div class="stat-block">
+                    <div class="stat-line" style="--a:58;--b:42"><span class="num">58%</span><span>الاستحواذ</span><span class="num">42%</span><div class="bars"><i></i><i></i></div></div>
+                    <div class="stat-line" style="--a:64;--b:36"><span class="num">14</span><span>التسديدات</span><span class="num">8</span><div class="bars"><i></i><i></i></div></div>
+                    <div class="stat-line" style="--a:62;--b:38"><span class="num">1.8</span><span>الأهداف المتوقعة</span><span class="num">1.1</span><div class="bars"><i></i><i></i></div></div>
+                    <div class="stat-line" style="--a:55;--b:45"><span class="num">6</span><span>الركنيات</span><span class="num">5</span><div class="bars"><i></i><i></i></div></div>
+                  </div>
+                  <div class="momentum">
+                    <span class="mini-title">زخم المباراة</span>
+                    <div class="mo-bars">
+                      <i style="--h:30"></i><i style="--h:55"></i><i class="dn" style="--h:20"></i><i style="--h:70"></i><i style="--h:40"></i><i class="dn" style="--h:45"></i><i class="dn" style="--h:60"></i><i style="--h:25"></i><i style="--h:80"></i><i style="--h:60"></i><i class="dn" style="--h:30"></i><i style="--h:45"></i><i style="--h:90"></i><i style="--h:35"></i><i class="dn" style="--h:25"></i><i style="--h:50"></i>
+                    </div>
+                  </div>
+                  <div class="vote">
+                    <span class="mini-title">مين هيكسب؟ <small class="num">12,480 صوت</small></span>
+                    <div class="vote-bar"><i style="--w:54">آرسنال <b class="num">54%</b></i><i style="--w:18"><b class="num">18%</b></i><i style="--w:28"><b class="num">28%</b></i></div>
+                  </div>
+                </div>
+
+                <!-- Screen: predictions -->
+                <div class="screen" data-screen="predict">
+                  <div class="app-bar">
+                    <span class="app-title">ملك <span class="gold-text">النتائج</span></span>
+                    <span class="pill pill--gold">👑 الأسبوع</span>
+                  </div>
+                  <div class="me-card">
+                    <div><small>نقاطك</small><b class="num" data-count-to="1240">1,240</b></div>
+                    <div><small>مركزك</small><b class="num">#12</b></div>
+                    <div><small>الجائزة</small><b>👕 تيشرت</b></div>
+                  </div>
+                  <div class="pick-card">
+                    <div class="pick-teams">
+                      <span class="crest" style="--c1:#ef0107;--c2:#9c824a">ARS</span>
+                      <div class="pick-score"><span class="num">2</span><i>:</i><span class="num">1</span></div>
+                      <span class="crest" style="--c1:#034694;--c2:#dba111">CHE</span>
+                    </div>
+                    <div class="pick-opts"><span class="on">آرسنال</span><span>تعادل</span><span>تشيلسي</span></div>
+                  </div>
+                  <div class="pick-card">
+                    <div class="pick-teams">
+                      <span class="crest" style="--c1:#ffffff;--c2:#febe10">RMA</span>
+                      <div class="pick-score"><span class="num">1</span><i>:</i><span class="num">1</span></div>
+                      <span class="crest" style="--c1:#a50044;--c2:#004d98">FCB</span>
+                    </div>
+                    <div class="pick-opts"><span>ريال</span><span class="on">تعادل</span><span>برشلونة</span></div>
+                  </div>
+                  <div class="pick-card pick-card--done">
+                    <div class="pick-teams">
+                      <span class="crest" style="--c1:#c8102e;--c2:#00b2a9">LIV</span>
+                      <div class="pick-score"><span class="num">3</span><i>:</i><span class="num">0</span></div>
+                      <span class="crest" style="--c1:#6cabdd;--c2:#1c2c5b">MCI</span>
+                    </div>
+                    <div class="pick-result">✓ توقع صحيح <b class="num" dir="ltr">+50 XP</b></div>
+                  </div>
+                  <div class="xp-pop num" dir="ltr">+50 XP</div>
+                  <div class="tabbar"><i></i><i></i><i class="on"></i><i></i><i></i></div>
+                </div>
+
+                <!-- Screen: quiz -->
+                <div class="screen" data-screen="quiz">
+                  <div class="app-bar">
+                    <span class="app-title">الكويز اليومي</span>
+                    <span class="pill pill--gold"><span class="num" dir="ltr">🪙 320</span></span>
+                  </div>
+                  <div class="quiz-meta"><span>سؤال <span class="num" dir="ltr">3 / 5</span></span><span>🔥 <span class="num">x3</span></span></div>
+                  <div class="quiz-timer"><i></i></div>
+                  <div class="quiz-q">
+                    <div class="quiz-art"></div>
+                    <p>مين اللاعب اللي سجّل أسرع هاتريك في تاريخ الدوري الإنجليزي؟</p>
+                  </div>
+                  <div class="answers">
+                    <span>تييري هنري</span>
+                    <span class="right">ساديو ماني</span>
+                    <span>محمد صلاح</span>
+                    <span>آلان شيرار</span>
+                  </div>
+                  <div class="quiz-win"><b>إجابة صحيحة!</b><span class="num" dir="ltr">+10 🪙</span></div>
+                  <div class="tabbar"><i></i><i></i><i></i><i class="on"></i><i></i></div>
+                </div>
+
+                <!-- Screen: Captain AI -->
+                <div class="screen" data-screen="ai">
+                  <div class="app-bar">
+                    <span class="app-title">Captain <span class="gold-text">AI</span></span>
+                    <span class="pill">⚡ متصل</span>
+                  </div>
+                  <div class="chat">
+                    <div class="msg msg--me">ليه آرسنال بيضغط عالي في الشوط التاني؟</div>
+                    <div class="msg msg--ai msg--typing"><i></i><i></i><i></i></div>
+                    <div class="msg msg--ai msg--answer">
+                      <b>تحليل سريع:</b> تشيلسي بيبني اللعب من الخلف بالظهيرين، فآرسنال بيقفل الأطراف بدري ويجبرهم على الكورة الطويلة.
+                      <span class="ai-stat"><span class="num" dir="ltr">+38%</span> استرجاع كرة في نص ملعب الخصم</span>
+                    </div>
+                    <div class="msg msg--me msg--late">طب أتوقع إيه في الماتش الجاي؟</div>
+                  </div>
+                  <div class="chat-input"><span>اسأل Captain AI…</span><i>➤</i></div>
+                </div>
+              </div>
+            </div>
+            <ol class="stage-dots">
+              <li data-dot="live"></li><li data-dot="match"></li><li data-dot="predict"></li><li data-dot="quiz"></li><li data-dot="ai"></li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- PRIZES -->
+      <section class="prizes" id="prizes" aria-labelledby="prizes-title">
+        <div class="wrap prizes-grid">
+          <div class="prizes-copy reveal">
+            <p class="kicker">توقّع واربح</p>
+            <h2 id="prizes-title">جوايز <span class="gold-text">حقيقية</span><br />مش مجرد نقاط</h2>
+            <p class="section-lead">تحديات يومية برعاية محلات ومطاعم وبراندات موثوقة. ادخل مجاناً، توقّع صح، واكسب جايزتك.</p>
+            <div class="prize-highlights">
+              <div class="ph">
+                <img src="./src/assets/art/top-10.webp" alt="" width="560" height="275" loading="lazy" />
+                <div><b>مئات المشاركين</b><span>تحدّى الآخرين في كل ماتش</span></div>
+              </div>
+              <div class="ph ph--plain">
+                <span class="ph-icon">👑</span>
+                <div><b>جايزة كل أسبوع</b><span>تيشرت كرة قدم للمركز الأول في ملك التوقعات وخماسي الهدافين</span></div>
               </div>
             </div>
           </div>
-          <div class="phone-glow"></div>
+          <ul class="prize-cloud" aria-label="أنواع الجوائز">
+            <li class="reveal-pop"><span>👟</span>ملابس وأحذية رياضية</li>
+            <li class="reveal-pop"><span>🎟️</span>تذاكر مباريات</li>
+            <li class="reveal-pop prize-hot"><span>💵</span>جوائز كاش</li>
+            <li class="reveal-pop"><span>🍔</span>مطاعم وكافيهات</li>
+            <li class="reveal-pop"><span>🎁</span>قسائم شراء</li>
+            <li class="reveal-pop"><span>🎧</span>إلكترونيات</li>
+            <li class="reveal-pop"><span>💪</span>لياقة وصحة</li>
+            <li class="reveal-pop"><span>⚽</span>مستلزمات كرة القدم</li>
+            <li class="reveal-pop"><span>🎮</span>ألعاب وترفيه</li>
+          </ul>
         </div>
       </section>
 
-      <section class="stats reveal" aria-label="لمحة سريعة">
-        <div class="stat tilt">
-          <strong>LIVE</strong>
-          <span>نتائج مباشرة</span>
+      <!-- RANK ARENA -->
+      <section class="arena" id="rank" aria-labelledby="rank-title">
+        <div class="arena-bg" aria-hidden="true">
+          <img src="./src/assets/art/arena.webp" alt="" width="1448" height="1086" loading="lazy" />
         </div>
-        <div class="stat tilt">
-          <strong>AI</strong>
-          <span>مساعد كروي ذكي</span>
-        </div>
-        <div class="stat tilt">
-          <strong>AR / EN</strong>
-          <span>عربي وإنجليزي</span>
-        </div>
-        <div class="stat tilt">
-          <strong>FREE</strong>
-          <span>مجاني للتحميل</span>
-        </div>
-      </section>
-
-      <div class="section-head reveal">
-        <h2>شوف التطبيق من جوّه</h2>
-        <p>لقطات حيّة من داخل 90Plus بتتحرك أوتوماتيك — عدّي بينها واتفرّج على كل شاشة.</p>
-      </div>
-
-      <section class="screens" aria-label="لقطات من التطبيق">
-        <div class="fan-wrap reveal">
-          <div class="fan-layout" id="fanLayout"></div>
-          <div class="fan-controls">
-            <button class="fan-arrow" id="fanPrev" type="button" aria-label="السابق">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M14.5 5.5L8 12l6.5 6.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <div class="fan-dots" id="fanDots"></div>
-            <button class="fan-arrow" id="fanNext" type="button" aria-label="التالي">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M9.5 5.5L16 12l-6.5 6.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
+        <div class="wrap arena-grid">
+          <div class="arena-copy reveal">
+            <p class="kicker">ساحة الرانك</p>
+            <h2 id="rank-title">اطلع <span class="gold-text">البوديوم</span><br />واسمك يتشاف</h2>
+            <p class="section-lead">كل توقع، كل إجابة، كل ريل بتنشره بيزوّد الـ XP بتاعك. أقوى 7 في الأسبوع بيقفوا على بوديوم لاعب الأسبوع، والأفضل في الشهر بيدخلوا تشكيلة الشهر 4-3-3.</p>
+            <dl class="counters">
+              <div><dt>لاعبين على بوديوم الأسبوع</dt><dd class="num" data-count-to="7">7</dd></div>
+              <div><dt>مراكز في تشكيلة الشهر</dt><dd class="num" data-count-to="11">11</dd></div>
+              <div><dt>نقطة يومياً من اليوم السابع</dt><dd class="num" data-count-to="50">50</dd></div>
+            </dl>
+          </div>
+          <div class="rank-cards" aria-hidden="true">
+            <img class="rank-card rank-card--2" src="./src/assets/art/rank-2.webp" alt="" width="420" height="560" loading="lazy" />
+            <img class="rank-card rank-card--1" src="./src/assets/art/rank-1.webp" alt="" width="420" height="560" loading="lazy" />
+            <img class="rank-card rank-card--3" src="./src/assets/art/rank-3.webp" alt="" width="420" height="560" loading="lazy" />
           </div>
         </div>
       </section>
 
-      <div class="section-head reveal">
-        <h2>كل ما يحتاجه المشجع</h2>
-        <p>من أول صافرة البداية لحد آخر دقيقة — تابع، العب، توقّع، وشارك مع مجتمع 90Plus.</p>
-      </div>
+      <!-- COMMUNITY BENTO -->
+      <section class="community wrap" id="community" aria-labelledby="community-title">
+        <header class="section-head reveal">
+          <p class="kicker">أكتر من مجرد نتائج</p>
+          <h2 id="community-title">مجتمع كامل<br /><span class="grad-text">بيعيش الكورة زيك</span></h2>
+        </header>
 
-      <section class="features reveal" aria-label="المميزات">
-        <article class="feature tilt">
-          <div class="feature-icon" aria-hidden="true">⚽</div>
-          <h3>نتائج وإحصائيات مباشرة</h3>
-          <p>تابع المباريات لحظة بلحظة — أهداف، تشكيلات، أحداث، وإحصائيات تفصيلية.</p>
-        </article>
-        <article class="feature tilt">
-          <div class="feature-icon" aria-hidden="true">🧠</div>
-          <h3>كويزات يومية</h3>
-          <p>اختبر معلوماتك الكروية بأسئلة يومية، مستويات صعوبة، وترتيب عالمي.</p>
-        </article>
-        <article class="feature tilt">
-          <div class="feature-icon" aria-hidden="true">🎯</div>
-          <h3>تنبؤات ومكافآت</h3>
-          <p>توقّع نتائج المباريات، اجمع نقاط، وتنافس على قمة الليدربورد.</p>
-        </article>
-        <article class="feature tilt">
-          <div class="feature-icon" aria-hidden="true">🎬</div>
-          <h3>ريلز ومجتمع</h3>
-          <p>شاهد وشارك لحظات كروية، تفاعل مع المبدعين، وتابع مشجعين آخرين.</p>
-        </article>
-        <article class="feature tilt">
-          <div class="feature-icon" aria-hidden="true">🤖</div>
-          <h3>90Plus AI</h3>
-          <p>مساعدك الرياضي الذكي — اسأل عن كرة القدم، التدريب، والتغذية الرياضية.</p>
-        </article>
-        <article class="feature tilt">
-          <div class="feature-icon" aria-hidden="true">🔔</div>
-          <h3>تنبيهات ذكية</h3>
-          <p>تذكيرات مباريات، تحديثات نتائج، مواعيد الكويز، ونشاط اجتماعي — في الوقت المناسب.</p>
-        </article>
+        <div class="bento">
+          <article class="tile tile--reels reveal">
+            <div class="tile-copy">
+              <h3>ريلز وترند</h3>
+              <p>ارفع مهاراتك وأهدافك، اجمع لايكات ومشاركات، والأقوى بيطلع في الترند على الصفحة الرئيسية.</p>
+            </div>
+            <img src="./src/assets/art/most-engaging.webp" alt="" width="520" height="780" loading="lazy" />
+          </article>
+
+          <article class="tile tile--quiz reveal">
+            <div class="tile-copy">
+              <h3>تحدّى معلوماتك</h3>
+              <p>خمّن اللاعب، روابط اللاعبين، وكويز بالصور.</p>
+            </div>
+            <img src="./src/assets/art/player-connection.webp" alt="" width="640" height="362" loading="lazy" />
+          </article>
+
+          <article class="tile tile--streak reveal">
+            <div class="tile-copy">
+              <h3>السلسلة اليومية 🔥</h3>
+              <p>افتح كل يوم ومكافأتك بتكبر.</p>
+            </div>
+            <ol class="streak" aria-label="مكافآت أيام السلسلة">
+              <li><b class="num">5</b><small>يوم 1</small></li>
+              <li><b class="num">10</b><small>يوم 2</small></li>
+              <li><b class="num">15</b><small>يوم 3</small></li>
+              <li><b class="num">20</b><small>يوم 4</small></li>
+              <li><b class="num">30</b><small>يوم 5</small></li>
+              <li><b class="num">40</b><small>يوم 6</small></li>
+              <li class="max"><b class="num">50</b><small>يوم 7+</small></li>
+            </ol>
+          </article>
+
+          <article class="tile tile--share reveal">
+            <div class="tile-copy">
+              <h3>شارك واربح</h3>
+              <p>ابعت رابطك لصحابك، اطلع في ترتيب المشاركات، ولف عجلة الحظ كل يوم على XP وكوينز.</p>
+            </div>
+            <div class="wheel-wrap" aria-hidden="true">
+              <div class="wheel"></div>
+              <span class="wheel-pin"></span>
+            </div>
+            <img class="share-art" src="./src/assets/art/share-phone.webp" alt="" width="520" height="780" loading="lazy" />
+          </article>
+
+          <article class="tile tile--team reveal">
+            <img class="tile-bg" src="./src/assets/art/stadium-top.webp" alt="" width="1400" height="933" loading="lazy" />
+            <div class="tile-copy">
+              <h3>تشكيلة الشهر</h3>
+              <p>أفضل 11 مشجع في الشهر بياخدوا أماكنهم على الملعب. مكانك مستنيك.</p>
+            </div>
+          </article>
+
+          <article class="tile tile--notify reveal">
+            <div class="tile-copy">
+              <h3>تنبيهات في وقتها</h3>
+              <p>أهداف، بداية الماتش، الكويز الجديد، وعجلة الحظ — من غير زحمة.</p>
+            </div>
+            <div class="notif-stack" aria-hidden="true">
+              <div class="notif"><span>⚽</span><div><b>جووول! آرسنال 2-1</b><small>ساكا · 67'</small></div></div>
+              <div class="notif"><span>🎡</span><div><b>عجلة الحظ جاهزة</b><small>لف واكسب عملات مجانية</small></div></div>
+              <div class="notif"><span>🧠</span><div><b>كويز اليوم نزل</b><small>جاوب 5 صح واكسب</small></div></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- FINAL CTA -->
+      <section class="download" id="download" aria-labelledby="download-title">
+        <div class="download-bg" aria-hidden="true">
+          <img src="./src/assets/art/world-cup.webp" alt="" width="1448" height="1086" loading="lazy" />
+        </div>
+        <div class="wrap download-inner reveal">
+          <img class="download-logo" src="./src/assets/logo-96.png" width="88" height="88" alt="" />
+          <h2 id="download-title">الماتش الجاي<br /><span class="gold-text">عيشه مع 90Plus</span></h2>
+          <p>حمّل التطبيق مجاناً وابدأ توقعاتك النهارده.</p>
+          <div class="store-row store-row--center">
+            <a class="store-badge store-badge--light" href="https://apps.apple.com/app/id6758296989" data-store="apple" rel="noopener noreferrer" aria-label="حمّل 90Plus من App Store">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.63 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+              <span class="label"><span class="small">Download on the</span><span class="big">App Store</span></span>
+            </a>
+            <a class="store-badge" href="https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp" data-store="google" rel="noopener noreferrer" aria-label="حمّل 90Plus من Google Play">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85C3.34 21.61 3 21.09 3 20.5m13.81-5.38L6.05 21.34 14.54 12.85l2.27 2.27m3.35-4.31c.34.27.59.69.59 1.19s-.25.92-.57 1.18l-2.29 1.32-2.5-2.5 2.5-2.5 2.27 1.31M6.05 2.66l10.76 6.22-2.27 2.27L6.05 2.66z"/></svg>
+              <span class="label"><span class="small">Get it on</span><span class="big">Google Play</span></span>
+            </a>
+          </div>
+        </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <div class="page">
-        <section class="footer-glass glass-liquid reveal" aria-labelledby="cta-title">
-          <div class="footer-glass-glow" aria-hidden="true"></div>
-          <span class="liquid-sheen" aria-hidden="true"></span>
-          <h2 id="cta-title">جاهز تعيش الكورة بشكل مختلف؟</h2>
-          <p>حمّل 90Plus دلوقتي وانضم لآلاف المشجعين — مجاني على iOS و Android.</p>
-          <div class="store-row store-row--center">
-            <a
-              class="glass-btn primary"
-              href="https://apps.apple.com/app/id6758296989"
-              data-store="apple"
-              rel="noopener noreferrer"
-              aria-label="حمّل 90Plus من App Store"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.63 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-              </svg>
-              <span class="label">
-                <span class="small">Download on the</span>
-                <span class="big">App Store</span>
-              </span>
-            </a>
-            <a
-              class="glass-btn"
-              href="https://play.google.com/store/apps/details?id=com.mhmdsh1892.ninetyplusapp"
-              data-store="google"
-              rel="noopener noreferrer"
-              aria-label="حمّل 90Plus من Google Play"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M3 20.5V3.5C3 2.91 3.34 2.39 3.84 2.15L13.69 12 3.84 21.85C3.34 21.61 3 21.09 3 20.5m13.81-5.38L6.05 21.34 14.54 12.85l2.27 2.27m3.35-4.31c.34.27.59.69.59 1.19s-.25.92-.57 1.18l-2.29 1.32-2.5-2.5 2.5-2.5 2.27 1.31M6.05 2.66l10.76 6.22-2.27 2.27L6.05 2.66z"/>
-              </svg>
-              <span class="label">
-                <span class="small">Get it on</span>
-                <span class="big">Google Play</span>
-              </span>
-            </a>
-          </div>
-        </section>
-
-        <div class="footer-legal">
-          <nav class="footer-nav" aria-label="روابط قانونية">
-            <a href="/news">أخبار كأس العالم</a>
-            <a href="/support">الدعم</a>
-            <a href="/privacy">سياسة الخصوصية</a>
-            <a href="/terms">شروط الاستخدام</a>
-            <a href="/delete-account">حذف الحساب</a>
-          </nav>
-          <p class="footer-copy">© 2026 90Plus. جميع الحقوق محفوظة.</p>
-        </div>
+      <div class="wrap footer-inner">
+        <a class="brand" href="#top" aria-label="90Plus — أعلى الصفحة">
+          <img src="./src/assets/logo-96.png" width="36" height="36" alt="" />
+          <span class="brand-word">90<b>PLUS</b></span>
+        </a>
+        <nav class="footer-nav" aria-label="روابط قانونية">
+          <a href="/support">الدعم</a>
+          <a href="/privacy">سياسة الخصوصية</a>
+          <a href="/terms">شروط الاستخدام</a>
+          <a href="/delete-account">حذف الحساب</a>
+        </nav>
+        <p class="footer-copy">© 2026 90Plus. جميع الحقوق محفوظة.</p>
       </div>
     </footer>
   </body>

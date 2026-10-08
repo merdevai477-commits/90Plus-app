@@ -515,19 +515,8 @@ app.get(['/AsS', '/ass'], (_req: Request, res: Response) => {
     });
 });
 
-app.get('/news', (_req: Request, res: Response) => {
-    const filePath = resolveSiteFile(__dirname, 'news.html');
-    logger.info(`📰 Serving news page from: ${filePath}`);
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            logger.error('Failed to send news.html:', err);
-            res.status(500).send('تعذّر تحميل صفحة الأخبار');
-        }
-    });
-});
-
-app.get('/news.html', (_req, res) => {
-    res.redirect(301, '/news');
+app.get(['/news', '/news.html'], (_req, res) => {
+    res.redirect(301, '/');
 });
 
 app.get('/', (_req: Request, res: Response) => {
