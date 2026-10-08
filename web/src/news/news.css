@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Noto+Kufi+Arabic:wght@400;500;600;700&display=swap');
-
 :root {
   --bg: #0c0b18;
   --card: #13122a;
@@ -182,6 +180,7 @@ img {
 }
 
 .card-large {
+  display: block;
   position: relative;
   overflow: hidden;
   border-radius: 0.5rem;
@@ -266,6 +265,10 @@ img {
   text-transform: uppercase;
   background: var(--purple);
   color: #fff;
+}
+
+.card-large .badge {
+  align-self: flex-start;
 }
 
 .card-large h2 {
@@ -422,6 +425,7 @@ body.lang-ar .card-small h4 {
 }
 
 .card-medium {
+  display: block;
   overflow: hidden;
   border-radius: 0.5rem;
   background: var(--card);

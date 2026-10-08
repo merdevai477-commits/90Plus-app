@@ -1,3 +1,15 @@
+import '@fontsource/noto-kufi-arabic/arabic-400.css';
+import '@fontsource/noto-kufi-arabic/arabic-500.css';
+import '@fontsource/noto-kufi-arabic/arabic-600.css';
+import '@fontsource/noto-kufi-arabic/arabic-700.css';
+import '@fontsource/oswald/latin-400.css';
+import '@fontsource/oswald/latin-600.css';
+import '@fontsource/oswald/latin-700.css';
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-500.css';
+import '@fontsource/inter/latin-600.css';
+import './news.css';
+
 (function () {
   var API_URL = '/api/news/world-cup';
   var LANG_KEY = '90plus-news-lang';
@@ -144,9 +156,7 @@
         (priority ? 'eager' : 'lazy') +
         '" decoding="async"' +
         (priority ? ' fetchpriority="high"' : '') +
-        ' onerror="this.onerror=null;this.src=\'' +
-        PLACEHOLDER_IMG +
-        '\';this.classList.add(\'img-fallback\');" />'
+        ' data-news-img />'
       );
     }
     return '<div class="card-fallback" aria-hidden="true">⚽</div>';
@@ -163,6 +173,7 @@
       escapeHtml(article.url) +
       '" target="_blank" rel="noopener noreferrer">' +
       mediaHtml(article.imageUrl, true) +
+      '<div class="overlay" aria-hidden="true"></div>' +
       '<div class="content">' +
       '<span class="badge">' +
       escapeHtml(t('wcTag')) +
@@ -197,6 +208,22 @@
       clockIcon() +
       escapeHtml(formatRelativeTime(article.publishedAt)) +
       '</span></div></a>'
+    );
+  }
+
+  // The server CSP blocks inline onerror handlers, so swap broken article images here.
+  function bindImageFallback() {
+    document.addEventListener(
+      'error',
+      function (e) {
+        var img = e.target;
+        if (!img || img.tagName !== 'IMG' || !img.hasAttribute('data-news-img')) return;
+        if (img.getAttribute('data-fallback') === '1') return;
+        img.setAttribute('data-fallback', '1');
+        img.src = PLACEHOLDER_IMG;
+        img.classList.add('img-fallback');
+      },
+      true,
     );
   }
 
@@ -377,6 +404,7 @@
   });
 
   applyLanguage(readStoredLang());
+  bindImageFallback();
   bindNativeExternalLinks();
   loadNews();
 })();

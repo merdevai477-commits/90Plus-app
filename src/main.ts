@@ -267,7 +267,7 @@ import debugRoutes from './routes/debug.routes';
 import i18nRoutes from './routes/i18n.routes';
 import newsRoutes from './routes/news.routes';
 import path from 'path';
-import { resolvePublicDir, resolvePublicFile } from './utils/public-path.util';
+import { resolvePublicDir, resolveSiteFile, resolveWebDistDir } from './utils/public-path.util';
 import {
     CLERK_SIGN_IN_URL,
     CLERK_SIGN_UP_URL,
@@ -516,7 +516,7 @@ app.get(['/AsS', '/ass'], (_req: Request, res: Response) => {
 });
 
 app.get('/news', (_req: Request, res: Response) => {
-    const filePath = resolvePublicFile(__dirname, 'news.html');
+    const filePath = resolveSiteFile(__dirname, 'news.html');
     logger.info(`📰 Serving news page from: ${filePath}`);
     res.sendFile(filePath, (err) => {
         if (err) {
@@ -531,7 +531,7 @@ app.get('/news.html', (_req, res) => {
 });
 
 app.get('/', (_req: Request, res: Response) => {
-    res.sendFile(path.join(publicPath, 'index.html'), (err) => {
+    res.sendFile(resolveSiteFile(__dirname, 'index.html'), (err) => {
         if (err) {
             logger.error('Failed to send index.html:', err);
             res.status(500).send('90Plus');
@@ -546,8 +546,17 @@ app.get('/login', (_req, res) => res.redirect(302, CLERK_SIGN_IN_URL));
 app.get('/account', (_req, res) => res.redirect(302, CLERK_USER_PROFILE_URL));
 app.get('/user', (_req, res) => res.redirect(302, CLERK_USER_PROFILE_URL));
 
+// Vite emits content-hashed files under /assets, so they can be cached forever.
+const siteAssetsDir = [path.join(publicPath, 'assets'), path.join(resolveWebDistDir(), 'assets')].find((dir) =>
+    require('fs').existsSync(dir),
+);
+if (siteAssetsDir) {
+    app.use('/assets', express.static(siteAssetsDir, { immutable: true, maxAge: '1y', fallthrough: false }));
+}
+
 // Serve static files from public directory
 app.use(express.static(publicPath));
+app.use(express.static(resolveWebDistDir(), { index: false }));
 
 // Serve legal pages with proper error handling and logging
 app.get('/privacy-policy.html', (req, res) => {

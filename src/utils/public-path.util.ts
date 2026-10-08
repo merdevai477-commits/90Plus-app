@@ -25,3 +25,18 @@ export function resolvePublicDir(callerDirname: string): string {
 export function resolvePublicFile(callerDirname: string, filename: string): string {
   return path.join(resolvePublicDir(callerDirname), filename);
 }
+
+/** Vite build output of the marketing site (`web/`); copied into dist/public by copy-public.js. */
+export function resolveWebDistDir(): string {
+  return path.join(process.cwd(), 'web', 'dist');
+}
+
+/**
+ * Home/news pages come from the Vite build. Production serves them from dist/public;
+ * running from src/ (repo public/ has no pages) falls back to web/dist.
+ */
+export function resolveSiteFile(callerDirname: string, filename: string): string {
+  const fromPublic = resolvePublicFile(callerDirname, filename);
+  if (fs.existsSync(fromPublic)) return fromPublic;
+  return path.join(resolveWebDistDir(), filename);
+}

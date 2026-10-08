@@ -60,3 +60,6 @@ front/**
 .nixpacks/
 .nixpacks/**
 
+
+web/node_modules/
+web/dist/
