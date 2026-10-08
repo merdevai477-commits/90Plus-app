@@ -3,7 +3,7 @@
   var LANG_KEY = '90plus-news-lang';
   var PAYLOAD_CACHE_KEY = '90plus-news-payload';
   var PAYLOAD_CACHE_TTL_MS = 10 * 60 * 1000;
-  var PLACEHOLDER_IMG = '/90Plus.png';
+  var PLACEHOLDER_IMG = '/90plus-logo-512.png';
 
   var I18N = {
     ar: {
