@@ -6,17 +6,14 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from './MatchText';
 import { LinearGradient } from 'expo-linear-gradient';
-import { GlassWrapper, glassProps } from '../../constants/ui';
-import { isLiquidGlassSupported } from '../../utils/liquidGlassSafe';
 import {
   BLUE_ELECTRIC,
-  GLASS_BORDER_BOTTOM,
-  GLASS_BORDER_SIDE,
-  GLASS_BORDER_TOP,
+  BLUE_PRIMARY,
   GOLD_PRIMARY,
+  PURPLE_DARK,
   PURPLE_GLOW,
+  PURPLE_PRIMARY,
   PURPLE_SOFT,
-  TEXT_MUTED,
   TEXT_PRIMARY,
   TEXT_SECONDARY,
 } from '../../constants/tokens';
@@ -57,8 +54,8 @@ function ValuePill({
         <LinearGradient
           colors={
             side === 'home'
-              ? ['rgba(167,139,250,0.55)', 'rgba(124,58,237,0.22)']
-              : ['rgba(96,165,250,0.50)', 'rgba(59,130,246,0.20)']
+              ? ['#9F6BFF', PURPLE_PRIMARY, PURPLE_DARK]
+              : ['#38BDF8', BLUE_PRIMARY, '#1D4ED8']
           }
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
@@ -219,17 +216,17 @@ export function PreMatchRecentStats({
 
   return (
     <View style={styles.cardOuter}>
-      <GlassWrapper {...(glassProps.card as object)} style={StyleSheet.absoluteFill} />
       <LinearGradient
-        colors={['rgba(124,58,237,0.16)', 'rgba(59,130,246,0.08)', 'rgba(10,6,18,0.20)']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+        colors={['#1C0E3A', '#120A2A', '#0B0618']}
+        locations={[0, 0.45, 1]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
       <View style={styles.banner}>
         <LinearGradient
-          colors={['rgba(124,58,237,0.38)', 'rgba(59,130,246,0.22)', 'rgba(91,33,182,0.16)']}
+          colors={['rgba(124,58,237,0.65)', 'rgba(91,33,182,0.45)', 'rgba(59,130,246,0.35)']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
@@ -339,11 +336,8 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     overflow: 'hidden',
     borderWidth: 1,
-    borderTopColor: GLASS_BORDER_TOP,
-    borderLeftColor: GLASS_BORDER_SIDE,
-    borderRightColor: GLASS_BORDER_SIDE,
-    borderBottomColor: GLASS_BORDER_BOTTOM,
-    backgroundColor: isLiquidGlassSupported ? 'transparent' : 'rgba(12,8,22,0.72)',
+    borderColor: 'rgba(167,139,250,0.28)',
+    backgroundColor: '#120A2A',
     shadowColor: PURPLE_GLOW,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 1,
@@ -383,7 +377,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: {
-    color: TEXT_PRIMARY,
+    color: GOLD_PRIMARY,
     fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
@@ -446,12 +440,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.08)',
+    borderTopColor: 'rgba(167,139,250,0.18)',
     gap: 6,
   },
   rowLabel: {
     flex: 1,
-    color: TEXT_PRIMARY,
+    color: '#EDE9FE',
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
@@ -468,19 +462,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   pillIdle: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(124,58,237,0.12)',
+    borderColor: 'rgba(167,139,250,0.22)',
   },
   pillHome: {
-    backgroundColor: 'rgba(124,58,237,0.22)',
-    borderColor: 'rgba(167,139,250,0.55)',
+    backgroundColor: PURPLE_PRIMARY,
+    borderColor: PURPLE_SOFT,
   },
   pillAway: {
-    backgroundColor: 'rgba(59,130,246,0.20)',
-    borderColor: 'rgba(96,165,250,0.50)',
+    backgroundColor: BLUE_PRIMARY,
+    borderColor: BLUE_ELECTRIC,
   },
   valueText: {
-    color: TEXT_MUTED,
+    color: 'rgba(221,214,254,0.7)',
     fontSize: 13,
     fontWeight: '700',
     zIndex: 1,

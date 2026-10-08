@@ -264,15 +264,20 @@ export function MatchKickoffHighlights({
             <View style={styles.hero}>
               <StadiumPhoto uri={info.stadiumImage} stadiumName={info.stadiumName} />
               <LinearGradient
-                colors={['rgba(0,0,0,0.32)', '#000000']}
-                locations={[0, 0.91]}
+                colors={['rgba(8,7,25,0.05)', 'rgba(8,7,25,0.35)', 'rgba(8,7,25,0.97)']}
+                locations={[0, 0.45, 1]}
                 start={{ x: 0.5, y: 0 }}
                 end={{ x: 0.5, y: 1 }}
                 style={StyleSheet.absoluteFill}
               />
               {info.stadiumName ? (
                 <View style={styles.heroCopy}>
-                  <Text style={styles.heroTag}>{stadiumLabel}</Text>
+                  <View style={[styles.heroTagPill, rtl && styles.rowReverse]}>
+                    <MaterialCommunityIcons name="stadium-variant" size={12} color={GOLD_PRIMARY} />
+                    <Text style={styles.heroTag} numberOfLines={1}>
+                      {stadiumLabel}
+                    </Text>
+                  </View>
                   <Text style={styles.heroName} numberOfLines={2}>
                     {info.stadiumName}
                   </Text>
@@ -372,23 +377,39 @@ const styles = StyleSheet.create({
   },
   heroCopy: {
     position: 'absolute',
-    top: 56,
-    left: 24,
-    right: 24,
+    bottom: 14,
+    left: 20,
+    right: 20,
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
+  },
+  heroTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: 'rgba(124,58,237,0.38)',
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.55)',
   },
   heroTag: {
-    color: '#FFFFFF',
-    fontSize: 19,
+    color: '#EDE9FE',
+    fontSize: 11,
     fontWeight: '700',
+    letterSpacing: 0.6,
     textAlign: 'center',
   },
   heroName: {
     color: '#FFFFFF',
-    fontSize: 19,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     textAlign: 'center',
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
   heroLocation: {
     flexDirection: 'row',
@@ -399,9 +420,9 @@ const styles = StyleSheet.create({
   },
   heroCity: {
     flexShrink: 1,
-    color: '#9A9A9A',
+    color: 'rgba(221,214,254,0.8)',
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   grid: {
     paddingHorizontal: 19,
