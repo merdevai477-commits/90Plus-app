@@ -1,6 +1,6 @@
 /**
- * ChatComposer — floating liquid-glass input island with an inline mic and a
- * send button that springs in beside the field once the user starts typing.
+ * ChatComposer — floating capsule built from the bottom nav's glass material,
+ * with an inline mic and a lit send bubble that springs in once the user types.
  */
 
 import React, { useMemo } from 'react';
@@ -11,13 +11,14 @@ import {
   Pressable,
   StyleSheet,
   Platform,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
   useAnimatedStyle,
-  interpolateColor,
   FadeIn,
   ZoomIn,
   ZoomOut,
@@ -28,18 +29,46 @@ import { Mic } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { ChatSpinner } from './ChatSpinner';
-import { ChatGlassSurface } from './ChatGlassSurface';
 import { LimitReachedCountdown } from './LimitReachedCountdown';
-import { Colors, Gradients } from '../../constants/theme';
-import { chatColors } from './chatTheme';
+import { Colors } from '../../constants/theme';
 import { getTextDirectionStyles } from './chatTextUtils';
 import { useTranslation } from '../../src/i18n';
+import { useAppFont } from '../../utils/fontSetup';
+import {
+  GLASS_ACCENT,
+  GLASS_BAR_BG,
+  GlassBubbleFill,
+  GlassRim,
+  GlassSheen,
+} from '../navigation/glass';
+import { GLASS_ICON_IDLE } from '../navigation/GlassCapsuleNav';
+import { TAB_BAR_HEIGHT, TAB_BAR_HORIZONTAL_MARGIN } from '../navigation/liquidGlassTabBar.constants';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const ISLAND_HEIGHT = 54;
-const PRESS_SPRING = { stiffness: 300, damping: 18 };
-const ISLAND_TINT = Platform.OS === 'ios' ? 'rgba(22,12,40,0.45)' : 'rgba(22,12,40,0.82)';
+const BAR_HEIGHT = TAB_BAR_HEIGHT;
+const BAR_RADIUS = BAR_HEIGHT / 2;
+const BAR_PAD = 6;
+const SLOT = BAR_HEIGHT - BAR_PAD * 2;
+const SPRING = { damping: 18, stiffness: 210, mass: 0.9 };
+
+function GlassPanel({
+  radius,
+  style,
+  children,
+}: {
+  radius: number;
+  style?: StyleProp<ViewStyle>;
+  children?: React.ReactNode;
+}) {
+  return (
+    <View style={[styles.panel, { borderRadius: radius }, style]}>
+      <GlassSheen radius={radius} />
+      <GlassRim radius={radius} />
+      {children}
+    </View>
+  );
+}
 
 function SendButton({
   loading,
@@ -52,62 +81,62 @@ function SendButton({
   onPress: () => void;
   a11yLabel: string;
 }) {
-  const scale = useSharedValue(1);
+  const press = useSharedValue(1);
   const style = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [{ scale: press.value }],
   }));
 
   return (
     <AnimatedPressable
-      entering={ZoomIn.springify().damping(14).stiffness(220)}
+      entering={ZoomIn.springify().damping(15).stiffness(240)}
       exiting={ZoomOut.duration(140)}
       onPress={onPress}
       disabled={!isStop && loading}
-      style={[styles.sendShadow, style]}
-      onPressIn={() => { scale.value = withSpring(0.9, PRESS_SPRING); }}
-      onPressOut={() => { scale.value = withSpring(1, PRESS_SPRING); }}
+      onPressIn={() => { press.value = withSpring(0.9, SPRING); }}
+      onPressOut={() => { press.value = withSpring(1, SPRING); }}
+      style={[styles.sendButton, style]}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
     >
-      <View style={styles.sendButton}>
-        <LinearGradient
-          colors={isStop ? ['#4B5563', '#1F2937'] : Gradients.purpleCTA}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View pointerEvents="none" style={styles.sendSheen} />
-        {loading && !isStop ? (
-          <ChatSpinner />
-        ) : isStop ? (
-          <View style={styles.stopSquare} />
-        ) : (
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2}>
-            <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round" />
-          </Svg>
-        )}
-      </View>
+      {isStop ? (
+        <View style={[StyleSheet.absoluteFill, styles.stopFill]}>
+          <LinearGradient colors={['#4B5563', '#1F2937']} style={StyleSheet.absoluteFill} />
+          <GlassRim radius={BAR_RADIUS} />
+        </View>
+      ) : (
+        <GlassBubbleFill radius={BAR_RADIUS} height={BAR_HEIGHT} />
+      )}
+      {loading && !isStop ? (
+        <ChatSpinner />
+      ) : isStop ? (
+        <View style={styles.stopSquare} />
+      ) : (
+        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.2}>
+          <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      )}
     </AnimatedPressable>
   );
 }
 
 function MicButton({ onPress, a11yLabel }: { onPress?: () => void; a11yLabel: string }) {
-  const scale = useSharedValue(1);
+  const press = useSharedValue(1);
   const style = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [{ scale: press.value }],
   }));
 
   return (
     <AnimatedPressable
       onPress={onPress}
-      onPressIn={() => { scale.value = withSpring(0.86, PRESS_SPRING); }}
-      onPressOut={() => { scale.value = withSpring(1, PRESS_SPRING); }}
+      onPressIn={() => { press.value = withSpring(0.88, SPRING); }}
+      onPressOut={() => { press.value = withSpring(1, SPRING); }}
       hitSlop={6}
       style={[styles.micButton, style]}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
     >
-      <Mic size={19} color={chatColors.accentSoft} strokeWidth={2.2} />
+      <GlassSheen radius={SLOT / 2} intensity={0.8} />
+      <Mic size={20} color={GLASS_ICON_IDLE} strokeWidth={2} />
     </AnimatedPressable>
   );
 }
@@ -128,9 +157,8 @@ export interface ChatComposerProps {
   dailyLimitOverText: string;
   limitResetsAfterText: string;
   stopLabel: string;
-  /** Safe-area padding when KeyboardStickyView is not active (Expo Go). */
+  /** Gap below the capsule; matches the bottom nav's float height when the keyboard is closed. */
   bottomInset?: number;
-  /** Hides the footer so the field sits on the keyboard like live chat. */
   keyboardVisible?: boolean;
   onInputFocus?: () => void;
   onStop?: () => void;
@@ -154,12 +182,13 @@ export function ChatComposer({
   limitResetsAfterText,
   stopLabel: _stopLabel,
   bottomInset = 0,
-  keyboardVisible = false,
+  keyboardVisible: _keyboardVisible,
   onInputFocus,
   onStop,
   onMicPress,
 }: ChatComposerProps) {
   const { t, language } = useTranslation();
+  const fontMedium = useAppFont(500);
   const isAr = language === 'ar';
   const inputDirection = useMemo(() => {
     if (value.trim()) return getTextDirectionStyles(value);
@@ -168,17 +197,10 @@ export function ChatComposer({
       : { textAlign: 'left' as const, writingDirection: 'ltr' as const };
   }, [value, isAr]);
   const isGenerating = isLoading && !!onStop;
-  const hasText = Boolean(value.trim());
-  const showSend = hasText || isLoading;
+  const showSend = Boolean(value.trim()) || isLoading;
 
   const focus = useSharedValue(0);
-  const ringStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(
-      focus.value,
-      [0, 1],
-      ['rgba(196,181,253,0.18)', 'rgba(192,132,252,0.6)'],
-    ),
-  }));
+  const focusRimStyle = useAnimatedStyle(() => ({ opacity: focus.value }));
 
   const handleFocus = () => {
     focus.value = withTiming(1, { duration: 180 });
@@ -189,28 +211,18 @@ export function ChatComposer({
   };
 
   return (
-    <View
-      pointerEvents="box-none"
-      style={[styles.dock, bottomInset > 0 && { paddingBottom: bottomInset }]}
-    >
-      <LinearGradient
-        pointerEvents="none"
-        colors={['rgba(5,2,8,0)', 'rgba(5,2,8,0.7)', 'rgba(5,2,8,0.92)']}
-        locations={[0, 0.5, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-
+    <View pointerEvents="box-none" style={[styles.dock, { paddingBottom: bottomInset }]}>
       {messagesRemaining !== null && messagesRemaining <= 0 && resetTime ? (
-        <ChatGlassSurface style={styles.limitBanner} tint={ISLAND_TINT}>
+        <GlassPanel radius={26} style={styles.limitBanner}>
           <Text style={styles.limitText}>{dailyLimitOverText}</Text>
           <Text style={styles.limitSub}>{limitResetsAfterText}</Text>
           <LimitReachedCountdown resetTime={resetTime} style={styles.limitCountdown} />
-        </ChatGlassSurface>
+        </GlassPanel>
       ) : (
         <>
           {editingMessage ? (
             <Animated.View entering={FadeIn.duration(180)}>
-              <ChatGlassSurface style={styles.editHeader} tint="rgba(124,58,237,0.22)">
+              <GlassPanel radius={18} style={styles.editHeader}>
                 <View style={styles.editLabel}>
                   <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={Colors.purpleSoft} strokeWidth={2}>
                     <Path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -221,31 +233,26 @@ export function ChatComposer({
                 <Pressable onPress={onCancelEdit} hitSlop={8}>
                   <Text style={styles.editCancel}>×</Text>
                 </Pressable>
-              </ChatGlassSurface>
+              </GlassPanel>
             </Animated.View>
           ) : null}
 
-          <View style={[styles.composerRow, isAr && styles.composerRowRtl]}>
+          <View style={[styles.composerRow, isAr && styles.rowRtl]}>
             <Animated.View
-              layout={LinearTransition.springify().damping(18).stiffness(200)}
-              style={styles.islandShadow}
+              layout={LinearTransition.springify().damping(18).stiffness(210)}
+              style={styles.barWrap}
             >
-              <ChatGlassSurface
-                style={[styles.island, isAr && styles.islandRtl]}
-                tint={ISLAND_TINT}
-                effect="regular"
-                interactive
-              >
-                <Animated.View pointerEvents="none" style={[styles.islandRing, ringStyle]} />
+              <GlassPanel radius={BAR_RADIUS} style={[styles.bar, isAr && styles.barRtl]}>
+                <Animated.View pointerEvents="none" style={[styles.focusRim, focusRimStyle]} />
                 <TextInput
                   ref={inputRef}
-                  style={[styles.textInput, inputDirection]}
+                  style={[styles.textInput, { fontFamily: fontMedium }, inputDirection]}
                   value={value}
                   onChangeText={onChangeText}
                   onFocus={handleFocus}
                   onBlur={handleBlur}
                   placeholder={editingMessage ? editPlaceholder : placeholder}
-                  placeholderTextColor="rgba(255,255,255,0.38)"
+                  placeholderTextColor="rgba(235,228,255,0.42)"
                   multiline
                   textAlignVertical="center"
                   keyboardAppearance="dark"
@@ -253,11 +260,13 @@ export function ChatComposer({
                   onSubmitEditing={onSend}
                   submitBehavior="submit"
                   underlineColorAndroid="transparent"
-                  selectionColor={Colors.purpleSoft}
+                  selectionColor={GLASS_ACCENT}
+                  cursorColor={GLASS_ACCENT}
                   blurOnSubmit={false}
+                  maxFontSizeMultiplier={1.2}
                 />
                 <MicButton onPress={onMicPress} a11yLabel={t.chat.a11yMic} />
-              </ChatGlassSurface>
+              </GlassPanel>
             </Animated.View>
 
             {showSend ? (
@@ -271,128 +280,105 @@ export function ChatComposer({
           </View>
         </>
       )}
-
-      {keyboardVisible ? null : (
-        <View style={styles.footerInfo}>
-          <Text style={styles.footerText}>{t.chat.poweredBy}</Text>
-        </View>
-      )}
     </View>
   );
 }
 
-const glow = Platform.select({
-  ios: {
-    shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-  },
-  default: {},
-});
+const barShadow = {
+  shadowColor: '#7C4DFF',
+  shadowOpacity: 0.45,
+  shadowRadius: 20,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 12,
+};
 
 const styles = StyleSheet.create({
   dock: {
-    paddingHorizontal: 14,
-    paddingTop: 18,
-    paddingBottom: 8,
+    paddingHorizontal: TAB_BAR_HORIZONTAL_MARGIN,
+  },
+  panel: {
+    backgroundColor: GLASS_BAR_BG,
+    ...barShadow,
   },
   composerRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 10,
+    gap: 8,
   },
-  composerRowRtl: {
+  rowRtl: {
     flexDirection: 'row-reverse',
   },
-  islandShadow: {
+  barWrap: {
     flex: 1,
-    borderRadius: ISLAND_HEIGHT / 2,
-    ...glow,
   },
-  island: {
-    minHeight: ISLAND_HEIGHT,
-    borderRadius: ISLAND_HEIGHT / 2,
+  bar: {
+    minHeight: BAR_HEIGHT,
+    paddingVertical: BAR_PAD,
     paddingLeft: 20,
-    paddingRight: 7,
-    paddingVertical: 7,
+    paddingRight: BAR_PAD,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
   },
-  islandRtl: {
+  barRtl: {
     flexDirection: 'row-reverse',
-    paddingLeft: 7,
+    paddingLeft: BAR_PAD,
     paddingRight: 20,
   },
-  islandRing: {
+  focusRim: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: ISLAND_HEIGHT / 2,
+    borderRadius: BAR_RADIUS,
     borderWidth: 1,
+    borderColor: 'rgba(164,123,255,0.65)',
+    borderTopColor: 'rgba(255,255,255,0.55)',
   },
   textInput: {
     flex: 1,
-    minHeight: ISLAND_HEIGHT - 14,
+    minHeight: SLOT,
+    maxHeight: 120,
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '500',
-    paddingVertical: Platform.OS === 'ios' ? 11 : 8,
-    maxHeight: 120,
+    paddingTop: Platform.OS === 'ios' ? 13 : 10,
+    paddingBottom: Platform.OS === 'ios' ? 13 : 10,
     includeFontPadding: false,
   },
   micButton: {
-    width: ISLAND_HEIGHT - 14,
-    height: ISLAND_HEIGHT - 14,
-    borderRadius: (ISLAND_HEIGHT - 14) / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(168,85,247,0.14)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(196,181,253,0.28)',
-  },
-  sendShadow: {
-    borderRadius: ISLAND_HEIGHT / 2,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.55,
-        shadowRadius: 14,
-      },
-      android: { elevation: 8 },
-    }),
-  },
-  sendButton: {
-    width: ISLAND_HEIGHT,
-    height: ISLAND_HEIGHT,
-    borderRadius: ISLAND_HEIGHT / 2,
+    width: SLOT,
+    height: SLOT,
+    borderRadius: SLOT / 2,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(190,160,255,0.25)',
   },
-  sendSheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: ISLAND_HEIGHT / 2,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+  sendButton: {
+    width: BAR_HEIGHT,
+    height: BAR_HEIGHT,
+    borderRadius: BAR_RADIUS,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#8B5CF6',
+    shadowOpacity: 0.6,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+  },
+  stopFill: {
+    borderRadius: BAR_RADIUS,
+    overflow: 'hidden',
   },
   editHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(167,139,250,0.35)',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     marginBottom: 10,
   },
   editLabel: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  editText: { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
+  editText: { fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
   editCancel: {
     fontSize: 22,
     color: 'rgba(255,255,255,0.6)',
@@ -401,29 +387,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  footerInfo: { alignItems: 'center', marginTop: 8 },
-  footerText: {
-    fontSize: 9,
-    color: 'rgba(255,255,255,0.22)',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
   limitBanner: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(196,181,253,0.2)',
-    borderRadius: 24,
     paddingHorizontal: 24,
     paddingVertical: 16,
     gap: 6,
   },
-  limitText: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '600' },
-  limitSub: { color: 'rgba(255,255,255,0.45)', fontSize: 11 },
+  limitText: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600' },
+  limitSub: { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
   limitCountdown: {
     fontSize: 28,
     fontWeight: '300',
-    color: 'rgba(255,255,255,0.55)',
+    color: 'rgba(255,255,255,0.6)',
     letterSpacing: 2,
     marginTop: 4,
   },

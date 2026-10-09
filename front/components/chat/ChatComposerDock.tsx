@@ -8,6 +8,8 @@ import {
   isKeyboardControllerActive,
 } from '@/utils/keyboardControllerSafe';
 
+const KEYBOARD_GAP = 8;
+
 export type ChatComposerDockProps = ChatComposerProps & {
   dockPaddingBottom: number;
   /** iOS Expo Go fallback when KeyboardStickyView is unavailable. */
@@ -32,7 +34,7 @@ export function ChatComposerDock({
   ...composerProps
 }: ChatComposerDockProps) {
   const insets = useSafeAreaInsets();
-  const safeBottom = Math.max(insets.bottom, 8);
+  const floatBottom = Math.max(insets.bottom, 16);
   const useStickyKeyboard = isKeyboardControllerActive;
   const lift = useStickyKeyboard ? 0 : Math.max(0, keyboardLift);
   const keyboardOpen = keyboardVisible || lift > 0;
@@ -56,7 +58,7 @@ export function ChatComposerDock({
     >
       <ChatComposer
         {...composerProps}
-        bottomInset={keyboardOpen ? 0 : safeBottom}
+        bottomInset={keyboardOpen ? KEYBOARD_GAP : floatBottom}
         keyboardVisible={keyboardOpen}
       />
     </View>
