@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatComposer, type ChatComposerProps } from './ChatComposer';
@@ -14,17 +14,20 @@ export type ChatComposerDockProps = ChatComposerProps & {
   keyboardLift?: number;
   keyboardVisible?: boolean;
   stickyOpenedOffset?: number;
+  /** Reports the floating dock height so content can scroll beneath it. */
+  onHeightChange?: (height: number) => void;
 };
 
 /**
- * Same keyboard dock as match live chat: KeyboardStickyView when linked,
- * iOS manual lift as fallback. Composer stays in document flow otherwise.
+ * Floats the composer over the bottom of the chat body. KeyboardStickyView
+ * moves it with the keyboard when linked; iOS Expo Go lifts it manually.
  */
 export function ChatComposerDock({
   dockPaddingBottom,
   keyboardLift = 0,
   keyboardVisible = false,
   stickyOpenedOffset = 0,
+  onHeightChange,
   bottomInset: _bottomInset,
   ...composerProps
 }: ChatComposerDockProps) {
@@ -34,15 +37,21 @@ export function ChatComposerDock({
   const lift = useStickyKeyboard ? 0 : Math.max(0, keyboardLift);
   const keyboardOpen = keyboardVisible || lift > 0;
 
+  const handleLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      onHeightChange?.(Math.round(e.nativeEvent.layout.height));
+    },
+    [onHeightChange],
+  );
+
   const node = (
     <View
       collapsable={false}
+      pointerEvents="box-none"
+      onLayout={handleLayout}
       style={[
-        styles.dock,
-        {
-          paddingBottom: keyboardOpen ? dockPaddingBottom : 0,
-          marginBottom: lift,
-        },
+        !useStickyKeyboard && [styles.overlay, { bottom: lift }],
+        { paddingBottom: keyboardOpen ? dockPaddingBottom : 0 },
       ]}
     >
       <ChatComposer
@@ -58,7 +67,8 @@ export function ChatComposerDock({
   return (
     <ChatKeyboardStickyView
       offset={{ closed: 0, opened: stickyOpenedOffset }}
-      style={styles.sticky}
+      pointerEvents="box-none"
+      style={styles.overlay}
     >
       {node}
     </ChatKeyboardStickyView>
@@ -66,14 +76,11 @@ export function ChatComposerDock({
 }
 
 const styles = StyleSheet.create({
-  sticky: {
-    flexShrink: 0,
-    width: '100%',
+  overlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     zIndex: 40,
-  },
-  dock: {
-    flexShrink: 0,
-    zIndex: 40,
-    backgroundColor: '#07040D',
   },
 });

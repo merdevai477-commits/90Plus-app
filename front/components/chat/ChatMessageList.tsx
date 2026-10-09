@@ -49,6 +49,8 @@ export type ChatMessageListProps = {
   isNearBottomRef: React.MutableRefObject<boolean>;
   useNativeKeyboardScroll?: boolean;
   listBottomInset?: number;
+  /** Height of the floating composer overlapping the bottom of the list. */
+  overlayBottomInset?: number;
 };
 
 export function ChatMessageList({
@@ -75,6 +77,7 @@ export function ChatMessageList({
   isNearBottomRef,
   useNativeKeyboardScroll = false,
   listBottomInset = chatSpacing.listBottom,
+  overlayBottomInset = 0,
 }: ChatMessageListProps) {
   const mountedRef = useRef(true);
   const contentSizeRafRef = useRef<number | null>(null);
@@ -201,7 +204,7 @@ export function ChatMessageList({
         <Animated.View
           entering={FadeIn.duration(200).springify()}
           exiting={FadeOut.duration(150)}
-          style={[styles.scrollFab, { bottom: CHAT_OVERLAY_BOTTOM }]}
+          style={[styles.scrollFab, { bottom: CHAT_OVERLAY_BOTTOM + overlayBottomInset }]}
           pointerEvents="box-none"
         >
           <ScrollToBottomButton
@@ -215,7 +218,7 @@ export function ChatMessageList({
         <Animated.View
           entering={FadeIn.duration(220)}
           exiting={FadeOut.duration(180)}
-          style={[styles.nudgeFab, { bottom: CHAT_BANNER_BOTTOM }]}
+          style={[styles.nudgeFab, { bottom: CHAT_BANNER_BOTTOM + overlayBottomInset }]}
           pointerEvents="box-none"
         >
           <ChatGlassSurface
@@ -236,7 +239,7 @@ export function ChatMessageList({
         <Animated.View
           entering={FadeIn.duration(200)}
           exiting={FadeOut.duration(150)}
-          style={[styles.retryFab, { bottom: CHAT_BANNER_BOTTOM }]}
+          style={[styles.retryFab, { bottom: CHAT_BANNER_BOTTOM + overlayBottomInset }]}
           pointerEvents="box-none"
         >
           <View style={styles.retryBannerInner}>

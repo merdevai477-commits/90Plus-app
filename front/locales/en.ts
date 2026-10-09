@@ -3146,6 +3146,8 @@ export const en = {
     a11yMenu: 'Open conversation history',
     a11ySend: 'Send message',
     a11yStop: 'Stop generating',
+    a11yMic: 'Voice input',
+    voiceComingSoon: 'Voice typing is coming soon',
 
     initialWelcome: "Hey there! I'm 90Plus AI — ask me anything about football or performance. How can I help today?",
     streamRetry: 'Connection lost — retrying {current}/{max}...',

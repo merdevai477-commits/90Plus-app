@@ -3065,6 +3065,8 @@ export const ar = {
     a11yMenu: 'فتح سجل المحادثات',
     a11ySend: 'إرسال رسالة',
     a11yStop: 'إيقاف التوليد',
+    a11yMic: 'الإدخال الصوتي',
+    voiceComingSoon: 'الكتابة بالصوت قريبًا',
 
     initialWelcome: 'أهلاً! أنا 90Plus AI — اسألني عن كرة القدم أو الأداء. إزاي أقدر أساعدك؟',
     streamRetry: 'انقطع الاتصال — إعادة المحاولة {current}/{max}...',

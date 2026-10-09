@@ -7,7 +7,6 @@ export const SCROLL_NEAR_BOTTOM_THRESHOLD = 120;
 export const NUDGE_FLAG_PREFIX = '@chat_fifa_nudge_shown_v1_';
 export const CHAT_INPUT_NATIVE_ID = 'chat-input';
 export const CHAT_INPUT_MIN_HEIGHT = 52;
-export const CHAT_BOTTOM_OFFSET_MARGIN = 8;
 export const CHAT_OVERLAY_BOTTOM = 16;
 export const CHAT_BANNER_BOTTOM = 24;
 export const CHAT_DRAW_DISTANCE = 400;

@@ -8,7 +8,7 @@
 
 
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 
 import { View } from 'react-native';
 
@@ -224,7 +224,11 @@ export default function ChatScreen() {
 
 
 
-  const listBottomInset = chatSpacing.listBottom;
+  const [composerHeight, setComposerHeight] = useState(0);
+
+  const composerOverlap = composerHeight + keyboard.composerKeyboardLift;
+
+  const listBottomInset = chatSpacing.listBottom + composerOverlap;
 
 
 
@@ -304,6 +308,8 @@ export default function ChatScreen() {
 
       listBottomInset={listBottomInset}
 
+      overlayBottomInset={composerOverlap}
+
     />
 
   ) : (
@@ -317,6 +323,8 @@ export default function ChatScreen() {
         tChat={tChat}
 
         onSuggestionPress={(text) => screen.handleSend(text)}
+
+        bottomInset={composerOverlap}
 
       />
 
@@ -439,6 +447,10 @@ export default function ChatScreen() {
           keyboardVisible={keyboard.keyboardVisible}
 
           stickyOpenedOffset={keyboard.KEYBOARD_OPEN_GAP}
+
+          onHeightChange={setComposerHeight}
+
+          onMicPress={() => screen.setConnToast({ message: tChat.voiceComingSoon, type: 'info' })}
 
           inputRef={screen.inputRef}
 

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react-native';
 import { chatScreenStyles as styles } from './chatScreen.styles';
 import { ChatWelcomeChip } from './ChatWelcomeChip';
-import { chatColors } from './chatTheme';
+import { chatColors, chatSpacing } from './chatTheme';
 
 const CHIP_ICON_SIZE = 20;
 const CHIP_ICON_COLOR = chatColors.accentSoft;
@@ -21,12 +21,15 @@ export type ChatWelcomeViewProps = {
   onSuggestionPress: (text: string) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tChat: any;
+  /** Height of the floating composer overlapping the bottom of the scroll. */
+  bottomInset?: number;
 };
 
 export const ChatWelcomeView = React.memo(function ChatWelcomeView({
   greetingName,
   onSuggestionPress,
   tChat,
+  bottomInset = 0,
 }: ChatWelcomeViewProps) {
   const greeting = (tChat.welcomeGreeting as string).replace('{name}', greetingName);
 
@@ -69,7 +72,10 @@ export const ChatWelcomeView = React.memo(function ChatWelcomeView({
   return (
     <ScrollView
       style={styles.welcomeScroll}
-      contentContainerStyle={styles.welcomeContent}
+      contentContainerStyle={[
+        styles.welcomeContent,
+        { paddingBottom: chatSpacing.welcomeBottom + bottomInset },
+      ]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       showsVerticalScrollIndicator={false}

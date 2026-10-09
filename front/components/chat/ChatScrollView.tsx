@@ -1,35 +1,30 @@
 import React, { forwardRef } from 'react';
-import { ScrollView, type ScrollViewProps } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { ScrollViewProps } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 import { ChatKeyboardScrollView } from '@/utils/keyboardControllerSafe';
-import { CHAT_BOTTOM_OFFSET_MARGIN } from './chatTheme';
 
 export type ChatScrollViewProps = ScrollViewProps & {
   inverted?: boolean;
   extraContentPadding?: SharedValue<number>;
 };
 
+/** The list runs to the screen bottom under the floating composer, so no keyboard offset. */
 const ChatScrollView = forwardRef<React.ComponentRef<typeof ChatKeyboardScrollView>, ChatScrollViewProps>(
-  ({ inverted, extraContentPadding, ...props }, ref) => {
-    const { bottom } = useSafeAreaInsets();
-
-    return (
-      <ChatKeyboardScrollView
-        ref={ref}
-        {...props}
-        inverted={inverted}
-        automaticallyAdjustContentInsets={false}
-        contentInsetAdjustmentBehavior="never"
-        keyboardDismissMode="interactive"
-        keyboardLiftBehavior="whenAtEnd"
-        bounces={false}
-        overScrollMode="never"
-        offset={Math.max(0, bottom - CHAT_BOTTOM_OFFSET_MARGIN)}
-        extraContentPadding={extraContentPadding}
-      />
-    );
-  },
+  ({ inverted, extraContentPadding, ...props }, ref) => (
+    <ChatKeyboardScrollView
+      ref={ref}
+      {...props}
+      inverted={inverted}
+      automaticallyAdjustContentInsets={false}
+      contentInsetAdjustmentBehavior="never"
+      keyboardDismissMode="interactive"
+      keyboardLiftBehavior="whenAtEnd"
+      bounces={false}
+      overScrollMode="never"
+      offset={0}
+      extraContentPadding={extraContentPadding}
+    />
+  ),
 );
 
 ChatScrollView.displayName = 'ChatScrollView';
