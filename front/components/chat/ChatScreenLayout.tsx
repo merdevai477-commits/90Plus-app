@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurTargetView } from 'expo-blur';
 
 import { ChatScreenBackground } from './ChatScreenBackground';
 import { chatScreenStyles as styles } from './chatScreen.styles';
@@ -12,10 +13,12 @@ export type ChatScreenLayoutProps = {
   composer: React.ReactNode;
   connToast?: React.ReactNode;
   useKeyboardAvoiding?: boolean;
+  /** Lets the floating composer frost the messages on Android. */
+  blurTargetRef?: React.RefObject<View | null>;
 };
 
 /**
- * Column layout: header (fixed) → clipped messages → composer.
+ * Column layout: header (fixed) → clipped messages, with the composer floating over them.
  * iOS Expo Go: KeyboardAvoidingView around list + composer only.
  */
 export function ChatScreenLayout({
@@ -25,11 +28,14 @@ export function ChatScreenLayout({
   composer,
   connToast,
   useKeyboardAvoiding = false,
+  blurTargetRef,
 }: ChatScreenLayoutProps) {
   const mainColumn = (
     <>
       {connToast}
-      <View style={styles.listRegion}>{messageArea}</View>
+      <BlurTargetView ref={blurTargetRef} style={styles.listRegion}>
+        {messageArea}
+      </BlurTargetView>
       {composer}
     </>
   );

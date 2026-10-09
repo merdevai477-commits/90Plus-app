@@ -8,7 +8,7 @@
 
 
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 
 import { View } from 'react-native';
 
@@ -47,6 +47,8 @@ import { ChatHistoryPanel } from '../../components/chat/ChatHistoryPanel';
 import { Toast } from '../../components/chat/Toast';
 
 import { chatSpacing } from '../../components/chat/chatTheme';
+
+import type { VoiceInputError } from '../../hooks/useVoiceInput';
 
 
 
@@ -226,6 +228,16 @@ export default function ChatScreen() {
 
   const [composerHeight, setComposerHeight] = useState(0);
 
+  const blurTargetRef = useRef<View | null>(null);
+
+  const voiceErrorMessages: Record<VoiceInputError, string> = {
+    permission: tChat.voicePermission,
+    tooShort: tChat.voiceTooShort,
+    empty: tChat.voiceEmpty,
+    unavailable: tChat.voiceUnavailable,
+    failed: tChat.voiceFailed,
+  };
+
   const composerOverlap = composerHeight + keyboard.composerKeyboardLift;
 
   const listBottomInset = chatSpacing.listBottom + composerOverlap;
@@ -358,6 +370,8 @@ export default function ChatScreen() {
 
       useKeyboardAvoiding={keyboard.useKeyboardAvoiding}
 
+      blurTargetRef={blurTargetRef}
+
       connToast={connToast}
 
       header={
@@ -450,7 +464,11 @@ export default function ChatScreen() {
 
           onHeightChange={setComposerHeight}
 
-          onMicPress={() => screen.setConnToast({ message: tChat.voiceComingSoon, type: 'info' })}
+          blurTarget={blurTargetRef}
+
+          onVoiceError={(reason) =>
+            screen.setConnToast({ message: voiceErrorMessages[reason], type: reason === 'tooShort' ? 'info' : 'error' })
+          }
 
           inputRef={screen.inputRef}
 

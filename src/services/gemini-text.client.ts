@@ -66,6 +66,104 @@ function isRetryableGeminiStatus(status: number): boolean {
   return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
 
+export function isGeminiAudioConfigured(): boolean {
+  return !!resolveGeminiQuizApiKey();
+}
+
+/** Thinking only adds latency to a verbatim transcript; the knob differs per model family. */
+function minimalThinkingConfig(model: string): Record<string, unknown> | undefined {
+  if (model.startsWith('gemini-3')) return { thinkingLevel: 'low' };
+  if (model.includes('2.5-flash')) return { thinkingBudget: 0 };
+  return undefined;
+}
+
+export interface GeminiTranscribeParams {
+  audio: Buffer;
+  mimeType: string;
+  /** App language — biases the transcript script when speech is ambiguous. */
+  language?: 'ar' | 'en';
+}
+
+export async function transcribeAudioWithGemini(
+  params: GeminiTranscribeParams,
+): Promise<{ text: string; model: string }> {
+  const apiKey = resolveGeminiQuizApiKey();
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured (GEMINI_API_KEY)');
+  }
+
+  const models = [
+    process.env.GEMINI_TRANSCRIBE_MODEL?.trim(),
+    'gemini-3.5-flash-lite',
+    'gemini-flash-latest',
+    resolveGeminiQuizModel(),
+  ].filter((m, i, all): m is string => !!m && all.indexOf(m) === i);
+
+  const languageHint =
+    params.language === 'en'
+      ? 'The speaker most likely speaks English.'
+      : 'The speaker most likely speaks Arabic (often Egyptian dialect), possibly mixed with English football names.';
+  const instruction = [
+    'Transcribe this voice message verbatim, in the language and script it was spoken in.',
+    languageHint,
+    'It is a question for a football and sports-fitness assistant, so spell player, club and competition names correctly.',
+    'Output only the transcript text — no quotes, labels, translation or commentary.',
+    'If there is no intelligible speech, output nothing.',
+  ].join(' ');
+
+  const baseUrl = resolveGeminiBaseUrl();
+  const audioBase64 = params.audio.toString('base64');
+  let lastErr: Error | null = null;
+
+  for (let i = 0; i < models.length; i += 1) {
+    const model = models[i];
+    const hasFallback = i < models.length - 1;
+    const thinkingConfig = minimalThinkingConfig(model);
+    try {
+      const res = await fetch(`${baseUrl}/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: instruction },
+                { inlineData: { mimeType: params.mimeType, data: audioBase64 } },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 2048,
+            ...(thinkingConfig ? { thinkingConfig } : {}),
+          },
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        lastErr = new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 300)}`);
+        if (hasFallback) continue;
+        throw lastErr;
+      }
+
+      const payload = (await res.json()) as unknown;
+      return { text: extractGeminiText(payload).trim(), model };
+    } catch (err: unknown) {
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      if (hasFallback) continue;
+      throw lastErr;
+    }
+  }
+
+  throw lastErr ?? new Error('Gemini transcription failed');
+}
+
 export interface GeminiGenerateTextParams {
   system: string;
   user: string;

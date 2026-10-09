@@ -85,6 +85,10 @@ import {
 } from '../services/chat-agent.service';
 import { tryDeterministicFootballReply } from '../services/chat-deterministic-fallback.service';
 import {
+    isGeminiAudioConfigured,
+    transcribeAudioWithGemini,
+} from '../services/gemini-text.client';
+import {
     decodeChatNavMarker,
     encodeChatNavMarker,
     extractChatNavLinks,
@@ -1255,15 +1259,55 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 
 // ─── POST /chat/transcribe (voice → text) ────────────────────────────────────
 //
-// Accepts an audio file (multipart/form-data, field name "audio") and returns
-// `{ text }`. Uses OpenAI-compatible `audio.transcriptions` so OpenRouter (or
-// anything else exposing the Whisper endpoint via env) can serve it.
+// Accepts an audio file (multipart/form-data, field name "audio", optional
+// "language" = ar|en) and returns `{ text }`. Gemini is preferred because it
+// already powers chat and accepts the AAC/WAV the app records; an
+// OpenAI-compatible Whisper endpoint is the fallback when only that is set.
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB cap — plenty for short voice memos
 });
 
+const AUDIO_MIME_BY_EXT: Record<string, string> = {
+    aac: 'audio/aac',
+    wav: 'audio/wav',
+    mp3: 'audio/mp3',
+    m4a: 'audio/mp4',
+    mp4: 'audio/mp4',
+    ogg: 'audio/ogg',
+    flac: 'audio/flac',
+    webm: 'audio/webm',
+};
+
+/** Clients often send generic or platform-specific types; trust the extension when it is known. */
+function resolveAudioMime(file: Express.Multer.File): string {
+    const ext = (file.originalname.split('.').pop() ?? '').toLowerCase();
+    return AUDIO_MIME_BY_EXT[ext] ?? (file.mimetype?.startsWith('audio/') ? file.mimetype : 'audio/aac');
+}
+
 router.post('/chat/transcribe', upload.single('audio'), async (req: Request, res: Response): Promise<void> => {
+    if (!req.file) {
+        res.status(400).json({ error: 'Audio file is required (multipart field "audio")' });
+        return;
+    }
+
+    const language = req.body?.language === 'en' ? 'en' : 'ar';
+
+    if (isGeminiAudioConfigured()) {
+        try {
+            const { text } = await transcribeAudioWithGemini({
+                audio: req.file.buffer,
+                mimeType: resolveAudioMime(req.file),
+                language,
+            });
+            res.json({ text });
+        } catch (err: any) {
+            logger.warn('[chat] gemini transcribe failed:', err?.message ?? err);
+            res.status(502).json({ error: 'Transcription failed' });
+        }
+        return;
+    }
+
     const transcribeKey = process.env.AI_TRANSCRIBE_KEY ?? process.env.OPENAI_API_KEY ?? '';
     const transcribeBaseURL =
         process.env.AI_TRANSCRIBE_BASE_URL ??
@@ -1272,10 +1316,6 @@ router.post('/chat/transcribe', upload.single('audio'), async (req: Request, res
 
     if (!transcribeKey || !transcribeBaseURL) {
         res.status(501).json({ error: 'Transcription not configured' });
-        return;
-    }
-    if (!req.file) {
-        res.status(400).json({ error: 'Audio file is required (multipart field "audio")' });
         return;
     }
 

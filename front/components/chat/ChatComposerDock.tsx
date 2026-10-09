@@ -9,6 +9,8 @@ import {
 } from '@/utils/keyboardControllerSafe';
 
 const KEYBOARD_GAP = 8;
+/** Extra height above the safe area so the capsule visibly hovers off the screen edge. */
+const FLOAT_LIFT = 16;
 
 export type ChatComposerDockProps = ChatComposerProps & {
   dockPaddingBottom: number;
@@ -34,7 +36,7 @@ export function ChatComposerDock({
   ...composerProps
 }: ChatComposerDockProps) {
   const insets = useSafeAreaInsets();
-  const floatBottom = Math.max(insets.bottom, 16);
+  const floatBottom = Math.max(insets.bottom, 16) + FLOAT_LIFT;
   const useStickyKeyboard = isKeyboardControllerActive;
   const lift = useStickyKeyboard ? 0 : Math.max(0, keyboardLift);
   const keyboardOpen = keyboardVisible || lift > 0;
