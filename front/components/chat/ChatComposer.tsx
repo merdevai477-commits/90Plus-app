@@ -32,6 +32,7 @@ import Svg, { Path } from 'react-native-svg';
 import { ChatSpinner } from './ChatSpinner';
 import { LimitReachedCountdown } from './LimitReachedCountdown';
 import { LiquidWaterSurface } from './LiquidWaterSurface';
+import { IridescentRim } from './IridescentRim';
 import { Colors } from '../../constants/theme';
 import { getTextDirectionStyles } from './chatTextUtils';
 import { useTranslation } from '../../src/i18n';
@@ -42,7 +43,10 @@ import { GLASS_ICON_IDLE } from '../navigation/GlassCapsuleNav';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const BAR_HEIGHT = 50;
+/** Composer size: capsule height (also the send button size) and side gap to the screen edges. */
+const BAR_HEIGHT = 44;
+const BAR_SIDE_INSET = 30;
+const INPUT_FONT_SIZE = 14;
 const BAR_RADIUS = BAR_HEIGHT / 2;
 const BAR_PAD = 5;
 const SLOT = BAR_HEIGHT - BAR_PAD * 2;
@@ -235,7 +239,6 @@ export function ChatComposer({
   const showSend = !voiceActive && (Boolean(value.trim()) || isLoading);
 
   const focus = useSharedValue(0);
-  const focusRimStyle = useAnimatedStyle(() => ({ opacity: focus.value }));
 
   const handleFocus = () => {
     focus.value = withTiming(1, { duration: 180 });
@@ -280,8 +283,6 @@ export function ChatComposer({
               style={styles.barWrap}
             >
               <LiquidWaterSurface radius={BAR_RADIUS} tint={BAR_TINT} blurTarget={blurTarget}>
-                <Animated.View pointerEvents="none" style={[styles.focusRim, focusRimStyle]} />
-
                 {voice.status === 'recording' ? (
                   <Animated.View
                     entering={FadeIn.duration(160)}
@@ -342,6 +343,7 @@ export function ChatComposer({
                   </View>
                 )}
               </LiquidWaterSurface>
+              <IridescentRim radius={BAR_RADIUS} focus={focus} />
             </Animated.View>
 
             {showSend ? (
@@ -362,7 +364,7 @@ export function ChatComposer({
 
 const styles = StyleSheet.create({
   dock: {
-    paddingHorizontal: 22,
+    paddingHorizontal: BAR_SIDE_INSET,
   },
   composerRow: {
     flexDirection: 'row',
@@ -394,21 +396,14 @@ const styles = StyleSheet.create({
     paddingLeft: BAR_PAD,
     gap: 10,
   },
-  focusRim: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: BAR_RADIUS,
-    borderWidth: 1,
-    borderColor: 'rgba(164,123,255,0.7)',
-    borderTopColor: 'rgba(255,255,255,0.6)',
-  },
   textInput: {
     flex: 1,
     minHeight: SLOT,
     maxHeight: 140,
     color: '#FFFFFF',
-    fontSize: 14.5,
-    paddingTop: Platform.OS === 'ios' ? 11 : 9,
-    paddingBottom: Platform.OS === 'ios' ? 11 : 9,
+    fontSize: INPUT_FONT_SIZE,
+    paddingTop: Platform.OS === 'ios' ? 8 : 6,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 6,
     includeFontPadding: false,
   },
   iconButton: {
