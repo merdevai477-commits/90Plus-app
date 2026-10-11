@@ -17,8 +17,8 @@ export function ChatScreenBackground() {
       <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
           <RadialGradient id="chatBgGlow" cx="50%" cy="38%" r="58%">
-            <Stop offset="0" stopColor="#6F24FB" stopOpacity="0.34" />
-            <Stop offset="0.4" stopColor="#4A16B0" stopOpacity="0.16" />
+            <Stop offset="0" stopColor="#6F24FB" stopOpacity="0.2" />
+            <Stop offset="0.4" stopColor="#4A16B0" stopOpacity="0.1" />
             <Stop offset="1" stopColor="#1B0C33" stopOpacity="0" />
           </RadialGradient>
         </Defs>

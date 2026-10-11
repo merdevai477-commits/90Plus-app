@@ -81,8 +81,8 @@ export const ChatIridescentBubble = React.memo(function ChatIridescentBubble({
         <Svg width={glowSize} height={glowSize} viewBox="0 0 100 100">
           <Defs>
             <RadialGradient id="bubbleGlow" cx="50%" cy="50%" r="50%">
-              <Stop offset="0" stopColor="#6F24FB" stopOpacity="0.42" />
-              <Stop offset="0.45" stopColor="#5B1ED6" stopOpacity="0.16" />
+              <Stop offset="0" stopColor="#6F24FB" stopOpacity="0.26" />
+              <Stop offset="0.45" stopColor="#5B1ED6" stopOpacity="0.1" />
               <Stop offset="1" stopColor="#4C1D95" stopOpacity="0" />
             </RadialGradient>
           </Defs>
