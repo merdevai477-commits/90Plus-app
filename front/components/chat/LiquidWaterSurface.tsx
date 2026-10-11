@@ -28,7 +28,8 @@ import {
 import { LiquidGlassView, isLiquidGlassSupported } from '@/utils/liquidGlassSafe';
 import { GlassRim, GlassSheen } from '../navigation/glass';
 
-const WATER_SHADER = Skia.RuntimeEffect.Make(`
+// On web `Skia` stays undefined until CanvasKit is loaded, which this app never does.
+const WATER_SHADER = Platform.OS === 'web' ? null : Skia.RuntimeEffect.Make(`
 uniform float2 res;
 uniform float time;
 uniform float3 glow;
