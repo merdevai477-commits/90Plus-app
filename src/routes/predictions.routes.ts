@@ -235,7 +235,9 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
  * GET /api/predictions/user
  * Get all predictions for current user
  */
-router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000 }), async (req: Request, res: Response): Promise<void> => {
+// clientMaxAgeSec 0: a device-side copy would outlive the invalidation done on
+// every save, and the screen would read the pre-save list.
+router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000, clientMaxAgeSec: 0 }), async (req: Request, res: Response): Promise<void> => {
     try {
         // ✅ استخدام req.auth.userId من الـ middleware
         const clerkUserId = req.auth?.userId;

@@ -34,6 +34,7 @@ import {
 } from './KingBoardList';
 import { GlassSurface } from './GlassSurface';
 import { KingHeader } from './KingHeader';
+import { isExactPick, useKingPicksStore } from './kingPicksStore';
 import {
   KING_BG,
   KING_PURPLE,
@@ -78,8 +79,10 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
   const todayKey = localDateKey(new Date());
   const initialIndex = Math.max(0, days.findIndex((day) => localDateKey(day) === todayKey));
   const [dayIndex, setDayIndex] = useState(initialIndex);
-  const [matchCount, setMatchCount] = useState(0);
-  const [predictedIds, setPredictedIds] = useState<Set<string>>(new Set());
+  const [dayMatchIds, setDayMatchIds] = useState<string[]>([]);
+  const matchCount = dayMatchIds.length;
+  const serverPicks = useKingPicksStore((state) => state.server);
+  const localPicks = useKingPicksStore((state) => state.local);
   const [period, setPeriod] = useState<KingPeriod>('week');
   const [board, setBoard] = useState<KingLeaderboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,10 +95,10 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
       fetchKingMatches(selectedKey).catch(() => []),
       getTokenRef.current().catch(() => null),
     ]);
-    setMatchCount(dayMatches.length);
+    setDayMatchIds(dayMatches.map((match) => String(match.id)));
 
     if (!token) {
-      setPredictedIds(new Set());
+      useKingPicksStore.getState().clear();
       setBoard(null);
       return;
     }
@@ -104,18 +107,18 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
       PredictionsService.getUserPredictions(token).catch(() => null),
       PredictionsService.getKingLeaderboard(token, toApiMode(mode), period).catch(() => null),
     ]);
-    const ids = new Set<string>();
-    const map = preds?.predictionsMap ?? {};
-    for (const match of dayMatches) {
-      const row = map[match.id] ?? map[String(match.id)];
-      if (!row) continue;
-      const scores = row as { predictedHomeScore?: number | null; predictedAwayScore?: number | null };
-      const isExact = scores.predictedHomeScore != null && scores.predictedAwayScore != null;
-      if (mode === 'results' ? isExact : !isExact) ids.add(String(match.id));
-    }
-    setPredictedIds(ids);
+    if (preds) useKingPicksStore.getState().hydrate(preds.predictionsMap);
     setBoard(leaderboard);
   }, [mode, period, selectedKey]);
+
+  const predictedIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const id of dayMatchIds) {
+      const pick = localPicks[id] ?? serverPicks[id];
+      if (pick && isExactPick(pick) === (mode === 'results')) ids.add(id);
+    }
+    return ids;
+  }, [dayMatchIds, localPicks, mode, serverPicks]);
 
   useFocusEffect(
     useCallback(() => {

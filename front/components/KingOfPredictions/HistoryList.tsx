@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -22,6 +22,7 @@ import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { GlassSurface, type GlassTone } from './GlassSurface';
 import { KingEmptyState } from './KingBoardList';
+import { isExactPick, localHistoryItems, useKingPicksStore } from './kingPicksStore';
 import { KING_PURPLE, toApiMode, type KingRouteMode } from './shared';
 
 const SIDE = 22;
@@ -94,9 +95,9 @@ export function KingHistoryList({
     [mode, status],
   );
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (silent = false) => {
     const id = ++requestId.current;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(false);
     try {
       const data = await fetchPage(0);
@@ -115,6 +116,46 @@ export function KingHistoryList({
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  const confirmed = useKingPicksStore((state) => state.confirmed);
+  const confirmedSeen = useRef(confirmed);
+  useEffect(() => {
+    if (confirmed === confirmedSeen.current) return;
+    confirmedSeen.current = confirmed;
+    void reload(true);
+  }, [confirmed, reload]);
+
+  // Saves still on their way to the server show here right away, and an edit
+  // replaces the stored pick on its card.
+  const localPicks = useKingPicksStore((state) => state.local);
+  const { shown, shownCounts } = useMemo(() => {
+    const exact = mode === 'results';
+    const pending = status === 'correct' || status === 'wrong' ? [] : localHistoryItems(localPicks, exact);
+    if (Object.keys(localPicks).length === 0) return { shown: items, shownCounts: counts };
+    const byMatch = new Map(pending.map((row) => [row.apiMatchId, row]));
+    const merged = items.flatMap((item) => {
+      const local = localPicks[String(item.apiMatchId)];
+      if (!local) return [item];
+      if (isExactPick(local) !== exact) return [];
+      const row = byMatch.get(item.apiMatchId);
+      byMatch.delete(item.apiMatchId);
+      return row
+        ? [{
+            ...item,
+            predictionType: row.predictionType,
+            predictedHomeScore: row.predictedHomeScore,
+            predictedAwayScore: row.predictedAwayScore,
+          }]
+        : [item];
+    });
+    const added = [...byMatch.values()];
+    return {
+      shown: [...added, ...merged],
+      shownCounts: counts && added.length > 0
+        ? { ...counts, all: counts.all + added.length, pending: counts.pending + added.length }
+        : counts,
+    };
+  }, [counts, items, localPicks, mode, status]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || loading || loadingMore) return;
@@ -229,7 +270,7 @@ export function KingHistoryList({
       >
         {FILTERS.map((key) => {
           const active = key === status;
-          const count = counts?.[key];
+          const count = shownCounts?.[key];
           return (
             <Pressable
               key={key}
@@ -258,7 +299,7 @@ export function KingHistoryList({
       </ScrollView>
 
       <FlatList
-        data={loading ? [] : items}
+        data={loading ? [] : shown}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListEmptyComponent={empty}

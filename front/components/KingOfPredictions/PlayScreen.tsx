@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -28,6 +28,7 @@ import { KingHistoryList } from './HistoryList';
 import { KING_BUTTON_GRADIENT } from './KingBoardList';
 import { KingHeader } from './KingHeader';
 import { KingToast, type KingToastState } from './KingToast';
+import { useKingPicksStore, type KingPick } from './kingPicksStore';
 import {
   KING_BG,
   KING_PURPLE,
@@ -37,13 +38,6 @@ import {
 } from './shared';
 
 type Pick = 'home' | 'draw' | 'away';
-
-type SavedRow = {
-  type?: Pick;
-  home: number | null;
-  away: number | null;
-  correct: boolean | null;
-};
 
 type Verdict = 'pending' | 'correct' | 'wrong';
 
@@ -102,10 +96,14 @@ export function KingPlayScreen({
   const fontRegular = useAppFont(400);
 
   const [matches, setMatches] = useState<Match[]>([]);
-  const [saved, setSaved] = useState<Record<string, SavedRow>>({});
+  const serverPicks = useKingPicksStore((state) => state.server);
+  const localPicks = useKingPicksStore((state) => state.local);
+  const saved = useMemo<Record<string, KingPick>>(
+    () => ({ ...serverPicks, ...localPicks }),
+    [serverPicks, localPicks],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [sheetMatch, setSheetMatch] = useState<Match | null>(null);
   const [sheetPick, setSheetPick] = useState<Pick | null>(null);
   const [homeText, setHomeText] = useState('');
@@ -122,27 +120,11 @@ export function KingPlayScreen({
 
     const token = await getTokenRef.current().catch(() => null);
     if (!token) {
-      setSaved({});
+      useKingPicksStore.getState().clear();
       return;
     }
     const preds = await PredictionsService.getUserPredictions(token);
-    const nextSaved: Record<string, SavedRow> = {};
-    for (const match of dayMatches) {
-      const row = (preds.predictionsMap as Record<string, {
-        prediction?: { type?: Pick };
-        predictedHomeScore?: number | null;
-        predictedAwayScore?: number | null;
-        isCorrect?: boolean | null;
-      }>)[match.id];
-      if (!row) continue;
-      nextSaved[match.id] = {
-        type: row.prediction?.type,
-        home: row.predictedHomeScore ?? null,
-        away: row.predictedAwayScore ?? null,
-        correct: row.isCorrect ?? null,
-      };
-    }
-    setSaved(nextSaved);
+    useKingPicksStore.getState().hydrate(preds.predictionsMap);
   }, [dateKey]);
 
   useFocusEffect(
@@ -197,50 +179,64 @@ export function KingPlayScreen({
 
   const closeSheet = () => setSheetMatch(null);
 
-  const confirmSheet = useCallback(async () => {
+  // The pick shows on the card the moment it is confirmed; the request runs
+  // after, and a rejected save puts the card back the way it was.
+  const confirmSheet = useCallback(() => {
     const match = sheetMatch;
     if (!match) return;
     const home = parseScore(homeText);
     const away = parseScore(awayText);
     if (isGame ? sheetPick == null : home == null || away == null) return;
-    const token = await getToken();
-    if (!token || !isSignedIn) {
+    if (!isSignedIn) {
       showError(copy.signIn);
       return;
     }
-    setBusy(true);
-    try {
-      const predictionType: Pick = isGame
-        ? (sheetPick as Pick)
-        : home! > away! ? 'home' : away! > home! ? 'away' : 'draw';
-      const result = await PredictionsService.submitPrediction(token, {
-        apiMatchId: match.id,
-        predictionType,
-        homeTeam: match.homeTeam.name,
-        awayTeam: match.awayTeam.name,
-        homeTeamLogo: match.homeTeam.logo,
-        awayTeamLogo: match.awayTeam.logo,
-        matchDate: match.fixtureDate || new Date().toISOString(),
-        leagueName: match.league?.name,
-        predictedHomeScore: isGame ? undefined : home!,
-        predictedAwayScore: isGame ? undefined : away!,
-      });
-      setSheetMatch(null);
-      const pickName =
-        predictionType === 'home' ? match.homeTeam.name : predictionType === 'away' ? match.awayTeam.name : copy.draw;
-      setToast({
-        variant: 'success',
-        title: result.updated ? copy.updated : copy.saved,
-        pick: isGame ? pickName : `${away} - ${home}`,
-        caption: `${match.awayTeam.name} ${copy.vs} ${match.homeTeam.name}`,
-      });
-      await load().catch(() => undefined);
-    } catch (err) {
-      explain(err);
-    } finally {
-      setBusy(false);
-    }
-  }, [awayText, copy, explain, getToken, homeText, isGame, isSignedIn, load, sheetMatch, sheetPick, showError]);
+    const predictionType: Pick = isGame
+      ? (sheetPick as Pick)
+      : home! > away! ? 'home' : away! > home! ? 'away' : 'draw';
+    const meta = {
+      homeTeam: match.homeTeam.name,
+      awayTeam: match.awayTeam.name,
+      homeTeamLogo: match.homeTeam.logo,
+      awayTeamLogo: match.awayTeam.logo,
+      matchDate: match.fixtureDate || new Date().toISOString(),
+      leagueName: match.league?.name,
+    };
+    const picks = useKingPicksStore.getState();
+    const seq = picks.begin(
+      match.id,
+      { type: predictionType, home: isGame ? null : home, away: isGame ? null : away, correct: null },
+      meta,
+    );
+
+    setSheetMatch(null);
+    const pickName =
+      predictionType === 'home' ? match.homeTeam.name : predictionType === 'away' ? match.awayTeam.name : copy.draw;
+    setToast({
+      variant: 'success',
+      title: saved[match.id] ? copy.updated : copy.saved,
+      pick: isGame ? pickName : `${away} - ${home}`,
+      caption: `${match.awayTeam.name} ${copy.vs} ${match.homeTeam.name}`,
+    });
+
+    void (async () => {
+      try {
+        const token = await getTokenRef.current();
+        if (!token) throw new PredictionApiError('E002', 'Unauthorized', 401);
+        await PredictionsService.submitPrediction(token, {
+          apiMatchId: match.id,
+          predictionType,
+          ...meta,
+          predictedHomeScore: isGame ? undefined : home!,
+          predictedAwayScore: isGame ? undefined : away!,
+        });
+        picks.confirm(match.id, seq);
+      } catch (err) {
+        picks.revert(match.id, seq);
+        explain(err);
+      }
+    })();
+  }, [awayText, copy, explain, homeText, isGame, isSignedIn, saved, sheetMatch, sheetPick, showError]);
 
   const sheetReady = isGame
     ? sheetPick != null
@@ -315,7 +311,7 @@ export function KingPlayScreen({
                   </Text>
                   <Text style={[styles.time, { fontFamily: fontMedium }]}>{match.time || ''}</Text>
                   <Pressable
-                    disabled={locked || busy}
+                    disabled={locked}
                     onPress={() => openSheet(match)}
                     style={({ pressed }) => [styles.predictPress, pressed && styles.predictPressed]}
                   >
@@ -424,11 +420,11 @@ export function KingPlayScreen({
             ) : null}
 
             <Pressable
-              disabled={!sheetReady || busy}
-              onPress={() => { void confirmSheet(); }}
+              disabled={!sheetReady}
+              onPress={confirmSheet}
               style={isGame ? styles.sheetConfirmGame : styles.sheetConfirm}
             >
-              <LinearGradient colors={KING_BUTTON_GRADIENT} style={[styles.footerBtn, (!sheetReady || busy) && styles.dimmed]}>
+              <LinearGradient colors={KING_BUTTON_GRADIENT} style={[styles.footerBtn, !sheetReady && styles.dimmed]}>
                 <Text style={[styles.footerText, { fontFamily: fontSemi }]} maxFontSizeMultiplier={1.15}>{copy.confirm}</Text>
               </LinearGradient>
             </Pressable>
