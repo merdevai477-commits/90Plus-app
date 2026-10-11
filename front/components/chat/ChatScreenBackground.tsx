@@ -1,60 +1,28 @@
 import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
-/** Chat-only ambient background — deep purple with a soft violet glow. */
+/** Chat-only ambient background — diagonal purple gradient with a soft centre glow. */
 export function ChatScreenBackground() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <LinearGradient
-        colors={['#24103F', '#1A0A30', '#120624', '#0B0318']}
-        locations={[0, 0.35, 0.7, 1]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
+        colors={['#3B1670', '#2A0F55', '#190838', '#0C031C']}
+        locations={[0, 0.3, 0.65, 1]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      <LinearGradient
-        colors={['rgba(168,85,247,0.22)', 'rgba(124,58,237,0.08)', 'transparent']}
-        locations={[0, 0.4, 1]}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 0.55 }}
-        style={styles.topGlow}
-      />
-      <View style={styles.orbLeft} />
-      <View style={styles.orbRight} />
-      {Platform.OS === 'ios' ? (
-        <BlurView intensity={12} tint="dark" style={StyleSheet.absoluteFill} />
-      ) : (
-        <View style={[StyleSheet.absoluteFill, styles.androidVeil]} />
-      )}
+      <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
+        <Defs>
+          <RadialGradient id="chatBgGlow" cx="50%" cy="40%" r="60%">
+            <Stop offset="0" stopColor="#7C3AED" stopOpacity="0.22" />
+            <Stop offset="1" stopColor="#7C3AED" stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100" height="100" fill="url(#chatBgGlow)" />
+      </Svg>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  topGlow: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  orbLeft: {
-    position: 'absolute',
-    top: '18%',
-    left: -80,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(124,58,237,0.14)',
-  },
-  orbRight: {
-    position: 'absolute',
-    bottom: '22%',
-    right: -60,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(168,85,247,0.1)',
-  },
-  androidVeil: {
-    backgroundColor: 'rgba(4,2,10,0.12)',
-  },
-});

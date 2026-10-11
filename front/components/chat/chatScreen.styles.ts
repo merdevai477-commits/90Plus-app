@@ -4,7 +4,7 @@ import { chatColors, chatSpacing, chatRadii, chatTypography } from './chatTheme'
 export const chatScreenStyles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#120624',
+    backgroundColor: '#190838',
     overflow: 'hidden',
   },
   screen: {
