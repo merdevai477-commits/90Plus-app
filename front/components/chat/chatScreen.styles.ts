@@ -4,7 +4,7 @@ import { chatColors, chatSpacing, chatRadii, chatTypography } from './chatTheme'
 export const chatScreenStyles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#050208',
+    backgroundColor: '#120624',
     overflow: 'hidden',
   },
   screen: {
@@ -115,30 +115,13 @@ export const chatScreenStyles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: chatSpacing.welcomeBottom,
     alignItems: 'stretch',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
   },
   welcomeHero: {
     alignItems: 'center',
-    paddingTop: 8,
   },
-  welcomeMarkGlow: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(124,58,237,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(196,181,253,0.28)',
-    marginBottom: 16,
-  },
-  welcomeMark: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+  welcomeBubble: {
+    marginBottom: 40,
   },
   welcomeTitle: {
     ...chatTypography.welcomeTitle,
@@ -151,26 +134,6 @@ export const chatScreenStyles = StyleSheet.create({
     color: chatColors.textSecondary,
     textAlign: 'center',
     marginBottom: 10,
-  },
-  welcomeBrandPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  welcomeBrand: {
-    fontSize: 11,
-    color: chatColors.textMuted,
-    textAlign: 'center',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    fontWeight: '600',
-  },
-  welcomeChips: {
-    width: '100%',
-    marginTop: 22,
   },
   messagesList: { flex: 1, minHeight: 0 },
   streamingPlaceholder: {

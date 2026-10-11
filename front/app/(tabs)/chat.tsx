@@ -334,8 +334,6 @@ export default function ChatScreen() {
 
         tChat={tChat}
 
-        onSuggestionPress={(text) => screen.handleSend(text)}
-
         bottomInset={composerOverlap}
 
       />

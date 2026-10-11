@@ -19,7 +19,7 @@ export const chatColors = {
   bgElevated: '#0C0618',
   bgSurface: 'rgba(18,10,32,0.92)',
   bgSurfaceHover: 'rgba(28,16,48,0.95)',
-  headerBackdrop: 'rgba(6,2,14,0.88)',
+  headerBackdrop: 'rgba(26,10,48,0.88)',
   headerBorder: 'rgba(255,255,255,0.04)',
   iconBg: 'rgba(255,255,255,0.06)',
   iconBorder: 'rgba(255,255,255,0.1)',

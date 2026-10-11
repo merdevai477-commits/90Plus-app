@@ -3,12 +3,12 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 
-/** Chat-only ambient background — richer depth, soft purple glow. */
+/** Chat-only ambient background — deep purple with a soft violet glow. */
 export function ChatScreenBackground() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <LinearGradient
-        colors={['#120820', '#0A0414', '#050208', '#020005']}
+        colors={['#24103F', '#1A0A30', '#120624', '#0B0318']}
         locations={[0, 0.35, 0.7, 1]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
