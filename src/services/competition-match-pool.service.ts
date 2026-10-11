@@ -130,6 +130,39 @@ export function appClockTime(iso: string, timezone = getAppCalendarTimezone()): 
 }
 
 /**
+ * Cairo derby — Al Ahly vs Zamalek.
+ *
+ * The daily cap fills with Big 5 fixtures first, so this match drops out of
+ * the sponsor picker on a normal European weekend even though it is the match
+ * sponsors are asked for. Names are matched exactly so "Shabab Al Ahly" and
+ * Saudi "Al Ahli" do not qualify.
+ */
+const AHLY_NAME = /^(al[\s-]?ahly|الأهلي|الاهلي)(\s+(sc|fc|المصري))?$/i;
+const ZAMALEK_NAME = /^(zamalek|الزمالك)(\s+(sc|fc))?$/i;
+
+export function isCairoDerby(homeName: string, awayName: string): boolean {
+  const home = homeName.trim();
+  const away = awayName.trim();
+  const ahlyHome = AHLY_NAME.test(home);
+  const ahlyAway = AHLY_NAME.test(away);
+  const zamalekHome = ZAMALEK_NAME.test(home);
+  const zamalekAway = ZAMALEK_NAME.test(away);
+  return (ahlyHome && zamalekAway) || (zamalekHome && ahlyAway);
+}
+
+function pinCairoDerbyFirst<T extends { home: { name: string }; away: { name: string } }>(
+  matches: T[],
+): T[] {
+  const pinned: T[] = [];
+  const rest: T[] = [];
+  for (const match of matches) {
+    if (isCairoDerby(match.home.name, match.away.name)) pinned.push(match);
+    else rest.push(match);
+  }
+  return pinned.length > 0 ? [...pinned, ...rest] : matches;
+}
+
+/**
  * The instant a match must kick off after to be offerable.
  *
  * `pickTopFixtures` already drops anything whose status is not `NS`/`TBD`, but
@@ -181,11 +214,12 @@ export async function getPoolForDate(dateString?: string, now: Date = new Date()
   // while leaving the cap to us — the eligibility filter has to come first.
   const ranked = pickTopFixtures(fixtures, Number.MAX_SAFE_INTEGER);
 
-  const pool = ranked
-    .map((f: any) => toPoolMatch(f, day))
-    .filter((m): m is PoolMatch => m !== null)
-    .filter((m) => isOfferable(m, now))
-    .slice(0, POOL_SIZE);
+  const pool = pinCairoDerbyFirst(
+    ranked
+      .map((f: any) => toPoolMatch(f, day))
+      .filter((m): m is PoolMatch => m !== null)
+      .filter((m) => isOfferable(m, now)),
+  ).slice(0, POOL_SIZE);
 
   if (pool.length === 0) logger.warn(`[PredictWinPool] no offerable fixtures for ${day}`);
   return pool;
@@ -193,7 +227,8 @@ export async function getPoolForDate(dateString?: string, now: Date = new Date()
 
 /**
  * Every match a sponsor may choose right now: today's remaining fixtures plus
- * the next `POOL_MAX_DAYS_AHEAD` days, in kickoff order.
+ * the next `POOL_MAX_DAYS_AHEAD` days. A Cairo derby, when it is still
+ * offerable, is always the first row; everything else stays in kickoff order.
  *
  * This is what the wizard asks for when it does not name a day. Serving only
  * today was what forced the deadline picker onto today's date — there was
@@ -217,7 +252,7 @@ export async function getUpcomingPool(now: Date = new Date()): Promise<PoolMatch
   );
 
   const seen = new Set<number>();
-  return perDay
+  const ordered = perDay
     .flat()
     .filter((m) => {
       // A fixture can surface under two calendar days around midnight.
@@ -226,6 +261,7 @@ export async function getUpcomingPool(now: Date = new Date()): Promise<PoolMatch
       return true;
     })
     .sort((a, b) => new Date(a.kickoffIso).getTime() - new Date(b.kickoffIso).getTime());
+  return pinCairoDerbyFirst(ordered);
 }
 
 /**

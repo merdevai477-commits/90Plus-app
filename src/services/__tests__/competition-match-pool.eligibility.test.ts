@@ -228,6 +228,78 @@ describe('upcoming window', () => {
   });
 });
 
+function cairoDerby(id: number, kickoffIso: string) {
+  return {
+    ...fixture(id, kickoffIso),
+    teams: {
+      home: { name: 'Zamalek SC', logo: null },
+      away: { name: 'Al Ahly SC', logo: null },
+    },
+    league: { name: 'Premier League', id: 233 },
+  };
+}
+
+describe('Cairo derby pin', () => {
+  const DAY = '2026-03-10';
+
+  it('recognises only Al Ahly versus Zamalek', () => {
+    const pool = loadPool({});
+    expect(pool.isCairoDerby('Al Ahly SC', 'Zamalek SC')).toBe(true);
+    expect(pool.isCairoDerby('الزمالك', 'الأهلي')).toBe(true);
+    expect(pool.isCairoDerby('Shabab Al Ahly', 'Al Ain')).toBe(false);
+    expect(pool.isCairoDerby('Al Ahli', 'Al Nassr')).toBe(false);
+  });
+
+  it('puts the derby first even when Big 5 fills the daily cap', async () => {
+    const big5 = Array.from({ length: 12 }, (_, i) =>
+      fixture(i + 1, '2026-03-10T20:00:00.000Z'),
+    );
+    const pool = loadPool(
+      { [DAY]: [...big5, cairoDerby(99, '2026-03-10T22:00:00.000Z')] },
+      { PREDICT_WIN_POOL_SIZE: '10', PREDICT_WIN_POOL_MIN_LEAD_MINUTES: '0' },
+    );
+
+    const result = await pool.getPoolForDate(DAY, NOW);
+    expect(result).toHaveLength(10);
+    expect(result[0]?.apiMatchId).toBe(99);
+    expect(result[0]?.home.name).toBe('Zamalek SC');
+    expect(result[0]?.away.name).toBe('Al Ahly SC');
+  });
+
+  it('keeps the derby as the first upcoming choice ahead of earlier kickoffs', async () => {
+    const pool = loadPool(
+      {
+        '2026-03-10': [
+          fixture(1, '2026-03-10T19:00:00.000Z'),
+          cairoDerby(99, '2026-03-10T22:00:00.000Z'),
+        ],
+        '2026-03-11': [fixture(2, '2026-03-11T15:00:00.000Z')],
+      },
+      { PREDICT_WIN_POOL_DAYS_AHEAD: '1', PREDICT_WIN_POOL_MIN_LEAD_MINUTES: '0' },
+    );
+
+    const result = await pool.getUpcomingPool(NOW);
+    expect(result.map((m) => m.apiMatchId)).toEqual([99, 1, 2]);
+  });
+
+  it('does not promote Shabab Al Ahly ahead of an earlier kickoff', async () => {
+    const shabab = {
+      ...fixture(8, '2026-03-10T22:00:00.000Z'),
+      teams: {
+        home: { name: 'Shabab Al Ahly', logo: null },
+        away: { name: 'Al Ain', logo: null },
+      },
+    };
+    const pool = loadPool(
+      { '2026-03-10': [fixture(1, '2026-03-10T19:00:00.000Z'), shabab] },
+      { PREDICT_WIN_POOL_DAYS_AHEAD: '0', PREDICT_WIN_POOL_MIN_LEAD_MINUTES: '0' },
+    );
+
+    const result = await pool.getUpcomingPool(NOW);
+    expect(result.map((m) => m.apiMatchId)).toEqual([1, 8]);
+  });
+});
+
 describe('findInPool', () => {
   it('accepts a match the picker offered for a future day', async () => {
     const pool = loadPool(
