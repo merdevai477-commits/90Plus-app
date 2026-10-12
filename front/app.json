@@ -7,7 +7,10 @@
     "orientation": "portrait",
     "icon": "./assets/images/app-icon.png",
     "scheme": "ninetyplus",
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
@@ -20,7 +23,7 @@
         "applinks:clerk.90plus.pro"
       ],
       "usesAppleSignIn": true,
-      "buildNumber": "151",
+      "buildNumber": "152",
       "requireFullScreen": false,
       "entitlements": {
         "com.apple.developer.usernotifications.time-sensitive": true,
@@ -60,6 +63,8 @@
         "UIBackgroundModes": [
           "remote-notification"
         ],
+        "NSSupportsLiveActivities": true,
+        "NSSupportsLiveActivitiesFrequentUpdates": true,
         "NSCameraUsageDescription": "تطبيق 90Plus يحتاج للوصول إلى الكاميرا لالتقاط صور ملفك الشخصي وصور مجموعات التوقعات.",
         "NSPhotoLibraryUsageDescription": "نحتاج الوصول لمكتبة الصور لاختيار صور الغلاف والبروفايل الخاصة بك ومقاطع الفيديو.",
         "NSUserNotificationsUsageDescription": "نرسل لك إشعارات بأهم الأحداث والمباريات وأهداف فريقك المفضل.",

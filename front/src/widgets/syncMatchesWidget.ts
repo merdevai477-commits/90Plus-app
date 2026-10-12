@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 import { reloadWidgets, setWidgetConfig, type WidgetLabels } from '../../modules/widget-bridge';
 import { getApiUrl } from '../../utils/getApiUrl';
 import { logger } from '../../utils/logger';
+import { syncLiveActivities } from './liveActivities';
 
 type WidgetLanguage = 'ar' | 'en';
 
@@ -54,11 +55,12 @@ export function syncMatchesWidget(teamIds: number[], language: WidgetLanguage, f
   const signature = `${language}|${teamIds.join(',')}`;
   const changed = signature !== lastSignature;
   if (!changed && !force) return;
+  const apiBase = widgetApiBase();
   try {
     if (changed) {
       setWidgetConfig({
         teamIds,
-        apiBase: widgetApiBase(),
+        apiBase,
         language,
         labels: LABELS[language],
         updatedAt: Date.now(),
@@ -69,4 +71,5 @@ export function syncMatchesWidget(teamIds: number[], language: WidgetLanguage, f
   } catch (error) {
     logger.warn('[widgets] sync failed:', error);
   }
+  void syncLiveActivities(apiBase, teamIds, language);
 }

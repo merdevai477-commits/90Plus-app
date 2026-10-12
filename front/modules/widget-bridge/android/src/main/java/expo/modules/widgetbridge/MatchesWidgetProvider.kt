@@ -18,7 +18,8 @@ class MatchesWidgetProvider : AppWidgetProvider() {
   }
 
   override fun onDisabled(context: Context) {
-    WidgetScheduler.cancelAll(context)
+    // The live-score notification keeps using the same refresh work while teams are followed.
+    if (WidgetStore.config(context)?.teamIds.isNullOrEmpty()) WidgetScheduler.cancelAll(context)
   }
 
   override fun onAppWidgetOptionsChanged(

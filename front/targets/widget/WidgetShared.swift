@@ -218,6 +218,14 @@ enum ImageStore {
     }
   }
 
+  /// Live Activity views cannot fetch, so they only read what the app or the widget already cached.
+  static func cachedImage(for urlString: String) -> UIImage? {
+    guard !urlString.isEmpty,
+          let file = fileURL(for: urlString),
+          let data = try? Data(contentsOf: file) else { return nil }
+    return UIImage(data: data)
+  }
+
   private static func image(for urlString: String) async -> UIImage? {
     if let file = fileURL(for: urlString),
        let data = try? Data(contentsOf: file),

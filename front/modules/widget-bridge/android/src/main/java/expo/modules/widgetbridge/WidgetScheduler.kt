@@ -15,7 +15,11 @@ internal object WidgetScheduler {
   private const val NOW = "ninetyplus_widget_now"
   private const val LIVE = "ninetyplus_widget_live"
   const val LIVE_TAG = "ninetyplus_widget_live_tick"
-  private const val LIVE_TICK_MINUTES = 2L
+  private const val LIVE_TICK_MINUTES = 1L
+  private const val KICKOFF_PREFIX = "ninetyplus_widget_kickoff_"
+  private const val KICKOFF_TAG = "ninetyplus_widget_kickoff"
+  private const val KICKOFF_GRACE_MS = 60_000L
+  private const val KICKOFF_HORIZON_MS = 48 * 60 * 60_000L
 
   private val network = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
@@ -51,10 +55,24 @@ internal object WidgetScheduler {
     WorkManager.getInstance(context).enqueueUniqueWork(LIVE, policy, request)
   }
 
+  /** Wakes up just after kick-off so the live notification does not wait for the 15-minute cycle. */
+  fun scheduleKickoff(context: Context, match: FeedMatch) {
+    val delayMs = match.kickoffTs * 1000 + KICKOFF_GRACE_MS - System.currentTimeMillis()
+    if (match.status != "upcoming" || delayMs <= 0 || delayMs > KICKOFF_HORIZON_MS) return
+    val request = OneTimeWorkRequestBuilder<WidgetUpdateWorker>()
+      .setConstraints(network)
+      .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+      .addTag(KICKOFF_TAG)
+      .build()
+    WorkManager.getInstance(context)
+      .enqueueUniqueWork("$KICKOFF_PREFIX${match.fixtureId}", ExistingWorkPolicy.KEEP, request)
+  }
+
   fun cancelAll(context: Context) {
     val wm = WorkManager.getInstance(context)
     wm.cancelUniqueWork(PERIODIC)
     wm.cancelUniqueWork(NOW)
     wm.cancelUniqueWork(LIVE)
+    wm.cancelAllWorkByTag(KICKOFF_TAG)
   }
 }

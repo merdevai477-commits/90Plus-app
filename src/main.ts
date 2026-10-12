@@ -244,6 +244,7 @@ import teamsRoutes from './routes/teams.routes';
 import onboardingRoutes from './routes/onboarding.routes';
 import dailySpinRoutes from './routes/daily-spin.routes';
 import footballRoutes from './routes/football.routes';
+import liveActivityRoutes from './routes/live-activity.routes';
 import knowledgeExportRoutes from './routes/knowledge-export.routes';
 import predictionsRoutes from './routes/predictions.routes';
 import topScorersFiveRoutes from './routes/top-scorers-five.routes';
@@ -457,6 +458,7 @@ app.use(`${API_PREFIX}/teams`, teamsRoutes);
 app.use(`${API_PREFIX}/onboarding`, onboardingRoutes);
 app.use(`${API_PREFIX}/daily-spin`, dailySpinRoutes);
 app.use(`${API_PREFIX}/football`, footballRoutes);
+app.use(`${API_PREFIX}/live-activity`, liveActivityRoutes);
 // INTERNAL ONLY — Football Knowledge Factory season-aware export (API key auth)
 app.use(`${API_PREFIX}/internal/football/knowledge`, knowledgeExportRoutes);
 app.use(`${API_PREFIX}/news`, newsRoutes);
@@ -884,6 +886,9 @@ async function startServer() {
                     const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
                     liveFixtureSyncService.start();
 
+                    const { liveActivityPushService } = await import('./services/live-activity.service');
+                    liveActivityPushService.start();
+
                     const { footballCalendarSyncService } = await import(
                         './services/football-calendar-sync.service'
                     );
@@ -1250,6 +1255,8 @@ process.on('SIGINT', async () => {
     }
     const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
     liveFixtureSyncService.stop();
+    const { liveActivityPushService } = await import('./services/live-activity.service');
+    liveActivityPushService.stop();
     const { footballCalendarSyncService } = await import('./services/football-calendar-sync.service');
     footballCalendarSyncService.stop();
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload
@@ -1275,6 +1282,8 @@ process.on('SIGTERM', async () => {
     }
     const { liveFixtureSyncService } = await import('./services/live-fixture-sync.service');
     liveFixtureSyncService.stop();
+    const { liveActivityPushService } = await import('./services/live-activity.service');
+    liveActivityPushService.stop();
     const { footballCalendarSyncService } = await import('./services/football-calendar-sync.service');
     footballCalendarSyncService.stop();
     backgroundPreloadService.stop(); // ✅ OPTIMIZATION 4: Stop background preload

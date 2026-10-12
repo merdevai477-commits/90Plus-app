@@ -190,6 +190,29 @@ model UserPushDevice {
   @@map("user_push_devices")
 }
 
+/// APNs tokens for iOS Live Activities (lock screen + Dynamic Island score).
+/// kind "update" drives one running activity for `fixtureId`; kind "start" is the device's
+/// push-to-start token (iOS 17.2+) used to open an activity when a followed team kicks off.
+model LiveActivityToken {
+  token             String    @id
+  kind              String
+  deviceId          String
+  fixtureId         Int?
+  teamIds           Int[]     @default([])
+  language          String    @default("en")
+  /// null until the first send tells production and sandbox tokens apart.
+  sandbox           Boolean?
+  startedFixtureIds Int[]     @default([])
+  lastState         String?
+  lastPushAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([kind, fixtureId])
+  @@index([deviceId])
+  @@map("live_activity_tokens")
+}
+
 model ParentalConsentRequest {
   id          String        @id @default(uuid())
   userId      String

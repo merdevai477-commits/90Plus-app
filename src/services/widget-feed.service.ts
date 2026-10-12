@@ -86,7 +86,7 @@ function toWidgetStatus(short: string): WidgetMatchStatus {
   return 'upcoming';
 }
 
-function toWidgetMatch(f: FixtureFromAPI): WidgetMatch {
+export function toWidgetMatch(f: FixtureFromAPI): WidgetMatch {
   const short = f.fixture?.status?.short ?? 'NS';
   const status = toWidgetStatus(short);
   const hasScore = status !== 'upcoming' && status !== 'off';
@@ -198,6 +198,20 @@ async function buildFeatured(match: WidgetMatch, language: string): Promise<Widg
   };
 }
 
+/** One followed team with its nearest match, live clock and score overlaid. */
+export async function resolveTeamMatch(teamId: number, language: string, nowSec: number): Promise<WidgetTeam> {
+  try {
+    const result = await footballDataCacheService.getCached365CompetitorMatches(teamId, language);
+    const picked = result.data ? pickNearestFixture(result.data, nowSec) : null;
+    const match = picked ? toWidgetMatch(await overlayLiveState(picked, nowSec)) : null;
+    const side = match ? sideOf(match, teamId) : null;
+    return { teamId, name: side?.name ?? '', logo: side?.logo ?? null, match };
+  } catch (err) {
+    logger.warn(`[WidgetFeed] competitor ${teamId} failed:`, err);
+    return { teamId, name: '', logo: null, match: null };
+  }
+}
+
 export async function buildWidgetFeed(
   teamIds: number[],
   language: string,
@@ -205,20 +219,7 @@ export async function buildWidgetFeed(
 ): Promise<WidgetFeedPayload> {
   const nowSec = Math.floor(now / 1000);
 
-  const teams = await Promise.all(
-    teamIds.map(async (teamId): Promise<WidgetTeam> => {
-      try {
-        const result = await footballDataCacheService.getCached365CompetitorMatches(teamId, language);
-        const picked = result.data ? pickNearestFixture(result.data, nowSec) : null;
-        const match = picked ? toWidgetMatch(await overlayLiveState(picked, nowSec)) : null;
-        const side = match ? sideOf(match, teamId) : null;
-        return { teamId, name: side?.name ?? '', logo: side?.logo ?? null, match };
-      } catch (err) {
-        logger.warn(`[WidgetFeed] competitor ${teamId} failed:`, err);
-        return { teamId, name: '', logo: null, match: null };
-      }
-    }),
-  );
+  const teams = await Promise.all(teamIds.map((teamId) => resolveTeamMatch(teamId, language, nowSec)));
 
   // Two followed teams playing each other would otherwise show the same match twice.
   const seenFixtures = new Set<number>();

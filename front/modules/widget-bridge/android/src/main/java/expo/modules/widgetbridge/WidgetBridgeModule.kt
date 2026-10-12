@@ -19,9 +19,13 @@ class WidgetBridgeModule : Module() {
 
     Function("reload") {
       appContext.reactContext?.let { context ->
-        if (WidgetRenderer.widgetIds(context).isNotEmpty()) {
+        val hasTeams = !WidgetStore.config(context)?.teamIds.isNullOrEmpty()
+        if (hasTeams || WidgetRenderer.widgetIds(context).isNotEmpty()) {
           WidgetScheduler.ensurePeriodic(context)
           WidgetScheduler.refreshNow(context)
+        } else {
+          WidgetScheduler.cancelAll(context)
+          LiveNotifier.update(context, null, null)
         }
       }
       Unit

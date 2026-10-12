@@ -5,5 +5,6 @@ import WidgetKit
 struct NinetyPlusWidgetBundle: WidgetBundle {
   var body: some Widget {
     MatchesWidget()
+    MatchLiveActivity()
   }
 }

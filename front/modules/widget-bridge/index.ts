@@ -35,8 +35,38 @@ type AndroidWidgetBridge = {
   reload(): void;
 };
 
+type IosLiveActivityBridge = {
+  areLiveActivitiesEnabled(): Promise<boolean>;
+  activeMatchActivities(): Promise<number[]>;
+  startMatchActivity(json: string): Promise<boolean>;
+  endMatchActivity(fixtureId: number): Promise<void>;
+  refreshLiveActivityRegistration(): Promise<void>;
+};
+
+/** Must match Swift `MatchActivityAttributes` and the backend's live-activity.service.ts. */
+export interface MatchActivityAttributes {
+  fixtureId: number;
+  homeName: string;
+  awayName: string;
+  homeLogo: string;
+  awayLogo: string;
+  league: string;
+  language: string;
+}
+
+export interface MatchActivityState {
+  homeScore: number;
+  awayScore: number;
+  status: 'live' | 'ht' | 'ft' | 'upcoming';
+  minute: number | null;
+  clockStart: number | null;
+}
+
 const androidBridge =
   Platform.OS === 'android' ? requireOptionalNativeModule<AndroidWidgetBridge>('WidgetBridge') : null;
+
+const iosBridge =
+  Platform.OS === 'ios' ? requireOptionalNativeModule<IosLiveActivityBridge>('WidgetBridge') : null;
 
 const iosStorage = Platform.OS === 'ios' ? new ExtensionStorage(WIDGET_APP_GROUP) : null;
 
@@ -50,3 +80,14 @@ export function reloadWidgets(): void {
   if (Platform.OS === 'ios') ExtensionStorage.reloadWidget();
   androidBridge?.reload();
 }
+
+export const liveActivities = {
+  isSupported: iosBridge != null,
+  areEnabled: () => iosBridge?.areLiveActivitiesEnabled() ?? Promise.resolve(false),
+  activeFixtureIds: () => iosBridge?.activeMatchActivities() ?? Promise.resolve([] as number[]),
+  start: (attributes: MatchActivityAttributes, state: MatchActivityState) =>
+    iosBridge?.startMatchActivity(JSON.stringify({ attributes, state })) ?? Promise.resolve(false),
+  end: (fixtureId: number) => iosBridge?.endMatchActivity(fixtureId) ?? Promise.resolve(),
+  /** Re-sends the push-to-start token so the server knows the current followed teams. */
+  refreshRegistration: () => iosBridge?.refreshLiveActivityRegistration() ?? Promise.resolve(),
+};

@@ -1,6 +1,10 @@
 {
-  "platforms": ["android"],
+  "platforms": ["android", "apple"],
   "android": {
     "modules": ["expo.modules.widgetbridge.WidgetBridgeModule"]
+  },
+  "apple": {
+    "modules": ["WidgetBridgeModule"],
+    "appDelegateSubscribers": ["LiveActivityAppDelegateSubscriber"]
   }
 }

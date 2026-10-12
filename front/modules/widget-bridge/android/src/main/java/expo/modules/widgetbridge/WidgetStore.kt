@@ -67,6 +67,7 @@ internal object WidgetStore {
   private const val KEY_CONFIG = "widget.config"
   private const val KEY_FEED = "widget.feed"
   private const val KEY_FEED_AT = "widget.feedAt"
+  private const val KEY_LIVE_NOTIFIED = "widget.liveNotified"
 
   private fun prefs(context: Context) =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -103,5 +104,13 @@ internal object WidgetStore {
 
   fun clearFeed(context: Context) {
     prefs(context).edit().remove(KEY_FEED).remove(KEY_FEED_AT).apply()
+  }
+
+  /** Fixture ids that currently have a live-score notification up. */
+  fun liveNotified(context: Context): Set<Int> =
+    prefs(context).getStringSet(KEY_LIVE_NOTIFIED, emptySet()).orEmpty().mapNotNull { it.toIntOrNull() }.toSet()
+
+  fun setLiveNotified(context: Context, ids: Set<Int>) {
+    prefs(context).edit().putStringSet(KEY_LIVE_NOTIFIED, ids.map { it.toString() }.toSet()).apply()
   }
 }

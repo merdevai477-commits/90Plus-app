@@ -10,22 +10,25 @@ import java.net.URLEncoder
 class WidgetUpdateWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
   override fun doWork(): Result {
     val context = applicationContext
-    if (WidgetRenderer.widgetIds(context).isEmpty()) return Result.success()
+    val hasWidgets = WidgetRenderer.widgetIds(context).isNotEmpty()
 
     val config = WidgetStore.config(context)
     if (config == null || config.teamIds.isEmpty() || config.apiBase.isBlank()) {
-      WidgetRenderer.render(context, null, config, allowNetwork = false)
+      if (hasWidgets) WidgetRenderer.render(context, null, config, allowNetwork = false)
+      LiveNotifier.update(context, null, config)
       return Result.success()
     }
 
     val fetched = fetchFeed(config)
     if (fetched != null) WidgetStore.saveFeed(context, fetched)
     val feed = WidgetFeed.parse(fetched ?: WidgetStore.feed(context))
-    WidgetRenderer.render(context, feed, config, allowNetwork = true)
+    if (hasWidgets) WidgetRenderer.render(context, feed, config, allowNetwork = true)
+    LiveNotifier.update(context, feed, config)
 
     if (feed?.hasLive == true) {
       WidgetScheduler.scheduleLiveTick(context, fromLiveTick = tags.contains(WidgetScheduler.LIVE_TAG))
     }
+    feed?.teams?.mapNotNull { it.match }?.forEach { WidgetScheduler.scheduleKickoff(context, it) }
     return Result.success()
   }
 

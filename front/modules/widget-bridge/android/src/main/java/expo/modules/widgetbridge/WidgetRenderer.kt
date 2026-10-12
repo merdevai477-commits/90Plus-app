@@ -302,9 +302,9 @@ internal object WidgetRenderer {
     return bitmap
   }
 
-  private fun matchUri(match: FeedMatch) = "ninetyplus://match-details?fixtureId=${match.fixtureId}"
+  internal fun matchUri(match: FeedMatch) = "ninetyplus://match-details?fixtureId=${match.fixtureId}"
 
-  private fun openIntent(context: Context, uri: String): PendingIntent {
+  internal fun openIntent(context: Context, uri: String): PendingIntent {
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
       .setPackage(context.packageName)
       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)

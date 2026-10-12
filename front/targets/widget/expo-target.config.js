@@ -5,7 +5,7 @@ module.exports = (config) => ({
   displayName: '90PLUS',
   bundleIdentifier: '.widget',
   deploymentTarget: '17.0',
-  frameworks: ['SwiftUI', 'WidgetKit', 'AppIntents'],
+  frameworks: ['SwiftUI', 'WidgetKit', 'AppIntents', 'ActivityKit'],
   colors: {
     $accent: '#8B5CF6',
     $widgetBackground: '#14111C',
