@@ -32,7 +32,7 @@ import { LiquidWaterSurface } from './LiquidWaterSurface';
 import { IridescentRim } from './IridescentRim';
 import { ChatRimButton } from './ChatRimButton';
 import { VoiceOrb } from './VoiceOrb';
-import { useVoiceModeStore } from './voiceModeStore';
+import { useVoiceModeStore, VOICE_PULL_MS } from './voiceModeStore';
 import { Colors } from '../../constants/theme';
 import { getTextDirectionStyles } from './chatTextUtils';
 import { useTranslation } from '../../src/i18n';
@@ -58,8 +58,12 @@ const FIELD_CAUSTIC: [number, number, number] = [0.6, 0.75, 1];
 const ORB_SIZE = Math.round(BAR_HEIGHT * 1.3);
 const VOICE_ACTION_SIZE = 44;
 const VOICE_MORPH = LinearTransition.duration(340).easing(Easing.out(Easing.cubic));
-/** Lands just as the welcome bubble finishes being pulled into the composer. */
-const ORB_APPEAR_DELAY = 380;
+/**
+ * With the welcome bubble on screen, the voice orb fades in under it as it lands. The bubble
+ * starts a couple of frames after this view (it waits on two layout measurements).
+ */
+const ORB_APPEAR_AFTER_PULL = VOICE_PULL_MS + 220;
+const ORB_APPEAR_DELAY = 200;
 
 function usePressScale(to: number) {
   const press = useSharedValue(1);
@@ -234,13 +238,15 @@ export function ChatComposer({
   const rowRef = useRef<View>(null);
   const enterVoiceMode = useVoiceModeStore((s) => s.enter);
   const exitVoiceMode = useVoiceModeStore((s) => s.exit);
+  const welcomeShown = useVoiceModeStore((s) => s.welcomeShown);
+  const orbDelay = welcomeShown ? ORB_APPEAR_AFTER_PULL : ORB_APPEAR_DELAY;
 
   useEffect(() => {
     surfaceFade.value = voiceActive
       ? withDelay(160, withTiming(0, { duration: 260 }))
       : withTiming(1, { duration: 200 });
     if (voiceActive) {
-      rowRef.current?.measureInWindow((_x, y, _w, h) => enterVoiceMode(y + h / 2));
+      rowRef.current?.measureInWindow((_x, y, _w, h) => enterVoiceMode(y + h / 2, ORB_SIZE));
     } else {
       exitVoiceMode();
     }
@@ -294,10 +300,11 @@ export function ChatComposer({
           <View
             ref={rowRef}
             collapsable={false}
-            style={[styles.composerRow, voiceActive && styles.composerRowVoice, isAr && styles.rowRtl]}
+            // Voice mode keeps cancel on the left and done on the right in both languages.
+            style={[styles.composerRow, voiceActive ? styles.composerRowVoice : isAr && styles.rowRtl]}
           >
             {voice.status === 'recording' ? (
-              <Animated.View entering={FadeIn.delay(220).duration(200)} exiting={FadeOut.duration(120)}>
+              <Animated.View entering={FadeIn.delay(orbDelay).duration(220)} exiting={FadeOut.duration(120)}>
                 <ChatRimButton size={VOICE_ACTION_SIZE} onPress={voice.cancel} accessibilityLabel={t.chat.a11yVoiceCancel}>
                   <X size={18} color="#FFFFFF" strokeWidth={2.2} />
                 </ChatRimButton>
@@ -353,7 +360,7 @@ export function ChatComposer({
 
               {voiceActive ? (
                 <Animated.View
-                  entering={FadeIn.delay(ORB_APPEAR_DELAY).duration(260)}
+                  entering={FadeIn.delay(orbDelay).duration(280)}
                   exiting={FadeOut.duration(160)}
                   pointerEvents="none"
                   style={styles.orb}
@@ -372,7 +379,7 @@ export function ChatComposer({
             </Animated.View>
 
             {voice.status === 'recording' ? (
-              <Animated.View entering={FadeIn.delay(220).duration(200)} exiting={FadeOut.duration(120)}>
+              <Animated.View entering={FadeIn.delay(orbDelay).duration(220)} exiting={FadeOut.duration(120)}>
                 <ChatRimButton size={VOICE_ACTION_SIZE} onPress={voice.finish} accessibilityLabel={t.chat.a11yVoiceDone}>
                   <Check size={19} color="#FFFFFF" strokeWidth={2.6} />
                 </ChatRimButton>

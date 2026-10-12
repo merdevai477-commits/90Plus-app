@@ -34,8 +34,8 @@ const ORB_RENDER = 200;
 const REST_SCALE = ORB / ORB_RENDER;
 /** Arrives a little small and wobbles back up to rest size. */
 const ARRIVE_SCALE = REST_SCALE * 0.75;
-const PULL_MS = 760;
-const SETTLE_MS = 520;
+const PULL_MS = 600;
+const SETTLE_MS = 460;
 const LANDED_MS = PULL_MS + SETTLE_MS;
 const PILL_HEIGHT = 34;
 const PILL_RADIUS = PILL_HEIGHT / 2;
