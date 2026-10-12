@@ -422,13 +422,17 @@ private func scorerLines(_ events: [FeedEvent], side: String) -> [String] {
   var order: [String] = []
   var minutes: [String: [String]] = [:]
   for event in events where event.side == side && ["goal", "penalty", "own_goal"].contains(event.kind) {
-    let name = shortPlayerName(event.player) + (event.kind == "own_goal" ? " (OG)" : "")
+    let name = (shortPlayerName(event.player) + (event.kind == "own_goal" ? " (OG)" : ""))
+      .trimmingCharacters(in: .whitespaces)
     let extra = event.extra.map { "+\($0)" } ?? ""
     let minute = "\(event.minute)\(extra)\u{2019}" + (event.kind == "penalty" ? " (P)" : "")
     if minutes[name] == nil { order.append(name) }
     minutes[name, default: []].append(minute)
   }
-  return order.map { "\($0) \(minutes[$0]!.joined(separator: ", "))" }
+  // Some leagues publish goals without the scorer; then only the minutes are listed.
+  return order.map { name in
+    [name, minutes[name]!.joined(separator: ", ")].filter { !$0.isEmpty }.joined(separator: " ")
+  }
 }
 
 private struct MiniScoreHeader: View {
@@ -475,7 +479,7 @@ private struct EventsPage: View {
       Spacer(minLength: 0)
       VStack(spacing: family == .systemLarge ? 6 : 3) {
         ForEach(Array(events.suffix(family == .systemLarge ? 10 : 5).enumerated()), id: \.offset) { _, event in
-          EventRow(event: event)
+          EventRow(event: event, team: event.side == "home" ? match.home.name : match.away.name)
         }
       }
       Spacer(minLength: 0)
@@ -485,11 +489,14 @@ private struct EventsPage: View {
 
 private struct EventRow: View {
   let event: FeedEvent
+  /// Shown when the league publishes the event without a player.
+  let team: String
 
   private var isHome: Bool { event.side == "home" }
 
   private var label: String {
-    let name = shortPlayerName(event.player)
+    let player = shortPlayerName(event.player)
+    let name = player.isEmpty ? team : player
     switch event.kind {
     case "penalty": return "\(name) (P)"
     case "own_goal": return "\(name) (OG)"

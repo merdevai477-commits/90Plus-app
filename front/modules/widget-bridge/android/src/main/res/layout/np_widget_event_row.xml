@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Home event | minute | away event, mirrored around the centre like the in-app timeline -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/np_event_row"
   android:layout_width="match_parent"
   android:layout_height="wrap_content"
   android:gravity="center_vertical"

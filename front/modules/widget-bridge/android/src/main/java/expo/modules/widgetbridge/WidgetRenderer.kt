@@ -187,11 +187,20 @@ internal object WidgetRenderer {
     val byPlayer = LinkedHashMap<String, MutableList<String>>()
     for (event in events) {
       if (event.side != side || event.kind !in setOf("goal", "penalty", "own_goal")) continue
-      val name = shortName(event.player) + if (event.kind == "own_goal") " (OG)" else ""
+      val name = (shortName(event.player) + if (event.kind == "own_goal") " (OG)" else "").trim()
       val minute = eventMinute(event) + if (event.kind == "penalty") " (P)" else ""
       byPlayer.getOrPut(name) { mutableListOf() } += minute
     }
-    return byPlayer.map { (name, minutes) -> "$name ${minutes.joinToString(", ")}" }
+    // Some leagues publish goals without the scorer; then only the minutes are listed.
+    return byPlayer.map { (name, minutes) -> listOf(name, minutes.joinToString(", ")).filter { it.isNotBlank() }.joinToString(" ") }
+  }
+
+  private fun RemoteViews.textSp(viewId: Int, sp: Float) =
+    setTextViewTextSize(viewId, TypedValue.COMPLEX_UNIT_SP, sp)
+
+  private fun RemoteViews.padVertical(context: Context, viewId: Int, dp: Int) {
+    val px = (dp * context.resources.displayMetrics.density).toInt()
+    setViewPadding(viewId, 0, px, 0, px)
   }
 
   private fun applyScorers(views: RemoteViews, viewId: Int, lines: List<String>, rows: Int) {
@@ -214,10 +223,18 @@ internal object WidgetRenderer {
     val views = RemoteViews(context.packageName, R.layout.np_widget_page_events)
     applyMiniHeader(views, match, labels.events, labels, images)
     views.removeAllViews(R.id.np_event_rows)
-    for (event in events.takeLast(size.rows(24, events.size))) {
+    // Tall widgets get larger rows instead of a small list floating in empty space.
+    val roomy = size.detailBody >= 150
+    for (event in events.takeLast(size.rows(if (roomy) 30 else 24, events.size))) {
       val row = RemoteViews(context.packageName, R.layout.np_widget_event_row)
+      if (roomy) {
+        row.padVertical(context, R.id.np_event_row, 6)
+        row.textSp(R.id.np_event_home_name, 13f)
+        row.textSp(R.id.np_event_away_name, 13f)
+      }
       val home = event.side == "home"
-      val name = shortName(event.player) + when (event.kind) {
+      val who = if (event.player.isBlank()) (if (home) match.home.name else match.away.name) else shortName(event.player)
+      val name = who + when (event.kind) {
         "penalty" -> " (P)"
         "own_goal" -> " (OG)"
         else -> ""
@@ -285,11 +302,18 @@ internal object WidgetRenderer {
     val views = RemoteViews(context.packageName, R.layout.np_widget_page_stats)
     applyMiniHeader(views, match, labels.stats, labels, images)
     views.removeAllViews(R.id.np_stat_rows)
-    var room = size.rows(19, 5)
+    val roomy = size.detailBody >= 150
+    var room = size.rows(if (roomy) 36 else 19, 5)
     fun add(key: String, pair: FeedStatPair?, percent: Boolean, decimal: Boolean) {
       if (pair == null || room <= 0) return
       room--
       val row = RemoteViews(context.packageName, R.layout.np_widget_stat_row)
+      if (roomy) {
+        row.padVertical(context, R.id.np_stat_row, 7)
+        row.textSp(R.id.np_stat_home, 16f)
+        row.textSp(R.id.np_stat_away, 16f)
+        row.textSp(R.id.np_stat_label, 12f)
+      }
       row.setTextViewText(R.id.np_stat_label, statLabel(key, arabic))
       row.setTextViewText(R.id.np_stat_home, formatStat(pair.home, percent, decimal))
       row.setTextViewText(R.id.np_stat_away, formatStat(pair.away, percent, decimal))
