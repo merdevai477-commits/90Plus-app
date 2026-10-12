@@ -81,6 +81,7 @@ import {
   GlobalNotificationTrayBridge,
 } from "../components/common/PushTokenSyncBootstrap";
 import { PushRegistrationReportBootstrap } from "../components/common/PushRegistrationReportBootstrap";
+import { WidgetSyncBootstrap } from "../components/common/WidgetSyncBootstrap";
 import { OtaUpdateBootstrap } from "../components/common/OtaUpdateBootstrap";
 import { OtaPendingReloadGate } from "../components/common/OtaPendingReloadGate";
 import { FootballCacheEpochBootstrap } from "../components/common/FootballCacheEpochBootstrap";
@@ -931,6 +932,7 @@ function RootLayout() {
                                             <ClerkTokenWarmup />
                                             <DeviceSessionRegistrar />
                                             <PushTokenSyncBootstrap />
+                                            <WidgetSyncBootstrap />
                                             <GlobalNotificationTrayBridge />
                                             <WebSocketInitializer>
                                               <PreloadInitializer>

@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figma 90plus 1442:4283: crest + name | status pill + score | crest + name -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/np_page"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:gravity="center"
+  android:orientation="vertical"
+  android:paddingStart="16dp"
+  android:paddingTop="11dp"
+  android:paddingEnd="16dp"
+  android:paddingBottom="26dp">
+
+  <TextView
+    android:id="@+id/np_league"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:ellipsize="end"
+    android:maxLines="1"
+    android:textColor="#8F8F8F"
+    android:textSize="10sp" />
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="6dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <LinearLayout
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:gravity="center_horizontal"
+      android:orientation="vertical">
+
+      <ImageView
+        android:id="@+id/np_home_logo"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter" />
+
+      <TextView
+        android:id="@+id/np_home_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="9dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#A7A7A7"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+    </LinearLayout>
+
+    <LinearLayout
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:gravity="center_horizontal"
+      android:orientation="vertical">
+
+      <TextView
+        android:id="@+id/np_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="19dp"
+        android:background="@drawable/np_widget_chip_live"
+        android:gravity="center"
+        android:maxLines="1"
+        android:minWidth="54dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:textColor="#DE1F1F"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+      <LinearLayout
+        android:id="@+id/np_score"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <TextView
+          android:id="@+id/np_score_home"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:textColor="#FFFFFF"
+          android:textSize="23sp"
+          android:textStyle="bold" />
+
+        <TextView
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginStart="4dp"
+          android:layout_marginEnd="4dp"
+          android:text="-"
+          android:textColor="#FFFFFF"
+          android:textSize="23sp"
+          android:textStyle="bold" />
+
+        <TextView
+          android:id="@+id/np_score_away"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:textColor="#FFFFFF"
+          android:textSize="23sp"
+          android:textStyle="bold" />
+      </LinearLayout>
+
+      <TextView
+        android:id="@+id/np_center"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+    </LinearLayout>
+
+    <LinearLayout
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:gravity="center_horizontal"
+      android:orientation="vertical">
+
+      <ImageView
+        android:id="@+id/np_away_logo"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter" />
+
+      <TextView
+        android:id="@+id/np_away_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="11dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#A7A7A7"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+    </LinearLayout>
+  </LinearLayout>
+</LinearLayout>

@@ -18,6 +18,9 @@ tsconfig.tsbuildinfo
 # version conflicts when React Native or Expo SDK is upgraded.
 ios/
 android/
+# Local Expo modules keep hand-written native sources under android/.
+!modules/*/android/
+modules/*/android/build/
 
 # Local scripts/tools (do not commit)
 *.ps1

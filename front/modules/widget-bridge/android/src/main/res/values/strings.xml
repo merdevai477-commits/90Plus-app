@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="np_widget_label">90PLUS Matches</string>
+  <string name="np_widget_description">Live scores and the next match of the teams you follow.</string>
+  <string name="np_widget_brand" translatable="false">90PLUS</string>
+</resources>
