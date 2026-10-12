@@ -608,6 +608,9 @@ const s = StyleSheet.create({
     borderRadius: AI_BUBBLE_RADIUS,
     overflow: 'hidden',
     backgroundColor: 'rgba(3,2,8,0.94)',
+    // Holds the edge while the bubble is still growing and the Skia rim hasn't redrawn yet.
+    borderWidth: 1,
+    borderColor: 'rgba(167,139,250,0.28)',
   },
   ctaFooter: {
     paddingHorizontal: 10,

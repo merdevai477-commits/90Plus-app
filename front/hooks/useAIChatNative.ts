@@ -19,6 +19,7 @@ import { Storage } from '../services/chatStorageService';
 import { logger } from '../services/logger';
 import { fetchWithClerkAuth, getClerkBearerToken } from '../utils/clerkAuthToken';
 import { setChatSessionActive } from '../utils/chatSessionState';
+import { typingOrbHoldUntil } from '../utils/chatTypingHold';
 import { useLanguageStore } from '../src/i18n/store';
 import {
   decodeChatNavMarker,
@@ -89,14 +90,16 @@ const DEFAULT_DAILY_MESSAGE_LIMIT = 10;
  *   - Small backlog  → 1 word per tick (slow, deliberate typing)
  *   - Medium backlog → 2-3 words per tick (normal speed)
  *   - Large backlog  → 4-8 words per tick (catch up so we don't fall behind)
- *   - Network done   → 6-12 words per tick (drain remaining queue smoothly)
+ *   - Network done   → whatever step finishes the rest in TYPING_DRAIN_* time,
+ *     so a reply that arrives in one burst still types out instead of popping in.
  */
 const TYPING_TICK_MS = 25;
 const TYPING_BACKLOG_LARGE = 60;   // queue length above which we accelerate
 const TYPING_BACKLOG_HUGE = 200;   // queue length above which we sprint
-const TYPING_DRAIN_TICK_MS = 16;   // post-done, slightly faster ticks
-/** Long answers: flush remaining queue instantly when network is done. */
-const TYPING_FLUSH_IMMEDIATE_THRESHOLD = 80;
+const TYPING_DRAIN_TICK_MS = 33;
+const TYPING_DRAIN_MS_PER_WORD = 22;
+const TYPING_DRAIN_MIN_MS = 500;
+const TYPING_DRAIN_MAX_MS = 2600;
 const CODE_BLOCK_REGEX = /```|\|/;
 
 export interface ChatLabels {
@@ -299,6 +302,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   const visibleTypingQueueRef = useRef<string[]>([]);
   const typingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const networkDoneRef = useRef(false);
+  const drainStepRef = useRef(1);
   const pendingDoneCallbackRef = useRef<(() => void) | null>(null);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
 
@@ -673,13 +677,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
    * a short reply still types out at a human pace.
    */
   const computeWordsPerTick = useCallback((queueLen: number): number => {
-    if (networkDoneRef.current) {
-      // Drain phase — finish smoothly but quickly. Bigger steps for huge
-      // tails so a 5000-char essay doesn't take forever after `done`.
-      if (queueLen > TYPING_BACKLOG_HUGE) return 12;
-      if (queueLen > TYPING_BACKLOG_LARGE) return 8;
-      return 6;
-    }
+    if (networkDoneRef.current) return drainStepRef.current;
     if (queueLen > TYPING_BACKLOG_HUGE) return 8;
     if (queueLen > TYPING_BACKLOG_LARGE) return 4;
     if (queueLen > 20) return 3;
@@ -700,6 +698,9 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
       }
       return;
     }
+
+    // The first message's orb is still falling into the black hole; the reply waits for it to land.
+    if (Date.now() < typingOrbHoldUntil()) return;
 
     if (queue.length === 0) {
       // Queue empty — only finish if the network signaled done.
@@ -786,28 +787,13 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     }
 
     const queueLen = visibleTypingQueueRef.current.length;
-    const id = activeAssistantMessageIdRef.current;
-    if (queueLen >= TYPING_FLUSH_IMMEDIATE_THRESHOLD && id) {
-      const remainder = visibleTypingQueueRef.current.splice(0).join('');
-      if (remainder) {
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === id ? { ...m, text: m.text + remainder, isStreaming: false } : m,
-          ),
-        );
-      } else {
-        setMessages(prev =>
-          prev.map(m => (m.id === id ? { ...m, isStreaming: false } : m)),
-        );
-      }
-      activeAssistantMessageIdRef.current = null;
-      pendingDoneCallbackRef.current = null;
-      networkDoneRef.current = false;
-      onAllRendered();
-      return;
-    }
+    const drainMs = Math.min(
+      TYPING_DRAIN_MAX_MS,
+      Math.max(TYPING_DRAIN_MIN_MS, queueLen * TYPING_DRAIN_MS_PER_WORD),
+    );
+    drainStepRef.current = Math.max(1, Math.ceil(queueLen / (drainMs / TYPING_DRAIN_TICK_MS)));
 
-    if (visibleTypingQueueRef.current.length > 0) {
+    if (queueLen > 0) {
       typingTimerRef.current = setInterval(typingTick, TYPING_DRAIN_TICK_MS);
     } else {
       // Nothing queued — finish immediately.

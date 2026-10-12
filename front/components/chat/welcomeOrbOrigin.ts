@@ -5,22 +5,29 @@
 
 export type WelcomeOrbOrigin = { x: number; y: number; size: number };
 
-/** Older than this, the welcome view is long gone and the orb starts from screen centre instead. */
+/** Once the welcome view has been gone this long, the orb just appears in place. */
 const MAX_AGE_MS = 4000;
 
-let origin: (WelcomeOrbOrigin & { at: number }) | null = null;
+let origin: WelcomeOrbOrigin | null = null;
+/** null while the welcome view is still on screen. */
+let leftAt: number | null = null;
 
 export function setWelcomeOrbOrigin(next: WelcomeOrbOrigin): void {
-  origin = { ...next, at: Date.now() };
+  origin = next;
+  leftAt = null;
 }
 
 export function markWelcomeOrbLeft(): void {
-  if (origin) origin.at = Date.now();
+  if (origin) leftAt = Date.now();
+}
+
+export function hasWelcomeOrbOrigin(): boolean {
+  return origin !== null && (leftAt === null || Date.now() - leftAt <= MAX_AGE_MS);
 }
 
 export function takeWelcomeOrbOrigin(): WelcomeOrbOrigin | null {
-  const current = origin;
+  const current = hasWelcomeOrbOrigin() ? origin : null;
   origin = null;
-  if (!current || Date.now() - current.at > MAX_AGE_MS) return null;
-  return { x: current.x, y: current.y, size: current.size };
+  leftAt = null;
+  return current;
 }
