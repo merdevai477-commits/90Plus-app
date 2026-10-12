@@ -562,10 +562,16 @@ function decodeEntities(text: string): string {
     .replace(/&amp;/g, '&');
 }
 
-/** Wikipedia hands back 3840px originals; the widget only needs a card-sized thumbnail. */
+/** Wikipedia hands back 3840px or unscaled originals; the widget only needs a card-sized thumbnail. */
 export function widgetImageUrl(url: string | null): string | null {
   if (!url) return null;
-  return url.replace(/\/\d+px-([^/?]+)/, '/960px-$1');
+  if (/\/\d+px-[^/?]+/.test(url)) return url.replace(/\/\d+px-([^/?]+)/, '/960px-$1');
+  const original = url.match(/^(https:\/\/upload\.wikimedia\.org\/wikipedia\/[^/]+)\/([0-9a-f]\/[0-9a-f]{2})\/([^/?]+\.(?:jpe?g|png|webp))(?:\?.*)?$/i);
+  if (original) {
+    const [, base, hash, file] = original;
+    return `${base}/thumb/${hash}/${file}/960px-${file}`;
+  }
+  return url;
 }
 
 const matchInfoCache = new Map<string, { expires: number; info: WidgetMatchInfo }>();

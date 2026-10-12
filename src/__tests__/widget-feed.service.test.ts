@@ -153,6 +153,10 @@ describe('match info pickers', () => {
 
   it('asks Wikipedia for a card-sized thumbnail', () => {
     expect(widgetImageUrl('https://x.org/thumb/1/1c/A.jpg/3840px-A.jpg?utm=1')).toBe('https://x.org/thumb/1/1c/A.jpg/960px-A.jpg?utm=1');
+    expect(
+      widgetImageUrl('https://upload.wikimedia.org/wikipedia/commons/e/ed/Arena_Cond%C3%A1.jpg?utm_source=en.wikipedia.org'),
+    ).toBe('https://upload.wikimedia.org/wikipedia/commons/thumb/e/ed/Arena_Cond%C3%A1.jpg/960px-Arena_Cond%C3%A1.jpg');
+    expect(widgetImageUrl('https://cdn.example.com/stadium.jpg')).toBe('https://cdn.example.com/stadium.jpg');
     expect(widgetImageUrl(null)).toBeNull();
   });
 });
