@@ -108,23 +108,25 @@ struct MatchesProvider: TimelineProvider {
     let focus = feed.focusMatch
     let featured = feed.featured?.fixtureId == focus?.fixtureId ? feed.featured : nil
 
+    let fixturePages = feed.fixtures.indices.map { WidgetPage.fixture($0) }
     switch family {
     case .systemMedium, .systemLarge, .systemExtraLarge:
       var pages: [WidgetPage] = []
       if focus != nil { pages.append(.live) }
-      if !feed.fixtures.isEmpty { pages.append(.list) }
+      pages.append(contentsOf: fixturePages)
       if featured != nil {
         if featured?.lineup != nil { pages.append(.lineup) }
         if featured?.topPlayers.isEmpty == false { pages.append(.players) }
         if (featured?.momentum.count ?? 0) >= 2 { pages.append(.momentum) }
         if featured?.stats?.hasAny == true { pages.append(.stats) }
       }
-      return pages.isEmpty ? [.list] : pages
+      return pages.isEmpty ? [.empty] : pages
     case .systemSmall:
-      if focus != nil { return [.live] }
-      return [.list]
+      let pages = (focus != nil ? [WidgetPage.live] : []) + fixturePages
+      return pages.isEmpty ? [.empty] : pages
     default:
-      return focus != nil ? [.live] : [.list]
+      if focus != nil { return [.live] }
+      return fixturePages.isEmpty ? [.empty] : [fixturePages[0]]
     }
   }
 

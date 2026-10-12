@@ -21,7 +21,6 @@ import java.util.Locale
 internal object WidgetRenderer {
   private const val MATCHES_URI = "ninetyplus://matches"
   private const val SEARCH_URI = "ninetyplus://search"
-  private const val LIST_ROWS = 3
   private const val LINEUP_NAMES = 4
   private const val LIVE_TEXT = 0xFFDE1F1F.toInt()
   private const val IDLE_TEXT = 0xFF8C8C8C.toInt()
@@ -67,7 +66,7 @@ internal object WidgetRenderer {
         val focus = feed.focusMatch
         val featured = feed.featured?.takeIf { it.fixtureId == focus?.fixtureId }
         if (focus != null) pages += matchPage(context, focus, labels, images)
-        if (feed.fixtures.isNotEmpty()) pages += listPage(context, feed.fixtures, labels, images)
+        feed.fixtures.forEach { pages += matchPage(context, it, labels, images) }
         if (focus != null && featured != null) {
           featured.lineup?.let { pages += lineupPage(context, focus, it, labels, images) }
           if (featured.topPlayers.isNotEmpty()) {
@@ -112,38 +111,9 @@ internal object WidgetRenderer {
       views.setTextViewText(R.id.np_score_home, match.homeScore.toString())
       views.setTextViewText(R.id.np_score_away, match.awayScore.toString())
     } else {
-      views.setTextViewText(R.id.np_center, dayLabel(match.kickoffTs, labels))
+      views.setTextViewText(R.id.np_center, clock(match.kickoffTs))
     }
     views.setOnClickPendingIntent(R.id.np_page, openIntent(context, matchUri(match)))
-    return views
-  }
-
-  private fun listPage(context: Context, fixtures: List<FeedMatch>, labels: WidgetLabels, images: ImageResolver): RemoteViews {
-    val views = RemoteViews(context.packageName, R.layout.np_widget_page_list)
-    views.removeAllViews(R.id.np_rows)
-    val shown = fixtures.take(LIST_ROWS)
-    for (match in shown) {
-      val row = RemoteViews(context.packageName, R.layout.np_widget_row_fixture)
-      row.setTextViewText(R.id.np_home_name, match.home.name)
-      row.setTextViewText(R.id.np_away_name, match.away.name)
-      images.crest(match.home.logo)?.let { row.setImageViewBitmap(R.id.np_home_logo, it) }
-      images.crest(match.away.logo)?.let { row.setImageViewBitmap(R.id.np_away_logo, it) }
-      row.setTextViewText(R.id.np_row_time, rowTime(match, labels))
-      val chip = match.status == "upcoming"
-      row.setViewVisibility(R.id.np_row_status, if (chip) View.GONE else View.VISIBLE)
-      if (!chip) {
-        row.setTextViewText(R.id.np_row_status, statusWord(match, labels))
-        row.setTextColor(R.id.np_row_status, if (match.isLive) LIVE_TEXT else IDLE_TEXT)
-        row.setInt(
-          R.id.np_row_status,
-          "setBackgroundResource",
-          if (match.isLive) R.drawable.np_widget_chip_live else R.drawable.np_widget_chip_idle,
-        )
-      }
-      row.setOnClickPendingIntent(R.id.np_row, openIntent(context, matchUri(match)))
-      views.addView(R.id.np_rows, row)
-    }
-    views.setOnClickPendingIntent(R.id.np_page, openIntent(context, shown.firstOrNull()?.let(::matchUri) ?: MATCHES_URI))
     return views
   }
 
@@ -291,23 +261,7 @@ internal object WidgetRenderer {
     "ht" -> labels.halftime
     "ft" -> labels.finished
     "off" -> labels.postponed
-    else -> clock(match.kickoffTs)
-  }
-
-  private fun statusWord(match: FeedMatch, labels: WidgetLabels): String = when (match.status) {
-    "live" -> labels.live
-    "ht" -> labels.halftime
-    "ft" -> labels.finished
-    "off" -> labels.postponed
-    else -> labels.upcoming
-  }
-
-  private fun rowTime(match: FeedMatch, labels: WidgetLabels): String {
-    if (match.isLive && match.homeScore != null && match.awayScore != null) {
-      return "${match.homeScore} - ${match.awayScore}"
-    }
-    val time = clock(match.kickoffTs)
-    return if (isToday(match.kickoffTs)) time else "${dayLabel(match.kickoffTs, labels)} $time"
+    else -> if (isToday(match.kickoffTs)) labels.upcoming else dayLabel(match.kickoffTs, labels)
   }
 
   private fun clock(kickoffTs: Long): String =

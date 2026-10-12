@@ -189,7 +189,7 @@ describe('buildWidgetFeed', () => {
     expect(feed.primary?.fixtureId).toBe(100);
   });
 
-  it('lists one fixture when two followed teams share it', async () => {
+  it('gives each followed club one card and counts a shared fixture for both clubs', async () => {
     const shared = fixture(300, [10, 'Ahly'], [20, 'Zamalek'], 'NS', NOW_SEC + 7200);
     const later = fixture(301, [10, 'Ahly'], [40, 'Pyramids'], 'NS', NOW_SEC + 86400);
     matchesMock.mockImplementation(async (id: number) => ({
@@ -203,7 +203,20 @@ describe('buildWidgetFeed', () => {
     const feed = await buildWidgetFeed([10, 20], 'en', NOW);
 
     expect(feed.primary).toBeNull();
-    expect(feed.fixtures.map((match) => match.fixtureId)).toEqual([300, 301]);
+    expect(feed.fixtures.map((match) => match.fixtureId)).toEqual([300]);
+  });
+
+  it('shows only the next match of a club that has several upcoming', async () => {
+    const soon = fixture(400, [10, 'Ahly'], [50, 'Masry'], 'NS', NOW_SEC + 7200);
+    const later = fixture(401, [10, 'Ahly'], [60, 'Pyramids'], 'NS', NOW_SEC + 3 * 86400);
+    const other = fixture(402, [30, 'Barcelona'], [70, 'Sevilla'], 'NS', NOW_SEC + 86400);
+    matchesMock.mockImplementation(async (id: number) => ({
+      data: { live: [], upcoming: id === 10 ? [soon, later] : [other], finished: [] },
+    }));
+
+    const feed = await buildWidgetFeed([10, 30], 'en', NOW);
+
+    expect(feed.fixtures.map((match) => match.fixtureId)).toEqual([400, 402]);
   });
 
   it('drops a long-postponed fixture so the next kickoff stays first', async () => {

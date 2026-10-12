@@ -402,7 +402,8 @@ enum WidgetPage: Hashable {
   case momentum
   case lineup
   case stats
-  case list
+  case fixture(Int)
+  case empty
   case match(Int)
 }
 

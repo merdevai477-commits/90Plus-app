@@ -369,17 +369,36 @@ export function choosePrimary(
   return recent ? { primary: recent, reason: null } : { primary: null, reason: null };
 }
 
-function listFixtures(matches: WidgetMatch[], primaryId: number | null, nowSec: number): WidgetMatch[] {
+/** One card per followed club: its live match, else its next kickoff. A club on the primary card gets no extra card. */
+function listFixtures(
+  matches: WidgetMatch[],
+  teamIds: number[],
+  primary: WidgetMatch | null,
+  nowSec: number,
+): WidgetMatch[] {
   const stillAhead = nowSec - 3 * 60 * 60;
-  return matches
-    .filter((match) => match.fixtureId !== primaryId)
+  const followed = new Set(teamIds);
+  const covered = new Set<number>();
+  if (primary) [primary.home.id, primary.away.id].forEach((id) => covered.add(id));
+
+  const candidates = matches
+    .filter((match) => match.fixtureId !== primary?.fixtureId)
     .filter((match) => isLiveStatus(match.status) || match.status === 'upcoming' || match.status === 'off')
     .filter((match) => isLiveStatus(match.status) || match.kickoffTs >= stillAhead)
     .sort((a, b) => {
       const rank = (match: WidgetMatch) => (isLiveStatus(match.status) ? 0 : 1);
       return rank(a) - rank(b) || byKickoff(a, b);
-    })
-    .slice(0, FIXTURE_LIST_CAP);
+    });
+
+  const picked: WidgetMatch[] = [];
+  for (const match of candidates) {
+    const clubs = [match.home.id, match.away.id].filter((id) => followed.has(id));
+    if (clubs.length === 0 || clubs.every((id) => covered.has(id))) continue;
+    clubs.forEach((id) => covered.add(id));
+    picked.push(match);
+    if (picked.length >= FIXTURE_LIST_CAP) break;
+  }
+  return picked;
 }
 
 /** One followed team with its nearest match, live clock and score overlaid. */
@@ -494,7 +513,7 @@ export async function buildWidgetFeed(
     teams: unique,
     primary,
     primaryReason: reason,
-    fixtures: listFixtures(followedMatches, primary?.fixtureId ?? null, nowSec),
+    fixtures: listFixtures(followedMatches, teamIds, primary, nowSec),
     featured,
   };
 }

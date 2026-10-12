@@ -53,8 +53,8 @@ struct MatchesWidgetView: View {
     switch entry.page {
     case .live, .players, .momentum, .lineup, .stats:
       return feed.focusMatch?.deepLink ?? searchURL
-    case .list:
-      return feed.fixtures.first?.deepLink ?? searchURL
+    case .fixture(let index) where feed.fixtures.indices.contains(index):
+      return feed.fixtures[index].deepLink ?? searchURL
     case .match(let index) where feed.teams.indices.contains(index):
       return feed.teams[index].match?.deepLink ?? searchURL
     default:
@@ -225,7 +225,7 @@ private struct StatusBadge: View {
     case "off":
       Text(labels.postponed)
     default:
-      Text(KickoffText.time(match.kickoff, arabic: arabic))
+      Text(Calendar.current.isDateInToday(match.kickoff) ? labels.upcoming : KickoffText.day(match.kickoff, labels: labels, arabic: arabic))
     }
   }
 }
@@ -299,10 +299,12 @@ private struct MediumView: View {
         if let stats = feed.featured?.stats, stats.hasAny, let match = feed.focusMatch {
           StatsPage(entry: entry, match: match, stats: stats)
         }
+      case .fixture(let index) where feed.fixtures.indices.contains(index):
+        MatchCard(entry: entry, match: feed.fixtures[index])
       case .match(let index) where feed.teams.indices.contains(index):
         if let match = feed.teams[index].match { MatchCard(entry: entry, match: match) }
       default:
-        FixturesPage(entry: entry, fixtures: Array(feed.fixtures.prefix(3)))
+        MessageView(text: entry.labels.followTeams)
       }
     }
   }
@@ -364,8 +366,8 @@ private struct MatchCard: View {
           if match.score != nil {
             ScoreText(match: match, size: 23)
           } else {
-            Text(KickoffText.day(match.kickoff, labels: entry.labels, arabic: entry.isArabic))
-              .font(.system(size: 15, weight: .semibold))
+            Text(KickoffText.time(match.kickoff, arabic: entry.isArabic))
+              .font(.system(size: 20, weight: .bold))
               .foregroundStyle(.white)
               .lineLimit(1)
               .minimumScaleFactor(0.7)
@@ -375,84 +377,6 @@ private struct MatchCard: View {
         TeamColumn(side: match.away, image: entry.image(match.away.logo), crest: 42, spacing: 11)
       }
       .environment(\.layoutDirection, .leftToRight)
-    }
-  }
-}
-
-/// One row per fixture: both crests and names, then the localized kickoff. Home stays on the left.
-private struct FixturesPage: View {
-  let entry: MatchesEntry
-  let fixtures: [FeedMatch]
-
-  var body: some View {
-    if fixtures.isEmpty {
-      MessageView(text: entry.labels.followTeams)
-    } else {
-      VStack(alignment: .leading, spacing: 6) {
-        BrandMark()
-        ForEach(Array(fixtures.enumerated()), id: \.offset) { _, match in
-          if let link = match.deepLink {
-            Link(destination: link) { FixtureRow(entry: entry, match: match) }
-          } else {
-            FixtureRow(entry: entry, match: match)
-          }
-        }
-      }
-      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-  }
-}
-
-private struct FixtureRow: View {
-  let entry: MatchesEntry
-  let match: FeedMatch
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 1) {
-      HStack(spacing: 4) {
-        Crest(image: entry.image(match.home.logo), size: 14)
-        Text(match.home.name)
-          .lineLimit(1)
-          .frame(maxWidth: .infinity, alignment: .leading)
-        Crest(image: entry.image(match.away.logo), size: 14)
-        Text(match.away.name)
-          .lineLimit(1)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      .font(.system(size: 12, weight: .medium))
-      .foregroundStyle(.white)
-      HStack(spacing: 4) {
-        Text(timeText(match))
-          .font(.system(size: 9))
-          .foregroundStyle(Palette.rowTime)
-          .lineLimit(1)
-        if match.status != "upcoming" {
-          Text(statusText(match))
-            .font(.system(size: 8, weight: .medium))
-            .foregroundStyle(match.isLive ? Palette.liveText : Palette.idleText)
-            .padding(.vertical, 2)
-            .padding(.horizontal, 6)
-            .background(match.isLive ? Palette.liveFill : Palette.idleFill, in: Capsule())
-        }
-      }
-    }
-    .environment(\.layoutDirection, .leftToRight)
-  }
-
-  private func timeText(_ match: FeedMatch) -> String {
-    if match.isLive, let score = match.score { return "\(score.home) - \(score.away)" }
-    let time = KickoffText.time(match.kickoff, arabic: entry.isArabic)
-    if Calendar.current.isDateInToday(match.kickoff) { return time }
-    return "\(KickoffText.day(match.kickoff, labels: entry.labels, arabic: entry.isArabic)) \(time)"
-  }
-
-  private func statusText(_ match: FeedMatch) -> String {
-    switch match.status {
-    case "live": return entry.labels.live
-    case "ht": return entry.labels.halftime
-    case "ft": return entry.labels.finished
-    case "off": return entry.labels.postponed
-    default: return entry.labels.upcoming
     }
   }
 }
@@ -764,7 +688,7 @@ private struct SmallView: View {
 
   private func currentMatch(_ feed: WidgetFeed) -> FeedMatch? {
     switch entry.page {
-    case .list: return feed.fixtures.first
+    case .fixture(let index) where feed.fixtures.indices.contains(index): return feed.fixtures[index]
     default: return feed.focusMatch ?? feed.fixtures.first
     }
   }
@@ -786,8 +710,8 @@ private struct SmallMatchCard: View {
       if match.score != nil {
         ScoreText(match: match, size: 24)
       } else {
-        Text(KickoffText.day(match.kickoff, labels: entry.labels, arabic: entry.isArabic))
-          .font(.system(size: 14, weight: .semibold))
+        Text(KickoffText.time(match.kickoff, arabic: entry.isArabic))
+          .font(.system(size: 18, weight: .bold))
           .foregroundStyle(.white)
           .lineLimit(1)
           .minimumScaleFactor(0.7)
