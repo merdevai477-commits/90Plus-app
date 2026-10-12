@@ -5,7 +5,14 @@ jest.mock('../services/football-data-cache.service', () => ({
     getMatchMomentum: jest.fn(),
     getMatchStatistics: jest.fn(),
     getMatchEvents: jest.fn(),
+    getFixtureDetailsBundle: jest.fn(async () => null),
+    getCached365FixtureForm: jest.fn(async () => ({ data: null })),
+    getStandingsParsed: jest.fn(async () => ({ flat: [], groups: [] })),
   },
+}));
+
+jest.mock('../services/stadium-image.service', () => ({
+  resolveVenueImage: jest.fn(async () => ({ imageUrl: null, isPlaceholder: true })),
 }));
 
 jest.mock('../services/live-fixture-cache.service', () => ({
@@ -26,11 +33,17 @@ import { readLiveFixtureById } from '../services/live-fixture-cache.service';
 import {
   buildWidgetFeed,
   clearFeaturedMemory,
+  clearMatchInfoCache,
   compressMomentum,
   keepLastFeatured,
   parseWidgetTeamIds,
+  pickForm,
+  pickHeadToHead,
   pickKeyEvents,
   pickNearestFixture,
+  pickRecentGoal,
+  toWidgetMatch,
+  widgetImageUrl,
 } from '../services/widget-feed.service';
 
 const NOW = Date.UTC(2026, 9, 12, 18, 0, 0);
@@ -70,6 +83,7 @@ const liveMock = readLiveFixtureById as jest.Mock;
 beforeEach(() => {
   jest.clearAllMocks();
   clearFeaturedMemory();
+  clearMatchInfoCache();
   liveMock.mockResolvedValue(null);
   eventsMock.mockResolvedValue([]);
   lineupsMock.mockResolvedValue([]);
@@ -85,6 +99,8 @@ describe('keepLastFeatured', () => {
     lineup: null,
     stats: null,
     events: [{ minute: 10, extra: null, kind: 'goal' as const, side: 'home' as const, player: 'A' }],
+    goal: null,
+    info: null,
   };
   const empty = { ...full, topPlayers: [], momentum: [], events: [] };
 
@@ -97,6 +113,75 @@ describe('keepLastFeatured', () => {
   it('forgets a build older than four hours', () => {
     keepLastFeatured(full, 'en', 0);
     expect(keepLastFeatured(empty, 'en', 4 * 60 * 60 * 1000 + 1)).toEqual(empty);
+  });
+});
+
+describe('match info pickers', () => {
+  const match = () => toWidgetMatch(fixture(500, [10, 'Ahly'], [20, 'Zamalek'], 'NS', NOW_SEC + 3600));
+  const game = (id: number, daysAgo: number, home: number, away: number, hs: number, as: number) => ({
+    id,
+    startTime: new Date(NOW - daysAgo * 86_400_000).toISOString(),
+    homeCompetitor: { id: home, score: hs },
+    awayCompetitor: { id: away, score: as },
+  });
+
+  it('builds last-five form oldest first and skips this fixture and unplayed games', () => {
+    const games = [
+      game(500, 0, 10, 20, -1, -1),
+      game(1, 1, 10, 30, 2, 0),
+      game(2, 8, 40, 10, 1, 1),
+      game(3, 15, 10, 50, 0, 3),
+      game(4, 22, 60, 10, 0, 1),
+      game(5, 29, 10, 70, 4, 4),
+      game(6, 36, 10, 80, 9, 0),
+    ];
+    expect(pickForm(games, 10, match())).toEqual(['D', 'W', 'L', 'D', 'W']);
+  });
+
+  it('orients head-to-head goals to today\'s home side', () => {
+    const h2h = pickHeadToHead([game(1, 30, 20, 10, 2, 1), game(2, 90, 10, 20, 3, 0), game(3, 120, 10, 99, 1, 0)], match());
+    expect(h2h).toEqual({
+      homeWins: 1,
+      draws: 0,
+      awayWins: 1,
+      meetings: [
+        { ts: Math.floor((NOW - 30 * 86_400_000) / 1000), homeGoals: 1, awayGoals: 2 },
+        { ts: Math.floor((NOW - 90 * 86_400_000) / 1000), homeGoals: 3, awayGoals: 0 },
+      ],
+    });
+  });
+
+  it('asks Wikipedia for a card-sized thumbnail', () => {
+    expect(widgetImageUrl('https://x.org/thumb/1/1c/A.jpg/3840px-A.jpg?utm=1')).toBe('https://x.org/thumb/1/1c/A.jpg/960px-A.jpg?utm=1');
+    expect(widgetImageUrl(null)).toBeNull();
+  });
+});
+
+describe('pickRecentGoal', () => {
+  const live = (elapsed: number) => {
+    const f = fixture(100, [10, 'Ahly'], [20, 'Zamalek'], '2H', NOW_SEC - 4000, [1, 0]);
+    f.fixture.status.elapsed = elapsed;
+    return toWidgetMatch(f);
+  };
+  const events = [
+    { time: { elapsed: 12, extra: null }, team: { id: 20 }, player: { id: 5, name: 'Early' }, type: 'Card', detail: 'Yellow Card' },
+    { time: { elapsed: 50, extra: null }, team: { id: 10 }, player: { id: 77, name: 'Scorer' }, type: 'Goal', detail: 'Normal Goal' },
+  ];
+  const lineups = [{ team: { id: 10 }, startXI: [{ player: { id: 9001, scores365MemberId: 77, name: 'Scorer', photo: 'p.png' } }] }];
+
+  it('leads with a fresh goal and finds the scorer photo through the lineup member id', () => {
+    expect(pickRecentGoal(events, lineups, live(52))).toEqual({
+      minute: 50,
+      extra: null,
+      kind: 'goal',
+      side: 'home',
+      player: 'Scorer',
+      photo: 'p.png',
+    });
+  });
+
+  it('drops the goal once a few match minutes have passed', () => {
+    expect(pickRecentGoal(events, lineups, live(55))).toBeNull();
   });
 });
 
@@ -265,6 +350,44 @@ describe('buildWidgetFeed', () => {
       [70, 'own_goal'],
       [80, 'yellow'],
     ]);
+  });
+
+  it('previews an upcoming primary with venue, referee, table, form and head-to-head', async () => {
+    const next = fixture(400, [10, 'Ahly'], [20, 'Zamalek'], 'NS', NOW_SEC + 7200);
+    matchesMock.mockResolvedValue({ data: { live: [], upcoming: [next], finished: [] } });
+    (footballDataCacheService.getFixtureDetailsBundle as jest.Mock).mockResolvedValue({
+      fixture: { fixture: { referee: 'M. Guida' }, league: { season: 2026 } },
+      venue: { id: 0, name: 'T&#252;rk Telekom Arena', city: null, image: 'https://x.org/a/3840px-A.jpg' },
+    });
+    (footballDataCacheService.getStandingsParsed as jest.Mock).mockResolvedValue({
+      flat: [
+        { rank: 1, team: { id: 10 }, points: 30, all: { played: 12 } },
+        { rank: 4, team: { id: 20 }, points: 22, all: { played: 12 } },
+      ],
+      groups: [],
+    });
+    const played = (daysAgo: number, hs: number, as: number) => ({
+      id: 9000 + daysAgo,
+      startTime: new Date(NOW - daysAgo * 86_400_000).toISOString(),
+      homeCompetitor: { id: 10, score: hs },
+      awayCompetitor: { id: 20, score: as },
+    });
+    (footballDataCacheService.getCached365FixtureForm as jest.Mock).mockResolvedValue({
+      data: { home: { recentGames: [played(7, 2, 0)] }, away: { recentGames: [played(7, 2, 0)] }, meetings: [played(7, 2, 0)] },
+    });
+
+    const feed = await buildWidgetFeed([10], 'en', NOW, [400]);
+
+    expect(feed.featured?.info).toEqual({
+      venue: 'Türk Telekom Arena',
+      city: null,
+      venueImage: 'https://x.org/a/960px-A.jpg',
+      referee: 'M. Guida',
+      home: { rank: 1, points: 30, played: 12, form: ['W'] },
+      away: { rank: 4, points: 22, played: 12, form: ['L'] },
+      h2h: { homeWins: 1, draws: 0, awayWins: 0, meetings: [{ ts: Math.floor((NOW - 7 * 86_400_000) / 1000), homeGoals: 2, awayGoals: 0 }] },
+    });
+    expect(feed.featured?.events).toEqual([]);
   });
 
   it('drops an unresolvable favorite and falls back to the live followed match', async () => {

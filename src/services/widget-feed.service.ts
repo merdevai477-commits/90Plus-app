@@ -7,6 +7,7 @@ import prisma from '../lib/prisma';
 import { footballDataCacheService } from './football-data-cache.service';
 import { readLiveFixtureById } from './live-fixture-cache.service';
 import { matchCacheService, type FixtureFromAPI } from './match-cache.service';
+import { resolveVenueImage } from './stadium-image.service';
 import { logger } from '../utils/logger';
 
 export const WIDGET_MAX_TEAMS = 8;
@@ -16,6 +17,13 @@ const FIXTURE_LIST_CAP = 6;
 /** Enough for every scorer of a lopsided game; the widget trims rows to the space it has. */
 const WIDGET_EVENT_LIMIT = 10;
 const FEATURED_SIDE_BUDGET_MS = 2_000;
+/** Match minutes a goal stays the widget's lead page. */
+const GOAL_FLASH_MINUTES = 3;
+const FORM_GAMES = 5;
+const H2H_MEETINGS = 3;
+/** Venue, table and form barely move during a match; a partial answer is retried sooner. */
+const MATCH_INFO_TTL_MS = 15 * 60 * 1000;
+const MATCH_INFO_RETRY_MS = 2 * 60 * 1000;
 /** A finished match stays on the widget this long before the next fixture takes over. */
 const RECENT_FINISH_WINDOW_SEC = 3 * 60 * 60;
 
@@ -100,6 +108,43 @@ export interface WidgetEvent {
   player: string;
 }
 
+export type WidgetFormResult = 'W' | 'D' | 'L';
+
+export interface WidgetTeamInfo {
+  rank: number | null;
+  points: number | null;
+  played: number | null;
+  /** Last finished games, oldest first. */
+  form: WidgetFormResult[];
+}
+
+/** Goals are oriented to this fixture: `homeGoals` belong to today's home side. */
+export interface WidgetMeeting {
+  ts: number;
+  homeGoals: number;
+  awayGoals: number;
+}
+
+export interface WidgetMatchInfo {
+  venue: string | null;
+  city: string | null;
+  venueImage: string | null;
+  referee: string | null;
+  home: WidgetTeamInfo;
+  away: WidgetTeamInfo;
+  h2h: { homeWins: number; draws: number; awayWins: number; meetings: WidgetMeeting[] } | null;
+}
+
+/** The latest goal while it is still news, so the widget can lead with it. */
+export interface WidgetGoal {
+  minute: number;
+  extra: number | null;
+  kind: 'goal' | 'penalty' | 'own_goal';
+  side: 'home' | 'away';
+  player: string;
+  photo: string | null;
+}
+
 export interface WidgetFeatured {
   fixtureId: number;
   topPlayers: WidgetTopPlayer[];
@@ -108,6 +153,8 @@ export interface WidgetFeatured {
   stats: WidgetStats | null;
   /** Goals and red cards always; yellow cards only fill spare rows. Chronological. */
   events: WidgetEvent[];
+  goal: WidgetGoal | null;
+  info: WidgetMatchInfo | null;
 }
 
 export type WidgetPrimaryReason = 'favorite' | 'live' | null;
@@ -392,6 +439,7 @@ export function keepLastFeatured(featured: WidgetFeatured, language: string, now
         lineup: featured.lineup ?? previous.lineup,
         stats: featured.stats ?? previous.stats,
         events: featured.events.length ? featured.events : previous.events,
+        info: featured.info ?? previous.info,
       }
     : featured;
   lastFeatured.delete(key);
@@ -403,8 +451,189 @@ export function keepLastFeatured(featured: WidgetFeatured, language: string, now
   return merged;
 }
 
+/**
+ * Event player ids are 365 member ids, not athlete ids, so the photo comes from the lineup
+ * entry with the same member id (name match as a fallback).
+ */
+function scorerPhoto(event: any, lineups: any[]): string | null {
+  const memberId = event?.player?.id;
+  const name = String(event?.player?.name ?? '').trim().toLowerCase();
+  for (const lineup of lineups ?? []) {
+    for (const item of [...(lineup?.startXI ?? []), ...(lineup?.substitutes ?? [])]) {
+      const p = item?.player ?? {};
+      const sameMember = memberId != null && (p.scores365MemberId === memberId || p.id === memberId);
+      const sameName = name !== '' && String(p.name ?? '').trim().toLowerCase() === name;
+      if ((sameMember || sameName) && p.photo) return String(p.photo);
+    }
+  }
+  return null;
+}
+
+export function pickRecentGoal(events: any[], lineups: any[], match: WidgetMatch): WidgetGoal | null {
+  if (match.status !== 'live' || match.elapsed == null) return null;
+  let latest: { event: any; kind: WidgetGoal['kind']; minute: number; extra: number } | null = null;
+  for (const event of events ?? []) {
+    const kind = eventKind(event);
+    if (kind !== 'goal' && kind !== 'penalty' && kind !== 'own_goal') continue;
+    const teamId = event?.team?.id;
+    if (teamId !== match.home.id && teamId !== match.away.id) continue;
+    const minute = Number(event?.time?.elapsed);
+    if (!Number.isFinite(minute)) continue;
+    const extra = Number(event?.time?.extra) > 0 ? Number(event.time.extra) : 0;
+    if (!latest || minute * 100 + extra >= latest.minute * 100 + latest.extra) latest = { event, kind, minute, extra };
+  }
+  if (!latest) return null;
+  const clock = match.elapsed + (match.extra ?? 0);
+  if (clock - (latest.minute + latest.extra) > GOAL_FLASH_MINUTES) return null;
+  return {
+    minute: latest.minute,
+    extra: latest.extra || null,
+    kind: latest.kind,
+    side: latest.event.team.id === match.home.id ? 'home' : 'away',
+    player: String(latest.event?.player?.name ?? '').trim(),
+    photo: scorerPhoto(latest.event, lineups),
+  };
+}
+
+function gameTs(game: any): number {
+  const ms = Date.parse(String(game?.startTime ?? ''));
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
+}
+
+/** Finished 365 games before this fixture, newest first. */
+function finishedBefore(games: any[], match: WidgetMatch): any[] {
+  return (games ?? [])
+    .filter((game) => {
+      if (Number(game?.id) === match.fixtureId) return false;
+      const home = Number(game?.homeCompetitor?.score);
+      const away = Number(game?.awayCompetitor?.score);
+      const ts = gameTs(game);
+      return home >= 0 && away >= 0 && ts > 0 && ts < match.kickoffTs;
+    })
+    .sort((a, b) => gameTs(b) - gameTs(a));
+}
+
+export function pickForm(games: any[], teamId: number, match: WidgetMatch): WidgetFormResult[] {
+  return finishedBefore(games, match)
+    .slice(0, FORM_GAMES)
+    .reverse()
+    .map((game) => {
+      const home = Number(game.homeCompetitor.score);
+      const away = Number(game.awayCompetitor.score);
+      const mine = game.homeCompetitor?.id === teamId ? home : away;
+      const theirs = game.homeCompetitor?.id === teamId ? away : home;
+      return mine > theirs ? 'W' : mine < theirs ? 'L' : 'D';
+    });
+}
+
+export function pickHeadToHead(meetings: any[], match: WidgetMatch): WidgetMatchInfo['h2h'] {
+  const games = finishedBefore(meetings, match).filter((game) => {
+    const ids = [game.homeCompetitor?.id, game.awayCompetitor?.id];
+    return ids.includes(match.home.id) && ids.includes(match.away.id);
+  });
+  if (games.length === 0) return null;
+  const oriented = games.map((game) => {
+    const flipped = game.homeCompetitor.id !== match.home.id;
+    const home = Number(game.homeCompetitor.score);
+    const away = Number(game.awayCompetitor.score);
+    return { ts: gameTs(game), homeGoals: flipped ? away : home, awayGoals: flipped ? home : away };
+  });
+  return {
+    homeWins: oriented.filter((m) => m.homeGoals > m.awayGoals).length,
+    draws: oriented.filter((m) => m.homeGoals === m.awayGoals).length,
+    awayWins: oriented.filter((m) => m.homeGoals < m.awayGoals).length,
+    meetings: oriented.slice(0, H2H_MEETINGS),
+  };
+}
+
+function tableEntry(rows: any[], teamId: number): Pick<WidgetTeamInfo, 'rank' | 'points' | 'played'> {
+  const row = (rows ?? []).find((r) => r?.team?.id === teamId);
+  const num = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : null);
+  return { rank: num(row?.rank), points: num(row?.points), played: num(row?.all?.played) };
+}
+
+/** Upstream venue names arrive HTML-escaped ("T&#252;rk Telekom Arena"). */
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+/** Wikipedia hands back 3840px originals; the widget only needs a card-sized thumbnail. */
+export function widgetImageUrl(url: string | null): string | null {
+  if (!url) return null;
+  return url.replace(/\/\d+px-([^/?]+)/, '/960px-$1');
+}
+
+const matchInfoCache = new Map<string, { expires: number; info: WidgetMatchInfo }>();
+
+export function clearMatchInfoCache(): void {
+  matchInfoCache.clear();
+}
+
+async function buildMatchInfo(match: WidgetMatch, language: string): Promise<WidgetMatchInfo | null> {
+  const key = `${match.fixtureId}:${language}`;
+  const cached = matchInfoCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.info;
+
+  const [bundle, form] = await Promise.all([
+    withBudget(footballDataCacheService.getFixtureDetailsBundle(match.fixtureId, { language }).catch(() => null), null),
+    withBudget(footballDataCacheService.getCached365FixtureForm(match.fixtureId, language).catch(() => null), null),
+  ]);
+  const fixture = bundle?.fixture ?? null;
+  const venueRaw = bundle?.venue ?? fixture?.fixture?.venue ?? null;
+  const venue = venueRaw?.name ? decodeEntities(String(venueRaw.name)).trim() : null;
+  const season = Number(fixture?.league?.season) || new Date(match.kickoffTs * 1000).getUTCFullYear();
+
+  const [table, image] = await Promise.all([
+    withBudget(
+      footballDataCacheService.getStandingsParsed(match.league.id, season, language).catch(() => null),
+      null,
+    ),
+    venueRaw?.image
+      ? Promise.resolve(String(venueRaw.image))
+      : withBudget(
+          resolveVenueImage({ venueId: venueRaw?.id ?? null, venueName: venue, fast: true })
+            .then((lookup) => (lookup.isPlaceholder ? null : lookup.imageUrl))
+            .catch(() => null),
+          null,
+        ),
+  ]);
+
+  const data = form?.data ?? null;
+  const info: WidgetMatchInfo = {
+    venue,
+    city: venueRaw?.city ? decodeEntities(String(venueRaw.city)) : null,
+    venueImage: widgetImageUrl(image),
+    referee: fixture?.fixture?.referee ? decodeEntities(String(fixture.fixture.referee)).trim() || null : null,
+    home: { ...tableEntry(table?.flat ?? [], match.home.id), form: pickForm(data?.home?.recentGames ?? [], match.home.id, match) },
+    away: { ...tableEntry(table?.flat ?? [], match.away.id), form: pickForm(data?.away?.recentGames ?? [], match.away.id, match) },
+    h2h: pickHeadToHead(data?.meetings ?? [], match),
+  };
+  const hasAnything =
+    info.venue || info.referee || info.home.rank != null || info.home.form.length > 0 || info.h2h != null;
+  if (!hasAnything) return null;
+  const complete = info.venue != null && info.home.form.length > 0 && info.home.rank != null;
+  matchInfoCache.set(key, { expires: Date.now() + (complete ? MATCH_INFO_TTL_MS : MATCH_INFO_RETRY_MS), info });
+  if (matchInfoCache.size > FEATURED_MEMORY_CAP) {
+    const oldest = matchInfoCache.keys().next().value;
+    if (oldest !== undefined) matchInfoCache.delete(oldest);
+  }
+  return info;
+}
+
+/** Before kick-off only the venue, table, form and head-to-head exist. */
+async function buildPreview(match: WidgetMatch, language: string): Promise<WidgetFeatured | null> {
+  const info = await buildMatchInfo(match, language);
+  if (!info) return null;
+  return { fixtureId: match.fixtureId, topPlayers: [], momentum: [], lineup: null, stats: null, events: [], goal: null, info };
+}
+
 async function buildFeatured(match: WidgetMatch, language: string): Promise<WidgetFeatured> {
-  const [lineups, momentum, statistics, events] = await Promise.all([
+  const [lineups, momentum, statistics, events, info] = await Promise.all([
     footballDataCacheService.getMatchLineups(match.fixtureId, { language }).catch(() => []),
     footballDataCacheService.getMatchMomentum(match.fixtureId, { language }).catch(() => null),
     withBudget(
@@ -415,6 +644,7 @@ async function buildFeatured(match: WidgetMatch, language: string): Promise<Widg
       footballDataCacheService.getMatchEvents(match.fixtureId, { language }).catch(() => []),
       [],
     ),
+    buildMatchInfo(match, language).catch(() => null),
   ]);
   return keepLastFeatured(
     {
@@ -424,6 +654,8 @@ async function buildFeatured(match: WidgetMatch, language: string): Promise<Widg
       lineup: pickOfficialLineup(lineups, match.home.id),
       stats: pickWidgetStats(statistics, match.home.id),
       events: pickKeyEvents(events, match),
+      goal: pickRecentGoal(events, lineups, match),
+      info,
     },
     language,
   );
@@ -601,7 +833,11 @@ export async function buildWidgetFeed(
 
   const { primary, reason } = choosePrimary(favorites, followedMatches, nowSec);
   const showFeatured = primary != null && (isLiveStatus(primary.status) || primary.status === 'ft');
-  const featured = showFeatured ? await buildFeatured(primary, language) : null;
+  const featured = showFeatured
+    ? await buildFeatured(primary, language)
+    : primary?.status === 'upcoming'
+      ? await buildPreview(primary, language).catch(() => null)
+      : null;
   const hasLive =
     (primary != null && isLiveStatus(primary.status)) || followedMatches.some((match) => isLiveStatus(match.status));
 
