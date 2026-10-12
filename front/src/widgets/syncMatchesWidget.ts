@@ -17,10 +17,12 @@ const LABELS: Record<WidgetLanguage, WidgetLabels> = {
     topPlayers: 'Top rated',
     momentum: 'Match momentum',
     myTeams: 'My teams',
-    followTeams: 'Follow teams in 90PLUS to see their matches here',
+    followTeams: 'Follow teams on 90Plus to see their matches here.',
     vs: 'vs',
     today: 'Today',
     tomorrow: 'Tomorrow',
+    lineup: 'Lineup',
+    stats: 'Stats',
   },
   ar: {
     live: 'مباشر',
@@ -31,10 +33,12 @@ const LABELS: Record<WidgetLanguage, WidgetLabels> = {
     topPlayers: 'الأعلى تقييمًا',
     momentum: 'زخم المباراة',
     myTeams: 'فرقي',
-    followTeams: 'تابع فرقك في 90PLUS لتظهر مبارياتها هنا',
+    followTeams: 'تابع فرق في 90Plus عشان تشوف ماتشاتها هنا',
     vs: 'vs',
     today: 'اليوم',
     tomorrow: 'غدًا',
+    lineup: 'التشكيلة',
+    stats: 'الإحصائيات',
   },
 };
 
@@ -51,8 +55,13 @@ let lastSignature = '';
  * Hands the followed team list to the native widgets and asks them to refresh.
  * `force` re-fetches even when the team list is unchanged (e.g. app returning to foreground).
  */
-export function syncMatchesWidget(teamIds: number[], language: WidgetLanguage, force = false): void {
-  const signature = `${language}|${teamIds.join(',')}`;
+export function syncMatchesWidget(
+  teamIds: number[],
+  language: WidgetLanguage,
+  force = false,
+  favoriteIds: number[] = [],
+): void {
+  const signature = `${language}|${teamIds.join(',')}|${favoriteIds.join(',')}`;
   const changed = signature !== lastSignature;
   if (!changed && !force) return;
   const apiBase = widgetApiBase();
@@ -60,6 +69,7 @@ export function syncMatchesWidget(teamIds: number[], language: WidgetLanguage, f
     if (changed) {
       setWidgetConfig({
         teamIds,
+        favoriteIds,
         apiBase,
         language,
         labels: LABELS[language],
@@ -71,5 +81,5 @@ export function syncMatchesWidget(teamIds: number[], language: WidgetLanguage, f
   } catch (error) {
     logger.warn('[widgets] sync failed:', error);
   }
-  void syncLiveActivities(apiBase, teamIds, language);
+  void syncLiveActivities(apiBase, teamIds, language, favoriteIds);
 }

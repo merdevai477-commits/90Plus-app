@@ -20,6 +20,9 @@ import java.util.Locale
 
 internal object WidgetRenderer {
   private const val MATCHES_URI = "ninetyplus://matches"
+  private const val SEARCH_URI = "ninetyplus://search"
+  private const val LIST_ROWS = 3
+  private const val LINEUP_NAMES = 4
   private const val LIVE_TEXT = 0xFFDE1F1F.toInt()
   private const val IDLE_TEXT = 0xFF8C8C8C.toInt()
   private const val PURPLE = 0xFF8B5CF6.toInt()
@@ -51,38 +54,37 @@ internal object WidgetRenderer {
   private fun build(context: Context, feed: WidgetFeed?, config: WidgetConfig?, allowNetwork: Boolean): RemoteViews {
     val root = RemoteViews(context.packageName, R.layout.np_widget_root)
     val labels = config?.labels ?: WidgetLabels.DEFAULT
-    val rtl = config?.language?.startsWith("ar") == true
     val images = ImageResolver(context, allowNetwork)
 
     val pages = mutableListOf<RemoteViews>()
+    val noScope = config == null || (config.teamIds.isEmpty() && config.favoriteIds.isEmpty())
+    val arabic = config?.language?.startsWith("ar") == true
+    // Home stays on the left. Arabic copy still renders inside each text view.
     when {
-      config == null || config.teamIds.isEmpty() -> pages += messagePage(context, labels.followTeams)
-      feed == null -> pages += messagePage(context, "")
-      feed.teams.isEmpty() -> pages += messagePage(context, labels.followTeams)
+      noScope -> pages += messagePage(context, labels.followTeams, SEARCH_URI)
+      feed == null -> pages += messagePage(context, "", MATCHES_URI)
       else -> {
-        val featuredMatch = feed.featuredMatch
-        val featured = feed.featured
-        if (featuredMatch != null && featured != null) {
-          pages += matchPage(context, featuredMatch, labels, images)
+        val focus = feed.focusMatch
+        val featured = feed.featured?.takeIf { it.fixtureId == focus?.fixtureId }
+        if (focus != null) pages += matchPage(context, focus, labels, images)
+        if (feed.fixtures.isNotEmpty()) pages += listPage(context, feed.fixtures, labels, images)
+        if (focus != null && featured != null) {
+          featured.lineup?.let { pages += lineupPage(context, focus, it, labels, images) }
           if (featured.topPlayers.isNotEmpty()) {
-            pages += playersPage(context, featuredMatch, featured.topPlayers, labels, images)
+            pages += playersPage(context, focus, featured.topPlayers, labels, images)
           }
           if (featured.momentum.size >= 2) {
-            pages += momentumPage(context, featuredMatch, featured.momentum, labels, images)
+            pages += momentumPage(context, focus, featured.momentum, labels, images)
           }
+          featured.stats?.takeIf { hasStats(it) }?.let { pages += statsPage(context, focus, it, labels, images, arabic) }
         }
-        pages += listPage(context, feed, labels, images)
-        feed.teams
-          .mapNotNull { it.match }
-          .filter { it.fixtureId != featured?.fixtureId }
-          .take(2)
-          .forEach { pages += matchPage(context, it, labels, images) }
+        if (pages.isEmpty()) pages += messagePage(context, labels.followTeams, SEARCH_URI)
       }
     }
 
     root.removeAllViews(R.id.np_flipper)
     for (page in pages) {
-      page.setInt(R.id.np_page, "setLayoutDirection", if (rtl) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR)
+      page.setInt(R.id.np_page, "setLayoutDirection", View.LAYOUT_DIRECTION_LTR)
       root.addView(R.id.np_flipper, page)
     }
     root.setViewVisibility(R.id.np_nav, if (pages.size > 1) View.VISIBLE else View.GONE)
@@ -116,27 +118,20 @@ internal object WidgetRenderer {
     return views
   }
 
-  /** Headline crest + "vs"; first row is the headline team's opponent, the rest are other followed teams. */
-  private fun listPage(context: Context, feed: WidgetFeed, labels: WidgetLabels, images: ImageResolver): RemoteViews {
+  private fun listPage(context: Context, fixtures: List<FeedMatch>, labels: WidgetLabels, images: ImageResolver): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.np_widget_page_list)
-    val headline = feed.teams.first()
-    views.setTextViewText(R.id.np_head_name, headline.name)
-    views.setTextViewText(R.id.np_vs, labels.vs)
-    images.crest(headline.logo)?.let { views.setImageViewBitmap(R.id.np_head_logo, it) }
-
-    val rows = mutableListOf<Pair<String, FeedMatch?>>()
-    headline.match?.let { match ->
-      val opponent = if (match.home.id == headline.teamId) match.away else match.home
-      rows += opponent.name to match
-    }
-    feed.teams.drop(1).take(3 - rows.size).forEach { rows += it.name to it.match }
-
     views.removeAllViews(R.id.np_rows)
-    for ((title, match) in rows) {
-      val row = RemoteViews(context.packageName, R.layout.np_widget_row_team)
-      row.setTextViewText(R.id.np_row_title, title)
-      if (match != null) {
-        row.setTextViewText(R.id.np_row_time, rowTime(match, labels))
+    val shown = fixtures.take(LIST_ROWS)
+    for (match in shown) {
+      val row = RemoteViews(context.packageName, R.layout.np_widget_row_fixture)
+      row.setTextViewText(R.id.np_home_name, match.home.name)
+      row.setTextViewText(R.id.np_away_name, match.away.name)
+      images.crest(match.home.logo)?.let { row.setImageViewBitmap(R.id.np_home_logo, it) }
+      images.crest(match.away.logo)?.let { row.setImageViewBitmap(R.id.np_away_logo, it) }
+      row.setTextViewText(R.id.np_row_time, rowTime(match, labels))
+      val chip = match.status == "upcoming"
+      row.setViewVisibility(R.id.np_row_status, if (chip) View.GONE else View.VISIBLE)
+      if (!chip) {
         row.setTextViewText(R.id.np_row_status, statusWord(match, labels))
         row.setTextColor(R.id.np_row_status, if (match.isLive) LIVE_TEXT else IDLE_TEXT)
         row.setInt(
@@ -144,14 +139,83 @@ internal object WidgetRenderer {
           "setBackgroundResource",
           if (match.isLive) R.drawable.np_widget_chip_live else R.drawable.np_widget_chip_idle,
         )
-        row.setOnClickPendingIntent(R.id.np_row, openIntent(context, matchUri(match)))
-      } else {
-        row.setViewVisibility(R.id.np_row_status, View.GONE)
       }
+      row.setOnClickPendingIntent(R.id.np_row, openIntent(context, matchUri(match)))
       views.addView(R.id.np_rows, row)
     }
-    views.setOnClickPendingIntent(R.id.np_page, openIntent(context, headline.match?.let(::matchUri) ?: MATCHES_URI))
+    views.setOnClickPendingIntent(R.id.np_page, openIntent(context, shown.firstOrNull()?.let(::matchUri) ?: MATCHES_URI))
     return views
+  }
+
+  private fun lineupPage(
+    context: Context,
+    match: FeedMatch,
+    lineup: FeedLineup,
+    labels: WidgetLabels,
+    images: ImageResolver,
+  ): RemoteViews {
+    val views = RemoteViews(context.packageName, R.layout.np_widget_page_lineup)
+    applyMiniHeader(views, match, labels.lineup, labels, images)
+    val formation = listOfNotNull(lineup.homeFormation, lineup.awayFormation).filter { it.isNotBlank() }.joinToString(" · ")
+    views.setTextViewText(R.id.np_formation, formation)
+    views.setViewVisibility(R.id.np_formation, if (formation.isBlank()) View.GONE else View.VISIBLE)
+    views.removeAllViews(R.id.np_lineup_home)
+    views.removeAllViews(R.id.np_lineup_away)
+    lineup.home.take(LINEUP_NAMES).forEach { views.addView(R.id.np_lineup_home, lineupName(context, it)) }
+    lineup.away.take(LINEUP_NAMES).forEach { views.addView(R.id.np_lineup_away, lineupName(context, it)) }
+    views.setOnClickPendingIntent(R.id.np_page, openIntent(context, matchUri(match)))
+    return views
+  }
+
+  private fun lineupName(context: Context, player: FeedLineupPlayer): RemoteViews {
+    val row = RemoteViews(context.packageName, R.layout.np_widget_lineup_name)
+    val rating = player.rating?.let { "  ${String.format(Locale.US, "%.1f", it)}" }.orEmpty()
+    row.setTextViewText(R.id.np_lineup_name, player.name.trim().split(" ").last() + rating)
+    return row
+  }
+
+  private fun statsPage(
+    context: Context,
+    match: FeedMatch,
+    stats: FeedStats,
+    labels: WidgetLabels,
+    images: ImageResolver,
+    arabic: Boolean,
+  ): RemoteViews {
+    val views = RemoteViews(context.packageName, R.layout.np_widget_page_stats)
+    applyMiniHeader(views, match, labels.stats, labels, images)
+    views.removeAllViews(R.id.np_stat_rows)
+    fun add(key: String, pair: FeedStatPair?, percent: Boolean, decimal: Boolean) {
+      if (pair == null) return
+      val row = RemoteViews(context.packageName, R.layout.np_widget_stat_row)
+      row.setTextViewText(R.id.np_stat_label, statLabel(key, arabic))
+      row.setTextViewText(R.id.np_stat_home, formatStat(pair.home, percent, decimal))
+      row.setTextViewText(R.id.np_stat_away, formatStat(pair.away, percent, decimal))
+      views.addView(R.id.np_stat_rows, row)
+    }
+    add("possession", stats.possession, percent = true, decimal = false)
+    add("shots", stats.shots, percent = false, decimal = false)
+    add("shotsOn", stats.shotsOn, percent = false, decimal = false)
+    add("corners", stats.corners, percent = false, decimal = false)
+    add("xg", stats.xg, percent = false, decimal = true)
+    views.setOnClickPendingIntent(R.id.np_page, openIntent(context, matchUri(match)))
+    return views
+  }
+
+  private fun hasStats(stats: FeedStats): Boolean =
+    listOf(stats.possession, stats.shots, stats.shotsOn, stats.corners, stats.xg).any { it != null }
+
+  private fun formatStat(value: Double, percent: Boolean, decimal: Boolean): String {
+    val text = if (decimal) String.format(Locale.US, "%.1f", value) else String.format(Locale.US, "%.0f", value)
+    return if (percent) "$text%" else text
+  }
+
+  private fun statLabel(key: String, arabic: Boolean): String = when (key) {
+    "possession" -> if (arabic) "استحواذ" else "Possession"
+    "shots" -> if (arabic) "تسديدات" else "Shots"
+    "shotsOn" -> if (arabic) "على المرمى" else "On target"
+    "corners" -> if (arabic) "ركنيات" else "Corners"
+    else -> "xG"
   }
 
   private fun playersPage(
@@ -191,11 +255,11 @@ internal object WidgetRenderer {
     return views
   }
 
-  private fun messagePage(context: Context, text: String): RemoteViews {
+  private fun messagePage(context: Context, text: String, uri: String): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.np_widget_message)
     views.setTextViewText(R.id.np_message, text)
     views.setViewVisibility(R.id.np_message, if (text.isBlank()) View.GONE else View.VISIBLE)
-    views.setOnClickPendingIntent(R.id.np_page, openIntent(context, MATCHES_URI))
+    views.setOnClickPendingIntent(R.id.np_page, openIntent(context, uri))
     return views
   }
 

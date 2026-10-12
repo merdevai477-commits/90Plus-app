@@ -54,19 +54,36 @@ function toAttributes(match: FeedMatch, language: string): MatchActivityAttribut
  * Opens (or refreshes) the lock screen / Dynamic Island card for followed teams playing right now.
  * The server starts them by push on iOS 17.2+; this covers older iOS and app-open moments.
  */
-export async function syncLiveActivities(apiBase: string, teamIds: number[], language: string): Promise<void> {
+export async function syncLiveActivities(
+  apiBase: string,
+  teamIds: number[],
+  language: string,
+  favoriteIds: number[] = [],
+): Promise<void> {
   if (!liveActivities.isSupported) return;
   try {
     await liveActivities.refreshRegistration();
-    if (teamIds.length === 0 || !(await liveActivities.areEnabled())) return;
+    if ((teamIds.length === 0 && favoriteIds.length === 0) || !(await liveActivities.areEnabled())) return;
 
-    const url = `${apiBase}/football/widget/followed?teams=${teamIds.join(',')}&language=${language}`;
+    const params = new URLSearchParams({ language });
+    if (teamIds.length > 0) params.set('teams', teamIds.join(','));
+    if (favoriteIds.length > 0) params.set('favorites', favoriteIds.join(','));
+    const url = `${apiBase}/football/widget/followed?${params.toString()}`;
     const res = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!res.ok) return;
     const body = await res.json();
-    const live: FeedMatch[] = (body?.response?.teams ?? [])
+    const response = body?.response ?? {};
+    const primary = response.primary as FeedMatch | null | undefined;
+    const fromTeams: FeedMatch[] = (response.teams ?? [])
       .map((team: { match: FeedMatch | null }) => team.match)
       .filter((m: FeedMatch | null): m is FeedMatch => m != null && (m.status === 'live' || m.status === 'ht'));
+    const seen = new Set<number>();
+    const live: FeedMatch[] = [];
+    for (const match of [primary, ...fromTeams]) {
+      if (match == null || (match.status !== 'live' && match.status !== 'ht') || seen.has(match.fixtureId)) continue;
+      seen.add(match.fixtureId);
+      live.push(match);
+    }
     if (live.length === 0) return;
 
     const running = new Set(await liveActivities.activeFixtureIds());

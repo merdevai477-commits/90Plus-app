@@ -7,9 +7,11 @@
   android:gravity="center"
   android:orientation="vertical"
   android:paddingStart="16dp"
-  android:paddingTop="11dp"
+  android:paddingTop="8dp"
   android:paddingEnd="16dp"
   android:paddingBottom="26dp">
+
+  <include layout="@layout/np_widget_brand" />
 
   <TextView
     android:id="@+id/np_league"

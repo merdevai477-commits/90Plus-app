@@ -16,6 +16,8 @@ internal data class WidgetLabels(
   val vs: String,
   val today: String,
   val tomorrow: String,
+  val lineup: String,
+  val stats: String,
 ) {
   companion object {
     val DEFAULT = WidgetLabels(
@@ -27,10 +29,12 @@ internal data class WidgetLabels(
       topPlayers = "Top players",
       momentum = "Momentum",
       myTeams = "My teams",
-      followTeams = "Follow teams in 90PLUS to see their matches here",
+      followTeams = "Follow teams on 90Plus to see their matches here.",
       vs = "vs",
       today = "Today",
       tomorrow = "Tomorrow",
+      lineup = "Lineup",
+      stats = "Stats",
     )
 
     fun parse(json: JSONObject?): WidgetLabels {
@@ -49,6 +53,8 @@ internal data class WidgetLabels(
         vs = s("vs", DEFAULT.vs),
         today = s("today", DEFAULT.today),
         tomorrow = s("tomorrow", DEFAULT.tomorrow),
+        lineup = s("lineup", DEFAULT.lineup),
+        stats = s("stats", DEFAULT.stats),
       )
     }
   }
@@ -56,6 +62,7 @@ internal data class WidgetLabels(
 
 internal data class WidgetConfig(
   val teamIds: List<Int>,
+  val favoriteIds: List<Int>,
   val apiBase: String,
   val language: String,
   val labels: WidgetLabels,
@@ -82,8 +89,11 @@ internal object WidgetStore {
       val json = JSONObject(raw)
       val ids = json.optJSONArray("teamIds")
       val teamIds = (0 until (ids?.length() ?: 0)).mapNotNull { i -> ids?.optInt(i)?.takeIf { it > 0 } }
+      val favs = json.optJSONArray("favoriteIds")
+      val favoriteIds = (0 until (favs?.length() ?: 0)).mapNotNull { i -> favs?.optInt(i)?.takeIf { it > 0 } }
       WidgetConfig(
         teamIds = teamIds,
+        favoriteIds = favoriteIds,
         apiBase = json.optString("apiBase").trimEnd('/'),
         language = json.optString("language").ifBlank { "en" },
         labels = WidgetLabels.parse(json.optJSONObject("labels")),

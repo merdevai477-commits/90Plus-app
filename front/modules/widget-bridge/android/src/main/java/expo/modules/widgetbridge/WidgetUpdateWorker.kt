@@ -13,7 +13,8 @@ class WidgetUpdateWorker(context: Context, params: WorkerParameters) : Worker(co
     val hasWidgets = WidgetRenderer.widgetIds(context).isNotEmpty()
 
     val config = WidgetStore.config(context)
-    if (config == null || config.teamIds.isEmpty() || config.apiBase.isBlank()) {
+    val hasScope = config != null && (config.teamIds.isNotEmpty() || config.favoriteIds.isNotEmpty())
+    if (config == null || !hasScope || config.apiBase.isBlank()) {
       if (hasWidgets) WidgetRenderer.render(context, null, config, allowNetwork = false)
       LiveNotifier.update(context, null, config)
       return Result.success()
@@ -28,13 +29,18 @@ class WidgetUpdateWorker(context: Context, params: WorkerParameters) : Worker(co
     if (feed?.hasLive == true) {
       WidgetScheduler.scheduleLiveTick(context, fromLiveTick = tags.contains(WidgetScheduler.LIVE_TAG))
     }
-    feed?.teams?.mapNotNull { it.match }?.forEach { WidgetScheduler.scheduleKickoff(context, it) }
+    val kickoffs = (feed?.fixtures.orEmpty() + listOfNotNull(feed?.primary)).distinctBy { it.fixtureId }
+    kickoffs.forEach { WidgetScheduler.scheduleKickoff(context, it) }
     return Result.success()
   }
 
   private fun fetchFeed(config: WidgetConfig): String? {
-    val teams = URLEncoder.encode(config.teamIds.joinToString(","), "UTF-8")
-    val url = "${config.apiBase}/football/widget/followed?teams=$teams&language=${config.language}"
+    val query = buildList {
+      if (config.teamIds.isNotEmpty()) add("teams=" + URLEncoder.encode(config.teamIds.joinToString(","), "UTF-8"))
+      if (config.favoriteIds.isNotEmpty()) add("favorites=" + URLEncoder.encode(config.favoriteIds.joinToString(","), "UTF-8"))
+      add("language=${config.language}")
+    }.joinToString("&")
+    val url = "${config.apiBase}/football/widget/followed?$query"
     var connection: HttpURLConnection? = null
     return try {
       connection = (URL(url).openConnection() as HttpURLConnection).apply {

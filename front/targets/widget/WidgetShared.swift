@@ -16,7 +16,7 @@ enum WidgetShared {
 
 // MARK: - Config written by the app (JSON string under `widget.config`)
 
-struct WidgetLabels: Codable, Hashable {
+struct WidgetLabels: Decodable, Hashable {
   var live = "Live"
   var upcoming = "Upcoming"
   var finished = "FT"
@@ -25,19 +25,63 @@ struct WidgetLabels: Codable, Hashable {
   var topPlayers = "Top rated"
   var momentum = "Match momentum"
   var myTeams = "My teams"
-  var followTeams = "Follow teams in 90PLUS to see their matches here"
+  var followTeams = "Follow teams on 90Plus to see their matches here."
   var vs = "vs"
   var today = "Today"
   var tomorrow = "Tomorrow"
+  var lineup = "Lineup"
+  var stats = "Stats"
+
+  init() {}
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    func str(_ key: CodingKeys, _ fallback: String) -> String {
+      (try? container.decodeIfPresent(String.self, forKey: key)) ?? fallback
+    }
+    live = str(.live, "Live")
+    upcoming = str(.upcoming, "Upcoming")
+    finished = str(.finished, "FT")
+    halftime = str(.halftime, "HT")
+    postponed = str(.postponed, "Postponed")
+    topPlayers = str(.topPlayers, "Top rated")
+    momentum = str(.momentum, "Match momentum")
+    myTeams = str(.myTeams, "My teams")
+    followTeams = str(.followTeams, "Follow teams on 90Plus to see their matches here.")
+    vs = str(.vs, "vs")
+    today = str(.today, "Today")
+    tomorrow = str(.tomorrow, "Tomorrow")
+    lineup = str(.lineup, "Lineup")
+    stats = str(.stats, "Stats")
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case live, upcoming, finished, halftime, postponed, topPlayers, momentum, myTeams
+    case followTeams, vs, today, tomorrow, lineup, stats
+  }
 }
 
-struct WidgetConfig: Codable {
+struct WidgetConfig: Decodable {
   var teamIds: [Int]
+  var favoriteIds: [Int]
   var apiBase: String
   var language: String
   var labels: WidgetLabels?
 
   var isArabic: Bool { language.hasPrefix("ar") }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    teamIds = try container.decodeIfPresent([Int].self, forKey: .teamIds) ?? []
+    favoriteIds = try container.decodeIfPresent([Int].self, forKey: .favoriteIds) ?? []
+    apiBase = try container.decode(String.self, forKey: .apiBase)
+    language = try container.decodeIfPresent(String.self, forKey: .language) ?? "en"
+    labels = try container.decodeIfPresent(WidgetLabels.self, forKey: .labels)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case teamIds, favoriteIds, apiBase, language, labels
+  }
 
   static func load() -> WidgetConfig? {
     guard let raw = WidgetShared.defaults?.string(forKey: WidgetShared.configKey),
@@ -103,28 +147,118 @@ struct FeedMomentumPoint: Codable, Hashable {
   let away: Int
 }
 
+struct FeedLineupPlayer: Codable, Hashable {
+  let name: String
+  let photo: String?
+  let pos: String?
+  let grid: String?
+  let rating: Double?
+  let number: Int?
+}
+
+struct FeedLineup: Codable, Hashable {
+  let homeFormation: String?
+  let awayFormation: String?
+  let home: [FeedLineupPlayer]
+  let away: [FeedLineupPlayer]
+
+  var hasPitch: Bool {
+    let players = home + away
+    return players.count >= 11 && players.allSatisfy { $0.grid?.contains(":") == true }
+  }
+}
+
+struct FeedStatPair: Codable, Hashable {
+  let home: Double
+  let away: Double
+}
+
+struct FeedStats: Codable, Hashable {
+  let possession: FeedStatPair?
+  let shots: FeedStatPair?
+  let shotsOn: FeedStatPair?
+  let corners: FeedStatPair?
+  let xg: FeedStatPair?
+
+  var hasAny: Bool { possession != nil || shots != nil || shotsOn != nil || corners != nil || xg != nil }
+}
+
 struct FeedFeatured: Codable, Hashable {
   let fixtureId: Int
   let topPlayers: [FeedPlayer]
   let momentum: [FeedMomentumPoint]
+  let lineup: FeedLineup?
+  let stats: FeedStats?
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    fixtureId = try container.decode(Int.self, forKey: .fixtureId)
+    topPlayers = try container.decodeIfPresent([FeedPlayer].self, forKey: .topPlayers) ?? []
+    momentum = try container.decodeIfPresent([FeedMomentumPoint].self, forKey: .momentum) ?? []
+    lineup = try container.decodeIfPresent(FeedLineup.self, forKey: .lineup)
+    stats = try container.decodeIfPresent(FeedStats.self, forKey: .stats)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(fixtureId, forKey: .fixtureId)
+    try container.encode(topPlayers, forKey: .topPlayers)
+    try container.encode(momentum, forKey: .momentum)
+    try container.encodeIfPresent(lineup, forKey: .lineup)
+    try container.encodeIfPresent(stats, forKey: .stats)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case fixtureId, topPlayers, momentum, lineup, stats
+  }
 }
 
 struct WidgetFeed: Codable, Hashable {
   let generatedAt: Double
   let hasLive: Bool
   let teams: [FeedTeam]
+  let primary: FeedMatch?
+  let primaryReason: String?
+  let fixtures: [FeedMatch]
   let featured: FeedFeatured?
 
-  var featuredMatch: FeedMatch? {
+  var focusMatch: FeedMatch? {
+    if let primary { return primary }
     guard let featured else { return nil }
     return teams.first { $0.match?.fixtureId == featured.fixtureId }?.match
   }
 
   var nextKickoff: Date? {
-    teams.compactMap { $0.match }
+    (fixtures + teams.compactMap(\.match))
       .filter { $0.status == "upcoming" && $0.kickoff > Date() }
       .map(\.kickoff)
       .min()
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    generatedAt = try container.decodeIfPresent(Double.self, forKey: .generatedAt) ?? 0
+    hasLive = try container.decodeIfPresent(Bool.self, forKey: .hasLive) ?? false
+    teams = try container.decodeIfPresent([FeedTeam].self, forKey: .teams) ?? []
+    primary = try container.decodeIfPresent(FeedMatch.self, forKey: .primary)
+    primaryReason = try container.decodeIfPresent(String.self, forKey: .primaryReason)
+    fixtures = try container.decodeIfPresent([FeedMatch].self, forKey: .fixtures) ?? []
+    featured = try container.decodeIfPresent(FeedFeatured.self, forKey: .featured)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(generatedAt, forKey: .generatedAt)
+    try container.encode(hasLive, forKey: .hasLive)
+    try container.encode(teams, forKey: .teams)
+    try container.encodeIfPresent(primary, forKey: .primary)
+    try container.encodeIfPresent(primaryReason, forKey: .primaryReason)
+    try container.encode(fixtures, forKey: .fixtures)
+    try container.encodeIfPresent(featured, forKey: .featured)
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case generatedAt, hasLive, teams, primary, primaryReason, fixtures, featured
   }
 }
 
@@ -164,16 +298,23 @@ enum FeedLoader {
 
   /// A cached feed for a different team list must never leak unfollowed teams onto the widget.
   private static func cacheMatches(_ feed: WidgetFeed, _ config: WidgetConfig) -> Bool {
-    Set(feed.teams.map(\.teamId)).isSubset(of: Set(config.teamIds))
+    guard feed.teams.allSatisfy({ config.teamIds.contains($0.teamId) }) else { return false }
+    if feed.primaryReason == "favorite", let fixtureId = feed.primary?.fixtureId {
+      return config.favoriteIds.contains(fixtureId)
+    }
+    return true
   }
 
   private static func fetch(config: WidgetConfig) async -> WidgetFeed? {
-    let teams = config.teamIds.map(String.init).joined(separator: ",")
     guard var components = URLComponents(string: "\(config.apiBase)/football/widget/followed") else { return nil }
-    components.queryItems = [
-      URLQueryItem(name: "teams", value: teams),
-      URLQueryItem(name: "language", value: config.language),
-    ]
+    var items = [URLQueryItem(name: "language", value: config.language)]
+    if !config.teamIds.isEmpty {
+      items.append(URLQueryItem(name: "teams", value: config.teamIds.map(String.init).joined(separator: ",")))
+    }
+    if !config.favoriteIds.isEmpty {
+      items.append(URLQueryItem(name: "favorites", value: config.favoriteIds.map(String.init).joined(separator: ",")))
+    }
+    components.queryItems = items
     guard let url = components.url else { return nil }
     var request = URLRequest(url: url, timeoutInterval: 12)
     request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -259,6 +400,8 @@ enum WidgetPage: Hashable {
   case live
   case players
   case momentum
+  case lineup
+  case stats
   case list
   case match(Int)
 }

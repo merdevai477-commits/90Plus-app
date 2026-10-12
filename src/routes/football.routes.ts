@@ -242,16 +242,18 @@ router.get('/cached/365/player/:athleteId/socials', SHARED_CACHE_60S, async (req
   }
 });
 
-// GET /api/football/widget/followed?teams=1,2,3 — nearest/live match per followed team for
-// the native home-screen widgets (public: widgets fetch outside the app without a session).
+// GET /api/football/widget/followed?teams=1,2,3&favorites=9 — widget feed.
+// Public: widgets fetch outside the app without a session. Favorite ids are the
+// ones the device already stored; the response is still public match data.
 router.get('/widget/followed', SHARED_CACHE_30S, async (req, res) => {
   const teamIds = parseWidgetTeamIds(req.query.teams);
-  if (teamIds.length === 0) {
-    res.status(400).json({ status: 'ERROR', message: 'teams query is required' });
+  const favoriteIds = parseWidgetTeamIds(req.query.favorites);
+  if (teamIds.length === 0 && favoriteIds.length === 0) {
+    res.status(400).json({ status: 'ERROR', message: 'teams or favorites query is required' });
     return;
   }
   try {
-    const feed = await buildWidgetFeed(teamIds, resolveAppLanguage(req));
+    const feed = await buildWidgetFeed(teamIds, resolveAppLanguage(req), Date.now(), favoriteIds);
     res.json({ status: 'SUCCESS', response: feed });
   } catch (error) {
     logger.warn('[WidgetFeed] build failed:', (error as Error)?.message);

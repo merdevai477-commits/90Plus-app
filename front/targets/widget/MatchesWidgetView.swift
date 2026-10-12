@@ -19,6 +19,7 @@ private enum Palette {
 }
 
 private let matchesURL = URL(string: "ninetyplus://matches")
+private let searchURL = URL(string: "ninetyplus://search")
 
 // MARK: - Root
 
@@ -48,14 +49,16 @@ struct MatchesWidgetView: View {
   }
 
   private var deepLink: URL? {
-    guard let feed = entry.feed else { return matchesURL }
+    guard let feed = entry.feed else { return searchURL }
     switch entry.page {
-    case .live, .players, .momentum:
-      return feed.featuredMatch?.deepLink ?? matchesURL
+    case .live, .players, .momentum, .lineup, .stats:
+      return feed.focusMatch?.deepLink ?? searchURL
+    case .list:
+      return feed.fixtures.first?.deepLink ?? searchURL
     case .match(let index) where feed.teams.indices.contains(index):
-      return feed.teams[index].match?.deepLink ?? matchesURL
+      return feed.teams[index].match?.deepLink ?? searchURL
     default:
-      return feed.teams.first?.match?.deepLink ?? matchesURL
+      return feed.focusMatch?.deepLink ?? feed.fixtures.first?.deepLink ?? searchURL
     }
   }
 }
@@ -114,6 +117,19 @@ private extension View {
 }
 
 // MARK: - Building blocks
+
+private struct BrandMark: View {
+  var size: CGFloat = 13
+
+  var body: some View {
+    HStack(spacing: 0) {
+      Text("90").foregroundStyle(.white)
+      Text("Plus").foregroundStyle(Palette.purple)
+    }
+    .font(.system(size: size, weight: .heavy))
+    .widgetAccentable()
+  }
+}
 
 private struct Crest: View {
   let image: UIImage?
@@ -266,19 +282,27 @@ private struct MediumView: View {
     case .feed(let feed):
       switch entry.page {
       case .live:
-        if let match = feed.featuredMatch { MatchCard(entry: entry, match: match) }
+        if let match = feed.focusMatch { MatchCard(entry: entry, match: match) }
       case .players:
-        if let featured = feed.featured, let match = feed.featuredMatch {
+        if let featured = feed.featured, let match = feed.focusMatch {
           PlayersPage(entry: entry, match: match, players: featured.topPlayers)
         }
       case .momentum:
-        if let featured = feed.featured, let match = feed.featuredMatch {
+        if let featured = feed.featured, let match = feed.focusMatch {
           MomentumPage(entry: entry, match: match, points: featured.momentum)
+        }
+      case .lineup:
+        if let lineup = feed.featured?.lineup, let match = feed.focusMatch {
+          LineupPage(entry: entry, match: match, lineup: lineup)
+        }
+      case .stats:
+        if let stats = feed.featured?.stats, stats.hasAny, let match = feed.focusMatch {
+          StatsPage(entry: entry, match: match, stats: stats)
         }
       case .match(let index) where feed.teams.indices.contains(index):
         if let match = feed.teams[index].match { MatchCard(entry: entry, match: match) }
       default:
-        FollowedListPage(entry: entry, feed: feed)
+        FixturesPage(entry: entry, fixtures: Array(feed.fixtures.prefix(3)))
       }
     }
   }
@@ -326,6 +350,7 @@ private struct MatchCard: View {
 
   var body: some View {
     VStack(spacing: 6) {
+      BrandMark()
       if let league = match.league?.name, !league.isEmpty {
         Text(league)
           .font(.system(size: 10, weight: .medium))
@@ -349,81 +374,59 @@ private struct MatchCard: View {
         .frame(maxWidth: .infinity)
         TeamColumn(side: match.away, image: entry.image(match.away.logo), crest: 42, spacing: 11)
       }
+      .environment(\.layoutDirection, .leftToRight)
     }
   }
 }
 
-/// Followed-teams frame: headline team crest, "vs", then each followed team's next fixture.
-private struct FollowedListPage: View {
+/// One row per fixture: both crests and names, then the localized kickoff. Home stays on the left.
+private struct FixturesPage: View {
   let entry: MatchesEntry
-  let feed: WidgetFeed
+  let fixtures: [FeedMatch]
 
   var body: some View {
-    if let headline = feed.teams.first {
-      HStack(spacing: 12) {
-        VStack(spacing: 9) {
-          Crest(image: entry.image(headline.logo), size: 60)
-          Text(headline.name)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(Palette.muted)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-        }
-        .frame(width: 72)
-
-        Text(entry.labels.vs)
-          .font(.system(size: 27, weight: .medium))
-          .foregroundStyle(Palette.vs)
-
-        VStack(alignment: .leading, spacing: 5) {
-          ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-            if let link = row.match?.deepLink {
-              Link(destination: link) { TeamRow(entry: entry, title: row.title, match: row.match) }
-            } else {
-              TeamRow(entry: entry, title: row.title, match: row.match)
-            }
+    if fixtures.isEmpty {
+      MessageView(text: entry.labels.followTeams)
+    } else {
+      VStack(alignment: .leading, spacing: 6) {
+        BrandMark()
+        ForEach(Array(fixtures.enumerated()), id: \.offset) { _, match in
+          if let link = match.deepLink {
+            Link(destination: link) { FixtureRow(entry: entry, match: match) }
+          } else {
+            FixtureRow(entry: entry, match: match)
           }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
       }
-    } else {
-      MessageView(text: entry.labels.followTeams)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
-  }
-
-  /// First row is the headline team's opponent (reads "Team vs Opponent"); the rest are other followed teams.
-  private var rows: [(title: String, match: FeedMatch?)] {
-    guard let headline = feed.teams.first else { return [] }
-    var out: [(title: String, match: FeedMatch?)] = []
-    if let match = headline.match {
-      let opponent = match.home.id == headline.teamId ? match.away : match.home
-      out.append((opponent.name, match))
-    }
-    for team in feed.teams.dropFirst().prefix(3 - out.count) {
-      out.append((team.name, team.match))
-    }
-    return out
   }
 }
 
-private struct TeamRow: View {
+private struct FixtureRow: View {
   let entry: MatchesEntry
-  let title: String
-  let match: FeedMatch?
+  let match: FeedMatch
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(title)
-        .font(.system(size: 14, weight: .medium))
-        .foregroundStyle(Palette.rowTitle)
-        .lineLimit(1)
-        .minimumScaleFactor(0.75)
-      if let match {
-        HStack(spacing: 4) {
-          Text(timeText(match))
-            .font(.system(size: 9))
-            .foregroundStyle(Palette.rowTime)
-            .lineLimit(1)
+    VStack(alignment: .leading, spacing: 1) {
+      HStack(spacing: 4) {
+        Crest(image: entry.image(match.home.logo), size: 14)
+        Text(match.home.name)
+          .lineLimit(1)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        Crest(image: entry.image(match.away.logo), size: 14)
+        Text(match.away.name)
+          .lineLimit(1)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .font(.system(size: 12, weight: .medium))
+      .foregroundStyle(.white)
+      HStack(spacing: 4) {
+        Text(timeText(match))
+          .font(.system(size: 9))
+          .foregroundStyle(Palette.rowTime)
+          .lineLimit(1)
+        if match.status != "upcoming" {
           Text(statusText(match))
             .font(.system(size: 8, weight: .medium))
             .foregroundStyle(match.isLive ? Palette.liveText : Palette.idleText)
@@ -433,6 +436,7 @@ private struct TeamRow: View {
         }
       }
     }
+    .environment(\.layoutDirection, .leftToRight)
   }
 
   private func timeText(_ match: FeedMatch) -> String {
@@ -470,6 +474,7 @@ private struct MiniScoreHeader: View {
       Crest(image: entry.image(match.away.logo), size: 16)
       StatusBadge(match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic, fontSize: 9)
     }
+    .environment(\.layoutDirection, .leftToRight)
   }
 }
 
@@ -575,15 +580,143 @@ private struct MomentumPage: View {
   }
 }
 
+private struct LineupPage: View {
+  let entry: MatchesEntry
+  let match: FeedMatch
+  let lineup: FeedLineup
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      BrandMark(size: 12)
+      MiniScoreHeader(entry: entry, match: match, title: entry.labels.lineup)
+        if lineup.hasPitch {
+        Pitch(lineup: lineup)
+      } else {
+        if let formation = formationText {
+          Text(formation)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(Palette.rowTime)
+            .lineLimit(1)
+        }
+        HStack(alignment: .top, spacing: 8) {
+          nameColumn(lineup.home)
+          nameColumn(lineup.away)
+        }
+        .environment(\.layoutDirection, .leftToRight)
+      }
+    }
+  }
+
+  private var formationText: String? {
+    let parts = [lineup.homeFormation, lineup.awayFormation].compactMap { $0 }.filter { !$0.isEmpty }
+    return parts.isEmpty ? nil : parts.joined(separator: " · ")
+  }
+
+  private func nameColumn(_ players: [FeedLineupPlayer]) -> some View {
+    VStack(alignment: .leading, spacing: 1) {
+      ForEach(Array(players.prefix(4).enumerated()), id: \.offset) { _, player in
+        Text(label(player))
+          .font(.system(size: 10, weight: .medium))
+          .foregroundStyle(.white)
+          .lineLimit(1)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func label(_ player: FeedLineupPlayer) -> String {
+    let name = player.name.split(separator: " ").last.map(String.init) ?? player.name
+    guard let rating = player.rating, rating > 0 else { return name }
+    return "\(name)  \(String(format: "%.1f", rating))"
+  }
+}
+
+/// Compact pitch. Grid values are "row:column" from the provider; missing grids use the name list instead.
+private struct Pitch: View {
+  let lineup: FeedLineup
+
+  var body: some View {
+    let players = lineup.home + lineup.away
+    let rows = Set(players.compactMap { grid($0)?.row }).count
+    ZStack {
+      RoundedRectangle(cornerRadius: 8)
+        .fill(Color(red: 0.08, green: 0.18, blue: 0.12).opacity(0.85))
+      VStack(spacing: 2) {
+        ForEach(1...max(rows, 1), id: \.self) { row in
+          let rowPlayers = players.filter { grid($0)?.row == row }
+          HStack(spacing: 2) {
+            ForEach(Array(rowPlayers.enumerated()), id: \.offset) { _, player in
+              Text(player.name.split(separator: " ").last.map(String.init) ?? player.name)
+                .font(.system(size: 7, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+            }
+          }
+        }
+      }
+      .padding(4)
+    }
+    .frame(maxWidth: .infinity, maxHeight: 78)
+    .environment(\.layoutDirection, .leftToRight)
+  }
+
+  private func grid(_ player: FeedLineupPlayer) -> (row: Int, column: Int)? {
+    guard let raw = player.grid, let split = raw.split(separator: ":").first, let row = Int(split) else { return nil }
+    let column = Int(raw.split(separator: ":").dropFirst().first ?? "0") ?? 0
+    return (row, column)
+  }
+}
+
+private struct StatsPage: View {
+  let entry: MatchesEntry
+  let match: FeedMatch
+  let stats: FeedStats
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      BrandMark(size: 12)
+      MiniScoreHeader(entry: entry, match: match, title: entry.labels.stats)
+      VStack(spacing: 2) {
+        statRow(entry.isArabic ? "استحواذ" : "Possession", stats.possession, suffix: "%")
+        statRow(entry.isArabic ? "تسديدات" : "Shots", stats.shots, suffix: "")
+        statRow(entry.isArabic ? "على المرمى" : "On target", stats.shotsOn, suffix: "")
+        statRow(entry.isArabic ? "ركنيات" : "Corners", stats.corners, suffix: "")
+        statRow("xG", stats.xg, suffix: "", decimal: true)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func statRow(_ title: String, _ pair: FeedStatPair?, suffix: String, decimal: Bool = false) -> some View {
+    if let pair {
+      HStack {
+        Text(format(pair.home, suffix: suffix, decimal: decimal))
+          .frame(maxWidth: .infinity, alignment: .trailing)
+        Text(title)
+          .foregroundStyle(Palette.rowTime)
+          .frame(maxWidth: .infinity)
+        Text(format(pair.away, suffix: suffix, decimal: decimal))
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .font(.system(size: 11, weight: .semibold))
+      .foregroundStyle(.white)
+      .environment(\.layoutDirection, .leftToRight)
+    }
+  }
+
+  private func format(_ value: Double, suffix: String, decimal: Bool) -> String {
+    let number = decimal ? String(format: "%.1f", value) : String(format: "%.0f", value)
+    return number + suffix
+  }
+}
+
 private struct MessageView: View {
   let text: String?
 
   var body: some View {
     VStack(spacing: 6) {
-      Text("90PLUS")
-        .font(.system(size: 16, weight: .heavy))
-        .foregroundStyle(Palette.purple)
-        .widgetAccentable()
+      BrandMark(size: 16)
       if let text {
         Text(text)
           .font(.system(size: 12, weight: .medium))
@@ -631,9 +764,8 @@ private struct SmallView: View {
 
   private func currentMatch(_ feed: WidgetFeed) -> FeedMatch? {
     switch entry.page {
-    case .live: return feed.featuredMatch
-    case .match(let index) where feed.teams.indices.contains(index): return feed.teams[index].match
-    default: return feed.teams.first?.match
+    case .list: return feed.fixtures.first
+    default: return feed.focusMatch ?? feed.fixtures.first
     }
   }
 }
@@ -643,12 +775,14 @@ private struct SmallMatchCard: View {
   let match: FeedMatch
 
   var body: some View {
-    VStack(spacing: 8) {
+    VStack(spacing: 6) {
+      BrandMark(size: 11)
       HStack {
         Crest(image: entry.image(match.home.logo), size: 38)
         Spacer(minLength: 4)
         Crest(image: entry.image(match.away.logo), size: 38)
       }
+      .environment(\.layoutDirection, .leftToRight)
       if match.score != nil {
         ScoreText(match: match, size: 24)
       } else {
@@ -668,10 +802,7 @@ private struct SmallMatchCard: View {
 
 private func lockScreenMatch(_ entry: MatchesEntry) -> FeedMatch? {
   guard let feed = entry.feed else { return nil }
-  if case .match(let index) = entry.page, feed.teams.indices.contains(index) {
-    return feed.teams[index].match
-  }
-  return feed.featuredMatch ?? feed.teams.first?.match
+  return feed.focusMatch ?? feed.fixtures.first
 }
 
 private func lockScreenLine(_ match: FeedMatch) -> String {
@@ -700,7 +831,7 @@ private struct RectangularView: View {
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     } else {
-      Text("90PLUS").font(.headline)
+      Text("90Plus").font(.headline)
     }
   }
 
@@ -729,7 +860,7 @@ private struct InlineView: View {
     if let match = lockScreenMatch(entry) {
       Text(lockScreenLine(match))
     } else {
-      Text("90PLUS")
+      Text("90Plus")
     }
   }
 }

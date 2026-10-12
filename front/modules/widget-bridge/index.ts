@@ -20,10 +20,13 @@ export interface WidgetLabels {
   vs: string;
   today: string;
   tomorrow: string;
+  lineup: string;
+  stats: string;
 }
 
 export interface WidgetConfig {
   teamIds: number[];
+  favoriteIds: number[];
   apiBase: string;
   language: 'ar' | 'en';
   labels: WidgetLabels;

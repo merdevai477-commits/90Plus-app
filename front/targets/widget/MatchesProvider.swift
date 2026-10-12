@@ -68,7 +68,7 @@ struct MatchesProvider: TimelineProvider {
 
   static func build(family: WidgetFamily, rotate: Bool) async -> (entries: [MatchesEntry], reloadAt: Date) {
     let now = Date()
-    guard let config = WidgetConfig.load(), !config.teamIds.isEmpty else {
+    guard let config = WidgetConfig.load(), !config.teamIds.isEmpty || !config.favoriteIds.isEmpty else {
       return ([.message(.needsTeams, labels: WidgetConfig.load()?.labels ?? WidgetLabels(),
                         isArabic: WidgetConfig.load()?.isArabic ?? false)],
               now.addingTimeInterval(60 * 60))
@@ -105,30 +105,26 @@ struct MatchesProvider: TimelineProvider {
   }
 
   static func pages(for feed: WidgetFeed, family: WidgetFamily) -> [WidgetPage] {
-    let others = feed.teams.indices.filter { index in
-      guard let match = feed.teams[index].match else { return false }
-      return match.fixtureId != feed.featured?.fixtureId
-    }
+    let focus = feed.focusMatch
+    let featured = feed.featured?.fixtureId == focus?.fixtureId ? feed.featured : nil
 
     switch family {
     case .systemMedium, .systemLarge, .systemExtraLarge:
       var pages: [WidgetPage] = []
-      if let featured = feed.featured, feed.featuredMatch != nil {
-        pages.append(.live)
-        if !featured.topPlayers.isEmpty { pages.append(.players) }
-        if featured.momentum.count >= 2 { pages.append(.momentum) }
+      if focus != nil { pages.append(.live) }
+      if !feed.fixtures.isEmpty { pages.append(.list) }
+      if featured != nil {
+        if featured?.lineup != nil { pages.append(.lineup) }
+        if featured?.topPlayers.isEmpty == false { pages.append(.players) }
+        if (featured?.momentum.count ?? 0) >= 2 { pages.append(.momentum) }
+        if featured?.stats?.hasAny == true { pages.append(.stats) }
       }
-      pages.append(.list)
-      pages.append(contentsOf: others.prefix(2).map { WidgetPage.match($0) })
-      return pages
-    case .systemSmall:
-      var pages: [WidgetPage] = feed.featuredMatch != nil ? [.live] : []
-      pages.append(contentsOf: others.prefix(3).map { WidgetPage.match($0) })
       return pages.isEmpty ? [.list] : pages
-    default:
-      if feed.featuredMatch != nil { return [.live] }
-      if let first = others.first { return [.match(first)] }
+    case .systemSmall:
+      if focus != nil { return [.live] }
       return [.list]
+    default:
+      return focus != nil ? [.live] : [.list]
     }
   }
 
@@ -140,15 +136,14 @@ struct MatchesProvider: TimelineProvider {
       break
     }
     var urls: [String] = []
-    for team in feed.teams {
-      if let logo = team.logo { urls.append(logo) }
-      if let match = team.match {
-        if let logo = match.home.logo { urls.append(logo) }
-        if let logo = match.away.logo { urls.append(logo) }
-      }
+    for match in [feed.focusMatch].compactMap({ $0 }) + feed.fixtures {
+      if let logo = match.home.logo { urls.append(logo) }
+      if let logo = match.away.logo { urls.append(logo) }
     }
     if family != .systemSmall {
       urls.append(contentsOf: feed.featured?.topPlayers.compactMap(\.photo) ?? [])
+      urls.append(contentsOf: feed.featured?.lineup?.home.compactMap(\.photo) ?? [])
+      urls.append(contentsOf: feed.featured?.lineup?.away.compactMap(\.photo) ?? [])
     }
     return urls
   }

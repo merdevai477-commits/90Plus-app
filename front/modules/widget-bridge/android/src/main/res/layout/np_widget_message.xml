@@ -7,13 +7,7 @@
   android:orientation="vertical"
   android:padding="16dp">
 
-  <TextView
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:text="@string/np_widget_brand"
-    android:textColor="#8B5CF6"
-    android:textSize="16sp"
-    android:textStyle="bold" />
+  <include layout="@layout/np_widget_brand" />
 
   <TextView
     android:id="@+id/np_message"

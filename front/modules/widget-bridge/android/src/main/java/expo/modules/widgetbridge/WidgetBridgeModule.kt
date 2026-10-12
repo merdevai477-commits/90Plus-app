@@ -19,8 +19,9 @@ class WidgetBridgeModule : Module() {
 
     Function("reload") {
       appContext.reactContext?.let { context ->
-        val hasTeams = !WidgetStore.config(context)?.teamIds.isNullOrEmpty()
-        if (hasTeams || WidgetRenderer.widgetIds(context).isNotEmpty()) {
+        val stored = WidgetStore.config(context)
+        val hasScope = !stored?.teamIds.isNullOrEmpty() || !stored?.favoriteIds.isNullOrEmpty()
+        if (hasScope || WidgetRenderer.widgetIds(context).isNotEmpty()) {
           WidgetScheduler.ensurePeriodic(context)
           WidgetScheduler.refreshNow(context)
         } else {

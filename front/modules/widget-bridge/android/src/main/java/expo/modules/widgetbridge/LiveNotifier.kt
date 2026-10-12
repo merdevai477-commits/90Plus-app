@@ -26,8 +26,12 @@ internal object LiveNotifier {
   fun update(context: Context, feed: WidgetFeed?, config: WidgetConfig?) {
     val manager = NotificationManagerCompat.from(context)
     val shown = WidgetStore.liveNotified(context)
-    val matches = feed?.teams?.mapNotNull { it.match }?.distinctBy { it.fixtureId }.orEmpty()
-    val live = matches.filter { it.isLive }.take(MAX_LIVE)
+    val matches = (feed?.teams?.mapNotNull { it.match }.orEmpty() + listOfNotNull(feed?.primary))
+      .distinctBy { it.fixtureId }
+    val favoriteLive = feed?.primary?.takeIf { feed.primaryReason == "favorite" && it.isLive }
+    val live = (listOfNotNull(favoriteLive) + matches.filter { it.isLive })
+      .distinctBy { it.fixtureId }
+      .take(MAX_LIVE)
     val liveIds = live.map { it.fixtureId }.toSet()
 
     if (!canNotify(context, manager)) {
