@@ -369,10 +369,12 @@ export function choosePrimary(
   return recent ? { primary: recent, reason: null } : { primary: null, reason: null };
 }
 
-function listFixtures(matches: WidgetMatch[], primaryId: number | null): WidgetMatch[] {
+function listFixtures(matches: WidgetMatch[], primaryId: number | null, nowSec: number): WidgetMatch[] {
+  const stillAhead = nowSec - 3 * 60 * 60;
   return matches
     .filter((match) => match.fixtureId !== primaryId)
     .filter((match) => isLiveStatus(match.status) || match.status === 'upcoming' || match.status === 'off')
+    .filter((match) => isLiveStatus(match.status) || match.kickoffTs >= stillAhead)
     .sort((a, b) => {
       const rank = (match: WidgetMatch) => (isLiveStatus(match.status) ? 0 : 1);
       return rank(a) - rank(b) || byKickoff(a, b);
@@ -492,7 +494,7 @@ export async function buildWidgetFeed(
     teams: unique,
     primary,
     primaryReason: reason,
-    fixtures: listFixtures(followedMatches, primary?.fixtureId ?? null),
+    fixtures: listFixtures(followedMatches, primary?.fixtureId ?? null, nowSec),
     featured,
   };
 }

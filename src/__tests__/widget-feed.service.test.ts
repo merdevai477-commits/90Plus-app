@@ -206,6 +206,22 @@ describe('buildWidgetFeed', () => {
     expect(feed.fixtures.map((match) => match.fixtureId)).toEqual([300, 301]);
   });
 
+  it('drops a long-postponed fixture so the next kickoff stays first', async () => {
+    const postponed = fixture(1, [10, 'Ahly'], [20, 'Ismaily'], 'PST', NOW_SEC - 200 * 86400);
+    const next = fixture(2, [30, 'Galatasaray'], [40, 'Barcelona'], 'NS', NOW_SEC + 86400);
+    matchesMock.mockImplementation(async (id: number) => ({
+      data: {
+        live: [],
+        upcoming: id === 10 ? [postponed] : [next],
+        finished: [],
+      },
+    }));
+
+    const feed = await buildWidgetFeed([10, 30], 'en', NOW);
+
+    expect(feed.fixtures.map((match) => match.fixtureId)).toEqual([2]);
+  });
+
   it('omits an unconfirmed short lineup and keeps a confirmed one with real stats', async () => {
     const live = fixture(100, [10, 'Ahly'], [20, 'Zamalek'], '1H', NOW_SEC - 1800, [0, 0]);
     matchesMock.mockResolvedValue({ data: { live: [live], upcoming: [], finished: [] } });
