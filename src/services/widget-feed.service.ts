@@ -13,6 +13,7 @@ export const WIDGET_MAX_TEAMS = 8;
 const TOP_PLAYERS = 3;
 const MOMENTUM_BUCKETS = 12;
 const FIXTURE_LIST_CAP = 6;
+const WIDGET_EVENT_LIMIT = 5;
 const FEATURED_SIDE_BUDGET_MS = 2_000;
 /** A finished match stays on the widget this long before the next fixture takes over. */
 const RECENT_FINISH_WINDOW_SEC = 3 * 60 * 60;
@@ -88,12 +89,24 @@ export interface WidgetStats {
   xg: WidgetStatPair | null;
 }
 
+export type WidgetEventKind = 'goal' | 'penalty' | 'own_goal' | 'red' | 'yellow';
+
+export interface WidgetEvent {
+  minute: number;
+  extra: number | null;
+  kind: WidgetEventKind;
+  side: 'home' | 'away';
+  player: string;
+}
+
 export interface WidgetFeatured {
   fixtureId: number;
   topPlayers: WidgetTopPlayer[];
   momentum: Array<{ minute: number; home: number; away: number }>;
   lineup: WidgetLineup | null;
   stats: WidgetStats | null;
+  /** Goals and red cards always; yellow cards only fill spare rows. Chronological. */
+  events: WidgetEvent[];
 }
 
 export type WidgetPrimaryReason = 'favorite' | 'live' | null;
@@ -314,12 +327,56 @@ export function pickWidgetStats(statistics: any[], homeTeamId: number): WidgetSt
   return Object.values(stats).some((pair) => pair != null) ? stats : null;
 }
 
+function eventKind(event: any): WidgetEventKind | null {
+  const type = String(event?.type ?? '');
+  const detail = String(event?.detail ?? '');
+  if (type === 'Goal') {
+    if (/missed/i.test(detail)) return null;
+    if (/own/i.test(detail)) return 'own_goal';
+    if (/penalty/i.test(detail)) return 'penalty';
+    return 'goal';
+  }
+  if (type === 'Card') {
+    if (/red|second yellow/i.test(detail)) return 'red';
+    if (/yellow/i.test(detail)) return 'yellow';
+  }
+  return null;
+}
+
+export function pickKeyEvents(events: any[], match: WidgetMatch, limit = WIDGET_EVENT_LIMIT): WidgetEvent[] {
+  const all: WidgetEvent[] = [];
+  for (const event of events ?? []) {
+    const kind = eventKind(event);
+    const minute = Number(event?.time?.elapsed);
+    if (!kind || !Number.isFinite(minute)) continue;
+    const teamId = event?.team?.id;
+    if (teamId !== match.home.id && teamId !== match.away.id) continue;
+    const extra = Number(event?.time?.extra);
+    all.push({
+      minute,
+      extra: Number.isFinite(extra) && extra > 0 ? extra : null,
+      kind,
+      side: teamId === match.home.id ? 'home' : 'away',
+      player: String(event?.player?.name ?? '').trim(),
+    });
+  }
+  const order = (e: WidgetEvent) => e.minute * 100 + (e.extra ?? 0);
+  const key = all.filter((e) => e.kind !== 'yellow').sort((a, b) => order(a) - order(b)).slice(-limit);
+  const spare = limit - key.length;
+  const yellows = spare > 0 ? all.filter((e) => e.kind === 'yellow').sort((a, b) => order(a) - order(b)).slice(-spare) : [];
+  return [...key, ...yellows].sort((a, b) => order(a) - order(b));
+}
+
 async function buildFeatured(match: WidgetMatch, language: string): Promise<WidgetFeatured> {
-  const [lineups, momentum, statistics] = await Promise.all([
+  const [lineups, momentum, statistics, events] = await Promise.all([
     footballDataCacheService.getMatchLineups(match.fixtureId, { language }).catch(() => []),
     footballDataCacheService.getMatchMomentum(match.fixtureId, { language }).catch(() => null),
     withBudget(
       footballDataCacheService.getMatchStatistics(match.fixtureId, { language }).catch(() => []),
+      [],
+    ),
+    withBudget(
+      footballDataCacheService.getMatchEvents(match.fixtureId, { language }).catch(() => []),
       [],
     ),
   ]);
@@ -329,6 +386,7 @@ async function buildFeatured(match: WidgetMatch, language: string): Promise<Widg
     momentum: momentum?.available ? compressMomentum(momentum.series) : [],
     lineup: pickOfficialLineup(lineups, match.home.id),
     stats: pickWidgetStats(statistics, match.home.id),
+    events: pickKeyEvents(events, match),
   };
 }
 
@@ -342,7 +400,8 @@ function byKickoff(a: WidgetMatch, b: WidgetMatch): number {
 }
 
 /**
- * Favorite (live, else upcoming, else most recently finished) beats every followed-team match.
+ * A live match always leads: live favorite, then a live followed-team match.
+ * With nothing live, a favorite (upcoming, else most recently finished) leads.
  * A followed-team finish within the recent window is only used when nothing is upcoming.
  */
 export function choosePrimary(
@@ -352,6 +411,8 @@ export function choosePrimary(
 ): { primary: WidgetMatch | null; reason: WidgetPrimaryReason } {
   const favoriteLive = favorites.filter((match) => isLiveStatus(match.status)).sort(byKickoff)[0];
   if (favoriteLive) return { primary: favoriteLive, reason: 'favorite' };
+  const followedLive = followed.filter((match) => isLiveStatus(match.status)).sort(byKickoff)[0];
+  if (followedLive) return { primary: followedLive, reason: 'live' };
   const favoriteUpcoming = favorites.filter((match) => match.status === 'upcoming').sort(byKickoff)[0];
   if (favoriteUpcoming) return { primary: favoriteUpcoming, reason: 'favorite' };
   const favoriteDone = [...favorites]
@@ -359,8 +420,6 @@ export function choosePrimary(
     .sort((a, b) => b.kickoffTs - a.kickoffTs || a.fixtureId - b.fixtureId)[0];
   if (favoriteDone) return { primary: favoriteDone, reason: 'favorite' };
 
-  const live = followed.filter((match) => isLiveStatus(match.status)).sort(byKickoff)[0];
-  if (live) return { primary: live, reason: 'live' };
   if (followed.some((match) => match.status === 'upcoming')) return { primary: null, reason: null };
 
   const recent = followed

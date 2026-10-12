@@ -4,6 +4,7 @@ jest.mock('../services/football-data-cache.service', () => ({
     getMatchLineups: jest.fn(),
     getMatchMomentum: jest.fn(),
     getMatchStatistics: jest.fn(),
+    getMatchEvents: jest.fn(),
   },
 }));
 
@@ -60,11 +61,13 @@ const matchesMock = footballDataCacheService.getCached365CompetitorMatches as je
 const lineupsMock = footballDataCacheService.getMatchLineups as jest.Mock;
 const momentumMock = footballDataCacheService.getMatchMomentum as jest.Mock;
 const statsMock = footballDataCacheService.getMatchStatistics as jest.Mock;
+const eventsMock = footballDataCacheService.getMatchEvents as jest.Mock;
 const liveMock = readLiveFixtureById as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
   liveMock.mockResolvedValue(null);
+  eventsMock.mockResolvedValue([]);
   lineupsMock.mockResolvedValue([]);
   statsMock.mockResolvedValue([]);
   momentumMock.mockResolvedValue({ available: false, duration: 90, series: [], markers: [] });
@@ -161,7 +164,7 @@ describe('buildWidgetFeed', () => {
     expect(feed.fixtures.map((match) => match.fixtureId)).toEqual([200]);
   });
 
-  it('keeps a favorite match ahead of a live followed-team match', async () => {
+  it('puts a live followed-team match ahead of an upcoming favorite', async () => {
     const live = fixture(100, [10, 'Ahly'], [20, 'Zamalek'], '1H', NOW_SEC - 1800, [1, 0]);
     const favorite = fixture(200, [30, 'Barcelona'], [40, 'Sevilla'], 'NS', NOW_SEC + 86400);
     matchesMock.mockImplementation(async (id: number) => ({
@@ -173,10 +176,57 @@ describe('buildWidgetFeed', () => {
 
     const feed = await buildWidgetFeed([10, 30], 'en', NOW, [200]);
 
+    expect(feed.primaryReason).toBe('live');
+    expect(feed.primary).toMatchObject({ fixtureId: 100, status: 'live' });
+    expect(feed.featured?.fixtureId).toBe(100);
+    expect(feed.fixtures.map((match) => match.fixtureId)).toEqual([200]);
+  });
+
+  it('keeps a live favorite ahead of another live followed-team match', async () => {
+    const followedLive = fixture(100, [10, 'Ahly'], [20, 'Zamalek'], '1H', NOW_SEC - 3000, [1, 0]);
+    const favoriteLive = fixture(200, [30, 'Barcelona'], [40, 'Sevilla'], '2H', NOW_SEC - 1200, [0, 0]);
+    matchesMock.mockImplementation(async (id: number) => ({
+      data: { live: [id === 30 ? favoriteLive : followedLive], upcoming: [], finished: [] },
+    }));
+
+    const feed = await buildWidgetFeed([10, 30], 'en', NOW, [200]);
+
     expect(feed.primaryReason).toBe('favorite');
-    expect(feed.primary).toMatchObject({ fixtureId: 200, status: 'upcoming', score: null });
-    expect(feed.featured).toBeNull();
+    expect(feed.primary?.fixtureId).toBe(200);
     expect(feed.fixtures.map((match) => match.fixtureId)).toEqual([100]);
+  });
+
+  it('lists goals and red cards, filling spare rows with yellow cards', async () => {
+    const live = fixture(100, [10, 'Ahly'], [20, 'Zamalek'], '2H', NOW_SEC - 4000, [2, 1]);
+    matchesMock.mockResolvedValue({ data: { live: [live], upcoming: [], finished: [] } });
+    const ev = (minute: number, teamId: number, type: string, detail: string, name: string) => ({
+      time: { elapsed: minute, extra: null },
+      team: { id: teamId },
+      player: { name },
+      type,
+      detail,
+    });
+    eventsMock.mockResolvedValue([
+      ev(5, 20, 'Card', 'Yellow Card', 'Y1'),
+      ev(12, 10, 'Goal', 'Normal Goal', 'Scorer'),
+      ev(30, 20, 'Goal', 'Penalty', 'Pen'),
+      ev(33, 10, 'Goal', 'Missed Penalty', 'Miss'),
+      ev(40, 10, 'subst', 'Substitution 1', 'Sub'),
+      ev(55, 20, 'Card', 'Red Card', 'Off'),
+      ev(60, 10, 'Card', 'Yellow Card', 'Y2'),
+      ev(70, 10, 'Goal', 'Own Goal', 'OG'),
+      ev(80, 20, 'Card', 'Yellow Card', 'Y3'),
+    ]);
+
+    const feed = await buildWidgetFeed([10], 'en', NOW);
+
+    expect(feed.featured?.events.map((e) => [e.minute, e.kind, e.side, e.player])).toEqual([
+      [12, 'goal', 'home', 'Scorer'],
+      [30, 'penalty', 'away', 'Pen'],
+      [55, 'red', 'away', 'Off'],
+      [70, 'own_goal', 'home', 'OG'],
+      [80, 'yellow', 'away', 'Y3'],
+    ]);
   });
 
   it('drops an unresolvable favorite and falls back to the live followed match', async () => {
