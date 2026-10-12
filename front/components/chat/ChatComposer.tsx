@@ -177,6 +177,8 @@ export interface ChatComposerProps {
   onVoiceError?: (reason: VoiceInputError) => void;
   /** Android: the chat content view the glass frosts. */
   blurTarget?: React.RefObject<View | null>;
+  /** Full-width row shown above the capsule (e.g. suggestion chips); hidden in voice mode and while editing. */
+  suggestions?: React.ReactNode;
 }
 
 export function ChatComposer({
@@ -201,6 +203,7 @@ export function ChatComposer({
   onStop,
   onVoiceError,
   blurTarget,
+  suggestions,
 }: ChatComposerProps) {
   const { t, language } = useTranslation();
   const fontMedium = useAppFont(500);
@@ -279,6 +282,12 @@ export function ChatComposer({
                   <Text style={styles.editCancel}>×</Text>
                 </Pressable>
               </LiquidWaterSurface>
+            </Animated.View>
+          ) : null}
+
+          {suggestions && !voiceActive && !editingMessage ? (
+            <Animated.View exiting={FadeOut.duration(180)} style={styles.suggestions}>
+              {suggestions}
             </Animated.View>
           ) : null}
 
@@ -389,6 +398,10 @@ export function ChatComposer({
 const styles = StyleSheet.create({
   dock: {
     paddingHorizontal: BAR_SIDE_INSET,
+  },
+  suggestions: {
+    marginHorizontal: -BAR_SIDE_INSET,
+    marginBottom: 4,
   },
   composerRow: {
     flexDirection: 'row',

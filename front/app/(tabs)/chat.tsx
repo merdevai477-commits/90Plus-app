@@ -42,6 +42,8 @@ import { ChatMessageList } from '../../components/chat/ChatMessageList';
 
 import { ChatComposerDock } from '../../components/chat/ChatComposerDock';
 
+import { ChatSuggestionChips } from '../../components/chat/ChatSuggestionChips';
+
 import { ChatHistoryPanel } from '../../components/chat/ChatHistoryPanel';
 
 import { Toast } from '../../components/chat/Toast';
@@ -238,6 +240,11 @@ export default function ChatScreen() {
     failed: tChat.voiceFailed,
   };
 
+  const showSuggestions =
+    !screen.hasMessages && !isLoading && !(messagesRemaining !== null && messagesRemaining <= 0);
+  const { handleSend } = screen;
+  const handleSuggestion = useCallback((prompt: string) => handleSend(prompt), [handleSend]);
+
   const composerOverlap = composerHeight + keyboard.composerKeyboardLift;
 
   const listBottomInset = chatSpacing.listBottom + composerOverlap;
@@ -334,15 +341,7 @@ export default function ChatScreen() {
 
         tChat={tChat}
 
-        isAr={language === 'ar'}
-
         bottomInset={composerOverlap}
-
-        onSuggestion={
-          messagesRemaining !== null && messagesRemaining <= 0
-            ? undefined
-            : (prompt) => screen.handleSend(prompt)
-        }
 
       />
 
@@ -471,6 +470,17 @@ export default function ChatScreen() {
           onHeightChange={setComposerHeight}
 
           blurTarget={blurTargetRef}
+
+          suggestions={
+            showSuggestions ? (
+              <ChatSuggestionChips
+                tChat={tChat}
+                isAr={language === 'ar'}
+                onSelect={handleSuggestion}
+                blurTarget={blurTargetRef}
+              />
+            ) : undefined
+          }
 
           onVoiceError={(reason) =>
             screen.setConnToast({ message: voiceErrorMessages[reason], type: reason === 'tooShort' ? 'info' : 'error' })
