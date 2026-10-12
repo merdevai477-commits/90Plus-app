@@ -7,6 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/app-icon.png",
     "scheme": "ninetyplus",
+    "platforms": ["ios", "android"],
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
@@ -174,7 +175,6 @@
       ]
     },
     "web": {
-      "output": "static",
       "favicon": "./assets/images/app-icon.png"
     },
     "plugins": [
