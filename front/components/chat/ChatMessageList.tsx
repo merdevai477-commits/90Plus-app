@@ -6,7 +6,7 @@ import type { SharedValue } from 'react-native-reanimated';
 
 import type { Message } from '../../hooks/useAIChatNative';
 import { AIMessageBubble, UserMessageBubble } from './MessageBubble';
-import { ThinkingIndicator } from './ThinkingIndicator';
+import { ChatTypingOrb } from './ChatTypingOrb';
 import { ScrollToBottomButton } from './ScrollToBottomButton';
 import { ChatGlassSurface } from './ChatGlassSurface';
 import ChatScrollView from './ChatScrollView';
@@ -186,18 +186,7 @@ export function ChatMessageList({
         overScrollMode="never"
         removeClippedSubviews={Platform.OS === 'android' ? false : undefined}
         onContentSizeChange={onListContentSizeChange}
-        ListFooterComponent={
-          isThinking ? (
-            <ThinkingIndicator
-              isThinking={isThinking}
-              lastMessage={
-                [...messages]
-                  .reverse()
-                  .find((m) => m.role === 'user' && m.text.trim())?.text ?? ''
-              }
-            />
-          ) : null
-        }
+        ListFooterComponent={isThinking ? <ChatTypingOrb /> : null}
       />
 
       {showScrollButton && (

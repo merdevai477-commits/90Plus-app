@@ -31,6 +31,9 @@ import { Message } from '../../hooks/useAIChatNative';
 import { getTextDirectionStyles, useBubbleMaxWidth } from './chatTextUtils';
 import { ChatNavLinks } from './ChatNavLinks';
 import { decodeChatNavMarker } from '../../utils/chatNavLinks';
+import { IridescentRim } from './IridescentRim';
+
+const AI_BUBBLE_RADIUS = 22;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -468,30 +471,27 @@ export const AIMessageBubble = React.memo(function AIMessageBubble({ message, in
   return (
     <Animated.View entering={enter} style={s.aiRow}>
       <View style={[s.aiBubbleWrap, { maxWidth, width: '100%', alignSelf: 'flex-start' }]}>
-        <View style={s.aiBubble} collapsable={false}>
-          {Platform.OS === 'ios' ? (
-            <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
-          ) : (
-            <View style={s.aiBubbleAndroidFill} />
-          )}
-          <LinearGradient
-            colors={['rgba(124,58,237,0.16)', 'rgba(76,29,149,0.08)']}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <View style={s.aiBubbleTopHighlight} pointerEvents="none" />
-          <Pressable onPress={onPress} accessibilityRole="text">
-            <View style={s.aiBubbleInner}>
-              {content}
-              {showCursor && <StreamCursor />}
-            </View>
-          </Pressable>
-          {navLinks.length ? (
-            <View style={s.ctaFooter}>
-              <ChatNavLinks links={navLinks} onChoose={onNavChoice} />
-            </View>
-          ) : null}
+        <View style={s.aiBubbleShell}>
+          <View style={s.aiBubble} collapsable={false}>
+            <LinearGradient
+              colors={['rgba(150,120,255,0.10)', 'rgba(150,120,255,0)']}
+              start={{ x: 0, y: 0 }} end={{ x: 0, y: 0.35 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            <Pressable onPress={onPress} accessibilityRole="text">
+              <View style={s.aiBubbleInner}>
+                {content}
+                {showCursor && <StreamCursor />}
+              </View>
+            </Pressable>
+            {navLinks.length ? (
+              <View style={s.ctaFooter}>
+                <ChatNavLinks links={navLinks} onChoose={onNavChoice} />
+              </View>
+            ) : null}
+          </View>
+          <IridescentRim radius={AI_BUBBLE_RADIUS} filmDepth={12} spin={false} />
         </View>
         <Animated.Text style={[s.aiTs, tsStyle]}>{message.time}</Animated.Text>
       </View>
@@ -592,45 +592,33 @@ const s = StyleSheet.create({
     paddingHorizontal: 0,
   },
   aiBubbleWrap: {},
-  aiBubble: {
-    borderRadius: 18,
-    borderTopLeftRadius: 4,
-    borderBottomLeftRadius: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(167,139,250,0.32)',
-    overflow: 'hidden',
-    backgroundColor: 'rgba(16,8,28,0.94)',
+  aiBubbleShell: {
+    borderRadius: AI_BUBBLE_RADIUS,
     ...Platform.select({
       ios: {
-        shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.18,
-        shadowRadius: 10,
+        shadowColor: '#7C4DFF',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.28,
+        shadowRadius: 16,
       },
-      android: { elevation: 0 },
+      default: {},
     }),
   },
-  aiBubbleAndroidFill: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(18,10,32,0.96)',
+  aiBubble: {
+    borderRadius: AI_BUBBLE_RADIUS,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(3,2,8,0.94)',
   },
   ctaFooter: {
     paddingHorizontal: 10,
     paddingTop: 2,
     paddingBottom: 10,
   },
-  aiBubbleTopHighlight: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    zIndex: 2,
-  },
   aiBubbleInner: {
     width: '100%',
     alignSelf: 'stretch',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     gap: 2,
     zIndex: 1,
   },

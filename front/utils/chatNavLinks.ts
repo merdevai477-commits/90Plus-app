@@ -200,15 +200,26 @@ export function stripChatNavMarker(text: string): string {
   return decodeChatNavMarker(text).text;
 }
 
+const FITNESS_TOPIC_RE =
+  /نظام\s*[أا]كل|دايت|رجيم|تغذي|سعرات|بروتين|وجب[ةه]|تدريب|تمرين|تمارين|لياق[ةه]|جيم|إحماء|احماء|استشفاء|إطال[ةه]|\b(diet|meal|nutrition|calorie|protein|training|workout|exercise|fitness|gym|warm[-\s]?up|stretch\w*|recovery)\b/i;
+
+/** Mirrors the backend: training, diet and recovery answers never carry a profile/match CTA. */
+export function isFitnessTopic(question: string): boolean {
+  return FITNESS_TOPIC_RE.test(question ?? '');
+}
+
+/** Drops CTAs the server attached to a fitness question (older replies stored before the fix). */
+export function navLinksForQuestion(links: ChatNavLink[], question: string): ChatNavLink[] {
+  return isFitnessTopic(question) ? [] : links;
+}
+
 export function inferChatNavLinksFromQuestion(
   question: string,
   language: 'ar' | 'en',
 ): ChatNavLink[] {
   const q = (question ?? '').replace(/\s+/g, ' ').trim();
   if (q.length < 2) return [];
-  if (/نظام\s*أكل|نظام\s*اكل|دايت|رجيم|\bdiet\b|تدريب|تمرين|\btraining\b|استشفاء|\brecovery\b/i.test(q)) {
-    return [];
-  }
+  if (isFitnessTopic(q)) return [];
 
   const matches =
     /مباريات|ماتشات|\bmatches\b|جدول\s*اليوم|مواعيد\s*اليوم/i.test(q) ||

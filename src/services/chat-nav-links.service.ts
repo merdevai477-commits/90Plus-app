@@ -249,12 +249,18 @@ function addClarificationChoices(map: Map<string, ChatNavLink>, parsed: Record<s
   }
 }
 
+const FITNESS_TOPIC_RE =
+  /نظام\s*[أا]كل|دايت|رجيم|تغذي|سعرات|بروتين|وجب[ةه]|تدريب|تمرين|تمارين|لياق[ةه]|جيم|إحماء|احماء|استشفاء|إطال[ةه]|\b(diet|meal|nutrition|calorie|protein|training|workout|exercise|fitness|gym|warm[-\s]?up|stretch\w*|recovery)\b/i;
+
+/** Training, diet and recovery questions never get a profile/match CTA, even if a search tool ran. */
+export function isFitnessTopic(message: string): boolean {
+  return FITNESS_TOPIC_RE.test(message ?? '');
+}
+
 export function inferChatNavIntent(message: string): ChatNavLinkType[] {
   const q = (message ?? '').replace(/\s+/g, ' ').trim();
   if (q.length < 2) return [];
-  if (/نظام\s*أكل|نظام\s*اكل|دايت|رجيم|\bdiet\b|تدريب|تمرين|\btraining\b|استشفاء|\brecovery\b/i.test(q)) {
-    return [];
-  }
+  if (isFitnessTopic(q)) return [];
 
   const types: ChatNavLinkType[] = [];
   const wantsMatches =
@@ -285,6 +291,7 @@ export function extractChatNavLinks(
   language: 'ar' | 'en',
   userMessage?: string,
 ): ChatNavLink[] {
+  if (isFitnessTopic(userMessage ?? '')) return [];
   const used = new Set(toolsUsed);
   const inferred = inferChatNavIntent(userMessage ?? '');
   const wantMatches =
@@ -510,23 +517,15 @@ export function extractChatNavLinks(
   }
 
   const hasChoices = [...map.values()].some((l) => l.choice);
+  // A search tool running is not proof the question was about a person or club; the
+  // generic (unresolved) profile CTA needs the question itself to ask about one.
+  const askedPlayer = inferred.includes('player');
+  const askedClub = inferred.includes('club');
 
-  if (used.has('search_football') && !hasChoices) {
-    const hasPlayer = [...map.values()].some((l) => l.type === 'player');
-    const hasClub = [...map.values()].some((l) => l.type === 'club');
-    if (!hasPlayer && !hasClub) {
-      if (inferred.includes('club')) {
-        addLink(map, { type: 'club', label: clubFallback, query });
-      } else {
-        addLink(map, { type: 'player', label: playerFallback, query });
-      }
-    }
-  }
-
-  if (!hasChoices && wantPlayer && ![...map.values()].some((l) => l.type === 'player')) {
+  if (!hasChoices && askedPlayer && ![...map.values()].some((l) => l.type === 'player')) {
     addLink(map, { type: 'player', label: playerFallback, query });
   }
-  if (!hasChoices && wantClub && ![...map.values()].some((l) => l.type === 'club')) {
+  if (!hasChoices && askedClub && ![...map.values()].some((l) => l.type === 'club')) {
     addLink(map, { type: 'club', label: clubFallback, query });
   }
   if (wantMatches) {

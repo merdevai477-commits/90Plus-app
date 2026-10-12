@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { View, ScrollView, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing,
@@ -13,6 +13,7 @@ import { chatScreenStyles as styles } from './chatScreen.styles';
 import { ChatIridescentBubble } from './ChatIridescentBubble';
 import { chatSpacing } from './chatTheme';
 import { useVoiceModeStore } from './voiceModeStore';
+import { markWelcomeOrbLeft, setWelcomeOrbOrigin } from './welcomeOrbOrigin';
 
 /** Voice mode: the bubble is pulled down into the composer, then floats back when it ends. */
 const SUCK_DURATION = 560;
@@ -69,6 +70,13 @@ export const ChatWelcomeView = React.memo(function ChatWelcomeView({
   const suck = useSharedValue(0);
   const dropY = useSharedValue(0);
 
+  const recordOrigin = useCallback(() => {
+    anchorRef.current?.measureInWindow((x, y, w, h) => {
+      if (w > 0) setWelcomeOrbOrigin({ x: x + w / 2, y: y + h / 2, size: bubbleSize });
+    });
+  }, [bubbleSize]);
+  useEffect(() => markWelcomeOrbLeft, []);
+
   useEffect(() => {
     if (voiceActive && targetY != null) {
       anchorRef.current?.measureInWindow((_x, y, _w, h) => {
@@ -110,7 +118,7 @@ export const ChatWelcomeView = React.memo(function ChatWelcomeView({
       keyboardDismissMode="on-drag"
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.welcomeHero}>
+      <View style={styles.welcomeHero} onLayout={recordOrigin}>
         <View ref={anchorRef} collapsable={false} style={styles.welcomeBubble}>
           <Animated.View style={bubbleInStyle}>
             <Animated.View style={dropStyle}>

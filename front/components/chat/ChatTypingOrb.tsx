@@ -1,0 +1,183 @@
+/**
+ * Replaces the thinking card: the 90 PLUS orb starts where the welcome bubble
+ * was (or mid-screen), gets pulled down to the assistant's side with the same
+ * pinch-and-stretch as voice mode, then breathes beside a glass "typing" pill
+ * until the first word of the reply lands.
+ */
+
+import React, { useCallback, useEffect, useRef } from 'react';
+import { View, StyleSheet, useWindowDimensions, type ViewStyle } from 'react-native';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
+  interpolate,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+import { ChatIridescentBubble } from './ChatIridescentBubble';
+import { LiquidWaterSurface } from './LiquidWaterSurface';
+import { IridescentRim } from './IridescentRim';
+import { takeWelcomeOrbOrigin } from './welcomeOrbOrigin';
+import { useTranslation } from '../../src/i18n';
+
+const ORB = 40;
+/** Rendered large and scaled down, so the orb stays crisp while it is still big mid-flight. */
+const ORB_RENDER = 200;
+const REST_SCALE = ORB / ORB_RENDER;
+const FLY_MS = 820;
+const PILL_HEIGHT = 34;
+const PILL_RADIUS = PILL_HEIGHT / 2;
+const DOT = 7;
+
+function TypingDot({ delay, reduceMotion }: { delay: number; reduceMotion: boolean }) {
+  const lift = useSharedValue(0);
+  useEffect(() => {
+    if (reduceMotion) return;
+    lift.value = withDelay(
+      delay,
+      withRepeat(
+        withSequence(
+          withTiming(1, { duration: 360, easing: Easing.out(Easing.quad) }),
+          withTiming(0, { duration: 360, easing: Easing.in(Easing.quad) }),
+          withTiming(0, { duration: 420 }),
+        ),
+        -1,
+        false,
+      ),
+    );
+  }, [delay, lift, reduceMotion]);
+  const style = useAnimatedStyle(() => ({
+    opacity: 0.4 + lift.value * 0.6,
+    transform: [{ translateY: -lift.value * 4 }],
+  }));
+  return <Animated.View style={[styles.dot, style]} />;
+}
+
+export function ChatTypingOrb() {
+  const { t } = useTranslation();
+  const { width, height } = useWindowDimensions();
+  const reduceMotion = useReducedMotion();
+  const anchorRef = useRef<View>(null);
+  const launched = useRef(false);
+
+  const fly = useSharedValue(0);
+  const fromX = useSharedValue(0);
+  const fromY = useSharedValue(0);
+  const fromScale = useSharedValue(REST_SCALE);
+  const visible = useSharedValue(0);
+  const breathe = useSharedValue(0);
+
+  const launch = useCallback(() => {
+    if (launched.current) return;
+    anchorRef.current?.measureInWindow((x, y, w, h) => {
+      if (launched.current || w === 0) return;
+      launched.current = true;
+      const origin = takeWelcomeOrbOrigin() ?? {
+        x: width / 2,
+        y: height * 0.42,
+        size: Math.min(width * 0.5, 200),
+      };
+      fromX.value = origin.x - (x + w / 2);
+      fromY.value = origin.y - (y + h / 2);
+      fromScale.value = origin.size / ORB_RENDER;
+      visible.value = 1;
+      if (reduceMotion) {
+        fly.value = 1;
+        return;
+      }
+      fly.value = withTiming(1, { duration: FLY_MS, easing: Easing.inOut(Easing.cubic) });
+      breathe.value = withDelay(
+        FLY_MS,
+        withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.sin) }), -1, true),
+      );
+    });
+  }, [breathe, fly, fromScale, fromX, fromY, height, reduceMotion, visible, width]);
+
+  const orbStyle = useAnimatedStyle((): ViewStyle => {
+    const p = fly.value;
+    const scale = interpolate(p, [0, 1], [fromScale.value, REST_SCALE]) * (1 + breathe.value * 0.06);
+    return {
+      opacity: visible.value,
+      transform: [
+        { translateX: fromX.value * (1 - p) },
+        // Falls a little faster than it slides so the path curves towards the side.
+        { translateY: fromY.value * (1 - p) * (1 - p * 0.35) },
+        { scaleX: scale * interpolate(p, [0, 0.45, 1], [1, 0.8, 1]) },
+        { scaleY: scale * interpolate(p, [0, 0.45, 1], [1, 1.16, 1]) },
+      ],
+    };
+  });
+
+  return (
+    <Animated.View
+      exiting={FadeOut.duration(180)}
+      style={styles.row}
+      accessibilityRole="progressbar"
+      accessibilityLabel={t.chat.thinking.thinkingLabel}
+    >
+      <View ref={anchorRef} collapsable={false} onLayout={launch} style={styles.orbSlot}>
+        <Animated.View style={[styles.orbRender, orbStyle]} pointerEvents="none">
+          <ChatIridescentBubble size={ORB_RENDER} />
+        </Animated.View>
+      </View>
+
+      <Animated.View entering={FadeIn.delay(reduceMotion ? 0 : FLY_MS - 180).duration(260)}>
+        <LiquidWaterSurface
+          radius={PILL_RADIUS}
+          tint="rgba(3,2,8,0.92)"
+          glow={[0.6, 0.75, 1]}
+          strength={0.12}
+          sheen={0.1}
+          style={styles.pill}
+        >
+          {[0, 160, 320].map((d) => (
+            <TypingDot key={d} delay={d} reduceMotion={reduceMotion} />
+          ))}
+        </LiquidWaterSurface>
+        <IridescentRim radius={PILL_RADIUS} filmDepth={6} />
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 10,
+    paddingLeft: 2,
+    zIndex: 10,
+  },
+  orbSlot: {
+    width: ORB,
+    height: ORB,
+    overflow: 'visible',
+  },
+  orbRender: {
+    position: 'absolute',
+    width: ORB_RENDER,
+    height: ORB_RENDER,
+    left: (ORB - ORB_RENDER) / 2,
+    top: (ORB - ORB_RENDER) / 2,
+  },
+  pill: {
+    height: PILL_HEIGHT,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dot: {
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
+    backgroundColor: '#D9CCFF',
+  },
+});

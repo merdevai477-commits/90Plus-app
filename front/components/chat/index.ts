@@ -11,7 +11,7 @@ export { ChatHistoryPanel } from './ChatHistoryPanel';
 export { ChatGlassSurface } from './ChatGlassSurface';
 export { ChatSpinner, SpinnerRing } from './ChatSpinner';
 export { isArabicText, getTextDirectionStyles, useBubbleMaxWidth } from './chatTextUtils';
-export { ThinkingIndicator } from './ThinkingIndicator';
+export { ChatTypingOrb } from './ChatTypingOrb';
 export { ChatNavLinks } from './ChatNavLinks';
 export { MessageCounter } from './MessageCounter';
 export { LimitReachedCountdown } from './LimitReachedCountdown';

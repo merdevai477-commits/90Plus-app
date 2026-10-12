@@ -100,6 +100,22 @@ describe('chat-nav-links', () => {
     expect(links).toEqual([]);
   });
 
+  it('does not attach a profile CTA to a training plan even when a search tool ran', () => {
+    expect(
+      extractChatNavLinks([], ['search_football'], 'en', 'Create a weekly football training plan for me'),
+    ).toEqual([]);
+    expect(
+      extractChatNavLinks([], ['search_player'], 'ar', 'اعملي برنامج تدريب أسبوعي لكرة القدم'),
+    ).toEqual([]);
+  });
+
+  it('needs the question itself to ask about a player before adding an unresolved player CTA', () => {
+    expect(extractChatNavLinks([], ['search_football'], 'en', 'What are the latest football news?')).toEqual([]);
+    expect(
+      extractChatNavLinks([], ['search_football'], 'ar', 'مين أحسن لاعب في الدوري').some((l) => l.type === 'player'),
+    ).toBe(true);
+  });
+
   it('attaches club and nationality so the profile card can show them', () => {
     const links = extractChatNavLinks(
       [

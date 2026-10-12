@@ -23,6 +23,7 @@ import { useLanguageStore } from '../src/i18n/store';
 import {
   decodeChatNavMarker,
   inferChatNavLinksFromQuestion,
+  navLinksForQuestion,
   sanitizeChatNavLinks,
   stripChatNavMarker,
   type ChatNavLink,
@@ -565,9 +566,14 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         });
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        if (row.role !== 'ai' || row.navLinks?.length) continue;
+        if (row.role !== 'ai') continue;
         const prev = rows[i - 1];
         if (prev?.role !== 'user') continue;
+        if (row.navLinks?.length) {
+          const kept = navLinksForQuestion(row.navLinks, prev.text);
+          row.navLinks = kept.length ? kept : undefined;
+          continue;
+        }
         const inferred = inferChatNavLinksFromQuestion(prev.text, lang);
         if (inferred.length) row.navLinks = inferred;
       }
@@ -945,7 +951,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
             // long the typing renderer takes to drain.
             if (usedModel && activeAssistantMessageIdRef.current) {
               const targetId = activeAssistantMessageIdRef.current;
-              let navLinks = sanitizeChatNavLinks(doneEvent.navLinks);
+              let navLinks = navLinksForQuestion(sanitizeChatNavLinks(doneEvent.navLinks), trimmed);
               if (!navLinks.length) {
                 const lang = useLanguageStore.getState().language === 'ar' ? 'ar' : 'en';
                 navLinks = inferChatNavLinksFromQuestion(trimmed, lang);
@@ -959,7 +965,7 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
               );
             } else if (activeAssistantMessageIdRef.current) {
               const targetId = activeAssistantMessageIdRef.current;
-              let navLinks = sanitizeChatNavLinks(doneEvent.navLinks);
+              let navLinks = navLinksForQuestion(sanitizeChatNavLinks(doneEvent.navLinks), trimmed);
               if (!navLinks.length) {
                 const lang = useLanguageStore.getState().language === 'ar' ? 'ar' : 'en';
                 navLinks = inferChatNavLinksFromQuestion(trimmed, lang);

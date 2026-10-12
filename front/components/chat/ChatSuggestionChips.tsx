@@ -85,8 +85,8 @@ function SuggestionChip({
         .duration(CHIP_DURATION)
         .easing(Easing.out(Easing.cubic))
         .withInitialValues({ opacity: 0, transform: [{ translateY: 12 }] })}
-      style={pressStyle}
     >
+      <Animated.View style={pressStyle}>
       <Pressable
         onPressIn={() => { press.value = withTiming(0.96, { duration: 110 }); }}
         onPressOut={() => { press.value = withTiming(1, { duration: 180 }); }}
@@ -120,6 +120,7 @@ function SuggestionChip({
         </LiquidWaterSurface>
         <IridescentRim radius={CHIP_RADIUS} filmDepth={8} />
       </Pressable>
+      </Animated.View>
     </Animated.View>
   );
 }

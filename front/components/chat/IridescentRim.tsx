@@ -47,9 +47,13 @@ export type IridescentRimProps = {
   focus?: SharedValue<number>;
   /** How far the film colour bleeds inward from the edge. */
   filmDepth?: number;
+  /** Off for surfaces that repeat down a list (message bubbles): the film holds still and never redraws. */
+  spin?: boolean;
 };
 
-export function IridescentRim({ radius, focus, filmDepth = 16 }: IridescentRimProps) {
+const STILL_ANGLE = 2.4;
+
+export function IridescentRim({ radius, focus, filmDepth = 16, spin = true }: IridescentRimProps) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const clock = useClock();
 
@@ -58,7 +62,10 @@ export function IridescentRim({ radius, focus, filmDepth = 16 }: IridescentRimPr
     setSize((prev) => (prev.w === width && prev.h === height ? prev : { w: width, h: height }));
   }, []);
 
-  const transform = useDerivedValue(() => [{ rotate: (clock.value / 1000) * SPIN_SPEED }]);
+  const transform = useDerivedValue(
+    () => [{ rotate: spin ? (clock.value / 1000) * SPIN_SPEED : STILL_ANGLE }],
+    [spin],
+  );
   const opacity = useDerivedValue(() => 0.75 + (focus ? focus.value : 0) * 0.25);
 
   if (Platform.OS === 'web') return null;
