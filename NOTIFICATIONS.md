@@ -174,8 +174,8 @@ Plugin في `front/app.json`:
 
 ```json
 ["expo-notifications", {
-  "icon": "./assets/images/90Plus.png",
-  "color": "#22c55e",
+  "icon": "./assets/images/notification-icon.png",
+  "color": "#0D0529",
   "defaultChannel": "default",
   "googleServicesFile": "./google-services.json"
 }]
