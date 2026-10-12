@@ -149,4 +149,41 @@
         android:textStyle="bold" />
     </LinearLayout>
   </LinearLayout>
+
+  <!-- Scorers sit in their own row so uneven lists never shift the crests off the score line -->
+  <LinearLayout
+    android:id="@+id/np_scorers"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="3dp"
+    android:orientation="horizontal"
+    android:visibility="gone">
+
+    <TextView
+      android:id="@+id/np_home_scorers"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:ellipsize="end"
+      android:gravity="center_horizontal"
+      android:lineSpacingExtra="1dp"
+      android:textColor="#8F8F8F"
+      android:textSize="10sp" />
+
+    <TextView
+      android:layout_width="0dp"
+      android:layout_height="1dp"
+      android:layout_weight="1" />
+
+    <TextView
+      android:id="@+id/np_away_scorers"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:ellipsize="end"
+      android:gravity="center_horizontal"
+      android:lineSpacingExtra="1dp"
+      android:textColor="#8F8F8F"
+      android:textSize="10sp" />
+  </LinearLayout>
 </LinearLayout>

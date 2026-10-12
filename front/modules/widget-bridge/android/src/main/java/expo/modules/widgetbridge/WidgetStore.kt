@@ -18,6 +18,7 @@ internal data class WidgetLabels(
   val tomorrow: String,
   val lineup: String,
   val stats: String,
+  val events: String,
 ) {
   companion object {
     val DEFAULT = WidgetLabels(
@@ -35,6 +36,7 @@ internal data class WidgetLabels(
       tomorrow = "Tomorrow",
       lineup = "Lineup",
       stats = "Stats",
+      events = "Key events",
     )
 
     fun parse(json: JSONObject?): WidgetLabels {
@@ -55,6 +57,7 @@ internal data class WidgetLabels(
         tomorrow = s("tomorrow", DEFAULT.tomorrow),
         lineup = s("lineup", DEFAULT.lineup),
         stats = s("stats", DEFAULT.stats),
+        events = s("events", DEFAULT.events),
       )
     }
   }
@@ -75,6 +78,8 @@ internal object WidgetStore {
   private const val KEY_FEED = "widget.feed"
   private const val KEY_FEED_AT = "widget.feedAt"
   private const val KEY_LIVE_NOTIFIED = "widget.liveNotified"
+  private const val KEY_PAGE = "widget.page"
+  private const val KEY_PAGE_AT = "widget.pageAt"
 
   private fun prefs(context: Context) =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -122,5 +127,16 @@ internal object WidgetStore {
 
   fun setLiveNotified(context: Context, ids: Set<Int>) {
     prefs(context).edit().putStringSet(KEY_LIVE_NOTIFIED, ids.map { it.toString() }.toSet()).apply()
+  }
+
+  /** Page the user picked with the arrows, or null once that choice is older than [holdMs]. */
+  fun heldPage(context: Context, holdMs: Long): Int? {
+    val prefs = prefs(context)
+    val at = prefs.getLong(KEY_PAGE_AT, 0L)
+    return if (System.currentTimeMillis() - at < holdMs) prefs.getInt(KEY_PAGE, 0) else null
+  }
+
+  fun savePage(context: Context, index: Int) {
+    prefs(context).edit().putInt(KEY_PAGE, index).putLong(KEY_PAGE_AT, System.currentTimeMillis()).apply()
   }
 }

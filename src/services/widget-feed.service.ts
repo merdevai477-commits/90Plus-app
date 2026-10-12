@@ -13,7 +13,8 @@ export const WIDGET_MAX_TEAMS = 8;
 const TOP_PLAYERS = 3;
 const MOMENTUM_BUCKETS = 12;
 const FIXTURE_LIST_CAP = 6;
-const WIDGET_EVENT_LIMIT = 5;
+/** Enough for every scorer of a lopsided game; the widget trims rows to the space it has. */
+const WIDGET_EVENT_LIMIT = 10;
 const FEATURED_SIDE_BUDGET_MS = 2_000;
 /** A finished match stays on the widget this long before the next fixture takes over. */
 const RECENT_FINISH_WINDOW_SEC = 3 * 60 * 60;
@@ -367,6 +368,41 @@ export function pickKeyEvents(events: any[], match: WidgetMatch, limit = WIDGET_
   return [...key, ...yellows].sort((a, b) => order(a) - order(b));
 }
 
+/**
+ * Upstream detail feeds can go empty for a while (often right at full time). Without this the
+ * widget would drop its scorers and detail pages exactly when the result matters most.
+ */
+const lastFeatured = new Map<string, { at: number; featured: WidgetFeatured }>();
+const FEATURED_MEMORY_MS = 4 * 60 * 60 * 1000;
+const FEATURED_MEMORY_CAP = 300;
+
+export function clearFeaturedMemory(): void {
+  lastFeatured.clear();
+}
+
+export function keepLastFeatured(featured: WidgetFeatured, language: string, nowMs = Date.now()): WidgetFeatured {
+  const key = `${featured.fixtureId}:${language}`;
+  const remembered = lastFeatured.get(key);
+  const previous = remembered && nowMs - remembered.at < FEATURED_MEMORY_MS ? remembered.featured : null;
+  const merged: WidgetFeatured = previous
+    ? {
+        ...featured,
+        topPlayers: featured.topPlayers.length ? featured.topPlayers : previous.topPlayers,
+        momentum: featured.momentum.length ? featured.momentum : previous.momentum,
+        lineup: featured.lineup ?? previous.lineup,
+        stats: featured.stats ?? previous.stats,
+        events: featured.events.length ? featured.events : previous.events,
+      }
+    : featured;
+  lastFeatured.delete(key);
+  lastFeatured.set(key, { at: nowMs, featured: merged });
+  if (lastFeatured.size > FEATURED_MEMORY_CAP) {
+    const oldest = lastFeatured.keys().next().value;
+    if (oldest !== undefined) lastFeatured.delete(oldest);
+  }
+  return merged;
+}
+
 async function buildFeatured(match: WidgetMatch, language: string): Promise<WidgetFeatured> {
   const [lineups, momentum, statistics, events] = await Promise.all([
     footballDataCacheService.getMatchLineups(match.fixtureId, { language }).catch(() => []),
@@ -380,14 +416,17 @@ async function buildFeatured(match: WidgetMatch, language: string): Promise<Widg
       [],
     ),
   ]);
-  return {
-    fixtureId: match.fixtureId,
-    topPlayers: pickTopPlayers(lineups, match.home.id),
-    momentum: momentum?.available ? compressMomentum(momentum.series) : [],
-    lineup: pickOfficialLineup(lineups, match.home.id),
-    stats: pickWidgetStats(statistics, match.home.id),
-    events: pickKeyEvents(events, match),
-  };
+  return keepLastFeatured(
+    {
+      fixtureId: match.fixtureId,
+      topPlayers: pickTopPlayers(lineups, match.home.id),
+      momentum: momentum?.available ? compressMomentum(momentum.series) : [],
+      lineup: pickOfficialLineup(lineups, match.home.id),
+      stats: pickWidgetStats(statistics, match.home.id),
+      events: pickKeyEvents(events, match),
+    },
+    language,
+  );
 }
 
 function isLiveStatus(status: WidgetMatchStatus): boolean {

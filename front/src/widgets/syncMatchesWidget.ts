@@ -23,6 +23,7 @@ const LABELS: Record<WidgetLanguage, WidgetLabels> = {
     tomorrow: 'Tomorrow',
     lineup: 'Lineup',
     stats: 'Stats',
+    events: 'Key events',
   },
   ar: {
     live: 'مباشر',
@@ -39,6 +40,7 @@ const LABELS: Record<WidgetLanguage, WidgetLabels> = {
     tomorrow: 'غدًا',
     lineup: 'التشكيلة',
     stats: 'الإحصائيات',
+    events: 'أحداث المباراة',
   },
 };
 

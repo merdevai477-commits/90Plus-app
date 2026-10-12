@@ -25,8 +25,11 @@ import { footballDataCacheService } from '../services/football-data-cache.servic
 import { readLiveFixtureById } from '../services/live-fixture-cache.service';
 import {
   buildWidgetFeed,
+  clearFeaturedMemory,
   compressMomentum,
+  keepLastFeatured,
   parseWidgetTeamIds,
+  pickKeyEvents,
   pickNearestFixture,
 } from '../services/widget-feed.service';
 
@@ -66,11 +69,35 @@ const liveMock = readLiveFixtureById as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  clearFeaturedMemory();
   liveMock.mockResolvedValue(null);
   eventsMock.mockResolvedValue([]);
   lineupsMock.mockResolvedValue([]);
   statsMock.mockResolvedValue([]);
   momentumMock.mockResolvedValue({ available: false, duration: 90, series: [], markers: [] });
+});
+
+describe('keepLastFeatured', () => {
+  const full = {
+    fixtureId: 9,
+    topPlayers: [{ id: 1, name: 'A', photo: null, rating: 8, side: 'home' as const }],
+    momentum: [{ minute: 10, home: 60, away: 40 }],
+    lineup: null,
+    stats: null,
+    events: [{ minute: 10, extra: null, kind: 'goal' as const, side: 'home' as const, player: 'A' }],
+  };
+  const empty = { ...full, topPlayers: [], momentum: [], events: [] };
+
+  it('fills sections that went empty from the last good build of the same match and language', () => {
+    keepLastFeatured(full, 'en', 1_000);
+    expect(keepLastFeatured(empty, 'en', 2_000)).toEqual(full);
+    expect(keepLastFeatured(empty, 'ar', 2_000)).toEqual(empty);
+  });
+
+  it('forgets a build older than four hours', () => {
+    keepLastFeatured(full, 'en', 0);
+    expect(keepLastFeatured(empty, 'en', 4 * 60 * 60 * 1000 + 1)).toEqual(empty);
+  });
 });
 
 describe('parseWidgetTeamIds', () => {
@@ -221,11 +248,22 @@ describe('buildWidgetFeed', () => {
     const feed = await buildWidgetFeed([10], 'en', NOW);
 
     expect(feed.featured?.events.map((e) => [e.minute, e.kind, e.side, e.player])).toEqual([
+      [5, 'yellow', 'away', 'Y1'],
       [12, 'goal', 'home', 'Scorer'],
       [30, 'penalty', 'away', 'Pen'],
       [55, 'red', 'away', 'Off'],
+      [60, 'yellow', 'home', 'Y2'],
       [70, 'own_goal', 'home', 'OG'],
       [80, 'yellow', 'away', 'Y3'],
+    ]);
+
+    const tight = pickKeyEvents(await eventsMock(), feed.primary!, 5);
+    expect(tight.map((e) => [e.minute, e.kind])).toEqual([
+      [12, 'goal'],
+      [30, 'penalty'],
+      [55, 'red'],
+      [70, 'own_goal'],
+      [80, 'yellow'],
     ]);
   });
 

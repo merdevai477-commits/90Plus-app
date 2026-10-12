@@ -1,9 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-  android:id="@+id/np_lineup_name"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:layout_width="match_parent"
   android:layout_height="wrap_content"
-  android:ellipsize="end"
-  android:maxLines="1"
-  android:textColor="#FFFFFF"
-  android:textSize="10sp" />
+  android:gravity="center_vertical"
+  android:orientation="horizontal"
+  android:paddingTop="1dp"
+  android:paddingBottom="1dp">
+
+  <TextView
+    android:id="@+id/np_lineup_number"
+    android:layout_width="18dp"
+    android:layout_height="wrap_content"
+    android:maxLines="1"
+    android:textColor="#8F8F8F"
+    android:textSize="10sp"
+    android:textStyle="bold" />
+
+  <TextView
+    android:id="@+id/np_lineup_name"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:ellipsize="end"
+    android:maxLines="1"
+    android:textColor="#FFFFFF"
+    android:textSize="10sp" />
+
+  <TextView
+    android:id="@+id/np_lineup_rating"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="4dp"
+    android:maxLines="1"
+    android:textColor="#D1A4FB"
+    android:textSize="10sp"
+    android:textStyle="bold" />
+</LinearLayout>

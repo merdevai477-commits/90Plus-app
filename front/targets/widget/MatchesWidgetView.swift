@@ -51,7 +51,7 @@ struct MatchesWidgetView: View {
   private var deepLink: URL? {
     guard let feed = entry.feed else { return searchURL }
     switch entry.page {
-    case .live, .players, .momentum, .lineup, .stats:
+    case .live, .players, .momentum, .lineup, .stats, .events:
       return feed.focusMatch?.deepLink ?? searchURL
     case .fixture(let index) where feed.fixtures.indices.contains(index):
       return feed.fixtures[index].deepLink ?? searchURL
@@ -282,7 +282,10 @@ private struct MediumView: View {
     case .feed(let feed):
       switch entry.page {
       case .live:
-        if let match = feed.focusMatch { MatchCard(entry: entry, match: match) }
+        if let match = feed.focusMatch {
+          let events = feed.featured?.fixtureId == match.fixtureId ? feed.featured?.events ?? [] : []
+          MatchCard(entry: entry, match: match, events: events)
+        }
       case .players:
         if let featured = feed.featured, let match = feed.focusMatch {
           PlayersPage(entry: entry, match: match, players: featured.topPlayers)
@@ -298,6 +301,10 @@ private struct MediumView: View {
       case .stats:
         if let stats = feed.featured?.stats, stats.hasAny, let match = feed.focusMatch {
           StatsPage(entry: entry, match: match, stats: stats)
+        }
+      case .events:
+        if let events = feed.featured?.events, !events.isEmpty, let match = feed.focusMatch {
+          EventsPage(entry: entry, match: match, events: events)
         }
       case .fixture(let index) where feed.fixtures.indices.contains(index):
         MatchCard(entry: entry, match: feed.fixtures[index])
@@ -349,6 +356,11 @@ private struct PagerBar: View {
 private struct MatchCard: View {
   let entry: MatchesEntry
   let match: FeedMatch
+  var events: [FeedEvent] = []
+  @Environment(\.widgetFamily) private var family
+
+  private var isLarge: Bool { family == .systemLarge || family == .systemExtraLarge }
+  private var crest: CGFloat { isLarge ? 60 : 42 }
 
   var body: some View {
     VStack(spacing: 6) {
@@ -359,26 +371,64 @@ private struct MatchCard: View {
           .foregroundStyle(Palette.rowTime)
           .lineLimit(1)
       }
-      HStack(spacing: 16) {
-        TeamColumn(side: match.home, image: entry.image(match.home.logo), crest: 42, spacing: 9)
-        VStack(spacing: 8) {
-          StatusBadge(match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic)
-          if match.score != nil {
-            ScoreText(match: match, size: 23)
-          } else {
-            Text(KickoffText.time(match.kickoff, arabic: entry.isArabic))
-              .font(.system(size: 20, weight: .bold))
-              .foregroundStyle(.white)
-              .lineLimit(1)
-              .minimumScaleFactor(0.7)
-          }
+      teams
+      // Only the large family has room for scorers under the crests.
+      if isLarge, !events.isEmpty {
+        HStack(alignment: .top, spacing: 16) {
+          scorerColumn(scorerLines(events, side: "home"))
+          Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
+          scorerColumn(scorerLines(events, side: "away"))
         }
-        .frame(maxWidth: .infinity)
-        TeamColumn(side: match.away, image: entry.image(match.away.logo), crest: 42, spacing: 11)
+        .environment(\.layoutDirection, .leftToRight)
       }
-      .environment(\.layoutDirection, .leftToRight)
     }
   }
+
+  private func scorerColumn(_ lines: [String]) -> some View {
+    VStack(spacing: 2) {
+      ForEach(Array(lines.prefix(5).enumerated()), id: \.offset) { _, line in
+        Text(line).lineLimit(1).minimumScaleFactor(0.8)
+      }
+    }
+    .font(.system(size: 10, weight: .medium))
+    .foregroundStyle(Palette.rowTime)
+    .frame(maxWidth: .infinity)
+  }
+
+  private var teams: some View {
+    HStack(spacing: 16) {
+      TeamColumn(side: match.home, image: entry.image(match.home.logo), crest: crest, spacing: 9)
+      VStack(spacing: 8) {
+        StatusBadge(match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic)
+        if match.score != nil {
+          ScoreText(match: match, size: 23)
+        } else {
+          Text(KickoffText.time(match.kickoff, arabic: entry.isArabic))
+            .font(.system(size: 20, weight: .bold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+        }
+      }
+      .frame(maxWidth: .infinity)
+      TeamColumn(side: match.away, image: entry.image(match.away.logo), crest: crest, spacing: 11)
+    }
+    .environment(\.layoutDirection, .leftToRight)
+  }
+}
+
+/// "Guerrero 13', 37'" per scorer, in the order they first scored. Mirrors the Android widget.
+private func scorerLines(_ events: [FeedEvent], side: String) -> [String] {
+  var order: [String] = []
+  var minutes: [String: [String]] = [:]
+  for event in events where event.side == side && ["goal", "penalty", "own_goal"].contains(event.kind) {
+    let name = shortPlayerName(event.player) + (event.kind == "own_goal" ? " (OG)" : "")
+    let extra = event.extra.map { "+\($0)" } ?? ""
+    let minute = "\(event.minute)\(extra)\u{2019}" + (event.kind == "penalty" ? " (P)" : "")
+    if minutes[name] == nil { order.append(name) }
+    minutes[name, default: []].append(minute)
+  }
+  return order.map { "\($0) \(minutes[$0]!.joined(separator: ", "))" }
 }
 
 private struct MiniScoreHeader: View {
@@ -388,9 +438,10 @@ private struct MiniScoreHeader: View {
 
   var body: some View {
     HStack(spacing: 6) {
+      BrandMark(size: 12)
       Text(title)
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(.white)
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(Palette.muted)
         .lineLimit(1)
       Spacer(minLength: 4)
       Crest(image: entry.image(match.home.logo), size: 16)
@@ -399,6 +450,101 @@ private struct MiniScoreHeader: View {
       StatusBadge(match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic, fontSize: 9)
     }
     .environment(\.layoutDirection, .leftToRight)
+  }
+}
+
+/// "Mohamed Salah" -> "Salah"; keeps particles like "De Bruyne" readable. Mirrors the Android widget.
+private func shortPlayerName(_ full: String) -> String {
+  let parts = full.split(whereSeparator: \.isWhitespace).map(String.init)
+  guard parts.count > 1 else { return parts.first ?? "" }
+  let particles: Set<String> = ["de", "da", "di", "van", "von", "der", "del", "la", "le", "el", "al", "dos", "ben", "bin", "abu"]
+  let second = parts[parts.count - 2]
+  return particles.contains(second.lowercased()) ? "\(second) \(parts.last!)" : parts.last!
+}
+
+/// Goals and red cards (yellows fill spare rows), mirrored around the minute like the in-app timeline.
+private struct EventsPage: View {
+  let entry: MatchesEntry
+  let match: FeedMatch
+  let events: [FeedEvent]
+  @Environment(\.widgetFamily) private var family
+
+  var body: some View {
+    VStack(spacing: 4) {
+      MiniScoreHeader(entry: entry, match: match, title: entry.labels.events)
+      Spacer(minLength: 0)
+      VStack(spacing: family == .systemLarge ? 6 : 3) {
+        ForEach(Array(events.suffix(family == .systemLarge ? 10 : 5).enumerated()), id: \.offset) { _, event in
+          EventRow(event: event)
+        }
+      }
+      Spacer(minLength: 0)
+    }
+  }
+}
+
+private struct EventRow: View {
+  let event: FeedEvent
+
+  private var isHome: Bool { event.side == "home" }
+
+  private var label: String {
+    let name = shortPlayerName(event.player)
+    switch event.kind {
+    case "penalty": return "\(name) (P)"
+    case "own_goal": return "\(name) (OG)"
+    default: return name
+    }
+  }
+
+  private var minute: String {
+    let extra = event.extra.map { "+\($0)" } ?? ""
+    return "\(event.minute)\(extra)\u{2019}"
+  }
+
+  var body: some View {
+    HStack(spacing: 6) {
+      HStack(spacing: 4) {
+        if isHome {
+          Text(label).lineLimit(1)
+          EventIcon(kind: event.kind)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .trailing)
+      Text(minute)
+        .font(.system(size: 10, weight: .bold))
+        .monospacedDigit()
+        .foregroundStyle(Palette.ratingText)
+        .frame(width: 42, height: 15)
+        .background(Palette.ratingFill, in: Capsule())
+      HStack(spacing: 4) {
+        if !isHome {
+          EventIcon(kind: event.kind)
+          Text(label).lineLimit(1)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .font(.system(size: 11, weight: .medium))
+    .foregroundStyle(.white)
+    .environment(\.layoutDirection, .leftToRight)
+  }
+}
+
+private struct EventIcon: View {
+  let kind: String
+
+  var body: some View {
+    switch kind {
+    case "red":
+      RoundedRectangle(cornerRadius: 1.5).fill(Color(red: 0.94, green: 0.27, blue: 0.27)).frame(width: 8, height: 11)
+    case "yellow":
+      RoundedRectangle(cornerRadius: 1.5).fill(Color(red: 0.98, green: 0.80, blue: 0.08)).frame(width: 8, height: 11)
+    default:
+      Image(systemName: "soccerball")
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(kind == "own_goal" ? Color(red: 0.97, green: 0.44, blue: 0.44) : Color.white)
+    }
   }
 }
 
@@ -462,10 +608,7 @@ private struct PlayerTile: View {
     .frame(maxWidth: .infinity)
   }
 
-  private var shortName: String {
-    let parts = player.name.split(separator: " ")
-    return parts.count > 1 ? String(parts.last!) : player.name
-  }
+  private var shortName: String { shortPlayerName(player.name) }
 }
 
 private struct MomentumPage: View {
@@ -473,7 +616,9 @@ private struct MomentumPage: View {
   let match: FeedMatch
   let points: [FeedMomentumPoint]
 
-  private let halfHeight: CGFloat = 30
+  @Environment(\.widgetFamily) private var family
+
+  private var halfHeight: CGFloat { family == .systemLarge ? 80 : 34 }
 
   var body: some View {
     VStack(spacing: 8) {
@@ -511,9 +656,8 @@ private struct LineupPage: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
-      BrandMark(size: 12)
       MiniScoreHeader(entry: entry, match: match, title: entry.labels.lineup)
-        if lineup.hasPitch {
+      if lineup.hasPitch {
         Pitch(lineup: lineup)
       } else {
         if let formation = formationText {
@@ -536,22 +680,28 @@ private struct LineupPage: View {
     return parts.isEmpty ? nil : parts.joined(separator: " · ")
   }
 
+  @Environment(\.widgetFamily) private var family
+
   private func nameColumn(_ players: [FeedLineupPlayer]) -> some View {
     VStack(alignment: .leading, spacing: 1) {
-      ForEach(Array(players.prefix(4).enumerated()), id: \.offset) { _, player in
-        Text(label(player))
-          .font(.system(size: 10, weight: .medium))
-          .foregroundStyle(.white)
-          .lineLimit(1)
+      ForEach(Array(players.prefix(family == .systemLarge ? 11 : 5).enumerated()), id: \.offset) { _, player in
+        HStack(spacing: 4) {
+          Text(player.number.map(String.init) ?? "")
+            .foregroundStyle(Palette.rowTime)
+            .frame(width: 16, alignment: .leading)
+          Text(shortPlayerName(player.name))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+          Spacer(minLength: 2)
+          if let rating = player.rating, rating > 0 {
+            Text(String(format: "%.1f", rating)).foregroundStyle(Palette.ratingText)
+          }
+        }
+        .font(.system(size: 10, weight: .medium))
+        .monospacedDigit()
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-  }
-
-  private func label(_ player: FeedLineupPlayer) -> String {
-    let name = player.name.split(separator: " ").last.map(String.init) ?? player.name
-    guard let rating = player.rating, rating > 0 else { return name }
-    return "\(name)  \(String(format: "%.1f", rating))"
   }
 }
 
@@ -599,7 +749,6 @@ private struct StatsPage: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
-      BrandMark(size: 12)
       MiniScoreHeader(entry: entry, match: match, title: entry.labels.stats)
       VStack(spacing: 2) {
         statRow(entry.isArabic ? "استحواذ" : "Possession", stats.possession, suffix: "%")

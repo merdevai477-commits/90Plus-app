@@ -31,6 +31,7 @@ internal data class FeedLineupPlayer(
   val name: String,
   val rating: Double?,
   val grid: String?,
+  val number: Int?,
 )
 
 internal data class FeedLineup(
@@ -50,12 +51,15 @@ internal data class FeedStats(
   val xg: FeedStatPair?,
 )
 
+internal data class FeedEvent(val minute: Int, val extra: Int?, val kind: String, val side: String, val player: String)
+
 internal data class FeedFeatured(
   val fixtureId: Int,
   val topPlayers: List<FeedPlayer>,
   val momentum: List<FeedMomentumPoint>,
   val lineup: FeedLineup?,
   val stats: FeedStats?,
+  val events: List<FeedEvent>,
 )
 
 internal data class WidgetFeed(
@@ -139,7 +143,7 @@ internal data class WidgetFeed(
           val rating = if (it.isNull("rating") || !it.has("rating")) null else it.optDouble("rating").takeIf { value ->
             !value.isNaN() && value > 0
           }
-          FeedLineupPlayer(it.optString("name"), rating, it.optStringOrNull("grid"))
+          FeedLineupPlayer(it.optString("name"), rating, it.optStringOrNull("grid"), it.optIntOrNull("number"))
         }
       }
 
@@ -153,6 +157,7 @@ internal data class WidgetFeed(
       val momentum = json.optJSONArray("momentum")
       val lineup = json.optJSONObject("lineup")
       val stats = json.optJSONObject("stats")
+      val events = json.optJSONArray("events")
       return FeedFeatured(
         fixtureId = json.optInt("fixtureId"),
         topPlayers = (0 until (players?.length() ?: 0)).mapNotNull { i ->
@@ -181,6 +186,11 @@ internal data class WidgetFeed(
             parsePair(it.optJSONObject("corners")),
             parsePair(it.optJSONObject("xg")),
           )
+        },
+        events = (0 until (events?.length() ?: 0)).mapNotNull { i ->
+          events?.optJSONObject(i)?.let {
+            FeedEvent(it.optInt("minute"), it.optIntOrNull("extra"), it.optString("kind"), it.optString("side"), it.optString("player"))
+          }
         },
       )
     }

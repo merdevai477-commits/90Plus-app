@@ -22,6 +22,7 @@ export interface WidgetLabels {
   tomorrow: string;
   lineup: string;
   stats: string;
+  events: string;
 }
 
 export interface WidgetConfig {

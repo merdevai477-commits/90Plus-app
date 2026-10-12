@@ -111,15 +111,17 @@ struct MatchesProvider: TimelineProvider {
     let fixturePages = feed.fixtures.indices.map { WidgetPage.fixture($0) }
     switch family {
     case .systemMedium, .systemLarge, .systemExtraLarge:
+      // The live match and everything about it come first; other clubs' cards follow.
       var pages: [WidgetPage] = []
       if focus != nil { pages.append(.live) }
-      pages.append(contentsOf: fixturePages)
-      if featured != nil {
-        if featured?.lineup != nil { pages.append(.lineup) }
-        if featured?.topPlayers.isEmpty == false { pages.append(.players) }
-        if (featured?.momentum.count ?? 0) >= 2 { pages.append(.momentum) }
-        if featured?.stats?.hasAny == true { pages.append(.stats) }
+      if let featured {
+        if !featured.events.isEmpty { pages.append(.events) }
+        if featured.momentum.count >= 2 { pages.append(.momentum) }
+        if featured.lineup != nil { pages.append(.lineup) }
+        if !featured.topPlayers.isEmpty { pages.append(.players) }
+        if featured.stats?.hasAny == true { pages.append(.stats) }
       }
+      pages.append(contentsOf: fixturePages)
       return pages.isEmpty ? [.empty] : pages
     case .systemSmall:
       let pages = (focus != nil ? [WidgetPage.live] : []) + fixturePages

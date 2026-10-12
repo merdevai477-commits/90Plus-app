@@ -31,6 +31,7 @@ struct WidgetLabels: Decodable, Hashable {
   var tomorrow = "Tomorrow"
   var lineup = "Lineup"
   var stats = "Stats"
+  var events = "Key events"
 
   init() {}
 
@@ -53,11 +54,12 @@ struct WidgetLabels: Decodable, Hashable {
     tomorrow = str(.tomorrow, "Tomorrow")
     lineup = str(.lineup, "Lineup")
     stats = str(.stats, "Stats")
+    events = str(.events, "Key events")
   }
 
   private enum CodingKeys: String, CodingKey {
     case live, upcoming, finished, halftime, postponed, topPlayers, momentum, myTeams
-    case followTeams, vs, today, tomorrow, lineup, stats
+    case followTeams, vs, today, tomorrow, lineup, stats, events
   }
 }
 
@@ -183,12 +185,22 @@ struct FeedStats: Codable, Hashable {
   var hasAny: Bool { possession != nil || shots != nil || shotsOn != nil || corners != nil || xg != nil }
 }
 
+struct FeedEvent: Codable, Hashable {
+  let minute: Int
+  let extra: Int?
+  /// goal | penalty | own_goal | red | yellow
+  let kind: String
+  let side: String
+  let player: String
+}
+
 struct FeedFeatured: Codable, Hashable {
   let fixtureId: Int
   let topPlayers: [FeedPlayer]
   let momentum: [FeedMomentumPoint]
   let lineup: FeedLineup?
   let stats: FeedStats?
+  let events: [FeedEvent]
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -197,6 +209,7 @@ struct FeedFeatured: Codable, Hashable {
     momentum = try container.decodeIfPresent([FeedMomentumPoint].self, forKey: .momentum) ?? []
     lineup = try container.decodeIfPresent(FeedLineup.self, forKey: .lineup)
     stats = try container.decodeIfPresent(FeedStats.self, forKey: .stats)
+    events = (try? container.decodeIfPresent([FeedEvent].self, forKey: .events)) ?? []
   }
 
   func encode(to encoder: Encoder) throws {
@@ -206,10 +219,11 @@ struct FeedFeatured: Codable, Hashable {
     try container.encode(momentum, forKey: .momentum)
     try container.encodeIfPresent(lineup, forKey: .lineup)
     try container.encodeIfPresent(stats, forKey: .stats)
+    try container.encode(events, forKey: .events)
   }
 
   private enum CodingKeys: String, CodingKey {
-    case fixtureId, topPlayers, momentum, lineup, stats
+    case fixtureId, topPlayers, momentum, lineup, stats, events
   }
 }
 
@@ -402,6 +416,7 @@ enum WidgetPage: Hashable {
   case momentum
   case lineup
   case stats
+  case events
   case fixture(Int)
   case empty
   case match(Int)
