@@ -3106,7 +3106,7 @@ export const en = {
     // Welcome / hero
     welcomeGreetingFallback: 'Captain',
     welcomeGreeting: 'Hey {name}!',
-    welcomeSubtitle: 'How can I help you?',
+    welcomeSubtitle: 'What can I help you with today?',
     welcomeBrand: '90Plus AI · Your personal coach',
     welcomeOnline: 'Online',
     suggestionFootballInfoSub: 'News, players and matches',

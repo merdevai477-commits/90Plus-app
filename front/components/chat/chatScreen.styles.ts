@@ -27,15 +27,8 @@ export const chatScreenStyles = StyleSheet.create({
     minHeight: 0,
   },
   header: {
-    overflow: 'hidden',
     flexShrink: 0,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: chatColors.headerBorder,
     zIndex: 100,
-    elevation: 4,
-  },
-  headerBackdrop: {
-    backgroundColor: chatColors.headerBackdrop,
   },
   headerRow: {
     flexDirection: 'row',
@@ -44,66 +37,6 @@ export const chatScreenStyles = StyleSheet.create({
     paddingHorizontal: chatSpacing.screenHorizontal,
     paddingTop: 8,
     paddingBottom: 12,
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  logoPillLarge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    gap: 6,
-  },
-  logo90Large: {
-    color: chatColors.textPrimary,
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-  plusChipLarge: {
-    backgroundColor: chatColors.accent,
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  logoPlusLarge: {
-    color: chatColors.textPrimary,
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-  },
-  captainText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: -0.1,
-    flexShrink: 1,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: chatColors.iconBg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: chatColors.iconBorder,
-  },
-  iconButtonGhost: {
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
-  },
-  iconButtonPressed: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    transform: [{ scale: 0.94 }],
   },
   welcomeScroll: {
     flex: 1,
@@ -121,7 +54,10 @@ export const chatScreenStyles = StyleSheet.create({
     alignItems: 'center',
   },
   welcomeBubble: {
-    marginBottom: 40,
+    marginBottom: 28,
+  },
+  welcomeText: {
+    alignSelf: 'stretch',
   },
   welcomeTitle: {
     ...chatTypography.welcomeTitle,
@@ -133,7 +69,6 @@ export const chatScreenStyles = StyleSheet.create({
     ...chatTypography.welcomeSubtitle,
     color: chatColors.textSecondary,
     textAlign: 'center',
-    marginBottom: 10,
   },
   messagesList: { flex: 1, minHeight: 0 },
   streamingPlaceholder: {

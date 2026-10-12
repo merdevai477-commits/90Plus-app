@@ -56,7 +56,7 @@ export default function ChatScreen() {
 
   useScreenFont();
 
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   const tChat = t.chat;
 
@@ -334,7 +334,15 @@ export default function ChatScreen() {
 
         tChat={tChat}
 
+        isAr={language === 'ar'}
+
         bottomInset={composerOverlap}
+
+        onSuggestion={
+          messagesRemaining !== null && messagesRemaining <= 0
+            ? undefined
+            : (prompt) => screen.handleSend(prompt)
+        }
 
       />
 

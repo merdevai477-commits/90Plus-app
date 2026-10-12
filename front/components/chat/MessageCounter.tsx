@@ -1,20 +1,22 @@
 /**
  * MessageCounter.tsx — Native
- * Pill showing remaining messages with dynamic color:
- *   ≥ 80% → green | ≥ 50% → yellow | < 50% → red
- * (نسبة مئوية بدل hardcoded 5/3)
+ * Liquid-glass pill showing remaining messages: frosted body, violet→pink
+ * brand gradient, top sheen and a soft backlight glow. Turns rose when the
+ * user is running low.
  */
 
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Platform, type LayoutChangeEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { MessageCircle } from 'lucide-react-native';
 import {
-  Colors,
-  Radius,
-  FontSize,
-  Spacing,
-  Gradients,
-} from '../../constants/theme';
+  BlurMask,
+  Canvas,
+  LinearGradient as SkiaLinearGradient,
+  RoundedRect,
+  vec,
+} from '@shopify/react-native-skia';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,57 +30,29 @@ interface MessageCounterProps {
   total?: number;
 }
 
-interface CounterColors {
-  gradientColors: readonly [string, string];
-  borderColor: string;
-  shadowColor: string;
-  textColor: string;
-}
+type GlassPalette = {
+  fill: readonly [string, string];
+  glow: readonly [string, string];
+};
 
-// ─── Color Logic ──────────────────────────────────────────────────────────────
+// ─── Palette ──────────────────────────────────────────────────────────────────
 
-/**
- * ✅ يعتمد على النسبة المئوية بدل الأرقام الثابتة
- * حتى لو تغيّر total يظل المنطق صحيح
- */
-function getColors(remaining: number, total: number): CounterColors {
-  const ratio = total > 0 ? remaining / total : 0;
+const BRAND: GlassPalette = {
+  fill: ['rgba(111,36,251,0.82)', 'rgba(221,126,187,0.62)'],
+  glow: ['#6F24FB', '#DD7EBB'],
+};
+const LOW: GlassPalette = {
+  fill: ['rgba(224,121,144,0.85)', 'rgba(167,75,142,0.7)'],
+  glow: ['#E07990', '#A74B8E'],
+};
+const LOADING: GlassPalette = {
+  fill: ['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.05)'],
+  glow: ['rgba(163,221,249,0.4)', 'rgba(111,36,251,0.4)'],
+};
 
-  if (ratio >= 0.8) {
-    return {
-      gradientColors: Gradients.success,
-      borderColor: Colors.successBorder,
-      shadowColor: Colors.success,
-      textColor: '#6EE7B7',
-    };
-  }
-  if (ratio >= 0.5) {
-    return {
-      gradientColors: Gradients.warning,
-      borderColor: Colors.warningBorder,
-      shadowColor: Colors.warning,
-      textColor: '#FDE68A',
-    };
-  }
-  return {
-    gradientColors: Gradients.error,
-    borderColor: Colors.errorBorder,
-    shadowColor: Colors.error,
-    textColor: '#FCA5A5',
-  };
-}
-
-/**
- * Neutral palette for the "still loading" pill state.
- */
-function getLoadingColors(): CounterColors {
-  return {
-    gradientColors: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.04)'] as const,
-    borderColor: 'rgba(255,255,255,0.15)',
-    shadowColor: 'rgba(255,255,255,0.1)',
-    textColor: 'rgba(255,255,255,0.6)',
-  };
-}
+/** Below this share of the daily limit the pill switches to the rose palette. */
+const LOW_RATIO = 0.3;
+const GLOW_PAD = 12;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -87,60 +61,70 @@ export function MessageCounter({
   total = 10,
 }: MessageCounterProps) {
   const isLoading = messagesRemaining === null;
+  const [size, setSize] = useState({ w: 0, h: 0 });
 
-  // ✅ useMemo — لا نعيد الحساب إلا عند تغيّر القيم
-  const colors = useMemo(
-    () => (isLoading ? getLoadingColors() : getColors(messagesRemaining, total)),
-    [isLoading, messagesRemaining, total],
-  );
+  const palette = useMemo(() => {
+    if (isLoading) return LOADING;
+    const ratio = total > 0 ? messagesRemaining / total : 0;
+    return ratio < LOW_RATIO ? LOW : BRAND;
+  }, [isLoading, messagesRemaining, total]);
 
-  // ✅ نص وصفي للـ accessibility
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setSize((prev) => (prev.w === width && prev.h === height ? prev : { w: width, h: height }));
+  }, []);
+
   const accessibilityLabel = isLoading
     ? 'Loading message limit'
     : `${messagesRemaining} of ${total} messages remaining`;
-
   const displayText = isLoading ? '…' : `${messagesRemaining}/${total}`;
+  const radius = size.h / 2;
 
   return (
-    /**
-     * ✅ Shadow على wrapper خارجي بدون overflow:hidden
-     *    حتى لا يُقطع الظل على iOS
-     */
-    <View
-      style={[
-        styles.shadowWrapper,
-        {
-          shadowColor: colors.shadowColor,
-        },
-      ]}
-    >
-      <View
-        style={[
-          styles.container,
-          { borderColor: colors.borderColor },
-        ]}
-        accessible
-        accessibilityRole="text"
-        accessibilityLabel={accessibilityLabel}
-      >
+    <View onLayout={onLayout} accessible accessibilityRole="text" accessibilityLabel={accessibilityLabel}>
+      {Platform.OS !== 'web' && size.w > 0 ? (
+        <Canvas
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: -GLOW_PAD,
+            top: -GLOW_PAD,
+            width: size.w + GLOW_PAD * 2,
+            height: size.h + GLOW_PAD * 2,
+          }}
+        >
+          <RoundedRect
+            x={GLOW_PAD + 2}
+            y={GLOW_PAD + 3}
+            width={size.w - 4}
+            height={size.h - 2}
+            r={radius}
+            opacity={0.75}
+          >
+            <SkiaLinearGradient
+              start={vec(GLOW_PAD, 0)}
+              end={vec(GLOW_PAD + size.w, 0)}
+              colors={[...palette.glow]}
+            />
+            <BlurMask blur={9} style="normal" />
+          </RoundedRect>
+        </Canvas>
+      ) : null}
+
+      <View style={styles.pill}>
+        <BlurView intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
         <LinearGradient
-          colors={colors.gradientColors}
+          colors={palette.fill}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.gradient}
-        >
-          {/* ✅ Glow blob — محسوب الحجم والموضع */}
-          <View
-            style={[
-              styles.glowBlob,
-              { backgroundColor: colors.shadowColor },
-            ]}
-          />
-
-          <Text style={[styles.text, { color: colors.textColor }]}>
-            {displayText}
-          </Text>
-        </LinearGradient>
+          style={StyleSheet.absoluteFill}
+        />
+        <LinearGradient
+          colors={['rgba(255,255,255,0.42)', 'rgba(255,255,255,0)']}
+          style={styles.sheen}
+        />
+        <MessageCircle size={13} color="#FFFFFF" strokeWidth={2.4} />
+        <Text style={styles.text}>{displayText}</Text>
       </View>
     </View>
   );
@@ -149,43 +133,32 @@ export function MessageCounter({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  // ✅ Shadow wrapper منفصل — لا overflow هنا
-  shadowWrapper: {
-    borderRadius: Radius.full,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-
-  // ✅ overflow:hidden هنا فقط لقطع الـ gradient والـ glowBlob
-  container: {
-    borderRadius: Radius.full,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-
-  gradient: {
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.xs,   // ✅ أصغر من sm — pill مناسب الحجم
+  pill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',          // ✅ تجهيز لو أضفت أيقونة لاحقاً
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.45)',
   },
-
-  glowBlob: {
+  sheen: {
     position: 'absolute',
-    top: -10,
-    left: -10,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    opacity: 0.25,                 // ✅ خفف أكثر — كان 0.3 مبالغ
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
   },
-
   text: {
-    fontSize: FontSize.sm,         // ✅ أصغر — مناسب للـ pill
-    fontWeight: '700',
-    letterSpacing: 0.5,            // ✅ يحسن قراءة الأرقام
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });

@@ -10,7 +10,7 @@ import {
 
 const KEYBOARD_GAP = 8;
 /** Extra height above the safe area so the capsule visibly hovers off the screen edge. */
-const FLOAT_LIFT = 16;
+const FLOAT_LIFT = 46;
 
 export type ChatComposerDockProps = ChatComposerProps & {
   dockPaddingBottom: number;

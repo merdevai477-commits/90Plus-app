@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
+import * as Device from 'expo-device';
 import {
   AudioQuality,
   IOSOutputFormat,
@@ -66,6 +67,16 @@ function normalizeLevel(db: number | undefined): number {
   return Math.min(1, Math.max(0, (db + 55) / 50));
 }
 
+/** Emulator mics usually record silence, so dev builds there fake speech-like levels for the orb. */
+const SIMULATE_LEVELS = __DEV__ && !Device.isDevice;
+
+function simulatedLevel(ms: number): number {
+  const s = ms / 1000;
+  const phrase = Math.max(0, Math.sin(s * 1.9));
+  const syllables = Math.abs(Math.sin(s * 9.7)) * 0.65 + Math.random() * 0.25;
+  return Math.min(1, 0.06 + syllables * phrase);
+}
+
 type UseVoiceInputOptions = {
   onTranscript: (text: string) => void;
   onError: (reason: VoiceInputError) => void;
@@ -93,7 +104,9 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
 
   useEffect(() => {
     if (status !== 'recording') return;
-    const level = normalizeLevel(recorderState.metering);
+    const level = SIMULATE_LEVELS
+      ? simulatedLevel(recorderState.durationMillis)
+      : normalizeLevel(recorderState.metering);
     setLevels((prev) => [...prev.slice(1), level]);
   }, [recorderState.metering, recorderState.durationMillis, status]);
 

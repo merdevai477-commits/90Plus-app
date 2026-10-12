@@ -3032,7 +3032,7 @@ export const ar = {
     limitResetsAfter: 'يتجدد بعد العد التنازلي',
     welcomeGreetingFallback: 'كابتن',
     welcomeGreeting: 'إزيك يا {name}!',
-    welcomeSubtitle: 'كيف أقدر أساعدك؟',
+    welcomeSubtitle: 'أقدر أساعدك في إيه النهارده؟',
     welcomeBrand: '90Plus AI · مدربك الشخصي',
     welcomeOnline: 'متصل',
     suggestionFootballInfoSub: 'أخبار ولاعيبة ومباريات',

@@ -74,6 +74,8 @@ export type LiquidWaterSurfaceProps = {
   scale?: number;
   /** Android only: the view to frost (see expo-blur `BlurTargetView`). */
   blurTarget?: React.RefObject<View | null>;
+  /** 0…1 opacity of the white top sheen. */
+  sheen?: number;
   style?: StyleProp<ViewStyle>;
   children?: React.ReactNode;
 };
@@ -85,6 +87,7 @@ export function LiquidWaterSurface({
   strength = 0.32,
   scale = 2.2,
   blurTarget,
+  sheen = 0.9,
   style,
   children,
 }: LiquidWaterSurfaceProps) {
@@ -167,7 +170,7 @@ export function LiquidWaterSurface({
           </Canvas>
         ) : null}
       </View>
-      <GlassSheen radius={radius} intensity={0.9} />
+      <GlassSheen radius={radius} intensity={sheen} />
       <GlassRim radius={radius} />
       {children}
     </View>

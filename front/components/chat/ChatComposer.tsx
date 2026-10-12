@@ -1,10 +1,11 @@
 /**
- * ChatComposer — compact floating water-glass capsule. The mic records a voice
- * question and drops the transcript into the field; the glass send bubble
- * springs in beside the capsule once there is something to send.
+ * ChatComposer — compact floating water-glass capsule. The mic collapses the
+ * capsule into a voice orb that reacts to the user's voice, then drops the
+ * transcript into the field; the send bubble fades in once there is something
+ * to send.
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,55 +13,61 @@ import {
   Pressable,
   StyleSheet,
   Platform,
-  ActivityIndicator,
 } from 'react-native';
 import Animated, {
   useSharedValue,
-  withSpring,
   withTiming,
-  withRepeat,
+  withDelay,
   useAnimatedStyle,
+  Easing,
   FadeIn,
   FadeOut,
-  ZoomIn,
-  ZoomOut,
   LinearTransition,
 } from 'react-native-reanimated';
 import { Check, Mic, X } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
-
 import { ChatSpinner } from './ChatSpinner';
 import { LimitReachedCountdown } from './LimitReachedCountdown';
 import { LiquidWaterSurface } from './LiquidWaterSurface';
 import { IridescentRim } from './IridescentRim';
+import { ChatRimButton } from './ChatRimButton';
+import { VoiceOrb } from './VoiceOrb';
+import { useVoiceModeStore } from './voiceModeStore';
 import { Colors } from '../../constants/theme';
 import { getTextDirectionStyles } from './chatTextUtils';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { useVoiceInput, type VoiceInputError } from '../../hooks/useVoiceInput';
-import { GLASS_ACCENT, GlassBubbleFill } from '../navigation/glass';
+import { GLASS_ACCENT } from '../navigation/glass';
 import { GLASS_ICON_IDLE } from '../navigation/GlassCapsuleNav';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /** Composer size: capsule height (also the send button size) and side gap to the screen edges. */
-const BAR_HEIGHT = 44;
-const BAR_SIDE_INSET = 30;
+const BAR_HEIGHT = 55;
+const BAR_SIDE_INSET = 55;
 const INPUT_FONT_SIZE = 14;
-const BAR_RADIUS = BAR_HEIGHT / 2;
+const BAR_RADIUS = BAR_HEIGHT / 1;
 const BAR_PAD = 5;
 const SLOT = BAR_HEIGHT - BAR_PAD * 2;
-const SPRING = { damping: 18, stiffness: 210, mass: 0.9 };
 const BAR_TINT = 'rgba(20,12,40,0.42)';
-const SEND_TINT = 'rgba(124,77,255,0.5)';
+/** Message field + send button: the welcome bubble's black core; IridescentRim adds its film edge. */
+const FIELD_TINT = 'rgba(3,2,8,0.94)';
+const FIELD_CAUSTIC: [number, number, number] = [0.6, 0.75, 1];
+/** Voice mode: the capsule collapses to a BAR_HEIGHT circle and the orb floats over it. */
+const ORB_SIZE = Math.round(BAR_HEIGHT * 1.3);
+const VOICE_ACTION_SIZE = 44;
+const VOICE_MORPH = LinearTransition.duration(340).easing(Easing.out(Easing.cubic));
+/** Lands just as the welcome bubble finishes being pulled into the composer. */
+const ORB_APPEAR_DELAY = 380;
 
 function usePressScale(to: number) {
   const press = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   return {
     style,
-    onPressIn: () => { press.value = withSpring(to, SPRING); },
-    onPressOut: () => { press.value = withSpring(1, SPRING); },
+    onPressIn: () => { press.value = withTiming(to, { duration: 90 }); },
+    onPressOut: () => { press.value = withTiming(1, { duration: 140 }); },
   };
 }
 
@@ -77,12 +84,12 @@ function SendButton({
   a11yLabel: string;
   blurTarget?: React.RefObject<View | null>;
 }) {
-  const press = usePressScale(0.88);
+  const press = usePressScale(0.94);
 
   return (
     <AnimatedPressable
-      entering={ZoomIn.springify().damping(15).stiffness(240)}
-      exiting={ZoomOut.duration(140)}
+      entering={FadeIn.duration(160)}
+      exiting={FadeOut.duration(120)}
       onPress={onPress}
       disabled={!isStop && loading}
       onPressIn={press.onPressIn}
@@ -93,10 +100,10 @@ function SendButton({
     >
       <LiquidWaterSurface
         radius={BAR_RADIUS}
-        tint={isStop ? 'rgba(75,85,99,0.55)' : SEND_TINT}
-        glow={[1, 1, 1]}
-        strength={0.5}
-        scale={1.1}
+        tint={FIELD_TINT}
+        glow={FIELD_CAUSTIC}
+        strength={0.14}
+        sheen={0.12}
         blurTarget={blurTarget}
         style={styles.sendButton}
       >
@@ -110,6 +117,7 @@ function SendButton({
           </Svg>
         )}
       </LiquidWaterSurface>
+      <IridescentRim radius={BAR_RADIUS} />
     </AnimatedPressable>
   );
 }
@@ -117,12 +125,10 @@ function SendButton({
 function RoundIconButton({
   onPress,
   a11yLabel,
-  variant = 'glass',
   children,
 }: {
   onPress?: () => void;
   a11yLabel: string;
-  variant?: 'glass' | 'lit';
   children: React.ReactNode;
 }) {
   const press = usePressScale(0.86);
@@ -133,11 +139,10 @@ function RoundIconButton({
       onPressIn={press.onPressIn}
       onPressOut={press.onPressOut}
       hitSlop={6}
-      style={[styles.iconButton, variant === 'glass' && styles.iconButtonGlass, press.style]}
+      style={[styles.iconButton, styles.iconButtonGlass, press.style]}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
     >
-      {variant === 'lit' ? <GlassBubbleFill radius={SLOT / 2} height={SLOT} /> : null}
       {children}
     </AnimatedPressable>
   );
@@ -146,25 +151,6 @@ function RoundIconButton({
 function formatDuration(ms: number): string {
   const total = Math.floor(ms / 1000);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-}
-
-function RecordingDot() {
-  const pulse = useSharedValue(1);
-  useEffect(() => {
-    pulse.value = withRepeat(withTiming(0.25, { duration: 650 }), -1, true);
-  }, [pulse]);
-  const style = useAnimatedStyle(() => ({ opacity: pulse.value }));
-  return <Animated.View style={[styles.recDot, style]} />;
-}
-
-function LevelBars({ levels, rtl }: { levels: number[]; rtl: boolean }) {
-  return (
-    <View style={[styles.levels, rtl && styles.rowRtl]}>
-      {levels.map((level, i) => (
-        <View key={i} style={[styles.levelBar, { height: 3 + level * 20, opacity: 0.35 + level * 0.65 }]} />
-      ))}
-    </View>
-  );
 }
 
 export interface ChatComposerProps {
@@ -239,6 +225,25 @@ export function ChatComposer({
   const showSend = !voiceActive && (Boolean(value.trim()) || isLoading);
 
   const focus = useSharedValue(0);
+  const surfaceFade = useSharedValue(1);
+  const surfaceStyle = useAnimatedStyle(() => ({ opacity: surfaceFade.value }));
+
+  const rowRef = useRef<View>(null);
+  const enterVoiceMode = useVoiceModeStore((s) => s.enter);
+  const exitVoiceMode = useVoiceModeStore((s) => s.exit);
+
+  useEffect(() => {
+    surfaceFade.value = voiceActive
+      ? withDelay(160, withTiming(0, { duration: 260 }))
+      : withTiming(1, { duration: 200 });
+    if (voiceActive) {
+      rowRef.current?.measureInWindow((_x, y, _w, h) => enterVoiceMode(y + h / 2));
+    } else {
+      exitVoiceMode();
+    }
+  }, [voiceActive, surfaceFade, enterVoiceMode, exitVoiceMode]);
+
+  useEffect(() => exitVoiceMode, [exitVoiceMode]);
 
   const handleFocus = () => {
     focus.value = withTiming(1, { duration: 180 });
@@ -277,74 +282,93 @@ export function ChatComposer({
             </Animated.View>
           ) : null}
 
-          <View style={[styles.composerRow, isAr && styles.rowRtl]}>
+          <View
+            ref={rowRef}
+            collapsable={false}
+            style={[styles.composerRow, voiceActive && styles.composerRowVoice, isAr && styles.rowRtl]}
+          >
+            {voice.status === 'recording' ? (
+              <Animated.View entering={FadeIn.delay(220).duration(200)} exiting={FadeOut.duration(120)}>
+                <ChatRimButton size={VOICE_ACTION_SIZE} onPress={voice.cancel} accessibilityLabel={t.chat.a11yVoiceCancel}>
+                  <X size={18} color="#FFFFFF" strokeWidth={2.2} />
+                </ChatRimButton>
+              </Animated.View>
+            ) : null}
+
             <Animated.View
-              layout={LinearTransition.springify().damping(18).stiffness(210)}
-              style={styles.barWrap}
+              layout={VOICE_MORPH}
+              style={voiceActive ? styles.orbWrap : styles.barWrap}
             >
-              <LiquidWaterSurface radius={BAR_RADIUS} tint={BAR_TINT} blurTarget={blurTarget}>
-                {voice.status === 'recording' ? (
-                  <Animated.View
-                    entering={FadeIn.duration(160)}
-                    exiting={FadeOut.duration(120)}
-                    style={[styles.bar, styles.barVoice, isAr && styles.rowRtl]}
-                  >
-                    <RoundIconButton onPress={voice.cancel} a11yLabel={t.chat.a11yVoiceCancel}>
-                      <X size={18} color={GLASS_ICON_IDLE} strokeWidth={2.2} />
-                    </RoundIconButton>
-                    <View style={[styles.recMeta, isAr && styles.rowRtl]}>
-                      <RecordingDot />
-                      <Text style={[styles.recTime, { fontFamily: fontMedium }]}>
-                        {formatDuration(voice.durationMs)}
-                      </Text>
+              <Animated.View style={surfaceStyle}>
+                <LiquidWaterSurface
+                  radius={BAR_RADIUS}
+                  tint={FIELD_TINT}
+                  glow={FIELD_CAUSTIC}
+                  strength={0.14}
+                  sheen={0.12}
+                  blurTarget={blurTarget}
+                >
+                  {voiceActive ? (
+                    <View style={styles.barCollapsed} />
+                  ) : (
+                    <View style={[styles.bar, isAr && styles.barRtl]}>
+                      <TextInput
+                        ref={inputRef}
+                        style={[styles.textInput, { fontFamily: fontMedium }, inputDirection]}
+                        value={value}
+                        onChangeText={onChangeText}
+                        onFocus={handleFocus}
+                        onBlur={handleBlur}
+                        placeholder={editingMessage ? editPlaceholder : placeholder}
+                        placeholderTextColor="rgba(235,228,255,0.45)"
+                        multiline
+                        textAlignVertical="center"
+                        keyboardAppearance="dark"
+                        returnKeyType="send"
+                        onSubmitEditing={onSend}
+                        submitBehavior="submit"
+                        underlineColorAndroid="transparent"
+                        selectionColor={GLASS_ACCENT}
+                        cursorColor={GLASS_ACCENT}
+                        blurOnSubmit={false}
+                        maxFontSizeMultiplier={1.2}
+                      />
+                      <RoundIconButton onPress={voice.start} a11yLabel={t.chat.a11yMic}>
+                        <Mic size={18} color={GLASS_ICON_IDLE} strokeWidth={2} />
+                      </RoundIconButton>
                     </View>
-                    <LevelBars levels={voice.levels} rtl={isAr} />
-                    <RoundIconButton onPress={voice.finish} a11yLabel={t.chat.a11yVoiceDone} variant="lit">
-                      <Check size={19} color="#FFFFFF" strokeWidth={2.6} />
-                    </RoundIconButton>
-                  </Animated.View>
-                ) : voice.status === 'transcribing' ? (
-                  <Animated.View
-                    entering={FadeIn.duration(160)}
-                    exiting={FadeOut.duration(120)}
-                    style={[styles.bar, styles.barVoice, styles.transcribing, isAr && styles.rowRtl]}
-                  >
-                    <ActivityIndicator size="small" color={GLASS_ACCENT} />
-                    <Text style={[styles.transcribingText, { fontFamily: fontMedium }]}>
-                      {t.chat.voiceTranscribing}
-                    </Text>
-                  </Animated.View>
-                ) : (
-                  <View style={[styles.bar, isAr && styles.barRtl]}>
-                    <TextInput
-                      ref={inputRef}
-                      style={[styles.textInput, { fontFamily: fontMedium }, inputDirection]}
-                      value={value}
-                      onChangeText={onChangeText}
-                      onFocus={handleFocus}
-                      onBlur={handleBlur}
-                      placeholder={editingMessage ? editPlaceholder : placeholder}
-                      placeholderTextColor="rgba(235,228,255,0.45)"
-                      multiline
-                      textAlignVertical="center"
-                      keyboardAppearance="dark"
-                      returnKeyType="send"
-                      onSubmitEditing={onSend}
-                      submitBehavior="submit"
-                      underlineColorAndroid="transparent"
-                      selectionColor={GLASS_ACCENT}
-                      cursorColor={GLASS_ACCENT}
-                      blurOnSubmit={false}
-                      maxFontSizeMultiplier={1.2}
-                    />
-                    <RoundIconButton onPress={voice.start} a11yLabel={t.chat.a11yMic}>
-                      <Mic size={18} color={GLASS_ICON_IDLE} strokeWidth={2} />
-                    </RoundIconButton>
-                  </View>
-                )}
-              </LiquidWaterSurface>
-              <IridescentRim radius={BAR_RADIUS} focus={focus} />
+                  )}
+                </LiquidWaterSurface>
+                <IridescentRim radius={BAR_RADIUS} focus={focus} />
+              </Animated.View>
+
+              {voiceActive ? (
+                <Animated.View
+                  entering={FadeIn.delay(ORB_APPEAR_DELAY).duration(260)}
+                  exiting={FadeOut.duration(160)}
+                  pointerEvents="none"
+                  style={styles.orb}
+                  accessibilityLabel={
+                    voice.status === 'transcribing' ? t.chat.voiceTranscribing : t.chat.a11yMic
+                  }
+                >
+                  <VoiceOrb
+                    size={ORB_SIZE}
+                    level={voice.levels[voice.levels.length - 1] ?? 0}
+                    mode={voice.status === 'transcribing' ? 'thinking' : 'listening'}
+                    label={voice.status === 'recording' ? formatDuration(voice.durationMs) : undefined}
+                  />
+                </Animated.View>
+              ) : null}
             </Animated.View>
+
+            {voice.status === 'recording' ? (
+              <Animated.View entering={FadeIn.delay(220).duration(200)} exiting={FadeOut.duration(120)}>
+                <ChatRimButton size={VOICE_ACTION_SIZE} onPress={voice.finish} accessibilityLabel={t.chat.a11yVoiceDone}>
+                  <Check size={19} color="#FFFFFF" strokeWidth={2.6} />
+                </ChatRimButton>
+              </Animated.View>
+            ) : null}
 
             {showSend ? (
               <SendButton
@@ -374,8 +398,25 @@ const styles = StyleSheet.create({
   rowRtl: {
     flexDirection: 'row-reverse',
   },
+  composerRowVoice: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 28,
+  },
   barWrap: {
     flex: 1,
+  },
+  orbWrap: {
+    width: BAR_HEIGHT,
+    height: BAR_HEIGHT,
+  },
+  barCollapsed: {
+    height: BAR_HEIGHT,
+  },
+  orb: {
+    position: 'absolute',
+    left: (BAR_HEIGHT - ORB_SIZE) / 2,
+    top: (BAR_HEIGHT - ORB_SIZE) / 2,
   },
   bar: {
     minHeight: BAR_HEIGHT,
@@ -390,11 +431,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     paddingLeft: BAR_PAD,
     paddingRight: 18,
-  },
-  barVoice: {
-    alignItems: 'center',
-    paddingLeft: BAR_PAD,
-    gap: 10,
   },
   textInput: {
     flex: 1,
@@ -418,42 +454,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(210,190,255,0.3)',
-  },
-  recMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  recDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#F43F5E',
-  },
-  recTime: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontVariant: ['tabular-nums'],
-  },
-  levels: {
-    flex: 1,
-    height: SLOT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    overflow: 'hidden',
-  },
-  levelBar: {
-    width: 3,
-    borderRadius: 1.5,
-    backgroundColor: '#C4B5FD',
-  },
-  transcribing: {
-    justifyContent: 'center',
-  },
-  transcribingText: {
-    color: 'rgba(235,228,255,0.8)',
-    fontSize: 13.5,
   },
   sendButton: {
     width: BAR_HEIGHT,

@@ -16,7 +16,6 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
-  withRepeat,
   withTiming,
   withSpring,
   useAnimatedStyle,
@@ -24,7 +23,12 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
+import { MessageCircle, Pin, Search, X } from 'lucide-react-native';
 import { Conversation } from '../../hooks/useAIChatNative';
+import { ChatRimButton } from './ChatRimButton';
+import { IridescentRim } from './IridescentRim';
+import { chatColors } from './chatTheme';
 import { MessageCounter } from './MessageCounter';
 import { Toast } from './Toast';
 import { ConversationContextMenu } from './ConversationContextMenu';
@@ -38,6 +42,20 @@ import {
   safeConversationTitle,
 } from './conversationSafety';
 import { logger } from '../../services/logger';
+
+const BUBBLE_IMAGE = require('../../assets/images/chat/iridescent-bubble.png');
+const FILM_ACCENT = '#A3DDF9';
+const NEW_CHAT_HEIGHT = 48;
+/** Hairline down the panel's open edge, in the welcome bubble's film colours. */
+const PANEL_EDGE_COLORS = [
+  'rgba(163,221,249,0)',
+  '#A3DDF9',
+  '#7A388B',
+  '#216ACE',
+  '#DD7EBB',
+  '#36A2FB',
+  'rgba(54,162,251,0)',
+] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,27 +81,6 @@ function formatConversationDate(
   if (diffDays < 7) return labels.dateDaysAgo.replace('{n}', String(diffDays));
   if (diffDays < 30) return labels.dateWeeksAgo.replace('{n}', String(Math.floor(diffDays / 7)));
   return labels.dateMonthsAgo.replace('{n}', String(Math.floor(diffDays / 30)));
-}
-
-// ─── Online Pulse ─────────────────────────────────────────────────────────────
-
-export function OnlinePulse() {
-  const pulseScale = useSharedValue(1);
-  const pulseOpacity = useSharedValue(0.8);
-  useEffect(() => {
-    pulseScale.value = withRepeat(withTiming(1.8, { duration: 1200 }), -1, true);
-    pulseOpacity.value = withRepeat(withTiming(0, { duration: 1200 }), -1, true);
-  }, []);
-  const ringStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulseScale.value }],
-    opacity: pulseOpacity.value,
-  }));
-  return (
-    <View style={styles.onlinePulseContainer}>
-      <Animated.View style={[styles.onlinePulseRing, ringStyle]} />
-      <View style={styles.onlinePulseDot} />
-    </View>
-  );
 }
 
 // ─── Rename Modal ─────────────────────────────────────────────────────────────
@@ -171,17 +168,27 @@ export function HistoryItem({
   isActive: boolean; isPinned: boolean;
   onPress: () => void; onLongPress: () => void;
 }) {
+  const [pressed, setPressed] = useState(false);
   return (
     <Pressable
-      style={[styles.historyItem, isActive && styles.historyItemActive]}
+      style={[
+        styles.historyItem,
+        isActive && styles.historyItemActive,
+        pressed && styles.historyItemPressed,
+      ]}
       onPress={onPress}
       onLongPress={onLongPress}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
     >
-      <View style={styles.historyItemIcon}><Text style={{ fontSize: 14 }}>💬</Text></View>
+      {isActive ? <IridescentRim radius={16} filmDepth={8} /> : null}
+      <View style={styles.historyItemIcon}>
+        <MessageCircle size={16} color={isActive ? '#FFFFFF' : FILM_ACCENT} strokeWidth={2} />
+      </View>
       <View style={styles.historyItemContent}>
         <View style={styles.historyItemTitleRow}>
           <Text style={styles.historyItemTitle} numberOfLines={1}>{title}</Text>
-          {isPinned && <Text style={{ fontSize: 10 }}>📌</Text>}
+          {isPinned && <Pin size={12} color={FILM_ACCENT} strokeWidth={2.2} />}
         </View>
         <Text style={styles.historyItemDate}>{date}</Text>
       </View>
@@ -215,7 +222,7 @@ export function ChatHistoryPanel({
   conversations, activeConversationId,
   onSelectConversation, onTogglePin, onRenameConversation, onDeleteConversation,
   onCopyConversation,
-  onNewChat, isOnline, isLoading,
+  onNewChat, isLoading,
   displayName, avatar,
 }: ChatHistoryPanelProps) {
   const { t } = useTranslation();
@@ -227,6 +234,7 @@ export function ChatHistoryPanel({
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [renameModal, setRenameModal] = useState<{ conversation: Conversation } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [newChatPressed, setNewChatPressed] = useState(false);
 
   // Filtered conversations — local search, no backend call needed
   const safeConversations = useMemo(
@@ -343,23 +351,30 @@ export function ChatHistoryPanel({
           panelStyle,
         ]}
       >
-        {/* Glass background layer */}
-        <BlurView
-          intensity={Platform.OS === 'ios' ? 40 : 90}
-          tint="dark"
+        <LinearGradient
+          colors={['#0D0A1A', '#08070F', '#060509']}
+          locations={[0, 0.5, 1]}
           style={StyleSheet.absoluteFill}
         />
-        <View style={styles.panelOverlay} />
-        <View style={styles.panelInnerBorder} />
+        <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
+          <Defs>
+            <RadialGradient id="panelGlow" cx="85%" cy="0%" r="75%">
+              <Stop offset="0" stopColor="#6F24FB" stopOpacity="0.22" />
+              <Stop offset="1" stopColor="#6F24FB" stopOpacity="0" />
+            </RadialGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100" height="100" fill="url(#panelGlow)" />
+        </Svg>
+        <LinearGradient pointerEvents="none" colors={PANEL_EDGE_COLORS} style={styles.panelEdge} />
 
         <View style={styles.panelContent}>
           {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
           {/* Header */}
           <View style={styles.panelHeader}>
-            <Pressable onPress={onClose} style={styles.panelCloseButton} hitSlop={8}>
-              <Text style={styles.panelCloseText}>×</Text>
-            </Pressable>
+            <ChatRimButton size={36} onPress={onClose} accessibilityLabel={t.common.close}>
+              <X size={18} color="#FFFFFF" strokeWidth={2.2} />
+            </ChatRimButton>
             <View>
               <Text style={styles.panelTitle}>{p.title}</Text>
               <Text style={styles.panelSubtitle}>
@@ -383,45 +398,33 @@ export function ChatHistoryPanel({
               <View style={styles.profileCard}>
                 <View style={styles.profileCardShine} pointerEvents="none" />
                 <View style={styles.profileLeft}>
-                  <View style={styles.avatar}>
-                    {avatar ? (
-                      <Image
-                        source={{ uri: avatar }}
-                        style={StyleSheet.absoluteFill}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={150}
-                      />
-                    ) : (
-                      <>
-                        <LinearGradient
-                          colors={['#8B5CF6', '#7C3AED']}
+                  <View style={styles.avatarRing}>
+                    <IridescentRim radius={25} />
+                    <View style={styles.avatar}>
+                      {avatar ? (
+                        <Image
+                          source={{ uri: avatar }}
                           style={StyleSheet.absoluteFill}
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                          transition={150}
                         />
-                        <Text style={styles.avatarText}>
-                          {(displayName?.trim()?.[0] ?? 'ك').toUpperCase()}
-                        </Text>
-                      </>
-                    )}
-                    <View style={[
-                      styles.onlineDot,
-                      !isOnline && { backgroundColor: '#EF4444' },
-                    ]} />
-                  </View>
-                  <View>
-                    <Text style={styles.profileName}>
-                      {displayName?.trim() || fallbackName}
-                    </Text>
-                    <View style={styles.onlineRow}>
-                      {isOnline && <OnlinePulse />}
-                      <Text style={[
-                        styles.onlineText,
-                        !isOnline && { color: '#FCA5A5' },
-                      ]}>
-                        {isOnline ? p.online : p.offline}
-                      </Text>
+                      ) : (
+                        <>
+                          <LinearGradient
+                            colors={['#7B35FF', '#6420F0']}
+                            style={StyleSheet.absoluteFill}
+                          />
+                          <Text style={styles.avatarText}>
+                            {(displayName?.trim()?.[0] ?? 'ك').toUpperCase()}
+                          </Text>
+                        </>
+                      )}
                     </View>
                   </View>
+                  <Text style={styles.profileName} numberOfLines={1}>
+                    {displayName?.trim() || fallbackName}
+                  </Text>
                 </View>
                 <MessageCounter
                   messagesRemaining={messagesRemaining}
@@ -432,23 +435,17 @@ export function ChatHistoryPanel({
               {/* New chat button (top, more prominent) */}
               <Pressable
                 onPress={onNewChat}
-                style={({ pressed }) => [
-                  styles.newChatButton,
-                  pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-                ]}
+                onPressIn={() => setNewChatPressed(true)}
+                onPressOut={() => setNewChatPressed(false)}
+                style={[styles.newChatButton, newChatPressed && styles.newChatButtonPressed]}
               >
-                <LinearGradient
-                  colors={Gradients.purpleCTA}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.newChatGradient}
-                >
-                  <Text style={styles.newChatText}>{p.newChatButton}</Text>
-                </LinearGradient>
+                <IridescentRim radius={NEW_CHAT_HEIGHT / 2} />
+                <Text style={styles.newChatText}>{p.newChatButton}</Text>
               </Pressable>
 
               {/* Search bar */}
               <View style={styles.searchBar}>
+                <Search size={16} color="rgba(255,255,255,0.4)" strokeWidth={2} />
                 <TextInput
                   style={styles.searchInput}
                   value={searchQuery}
@@ -522,7 +519,11 @@ export function ChatHistoryPanel({
                 {/* Empty state — no conversations at all, or no search results */}
                 {filteredConversations.length === 0 && (
                   <View style={styles.emptyState}>
-                    <Text style={styles.emptyEmoji}>{searchQuery.trim() ? '🔍' : '💬'}</Text>
+                    {searchQuery.trim() ? (
+                      <Search size={36} color={FILM_ACCENT} strokeWidth={1.6} style={styles.emptyIcon} />
+                    ) : (
+                      <Image source={BUBBLE_IMAGE} style={styles.emptyBubble} contentFit="contain" />
+                    )}
                     <Text style={styles.emptyTitle}>
                       {searchQuery.trim() ? p.emptyTitleNoResults : p.emptyTitleNoConversations}
                     </Text>
@@ -674,42 +675,30 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, bottom: 0, right: 0,
     zIndex: 100,
     overflow: 'hidden',
-    borderTopLeftRadius: 24,
-    borderBottomLeftRadius: 24,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderTopLeftRadius: 28,
+    borderBottomLeftRadius: 28,
+    backgroundColor: '#08070F',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: -8, height: 0 },
-        shadowOpacity: 0.5,
+        shadowOpacity: 0.6,
         shadowRadius: 24,
       },
       android: {
         elevation: 24,
-        backgroundColor: 'rgba(13,10,20,0.98)',
       },
     }),
   },
-  panelOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(13,10,20,0.72)' : 'transparent',
-  },
-  panelInnerBorder: {
+  panelEdge: {
     position: 'absolute',
-    top: 1, left: 1, right: 0, bottom: 1,
-    borderTopLeftRadius: 23,
-    borderBottomLeftRadius: 23,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.06)',
-    pointerEvents: 'none',
+    left: 0,
+    top: 28,
+    bottom: 28,
+    width: 1.5,
   },
   panelBackdrop: {
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     zIndex: 99,
   },
   panelContent: {
@@ -738,43 +727,36 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginTop: 2,
   },
-  panelCloseButton: {
-    width: 34, height: 34, borderRadius: 17,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  panelCloseText: {
-    color: 'white',
-    fontSize: 22,
-    lineHeight: 24,
-    fontWeight: '300',
-  },
 
   // Profile card
   profileCard: {
         flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 18,
+    borderColor: 'rgba(163,221,249,0.14)',
+    borderRadius: 20,
     padding: 14,
     marginBottom: 14,
     overflow: 'hidden',
   },
   profileCardShine: {
     position: 'absolute',
-    top: 0, left: 0, right: 0,
+    top: 0, left: 20, right: 20,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   profileLeft: {
         flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flexShrink: 1,
+  },
+  avatarRing: {
+    width: 50, height: 50, borderRadius: 25,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: chatColors.rimButtonCore,
   },
   avatar: {
     width: 44, height: 44, borderRadius: 22,
@@ -787,31 +769,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     zIndex: 1,
   },
-  onlineDot: {
-    position: 'absolute',
-    bottom: -2, right: -2,
-    width: 12, height: 12,
-    borderRadius: 6,
-    backgroundColor: '#10B981',
-    borderWidth: 2,
-    borderColor: '#0D0A14',
-  },
   profileName: {
+    flexShrink: 1,
     color: 'white',
     fontWeight: '700',
     fontSize: 15,
     textAlign: 'right',
-  },
-  onlineRow: {
-        flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  onlineText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#34D399',
   },
 
   conversationsList: { flex: 1, marginTop: 4 },
@@ -833,20 +796,26 @@ const styles = StyleSheet.create({
   historyItem: {
         flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.025)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: 'rgba(255,255,255,0.06)',
   },
   historyItemActive: {
-    backgroundColor: 'rgba(124,58,237,0.12)',
-    borderColor: 'rgba(124,58,237,0.35)',
+    backgroundColor: chatColors.rimButtonCore,
+    borderColor: 'transparent',
+  },
+  historyItemPressed: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   historyItemIcon: {
-    width: 32, height: 32, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: 'rgba(163,221,249,0.08)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(163,221,249,0.18)',
     alignItems: 'center', justifyContent: 'center',
   },
   historyItemContent: { flex: 1, gap: 2 },
@@ -874,7 +843,8 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
     gap: 8,
   },
-  emptyEmoji: { fontSize: 42, marginBottom: 8 },
+  emptyIcon: { marginBottom: 8 },
+  emptyBubble: { width: 72, height: 72, marginBottom: 8 },
   emptyTitle: {
     fontSize: 16,
     color: 'rgba(255,255,255,0.7)',
@@ -889,22 +859,14 @@ const styles = StyleSheet.create({
   // New chat button
   newChatButton: {
     marginVertical: 4,
-    borderRadius: 14,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#7C3AED',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-      },
-      android: { elevation: 6 },
-    }),
-  },
-  newChatGradient: {
-    paddingVertical: 14,
+    height: NEW_CHAT_HEIGHT,
+    borderRadius: NEW_CHAT_HEIGHT / 2,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: chatColors.rimButtonCore,
+  },
+  newChatButtonPressed: {
+    transform: [{ scale: 0.98 }],
   },
   newChatText: {
     color: 'white',
@@ -917,14 +879,15 @@ const styles = StyleSheet.create({
   searchBar: {
         flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginTop: 10,
+    borderColor: 'rgba(163,221,249,0.14)',
+    borderRadius: 22,
+    paddingHorizontal: 14,
+    marginTop: 12,
     marginBottom: 4,
-    minHeight: 40,
+    minHeight: 44,
   },
   searchInput: {
     flex: 1,
@@ -959,9 +922,4 @@ const styles = StyleSheet.create({
   renameConfirmBtn: { flex: 1, height: 48, borderRadius: 12, overflow: 'hidden' },
   renameConfirmGradient: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   renameConfirmText: { color: 'white', fontSize: 16, fontWeight: '600' },
-
-  onlinePulseContainer: { width: 14, height: 14, alignItems: 'center', justifyContent: 'center' },
-  onlinePulseRing: { position: 'absolute', width: 14, height: 14, borderRadius: 7, backgroundColor: '#10B981' },
-  onlinePulseDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
-
 });
