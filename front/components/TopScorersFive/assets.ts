@@ -21,7 +21,7 @@ export const TSF_ART: { hero: number | null; pitch: number | null } = {
 };
 
 /** Prize art on the ranking tab — the shirt the week's top score wins. */
-export const TSF_PRIZE_SHIRT: number = require('../../assets/images/top-scorers-five/shirt.png');
+export const TSF_PRIZE_SHIRT: number = require('../../assets/images/top-scorers-five/shirt.webp');
 
 /**
  * Picker card frame, Figma 1302:15248, flattened into the two layers that sit

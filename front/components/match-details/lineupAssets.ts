@@ -1,6 +1,6 @@
 /** Figma "90plus" lineup artboard (node 1344:17434). */
 export const LINEUP_ART = {
-  stadium: require('../../assets/images/match-lineup/stadium-bg.png'),
+  stadium: require('../../assets/images/match-lineup/stadium-bg.webp'),
   stripe31: require('../../assets/images/match-lineup/stripe-31.svg'),
   stripe32: require('../../assets/images/match-lineup/stripe-32.svg'),
   stripe34: require('../../assets/images/match-lineup/stripe-34.svg'),
@@ -21,7 +21,7 @@ export const LINEUP_ART = {
   cornerLeft: require('../../assets/images/match-lineup/corner-left.svg'),
   cornerRight: require('../../assets/images/match-lineup/corner-right.svg'),
   /** Best-players card (node 550:2809). */
-  bestPlayersBg: require('../../assets/images/match-lineup/best-players-bg.png'),
+  bestPlayersBg: require('../../assets/images/match-lineup/best-players-bg.webp'),
   bestSideOverlay: require('../../assets/images/match-lineup/best-side-overlay.png'),
 } as const;
 
