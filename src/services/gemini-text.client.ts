@@ -84,6 +84,32 @@ export interface GeminiTranscribeParams {
   language?: 'ar' | 'en';
 }
 
+/** Shared by every audio provider so transcripts read the same whichever one answers. */
+export function buildTranscriptionInstruction(language?: 'ar' | 'en'): string {
+  const languageHint =
+    language === 'en'
+      ? 'The speaker most likely speaks English.'
+      : 'The speaker most likely speaks Arabic (often Egyptian dialect), possibly mixed with English football names.';
+  return [
+    'Transcribe this voice message verbatim, in the language and script it was spoken in.',
+    languageHint,
+    'It is a question for a football and sports-fitness assistant, so spell player, club and competition names correctly.',
+    'Do not answer, summarize, translate or correct the speaker — only write down what was said.',
+    'Output only the transcript text — no quotes, labels, timestamps or commentary.',
+    'If there is no intelligible speech, output nothing.',
+  ].join(' ');
+}
+
+const TRANSCRIPT_LABEL = /^(transcript(ion)?|النص|التفريغ)\s*[:：]\s*/i;
+const WRAPPING_QUOTES = /^["'“”«»]+|["'“”«»]+$/g;
+/** Models sometimes describe silence instead of returning nothing, e.g. "[silence]" or "(no speech)". */
+const NON_SPEECH_ONLY = /^[[(][^\])]*[\])]$/;
+
+export function cleanTranscript(raw: string): string {
+  const text = raw.trim().replace(TRANSCRIPT_LABEL, '').replace(WRAPPING_QUOTES, '').trim();
+  return NON_SPEECH_ONLY.test(text) ? '' : text;
+}
+
 export async function transcribeAudioWithGemini(
   params: GeminiTranscribeParams,
 ): Promise<{ text: string; model: string }> {
@@ -99,17 +125,7 @@ export async function transcribeAudioWithGemini(
     resolveGeminiQuizModel(),
   ].filter((m, i, all): m is string => !!m && all.indexOf(m) === i);
 
-  const languageHint =
-    params.language === 'en'
-      ? 'The speaker most likely speaks English.'
-      : 'The speaker most likely speaks Arabic (often Egyptian dialect), possibly mixed with English football names.';
-  const instruction = [
-    'Transcribe this voice message verbatim, in the language and script it was spoken in.',
-    languageHint,
-    'It is a question for a football and sports-fitness assistant, so spell player, club and competition names correctly.',
-    'Output only the transcript text — no quotes, labels, translation or commentary.',
-    'If there is no intelligible speech, output nothing.',
-  ].join(' ');
+  const instruction = buildTranscriptionInstruction(params.language);
 
   const baseUrl = resolveGeminiBaseUrl();
   const audioBase64 = params.audio.toString('base64');
@@ -153,7 +169,7 @@ export async function transcribeAudioWithGemini(
       }
 
       const payload = (await res.json()) as unknown;
-      return { text: extractGeminiText(payload).trim(), model };
+      return { text: cleanTranscript(extractGeminiText(payload)), model };
     } catch (err: unknown) {
       lastErr = err instanceof Error ? err : new Error(String(err));
       if (hasFallback) continue;

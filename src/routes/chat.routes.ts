@@ -89,6 +89,11 @@ import {
     transcribeAudioWithGemini,
 } from '../services/gemini-text.client';
 import {
+    audioFormatForMime,
+    isOpenRouterTranscribeConfigured,
+    transcribeAudioWithOpenRouter,
+} from '../services/openrouter-transcribe.client';
+import {
     decodeChatNavMarker,
     encodeChatNavMarker,
     extractChatNavLinks,
@@ -1260,9 +1265,9 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 // ─── POST /chat/transcribe (voice → text) ────────────────────────────────────
 //
 // Accepts an audio file (multipart/form-data, field name "audio", optional
-// "language" = ar|en) and returns `{ text }`. Gemini is preferred because it
-// already powers chat and accepts the AAC/WAV the app records; an
-// OpenAI-compatible Whisper endpoint is the fallback when only that is set.
+// "language" = ar|en) and returns `{ text }`. Providers are tried in order:
+// OpenRouter (google/gemini-2.5-flash-lite by default), Gemini direct, then an
+// OpenAI-compatible Whisper endpoint — each only when its key is set.
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB cap — plenty for short voice memos
@@ -1292,20 +1297,29 @@ router.post('/chat/transcribe', upload.single('audio'), async (req: Request, res
     }
 
     const language = req.body?.language === 'en' ? 'en' : 'ar';
+    const mimeType = resolveAudioMime(req.file);
+    let attempted = false;
+
+    if (isOpenRouterTranscribeConfigured() && audioFormatForMime(mimeType)) {
+        attempted = true;
+        try {
+            const { text } = await transcribeAudioWithOpenRouter({ audio: req.file.buffer, mimeType, language });
+            res.json({ text });
+            return;
+        } catch (err: any) {
+            logger.warn('[chat] openrouter transcribe failed:', err?.message ?? err);
+        }
+    }
 
     if (isGeminiAudioConfigured()) {
+        attempted = true;
         try {
-            const { text } = await transcribeAudioWithGemini({
-                audio: req.file.buffer,
-                mimeType: resolveAudioMime(req.file),
-                language,
-            });
+            const { text } = await transcribeAudioWithGemini({ audio: req.file.buffer, mimeType, language });
             res.json({ text });
+            return;
         } catch (err: any) {
             logger.warn('[chat] gemini transcribe failed:', err?.message ?? err);
-            res.status(502).json({ error: 'Transcription failed' });
         }
-        return;
     }
 
     const transcribeKey = process.env.AI_TRANSCRIBE_KEY ?? process.env.OPENAI_API_KEY ?? '';
@@ -1315,7 +1329,11 @@ router.post('/chat/transcribe', upload.single('audio'), async (req: Request, res
     const model = process.env.AI_TRANSCRIBE_MODEL ?? 'whisper-1';
 
     if (!transcribeKey || !transcribeBaseURL) {
-        res.status(501).json({ error: 'Transcription not configured' });
+        if (attempted) {
+            res.status(502).json({ error: 'Transcription failed' });
+        } else {
+            res.status(501).json({ error: 'Transcription not configured' });
+        }
         return;
     }
 
