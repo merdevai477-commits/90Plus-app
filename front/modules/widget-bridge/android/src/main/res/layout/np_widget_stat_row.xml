@@ -3,37 +3,55 @@
   android:id="@+id/np_stat_row"
   android:layout_width="match_parent"
   android:layout_height="wrap_content"
-  android:gravity="center_vertical"
-  android:orientation="horizontal"
+  android:orientation="vertical"
   android:paddingTop="2dp"
   android:paddingBottom="2dp">
 
-  <TextView
-    android:id="@+id/np_stat_home"
-    android:layout_width="0dp"
+  <LinearLayout
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_weight="1"
-    android:gravity="end"
-    android:textColor="#FFFFFF"
-    android:textSize="12sp"
-    android:textStyle="bold" />
+    android:baselineAligned="false"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
 
-  <TextView
-    android:id="@+id/np_stat_label"
-    android:layout_width="0dp"
-    android:layout_height="wrap_content"
-    android:layout_weight="1.4"
-    android:gravity="center"
-    android:textColor="#8F8F8F"
-    android:textSize="10sp" />
+    <TextView
+      android:id="@+id/np_stat_home"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:gravity="end"
+      android:textColor="#FFFFFF"
+      android:textSize="12sp"
+      android:textStyle="bold" />
 
-  <TextView
-    android:id="@+id/np_stat_away"
-    android:layout_width="0dp"
-    android:layout_height="wrap_content"
-    android:layout_weight="1"
-    android:gravity="start"
-    android:textColor="#FFFFFF"
-    android:textSize="12sp"
-    android:textStyle="bold" />
+    <TextView
+      android:id="@+id/np_stat_label"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1.4"
+      android:gravity="center"
+      android:textColor="#8F8F8F"
+      android:textSize="10sp" />
+
+    <TextView
+      android:id="@+id/np_stat_away"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:gravity="start"
+      android:textColor="#FFFFFF"
+      android:textSize="12sp"
+      android:textStyle="bold" />
+  </LinearLayout>
+
+  <ProgressBar
+    android:id="@+id/np_stat_bar"
+    style="?android:attr/progressBarStyleHorizontal"
+    android:layout_width="match_parent"
+    android:layout_height="4dp"
+    android:layout_marginTop="3dp"
+    android:indeterminate="false"
+    android:max="1000"
+    android:progressDrawable="@drawable/np_widget_stat_bar"
+    android:visibility="gone" />
 </LinearLayout>

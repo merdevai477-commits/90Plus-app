@@ -17,30 +17,66 @@ import java.security.MessageDigest
 internal object WidgetImages {
   /** RemoteViews ship bitmaps over binder; keep each one small. */
   private const val MAX_PX = 96
+  /** Stadium backdrops span the whole card but sit under a dark scrim, so modest detail is enough. */
+  const val COVER_PX = 560
 
   private fun dir(context: Context): File =
     File(context.cacheDir, "np_widget_images").apply { mkdirs() }
 
-  private fun fileFor(context: Context, url: String): File {
-    val digest = MessageDigest.getInstance("SHA-256").digest(url.toByteArray())
-    return File(dir(context), digest.joinToString("") { "%02x".format(it) } + ".png")
+  private fun fileFor(context: Context, url: String, maxPx: Int): File {
+    val key = if (maxPx == MAX_PX) url else "$url#$maxPx"
+    val digest = MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
+    return File(dir(context), digest.joinToString("") { "%02x".format(it) } + if (maxPx == MAX_PX) ".png" else ".jpg")
   }
 
-  fun load(context: Context, url: String?, allowNetwork: Boolean): Bitmap? {
+  fun load(context: Context, url: String?, allowNetwork: Boolean, maxPx: Int = MAX_PX): Bitmap? {
     if (url.isNullOrBlank()) return null
-    val file = fileFor(context, url)
+    val file = fileFor(context, url, maxPx)
     if (file.exists()) {
       BitmapFactory.decodeFile(file.absolutePath)?.let { return it }
     }
     if (!allowNetwork) return null
     val bytes = download(url) ?: return null
-    val bitmap = decodeScaled(bytes) ?: return null
+    val bitmap = decodeScaled(bytes, maxPx) ?: return null
     try {
-      file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+      val format = if (maxPx == MAX_PX) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
+      file.outputStream().use { bitmap.compress(format, 85, it) }
     } catch (_: Exception) {
       // Cache write is best-effort.
     }
     return bitmap
+  }
+
+  /**
+   * Centre-crops [source] to the card's aspect, rounds it to the card corners and darkens it
+   * (more towards the bottom) so white text stays readable on any stadium photo.
+   */
+  fun cover(source: Bitmap, aspect: Float, radiusFraction: Float): Bitmap {
+    val width = minOf(source.width, COVER_PX)
+    val height = (width / aspect).toInt().coerceAtLeast(1)
+    val out = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(out)
+    val scale = maxOf(width.toFloat() / source.width, height.toFloat() / source.height)
+    val matrix = android.graphics.Matrix().apply {
+      setScale(scale, scale)
+      postTranslate((width - source.width * scale) / 2f, (height - source.height * scale) / 2f)
+    }
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+      shader = BitmapShader(source, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).also { it.setLocalMatrix(matrix) }
+    }
+    val radius = width * radiusFraction
+    val rect = RectF(0f, 0f, width.toFloat(), height.toFloat())
+    canvas.drawRoundRect(rect, radius, radius, paint)
+    val scrim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      shader = android.graphics.LinearGradient(
+        0f, 0f, 0f, height.toFloat(),
+        intArrayOf(0xB30D0A14.toInt(), 0x990D0A14.toInt(), 0xF20D0A14.toInt()),
+        floatArrayOf(0f, 0.45f, 1f),
+        Shader.TileMode.CLAMP,
+      )
+    }
+    canvas.drawRoundRect(rect, radius, radius, scrim)
+    return out
   }
 
   fun circle(source: Bitmap): Bitmap {
@@ -63,6 +99,8 @@ internal object WidgetImages {
       connection = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 8_000
         readTimeout = 8_000
+        // Wikimedia (stadium photos) rejects anonymous clients.
+        setRequestProperty("User-Agent", "90PlusWidget/1.0 (https://90plus.pro)")
       }
       if (connection.responseCode !in 200..299) null else connection.inputStream.use { it.readBytes() }
     } catch (_: Exception) {
@@ -72,15 +110,15 @@ internal object WidgetImages {
     }
   }
 
-  private fun decodeScaled(bytes: ByteArray): Bitmap? {
+  private fun decodeScaled(bytes: ByteArray, maxPx: Int): Bitmap? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
     var sample = 1
-    while (bounds.outWidth / (sample * 2) >= MAX_PX && bounds.outHeight / (sample * 2) >= MAX_PX) sample *= 2
+    while (bounds.outWidth / (sample * 2) >= maxPx && bounds.outHeight / (sample * 2) >= maxPx) sample *= 2
     val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
       ?: return null
-    val scale = MAX_PX.toFloat() / maxOf(decoded.width, decoded.height)
+    val scale = maxPx.toFloat() / maxOf(decoded.width, decoded.height)
     if (scale >= 1f) return decoded
     return Bitmap.createScaledBitmap(
       decoded,

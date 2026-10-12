@@ -8,7 +8,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
@@ -102,10 +104,15 @@ internal object WidgetRenderer {
       else -> {
         val focus = feed.focusMatch
         val featured = feed.featured?.takeIf { it.fixtureId == focus?.fixtureId }
+        val goal = featured?.goal?.takeIf { focus?.isLive == true }
         // The live match and everything about it come first; other clubs' cards follow.
+        if (focus != null && goal != null) pages += goalPage(context, focus, goal, labels, images, size)
         if (focus != null) pages += matchPage(context, focus, labels, images, size, featured?.events.orEmpty())
         if (focus != null && featured != null) {
           if (featured.events.isNotEmpty()) pages += eventsPage(context, focus, featured.events, labels, images, size)
+          featured.stats?.takeIf { hasStats(it) }?.let {
+            pages += statsPage(context, focus, it, labels, images, arabic, size)
+          }
           if (featured.momentum.size >= 2) {
             pages += momentumPage(context, focus, featured.momentum, labels, images, size)
           }
@@ -113,11 +120,13 @@ internal object WidgetRenderer {
           if (featured.topPlayers.isNotEmpty()) {
             pages += playersPage(context, focus, featured.topPlayers, labels, images, size)
           }
-          featured.stats?.takeIf { hasStats(it) }?.let {
-            pages += statsPage(context, focus, it, labels, images, arabic, size)
-          }
+          featured.info?.takeIf { it.hasBasics }?.let { pages += infoPage(context, focus, it, labels, images, size) }
+          featured.info?.takeIf { it.hasForm }?.let { pages += formPage(context, focus, it, labels, images, arabic, size) }
         }
-        feed.fixtures.forEach { pages += matchPage(context, it, labels, images, size) }
+        // Badges on missing view ids are ignored, so this marks the score card and every mini header.
+        if (goal != null) pages.forEach { markGoal(it, labels) }
+        // A live followed match owns the widget until the final whistle; the other fixtures return after.
+        if (focus?.isLive != true) feed.fixtures.forEach { pages += matchPage(context, it, labels, images, size) }
         if (pages.isEmpty()) pages += messagePage(context, labels.followTeams, SEARCH_URI)
       }
     }
@@ -125,9 +134,19 @@ internal object WidgetRenderer {
     val held = WidgetStore.heldPage(context, NAV_HOLD_MS)
     val root = RemoteViews(context.packageName, if (held == null) R.layout.np_widget_root else R.layout.np_widget_root_manual)
     root.removeAllViews(R.id.np_flipper)
-    for (page in pages) {
+    // Dot is 5dp + 4dp gap; leave the arrows (72dp) and side margins clear.
+    val showDots = pages.size in 2..((size.widthDp - 110) / 9)
+    pages.forEachIndexed { index, page ->
       page.setInt(R.id.np_page, "setLayoutDirection", View.LAYOUT_DIRECTION_LTR)
-      root.addView(R.id.np_flipper, page)
+      val frame = RemoteViews(context.packageName, R.layout.np_widget_page_frame)
+      frame.addView(R.id.np_frame_slot, page)
+      if (showDots) {
+        for (dot in pages.indices) {
+          val layout = if (dot == index) R.layout.np_widget_dot_active else R.layout.np_widget_dot
+          frame.addView(R.id.np_dots, RemoteViews(context.packageName, layout))
+        }
+      }
+      root.addView(R.id.np_flipper, frame)
     }
     if (held != null) root.setDisplayedChild(R.id.np_flipper, Math.floorMod(held, pages.size))
     root.setViewVisibility(R.id.np_nav, if (pages.size > 1) View.VISIBLE else View.GONE)
@@ -137,6 +156,163 @@ internal object WidgetRenderer {
   }
 
   // region Pages
+
+  /** Leads the widget for a few match minutes after a goal. */
+  private fun goalPage(
+    context: Context,
+    match: FeedMatch,
+    goal: FeedGoal,
+    labels: WidgetLabels,
+    images: ImageResolver,
+    size: Sizing,
+  ): RemoteViews {
+    val views = RemoteViews(context.packageName, R.layout.np_widget_page_goal)
+    applyMiniHeader(views, match, match.leagueName, labels, images)
+    val team = if (goal.side == "home") match.home else match.away
+    val who = goal.player.ifBlank { team.name } + when (goal.kind) {
+      "penalty" -> " (P)"
+      "own_goal" -> " (OG)"
+      else -> ""
+    }
+    val minute = "${goal.minute}${goal.extra?.let { "+$it" }.orEmpty()}\u2019"
+    views.setTextViewText(R.id.np_goal_title, labels.goal)
+    // Photo, title, name and meta need about 65dp plus the photo; short widgets drop to two lines.
+    if (size.detailBody < 90) {
+      views.setViewVisibility(R.id.np_goal_photo, View.GONE)
+      views.setViewVisibility(R.id.np_goal_meta, View.GONE)
+      views.textSp(R.id.np_goal_title, 16f)
+      views.setTextViewText(R.id.np_goal_player, "$who  $minute")
+    } else {
+      val photoDp = (size.detailBody - 65).coerceIn(28, 72)
+      views.sizeDp(R.id.np_goal_photo, photoDp, photoDp)
+      val photo = images.photo(goal.photo) ?: images.crest(team.logo)
+      if (photo != null) views.setImageViewBitmap(R.id.np_goal_photo, photo)
+      else views.setViewVisibility(R.id.np_goal_photo, View.GONE)
+      views.setTextViewText(R.id.np_goal_player, who)
+      views.setTextViewText(R.id.np_goal_meta, if (goal.player.isBlank()) minute else "$minute  \u00B7  ${team.name}")
+    }
+    views.setOnClickPendingIntent(R.id.np_page, openIntent(context, matchUri(match)))
+    return views
+  }
+
+  private fun infoPage(
+    context: Context,
+    match: FeedMatch,
+    info: FeedInfo,
+    labels: WidgetLabels,
+    images: ImageResolver,
+    size: Sizing,
+  ): RemoteViews {
+    val views = RemoteViews(context.packageName, R.layout.np_widget_page_info)
+    applyMiniHeader(views, match, labels.info, labels, images)
+    images.cover(info.venueImage, size.widthDp.toFloat() / size.heightDp, 24f / size.widthDp)?.let {
+      views.setImageViewBitmap(R.id.np_info_bg, it)
+      views.setViewVisibility(R.id.np_info_bg, View.VISIBLE)
+    }
+    // Venue 34dp, referee 24dp, table 32dp.
+    var room = size.detailBody
+    val showVenue = info.venue != null
+    if (showVenue) room -= 34
+    views.setViewVisibility(R.id.np_info_venue_row, if (showVenue) View.VISIBLE else View.GONE)
+    views.setTextViewText(R.id.np_info_venue, info.venue.orEmpty())
+    views.setTextViewText(R.id.np_info_city, info.city.orEmpty())
+    views.setViewVisibility(R.id.np_info_city, if (info.city != null) View.VISIBLE else View.GONE)
+
+    val showReferee = info.referee != null && room >= 24
+    if (showReferee) room -= 24
+    views.setViewVisibility(R.id.np_info_ref_row, if (showReferee) View.VISIBLE else View.GONE)
+    views.setTextViewText(R.id.np_info_referee, "${labels.referee}: ${info.referee.orEmpty()}")
+
+    val showTable = (info.home.rank != null || info.away.rank != null) && room >= 32
+    views.setViewVisibility(R.id.np_info_table_row, if (showTable) View.VISIBLE else View.GONE)
+    if (showTable) {
+      images.crest(match.home.logo)?.let { views.setImageViewBitmap(R.id.np_info_home_logo, it) }
+      images.crest(match.away.logo)?.let { views.setImageViewBitmap(R.id.np_info_away_logo, it) }
+      views.setTextViewText(R.id.np_info_home_rank, info.home.rank?.let { "#$it" } ?: "-")
+      views.setTextViewText(R.id.np_info_away_rank, info.away.rank?.let { "#$it" } ?: "-")
+      views.setTextViewText(R.id.np_info_home_pts, info.home.points?.let { "$it ${labels.points}" }.orEmpty())
+      views.setTextViewText(R.id.np_info_away_pts, info.away.points?.let { "$it ${labels.points}" }.orEmpty())
+    }
+    views.setOnClickPendingIntent(R.id.np_page, openIntent(context, matchUri(match)))
+    return views
+  }
+
+  private fun formPage(
+    context: Context,
+    match: FeedMatch,
+    info: FeedInfo,
+    labels: WidgetLabels,
+    images: ImageResolver,
+    arabic: Boolean,
+    size: Sizing,
+  ): RemoteViews {
+    val views = RemoteViews(context.packageName, R.layout.np_widget_page_form)
+    applyMiniHeader(views, match, labels.form, labels, images)
+    var room = size.detailBody
+
+    val hasForm = info.home.form.isNotEmpty() || info.away.form.isNotEmpty()
+    views.setViewVisibility(R.id.np_form_home_row, if (hasForm) View.VISIBLE else View.GONE)
+    views.setViewVisibility(R.id.np_form_away_row, if (hasForm) View.VISIBLE else View.GONE)
+    if (hasForm) {
+      room -= 44
+      formRow(context, views, R.id.np_form_home_logo, R.id.np_form_home_name, R.id.np_form_home_chips, match.home, info.home, images, arabic)
+      formRow(context, views, R.id.np_form_away_logo, R.id.np_form_away_name, R.id.np_form_away_chips, match.away, info.away, images, arabic)
+    }
+
+    val h2h = info.h2h?.takeIf { it.homeWins + it.draws + it.awayWins > 0 }
+    val showH2h = h2h != null && (room >= 34 || !hasForm)
+    views.setViewVisibility(R.id.np_h2h_row, if (showH2h) View.VISIBLE else View.GONE)
+    views.removeAllViews(R.id.np_meetings)
+    if (h2h != null && showH2h) {
+      room -= 38
+      images.crest(match.home.logo)?.let { views.setImageViewBitmap(R.id.np_h2h_home_logo, it) }
+      images.crest(match.away.logo)?.let { views.setImageViewBitmap(R.id.np_h2h_away_logo, it) }
+      views.setTextViewText(R.id.np_h2h_home_wins, h2h.homeWins.toString())
+      views.setTextViewText(R.id.np_h2h_away_wins, h2h.awayWins.toString())
+      views.setTextViewText(R.id.np_h2h_draws, "${labels.draws} ${h2h.draws}")
+      for (meeting in h2h.meetings.take((room / 20).coerceIn(0, 3))) {
+        val row = RemoteViews(context.packageName, R.layout.np_widget_meeting_row)
+        row.setTextViewText(
+          R.id.np_meeting_date,
+          latinDigits(SimpleDateFormat("d MMM yy", Locale.getDefault()).format(Date(meeting.ts * 1000))),
+        )
+        row.setTextViewText(R.id.np_meeting_score, "${meeting.homeGoals} - ${meeting.awayGoals}")
+        images.crest(match.home.logo)?.let { row.setImageViewBitmap(R.id.np_meeting_home_logo, it) }
+        images.crest(match.away.logo)?.let { row.setImageViewBitmap(R.id.np_meeting_away_logo, it) }
+        views.addView(R.id.np_meetings, row)
+      }
+    }
+    views.setOnClickPendingIntent(R.id.np_page, openIntent(context, matchUri(match)))
+    return views
+  }
+
+  /** Last results oldest to newest, so the most recent chip sits next to the edge. */
+  private fun formRow(
+    context: Context,
+    views: RemoteViews,
+    logoId: Int,
+    nameId: Int,
+    chipsId: Int,
+    side: FeedSide,
+    team: FeedTeamInfo,
+    images: ImageResolver,
+    arabic: Boolean,
+  ) {
+    images.crest(side.logo)?.let { views.setImageViewBitmap(logoId, it) }
+    views.setTextViewText(nameId, side.name)
+    views.removeAllViews(chipsId)
+    for (result in team.form) {
+      val chip = RemoteViews(context.packageName, R.layout.np_widget_form_chip)
+      val (letter, background) = when (result) {
+        "W" -> (if (arabic) "\u0641" else "W") to R.drawable.np_widget_form_w
+        "L" -> (if (arabic) "\u062E" else "L") to R.drawable.np_widget_form_l
+        else -> (if (arabic) "\u062A" else "D") to R.drawable.np_widget_form_d
+      }
+      chip.setTextViewText(R.id.np_form_chip, letter)
+      chip.setInt(R.id.np_form_chip, "setBackgroundResource", background)
+      views.addView(chipsId, chip)
+    }
+  }
 
   private fun matchPage(
     context: Context,
@@ -303,13 +479,15 @@ internal object WidgetRenderer {
     applyMiniHeader(views, match, labels.stats, labels, images)
     views.removeAllViews(R.id.np_stat_rows)
     val roomy = size.detailBody >= 150
-    var room = size.rows(if (roomy) 36 else 19, 5)
+    // The share bar adds 7dp per row, so short widgets keep plain numbers.
+    val bars = size.detailBody >= 110
+    var room = size.rows(if (roomy) 36 else if (bars) 27 else 19, 5)
     fun add(key: String, pair: FeedStatPair?, percent: Boolean, decimal: Boolean) {
       if (pair == null || room <= 0) return
       room--
       val row = RemoteViews(context.packageName, R.layout.np_widget_stat_row)
       if (roomy) {
-        row.padVertical(context, R.id.np_stat_row, 7)
+        row.padVertical(context, R.id.np_stat_row, if (bars) 4 else 7)
         row.textSp(R.id.np_stat_home, 16f)
         row.textSp(R.id.np_stat_away, 16f)
         row.textSp(R.id.np_stat_label, 12f)
@@ -317,6 +495,11 @@ internal object WidgetRenderer {
       row.setTextViewText(R.id.np_stat_label, statLabel(key, arabic))
       row.setTextViewText(R.id.np_stat_home, formatStat(pair.home, percent, decimal))
       row.setTextViewText(R.id.np_stat_away, formatStat(pair.away, percent, decimal))
+      val total = pair.home + pair.away
+      if (bars && total > 0) {
+        row.setViewVisibility(R.id.np_stat_bar, View.VISIBLE)
+        row.setProgressBar(R.id.np_stat_bar, 1000, (pair.home / total * 1000).toInt(), false)
+      }
       views.addView(R.id.np_stat_rows, row)
     }
     add("possession", stats.possession, percent = true, decimal = false)
@@ -384,7 +567,7 @@ internal object WidgetRenderer {
     val density = context.resources.displayMetrics.density
     val width = ((size.widthDp - 24) * density).toInt().coerceAtLeast(200)
     val height = (size.detailBody.coerceAtLeast(36) * density).toInt()
-    views.setImageViewBitmap(R.id.np_momentum_chart, momentumChart(points, width, height))
+    views.setImageViewBitmap(R.id.np_momentum_chart, momentumChart(context, points, width, height, labels.halftime))
     views.setOnClickPendingIntent(R.id.np_page, openIntent(context, matchUri(match)))
     return views
   }
@@ -424,6 +607,14 @@ internal object WidgetRenderer {
       "setBackgroundResource",
       if (match.isLive) R.drawable.np_widget_chip_live else R.drawable.np_widget_chip_idle,
     )
+  }
+
+  private fun markGoal(views: RemoteViews, labels: WidgetLabels) {
+    for (viewId in intArrayOf(R.id.np_badge, R.id.np_header_badge)) {
+      views.setTextViewText(viewId, labels.goal)
+      views.setTextColor(viewId, Color.WHITE)
+      views.setInt(viewId, "setBackgroundResource", R.drawable.np_widget_chip_goal)
+    }
   }
 
   private fun badgeText(match: FeedMatch, labels: WidgetLabels): String = when (match.status) {
@@ -469,18 +660,60 @@ internal object WidgetRenderer {
     }
   }
 
-  private fun momentumChart(points: List<FeedMomentumPoint>, width: Int, height: Int): Bitmap {
+  /** Bars per minute bucket above (home) and below (away) the axis, with a minute scale and HT line. */
+  private fun momentumChart(
+    context: Context,
+    points: List<FeedMomentumPoint>,
+    width: Int,
+    height: Int,
+    halftime: String,
+  ): Bitmap {
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    val mid = height / 2f
+    val metrics = context.resources.displayMetrics
+    val labelStrip = 13 * metrics.density
+    val chartHeight = height - labelStrip
+    val mid = chartHeight / 2f
     val slot = width.toFloat() / points.size
-    val barWidth = minOf(slot * 0.55f, height * 0.16f)
+    val barWidth = minOf(slot * 0.55f, chartHeight * 0.16f)
     val half = mid - 4f
+
+    val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      color = Color.argb(150, 255, 255, 255)
+      textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 9f, metrics)
+    }
+    val baseline = height - 2 * metrics.density
+    text.textAlign = Paint.Align.LEFT
+    canvas.drawText("0\u2019", 0f, baseline, text)
+    // Half-time sits between the last first-half bucket and the first second-half one.
+    val secondHalf = points.indexOfFirst { it.minute > 45 }
+    val end = "${points.last().minute}\u2019"
+    val endClear = secondHalf <= 0 ||
+      width - secondHalf * slot > (text.measureText(halftime) / 2f + text.measureText(end) + 6 * metrics.density)
+    if (endClear) {
+      text.textAlign = Paint.Align.RIGHT
+      canvas.drawText(end, width.toFloat(), baseline, text)
+    }
+    if (secondHalf > 0) {
+      val x = secondHalf * slot
+      val dash = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(110, 255, 255, 255)
+        strokeWidth = metrics.density
+        style = Paint.Style.STROKE
+        pathEffect = DashPathEffect(floatArrayOf(4 * metrics.density, 3 * metrics.density), 0f)
+      }
+      canvas.drawPath(Path().apply { moveTo(x, 0f); lineTo(x, chartHeight) }, dash)
+      text.textAlign = Paint.Align.CENTER
+      val labelHalf = text.measureText(halftime) / 2f
+      canvas.drawText(halftime, x.coerceIn(labelHalf, width - labelHalf), baseline, text)
+    }
     val home = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = PURPLE }
     val away = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(190, 255, 255, 255) }
     val axis = Paint().apply { color = Color.argb(50, 255, 255, 255); strokeWidth = 2f }
     canvas.drawLine(0f, mid, width.toFloat(), mid, axis)
     points.forEachIndexed { index, point ->
+      // Buckets the match has not reached yet come back as 0/0.
+      if (point.home <= 0 && point.away <= 0) return@forEachIndexed
       val left = index * slot + (slot - barWidth) / 2f
       val radius = barWidth / 2f
       val homeH = (point.home.coerceIn(0, 100) / 100f * half).coerceAtLeast(3f)
@@ -528,6 +761,12 @@ internal object WidgetRenderer {
     fun photo(url: String?): Bitmap? {
       if (url.isNullOrBlank()) return null
       return photos.getOrPut(url) { WidgetImages.load(context, url, allowNetwork)?.let(WidgetImages::circle) }
+    }
+
+    fun cover(url: String?, aspect: Float, radiusFraction: Float): Bitmap? {
+      if (url.isNullOrBlank()) return null
+      return WidgetImages.load(context, url, allowNetwork, WidgetImages.COVER_PX)
+        ?.let { WidgetImages.cover(it, aspect, radiusFraction) }
     }
   }
 }

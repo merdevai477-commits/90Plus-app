@@ -32,6 +32,12 @@ struct WidgetLabels: Decodable, Hashable {
   var lineup = "Lineup"
   var stats = "Stats"
   var events = "Key events"
+  var goal = "GOAL!"
+  var info = "Match info"
+  var form = "Form & head to head"
+  var referee = "Referee"
+  var points = "pts"
+  var draws = "Draws"
 
   init() {}
 
@@ -55,11 +61,18 @@ struct WidgetLabels: Decodable, Hashable {
     lineup = str(.lineup, "Lineup")
     stats = str(.stats, "Stats")
     events = str(.events, "Key events")
+    goal = str(.goal, "GOAL!")
+    info = str(.info, "Match info")
+    form = str(.form, "Form & head to head")
+    referee = str(.referee, "Referee")
+    points = str(.points, "pts")
+    draws = str(.draws, "Draws")
   }
 
   private enum CodingKeys: String, CodingKey {
     case live, upcoming, finished, halftime, postponed, topPlayers, momentum, myTeams
     case followTeams, vs, today, tomorrow, lineup, stats, events
+    case goal, info, form, referee, points, draws
   }
 }
 
@@ -194,6 +207,66 @@ struct FeedEvent: Codable, Hashable {
   let player: String
 }
 
+/// The latest goal, sent only for a few match minutes after it went in.
+struct FeedGoal: Codable, Hashable {
+  let minute: Int
+  let extra: Int?
+  /// goal | penalty | own_goal
+  let kind: String
+  let side: String
+  let player: String
+  let photo: String?
+}
+
+struct FeedTeamInfo: Codable, Hashable {
+  let rank: Int?
+  let points: Int?
+  let played: Int?
+  /// Oldest first; "W" | "D" | "L".
+  let form: [String]
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    rank = try? container.decodeIfPresent(Int.self, forKey: .rank)
+    points = try? container.decodeIfPresent(Int.self, forKey: .points)
+    played = try? container.decodeIfPresent(Int.self, forKey: .played)
+    form = ((try? container.decodeIfPresent([String].self, forKey: .form)) ?? []).filter { ["W", "D", "L"].contains($0) }
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case rank, points, played, form
+  }
+}
+
+/// Goals oriented to this fixture: `homeGoals` belong to today's home side.
+struct FeedMeeting: Codable, Hashable {
+  let ts: Double
+  let homeGoals: Int
+  let awayGoals: Int
+}
+
+struct FeedH2H: Codable, Hashable {
+  let homeWins: Int
+  let draws: Int
+  let awayWins: Int
+  let meetings: [FeedMeeting]
+
+  var total: Int { homeWins + draws + awayWins }
+}
+
+struct FeedInfo: Codable, Hashable {
+  let venue: String?
+  let city: String?
+  let venueImage: String?
+  let referee: String?
+  let home: FeedTeamInfo
+  let away: FeedTeamInfo
+  let h2h: FeedH2H?
+
+  var hasBasics: Bool { venue != nil || referee != nil || home.rank != nil || away.rank != nil }
+  var hasForm: Bool { !home.form.isEmpty || !away.form.isEmpty || (h2h?.total ?? 0) > 0 }
+}
+
 struct FeedFeatured: Codable, Hashable {
   let fixtureId: Int
   let topPlayers: [FeedPlayer]
@@ -201,6 +274,8 @@ struct FeedFeatured: Codable, Hashable {
   let lineup: FeedLineup?
   let stats: FeedStats?
   let events: [FeedEvent]
+  let goal: FeedGoal?
+  let info: FeedInfo?
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -210,6 +285,9 @@ struct FeedFeatured: Codable, Hashable {
     lineup = try container.decodeIfPresent(FeedLineup.self, forKey: .lineup)
     stats = try container.decodeIfPresent(FeedStats.self, forKey: .stats)
     events = (try? container.decodeIfPresent([FeedEvent].self, forKey: .events)) ?? []
+    // Newer sections must never break decoding of the core feed.
+    goal = try? container.decodeIfPresent(FeedGoal.self, forKey: .goal)
+    info = try? container.decodeIfPresent(FeedInfo.self, forKey: .info)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -220,10 +298,12 @@ struct FeedFeatured: Codable, Hashable {
     try container.encodeIfPresent(lineup, forKey: .lineup)
     try container.encodeIfPresent(stats, forKey: .stats)
     try container.encode(events, forKey: .events)
+    try container.encodeIfPresent(goal, forKey: .goal)
+    try container.encodeIfPresent(info, forKey: .info)
   }
 
   private enum CodingKeys: String, CodingKey {
-    case fixtureId, topPlayers, momentum, lineup, stats, events
+    case fixtureId, topPlayers, momentum, lineup, stats, events, goal, info
   }
 }
 
@@ -359,8 +439,10 @@ enum ImageStore {
     return directory?.appendingPathComponent("\(digest).png")
   }
 
+  /// Callers list the most important URLs first; only the first 16 distinct ones are loaded.
   static func images(for urls: [String]) async -> [String: UIImage] {
-    let unique = Array(Set(urls.filter { !$0.isEmpty })).prefix(16)
+    var seen = Set<String>()
+    let unique = urls.filter { !$0.isEmpty && seen.insert($0).inserted }.prefix(16)
     return await withTaskGroup(of: (String, UIImage?).self) { group in
       for url in unique {
         group.addTask { (url, await ImageStore.image(for: url)) }
@@ -381,6 +463,26 @@ enum ImageStore {
     return UIImage(data: data)
   }
 
+  /// Stadium backdrop: wider than a crest, stored as JPEG so it stays well inside the widget memory cap.
+  static func cover(for urlString: String) async -> UIImage? {
+    let key = urlString + "#cover"
+    if let file = fileURL(for: key),
+       let data = try? Data(contentsOf: file),
+       let cached = UIImage(data: data) {
+      return cached
+    }
+    guard let url = URL(string: urlString) else { return nil }
+    var request = URLRequest(url: url, timeoutInterval: 10)
+    // Wikimedia (stadium photos) rejects anonymous clients.
+    request.setValue("90PlusWidget/1.0 (https://90plus.pro)", forHTTPHeaderField: "User-Agent")
+    guard let response = try? await URLSession.shared.data(for: request),
+          let image = downsample(response.0, maxPixel: 640) else { return nil }
+    if let file = fileURL(for: key), let jpeg = image.jpegData(compressionQuality: 0.8) {
+      try? jpeg.write(to: file, options: .atomic)
+    }
+    return image
+  }
+
   private static func image(for urlString: String) async -> UIImage? {
     if let file = fileURL(for: urlString),
        let data = try? Data(contentsOf: file),
@@ -389,14 +491,14 @@ enum ImageStore {
     }
     guard let url = URL(string: urlString),
           let response = try? await URLSession.shared.data(from: url),
-          let image = downsample(response.0) else { return nil }
+          let image = downsample(response.0, maxPixel: maxPixel) else { return nil }
     if let file = fileURL(for: urlString), let png = image.pngData() {
       try? png.write(to: file, options: .atomic)
     }
     return image
   }
 
-  private static func downsample(_ data: Data) -> UIImage? {
+  private static func downsample(_ data: Data, maxPixel: CGFloat) -> UIImage? {
     guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
     let options: [CFString: Any] = [
       kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -417,6 +519,9 @@ enum WidgetPage: Hashable {
   case lineup
   case stats
   case events
+  case goal
+  case info
+  case form
   case fixture(Int)
   case empty
   case match(Int)
@@ -440,5 +545,15 @@ enum WidgetPager {
     let current = index(at: now)
     WidgetShared.defaults?.set(current + delta, forKey: baseKey)
     WidgetShared.defaults?.set(now.timeIntervalSince1970, forKey: baseAtKey)
+  }
+
+  private static let lastGoalKey = "widget.lastGoal"
+
+  /// Jumps to page 0 (the goal page) the first time a goal shows up, then rotation resumes from there.
+  static func showGoalOnce(_ key: String) {
+    guard let defaults = WidgetShared.defaults, defaults.string(forKey: lastGoalKey) != key else { return }
+    defaults.set(key, forKey: lastGoalKey)
+    defaults.set(0, forKey: baseKey)
+    defaults.set(Date().timeIntervalSince1970, forKey: baseAtKey)
   }
 }

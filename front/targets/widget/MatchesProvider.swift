@@ -38,6 +38,12 @@ struct MatchesEntry: TimelineEntry {
     return images[url]
   }
 
+  /// The feed only carries `goal` for a few match minutes after it went in.
+  func hasFreshGoal(_ match: FeedMatch) -> Bool {
+    guard match.isLive, let featured = feed?.featured, featured.fixtureId == match.fixtureId else { return false }
+    return featured.goal != nil
+  }
+
   static func message(_ content: Content, labels: WidgetLabels = WidgetLabels(), isArabic: Bool = false) -> MatchesEntry {
     MatchesEntry(date: Date(), content: content, labels: labels, isArabic: isArabic, pages: [], pageIndex: 0, images: [:])
   }
@@ -81,7 +87,13 @@ struct MatchesProvider: TimelineProvider {
 
     let feed = loaded.feed
     let pages = pages(for: feed, family: family)
-    let images = await ImageStore.images(for: imageURLs(for: feed, family: family))
+    if pages.first == .goal, let match = feed.focusMatch, let goal = feed.featured?.goal {
+      WidgetPager.showGoalOnce("\(match.fixtureId):\(goal.minute):\(goal.side):\(goal.player)")
+    }
+    var images = await ImageStore.images(for: imageURLs(for: feed, family: family))
+    if pages.contains(.info), let url = feed.featured?.info?.venueImage, let cover = await ImageStore.cover(for: url) {
+      images[url + "#cover"] = cover
+    }
 
     var reloadAt = now.addingTimeInterval(feed.hasLive ? liveReload : idleReload)
     if let kickoff = feed.nextKickoff?.addingTimeInterval(60), kickoff < reloadAt {
@@ -108,18 +120,22 @@ struct MatchesProvider: TimelineProvider {
     let focus = feed.focusMatch
     let featured = feed.featured?.fixtureId == focus?.fixtureId ? feed.featured : nil
 
-    let fixturePages = feed.fixtures.indices.map { WidgetPage.fixture($0) }
+    // A live followed match owns the widget until the final whistle; the other fixtures return after.
+    let fixturePages = focus?.isLive == true ? [] : feed.fixtures.indices.map { WidgetPage.fixture($0) }
     switch family {
     case .systemMedium, .systemLarge, .systemExtraLarge:
       // The live match and everything about it come first; other clubs' cards follow.
       var pages: [WidgetPage] = []
+      if focus?.isLive == true, featured?.goal != nil { pages.append(.goal) }
       if focus != nil { pages.append(.live) }
       if let featured {
         if !featured.events.isEmpty { pages.append(.events) }
+        if featured.stats?.hasAny == true { pages.append(.stats) }
         if featured.momentum.count >= 2 { pages.append(.momentum) }
         if featured.lineup != nil { pages.append(.lineup) }
         if !featured.topPlayers.isEmpty { pages.append(.players) }
-        if featured.stats?.hasAny == true { pages.append(.stats) }
+        if featured.info?.hasBasics == true { pages.append(.info) }
+        if featured.info?.hasForm == true { pages.append(.form) }
       }
       pages.append(contentsOf: fixturePages)
       return pages.isEmpty ? [.empty] : pages
@@ -145,6 +161,7 @@ struct MatchesProvider: TimelineProvider {
       if let logo = match.away.logo { urls.append(logo) }
     }
     if family != .systemSmall {
+      if let photo = feed.featured?.goal?.photo { urls.append(photo) }
       urls.append(contentsOf: feed.featured?.topPlayers.compactMap(\.photo) ?? [])
       urls.append(contentsOf: feed.featured?.lineup?.home.compactMap(\.photo) ?? [])
       urls.append(contentsOf: feed.featured?.lineup?.away.compactMap(\.photo) ?? [])

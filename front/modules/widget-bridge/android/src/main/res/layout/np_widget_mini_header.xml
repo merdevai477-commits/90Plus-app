@@ -24,6 +24,7 @@
 
   <TextView
     android:id="@+id/np_header_title"
+    android:textAlignment="viewStart"
     android:layout_width="0dp"
     android:layout_height="wrap_content"
     android:layout_marginStart="6dp"

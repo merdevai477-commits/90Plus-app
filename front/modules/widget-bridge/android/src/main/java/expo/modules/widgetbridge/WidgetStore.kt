@@ -19,6 +19,12 @@ internal data class WidgetLabels(
   val lineup: String,
   val stats: String,
   val events: String,
+  val goal: String,
+  val info: String,
+  val form: String,
+  val referee: String,
+  val points: String,
+  val draws: String,
 ) {
   companion object {
     val DEFAULT = WidgetLabels(
@@ -37,6 +43,12 @@ internal data class WidgetLabels(
       lineup = "Lineup",
       stats = "Stats",
       events = "Key events",
+      goal = "GOAL!",
+      info = "Match info",
+      form = "Form & head to head",
+      referee = "Referee",
+      points = "pts",
+      draws = "Draws",
     )
 
     fun parse(json: JSONObject?): WidgetLabels {
@@ -58,6 +70,12 @@ internal data class WidgetLabels(
         lineup = s("lineup", DEFAULT.lineup),
         stats = s("stats", DEFAULT.stats),
         events = s("events", DEFAULT.events),
+        goal = s("goal", DEFAULT.goal),
+        info = s("info", DEFAULT.info),
+        form = s("form", DEFAULT.form),
+        referee = s("referee", DEFAULT.referee),
+        points = s("points", DEFAULT.points),
+        draws = s("draws", DEFAULT.draws),
       )
     }
   }

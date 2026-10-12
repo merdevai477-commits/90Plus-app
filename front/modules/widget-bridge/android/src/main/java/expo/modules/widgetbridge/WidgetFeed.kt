@@ -53,6 +53,35 @@ internal data class FeedStats(
 
 internal data class FeedEvent(val minute: Int, val extra: Int?, val kind: String, val side: String, val player: String)
 
+internal data class FeedGoal(
+  val minute: Int,
+  val extra: Int?,
+  val kind: String,
+  val side: String,
+  val player: String,
+  val photo: String?,
+)
+
+internal data class FeedTeamInfo(val rank: Int?, val points: Int?, val played: Int?, val form: List<String>)
+
+/** Goals oriented to this fixture: [homeGoals] belong to today's home side. */
+internal data class FeedMeeting(val ts: Long, val homeGoals: Int, val awayGoals: Int)
+
+internal data class FeedH2H(val homeWins: Int, val draws: Int, val awayWins: Int, val meetings: List<FeedMeeting>)
+
+internal data class FeedInfo(
+  val venue: String?,
+  val city: String?,
+  val venueImage: String?,
+  val referee: String?,
+  val home: FeedTeamInfo,
+  val away: FeedTeamInfo,
+  val h2h: FeedH2H?,
+) {
+  val hasBasics get() = venue != null || referee != null || home.rank != null || away.rank != null
+  val hasForm get() = home.form.isNotEmpty() || away.form.isNotEmpty() || h2h != null
+}
+
 internal data class FeedFeatured(
   val fixtureId: Int,
   val topPlayers: List<FeedPlayer>,
@@ -60,6 +89,8 @@ internal data class FeedFeatured(
   val lineup: FeedLineup?,
   val stats: FeedStats?,
   val events: List<FeedEvent>,
+  val goal: FeedGoal?,
+  val info: FeedInfo?,
 )
 
 internal data class WidgetFeed(
@@ -191,6 +222,50 @@ internal data class WidgetFeed(
           events?.optJSONObject(i)?.let {
             FeedEvent(it.optInt("minute"), it.optIntOrNull("extra"), it.optString("kind"), it.optString("side"), it.optString("player"))
           }
+        },
+        goal = json.optJSONObject("goal")?.let {
+          FeedGoal(
+            it.optInt("minute"),
+            it.optIntOrNull("extra"),
+            it.optString("kind"),
+            it.optString("side"),
+            it.optString("player"),
+            it.optStringOrNull("photo"),
+          )
+        },
+        info = json.optJSONObject("info")?.let(::parseInfo),
+      )
+    }
+
+    private fun parseTeamInfo(json: JSONObject?): FeedTeamInfo {
+      val form = json?.optJSONArray("form")
+      return FeedTeamInfo(
+        rank = json?.optIntOrNull("rank"),
+        points = json?.optIntOrNull("points"),
+        played = json?.optIntOrNull("played"),
+        form = (0 until (form?.length() ?: 0)).map { form!!.optString(it) }.filter { it in setOf("W", "D", "L") },
+      )
+    }
+
+    private fun parseInfo(json: JSONObject): FeedInfo {
+      val h2h = json.optJSONObject("h2h")
+      val meetings = h2h?.optJSONArray("meetings")
+      return FeedInfo(
+        venue = json.optStringOrNull("venue"),
+        city = json.optStringOrNull("city"),
+        venueImage = json.optStringOrNull("venueImage"),
+        referee = json.optStringOrNull("referee"),
+        home = parseTeamInfo(json.optJSONObject("home")),
+        away = parseTeamInfo(json.optJSONObject("away")),
+        h2h = h2h?.let {
+          FeedH2H(
+            it.optInt("homeWins"),
+            it.optInt("draws"),
+            it.optInt("awayWins"),
+            (0 until (meetings?.length() ?: 0)).mapNotNull { i ->
+              meetings?.optJSONObject(i)?.let { m -> FeedMeeting(m.optLong("ts"), m.optInt("homeGoals"), m.optInt("awayGoals")) }
+            },
+          )
         },
       )
     }

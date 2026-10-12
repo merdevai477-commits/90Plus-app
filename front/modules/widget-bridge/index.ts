@@ -23,6 +23,12 @@ export interface WidgetLabels {
   lineup: string;
   stats: string;
   events: string;
+  goal: string;
+  info: string;
+  form: string;
+  referee: string;
+  points: string;
+  draws: string;
 }
 
 export interface WidgetConfig {

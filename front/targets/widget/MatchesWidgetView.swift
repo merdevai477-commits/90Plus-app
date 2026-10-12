@@ -16,6 +16,9 @@ private enum Palette {
   static let purple = Color(red: 0.545, green: 0.361, blue: 0.965)   // #8B5CF6
   static let ratingText = Color(red: 0.82, green: 0.64, blue: 0.98)  // #D1A4FB
   static let ratingFill = Color(red: 0.145, green: 0.008, blue: 0.27).opacity(0.5)
+  static let goal = Color(red: 0.13, green: 0.77, blue: 0.37)        // #22C55E
+  static let loss = Color(red: 0.94, green: 0.27, blue: 0.27)        // #EF4444
+  static let draw = Color(red: 0.42, green: 0.45, blue: 0.50)        // #6B7280
 }
 
 private let matchesURL = URL(string: "ninetyplus://matches")
@@ -51,7 +54,7 @@ struct MatchesWidgetView: View {
   private var deepLink: URL? {
     guard let feed = entry.feed else { return searchURL }
     switch entry.page {
-    case .live, .players, .momentum, .lineup, .stats, .events:
+    case .live, .players, .momentum, .lineup, .stats, .events, .goal, .info, .form:
       return feed.focusMatch?.deepLink ?? searchURL
     case .fixture(let index) where feed.fixtures.indices.contains(index):
       return feed.fixtures[index].deepLink ?? searchURL
@@ -195,20 +198,31 @@ private struct StatusBadge: View {
   let asOf: Date
   let arabic: Bool
   var fontSize: CGFloat = 12
+  /// Swaps the minute for "GOAL!" while a fresh goal is on the feed.
+  var goal = false
 
   var body: some View {
     label
-      .font(.system(size: fontSize, weight: .semibold))
+      .font(.system(size: fontSize, weight: goal ? .heavy : .semibold))
       .monospacedDigit()
       .lineLimit(1)
-      .foregroundStyle(match.isLive ? Palette.liveText : Palette.idleText)
+      .foregroundStyle(goal ? Color.white : match.isLive ? Palette.liveText : Palette.idleText)
       .padding(.horizontal, fontSize * 0.6)
       .frame(minWidth: fontSize * 4.5, minHeight: fontSize * 1.6)
-      .background(match.isLive ? Palette.liveFill : Palette.idleFill, in: Capsule())
+      .background(goal ? Palette.goal : match.isLive ? Palette.liveFill : Palette.idleFill, in: Capsule())
   }
 
   @ViewBuilder
   private var label: some View {
+    if goal {
+      Text(labels.goal)
+    } else {
+      status
+    }
+  }
+
+  @ViewBuilder
+  private var status: some View {
     switch match.status {
     case "live":
       if let elapsed = match.elapsed {
@@ -270,6 +284,23 @@ private struct MediumView: View {
           .padding(.bottom, 7)
       }
     }
+    .background { stadiumCover }
+  }
+
+  /// The info page sits over the venue photo, darkened so white text stays readable.
+  @ViewBuilder
+  private var stadiumCover: some View {
+    if entry.page == .info, let url = entry.feed?.featured?.info?.venueImage, let cover = entry.image(url + "#cover") {
+      ZStack {
+        Image(uiImage: cover).resizable().scaledToFill()
+        LinearGradient(
+          colors: [Color.black.opacity(0.70), Color.black.opacity(0.60), Color.black.opacity(0.92)],
+          startPoint: .top,
+          endPoint: .bottom
+        )
+      }
+      .clipped()
+    }
   }
 
   @ViewBuilder
@@ -305,6 +336,18 @@ private struct MediumView: View {
       case .events:
         if let events = feed.featured?.events, !events.isEmpty, let match = feed.focusMatch {
           EventsPage(entry: entry, match: match, events: events)
+        }
+      case .goal:
+        if let goal = feed.featured?.goal, let match = feed.focusMatch {
+          GoalPage(entry: entry, match: match, goal: goal)
+        }
+      case .info:
+        if let info = feed.featured?.info, let match = feed.focusMatch {
+          InfoPage(entry: entry, match: match, info: info)
+        }
+      case .form:
+        if let info = feed.featured?.info, let match = feed.focusMatch {
+          FormPage(entry: entry, match: match, info: info)
         }
       case .fixture(let index) where feed.fixtures.indices.contains(index):
         MatchCard(entry: entry, match: feed.fixtures[index])
@@ -399,7 +442,7 @@ private struct MatchCard: View {
     HStack(spacing: 16) {
       TeamColumn(side: match.home, image: entry.image(match.home.logo), crest: crest, spacing: 9)
       VStack(spacing: 8) {
-        StatusBadge(match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic)
+        StatusBadge(match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic, goal: entry.hasFreshGoal(match))
         if match.score != nil {
           ScoreText(match: match, size: 23)
         } else {
@@ -451,7 +494,10 @@ private struct MiniScoreHeader: View {
       Crest(image: entry.image(match.home.logo), size: 16)
       ScoreText(match: match, size: 12)
       Crest(image: entry.image(match.away.logo), size: 16)
-      StatusBadge(match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic, fontSize: 9)
+      StatusBadge(
+        match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic,
+        fontSize: 9, goal: entry.hasFreshGoal(match)
+      )
     }
     .environment(\.layoutDirection, .leftToRight)
   }
@@ -625,21 +671,30 @@ private struct MomentumPage: View {
 
   @Environment(\.widgetFamily) private var family
 
-  private var halfHeight: CGFloat { family == .systemLarge ? 80 : 34 }
+  private var halfHeight: CGFloat { family == .systemLarge ? 80 : 30 }
+  private let barSpacing: CGFloat = 3
+
+  /// Half-time sits between the last first-half bucket and the first second-half one.
+  private var secondHalf: Int? {
+    guard let index = points.firstIndex(where: { $0.minute > 45 }), index > 0 else { return nil }
+    return index
+  }
 
   var body: some View {
-    VStack(spacing: 8) {
+    VStack(spacing: 5) {
       MiniScoreHeader(entry: entry, match: match, title: entry.labels.momentum)
-      HStack(alignment: .center, spacing: 3) {
+      HStack(alignment: .center, spacing: barSpacing) {
         ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+          // Buckets the match has not reached yet come back as 0/0.
+          let played = point.home > 0 || point.away > 0
           VStack(spacing: 2) {
             VStack(spacing: 0) {
               Spacer(minLength: 0)
-              Capsule().fill(Palette.purple).frame(height: barHeight(point.home))
+              if played { Capsule().fill(Palette.purple).frame(height: barHeight(point.home)) }
             }
             .frame(height: halfHeight)
             VStack(spacing: 0) {
-              Capsule().fill(Color.white.opacity(0.75)).frame(height: barHeight(point.away))
+              if played { Capsule().fill(Color.white.opacity(0.75)).frame(height: barHeight(point.away)) }
               Spacer(minLength: 0)
             }
             .frame(height: halfHeight)
@@ -647,8 +702,47 @@ private struct MomentumPage: View {
           .frame(maxWidth: .infinity)
         }
       }
-      .environment(\.layoutDirection, .leftToRight)
+      .overlay {
+        GeometryReader { proxy in
+          if let index = secondHalf {
+            let x = htX(index, width: proxy.size.width)
+            Path { path in
+              path.move(to: CGPoint(x: x, y: 0))
+              path.addLine(to: CGPoint(x: x, y: proxy.size.height))
+            }
+            .stroke(Color.white.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+          }
+        }
+      }
+      axis
     }
+    .environment(\.layoutDirection, .leftToRight)
+  }
+
+  private func htX(_ index: Int, width: CGFloat) -> CGFloat {
+    (width + barSpacing) * CGFloat(index) / CGFloat(points.count) - barSpacing / 2
+  }
+
+  /// 0' on the left, the latest bucket on the right, HT under the dashed line.
+  private var axis: some View {
+    let endClear = secondHalf.map { Double($0) / Double(points.count) < 0.8 } ?? true
+    return HStack {
+      Text("0\u{2019}")
+      Spacer(minLength: 0)
+      if endClear, let last = points.last { Text("\(last.minute)\u{2019}") }
+    }
+    .overlay {
+      GeometryReader { proxy in
+        if let index = secondHalf {
+          Text(entry.labels.halftime)
+            .fixedSize()
+            .position(x: min(max(htX(index, width: proxy.size.width), 10), proxy.size.width - 10), y: proxy.size.height / 2)
+        }
+      }
+    }
+    .font(.system(size: 8, weight: .medium))
+    .foregroundStyle(Color.white.opacity(0.55))
+    .frame(height: 10)
   }
 
   private func barHeight(_ value: Int) -> CGFloat {
@@ -757,7 +851,7 @@ private struct StatsPage: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
       MiniScoreHeader(entry: entry, match: match, title: entry.labels.stats)
-      VStack(spacing: 2) {
+      VStack(spacing: 1) {
         statRow(entry.isArabic ? "استحواذ" : "Possession", stats.possession, suffix: "%")
         statRow(entry.isArabic ? "تسديدات" : "Shots", stats.shots, suffix: "")
         statRow(entry.isArabic ? "على المرمى" : "On target", stats.shotsOn, suffix: "")
@@ -770,24 +864,261 @@ private struct StatsPage: View {
   @ViewBuilder
   private func statRow(_ title: String, _ pair: FeedStatPair?, suffix: String, decimal: Bool = false) -> some View {
     if let pair {
-      HStack {
-        Text(format(pair.home, suffix: suffix, decimal: decimal))
-          .frame(maxWidth: .infinity, alignment: .trailing)
-        Text(title)
-          .foregroundStyle(Palette.rowTime)
-          .frame(maxWidth: .infinity)
-        Text(format(pair.away, suffix: suffix, decimal: decimal))
-          .frame(maxWidth: .infinity, alignment: .leading)
+      VStack(spacing: 1) {
+        HStack {
+          Text(format(pair.home, suffix: suffix, decimal: decimal))
+            .frame(maxWidth: .infinity, alignment: .trailing)
+          Text(title)
+            .foregroundStyle(Palette.rowTime)
+            .frame(maxWidth: .infinity)
+          Text(format(pair.away, suffix: suffix, decimal: decimal))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(.white)
+        shareBar(pair)
       }
-      .font(.system(size: 11, weight: .semibold))
-      .foregroundStyle(.white)
       .environment(\.layoutDirection, .leftToRight)
     }
+  }
+
+  /// Home share in purple from the left; the rest belongs to the away side.
+  private func shareBar(_ pair: FeedStatPair) -> some View {
+    let total = pair.home + pair.away
+    let share = total > 0 ? CGFloat(pair.home / total) : 0.5
+    return GeometryReader { proxy in
+      HStack(spacing: 0) {
+        Palette.purple.frame(width: proxy.size.width * share)
+        Color.white.opacity(0.45)
+      }
+    }
+    .frame(height: 2)
+    .clipShape(Capsule())
   }
 
   private func format(_ value: Double, suffix: String, decimal: Bool) -> String {
     let number = decimal ? String(format: "%.1f", value) : String(format: "%.0f", value)
     return number + suffix
+  }
+}
+
+/// Leads the widget for a few match minutes after a goal: scorer photo, GOAL!, name and minute.
+private struct GoalPage: View {
+  let entry: MatchesEntry
+  let match: FeedMatch
+  let goal: FeedGoal
+
+  private var team: FeedSide { goal.side == "home" ? match.home : match.away }
+
+  private var who: String {
+    let name = goal.player.isEmpty ? team.name : goal.player
+    switch goal.kind {
+    case "penalty": return "\(name) (P)"
+    case "own_goal": return "\(name) (OG)"
+    default: return name
+    }
+  }
+
+  private var minute: String {
+    let extra = goal.extra.map { "+\($0)" } ?? ""
+    return "\(goal.minute)\(extra)\u{2019}"
+  }
+
+  var body: some View {
+    VStack(spacing: 6) {
+      MiniScoreHeader(entry: entry, match: match, title: match.league?.name ?? "")
+      Spacer(minLength: 0)
+      HStack(spacing: 14) {
+        Group {
+          if let photo = entry.image(goal.photo) {
+            Image(uiImage: photo).resizable().scaledToFill()
+          } else {
+            Crest(image: entry.image(team.logo), size: 40)
+          }
+        }
+        .frame(width: 58, height: 58)
+        .background(Color(red: 0.11, green: 0.07, blue: 0.25))
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Palette.goal, lineWidth: 2.5))
+
+        VStack(alignment: .leading, spacing: 2) {
+          Text(entry.labels.goal)
+            .font(.system(size: 22, weight: .heavy))
+            .tracking(1.5)
+            .foregroundStyle(Palette.goal)
+          Text(who)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+          Text(goal.player.isEmpty ? minute : "\(minute)  \u{00B7}  \(team.name)")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(Palette.muted)
+            .lineLimit(1)
+        }
+        Spacer(minLength: 0)
+      }
+      .environment(\.layoutDirection, .leftToRight)
+      Spacer(minLength: 0)
+    }
+  }
+}
+
+/// Venue, referee and both teams' league positions (over the stadium photo when there is one).
+private struct InfoPage: View {
+  let entry: MatchesEntry
+  let match: FeedMatch
+  let info: FeedInfo
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      MiniScoreHeader(entry: entry, match: match, title: entry.labels.info)
+      Spacer(minLength: 0)
+      if let venue = info.venue {
+        HStack(spacing: 6) {
+          Image(systemName: "mappin.and.ellipse")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Palette.ratingText)
+          Text(venue)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+          if let city = info.city {
+            Text(city)
+              .font(.system(size: 10, weight: .medium))
+              .foregroundStyle(Palette.vs)
+              .lineLimit(1)
+          }
+        }
+      }
+      if let referee = info.referee {
+        HStack(spacing: 6) {
+          RoundedRectangle(cornerRadius: 1.5)
+            .fill(Color(red: 0.98, green: 0.80, blue: 0.08))
+            .frame(width: 8, height: 11)
+            .frame(width: 13)
+          Text("\(entry.labels.referee): \(referee)")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(Palette.vs)
+            .lineLimit(1)
+        }
+      }
+      if info.home.rank != nil || info.away.rank != nil {
+        HStack(spacing: 6) {
+          Crest(image: entry.image(match.home.logo), size: 18)
+          tableText(info.home)
+          Spacer(minLength: 4)
+          tableText(info.away)
+          Crest(image: entry.image(match.away.logo), size: 18)
+        }
+        .padding(.top, 2)
+      }
+      Spacer(minLength: 0)
+    }
+    .environment(\.layoutDirection, .leftToRight)
+  }
+
+  private func tableText(_ team: FeedTeamInfo) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 4) {
+      Text(team.rank.map { "#\($0)" } ?? "-")
+        .font(.system(size: 14, weight: .bold))
+        .foregroundStyle(.white)
+      if let points = team.points {
+        Text("\(points) \(entry.labels.points)")
+          .font(.system(size: 10, weight: .medium))
+          .foregroundStyle(Palette.vs)
+      }
+    }
+  }
+}
+
+/// Last five results per team, then the head-to-head tally and the latest meeting.
+private struct FormPage: View {
+  let entry: MatchesEntry
+  let match: FeedMatch
+  let info: FeedInfo
+
+  var body: some View {
+    VStack(spacing: 5) {
+      MiniScoreHeader(entry: entry, match: match, title: entry.labels.form)
+      Spacer(minLength: 0)
+      if !info.home.form.isEmpty || !info.away.form.isEmpty {
+        formRow(match.home, info.home)
+        formRow(match.away, info.away)
+      }
+      if let h2h = info.h2h, h2h.total > 0 {
+        HStack(spacing: 6) {
+          Crest(image: entry.image(match.home.logo), size: 14)
+          Text("\(h2h.homeWins)")
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(Palette.ratingText)
+          Spacer(minLength: 2)
+          Text("\(entry.labels.draws) \(h2h.draws)")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(Palette.vs)
+          if let last = h2h.meetings.first {
+            Text("\u{00B7}  \(last.homeGoals)-\(last.awayGoals) \(meetingDate(last.ts))")
+              .font(.system(size: 10, weight: .medium))
+              .foregroundStyle(Palette.rowTime)
+          }
+          Spacer(minLength: 2)
+          Text("\(h2h.awayWins)")
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(.white)
+          Crest(image: entry.image(match.away.logo), size: 14)
+        }
+        .monospacedDigit()
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Palette.idleFill, in: Capsule())
+        .padding(.top, 2)
+      }
+      Spacer(minLength: 0)
+    }
+    .environment(\.layoutDirection, .leftToRight)
+  }
+
+  private func formRow(_ side: FeedSide, _ team: FeedTeamInfo) -> some View {
+    HStack(spacing: 6) {
+      Crest(image: entry.image(side.logo), size: 16)
+      Text(side.name)
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(.white)
+        .lineLimit(1)
+      Spacer(minLength: 4)
+      HStack(spacing: 3) {
+        ForEach(Array(team.form.enumerated()), id: \.offset) { _, result in
+          Text(letter(result))
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 16, height: 16)
+            .background(color(result), in: RoundedRectangle(cornerRadius: 4))
+        }
+      }
+    }
+  }
+
+  private func letter(_ result: String) -> String {
+    switch result {
+    case "W": return entry.isArabic ? "\u{0641}" : "W"
+    case "L": return entry.isArabic ? "\u{062E}" : "L"
+    default: return entry.isArabic ? "\u{062A}" : "D"
+    }
+  }
+
+  private func color(_ result: String) -> Color {
+    switch result {
+    case "W": return Palette.goal
+    case "L": return Palette.loss
+    default: return Palette.draw
+    }
+  }
+
+  private func meetingDate(_ ts: Double) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: entry.isArabic ? "ar@numbers=latn" : "en_US_POSIX")
+    formatter.setLocalizedDateFormatFromTemplate("MMM yy")
+    return formatter.string(from: Date(timeIntervalSince1970: ts))
   }
 }
 
@@ -872,7 +1203,10 @@ private struct SmallMatchCard: View {
           .lineLimit(1)
           .minimumScaleFactor(0.7)
       }
-      StatusBadge(match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic, fontSize: 11)
+      StatusBadge(
+        match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic,
+        fontSize: 11, goal: entry.hasFreshGoal(match)
+      )
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }

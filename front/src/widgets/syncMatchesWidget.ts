@@ -24,6 +24,12 @@ const LABELS: Record<WidgetLanguage, WidgetLabels> = {
     lineup: 'Lineup',
     stats: 'Stats',
     events: 'Key events',
+    goal: 'GOAL!',
+    info: 'Match info',
+    form: 'Form & head to head',
+    referee: 'Referee',
+    points: 'pts',
+    draws: 'Draws',
   },
   ar: {
     live: 'مباشر',
@@ -41,6 +47,12 @@ const LABELS: Record<WidgetLanguage, WidgetLabels> = {
     lineup: 'التشكيلة',
     stats: 'الإحصائيات',
     events: 'أحداث المباراة',
+    goal: 'هدف!',
+    info: 'معلومات المباراة',
+    form: 'المستوى والمواجهات',
+    referee: 'الحكم',
+    points: 'نقطة',
+    draws: 'تعادل',
   },
 };
 

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Leads the widget for a few match minutes after a goal: scorer photo, GOAL!, name and minute -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/np_page"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:orientation="vertical"
+  android:paddingStart="12dp"
+  android:paddingTop="8dp"
+  android:paddingEnd="12dp"
+  android:paddingBottom="26dp">
+
+  <include
+    layout="@layout/np_widget_mini_header"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content" />
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight="1"
+    android:gravity="center"
+    android:orientation="vertical">
+
+    <ImageView
+      android:id="@+id/np_goal_photo"
+      android:layout_width="56dp"
+      android:layout_height="56dp"
+      android:background="@drawable/np_widget_goal_ring"
+      android:contentDescription="@null"
+      android:padding="3dp"
+      android:scaleType="fitCenter" />
+
+    <TextView
+      android:id="@+id/np_goal_title"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="4dp"
+      android:letterSpacing="0.08"
+      android:maxLines="1"
+      android:textColor="#22C55E"
+      android:textSize="20sp"
+      android:textStyle="bold" />
+
+    <TextView
+      android:id="@+id/np_goal_player"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:ellipsize="end"
+      android:maxLines="1"
+      android:textColor="#FFFFFF"
+      android:textSize="14sp"
+      android:textStyle="bold" />
+
+    <TextView
+      android:id="@+id/np_goal_meta"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="1dp"
+      android:ellipsize="end"
+      android:maxLines="1"
+      android:textColor="#A7A7A7"
+      android:textSize="11sp" />
+  </LinearLayout>
+</LinearLayout>

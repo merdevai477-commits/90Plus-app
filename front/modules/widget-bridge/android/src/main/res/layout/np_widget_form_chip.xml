@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/np_form_chip"
+  android:layout_width="18dp"
+  android:layout_height="18dp"
+  android:layout_marginStart="3dp"
+  android:background="@drawable/np_widget_form_d"
+  android:gravity="center"
+  android:maxLines="1"
+  android:textColor="#FFFFFF"
+  android:textSize="10sp"
+  android:textStyle="bold" />
