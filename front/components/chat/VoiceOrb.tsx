@@ -1,11 +1,12 @@
 /**
  * Voice orb — the welcome bubble shrunk into the composer while recording.
- * It swells, wobbles and spins faster with the live mic level, and breathes
- * slowly while the recording is being transcribed.
+ * Neon liquid sloshes inside it with the live mic level, the bubble swells,
+ * wobbles and spins faster as the user talks, and it all calms down while the
+ * recording is being transcribed.
  */
 
 import React, { useEffect } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import Animated, {
   useAnimatedStyle,
@@ -13,6 +14,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { VoiceLiquid } from './VoiceLiquid';
 
 const BUBBLE_IMAGE = require('../../assets/images/chat/iridescent-bubble.png');
 const DEG = 180 / Math.PI;
@@ -22,11 +24,9 @@ export type VoiceOrbProps = {
   /** Latest mic level, 0…1. */
   level: number;
   mode: 'listening' | 'thinking';
-  /** Centre caption, e.g. the recording timer. */
-  label?: string;
 };
 
-export function VoiceOrb({ size, level, mode, label }: VoiceOrbProps) {
+export function VoiceOrb({ size, level, mode }: VoiceOrbProps) {
   const lvl = useSharedValue(0);
   const thinking = useSharedValue(mode === 'thinking' ? 1 : 0);
   const angle = useSharedValue(0);
@@ -64,8 +64,8 @@ export function VoiceOrb({ size, level, mode, label }: VoiceOrbProps) {
     transform: [{ rotate: `${-angle.value * 0.7 + 140}deg` }],
   }));
   const glow = useAnimatedStyle(() => ({
-    opacity: 0.45 + lvl.value * 0.55 + Math.sin(phase.value * 0.5) * 0.08 * thinking.value,
-    transform: [{ scale: 0.9 + lvl.value * 0.45 }],
+    opacity: 0.55 + lvl.value * 0.45 + Math.sin(phase.value * 0.5) * 0.08 * thinking.value,
+    transform: [{ scale: 0.95 + lvl.value * 0.45 }],
   }));
 
   const glowSize = size * 2;
@@ -85,7 +85,7 @@ export function VoiceOrb({ size, level, mode, label }: VoiceOrbProps) {
         <Svg width={glowSize} height={glowSize} viewBox="0 0 100 100">
           <Defs>
             <RadialGradient id="voiceOrbGlow" cx="50%" cy="50%" r="50%">
-              <Stop offset="0.3" stopColor="#36A2FB" stopOpacity="0.4" />
+              <Stop offset="0.3" stopColor="#B026FF" stopOpacity="0.42" />
               <Stop offset="0.55" stopColor="#6F24FB" stopOpacity="0.22" />
               <Stop offset="1" stopColor="#DD7EBB" stopOpacity="0" />
             </RadialGradient>
@@ -99,14 +99,11 @@ export function VoiceOrb({ size, level, mode, label }: VoiceOrbProps) {
           <Image source={BUBBLE_IMAGE} style={[styles.layer, imageStyle]} />
           <Animated.Image source={BUBBLE_IMAGE} style={[styles.layer, imageStyle, filmA]} />
           <Animated.Image source={BUBBLE_IMAGE} style={[styles.layer, imageStyle, filmB]} />
+          <View style={styles.layer}>
+            <VoiceLiquid size={size} level={lvl} thinking={thinking} />
+          </View>
         </Animated.View>
       </Animated.View>
-
-      {label ? (
-        <View pointerEvents="none" style={[styles.layer, imageStyle, styles.center]}>
-          <Text style={[styles.label, { fontSize: Math.max(11, size * 0.17) }]}>{label}</Text>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -116,17 +113,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-  },
-  center: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  label: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
 });

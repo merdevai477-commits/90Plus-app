@@ -64,6 +64,7 @@ const VOICE_MORPH = LinearTransition.duration(340).easing(Easing.out(Easing.cubi
  */
 const ORB_APPEAR_AFTER_PULL = VOICE_PULL_MS + 220;
 const ORB_APPEAR_DELAY = 200;
+const FIELD_RETURN_DELAY = 260;
 
 function usePressScale(to: number) {
   const press = useSharedValue(1);
@@ -81,18 +82,20 @@ function SendButton({
   onPress,
   a11yLabel,
   blurTarget,
+  enterDelay = 0,
 }: {
   loading: boolean;
   isStop?: boolean;
   onPress: () => void;
   a11yLabel: string;
   blurTarget?: React.RefObject<View | null>;
+  enterDelay?: number;
 }) {
   const press = usePressScale(0.94);
 
   return (
     <AnimatedPressable
-      entering={FadeIn.duration(160)}
+      entering={FadeIn.delay(enterDelay).duration(160)}
       exiting={FadeOut.duration(120)}
       onPress={onPress}
       disabled={!isStop && loading}
@@ -150,11 +153,6 @@ function RoundIconButton({
       {children}
     </AnimatedPressable>
   );
-}
-
-function formatDuration(ms: number): string {
-  const total = Math.floor(ms / 1000);
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
 export interface ChatComposerProps {
@@ -224,12 +222,16 @@ export function ChatComposer({
     onTranscript: (text) => {
       const current = value.trim();
       onChangeText(current ? `${current} ${text}` : text);
-      requestAnimationFrame(() => inputRef.current?.focus());
+      // The keyboard waits until the field is back, so it doesn't cover the bubble lifting off.
+      setTimeout(() => inputRef.current?.focus(), FIELD_RETURN_DELAY + 260);
     },
     onError: (reason) => onVoiceError?.(reason),
   });
   const voiceActive = voice.status !== 'idle';
   const showSend = !voiceActive && (Boolean(value.trim()) || isLoading);
+  const wasVoiceActive = useRef(false);
+  const leavingVoice = wasVoiceActive.current && !voiceActive;
+  wasVoiceActive.current = voiceActive;
 
   const focus = useSharedValue(0);
   const surfaceFade = useSharedValue(1);
@@ -244,7 +246,11 @@ export function ChatComposer({
   useEffect(() => {
     surfaceFade.value = voiceActive
       ? withDelay(160, withTiming(0, { duration: 260 }))
-      : withTiming(1, { duration: 200 });
+      // On the welcome screen the bubble lifts off first, then the field (with the transcript) returns.
+      : withDelay(
+          useVoiceModeStore.getState().welcomeShown ? FIELD_RETURN_DELAY : 0,
+          withTiming(1, { duration: 240 }),
+        );
     if (voiceActive) {
       rowRef.current?.measureInWindow((_x, y, _w, h) => enterVoiceMode(y + h / 2, ORB_SIZE));
     } else {
@@ -372,7 +378,6 @@ export function ChatComposer({
                     size={ORB_SIZE}
                     level={voice.levels[voice.levels.length - 1] ?? 0}
                     mode={voice.status === 'transcribing' ? 'thinking' : 'listening'}
-                    label={voice.status === 'recording' ? formatDuration(voice.durationMs) : undefined}
                   />
                 </Animated.View>
               ) : null}
@@ -393,6 +398,7 @@ export function ChatComposer({
                 onPress={isGenerating ? onStop! : onSend}
                 a11yLabel={isGenerating ? t.chat.a11yStop : t.chat.a11ySend}
                 blurTarget={blurTarget}
+                enterDelay={leavingVoice && welcomeShown ? FIELD_RETURN_DELAY : 0}
               />
             ) : null}
           </View>
