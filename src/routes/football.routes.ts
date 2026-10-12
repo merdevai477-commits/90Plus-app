@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { FootballController } from '../controllers/football.controller';
 import { responseCacheMiddleware } from '../middleware/responseCache.middleware';
 import { getPlayerSocialLinks } from '../services/player-social-links.service';
+import { buildWidgetFeed, parseWidgetTeamIds } from '../services/widget-feed.service';
+import { resolveAppLanguage } from '../utils/app-language.util';
 import { logger } from '../utils/logger';
 import {
   calendarTodayKey,
@@ -237,6 +239,23 @@ router.get('/cached/365/player/:athleteId/socials', SHARED_CACHE_60S, async (req
   } catch (error) {
     logger.warn(`[PlayerSocials] read ${athleteId} failed:`, (error as Error)?.message);
     res.json({ status: 'SUCCESS', data: { athleteId, facebookUrl: null, instagramUrl: null } });
+  }
+});
+
+// GET /api/football/widget/followed?teams=1,2,3 — nearest/live match per followed team for
+// the native home-screen widgets (public: widgets fetch outside the app without a session).
+router.get('/widget/followed', SHARED_CACHE_30S, async (req, res) => {
+  const teamIds = parseWidgetTeamIds(req.query.teams);
+  if (teamIds.length === 0) {
+    res.status(400).json({ status: 'ERROR', message: 'teams query is required' });
+    return;
+  }
+  try {
+    const feed = await buildWidgetFeed(teamIds, resolveAppLanguage(req));
+    res.json({ status: 'SUCCESS', response: feed });
+  } catch (error) {
+    logger.warn('[WidgetFeed] build failed:', (error as Error)?.message);
+    res.status(503).json({ status: 'ERROR', message: 'Widget feed unavailable' });
   }
 });
 

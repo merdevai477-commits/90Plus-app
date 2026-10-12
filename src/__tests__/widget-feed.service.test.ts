@@ -1,0 +1,154 @@
+jest.mock('../services/football-data-cache.service', () => ({
+  footballDataCacheService: {
+    getCached365CompetitorMatches: jest.fn(),
+    getMatchLineups: jest.fn(),
+    getMatchMomentum: jest.fn(),
+  },
+}));
+
+jest.mock('../services/live-fixture-cache.service', () => ({
+  readLiveFixtureById: jest.fn(async () => null),
+}));
+
+import { footballDataCacheService } from '../services/football-data-cache.service';
+import { readLiveFixtureById } from '../services/live-fixture-cache.service';
+import {
+  buildWidgetFeed,
+  compressMomentum,
+  parseWidgetTeamIds,
+  pickNearestFixture,
+} from '../services/widget-feed.service';
+
+const NOW = Date.UTC(2026, 9, 12, 18, 0, 0);
+const NOW_SEC = Math.floor(NOW / 1000);
+
+function fixture(
+  id: number,
+  home: [number, string],
+  away: [number, string],
+  short: string,
+  kickoffSec: number,
+  goals: [number | null, number | null] = [null, null],
+): any {
+  return {
+    fixture: {
+      id,
+      date: new Date(kickoffSec * 1000).toISOString(),
+      timestamp: kickoffSec,
+      status: { short, long: short, elapsed: short === 'NS' ? null : 35 },
+    },
+    league: { id: 1, name: 'League', logo: 'l.png' },
+    teams: {
+      home: { id: home[0], name: home[1], logo: `${home[0]}.png` },
+      away: { id: away[0], name: away[1], logo: `${away[0]}.png` },
+    },
+    goals: { home: goals[0], away: goals[1] },
+  };
+}
+
+const matchesMock = footballDataCacheService.getCached365CompetitorMatches as jest.Mock;
+const lineupsMock = footballDataCacheService.getMatchLineups as jest.Mock;
+const momentumMock = footballDataCacheService.getMatchMomentum as jest.Mock;
+const liveMock = readLiveFixtureById as jest.Mock;
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  liveMock.mockResolvedValue(null);
+  lineupsMock.mockResolvedValue([]);
+  momentumMock.mockResolvedValue({ available: false, duration: 90, series: [], markers: [] });
+});
+
+describe('parseWidgetTeamIds', () => {
+  it('keeps unique positive ids and caps the list', () => {
+    expect(parseWidgetTeamIds('5, 7,5,abc,-1,0')).toEqual([5, 7]);
+    expect(parseWidgetTeamIds('1,2,3,4,5,6,7,8,9,10')).toHaveLength(8);
+    expect(parseWidgetTeamIds(undefined)).toEqual([]);
+  });
+});
+
+describe('pickNearestFixture', () => {
+  it('prefers live, then a recent finish, then the nearest upcoming match', () => {
+    const live = fixture(1, [10, 'A'], [20, 'B'], '2H', NOW_SEC - 3600);
+    const recentFt = fixture(2, [10, 'A'], [30, 'C'], 'FT', NOW_SEC - 2 * 3600);
+    const oldFt = fixture(3, [10, 'A'], [40, 'D'], 'FT', NOW_SEC - 48 * 3600);
+    const later = fixture(4, [10, 'A'], [50, 'E'], 'NS', NOW_SEC + 5 * 86400);
+    const sooner = fixture(5, [10, 'A'], [60, 'F'], 'NS', NOW_SEC + 86400);
+
+    expect(pickNearestFixture({ live: [live], upcoming: [later], finished: [] }, NOW_SEC)).toBe(live);
+    expect(
+      pickNearestFixture({ live: [], upcoming: [later, sooner], finished: [recentFt] }, NOW_SEC),
+    ).toBe(recentFt);
+    expect(
+      pickNearestFixture({ live: [], upcoming: [later, sooner], finished: [oldFt] }, NOW_SEC),
+    ).toBe(sooner);
+  });
+});
+
+describe('compressMomentum', () => {
+  it('averages the series into at most the requested buckets', () => {
+    const series = Array.from({ length: 90 }, (_, i) => ({ minute: i + 1, home: 10, away: 30 }));
+    const out = compressMomentum(series, 12);
+    expect(out.length).toBeLessThanOrEqual(12);
+    expect(out[0]).toEqual({ minute: 8, home: 10, away: 30 });
+    expect(out[out.length - 1].minute).toBe(90);
+  });
+});
+
+describe('buildWidgetFeed', () => {
+  it('orders live first, dedupes shared fixtures, overlays live score and builds the featured card', async () => {
+    const derby = fixture(100, [10, 'Ahly'], [20, 'Zamalek'], '1H', NOW_SEC - 1800, [0, 0]);
+    const barca = fixture(200, [30, 'Barcelona'], [40, 'Sevilla'], 'NS', NOW_SEC + 86400);
+
+    matchesMock.mockImplementation(async (id: number) => ({
+      data:
+        id === 30
+          ? { live: [], upcoming: [barca], finished: [] }
+          : { live: [derby], upcoming: [], finished: [] },
+    }));
+    liveMock.mockImplementation(async (id: number) =>
+      id === 100
+        ? { fixture: { id: 100, status: { short: 'HT', long: 'Halftime', elapsed: 45 } }, goals: { home: 2, away: 1 } }
+        : null,
+    );
+    lineupsMock.mockResolvedValue([
+      {
+        team: { id: 10 },
+        startXI: [
+          { player: { id: 1, name: 'Home Star', rating: 8.4 } },
+          { player: { id: 2, name: 'Home Ok', rating: 6.1 } },
+        ],
+        substitutes: [{ player: { id: 3, name: 'Bench', rating: null } }],
+      },
+      { team: { id: 20 }, startXI: [{ player: { id: 4, name: 'Away Star', rating: '7.9' } }], substitutes: [] },
+    ]);
+    momentumMock.mockResolvedValue({
+      available: true,
+      duration: 90,
+      series: [{ minute: 1, home: 20, away: 10 }],
+      markers: [],
+    });
+
+    const feed = await buildWidgetFeed([30, 10, 20], 'ar', NOW);
+
+    expect(feed.hasLive).toBe(true);
+    expect(feed.teams.map((t) => t.teamId)).toEqual([10, 30]);
+    expect(feed.teams[0]).toMatchObject({ name: 'Ahly', logo: '10.png' });
+    expect(feed.teams[0].match).toMatchObject({ status: 'ht', score: { home: 2, away: 1 }, elapsed: 45 });
+    expect(feed.teams[1].match).toMatchObject({ status: 'upcoming', score: null });
+
+    expect(feed.featured?.fixtureId).toBe(100);
+    expect(feed.featured?.topPlayers.map((p) => [p.name, p.side])).toEqual([
+      ['Home Star', 'home'],
+      ['Away Star', 'away'],
+      ['Home Ok', 'home'],
+    ]);
+    expect(feed.featured?.momentum).toEqual([{ minute: 1, home: 20, away: 10 }]);
+  });
+
+  it('keeps a team row with no match when the upstream call fails', async () => {
+    matchesMock.mockRejectedValue(new Error('upstream down'));
+    const feed = await buildWidgetFeed([99], 'en', NOW);
+    expect(feed).toMatchObject({ hasLive: false, featured: null });
+    expect(feed.teams).toEqual([{ teamId: 99, name: '', logo: null, match: null }]);
+  });
+});
