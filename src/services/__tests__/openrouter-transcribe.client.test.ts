@@ -107,6 +107,16 @@ describe('openrouter-transcribe.client', () => {
     ).rejects.toThrow(/402/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('does not retry another model after a timeout (the first may still be billed)', async () => {
+    process.env.OPENROUTER_API_KEY = 'k';
+    fetchMock.mockRejectedValue(Object.assign(new Error('The operation timed out'), { name: 'TimeoutError' }));
+
+    await expect(
+      transcribeAudioWithOpenRouter({ audio: Buffer.from('a'), mimeType: 'audio/wav' }),
+    ).rejects.toMatchObject({ name: 'TimeoutError' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('cleanTranscript', () => {

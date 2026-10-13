@@ -5,7 +5,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { buildTranscriptionInstruction, cleanTranscript } from './gemini-text.client';
+import { buildTranscriptionInstruction, cleanTranscript, isTimeoutError } from './gemini-text.client';
 
 const DEFAULT_MODEL = 'google/gemini-2.5-flash-lite';
 const DEFAULT_FALLBACK_MODEL = 'google/gemini-2.5-flash';
@@ -146,6 +146,7 @@ export async function transcribeAudioWithOpenRouter(
       );
       return { text, model };
     } catch (err: unknown) {
+      if (isTimeoutError(err)) throw err;
       lastErr = err instanceof Error ? err : new Error(String(err));
       if (hasFallback) continue;
       throw lastErr;

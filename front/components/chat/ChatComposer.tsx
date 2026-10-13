@@ -37,7 +37,7 @@ import { Colors } from '../../constants/theme';
 import { getTextDirectionStyles } from './chatTextUtils';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
-import { useVoiceInput, type VoiceInputError } from '../../hooks/useVoiceInput';
+import { useVoiceInput, type VoiceInputError, type VoiceQuotaUpdate } from '../../hooks/useVoiceInput';
 import { GLASS_ACCENT } from '../navigation/glass';
 import { GLASS_ICON_IDLE } from '../navigation/GlassCapsuleNav';
 
@@ -132,26 +132,44 @@ function SendButton({
 function RoundIconButton({
   onPress,
   a11yLabel,
+  a11yHint,
+  dimmed = false,
+  badge,
   children,
 }: {
   onPress?: () => void;
   a11yLabel: string;
+  a11yHint?: string;
+  /** Still pressable so the tap can explain why the action is unavailable. */
+  dimmed?: boolean;
+  badge?: number | null;
   children: React.ReactNode;
 }) {
   const press = usePressScale(0.86);
 
   return (
-    <AnimatedPressable
-      onPress={onPress}
-      onPressIn={press.onPressIn}
-      onPressOut={press.onPressOut}
-      hitSlop={6}
-      style={[styles.iconButton, styles.iconButtonGlass, press.style]}
-      accessibilityRole="button"
-      accessibilityLabel={a11yLabel}
-    >
-      {children}
-    </AnimatedPressable>
+    <View>
+      <AnimatedPressable
+        onPress={onPress}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        hitSlop={6}
+        style={[styles.iconButton, styles.iconButtonGlass, dimmed && styles.iconButtonDimmed, press.style]}
+        accessibilityRole="button"
+        accessibilityLabel={a11yLabel}
+        accessibilityHint={a11yHint}
+        accessibilityState={{ disabled: dimmed }}
+      >
+        {children}
+      </AnimatedPressable>
+      {badge != null ? (
+        <View pointerEvents="none" style={[styles.badge, badge <= 0 && styles.badgeEmpty]}>
+          <Text style={styles.badgeText} maxFontSizeMultiplier={1}>
+            {badge}
+          </Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -177,6 +195,9 @@ export interface ChatComposerProps {
   onInputFocus?: () => void;
   onStop?: () => void;
   onVoiceError?: (reason: VoiceInputError) => void;
+  /** Server-reported voice quota; null hides the mic counter (unknown or unlimited). */
+  voiceQuota?: VoiceQuotaUpdate | null;
+  onVoiceQuota?: (quota: VoiceQuotaUpdate) => void;
   /** Android: the chat content view the glass frosts. */
   blurTarget?: React.RefObject<View | null>;
   /** Full-width row shown above the capsule (e.g. suggestion chips); hidden in voice mode and while editing. */
@@ -204,6 +225,8 @@ export function ChatComposer({
   onInputFocus,
   onStop,
   onVoiceError,
+  voiceQuota = null,
+  onVoiceQuota,
   blurTarget,
   suggestions,
 }: ChatComposerProps) {
@@ -226,7 +249,16 @@ export function ChatComposer({
       setTimeout(() => inputRef.current?.focus(), FIELD_RETURN_DELAY + 260);
     },
     onError: (reason) => onVoiceError?.(reason),
+    onQuota: (quota) => onVoiceQuota?.(quota),
+    canStart: () => {
+      if (messagesRemaining !== null && messagesRemaining <= 0) return 'messageQuota';
+      if (voiceQuota && voiceQuota.voiceRemaining <= 0) return 'voiceQuota';
+      return null;
+    },
   });
+  const micUnavailable =
+    (messagesRemaining !== null && messagesRemaining <= 0) ||
+    (voiceQuota !== null && voiceQuota.voiceRemaining <= 0);
   const voiceActive = voice.status !== 'idle';
   const showSend = !voiceActive && (Boolean(value.trim()) || isLoading);
   const wasVoiceActive = useRef(false);
@@ -355,7 +387,17 @@ export function ChatComposer({
                         blurOnSubmit={false}
                         maxFontSizeMultiplier={1.2}
                       />
-                      <RoundIconButton onPress={voice.start} a11yLabel={t.chat.a11yMic}>
+                      <RoundIconButton
+                        onPress={voice.start}
+                        a11yLabel={t.chat.a11yMic}
+                        a11yHint={
+                          voiceQuota
+                            ? t.chat.voiceRemainingA11y.replace('{count}', String(voiceQuota.voiceRemaining))
+                            : undefined
+                        }
+                        dimmed={micUnavailable}
+                        badge={voiceQuota?.voiceRemaining}
+                      >
                         <Mic size={18} color={GLASS_ICON_IDLE} strokeWidth={2} />
                       </RoundIconButton>
                     </View>
@@ -480,6 +522,32 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(210,190,255,0.3)',
+  },
+  iconButtonDimmed: {
+    opacity: 0.4,
+  },
+  badge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6F24FB',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  badgeEmpty: {
+    backgroundColor: 'rgba(224,121,144,0.9)',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
   },
   sendButton: {
     width: BAR_HEIGHT,

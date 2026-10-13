@@ -75,7 +75,7 @@ function isSkippablePath(req: Request): boolean {
     return false;
 }
 
-function getRedisRateLimitStore(): RedisStore | undefined {
+function getRedisRateLimitStore(prefix?: string): RedisStore | undefined {
     try {
         if (!isRedisConnected()) return undefined;
         const redis = getRedisClient();
@@ -83,6 +83,7 @@ function getRedisRateLimitStore(): RedisStore | undefined {
 
         return new RedisStore({
             sendCommand: (...args: string[]) => (redis as any).call(...args),
+            ...(prefix ? { prefix } : {}),
         });
     } catch {
         return undefined;
@@ -335,6 +336,34 @@ export const userSyncLimiterProfileCompletion = createUserSyncLimiter(
 export const userSyncLimiterXp = createUserSyncLimiter('user-sync-xp');
 export const userSyncLimiterGdpr = createUserSyncLimiter('user-sync-gdpr');
 export const userSyncLimiterPushToken = createUserSyncLimiter('user-sync-push-token');
+
+function readEnvInt(name: string, fallback: number): number {
+    const raw = Number(process.env[name]);
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
+}
+
+/**
+ * Voice transcription calls a paid speech provider, so it gets its own small
+ * per-user bucket on top of the daily voice quota (which only counts billed
+ * transcriptions, not failed or timed-out attempts).
+ */
+export const voiceTranscribeLimiter = rateLimit({
+    store: getRedisRateLimitStore('rl:voice-transcribe:'),
+    windowMs: readEnvInt('VOICE_RATE_WINDOW_MS', 10 * 60 * 1000),
+    max: readEnvInt('VOICE_RATE_MAX', 10),
+    identifier: 'voice-transcribe',
+    message: {
+        status: 'ERROR',
+        code: 'VOICE_RATE_LIMITED',
+        error: 'Too many voice requests, please try again later',
+        message: 'Too many voice requests, please try again later',
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    passOnStoreError: true,
+    skip: (req: Request, res: Response) => skipRateLimitForTrusted(req, res),
+    keyGenerator: (req: Request) => rateLimitKey(req),
+});
 
 /** @deprecated Prefer userSyncLimiterClerkMe; kept for clerk-user.routes imports */
 export const userSyncLimiter = userSyncLimiterClerkMe;

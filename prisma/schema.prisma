@@ -2160,6 +2160,34 @@ model ChatLimit {
   @@map("chat_limits")
 }
 
+/// Per-user anchor of the rolling 24h voice window; locked FOR UPDATE to serialize reservations.
+model ChatVoiceUsage {
+  userId      String   @id
+  windowStart DateTime
+  updatedAt   DateTime @updatedAt
+
+  @@map("chat_voice_usage")
+}
+
+/// One logical voice transcription. Usage is counted from these rows, never from a counter.
+/// status: RESERVED | COMMITTED | RELEASED | TIMED_OUT
+model ChatVoiceOperation {
+  id             String   @id @default(uuid())
+  userId         String
+  idempotencyKey String
+  status         String
+  attempt        Int      @default(1)
+  windowStart    DateTime
+  transcript     String?
+  failureCode    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, windowStart, status])
+  @@map("chat_voice_operations")
+}
+
 model MatchChatMessage {
   id                 String                    @id @default(uuid())
   matchId            Int

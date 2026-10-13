@@ -5,9 +5,9 @@
  * All conversation + message CRUD goes through `chat.service.ts`.
  *
  * Endpoints:
- *   GET    /api/chat/limit                                    remaining daily messages
+ *   GET    /api/chat/limit                                    remaining daily messages + voice quota
  *   POST   /api/chat/stream                                   SSE streaming reply
- *   POST   /api/chat/transcribe                               voice → text (optional; 501 if no provider)
+ *   POST   /api/chat/transcribe                               voice → text, quota-gated (501 if no provider)
  *   GET    /api/conversations                                 list user conversations
  *   POST   /api/conversations                                 create new conversation
  *   GET    /api/conversations/:id/messages                    fetch messages
@@ -21,7 +21,9 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { randomUUID } from 'crypto';
 import { requireAuth } from '../middleware/clerk.middleware';
+import { voiceTranscribeLimiter } from '../middleware/rateLimit.middleware';
 import multer from 'multer';
 import OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
@@ -86,8 +88,20 @@ import {
 import { tryDeterministicFootballReply } from '../services/chat-deterministic-fallback.service';
 import {
     isGeminiAudioConfigured,
+    isTimeoutError,
     transcribeAudioWithGemini,
 } from '../services/gemini-text.client';
+import {
+    commitVoiceUnit,
+    getVoiceQuota,
+    getVoiceQuotaConfig,
+    markVoiceTimedOut,
+    releaseVoiceUnit,
+    reserveVoiceUnit,
+    type ReserveResult,
+    type VoiceQuota,
+} from '../services/chat-voice-quota.service';
+import { inspectAudio } from '../utils/audio-duration.util';
 import {
     audioFormatForMime,
     isOpenRouterTranscribeConfigured,
@@ -565,6 +579,10 @@ router.get('/chat/limit', async (req: Request, res: Response): Promise<void> => 
     try {
         const unlimited = isChatUnlimitedUser(userId);
         const remaining = await getRemaining(userId, tz);
+        const voiceQuota = await getVoiceQuota(userId).catch((err: any) => {
+            logger.warn('[chat] /limit voice quota failed:', err?.message ?? err);
+            return undefined;
+        });
         res.json({
             remaining,
             used: unlimited ? 0 : DAILY_LIMIT - remaining,
@@ -572,6 +590,7 @@ router.get('/chat/limit', async (req: Request, res: Response): Promise<void> => 
             unlimited,
             resetAt: await getResetTimeForUser(userId),
             timezone: tz,
+            ...voiceQuotaFields(voiceQuota),
         });
     } catch (err: any) {
         logger.error('[chat] /limit failed:', err?.message ?? err);
@@ -1265,95 +1284,289 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 // ─── POST /chat/transcribe (voice → text) ────────────────────────────────────
 //
 // Accepts an audio file (multipart/form-data, field name "audio", optional
-// "language" = ar|en) and returns `{ text }`. Providers are tried in order:
-// OpenRouter (google/gemini-2.5-flash-lite by default), Gemini direct, then an
+// "language" = ar|en) and returns `{ text, voiceRemaining, voiceLimit, voiceResetAt }`.
+// Providers are tried in order: OpenRouter, Gemini direct, then an
 // OpenAI-compatible Whisper endpoint — each only when its key is set.
+//
+// Order matters: cheap rejections (rate limit, quotas) run before the upload is
+// buffered, the audio is validated before a quota unit is reserved, and a
+// provider is only called while holding a reservation (see chat-voice-quota.service).
+// Errors carry a stable `code`; older clients only look at the HTTP status.
+const MAX_VOICE_UPLOAD_BYTES = 3 * 1024 * 1024;
+
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB cap — plenty for short voice memos
+    limits: { fileSize: MAX_VOICE_UPLOAD_BYTES, files: 1, fields: 4 },
 });
 
-const AUDIO_MIME_BY_EXT: Record<string, string> = {
-    aac: 'audio/aac',
-    wav: 'audio/wav',
-    mp3: 'audio/mp3',
-    m4a: 'audio/mp4',
-    mp4: 'audio/mp4',
-    ogg: 'audio/ogg',
-    flac: 'audio/flac',
-    webm: 'audio/webm',
-};
+type VoiceErrorCode =
+    | 'AUTH_REQUIRED'
+    | 'MESSAGE_QUOTA_EXHAUSTED'
+    | 'VOICE_QUOTA_EXHAUSTED'
+    | 'VOICE_AUDIO_INVALID'
+    | 'VOICE_AUDIO_TOO_LONG'
+    | 'VOICE_AUDIO_TOO_LARGE'
+    | 'VOICE_EMPTY'
+    | 'VOICE_PROVIDER_FAILED'
+    | 'VOICE_PROVIDER_TIMEOUT'
+    | 'VOICE_IN_PROGRESS'
+    | 'VOICE_UNAVAILABLE'
+    | 'TEMPORARY_FAILURE';
 
-/** Clients often send generic or platform-specific types; trust the extension when it is known. */
-function resolveAudioMime(file: Express.Multer.File): string {
-    const ext = (file.originalname.split('.').pop() ?? '').toLowerCase();
-    return AUDIO_MIME_BY_EXT[ext] ?? (file.mimetype?.startsWith('audio/') ? file.mimetype : 'audio/aac');
+function voiceQuotaFields(quota: VoiceQuota | undefined) {
+    if (!quota) return {};
+    return {
+        voiceRemaining: quota.remaining,
+        voiceLimit: quota.limit,
+        voiceResetAt: quota.resetAt ? quota.resetAt.toISOString() : null,
+    };
 }
 
-router.post('/chat/transcribe', upload.single('audio'), async (req: Request, res: Response): Promise<void> => {
-    if (!req.file) {
-        res.status(400).json({ error: 'Audio file is required (multipart field "audio")' });
-        return;
-    }
+function sendVoiceError(
+    res: Response,
+    status: number,
+    code: VoiceErrorCode,
+    error: string,
+    extra: Record<string, unknown> = {},
+): void {
+    res.status(status).json({ error, code, ...extra });
+}
 
-    const language = req.body?.language === 'en' ? 'en' : 'ar';
-    const mimeType = resolveAudioMime(req.file);
-    let attempted = false;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 
+/** Older clients send no key; each of their requests is its own operation. */
+function resolveIdempotencyKey(req: Request): string {
+    const raw = req.headers['idempotency-key'];
+    const key = Array.isArray(raw) ? raw[0] : raw;
+    return key && IDEMPOTENCY_KEY_PATTERN.test(key) ? key : `srv-${randomUUID()}`;
+}
+
+function resolveWhisperConfig(): { apiKey: string; baseURL: string; model: string } | null {
+    const apiKey = process.env.AI_TRANSCRIBE_KEY ?? process.env.OPENAI_API_KEY ?? '';
+    const baseURL =
+        process.env.AI_TRANSCRIBE_BASE_URL ??
+        (process.env.OPENAI_API_KEY ? 'https://api.openai.com/v1' : '');
+    if (!apiKey || !baseURL) return null;
+    return { apiKey, baseURL, model: process.env.AI_TRANSCRIBE_MODEL ?? 'whisper-1' };
+}
+
+function isAnyTranscribeProviderConfigured(): boolean {
+    return isOpenRouterTranscribeConfigured() || isGeminiAudioConfigured() || !!resolveWhisperConfig();
+}
+
+type ProviderOutcome = { kind: 'text'; text: string } | { kind: 'timeout' } | { kind: 'failed' };
+
+/**
+ * Falls through to the next provider only on a definite failure. A timeout
+ * stops the chain: the request may still be processed and billed upstream.
+ */
+async function runTranscriptionProviders(
+    audio: Buffer,
+    mimeType: string,
+    language: 'ar' | 'en',
+): Promise<ProviderOutcome> {
     if (isOpenRouterTranscribeConfigured() && audioFormatForMime(mimeType)) {
-        attempted = true;
         try {
-            const { text } = await transcribeAudioWithOpenRouter({ audio: req.file.buffer, mimeType, language });
-            res.json({ text });
-            return;
+            const { text } = await transcribeAudioWithOpenRouter({ audio, mimeType, language });
+            return { kind: 'text', text };
         } catch (err: any) {
             logger.warn('[chat] openrouter transcribe failed:', err?.message ?? err);
+            if (isTimeoutError(err)) return { kind: 'timeout' };
         }
     }
 
     if (isGeminiAudioConfigured()) {
-        attempted = true;
         try {
-            const { text } = await transcribeAudioWithGemini({ audio: req.file.buffer, mimeType, language });
-            res.json({ text });
-            return;
+            const { text } = await transcribeAudioWithGemini({ audio, mimeType, language });
+            return { kind: 'text', text };
         } catch (err: any) {
             logger.warn('[chat] gemini transcribe failed:', err?.message ?? err);
+            if (isTimeoutError(err)) return { kind: 'timeout' };
         }
     }
 
-    const transcribeKey = process.env.AI_TRANSCRIBE_KEY ?? process.env.OPENAI_API_KEY ?? '';
-    const transcribeBaseURL =
-        process.env.AI_TRANSCRIBE_BASE_URL ??
-        (process.env.OPENAI_API_KEY ? 'https://api.openai.com/v1' : '');
-    const model = process.env.AI_TRANSCRIBE_MODEL ?? 'whisper-1';
-
-    if (!transcribeKey || !transcribeBaseURL) {
-        if (attempted) {
-            res.status(502).json({ error: 'Transcription failed' });
-        } else {
-            res.status(501).json({ error: 'Transcription not configured' });
+    const whisper = resolveWhisperConfig();
+    if (whisper) {
+        try {
+            const client = new OpenAI({
+                apiKey: whisper.apiKey,
+                baseURL: whisper.baseURL,
+                timeout: 30_000,
+                maxRetries: 0,
+            });
+            const { toFile } = await import('openai/uploads');
+            const ext = mimeType === 'audio/wav' ? 'wav' : 'aac';
+            const file = await toFile(audio, `voice.${ext}`, { type: mimeType });
+            const result = await client.audio.transcriptions.create({ file, model: whisper.model });
+            return { kind: 'text', text: (result as { text?: string }).text ?? '' };
+        } catch (err: any) {
+            logger.warn('[chat] whisper transcribe failed:', err?.message ?? err);
+            if (err instanceof OpenAI.APIConnectionTimeoutError || isTimeoutError(err)) {
+                return { kind: 'timeout' };
+            }
         }
+    }
+
+    return { kind: 'failed' };
+}
+
+/** Quota gates that need no upload: provider availability, message quota, voice quota. */
+async function voicePrecheck(req: Request, res: Response, next: () => void): Promise<void> {
+    let userId: string;
+    try {
+        userId = getUserId(req);
+    } catch {
+        sendVoiceError(res, 401, 'AUTH_REQUIRED', 'Unauthorized');
+        return;
+    }
+
+    if (!isAnyTranscribeProviderConfigured()) {
+        sendVoiceError(res, 501, 'VOICE_UNAVAILABLE', 'Transcription not configured');
         return;
     }
 
     try {
-        const client = new OpenAI({ apiKey: transcribeKey, baseURL: transcribeBaseURL });
-        // OpenAI SDK v6 accepts a `toFile`-compatible argument for `file`.
-        const { toFile } = await import('openai/uploads');
-        const file = await toFile(req.file.buffer, req.file.originalname || 'audio.m4a', {
-            type: req.file.mimetype || 'audio/m4a',
-        });
-        const result = await client.audio.transcriptions.create({
-            file,
-            model,
-        });
-        res.json({ text: (result as { text?: string }).text ?? '' });
+        const voiceQuota = await getVoiceQuota(userId);
+        if (!isChatUnlimitedUser(userId)) {
+            const remaining = await getRemaining(userId, getTimezone(req));
+            if (remaining <= 0) {
+                sendVoiceError(res, 429, 'MESSAGE_QUOTA_EXHAUSTED', 'Daily message limit reached', {
+                    resetAt: await getResetTimeForUser(userId),
+                    ...voiceQuotaFields(voiceQuota),
+                });
+                return;
+            }
+        }
+        if (!voiceQuota.unlimited && voiceQuota.remaining <= 0) {
+            sendVoiceError(res, 429, 'VOICE_QUOTA_EXHAUSTED', 'Daily voice limit reached', voiceQuotaFields(voiceQuota));
+            return;
+        }
     } catch (err: any) {
-        logger.warn('[chat] transcribe failed:', err?.message ?? err);
-        res.status(502).json({ error: 'Transcription failed' });
+        logger.error('[chat] transcribe precheck failed:', err?.message ?? err);
+        sendVoiceError(res, 503, 'TEMPORARY_FAILURE', 'Temporarily unavailable');
+        return;
     }
-});
+    next();
+}
+
+function receiveVoiceUpload(req: Request, res: Response, next: () => void): void {
+    upload.single('audio')(req, res, (err?: unknown) => {
+        if (!err) {
+            next();
+            return;
+        }
+        if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+            sendVoiceError(res, 413, 'VOICE_AUDIO_TOO_LARGE', 'Audio file is too large', {
+                maxBytes: MAX_VOICE_UPLOAD_BYTES,
+            });
+            return;
+        }
+        sendVoiceError(res, 400, 'VOICE_AUDIO_INVALID', 'Invalid audio upload');
+    });
+}
+
+router.post(
+    '/chat/transcribe',
+    voiceTranscribeLimiter,
+    voicePrecheck,
+    receiveVoiceUpload,
+    async (req: Request, res: Response): Promise<void> => {
+        const userId = getUserId(req);
+        if (!req.file) {
+            sendVoiceError(res, 400, 'VOICE_AUDIO_INVALID', 'Audio file is required (multipart field "audio")');
+            return;
+        }
+
+        const audio = inspectAudio(req.file.buffer);
+        if (!audio.ok) {
+            sendVoiceError(
+                res,
+                audio.reason === 'unsupported' ? 415 : 422,
+                'VOICE_AUDIO_INVALID',
+                'Unsupported or unreadable audio',
+            );
+            return;
+        }
+        const { serverMaxSeconds } = getVoiceQuotaConfig();
+        if (audio.durationSec > serverMaxSeconds) {
+            sendVoiceError(res, 413, 'VOICE_AUDIO_TOO_LONG', 'Audio is too long', {
+                maxSeconds: serverMaxSeconds,
+            });
+            return;
+        }
+
+        const language = req.body?.language === 'en' ? 'en' : 'ar';
+        const idempotencyKey = resolveIdempotencyKey(req);
+        const freshQuota = () => getVoiceQuota(userId).catch(() => undefined);
+
+        let reservation: ReserveResult;
+        try {
+            reservation = await reserveVoiceUnit(userId, idempotencyKey);
+        } catch (err: any) {
+            logger.error('[chat] voice reservation failed:', err?.message ?? err);
+            sendVoiceError(res, 503, 'TEMPORARY_FAILURE', 'Temporarily unavailable');
+            return;
+        }
+
+        if (reservation.kind === 'cached') {
+            res.json({ text: reservation.transcript, ...voiceQuotaFields(reservation.quota) });
+            return;
+        }
+        if (reservation.kind === 'in_progress') {
+            sendVoiceError(res, 409, 'VOICE_IN_PROGRESS', 'This recording is already being transcribed',
+                voiceQuotaFields(reservation.quota));
+            return;
+        }
+        if (reservation.kind === 'exhausted') {
+            sendVoiceError(res, 429, 'VOICE_QUOTA_EXHAUSTED', 'Daily voice limit reached',
+                voiceQuotaFields(reservation.quota));
+            return;
+        }
+
+        const { operationId, attempt } = reservation;
+        const outcome = await runTranscriptionProviders(req.file.buffer, audio.mimeType, language);
+
+        try {
+            if (outcome.kind === 'text' && outcome.text.trim()) {
+                const text = outcome.text.trim();
+                try {
+                    if (!(await commitVoiceUnit(operationId, attempt, text))) {
+                        logger.warn(`[chat] voice op ${operationId} was already settled before commit`);
+                    }
+                } catch (err: any) {
+                    // The user already has a transcript; an unsettled reservation expires on its own.
+                    logger.error('[chat] voice commit failed:', err?.message ?? err);
+                }
+                res.json({ text, ...voiceQuotaFields(reservation.quota) });
+                return;
+            }
+
+            if (outcome.kind === 'text') {
+                await releaseVoiceUnit(operationId, attempt, 'empty_transcript');
+                // 200 + empty text keeps older clients on their "no speech" message.
+                res.json({ text: '', code: 'VOICE_EMPTY', ...voiceQuotaFields(await freshQuota()) });
+                return;
+            }
+
+            if (outcome.kind === 'timeout') {
+                await markVoiceTimedOut(operationId, attempt);
+                sendVoiceError(res, 504, 'VOICE_PROVIDER_TIMEOUT', 'Transcription timed out',
+                    voiceQuotaFields(await freshQuota()));
+                return;
+            }
+
+            await releaseVoiceUnit(operationId, attempt, 'provider_failed');
+            sendVoiceError(res, 502, 'VOICE_PROVIDER_FAILED', 'Transcription failed',
+                voiceQuotaFields(await freshQuota()));
+        } catch (err: any) {
+            // The reservation stops counting after its TTL, so a failed settle never pins quota.
+            logger.error('[chat] voice settle failed:', err?.message ?? err);
+            if (!res.headersSent) {
+                sendVoiceError(res, 503, 'TEMPORARY_FAILURE', 'Temporarily unavailable');
+            }
+        }
+    },
+);
 
 // ─── Conversation CRUD ───────────────────────────────────────────────────────
 router.get('/conversations', async (req: Request, res: Response): Promise<void> => {

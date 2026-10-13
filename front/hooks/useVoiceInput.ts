@@ -1,13 +1,16 @@
 /**
  * Voice → text for the AI chat composer: records with expo-audio, uploads the
  * clip to `/api/chat/transcribe`, and hands the transcript back to the caller.
+ * The transcript only fills the input — sending stays a separate user action.
+ *
+ * The server owns the voice quota; this hook only mirrors what it reports
+ * (`onQuota`) and skips uploads it knows would be rejected (too short, silent).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
-import * as Device from 'expo-device';
 import {
   AudioQuality,
   IOSOutputFormat,
@@ -23,20 +26,28 @@ import { API_CONFIG } from '../constants/theme';
 import { getClerkBearerToken } from '../utils/clerkAuthToken';
 import { useLanguageStore } from '../src/i18n/store';
 import { logger } from '../services/logger';
+import {
+  MAX_VOICE_DURATION_MS,
+  addMeterSample,
+  emptyMeterStats,
+  evaluateRecording,
+  makeVoiceIdempotencyKey,
+  normalizeLevel,
+  type MeterStats,
+} from './voiceRecordingCheck';
+import {
+  mapTranscribeResponse,
+  type TranscribeResult,
+  type VoiceInputError,
+  type VoiceQuotaUpdate,
+} from './voiceTranscribeResponse';
 
+export type { VoiceInputError, VoiceQuotaUpdate } from './voiceTranscribeResponse';
 export type VoiceInputStatus = 'idle' | 'recording' | 'transcribing';
-export type VoiceInputError =
-  | 'permission'
-  | 'permissionBlocked'
-  | 'tooShort'
-  | 'empty'
-  | 'unavailable'
-  | 'failed';
 
-const MAX_DURATION_MS = 60_000;
-const MIN_DURATION_MS = 700;
 const LEVEL_SAMPLES = 28;
 const POLL_MS = 80;
+const NETWORK_RETRY_DELAY_MS = 800;
 
 /** AAC (Android) and 16-bit WAV (iOS) are both formats Gemini accepts as inline audio. */
 const VOICE_RECORDING: RecordingOptions = {
@@ -68,28 +79,20 @@ const MIME_BY_EXT: Record<string, string> = {
   m4a: 'audio/mp4',
 };
 
-/** Metering is dBFS (≈ -60 silence … 0 loud); map to 0…1 for the level bars. */
-function normalizeLevel(db: number | undefined): number {
-  if (typeof db !== 'number' || !Number.isFinite(db)) return 0;
-  return Math.min(1, Math.max(0, (db + 55) / 50));
-}
-
-/** Emulator mics usually record silence, so dev builds there fake speech-like levels for the orb. */
-const SIMULATE_LEVELS = __DEV__ && !Device.isDevice;
-
-function simulatedLevel(ms: number): number {
-  const s = ms / 1000;
-  const phrase = Math.max(0, Math.sin(s * 1.9));
-  const syllables = Math.abs(Math.sin(s * 9.7)) * 0.65 + Math.random() * 0.25;
-  return Math.min(1, 0.06 + syllables * phrase);
+function isAbortError(err: unknown): boolean {
+  return (err as { name?: string } | null)?.name === 'AbortError';
 }
 
 type UseVoiceInputOptions = {
   onTranscript: (text: string) => void;
   onError: (reason: VoiceInputError) => void;
+  /** Authoritative voice quota from the server, after every response that carries it. */
+  onQuota?: (quota: VoiceQuotaUpdate) => void;
+  /** Return a reason to refuse recording (e.g. a quota the server already reported as used up). */
+  canStart?: () => VoiceInputError | null;
 };
 
-export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
+export function useVoiceInput({ onTranscript, onError, onQuota, canStart }: UseVoiceInputOptions) {
   const { getToken } = useAuth();
   const recorder = useAudioRecorder(VOICE_RECORDING);
   const recorderState = useAudioRecorderState(recorder, POLL_MS);
@@ -97,10 +100,14 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
   const [levels, setLevels] = useState<number[]>(() => Array(LEVEL_SAMPLES).fill(0));
 
   const statusRef = useRef<VoiceInputStatus>('idle');
-  const callbacksRef = useRef({ onTranscript, onError });
-  callbacksRef.current = { onTranscript, onError };
+  const callbacksRef = useRef({ onTranscript, onError, onQuota, canStart });
+  callbacksRef.current = { onTranscript, onError, onQuota, canStart };
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
+  const meterRef = useRef<MeterStats>(emptyMeterStats());
+  /** Bumped by every start/cancel/unmount; async work from an older operation is discarded. */
+  const operationRef = useRef(0);
+  const uploadAbortRef = useRef<AbortController | null>(null);
 
   const isTranscribing = () => statusRef.current === 'transcribing';
 
@@ -111,9 +118,8 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
 
   useEffect(() => {
     if (status !== 'recording') return;
-    const level = SIMULATE_LEVELS
-      ? simulatedLevel(recorderState.durationMillis)
-      : normalizeLevel(recorderState.metering);
+    meterRef.current = addMeterSample(meterRef.current, recorderState.metering);
+    const level = normalizeLevel(recorderState.metering);
     setLevels((prev) => [...prev.slice(1), level]);
   }, [recorderState.metering, recorderState.durationMillis, status]);
 
@@ -123,8 +129,15 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
 
   const start = useCallback(async () => {
     if (statusRef.current !== 'idle') return;
+    const refusal = callbacksRef.current.canStart?.() ?? null;
+    if (refusal) {
+      callbacksRef.current.onError(refusal);
+      return;
+    }
+    const op = ++operationRef.current;
     try {
       const permission = await requestRecordingPermissionsAsync();
+      if (op !== operationRef.current) return;
       if (!permission.granted) {
         // After "don't ask again" the system dialog never shows; only Settings can grant it.
         callbacksRef.current.onError(permission.canAskAgain ? 'permission' : 'permissionBlocked');
@@ -132,20 +145,34 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
+      if (op !== operationRef.current) {
+        releaseAudioMode();
+        return;
+      }
       recorder.record();
+      meterRef.current = emptyMeterStats();
       setLevels(Array(LEVEL_SAMPLES).fill(0));
       setStatusBoth('recording');
     } catch (err) {
       logger.warn('[voice] failed to start recording', err);
       releaseAudioMode();
+      if (op !== operationRef.current) return;
       setStatusBoth('idle');
       callbacksRef.current.onError('failed');
     }
   }, [recorder, releaseAudioMode, setStatusBoth]);
 
+  /** Stops recording without uploading, or abandons an in-flight upload. */
   const cancel = useCallback(async () => {
-    if (statusRef.current !== 'recording') return;
+    const was = statusRef.current;
+    if (was === 'idle') return;
+    operationRef.current += 1;
     setStatusBoth('idle');
+    if (was === 'transcribing') {
+      uploadAbortRef.current?.abort();
+      uploadAbortRef.current = null;
+      return;
+    }
     try {
       await recorder.stop();
     } catch {
@@ -154,8 +181,53 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
     releaseAudioMode();
   }, [recorder, releaseAudioMode, setStatusBoth]);
 
+  const upload = useCallback(
+    async (uri: string, idempotencyKey: string, signal: AbortSignal): Promise<TranscribeResult> => {
+      const ext = (uri.split('.').pop() ?? 'aac').toLowerCase();
+      const language = useLanguageStore.getState().language === 'en' ? 'en' : 'ar';
+
+      for (let attempt = 0; ; attempt += 1) {
+        const form = new FormData();
+        form.append('audio', {
+          uri,
+          name: `voice.${ext}`,
+          type: MIME_BY_EXT[ext] ?? 'audio/aac',
+        } as unknown as Blob);
+        form.append('language', language);
+        try {
+          const token = await getClerkBearerToken(getTokenRef.current, { retries: 4 });
+          const res = await fetch(`${API_CONFIG.baseUrl}/api/chat/transcribe`, {
+            method: 'POST',
+            headers: {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              'x-user-language': language,
+              // Same key on the retry: the server replays a finished transcript instead of billing twice.
+              'Idempotency-Key': idempotencyKey,
+            },
+            body: form,
+            signal,
+          });
+          const body = await res.json().catch(() => null);
+          if (!res.ok) logger.warn('[voice] transcribe HTTP', res.status, Platform.OS);
+          return mapTranscribeResponse(res.status, body);
+        } catch (err) {
+          if (isAbortError(err) || signal.aborted) throw err;
+          // Only a network throw is retried; any HTTP answer is final.
+          if (attempt >= 1) {
+            logger.warn('[voice] transcribe failed', err);
+            return { kind: 'error', error: 'network', quota: null };
+          }
+          await new Promise((r) => setTimeout(r, NETWORK_RETRY_DELAY_MS));
+          if (signal.aborted) throw err;
+        }
+      }
+    },
+    [],
+  );
+
   const finish = useCallback(async () => {
     if (statusRef.current !== 'recording') return;
+    const op = operationRef.current;
     const duration = recorder.getStatus().durationMillis;
     setStatusBoth('transcribing');
     try {
@@ -164,62 +236,37 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
       // Already stopped.
     }
     releaseAudioMode();
+    if (op !== operationRef.current) return;
 
     const uri = recorder.uri;
-    if (!uri || duration < MIN_DURATION_MS) {
+    const verdict = uri ? evaluateRecording(duration, meterRef.current) : 'tooShort';
+    if (!uri || verdict !== 'ok') {
       setStatusBoth('idle');
-      callbacksRef.current.onError('tooShort');
+      callbacksRef.current.onError(verdict === 'ok' ? 'tooShort' : verdict);
       return;
     }
 
+    const abort = new AbortController();
+    uploadAbortRef.current = abort;
     try {
-      const ext = (uri.split('.').pop() ?? 'aac').toLowerCase();
-      const language = useLanguageStore.getState().language === 'en' ? 'en' : 'ar';
-      const form = new FormData();
-      form.append('audio', {
-        uri,
-        name: `voice.${ext}`,
-        type: MIME_BY_EXT[ext] ?? 'audio/aac',
-      } as unknown as Blob);
-      form.append('language', language);
-
-      const token = await getClerkBearerToken(getTokenRef.current, { retries: 4 });
-      const res = await fetch(`${API_CONFIG.baseUrl}/api/chat/transcribe`, {
-        method: 'POST',
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          'x-user-language': language,
-        },
-        body: form,
-      });
-
-      if (!isTranscribing()) return;
-      if (res.status === 501) {
-        callbacksRef.current.onError('unavailable');
-        return;
-      }
-      if (!res.ok) {
-        logger.warn('[voice] transcribe HTTP', res.status, Platform.OS);
-        callbacksRef.current.onError('failed');
-        return;
-      }
-      const data = (await res.json()) as { text?: string };
-      const text = (data.text ?? '').trim();
-      if (!text) {
-        callbacksRef.current.onError('empty');
-        return;
-      }
-      callbacksRef.current.onTranscript(text);
+      const result = await upload(uri, makeVoiceIdempotencyKey(), abort.signal);
+      if (op !== operationRef.current) return;
+      if (result.quota) callbacksRef.current.onQuota?.(result.quota);
+      if (result.kind === 'text') callbacksRef.current.onTranscript(result.text);
+      else callbacksRef.current.onError(result.error);
     } catch (err) {
+      if (op !== operationRef.current || isAbortError(err)) return;
       logger.warn('[voice] transcribe failed', err);
       callbacksRef.current.onError('failed');
     } finally {
-      if (isTranscribing()) setStatusBoth('idle');
+      if (uploadAbortRef.current === abort) uploadAbortRef.current = null;
+      if (op === operationRef.current && isTranscribing()) setStatusBoth('idle');
     }
-  }, [recorder, releaseAudioMode, setStatusBoth]);
+  }, [recorder, releaseAudioMode, setStatusBoth, upload]);
 
+  // Hitting the cap stops and uploads what was captured — nothing is thrown away.
   useEffect(() => {
-    if (status === 'recording' && recorderState.durationMillis >= MAX_DURATION_MS) {
+    if (status === 'recording' && recorderState.durationMillis >= MAX_VOICE_DURATION_MS) {
       void finish();
     }
   }, [finish, recorderState.durationMillis, status]);
@@ -236,13 +283,16 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'background') void cancel();
+      // A finished clip keeps uploading so a quick app switch doesn't lose the transcript.
+      if (next === 'background' && statusRef.current === 'recording') void cancel();
     });
     return () => sub.remove();
   }, [cancel]);
 
   useEffect(
     () => () => {
+      operationRef.current += 1;
+      uploadAbortRef.current?.abort();
       if (statusRef.current === 'recording') {
         try {
           recorder.stop().catch(() => {});

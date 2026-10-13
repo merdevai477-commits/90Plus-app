@@ -134,6 +134,10 @@ export default function ChatScreen() {
 
     dailyMessageLimit,
 
+    voiceQuota,
+
+    applyVoiceQuota,
+
     resetTime,
 
     error,
@@ -236,10 +240,19 @@ export default function ChatScreen() {
     permission: tChat.voicePermission,
     permissionBlocked: tChat.voicePermission,
     tooShort: tChat.voiceTooShort,
+    silent: tChat.voiceSilent,
+    tooLong: tChat.voiceTooLong,
     empty: tChat.voiceEmpty,
     unavailable: tChat.voiceUnavailable,
     failed: tChat.voiceFailed,
+    timeout: tChat.voiceTimeout,
+    network: tChat.voiceNetwork,
+    inProgress: tChat.voiceInProgress,
+    rateLimited: tChat.voiceRateLimited,
+    voiceQuota: tChat.voiceQuotaExhausted,
+    messageQuota: tChat.voiceMessageQuotaExhausted,
   };
+  const voiceInfoReasons: VoiceInputError[] = ['tooShort', 'silent', 'voiceQuota', 'inProgress'];
 
   const handleVoiceError = (reason: VoiceInputError) => {
     if (reason === 'permissionBlocked') {
@@ -249,7 +262,10 @@ export default function ChatScreen() {
       ]);
       return;
     }
-    screen.setConnToast({ message: voiceErrorMessages[reason], type: reason === 'tooShort' ? 'info' : 'error' });
+    screen.setConnToast({
+      message: voiceErrorMessages[reason],
+      type: voiceInfoReasons.includes(reason) ? 'info' : 'error',
+    });
   };
 
   const showSuggestions =
@@ -495,6 +511,10 @@ export default function ChatScreen() {
           }
 
           onVoiceError={handleVoiceError}
+
+          voiceQuota={voiceQuota}
+
+          onVoiceQuota={applyVoiceQuota}
 
           inputRef={screen.inputRef}
 

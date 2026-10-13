@@ -110,6 +110,15 @@ export function cleanTranscript(raw: string): string {
   return NON_SPEECH_ONLY.test(text) ? '' : text;
 }
 
+/**
+ * A timed-out request may still be processed (and billed) upstream, so
+ * transcription never retries it on another model or provider.
+ */
+export function isTimeoutError(err: unknown): boolean {
+  const name = (err as { name?: string } | null)?.name;
+  return name === 'TimeoutError' || name === 'AbortError';
+}
+
 export async function transcribeAudioWithGemini(
   params: GeminiTranscribeParams,
 ): Promise<{ text: string; model: string }> {
@@ -171,6 +180,7 @@ export async function transcribeAudioWithGemini(
       const payload = (await res.json()) as unknown;
       return { text: cleanTranscript(extractGeminiText(payload)), model };
     } catch (err: unknown) {
+      if (isTimeoutError(err)) throw err;
       lastErr = err instanceof Error ? err : new Error(String(err));
       if (hasFallback) continue;
       throw lastErr;

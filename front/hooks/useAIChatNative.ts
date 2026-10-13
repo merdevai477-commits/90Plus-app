@@ -21,6 +21,7 @@ import { fetchWithClerkAuth, getClerkBearerToken } from '../utils/clerkAuthToken
 import { setChatSessionActive } from '../utils/chatSessionState';
 import { typingOrbHoldUntil } from '../utils/chatTypingHold';
 import { useLanguageStore } from '../src/i18n/store';
+import type { VoiceQuotaUpdate } from './voiceTranscribeResponse';
 import {
   decodeChatNavMarker,
   inferChatNavLinksFromQuestion,
@@ -318,6 +319,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
   const [messagesRemaining, setMessagesRemaining] = useState<number | null>(null);
   const chatUnlimitedRef = useRef(false);
   const [dailyMessageLimit, setDailyMessageLimit] = useState<number | null>(null);
+  // Server-reported voice quota; `null` until known or when the user is unlimited.
+  const [voiceQuota, setVoiceQuota] = useState<VoiceQuotaUpdate | null>(null);
   const [resetTime, setResetTime] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Retry state for the reconnect banner
@@ -483,10 +486,22 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
         headers: await getAuthHeaders(),
       });
       if (res.ok) {
-        const data = await res.json() as { remaining: number; limit?: number; resetAt?: string; unlimited?: boolean };
+        const data = await res.json() as {
+          remaining: number;
+          limit?: number;
+          resetAt?: string;
+          unlimited?: boolean;
+          voiceRemaining?: number;
+          voiceLimit?: number;
+        };
         const unlimited = data.unlimited === true;
         chatUnlimitedRef.current = unlimited;
         setMessagesRemaining(unlimited ? null : data.remaining);
+        setVoiceQuota(
+          !unlimited && typeof data.voiceRemaining === 'number' && typeof data.voiceLimit === 'number'
+            ? { voiceRemaining: data.voiceRemaining, voiceLimit: data.voiceLimit }
+            : null,
+        );
         setDailyMessageLimit(
           typeof data.limit === 'number' && data.limit > 0
             ? data.limit
@@ -1461,6 +1476,11 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     });
   }, [getLabels]);
 
+  /** Only for values the server just returned (transcribe responses). */
+  const applyVoiceQuota = useCallback((quota: VoiceQuotaUpdate) => {
+    if (!chatUnlimitedRef.current) setVoiceQuota(quota);
+  }, []);
+
   // ─── Return ───────────────────────────────────────────────────────────────
 
   return {
@@ -1474,6 +1494,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     isRetrying,
     messagesRemaining,
     dailyMessageLimit,
+    voiceQuota,
+    applyVoiceQuota,
     resetTime,
     error,
     /** ID of the AI message that is currently streaming (or null). */
