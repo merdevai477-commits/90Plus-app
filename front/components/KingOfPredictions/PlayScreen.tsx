@@ -18,10 +18,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@clerk/clerk-expo';
 import { useFocusEffect } from '@react-navigation/native';
 
-import type { Match } from '../Matches/matchCardUtils';
+import type { Match, TeamInfo } from '../Matches/matchCardUtils';
 import { PredictionApiError, PredictionsService } from '../../services/predictions.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { getTeamDisplayName } from '../../utils/i18nHelpers';
 import { KING_ART, KING_ICON } from './assets';
 import { GlassSurface, type GlassTone } from './GlassSurface';
 import { KingHistoryList } from './HistoryList';
@@ -88,8 +89,10 @@ export function KingPlayScreen({
   // stops the focus effect from re-running (and re-rendering) forever.
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const copy = t.kingPredictions;
+  // Names stay in the API's English for the server; only what the user sees is localized.
+  const teamName = useCallback((team: TeamInfo) => getTeamDisplayName(team.name, language), [language]);
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
   const fontMedium = useAppFont(500);
@@ -211,12 +214,12 @@ export function KingPlayScreen({
 
     setSheetMatch(null);
     const pickName =
-      predictionType === 'home' ? match.homeTeam.name : predictionType === 'away' ? match.awayTeam.name : copy.draw;
+      predictionType === 'home' ? teamName(match.homeTeam) : predictionType === 'away' ? teamName(match.awayTeam) : copy.draw;
     setToast({
       variant: 'success',
       title: saved[match.id] ? copy.updated : copy.saved,
       pick: isGame ? pickName : `${away} - ${home}`,
-      caption: `${match.awayTeam.name} ${copy.vs} ${match.homeTeam.name}`,
+      caption: `${teamName(match.awayTeam)} ${copy.vs} ${teamName(match.homeTeam)}`,
     });
 
     void (async () => {
@@ -236,7 +239,7 @@ export function KingPlayScreen({
         explain(err);
       }
     })();
-  }, [awayText, copy, explain, homeText, isGame, isSignedIn, saved, sheetMatch, sheetPick, showError]);
+  }, [awayText, copy, explain, homeText, isGame, isSignedIn, saved, sheetMatch, sheetPick, showError, teamName]);
 
   const sheetReady = isGame
     ? sheetPick != null
@@ -248,8 +251,8 @@ export function KingPlayScreen({
     const exact = prev.home != null && prev.away != null;
     if (!isGame) return exact ? `${prev.away} - ${prev.home}` : null;
     if (exact) return null;
-    if (prev.type === 'home') return match.homeTeam.name;
-    if (prev.type === 'away') return match.awayTeam.name;
+    if (prev.type === 'home') return teamName(match.homeTeam);
+    if (prev.type === 'away') return teamName(match.awayTeam);
     if (prev.type === 'draw') return copy.draw;
     return null;
   };
@@ -304,7 +307,7 @@ export function KingPlayScreen({
             const look = BUTTON_LOOK[state];
             return (
               <LinearGradient key={match.id} colors={CARD_BG} style={styles.card}>
-                <CardTeam name={match.awayTeam.name} logo={match.awayTeam.logo} font={fontBold} size={13} />
+                <CardTeam name={teamName(match.awayTeam)} logo={match.awayTeam.logo} font={fontBold} size={13} />
                 <View style={styles.cardMid}>
                   <Text style={[styles.vsColor, styles.vs, { fontFamily: fontSemi }]}>
                     {copy.vs}
@@ -329,7 +332,7 @@ export function KingPlayScreen({
                     </GlassSurface>
                   </Pressable>
                 </View>
-                <CardTeam name={match.homeTeam.name} logo={match.homeTeam.logo} font={fontBold} size={14} />
+                <CardTeam name={teamName(match.homeTeam)} logo={match.homeTeam.logo} font={fontBold} size={14} />
               </LinearGradient>
             );
           })}
@@ -353,7 +356,7 @@ export function KingPlayScreen({
                 <Text style={[styles.pickHint, { fontFamily: fontMedium }]}>{copy.pickWinner}</Text>
                 <View style={styles.pickRow}>
                   <PickTeam
-                    name={sheetMatch.awayTeam.name}
+                    name={teamName(sheetMatch.awayTeam)}
                     logo={sheetMatch.awayTeam.logo}
                     selected={sheetPick === 'away'}
                     font={fontSemi}
@@ -387,7 +390,7 @@ export function KingPlayScreen({
                     <Text style={[styles.time, { fontFamily: fontMedium }]}>{sheetMatch.time || ''}</Text>
                   </View>
                   <PickTeam
-                    name={sheetMatch.homeTeam.name}
+                    name={teamName(sheetMatch.homeTeam)}
                     logo={sheetMatch.homeTeam.logo}
                     selected={sheetPick === 'home'}
                     font={fontSemi}
@@ -399,14 +402,14 @@ export function KingPlayScreen({
             ) : sheetMatch ? (
               <>
                 <View style={styles.sheetTeams}>
-                  <SheetTeam name={sheetMatch.awayTeam.name} logo={sheetMatch.awayTeam.logo} font={fontSemi} />
+                  <SheetTeam name={teamName(sheetMatch.awayTeam)} logo={sheetMatch.awayTeam.logo} font={fontSemi} />
                   <View style={styles.sheetMid}>
                     <Text style={[styles.vsColor, styles.vs, { fontFamily: fontSemi }]}>
                       {copy.vs}
                     </Text>
                     <Text style={[styles.time, { fontFamily: fontMedium }]}>{sheetMatch.time || ''}</Text>
                   </View>
-                  <SheetTeam name={sheetMatch.homeTeam.name} logo={sheetMatch.homeTeam.logo} font={fontSemi} />
+                  <SheetTeam name={teamName(sheetMatch.homeTeam)} logo={sheetMatch.homeTeam.logo} font={fontSemi} />
                 </View>
                 <Text style={[styles.resultTitle, { fontFamily: fontSemi }]}>{copy.matchResult}</Text>
                 <View style={styles.scoreRow}>

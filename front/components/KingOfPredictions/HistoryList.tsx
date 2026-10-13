@@ -20,6 +20,7 @@ import {
 } from '../../services/predictions.service';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
+import { getTeamDisplayName } from '../../utils/i18nHelpers';
 import { GlassSurface, type GlassTone } from './GlassSurface';
 import { KingEmptyState } from './KingBoardList';
 import { isExactPick, localHistoryItems, useKingPicksStore } from './kingPicksStore';
@@ -70,8 +71,9 @@ export function KingHistoryList({
   const { getToken, isSignedIn } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const copy = t.kingPredictions;
+  const teamName = (name: string) => getTeamDisplayName(name, language);
   const fontBold = useAppFont(700);
   const fontSemi = useAppFont(600);
   const fontMedium = useAppFont(500);
@@ -192,8 +194,8 @@ export function KingHistoryList({
     if (mode === 'results' && item.predictedHomeScore != null && item.predictedAwayScore != null) {
       return `${item.predictedAwayScore} - ${item.predictedHomeScore}`;
     }
-    if (item.predictionType === 'home') return item.homeTeam ?? copy.homeWin;
-    if (item.predictionType === 'away') return item.awayTeam ?? copy.awayWin;
+    if (item.predictionType === 'home') return item.homeTeam ? teamName(item.homeTeam) : copy.homeWin;
+    if (item.predictionType === 'away') return item.awayTeam ? teamName(item.awayTeam) : copy.awayWin;
     return copy.draw;
   };
 
@@ -203,7 +205,7 @@ export function KingHistoryList({
     const hasScore = item.finalHomeScore != null && item.finalAwayScore != null;
     return (
       <LinearGradient colors={CARD_BG} style={styles.card}>
-        <HistoryTeam name={item.awayTeam ?? ''} logo={item.awayTeamLogo} font={fontBold} />
+        <HistoryTeam name={item.awayTeam ? teamName(item.awayTeam) : ''} logo={item.awayTeamLogo} font={fontBold} />
         <View style={styles.cardMid}>
           {hasScore ? (
             <Text maxFontSizeMultiplier={1.15} style={[styles.score, { fontFamily: fontBold }]}>
@@ -228,7 +230,7 @@ export function KingHistoryList({
             </Text>
           </GlassSurface>
         </View>
-        <HistoryTeam name={item.homeTeam ?? ''} logo={item.homeTeamLogo} font={fontBold} />
+        <HistoryTeam name={item.homeTeam ? teamName(item.homeTeam) : ''} logo={item.homeTeamLogo} font={fontBold} />
       </LinearGradient>
     );
   };
