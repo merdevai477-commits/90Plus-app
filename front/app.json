@@ -23,7 +23,7 @@
         "applinks:clerk.90plus.pro"
       ],
       "usesAppleSignIn": true,
-      "buildNumber": "152",
+      "buildNumber": "153",
       "requireFullScreen": false,
       "entitlements": {
         "com.apple.developer.usernotifications.time-sensitive": true,
