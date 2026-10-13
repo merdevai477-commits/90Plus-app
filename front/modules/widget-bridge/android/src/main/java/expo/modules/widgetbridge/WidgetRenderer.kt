@@ -108,11 +108,17 @@ internal object WidgetRenderer {
           if (focus != null) add(FeedOther(focus, feed.featured?.takeIf { it.fixtureId == focus.fixtureId }))
           if (focus?.isLive == true) feed.others.filter { it.match.isLive }.forEach { add(it) }
         }
+        val goalKeys = mutableListOf<String>()
         blocks.forEach { block ->
           block.featured?.goal?.takeIf { block.match.isLive }?.let {
-            pages += goalPage(context, block.match, it, labels, images, size).also { page -> markGoal(page, labels) }
+            pages += goalPage(context, block.match, it, labels, images, size)
+            goalKeys += "${block.match.fixtureId}:${it.minute}:${it.side}:${it.player}"
           }
         }
+        // A goal nobody has seen yet takes the widget straight to its page; rotation resumes after the hold.
+        val seen = WidgetStore.seenGoals(context)
+        goalKeys.indexOfFirst { it !in seen }.takeIf { it >= 0 }?.let { WidgetStore.savePage(context, it) }
+        if (goalKeys.isNotEmpty()) WidgetStore.setSeenGoals(context, seen + goalKeys)
         blocks.forEach { pages += detailPages(context, it, labels, images, arabic, size) }
         // A live followed match owns the widget until the final whistle; the other fixtures return after.
         if (focus?.isLive != true) feed.fixtures.forEach { pages += matchPage(context, it, labels, images, size) }
@@ -123,17 +129,13 @@ internal object WidgetRenderer {
     val held = WidgetStore.heldPage(context, NAV_HOLD_MS)
     val root = RemoteViews(context.packageName, if (held == null) R.layout.np_widget_root else R.layout.np_widget_root_manual)
     root.removeAllViews(R.id.np_flipper)
-    // Dot is 5dp + 4dp gap; leave the arrows (72dp) and side margins clear.
-    val showDots = pages.size in 2..((size.widthDp - 110) / 9)
     pages.forEachIndexed { index, page ->
       page.setInt(R.id.np_page, "setLayoutDirection", View.LAYOUT_DIRECTION_LTR)
       val frame = RemoteViews(context.packageName, R.layout.np_widget_page_frame)
       frame.addView(R.id.np_frame_slot, page)
-      if (showDots) {
-        for (dot in pages.indices) {
-          val layout = if (dot == index) R.layout.np_widget_dot_active else R.layout.np_widget_dot
-          frame.addView(R.id.np_dots, RemoteViews(context.packageName, layout))
-        }
+      if (pages.size > 1) {
+        frame.setTextViewText(R.id.np_counter, "${index + 1}/${pages.size}")
+        frame.setViewVisibility(R.id.np_counter, View.VISIBLE)
       }
       root.addView(R.id.np_flipper, frame)
     }
@@ -189,13 +191,13 @@ internal object WidgetRenderer {
       else -> ""
     }
     val minute = "${goal.minute}${goal.extra?.let { "+$it" }.orEmpty()}\u2019"
-    views.setTextViewText(R.id.np_goal_title, labels.goal)
+    views.setTextViewText(R.id.np_goal_title, "${labels.goal}  $minute")
     // Photo, title, name and meta need about 65dp plus the photo; short widgets drop to two lines.
     if (size.detailBody < 90) {
       views.setViewVisibility(R.id.np_goal_photo, View.GONE)
       views.setViewVisibility(R.id.np_goal_meta, View.GONE)
       views.textSp(R.id.np_goal_title, 16f)
-      views.setTextViewText(R.id.np_goal_player, "$who  $minute")
+      views.setTextViewText(R.id.np_goal_player, who)
     } else {
       val photoDp = (size.detailBody - 65).coerceIn(28, 72)
       views.sizeDp(R.id.np_goal_photo, photoDp, photoDp)
@@ -203,7 +205,8 @@ internal object WidgetRenderer {
       if (photo != null) views.setImageViewBitmap(R.id.np_goal_photo, photo)
       else views.setViewVisibility(R.id.np_goal_photo, View.GONE)
       views.setTextViewText(R.id.np_goal_player, who)
-      views.setTextViewText(R.id.np_goal_meta, if (goal.player.isBlank()) minute else "$minute  \u00B7  ${team.name}")
+      if (goal.player.isBlank()) views.setViewVisibility(R.id.np_goal_meta, View.GONE)
+      else views.setTextViewText(R.id.np_goal_meta, team.name)
     }
     views.setOnClickPendingIntent(R.id.np_page, openIntent(context, matchUri(match)))
     return views

@@ -98,6 +98,7 @@ internal object WidgetStore {
   private const val KEY_LIVE_NOTIFIED = "widget.liveNotified"
   private const val KEY_PAGE = "widget.page"
   private const val KEY_PAGE_AT = "widget.pageAt"
+  private const val KEY_SEEN_GOALS = "widget.seenGoals"
 
   private fun prefs(context: Context) =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -156,5 +157,13 @@ internal object WidgetStore {
 
   fun savePage(context: Context, index: Int) {
     prefs(context).edit().putInt(KEY_PAGE, index).putLong(KEY_PAGE_AT, System.currentTimeMillis()).apply()
+  }
+
+  /** Goals the widget already jumped to, oldest first. */
+  fun seenGoals(context: Context): List<String> =
+    prefs(context).getString(KEY_SEEN_GOALS, null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
+
+  fun setSeenGoals(context: Context, keys: List<String>) {
+    prefs(context).edit().putString(KEY_SEEN_GOALS, keys.distinct().takeLast(20).joinToString("\n")).apply()
   }
 }

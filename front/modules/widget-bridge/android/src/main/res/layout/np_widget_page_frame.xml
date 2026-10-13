@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Wraps every page so each one carries its own position dots; auto-rotation keeps them right -->
+<!-- Wraps every page so each one carries its own "3/12" position; auto-rotation keeps it right -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:layout_width="match_parent"
   android:layout_height="match_parent">
@@ -9,13 +9,17 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent" />
 
-  <LinearLayout
-    android:id="@+id/np_dots"
+  <TextView
+    android:id="@+id/np_counter"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:layout_gravity="bottom|start"
     android:layout_marginStart="14dp"
-    android:layout_marginBottom="15dp"
-    android:gravity="center_vertical"
-    android:orientation="horizontal" />
+    android:layout_marginBottom="10dp"
+    android:fontFeatureSettings="tnum"
+    android:maxLines="1"
+    android:textColor="#40FFFFFF"
+    android:textSize="11sp"
+    android:textStyle="bold"
+    android:visibility="gone" />
 </FrameLayout>

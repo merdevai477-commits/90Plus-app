@@ -368,13 +368,12 @@ private struct PagerBar: View {
 
   var body: some View {
     HStack(spacing: 6) {
-      HStack(spacing: 4) {
-        ForEach(0..<count, id: \.self) { dot in
-          Capsule()
-            .fill(dot == current ? Palette.purple : Color.white.opacity(0.25))
-            .frame(width: dot == current ? 12 : 5, height: 5)
-        }
-      }
+      // Kept faint so it never competes with the score.
+      Text("\(current + 1)/\(count)")
+        .font(.system(size: 11, weight: .bold))
+        .monospacedDigit()
+        .foregroundStyle(Color.white.opacity(0.25))
+        .environment(\.layoutDirection, .leftToRight)
       Spacer(minLength: 0)
       Button(intent: ChangePageIntent(step: -1)) {
         Image(systemName: "chevron.backward")
@@ -482,6 +481,8 @@ private struct MiniScoreHeader: View {
   let entry: MatchesEntry
   let match: FeedMatch
   let title: String
+  /// The goal page already says GOAL in full, so its header keeps the plain status.
+  var markGoal = true
 
   var body: some View {
     HStack(spacing: 6) {
@@ -496,7 +497,7 @@ private struct MiniScoreHeader: View {
       Crest(image: entry.image(match.away.logo), size: 16)
       StatusBadge(
         match: match, labels: entry.labels, asOf: entry.asOf, arabic: entry.isArabic,
-        fontSize: 9, goal: entry.hasFreshGoal(match)
+        fontSize: 9, goal: markGoal && entry.hasFreshGoal(match)
       )
     }
     .environment(\.layoutDirection, .leftToRight)
@@ -926,7 +927,7 @@ private struct GoalPage: View {
 
   var body: some View {
     VStack(spacing: 6) {
-      MiniScoreHeader(entry: entry, match: match, title: match.league?.name ?? "")
+      MiniScoreHeader(entry: entry, match: match, title: match.league?.name ?? "", markGoal: false)
       Spacer(minLength: 0)
       HStack(spacing: 14) {
         Group {
@@ -942,19 +943,26 @@ private struct GoalPage: View {
         .overlay(Circle().stroke(Palette.goal, lineWidth: 2.5))
 
         VStack(alignment: .leading, spacing: 2) {
-          Text(entry.labels.goal)
-            .font(.system(size: 22, weight: .heavy))
-            .tracking(1.5)
-            .foregroundStyle(Palette.goal)
+          HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(entry.labels.goal)
+              .font(.system(size: 22, weight: .heavy))
+              .tracking(1.5)
+            Text(minute)
+              .font(.system(size: 18, weight: .bold))
+              .monospacedDigit()
+          }
+          .foregroundStyle(Palette.goal)
           Text(who)
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
-          Text(goal.player.isEmpty ? minute : "\(minute)  \u{00B7}  \(team.name)")
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(Palette.muted)
-            .lineLimit(1)
+          if !goal.player.isEmpty {
+            Text(team.name)
+              .font(.system(size: 11, weight: .medium))
+              .foregroundStyle(Palette.muted)
+              .lineLimit(1)
+          }
         }
         Spacer(minLength: 0)
       }

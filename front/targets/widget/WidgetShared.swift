@@ -601,13 +601,16 @@ enum WidgetPager {
     WidgetShared.defaults?.set(now.timeIntervalSince1970, forKey: baseAtKey)
   }
 
-  private static let lastGoalKey = "widget.lastGoal"
+  private static let seenGoalsKey = "widget.seenGoals"
 
-  /// Jumps to page 0 (the goal page) the first time a goal shows up, then rotation resumes from there.
-  static func showGoalOnce(_ key: String) {
-    guard let defaults = WidgetShared.defaults, defaults.string(forKey: lastGoalKey) != key else { return }
-    defaults.set(key, forKey: lastGoalKey)
-    defaults.set(0, forKey: baseKey)
+  /// `keys` follow the goal pages, which lead the page list. The first goal not seen before takes
+  /// the widget straight to its page; rotation resumes from there.
+  static func showNewGoal(_ keys: [String]) {
+    guard let defaults = WidgetShared.defaults else { return }
+    let seen = defaults.stringArray(forKey: seenGoalsKey) ?? []
+    guard let index = keys.firstIndex(where: { !seen.contains($0) }) else { return }
+    defaults.set(Array((seen + keys.filter { !seen.contains($0) }).suffix(20)), forKey: seenGoalsKey)
+    defaults.set(index, forKey: baseKey)
     defaults.set(Date().timeIntervalSince1970, forKey: baseAtKey)
   }
 }

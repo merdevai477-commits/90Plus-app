@@ -98,7 +98,7 @@ struct MatchesProvider: TimelineProvider {
       guard kind == .goal, let block = feed.block(slot), let goal = block.featured?.goal else { return nil }
       return "\(block.match.fixtureId):\(goal.minute):\(goal.side):\(goal.player)"
     }
-    if pages.first?.slotted.page == .goal { WidgetPager.showGoalOnce(goalKeys.joined(separator: "|")) }
+    WidgetPager.showNewGoal(goalKeys)
     var images = await ImageStore.images(for: imageURLs(for: feed, family: family))
     for page in pages where page.slotted.page == .info {
       if let url = feed.block(page.slotted.slot)?.featured?.info?.venueImage, let cover = await ImageStore.cover(for: url) {
