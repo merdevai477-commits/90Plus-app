@@ -10,7 +10,7 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 
-import { View } from 'react-native';
+import { Alert, Linking, View } from 'react-native';
 
 import * as ExpoClipboard from 'expo-clipboard';
 
@@ -234,10 +234,22 @@ export default function ChatScreen() {
 
   const voiceErrorMessages: Record<VoiceInputError, string> = {
     permission: tChat.voicePermission,
+    permissionBlocked: tChat.voicePermission,
     tooShort: tChat.voiceTooShort,
     empty: tChat.voiceEmpty,
     unavailable: tChat.voiceUnavailable,
     failed: tChat.voiceFailed,
+  };
+
+  const handleVoiceError = (reason: VoiceInputError) => {
+    if (reason === 'permissionBlocked') {
+      Alert.alert(tChat.voicePermission, tChat.voicePermissionSettings, [
+        { text: t.common.cancel, style: 'cancel' },
+        { text: tChat.voiceOpenSettings, onPress: () => void Linking.openSettings() },
+      ]);
+      return;
+    }
+    screen.setConnToast({ message: voiceErrorMessages[reason], type: reason === 'tooShort' ? 'info' : 'error' });
   };
 
   const showSuggestions =
@@ -482,9 +494,7 @@ export default function ChatScreen() {
             ) : undefined
           }
 
-          onVoiceError={(reason) =>
-            screen.setConnToast({ message: voiceErrorMessages[reason], type: reason === 'tooShort' ? 'info' : 'error' })
-          }
+          onVoiceError={handleVoiceError}
 
           inputRef={screen.inputRef}
 

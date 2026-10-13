@@ -61,6 +61,7 @@ interface SSEDone {
   remaining?: number;
   limit?: number;
   resetAt?: string;
+  unlimited?: boolean;
   usedModel?: string;
   /** Set when the server auto-titles the conversation from the first message. */
   conversationTitle?: string;

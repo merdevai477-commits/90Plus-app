@@ -3070,6 +3070,8 @@ export const ar = {
     a11yVoiceDone: 'إنهاء التسجيل',
     voiceTranscribing: 'بحوّل صوتك لكلام…',
     voicePermission: 'اسمح للتطبيق بالمايك عشان تكتب بصوتك',
+    voicePermissionSettings: 'المايك مقفول للتطبيق. افتح الإعدادات وفعّل صلاحية الميكروفون.',
+    voiceOpenSettings: 'افتح الإعدادات',
     voiceTooShort: 'اتكلم شوية أطول وبعدين دوس ✓',
     voiceEmpty: 'ماسمعتش كويس — قرّب من المايك وجرّب تاني',
     voiceUnavailable: 'الكتابة بالصوت مش متاحة دلوقتي',

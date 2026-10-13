@@ -3151,6 +3151,8 @@ export const en = {
     a11yVoiceDone: 'Finish recording',
     voiceTranscribing: 'Turning your voice into text…',
     voicePermission: 'Allow microphone access to type with your voice',
+    voicePermissionSettings: 'Microphone access is turned off for 90Plus. Open Settings and allow the microphone.',
+    voiceOpenSettings: 'Open Settings',
     voiceTooShort: 'Hold on a little longer, then tap ✓',
     voiceEmpty: "Couldn't catch that — try again closer to the mic",
     voiceUnavailable: 'Voice typing is not available right now',

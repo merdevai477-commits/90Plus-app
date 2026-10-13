@@ -3,7 +3,7 @@
     "name": "90Plus",
     "slug": "90plus",
     "version": "1.1.2",
-    "runtimeVersion": "1.1.0",
+    "runtimeVersion": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/app-icon.png",
     "scheme": "ninetyplus",
@@ -171,15 +171,13 @@
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "web": {
@@ -198,7 +196,16 @@
         "expo-audio",
         {
           "microphonePermission": "نحتاج المايك عشان تقدر تكتب رسالتك للمساعد بصوتك.",
-          "recordAudioAndroid": true
+          "recordAudioAndroid": true,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "يستخدم 90Plus موقعك لتحديد عنوان المتجر على الخريطة.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false
         }
       ],
       [

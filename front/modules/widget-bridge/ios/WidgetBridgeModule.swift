@@ -7,8 +7,9 @@ public class WidgetBridgeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("WidgetBridge")
 
+    // The widget extension that draws the activity (targets/widget) requires iOS 17.
     AsyncFunction("areLiveActivitiesEnabled") { () -> Bool in
-      guard #available(iOS 16.2, *) else { return false }
+      guard #available(iOS 17.0, *) else { return false }
       return ActivityAuthorizationInfo().areActivitiesEnabled
     }
 
@@ -18,7 +19,7 @@ public class WidgetBridgeModule: Module {
     }
 
     AsyncFunction("startMatchActivity") { (json: String) async throws -> Bool in
-      guard #available(iOS 16.2, *) else { return false }
+      guard #available(iOS 17.0, *) else { return false }
       let request = try JSONDecoder().decode(MatchActivityRequest.self, from: Data(json.utf8))
       return try await LiveActivityCenter.shared.start(request)
     }

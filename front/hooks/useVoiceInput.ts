@@ -4,7 +4,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import * as Device from 'expo-device';
 import {
@@ -24,7 +25,13 @@ import { useLanguageStore } from '../src/i18n/store';
 import { logger } from '../services/logger';
 
 export type VoiceInputStatus = 'idle' | 'recording' | 'transcribing';
-export type VoiceInputError = 'permission' | 'tooShort' | 'empty' | 'unavailable' | 'failed';
+export type VoiceInputError =
+  | 'permission'
+  | 'permissionBlocked'
+  | 'tooShort'
+  | 'empty'
+  | 'unavailable'
+  | 'failed';
 
 const MAX_DURATION_MS = 60_000;
 const MIN_DURATION_MS = 700;
@@ -119,7 +126,8 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
-        callbacksRef.current.onError('permission');
+        // After "don't ask again" the system dialog never shows; only Settings can grant it.
+        callbacksRef.current.onError(permission.canAskAgain ? 'permission' : 'permissionBlocked');
         return;
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
@@ -215,6 +223,23 @@ export function useVoiceInput({ onTranscript, onError }: UseVoiceInputOptions) {
       void finish();
     }
   }, [finish, recorderState.durationMillis, status]);
+
+  // Tabs stay mounted (and frozen) when the user leaves the chat, so unmount cleanup alone would leave the mic live.
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        void cancel();
+      },
+      [cancel],
+    ),
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'background') void cancel();
+    });
+    return () => sub.remove();
+  }, [cancel]);
 
   useEffect(
     () => () => {
