@@ -38,6 +38,8 @@ import { getTextDirectionStyles } from './chatTextUtils';
 import { useTranslation } from '../../src/i18n';
 import { useAppFont } from '../../utils/fontSetup';
 import { useVoiceInput, type VoiceInputError, type VoiceQuotaUpdate } from '../../hooks/useVoiceInput';
+import { recordingCapMs } from '../../hooks/voiceRecordingCheck';
+import { formatVoiceTimeLeft, voiceExhaustedNotice } from './voiceQuotaNotice';
 import { GLASS_ACCENT } from '../navigation/glass';
 import { GLASS_ICON_IDLE } from '../navigation/GlassCapsuleNav';
 
@@ -133,16 +135,15 @@ function RoundIconButton({
   onPress,
   a11yLabel,
   a11yHint,
-  dimmed = false,
   badge,
+  testID,
   children,
 }: {
   onPress?: () => void;
   a11yLabel: string;
   a11yHint?: string;
-  /** Still pressable so the tap can explain why the action is unavailable. */
-  dimmed?: boolean;
-  badge?: number | null;
+  badge?: string | null;
+  testID?: string;
   children: React.ReactNode;
 }) {
   const press = usePressScale(0.86);
@@ -154,22 +155,43 @@ function RoundIconButton({
         onPressIn={press.onPressIn}
         onPressOut={press.onPressOut}
         hitSlop={6}
-        style={[styles.iconButton, styles.iconButtonGlass, dimmed && styles.iconButtonDimmed, press.style]}
+        style={[styles.iconButton, styles.iconButtonGlass, press.style]}
         accessibilityRole="button"
         accessibilityLabel={a11yLabel}
         accessibilityHint={a11yHint}
-        accessibilityState={{ disabled: dimmed }}
+        testID={testID}
       >
         {children}
       </AnimatedPressable>
-      {badge != null ? (
-        <View pointerEvents="none" style={[styles.badge, badge <= 0 && styles.badgeEmpty]}>
+      {badge ? (
+        <View pointerEvents="none" style={styles.badge}>
           <Text style={styles.badgeText} maxFontSizeMultiplier={1}>
             {badge}
           </Text>
         </View>
       ) : null}
     </View>
+  );
+}
+
+/** Takes the mic's place once today's voice time is used up; typing is unaffected. */
+function VoiceQuotaNotice({ message, isAr, fontFamily }: { message: string; isAr: boolean; fontFamily?: string }) {
+  return (
+    <Animated.View
+      entering={FadeIn.duration(200)}
+      exiting={FadeOut.duration(140)}
+      style={styles.voiceNotice}
+      accessibilityRole="text"
+      accessibilityLiveRegion="polite"
+      testID="voice-quota-notice"
+    >
+      <Text
+        style={[styles.voiceNoticeText, { fontFamily, writingDirection: isAr ? 'rtl' : 'ltr' }]}
+        maxFontSizeMultiplier={1.2}
+      >
+        {message}
+      </Text>
+    </Animated.View>
   );
 }
 
@@ -195,7 +217,10 @@ export interface ChatComposerProps {
   onInputFocus?: () => void;
   onStop?: () => void;
   onVoiceError?: (reason: VoiceInputError) => void;
-  /** Server-reported voice quota; null hides the mic counter (unknown or unlimited). */
+  /**
+   * Server-reported voice time; null = unknown or unlimited (mic shown, no counter).
+   * At 0 seconds left the mic is replaced by a short notice.
+   */
   voiceQuota?: VoiceQuotaUpdate | null;
   onVoiceQuota?: (quota: VoiceQuotaUpdate) => void;
   /** Android: the chat content view the glass frosts. */
@@ -252,14 +277,19 @@ export function ChatComposer({
     onQuota: (quota) => onVoiceQuota?.(quota),
     canStart: () => {
       if (messagesRemaining !== null && messagesRemaining <= 0) return 'messageQuota';
-      if (voiceQuota && voiceQuota.voiceRemaining <= 0) return 'voiceQuota';
+      if (voiceQuota && voiceQuota.remainingSeconds <= 0) return 'voiceQuota';
       return null;
     },
+    maxDurationMs: recordingCapMs(voiceQuota?.remainingSeconds),
   });
-  const micUnavailable =
-    (messagesRemaining !== null && messagesRemaining <= 0) ||
-    (voiceQuota !== null && voiceQuota.voiceRemaining <= 0);
+  const limitReached = messagesRemaining !== null && messagesRemaining <= 0;
+  const voiceExhausted = voiceQuota !== null && voiceQuota.remainingSeconds <= 0;
+  const showMic = !limitReached && !voiceExhausted;
   const voiceActive = voice.status !== 'idle';
+  const voiceNotice =
+    voiceExhausted && !limitReached && !voiceActive
+      ? voiceExhaustedNotice(voiceQuota?.resetAt, new Date(), isAr ? 'ar' : 'en', t.chat)
+      : null;
   const showSend = !voiceActive && (Boolean(value.trim()) || isLoading);
   const wasVoiceActive = useRef(false);
   const leavingVoice = wasVoiceActive.current && !voiceActive;
@@ -300,8 +330,6 @@ export function ChatComposer({
     focus.value = withTiming(0, { duration: 220 });
   };
 
-  const limitReached = messagesRemaining !== null && messagesRemaining <= 0;
-
   return (
     <View pointerEvents="box-none" style={[styles.dock, { paddingBottom: bottomInset }]}>
       {limitReached && resetTime ? (
@@ -335,6 +363,8 @@ export function ChatComposer({
             </Animated.View>
           ) : null}
 
+          {voiceNotice ? <VoiceQuotaNotice message={voiceNotice} isAr={isAr} fontFamily={fontMedium} /> : null}
+
           <View
             ref={rowRef}
             collapsable={false}
@@ -365,7 +395,13 @@ export function ChatComposer({
                   {voiceActive ? (
                     <View style={styles.barCollapsed} />
                   ) : (
-                    <View style={[styles.bar, isAr && styles.barRtl]}>
+                    <View
+                      style={[
+                        styles.bar,
+                        isAr && styles.barRtl,
+                        !showMic && (isAr ? styles.barNoActionRtl : styles.barNoAction),
+                      ]}
+                    >
                       <TextInput
                         ref={inputRef}
                         style={[styles.textInput, { fontFamily: fontMedium }, inputDirection]}
@@ -387,19 +423,24 @@ export function ChatComposer({
                         blurOnSubmit={false}
                         maxFontSizeMultiplier={1.2}
                       />
-                      <RoundIconButton
-                        onPress={voice.start}
-                        a11yLabel={t.chat.a11yMic}
-                        a11yHint={
-                          voiceQuota
-                            ? t.chat.voiceRemainingA11y.replace('{count}', String(voiceQuota.voiceRemaining))
-                            : undefined
-                        }
-                        dimmed={micUnavailable}
-                        badge={voiceQuota?.voiceRemaining}
-                      >
-                        <Mic size={18} color={GLASS_ICON_IDLE} strokeWidth={2} />
-                      </RoundIconButton>
+                      {showMic ? (
+                        <RoundIconButton
+                          onPress={voice.start}
+                          a11yLabel={t.chat.a11yMic}
+                          a11yHint={
+                            voiceQuota
+                              ? t.chat.voiceRemainingA11y.replace(
+                                  '{time}',
+                                  formatVoiceTimeLeft(voiceQuota.remainingSeconds),
+                                )
+                              : undefined
+                          }
+                          badge={voiceQuota ? formatVoiceTimeLeft(voiceQuota.remainingSeconds) : null}
+                          testID="chat-mic"
+                        >
+                          <Mic size={18} color={GLASS_ICON_IDLE} strokeWidth={2} />
+                        </RoundIconButton>
+                      ) : null}
                     </View>
                   )}
                 </LiquidWaterSurface>
@@ -500,6 +541,13 @@ const styles = StyleSheet.create({
     paddingLeft: BAR_PAD,
     paddingRight: 18,
   },
+  /** No mic: the field keeps the same inset on both sides instead of a gap where it was. */
+  barNoAction: {
+    paddingRight: 18,
+  },
+  barNoActionRtl: {
+    paddingLeft: 18,
+  },
   textInput: {
     flex: 1,
     minHeight: SLOT,
@@ -523,13 +571,10 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(210,190,255,0.3)',
   },
-  iconButtonDimmed: {
-    opacity: 0.4,
-  },
   badge: {
     position: 'absolute',
-    top: -3,
-    right: -3,
+    top: -5,
+    right: -8,
     minWidth: 16,
     height: 16,
     paddingHorizontal: 4,
@@ -540,14 +585,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.35)',
   },
-  badgeEmpty: {
-    backgroundColor: 'rgba(224,121,144,0.9)',
-  },
   badgeText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     lineHeight: 12,
+  },
+  voiceNotice: {
+    alignSelf: 'center',
+    maxWidth: '100%',
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: 'rgba(111,36,251,0.16)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(210,190,255,0.3)',
+  },
+  voiceNoticeText: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
   },
   sendButton: {
     width: BAR_HEIGHT,

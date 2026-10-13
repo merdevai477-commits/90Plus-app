@@ -14,30 +14,46 @@ export type VoiceInputError =
   | 'inProgress'
   | 'rateLimited'
   | 'voiceQuota'
+  | 'voiceQuotaShort'
   | 'messageQuota';
 
-export type VoiceQuotaUpdate = { voiceRemaining: number; voiceLimit: number };
+/** Server-reported voice-time allowance (whole seconds; `resetAt` is an ISO timestamp or null). */
+export type VoiceQuotaUpdate = {
+  remainingSeconds: number;
+  limitSeconds: number;
+  resetAt: string | null;
+};
 
 export type TranscribeResult =
   | { kind: 'text'; text: string; quota: VoiceQuotaUpdate | null }
   | { kind: 'error'; error: VoiceInputError; quota: VoiceQuotaUpdate | null };
 
-type TranscribeBody = {
-  text?: unknown;
-  code?: unknown;
-  voiceRemaining?: unknown;
-  voiceLimit?: unknown;
+type QuotaFields = {
+  voiceRemainingSeconds?: unknown;
+  voiceLimitSeconds?: unknown;
+  voiceResetAt?: unknown;
 };
 
-function readQuota(body: TranscribeBody): VoiceQuotaUpdate | null {
-  const { voiceRemaining, voiceLimit } = body;
-  if (typeof voiceRemaining !== 'number' || typeof voiceLimit !== 'number') return null;
-  return { voiceRemaining: Math.max(0, voiceRemaining), voiceLimit };
+type TranscribeBody = QuotaFields & {
+  text?: unknown;
+  code?: unknown;
+};
+
+/** Reads the voice allowance from a `/chat/transcribe` or `/chat/limit` body; null when absent. */
+export function readVoiceQuota(body: QuotaFields | null | undefined): VoiceQuotaUpdate | null {
+  if (!body) return null;
+  const { voiceRemainingSeconds, voiceLimitSeconds, voiceResetAt } = body;
+  if (typeof voiceRemainingSeconds !== 'number' || typeof voiceLimitSeconds !== 'number') return null;
+  return {
+    remainingSeconds: Math.max(0, Math.floor(voiceRemainingSeconds)),
+    limitSeconds: voiceLimitSeconds,
+    resetAt: typeof voiceResetAt === 'string' ? voiceResetAt : null,
+  };
 }
 
 export function mapTranscribeResponse(status: number, body: unknown): TranscribeResult {
   const data = (body && typeof body === 'object' ? body : {}) as TranscribeBody;
-  const quota = readQuota(data);
+  const quota = readVoiceQuota(data);
   const code = typeof data.code === 'string' ? data.code : '';
   const error = (e: VoiceInputError): TranscribeResult => ({ kind: 'error', error: e, quota });
 
@@ -50,9 +66,12 @@ export function mapTranscribeResponse(status: number, body: unknown): Transcribe
       return error('inProgress');
     case 413:
       return error('tooLong');
+    case 422:
+      return error(code === 'VOICE_AUDIO_TOO_SHORT' ? 'tooShort' : 'failed');
     case 429:
       if (code === 'MESSAGE_QUOTA_EXHAUSTED') return error('messageQuota');
       if (code === 'VOICE_QUOTA_EXHAUSTED') return error('voiceQuota');
+      if (code === 'VOICE_QUOTA_INSUFFICIENT') return error('voiceQuotaShort');
       return error('rateLimited');
     case 501:
       return error('unavailable');

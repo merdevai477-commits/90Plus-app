@@ -45,7 +45,10 @@ function jsonResponse(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
 
-function setup(extra: { canStart?: () => null | 'voiceQuota' } = {}) {
+const quotaBody = (remaining: number) => ({ voiceRemainingSeconds: remaining, voiceLimitSeconds: 150, voiceResetAt: null });
+const quotaUpdate = (remaining: number) => ({ remainingSeconds: remaining, limitSeconds: 150, resetAt: null });
+
+function setup(extra: { canStart?: () => null | 'voiceQuota'; maxDurationMs?: number } = {}) {
   const onTranscript = jest.fn();
   const onError = jest.fn();
   const onQuota = jest.fn();
@@ -141,7 +144,7 @@ describe('useVoiceInput', () => {
   });
 
   it('hitting the 30s cap stops and uploads what was captured', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { text: 'مين جاب الجول', voiceRemaining: 4, voiceLimit: 5 }));
+    fetchMock.mockResolvedValue(jsonResponse(200, { text: 'مين جاب الجول', ...quotaBody(120) }));
     const { result, rerender, onTranscript, onQuota } = setup();
     await startRecording(result);
 
@@ -155,15 +158,33 @@ describe('useVoiceInput', () => {
     expect(url).toBe('https://api.test/api/chat/transcribe');
     expect(init.headers['Idempotency-Key']).toMatch(/^voice-/);
     expect(onTranscript).toHaveBeenCalledWith('مين جاب الجول');
-    expect(onQuota).toHaveBeenCalledWith({ voiceRemaining: 4, voiceLimit: 5 });
+    expect(onQuota).toHaveBeenCalledWith(quotaUpdate(120));
     expect(result.current.status).toBe('idle');
+  });
+
+  it('with less voice time left than 30s, recording stops at the time left', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { text: 'ok', ...quotaBody(0) }));
+    const { result, rerender } = setup({ maxDurationMs: 12_000 });
+    await startRecording(result);
+
+    await act(async () => {
+      speak(rerender, [-40, -20, -15], 11_000);
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.status).toBe('recording');
+
+    await act(async () => {
+      speak(rerender, [-30], 12_000);
+    });
+    expect(mockRecorder.stop).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('retries a dropped connection once with the same idempotency key', async () => {
     jest.useFakeTimers();
     fetchMock
       .mockRejectedValueOnce(new TypeError('Network request failed'))
-      .mockResolvedValueOnce(jsonResponse(200, { text: 'hi', voiceRemaining: 3, voiceLimit: 5 }));
+      .mockResolvedValueOnce(jsonResponse(200, { text: 'hi', ...quotaBody(100) }));
     const { result, rerender, onTranscript } = setup();
     await startRecording(result);
     speak(rerender, [-40, -20, -25], 3000);
@@ -183,7 +204,7 @@ describe('useVoiceInput', () => {
   });
 
   it('a server quota rejection reports the reason and the fresh quota', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(429, { code: 'VOICE_QUOTA_EXHAUSTED', voiceRemaining: 0, voiceLimit: 5 }));
+    fetchMock.mockResolvedValue(jsonResponse(429, { code: 'VOICE_QUOTA_EXHAUSTED', ...quotaBody(0) }));
     const { result, rerender, onError, onQuota, onTranscript } = setup();
     await startRecording(result);
     speak(rerender, [-40, -20, -25], 3000);
@@ -193,7 +214,7 @@ describe('useVoiceInput', () => {
     });
 
     expect(onError).toHaveBeenCalledWith('voiceQuota');
-    expect(onQuota).toHaveBeenCalledWith({ voiceRemaining: 0, voiceLimit: 5 });
+    expect(onQuota).toHaveBeenCalledWith(quotaUpdate(0));
     expect(onTranscript).not.toHaveBeenCalled();
   });
 
@@ -216,7 +237,7 @@ describe('useVoiceInput', () => {
       await Promise.resolve();
     });
     unmount();
-    resolveFetch(jsonResponse(200, { text: 'late', voiceRemaining: 4, voiceLimit: 5 }));
+    resolveFetch(jsonResponse(200, { text: 'late', ...quotaBody(120) }));
     await finishing;
 
     expect(signal?.aborted).toBe(true);

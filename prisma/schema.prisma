@@ -2178,6 +2178,8 @@ model ChatVoiceOperation {
   status         String
   attempt        Int      @default(1)
   windowStart    DateTime
+  /// Voice time this operation charges, measured from the decoded audio. 0 on rows from before duration billing.
+  durationMs     Int      @default(0)
   transcript     String?
   failureCode    String?
   createdAt      DateTime @default(now())

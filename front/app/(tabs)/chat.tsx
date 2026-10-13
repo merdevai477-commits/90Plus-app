@@ -138,6 +138,8 @@ export default function ChatScreen() {
 
     applyVoiceQuota,
 
+    refreshLimit,
+
     resetTime,
 
     error,
@@ -250,9 +252,10 @@ export default function ChatScreen() {
     inProgress: tChat.voiceInProgress,
     rateLimited: tChat.voiceRateLimited,
     voiceQuota: tChat.voiceQuotaExhausted,
+    voiceQuotaShort: tChat.voiceQuotaShort,
     messageQuota: tChat.voiceMessageQuotaExhausted,
   };
-  const voiceInfoReasons: VoiceInputError[] = ['tooShort', 'silent', 'voiceQuota', 'inProgress'];
+  const voiceInfoReasons: VoiceInputError[] = ['tooShort', 'silent', 'voiceQuota', 'voiceQuotaShort', 'inProgress'];
 
   const handleVoiceError = (reason: VoiceInputError) => {
     if (reason === 'permissionBlocked') {
@@ -262,6 +265,12 @@ export default function ChatScreen() {
       ]);
       return;
     }
+    if (reason === 'voiceQuota') {
+      // The composer swaps the mic for its notice; re-read in case the rejection carried no quota.
+      void refreshLimit();
+      return;
+    }
+    if (reason === 'messageQuota') void refreshLimit();
     screen.setConnToast({
       message: voiceErrorMessages[reason],
       type: voiceInfoReasons.includes(reason) ? 'info' : 'error',

@@ -1,7 +1,7 @@
 /**
  * Real-Postgres check of the voice reservation lock. Skipped unless
  * VOICE_QUOTA_TEST_DATABASE_URL points at a disposable database (never prod)
- * whose schema already has chat_voice_usage / chat_voice_operations.
+ * whose schema already has chat_voice_usage / chat_voice_operations (with durationMs).
  */
 
 const TEST_DB = process.env.VOICE_QUOTA_TEST_DATABASE_URL;
@@ -19,19 +19,27 @@ jest.mock('../chat.service', () => ({ isChatUnlimitedUser: () => false }));
 
 import { prisma } from '../../lib/prisma';
 import {
-  commitVoiceUnit,
+  commitVoiceOperation,
   getVoiceQuota,
-  releaseVoiceUnit,
-  reserveVoiceUnit,
+  releaseVoiceOperation,
+  reserveVoiceDuration,
 } from '../chat-voice-quota.service';
 
 jest.setTimeout(60_000);
 
-describeDb('chat voice quota on Postgres', () => {
+async function reservedMs(userId: string): Promise<number> {
+  const agg = await prisma.chatVoiceOperation.aggregate({
+    where: { userId, status: { in: ['RESERVED', 'COMMITTED'] } },
+    _sum: { durationMs: true },
+  });
+  return agg._sum.durationMs ?? 0;
+}
+
+describeDb('chat voice-time allowance on Postgres', () => {
   const user = `itest_${Date.now()}`;
 
   beforeAll(() => {
-    process.env.VOICE_DAILY_LIMIT = '5';
+    process.env.VOICE_DAILY_SECONDS = '150';
   });
 
   afterAll(async () => {
@@ -40,45 +48,59 @@ describeDb('chat voice quota on Postgres', () => {
     await prisma.$disconnect();
   });
 
-  it('12 parallel reservations against a limit of 5 reserve exactly 5', async () => {
+  it('12 parallel 30s clips against 150s reserve exactly 5 (150s)', async () => {
     const results = await Promise.all(
-      Array.from({ length: 12 }, (_, i) => reserveVoiceUnit(user, `par-${i}`)),
+      Array.from({ length: 12 }, (_, i) => reserveVoiceDuration(user, `par-${i}`, 30_000)),
     );
     expect(results.filter((r) => r.kind === 'reserved')).toHaveLength(5);
     expect(results.filter((r) => r.kind === 'exhausted')).toHaveLength(7);
-    expect(await prisma.chatVoiceOperation.count({ where: { userId: user, status: 'RESERVED' } })).toBe(5);
+    expect(await reservedMs(user)).toBe(150_000);
   });
 
-  it('a flood that overruns the lock wait budget fails closed, never over the limit', async () => {
+  it('parallel clips of uneven length never reserve more than the allowance', async () => {
+    const mixedUser = `${user}_mixed`;
+    const lengths = [25_000, 18_000, 30_000, 12_000, 27_000, 9_000, 30_000, 21_000, 16_000, 30_000];
+    const results = await Promise.all(
+      lengths.map((ms, i) => reserveVoiceDuration(mixedUser, `mix-${i}`, ms)),
+    );
+    const total = await reservedMs(mixedUser);
+    expect(total).toBeLessThanOrEqual(150_000);
+    const charged = results.reduce((s, r) => s + (r.kind === 'reserved' ? r.chargedMs : 0), 0);
+    expect(charged).toBe(total);
+    expect(results.some((r) => r.kind !== 'reserved')).toBe(true);
+  });
+
+  it('a flood that overruns the lock wait budget fails closed, never over the allowance', async () => {
     const floodUser = `${user}_flood`;
     const settled = await Promise.allSettled(
-      Array.from({ length: 40 }, (_, i) => reserveVoiceUnit(floodUser, `flood-${i}`)),
+      Array.from({ length: 40 }, (_, i) => reserveVoiceDuration(floodUser, `flood-${i}`, 30_000)),
     );
     const reserved = settled.filter((s) => s.status === 'fulfilled' && s.value.kind === 'reserved');
     expect(reserved.length).toBeLessThanOrEqual(5);
-    expect(await prisma.chatVoiceOperation.count({ where: { userId: floodUser } })).toBe(reserved.length);
+    expect(await reservedMs(floodUser)).toBe(reserved.length * 30_000);
   });
 
-  it('parallel requests with one key create one logical operation', async () => {
+  it('parallel requests with one key create one logical charge', async () => {
     const sameKeyUser = `${user}_key`;
     const results = await Promise.all(
-      Array.from({ length: 8 }, () => reserveVoiceUnit(sameKeyUser, 'same-key')),
+      Array.from({ length: 8 }, () => reserveVoiceDuration(sameKeyUser, 'same-key', 20_000)),
     );
     expect(results.filter((r) => r.kind === 'reserved')).toHaveLength(1);
     expect(results.filter((r) => r.kind === 'in_progress')).toHaveLength(7);
     expect(await prisma.chatVoiceOperation.count({ where: { userId: sameKeyUser } })).toBe(1);
+    expect(await reservedMs(sameKeyUser)).toBe(20_000);
   });
 
   it('commit and release race on one reservation: exactly one wins', async () => {
     const raceUser = `${user}_race`;
-    const r = await reserveVoiceUnit(raceUser, 'race-key');
+    const r = await reserveVoiceDuration(raceUser, 'race-key', 10_000);
     if (r.kind !== 'reserved') throw new Error('expected a reservation');
     const [committed, released] = await Promise.all([
-      commitVoiceUnit(r.operationId, r.attempt, 'text'),
-      releaseVoiceUnit(r.operationId, r.attempt, 'provider_failed'),
+      commitVoiceOperation(r.operationId, r.attempt, 'text'),
+      releaseVoiceOperation(r.operationId, r.attempt, 'provider_failed'),
     ]);
     expect(Number(committed) + Number(released)).toBe(1);
     const quota = await getVoiceQuota(raceUser);
-    expect(quota.remaining).toBe(committed ? 4 : 5);
+    expect(quota.remainingMs).toBe(committed ? 140_000 : 150_000);
   });
 });

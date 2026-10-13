@@ -21,7 +21,7 @@ import { fetchWithClerkAuth, getClerkBearerToken } from '../utils/clerkAuthToken
 import { setChatSessionActive } from '../utils/chatSessionState';
 import { typingOrbHoldUntil } from '../utils/chatTypingHold';
 import { useLanguageStore } from '../src/i18n/store';
-import type { VoiceQuotaUpdate } from './voiceTranscribeResponse';
+import { readVoiceQuota, type VoiceQuotaUpdate } from './voiceTranscribeResponse';
 import {
   decodeChatNavMarker,
   inferChatNavLinksFromQuestion,
@@ -491,17 +491,14 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
           limit?: number;
           resetAt?: string;
           unlimited?: boolean;
-          voiceRemaining?: number;
-          voiceLimit?: number;
+          voiceRemainingSeconds?: number;
+          voiceLimitSeconds?: number;
+          voiceResetAt?: string | null;
         };
         const unlimited = data.unlimited === true;
         chatUnlimitedRef.current = unlimited;
         setMessagesRemaining(unlimited ? null : data.remaining);
-        setVoiceQuota(
-          !unlimited && typeof data.voiceRemaining === 'number' && typeof data.voiceLimit === 'number'
-            ? { voiceRemaining: data.voiceRemaining, voiceLimit: data.voiceLimit }
-            : null,
-        );
+        setVoiceQuota(unlimited ? null : readVoiceQuota(data));
         setDailyMessageLimit(
           typeof data.limit === 'number' && data.limit > 0
             ? data.limit
@@ -1481,6 +1478,19 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     if (!chatUnlimitedRef.current) setVoiceQuota(quota);
   }, []);
 
+  // Used-up voice time comes back when the window rolls over; ask the server then
+  // (one timer, only while used up) rather than trusting the device clock.
+  const voiceResetAt = voiceQuota && voiceQuota.remainingSeconds <= 0 ? voiceQuota.resetAt : null;
+  useEffect(() => {
+    if (!voiceResetAt) return;
+    const resetMs = new Date(voiceResetAt).getTime();
+    if (!Number.isFinite(resetMs)) return;
+    const timer = setTimeout(() => {
+      fetchLimit().catch(() => {});
+    }, Math.min(Math.max(0, resetMs - Date.now()) + 2_000, 2 ** 31 - 1));
+    return () => clearTimeout(timer);
+  }, [voiceResetAt, fetchLimit]);
+
   // ─── Return ───────────────────────────────────────────────────────────────
 
   return {
@@ -1496,6 +1506,8 @@ export function useAIChatNative(options: UseAIChatOptions = {}) {
     dailyMessageLimit,
     voiceQuota,
     applyVoiceQuota,
+    /** Re-reads message + voice quota from the server (e.g. after a quota rejection). */
+    refreshLimit: fetchLimit,
     resetTime,
     error,
     /** ID of the AI message that is currently streaming (or null). */

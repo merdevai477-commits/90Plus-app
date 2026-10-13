@@ -3,6 +3,7 @@ import {
   emptyMeterStats,
   evaluateRecording,
   makeVoiceIdempotencyKey,
+  recordingCapMs,
   type MeterStats,
 } from '../voiceRecordingCheck';
 
@@ -34,6 +35,23 @@ describe('evaluateRecording', () => {
 
   it('skips the silence check when the meter is stuck on one value', () => {
     expect(evaluateRecording(4000, meter([-160, -160, -160, -160]))).toBe('ok');
+  });
+});
+
+describe('recordingCapMs', () => {
+  it('is 30s while plenty of voice time is left', () => {
+    expect(recordingCapMs(150)).toBe(30_000);
+    expect(recordingCapMs(30)).toBe(30_000);
+  });
+
+  it('shrinks to the whole seconds left', () => {
+    expect(recordingCapMs(12)).toBe(12_000);
+    expect(recordingCapMs(7.9)).toBe(7_000);
+  });
+
+  it('falls back to 30s when the allowance is unknown', () => {
+    expect(recordingCapMs(null)).toBe(30_000);
+    expect(recordingCapMs(undefined)).toBe(30_000);
   });
 });
 

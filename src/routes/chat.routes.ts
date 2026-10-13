@@ -92,12 +92,14 @@ import {
     transcribeAudioWithGemini,
 } from '../services/gemini-text.client';
 import {
-    commitVoiceUnit,
+    commitVoiceOperation,
     getVoiceQuota,
     getVoiceQuotaConfig,
     markVoiceTimedOut,
-    releaseVoiceUnit,
-    reserveVoiceUnit,
+    MIN_VOICE_RECORDING_MS,
+    releaseVoiceOperation,
+    reserveVoiceDuration,
+    voiceQuotaResponseFields,
     type ReserveResult,
     type VoiceQuota,
 } from '../services/chat-voice-quota.service';
@@ -1284,15 +1286,19 @@ router.post('/chat/stream', async (req: Request, res: Response): Promise<void> =
 // ─── POST /chat/transcribe (voice → text) ────────────────────────────────────
 //
 // Accepts an audio file (multipart/form-data, field name "audio", optional
-// "language" = ar|en) and returns `{ text, voiceRemaining, voiceLimit, voiceResetAt }`.
+// "language" = ar|en) and returns
+// `{ text, voiceRemainingSeconds, voiceLimitSeconds, voiceResetAt }`.
 // Providers are tried in order: OpenRouter, Gemini direct, then an
 // OpenAI-compatible Whisper endpoint — each only when its key is set.
 //
 // Order matters: cheap rejections (rate limit, quotas) run before the upload is
-// buffered, the audio is validated before a quota unit is reserved, and a
-// provider is only called while holding a reservation (see chat-voice-quota.service).
+// buffered, the audio is validated before any voice time is reserved, and a
+// provider is only called while holding a reservation for the clip's measured
+// duration (see chat-voice-quota.service).
 // Errors carry a stable `code`; older clients only look at the HTTP status.
 const MAX_VOICE_UPLOAD_BYTES = 3 * 1024 * 1024;
+/** The app requires 1s by its own clock; the decoded clip can be a frame or two shorter. */
+const SERVER_MIN_VOICE_MS = MIN_VOICE_RECORDING_MS - 250;
 
 const upload = multer({
     storage: multer.memoryStorage(),
@@ -1303,7 +1309,9 @@ type VoiceErrorCode =
     | 'AUTH_REQUIRED'
     | 'MESSAGE_QUOTA_EXHAUSTED'
     | 'VOICE_QUOTA_EXHAUSTED'
+    | 'VOICE_QUOTA_INSUFFICIENT'
     | 'VOICE_AUDIO_INVALID'
+    | 'VOICE_AUDIO_TOO_SHORT'
     | 'VOICE_AUDIO_TOO_LONG'
     | 'VOICE_AUDIO_TOO_LARGE'
     | 'VOICE_EMPTY'
@@ -1314,12 +1322,7 @@ type VoiceErrorCode =
     | 'TEMPORARY_FAILURE';
 
 function voiceQuotaFields(quota: VoiceQuota | undefined) {
-    if (!quota) return {};
-    return {
-        voiceRemaining: quota.remaining,
-        voiceLimit: quota.limit,
-        voiceResetAt: quota.resetAt ? quota.resetAt.toISOString() : null,
-    };
+    return quota ? voiceQuotaResponseFields(quota) : {};
 }
 
 function sendVoiceError(
@@ -1437,7 +1440,7 @@ async function voicePrecheck(req: Request, res: Response, next: () => void): Pro
                 return;
             }
         }
-        if (!voiceQuota.unlimited && voiceQuota.remaining <= 0) {
+        if (voiceQuota.exhausted) {
             sendVoiceError(res, 429, 'VOICE_QUOTA_EXHAUSTED', 'Daily voice limit reached', voiceQuotaFields(voiceQuota));
             return;
         }
@@ -1494,6 +1497,11 @@ router.post(
             });
             return;
         }
+        const durationMs = Math.round(audio.durationSec * 1000);
+        if (durationMs < SERVER_MIN_VOICE_MS) {
+            sendVoiceError(res, 422, 'VOICE_AUDIO_TOO_SHORT', 'Audio is too short');
+            return;
+        }
 
         const language = req.body?.language === 'en' ? 'en' : 'ar';
         const idempotencyKey = resolveIdempotencyKey(req);
@@ -1501,7 +1509,7 @@ router.post(
 
         let reservation: ReserveResult;
         try {
-            reservation = await reserveVoiceUnit(userId, idempotencyKey);
+            reservation = await reserveVoiceDuration(userId, idempotencyKey, durationMs);
         } catch (err: any) {
             logger.error('[chat] voice reservation failed:', err?.message ?? err);
             sendVoiceError(res, 503, 'TEMPORARY_FAILURE', 'Temporarily unavailable');
@@ -1522,6 +1530,13 @@ router.post(
                 voiceQuotaFields(reservation.quota));
             return;
         }
+        if (reservation.kind === 'insufficient') {
+            sendVoiceError(res, 429, 'VOICE_QUOTA_INSUFFICIENT', 'Not enough voice time left for this clip', {
+                ...voiceQuotaFields(reservation.quota),
+                durationSeconds: Math.ceil(durationMs / 1000),
+            });
+            return;
+        }
 
         const { operationId, attempt } = reservation;
         const outcome = await runTranscriptionProviders(req.file.buffer, audio.mimeType, language);
@@ -1530,7 +1545,7 @@ router.post(
             if (outcome.kind === 'text' && outcome.text.trim()) {
                 const text = outcome.text.trim();
                 try {
-                    if (!(await commitVoiceUnit(operationId, attempt, text))) {
+                    if (!(await commitVoiceOperation(operationId, attempt, text))) {
                         logger.warn(`[chat] voice op ${operationId} was already settled before commit`);
                     }
                 } catch (err: any) {
@@ -1542,7 +1557,7 @@ router.post(
             }
 
             if (outcome.kind === 'text') {
-                await releaseVoiceUnit(operationId, attempt, 'empty_transcript');
+                await releaseVoiceOperation(operationId, attempt, 'empty_transcript');
                 // 200 + empty text keeps older clients on their "no speech" message.
                 res.json({ text: '', code: 'VOICE_EMPTY', ...voiceQuotaFields(await freshQuota()) });
                 return;
@@ -1555,7 +1570,7 @@ router.post(
                 return;
             }
 
-            await releaseVoiceUnit(operationId, attempt, 'provider_failed');
+            await releaseVoiceOperation(operationId, attempt, 'provider_failed');
             sendVoiceError(res, 502, 'VOICE_PROVIDER_FAILED', 'Transcription failed',
                 voiceQuotaFields(await freshQuota()));
         } catch (err: any) {

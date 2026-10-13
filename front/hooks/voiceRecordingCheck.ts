@@ -42,6 +42,15 @@ export function addMeterSample(stats: MeterStats, db: number | undefined): Meter
   };
 }
 
+/**
+ * Where a recording auto-stops: the per-clip cap, or the voice time left
+ * today when that is shorter (null = unknown/unlimited).
+ */
+export function recordingCapMs(remainingSeconds: number | null | undefined): number {
+  if (typeof remainingSeconds !== 'number' || !Number.isFinite(remainingSeconds)) return MAX_VOICE_DURATION_MS;
+  return Math.max(MIN_VOICE_DURATION_MS, Math.min(MAX_VOICE_DURATION_MS, Math.floor(remainingSeconds) * 1000));
+}
+
 export type RecordingVerdict = 'ok' | 'tooShort' | 'silent';
 
 export function evaluateRecording(durationMs: number, meter: MeterStats): RecordingVerdict {

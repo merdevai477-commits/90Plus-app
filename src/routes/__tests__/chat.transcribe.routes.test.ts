@@ -1,6 +1,7 @@
-/**
+﻿/**
  * POST /api/chat/transcribe and GET /api/chat/limit over real HTTP, with the
  * speech providers and quota storage mocked (no provider credits are spent).
+ * The response-field mapping is the real one from chat-voice-quota.service.
  */
 
 import type { AddressInfo } from 'net';
@@ -31,11 +32,12 @@ jest.mock('../../services/chat.service', () => ({
   migrateLegacyFileStore: jest.fn(async () => undefined),
 }));
 jest.mock('../../services/chat-voice-quota.service', () => ({
+  ...jest.requireActual('../../services/chat-voice-quota.service'),
   getVoiceQuota: jest.fn(),
-  getVoiceQuotaConfig: () => ({ dailyLimit: 5, maxSeconds: 30, serverMaxSeconds: 35, reservationTtlMs: 120000 }),
-  reserveVoiceUnit: jest.fn(),
-  commitVoiceUnit: jest.fn(async () => true),
-  releaseVoiceUnit: jest.fn(async () => true),
+  getVoiceQuotaConfig: () => ({ dailyMs: 150_000, maxSeconds: 30, serverMaxSeconds: 35, reservationTtlMs: 120000 }),
+  reserveVoiceDuration: jest.fn(),
+  commitVoiceOperation: jest.fn(async () => true),
+  releaseVoiceOperation: jest.fn(async () => true),
   markVoiceTimedOut: jest.fn(async () => true),
 }));
 jest.mock('../../services/openrouter-transcribe.client', () => ({
@@ -75,7 +77,7 @@ import * as openrouter from '../../services/openrouter-transcribe.client';
 const mocked = <T extends (...args: any[]) => any>(fn: T) => fn as unknown as jest.Mock;
 
 function wav(seconds: number): Buffer {
-  const dataBytes = Math.round(seconds * 16000 * 2);
+  const dataBytes = Math.round(seconds * 16000) * 2;
   const buf = Buffer.alloc(44 + dataBytes);
   buf.write('RIFF', 0, 'ascii');
   buf.writeUInt32LE(36 + dataBytes, 4);
@@ -93,10 +95,12 @@ function wav(seconds: number): Buffer {
   return buf;
 }
 
-const QUOTA = (remaining: number) => ({
-  limit: 5,
-  remaining,
-  used: 5 - remaining,
+/** Quota as the service reports it: whole seconds left of a 150s allowance. */
+const QUOTA = (remainingSeconds: number) => ({
+  limitMs: 150_000,
+  usedMs: 150_000 - remainingSeconds * 1000,
+  remainingMs: remainingSeconds * 1000,
+  exhausted: remainingSeconds < 1,
   unlimited: false,
   resetAt: new Date('2026-10-14T10:00:00.000Z'),
 });
@@ -119,13 +123,14 @@ beforeEach(() => {
   mocked(chatService.getRemaining).mockResolvedValue(7);
   mocked(chatService.isChatUnlimitedUser).mockReturnValue(false);
   mocked(openrouter.isOpenRouterTranscribeConfigured).mockReturnValue(true);
-  mocked(quota.getVoiceQuota).mockResolvedValue(QUOTA(3));
-  mocked(quota.reserveVoiceUnit).mockResolvedValue({
+  mocked(quota.getVoiceQuota).mockResolvedValue(QUOTA(150));
+  mocked(quota.reserveVoiceDuration).mockImplementation(async (_u: string, _k: string, ms: number) => ({
     kind: 'reserved',
     operationId: 'op-1',
     attempt: 1,
-    quota: QUOTA(2),
-  });
+    chargedMs: ms,
+    quota: QUOTA(150 - ms / 1000),
+  }));
 });
 
 async function transcribe(audio: Buffer | null, headers: Record<string, string> = {}) {
@@ -141,39 +146,64 @@ async function transcribe(audio: Buffer | null, headers: Record<string, string> 
 }
 
 describe('POST /chat/transcribe', () => {
-  it('returns the transcript, commits one unit and never touches the message quota', async () => {
+  it('reserves the measured duration, commits it and never touches the message quota', async () => {
     mocked(openrouter.transcribeAudioWithOpenRouter).mockResolvedValue({ text: ' مرحبا ', model: 'm' });
-    const { status, body } = await transcribe(wav(3), { 'Idempotency-Key': 'voice-abc12345' });
+    const { status, body } = await transcribe(wav(10), { 'Idempotency-Key': 'voice-abc12345' });
 
     expect(status).toBe(200);
-    expect(body).toMatchObject({ text: 'مرحبا', voiceRemaining: 2, voiceLimit: 5 });
-    expect(quota.reserveVoiceUnit).toHaveBeenCalledWith('user_1', 'voice-abc12345');
-    expect(quota.commitVoiceUnit).toHaveBeenCalledWith('op-1', 1, 'مرحبا');
-    expect(quota.releaseVoiceUnit).not.toHaveBeenCalled();
+    expect(body).toEqual({
+      text: 'مرحبا',
+      voiceRemainingSeconds: 140,
+      voiceLimitSeconds: 150,
+      voiceResetAt: '2026-10-14T10:00:00.000Z',
+    });
+    expect(quota.reserveVoiceDuration).toHaveBeenCalledWith('user_1', 'voice-abc12345', 10_000);
+    expect(quota.commitVoiceOperation).toHaveBeenCalledWith('op-1', 1, 'مرحبا');
+    expect(quota.releaseVoiceOperation).not.toHaveBeenCalled();
     expect(chatService.incrementLimit).not.toHaveBeenCalled();
     expect(openrouter.transcribeAudioWithOpenRouter).toHaveBeenCalledWith(
       expect.objectContaining({ mimeType: 'audio/wav', language: 'ar' }),
     );
   });
 
-  it('an empty transcript releases the unit and keeps the legacy 200 + empty text contract', async () => {
+  it('a 30s clip reserves 30s', async () => {
+    mocked(openrouter.transcribeAudioWithOpenRouter).mockResolvedValue({ text: 'x', model: 'm' });
+    const { body } = await transcribe(wav(30));
+    expect(mocked(quota.reserveVoiceDuration).mock.calls[0][2]).toBe(30_000);
+    expect(body.voiceRemainingSeconds).toBe(120);
+  });
+
+  it('the charge comes from the decoded audio, not from anything the client claims', async () => {
+    mocked(openrouter.transcribeAudioWithOpenRouter).mockResolvedValue({ text: 'x', model: 'm' });
+    const form = new FormData();
+    form.append('audio', new Blob([new Uint8Array(wav(12))], { type: 'audio/wav' }), 'voice.wav');
+    form.append('durationMs', '1000');
+    await fetch(`${baseUrl}/chat/transcribe`, {
+      method: 'POST',
+      headers: { 'x-test-user': 'user_1', 'x-voice-duration': '1' },
+      body: form,
+    });
+    expect(mocked(quota.reserveVoiceDuration).mock.calls[0][2]).toBe(12_000);
+  });
+
+  it('an empty transcript releases the reservation and keeps the 200 + empty text contract', async () => {
     mocked(openrouter.transcribeAudioWithOpenRouter).mockResolvedValue({ text: '', model: 'm' });
     const { status, body } = await transcribe(wav(3));
 
     expect(status).toBe(200);
-    expect(body).toMatchObject({ text: '', code: 'VOICE_EMPTY', voiceRemaining: 3 });
-    expect(quota.releaseVoiceUnit).toHaveBeenCalledWith('op-1', 1, 'empty_transcript');
-    expect(quota.commitVoiceUnit).not.toHaveBeenCalled();
+    expect(body).toMatchObject({ text: '', code: 'VOICE_EMPTY', voiceRemainingSeconds: 150 });
+    expect(quota.releaseVoiceOperation).toHaveBeenCalledWith('op-1', 1, 'empty_transcript');
+    expect(quota.commitVoiceOperation).not.toHaveBeenCalled();
   });
 
-  it('a provider failure releases the unit', async () => {
+  it('a provider failure releases the reservation', async () => {
     mocked(openrouter.transcribeAudioWithOpenRouter).mockRejectedValue(new Error('OpenRouter HTTP 500'));
     const { status, body } = await transcribe(wav(3));
 
     expect(status).toBe(502);
     expect(body.code).toBe('VOICE_PROVIDER_FAILED');
-    expect(quota.releaseVoiceUnit).toHaveBeenCalledWith('op-1', 1, 'provider_failed');
-    expect(quota.commitVoiceUnit).not.toHaveBeenCalled();
+    expect(quota.releaseVoiceOperation).toHaveBeenCalledWith('op-1', 1, 'provider_failed');
+    expect(quota.commitVoiceOperation).not.toHaveBeenCalled();
   });
 
   it('a provider timeout is recorded as ambiguous and not retried elsewhere', async () => {
@@ -184,26 +214,46 @@ describe('POST /chat/transcribe', () => {
     expect(status).toBe(504);
     expect(body.code).toBe('VOICE_PROVIDER_TIMEOUT');
     expect(quota.markVoiceTimedOut).toHaveBeenCalledWith('op-1', 1);
-    expect(quota.releaseVoiceUnit).not.toHaveBeenCalled();
+    expect(quota.releaseVoiceOperation).not.toHaveBeenCalled();
     expect(openrouter.transcribeAudioWithOpenRouter).toHaveBeenCalledTimes(1);
   });
 
-  it('zero voice quota never reaches the provider', async () => {
+  it('a used-up allowance never reaches the provider and reports 0 seconds left', async () => {
     mocked(quota.getVoiceQuota).mockResolvedValue(QUOTA(0));
     const { status, body } = await transcribe(wav(3));
 
     expect(status).toBe(429);
-    expect(body).toMatchObject({ code: 'VOICE_QUOTA_EXHAUSTED', voiceRemaining: 0, voiceLimit: 5 });
-    expect(quota.reserveVoiceUnit).not.toHaveBeenCalled();
+    expect(body).toEqual({
+      error: 'Daily voice limit reached',
+      code: 'VOICE_QUOTA_EXHAUSTED',
+      voiceRemainingSeconds: 0,
+      voiceLimitSeconds: 150,
+      voiceResetAt: '2026-10-14T10:00:00.000Z',
+    });
+    expect(quota.reserveVoiceDuration).not.toHaveBeenCalled();
     expect(openrouter.transcribeAudioWithOpenRouter).not.toHaveBeenCalled();
   });
 
   it('losing the reservation race never reaches the provider', async () => {
-    mocked(quota.reserveVoiceUnit).mockResolvedValue({ kind: 'exhausted', quota: QUOTA(0) });
+    mocked(quota.reserveVoiceDuration).mockResolvedValue({ kind: 'exhausted', quota: QUOTA(0) });
     const { status, body } = await transcribe(wav(3));
 
     expect(status).toBe(429);
-    expect(body.code).toBe('VOICE_QUOTA_EXHAUSTED');
+    expect(body).toMatchObject({ code: 'VOICE_QUOTA_EXHAUSTED', voiceRemainingSeconds: 0 });
+    expect(openrouter.transcribeAudioWithOpenRouter).not.toHaveBeenCalled();
+  });
+
+  it('a clip longer than the time left is refused with the time that is left', async () => {
+    mocked(quota.getVoiceQuota).mockResolvedValue(QUOTA(10));
+    mocked(quota.reserveVoiceDuration).mockResolvedValue({ kind: 'insufficient', quota: QUOTA(10) });
+    const { status, body } = await transcribe(wav(25));
+
+    expect(status).toBe(429);
+    expect(body).toMatchObject({
+      code: 'VOICE_QUOTA_INSUFFICIENT',
+      voiceRemainingSeconds: 10,
+      durationSeconds: 25,
+    });
     expect(openrouter.transcribeAudioWithOpenRouter).not.toHaveBeenCalled();
   });
 
@@ -213,7 +263,7 @@ describe('POST /chat/transcribe', () => {
 
     expect(status).toBe(429);
     expect(body.code).toBe('MESSAGE_QUOTA_EXHAUSTED');
-    expect(quota.reserveVoiceUnit).not.toHaveBeenCalled();
+    expect(quota.reserveVoiceDuration).not.toHaveBeenCalled();
     expect(openrouter.transcribeAudioWithOpenRouter).not.toHaveBeenCalled();
   });
 
@@ -222,7 +272,15 @@ describe('POST /chat/transcribe', () => {
 
     expect(status).toBe(413);
     expect(body).toMatchObject({ code: 'VOICE_AUDIO_TOO_LONG', maxSeconds: 35 });
-    expect(quota.reserveVoiceUnit).not.toHaveBeenCalled();
+    expect(quota.reserveVoiceDuration).not.toHaveBeenCalled();
+  });
+
+  it('a clip under the minimum is refused before reserving', async () => {
+    const { status, body } = await transcribe(wav(0.5));
+
+    expect(status).toBe(422);
+    expect(body.code).toBe('VOICE_AUDIO_TOO_SHORT');
+    expect(quota.reserveVoiceDuration).not.toHaveBeenCalled();
   });
 
   it('non-audio bytes are refused before reserving, whatever the filename claims', async () => {
@@ -230,7 +288,7 @@ describe('POST /chat/transcribe', () => {
 
     expect(status).toBe(415);
     expect(body.code).toBe('VOICE_AUDIO_INVALID');
-    expect(quota.reserveVoiceUnit).not.toHaveBeenCalled();
+    expect(quota.reserveVoiceDuration).not.toHaveBeenCalled();
   });
 
   it('a missing file is a 400 with a code', async () => {
@@ -240,16 +298,17 @@ describe('POST /chat/transcribe', () => {
   });
 
   it('a replayed idempotency key returns the stored transcript without calling the provider', async () => {
-    mocked(quota.reserveVoiceUnit).mockResolvedValue({ kind: 'cached', transcript: 'نص محفوظ', quota: QUOTA(2) });
-    const { status, body } = await transcribe(wav(3), { 'Idempotency-Key': 'voice-replay123' });
+    mocked(quota.reserveVoiceDuration).mockResolvedValue({ kind: 'cached', transcript: 'نص محفوظ', quota: QUOTA(140) });
+    const { status, body } = await transcribe(wav(10), { 'Idempotency-Key': 'voice-replay123' });
 
     expect(status).toBe(200);
-    expect(body).toMatchObject({ text: 'نص محفوظ', voiceRemaining: 2 });
+    expect(body).toMatchObject({ text: 'نص محفوظ', voiceRemainingSeconds: 140 });
     expect(openrouter.transcribeAudioWithOpenRouter).not.toHaveBeenCalled();
+    expect(quota.commitVoiceOperation).not.toHaveBeenCalled();
   });
 
   it('a key that is still in flight gets 409', async () => {
-    mocked(quota.reserveVoiceUnit).mockResolvedValue({ kind: 'in_progress', quota: QUOTA(2) });
+    mocked(quota.reserveVoiceDuration).mockResolvedValue({ kind: 'in_progress', quota: QUOTA(140) });
     const { status, body } = await transcribe(wav(3), { 'Idempotency-Key': 'voice-inflight1' });
     expect(status).toBe(409);
     expect(body.code).toBe('VOICE_IN_PROGRESS');
@@ -261,7 +320,7 @@ describe('POST /chat/transcribe', () => {
 
     expect(status).toBe(200);
     expect(body.text).toBe('hi');
-    expect(mocked(quota.reserveVoiceUnit).mock.calls[0][1]).toMatch(/^srv-/);
+    expect(mocked(quota.reserveVoiceDuration).mock.calls[0][1]).toMatch(/^srv-/);
   });
 
   it('keeps 501 when no provider is configured', async () => {
@@ -284,12 +343,13 @@ describe('POST /chat/transcribe', () => {
     form.append('audio', new Blob([new Uint8Array(wav(1))]), 'voice.wav');
     const res = await fetch(`${baseUrl}/chat/transcribe`, { method: 'POST', body: form });
     expect(res.status).toBe(401);
-    expect(quota.reserveVoiceUnit).not.toHaveBeenCalled();
+    expect(quota.reserveVoiceDuration).not.toHaveBeenCalled();
   });
 });
 
 describe('GET /chat/limit', () => {
-  it('adds voice fields without changing the existing ones', async () => {
+  it('adds the voice allowance in seconds without changing the message fields', async () => {
+    mocked(quota.getVoiceQuota).mockResolvedValue(QUOTA(95));
     const res = await fetch(`${baseUrl}/chat/limit`, { headers: { 'x-test-user': 'user_1' } });
     const body = (await res.json()) as any;
 
@@ -299,11 +359,12 @@ describe('GET /chat/limit', () => {
       used: 3,
       limit: 10,
       unlimited: false,
-      voiceRemaining: 3,
-      voiceLimit: 5,
+      voiceRemainingSeconds: 95,
+      voiceLimitSeconds: 150,
       voiceResetAt: '2026-10-14T10:00:00.000Z',
     });
     expect(body.resetAt).toBeDefined();
+    expect(body.voiceRemaining).toBeUndefined();
   });
 
   it('still answers when the voice quota lookup fails', async () => {
@@ -313,6 +374,6 @@ describe('GET /chat/limit', () => {
 
     expect(res.status).toBe(200);
     expect(body.remaining).toBe(7);
-    expect(body.voiceRemaining).toBeUndefined();
+    expect(body.voiceRemainingSeconds).toBeUndefined();
   });
 });

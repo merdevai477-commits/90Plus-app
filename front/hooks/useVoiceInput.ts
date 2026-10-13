@@ -90,9 +90,11 @@ type UseVoiceInputOptions = {
   onQuota?: (quota: VoiceQuotaUpdate) => void;
   /** Return a reason to refuse recording (e.g. a quota the server already reported as used up). */
   canStart?: () => VoiceInputError | null;
+  /** Auto-stop point for the next recording; read when recording starts. */
+  maxDurationMs?: number;
 };
 
-export function useVoiceInput({ onTranscript, onError, onQuota, canStart }: UseVoiceInputOptions) {
+export function useVoiceInput({ onTranscript, onError, onQuota, canStart, maxDurationMs }: UseVoiceInputOptions) {
   const { getToken } = useAuth();
   const recorder = useAudioRecorder(VOICE_RECORDING);
   const recorderState = useAudioRecorderState(recorder, POLL_MS);
@@ -100,8 +102,10 @@ export function useVoiceInput({ onTranscript, onError, onQuota, canStart }: UseV
   const [levels, setLevels] = useState<number[]>(() => Array(LEVEL_SAMPLES).fill(0));
 
   const statusRef = useRef<VoiceInputStatus>('idle');
-  const callbacksRef = useRef({ onTranscript, onError, onQuota, canStart });
-  callbacksRef.current = { onTranscript, onError, onQuota, canStart };
+  const callbacksRef = useRef({ onTranscript, onError, onQuota, canStart, maxDurationMs });
+  callbacksRef.current = { onTranscript, onError, onQuota, canStart, maxDurationMs };
+  /** Fixed for the whole recording, so a quota update mid-recording can't move the stop point. */
+  const capRef = useRef(MAX_VOICE_DURATION_MS);
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
   const meterRef = useRef<MeterStats>(emptyMeterStats());
@@ -149,6 +153,10 @@ export function useVoiceInput({ onTranscript, onError, onQuota, canStart }: UseV
         releaseAudioMode();
         return;
       }
+      capRef.current = Math.min(
+        MAX_VOICE_DURATION_MS,
+        callbacksRef.current.maxDurationMs ?? MAX_VOICE_DURATION_MS,
+      );
       recorder.record();
       meterRef.current = emptyMeterStats();
       setLevels(Array(LEVEL_SAMPLES).fill(0));
@@ -266,7 +274,7 @@ export function useVoiceInput({ onTranscript, onError, onQuota, canStart }: UseV
 
   // Hitting the cap stops and uploads what was captured — nothing is thrown away.
   useEffect(() => {
-    if (status === 'recording' && recorderState.durationMillis >= MAX_VOICE_DURATION_MS) {
+    if (status === 'recording' && recorderState.durationMillis >= capRef.current) {
       void finish();
     }
   }, [finish, recorderState.durationMillis, status]);
