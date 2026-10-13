@@ -103,28 +103,17 @@ internal object WidgetRenderer {
       feed == null -> pages += messagePage(context, "", MATCHES_URI)
       else -> {
         val focus = feed.focusMatch
-        val featured = feed.featured?.takeIf { it.fixtureId == focus?.fixtureId }
-        val goal = featured?.goal?.takeIf { focus?.isLive == true }
-        // The live match and everything about it come first; other clubs' cards follow.
-        if (focus != null && goal != null) pages += goalPage(context, focus, goal, labels, images, size)
-        if (focus != null) pages += matchPage(context, focus, labels, images, size, featured?.events.orEmpty())
-        if (focus != null && featured != null) {
-          if (featured.events.isNotEmpty()) pages += eventsPage(context, focus, featured.events, labels, images, size)
-          featured.stats?.takeIf { hasStats(it) }?.let {
-            pages += statsPage(context, focus, it, labels, images, arabic, size)
-          }
-          if (featured.momentum.size >= 2) {
-            pages += momentumPage(context, focus, featured.momentum, labels, images, size)
-          }
-          featured.lineup?.let { pages += lineupPage(context, focus, it, labels, images, size) }
-          if (featured.topPlayers.isNotEmpty()) {
-            pages += playersPage(context, focus, featured.topPlayers, labels, images, size)
-          }
-          featured.info?.takeIf { it.hasBasics }?.let { pages += infoPage(context, focus, it, labels, images, size) }
-          featured.info?.takeIf { it.hasForm }?.let { pages += formPage(context, focus, it, labels, images, arabic, size) }
+        // The live match and everything about it come first, then each other live match in full.
+        val blocks = buildList {
+          if (focus != null) add(FeedOther(focus, feed.featured?.takeIf { it.fixtureId == focus.fixtureId }))
+          if (focus?.isLive == true) feed.others.filter { it.match.isLive }.forEach { add(it) }
         }
-        // Badges on missing view ids are ignored, so this marks the score card and every mini header.
-        if (goal != null) pages.forEach { markGoal(it, labels) }
+        blocks.forEach { block ->
+          block.featured?.goal?.takeIf { block.match.isLive }?.let {
+            pages += goalPage(context, block.match, it, labels, images, size).also { page -> markGoal(page, labels) }
+          }
+        }
+        blocks.forEach { pages += detailPages(context, it, labels, images, arabic, size) }
         // A live followed match owns the widget until the final whistle; the other fixtures return after.
         if (focus?.isLive != true) feed.fixtures.forEach { pages += matchPage(context, it, labels, images, size) }
         if (pages.isEmpty()) pages += messagePage(context, labels.followTeams, SEARCH_URI)
@@ -156,6 +145,31 @@ internal object WidgetRenderer {
   }
 
   // region Pages
+
+  private fun detailPages(
+    context: Context,
+    block: FeedOther,
+    labels: WidgetLabels,
+    images: ImageResolver,
+    arabic: Boolean,
+    size: Sizing,
+  ): List<RemoteViews> {
+    val match = block.match
+    val featured = block.featured
+    val pages = mutableListOf(matchPage(context, match, labels, images, size, featured?.events.orEmpty()))
+    if (featured != null) {
+      if (featured.events.isNotEmpty()) pages += eventsPage(context, match, featured.events, labels, images, size)
+      featured.stats?.takeIf { hasStats(it) }?.let { pages += statsPage(context, match, it, labels, images, arabic, size) }
+      if (featured.momentum.size >= 2) pages += momentumPage(context, match, featured.momentum, labels, images, size)
+      featured.lineup?.let { pages += lineupPage(context, match, it, labels, images, size) }
+      if (featured.topPlayers.isNotEmpty()) pages += playersPage(context, match, featured.topPlayers, labels, images, size)
+      featured.info?.takeIf { it.hasBasics }?.let { pages += infoPage(context, match, it, labels, images, size) }
+      featured.info?.takeIf { it.hasForm }?.let { pages += formPage(context, match, it, labels, images, arabic, size) }
+    }
+    // Badges on missing view ids are ignored, so this marks the score card and every mini header.
+    if (featured?.goal != null && match.isLive) pages.forEach { markGoal(it, labels) }
+    return pages
+  }
 
   /** Leads the widget for a few match minutes after a goal. */
   private fun goalPage(

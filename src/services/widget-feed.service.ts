@@ -26,6 +26,12 @@ const MATCH_INFO_TTL_MS = 15 * 60 * 1000;
 const MATCH_INFO_RETRY_MS = 2 * 60 * 1000;
 /** A finished match stays on the widget this long before the next fixture takes over. */
 const RECENT_FINISH_WINDOW_SEC = 3 * 60 * 60;
+/** A live match the widget was locked on stays this long after the final whistle. */
+const FINISH_HOLD_SEC = 6 * 60;
+/** Past this, the whistle went long ago no matter when this process first saw the result. */
+const FINISH_STALE_SEC = 4 * 60 * 60;
+/** Live matches shown alongside the primary one, each with its own detail pages. */
+const MAX_EXTRA_LIVE = 2;
 
 const LIVE_SHORT = new Set(['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP']);
 const FINISHED_SHORT = new Set(['FT', 'AET', 'PEN', 'AWD', 'WO']);
@@ -169,6 +175,10 @@ export interface WidgetFeedPayload {
   /** Other live matches, then upcoming ones. Deduped, chronological, excluding `primary`. */
   fixtures: WidgetMatch[];
   featured: WidgetFeatured | null;
+  /** Further live favorites / followed matches while `primary` is live; widgets alternate between them. */
+  others: Array<{ match: WidgetMatch; featured: WidgetFeatured | null }>;
+  /** Seconds until this feed goes stale on its own (a finished match giving way); null when no deadline. */
+  refreshInSec: number | null;
 }
 
 export function parseWidgetTeamIds(raw: unknown): number[] {
@@ -676,9 +686,45 @@ function byKickoff(a: WidgetMatch, b: WidgetMatch): number {
   return a.fixtureId - b.fixtureId;
 }
 
+/** The provider sends no end time, so the first build that sees a result stands in for the whistle. */
+const finishSeenAt = new Map<number, number>();
+const liveSeen = new Set<number>();
+const FINISH_MEMORY_CAP = 500;
+
+export function clearFinishMemory(): void {
+  finishSeenAt.clear();
+  liveSeen.clear();
+}
+
+function remember<T>(store: Map<number, T> | Set<number>, id: number, value?: T): void {
+  if (store instanceof Map) store.set(id, value as T);
+  else store.add(id);
+  if (store.size > FINISH_MEMORY_CAP) {
+    const oldest = store.keys().next().value;
+    if (oldest !== undefined) store.delete(oldest);
+  }
+}
+
+function markLive(matches: WidgetMatch[]): void {
+  for (const match of matches) {
+    if (isLiveStatus(match.status) && !liveSeen.has(match.fixtureId)) remember(liveSeen, match.fixtureId);
+  }
+}
+
+/** Seconds a just-finished match still leads the widget; 0 once it should give way. */
+export function finishHoldLeft(match: WidgetMatch, nowSec: number): number {
+  if (match.status !== 'ft' || nowSec - match.kickoffTs > FINISH_STALE_SEC) return 0;
+  let seen = finishSeenAt.get(match.fixtureId);
+  if (seen === undefined) {
+    seen = nowSec;
+    remember(finishSeenAt, match.fixtureId, seen);
+  }
+  return Math.max(0, seen + FINISH_HOLD_SEC - nowSec);
+}
+
 /**
  * A live match always leads: live favorite, then a live followed-team match.
- * With nothing live, a favorite (upcoming, else most recently finished) leads.
+ * At the final whistle that match holds on for a few minutes, then the next favorite kick-off leads.
  * A followed-team finish within the recent window is only used when nothing is upcoming.
  */
 export function choosePrimary(
@@ -690,12 +736,18 @@ export function choosePrimary(
   if (favoriteLive) return { primary: favoriteLive, reason: 'favorite' };
   const followedLive = followed.filter((match) => isLiveStatus(match.status)).sort(byKickoff)[0];
   if (followedLive) return { primary: followedLive, reason: 'live' };
+
+  const latestFirst = (a: WidgetMatch, b: WidgetMatch) => b.kickoffTs - a.kickoffTs || a.fixtureId - b.fixtureId;
+  const favoriteJustDone = favorites.filter((match) => finishHoldLeft(match, nowSec) > 0).sort(latestFirst)[0];
+  if (favoriteJustDone) return { primary: favoriteJustDone, reason: 'favorite' };
+  // Only a followed match the widget actually showed live; a result found later is just history.
+  const followedJustDone = followed
+    .filter((match) => liveSeen.has(match.fixtureId) && finishHoldLeft(match, nowSec) > 0)
+    .sort(latestFirst)[0];
+  if (followedJustDone) return { primary: followedJustDone, reason: null };
+
   const favoriteUpcoming = favorites.filter((match) => match.status === 'upcoming').sort(byKickoff)[0];
   if (favoriteUpcoming) return { primary: favoriteUpcoming, reason: 'favorite' };
-  const favoriteDone = [...favorites]
-    .filter((match) => match.status === 'ft' || match.status === 'off')
-    .sort((a, b) => b.kickoffTs - a.kickoffTs || a.fixtureId - b.fixtureId)[0];
-  if (favoriteDone) return { primary: favoriteDone, reason: 'favorite' };
 
   if (followed.some((match) => match.status === 'upcoming')) return { primary: null, reason: null };
 
@@ -837,15 +889,22 @@ export async function buildWidgetFeed(
     followedMatches.push(toWidgetMatch(await overlayLiveState(fixture, nowSec)));
   }
 
+  markLive([...favorites, ...followedMatches]);
   const { primary, reason } = choosePrimary(favorites, followedMatches, nowSec);
   const showFeatured = primary != null && (isLiveStatus(primary.status) || primary.status === 'ft');
-  const featured = showFeatured
-    ? await buildFeatured(primary, language)
-    : primary?.status === 'upcoming'
-      ? await buildPreview(primary, language).catch(() => null)
-      : null;
+  const [featured, others] = await Promise.all([
+    showFeatured
+      ? buildFeatured(primary, language)
+      : primary?.status === 'upcoming'
+        ? buildPreview(primary, language).catch(() => null)
+        : Promise.resolve(null),
+    primary != null && isLiveStatus(primary.status)
+      ? buildOtherLive(favorites, followedMatches, primary, language)
+      : Promise.resolve([]),
+  ]);
   const hasLive =
     (primary != null && isLiveStatus(primary.status)) || followedMatches.some((match) => isLiveStatus(match.status));
+  const hold = primary ? finishHoldLeft(primary, nowSec) : 0;
 
   return {
     generatedAt: now,
@@ -855,5 +914,27 @@ export async function buildWidgetFeed(
     primaryReason: reason,
     fixtures: listFixtures(followedMatches, teamIds, primary, nowSec),
     featured,
+    others,
+    refreshInSec: hold > 0 ? hold + 5 : null,
   };
+}
+
+/** Live favorites first, then live followed-team matches, each with full detail pages. */
+async function buildOtherLive(
+  favorites: WidgetMatch[],
+  followed: WidgetMatch[],
+  primary: WidgetMatch,
+  language: string,
+): Promise<WidgetFeedPayload['others']> {
+  const seen = new Set<number>([primary.fixtureId]);
+  const picked: WidgetMatch[] = [];
+  for (const match of [...[...favorites].sort(byKickoff), ...[...followed].sort(byKickoff)]) {
+    if (!isLiveStatus(match.status) || seen.has(match.fixtureId)) continue;
+    seen.add(match.fixtureId);
+    picked.push(match);
+    if (picked.length >= MAX_EXTRA_LIVE) break;
+  }
+  return Promise.all(
+    picked.map(async (match) => ({ match, featured: await buildFeatured(match, language).catch(() => null) })),
+  );
 }

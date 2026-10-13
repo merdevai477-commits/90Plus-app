@@ -53,9 +53,9 @@ struct MatchesWidgetView: View {
 
   private var deepLink: URL? {
     guard let feed = entry.feed else { return searchURL }
-    switch entry.page {
+    switch entry.page?.slotted.page {
     case .live, .players, .momentum, .lineup, .stats, .events, .goal, .info, .form:
-      return feed.focusMatch?.deepLink ?? searchURL
+      return entry.block?.match.deepLink ?? feed.focusMatch?.deepLink ?? searchURL
     case .fixture(let index) where feed.fixtures.indices.contains(index):
       return feed.fixtures[index].deepLink ?? searchURL
     case .match(let index) where feed.teams.indices.contains(index):
@@ -290,7 +290,8 @@ private struct MediumView: View {
   /// The info page sits over the venue photo, darkened so white text stays readable.
   @ViewBuilder
   private var stadiumCover: some View {
-    if entry.page == .info, let url = entry.feed?.featured?.info?.venueImage, let cover = entry.image(url + "#cover") {
+    if entry.page?.slotted.page == .info, let url = entry.block?.featured?.info?.venueImage,
+       let cover = entry.image(url + "#cover") {
       ZStack {
         Image(uiImage: cover).resizable().scaledToFill()
         LinearGradient(
@@ -311,43 +312,42 @@ private struct MediumView: View {
     case .unavailable:
       MessageView(text: nil)
     case .feed(let feed):
-      switch entry.page {
+      switch entry.page?.slotted.page {
       case .live:
-        if let match = feed.focusMatch {
-          let events = feed.featured?.fixtureId == match.fixtureId ? feed.featured?.events ?? [] : []
-          MatchCard(entry: entry, match: match, events: events)
+        if let block = entry.block {
+          MatchCard(entry: entry, match: block.match, events: block.featured?.events ?? [])
         }
       case .players:
-        if let featured = feed.featured, let match = feed.focusMatch {
-          PlayersPage(entry: entry, match: match, players: featured.topPlayers)
+        if let block = entry.block, let featured = block.featured {
+          PlayersPage(entry: entry, match: block.match, players: featured.topPlayers)
         }
       case .momentum:
-        if let featured = feed.featured, let match = feed.focusMatch {
-          MomentumPage(entry: entry, match: match, points: featured.momentum)
+        if let block = entry.block, let featured = block.featured {
+          MomentumPage(entry: entry, match: block.match, points: featured.momentum)
         }
       case .lineup:
-        if let lineup = feed.featured?.lineup, let match = feed.focusMatch {
-          LineupPage(entry: entry, match: match, lineup: lineup)
+        if let block = entry.block, let lineup = block.featured?.lineup {
+          LineupPage(entry: entry, match: block.match, lineup: lineup)
         }
       case .stats:
-        if let stats = feed.featured?.stats, stats.hasAny, let match = feed.focusMatch {
-          StatsPage(entry: entry, match: match, stats: stats)
+        if let block = entry.block, let stats = block.featured?.stats, stats.hasAny {
+          StatsPage(entry: entry, match: block.match, stats: stats)
         }
       case .events:
-        if let events = feed.featured?.events, !events.isEmpty, let match = feed.focusMatch {
-          EventsPage(entry: entry, match: match, events: events)
+        if let block = entry.block, let events = block.featured?.events, !events.isEmpty {
+          EventsPage(entry: entry, match: block.match, events: events)
         }
       case .goal:
-        if let goal = feed.featured?.goal, let match = feed.focusMatch {
-          GoalPage(entry: entry, match: match, goal: goal)
+        if let block = entry.block, let goal = block.featured?.goal {
+          GoalPage(entry: entry, match: block.match, goal: goal)
         }
       case .info:
-        if let info = feed.featured?.info, let match = feed.focusMatch {
-          InfoPage(entry: entry, match: match, info: info)
+        if let block = entry.block, let info = block.featured?.info {
+          InfoPage(entry: entry, match: block.match, info: info)
         }
       case .form:
-        if let info = feed.featured?.info, let match = feed.focusMatch {
-          FormPage(entry: entry, match: match, info: info)
+        if let block = entry.block, let info = block.featured?.info {
+          FormPage(entry: entry, match: block.match, info: info)
         }
       case .fixture(let index) where feed.fixtures.indices.contains(index):
         MatchCard(entry: entry, match: feed.fixtures[index])

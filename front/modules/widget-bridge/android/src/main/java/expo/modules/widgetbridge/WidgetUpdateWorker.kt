@@ -29,6 +29,11 @@ class WidgetUpdateWorker(context: Context, params: WorkerParameters) : Worker(co
     if (feed?.hasLive == true) {
       WidgetScheduler.scheduleLiveTick(context, fromLiveTick = tags.contains(WidgetScheduler.LIVE_TAG))
     }
+    // Only a fresh response carries a valid countdown; a cached one may have expired long ago.
+    // The expiry run itself must not REPLACE (cancel) its own unique work.
+    if (fetched != null && !tags.contains(WidgetScheduler.EXPIRY_TAG)) {
+      feed?.refreshInSec?.let { WidgetScheduler.scheduleFeedExpiry(context, it) }
+    }
     val kickoffs = (feed?.fixtures.orEmpty() + listOfNotNull(feed?.primary)).distinctBy { it.fixtureId }
     kickoffs.forEach { WidgetScheduler.scheduleKickoff(context, it) }
     return Result.success()

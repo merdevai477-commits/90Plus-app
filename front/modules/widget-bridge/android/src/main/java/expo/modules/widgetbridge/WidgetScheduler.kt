@@ -14,6 +14,8 @@ internal object WidgetScheduler {
   private const val PERIODIC = "ninetyplus_widget_periodic"
   private const val NOW = "ninetyplus_widget_now"
   private const val LIVE = "ninetyplus_widget_live"
+  private const val EXPIRY = "ninetyplus_widget_expiry"
+  const val EXPIRY_TAG = "ninetyplus_widget_expiry_tick"
   const val LIVE_TAG = "ninetyplus_widget_live_tick"
   private const val LIVE_TICK_MINUTES = 1L
   private const val KICKOFF_PREFIX = "ninetyplus_widget_kickoff_"
@@ -55,6 +57,16 @@ internal object WidgetScheduler {
     WorkManager.getInstance(context).enqueueUniqueWork(LIVE, policy, request)
   }
 
+  /** Wakes up when a just-finished match is due to give way, instead of waiting for the 15-minute cycle. */
+  fun scheduleFeedExpiry(context: Context, inSec: Int) {
+    val request = OneTimeWorkRequestBuilder<WidgetUpdateWorker>()
+      .setConstraints(network)
+      .setInitialDelay(inSec.toLong(), TimeUnit.SECONDS)
+      .addTag(EXPIRY_TAG)
+      .build()
+    WorkManager.getInstance(context).enqueueUniqueWork(EXPIRY, ExistingWorkPolicy.REPLACE, request)
+  }
+
   /** Wakes up just after kick-off so the live notification does not wait for the 15-minute cycle. */
   fun scheduleKickoff(context: Context, match: FeedMatch) {
     val delayMs = match.kickoffTs * 1000 + KICKOFF_GRACE_MS - System.currentTimeMillis()
@@ -73,6 +85,7 @@ internal object WidgetScheduler {
     wm.cancelUniqueWork(PERIODIC)
     wm.cancelUniqueWork(NOW)
     wm.cancelUniqueWork(LIVE)
+    wm.cancelUniqueWork(EXPIRY)
     wm.cancelAllWorkByTag(KICKOFF_TAG)
   }
 }

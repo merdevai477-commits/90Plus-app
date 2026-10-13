@@ -93,6 +93,8 @@ internal data class FeedFeatured(
   val info: FeedInfo?,
 )
 
+internal data class FeedOther(val match: FeedMatch, val featured: FeedFeatured?)
+
 internal data class WidgetFeed(
   val hasLive: Boolean,
   val teams: List<FeedTeam>,
@@ -100,6 +102,10 @@ internal data class WidgetFeed(
   val primaryReason: String?,
   val fixtures: List<FeedMatch>,
   val featured: FeedFeatured?,
+  /** Further live matches the widget alternates through after [primary]. */
+  val others: List<FeedOther> = emptyList(),
+  /** Seconds until a just-finished [primary] gives way to the next fixture. */
+  val refreshInSec: Int? = null,
 ) {
   val focusMatch: FeedMatch?
     get() = primary ?: featured?.let { f -> teams.firstOrNull { it.match?.fixtureId == f.fixtureId }?.match }
@@ -115,6 +121,7 @@ internal data class WidgetFeed(
           teamsJson?.optJSONObject(i)?.let(::parseTeam)
         }
         val fixturesJson = body.optJSONArray("fixtures")
+        val othersJson = body.optJSONArray("others")
         WidgetFeed(
           hasLive = body.optBoolean("hasLive"),
           teams = teams,
@@ -124,6 +131,12 @@ internal data class WidgetFeed(
             fixturesJson?.optJSONObject(i)?.let(::parseMatch)
           },
           featured = body.optJSONObject("featured")?.let(::parseFeatured),
+          others = (0 until (othersJson?.length() ?: 0)).mapNotNull { i ->
+            val other = othersJson?.optJSONObject(i) ?: return@mapNotNull null
+            val match = other.optJSONObject("match")?.let(::parseMatch) ?: return@mapNotNull null
+            FeedOther(match, other.optJSONObject("featured")?.let(::parseFeatured))
+          },
+          refreshInSec = body.optIntOrNull("refreshInSec")?.takeIf { it > 0 },
         )
       } catch (_: Exception) {
         null

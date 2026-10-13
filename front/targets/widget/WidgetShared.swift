@@ -307,6 +307,23 @@ struct FeedFeatured: Codable, Hashable {
   }
 }
 
+/// One match with its detail data; the widget shows a full block of pages per match.
+struct FeedOther: Codable, Hashable {
+  let match: FeedMatch
+  let featured: FeedFeatured?
+
+  init(match: FeedMatch, featured: FeedFeatured?) {
+    self.match = match
+    self.featured = featured
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    match = try container.decode(FeedMatch.self, forKey: .match)
+    featured = try? container.decodeIfPresent(FeedFeatured.self, forKey: .featured)
+  }
+}
+
 struct WidgetFeed: Codable, Hashable {
   let generatedAt: Double
   let hasLive: Bool
@@ -315,11 +332,32 @@ struct WidgetFeed: Codable, Hashable {
   let primaryReason: String?
   let fixtures: [FeedMatch]
   let featured: FeedFeatured?
+  /// Further live matches the widget alternates through after the primary one.
+  let others: [FeedOther]
+  /// Seconds until a just-finished primary gives way to the next fixture.
+  let refreshInSec: Double?
 
   var focusMatch: FeedMatch? {
     if let primary { return primary }
     guard let featured else { return nil }
     return teams.first { $0.match?.fixtureId == featured.fixtureId }?.match
+  }
+
+  /// Slot 0 is the focus match; while it is live, every other live match follows with its own pages.
+  var blocks: [FeedOther] {
+    guard let focus = focusMatch else { return [] }
+    let first = FeedOther(match: focus, featured: featured?.fixtureId == focus.fixtureId ? featured : nil)
+    guard focus.isLive else { return [first] }
+    return [first] + others.filter { $0.match.isLive && $0.match.fixtureId != focus.fixtureId }
+  }
+
+  func block(_ slot: Int) -> FeedOther? {
+    let all = blocks
+    return all.indices.contains(slot) ? all[slot] : nil
+  }
+
+  func details(for fixtureId: Int) -> FeedFeatured? {
+    blocks.first { $0.match.fixtureId == fixtureId }?.featured
   }
 
   var nextKickoff: Date? {
@@ -338,6 +376,8 @@ struct WidgetFeed: Codable, Hashable {
     primaryReason = try container.decodeIfPresent(String.self, forKey: .primaryReason)
     fixtures = try container.decodeIfPresent([FeedMatch].self, forKey: .fixtures) ?? []
     featured = try container.decodeIfPresent(FeedFeatured.self, forKey: .featured)
+    others = (try? container.decodeIfPresent([FeedOther].self, forKey: .others)) ?? []
+    refreshInSec = (try? container.decodeIfPresent(Double.self, forKey: .refreshInSec)).flatMap { $0 }
   }
 
   func encode(to encoder: Encoder) throws {
@@ -349,10 +389,12 @@ struct WidgetFeed: Codable, Hashable {
     try container.encodeIfPresent(primaryReason, forKey: .primaryReason)
     try container.encode(fixtures, forKey: .fixtures)
     try container.encodeIfPresent(featured, forKey: .featured)
+    try container.encode(others, forKey: .others)
+    try container.encodeIfPresent(refreshInSec, forKey: .refreshInSec)
   }
 
   private enum CodingKeys: String, CodingKey {
-    case generatedAt, hasLive, teams, primary, primaryReason, fixtures, featured
+    case generatedAt, hasLive, teams, primary, primaryReason, fixtures, featured, others, refreshInSec
   }
 }
 
@@ -525,6 +567,18 @@ enum WidgetPage: Hashable {
   case fixture(Int)
   case empty
   case match(Int)
+  /// A detail page of `WidgetFeed.block(slot)` for slots after the focus match.
+  indirect case other(Int, WidgetPage)
+
+  /// The match slot (0 = focus) and the page kind shown for it.
+  var slotted: (slot: Int, page: WidgetPage) {
+    if case .other(let slot, let page) = self { return (slot, page) }
+    return (0, self)
+  }
+
+  func inSlot(_ slot: Int) -> WidgetPage {
+    slot == 0 ? self : .other(slot, self)
+  }
 }
 
 /// Displayed page at time t = base + elapsed rotation steps since `baseAt`; the arrow buttons rebase it.

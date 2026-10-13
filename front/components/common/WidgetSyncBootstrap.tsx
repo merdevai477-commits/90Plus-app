@@ -7,20 +7,36 @@ import { AppState } from 'react-native';
 
 import { useFavoriteTeam } from '../../hooks/useFavoriteTeam';
 import { useLanguageStore } from '../../src/i18n/store';
-import { MatchFavoritesStorage } from '../../src/storage/matchFavorites.storage';
+import { MatchFavoritesStorage, type StoredFavoriteMatch } from '../../src/storage/matchFavorites.storage';
 import { syncMatchesWidget } from '../../src/widgets/syncMatchesWidget';
 
 const MAX_FAVORITES = 8;
+/** Long enough to cover a match with extra time and the widget's short hold after the whistle. */
+const FAVORITE_ACTIVE_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * Bell matches still worth showing, soonest kick-off first. Old ones would otherwise fill
+ * the cap and keep newer favorites off the widget. Stored status is stale, so only kick-off counts.
+ */
 async function favoriteFixtureIds(): Promise<number[]> {
-  const raw = await MatchFavoritesStorage.getFavorites().catch(() => [] as string[]);
-  const ids: number[] = [];
+  const [raw, meta] = await Promise.all([
+    MatchFavoritesStorage.getFavorites().catch(() => [] as string[]),
+    MatchFavoritesStorage.getMatches().catch(() => [] as StoredFavoriteMatch[]),
+  ]);
+  const kickoffById = new Map<string, number>(meta.map((match) => [String(match.id), Date.parse(match.matchDate)]));
+  const now = Date.now();
+  const candidates: { id: number; kickoff: number }[] = [];
   for (const value of raw) {
     const id = Number(value);
-    if (Number.isFinite(id) && id > 0 && !ids.includes(id)) ids.push(id);
-    if (ids.length >= MAX_FAVORITES) break;
+    if (!Number.isFinite(id) || id <= 0 || candidates.some((c) => c.id === id)) continue;
+    const kickoff = kickoffById.get(String(value));
+    if (kickoff !== undefined && Number.isFinite(kickoff) && now - kickoff > FAVORITE_ACTIVE_MS) continue;
+    candidates.push({ id, kickoff: kickoff !== undefined && Number.isFinite(kickoff) ? kickoff : now });
   }
-  return ids;
+  return candidates
+    .sort((a, b) => a.kickoff - b.kickoff)
+    .slice(0, MAX_FAVORITES)
+    .map((c) => c.id);
 }
 
 export function WidgetSyncBootstrap(): null {
@@ -50,9 +66,11 @@ export function WidgetSyncBootstrap(): null {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active' || latest.current.loading) return;
+      if (latest.current.loading) return;
+      // Leaving the app hands over bells set during the session; returning forces a fresh feed.
+      if (state !== 'active' && state !== 'background') return;
       void favoriteFixtureIds().then((favoriteIds) => {
-        syncMatchesWidget(latest.current.teamIds, latest.current.language, true, favoriteIds);
+        syncMatchesWidget(latest.current.teamIds, latest.current.language, state === 'active', favoriteIds);
       });
     });
     return () => sub.remove();

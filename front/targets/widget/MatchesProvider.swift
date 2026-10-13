@@ -40,8 +40,14 @@ struct MatchesEntry: TimelineEntry {
 
   /// The feed only carries `goal` for a few match minutes after it went in.
   func hasFreshGoal(_ match: FeedMatch) -> Bool {
-    guard match.isLive, let featured = feed?.featured, featured.fixtureId == match.fixtureId else { return false }
-    return featured.goal != nil
+    guard match.isLive else { return false }
+    return feed?.details(for: match.fixtureId)?.goal != nil
+  }
+
+  /// The match (and its detail data) the current page belongs to.
+  var block: FeedOther? {
+    guard let page else { return nil }
+    return feed?.block(page.slotted.slot)
   }
 
   static func message(_ content: Content, labels: WidgetLabels = WidgetLabels(), isArabic: Bool = false) -> MatchesEntry {
@@ -87,17 +93,26 @@ struct MatchesProvider: TimelineProvider {
 
     let feed = loaded.feed
     let pages = pages(for: feed, family: family)
-    if pages.first == .goal, let match = feed.focusMatch, let goal = feed.featured?.goal {
-      WidgetPager.showGoalOnce("\(match.fixtureId):\(goal.minute):\(goal.side):\(goal.player)")
+    let goalKeys = pages.compactMap { page -> String? in
+      let (slot, kind) = page.slotted
+      guard kind == .goal, let block = feed.block(slot), let goal = block.featured?.goal else { return nil }
+      return "\(block.match.fixtureId):\(goal.minute):\(goal.side):\(goal.player)"
     }
+    if pages.first?.slotted.page == .goal { WidgetPager.showGoalOnce(goalKeys.joined(separator: "|")) }
     var images = await ImageStore.images(for: imageURLs(for: feed, family: family))
-    if pages.contains(.info), let url = feed.featured?.info?.venueImage, let cover = await ImageStore.cover(for: url) {
-      images[url + "#cover"] = cover
+    for page in pages where page.slotted.page == .info {
+      if let url = feed.block(page.slotted.slot)?.featured?.info?.venueImage, let cover = await ImageStore.cover(for: url) {
+        images[url + "#cover"] = cover
+      }
     }
 
     var reloadAt = now.addingTimeInterval(feed.hasLive ? liveReload : idleReload)
     if let kickoff = feed.nextKickoff?.addingTimeInterval(60), kickoff < reloadAt {
       reloadAt = kickoff
+    }
+    // A just-finished match gives way at this point; a stale cached countdown must not spin reloads.
+    if let refresh = feed.refreshInSec {
+      reloadAt = min(reloadAt, max(loaded.at.addingTimeInterval(refresh), now.addingTimeInterval(60)))
     }
 
     let count = rotate && pages.count > 1 ? Int(rotationHorizon / WidgetPager.interval) : 1
@@ -118,24 +133,19 @@ struct MatchesProvider: TimelineProvider {
 
   static func pages(for feed: WidgetFeed, family: WidgetFamily) -> [WidgetPage] {
     let focus = feed.focusMatch
-    let featured = feed.featured?.fixtureId == focus?.fixtureId ? feed.featured : nil
 
     // A live followed match owns the widget until the final whistle; the other fixtures return after.
     let fixturePages = focus?.isLive == true ? [] : feed.fixtures.indices.map { WidgetPage.fixture($0) }
     switch family {
     case .systemMedium, .systemLarge, .systemExtraLarge:
-      // The live match and everything about it come first; other clubs' cards follow.
+      // Fresh goals first, then the focus match in full, then each other live match in full.
+      let blocks = feed.blocks
       var pages: [WidgetPage] = []
-      if focus?.isLive == true, featured?.goal != nil { pages.append(.goal) }
-      if focus != nil { pages.append(.live) }
-      if let featured {
-        if !featured.events.isEmpty { pages.append(.events) }
-        if featured.stats?.hasAny == true { pages.append(.stats) }
-        if featured.momentum.count >= 2 { pages.append(.momentum) }
-        if featured.lineup != nil { pages.append(.lineup) }
-        if !featured.topPlayers.isEmpty { pages.append(.players) }
-        if featured.info?.hasBasics == true { pages.append(.info) }
-        if featured.info?.hasForm == true { pages.append(.form) }
+      for (slot, block) in blocks.enumerated() where block.match.isLive && block.featured?.goal != nil {
+        pages.append(WidgetPage.goal.inSlot(slot))
+      }
+      for (slot, block) in blocks.enumerated() {
+        pages.append(contentsOf: detailPages(block.featured).map { $0.inSlot(slot) })
       }
       pages.append(contentsOf: fixturePages)
       return pages.isEmpty ? [.empty] : pages
@@ -148,6 +158,19 @@ struct MatchesProvider: TimelineProvider {
     }
   }
 
+  private static func detailPages(_ featured: FeedFeatured?) -> [WidgetPage] {
+    var pages: [WidgetPage] = [.live]
+    guard let featured else { return pages }
+    if !featured.events.isEmpty { pages.append(.events) }
+    if featured.stats?.hasAny == true { pages.append(.stats) }
+    if featured.momentum.count >= 2 { pages.append(.momentum) }
+    if featured.lineup != nil { pages.append(.lineup) }
+    if !featured.topPlayers.isEmpty { pages.append(.players) }
+    if featured.info?.hasBasics == true { pages.append(.info) }
+    if featured.info?.hasForm == true { pages.append(.form) }
+    return pages
+  }
+
   private static func imageURLs(for feed: WidgetFeed, family: WidgetFamily) -> [String] {
     switch family {
     case .accessoryInline, .accessoryCircular, .accessoryRectangular:
@@ -155,16 +178,19 @@ struct MatchesProvider: TimelineProvider {
     default:
       break
     }
+    let blocks = family == .systemSmall ? Array(feed.blocks.prefix(1)) : feed.blocks
     var urls: [String] = []
-    for match in [feed.focusMatch].compactMap({ $0 }) + feed.fixtures {
+    for match in blocks.map(\.match) + feed.fixtures {
       if let logo = match.home.logo { urls.append(logo) }
       if let logo = match.away.logo { urls.append(logo) }
     }
     if family != .systemSmall {
-      if let photo = feed.featured?.goal?.photo { urls.append(photo) }
-      urls.append(contentsOf: feed.featured?.topPlayers.compactMap(\.photo) ?? [])
-      urls.append(contentsOf: feed.featured?.lineup?.home.compactMap(\.photo) ?? [])
-      urls.append(contentsOf: feed.featured?.lineup?.away.compactMap(\.photo) ?? [])
+      urls.append(contentsOf: blocks.compactMap { $0.featured?.goal?.photo })
+      for featured in blocks.compactMap(\.featured) {
+        urls.append(contentsOf: featured.topPlayers.compactMap(\.photo))
+        urls.append(contentsOf: featured.lineup?.home.compactMap(\.photo) ?? [])
+        urls.append(contentsOf: featured.lineup?.away.compactMap(\.photo) ?? [])
+      }
     }
     return urls
   }

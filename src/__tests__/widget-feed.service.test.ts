@@ -33,6 +33,7 @@ import { readLiveFixtureById } from '../services/live-fixture-cache.service';
 import {
   buildWidgetFeed,
   clearFeaturedMemory,
+  clearFinishMemory,
   clearMatchInfoCache,
   compressMomentum,
   keepLastFeatured,
@@ -83,6 +84,7 @@ const liveMock = readLiveFixtureById as jest.Mock;
 beforeEach(() => {
   jest.clearAllMocks();
   clearFeaturedMemory();
+  clearFinishMemory();
   clearMatchInfoCache();
   liveMock.mockResolvedValue(null);
   eventsMock.mockResolvedValue([]);
@@ -310,6 +312,64 @@ describe('buildWidgetFeed', () => {
     expect(feed.primaryReason).toBe('favorite');
     expect(feed.primary?.fixtureId).toBe(200);
     expect(feed.fixtures.map((match) => match.fixtureId)).toEqual([100]);
+    expect(feed.others.map((other) => [other.match.fixtureId, other.featured?.fixtureId])).toEqual([[100, 100]]);
+  });
+
+  it('alternates between live favorites, earliest kick-off first, capped at two extras', async () => {
+    const live = (id: number, home: number, away: number, ago: number) =>
+      fixture(id, [home, `T${home}`], [away, `T${away}`], '2H', NOW_SEC - ago, [0, 0]);
+    const matches = [live(500, 10, 11, 4000), live(501, 20, 21, 3000), live(502, 30, 31, 2000), live(503, 40, 41, 1000)];
+    matchesMock.mockResolvedValue({ data: { live: matches, upcoming: [], finished: [] } });
+
+    const feed = await buildWidgetFeed([10], 'en', NOW, [503, 501, 502]);
+
+    expect(feed.primary?.fixtureId).toBe(501);
+    expect(feed.others.map((other) => other.match.fixtureId)).toEqual([502, 503]);
+    expect(feed.refreshInSec).toBeNull();
+  });
+
+  it('holds a finished favorite for six minutes after the whistle, then moves on', async () => {
+    const done = fixture(600, [10, 'Ahly'], [20, 'Zamalek'], 'FT', NOW_SEC - 2 * 3600, [2, 1]);
+    const next = fixture(601, [30, 'Barcelona'], [40, 'Sevilla'], 'NS', NOW_SEC + 86400);
+    matchesMock.mockResolvedValue({ data: { live: [], upcoming: [next], finished: [done] } });
+
+    const atWhistle = await buildWidgetFeed([30], 'en', NOW, [600, 601]);
+    expect(atWhistle.primary).toMatchObject({ fixtureId: 600, status: 'ft' });
+    expect(atWhistle.refreshInSec).toBe(6 * 60 + 5);
+
+    const later = await buildWidgetFeed([30], 'en', NOW + 4 * 60_000, [600, 601]);
+    expect(later.primary?.fixtureId).toBe(600);
+    expect(later.refreshInSec).toBe(2 * 60 + 5);
+
+    const after = await buildWidgetFeed([30], 'en', NOW + 7 * 60_000, [600, 601]);
+    expect(after.primary?.fixtureId).toBe(601);
+    expect(after.refreshInSec).toBeNull();
+  });
+
+  it('ignores a favorite that finished long ago', async () => {
+    const old = fixture(700, [10, 'Ahly'], [20, 'Zamalek'], 'FT', NOW_SEC - 30 * 3600, [0, 0]);
+    matchesMock.mockResolvedValue({ data: { live: [], upcoming: [], finished: [] } });
+    liveMock.mockImplementation(async (id: number) => (id === 700 ? old : null));
+
+    const feed = await buildWidgetFeed([99], 'en', NOW, [700]);
+
+    expect(feed.primary).toBeNull();
+  });
+
+  it('holds a followed match only if the widget saw it live', async () => {
+    const liveNow = fixture(800, [10, 'Ahly'], [20, 'Zamalek'], '2H', NOW_SEC - 6000, [1, 0]);
+    const ftNow = fixture(800, [10, 'Ahly'], [20, 'Zamalek'], 'FT', NOW_SEC - 6000, [1, 0]);
+    const next = fixture(801, [10, 'Ahly'], [50, 'Masry'], 'NS', NOW_SEC + 86400);
+    matchesMock.mockResolvedValue({ data: { live: [], upcoming: [next], finished: [ftNow] } });
+    expect((await buildWidgetFeed([10], 'en', NOW)).primary).toBeNull();
+
+    clearFinishMemory();
+    matchesMock.mockResolvedValue({ data: { live: [liveNow], upcoming: [next], finished: [] } });
+    await buildWidgetFeed([10], 'en', NOW);
+    matchesMock.mockResolvedValue({ data: { live: [], upcoming: [next], finished: [ftNow] } });
+    const held = await buildWidgetFeed([10], 'en', NOW + 60_000);
+    expect(held.primary).toMatchObject({ fixtureId: 800, status: 'ft' });
+    expect(held.primaryReason).toBeNull();
   });
 
   it('lists goals and red cards, filling spare rows with yellow cards', async () => {
