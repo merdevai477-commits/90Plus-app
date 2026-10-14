@@ -203,9 +203,10 @@ private struct StatusPill: View {
     default:
       if let clockStart = state.clockStart {
         let start = Date(timeIntervalSince1970: clockStart)
-        Text(timerInterval: start...start.addingTimeInterval(150 * 60), countsDown: false)
+        Text(timerInterval: start...start.addingTimeInterval(150 * 60), countsDown: false, showsHours: false)
           .multilineTextAlignment(.center)
-          .frame(width: 44)
+          .lineLimit(1)
+          .frame(width: 50)
       } else if let minute = state.minute {
         Text("\(minute)'")
       } else {
