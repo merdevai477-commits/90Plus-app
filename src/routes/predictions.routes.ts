@@ -824,7 +824,7 @@ router.get('/king/matches', async (req: Request, res: Response): Promise<void> =
 
 /**
  * GET /api/predictions/king/history?mode=winner|exact&status=all|correct|wrong|pending&page=0
- * The signed-in user's King predictions for one mode, newest match first.
+ * The signed-in user's King predictions for one mode in the current week, newest match first.
  */
 router.get('/king/history', requireAuth, async (req: Request, res: Response): Promise<void> => {
     try {

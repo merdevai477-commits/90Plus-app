@@ -393,7 +393,15 @@ export async function getKingHistory(params: {
   });
   if (!user) return empty;
 
-  const base = { userId: user.id, ...modeWhere(params.mode) };
+  // The King history starts empty every week, on the same Sunday boundary as
+  // the weekly leaderboard. Rows are kept; the profile still lists them all.
+  const week = utcSundayWeek();
+  const inWeek = { gte: week.start, lt: week.end };
+  const base = {
+    userId: user.id,
+    ...modeWhere(params.mode),
+    OR: [{ matchDate: inWeek }, { matchDate: null, createdAt: inWeek }],
+  };
   const where =
     params.status === 'all' ? base : { ...base, isCorrect: STATUS_WHERE[params.status] };
 
