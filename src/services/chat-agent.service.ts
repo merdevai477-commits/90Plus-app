@@ -317,9 +317,13 @@ async function streamFinalAnswer(
   onToken: (token: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
+  // Without tools + tool_choice 'none', Qwen keeps emitting tool calls here
+  // (finish=tool_calls, empty content) and every step comes back blank.
   const stream = (await createAgentCompletion(client, {
     model,
     messages,
+    tools: AGENT_TOOLS,
+    tool_choice: 'none',
     temperature: 0.2,
     max_tokens: AGENT_FINAL_MAX_TOKENS,
     stream: true,
