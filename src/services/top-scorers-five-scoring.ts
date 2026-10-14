@@ -281,7 +281,7 @@ export type TsfRelevantFixtureState = { kickoffAt: Date; status: string; process
 /**
  * Where one league pick stands. Fixtures are the pick's club's fixtures in the
  * gameweek; postponed ones have left the window and are ignored.
- *   PICKING              nothing picked, or a carried-over pick not yet confirmed
+ *   PICKING              nothing picked, or a pick not yet confirmed
  *   CONFIRMED            locked, no relevant match has kicked off
  *   WAITING_FOR_MATCHES  a relevant match is live or still to come
  *   CALCULATING          every relevant match is over, stats not all stored yet

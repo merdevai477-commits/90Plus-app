@@ -130,7 +130,7 @@ import {
   tsfPickState,
   tsfUpcomingWindow,
 } from '../top-scorers-five-scoring';
-import { clearTsfSelection, saveTsfSelection, scoreTsfPicks, TopScorersFiveError } from '../top-scorers-five.service';
+import { clearTsfSelection, getTsfSelection, saveTsfSelection, scoreTsfPicks, TopScorersFiveError } from '../top-scorers-five.service';
 import { processTsfFixture, type TsfProcessingDeps } from '../top-scorers-five-processing.service';
 
 const NOW = new Date('2026-10-10T20:00:00.000Z');
@@ -410,13 +410,30 @@ describe('selection — confirm is final', () => {
     expect(db.selections).toHaveLength(1);
   });
 
-  it('lets a carried-over, unconfirmed pick be replaced once, then locks it', async () => {
+  it('lets an unconfirmed pick be replaced once, then locks it', async () => {
     db.gameweek = openWeek();
     db.selections.push({ id: 'sel-1', userId: 'user-1', gameweekId: 'gw-1', leagueKey: 'laliga', playerId: 'p-vini', confirmedAt: null, updatedAt: NOW });
     const replaced = await saveTsfSelection('clerk-1', 'laliga', 'p-lewa', 'en', NOW);
     expect(replaced.selection).toMatchObject({ confirmed: true });
     expect(db.selections).toEqual([expect.objectContaining({ playerId: 'p-lewa', confirmedAt: NOW })]);
     await expect(saveTsfSelection('clerk-1', 'laliga', 'p-mbappe', 'en', NOW)).rejects.toMatchObject({ code: 'GAMEWEEK_PICK_LOCKED' });
+  });
+
+  it('starts a new gameweek with an empty lineup — last week\'s pick is not carried over', async () => {
+    db.selections.push({ id: 'sel-1', userId: 'user-1', gameweekId: 'gw-1', leagueKey: 'laliga', playerId: 'p-vini', confirmedAt: NOW, updatedAt: NOW });
+    db.gameweek = null;
+    const nextWeek = gameweek({
+      id: 'gw-2',
+      weekKey: '2026-10-13',
+      startAt: new Date('2026-10-13T00:00:00.000Z'),
+      endAt: new Date('2026-10-20T00:00:00.000Z'),
+      lockAt: new Date('2026-10-20T00:00:00.000Z'),
+      status: 'OPEN',
+    });
+    prismaMock.topScorersFiveGameweek.create.mockImplementationOnce(async () => nextWeek);
+    const result = await getTsfSelection('clerk-1', 'laliga', 'en');
+    expect(result).toMatchObject({ gameweek: { id: 'gw-2' }, state: 'PICKING', selection: null });
+    expect(db.selections).toEqual([expect.objectContaining({ gameweekId: 'gw-1', playerId: 'p-vini' })]);
   });
 
   it('lets only one of two racing confirms win', async () => {
@@ -482,7 +499,7 @@ describe('gameweek window and lifecycle', () => {
     expect(to.getTime() - from.getTime()).toBe(7 * 86_400_000);
   });
 
-  it('starts a carried-over pick at 0 in the next gameweek — points never carry over', () => {
+  it('starts the same player at 0 when picked again next gameweek — points never carry over', () => {
     const points = new Map([['gw-1:p-vini', 7]]);
     const picks = [
       { userId: 'u1', gameweekId: 'gw-1', playerId: 'p-vini', leagueKey: 'laliga' },
@@ -507,7 +524,7 @@ describe('pick state', () => {
   const state = (fixtures: Parameters<typeof tsfPickState>[0]['fixtures'], extra: Partial<Parameters<typeof tsfPickState>[0]> = {}) =>
     tsfPickState({ picked: true, locked: true, now: NOW, windowEnd: END, fixtures, ...extra });
 
-  it('is PICKING with no pick or an unconfirmed carried-over pick in an open week', () => {
+  it('is PICKING with no pick or an unconfirmed pick in an open week', () => {
     expect(state([], { picked: false })).toBe('PICKING');
     expect(state([], { locked: false })).toBe('PICKING');
   });

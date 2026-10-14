@@ -9,7 +9,6 @@
 
 import { Prisma, type TopScorersFiveGameweek, type TopScorersFivePlayer } from '@prisma/client';
 import prisma from '../lib/prisma';
-import { logger } from '../utils/logger';
 import {
   combineTsfPickStates,
   enabledTsfLeagues,
@@ -81,10 +80,9 @@ export async function computeTsfLockAt(
 }
 
 /**
- * The gameweek `now` falls in, created on first use. A new week inherits each
- * user's pick from the league's previous week, unconfirmed, so the pick stands
- * until the user confirms it or a new one. Only the pick carries over: points
- * are per (gameweek, player, fixture) and start from zero.
+ * The gameweek `now` falls in, created on first use. Every week starts with an
+ * empty lineup: picks do not carry over, so a user who wants last week's player
+ * again searches for him and confirms him afresh.
  */
 export async function ensureTsfGameweek(leagueKey: string, now: Date = new Date()): Promise<TopScorersFiveGameweek> {
   const cfg = requireLeague(leagueKey);
@@ -96,11 +94,9 @@ export async function ensureTsfGameweek(leagueKey: string, now: Date = new Date(
 
   const lockAt = await computeTsfLockAt(cfg, window);
   try {
-    const created = await prisma.topScorersFiveGameweek.create({
+    return await prisma.topScorersFiveGameweek.create({
       data: { leagueKey: cfg.key, weekKey: window.weekKey, startAt: window.startAt, endAt: window.endAt, lockAt },
     });
-    await carryOverTsfSelections(created);
-    return created;
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return prisma.topScorersFiveGameweek.findUniqueOrThrow({
@@ -109,30 +105,6 @@ export async function ensureTsfGameweek(leagueKey: string, now: Date = new Date(
     }
     throw error;
   }
-}
-
-async function carryOverTsfSelections(gameweek: TopScorersFiveGameweek): Promise<void> {
-  const previous = await prisma.topScorersFiveGameweek.findFirst({
-    where: { leagueKey: gameweek.leagueKey, startAt: { lt: gameweek.startAt } },
-    orderBy: { startAt: 'desc' },
-    select: { id: true },
-  });
-  if (!previous) return;
-  const picks = await prisma.topScorersFiveSelection.findMany({
-    where: { gameweekId: previous.id, player: { active: true } },
-    select: { userId: true, playerId: true },
-  });
-  if (picks.length === 0) return;
-  const { count } = await prisma.topScorersFiveSelection.createMany({
-    data: picks.map((pick) => ({
-      userId: pick.userId,
-      playerId: pick.playerId,
-      gameweekId: gameweek.id,
-      leagueKey: gameweek.leagueKey,
-    })),
-    skipDuplicates: true,
-  });
-  logger.info(`[TopScorersFive] ${gameweek.leagueKey} ${gameweek.weekKey}: carried over ${count} pick(s)`);
 }
 
 export type TsfGameweekDto = {
@@ -367,8 +339,8 @@ export async function getTsfSelection(clerkUserId: string, leagueKey: string, la
  * C. Confirm the league's player for the current gameweek. Confirming is final:
  * once a pick is confirmed, any other player is refused with
  * GAMEWEEK_PICK_LOCKED until the next gameweek (re-sending the same player is a
- * no-op). A carried-over pick that was never confirmed can be confirmed or
- * replaced once, while the gameweek is open. The confirm itself is a
+ * no-op). An unconfirmed pick can be confirmed or replaced once, while the
+ * gameweek is open. The confirm itself is a
  * conditional write, so two racing requests cannot both win.
  */
 export async function saveTsfSelection(
@@ -423,8 +395,8 @@ export async function saveTsfSelection(
 }
 
 /**
- * Drop the league's pick (the pitch card's ✕). Only an unconfirmed,
- * carried-over pick can be dropped, and only while the gameweek is open.
+ * Drop the league's pick (the pitch card's ✕). Only an unconfirmed pick can be
+ * dropped, and only while the gameweek is open.
  */
 export async function clearTsfSelection(clerkUserId: string, leagueKey: string, now: Date = new Date()): Promise<void> {
   const userId = await requireUserId(clerkUserId);
