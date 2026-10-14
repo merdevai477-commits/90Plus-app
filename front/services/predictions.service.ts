@@ -237,6 +237,32 @@ export const PredictionsService = {
   },
 
   /**
+   * The user's picks for the given matches only. Throws on failure so callers
+   * keep the picks they already show instead of treating them as gone.
+   */
+  getPredictionsForMatches: async (
+    token: string,
+    matchIds: (string | number)[],
+  ): Promise<Record<string, unknown>> => {
+    if (matchIds.length === 0) return {};
+    const query = encodeURIComponent(matchIds.join(','));
+    const response = await fetch(`${API_URL}/predictions/user?matchIds=${query}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      throw await PredictionsService._parseError(response);
+    }
+    const result = await response.json();
+    if (!result.success || !result.data) {
+      throw new PredictionApiError('E010', 'Invalid response format', response.status);
+    }
+    return result.data.predictionsMap ?? {};
+  },
+
+  /**
    * Get user predictions
    */
   getUserPredictions: async (token: string): Promise<{ predictions: Prediction[]; predictionsMap: Record<string, Prediction & { prediction: { type: 'home' | 'draw' | 'away' } }> }> => {

@@ -46,6 +46,18 @@ interface ProfilePredictionRow {
 const DAILY_PREDICTION_LIMIT = 10; // الحد الأقصى للتوقعات اليومية (= عدد التذاكر اليومية)
 const PREDICTION_COST = 0; // Deprecated — predictions now cost only 1 daily ticket, not coins.
 const CORRECT_PREDICTION_REWARD = 10; // coins - مكافأة التوقع الصحيح
+const MAX_MATCH_IDS_QUERY = 100;
+
+/** `?matchIds=1,2,3` → ids; null when the param is absent. */
+function parseMatchIdsQuery(raw: unknown): number[] | null {
+    if (raw == null) return null;
+    const text = Array.isArray(raw) ? raw.join(',') : String(raw);
+    const ids = text
+        .split(',')
+        .map((part) => Number(part.trim()))
+        .filter((id) => Number.isInteger(id) && id > 0);
+    return [...new Set(ids)].slice(0, MAX_MATCH_IDS_QUERY);
+}
 
 /**
  * GET /api/predictions/remaining
@@ -257,10 +269,14 @@ router.get('/user', requireAuth, responseCacheMiddleware({ ttl: 30 * 1000, clien
             return;
         }
 
+        // `matchIds` asks for the user's picks on specific matches. Without it
+        // only the newest 50 come back, and a pick made before 50 newer ones
+        // would be missing from a screen that lists its match.
+        const matchIds = parseMatchIdsQuery(req.query.matchIds);
         const predictions = await prisma.prediction.findMany({
-            where: { userId: user.id },
+            where: matchIds ? { userId: user.id, apiMatchId: { in: matchIds } } : { userId: user.id },
             orderBy: { createdAt: 'desc' },
-            take: 50,
+            ...(matchIds ? {} : { take: 50 }),
         });
 
         const regularRows: ProfilePredictionRow[] = predictions.map((p) => ({

@@ -103,11 +103,14 @@ export function KingWeekScreen({ mode: modeParam }: { mode: string | string[] | 
       return;
     }
 
-    const [preds, leaderboard] = await Promise.all([
-      PredictionsService.getUserPredictions(token).catch(() => null),
+    const [picks, leaderboard] = await Promise.all([
+      PredictionsService.getPredictionsForMatches(
+        token,
+        dayMatches.map((match) => match.id),
+      ).catch(() => null),
       PredictionsService.getKingLeaderboard(token, toApiMode(mode), period).catch(() => null),
     ]);
-    if (preds) useKingPicksStore.getState().hydrate(preds.predictionsMap);
+    if (picks) useKingPicksStore.getState().hydrate(picks);
     setBoard(leaderboard);
   }, [mode, period, selectedKey]);
 

@@ -126,8 +126,11 @@ export function KingPlayScreen({
       useKingPicksStore.getState().clear();
       return;
     }
-    const preds = await PredictionsService.getUserPredictions(token);
-    useKingPicksStore.getState().hydrate(preds.predictionsMap);
+    const picks = await PredictionsService.getPredictionsForMatches(
+      token,
+      dayMatches.map((match) => match.id),
+    ).catch(() => null);
+    if (picks) useKingPicksStore.getState().hydrate(picks);
   }, [dateKey]);
 
   useFocusEffect(
