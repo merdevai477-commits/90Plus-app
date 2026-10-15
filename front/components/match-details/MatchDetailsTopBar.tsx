@@ -15,6 +15,7 @@ import { Text } from './MatchText';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassBubbleFill, GlassRim, GlassSheen } from '../navigation/glass';
+import { useAppFont } from '../../utils/fontSetup';
 
 const ISLAND_HEIGHT = 56;
 const ISLAND_RADIUS = ISLAND_HEIGHT / 2;
@@ -133,6 +134,7 @@ export function MatchDetailsTopBar({
   floating = false,
 }: MatchDetailsTopBarProps): React.ReactElement {
   const insets = useSafeAreaInsets();
+  const titleFont = useAppFont(800);
   const titleFade = useRef(new Animated.Value(1)).current;
   const titleShift = useRef(new Animated.Value(0)).current;
   const firstTitle = useRef(true);
@@ -175,7 +177,7 @@ export function MatchDetailsTopBar({
           <Animated.View
             style={[styles.centerLayer, { opacity: titleOpacity, transform: [{ translateY: titleShift }] }]}
           >
-            <Text style={styles.title} numberOfLines={1}>
+            <Text style={[styles.title, { fontFamily: titleFont }]} numberOfLines={1}>
               {title}
             </Text>
           </Animated.View>
@@ -273,11 +275,11 @@ const styles = StyleSheet.create({
   title: {
     color: '#fff',
     fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: 0.3,
+    // Weight comes from Cairo_800ExtraBold / Inter_800ExtraBold via fontFamily —
+    // synthetic fontWeight blurs Arabic glyphs on Android.
     textAlign: 'center',
-    textShadowColor: 'rgba(164,123,255,0.55)',
+    textShadowColor: 'rgba(164,123,255,0.35)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    textShadowRadius: 4,
   },
 });

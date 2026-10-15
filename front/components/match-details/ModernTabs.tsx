@@ -9,6 +9,7 @@ import {
   type LayoutChangeEvent,
 } from 'react-native';
 import { Text } from './MatchText';
+import { useAppFont } from '../../utils/fontSetup';
 
 interface Tab {
   key: string;
@@ -43,6 +44,8 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
   const scrollViewRef = useRef<ScrollView>(null);
   const [layouts, setLayouts] = useState<Record<string, TabLayout>>({});
   const [containerWidth, setContainerWidth] = useState(0);
+  const fontRegular = useAppFont(400);
+  const fontBold = useAppFont(700);
 
   const onTabLayout = useCallback((key: string, e: LayoutChangeEvent) => {
     const { x, width } = e.nativeEvent.layout;
@@ -110,7 +113,12 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
               accessibilityState={{ selected: isActive }}
             >
               <Text
-                style={[styles.tabText, floating && styles.floatingTabText, isActive && styles.activeTabText]}
+                style={[
+                  styles.tabText,
+                  floating && styles.floatingTabText,
+                  { fontFamily: isActive ? fontBold : fontRegular },
+                  isActive && styles.activeTabText,
+                ]}
                 numberOfLines={1}
               >
                 {tab.label}
@@ -173,15 +181,14 @@ const styles = StyleSheet.create({
   tabText: {
     color: '#fff',
     fontSize: 17,
-    fontWeight: '400',
     paddingBottom: 10,
   },
   activeTabText: {
-    color: '#810af2',
-    fontWeight: '700',
-    textShadowColor: '#5f2795',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    color: '#b57cff',
+    // Weight via Cairo_700Bold / Inter_700Bold — avoid synthetic bold on Arabic.
+    textShadowColor: 'rgba(95,39,149,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   underline: {
     width: '88%',
