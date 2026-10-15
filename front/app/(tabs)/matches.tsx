@@ -1,6 +1,24 @@
 import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react';
 import { useStableCallback } from '../../utils/performance';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Platform, ActivityIndicator, Dimensions, Animated, FlatList, InteractionManager, RefreshControl } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Modal,
+  Platform,
+  ActivityIndicator,
+  Dimensions,
+  Animated,
+  FlatList,
+  InteractionManager,
+  RefreshControl,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -137,6 +155,9 @@ const FILTER_LABEL_KEYS: Record<(typeof FILTERS)[number], string> = {
   Finished: 'matches.tabs.finished',
 };
 
+/** Country-list filters that share the accordion FlashList (not Favorite / WorldCup). */
+const COUNTRY_LIST_FILTERS: readonly MatchFilter[] = ['All', 'Live', 'Upcoming', 'Finished'];
+
 // Map API match status to display status
 function mapStatus(status: string): 'LIVE' | 'FT' | 'UPCOMING' {
   if (status === 'live') return 'LIVE';
@@ -174,6 +195,54 @@ type Fixture = {
     totalVotes: number;
   };
 };
+
+function matchPassesFilterValue(m: Match, filter: MatchFilter): boolean {
+  if (filter === 'Live') return m.status === 'live';
+  if (filter === 'Upcoming') return m.status !== 'live' && m.status !== 'finished';
+  if (filter === 'Finished') return m.status === 'finished';
+  if (filter === 'All') return m.status !== 'finished';
+  return true;
+}
+
+function fixturePassesFilterValue(f: Fixture, filter: MatchFilter): boolean {
+  if (filter === 'Live') return !!f.live;
+  if (filter === 'Upcoming') return f.status === 'UPCOMING';
+  if (filter === 'Finished') return f.status === 'FT';
+  if (filter === 'All') return f.status !== 'FT';
+  return true;
+}
+
+function filterCountryGroupsFor(
+  countryGroups: CountryGroup[],
+  filter: MatchFilter,
+  worldCupLeagueId: number | null | undefined,
+): CountryGroup[] {
+  const out: CountryGroup[] = [];
+  for (const cg of countryGroups) {
+    let changed = false;
+    const leagues: CountryGroup['leagues'] = [];
+    for (const l of cg.leagues) {
+      if (l.leagueId === worldCupLeagueId && !isMisTaggedWorldCupLeagueName(l.leagueName)) {
+        changed = true;
+        continue;
+      }
+      const kept = l.matches.filter((m) => matchPassesFilterValue(m, filter));
+      if (kept.length === 0) {
+        changed = true;
+        continue;
+      }
+      if (kept.length === l.matches.length) {
+        leagues.push(l);
+      } else {
+        changed = true;
+        leagues.push({ ...l, matches: kept });
+      }
+    }
+    const filtered = changed ? { ...cg, leagues } : cg;
+    if (filtered.leagues.length > 0) out.push(filtered);
+  }
+  return out;
+}
 
 // Convert a Match (from useMatchesData) into the Fixture shape used by MatchRow.
 // WeakMap-memoized by Match object identity so overlay-stable rows keep the same
@@ -1316,10 +1385,12 @@ export default function MatchesHubScreenV2() {
 
   // Live tab always shows today's fixtures — snap calendar back when selected
   // and kick a refresh so live rows appear without waiting on a stale day cache.
-  const handleFilterPress = useCallback((f: (typeof FILTERS)[number]) => {
+  // Returns false when the tab was blocked (e.g. locked World Cup) so the pager
+  // can stay on / bounce back to the previous page.
+  const handleFilterPress = useCallback((f: (typeof FILTERS)[number]): boolean => {
     if (f === 'WorldCup' && worldCupLocked && !worldCupEnabled) {
       setShowWorldCupLocked(true);
-      return;
+      return false;
     }
     if (f === 'Live' || f === 'Finished') {
       const today = startOfLocalDay();
@@ -1329,6 +1400,7 @@ export default function MatchesHubScreenV2() {
       else refreshSoft();
     }
     setFilter(f);
+    return true;
   }, [worldCupEnabled, worldCupLocked, selectedDate, refreshSoft]);
 
   const handleCalendarDayPress = useCallback((date: Date) => {
@@ -1357,78 +1429,20 @@ export default function MatchesHubScreenV2() {
     });
   }, []);
 
-  // Filter helper applied to a Match list.
-  const matchPassesFilter = useCallback(
-    (m: Match): boolean => {
-      if (filter === 'Live') return m.status === 'live';
-      if (filter === 'Upcoming') {
-        return m.status !== 'live' && m.status !== 'finished';
-      }
-      if (filter === 'Finished') return m.status === 'finished';
-      if (filter === 'All') return m.status !== 'finished';
-      return true;
-    },
-    [filter],
-  );
-
-  const fixturePassesFilter = useCallback(
-    (f: Fixture): boolean => {
-      if (filter === 'Live') return f.live;
-      if (filter === 'Upcoming') return f.status === 'UPCOMING';
-      if (filter === 'Finished') return f.status === 'FT';
-      if (filter === 'All') return f.status !== 'FT';
-      return true;
-    },
-    [filter],
-  );
-
-  // Country → League hierarchy after filtering. Drops empty leagues and
-  // empty countries. World Cup stays on its dedicated tab / pin.
-  // Continental / international leagues show in the main list (sorted on top).
-  // Per-country memo: countries whose CountryGroup object didn't change keep
-  // their filtered object identity, so their accordions skip re-rendering.
-  const filteredCountryCacheRef = useRef<{
-    key: string;
-    byGroup: WeakMap<CountryGroup, CountryGroup>;
-  }>({ key: '', byGroup: new WeakMap() });
-  const filteredCountryGroups = useMemo<CountryGroup[]>(() => {
-    const cacheKey = `${filter}|${worldCupLeagueId}`;
-    if (filteredCountryCacheRef.current.key !== cacheKey) {
-      filteredCountryCacheRef.current = { key: cacheKey, byGroup: new WeakMap() };
+  // Country → League hierarchy after filtering, keyed by tab so the swipe
+  // pager can show neighbouring pages without waiting for a filter settle.
+  // World Cup stays on its dedicated tab / pin; continental leagues stay in-list.
+  const countryGroupsByFilter = useMemo(() => {
+    const out = {} as Record<MatchFilter, CountryGroup[]>;
+    for (const f of COUNTRY_LIST_FILTERS) {
+      out[f] = filterCountryGroupsFor(countryGroups, f, worldCupLeagueId);
     }
-    const cache = filteredCountryCacheRef.current.byGroup;
-    const out: CountryGroup[] = [];
-    for (const cg of countryGroups) {
-      let filtered = cache.get(cg);
-      if (!filtered) {
-        let changed = false;
-        const leagues: CountryGroup['leagues'] = [];
-        for (const l of cg.leagues) {
-          // Real WC stays on the dedicated pin/tab. Mis-tagged leagueId=1 rows
-          // (e.g. "Italy, Primavera 1") must remain in the country list.
-          if (l.leagueId === worldCupLeagueId && !isMisTaggedWorldCupLeagueName(l.leagueName)) {
-            changed = true;
-            continue;
-          }
-          const kept = l.matches.filter(matchPassesFilter);
-          if (kept.length === 0) {
-            changed = true;
-            continue;
-          }
-          if (kept.length === l.matches.length) {
-            leagues.push(l);
-          } else {
-            changed = true;
-            leagues.push({ ...l, matches: kept });
-          }
-        }
-        filtered = changed ? { ...cg, leagues } : cg;
-        cache.set(cg, filtered);
-      }
-      if (filtered.leagues.length > 0) out.push(filtered);
-    }
+    out.Favorite = [];
+    out.WorldCup = [];
     return out;
-  }, [countryGroups, matchPassesFilter, worldCupLeagueId, filter]);
+  }, [countryGroups, worldCupLeagueId]);
+
+  const filteredCountryGroups = countryGroupsByFilter[filter] ?? countryGroupsByFilter.All;
 
   const worldCupLeagueGroups = useMemo<LeagueGroup[]>(() => {
     const wcMatches = worldCupMatches.filter(
@@ -1493,21 +1507,20 @@ export default function MatchesHubScreenV2() {
     return stageEntries.map((e) => e.group);
   }, [worldCupMatches]);
 
-  /** Pinned at top on All/Live/Upcoming/Finished — filtered by active tab. */
-  const pinnedWorldCupGroup = useMemo((): LeagueGroup | null => {
-    if (
-      filter === 'WorldCup' ||
-      filter === 'Favorite' ||
-      !worldCupEnabled ||
-      worldCupLeagueGroups.length === 0
-    ) {
-      return null;
+  /** Pinned WC card at top of All/Live/Upcoming/Finished — per swipe page. */
+  const pinnedWorldCupByFilter = useMemo(() => {
+    const out = {} as Partial<Record<MatchFilter, LeagueGroup | null>>;
+    if (!worldCupEnabled || worldCupLeagueGroups.length === 0) {
+      for (const f of COUNTRY_LIST_FILTERS) out[f] = null;
+      return out;
     }
     const base = worldCupLeagueGroups[0];
-    const fixtures = base.fixtures.filter(fixturePassesFilter);
-    if (fixtures.length === 0) return null;
-    return { ...base, fixtures };
-  }, [filter, worldCupEnabled, worldCupLeagueGroups, fixturePassesFilter]);
+    for (const f of COUNTRY_LIST_FILTERS) {
+      const fixtures = base.fixtures.filter((fx) => fixturePassesFilterValue(fx, f));
+      out[f] = fixtures.length > 0 ? { ...base, fixtures } : null;
+    }
+    return out;
+  }, [worldCupEnabled, worldCupLeagueGroups]);
 
   const hasWorldCupInCalendar = useMemo(
     () =>
@@ -1967,23 +1980,23 @@ export default function MatchesHubScreenV2() {
     [renderCountryMatchCard, handleViewAllLeague],
   );
 
-  const renderLeagueCard = useCallback(
-    ({ item }: { item: LeagueGroup }) => (
-      <LeagueCard
-        group={item}
-        filter={filter}
-        selectedDate={selectedDate}
-        onPredict={handlePredict}
-        submittingId={submittingId}
-        predictedMatches={predictedMatches}
-        subscribedFixtures={subscribedFixtures}
-        subscribingFixtureId={subscribingFixtureId}
-        onToggleSubscription={handleToggleSubscription}
-        onOpenDetails={handleOpenMatchDetails}
-      />
-    ),
+  const renderLeagueCardFor = useCallback(
+    (pageFilter: MatchFilter) =>
+      ({ item }: { item: LeagueGroup }) => (
+        <LeagueCard
+          group={item}
+          filter={pageFilter}
+          selectedDate={selectedDate}
+          onPredict={handlePredict}
+          submittingId={submittingId}
+          predictedMatches={predictedMatches}
+          subscribedFixtures={subscribedFixtures}
+          subscribingFixtureId={subscribingFixtureId}
+          onToggleSubscription={handleToggleSubscription}
+          onOpenDetails={handleOpenMatchDetails}
+        />
+      ),
     [
-      filter,
       selectedDate,
       handlePredict,
       submittingId,
@@ -2090,17 +2103,125 @@ export default function MatchesHubScreenV2() {
 
   const FloatingHeader = isLiquidGlassSupported ? LiquidGlassView : BlurView;
 
-  // Filter chips + calendar button. Reused by every FlashList branch below.
-  // Memoized so the header doesn't re-mount on unrelated state changes.
-  const listHeaderNode = useMemo(() => (
+  // ── Swipeable filter pager (same idea as match-details tabs) ──────────────
+  const { width: windowWidth } = useWindowDimensions();
+  const [pagerWidth, setPagerWidth] = useState(windowWidth);
+  const pagerRef = useRef<ScrollView>(null);
+  const chipsScrollRef = useRef<ScrollView>(null);
+  const chipLayoutsRef = useRef<Record<string, { x: number; width: number }>>({});
+  const activeFilterIndex = Math.max(0, visibleFilters.indexOf(filter));
+  const activeFilterIndexRef = useRef(activeFilterIndex);
+  activeFilterIndexRef.current = activeFilterIndex;
+  const pagerIndexRef = useRef(activeFilterIndex);
+  const pagerWidthRef = useRef(pagerWidth);
+  const pagerInitialOffsetRef = useRef<{ x: number; y: number } | null>(null);
+  const floatingHeaderOffset = Math.max(insets.top, 10) + 60;
+
+  const jumpPagerTo = useCallback((index: number, width: number, animated = false) => {
+    pagerIndexRef.current = index;
+    pagerWidthRef.current = width;
+    pagerRef.current?.scrollTo({ x: index * width, animated });
+  }, []);
+
+  const onPagerLayout = useCallback((e: LayoutChangeEvent) => {
+    const width = Math.round(e.nativeEvent.layout.width);
+    if (width <= 0) return;
+    setPagerWidth(width);
+    jumpPagerTo(activeFilterIndexRef.current, width, false);
+  }, [jumpPagerTo]);
+
+  // Tabs can appear/disappear (World Cup) or change via calendar / deep link —
+  // keep the pager offset pinned to the active filter.
+  useEffect(() => {
+    if (!pagerRef.current || pagerWidth <= 0) return;
+    if (pagerIndexRef.current === activeFilterIndex && pagerWidthRef.current === pagerWidth) return;
+    jumpPagerTo(activeFilterIndex, pagerWidth, false);
+  }, [activeFilterIndex, pagerWidth, jumpPagerTo]);
+
+  const scrollChipIntoView = useCallback((f: MatchFilter) => {
+    const layout = chipLayoutsRef.current[f];
+    if (!layout || !chipsScrollRef.current) return;
+    chipsScrollRef.current.scrollTo({
+      x: Math.max(0, layout.x - 24),
+      animated: true,
+    });
+  }, []);
+
+  useEffect(() => {
+    scrollChipIntoView(filter);
+  }, [filter, scrollChipIntoView]);
+
+  const selectFilterAtIndex = useCallback(
+    (index: number, opts?: { fromSwipe?: boolean }) => {
+      const f = visibleFilters[index];
+      if (!f) return;
+      if (f === 'WorldCup' && wcTabLocked) {
+        setShowWorldCupLocked(true);
+        if (opts?.fromSwipe) jumpPagerTo(activeFilterIndexRef.current, pagerWidthRef.current, true);
+        return;
+      }
+      const accepted = handleFilterPress(f);
+      if (!accepted) {
+        if (opts?.fromSwipe) jumpPagerTo(activeFilterIndexRef.current, pagerWidthRef.current, true);
+        return;
+      }
+      pagerIndexRef.current = index;
+    },
+    [visibleFilters, wcTabLocked, handleFilterPress, jumpPagerTo],
+  );
+
+  const onFilterChipPress = useCallback(
+    (f: MatchFilter) => {
+      const index = visibleFilters.indexOf(f);
+      if (index < 0) return;
+      if (f === 'WorldCup' && wcTabLocked) {
+        setShowWorldCupLocked(true);
+        return;
+      }
+      const accepted = handleFilterPress(f);
+      if (!accepted) return;
+      pagerIndexRef.current = index;
+      jumpPagerTo(index, pagerWidthRef.current, true);
+    },
+    [visibleFilters, wcTabLocked, handleFilterPress, jumpPagerTo],
+  );
+
+  const onPagerMomentumEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const width = pagerWidthRef.current;
+      if (width <= 0) return;
+      const index = Math.round(e.nativeEvent.contentOffset.x / width);
+      if (index === pagerIndexRef.current && visibleFilters[index] === filter) return;
+      selectFilterAtIndex(index, { fromSwipe: true });
+    },
+    [selectFilterAtIndex, visibleFilters, filter],
+  );
+
+  // Sticky filter chips + calendar (above the swipe pager, like match-details tabs).
+  const filterBarNode = useMemo(() => (
     <View style={styles.listHeader}>
       <View style={styles.tabsRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll} style={{ flex: 1, marginRight: 10 }}>
+        <ScrollView
+          ref={chipsScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabsScroll}
+          style={{ flex: 1, marginRight: 10 }}
+        >
           {visibleFilters.map((f) => {
             const active = filter === f;
             const showLock = f === 'WorldCup' && wcTabLocked;
             return (
-              <TouchableOpacity key={f} onPress={() => handleFilterPress(f)} activeOpacity={0.85} style={[styles.tabChip, active && styles.tabChipActive]}>
+              <TouchableOpacity
+                key={f}
+                onPress={() => onFilterChipPress(f)}
+                onLayout={(e) => {
+                  const { x, width } = e.nativeEvent.layout;
+                  chipLayoutsRef.current[f] = { x, width };
+                }}
+                activeOpacity={0.85}
+                style={[styles.tabChip, active && styles.tabChipActive]}
+              >
                 {isLiquidGlassSupported ? (
                   <LiquidGlassView {...({ style: [StyleSheet.absoluteFill, { borderRadius: 11 }], tint: 'rgba(20,15,30,0.65)', effect: 'clear' } as any)} />
                 ) : (
@@ -2133,34 +2254,31 @@ export default function MatchesHubScreenV2() {
         </TouchableOpacity>
       ) : null}
     </View>
-  ), [filter, t, handleFilterPress, isDataStale, matches.length, refetch, wcTabLocked, visibleFilters]);
+  ), [filter, t, onFilterChipPress, isDataStale, matches.length, refetch, wcTabLocked, visibleFilters, openCalendar]);
 
-  const listHeaderWithPinnedWc = useMemo(
-    () => (
-      <View>
-        {listHeaderNode}
-        {pinnedWorldCupGroup ? (
-          <View style={styles.pinnedWcWrap}>
-            <LeagueCard
-              group={pinnedWorldCupGroup}
-              filter={filter}
-              selectedDate={selectedDate}
-              onPredict={handlePredict}
-              submittingId={submittingId}
-              predictedMatches={predictedMatches}
-              subscribedFixtures={subscribedFixtures}
-              subscribingFixtureId={subscribingFixtureId}
-              onToggleSubscription={handleToggleSubscription}
-              onOpenDetails={handleOpenMatchDetails}
-            />
-          </View>
-        ) : null}
-      </View>
-    ),
+  const pinnedHeaderFor = useCallback(
+    (pageFilter: MatchFilter) => {
+      const pinned = pinnedWorldCupByFilter[pageFilter];
+      if (!pinned) return null;
+      return (
+        <View style={styles.pinnedWcWrap}>
+          <LeagueCard
+            group={pinned}
+            filter={pageFilter}
+            selectedDate={selectedDate}
+            onPredict={handlePredict}
+            submittingId={submittingId}
+            predictedMatches={predictedMatches}
+            subscribedFixtures={subscribedFixtures}
+            subscribingFixtureId={subscribingFixtureId}
+            onToggleSubscription={handleToggleSubscription}
+            onOpenDetails={handleOpenMatchDetails}
+          />
+        </View>
+      );
+    },
     [
-      listHeaderNode,
-      pinnedWorldCupGroup,
-      filter,
+      pinnedWorldCupByFilter,
       selectedDate,
       handlePredict,
       submittingId,
@@ -2172,13 +2290,67 @@ export default function MatchesHubScreenV2() {
     ],
   );
 
-  const listLoading =
-    (filter === 'WorldCup' && worldCupEnabled ? worldCupLoading : loading) &&
-    !(filter === 'Live' && matches.some((m) => m.status === 'live'));
-  const listError =
-    filter === 'WorldCup' && worldCupEnabled ? worldCupError : error;
-  const listRefetch =
-    filter === 'WorldCup' && worldCupEnabled ? refetchWorldCup : refetch;
+  const formatListError = useCallback(
+    (listError: string | null) => {
+      if (!listError) return null;
+      if (listError === 'load_failed') return t('matches.screen.loadFailed');
+      if (listError.toLowerCase().includes('date value out of bounds')) {
+        return t('matches.screen.loadFailed');
+      }
+      if (listError === 'Failed to load matches') return t('matches.screen.loadFailed');
+      if (listError.toLowerCase().includes('abort')) return t('matches.screen.loadFailed');
+      return listError;
+    },
+    [t],
+  );
+
+  const emptyNodeFor = useCallback(
+    (pageFilter: MatchFilter) => {
+      const pageLoading =
+        (pageFilter === 'WorldCup' && worldCupEnabled ? worldCupLoading : loading) &&
+        !(pageFilter === 'Live' && matches.some((m) => m.status === 'live'));
+      const pageError =
+        pageFilter === 'WorldCup' && worldCupEnabled ? worldCupError : error;
+      const pageRefetch =
+        pageFilter === 'WorldCup' && worldCupEnabled ? refetchWorldCup : refetch;
+      const msg = formatListError(pageError);
+      if (pageLoading) {
+        return (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
+            <Text style={styles.loadingTxt}>{t('matches.screen.loading')}</Text>
+          </View>
+        );
+      }
+      if (msg) {
+        return (
+          <View style={styles.errorWrap}>
+            <Text style={styles.errorTxt}>⚠️ {msg}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={pageRefetch} activeOpacity={0.7}>
+              <Text style={styles.retryTxt}>{t('matches.screen.retry')}</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      }
+      return (
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTxt}>{t('matches.screen.noMatchesFound')}</Text>
+        </View>
+      );
+    },
+    [
+      worldCupEnabled,
+      worldCupLoading,
+      loading,
+      matches,
+      worldCupError,
+      error,
+      refetchWorldCup,
+      refetch,
+      formatListError,
+      t,
+    ],
+  );
 
   const onListPull = useCallback(async () => {
     if (filter === 'WorldCup' && worldCupEnabled) {
@@ -2193,54 +2365,89 @@ export default function MatchesHubScreenV2() {
   }, [filter, worldCupEnabled, refetchWorldCup, refetch, refreshNotified]);
 
   const { refreshing: listPullRefreshing, onRefresh: onListPullRefresh } = usePullToRefresh(onListPull);
-  const listHeaderOffset = Math.max(insets.top, 10) + 60;
-  const listRefreshControl = (
-    <RefreshControl
-      refreshing={listPullRefreshing}
-      onRefresh={onListPullRefresh}
-      tintColor={PURPLE_SOFT}
-      colors={[PURPLE_PRIMARY]}
-      progressViewOffset={listHeaderOffset}
-    />
+
+  const refreshControlFor = useCallback(
+    (pageFilter: MatchFilter) =>
+      pageFilter === filter ? (
+        <RefreshControl
+          refreshing={listPullRefreshing}
+          onRefresh={onListPullRefresh}
+          tintColor={PURPLE_SOFT}
+          colors={[PURPLE_PRIMARY]}
+        />
+      ) : undefined,
+    [filter, listPullRefreshing, onListPullRefresh],
   );
 
-  const listErrorMessage = useMemo(() => {
-    if (!listError) return null;
-    if (listError === 'load_failed') return t('matches.screen.loadFailed');
-    if (listError.toLowerCase().includes('date value out of bounds')) {
-      return t('matches.screen.loadFailed');
-    }
-    if (listError === 'Failed to load matches') return t('matches.screen.loadFailed');
-    const lower = listError.toLowerCase();
-    if (lower.includes('abort')) return t('matches.screen.loadFailed');
-    return listError;
-  }, [listError, t]);
+  const renderFilterPage = useCallback(
+    (pageFilter: MatchFilter) => {
+      const refreshControl = refreshControlFor(pageFilter);
+      if (pageFilter === 'WorldCup') {
+        return (
+          <FlashList
+            data={worldCupLeagueGroups}
+            keyExtractor={(g) => g.id}
+            renderItem={renderLeagueCardFor(pageFilter)}
+            ItemSeparatorComponent={ITEM_SEPARATOR_10}
+            drawDistance={250}
+            contentContainerStyle={styles.pagerListContent}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={emptyNodeFor(pageFilter)}
+            refreshControl={refreshControl}
+          />
+        );
+      }
+      if (pageFilter === 'Favorite') {
+        return (
+          <FavoritesTab
+            followedTeams={followedTeams}
+            notifiedMatches={notifiedMatches}
+            loading={favoritesFeedLoading}
+            headerOffset={8}
+            listHeader={null}
+            renderFixture={renderFavoriteFixture}
+            onOpenTeam={handleOpenFavoriteTeam}
+            onChooseFavoriteTeam={() => router.push('/search' as any)}
+            refreshControl={refreshControl}
+          />
+        );
+      }
+      return (
+        <FlashList
+          data={countryGroupsByFilter[pageFilter] ?? []}
+          keyExtractor={(cg) => cg.country}
+          renderItem={renderCountryAccordion}
+          drawDistance={250}
+          ItemSeparatorComponent={ITEM_SEPARATOR_8}
+          contentContainerStyle={styles.pagerListContent}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={pinnedHeaderFor(pageFilter)}
+          ListEmptyComponent={emptyNodeFor(pageFilter)}
+          refreshControl={refreshControl}
+        />
+      );
+    },
+    [
+      refreshControlFor,
+      worldCupLeagueGroups,
+      renderLeagueCardFor,
+      emptyNodeFor,
+      followedTeams,
+      notifiedMatches,
+      favoritesFeedLoading,
+      renderFavoriteFixture,
+      handleOpenFavoriteTeam,
+      router,
+      countryGroupsByFilter,
+      renderCountryAccordion,
+      pinnedHeaderFor,
+    ],
+  );
 
-  const listEmptyNode = useMemo(() => {
-    if (listLoading) {
-      return (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={PURPLE_PRIMARY} />
-          <Text style={styles.loadingTxt}>{t('matches.screen.loading')}</Text>
-        </View>
-      );
-    }
-    if (listErrorMessage) {
-      return (
-        <View style={styles.errorWrap}>
-          <Text style={styles.errorTxt}>⚠️ {listErrorMessage}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={listRefetch} activeOpacity={0.7}>
-            <Text style={styles.retryTxt}>{t('matches.screen.retry')}</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-    return (
-      <View style={styles.emptyWrap}>
-        <Text style={styles.emptyTxt}>{t('matches.screen.noMatchesFound')}</Text>
-      </View>
-    );
-  }, [listLoading, listErrorMessage, listRefetch, t]);
+  if (!pagerInitialOffsetRef.current) {
+    pagerInitialOffsetRef.current = { x: activeFilterIndex * pagerWidth, y: 0 };
+  }
+  const pagerInitialOffset = pagerInitialOffsetRef.current;
 
   return (
     <View style={{ flex: 1, backgroundColor: APP_BG }}>
@@ -2283,46 +2490,29 @@ export default function MatchesHubScreenV2() {
         hype={t('matchesInfo.hype')}
         gotItLabel={t('matchesInfo.gotIt')}
       />
-      {/* FlashList — WorldCup / Favorite (placeholder) / default country accordion. */}
-      {filter === 'WorldCup' ? (
-        <FlashList
-          data={worldCupLeagueGroups}
-          keyExtractor={g => g.id}
-          renderItem={renderLeagueCard}
-          ItemSeparatorComponent={ITEM_SEPARATOR_10}
-          drawDistance={250}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={listHeaderWithPinnedWc}
-          ListEmptyComponent={listEmptyNode}
-          refreshControl={listRefreshControl}
-        />
-      ) : filter === 'Favorite' ? (
-        <FavoritesTab
-          followedTeams={followedTeams}
-          notifiedMatches={notifiedMatches}
-          loading={favoritesFeedLoading}
-          headerOffset={Math.max(insets.top, 10) + 60}
-          listHeader={listHeaderNode}
-          renderFixture={renderFavoriteFixture}
-          onOpenTeam={handleOpenFavoriteTeam}
-          onChooseFavoriteTeam={() => router.push('/search' as any)}
-          refreshControl={listRefreshControl}
-        />
-      ) : (
-        <FlashList
-          data={filteredCountryGroups}
-          keyExtractor={cg => cg.country}
-          renderItem={renderCountryAccordion}
-          drawDistance={250}
-          ItemSeparatorComponent={ITEM_SEPARATOR_8}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: Math.max(insets.top, 10) + 60 }}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={listHeaderWithPinnedWc}
-          ListEmptyComponent={listEmptyNode}
-          refreshControl={listRefreshControl}
-        />
-      )}
+      <View style={[styles.pagerShell, { paddingTop: floatingHeaderOffset }]}>
+        {filterBarNode}
+        <Animated.ScrollView
+          ref={pagerRef as any}
+          horizontal
+          pagingEnabled
+          style={styles.pager}
+          onLayout={onPagerLayout}
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          onMomentumScrollEnd={onPagerMomentumEnd}
+          scrollEventThrottle={16}
+          contentOffset={pagerInitialOffset}
+        >
+          {visibleFilters.map((pageFilter, index) => (
+            <View key={pageFilter} style={[styles.pagerPage, { width: pagerWidth }]}>
+              {Math.abs(index - activeFilterIndex) <= 1 ? renderFilterPage(pageFilter) : null}
+            </View>
+          ))}
+        </Animated.ScrollView>
+      </View>
 
       {/* "View All" league bottom sheet — driven by CountryAccordion taps. */}
       <LeagueAllMatchesModal
@@ -2459,7 +2649,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  listHeader: { marginBottom: 4 },
+  listHeader: { marginBottom: 4, paddingHorizontal: 16 },
+  pagerShell: { flex: 1 },
+  pager: { flex: 1 },
+  pagerPage: { flex: 1 },
+  pagerListContent: { paddingHorizontal: 16, paddingBottom: 120, paddingTop: 4 },
   pinnedWcWrap: { marginBottom: 10 },
   staleBanner: {
     marginBottom: 12,
@@ -2471,7 +2665,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(245,158,11,0.35)',
   },
   staleBannerTxt: { color: '#fcd34d', fontSize: 13, fontWeight: '600', textAlign: 'center' },
-  tabsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, marginTop: 24 },
+  tabsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginTop: 8 },
   tabsScroll: { gap: 8, paddingRight: 6 },
   ticketsOuter: { shadowColor: '#000000ff', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.8, shadowRadius: 12, elevation: 8 },
   ticketsInner: { height: 40, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(84, 13, 151, 0)', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, overflow: 'hidden' },
