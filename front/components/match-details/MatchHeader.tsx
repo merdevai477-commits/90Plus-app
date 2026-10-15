@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { Text } from './MatchText';
 import { Image } from 'expo-image';
@@ -10,14 +10,7 @@ import Animated, {
   withTiming,
   useAnimatedStyle,
 } from 'react-native-reanimated';
-import {
-  formatMatchTime,
-  isLiveStoppage,
-  resolveLiveMinuteLabel,
-} from '../../components/Matches/leagueApiUtils';
-import { isStaleInPlayClock } from '../../utils/staleMatchClock';
-import { useAnchoredPeriodStart } from '../../hooks/useAnchoredPeriodStart';
-import { useLiveDisplayClock } from '../../hooks/useLiveDisplayClock';
+import { useMatchStatusLine } from './useMatchStatusLine';
 import { ScorersViewMoreButton, useCollapsibleScorers } from './ScorersViewMore';
 import {
   LIVE_RED,
@@ -73,14 +66,7 @@ interface MatchHeaderProps {
   onPressAwayTeam?: () => void;
 }
 
-const LIVE_STATUSES = ['1H', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
-const FINISHED_STATUSES = ['FT', 'AET', 'PEN'];
-/** Terminal states with no meaningful score/live indicator. */
-const NOT_PLAYED_STATUSES = ['CANC', 'PST', 'ABD', 'AWD', 'WO', 'TBD'];
-/** Halted-but-resumable states — keep the score, drop the live pulse. */
-const PAUSED_STATUSES = ['SUSP'];
-
-function PulsingDot({ color = LIVE_RED }: { color?: string }): React.ReactElement {
+export function PulsingDot({ color = LIVE_RED }: { color?: string }): React.ReactElement {
   const pulse = useSharedValue(1);
   useEffect(() => {
     pulse.value = withRepeat(withTiming(0.3, { duration: 800 }), -1, true);
@@ -159,77 +145,36 @@ export const MatchHeader: React.FC<MatchHeaderProps> = ({
   onPressHomeTeam,
   onPressAwayTeam,
 }) => {
-  const short = statusShort || '';
-  const isHalftime = short === 'HT';
-  const isNotPlayed = NOT_PLAYED_STATUSES.includes(short);
-  const isPaused = PAUSED_STATUSES.includes(short);
-  const staleLive = isStaleInPlayClock({
-    statusShort: short,
+  const {
+    short,
+    isLive,
+    isHalftime,
+    isNotPlayed,
+    isStoppage,
+    statusLine,
+  } = useMatchStatusLine({
+    status,
+    statusShort,
     elapsed,
-    extra: stoppage,
-    kickoffIso: fixtureDate,
+    stoppage,
+    startTimestamp,
+    clockAnchorKey,
+    fixtureDate,
+    time,
+    statusLabel,
+    halftimeLabel,
+    finishedLabel,
+    vsLabel,
+    liveLabel,
+    penaltiesShortLabel,
+    kickoffStatusLabel,
   });
-  const isLive =
-    !staleLive &&
-    !isNotPlayed &&
-    !isPaused &&
-    (LIVE_STATUSES.includes(short) || (status === 'live' && !isHalftime));
-  const isFinished =
-    staleLive ||
-    (!isNotPlayed &&
-      (FINISHED_STATUSES.includes(short) || (status === 'finished' && !isPaused)));
-  const isStoppage = isLive && isLiveStoppage(short, elapsed, stoppage);
+  const specialBadgeText = statusLabel || short || '—';
   const hasPenaltyScore =
     penaltyHome != null &&
     penaltyAway != null &&
     String(penaltyHome).length > 0 &&
     String(penaltyAway).length > 0;
-  // Badge text for finished/paused/not-played states (falls back to English).
-  const finishedBadgeText =
-    statusLabel ||
-    (short === 'AET' ? 'AET' : short === 'PEN' ? penaltiesShortLabel : finishedLabel);
-  const specialBadgeText = statusLabel || short || '—';
-
-  const kickoffTime = useMemo(() => {
-    if (fixtureDate) return formatMatchTime(fixtureDate);
-    return time || '--:--';
-  }, [fixtureDate, time]);
-
-  // Seconds tick only in open play. Stoppage, half-time and full time keep
-  // the existing minute or status label.
-  const clockActive = isLive && !isStoppage && !isHalftime;
-
-  const anchoredStart = useAnchoredPeriodStart(
-    clockAnchorKey,
-    short,
-    elapsed,
-    startTimestamp,
-  );
-
-  const minuteLabel =
-    resolveLiveMinuteLabel(short, elapsed, {
-      startTimestamp: clockActive ? anchoredStart : undefined,
-      extra: stoppage,
-    }) ??
-    (isLive ? short || liveLabel : '');
-
-  const liveClock = useLiveDisplayClock({
-    fixtureId: clockAnchorKey != null ? String(clockAnchorKey) : '',
-    statusShort: short,
-    elapsed,
-    extra: stoppage,
-    fallbackLabel: minuteLabel,
-  });
-
-  const statusLine = isLive
-    ? (clockActive ? liveClock : minuteLabel)
-    : isFinished
-    ? finishedBadgeText
-    : isHalftime
-    ? halftimeLabel
-    : isNotPlayed || isPaused
-    ? specialBadgeText
-    : (kickoffStatusLabel || kickoffTime || vsLabel);
 
   const { width: screenWidth } = useWindowDimensions();
   const compact = screenWidth < 380;

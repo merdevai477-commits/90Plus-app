@@ -20,6 +20,8 @@ type MatchDetailsTopBarProps = {
   notificationsLoading?: boolean;
   /** Shown in place of the title as `collapseProgress` goes 0 → 1 (e.g. compact score). */
   compactContent?: React.ReactNode;
+  /** Full-width strip pinned to the bar's bottom edge, faded in with `collapseProgress`. */
+  compactFooter?: React.ReactNode;
   collapseProgress?: Animated.AnimatedInterpolation<number> | Animated.Value;
 };
 
@@ -33,6 +35,7 @@ export function MatchDetailsTopBar({
   notificationsDisabled = false,
   notificationsLoading = false,
   compactContent,
+  compactFooter,
   collapseProgress,
 }: MatchDetailsTopBarProps): React.ReactElement {
   const insets = useSafeAreaInsets();
@@ -83,6 +86,11 @@ export function MatchDetailsTopBar({
           )}
         </TouchableOpacity>
       </View>
+      {compactFooter && collapseProgress ? (
+        <Animated.View pointerEvents="none" style={[styles.footer, { opacity: collapseProgress }]}>
+          {compactFooter}
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -114,6 +122,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   title: {
     color: '#fff',

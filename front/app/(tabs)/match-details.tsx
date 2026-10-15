@@ -27,6 +27,7 @@ import { getTeamDisplayName, getLeagueDisplayName, getLocalizedMatchStatus, getL
 import { prefetchFootballTranslations } from '../../src/stores/footballTranslationStore';
 import { collectUniqueStrings } from '../../utils/footballNamePrefetch';
 import { MatchHeader } from '../../components/match-details/MatchHeader';
+import { MatchCompactScore, MatchCompactProgress } from '../../components/match-details/MatchCompactScore';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { TeamToggle } from '../../components/match-details/TeamToggle';
 import { MatchDetailsTopBar } from '../../components/match-details/MatchDetailsTopBar';
@@ -2652,6 +2653,12 @@ const MatchDetailsScreen = () => {
   // on the Score tab lets Android still paint a black surface that clips scorers
   // — especially when the widget reloads at FT / late stoppage.
 
+  const headerStatus = fixture ? (
+    ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(fixture.fixture?.status?.short ?? '') ? 'live'
+    : ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(fixture.fixture?.status?.short ?? '') ? 'finished'
+    : 'upcoming'
+  ) : 'upcoming';
+
   const scoreHeader = (
     <MatchHeader
       homeTeam={getTeamDisplayName(homeTeamName, language)}
@@ -2660,11 +2667,7 @@ const MatchDetailsScreen = () => {
       awayLogo={awayTeamLogo}
       homeScore={fixture?.goals?.home != null ? String(fixture.goals.home) : undefined}
       awayScore={fixture?.goals?.away != null ? String(fixture.goals.away) : undefined}
-      status={fixture ? (
-        ['1H', '2H', 'HT', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'].includes(fixture.fixture?.status?.short ?? '') ? 'live'
-        : ['FT', 'AET', 'PEN', 'CANC', 'ABD', 'AWD', 'WO'].includes(fixture.fixture?.status?.short ?? '') ? 'finished'
-        : 'upcoming'
-      ) : 'upcoming'}
+      status={headerStatus}
       league={getLeagueDisplayName(
         leagueName,
         language,
@@ -2831,19 +2834,38 @@ const MatchDetailsScreen = () => {
   }
 
   const compactScore = (
-    <View style={styles.compactScore}>
-      {homeTeamLogo ? (
-        <ExpoImage source={{ uri: homeTeamLogo }} style={styles.compactLogo} contentFit="contain" />
-      ) : null}
-      <Text style={styles.compactScoreText} numberOfLines={1}>
-        {fixture?.goals?.home != null && fixture?.goals?.away != null
-          ? `${fixture.goals.home} - ${fixture.goals.away}`
-          : kickoffTime || t.matchDetails.vs}
-      </Text>
-      {awayTeamLogo ? (
-        <ExpoImage source={{ uri: awayTeamLogo }} style={styles.compactLogo} contentFit="contain" />
-      ) : null}
-    </View>
+    <MatchCompactScore
+      homeTeam={getTeamDisplayName(homeTeamName, language)}
+      awayTeam={getTeamDisplayName(awayTeamName, language)}
+      homeLogo={homeTeamLogo}
+      awayLogo={awayTeamLogo}
+      homeScore={fixture?.goals?.home}
+      awayScore={fixture?.goals?.away}
+      status={headerStatus}
+      statusShort={fixture?.fixture?.status?.short}
+      elapsed={fixture?.fixture?.status?.elapsed ?? undefined}
+      stoppage={fixture?.fixture?.status?.extra ?? null}
+      startTimestamp={fixture ? getPeriodStartTimestamp(fixture) : undefined}
+      clockAnchorKey={fixtureId || undefined}
+      fixtureDate={fixture?.fixture?.date}
+      time={kickoffTime}
+      statusLabel={
+        fixture?.fixture?.status?.short
+          ? getLocalizedMatchStatus(fixture.fixture.status.short, language)
+          : undefined
+      }
+      halftimeLabel={getLocalizedMatchStatus('HT', language)}
+      finishedLabel={getLocalizedMatchStatus('FT', language)}
+      liveLabel={getLocalizedMatchStatus('LIVE', language)}
+      vsLabel={t.matchDetails.vs}
+      penaltiesShortLabel={getLocalizedMatchStatus('PEN', language)}
+    />
+  );
+  const compactProgress = (
+    <MatchCompactProgress
+      statusShort={fixture?.fixture?.status?.short}
+      elapsed={fixture?.fixture?.status?.elapsed ?? undefined}
+    />
   );
 
   return (
@@ -2860,6 +2882,7 @@ const MatchDetailsScreen = () => {
         notificationsDisabled={isFinishedMatch()}
         notificationsLoading={matchSubLoading}
         compactContent={compactScore}
+        compactFooter={compactProgress}
         collapseProgress={compactHeaderProgress}
       />
 
@@ -3006,20 +3029,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 8,
-  },
-  compactScore: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  compactLogo: {
-    width: 24,
-    height: 24,
-  },
-  compactScoreText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
   },
   pageScroll: {
     flex: 1,
