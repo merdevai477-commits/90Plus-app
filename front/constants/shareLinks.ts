@@ -69,11 +69,44 @@ export function buildReelDeepLink(reelId: string): string {
   return `ninetyplus://reel/${reelId}`;
 }
 
-/** HTTPS profile link — Android App Links open the app when installed */
+/**
+ * Payload for React Native `Share.share` when sharing a reel.
+ * Always includes the public HTTPS link so recipients can open the app / web.
+ */
+export function buildReelSharePayload(options: {
+  reelId: string;
+  creatorName?: string;
+  description?: string;
+  lang?: 'ar' | 'en';
+}): { message: string; title: string; url: string } {
+  const url = buildReelShareUrl(options.reelId);
+  const name = (options.creatorName || '').trim() || '90Plus';
+  const desc = (options.description || '').trim();
+  const shortDesc =
+    desc.length > 120 ? `${desc.slice(0, 117).trimEnd()}…` : desc;
+  const lang = options.lang === 'en' ? 'en' : 'ar';
+
+  const message =
+    lang === 'en'
+      ? shortDesc
+        ? `Check out this clip from ${name} on 90Plus!\n${shortDesc}\n\n${url}`
+        : `Check out this clip from ${name} on 90Plus!\n${url}`
+      : shortDesc
+        ? `شاهد هذا المقطع من ${name} على 90Plus!\n${shortDesc}\n\n${url}`
+        : `شاهد هذا المقطع من ${name} على 90Plus!\n${url}`;
+
+  return { message, title: '90Plus', url };
+}
+
+/**
+ * HTTPS profile link — Android App Links / iOS Universal Links open the app.
+ * Uses `/u/:username` (not `/@…`) so chat apps do not treat the path as a mention.
+ * Legacy `/@username` links still resolve on the server and in {@link parseProfileUsernameFromUrl}.
+ */
 export function buildProfileShareUrl(username: string): string {
   const clean = normalizeShareUsername(username);
   if (!isValidShareUsername(clean)) return PROFILE_SHARE_BASE_URL;
-  return `${PROFILE_SHARE_BASE_URL}/@${clean}`;
+  return `${PROFILE_SHARE_BASE_URL}/u/${clean}`;
 }
 
 export function buildProfileDeepLink(username: string): string {
@@ -113,7 +146,13 @@ export function parseReelIdFromUrl(url: string): string | null {
 /** Parse username from custom scheme or https profile share URLs */
 export function parseProfileUsernameFromUrl(url: string): string | null {
   if (!url) return null;
-  const trimmed = url.trim();
+  let trimmed = url.trim();
+  try {
+    // Chat apps / QR scanners often percent-encode `@` as %40.
+    trimmed = decodeURIComponent(trimmed);
+  } catch {
+    /* keep raw */
+  }
 
   if (trimmed.startsWith('ninetyplus://user/')) {
     const username = normalizeShareUsername(
@@ -129,9 +168,17 @@ export function parseProfileUsernameFromUrl(url: string): string | null {
     return isValidShareUsername(username) ? username : null;
   }
 
-  const httpsMatch = trimmed.match(/\/@([a-zA-Z0-9_]{1,64})/i);
-  if (httpsMatch?.[1]) {
-    const username = normalizeShareUsername(httpsMatch[1]);
+  // Canonical: https://90plus.pro/u/username
+  const pathMatch = trimmed.match(/\/u\/([a-zA-Z0-9_]{1,64})(?:[/?#]|$)/i);
+  if (pathMatch?.[1]) {
+    const username = normalizeShareUsername(pathMatch[1]);
+    return isValidShareUsername(username) ? username : null;
+  }
+
+  // Legacy: https://90plus.pro/@username
+  const atMatch = trimmed.match(/\/@([a-zA-Z0-9_]{1,64})/i);
+  if (atMatch?.[1]) {
+    const username = normalizeShareUsername(atMatch[1]);
     return isValidShareUsername(username) ? username : null;
   }
 

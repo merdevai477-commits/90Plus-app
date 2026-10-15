@@ -10,17 +10,15 @@ import {
     ActionSheetIOS,
     Platform,
     Share as RNShare,
-    Linking,
     Alert,
     Modal,
     TextInput,
     KeyboardAvoidingView,
-    ScrollView,
     ActivityIndicator,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     Heart,
     MessageCircle,
@@ -31,16 +29,23 @@ import {
     MoreVertical,
     Eye,
     Play,
+    BadgeCheck,
 } from 'lucide-react-native';
 
 import { SafeVideoPlayer as UnifiedVideoPlayer } from '../common/SafeVideoPlayer';
-import type { UnifiedReelData } from '../common/UnifiedVideoPlayer';
 import { DoubleTapLikeAnimation } from '../Matches/DoubleTapAnimation';
 import { ReelData } from './types';
-import { COLORS, GRADIENTS, EFFECTS } from './constants';
+import { COLORS, GRADIENTS, EFFECTS, REELS_TAB_CLEARANCE } from './constants';
 import * as Haptics from 'expo-haptics';
 import { useTranslation } from '../../src/i18n';
-import { buildReelShareUrl } from '../../constants/shareLinks';
+import { buildReelSharePayload } from '../../constants/shareLinks';
+import {
+    confirmExternalShare,
+    isCopyShareActivity,
+    watchShareHandoff,
+} from '../../utils/confirmExternalShare';
+import { toastManager } from '../../services/toastManager';
+import { SURFACE_MODAL, OVERLAY_SCRIM } from '../../constants/tokens';
 
 interface ReelItemProps {
     reel: ReelData;
@@ -126,7 +131,10 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const [editCaption, setEditCaption] = useState('');
     const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-    const { t } = useTranslation();
+    const { t, language } = useTranslation();
+    const insets = useSafeAreaInsets();
+    const bottomClearance = REELS_TAB_CLEARANCE + Math.max(insets.bottom, 12);
+    const topClearance = Math.max(insets.top, 12) + 8;
 
     const haptics = {
         lightImpact: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
@@ -246,89 +254,61 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
         }
     };
 
-    const handleShareWhatsApp = useCallback(async () => {
-        const url = buildReelShareUrl(reel.id);
-        const message = (t.reels.shareReelMessageWhatsApp as string).replace('{url}', url);
-        const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
-        try {
-            const canOpen = await Linking.canOpenURL(whatsappUrl);
-            if (canOpen) {
-                await Linking.openURL(whatsappUrl);
-                onRecordShare('whatsapp');
-            } else {
-                const result = await RNShare.share({ message });
-                if (result.action === RNShare.sharedAction) onRecordShare('whatsapp');
-            }
-        } catch {
-            try {
-                const result = await RNShare.share({ message });
-                if (result.action === RNShare.sharedAction) onRecordShare('whatsapp');
-            } catch {
-                /* user cancelled */
-            }
-        }
-    }, [reel.id, onRecordShare, t.reels.shareReelMessageWhatsApp]);
+    /** Native OS share sheet with real HTTPS deep link — records only on real handoff */
+    const shareReelNative = useCallback(async () => {
+        const lang = language === 'en' ? 'en' : 'ar';
+        const payload = buildReelSharePayload({
+            reelId: reel.id,
+            creatorName: reel.user?.name,
+            description: reel.description,
+            lang,
+        });
 
-    const handleShareFacebook = useCallback(async () => {
-        const url = buildReelShareUrl(reel.id);
-        const fbUrl = `fb://share?u=${encodeURIComponent(url)}`;
+        const handoff = watchShareHandoff();
         try {
-            const canOpen = await Linking.canOpenURL(fbUrl);
-            if (canOpen) {
-                await Linking.openURL(fbUrl);
-                onRecordShare('facebook');
-            } else {
-                const result = await RNShare.share({ message: url });
-                if (result.action === RNShare.sharedAction) onRecordShare('facebook');
-            }
-        } catch {
-            try {
-                const result = await RNShare.share({ message: url });
-                if (result.action === RNShare.sharedAction) onRecordShare('facebook');
-            } catch {
-                /* user cancelled */
-            }
-        }
-    }, [reel.id, onRecordShare]);
+            const result = await RNShare.share(
+                Platform.OS === 'ios'
+                    ? { message: payload.message, url: payload.url }
+                    : { message: payload.message, title: payload.title },
+                { dialogTitle: t.reels.shareReelTitle || payload.title },
+            );
 
-    const handleCopyLink = useCallback(async () => {
-        const url = buildReelShareUrl(reel.id);
-        try {
-            await Clipboard.setStringAsync(url);
-            onRecordShare('copy_link');
+            if (result.action !== RNShare.sharedAction) return;
+
+            if (Platform.OS === 'ios') {
+                if (!result.activityType || isCopyShareActivity(result.activityType)) return;
+                const platform = result.activityType.includes('WhatsApp')
+                    ? 'whatsapp'
+                    : result.activityType.includes('Facebook')
+                        ? 'facebook'
+                        : result.activityType.split('.').pop() || 'ios_share';
+                onRecordShare(platform);
+            } else {
+                if (!handoff.didLeave()) {
+                    const left = await confirmExternalShare(800, ['background']);
+                    if (!left) return;
+                }
+                onRecordShare('android_share');
+            }
+
+            toastManager.showShareSuccess();
         } catch {
-            /* clipboard unavailable — no share recorded */
+            /* user cancelled / share unavailable */
+        } finally {
+            handoff.stop();
         }
-    }, [reel.id, onRecordShare]);
+    }, [
+        language,
+        reel.id,
+        reel.user?.name,
+        reel.description,
+        onRecordShare,
+        t.reels.shareReelTitle,
+    ]);
 
     const showShareMenu = useCallback(() => {
-        if (Platform.OS === 'ios') {
-            ActionSheetIOS.showActionSheetWithOptions(
-                {
-                    options: [
-                        t.reels.shareToWhatsApp,
-                        t.reels.shareToFacebook,
-                        t.reels.copyLink,
-                        t.common.cancel,
-                    ],
-                    cancelButtonIndex: 3,
-                },
-                (buttonIndex) => {
-                    if (buttonIndex === 0) handleShareWhatsApp();
-                    else if (buttonIndex === 1) handleShareFacebook();
-                    else if (buttonIndex === 2) handleCopyLink();
-                }
-            );
-        } else {
-            // Android — use native share sheet
-            const url = buildReelShareUrl(reel.id);
-            RNShare.share({
-                message: (t.reels.shareReelMessageWhatsApp as string).replace('{url}', url),
-            }).then((result) => {
-                if (result.action === RNShare.sharedAction) onRecordShare('android_share');
-            });
-        }
-    }, [reel.id, t, handleShareWhatsApp, handleShareFacebook, handleCopyLink, onRecordShare]);
+        void shareReelNative();
+    }, [shareReelNative]);
 
     const handleMoreOptions = useCallback(() => {
         haptics.lightImpact();
@@ -475,9 +455,14 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 {/* Play/Pause Overlay */}
                 {isPaused && (
                     <View style={styles.pauseOverlay}>
-                        <View style={styles.pauseIconContainer}>
-                            <Play size={40} color="rgba(255, 255, 255, 0.8)" fill="rgba(255, 255, 255, 0.8)" />
-                        </View>
+                        <LinearGradient
+                            colors={GRADIENTS.brandGlow}
+                            style={styles.pauseIconContainer}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        >
+                            <Play size={36} color={COLORS.white} fill={COLORS.white} />
+                        </LinearGradient>
                     </View>
                 )}
             </TouchableOpacity>
@@ -488,10 +473,14 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 position={tapPosition}
             />
 
-            {/* Gradients */}
+            {/* Gradients — brand vignette */}
             <LinearGradient
                 colors={GRADIENTS.darkFade}
                 style={[styles.topGradient, { pointerEvents: 'none' }]}
+            />
+            <LinearGradient
+                colors={GRADIENTS.heroAccent}
+                style={[styles.topAccentGradient, { pointerEvents: 'none' }]}
             />
             <LinearGradient
                 colors={GRADIENTS.bottomFade}
@@ -499,45 +488,58 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             />
 
             {/* User Info - Glass Card */}
-            <RNAnimated.View style={[styles.userInfoContainer, { opacity: glowOpacity }]}>
+            <RNAnimated.View
+                style={[
+                    styles.userInfoContainer,
+                    { top: topClearance, opacity: glowOpacity },
+                ]}
+            >
                 <LinearGradient
-                    colors={['rgba(255, 255, 255, 0.12)' as const, 'rgba(255, 255, 255, 0.05)' as const]}
+                    colors={GRADIENTS.glassCard}
                     style={styles.glassCard}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                 >
-                    <TouchableOpacity style={styles.userInfo} onPress={onUserPress}>
+                    <TouchableOpacity style={styles.userInfo} onPress={onUserPress} activeOpacity={0.85}>
                         <View style={styles.avatarContainer}>
-                            <Image
-                                source={{ uri: reel.user.avatar }}
-                                style={styles.userAvatar}
-                            />
+                            <LinearGradient
+                                colors={GRADIENTS.brandGlow}
+                                style={styles.avatarRing}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <Image
+                                    source={{ uri: reel.user.avatar }}
+                                    style={styles.userAvatar}
+                                />
+                            </LinearGradient>
                             {isActive && (
                                 <RNAnimated.View style={[styles.avatarGlow, { opacity: glowOpacity }]} />
                             )}
                         </View>
                         <View style={styles.userDetails}>
                             <View style={styles.userNameRow}>
-                                <Text style={styles.userName}>{reel.user.name}</Text>
+                                <Text style={styles.userName} numberOfLines={1}>
+                                    {reel.user.name}
+                                </Text>
                                 {reel.user.verified && (
-                                    <Text style={styles.verifiedBadge}>✓</Text>
+                                    <BadgeCheck size={16} color={COLORS.primary} fill={COLORS.purpleGlow} />
                                 )}
                             </View>
                             {typeof reel.user.followers === 'number' && reel.user.followers > 0 && (
                                 <Text style={styles.userFollowers}>
-                                    {formatCount(reel.user.followers)} {t.reels?.followersLabel || t.profile?.followers || 'followers'}
+                                    {formatCount(reel.user.followers)}{' '}
+                                    {t.reels?.followersLabel || t.profile?.followers || 'followers'}
                                 </Text>
                             )}
                         </View>
                     </TouchableOpacity>
 
-                    {/* Follow Button Logic - Requirements 18.1, 18.2, 18.4 */}
-                    {/* Hide for own reels (18.1), Show for other users (18.2), Show correct state (18.4) */}
                     {!isOwnReel && (onFollow || onUnfollow) && (
                         <TouchableOpacity
                             style={[
                                 styles.followButton,
-                                reel.user.isFollowing && styles.followingButton
+                                reel.user.isFollowing && styles.followingButton,
                             ]}
                             onPress={() => {
                                 haptics.lightImpact();
@@ -547,18 +549,27 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                                     onFollow();
                                 }
                             }}
+                            activeOpacity={0.85}
                         >
                             <LinearGradient
-                                colors={reel.user.isFollowing ? GRADIENTS.cardGradient : GRADIENTS.brandGlow}
+                                colors={
+                                    reel.user.isFollowing
+                                        ? GRADIENTS.actionIdle
+                                        : GRADIENTS.brandGlow
+                                }
                                 style={styles.followButtonGradient}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 1 }}
                             >
-                                <Text style={[
-                                    styles.followButtonText,
-                                    reel.user.isFollowing && styles.followingButtonText
-                                ]}>
-                                    {reel.user.isFollowing ? (t.reels?.following || 'Following') : t.reels.follow}
+                                <Text
+                                    style={[
+                                        styles.followButtonText,
+                                        reel.user.isFollowing && styles.followingButtonText,
+                                    ]}
+                                >
+                                    {reel.user.isFollowing
+                                        ? t.reels?.following || 'Following'
+                                        : t.reels.follow}
                                 </Text>
                             </LinearGradient>
                         </TouchableOpacity>
@@ -567,18 +578,24 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             </RNAnimated.View>
 
             {/* Description & Hashtags */}
-            {reel.description && (
-                <View style={styles.descriptionContainer}>
+            {reel.description ? (
+                <View
+                    style={[
+                        styles.descriptionContainer,
+                        { bottom: bottomClearance + 52 },
+                    ]}
+                >
                     <Text style={styles.description} numberOfLines={2}>
                         {reel.description}
                     </Text>
-                    {reel.hashtags && (
+                    {reel.hashtags ? (
                         <View style={styles.hashtagsContainer}>
                             {reel.hashtags.map((tag, index) => (
                                 <TouchableOpacity
                                     key={index}
                                     onPress={() => onHashtagPress?.(tag)}
                                     style={styles.hashtagPill}
+                                    activeOpacity={0.8}
                                 >
                                     <LinearGradient
                                         colors={GRADIENTS.cardGradient}
@@ -591,14 +608,14 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                                 </TouchableOpacity>
                             ))}
                         </View>
-                    )}
+                    ) : null}
                 </View>
-            )}
+            ) : null}
 
             {/* Stats Bar */}
-            <View style={styles.statsContainer}>
+            <View style={[styles.statsContainer, { bottom: bottomClearance }]}>
                 <LinearGradient
-                    colors={['rgba(0, 0, 0, 0.6)' as const, 'rgba(0, 0, 0, 0.3)' as const]}
+                    colors={['rgba(14, 8, 28, 0.72)', 'rgba(14, 8, 28, 0.35)'] as const}
                     style={styles.statsBar}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
@@ -606,100 +623,139 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                     <View style={styles.statItem}>
                         <Eye size={14} color={COLORS.accent} />
                         <Text style={styles.statText}>
-                            {formatCount(reel.views)} {t.reels?.views || t.reels?.viewsLabel || 'views'}
+                            {formatCount(reel.views)}{' '}
+                            {t.reels?.views || t.reels?.viewsLabel || 'views'}
                         </Text>
                     </View>
-                    {reel.location && (
-                        <Text style={styles.locationText}>📍 {reel.location}</Text>
-                    )}
+                    {reel.location ? (
+                        <Text style={styles.locationText} numberOfLines={1}>
+                            {reel.location}
+                        </Text>
+                    ) : null}
                 </LinearGradient>
             </View>
 
             {/* Action Buttons */}
-            <View style={styles.actionsColumn}>
-                {/* Like */}
+            <View style={[styles.actionsColumn, { bottom: bottomClearance + 8 }]}>
                 <TouchableOpacity
                     style={styles.actionButton}
                     onPress={handleLikePress}
                     activeOpacity={0.7}
                 >
-                    <View style={[styles.buttonGlass, reel.liked && styles.buttonActive]}>
+                    <LinearGradient
+                        colors={reel.liked ? GRADIENTS.actionActive : GRADIENTS.actionIdle}
+                        style={[styles.buttonGlass, reel.liked && styles.buttonActive]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                    >
                         <Heart
-                            size={30}
+                            size={28}
                             color={reel.liked ? COLORS.error : COLORS.textPrimary}
                             fill={reel.liked ? COLORS.error : 'none'}
-                            strokeWidth={2}
+                            strokeWidth={2.2}
                         />
-                    </View>
-                    <Text style={[styles.actionCount, reel.liked && styles.actionCountActive]}>
+                    </LinearGradient>
+                    <Text style={[styles.actionCount, reel.liked && styles.actionCountLiked]}>
                         {formatCount(reel.likes)}
                     </Text>
                 </TouchableOpacity>
 
-                {/* Comment */}
                 <TouchableOpacity
                     style={styles.actionButton}
-                    onPress={() => { haptics.lightImpact(); onComment(); }}
+                    onPress={() => {
+                        haptics.lightImpact();
+                        onComment();
+                    }}
                     activeOpacity={0.7}
                 >
-                    <View style={styles.buttonGlass}>
-                        <MessageCircle size={30} color={COLORS.textPrimary} strokeWidth={2} />
-                    </View>
+                    <LinearGradient
+                        colors={GRADIENTS.actionIdle}
+                        style={styles.buttonGlass}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                    >
+                        <MessageCircle size={28} color={COLORS.textPrimary} strokeWidth={2.2} />
+                    </LinearGradient>
                     <Text style={styles.actionCount}>{formatCount(reel.comments)}</Text>
                 </TouchableOpacity>
 
-                {/* Share */}
                 <TouchableOpacity
                     style={styles.actionButton}
-                    onPress={() => { haptics.lightImpact(); showShareMenu(); }}
+                    onPress={() => {
+                        haptics.lightImpact();
+                        showShareMenu();
+                    }}
                     activeOpacity={0.7}
                 >
-                    <View style={styles.buttonGlass}>
-                        <Share2 size={28} color={COLORS.textPrimary} strokeWidth={2} />
-                    </View>
+                    <LinearGradient
+                        colors={GRADIENTS.actionIdle}
+                        style={styles.buttonGlass}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                    >
+                        <Share2 size={26} color={COLORS.textPrimary} strokeWidth={2.2} />
+                    </LinearGradient>
                     <Text style={styles.actionCount}>{formatCount(reel.shares)}</Text>
                 </TouchableOpacity>
 
-                {/* Save */}
                 <TouchableOpacity
                     style={styles.actionButton}
-                    onPress={() => { haptics.lightImpact(); onSave(); }}
+                    onPress={() => {
+                        haptics.lightImpact();
+                        onSave();
+                    }}
                     activeOpacity={0.7}
                 >
-                    <View style={[styles.buttonGlass, reel.saved && styles.buttonActive]}>
+                    <LinearGradient
+                        colors={reel.saved ? GRADIENTS.actionActive : GRADIENTS.actionIdle}
+                        style={[styles.buttonGlass, reel.saved && styles.buttonActive]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                    >
                         <Bookmark
-                            size={28}
+                            size={26}
                             color={reel.saved ? COLORS.primary : COLORS.textPrimary}
                             fill={reel.saved ? COLORS.primary : 'none'}
-                            strokeWidth={2}
+                            strokeWidth={2.2}
                         />
-                    </View>
+                    </LinearGradient>
                 </TouchableOpacity>
 
-                {/* Mute */}
                 <TouchableOpacity
                     style={styles.actionButton}
-                    onPress={() => { haptics.lightImpact(); onToggleMute(); }}
+                    onPress={() => {
+                        haptics.lightImpact();
+                        onToggleMute();
+                    }}
                     activeOpacity={0.7}
                 >
-                    <View style={styles.buttonGlass}>
+                    <LinearGradient
+                        colors={feedMuted ? GRADIENTS.actionIdle : GRADIENTS.actionActive}
+                        style={styles.buttonGlass}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                    >
                         {feedMuted ? (
-                            <VolumeX size={28} color={COLORS.textPrimary} strokeWidth={2} />
+                            <VolumeX size={26} color={COLORS.textSecondary} strokeWidth={2.2} />
                         ) : (
-                            <Volume2 size={28} color={COLORS.primary} strokeWidth={2} />
+                            <Volume2 size={26} color={COLORS.primary} strokeWidth={2.2} />
                         )}
-                    </View>
+                    </LinearGradient>
                 </TouchableOpacity>
 
-                {/* More */}
                 <TouchableOpacity
                     style={styles.moreButton}
                     onPress={handleMoreOptions}
                     activeOpacity={0.7}
                 >
-                    <View style={styles.buttonGlass}>
-                        <MoreVertical size={26} color={COLORS.textPrimary} strokeWidth={2} />
-                    </View>
+                    <LinearGradient
+                        colors={GRADIENTS.actionIdle}
+                        style={styles.buttonGlass}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                    >
+                        <MoreVertical size={24} color={COLORS.textPrimary} strokeWidth={2.2} />
+                    </LinearGradient>
                 </TouchableOpacity>
             </View>
 
@@ -720,10 +776,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                         onPress={() => !isSavingEdit && setShowEditModal(false)}
                     />
                     <View style={editStyles.sheet}>
-                        {/* Handle bar */}
                         <View style={editStyles.handle} />
-
-                        {/* Header */}
                         <View style={editStyles.header}>
                             <TouchableOpacity
                                 onPress={() => !isSavingEdit && setShowEditModal(false)}
@@ -739,9 +792,8 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                                     haptics.mediumImpact();
                                     setIsSavingEdit(true);
                                     try {
-                                        // استخراج الهاشتاجات من النص
                                         const hashtagMatches = editCaption.match(/#[\w\u0600-\u06FF]+/g) || [];
-                                        const hashtags = hashtagMatches.map(h => h.replace('#', ''));
+                                        const hashtags = hashtagMatches.map((h) => h.replace('#', ''));
                                         await onEditReel(reel.id, editCaption.trim(), hashtags);
                                         setShowEditModal(false);
                                     } finally {
@@ -759,29 +811,23 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                             </TouchableOpacity>
                         </View>
 
-                        {/* Input */}
                         <View style={editStyles.inputWrapper}>
                             <TextInput
                                 style={[editStyles.input, { textAlign: 'left' }]}
                                 value={editCaption}
                                 onChangeText={setEditCaption}
                                 placeholder={t.reels.editModalPlaceholder}
-                                placeholderTextColor="rgba(255,255,255,0.35)"
+                                placeholderTextColor={COLORS.textTertiary}
                                 multiline
                                 maxLength={500}
                                 autoFocus
                                 textAlignVertical="top"
                                 selectionColor={COLORS.primary}
                             />
-                            <Text style={editStyles.charCount}>
-                                {editCaption.length}/500
-                            </Text>
+                            <Text style={editStyles.charCount}>{editCaption.length}/500</Text>
                         </View>
 
-                        {/* Hint */}
-                        <Text style={editStyles.hint}>
-                            {t.reels.editModalHint}
-                        </Text>
+                        <Text style={editStyles.hint}>{t.reels.editModalHint}</Text>
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
@@ -793,7 +839,7 @@ const styles = StyleSheet.create({
     reelContainer: {
         width: SCREEN_WIDTH,
         height: SCREEN_HEIGHT,
-        backgroundColor: COLORS.deepBlack,
+        backgroundColor: COLORS.background,
     },
     videoWrapper: {
         position: 'absolute',
@@ -804,14 +850,22 @@ const styles = StyleSheet.create({
     },
     thumbnailFallback: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: COLORS.deepBlack,
+        backgroundColor: COLORS.background,
     },
     topGradient: {
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        height: 150,
+        height: 170,
+        zIndex: 5,
+    },
+    topAccentGradient: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 120,
         zIndex: 5,
     },
     bottomGradient: {
@@ -819,24 +873,24 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        height: 250,
+        height: 320,
         zIndex: 5,
     },
     userInfoContainer: {
         position: 'absolute',
-        top: 50,
         left: 12,
-        right: 90,
+        right: 88,
         zIndex: 10,
     },
     glassCard: {
-        borderRadius: 16,
+        borderRadius: 18,
         padding: 10,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         borderWidth: 1,
         borderColor: COLORS.glassBorder,
+        backgroundColor: COLORS.backgroundCard,
         ...EFFECTS.softShadow,
     },
     userInfo: {
@@ -844,44 +898,50 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 10,
         flex: 1,
+        minWidth: 0,
     },
     avatarContainer: {
         position: 'relative',
     },
+    avatarRing: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        padding: 2,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     userAvatar: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        borderWidth: 2,
-        borderColor: COLORS.primary,
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        backgroundColor: COLORS.darkGray,
     },
     avatarGlow: {
         position: 'absolute',
-        top: -3,
-        left: -3,
-        right: -3,
-        bottom: -3,
-        borderRadius: 27,
+        top: -4,
+        left: -4,
+        right: -4,
+        bottom: -4,
+        borderRadius: 29,
         backgroundColor: COLORS.primary,
-        opacity: 0.3,
+        opacity: 0.28,
         zIndex: -1,
     },
     userDetails: {
         flex: 1,
+        minWidth: 0,
     },
     userNameRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: 5,
     },
     userName: {
         color: COLORS.textPrimary,
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '700',
-    },
-    verifiedBadge: {
-        fontSize: 14,
-        color: COLORS.primary,
+        flexShrink: 1,
     },
     userFollowers: {
         color: COLORS.textSecondary,
@@ -890,22 +950,25 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     followButton: {
-        borderRadius: 18,
+        borderRadius: 16,
         overflow: 'hidden',
+        marginLeft: 8,
         ...EFFECTS.brandGlow,
     },
     followingButton: {
-        borderRadius: 18,
+        borderRadius: 16,
         overflow: 'hidden',
         borderWidth: 1,
         borderColor: COLORS.glassBorder,
+        shadowOpacity: 0,
+        elevation: 0,
     },
     followButtonGradient: {
-        paddingHorizontal: 18,
+        paddingHorizontal: 16,
         paddingVertical: 8,
     },
     followButtonText: {
-        color: COLORS.deepBlack,
+        color: COLORS.white,
         fontSize: 13,
         fontWeight: '700',
     },
@@ -914,9 +977,8 @@ const styles = StyleSheet.create({
     },
     descriptionContainer: {
         position: 'absolute',
-        bottom: 140,
         left: 16,
-        right: 90,
+        right: 88,
         zIndex: 10,
     },
     description: {
@@ -924,8 +986,8 @@ const styles = StyleSheet.create({
         fontSize: 14,
         lineHeight: 20,
         fontWeight: '500',
-        textShadowColor: 'rgba(0,0,0,0.8)',
-        textShadowOffset: { width: 0, height: 2 },
+        textShadowColor: 'rgba(5,1,13,0.85)',
+        textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 4,
     },
     hashtagsContainer: {
@@ -943,17 +1005,17 @@ const styles = StyleSheet.create({
         paddingVertical: 5,
         borderWidth: 1,
         borderColor: COLORS.glassBorder,
+        borderRadius: 14,
     },
     hashtag: {
-        color: COLORS.primary,
+        color: COLORS.secondary,
         fontSize: 12,
         fontWeight: '600',
     },
     statsContainer: {
         position: 'absolute',
-        bottom: 90,
         left: 16,
-        right: 90,
+        right: 88,
         zIndex: 10,
     },
     statsBar: {
@@ -962,9 +1024,10 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 14,
         paddingVertical: 8,
-        borderRadius: 16,
+        borderRadius: 14,
         borderWidth: 1,
         borderColor: COLORS.glassBorder,
+        gap: 8,
     },
     statItem: {
         flexDirection: 'row',
@@ -980,24 +1043,24 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
         fontSize: 11,
         fontWeight: '500',
+        flexShrink: 1,
+        maxWidth: '48%',
     },
     actionsColumn: {
         position: 'absolute',
         right: 10,
-        bottom: 140,
-        gap: 16,
+        gap: 14,
         zIndex: 100,
         alignItems: 'center',
     },
     actionButton: {
         alignItems: 'center',
-        gap: 5,
+        gap: 4,
     },
     buttonGlass: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: 'rgba(255, 255, 255, 0.12)',
+        width: 50,
+        height: 50,
+        borderRadius: 25,
         borderWidth: 1,
         borderColor: COLORS.glassBorder,
         justifyContent: 'center',
@@ -1005,23 +1068,22 @@ const styles = StyleSheet.create({
         ...EFFECTS.softShadow,
     },
     buttonActive: {
-        backgroundColor: 'rgba(168, 85, 247, 0.18)',
-        borderColor: COLORS.primary,
+        borderColor: 'rgba(167, 139, 250, 0.55)',
         ...EFFECTS.brandGlow,
     },
     actionCount: {
         color: COLORS.textPrimary,
         fontSize: 12,
         fontWeight: '700',
-        textShadowColor: 'rgba(0,0,0,0.8)',
+        textShadowColor: 'rgba(5,1,13,0.85)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 3,
     },
-    actionCountActive: {
-        color: COLORS.primary,
+    actionCountLiked: {
+        color: COLORS.error,
     },
     moreButton: {
-        marginTop: 6,
+        marginTop: 4,
     },
     pauseOverlay: {
         position: 'absolute',
@@ -1031,21 +1093,22 @@ const styles = StyleSheet.create({
         bottom: 0,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+        backgroundColor: 'rgba(5, 1, 13, 0.28)',
         zIndex: 20,
     },
     pauseIconContainer: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+        width: 76,
+        height: 76,
+        borderRadius: 38,
         justifyContent: 'center',
         alignItems: 'center',
-        ...EFFECTS.softShadow,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+        ...EFFECTS.brandGlow,
+        paddingLeft: 4,
     },
 });
 
-// ─── Edit Modal Styles ────────────────────────────────────────────────────────
 const editStyles = StyleSheet.create({
     overlay: {
         flex: 1,
@@ -1053,21 +1116,21 @@ const editStyles = StyleSheet.create({
     },
     backdrop: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.6)',
+        backgroundColor: OVERLAY_SCRIM,
     },
     sheet: {
-        backgroundColor: '#1A1A2E',
+        backgroundColor: SURFACE_MODAL,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         paddingBottom: 34,
         borderTopWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
+        borderColor: COLORS.glassBorder,
     },
     handle: {
         width: 40,
         height: 4,
         borderRadius: 2,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        backgroundColor: 'rgba(167, 139, 250, 0.45)',
         alignSelf: 'center',
         marginTop: 12,
         marginBottom: 4,
@@ -1082,12 +1145,12 @@ const editStyles = StyleSheet.create({
         borderBottomColor: 'rgba(255,255,255,0.06)',
     },
     title: {
-        color: '#FFFFFF',
+        color: COLORS.textPrimary,
         fontSize: 16,
         fontWeight: '700',
     },
     cancelBtn: {
-        color: 'rgba(255,255,255,0.5)',
+        color: COLORS.textTertiary,
         fontSize: 15,
         fontWeight: '500',
     },
@@ -1099,27 +1162,27 @@ const editStyles = StyleSheet.create({
     inputWrapper: {
         marginHorizontal: 16,
         marginTop: 16,
-        backgroundColor: 'rgba(255,255,255,0.06)',
+        backgroundColor: COLORS.glass,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: COLORS.glassBorder,
         padding: 14,
         minHeight: 140,
     },
     input: {
-        color: '#FFFFFF',
+        color: COLORS.textPrimary,
         fontSize: 15,
         lineHeight: 22,
         minHeight: 100,
     },
     charCount: {
-        color: 'rgba(255,255,255,0.3)',
+        color: COLORS.textTertiary,
         fontSize: 11,
         textAlign: 'left',
         marginTop: 8,
     },
     hint: {
-        color: 'rgba(255,255,255,0.35)',
+        color: COLORS.textTertiary,
         fontSize: 12,
         textAlign: 'center',
         marginTop: 14,

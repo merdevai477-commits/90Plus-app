@@ -1633,8 +1633,14 @@ const ReelsFeed: React.FC = () => {
       {/* No Reels Message - Improved empty state with guidance (Requirement 3.2) */}
       {!isInitialLoading && noReelsMessage && reels.length === 0 && (
         <View style={styles.noReelsContainer}>
+          <LinearGradient
+            colors={['rgba(124,58,237,0.22)', 'rgba(59,130,246,0.08)', 'transparent']}
+            style={styles.noReelsGlow}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+          />
           <View style={styles.noReelsIconContainer}>
-            <Eye size={64} color="rgba(255,255,255,0.3)" />
+            <Eye size={56} color={COLORS.secondary} />
           </View>
           <Text style={styles.noReelsTitle}>{t.reels.noVideosTitle}</Text>
           <Text style={styles.noReelsSubtitle}>{t.reels.noVideosSubtitle}</Text>
@@ -1644,9 +1650,16 @@ const ReelsFeed: React.FC = () => {
               haptic.trigger('light');
               router.push('/(tabs)/rank');
             }}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
-            <Text style={styles.noReelsButtonText}>{t.reels.noVideosCallToAction}</Text>
+            <LinearGradient
+              colors={[COLORS.primary, COLORS.brandPurpleDark]}
+              style={styles.noReelsButtonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={styles.noReelsButtonText}>{t.reels.noVideosCallToAction}</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       )}
@@ -1772,44 +1785,56 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     paddingHorizontal: 40,
   },
+  noReelsGlow: {
+    position: 'absolute',
+    top: '18%',
+    left: 24,
+    right: 24,
+    height: 220,
+    borderRadius: 32,
+  },
   noReelsIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    backgroundColor: 'rgba(124,58,237,0.12)',
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   noReelsTitle: {
-    color: 'white',
+    color: COLORS.textPrimary,
     fontSize: 22,
     fontWeight: 'bold',
     marginTop: 20,
     marginBottom: 8,
   },
   noReelsSubtitle: {
-    color: 'rgba(255,255,255,0.5)',
+    color: COLORS.textSecondary,
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 24,
   },
   noReelsButton: {
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    backgroundColor: COLORS.primary,
     borderRadius: 24,
+    overflow: 'hidden',
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  noReelsButtonGradient: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
   },
   noReelsButtonText: {
-    color: COLORS.background,
+    color: COLORS.white,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   loadingMoreContainer: {
     height: 80,
@@ -2133,16 +2158,20 @@ const styles = StyleSheet.create({
   },
   swipeHint: {
     position: 'absolute',
-    bottom: 30,
+    bottom: 110,
     left: 0,
     right: 0,
     alignItems: 'center',
     zIndex: 10,
   },
   swipeHintText: {
-    color: 'rgba(255,255,255,0.8)',
+    color: COLORS.textSecondary,
     fontSize: 13,
     marginTop: 4,
+    fontWeight: '600',
+    textShadowColor: 'rgba(5,1,13,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   modalOverlay: {
     flex: 1,
@@ -2428,25 +2457,28 @@ const styles = StyleSheet.create({
   hashtagFilterBar: {
     position: 'absolute',
     top: 50,
-    left: 0,
-    right: 0,
+    left: 16,
+    right: 16,
     zIndex: 99,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    paddingHorizontal: 20,
+    backgroundColor: COLORS.backgroundCard,
+    paddingHorizontal: 16,
     paddingVertical: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.glassBorder,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
   },
   hashtagFilterText: {
-    color: COLORS.primary,
-    fontSize: 18,
-    fontWeight: 'bold',
+    color: COLORS.secondary,
+    fontSize: 16,
+    fontWeight: '700',
   },
   clearFilterButton: {
-    padding: 8,
+    padding: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
 });
 

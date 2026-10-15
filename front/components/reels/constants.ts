@@ -1,74 +1,86 @@
 import {
+    BG_BASE,
+    BG_MID,
+    BG_SURFACE,
+    BLUE_ELECTRIC,
+    BLUE_PRIMARY,
+    GLASS_BORDER_TOP,
+    GLASS_CARD,
+    GOLD_PRIMARY,
+    LIVE_RED,
+    PURPLE_DARK,
+    PURPLE_GLOW,
     PURPLE_PRIMARY,
     PURPLE_SOFT,
+    TEXT_MUTED,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
 } from '../../constants/tokens';
 
-const BRAND_PURPLE = PURPLE_PRIMARY;
-const BRAND_PURPLE_LIGHT = PURPLE_SOFT;
-const BRAND_PURPLE_DARK = '#5B21B6';
-
-// Reels / video UI — purple brand identity
+// Reels / video UI — aligned with 90Plus brand tokens
 export const COLORS = {
-    brandPurple: BRAND_PURPLE,
-    brandPurpleLight: BRAND_PURPLE_LIGHT,
-    brandPurpleDark: BRAND_PURPLE_DARK,
-    neonGreen: BRAND_PURPLE,
-    electricGreen: BRAND_PURPLE_LIGHT,
-    darkGreen: BRAND_PURPLE_DARK,
-    neonBlue: '#00D9FF',
-    neonRed: '#FF3B30',
+    brandPurple: PURPLE_PRIMARY,
+    brandPurpleLight: PURPLE_SOFT,
+    brandPurpleDark: PURPLE_DARK,
+    neonGreen: PURPLE_PRIMARY,
+    electricGreen: PURPLE_SOFT,
+    darkGreen: PURPLE_DARK,
+    neonBlue: BLUE_ELECTRIC,
+    neonRed: LIVE_RED,
 
-    // Base Colors
-    deepBlack: '#000000',         // Pure black background
-    darkGray: '#1A1A1A',          // Secondary background
-    mediumGray: '#2A2A2A',        // Card backgrounds
+    // Base
+    deepBlack: BG_BASE,
+    darkGray: BG_MID,
+    mediumGray: BG_SURFACE,
 
-    // Semantic Colors
-    primary: BRAND_PURPLE,
-    secondary: BRAND_PURPLE_LIGHT,
-    accent: '#00D9FF',             // Electric blue (stats)
-    error: '#FF3B30',              // Red for errors
-    warning: '#FF9500',            // Orange warnings
-    success: BRAND_PURPLE,
-    info: '#2196F3',               // Info blue
+    // Semantic
+    primary: PURPLE_PRIMARY,
+    secondary: PURPLE_SOFT,
+    accent: BLUE_ELECTRIC,
+    error: LIVE_RED,
+    warning: '#FF9500',
+    success: PURPLE_PRIMARY,
+    info: BLUE_PRIMARY,
+    gold: GOLD_PRIMARY,
 
-    // UI Colors
-    background: '#000000',
-    backgroundLight: '#1A1A1A',
-    backgroundCard: 'rgba(26, 26, 26, 0.8)',
+    // UI
+    background: BG_BASE,
+    backgroundLight: BG_MID,
+    backgroundCard: 'rgba(14, 8, 28, 0.88)',
     white: '#FFFFFF',
-    overlay: 'rgba(0,0,0,0.6)',
-    glass: 'rgba(255,255,255,0.1)',
-    glassBlack: 'rgba(10, 10, 10, 0.95)',
+    overlay: 'rgba(5, 1, 13, 0.62)',
+    glass: GLASS_CARD,
+    glassBlack: 'rgba(10, 5, 20, 0.92)',
 
-    // Text Colors
-    textPrimary: '#FFFFFF',
-    textSecondary: 'rgba(255, 255, 255, 0.7)',
-    textTertiary: 'rgba(255, 255, 255, 0.5)',
+    // Text
+    textPrimary: TEXT_PRIMARY,
+    textSecondary: TEXT_SECONDARY,
+    textTertiary: TEXT_MUTED,
 
-    // Overlay Colors
-    overlayDark: 'rgba(0, 0, 0, 0.75)',
-    overlayLight: 'rgba(255, 255, 255, 0.1)',
+    // Overlay / glass
+    overlayDark: 'rgba(5, 1, 13, 0.78)',
+    overlayLight: 'rgba(255, 255, 255, 0.08)',
+    glassBorder: GLASS_BORDER_TOP,
+    purpleGlow: PURPLE_GLOW,
 
-    // Glassmorphism
-    glassBorder: 'rgba(255, 255, 255, 0.15)',
-    
-    // Trophy/Gold Colors
-    goldenTrophy: '#FFD700',      // Gold color for trophy
-    pureWhite: '#FFFFFF',         // Pure white
+    // Trophy / gold
+    goldenTrophy: GOLD_PRIMARY,
+    pureWhite: '#FFFFFF',
 };
 
-// Premium Gradients
 export const GRADIENTS = {
-    brandGlow: [BRAND_PURPLE, BRAND_PURPLE_LIGHT] as const,
+    brandGlow: [PURPLE_PRIMARY, PURPLE_DARK] as const,
     /** @deprecated use brandGlow */
-    greenGlow: [BRAND_PURPLE, BRAND_PURPLE_LIGHT] as const,
-    darkFade: ['rgba(0, 0, 0, 0.9)', 'transparent'] as const,
-    bottomFade: ['transparent', 'rgba(0, 0, 0, 0.95)'] as const,
-    cardGradient: ['rgba(124, 58, 237, 0.35)', 'rgba(124, 58, 237, 0.12)'] as const,
+    greenGlow: [PURPLE_PRIMARY, PURPLE_DARK] as const,
+    darkFade: ['rgba(5, 1, 13, 0.92)', 'rgba(5, 1, 13, 0.35)', 'transparent'] as const,
+    bottomFade: ['transparent', 'rgba(5, 1, 13, 0.55)', 'rgba(5, 1, 13, 0.96)'] as const,
+    heroAccent: ['rgba(236, 72, 153, 0.22)', 'rgba(124, 58, 237, 0.12)', 'transparent'] as const,
+    cardGradient: ['rgba(124, 58, 237, 0.32)', 'rgba(59, 130, 246, 0.12)'] as const,
+    glassCard: ['rgba(255, 255, 255, 0.14)', 'rgba(124, 58, 237, 0.08)'] as const,
+    actionIdle: ['rgba(255, 255, 255, 0.14)', 'rgba(255, 255, 255, 0.06)'] as const,
+    actionActive: ['rgba(124, 58, 237, 0.45)', 'rgba(91, 33, 182, 0.28)'] as const,
 };
 
-// Animation Timings
 export const ANIMATION = {
     fast: 200,
     normal: 300,
@@ -76,33 +88,35 @@ export const ANIMATION = {
     verySlow: 800,
 };
 
-// Shadows & Effects
 export const EFFECTS = {
     brandGlow: {
-        shadowColor: BRAND_PURPLE,
+        shadowColor: PURPLE_PRIMARY,
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.55,
-        shadowRadius: 12,
+        shadowRadius: 14,
         elevation: 8,
     },
     /** @deprecated use brandGlow */
     greenGlow: {
-        shadowColor: BRAND_PURPLE,
+        shadowColor: PURPLE_PRIMARY,
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.55,
-        shadowRadius: 12,
+        shadowRadius: 14,
         elevation: 8,
     },
     softShadow: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
         elevation: 4,
     },
     goldGlow: {
-        textShadowColor: 'rgba(255, 215, 0, 0.8)',
+        textShadowColor: 'rgba(245, 197, 24, 0.8)',
         textShadowOffset: { width: 0, height: 0 },
         textShadowRadius: 10,
     },
 };
+
+/** Clearance above the floating glass tab bar */
+export const REELS_TAB_CLEARANCE = 78;
