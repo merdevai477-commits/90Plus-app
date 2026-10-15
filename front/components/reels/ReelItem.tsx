@@ -77,9 +77,11 @@ interface ReelItemProps {
     pulseAnim?: RNAnimated.Value;
     /** Hide follow button on the viewer's own reels */
     isOwnReel?: boolean;
+    /** Exact feed viewport height — must match FlatList snap interval */
+    itemHeight?: number;
 }
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: FALLBACK_HEIGHT } = Dimensions.get('window');
 
 // Helper function to format numbers
 const formatCount = (count?: number): string => {
@@ -117,6 +119,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     isOwnReel = false,
     onDeleteReel,
     onEditReel,
+    itemHeight,
 }) => {
     const [showHeartAnimation, setShowHeartAnimation] = useState(false);
     const [tapPosition, setTapPosition] = useState({ x: 0, y: 0 });
@@ -135,6 +138,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const insets = useSafeAreaInsets();
     const bottomClearance = REELS_TAB_CLEARANCE + Math.max(insets.bottom, 12);
     const topClearance = Math.max(insets.top, 12) + 8;
+    const cellHeight = itemHeight && itemHeight > 0 ? itemHeight : FALLBACK_HEIGHT;
 
     const haptics = {
         lightImpact: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
@@ -142,36 +146,11 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
         heavyImpact: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy),
     };
 
-    // Animations
-    const glowAnim = useRef(new RNAnimated.Value(0)).current;
     const scaleAnim = useRef(new RNAnimated.Value(1)).current;
 
     useEffect(() => {
-        let animation: RNAnimated.CompositeAnimation | null = null;
-        if (isActive) {
-            animation = RNAnimated.loop(
-                RNAnimated.sequence([
-                    RNAnimated.timing(glowAnim, {
-                        toValue: 1,
-                        duration: 2000,
-                        useNativeDriver: true,
-                    }),
-                    RNAnimated.timing(glowAnim, {
-                        toValue: 0,
-                        duration: 2000,
-                        useNativeDriver: true,
-                    }),
-                ])
-            );
-            animation.start();
-        } else {
-            // Reset pause state when not active
-            setIsPaused(false);
-        }
-        return () => {
-            animation?.stop();
-        };
-    }, [isActive, glowAnim]);
+        if (!isActive) setIsPaused(false);
+    }, [isActive]);
 
     // Handle tap (single for pause, double for like)
     const handlePress = (event: any) => {
@@ -385,11 +364,6 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
         onLike();
     };
 
-    const glowOpacity = glowAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.3, 0.8],
-    });
-
     // Cleanup timers on unmount
     useEffect(() => {
         return () => {
@@ -410,6 +384,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
 
     const reelContainerStyle = [
         styles.reelContainer,
+        { height: cellHeight },
         fadeAnim && { opacity: fadeAnim },
     ];
 
@@ -425,6 +400,19 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 onPressOut={handleLongPressEnd}
                 style={styles.videoWrapper}
             >
+                {/* Always paint thumbnail first so the cell never flashes black */}
+                {reel.thumbnail ? (
+                    <ExpoImage
+                        source={{ uri: reel.thumbnail }}
+                        style={styles.thumbnailFallback}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={0}
+                        recyclingKey={reel.id}
+                    />
+                ) : (
+                    <View style={styles.thumbnailFallback} />
+                )}
                 {shouldMountPlayer ? (
                     <UnifiedVideoPlayer
                         key={`${reel.id}-${playerGeneration}`}
@@ -439,18 +427,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                         isActive={isActive && !isPaused}
                         onVideoRef={onVideoRef}
                     />
-                ) : (
-                    <View style={styles.thumbnailFallback}>
-                        {reel.thumbnail ? (
-                            <ExpoImage
-                                source={{ uri: reel.thumbnail }}
-                                style={StyleSheet.absoluteFill}
-                                contentFit="cover"
-                                cachePolicy="memory-disk"
-                            />
-                        ) : null}
-                    </View>
-                )}
+                ) : null}
 
                 {/* Play/Pause Overlay */}
                 {isPaused && (
@@ -488,12 +465,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
             />
 
             {/* User Info - Glass Card */}
-            <RNAnimated.View
-                style={[
-                    styles.userInfoContainer,
-                    { top: topClearance, opacity: glowOpacity },
-                ]}
-            >
+            <View style={[styles.userInfoContainer, { top: topClearance }]}>
                 <LinearGradient
                     colors={GRADIENTS.glassCard}
                     style={styles.glassCard}
@@ -513,9 +485,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                                     style={styles.userAvatar}
                                 />
                             </LinearGradient>
-                            {isActive && (
-                                <RNAnimated.View style={[styles.avatarGlow, { opacity: glowOpacity }]} />
-                            )}
+                            {isActive ? <View style={styles.avatarGlow} /> : null}
                         </View>
                         <View style={styles.userDetails}>
                             <View style={styles.userNameRow}>
@@ -575,14 +545,14 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                         </TouchableOpacity>
                     )}
                 </LinearGradient>
-            </RNAnimated.View>
+            </View>
 
             {/* Description & Hashtags */}
             {reel.description ? (
                 <View
                     style={[
                         styles.descriptionContainer,
-                        { bottom: bottomClearance + 52 },
+                        { bottom: bottomClearance + 48 },
                     ]}
                 >
                     <Text style={styles.description} numberOfLines={2}>
@@ -612,18 +582,22 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 </View>
             ) : null}
 
-            {/* Stats Bar */}
+            {/* Stats / Views pill */}
             <View style={[styles.statsContainer, { bottom: bottomClearance }]}>
                 <LinearGradient
-                    colors={['rgba(14, 8, 28, 0.72)', 'rgba(14, 8, 28, 0.35)'] as const}
+                    colors={['rgba(124,58,237,0.28)', 'rgba(59,130,246,0.14)', 'rgba(14,8,28,0.75)'] as const}
                     style={styles.statsBar}
                     start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
+                    end={{ x: 1, y: 1 }}
                 >
                     <View style={styles.statItem}>
-                        <Eye size={14} color={COLORS.accent} />
+                        <View style={styles.statIconWrap}>
+                            <Eye size={13} color={COLORS.accent} strokeWidth={2.4} />
+                        </View>
                         <Text style={styles.statText}>
-                            {formatCount(reel.views)}{' '}
+                            {formatCount(reel.views)}
+                        </Text>
+                        <Text style={styles.statLabel}>
                             {t.reels?.views || t.reels?.viewsLabel || 'views'}
                         </Text>
                     </View>
@@ -838,19 +812,18 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
 const styles = StyleSheet.create({
     reelContainer: {
         width: SCREEN_WIDTH,
-        height: SCREEN_HEIGHT,
         backgroundColor: COLORS.background,
+        overflow: 'hidden',
     },
     videoWrapper: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        ...StyleSheet.absoluteFillObject,
+        overflow: 'hidden',
+        backgroundColor: COLORS.background,
     },
     thumbnailFallback: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: COLORS.background,
+        zIndex: 0,
     },
     topGradient: {
         position: 'absolute',
@@ -1019,32 +992,48 @@ const styles = StyleSheet.create({
         zIndex: 10,
     },
     statsBar: {
+        alignSelf: 'flex-start',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 14,
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: 999,
         borderWidth: 1,
-        borderColor: COLORS.glassBorder,
-        gap: 8,
+        borderColor: 'rgba(167, 139, 250, 0.35)',
+        gap: 10,
+        ...EFFECTS.softShadow,
     },
     statItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 5,
+        gap: 6,
+    },
+    statIconWrap: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: 'rgba(96, 165, 250, 0.18)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     statText: {
-        color: COLORS.accent,
+        color: COLORS.textPrimary,
+        fontSize: 13,
+        fontWeight: '800',
+        letterSpacing: 0.2,
+    },
+    statLabel: {
+        color: COLORS.textSecondary,
         fontSize: 12,
-        fontWeight: '700',
+        fontWeight: '600',
     },
     locationText: {
         color: COLORS.textSecondary,
         fontSize: 11,
         fontWeight: '500',
         flexShrink: 1,
-        maxWidth: '48%',
+        maxWidth: 120,
     },
     actionsColumn: {
         position: 'absolute',
@@ -1194,6 +1183,7 @@ function reelItemPropsAreEqual(prev: ReelItemProps, next: ReelItemProps): boolea
     if (prev.isActive !== next.isActive) return false;
     if (prev.shouldMountPlayer !== next.shouldMountPlayer) return false;
     if (prev.playerGeneration !== next.playerGeneration) return false;
+    if (prev.itemHeight !== next.itemHeight) return false;
     if (prev.isOwnReel !== next.isOwnReel) return false;
     if (prev.feedMuted !== next.feedMuted) return false;
     if (prev.reel.id !== next.reel.id) return false;

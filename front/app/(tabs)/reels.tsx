@@ -14,8 +14,10 @@ import {
   Platform,
   Vibration,
   StatusBar,
+  type LayoutChangeEvent,
 } from 'react-native';
 import * as Network from 'expo-network';
+import { Image as ExpoImage } from 'expo-image';
 import {
   Heart,
   Eye,
@@ -67,11 +69,21 @@ const USE_IOS_PLAYER_SWAP = Platform.OS === 'ios';
 // long enough to read as a visible freeze on every swipe; 110ms still lets the
 // native player tear down cleanly while feeling near-instant.
 const IOS_PLAYER_SWAP_MS = 110;
-const REEL_PLAYER_MOUNT_DISTANCE = 0;
+/** Android can keep the next cell's player warm for instant swipe starts. */
+const REEL_PLAYER_MOUNT_DISTANCE = USE_IOS_PLAYER_SWAP ? 0 : 1;
 const REEL_LIST_WINDOW_SIZE = USE_IOS_PLAYER_SWAP ? 3 : 5;
 const REEL_INITIAL_RENDER = USE_IOS_PLAYER_SWAP ? 1 : 2;
 const REEL_MAX_BATCH = USE_IOS_PLAYER_SWAP ? 1 : 3;
 const REELS_FEED_MUTED_KEY = '@reels_feed_muted';
+
+function prefetchReelThumbnails(items: Array<{ thumbnail?: string }>, from = 0, count = 6) {
+  const urls = items
+    .slice(from, from + count)
+    .map((r) => r.thumbnail)
+    .filter((u): u is string => Boolean(u && u.startsWith('http')));
+  if (urls.length === 0) return;
+  void ExpoImage.prefetch(urls);
+}
 
 const ANIMATIONS = {
   spring: {
@@ -359,6 +371,8 @@ const ReelsFeed: React.FC = () => {
   const [safePlayerIndex, setSafePlayerIndex] = useState(0);
   const safeIndexTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentIndexRef = useRef(0);
+  /** Measured feed height — must match item height or the next reel peeks through */
+  const [viewportHeight, setViewportHeight] = useState(() => Math.round(SCREEN_HEIGHT));
   const haptic = useHaptic();
   const { t } = useTranslation();
   const { getToken } = useAuth();
@@ -589,8 +603,9 @@ const ReelsFeed: React.FC = () => {
             .catch(err => logger.warn('[ReelsFeed] Cache save failed:', err));
         }
 
-        // Auto-preload first 3 videos after initial load
+        // Auto-preload first videos + warm thumbnails for instant paint
         if (!cursor && transformed.length > 0) {
+          prefetchReelThumbnails(transformed, 0, 8);
           preloadManager.preloadNextReelVideos(transformed, 0);
         }
       }
@@ -1439,9 +1454,9 @@ const ReelsFeed: React.FC = () => {
         recordReelViewRef.current(currentReel.id);
       }
 
-      // Preload next 2-3 videos for smooth scrolling (Requirements 19.2, 19.3)
-      // Use PreloadManager for centralized video preloading (use ref for latest reels)
+      // Preload next videos + thumbnails for smooth scrolling
       if (reelsRef.current.length > 0) {
+        prefetchReelThumbnails(reelsRef.current, newIndex, 5);
         preloadManager.preloadNextReelVideos(reelsRef.current, newIndex);
       }
     }
@@ -1544,15 +1559,18 @@ const ReelsFeed: React.FC = () => {
 
   const renderItem = useCallback(({ item, index }: { item: ReelData; index: number }) => {
     const isActiveCell = index === safePlayerIndex;
+    const shouldMount =
+      isReelsScreenFocused &&
+      safePlayerIndex >= 0 &&
+      (index === safePlayerIndex ||
+        // Android: warm the next reel so the swipe starts instantly
+        (REEL_PLAYER_MOUNT_DISTANCE > 0 && index === safePlayerIndex + 1));
     return (
     <ReelItem
       reel={item}
       isActive={isActiveCell}
-      shouldMountPlayer={
-        isReelsScreenFocused &&
-        safePlayerIndex >= 0 &&
-        index === safePlayerIndex
-      }
+      itemHeight={viewportHeight}
+      shouldMountPlayer={shouldMount}
       playerGeneration={playerGeneration}
       feedMuted={feedMuted}
       isOwnReel={resolveIsOwnReel(item)}
@@ -1572,26 +1590,33 @@ const ReelsFeed: React.FC = () => {
       onEditReel={handleEditReel}
     />
   );
-  }, [safePlayerIndex, isReelsScreenFocused, playerGeneration, feedMuted, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
+  }, [safePlayerIndex, viewportHeight, isReelsScreenFocused, playerGeneration, feedMuted, resolveIsOwnReel, handleLike, handleToggleMute, openComments, openReport, recordReelShare, handleSave, handleVideoRef, handleHashtagPress, handleUserPress, handleMentionPress, handleFollow, handleUnfollow, handleDeleteReel, handleEditReel]);
 
   const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
     flatListRef.current?.scrollToOffset({
-      offset: Math.max(0, info.averageItemLength * info.index),
+      offset: Math.max(0, viewportHeight * info.index),
       animated: true,
     });
     setCurrentIndex(info.index);
-  }, []);
+  }, [viewportHeight]);
 
   const getItemLayout = useCallback((_: any, index: number) => ({
-    length: SCREEN_HEIGHT,
-    offset: SCREEN_HEIGHT * index,
+    length: viewportHeight,
+    offset: viewportHeight * index,
     index,
-  }), []);
+  }), [viewportHeight]);
 
   const keyExtractor = useCallback((item: ReelData) => item.id, []);
 
+  const onFeedLayout = useCallback((e: LayoutChangeEvent) => {
+    const h = Math.round(e.nativeEvent.layout.height);
+    if (h > 0 && Math.abs(h - viewportHeight) > 1) {
+      setViewportHeight(h);
+    }
+  }, [viewportHeight]);
+
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={onFeedLayout}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Header */}
@@ -1664,51 +1689,49 @@ const ReelsFeed: React.FC = () => {
         </View>
       )}
 
-      {/* Reels List */}
+      {/* Reels List — height snap must equal measured viewport (no next-reel peek) */}
       {!isInitialLoading && reels.length > 0 && (
         <FlatList
           ref={flatListRef}
           data={filteredReels}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          style={styles.feedList}
+          contentContainerStyle={styles.feedListContent}
           pagingEnabled
           showsVerticalScrollIndicator={false}
+          snapToInterval={viewportHeight}
           snapToAlignment="start"
+          disableIntervalMomentum
           decelerationRate="fast"
+          bounces={false}
+          overScrollMode="never"
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           getItemLayout={getItemLayout}
           onScrollToIndexFailed={handleScrollToIndexFailed}
-          // Performance optimizations — iOS: minimal window to avoid AVPlayer OOM/crash
           windowSize={REEL_LIST_WINDOW_SIZE}
           initialNumToRender={REEL_INITIAL_RENDER}
           maxToRenderPerBatch={REEL_MAX_BATCH}
-          updateCellsBatchingPeriod={100} // Increased from 50 to 100ms for better batching
-          // Keep off-screen reel cells mounted on Android — clipping VideoView
-          // during Fabric draw races with dispatchGetDisplayList NPEs.
+          updateCellsBatchingPeriod={50}
           removeClippedSubviews={false}
           onRefresh={handleRefresh}
           refreshing={isRefreshing}
           onEndReached={loadMoreReels}
           onEndReachedThreshold={0.5}
-          // Accessibility (Low Priority #13)
           accessible={true}
           accessibilityLabel={t.reels.a11yVideoList}
           accessibilityHint={t.reels.a11yVideoHint}
-          ListFooterComponent={
-            isLoadingMore ? (
-              <View style={styles.loadingMoreContainer}>
-                <ActivityIndicator size="small" color={COLORS.primary} />
-                <Text style={styles.loadingMoreText}>{t.reels.loadingMore}</Text>
-              </View>
-            ) : !hasMore && reels.length > 0 ? (
-              <View style={styles.endOfListContainer}>
-                <Text style={styles.endOfListText}>{t.reels.endOfFeed}</Text>
-              </View>
-            ) : null
-          }
         />
       )}
+
+      {/* Footer overlays — never inside FlatList (breaks page height snap) */}
+      {isLoadingMore ? (
+        <View style={styles.loadingMoreOverlay} pointerEvents="none">
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.loadingMoreText}>{t.reels.loadingMore}</Text>
+        </View>
+      ) : null}
 
       {/* Swipe Hint */}
       {currentIndex === 0 && (
@@ -1765,6 +1788,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+    overflow: 'hidden',
+  },
+  feedList: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  feedListContent: {
+    flexGrow: 0,
   },
   // Loading & Empty States
   initialLoadingContainer: {
@@ -1836,25 +1867,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  loadingMoreContainer: {
-    height: 80,
-    justifyContent: 'center',
+  loadingMoreOverlay: {
+    position: 'absolute',
+    bottom: 100,
+    left: 0,
+    right: 0,
     alignItems: 'center',
+    justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
+    zIndex: 20,
   },
   loadingMoreText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: COLORS.textSecondary,
     fontSize: 14,
-  },
-  endOfListContainer: {
-    height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  endOfListText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 14,
+    fontWeight: '600',
   },
   header: {
     position: 'absolute',

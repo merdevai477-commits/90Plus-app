@@ -29,7 +29,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
-  Dimensions,
   Platform,
   StyleSheet,
   Text,
@@ -37,6 +36,7 @@ import {
   View,
   type AppStateStatus,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { useEvent } from 'expo';
 import { useVideoPlayer, VideoView, type VideoSource } from 'expo-video';
 import { Play } from 'lucide-react-native';
@@ -49,8 +49,7 @@ import { VideoErrorBoundary } from './VideoErrorBoundary';
 import { logger } from '../../utils/logger';
 import { captureException } from '../../services/sentry.service';
 import { getApiUrl } from '../../config/api.config';
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+import { PURPLE_PRIMARY, BG_BASE } from '../../constants/tokens';
 
 function isTransientVideoError(msg: string): boolean {
   return /unknownhost|unable to resolve host|network is unreachable|enetunreach|econnreset|econnrefused|enotfound|sslhandshake|javax\.net\.ssl|trust anchor|certificate|timed out|timeout|offline|no address associated|failed to connect|source error/i.test(
@@ -94,11 +93,11 @@ export interface UnifiedVideoPlayerProps {
 // ─── Styling tokens ───────────────────────────────────────────────────────────
 
 const COLORS = {
-  primary: '#22c55e',
-  background: '#000000',
+  primary: PURPLE_PRIMARY,
+  background: BG_BASE,
   error: '#FF5252',
-  progressBg: 'rgba(255, 255, 255, 0.3)',
-  progressFill: '#22c55e',
+  progressBg: 'rgba(255, 255, 255, 0.28)',
+  progressFill: PURPLE_PRIMARY,
 } as const;
 
 /**
@@ -548,20 +547,36 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
   ];
   const videoStyle = Platform.OS === 'ios' ? styles.videoIos : styles.video;
 
+  const showPoster = Boolean(reel.thumbnail) && (isLoading || !isActive);
+
   return (
     <View style={containerStyle}>
+      {/* Poster keeps the frame filled while HLS buffers — feels instant */}
+      {reel.thumbnail ? (
+        <ExpoImage
+          source={{ uri: reel.thumbnail }}
+          style={styles.poster}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={0}
+          pointerEvents="none"
+        />
+      ) : null}
+
       <VideoView
-        style={videoStyle}
+        style={[videoStyle, showPoster && isLoading ? styles.videoWhileLoading : null]}
         player={player}
         contentFit={VIDEO_DEFAULTS.contentFit}
         nativeControls={false}
         allowsPictureInPicture={false}
       />
 
-      {/* Loading / buffering indicator — hide when user paused or replay cap reached */}
+      {/* Loading / buffering — brand purple, not green */}
       {isLoading && !hasError && isActive && !isPausedByLimit && (
         <View style={styles.loadingContainer} pointerEvents="none">
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <View style={styles.loadingBadge}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          </View>
         </View>
       )}
 
@@ -597,37 +612,43 @@ const UnifiedVideoPlayerInternal: React.FC<UnifiedVideoPlayerProps> = ({
 
 const styles = StyleSheet.create({
   videoContainer: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: COLORS.background,
+    overflow: 'hidden',
   },
   videoContainerIos: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    // Fill parent — never use module-level screen size (causes next-reel peek)
+  },
+  poster: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
   },
   video: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-    zIndex: 0,
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
   videoIos: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
-    zIndex: 0,
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+  },
+  videoWhileLoading: {
+    opacity: 0.01,
   },
   loadingContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    zIndex: 2,
+  },
+  loadingBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(10, 6, 18, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   progressContainer: {
     position: 'absolute',
@@ -670,28 +691,25 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   retryText: {
-    color: COLORS.background,
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   replayOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(5,1,13,0.45)',
+    zIndex: 3,
   },
   replayButton: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(10,6,18,0.72)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(167, 139, 250, 0.45)',
   },
   replayText: {
     color: 'white',
