@@ -23,7 +23,7 @@
         "applinks:clerk.90plus.pro"
       ],
       "usesAppleSignIn": true,
-      "buildNumber": "153",
+      "buildNumber": "154",
       "requireFullScreen": false,
       "entitlements": {
         "com.apple.developer.usernotifications.time-sensitive": true,
@@ -96,6 +96,21 @@
               "scheme": "https",
               "host": "90plus.pro",
               "pathPrefix": "/reels"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "90plus.pro",
+              "pathPrefix": "/u/"
             }
           ],
           "category": [

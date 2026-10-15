@@ -46,6 +46,7 @@ describe('iOS Universal Links (AASA)', () => {
 
   it('keeps the paths that already worked', () => {
     expect(AASA_ACTIVE_PATHS).toContain('/reels/*');
+    expect(AASA_ACTIVE_PATHS).toContain('/u/*');
     expect(AASA_ACTIVE_PATHS).toContain('/@*');
   });
 
@@ -116,11 +117,13 @@ describe('Android App Links (front/app.json intent filters)', () => {
 
   it('covers exactly the paths iOS claims', () => {
     // AASA patterns are glob-ish ("/invite/*"), Android's are prefixes
-    // ("/invite"). Compare them on the stem so the two manifests cannot drift.
-    const iosStems = AASA_ACTIVE_PATHS.map((pattern) => pattern.replace(/\*$/, '').replace(/\/$/, ''));
+    // ("/invite" or "/u/"). Compare on the stem so the two manifests cannot drift.
+    const stemOf = (value: string) => value.replace(/\*$/, '').replace(/\/$/, '');
+    const iosStems = AASA_ACTIVE_PATHS.map(stemOf);
     const androidStems = filters
       .flatMap((filter) => (filter.data ?? []).map((entry) => entry.pathPrefix))
-      .filter((value): value is string => Boolean(value));
+      .filter((value): value is string => Boolean(value))
+      .map(stemOf);
 
     for (const stem of iosStems) {
       expect(androidStems).toContain(stem);

@@ -16,10 +16,25 @@ const LANDING_STYLES = `
     .primary { background: #FFD700; color: #000; }
     .secondary { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
     .loading p { color: rgba(255,255,255,0.55); font-size: 0.95rem; }
-    .download { display: none; }
-    body.ready .loading { display: none; }
-    body.ready .download { display: block; }
+    /*
+     * Buttons stay visible even when CSP / in-app browsers block the opener
+     * script — QR scans and WhatsApp previews often land here without JS.
+     */
+    .download { display: block; }
+    body.opening .download { opacity: 0.85; }
 `;
+
+/** Helmet sets script-src 'self'; these pages need an inline opener. Override per response. */
+export const SHARE_LANDING_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline'",
+  "style-src 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+].join('; ');
 
 /**
  * Android App Link intent.
@@ -50,7 +65,7 @@ type ContentLandingOptions = {
 function buildSmartLandingPage(options: ContentLandingOptions): string {
   // Fallback is the Play Store, never this page — see buildAndroidIntentUrl.
   const intentUrl = buildAndroidIntentUrl(options.deepPath);
-  const intentHref = intentUrl.replace(/"/g, '&quot;');
+  const customHref = options.customSchemeUrl.replace(/"/g, '&quot;');
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -84,22 +99,16 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
         // iPadOS 13+ reports itself as a Mac; the touch points give it away.
         (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
 
-      function showDownloadLanding() {
-        document.body.classList.add('ready');
-      }
-
       function appLikelyOpened() {
         return document.hidden || document.webkitHidden;
       }
 
       function tryOpenApp() {
+        document.body.classList.add('opening');
         if (isAndroid) {
           // The intent's own browser_fallback_url is the Play Store, so a
           // missing app resolves in one hop without coming back here.
           window.location.href = intentUrl;
-          setTimeout(function() {
-            if (!appLikelyOpened()) showDownloadLanding();
-          }, 2200);
           return;
         }
         if (isIOS) {
@@ -107,15 +116,11 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
           window.location.href = customScheme;
           setTimeout(function() {
             if (appLikelyOpened() || Date.now() - start >= 3000) return;
-            // Still here: the app is not installed. Reveal the card (so the
-            // back button lands somewhere sensible) and go to the App Store.
-            showDownloadLanding();
+            // Still here: the app is not installed — go to the App Store.
             window.location.replace(appStoreUrl);
           }, 1600);
           return;
         }
-        // Desktop: there is no store to send them to, so offer both.
-        showDownloadLanding();
       }
 
       tryOpenApp();
@@ -130,11 +135,19 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
     </div>
     <div class="download">
       <p>${options.downloadText}</p>
-      <a class="btn primary" href="${intentHref}">افتح في التطبيق</a>
+      <a class="btn primary" id="open-app" href="${customHref}">افتح في التطبيق</a>
       <a class="btn secondary" href="${PLAY_STORE_URL}">حمّل من Google Play</a>
       <a class="btn secondary" href="${APP_STORE_URL}">حمّل من App Store</a>
     </div>
   </div>
+  <script>
+    (function() {
+      var ua = navigator.userAgent || '';
+      if (!/Android/i.test(ua)) return;
+      var el = document.getElementById('open-app');
+      if (el) el.setAttribute('href', ${JSON.stringify(intentUrl)});
+    })();
+  </script>
 </body>
 </html>`;
 }
@@ -143,7 +156,6 @@ function buildSmartLandingPage(options: ContentLandingOptions): string {
 export function buildAppInviteLandingPage(): string {
   const landingUrl = `${SHARE_BASE_URL}/`;
   const intentUrl = buildAndroidIntentUrl('open');
-  const intentHref = intentUrl.replace(/"/g, '&quot;');
 
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -165,21 +177,15 @@ export function buildAppInviteLandingPage(): string {
       var isIOS = /iPhone|iPad|iPod/i.test(ua) ||
         (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
 
-      function showDownloadLanding() {
-        document.body.classList.add('ready');
-      }
-
       function appLikelyOpened() {
         return document.hidden || document.webkitHidden;
       }
 
       function tryOpenApp() {
+        document.body.classList.add('opening');
         if (isAndroid) {
           // Intent fallback is the Play Store — see buildAndroidIntentUrl.
           window.location.href = intentUrl;
-          setTimeout(function() {
-            if (!appLikelyOpened()) showDownloadLanding();
-          }, 2200);
           return;
         }
         if (isIOS) {
@@ -187,12 +193,9 @@ export function buildAppInviteLandingPage(): string {
           window.location.href = customScheme;
           setTimeout(function() {
             if (appLikelyOpened() || Date.now() - start >= 3000) return;
-            showDownloadLanding();
             window.location.replace(appStoreUrl);
           }, 1600);
-          return;
         }
-        showDownloadLanding();
       }
 
       tryOpenApp();
@@ -207,11 +210,18 @@ export function buildAppInviteLandingPage(): string {
     </div>
     <div class="download">
       <p>أفضل تطبيق لكرة القدم — توقعات، اختبارات، وريلز</p>
-      <a class="btn primary" href="${intentHref}">افتح في التطبيق</a>
+      <a class="btn primary" id="open-app" href="ninetyplus://">افتح في التطبيق</a>
       <a class="btn secondary" href="${PLAY_STORE_URL}">Google Play</a>
       <a class="btn secondary" href="${APP_STORE_URL}">App Store</a>
     </div>
   </div>
+  <script>
+    (function() {
+      if (!/Android/i.test(navigator.userAgent || '')) return;
+      var el = document.getElementById('open-app');
+      if (el) el.setAttribute('href', ${JSON.stringify(intentUrl)});
+    })();
+  </script>
 </body>
 </html>`;
 }
@@ -230,15 +240,17 @@ export function buildReelLandingPage(reelId: string): string {
 }
 
 export function buildProfileLandingPage(username: string): string {
+  const clean = username.replace(/^@/, '').trim();
   return buildSmartLandingPage({
-    title: `90Plus — @${username}`,
-    ogTitle: `90Plus — @${username}`,
+    title: `90Plus — @${clean}`,
+    ogTitle: `90Plus — @${clean}`,
     ogDescription: 'افتح البروفايل في تطبيق 90Plus',
-    ogUrl: shareUrl(`/@${username}`),
-    loadingText: `جاري فتح بروفايل @${username}…`,
-    downloadText: `حمّل 90Plus لمتابعة @${username}`,
-    deepPath: `user/${username}`,
-    customSchemeUrl: `ninetyplus://user/${username}`,
+    // Canonical share path is /u/:username (chat apps often mangle /@…).
+    ogUrl: shareUrl(`/u/${clean}`),
+    loadingText: `جاري فتح بروفايل @${clean}…`,
+    downloadText: `حمّل 90Plus لمتابعة @${clean}`,
+    deepPath: `user/${clean}`,
+    customSchemeUrl: `ninetyplus://user/${clean}`,
   });
 }
 

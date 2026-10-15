@@ -128,6 +128,32 @@ describe('GET /.well-known/assetlinks.json', () => {
   });
 });
 
+describe('GET /u/:username — profile share landing', () => {
+  it('serves the profile opener instead of redirecting home', async () => {
+    const res = await get('/u/omar');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+  });
+
+  it('allows the inline opener script (overrides Helmet script-src self)', async () => {
+    const res = await get('/u/omar');
+    const csp = res.headers.get('content-security-policy') ?? '';
+    expect(csp).toContain("script-src 'unsafe-inline'");
+  });
+
+  it('keeps the username in the custom scheme and intent', async () => {
+    const html = await (await get('/u/omar')).text();
+    expect(html).toContain('ninetyplus://user/omar');
+    expect(html).toContain('intent://user/omar#Intent');
+  });
+
+  it('still accepts legacy /@username links', async () => {
+    const res = await get('/@omar');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('ninetyplus://user/omar');
+  });
+});
+
 describe('GET /invite/:code — the web fallback', () => {
   it('serves the landing page instead of redirecting to the website root', async () => {
     const res = await get('/invite/AB23CD');

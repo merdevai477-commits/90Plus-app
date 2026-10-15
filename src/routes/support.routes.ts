@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import {
+    SHARE_LANDING_CSP,
     buildProfileLandingPage,
     buildReelLandingPage,
     buildReferralLandingPage,
@@ -15,6 +16,24 @@ const PRIVACY_PAGE_PATH = resolvePublicFile(__dirname, 'privacy.html');
 const SUPPORT_PAGE_PATH = resolvePublicFile(__dirname, 'support.html');
 
 const router = Router();
+
+function sendShareLanding(res: Response, html: string): void {
+    // Override Helmet's script-src 'self' so the inline opener (and visible
+    // store buttons) actually run when a QR / share link lands in a browser.
+    res.setHeader('Content-Security-Policy', SHARE_LANDING_CSP);
+    res.type('html').send(html);
+}
+
+function sendProfileLanding(req: Request, res: Response): void {
+    const raw = ensureString(req.params.username);
+    const username = raw.replace(/^@/, '').trim();
+    if (!/^[a-zA-Z0-9_]{1,64}$/.test(username)) {
+        res.status(404).type('html').send('<!DOCTYPE html><html><body><p>Profile not found</p></body></html>');
+        return;
+    }
+
+    sendShareLanding(res, buildProfileLandingPage(username));
+}
 
 /**
  * GET /support
@@ -46,23 +65,16 @@ router.get('/privacy', (_req: Request, res: Response): void => {
  */
 router.get('/reels/:reelId', (req: Request, res: Response): void => {
     const reelId = ensureString(req.params.reelId);
-    res.type('html').send(buildReelLandingPage(reelId));
+    sendShareLanding(res, buildReelLandingPage(reelId));
 });
 
 /**
- * GET /@:username
+ * GET /u/:username  (canonical profile share — chat-safe)
+ * GET /@:username   (legacy QR / older shares)
  * Profile share — app installed → open profile; otherwise → store
  */
-router.get('/@:username', (req: Request, res: Response): void => {
-    const raw = ensureString(req.params.username);
-    const username = raw.replace(/^@/, '').trim();
-    if (!/^[a-zA-Z0-9_]{1,64}$/.test(username)) {
-        res.status(404).type('html').send('<!DOCTYPE html><html><body><p>Profile not found</p></body></html>');
-        return;
-    }
-
-    res.type('html').send(buildProfileLandingPage(username));
-});
+router.get('/u/:username', sendProfileLanding);
+router.get('/@:username', sendProfileLanding);
 
 /**
  * GET /invite/:code  (alias: /ref/:code)
@@ -76,7 +88,7 @@ function handleReferralLanding(req: Request, res: Response): void {
         return;
     }
 
-    res.type('html').send(buildReferralLandingPage(raw));
+    sendShareLanding(res, buildReferralLandingPage(raw));
 }
 
 router.get('/invite/:code', handleReferralLanding);
