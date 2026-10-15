@@ -1,11 +1,27 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator, Animated, Platform } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from './MatchText';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GlassBubbleFill, GlassRim, GlassSheen } from '../navigation/glass';
 
-const HEADER_BG = '#0c051a';
-const BELL = '#810af2';
+const CAPSULE_HEIGHT = 52;
+const CAPSULE_RADIUS = CAPSULE_HEIGHT / 2;
+const BUTTON_SIZE = 40;
+const BAR_PAD_TOP = 6;
+const BAR_PAD_BOTTOM = 8;
+/** iOS blurs what scrolls behind the capsule; Android has no blur, so the tint carries it. */
+const CAPSULE_BG = Platform.OS === 'ios' ? 'rgba(16,12,28,0.55)' : 'rgba(16,12,28,0.9)';
+
+/** Height of the bar below the status bar inset — screens floating content under it pad by this. */
+export const MATCH_TOP_BAR_HEIGHT = BAR_PAD_TOP + CAPSULE_HEIGHT + BAR_PAD_BOTTOM;
+
+export function useMatchTopBarHeight(): number {
+  const insets = useSafeAreaInsets();
+  return Math.max(insets.top, 12) + MATCH_TOP_BAR_HEIGHT;
+}
 
 type MatchDetailsTopBarProps = {
   title: string;
@@ -20,10 +36,52 @@ type MatchDetailsTopBarProps = {
   notificationsLoading?: boolean;
   /** Shown in place of the title as `collapseProgress` goes 0 → 1 (e.g. compact score). */
   compactContent?: React.ReactNode;
-  /** Full-width strip pinned to the bar's bottom edge, faded in with `collapseProgress`. */
+  /** Strip pinned to the capsule's bottom edge, faded in with `collapseProgress`. */
   compactFooter?: React.ReactNode;
   collapseProgress?: Animated.AnimatedInterpolation<number> | Animated.Value;
+  /** Overlay the screen so content scrolls behind the glass (pad content by `useMatchTopBarHeight`). */
+  floating?: boolean;
 };
+
+function GlassIconButton({
+  onPress,
+  disabled,
+  lit,
+  accessibilityLabel,
+  accessibilityState,
+  children,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+  lit?: boolean;
+  accessibilityLabel: string;
+  accessibilityState?: { selected?: boolean; disabled?: boolean };
+  children: React.ReactNode;
+}) {
+  const radius = BUTTON_SIZE / 2;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={accessibilityState}
+      style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
+    >
+      {lit ? (
+        <GlassBubbleFill radius={radius} height={BUTTON_SIZE} />
+      ) : (
+        <>
+          <View style={[StyleSheet.absoluteFill, styles.iconButtonFill]} />
+          <GlassSheen radius={radius} intensity={0.8} />
+          <GlassRim radius={radius} />
+        </>
+      )}
+      {children}
+    </Pressable>
+  );
+}
 
 export function MatchDetailsTopBar({
   title,
@@ -37,6 +95,7 @@ export function MatchDetailsTopBar({
   compactContent,
   compactFooter,
   collapseProgress,
+  floating = false,
 }: MatchDetailsTopBarProps): React.ReactElement {
   const insets = useSafeAreaInsets();
   const titleFade = useRef(new Animated.Value(1)).current;
@@ -58,18 +117,31 @@ export function MatchDetailsTopBar({
   const titleOpacity = collapseProgress && compactContent
     ? Animated.multiply(titleFade, Animated.subtract(1, collapseProgress))
     : titleFade;
+  const bellColor = isSubscribed ? '#fff' : notificationsDisabled ? 'rgba(199,155,255,0.4)' : '#c79bff';
 
   return (
-    <View style={[styles.bar, { paddingTop: Math.max(insets.top, 12) }]}>
-      <View style={styles.row}>
-        <TouchableOpacity
-          style={styles.iconHit}
-          onPress={onBack}
-          accessibilityRole="button"
-          accessibilityLabel={backLabel}
-        >
-          <Ionicons name="arrow-back" size={26} color="#fff" />
-        </TouchableOpacity>
+    <View
+      pointerEvents="box-none"
+      style={[styles.bar, floating && styles.barFloating, { paddingTop: Math.max(insets.top, 12) + BAR_PAD_TOP }]}
+    >
+      <LinearGradient
+        pointerEvents="none"
+        colors={['#0c051a', '#0c051a', 'rgba(12,5,26,0.88)', 'rgba(12,5,26,0)']}
+        locations={[0, 0.5, 0.82, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.capsule}>
+        {Platform.OS === 'ios' ? (
+          <BlurView intensity={40} tint="dark" style={[StyleSheet.absoluteFill, styles.capsuleClip]} />
+        ) : null}
+        <View style={[StyleSheet.absoluteFill, styles.capsuleClip, { backgroundColor: CAPSULE_BG }]} />
+        <GlassSheen radius={CAPSULE_RADIUS} />
+        <GlassRim radius={CAPSULE_RADIUS} />
+
+        <GlassIconButton onPress={onBack} accessibilityLabel={backLabel}>
+          <Ionicons name="chevron-back" size={22} color="#fff" />
+        </GlassIconButton>
+
         <View style={styles.center}>
           <Animated.View
             style={[styles.centerLayer, { opacity: titleOpacity, transform: [{ translateY: titleShift }] }]}
@@ -87,56 +159,77 @@ export function MatchDetailsTopBar({
             </Animated.View>
           ) : null}
         </View>
-        <TouchableOpacity
-          style={styles.iconHit}
+
+        <GlassIconButton
           onPress={onNotifications}
           disabled={notificationsDisabled || notificationsLoading}
-          accessibilityRole="button"
+          lit={isSubscribed && !notificationsDisabled}
           accessibilityLabel={notificationsLabel}
           accessibilityState={{ selected: isSubscribed, disabled: notificationsDisabled }}
         >
           {notificationsLoading ? (
-            <ActivityIndicator size="small" color={BELL} />
+            <ActivityIndicator size="small" color="#c79bff" />
           ) : (
-            <Ionicons
-              name={isSubscribed ? 'notifications' : 'notifications-outline'}
-              size={26}
-              color={notificationsDisabled ? 'rgba(129,10,242,0.45)' : BELL}
-            />
+            <Ionicons name={isSubscribed ? 'notifications' : 'notifications-outline'} size={20} color={bellColor} />
           )}
-        </TouchableOpacity>
+        </GlassIconButton>
+
+        {compactFooter && collapseProgress ? (
+          <Animated.View pointerEvents="none" style={[styles.footer, { opacity: collapseProgress }]}>
+            {compactFooter}
+          </Animated.View>
+        ) : null}
       </View>
-      {compactFooter && collapseProgress ? (
-        <Animated.View pointerEvents="none" style={[styles.footer, { opacity: collapseProgress }]}>
-          {compactFooter}
-        </Animated.View>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   bar: {
-    backgroundColor: HEADER_BG,
-    paddingHorizontal: 24,
-    paddingBottom: 10,
-    zIndex: 3,
+    paddingHorizontal: 12,
+    paddingBottom: BAR_PAD_BOTTOM,
+    zIndex: 5,
   },
-  row: {
-    height: 38,
+  barFloating: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  capsule: {
+    height: CAPSULE_HEIGHT,
+    borderRadius: CAPSULE_RADIUS,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingHorizontal: 6,
+    gap: 8,
+    shadowColor: '#7C4DFF',
+    shadowOpacity: 0.4,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
-  iconHit: {
-    width: 38,
-    height: 38,
+  capsuleClip: {
+    borderRadius: CAPSULE_RADIUS,
+    overflow: 'hidden',
+  },
+  iconButton: {
+    width: BUTTON_SIZE,
+    height: BUTTON_SIZE,
+    borderRadius: BUTTON_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconButtonPressed: {
+    transform: [{ scale: 0.92 }],
+  },
+  iconButtonFill: {
+    borderRadius: BUTTON_SIZE / 2,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
   center: {
     flex: 1,
-    height: 38,
+    height: CAPSULE_HEIGHT - 8,
   },
   centerLayer: {
     flex: 1,
@@ -145,14 +238,17 @@ const styles = StyleSheet.create({
   },
   footer: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    left: CAPSULE_RADIUS + 8,
+    right: CAPSULE_RADIUS + 8,
+    bottom: 3,
+    borderRadius: 1,
+    overflow: 'hidden',
   },
   title: {
     color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.2,
     textAlign: 'center',
   },
 });

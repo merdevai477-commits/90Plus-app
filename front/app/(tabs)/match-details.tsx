@@ -30,7 +30,7 @@ import { MatchHeader } from '../../components/match-details/MatchHeader';
 import { MatchCompactScore, MatchCompactProgress } from '../../components/match-details/MatchCompactScore';
 import { ModernTabs } from '../../components/match-details/ModernTabs';
 import { TeamToggle } from '../../components/match-details/TeamToggle';
-import { MatchDetailsTopBar } from '../../components/match-details/MatchDetailsTopBar';
+import { MatchDetailsTopBar, useMatchTopBarHeight } from '../../components/match-details/MatchDetailsTopBar';
 import { MatchChatTab } from '../../components/match-details/MatchChatTab';
 import { MatchStatsCompare } from '../../components/match-details/MatchStatsCompare';
 import { PreMatchRecentStats } from '../../components/match-details/PreMatchRecentStats';
@@ -1474,6 +1474,7 @@ const MatchDetailsScreen = () => {
   // scrolls under them and drives one shared value; the hero slides away by up
   // to its own height. Inactive pages are kept at an equivalent offset so a
   // horizontal swipe never makes the hero jump.
+  const topBarHeight = useMatchTopBarHeight();
   const [pagerHeight, setPagerHeight] = useState(0);
   const [heroHeight, setHeroHeight] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -2872,20 +2873,6 @@ const MatchDetailsScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0c051a" />
 
-      <MatchDetailsTopBar
-        title={tabs[activeTabIndex]?.label || t.matchDetails.navTitle || t.matchDetails.title || 'The Match'}
-        backLabel={t.matchDetails.backToMatches}
-        notificationsLabel={t.matchDetails.notifications || 'Notifications'}
-        onBack={() => router.push('/(tabs)/matches' as any)}
-        onNotifications={handleToggleMatchNotifications}
-        isSubscribed={isMatchSubscribed}
-        notificationsDisabled={isFinishedMatch()}
-        notificationsLoading={matchSubLoading}
-        compactContent={compactScore}
-        compactFooter={compactProgress}
-        collapseProgress={compactHeaderProgress}
-      />
-
       <View style={styles.body}>
         <Animated.ScrollView
           ref={pagerRef as any}
@@ -2915,7 +2902,10 @@ const MatchDetailsScreen = () => {
         <Animated.View
           pointerEvents="box-none"
           onLayout={onHeaderLayout}
-          style={[styles.floatingHeader, { transform: [{ translateY: headerTranslateY }] }]}
+          style={[
+            styles.floatingHeader,
+            { paddingTop: topBarHeight, transform: [{ translateY: headerTranslateY }] },
+          ]}
         >
           <View collapsable={false} onLayout={onHeroLayout} style={styles.heroBlock}>
             {lmtWidget}
@@ -2993,6 +2983,21 @@ const MatchDetailsScreen = () => {
           </View>
         </Animated.View>
       </View>
+
+      <MatchDetailsTopBar
+        title={tabs[activeTabIndex]?.label || t.matchDetails.navTitle || t.matchDetails.title || 'The Match'}
+        backLabel={t.matchDetails.backToMatches}
+        notificationsLabel={t.matchDetails.notifications || 'Notifications'}
+        onBack={() => router.push('/(tabs)/matches' as any)}
+        onNotifications={handleToggleMatchNotifications}
+        isSubscribed={isMatchSubscribed}
+        notificationsDisabled={isFinishedMatch()}
+        notificationsLoading={matchSubLoading}
+        compactContent={compactScore}
+        compactFooter={compactProgress}
+        collapseProgress={compactHeaderProgress}
+        floating
+      />
     </View>
   );
 };
