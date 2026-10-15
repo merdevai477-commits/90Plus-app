@@ -1431,6 +1431,18 @@ export const ar = {
       mine: 'تحدياتي',
       sponsored: 'تحديات الرعاة',
     },
+    store: {
+      categoryBadge: 'متجر رياضي',
+      ratingLabel: 'تقييم',
+      follow: 'تابعنا',
+      aboutTitle: 'عن متجرنا',
+      deliveryAvailable: 'التوصيل متاح',
+      cashOnDelivery: 'دفع عند الاستلام',
+      authenticProducts: 'منتجات أصلية',
+      contactTitle: 'تواصل معنا',
+      hoursLabel: 'ساعات العمل: 10:00 ص - 11:00 م',
+      showOnMap: 'عرض الموقع على الخريطة',
+    },
     tiles: {
       popular: { title: 'مئات المشاركين', subtitle: 'تحدى الاخرين' },
       daily: { title: 'تحديات اليوم', subtitle: 'اربح جوائز رائعة' },

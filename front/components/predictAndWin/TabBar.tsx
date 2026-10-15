@@ -4,7 +4,8 @@
  * 404×67 container, bg #0c051a, 0.5px #1a052d, radius 14, px 16.
  * Row gap 15; idle = Inter Regular 13 #9f9c9c; active = 124×38 pill radius 12,
  * #660db8 fill, Inter SemiBold 14 white. No dividers — the pill swaps position
- * per tab while the visual order stays sponsored → mine → today → all (LTR).
+ * per tab while the visual order stays mine → today → all (LTR).
+ * Sponsor Challenges was removed from the hub chrome.
  */
 
 import React, { useMemo } from 'react';
@@ -22,10 +23,10 @@ import {
 } from './theme';
 
 /** SwiftUI HStack order (leading → trailing in LTR). */
-const TABS_LTR: CompetitionTab[] = ['sponsored', 'mine', 'today', 'all'];
+const TABS_LTR: CompetitionTab[] = ['mine', 'today', 'all'];
 
 /** RTL mirrors the same reading order with `row-reverse`. */
-const TABS_RTL: CompetitionTab[] = ['all', 'today', 'mine', 'sponsored'];
+const TABS_RTL: CompetitionTab[] = ['all', 'today', 'mine'];
 
 const TAB_PILL_BG = '#660DB8';
 

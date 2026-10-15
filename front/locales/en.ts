@@ -1359,6 +1359,18 @@ export const en = {
       mine: 'My Challenges',
       sponsored: 'Sponsor Challenges',
     },
+    store: {
+      categoryBadge: 'Sports store',
+      ratingLabel: 'Rating',
+      follow: 'Follow us',
+      aboutTitle: 'About our store',
+      deliveryAvailable: 'Delivery available',
+      cashOnDelivery: 'Cash on delivery',
+      authenticProducts: 'Authentic products',
+      contactTitle: 'Contact us',
+      hoursLabel: 'Hours: 10:00 AM – 11:00 PM',
+      showOnMap: 'Show location on map',
+    },
     tiles: {
       popular: { title: 'Hundreds joining', subtitle: 'Challenge the rest' },
       daily: { title: "Today's challenges", subtitle: 'Win great prizes' },

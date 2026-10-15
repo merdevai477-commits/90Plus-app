@@ -360,7 +360,7 @@ describe('Predict & Win hub', () => {
     await waitFor(() => expect(screen.getByText('Wrong prediction')).toBeTruthy());
   });
 
-  it.each(['today', 'mine', 'sponsored'] as const)(
+  it.each(['today', 'mine'] as const)(
     'paints the cards after switching to the "%s" tab',
     async (tab) => {
       mockList.mockResolvedValue(TWO_ROWS);
@@ -376,6 +376,13 @@ describe('Predict & Win hub', () => {
       expect(screen.getByText('SPONSOR_TWO')).toBeTruthy();
     },
   );
+
+  it('does not render the Sponsor Challenges tab', async () => {
+    mockList.mockResolvedValue(TWO_ROWS);
+    render(<PredictAndWinScreen />);
+    await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
+    expect(screen.queryByText(TAB_LABELS.sponsored)).toBeNull();
+  });
 
   it('shows the empty placeholder — not a blank void — when there are no rows', async () => {
     mockList.mockResolvedValue({ items: [], nextCursor: null });

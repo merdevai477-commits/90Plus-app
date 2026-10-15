@@ -38,7 +38,7 @@ import { useCompetitions } from '../../hooks/useCompetitions';
 import { useSponsorPrizeCta } from '../../hooks/useSponsorPrizeCta';
 import { useTranslation } from '../../src/i18n';
 import { useScreenFont } from '../../utils/fontSetup';
-import { isEntryOpen, type CompetitionInfo, type CompetitionTab } from '../../services/competitions.service';
+import type { CompetitionInfo, CompetitionTab } from '../../services/competitions.service';
 
 export default function PredictAndWinScreen() {
   useScreenFont();
@@ -160,13 +160,7 @@ export default function PredictAndWinScreen() {
           <View key={item.id} style={{ marginBottom: cardGap }}>
             <HubPrizeCard
               competition={item}
-              onPress={() => {
-                if (isEntryOpen(item)) {
-                  setPredictTarget(item);
-                  return;
-                }
-                router.push(`/predict-and-win/${item.id}`);
-              }}
+              onPress={() => setPredictTarget(item)}
               onOpenSponsor={() => router.push(`/predict-and-win/${item.id}`)}
             />
           </View>
