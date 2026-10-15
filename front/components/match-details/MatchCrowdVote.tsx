@@ -39,10 +39,30 @@ export type MatchCrowdVoteData = {
 
 type Props = MatchCrowdVoteData & { rtl: boolean };
 
-const TONE: Record<CrowdVoteChoice, { color: string; soft: string; gradient: [string, string] }> = {
-  home: { color: '#A855F7', soft: 'rgba(168,85,247,0.14)', gradient: ['#B46CFF', '#7C3AED'] },
-  draw: { color: '#94A3B8', soft: 'rgba(148,163,184,0.12)', gradient: ['#A8B3C4', '#64748B'] },
-  away: { color: '#3B82F6', soft: 'rgba(59,130,246,0.14)', gradient: ['#60A5FA', '#2563EB'] },
+type Tone = { color: string; border: string; soft: string; strong: string; gradient: [string, string] };
+
+const TONE: Record<CrowdVoteChoice, Tone> = {
+  home: {
+    color: '#A855F7',
+    border: 'rgba(168,85,247,0.28)',
+    soft: 'rgba(168,85,247,0.12)',
+    strong: 'rgba(168,85,247,0.30)',
+    gradient: ['#B46CFF', '#7C3AED'],
+  },
+  draw: {
+    color: '#94A3B8',
+    border: 'rgba(148,163,184,0.24)',
+    soft: 'rgba(148,163,184,0.10)',
+    strong: 'rgba(148,163,184,0.26)',
+    gradient: ['#A8B3C4', '#64748B'],
+  },
+  away: {
+    color: '#3B82F6',
+    border: 'rgba(59,130,246,0.30)',
+    soft: 'rgba(59,130,246,0.12)',
+    strong: 'rgba(59,130,246,0.30)',
+    gradient: ['#60A5FA', '#2563EB'],
+  },
 };
 
 const CHOICES: CrowdVoteChoice[] = ['home', 'draw', 'away'];
@@ -126,62 +146,69 @@ function VoteTile({
   onPress: () => void;
 }) {
   const tone = TONE[choice];
+  const [pressed, setPressed] = useState(false);
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={locked}
-      accessibilityRole="button"
-      accessibilityLabel={`${name} ${percent}%`}
-      accessibilityState={{ selected, disabled: locked }}
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.tile,
-        selected && { borderColor: tone.color, backgroundColor: tone.soft },
+        { borderColor: selected ? tone.color : tone.border },
         dimmed && styles.tileDimmed,
         pressed && styles.tilePressed,
       ]}
     >
-      {selected ? (
-        <LinearGradient
-          colors={[tone.soft, 'rgba(0,0,0,0)']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-      ) : null}
+      <LinearGradient
+        colors={[selected ? tone.strong : tone.soft, 'rgba(255,255,255,0.02)']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => setPressed(true)}
+        onPressOut={() => setPressed(false)}
+        disabled={locked}
+        accessibilityRole="button"
+        accessibilityLabel={`${name} ${percent}%`}
+        accessibilityState={{ selected, disabled: locked }}
+        style={styles.tileInner}
+      >
+        <View style={styles.tileTop}>
+          <LinearGradient
+            colors={tone.gradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.markChip}
+          >
+            <Text style={styles.markChipText}>{CHOICE_MARK[choice]}</Text>
+          </LinearGradient>
+          {selected ? (
+            <View style={[styles.checkBadge, { backgroundColor: tone.color }]}>
+              <Ionicons name="checkmark" size={11} color="#FFFFFF" />
+            </View>
+          ) : null}
+        </View>
 
-      <View style={styles.tileTop}>
-        <LinearGradient
-          colors={tone.gradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.markChip}
-        >
-          <Text style={styles.markChipText}>{CHOICE_MARK[choice]}</Text>
-        </LinearGradient>
-        {selected ? (
-          <View style={[styles.checkBadge, { backgroundColor: tone.color }]}>
-            <Ionicons name="checkmark" size={11} color="#FFFFFF" />
-          </View>
-        ) : null}
-      </View>
+        {media}
 
-      {media}
-
-      <Text style={styles.tileName} numberOfLines={2}>
-        {name}
-      </Text>
-
-      <Text style={[styles.percent, leading && { color: tone.color }]}>
-        {percent}
-        <Text style={[styles.percentSign, leading && { color: tone.color }]}>%</Text>
-      </Text>
-
-      {votes != null ? (
-        <Text style={styles.tileVotes} numberOfLines={1}>
-          {`${formatVotes(votes)} ${votesUnit}`}
+        <Text style={styles.tileName} numberOfLines={2}>
+          {name}
         </Text>
-      ) : null}
-    </Pressable>
+
+        <View style={styles.divider} />
+
+        <Text style={[styles.percent, leading && { color: tone.color }]}>
+          {percent}
+          <Text style={[styles.percentSign, leading && { color: tone.color }]}>%</Text>
+        </Text>
+
+        {votes != null ? (
+          <Text style={styles.tileVotes} numberOfLines={1}>
+            {`${formatVotes(votes)} ${votesUnit}`}
+          </Text>
+        ) : null}
+      </Pressable>
+    </View>
   );
 }
 
@@ -424,17 +451,20 @@ const styles = StyleSheet.create({
   tile: {
     flex: 1,
     flexBasis: 0,
+    flexGrow: 1,
     minWidth: 0,
-    alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 12,
-    paddingHorizontal: 8,
-    gap: 6,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.035)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
     overflow: 'hidden',
+  },
+  tileInner: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 14,
+    paddingHorizontal: 8,
+    gap: 6,
   },
   tileDimmed: {
     opacity: 0.6,
@@ -507,6 +537,12 @@ const styles = StyleSheet.create({
     minHeight: 32,
     textAlign: 'center',
     textAlignVertical: 'center',
+  },
+  divider: {
+    alignSelf: 'stretch',
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 6,
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   percent: {
     color: '#FFFFFF',

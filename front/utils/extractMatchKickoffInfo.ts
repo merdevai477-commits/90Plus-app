@@ -26,8 +26,28 @@ type FixtureLike = {
   _officials?: string[];
 } | null | undefined;
 
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&',
+  apos: "'",
+  quot: '"',
+  lt: '<',
+  gt: '>',
+  nbsp: ' ',
+};
+
+/** Upstream feeds sometimes send names HTML-escaped (e.g. "Stade Michel d&apos;Ornano"). */
+function decodeEntities(value: string): string {
+  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code: string) => {
+    if (code[0] === '#') {
+      const point = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      return Number.isFinite(point) && point > 0 && point <= 0x10ffff ? String.fromCodePoint(point) : match;
+    }
+    return NAMED_ENTITIES[code.toLowerCase()] ?? match;
+  });
+}
+
 function clean(value?: string | null): string | null {
-  const next = (value ?? '').trim();
+  const next = decodeEntities(value ?? '').trim();
   return next || null;
 }
 
