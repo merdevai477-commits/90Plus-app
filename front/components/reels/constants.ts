@@ -72,18 +72,18 @@ export const GRADIENTS = {
     brandGlow: [PURPLE_PRIMARY, PURPLE_DARK] as const,
     /** @deprecated use brandGlow */
     greenGlow: [PURPLE_PRIMARY, PURPLE_DARK] as const,
-    darkFade: ['rgba(5, 1, 13, 0.92)', 'rgba(5, 1, 13, 0.35)', 'transparent'] as const,
-    bottomFade: ['transparent', 'rgba(5, 1, 13, 0.55)', 'rgba(5, 1, 13, 0.96)'] as const,
-    heroAccent: ['rgba(236, 72, 153, 0.22)', 'rgba(124, 58, 237, 0.12)', 'transparent'] as const,
+    darkFade: ['rgba(5, 1, 13, 0.78)', 'rgba(5, 1, 13, 0.22)', 'transparent'] as const,
+    bottomFade: ['transparent', 'rgba(5, 1, 13, 0.42)', 'rgba(5, 1, 13, 0.88)'] as const,
+    heroAccent: ['rgba(124, 58, 237, 0.18)', 'rgba(124, 58, 237, 0.06)', 'transparent'] as const,
     cardGradient: ['rgba(124, 58, 237, 0.32)', 'rgba(59, 130, 246, 0.12)'] as const,
-    glassCard: ['rgba(255, 255, 255, 0.14)', 'rgba(124, 58, 237, 0.08)'] as const,
-    actionIdle: ['rgba(255, 255, 255, 0.14)', 'rgba(255, 255, 255, 0.06)'] as const,
-    actionActive: ['rgba(124, 58, 237, 0.45)', 'rgba(91, 33, 182, 0.28)'] as const,
-    /** Bio / caption panel */
-    bioPanel: ['rgba(14, 8, 28, 0.82)', 'rgba(20, 12, 40, 0.55)'] as const,
+    glassCard: ['rgba(255, 255, 255, 0.12)', 'rgba(14, 8, 28, 0.55)'] as const,
+    actionIdle: ['rgba(18, 10, 36, 0.55)', 'rgba(10, 5, 22, 0.38)'] as const,
+    actionActive: ['rgba(124, 58, 237, 0.72)', 'rgba(91, 33, 182, 0.48)'] as const,
+    /** Bio / caption panel — lighter so video stays visible */
+    bioPanel: ['rgba(12, 6, 26, 0.52)', 'rgba(18, 10, 36, 0.28)'] as const,
     /** Hashtag chip fills */
-    hashtagA: ['rgba(124, 58, 237, 0.42)', 'rgba(59, 130, 246, 0.18)'] as const,
-    hashtagB: ['rgba(168, 85, 247, 0.32)', 'rgba(96, 165, 250, 0.16)'] as const,
+    hashtagA: ['rgba(124, 58, 237, 0.55)', 'rgba(91, 33, 182, 0.28)'] as const,
+    hashtagB: ['rgba(139, 92, 246, 0.42)', 'rgba(59, 130, 246, 0.18)'] as const,
 };
 
 export const ANIMATION = {
@@ -97,23 +97,31 @@ export const EFFECTS = {
     brandGlow: {
         shadowColor: PURPLE_PRIMARY,
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.55,
-        shadowRadius: 14,
-        elevation: 8,
+        shadowOpacity: 0.45,
+        shadowRadius: 12,
+        elevation: 6,
     },
     /** @deprecated use brandGlow */
     greenGlow: {
         shadowColor: PURPLE_PRIMARY,
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.55,
-        shadowRadius: 14,
-        elevation: 8,
+        shadowOpacity: 0.45,
+        shadowRadius: 12,
+        elevation: 6,
     },
     softShadow: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.28,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    /** Compact action rail buttons */
+    actionShadow: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.4,
+        shadowRadius: 6,
         elevation: 4,
     },
     goldGlow: {
@@ -124,4 +132,8 @@ export const EFFECTS = {
 };
 
 /** Clearance above the floating glass tab bar */
-export const REELS_TAB_CLEARANCE = 78;
+export const REELS_TAB_CLEARANCE = 82;
+
+/** Action rail sizing — keep full stack above tab bar */
+export const ACTION_BTN = 44;
+export const ACTION_GAP = 10;
