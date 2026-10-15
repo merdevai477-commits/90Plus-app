@@ -212,11 +212,12 @@ function resolveFormResult(
   return 'draw';
 }
 
-function detailsPullControl(refreshing: boolean, onRefresh: () => void) {
+function detailsPullControl(refreshing: boolean, onRefresh: () => void, progressViewOffset = 0) {
   return (
     <RefreshControl
       refreshing={refreshing}
       onRefresh={onRefresh}
+      progressViewOffset={progressViewOffset}
       tintColor={PURPLE_SOFT}
       colors={[PURPLE_PRIMARY]}
       progressBackgroundColor={BG_BASE}
@@ -1467,8 +1468,101 @@ const MatchDetailsScreen = () => {
     pagerRef.current?.scrollTo({ x: index * width, animated: false });
   }, [pagerScrollX]);
 
+  // ── Collapsing hero + floating tabs ───────────────────────────────────────
+  // Hero (score / pitch) and the tab capsule float over the pages. Every page
+  // scrolls under them and drives one shared value; the hero slides away by up
+  // to its own height. Inactive pages are kept at an equivalent offset so a
+  // horizontal swipe never makes the hero jump.
+  const [pagerHeight, setPagerHeight] = useState(0);
+  const [heroHeight, setHeroHeight] = useState(0);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const heroHeightRef = useRef(0);
+  heroHeightRef.current = heroHeight;
+  const pageScrollY = useRef(new Animated.Value(0)).current;
+  const pageRefs = useRef<Record<string, ScrollView | null>>({});
+  const pageOffsetsRef = useRef<Record<string, number>>({});
+  const pageMountOffsetsRef = useRef<Record<string, number>>({});
+  const pageMountAppliedRef = useRef<Set<string>>(new Set());
+  /** Offset of the last page that actually drove the hero (chat never does). */
+  const drivingOffsetRef = useRef(0);
+  const activeTabKeyRef = useRef<string>(activeTab);
+  activeTabKeyRef.current = activeTab;
+
+  const equivalentOffset = useCallback((key: string) => {
+    const collapseRange = heroHeightRef.current;
+    const driving = drivingOffsetRef.current;
+    if (driving < collapseRange) return driving;
+    return Math.max(pageOffsetsRef.current[key] ?? 0, collapseRange);
+  }, []);
+
+  const syncInactivePages = useCallback(() => {
+    for (const [key, ref] of Object.entries(pageRefs.current)) {
+      if (!ref || key === activeTabKeyRef.current) continue;
+      const target = equivalentOffset(key);
+      if (Math.abs(target - (pageOffsetsRef.current[key] ?? 0)) < 1) continue;
+      pageOffsetsRef.current[key] = target;
+      ref.scrollTo({ y: target, animated: false });
+    }
+  }, [equivalentOffset]);
+
+  const pageScrollHandlersRef = useRef<Record<string, (...args: any[]) => void>>({});
+  const getPageScrollHandler = useCallback((key: string) => {
+    let handler = pageScrollHandlersRef.current[key];
+    if (!handler) {
+      handler = Animated.event([{ nativeEvent: { contentOffset: { y: pageScrollY } } }], {
+        useNativeDriver: true,
+        listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+          const y = e.nativeEvent.contentOffset.y;
+          pageOffsetsRef.current[key] = y;
+          if (key === activeTabKeyRef.current) drivingOffsetRef.current = Math.max(0, y);
+        },
+      });
+      pageScrollHandlersRef.current[key] = handler;
+    }
+    return handler;
+  }, [pageScrollY]);
+
+  const onHeroLayout = useCallback((e: LayoutChangeEvent) => {
+    setHeroHeight(Math.round(e.nativeEvent.layout.height));
+  }, []);
+  const onHeaderLayout = useCallback((e: LayoutChangeEvent) => {
+    setHeaderHeight(Math.round(e.nativeEvent.layout.height));
+  }, []);
+
+  const chatTabIndex = tabs.findIndex((tab) => tab.key === 'chats');
+  const heroCollapse = useMemo(() => {
+    const range = Math.max(heroHeight, 1);
+    const scrolled = pageScrollY.interpolate({
+      inputRange: [0, range],
+      outputRange: [0, range],
+      extrapolate: 'clamp',
+    });
+    if (chatTabIndex < 0 || pagerWidth <= 0) return scrolled;
+    // Chat has no scroll of its own to drive the hero, so collapse it fully
+    // as the chat page slides into view.
+    const chatProximity = pagerScrollX.interpolate({
+      inputRange: [(chatTabIndex - 1) * pagerWidth, chatTabIndex * pagerWidth, (chatTabIndex + 1) * pagerWidth],
+      outputRange: [0, 1, 0],
+      extrapolate: 'clamp',
+    });
+    return Animated.add(
+      Animated.multiply(scrolled, Animated.subtract(1, chatProximity)),
+      Animated.multiply(chatProximity, range),
+    );
+  }, [heroHeight, pageScrollY, pagerScrollX, chatTabIndex, pagerWidth]);
+  const headerTranslateY = useMemo(() => Animated.multiply(heroCollapse, -1), [heroCollapse]);
+  const compactHeaderProgress = useMemo(() => {
+    const range = Math.max(heroHeight, 1);
+    return heroCollapse.interpolate({
+      inputRange: [range * 0.55, range],
+      outputRange: [0, 1],
+      extrapolate: 'clamp',
+    });
+  }, [heroCollapse, heroHeight]);
+
   const onPagerLayout = useCallback((e: LayoutChangeEvent) => {
     const width = Math.round(e.nativeEvent.layout.width);
+    setPagerHeight(Math.round(e.nativeEvent.layout.height));
     if (width <= 0) return;
     setPagerWidth(width);
     jumpPagerTo(activeTabIndexRef.current, width);
@@ -1499,11 +1593,12 @@ const MatchDetailsScreen = () => {
     (key: string) => {
       const index = tabs.findIndex((tab) => tab.key === key);
       if (index < 0) return;
+      syncInactivePages();
       pagerIndexRef.current = index;
       pagerRef.current?.scrollTo({ x: index * pagerWidthRef.current, animated: true });
       if (key !== activeTab) handleTabChange(key);
     },
-    [tabs, activeTab, handleTabChange],
+    [tabs, activeTab, handleTabChange, syncInactivePages],
   );
 
   const onPagerScroll = useMemo(
@@ -2630,49 +2725,71 @@ const MatchDetailsScreen = () => {
   const renderTabPage = (key: string) => {
     if (key === 'chats') {
       return (
-        <MatchChatTab
-          fixtureId={fixtureId}
-          kickoffAt={fixture?.fixture?.date}
-          matchSummary={{
-            homeTeam: getTeamDisplayName(homeTeamName, language),
-            awayTeam: getTeamDisplayName(awayTeamName, language),
-            homeLogo: homeTeamLogo,
-            awayLogo: awayTeamLogo,
-            homeScore: fixture?.goals?.home,
-            awayScore: fixture?.goals?.away,
-            league: getLeagueDisplayName(
-              leagueName,
-              language,
-              fixture?.league?.id,
-              fixture?.league?.country,
-            ),
-            statusShort: fixture?.fixture?.status?.short,
-            elapsed: fixture?.fixture?.status?.elapsed ?? undefined,
-            stoppage: fixture?.fixture?.status?.extra ?? null,
-            startTimestamp: fixture ? getPeriodStartTimestamp(fixture) : undefined,
-            clockAnchorKey: fixtureId || undefined,
-            fixtureDate: fixture?.fixture?.date,
-            kickoffStatusLabel: t.matchDetails.kickoffStatus,
-            liveLabel: getLocalizedMatchStatus('LIVE', language),
-            halftimeLabel: getLocalizedMatchStatus('HT', language),
-            finishedLabel: getLocalizedMatchStatus('FT', language),
-            statusLabel: fixture?.fixture?.status?.short
-              ? fixture.fixture.status.short === 'NS'
-                ? t.matchDetails.kickoffStatus
-                : getLocalizedMatchStatus(fixture.fixture.status.short, language)
-              : t.matchDetails.kickoffStatus,
-            scorers: goalScorers,
-            scorersViewMoreLabel: t.matchDetails.scorersViewMore,
-            scorersViewLessLabel: t.matchDetails.scorersViewLess,
-          }}
-        />
+        <View style={[styles.chatPage, { paddingTop: Math.max(0, headerHeight - heroHeight) }]}>
+          <MatchChatTab
+            fixtureId={fixtureId}
+            kickoffAt={fixture?.fixture?.date}
+            matchSummary={{
+              homeTeam: getTeamDisplayName(homeTeamName, language),
+              awayTeam: getTeamDisplayName(awayTeamName, language),
+              homeLogo: homeTeamLogo,
+              awayLogo: awayTeamLogo,
+              homeScore: fixture?.goals?.home,
+              awayScore: fixture?.goals?.away,
+              league: getLeagueDisplayName(
+                leagueName,
+                language,
+                fixture?.league?.id,
+                fixture?.league?.country,
+              ),
+              statusShort: fixture?.fixture?.status?.short,
+              elapsed: fixture?.fixture?.status?.elapsed ?? undefined,
+              stoppage: fixture?.fixture?.status?.extra ?? null,
+              startTimestamp: fixture ? getPeriodStartTimestamp(fixture) : undefined,
+              clockAnchorKey: fixtureId || undefined,
+              fixtureDate: fixture?.fixture?.date,
+              kickoffStatusLabel: t.matchDetails.kickoffStatus,
+              liveLabel: getLocalizedMatchStatus('LIVE', language),
+              halftimeLabel: getLocalizedMatchStatus('HT', language),
+              finishedLabel: getLocalizedMatchStatus('FT', language),
+              statusLabel: fixture?.fixture?.status?.short
+                ? fixture.fixture.status.short === 'NS'
+                  ? t.matchDetails.kickoffStatus
+                  : getLocalizedMatchStatus(fixture.fixture.status.short, language)
+                : t.matchDetails.kickoffStatus,
+              scorers: goalScorers,
+              scorersViewMoreLabel: t.matchDetails.scorersViewMore,
+              scorersViewLessLabel: t.matchDetails.scorersViewLess,
+            }}
+          />
+        </View>
       );
     }
+    if (pageMountOffsetsRef.current[key] === undefined) {
+      const initialY = equivalentOffset(key);
+      pageMountOffsetsRef.current[key] = initialY;
+      pageOffsetsRef.current[key] = initialY;
+    }
+    const mountOffset = pageMountOffsetsRef.current[key];
     return (
-      <ScrollView
+      <Animated.ScrollView
+        ref={(ref: ScrollView | null) => {
+          pageRefs.current[key] = ref;
+        }}
         style={styles.pageScroll}
-        contentContainerStyle={styles.pageScrollContent}
-        refreshControl={detailsPullControl(pullRefreshing, onPullRefresh)}
+        contentContainerStyle={[
+          styles.pageScrollContent,
+          { paddingTop: headerHeight, minHeight: pagerHeight + heroHeight },
+        ]}
+        contentOffset={{ x: 0, y: mountOffset }}
+        onScroll={getPageScrollHandler(key)}
+        scrollEventThrottle={16}
+        onContentSizeChange={() => {
+          if (mountOffset <= 0 || pageMountAppliedRef.current.has(key)) return;
+          pageMountAppliedRef.current.add(key);
+          pageRefs.current[key]?.scrollTo({ y: mountOffset, animated: false });
+        }}
+        refreshControl={detailsPullControl(pullRefreshing, onPullRefresh, headerHeight)}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
         alwaysBounceVertical
@@ -2695,7 +2812,7 @@ const MatchDetailsScreen = () => {
           {key === 'form' && renderForm()}
           {key === 'standings' && renderStandings()}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
     );
   };
 
@@ -2703,6 +2820,31 @@ const MatchDetailsScreen = () => {
     pagerInitialOffsetRef.current = { x: activeTabIndex * pagerWidth, y: 0 };
   }
   const pagerInitialOffset = pagerInitialOffsetRef.current;
+
+  const mountedTabKeys = new Set(
+    tabs.filter((_, index) => Math.abs(index - activeTabIndex) <= 1).map((tab) => tab.key),
+  );
+  for (const key of Object.keys(pageMountOffsetsRef.current)) {
+    if (mountedTabKeys.has(key)) continue;
+    delete pageMountOffsetsRef.current[key];
+    pageMountAppliedRef.current.delete(key);
+  }
+
+  const compactScore = (
+    <View style={styles.compactScore}>
+      {homeTeamLogo ? (
+        <ExpoImage source={{ uri: homeTeamLogo }} style={styles.compactLogo} contentFit="contain" />
+      ) : null}
+      <Text style={styles.compactScoreText} numberOfLines={1}>
+        {fixture?.goals?.home != null && fixture?.goals?.away != null
+          ? `${fixture.goals.home} - ${fixture.goals.away}`
+          : kickoffTime || t.matchDetails.vs}
+      </Text>
+      {awayTeamLogo ? (
+        <ExpoImage source={{ uri: awayTeamLogo }} style={styles.compactLogo} contentFit="contain" />
+      ) : null}
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -2717,101 +2859,117 @@ const MatchDetailsScreen = () => {
         isSubscribed={isMatchSubscribed}
         notificationsDisabled={isFinishedMatch()}
         notificationsLoading={matchSubLoading}
+        compactContent={compactScore}
+        collapseProgress={compactHeaderProgress}
       />
 
-      {lmtWidget}
-      {/* Score header stays mounted across Pitch ↔ Score so the live clock
-          anchor does not reset. LMT WebView mounts only while Pitch is shown. */}
-      <View
-        collapsable={false}
-        pointerEvents={showPitch ? 'none' : 'auto'}
-        style={showPitch ? styles.scoreHeaderHidden : undefined}
-      >
-        {scoreHeader}
+      <View style={styles.body}>
+        <Animated.ScrollView
+          ref={pagerRef as any}
+          horizontal
+          pagingEnabled
+          style={styles.pager}
+          showsHorizontalScrollIndicator={false}
+          directionalLockEnabled
+          decelerationRate="fast"
+          scrollEventThrottle={16}
+          onScroll={onPagerScroll}
+          onScrollBeginDrag={syncInactivePages}
+          onMomentumScrollEnd={onPagerMomentumEnd}
+          onLayout={onPagerLayout}
+          contentOffset={pagerInitialOffset}
+          keyboardShouldPersistTaps="handled"
+          overScrollMode="never"
+          bounces={false}
+        >
+          {tabs.map((tab, index) => (
+            <View key={tab.key} style={[styles.pagerPage, { width: pagerWidth }]}>
+              {Math.abs(index - activeTabIndex) <= 1 ? renderTabPage(tab.key) : null}
+            </View>
+          ))}
+        </Animated.ScrollView>
+
+        <Animated.View
+          pointerEvents="box-none"
+          onLayout={onHeaderLayout}
+          style={[styles.floatingHeader, { transform: [{ translateY: headerTranslateY }] }]}
+        >
+          <View collapsable={false} onLayout={onHeroLayout} style={styles.heroBlock}>
+            {lmtWidget}
+            {/* Score header stays mounted across Pitch ↔ Score so the live clock
+                anchor does not reset. LMT WebView mounts only while Pitch is shown. */}
+            <View
+              collapsable={false}
+              pointerEvents={showPitch ? 'none' : 'auto'}
+              style={showPitch ? styles.scoreHeaderHidden : undefined}
+            >
+              {scoreHeader}
+            </View>
+
+            {hasLmt ? (
+              <View style={styles.heroViewToggleWrap}>
+                <View style={styles.heroViewToggle}>
+                  <TouchableOpacity
+                    style={[styles.heroViewToggleBtn, heroView === 'pitch' && styles.heroViewToggleBtnActive]}
+                    onPress={() => setHeroView('pitch')}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: heroView === 'pitch' }}
+                    accessibilityLabel={t.matchDetails.viewPitch || 'Pitch'}
+                  >
+                    <Ionicons
+                      name="football-outline"
+                      size={14}
+                      color={heroView === 'pitch' ? '#fff' : '#9ca3af'}
+                    />
+                    <Text
+                      style={[
+                        styles.heroViewToggleText,
+                        heroView === 'pitch' && styles.heroViewToggleTextActive,
+                      ]}
+                    >
+                      {t.matchDetails.viewPitch || 'Pitch'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.heroViewToggleBtn, heroView === 'score' && styles.heroViewToggleBtnActive]}
+                    onPress={() => setHeroView('score')}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: heroView === 'score' }}
+                    accessibilityLabel={t.matchDetails.viewScore || 'Score'}
+                  >
+                    <Ionicons
+                      name="timer-outline"
+                      size={14}
+                      color={heroView === 'score' ? '#fff' : '#9ca3af'}
+                    />
+                    <Text
+                      style={[
+                        styles.heroViewToggleText,
+                        heroView === 'score' && styles.heroViewToggleTextActive,
+                      ]}
+                    >
+                      {t.matchDetails.viewScore || 'Score'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+          </View>
+
+          <View pointerEvents="box-none" style={styles.floatingTabsWrap}>
+            <ModernTabs
+              tabs={tabs}
+              activeTab={activeTab}
+              onTabChange={onTabPress}
+              scrollX={pagerScrollX}
+              pageWidth={pagerWidth}
+              floating
+            />
+          </View>
+        </Animated.View>
       </View>
-
-      {hasLmt ? (
-        <View style={styles.heroViewToggleWrap}>
-          <View style={styles.heroViewToggle}>
-            <TouchableOpacity
-              style={[styles.heroViewToggleBtn, heroView === 'pitch' && styles.heroViewToggleBtnActive]}
-              onPress={() => setHeroView('pitch')}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityState={{ selected: heroView === 'pitch' }}
-              accessibilityLabel={t.matchDetails.viewPitch || 'Pitch'}
-            >
-              <Ionicons
-                name="football-outline"
-                size={14}
-                color={heroView === 'pitch' ? '#fff' : '#9ca3af'}
-              />
-              <Text
-                style={[
-                  styles.heroViewToggleText,
-                  heroView === 'pitch' && styles.heroViewToggleTextActive,
-                ]}
-              >
-                {t.matchDetails.viewPitch || 'Pitch'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.heroViewToggleBtn, heroView === 'score' && styles.heroViewToggleBtnActive]}
-              onPress={() => setHeroView('score')}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityState={{ selected: heroView === 'score' }}
-              accessibilityLabel={t.matchDetails.viewScore || 'Score'}
-            >
-              <Ionicons
-                name="timer-outline"
-                size={14}
-                color={heroView === 'score' ? '#fff' : '#9ca3af'}
-              />
-              <Text
-                style={[
-                  styles.heroViewToggleText,
-                  heroView === 'score' && styles.heroViewToggleTextActive,
-                ]}
-              >
-                {t.matchDetails.viewScore || 'Score'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ) : null}
-
-      <ModernTabs
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={onTabPress}
-        scrollX={pagerScrollX}
-        pageWidth={pagerWidth}
-      />
-
-      <Animated.ScrollView
-        ref={pagerRef as any}
-        horizontal
-        pagingEnabled
-        style={styles.pager}
-        showsHorizontalScrollIndicator={false}
-        directionalLockEnabled
-        decelerationRate="fast"
-        scrollEventThrottle={16}
-        onScroll={onPagerScroll}
-        onMomentumScrollEnd={onPagerMomentumEnd}
-        onLayout={onPagerLayout}
-        contentOffset={pagerInitialOffset}
-        keyboardShouldPersistTaps="handled"
-        overScrollMode="never"
-        bounces={false}
-      >
-        {tabs.map((tab, index) => (
-          <View key={tab.key} style={[styles.pagerPage, { width: pagerWidth }]}>
-            {Math.abs(index - activeTabIndex) <= 1 ? renderTabPage(tab.key) : null}
-          </View>
-        ))}
-      </Animated.ScrollView>
     </View>
   );
 };
@@ -2821,11 +2979,47 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0c051a',
   },
+  body: {
+    flex: 1,
+    overflow: 'hidden',
+  },
   pager: {
     flex: 1,
   },
   pagerPage: {
     flex: 1,
+  },
+  chatPage: {
+    flex: 1,
+  },
+  floatingHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+  },
+  heroBlock: {
+    backgroundColor: '#0c051a',
+  },
+  floatingTabsWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  compactScore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  compactLogo: {
+    width: 24,
+    height: 24,
+  },
+  compactScoreText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '800',
   },
   pageScroll: {
     flex: 1,

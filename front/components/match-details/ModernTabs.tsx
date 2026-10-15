@@ -23,6 +23,8 @@ interface ModernTabsProps {
   /** Horizontal offset of the content pager; drives the sliding underline while swiping. */
   scrollX?: Animated.Value;
   pageWidth?: number;
+  /** Rounded glass capsule that floats over scrolling content. */
+  floating?: boolean;
 }
 
 type TabLayout = { x: number; width: number };
@@ -36,6 +38,7 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
   onTabChange,
   scrollX,
   pageWidth,
+  floating = false,
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
   const [layouts, setLayouts] = useState<Record<string, TabLayout>>({});
@@ -84,7 +87,7 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={floating ? styles.floatingContainer : styles.container}>
       <ScrollView
         ref={scrollViewRef}
         horizontal
@@ -98,7 +101,7 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
           return (
             <TouchableOpacity
               key={tab.key}
-              style={styles.tab}
+              style={[styles.tab, floating && styles.floatingTab]}
               onPress={() => onTabChange(tab.key)}
               onLayout={(e) => onTabLayout(tab.key, e)}
               activeOpacity={0.8}
@@ -107,7 +110,7 @@ export const ModernTabs: React.FC<ModernTabsProps> = ({
               accessibilityState={{ selected: isActive }}
             >
               <Text
-                style={[styles.tabText, isActive && styles.activeTabText]}
+                style={[styles.tabText, floating && styles.floatingTabText, isActive && styles.activeTabText]}
                 numberOfLines={1}
               >
                 {tab.label}
@@ -134,6 +137,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#53198a',
     paddingTop: 4,
+  },
+  floatingContainer: {
+    backgroundColor: 'rgba(20,9,38,0.96)',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(129,10,242,0.38)',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  floatingTab: {
+    paddingTop: 10,
+    minWidth: 60,
+  },
+  floatingTabText: {
+    fontSize: 15,
+    paddingBottom: 9,
   },
   scrollContent: {
     paddingHorizontal: 12,
