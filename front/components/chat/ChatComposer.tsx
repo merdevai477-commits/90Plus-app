@@ -56,7 +56,7 @@ const BAR_TINT = 'rgba(20,12,40,0.42)';
 /** Send button: the welcome bubble's black core; IridescentRim adds its film edge. */
 const FIELD_TINT = 'rgba(3,2,8,0.94)';
 /** Message field only: light enough that the frost shows messages scrolling behind it. */
-const INPUT_TINT = 'rgba(3,2,8,0.45)';
+const INPUT_TINT = 'rgba(13,10,26,0.8)';
 const FIELD_CAUSTIC: [number, number, number] = [0.6, 0.75, 1];
 /** Voice mode: the capsule collapses to a BAR_HEIGHT circle and the orb floats over it. */
 const ORB_SIZE = Math.round(BAR_HEIGHT * 1.3);
