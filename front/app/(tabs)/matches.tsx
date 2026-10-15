@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react';
+import { useMemo, useState, useEffect, useCallback, memo, useRef, startTransition } from 'react';
 import { useStableCallback } from '../../utils/performance';
 import {
   View,
@@ -1383,25 +1383,34 @@ export default function MatchesHubScreenV2() {
     }
   }, [params.filter, worldCupEnabled, worldCupLocked]);
 
-  // Live tab always shows today's fixtures — snap calendar back when selected
-  // and kick a refresh so live rows appear without waiting on a stale day cache.
+  // Live/Finished snap the calendar to today. During a swipe we only flip the
+  // tab label immediately and defer this work so the pager doesn't hitch.
+  const applyLiveFinishedSideEffects = useCallback(() => {
+    const today = startOfLocalDay();
+    if (selectedDate.getTime() !== today.getTime()) setSelectedDate(today);
+    else refreshSoft();
+  }, [selectedDate, refreshSoft]);
+
   // Returns false when the tab was blocked (e.g. locked World Cup) so the pager
   // can stay on / bounce back to the previous page.
-  const handleFilterPress = useCallback((f: (typeof FILTERS)[number]): boolean => {
+  const handleFilterPress = useCallback((
+    f: (typeof FILTERS)[number],
+    opts?: { deferSideEffects?: boolean },
+  ): boolean => {
     if (f === 'WorldCup' && worldCupLocked && !worldCupEnabled) {
       setShowWorldCupLocked(true);
       return false;
     }
-    if (f === 'Live' || f === 'Finished') {
-      const today = startOfLocalDay();
-      // A new date triggers its own fetch; same day only needs a throttled
-      // refresh (keeps the Date identity so date-keyed hooks don't refetch).
-      if (selectedDate.getTime() !== today.getTime()) setSelectedDate(today);
-      else refreshSoft();
-    }
     setFilter(f);
+    if (f === 'Live' || f === 'Finished') {
+      if (opts?.deferSideEffects) {
+        InteractionManager.runAfterInteractions(applyLiveFinishedSideEffects);
+      } else {
+        applyLiveFinishedSideEffects();
+      }
+    }
     return true;
-  }, [worldCupEnabled, worldCupLocked, selectedDate, refreshSoft]);
+  }, [worldCupEnabled, worldCupLocked, applyLiveFinishedSideEffects]);
 
   const handleCalendarDayPress = useCallback((date: Date) => {
     const next = new Date(date);
@@ -2115,7 +2124,46 @@ export default function MatchesHubScreenV2() {
   const pagerIndexRef = useRef(activeFilterIndex);
   const pagerWidthRef = useRef(pagerWidth);
   const pagerInitialOffsetRef = useRef<{ x: number; y: number } | null>(null);
+  const pagerDraggingRef = useRef(false);
+  /** Keep every visited/visible tab page alive so swipes never remount FlashLists. */
+  const mountedPagesRef = useRef<Set<MatchFilter>>(new Set());
+  const [mountedPagesVersion, setMountedPagesVersion] = useState(0);
+  /** Chip highlight during a swipe — updated immediately without a full filter commit. */
+  const [highlightIndex, setHighlightIndex] = useState(activeFilterIndex);
   const floatingHeaderOffset = Math.max(insets.top, 10) + 60;
+  const visibleFiltersRef = useRef(visibleFilters);
+  visibleFiltersRef.current = visibleFilters;
+
+  useEffect(() => {
+    if (pagerDraggingRef.current) return;
+    setHighlightIndex(activeFilterIndex);
+  }, [activeFilterIndex]);
+
+  const ensurePagesMounted = useCallback((centerIndex: number) => {
+    const tabs = visibleFiltersRef.current;
+    let added = false;
+    for (let i = Math.max(0, centerIndex - 1); i <= Math.min(tabs.length - 1, centerIndex + 1); i++) {
+      const f = tabs[i];
+      if (f && !mountedPagesRef.current.has(f)) {
+        mountedPagesRef.current.add(f);
+        added = true;
+      }
+    }
+    if (added) setMountedPagesVersion((v) => v + 1);
+  }, []);
+
+  // Warm all currently visible tabs up-front so the first swipe already has
+  // neighbour FlashLists ready (avoids mount hitch mid-gesture).
+  useEffect(() => {
+    let added = false;
+    for (const f of visibleFilters) {
+      if (!mountedPagesRef.current.has(f)) {
+        mountedPagesRef.current.add(f);
+        added = true;
+      }
+    }
+    if (added) setMountedPagesVersion((v) => v + 1);
+  }, [visibleFilters]);
 
   const jumpPagerTo = useCallback((index: number, width: number, animated = false) => {
     pagerIndexRef.current = index;
@@ -2131,8 +2179,10 @@ export default function MatchesHubScreenV2() {
   }, [jumpPagerTo]);
 
   // Tabs can appear/disappear (World Cup) or change via calendar / deep link —
-  // keep the pager offset pinned to the active filter.
+  // keep the pager offset pinned to the active filter. Skip while the user is
+  // mid-swipe so we don't fight the gesture.
   useEffect(() => {
+    if (pagerDraggingRef.current) return;
     if (!pagerRef.current || pagerWidth <= 0) return;
     if (pagerIndexRef.current === activeFilterIndex && pagerWidthRef.current === pagerWidth) return;
     jumpPagerTo(activeFilterIndex, pagerWidth, false);
@@ -2148,27 +2198,9 @@ export default function MatchesHubScreenV2() {
   }, []);
 
   useEffect(() => {
+    if (pagerDraggingRef.current) return;
     scrollChipIntoView(filter);
   }, [filter, scrollChipIntoView]);
-
-  const selectFilterAtIndex = useCallback(
-    (index: number, opts?: { fromSwipe?: boolean }) => {
-      const f = visibleFilters[index];
-      if (!f) return;
-      if (f === 'WorldCup' && wcTabLocked) {
-        setShowWorldCupLocked(true);
-        if (opts?.fromSwipe) jumpPagerTo(activeFilterIndexRef.current, pagerWidthRef.current, true);
-        return;
-      }
-      const accepted = handleFilterPress(f);
-      if (!accepted) {
-        if (opts?.fromSwipe) jumpPagerTo(activeFilterIndexRef.current, pagerWidthRef.current, true);
-        return;
-      }
-      pagerIndexRef.current = index;
-    },
-    [visibleFilters, wcTabLocked, handleFilterPress, jumpPagerTo],
-  );
 
   const onFilterChipPress = useCallback(
     (f: MatchFilter) => {
@@ -2178,23 +2210,75 @@ export default function MatchesHubScreenV2() {
         setShowWorldCupLocked(true);
         return;
       }
+      pagerDraggingRef.current = false;
+      ensurePagesMounted(index);
       const accepted = handleFilterPress(f);
       if (!accepted) return;
       pagerIndexRef.current = index;
+      setHighlightIndex(index);
       jumpPagerTo(index, pagerWidthRef.current, true);
     },
-    [visibleFilters, wcTabLocked, handleFilterPress, jumpPagerTo],
+    [visibleFilters, wcTabLocked, handleFilterPress, jumpPagerTo, ensurePagesMounted],
   );
 
-  const onPagerMomentumEnd = useCallback(
+  const onPagerScrollBeginDrag = useCallback(() => {
+    pagerDraggingRef.current = true;
+  }, []);
+
+  const onPagerScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const width = pagerWidthRef.current;
       if (width <= 0) return;
-      const index = Math.round(e.nativeEvent.contentOffset.x / width);
-      if (index === pagerIndexRef.current && visibleFilters[index] === filter) return;
-      selectFilterAtIndex(index, { fromSwipe: true });
+      const offsetX = e.nativeEvent.contentOffset.x;
+      // Prefetch the page we're sliding into before the round settles.
+      ensurePagesMounted(Math.floor(offsetX / width));
+      ensurePagesMounted(Math.ceil(offsetX / width));
+      const index = Math.round(offsetX / width);
+      if (index === pagerIndexRef.current) return;
+      pagerIndexRef.current = index;
+      // Flip the chip immediately without blocking the swipe gesture.
+      startTransition(() => setHighlightIndex(index));
     },
-    [selectFilterAtIndex, visibleFilters, filter],
+    [ensurePagesMounted],
+  );
+
+  const onPagerSettle = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      pagerDraggingRef.current = false;
+      const width = pagerWidthRef.current;
+      if (width <= 0) return;
+      const index = Math.round(e.nativeEvent.contentOffset.x / width);
+      const tabs = visibleFiltersRef.current;
+      const f = tabs[index];
+      if (!f) return;
+      ensurePagesMounted(index);
+      setHighlightIndex(index);
+
+      if (f === 'WorldCup' && wcTabLocked) {
+        setShowWorldCupLocked(true);
+        jumpPagerTo(activeFilterIndexRef.current, pagerWidthRef.current, true);
+        setHighlightIndex(activeFilterIndexRef.current);
+        return;
+      }
+
+      pagerIndexRef.current = index;
+      if (f !== filter) {
+        handleFilterPress(f, { deferSideEffects: true });
+      }
+      scrollChipIntoView(f);
+    },
+    [ensurePagesMounted, wcTabLocked, jumpPagerTo, handleFilterPress, filter, scrollChipIntoView],
+  );
+
+  // onScrollEndDrag fires before fling momentum; only settle here when the
+  // finger lift has no remaining velocity, otherwise wait for momentum end.
+  const onPagerScrollEndDrag = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const vx = e.nativeEvent.velocity?.x ?? 0;
+      if (Math.abs(vx) > 0.05) return;
+      onPagerSettle(e);
+    },
+    [onPagerSettle],
   );
 
   // Sticky filter chips + calendar (above the swipe pager, like match-details tabs).
@@ -2208,8 +2292,8 @@ export default function MatchesHubScreenV2() {
           contentContainerStyle={styles.tabsScroll}
           style={{ flex: 1, marginRight: 10 }}
         >
-          {visibleFilters.map((f) => {
-            const active = filter === f;
+          {visibleFilters.map((f, chipIndex) => {
+            const active = chipIndex === highlightIndex;
             const showLock = f === 'WorldCup' && wcTabLocked;
             return (
               <TouchableOpacity
@@ -2254,7 +2338,7 @@ export default function MatchesHubScreenV2() {
         </TouchableOpacity>
       ) : null}
     </View>
-  ), [filter, t, onFilterChipPress, isDataStale, matches.length, refetch, wcTabLocked, visibleFilters, openCalendar]);
+  ), [highlightIndex, t, onFilterChipPress, isDataStale, matches.length, refetch, wcTabLocked, visibleFilters, openCalendar]);
 
   const pinnedHeaderFor = useCallback(
     (pageFilter: MatchFilter) => {
@@ -2449,6 +2533,20 @@ export default function MatchesHubScreenV2() {
   }
   const pagerInitialOffset = pagerInitialOffsetRef.current;
 
+  // Stable page elements so chip highlight updates don't remount FlashLists.
+  const pagerPages = useMemo(
+    () =>
+      visibleFilters.map((pageFilter) => {
+        const keep = mountedPagesVersion >= 0 && mountedPagesRef.current.has(pageFilter);
+        return (
+          <View key={pageFilter} style={[styles.pagerPage, { width: pagerWidth }]}>
+            {keep ? renderFilterPage(pageFilter) : null}
+          </View>
+        );
+      }),
+    [visibleFilters, mountedPagesVersion, pagerWidth, renderFilterPage],
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: APP_BG }}>
       <FloatingHeader
@@ -2500,17 +2598,17 @@ export default function MatchesHubScreenV2() {
           onLayout={onPagerLayout}
           showsHorizontalScrollIndicator={false}
           decelerationRate="fast"
+          disableIntervalMomentum
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
-          onMomentumScrollEnd={onPagerMomentumEnd}
+          onScrollBeginDrag={onPagerScrollBeginDrag}
+          onScroll={onPagerScroll}
+          onMomentumScrollEnd={onPagerSettle}
+          onScrollEndDrag={onPagerScrollEndDrag}
           scrollEventThrottle={16}
           contentOffset={pagerInitialOffset}
         >
-          {visibleFilters.map((pageFilter, index) => (
-            <View key={pageFilter} style={[styles.pagerPage, { width: pagerWidth }]}>
-              {Math.abs(index - activeFilterIndex) <= 1 ? renderFilterPage(pageFilter) : null}
-            </View>
-          ))}
+          {pagerPages}
         </Animated.ScrollView>
       </View>
 
