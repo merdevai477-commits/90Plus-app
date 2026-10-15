@@ -15,7 +15,10 @@ export interface AppVersionInfo {
     currentVersion: string;
     minimumVersion: string;
     clientVersion: string;
+    /** True when client is behind latest store/server version (soft or force). */
     needsUpdate: boolean;
+    /** Soft update available (client < currentVersion). Same as needsUpdate when present. */
+    updateAvailable?: boolean;
     forceUpdate: boolean;
     updateMessage: string | null;
     updateUrl: string;
@@ -106,7 +109,13 @@ export async function checkAppVersion(): Promise<AppVersionInfo | null> {
         const data = await safeJsonParse<any>(response, { status: 'ERROR', data: null });
         
         if (data && data.status === 'SUCCESS' && data.data) {
-            return data.data;
+            const d = data.data as AppVersionInfo;
+            const updateAvailable = !!(d.updateAvailable ?? d.needsUpdate);
+            return {
+                ...d,
+                updateAvailable,
+                needsUpdate: !!(d.needsUpdate || updateAvailable),
+            };
         }
 
         return null;

@@ -49,9 +49,18 @@ router.get('/version', async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        // Compare versions (simple string comparison - works for semantic versioning)
-        const needsUpdate = clientVersion && compareVersions(clientVersion, appVersionConfig.minimumVersion) < 0;
-        const forceUpdateRequired = needsUpdate && appVersionConfig.forceUpdate;
+        // Soft: behind latest marketing version. Force: below minimum (or admin force flag).
+        const belowMinimum =
+            !!clientVersion && compareVersions(clientVersion, appVersionConfig.minimumVersion) < 0;
+        const updateAvailable =
+            !!clientVersion && compareVersions(clientVersion, appVersionConfig.currentVersion) < 0;
+        const forceUpdateRequired =
+            belowMinimum || (updateAvailable && appVersionConfig.forceUpdate);
+        const needsUpdate = updateAvailable || belowMinimum;
+
+        const softMessage =
+            process.env.APP_SOFT_UPDATE_MESSAGE ||
+            'يتوفر إصدار جديد من التطبيق. حدّث الآن لأفضل تجربة.';
 
         res.json({
             status: 'SUCCESS',
@@ -60,8 +69,13 @@ router.get('/version', async (req: Request, res: Response): Promise<void> => {
                 minimumVersion: appVersionConfig.minimumVersion,
                 clientVersion: clientVersion || 'unknown',
                 needsUpdate,
+                updateAvailable,
                 forceUpdate: forceUpdateRequired,
-                updateMessage: forceUpdateRequired ? appVersionConfig.updateMessage : null,
+                updateMessage: forceUpdateRequired
+                    ? appVersionConfig.updateMessage
+                    : updateAvailable
+                      ? softMessage
+                      : null,
                 updateUrl: appVersionConfig.updateUrl[platform as 'android' | 'ios'] || appVersionConfig.updateUrl.android,
                 maintenance: false,
             },

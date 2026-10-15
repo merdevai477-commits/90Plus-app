@@ -33,7 +33,7 @@ import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppKeyboardProvider } from '@/utils/keyboardControllerSafe';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, StatusBar, I18nManager, Linking, StyleSheet, Text, InteractionManager } from 'react-native';
+import { View, StatusBar, I18nManager, StyleSheet, Text, InteractionManager } from 'react-native';
 import { enableFreeze } from 'react-native-screens';
 import { isFlashListScrollRaceError } from '../components/chat/safeFlashListScroll';
 import { SettingsProvider } from "../contexts/SettingsContext";
@@ -47,8 +47,7 @@ import { configureAudioVideo } from "../utils/videoConfig";
 import { ClerkProvider } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
-import { parseReelIdFromUrl, parseProfileUsernameFromUrl, parseReferralCodeFromUrl } from '../constants/shareLinks';
-import { capturePendingReferral } from '../utils/pendingReferral';
+import { DeepLinkHandler } from '../components/DeepLinkHandler';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from "../src/i18n";
@@ -85,6 +84,7 @@ import { WidgetSyncBootstrap } from "../components/common/WidgetSyncBootstrap";
 import { OtaUpdateBootstrap } from "../components/common/OtaUpdateBootstrap";
 import { OtaPendingReloadGate } from "../components/common/OtaPendingReloadGate";
 import { FootballCacheEpochBootstrap } from "../components/common/FootballCacheEpochBootstrap";
+import { AppEngagementBootstrap } from "../components/common/AppEngagementBootstrap";
 import { GlobalOfflineBanner } from "../components/common/GlobalOfflineBanner";
 import { useOfflineSync } from "../src/hooks/useOfflineSync";
 // ErrorUtils is on `global`, not a reliable named export from react-native in SDK 55+.
@@ -705,93 +705,6 @@ function RootLayout() {
   }, [fontsLoaded]);
 
   useEffect(() => {
-    const handleDeepLink = (event: { url: string }) => {
-      const url = event.url;
-      logger.debug('[DeepLink] Received:', url);
-
-      if (/auth-callback/i.test(url)) {
-        return;
-      }
-
-      const navigateToReel = (reelId: string) => {
-        router.push({
-          pathname: '/(tabs)/reels',
-          params: { reelId },
-        });
-      };
-
-      const navigateToProfile = (username: string) => {
-        router.push({
-          pathname: '/user/[username]',
-          params: { username },
-        });
-      };
-
-      /*
-       * Share & Win referral. Parked before anything else so the code survives
-       * a fresh install → store → onboarding → registration journey; it is
-       * redeemed once, after the account exists. Attribution is decided by the
-       * backend, never here.
-       */
-      const referralCode = parseReferralCodeFromUrl(url);
-      if (referralCode) {
-        void capturePendingReferral(referralCode).then(() => {
-          router.push('/share-win');
-        });
-        return;
-      }
-
-      const profileUsername = parseProfileUsernameFromUrl(url);
-      if (profileUsername) {
-        navigateToProfile(profileUsername);
-        return;
-      }
-
-      const reelId = parseReelIdFromUrl(url);
-      if (reelId) {
-        navigateToReel(reelId);
-      }
-    };
-
-    Linking.getInitialURL().then((url) => {
-      if (url) {
-        handleDeepLink({ url });
-      }
-    });
-
-    const subscription = Linking.addEventListener('url', handleDeepLink);
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    // Only run version check once — prevent re-render triggering multiple calls
-    let didRun = false;
-    const checkVersion = async () => {
-      if (didRun) return;
-      didRun = true;
-      try {
-        const { checkAppVersion, showUpdateDialog, showMaintenanceDialog } = await import('../services/appVersionService');
-        const versionInfo = await checkAppVersion();
-
-        if (versionInfo) {
-          if (versionInfo.maintenance) {
-            showMaintenanceDialog(versionInfo);
-          } else if (versionInfo.needsUpdate) {
-            showUpdateDialog(versionInfo);
-          }
-        }
-      } catch (error) {
-        logger.warn('Failed to check app version:', error);
-      }
-    };
-
-    checkVersion();
-  }, []); // Empty deps — run once on mount only
-
-  useEffect(() => {
     const initializeAudioAndAssets = async () => {
       await configureAudioVideo();
     };
@@ -934,6 +847,8 @@ function RootLayout() {
                                             <PushTokenSyncBootstrap />
                                             <WidgetSyncBootstrap />
                                             <GlobalNotificationTrayBridge />
+                                            <DeepLinkHandler />
+                                            <AppEngagementBootstrap />
                                             <WebSocketInitializer>
                                               <PreloadInitializer>
                                                 <RootLayoutNav />

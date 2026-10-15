@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Platform, AppState, AppStateStatus } from 'react-native';
+import { Platform, AppState, AppStateStatus, Linking } from 'react-native';
 import { useAuth } from '@clerk/clerk-expo';
 import { useQueryClient } from '@tanstack/react-query';
 import { logger } from '../services/logger';
@@ -111,7 +111,15 @@ export function usePushNotifications(): PushNotificationState {
             const type = data.type as string | undefined;
             const r = routerRef.current;
 
-            if (type === 'LUCKY_WHEEL') {
+            if (type === 'APP_UPDATE') {
+                const url =
+                    (typeof data.updateUrl === 'string' && data.updateUrl) ||
+                    (typeof data.url === 'string' && data.url) ||
+                    '';
+                if (url) {
+                    void Linking.openURL(url).catch(() => undefined);
+                }
+            } else if (type === 'LUCKY_WHEEL') {
                 r.push('/(tabs)/profile');
             } else if (type === 'MATCH_GOAL' || type === 'MATCH_UPDATE' || type === 'MATCH_START' || type === 'MATCH_END' || type === 'MATCH_HALFTIME' || type?.includes('MATCH')) {
                 if (data.matchId || data.fixtureId) {

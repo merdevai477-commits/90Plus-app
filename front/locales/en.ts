@@ -3478,6 +3478,27 @@ export const en = {
     shareMessage: '🏆 Try 90Plus — the ultimate football app! Predictions, quizzes, and live highlights! https://apps.apple.com/app/90plus/id6758296989',
   },
 
+  appRating: {
+    title: 'Enjoying 90Plus?',
+    subtitle: 'Rate your experience — it only takes a second and helps us improve.',
+    submit: 'Submit',
+    later: 'Later',
+    thanksTitle: 'Thanks for the feedback!',
+    thanksLowDetail: 'We appreciate it — we will keep improving the app for you.',
+  },
+
+  appUpdate: {
+    softTitle: 'Update available',
+    softMessage: 'A new version of 90Plus is ready. Update now for the best experience.',
+    forceTitle: 'Update required',
+    forceMessage: 'Please update the app to continue using 90Plus.',
+    maintenanceTitle: 'Under maintenance',
+    maintenanceMessage: 'The app is under maintenance. Please try again later.',
+    updateNow: 'Update now',
+    later: 'Later',
+    notifyTitle: 'New update available',
+  },
+
   // ── Public user profile ──────────────────────────────────────────────
   publicProfile: {
     loading: 'Loading...',

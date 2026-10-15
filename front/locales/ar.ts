@@ -3386,6 +3386,27 @@ export const ar = {
     shareMessage: '🏆 جرّب 90Plus - أفضل تطبيق لكرة القدم! توقعات، اختبارات، وأهداف مباشرة! https://apps.apple.com/app/90plus/id6758296989',
   },
 
+  appRating: {
+    title: 'بتستمتع بـ 90Plus؟',
+    subtitle: 'قيّم تجربتك بنجمة لحد خمس — دقيقة واحدة وبتساعدنا نطوّر التطبيق.',
+    submit: 'موافق',
+    later: 'لاحقاً',
+    thanksTitle: 'شكراً على رأيك!',
+    thanksLowDetail: 'نقدر ملاحظاتك — هنفضل نطوّر التطبيق عشانك.',
+  },
+
+  appUpdate: {
+    softTitle: 'تحديث متاح',
+    softMessage: 'فيه إصدار جديد من 90Plus. حدّث دلوقتي عشان أفضل تجربة.',
+    forceTitle: 'تحديث مطلوب',
+    forceMessage: 'لازم تحدّث التطبيق عشان تكمل استخدام 90Plus.',
+    maintenanceTitle: 'التطبيق تحت الصيانة',
+    maintenanceMessage: 'التطبيق تحت الصيانة. حاول مرة تانية لاحقاً.',
+    updateNow: 'حدّث الآن',
+    later: 'لاحقاً',
+    notifyTitle: 'تحديث جديد متاح',
+  },
+
   // ── البروفايل العام (مستخدم آخر) ─────────────────────────────────────
   publicProfile: {
     loading: 'جاري التحميل...',
