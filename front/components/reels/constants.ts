@@ -79,6 +79,11 @@ export const GRADIENTS = {
     glassCard: ['rgba(255, 255, 255, 0.14)', 'rgba(124, 58, 237, 0.08)'] as const,
     actionIdle: ['rgba(255, 255, 255, 0.14)', 'rgba(255, 255, 255, 0.06)'] as const,
     actionActive: ['rgba(124, 58, 237, 0.45)', 'rgba(91, 33, 182, 0.28)'] as const,
+    /** Bio / caption panel */
+    bioPanel: ['rgba(14, 8, 28, 0.82)', 'rgba(20, 12, 40, 0.55)'] as const,
+    /** Hashtag chip fills */
+    hashtagA: ['rgba(124, 58, 237, 0.42)', 'rgba(59, 130, 246, 0.18)'] as const,
+    hashtagB: ['rgba(168, 85, 247, 0.32)', 'rgba(96, 165, 250, 0.16)'] as const,
 };
 
 export const ANIMATION = {

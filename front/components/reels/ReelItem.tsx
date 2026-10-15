@@ -30,6 +30,7 @@ import {
     Eye,
     Play,
     BadgeCheck,
+    Hash,
 } from 'lucide-react-native';
 
 import { SafeVideoPlayer as UnifiedVideoPlayer } from '../common/SafeVideoPlayer';
@@ -124,6 +125,7 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const [showHeartAnimation, setShowHeartAnimation] = useState(false);
     const [tapPosition, setTapPosition] = useState({ x: 0, y: 0 });
     const [isPaused, setIsPaused] = useState(false);
+    const [bioExpanded, setBioExpanded] = useState(false);
     const lastTapRef = useRef(0);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -149,8 +151,15 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
     const scaleAnim = useRef(new RNAnimated.Value(1)).current;
 
     useEffect(() => {
-        if (!isActive) setIsPaused(false);
+        if (!isActive) {
+            setIsPaused(false);
+            setBioExpanded(false);
+        }
     }, [isActive]);
+
+    useEffect(() => {
+        setBioExpanded(false);
+    }, [reel.id]);
 
     // Handle tap (single for pause, double for like)
     const handlePress = (event: any) => {
@@ -547,38 +556,95 @@ const ReelItemComponent: React.FC<ReelItemProps> = ({
                 </LinearGradient>
             </View>
 
-            {/* Description & Hashtags */}
-            {reel.description ? (
+            {/* Bio + Hashtags — premium glass panel */}
+            {(Boolean(reel.description?.trim()) || (reel.hashtags && reel.hashtags.length > 0)) ? (
                 <View
                     style={[
                         styles.descriptionContainer,
                         { bottom: bottomClearance + 48 },
                     ]}
                 >
-                    <Text style={styles.description} numberOfLines={2}>
-                        {reel.description}
-                    </Text>
-                    {reel.hashtags ? (
-                        <View style={styles.hashtagsContainer}>
-                            {reel.hashtags.map((tag, index) => (
+                    <LinearGradient
+                        colors={GRADIENTS.bioPanel}
+                        style={styles.bioPanel}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                    >
+                        <View style={styles.bioAccent} />
+                        <View style={styles.bioContent}>
+                            {reel.description?.trim() ? (
                                 <TouchableOpacity
-                                    key={index}
-                                    onPress={() => onHashtagPress?.(tag)}
-                                    style={styles.hashtagPill}
-                                    activeOpacity={0.8}
+                                    activeOpacity={0.9}
+                                    onPress={() => {
+                                        if ((reel.description?.length || 0) > 90) {
+                                            haptics.lightImpact();
+                                            setBioExpanded((v) => !v);
+                                        }
+                                    }}
                                 >
-                                    <LinearGradient
-                                        colors={GRADIENTS.cardGradient}
-                                        style={styles.hashtagGradient}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 0 }}
+                                    <Text
+                                        style={styles.description}
+                                        numberOfLines={bioExpanded ? undefined : 2}
                                     >
-                                        <Text style={styles.hashtag}>#{tag}</Text>
-                                    </LinearGradient>
+                                        {reel.description.trim()}
+                                    </Text>
+                                    {(reel.description?.length || 0) > 90 ? (
+                                        <Text style={styles.bioMore}>
+                                            {bioExpanded
+                                                ? (language === 'en' ? 'Show less' : 'عرض أقل')
+                                                : (language === 'en' ? 'Show more' : 'عرض المزيد')}
+                                        </Text>
+                                    ) : null}
                                 </TouchableOpacity>
-                            ))}
+                            ) : null}
+
+                            {reel.hashtags && reel.hashtags.length > 0 ? (
+                                <View
+                                    style={[
+                                        styles.hashtagsContainer,
+                                        reel.description?.trim() ? styles.hashtagsAfterBio : null,
+                                    ]}
+                                >
+                                    {reel.hashtags.slice(0, 8).map((tag, index) => {
+                                        const clean = tag.replace(/^#/, '');
+                                        return (
+                                            <TouchableOpacity
+                                                key={`${clean}-${index}`}
+                                                onPress={() => {
+                                                    haptics.lightImpact();
+                                                    onHashtagPress?.(clean);
+                                                }}
+                                                style={styles.hashtagPill}
+                                                activeOpacity={0.75}
+                                            >
+                                                <LinearGradient
+                                                    colors={
+                                                        index % 2 === 0
+                                                            ? GRADIENTS.hashtagA
+                                                            : GRADIENTS.hashtagB
+                                                    }
+                                                    style={styles.hashtagGradient}
+                                                    start={{ x: 0, y: 0 }}
+                                                    end={{ x: 1, y: 1 }}
+                                                >
+                                                    <View style={styles.hashtagIcon}>
+                                                        <Hash
+                                                            size={11}
+                                                            color={COLORS.white}
+                                                            strokeWidth={2.6}
+                                                        />
+                                                    </View>
+                                                    <Text style={styles.hashtag} numberOfLines={1}>
+                                                        {clean}
+                                                    </Text>
+                                                </LinearGradient>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            ) : null}
                         </View>
-                    ) : null}
+                    </LinearGradient>
                 </View>
             ) : null}
 
@@ -950,40 +1016,90 @@ const styles = StyleSheet.create({
     },
     descriptionContainer: {
         position: 'absolute',
-        left: 16,
+        left: 14,
         right: 88,
         zIndex: 10,
     },
+    bioPanel: {
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: 'rgba(167, 139, 250, 0.28)',
+        overflow: 'hidden',
+        flexDirection: 'row',
+        ...EFFECTS.softShadow,
+    },
+    bioAccent: {
+        width: 3,
+        backgroundColor: COLORS.primary,
+        borderTopLeftRadius: 18,
+        borderBottomLeftRadius: 18,
+    },
+    bioContent: {
+        flex: 1,
+        paddingVertical: 11,
+        paddingHorizontal: 12,
+        minWidth: 0,
+    },
     description: {
         color: COLORS.textPrimary,
-        fontSize: 14,
-        lineHeight: 20,
-        fontWeight: '500',
-        textShadowColor: 'rgba(5,1,13,0.85)',
+        fontSize: 14.5,
+        lineHeight: 21,
+        fontWeight: '600',
+        letterSpacing: 0.15,
+        textShadowColor: 'rgba(5,1,13,0.75)',
         textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 4,
+        textShadowRadius: 3,
+    },
+    bioMore: {
+        marginTop: 4,
+        color: COLORS.secondary,
+        fontSize: 12,
+        fontWeight: '700',
+        letterSpacing: 0.2,
     },
     hashtagsContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 8,
-        marginTop: 8,
+        gap: 7,
+    },
+    hashtagsAfterBio: {
+        marginTop: 10,
+        paddingTop: 9,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(167, 139, 250, 0.22)',
     },
     hashtagPill: {
-        borderRadius: 14,
+        borderRadius: 999,
         overflow: 'hidden',
+        maxWidth: '100%',
     },
     hashtagGradient: {
-        paddingHorizontal: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingLeft: 5,
+        paddingRight: 11,
         paddingVertical: 5,
         borderWidth: 1,
-        borderColor: COLORS.glassBorder,
-        borderRadius: 14,
+        borderColor: 'rgba(196, 181, 253, 0.38)',
+        borderRadius: 999,
+    },
+    hashtagIcon: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: 'rgba(124, 58, 237, 0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.18)',
     },
     hashtag: {
-        color: COLORS.secondary,
-        fontSize: 12,
-        fontWeight: '600',
+        color: COLORS.white,
+        fontSize: 12.5,
+        fontWeight: '700',
+        letterSpacing: 0.2,
+        maxWidth: 140,
     },
     statsContainer: {
         position: 'absolute',
