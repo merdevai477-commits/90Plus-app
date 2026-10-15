@@ -252,12 +252,13 @@ export default function CreateCompetitionScreen() {
    * it must not depend on Clerk's `getToken` — that dependency is what made
    * "Choose Match" call the endpoint continuously.
    */
+  const [matchSearch, setMatchSearch] = useState('');
   const {
     matches,
     loading: matchesLoading,
     error: matchesError,
     reload: reloadMatchPool,
-  } = useMatchPool(phase === 2);
+  } = useMatchPool(phase === 2, matchSearch);
 
   const canAdvance = (): boolean => {
     if (phase === 'category') return !!category;
@@ -882,6 +883,8 @@ export default function CreateCompetitionScreen() {
                       selected={selectedMatch}
                       onSelect={onSelectMatch}
                       onRetry={reloadMatchPool}
+                      searchQuery={matchSearch}
+                      onSearchChange={setMatchSearch}
                     />
                   </View>
                 </View>

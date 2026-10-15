@@ -360,27 +360,13 @@ describe('Predict & Win hub', () => {
     await waitFor(() => expect(screen.getByText('Wrong prediction')).toBeTruthy());
   });
 
-  it.each(['today', 'mine'] as const)(
-    'paints the cards after switching to the "%s" tab',
-    async (tab) => {
-      mockList.mockResolvedValue(TWO_ROWS);
-
-      render(<PredictAndWinScreen />);
-      await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
-
-      fireEvent.press(screen.getByText(TAB_LABELS[tab]));
-
-      await waitFor(() => expect(lastRequestedTab()).toBe(tab));
-      // The rows must be on screen again after the swap, not just refetched.
-      await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
-      expect(screen.getByText('SPONSOR_TWO')).toBeTruthy();
-    },
-  );
-
-  it('does not render the Sponsor Challenges tab', async () => {
+  it('does not render the challenge tabs chrome', async () => {
     mockList.mockResolvedValue(TWO_ROWS);
     render(<PredictAndWinScreen />);
     await waitFor(() => expect(screen.getByText('SPONSOR_ONE')).toBeTruthy());
+    expect(screen.queryByText(TAB_LABELS.all)).toBeNull();
+    expect(screen.queryByText(TAB_LABELS.today)).toBeNull();
+    expect(screen.queryByText(TAB_LABELS.mine)).toBeNull();
     expect(screen.queryByText(TAB_LABELS.sponsored)).toBeNull();
   });
 

@@ -121,6 +121,7 @@ model User {
   parentalConsentRequests       ParentalConsentRequest[]
   predictions                   Prediction[]
   ownedSponsors                 Sponsor[]                @relation("OwnedSponsors")
+  sponsorFollows                SponsorFollow[]
   competitionEntries            CompetitionEntry[]
   competitionViews              CompetitionView[]
   ownedPredictionGroups         PredictionGroup[]        @relation("OwnedPredictionGroups")
@@ -1502,11 +1503,27 @@ model Sponsor {
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
-  owner        User?         @relation("OwnedSponsors", fields: [ownerId], references: [id], onDelete: SetNull)
+  owner        User?          @relation("OwnedSponsors", fields: [ownerId], references: [id], onDelete: SetNull)
   competitions Competition[]
+  followers    SponsorFollow[]
 
   @@index([ownerId])
   @@map("sponsors")
+}
+
+/// Fans who follow a store page — notified when a new competition is published.
+model SponsorFollow {
+  id        String   @id @default(uuid())
+  userId    String
+  sponsorId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sponsor   Sponsor  @relation(fields: [sponsorId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sponsorId])
+  @@index([sponsorId])
+  @@index([userId])
+  @@map("sponsor_follows")
 }
 
 /// Dynamic prize category list rendered on the "اختر فئة الجائزة" grid —

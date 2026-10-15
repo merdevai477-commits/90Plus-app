@@ -44,9 +44,13 @@ export const POOL_MAX_DAYS_AHEAD = (() => {
  * that kicks off in the next few minutes is not offerable. `0` disables the
  * margin; the filter then means strictly "kickoff is still in the future".
  */
+/**
+ * Minimum time before kickoff for a match to be selectable.
+ * Default 60 minutes so sponsors always leave a real prediction window.
+ */
 export const POOL_MIN_LEAD_MINUTES = (() => {
   const parsed = Number.parseInt(process.env.PREDICT_WIN_POOL_MIN_LEAD_MINUTES ?? '', 10);
-  return Math.max(0, Number.isFinite(parsed) ? parsed : 15);
+  return Math.max(0, Number.isFinite(parsed) ? parsed : 60);
 })();
 
 export interface PoolMatch {
@@ -192,7 +196,11 @@ function isOfferable(match: PoolMatch, now: Date): boolean {
  * `POOL_SIZE` matches a sponsor can actually use rather than `POOL_SIZE` of
  * the day's best matches minus however many have already started.
  */
-export async function getPoolForDate(dateString?: string, now: Date = new Date()): Promise<PoolMatch[]> {
+export async function getPoolForDate(
+  dateString?: string,
+  now: Date = new Date(),
+  opts: { limit?: number | null } = {},
+): Promise<PoolMatch[]> {
   const day = normalisePoolDate(dateString);
   let fixtures = await loadPoolFixturesForDate(day);
 
@@ -214,15 +222,30 @@ export async function getPoolForDate(dateString?: string, now: Date = new Date()
   // while leaving the cap to us — the eligibility filter has to come first.
   const ranked = pickTopFixtures(fixtures, Number.MAX_SAFE_INTEGER);
 
-  const pool = pinCairoDerbyFirst(
+  const offerable = pinCairoDerbyFirst(
     ranked
       .map((f: any) => toPoolMatch(f, day))
       .filter((m): m is PoolMatch => m !== null)
       .filter((m) => isOfferable(m, now)),
-  ).slice(0, POOL_SIZE);
+  );
 
-  if (pool.length === 0) logger.warn(`[PredictWinPool] no offerable fixtures for ${day}`);
-  return pool;
+  // `limit: null` = every offerable fixture that day (search / validation).
+  const capped =
+    opts.limit === null
+      ? offerable
+      : offerable.slice(0, opts.limit ?? POOL_SIZE);
+
+  if (capped.length === 0) logger.warn(`[PredictWinPool] no offerable fixtures for ${day}`);
+  return capped;
+}
+
+function matchesSearchQuery(match: PoolMatch, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  const hay = [match.home.name, match.away.name, match.leagueName ?? '']
+    .join(' ')
+    .toLowerCase();
+  return hay.includes(needle);
 }
 
 /**
@@ -234,16 +257,22 @@ export async function getPoolForDate(dateString?: string, now: Date = new Date()
  * today was what forced the deadline picker onto today's date — there was
  * simply no later kickoff to bound it with.
  */
-export async function getUpcomingPool(now: Date = new Date()): Promise<PoolMatch[]> {
+export async function getUpcomingPool(
+  now: Date = new Date(),
+  opts: { q?: string; unlimited?: boolean } = {},
+): Promise<PoolMatch[]> {
   const today = calendarTodayKey();
   const days = [today];
   for (let i = 1; i <= POOL_MAX_DAYS_AHEAD; i += 1) {
     days.push(offsetCalendarDateKey(today, i));
   }
 
+  // Search / create-validation need every offerable fixture, not the featured cap.
+  const dayLimit = opts.unlimited || (opts.q && opts.q.trim()) ? null : POOL_SIZE;
+
   const perDay = await Promise.all(
     days.map((day) =>
-      getPoolForDate(day, now).catch((err) => {
+      getPoolForDate(day, now, { limit: dayLimit }).catch((err) => {
         // One unreachable day must not empty the whole picker.
         logger.warn(`[PredictWinPool] day ${day} failed:`, err?.message ?? err);
         return [] as PoolMatch[];
@@ -252,7 +281,7 @@ export async function getUpcomingPool(now: Date = new Date()): Promise<PoolMatch
   );
 
   const seen = new Set<number>();
-  const ordered = perDay
+  let ordered = perDay
     .flat()
     .filter((m) => {
       // A fixture can surface under two calendar days around midnight.
@@ -261,6 +290,11 @@ export async function getUpcomingPool(now: Date = new Date()): Promise<PoolMatch
       return true;
     })
     .sort((a, b) => new Date(a.kickoffIso).getTime() - new Date(b.kickoffIso).getTime());
+
+  if (opts.q?.trim()) {
+    ordered = ordered.filter((m) => matchesSearchQuery(m, opts.q!));
+  }
+
   return pinCairoDerbyFirst(ordered);
 }
 
@@ -277,8 +311,9 @@ export async function findInPool(
   dateString?: string,
   now: Date = new Date(),
 ): Promise<PoolMatch | null> {
+  // Unlimited so a match found via search still validates at create time.
   const pool = dateString
-    ? await getPoolForDate(dateString, now)
-    : await getUpcomingPool(now);
+    ? await getPoolForDate(dateString, now, { limit: null })
+    : await getUpcomingPool(now, { unlimited: true });
   return pool.find((m) => m.apiMatchId === apiMatchId) ?? null;
 }

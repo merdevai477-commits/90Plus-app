@@ -147,8 +147,24 @@ export async function listPrizeCategories() {
  * schedule a challenge for a future match. Every entry is guaranteed to kick
  * off in the future — see `getPoolForDate`.
  */
-export async function getMatchPool(dateString?: string): Promise<PoolMatch[]> {
-  return dateString ? getPoolForDate(dateString) : getUpcomingPool();
+export async function getMatchPool(
+  dateString?: string,
+  q?: string,
+): Promise<PoolMatch[]> {
+  const query = typeof q === 'string' && q.trim() ? q.trim() : undefined;
+  if (dateString) {
+    const day = await getPoolForDate(dateString, new Date(), {
+      limit: query ? null : undefined,
+    });
+    return query ? day.filter((m) => {
+      const needle = query.toLowerCase();
+      return [m.home.name, m.away.name, m.leagueName ?? '']
+        .join(' ')
+        .toLowerCase()
+        .includes(needle);
+    }) : day;
+  }
+  return getUpcomingPool(new Date(), { q: query, unlimited: Boolean(query) });
 }
 
 export async function listCompetitions(params: {
@@ -682,6 +698,16 @@ export async function publishCompetition(id: string) {
     vars: { prize: published.prizeName, store: published.sponsor.name },
     data: { screen: `/predict-and-win/${id}`, entityId: id, kind: 'competition_admin_approved' },
     idempotencyKey: `competitionAdminApproved:${id}`,
+  });
+  const { notifySponsorFollowersOfPublish } = await import('./sponsor-follow.service');
+  await notifySponsorFollowersOfPublish({
+    sponsorId: published.sponsorId,
+    sponsorName: published.sponsor.name,
+    competitionId: id,
+    prizeName: published.prizeName,
+    homeTeam: published.homeTeam,
+    awayTeam: published.awayTeam,
+    ownerId: published.sponsor.ownerId,
   });
   return published;
 }

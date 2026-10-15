@@ -19,7 +19,14 @@
 
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import TeamBadge from '../common/TeamBadge';
 import { useTranslation } from '../../src/i18n';
@@ -159,6 +166,8 @@ export function MatchPicker({
   selected,
   onSelect,
   onRetry,
+  searchQuery = '',
+  onSearchChange,
 }: {
   matches: MatchPoolEntry[];
   loading: boolean;
@@ -167,6 +176,9 @@ export function MatchPicker({
   selected: MatchPoolEntry | null;
   onSelect: (match: MatchPoolEntry) => void;
   onRetry?: () => void;
+  /** Server-backed search — any offerable match (≥1h before kickoff). */
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }) {
   const { s, f } = usePWScale();
   const { medium, regular, semibold } = usePWFonts();
@@ -330,7 +342,45 @@ export function MatchPicker({
       ) : (
         <>
           {header}
-          {open ? <View style={{ width: '100%' }}>{body()}</View> : null}
+          {open ? (
+            <View style={{ width: '100%' }}>
+              {onSearchChange ? (
+                <View
+                  style={{
+                    backgroundColor: PW.surface,
+                    borderWidth: 1,
+                    borderColor: PW.dropdownRowBorder,
+                    borderTopWidth: 0,
+                    paddingHorizontal: s(16),
+                    paddingVertical: s(10),
+                  }}
+                >
+                  <TextInput
+                    value={searchQuery}
+                    onChangeText={onSearchChange}
+                    placeholder={wizard.searchMatch}
+                    placeholderTextColor={PW.textSelect}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    returnKeyType="search"
+                    style={{
+                      height: s(42),
+                      borderRadius: s(12),
+                      borderWidth: 1,
+                      borderColor: PW.inputBorder,
+                      backgroundColor: PW.inputBottom,
+                      paddingHorizontal: s(14),
+                      fontFamily: medium,
+                      fontSize: f(14),
+                      color: PW.text,
+                      textAlign: dir.textAlign,
+                    }}
+                  />
+                </View>
+              ) : null}
+              {body()}
+            </View>
+          ) : null}
         </>
       )}
     </View>

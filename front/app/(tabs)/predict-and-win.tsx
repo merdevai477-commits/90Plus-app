@@ -30,7 +30,6 @@ import { InfoTiles } from '../../components/predictAndWin/InfoTiles';
 import { PWHeader, usePWHeaderOffset } from '../../components/predictAndWin/PWHeader';
 import { PredictScoreModal } from '../../components/predictAndWin/PredictScoreModal';
 import { SortFilterRow } from '../../components/predictAndWin/SortFilterRow';
-import { PredictAndWinTabBar } from '../../components/predictAndWin/TabBar';
 import { WinnerPickerModal } from '../../components/predictAndWin/WinnerPickerModal';
 import { PW, usePWScale } from '../../components/predictAndWin/theme';
 import { TAB_BAR_HEIGHT } from '../../components/navigation/liquidGlassTabBar.constants';
@@ -57,7 +56,6 @@ export default function PredictAndWinScreen() {
     loadingMore,
     error,
     hasMore,
-    changeTab,
     changeSort,
     refresh,
     loadMore,
@@ -90,7 +88,6 @@ export default function PredictAndWinScreen() {
   }, [addPrizeVariant, competitionId, goToCreate, router]);
 
   const gap28 = s(28);
-  const gap14 = s(14);
   const emptyPadTop = s(60);
   const cardGap = s(24);
   const bottomPad = insets.bottom + TAB_BAR_HEIGHT + s(24);
@@ -99,8 +96,6 @@ export default function PredictAndWinScreen() {
     () => (
       <View>
         <View style={{ height: gap28 }} />
-        <PredictAndWinTabBar active={tab} onChange={changeTab} />
-        <View style={{ height: gap14 }} />
         <InfoTiles />
         <View style={{ height: gap28 }} />
         <SortFilterRow
@@ -113,7 +108,7 @@ export default function PredictAndWinScreen() {
         <View style={{ height: gap28 }} />
       </View>
     ),
-    [gap28, gap14, tab, changeTab, sort, changeSort, onAddPrizePress, addPrizeVariant, addPrizeLoading],
+    [gap28, sort, changeSort, onAddPrizePress, addPrizeVariant, addPrizeLoading],
   );
 
   const onScroll = useCallback(

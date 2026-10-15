@@ -5,9 +5,11 @@
  * Prediction stays on the hub via `PredictScoreModal`.
  */
 
+import { useAuth } from '@clerk/clerk-expo';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useMemo } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Linking,
   Pressable,
@@ -19,8 +21,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTranslation } from '../../src/i18n';
-import type { CompetitionInfo } from '../../services/competitions.service';
+import { CompetitionsService, type CompetitionInfo } from '../../services/competitions.service';
 import { getSponsorCountryName, sponsorAddressWithoutCountry } from '../../utils/sponsorCountry';
+import { logger } from '../../utils/logger';
 import { IconArrowBack, IconFacebook, IconInstagram, IconLocationFilled, IconShareSolid, IconWhatsapp } from './icons';
 import { hasSponsorSocialLinks } from './prizeCta';
 import { shouldShowSponsorLogo, sponsorLogoSource } from './pwAssets';
@@ -170,6 +173,8 @@ export function SponsorStorePage({
   const { t, language } = useTranslation();
   const store = t.predictAndWin.store;
   const detail = t.predictAndWin.detail;
+  const { getToken, isSignedIn } = useAuth();
+  const router = useRouter();
 
   const figmaRow: FlexStyle['flexDirection'] = dir.isRTL ? 'row' : 'row-reverse';
   const sponsor = competition.sponsor;
@@ -188,7 +193,57 @@ export function SponsorStorePage({
     return sponsor.address?.trim() || null;
   }, [countryName, addressLine, sponsor.address]);
 
-  const followUrl = links?.instagram || links?.whatsapp || links?.facebook || null;
+  const [following, setFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isSignedIn) {
+        if (!cancelled) setFollowing(false);
+        return;
+      }
+      try {
+        const token = await getToken();
+        if (!token || cancelled) return;
+        const status = await CompetitionsService.getSponsorFollow(token, sponsor.id);
+        if (!cancelled) setFollowing(Boolean(status.following));
+      } catch (err) {
+        logger.warn('[SponsorStorePage] follow status failed:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, isSignedIn, sponsor.id]);
+
+  const onFollowPress = useCallback(async () => {
+    if (followBusy) return;
+    if (!isSignedIn) {
+      router.push('/auth');
+      return;
+    }
+    setFollowBusy(true);
+    const next = !following;
+    setFollowing(next);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('AUTH_REQUIRED');
+      if (next) await CompetitionsService.followSponsor(token, sponsor.id);
+      else await CompetitionsService.unfollowSponsor(token, sponsor.id);
+    } catch (err) {
+      setFollowing(!next);
+      logger.warn('[SponsorStorePage] follow toggle failed:', err);
+    } finally {
+      setFollowBusy(false);
+    }
+  }, [followBusy, following, getToken, isSignedIn, router, sponsor.id]);
+
+  const followLabel = !isSignedIn
+    ? store.follow
+    : following
+      ? store.following
+      : store.follow;
 
   const width = contentWidth;
 
@@ -307,20 +362,17 @@ export function SponsorStorePage({
 
         <View style={{ flexDirection: figmaRow, alignItems: 'center', justifyContent: 'space-between' }}>
           <Pressable
-            onPress={() => {
-              if (!followUrl) return;
-              if (followUrl === links?.whatsapp) openWhatsapp(followUrl);
-              else openExternal(followUrl);
-            }}
-            disabled={!followUrl}
+            onPress={onFollowPress}
+            disabled={followBusy}
             accessibilityRole="button"
-            accessibilityLabel={store.follow}
+            accessibilityLabel={followLabel}
+            accessibilityState={{ selected: following }}
             style={{
               width: c(159),
               height: c(42),
               borderRadius: c(12),
               overflow: 'hidden',
-              opacity: followUrl ? 1 : 0.45,
+              opacity: followBusy ? 0.7 : 1,
               flexDirection: figmaRow,
               alignItems: 'center',
               justifyContent: 'center',
@@ -328,8 +380,11 @@ export function SponsorStorePage({
               paddingHorizontal: c(23),
             }}
           >
-            <LinearGradient colors={['#8B5CF6', '#2E146A']} style={StyleSheet.absoluteFill} />
-            <Text style={{ fontFamily: bold, fontSize: f(12), color: PW.text }}>{store.follow}</Text>
+            <LinearGradient
+              colors={following ? ['#2E146A', '#170D2B'] : ['#8B5CF6', '#2E146A']}
+              style={StyleSheet.absoluteFill}
+            />
+            <Text style={{ fontFamily: bold, fontSize: f(12), color: PW.text }}>{followLabel}</Text>
             <IconStoreFollow width={c(16)} height={c(16)} />
           </Pressable>
 

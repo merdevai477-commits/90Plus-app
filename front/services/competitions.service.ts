@@ -349,10 +349,28 @@ export const CompetitionsService = {
   getPrizeCategories: (token?: string | null) =>
     authFetch(token ?? null, '/prize-categories') as Promise<PrizeCategoryInfo[]>,
 
-  getMatchPool: (token: string, date?: string) =>
-    authFetch(token, date ? `/match-pool?date=${encodeURIComponent(date)}` : '/match-pool') as Promise<
-      MatchPoolEntry[]
-    >,
+  getMatchPool: (token: string, opts?: { date?: string; q?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.date) params.set('date', opts.date);
+    if (opts?.q?.trim()) params.set('q', opts.q.trim());
+    const qs = params.toString();
+    return authFetch(token, qs ? `/match-pool?${qs}` : '/match-pool') as Promise<MatchPoolEntry[]>;
+  },
+
+  getSponsorFollow: (token: string, sponsorId: string) =>
+    authFetch(token, `/sponsors/${encodeURIComponent(sponsorId)}/follow`) as Promise<{
+      following: boolean;
+    }>,
+
+  followSponsor: (token: string, sponsorId: string) =>
+    authFetch(token, `/sponsors/${encodeURIComponent(sponsorId)}/follow`, {
+      method: 'POST',
+    }) as Promise<{ following: boolean }>,
+
+  unfollowSponsor: (token: string, sponsorId: string) =>
+    authFetch(token, `/sponsors/${encodeURIComponent(sponsorId)}/follow`, {
+      method: 'DELETE',
+    }) as Promise<{ following: boolean }>,
 
   /** Owned competitions for the caller's sponsor profile. */
   listMine: async (token: string) => {

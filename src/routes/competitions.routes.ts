@@ -120,8 +120,55 @@ router.get('/prize-categories', responseCacheMiddleware({ ttl: 60_000 }), async 
 router.get('/match-pool', requireAuth, async (req, res) => {
   try {
     const date = typeof req.query.date === 'string' ? req.query.date : undefined;
-    const matches = await getMatchPool(date);
+    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+    const matches = await getMatchPool(date, q);
     res.json({ success: true, data: matches, meta: { poolSize: POOL_SIZE } });
+  } catch (err) {
+    mapError(req, res, err);
+  }
+});
+
+/** Follow a store page — notified when that sponsor's next challenge is published. */
+router.get('/sponsors/:sponsorId/follow', requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) {
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found', { code: 'AUTH_REQUIRED' });
+      return;
+    }
+    const { isFollowingSponsor } = await import('../services/sponsor-follow.service');
+    const following = await isFollowingSponsor(user.id, param(req.params.sponsorId));
+    res.json({ success: true, data: { following } });
+  } catch (err) {
+    mapError(req, res, err);
+  }
+});
+
+router.post('/sponsors/:sponsorId/follow', requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) {
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found', { code: 'AUTH_REQUIRED' });
+      return;
+    }
+    const { followSponsor } = await import('../services/sponsor-follow.service');
+    const data = await followSponsor(user.id, param(req.params.sponsorId));
+    res.json({ success: true, data });
+  } catch (err) {
+    mapError(req, res, err);
+  }
+});
+
+router.delete('/sponsors/:sponsorId/follow', requireAuth, async (req, res) => {
+  try {
+    const user = await resolveUser(req);
+    if (!user) {
+      sendError(req, res, ErrorCode.NOT_FOUND, 'User not found', { code: 'AUTH_REQUIRED' });
+      return;
+    }
+    const { unfollowSponsor } = await import('../services/sponsor-follow.service');
+    const data = await unfollowSponsor(user.id, param(req.params.sponsorId));
+    res.json({ success: true, data });
   } catch (err) {
     mapError(req, res, err);
   }

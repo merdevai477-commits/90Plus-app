@@ -222,7 +222,9 @@ export type PushTemplateKey =
     | 'competitionAdminRejectedTitle'
     | 'competitionAdminRejectedBody'
     | 'competitionAdminAwardTitle'
-    | 'competitionAdminAwardBody';
+    | 'competitionAdminAwardBody'
+    | 'competitionFollowerTitle'
+    | 'competitionFollowerBody';
 
 type TemplateMap = Record<PushTemplateKey, string>;
 
@@ -406,6 +408,8 @@ const en: TemplateMap = {
       'You followed "{name}" — it is now in your Favorites tab with match alerts on.',
     competitionApprovedTitle: 'Your prize was approved',
     competitionApprovedBody: '"{prize}" is live — players can see it and enter now.',
+    competitionFollowerTitle: 'New prediction from {store}',
+    competitionFollowerBody: '{store} posted "{prize}" on {home} vs {away} — predict now!',
     competitionRejectedTitle: 'Your prize was not approved',
     competitionRejectedBody: '"{prize}" was declined and will not appear in the app.',
     competitionRejectedReasonBody: '"{prize}" was declined. Reason: {reason}',
@@ -602,6 +606,8 @@ const ar: TemplateMap = {
       'تم متابعة "{name}" وإضافته لتبويب المفضلة مع تفعيل إشعارات المنتخب.',
     competitionApprovedTitle: 'تم قبول جائزتك',
     competitionApprovedBody: '"{prize}" اتنشرت وهي ظاهرة للاعبين دلوقتي.',
+    competitionFollowerTitle: 'توقع جديد من {store}',
+    competitionFollowerBody: '{store} نزل "{prize}" على {home} ضد {away} — توقع دلوقتي!',
     competitionRejectedTitle: 'الجائزة مرفوضة',
     competitionRejectedBody: '"{prize}" اترفضت ومش هتظهر في التطبيق.',
     competitionRejectedReasonBody: '"{prize}" اترفضت. السبب: {reason}',
