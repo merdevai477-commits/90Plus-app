@@ -2873,7 +2873,7 @@ const MatchDetailsScreen = () => {
       <StatusBar barStyle="light-content" backgroundColor="#0c051a" />
 
       <MatchDetailsTopBar
-        title={t.matchDetails.navTitle || t.matchDetails.title || 'The Match'}
+        title={tabs[activeTabIndex]?.label || t.matchDetails.navTitle || t.matchDetails.title || 'The Match'}
         backLabel={t.matchDetails.backToMatches}
         notificationsLabel={t.matchDetails.notifications || 'Notifications'}
         onBack={() => router.push('/(tabs)/matches' as any)}

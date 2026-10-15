@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
 import { Text } from './MatchText';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,7 +39,25 @@ export function MatchDetailsTopBar({
   collapseProgress,
 }: MatchDetailsTopBarProps): React.ReactElement {
   const insets = useSafeAreaInsets();
-  const titleOpacity = collapseProgress && compactContent ? Animated.subtract(1, collapseProgress) : 1;
+  const titleFade = useRef(new Animated.Value(1)).current;
+  const titleShift = useRef(new Animated.Value(0)).current;
+  const firstTitle = useRef(true);
+  useEffect(() => {
+    if (firstTitle.current) {
+      firstTitle.current = false;
+      return;
+    }
+    titleFade.setValue(0);
+    titleShift.setValue(6);
+    Animated.parallel([
+      Animated.timing(titleFade, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(titleShift, { toValue: 0, duration: 220, useNativeDriver: true }),
+    ]).start();
+  }, [title, titleFade, titleShift]);
+
+  const titleOpacity = collapseProgress && compactContent
+    ? Animated.multiply(titleFade, Animated.subtract(1, collapseProgress))
+    : titleFade;
 
   return (
     <View style={[styles.bar, { paddingTop: Math.max(insets.top, 12) }]}>
@@ -53,7 +71,9 @@ export function MatchDetailsTopBar({
           <Ionicons name="arrow-back" size={26} color="#fff" />
         </TouchableOpacity>
         <View style={styles.center}>
-          <Animated.View style={[styles.centerLayer, { opacity: titleOpacity }]}>
+          <Animated.View
+            style={[styles.centerLayer, { opacity: titleOpacity, transform: [{ translateY: titleShift }] }]}
+          >
             <Text style={styles.title} numberOfLines={1}>
               {title}
             </Text>
