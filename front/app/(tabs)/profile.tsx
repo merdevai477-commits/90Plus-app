@@ -361,7 +361,8 @@ function OwnProfileScreen() {
   // Optimistic Profile Updates
   const { 
     updateUsername, 
-    updateDisplayName, 
+    updateDisplayName,
+    updateIdentity,
     updateBio, 
     updateFIFACard, 
     updateSocialLinks, 
@@ -1148,17 +1149,25 @@ function OwnProfileScreen() {
       const uploadResult = await uploadImage(finalUri, {
         endpoint: '/upload/avatar',
         fieldName: 'file',
-        maxRetries: 1,
-        timeoutMs: 35_000,
+        // No retry: timeout after a successful server write would double-upload
+        // and burn the avatar cooldown.
+        maxRetries: 0,
+        timeoutMs: 45_000,
       });
       if (uploadResult.success && uploadResult.url) {
         setLocalImage(uploadResult.url);
         if (globalState.userProfile) globalState.userProfile.avatar = uploadResult.url;
         globalState.setLocalAvatar(uploadResult.url);
-        await updateCachedUserData({ avatar: uploadResult.url });
-        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
-        await refreshXp();
+        updateCachedUserData({ avatar: uploadResult.url });
+        updateCachedCooldowns({
+          avatar: { canChange: false, daysRemaining: 7, hoursRemaining: 168 },
+        });
+        // Clear busy immediately — XP / cache refresh must not hold the spinner.
+        setIsAvatarUploading(false);
         toastManager.showUploadSuccess('image');
+        refreshCache(false).catch(err => logger.error('Background refresh error:', err));
+        void refreshXp();
+        return;
       } else {
         setLocalImage(originalAvatar || null);
         const errorMessage = uploadResult.error || t.profile.avatarUploadFailed;
@@ -1285,12 +1294,10 @@ function OwnProfileScreen() {
         return;
       }
 
-      // Ensure backend user row exists (iOS can upload before /clerk/me completes).
-      try {
-        await AuthService.syncUserWithBackend(token, { getToken });
-      } catch (syncErr) {
+      // Fire-and-forget: never block the XHR start on sync / notification setup.
+      void AuthService.syncUserWithBackend(token, { getToken }).catch((syncErr) => {
         logger.warn('[ReelUpload] Pre-upload sync failed (continuing):', syncErr);
-      }
+      });
 
       const caption = newVideo.caption || '';
       const hashtags = caption.match(/#[\w\u0600-\u06FF]+/g) || [];
@@ -1317,7 +1324,7 @@ function OwnProfileScreen() {
       };
 
       setReelUploadUi({ active: true, progress: 0, phaseLabel: t.profile.preparingUpload });
-      await reelUploadNotification.begin(getToken);
+      void reelUploadNotification.begin(getToken);
 
       logger.info('[ReelUpload] Starting POST to /api/upload/reel...', {
         uri: newVideo.uri?.slice(0, 80),
@@ -1352,12 +1359,20 @@ function OwnProfileScreen() {
         const reelId = (uploadResult as any)?.reelId || (uploadResult as any)?.data?.reelId;
         if (reelId) {
           setPollingReelId(reelId);
+          // Swap temp tile → real id instead of remove+reload flicker
+          addVideo({
+            ...tempVideo,
+            id: reelId,
+            isUploading: false,
+            uploadProgress: 100,
+          });
+          removeVideo(newVideo.id);
         }
 
         setVideoUploadMessage(t.profile.uploadSuccessPhase);
         setVideoUploadProgress(100);
         setReelUploadUi({ active: true, progress: 100, phaseLabel: t.profile.uploadSuccessPhase });
-        await reelUploadNotification.success(undefined, getToken);
+        void reelUploadNotification.success(undefined, getToken);
         void syncExpoPushToken(getToken);
 
         // Hide Add-reel immediately for the 3-day cooldown window
@@ -1365,18 +1380,14 @@ function OwnProfileScreen() {
           reelUpload: { canChange: false, daysRemaining: 3, hoursRemaining: 72 },
         });
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        removeVideo(newVideo.id);
         setIsVideoUploading(false);
         toastManager.showUploadSuccess('video');
 
-        // Invalidate reels feed cache immediately so new reel appears
-        await cacheService.invalidate(CACHE_KEYS.REELS_FEED).catch(() => {});
-
-        await refreshCache(true);
+        // Background only — do not hold the user on the progress modal.
+        void cacheService.invalidate(CACHE_KEYS.REELS_FEED).catch(() => {});
+        void refreshCache(true);
         if (userData?.username) {
-          await loadVideos(userData.username, true);
+          void loadVideos(userData.username, true);
         }
       } else {
         removeVideo(newVideo.id);
@@ -1945,61 +1956,53 @@ function OwnProfileScreen() {
           const changedUsername = nextUsername !== currentUsername;
           if (!changedName && !changedUsername) {
             toastManager.showInfo(t.profile.noChanges, t.profile.noProfileChanges);
-            return;
+            return true;
           }
 
           profileSaveInFlightRef.current = true;
-          toastManager.showInfo(t.profile.updating, t.profile.savingProfileChanges);
+          // Optimistic UI — show the new identity immediately, roll back on failure.
+          const optimisticPatch: { username?: string; displayName?: string } = {};
+          if (changedUsername) optimisticPatch.username = nextUsername;
+          if (changedName) optimisticPatch.displayName = nextName;
+          updateCachedUserData(optimisticPatch);
+          if (globalState.userProfile) {
+            globalState.setUserProfile({
+              ...globalState.userProfile,
+              ...optimisticPatch,
+            });
+          }
+
           try {
-            if (changedUsername) {
-              const result = await updateUsername(nextUsername);
-              if (result.success) {
-                updateCachedUserData({ username: nextUsername });
-                if (globalState.userProfile) {
-                  globalState.setUserProfile({
-                    ...globalState.userProfile,
-                    username: nextUsername,
-                  });
-                }
-                toastManager.showSuccess(
-                  t.profile.updated,
-                  t.profile.usernameUpdatedTo.replace('{username}', `@${nextUsername}`),
-                );
-              } else {
-                updateCachedUserData({ username: currentUsername });
-                if (globalState.userProfile) {
-                  globalState.setUserProfile({
-                    ...globalState.userProfile,
-                    username: currentUsername,
-                  });
-                }
+            const result = await updateIdentity(optimisticPatch, { silent: true });
+            if (result.success) {
+              if (changedUsername) {
+                updateCachedCooldowns({
+                  username: { canChange: false, daysRemaining: 15, hoursRemaining: 360 },
+                });
               }
+              const detail = changedUsername
+                ? t.profile.usernameUpdatedTo.replace('{username}', `@${nextUsername}`)
+                : t.profile.nameUpdatedTo.replace('{name}', nextName);
+              toastManager.showSuccess(t.profile.updated, detail);
+              return true;
             }
 
-            if (changedName) {
-              const result = await updateDisplayName(nextName);
-              if (result.success) {
-                updateCachedUserData({ displayName: nextName });
-                if (globalState.userProfile) {
-                  globalState.setUserProfile({
-                    ...globalState.userProfile,
-                    displayName: nextName,
-                  });
-                }
-                toastManager.showSuccess(
-                  t.profile.updated,
-                  t.profile.nameUpdatedTo.replace('{name}', nextName),
-                );
-              } else {
-                updateCachedUserData({ displayName: currentName });
-                if (globalState.userProfile) {
-                  globalState.setUserProfile({
-                    ...globalState.userProfile,
-                    displayName: currentName,
-                  });
-                }
-              }
+            updateCachedUserData({
+              username: currentUsername,
+              displayName: currentName,
+            });
+            if (globalState.userProfile) {
+              globalState.setUserProfile({
+                ...globalState.userProfile,
+                username: currentUsername,
+                displayName: currentName,
+              });
             }
+            toastManager.showError(
+              t.common.error,
+              result.error || t.profile.profileSaveFailed,
+            );
+            return false;
           } finally {
             profileSaveInFlightRef.current = false;
           }
@@ -2386,49 +2389,43 @@ function OwnProfileScreen() {
             toastManager.showInfo(t.profile.updating, t.profile.savingProfileChanges);
             
             try {
-            if (updates.username) {
-              const result = await updateUsername(updates.username);
+            const identityPatch: { username?: string; displayName?: string } = {};
+            if (updates.username) identityPatch.username = updates.username;
+            if (updates.displayName) identityPatch.displayName = updates.displayName;
+            if (Object.keys(identityPatch).length > 0) {
+              updateCachedUserData(identityPatch);
+              if (globalState.userProfile) {
+                globalState.setUserProfile({
+                  ...globalState.userProfile,
+                  ...identityPatch,
+                });
+              }
+              const result = await updateIdentity(identityPatch, { silent: true });
               if (result.success) {
-                updateCachedUserData({ username: updates.username });
-                if (globalState.userProfile) {
-                  globalState.setUserProfile({
-                    ...globalState.userProfile,
-                    username: updates.username,
+                if (identityPatch.username) {
+                  updateCachedCooldowns({
+                    username: { canChange: false, daysRemaining: 15, hoursRemaining: 360 },
                   });
                 }
-                toastManager.showSuccess(t.profile.updated, t.profile.usernameUpdatedTo.replace('{username}', `@${updates.username}`));
+                toastManager.showSuccess(t.profile.updated, t.profile.profileUpdated);
               } else {
-                updateCachedUserData({ username: currentUsername });
+                updateCachedUserData({
+                  username: currentUsername,
+                  displayName: currentName,
+                });
                 if (globalState.userProfile) {
                   globalState.setUserProfile({
                     ...globalState.userProfile,
                     username: currentUsername,
-                  });
-                }
-              }
-              delete updates.username;
-            }
-
-            if (updates.displayName) {
-              const result = await updateDisplayName(updates.displayName);
-              if (result.success) {
-                updateCachedUserData({ displayName: updates.displayName });
-                if (globalState.userProfile) {
-                  globalState.setUserProfile({
-                    ...globalState.userProfile,
-                    displayName: updates.displayName,
-                  });
-                }
-                toastManager.showSuccess(t.profile.updated, t.profile.nameUpdatedTo.replace('{name}', updates.displayName));
-              } else {
-                updateCachedUserData({ displayName: currentName });
-                if (globalState.userProfile) {
-                  globalState.setUserProfile({
-                    ...globalState.userProfile,
                     displayName: currentName,
                   });
                 }
+                toastManager.showError(
+                  t.common.error,
+                  result.error || t.profile.profileSaveFailed,
+                );
               }
+              delete updates.username;
               delete updates.displayName;
             }
             

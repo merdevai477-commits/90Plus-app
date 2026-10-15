@@ -103,15 +103,25 @@ export const useOptimisticProfile = (): UseOptimisticProfileReturn => {
 export const useProfileFieldUpdate = () => {
   const { updateProfile, isUpdating, showUpdateResult } = useOptimisticProfile();
 
-  const updateUsername = useCallback(async (username: string) => {
+  const updateUsername = useCallback(async (username: string, opts?: { silent?: boolean }) => {
     const result = await updateProfile({ username });
-    showUpdateResult(result);
+    if (!opts?.silent) showUpdateResult(result);
     return result;
   }, [updateProfile, showUpdateResult]);
 
-  const updateDisplayName = useCallback(async (displayName: string) => {
+  const updateDisplayName = useCallback(async (displayName: string, opts?: { silent?: boolean }) => {
     const result = await updateProfile({ displayName });
-    showUpdateResult(result);
+    if (!opts?.silent) showUpdateResult(result);
+    return result;
+  }, [updateProfile, showUpdateResult]);
+
+  /** Single PUT for username + displayName — one RTT instead of two chains. */
+  const updateIdentity = useCallback(async (
+    updates: { username?: string; displayName?: string },
+    opts?: { silent?: boolean },
+  ) => {
+    const result = await updateProfile(updates);
+    if (!opts?.silent) showUpdateResult(result);
     return result;
   }, [updateProfile, showUpdateResult]);
 
@@ -160,6 +170,7 @@ export const useProfileFieldUpdate = () => {
   return {
     updateUsername,
     updateDisplayName,
+    updateIdentity,
     updateBio,
     updateFIFACard,
     updateSocialLinks,

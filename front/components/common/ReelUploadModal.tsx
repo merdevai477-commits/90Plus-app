@@ -156,8 +156,11 @@ export default function ReelUploadModal({
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Videos,
                 allowsEditing: true,
-                quality: 1,
+                // Compress on pick (iOS export preset) so reels upload faster.
+                quality: 0.7,
                 videoMaxDuration: 60,
+                videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
+                videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
             });
 
             if (result.canceled) return;

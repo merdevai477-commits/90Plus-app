@@ -170,19 +170,8 @@ class OptimisticProfileService {
     }>;
   }> {
     try {
-      // Check username change restrictions first
-      if (updates.username) {
-        const canChangeUsername = await this.checkUsernameChangeAllowed(token);
-        if (!canChangeUsername.allowed) {
-          return {
-            success: false,
-            error: canChangeUsername.error,
-            canRetry: false,
-            nextAllowedChange: canChangeUsername.nextAllowedDate
-          };
-        }
-      }
-
+      // Trust PUT /clerk/profile for cooldown + uniqueness — a pre-check GET
+      // only adds an RTT before every username save.
       const response = await this.sendToBackendWithRetry(token, updates);
       
       if (response.status === 'SUCCESS') {
@@ -196,8 +185,11 @@ class OptimisticProfileService {
         let errorMessage = response.message || 'فشل في تحديث البروفايل';
         
         // Check for username cooldown error
-        if (errorMessage.includes('يمكنك تغيير اسم المستخدم بعد') || 
-            errorMessage.includes('يوم') && updates.username) {
+        if (
+          updates.username &&
+          (errorMessage.includes('يمكنك تغيير اسم المستخدم بعد') ||
+            errorMessage.includes('يوم'))
+        ) {
           // Extract days from Arabic message
           const daysMatch = errorMessage.match(/(\d+)\s*يوم/);
           if (daysMatch) {

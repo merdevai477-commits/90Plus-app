@@ -376,13 +376,13 @@ export class StorageService {
             });
 
             const first = await sendOnce();
-            if (
+            const transportRetryable =
                 !first.success &&
-                first.error &&
-                (first.error.includes('Network') ||
-                    first.error.includes('timeout') ||
-                    first.error.includes('Upload timeout'))
-            ) {
+                !!first.error &&
+                /network|timeout|timed out|فشل الاتصال|انتهت مهلة|انقطع الاتصال|اتصال/i.test(
+                    first.error,
+                );
+            if (transportRetryable) {
                 logger.warn('Reel upload: retrying once after transport error');
                 await new Promise(r => setTimeout(r, 1500));
                 return sendOnce();

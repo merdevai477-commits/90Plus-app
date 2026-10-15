@@ -52,7 +52,7 @@ interface ProfileMoreMenuModalProps {
   onSaveIdentity?: (data: {
     displayName: string;
     username: string;
-  }) => Promise<void> | void;
+  }) => Promise<void | boolean> | void | boolean;
 }
 
 function MenuOption({
@@ -272,11 +272,12 @@ export function ProfileMoreMenuModal({
 
     setSaving(true);
     try {
-      await onSaveIdentity({
+      const ok = await onSaveIdentity({
         displayName: nextName,
         username: nextUsername,
       });
-      closeDrawer();
+      // Keep the drawer open on failure so the user can fix and retry.
+      if (ok !== false) closeDrawer();
     } finally {
       setSaving(false);
     }

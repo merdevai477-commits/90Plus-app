@@ -196,7 +196,16 @@ export const useImageUpload = (): UseImageUploadReturn => {
             lastError = err;
             logger.error(`Upload attempt ${attempt + 1} failed:`, err);
 
-            // If not last attempt, wait before retry
+            const message = String(err?.message || '');
+            // Timeout/abort may mean the server already got the file — retry
+            // would double-upload and burn the avatar cooldown.
+            const isTimeoutOrAbort =
+              /timeout|timed out|مهلة|cancelled|canceled|إلغاء|abort/i.test(message);
+            if (isTimeoutOrAbort) {
+              break;
+            }
+
+            // If not last attempt, wait before retry (network blips only)
             if (attempt < maxRetries) {
               await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
             }

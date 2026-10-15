@@ -2,9 +2,27 @@
 export function isCooldownApiError(payload: unknown): boolean {
   if (!payload || typeof payload !== 'object') return false;
   const p = payload as Record<string, unknown>;
-  const code = p.code ?? p.errorCode ?? (p.data as Record<string, unknown> | undefined)?.code;
-  if (code === 'COOLDOWN_ACTIVE' || code === 'USERNAME_COOLDOWN') return true;
-  return p.error === 'COOLDOWN' || p.type === 'USERNAME_COOLDOWN';
+  const details = p.details as Record<string, unknown> | undefined;
+  const nestedData = p.data as Record<string, unknown> | undefined;
+  const code =
+    p.code ??
+    p.errorCode ??
+    details?.code ??
+    nestedData?.code ??
+    nestedData?.errorCode;
+  if (
+    code === 'COOLDOWN_ACTIVE' ||
+    code === 'USERNAME_COOLDOWN' ||
+    code === 'E006' ||
+    code === 'RATE_LIMIT'
+  ) {
+    return true;
+  }
+  return (
+    p.error === 'COOLDOWN' ||
+    p.error === 'E006' ||
+    p.type === 'USERNAME_COOLDOWN'
+  );
 }
 
 export function isReelUploadConflictError(message: string): boolean {
