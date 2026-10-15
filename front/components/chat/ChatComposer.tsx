@@ -53,8 +53,10 @@ const BAR_RADIUS = BAR_HEIGHT / 1;
 const BAR_PAD = 5;
 const SLOT = BAR_HEIGHT - BAR_PAD * 2;
 const BAR_TINT = 'rgba(20,12,40,0.42)';
-/** Message field + send button: the welcome bubble's black core; IridescentRim adds its film edge. */
+/** Send button: the welcome bubble's black core; IridescentRim adds its film edge. */
 const FIELD_TINT = 'rgba(3,2,8,0.94)';
+/** Message field only: light enough that the frost shows messages scrolling behind it. */
+const INPUT_TINT = 'rgba(3,2,8,0.45)';
 const FIELD_CAUSTIC: [number, number, number] = [0.6, 0.75, 1];
 /** Voice mode: the capsule collapses to a BAR_HEIGHT circle and the orb floats over it. */
 const ORB_SIZE = Math.round(BAR_HEIGHT * 1.3);
@@ -386,7 +388,7 @@ export function ChatComposer({
               <Animated.View style={surfaceStyle}>
                 <LiquidWaterSurface
                   radius={BAR_RADIUS}
-                  tint={FIELD_TINT}
+                  tint={INPUT_TINT}
                   glow={FIELD_CAUSTIC}
                   strength={0.14}
                   sheen={0.12}
